@@ -33,6 +33,7 @@ import { rotateKeys, RotationRefused, type RotationResult } from './rotateKeys'
 import { unlockOrigin } from '../../../app/vault'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
 import EmailAddressSection from '../email/EmailAddressSection.vue'
+import TrustResetLink from '../trustReset/TrustResetLink.vue'
 
 const { t } = useI18n()
 
@@ -40,6 +41,8 @@ const password = ref('')
 const secretKey = ref('')
 const confirmOpen = ref(false)
 const error = ref('')
+/** E8 — the rotation refused because this device refuses a trust document; the error then points at the reset. */
+const trustRefused = ref(false)
 const result = ref<RotationResult | null>(null)
 
 /**
@@ -62,13 +65,16 @@ const { run, pending: busy } = useAsyncAction(
   },
   {
     onError: (e) => {
+      trustRefused.value = e instanceof RotationRefused && e.reason === 'trustStateRefused'
       error.value =
         e instanceof RotationRefused
           ? e.reason === 'noFloorWrap'
             ? t('rotation.errorNoFloor')
             : e.reason === 'vaultLocked'
               ? t('rotation.errorLocked')
-              : t('rotation.errorCredential')
+              : e.reason === 'trustStateRefused'
+                ? t('rotation.errorTrustState')
+                : t('rotation.errorCredential')
           : t('rotation.errorFailed')
     },
   },
@@ -125,7 +131,10 @@ async function confirm() {
           <small>{{ t('rotation.secretKeyHint') }}</small>
         </div>
 
-        <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
+        <Message v-if="error" severity="error" :closable="false">
+          {{ error }}
+          <TrustResetLink v-if="trustRefused" />
+        </Message>
 
         <div class="rotation-action">
           <Button
@@ -162,7 +171,10 @@ async function confirm() {
       :close-on-escape="!busy"
     >
       <p class="dialog-copy">{{ t('rotation.confirmBody') }}</p>
-      <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
+      <Message v-if="error" severity="error" :closable="false">
+        {{ error }}
+        <TrustResetLink v-if="trustRefused" />
+      </Message>
       <div class="veyq-dialog-action-row">
         <Button
           type="button"

@@ -46,10 +46,10 @@ export async function saveFavorites(scopeId: string, scopeKey: Uint8Array, ids: 
 /**
  * Re-seal the caller's pin sets from the **old** Master Key to a **new** one — key rotation (ADR 0060 step 4).
  *
- * It exists for the same reason `resealPinsUnderNewMasterKey` does: during a rotation the vault still holds the
- * *old* Master Key (the sole-member scope re-key that follows opens grants with the old identity), so a helper
- * that read the vault would seal under exactly the key the rotation is retiring. Both keys are therefore
- * explicit.
+ * It takes both keys for the same reason the pin store's rotation re-seal does (`pinStoreDocument`): during a
+ * rotation the vault still holds the *old* Master Key (the sole-member scope re-key that follows opens grants with
+ * the old identity), so a helper that read the vault would seal under exactly the key the rotation is retiring.
+ * Both keys are therefore explicit.
  *
  * **Per scope, because the pin set is per scope.** `RotateAccountKeysResult`'s two lists partition the caller's
  * scopes, so their union is the complete set — including the queued ones, where the caller's *grant* is stale

@@ -37,11 +37,16 @@
 4. **Re-wrap the account.** `symWrap(MK', identityPriv')` replaces `wrappedIdentityPrivateKey`; the `PASSWORD`
    and `RECOVERY` wraps are rewritten under their existing KEKs; every `DEVICE`, `DEVICE_KEY` and `PASSKEY`
    wrap is **deleted**, because their key material is device-held and cannot be rewritten from here; the
-   identity-pin store, the device register and the Memory pins are re-sealed under `MK'`, and the caller's own
-   item marks are re-tagged — their self-tag's key derives from the Master Key, and only a mark whose tag verifies
-   under the old key is carried ([ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md) §9).
-   These four run best-effort once the server has accepted the request. The request carries a signature of
-   the **Secret-Key proof key** over what it installs, and the server refuses it without one that verifies.
+   identity-pin store and the device register are re-sealed under `MK'` and travel in the **same request**,
+   written in the same transaction — so a rotation that cannot re-seal them does not happen, rather than
+   leaving them under a key that no longer exists. Each is opened under the old key through this device's
+   trust-state marks first (E8), and a `stale_version` on either fails that attempt whole: the client re-reads,
+   re-seals and resubmits. The Memory pins are re-sealed under `MK'` and the caller's own item marks re-tagged —
+   their self-tag's key derives from the Master Key, and only a mark whose tag verifies under the old key is
+   carried ([ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md) §9); these two run
+   best-effort once the server has accepted the request. The request carries a signature of the **Secret-Key
+   proof key** over what it installs — the two documents aside, which a session can write anyway — and the
+   server refuses it without one that verifies.
 5. **Publish.** The new identity public bundle replaces the directory value. From this moment every contact
    who ever pinned this account sees **changed**, and every automated wrap to it declines
    ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md)).
@@ -112,6 +117,12 @@ sequenceDiagram
 - **E7 — the rotation is interrupted between steps 4 and 5.** The account holds `MK'` with an unpublished
   identity; the flow is resumable because every step is idempotent against the published state, and the client
   finishes rather than re-mints — re-minting would strand the wraps written in step 4.
+- **E8 — a trust document this device refuses.** The pin store or the device register is older than one this
+  device has held, missing after it held one, or does not open
+  ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 7). The rotation refuses
+  before writing anything and points at the settings hub's *Start a list over*: re-sealing a rolled-back copy
+  under `MK'` would make the rollback the rotation's own, and carrying an unreadable one across as empty is the
+  wipe Decision 7 refuses. Starting the list over is the user's own, confirmed act, not a side door of this one.
 
 ## Quality notes
 

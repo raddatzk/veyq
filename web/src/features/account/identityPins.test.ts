@@ -19,7 +19,7 @@ import {
   trustState,
   trustStates,
   IdentityMovedError,
-  resealPinsUnderNewMasterKey,
+  pinStoreDocument,
 } from './identityPins'
 import { accountIdentityPinsApi, tasksApi } from '../../api/client'
 import { masterKey, identityPrivate } from '../../app/vault'
@@ -396,24 +396,28 @@ describe('the pin store never goes backwards on this device (ADR 0028 Decision 7
   })
 })
 
-describe('the master-key rotation\u2019s re-seal goes through the same open (ADR 0028 Decision 7)', () => {
-  const NEW_MK = v1.randomBytes(32)
+// The rotation and the reset act on the store WHOLE, through `pinStoreDocument` — their behaviour is proven in
+// `rotation/rotateKeys.test.ts` and `trustReset/trustReset.test.ts`, against this real module. What is pinned here
+// is that the whole-document view is the same store: the same open (the marks apply), the same seal context.
+describe('pinStoreDocument — the store as one whole document (ADR 0028 Decision 7)', () => {
   const pinned = { u1: { key: 'a2V5', state: 'pinned', firstSeenAt: 1 } }
 
-  it('refuses to re-seal a store below the mark under the new key — the rollback would become the rotation\u2019s own', async () => {
+  it('opens through the same marks as every read: a store below the mark is refused, and nothing is written', async () => {
     fakeServer({ blob: seal(pinned, 3), version: 3 })
     await getPin('u1') // this device has held v3
     const rolled = fakeServer({ blob: seal(pinned, 2), version: 2 })
-    await expect(resealPinsUnderNewMasterKey(MK.slice(), NEW_MK)).rejects.toMatchObject({ code: 'trust_state_rolled_back' })
+    await expect(pinStoreDocument.open(MK.slice(), await pinStoreDocument.fetch())).rejects.toMatchObject({
+      code: 'trust_state_rolled_back',
+    })
     expect(rolled.putIdentityPins).not.toHaveBeenCalled()
   })
 
-  it('a re-seal that lands raises the NEW key\u2019s mark — the slot the account reads from after the switch', async () => {
+  it('control: at the mark it opens to the pins, and what it seals for v4 the ordinary read opens at v4', async () => {
     const srv = fakeServer({ blob: seal(pinned, 3), version: 3 })
-    await resealPinsUnderNewMasterKey(MK.slice(), NEW_MK)
+    const pins = await pinStoreDocument.open(MK.slice(), await pinStoreDocument.fetch())
+    expect(pins).toEqual(pinned)
+    await pinStoreDocument.write({ blob: pinStoreDocument.seal(MK.slice(), pins, 4), version: 3 })
     expect(srv.state.version).toBe(4)
-    vi.mocked(masterKey).mockImplementation(() => NEW_MK.slice()) // the vault has switched
-    fakeServer({ blob: null, version: 0 })
-    await expect(getPin('u1')).rejects.toMatchObject({ code: 'trust_state_rolled_back' })
+    expect(unsealPins(srv.state.blob!, 4)).toEqual(pinned)
   })
 })

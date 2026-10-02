@@ -12,9 +12,12 @@ vi.mock('../features/account/sessions/SessionsPanel.vue', () => ({ default: { te
 vi.mock('../features/spaces/TenantMembersPanel.vue', () => ({ default: { template: '<div class="stub-members" />' } }))
 vi.mock('../features/spaces/GroupMembersPanel.vue', () => ({ default: { template: '<div class="stub-group-members" />' } }))
 vi.mock('../features/spaces/CreateGroupDialog.vue', () => ({ default: { template: '<div class="stub-create-group" />' } }))
+vi.mock('../features/account/trustReset/TrustResetPanel.vue', () => ({ default: { template: '<div class="stub-trust-reset" />' } }))
+vi.mock('../features/account/trustReset/refusedDocuments', () => ({ refusedDocuments: vi.fn().mockResolvedValue([]) }))
 
 import SettingsHubView from './SettingsHubView.vue'
 import { listMyGroups } from '../features/spaces/scopes'
+import { refusedDocuments } from '../features/account/trustReset/refusedDocuments'
 import { activeSpace, clearActiveSpace } from '../app/activeSpace'
 import { ScopeKind } from '../api/generated/scopes'
 import { realI18n, t } from '../test/i18n'
@@ -46,9 +49,25 @@ beforeEach(() => {
   vi.clearAllMocks()
   clearActiveSpace()
   vi.mocked(listMyGroups).mockResolvedValue([]) // clearAllMocks keeps impls; reset the defaults per test
+  vi.mocked(refusedDocuments).mockResolvedValue([])
   stubMatchMedia(false) // narrow by default → /settings stays the list; the wide-redirect case opts in
 })
 afterEach(() => vi.unstubAllGlobals())
+
+describe('SettingsHubView — starting a refused trust list over (ADR 0028 Decision 7)', () => {
+  it('offers the section only while this device refuses a document, and opens its panel', async () => {
+    vi.mocked(refusedDocuments).mockResolvedValue([{ document: 'pins', code: 'trust_state_unreadable' }])
+    const w = await mountHub('/settings/trust-reset')
+    expect(navText(w)).toContain(t('trustReset.navTitle'))
+    expect(w.find('.stub-trust-reset').exists()).toBe(true)
+  })
+
+  it('control: nothing refused — no standing reset beside key rotation and the sessions', async () => {
+    const w = await mountHub()
+    expect(navText(w)).toContain(t('settings.security'))
+    expect(navText(w)).not.toContain(t('trustReset.navTitle'))
+  })
+})
 
 describe('SettingsHubView — section filtering by scope × role', () => {
   it('a member in the Tenant scope sees Personal + Shared space', async () => {

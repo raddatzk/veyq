@@ -21,6 +21,8 @@ import TenantMailSettingsPanel from '../features/tenant/TenantMailSettingsPanel.
 import TenantStoragePanel from '../features/tenant/TenantStoragePanel.vue'
 import GroupMembersPanel from '../features/spaces/GroupMembersPanel.vue'
 import CreateGroupDialog from '../features/spaces/CreateGroupDialog.vue'
+import TrustResetPanel from '../features/account/trustReset/TrustResetPanel.vue'
+import { refusedDocuments } from '../features/account/trustReset/refusedDocuments'
 import { activeSpace } from '../app/activeSpace'
 import { ScopeKind } from '../api/generated/scopes'
 import { listMyGroups, type GroupSpace } from '../features/spaces/scopes'
@@ -40,9 +42,22 @@ const router = useRouter()
 const ownedGroups = ref<GroupSpace[]>([])
 const createGroupOpen = ref(false)
 
+// Whether this device refuses its pin store or its device register right now (ADR 0028 Decision 7) — the one
+// condition under which the hub offers "Start a list over". A read like every other: it opens through the marks
+// and writes nothing; the reset itself is reachable only from that section's confirm dialog.
+const trustRefused = ref(false)
+
 onMounted(async () => {
-  await loadGroups()
+  await Promise.all([loadGroups(), loadTrustRefusals()])
 })
+
+async function loadTrustRefusals() {
+  try {
+    trustRefused.value = (await refusedDocuments()).length > 0
+  } catch {
+    trustRefused.value = false
+  }
+}
 
 async function loadGroups() {
   try {
@@ -81,6 +96,10 @@ const categories = computed<NavCategory[]>(() => {
         // all; its OWN gate is narrower still and lives in the panel (ADR 0060 Decision 2 — a device wrap
         // opened this vault is refused before the form is offered).
         { id: 'security', label: t('settings.security'), icon: 'pi pi-shield' },
+        // Starting a refused trust document over (ADR 0028 Decision 7's way back) — beside key rotation and the
+        // sessions, and shown ONLY while this device refuses one, so it is never a standing button next to them.
+        // Every refusal notice links here; the section's confirm dialog is the one place the reset can run.
+        ...(trustRefused.value ? [{ id: 'trust-reset', label: t('trustReset.navTitle'), icon: 'pi pi-history' }] : []),
         // Per-tenant identity (username + real name) needs any tenant context (ADR 0023).
         ...(activeSpace.tenantId ? [{ id: 'profile', label: t('profile.title'), icon: 'pi pi-user' }] : []),
       ],
@@ -156,6 +175,7 @@ const activeView = computed<{ component: Component; props: Record<string, unknow
   if (id === 'password') return { component: ChangePasswordPanel, props: {} }
   if (id === 'pairing') return { component: AddDevicePanel, props: {} }
   if (id === 'security') return { component: KeyRotationPanel, props: {} }
+  if (id === 'trust-reset') return { component: TrustResetPanel, props: {} }
   return { component: AppearancePanel, props: {} }
 })
 
@@ -228,7 +248,12 @@ async function onGroupCreated(scopeId: string) {
           <i class="pi pi-chevron-left" aria-hidden="true" />
           {{ t('settings.back') }}
         </button>
-        <component :is="activeView.component" v-bind="activeView.props" @lifecycle-changed="loadGroups" />
+        <component
+          :is="activeView.component"
+          v-bind="activeView.props"
+          @lifecycle-changed="loadGroups"
+          @trust-changed="loadTrustRefusals"
+        />
       </section>
     </div>
 

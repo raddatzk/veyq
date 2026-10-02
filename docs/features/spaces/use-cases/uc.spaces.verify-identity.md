@@ -67,6 +67,13 @@ sequenceDiagram
   the human, not the wire.
 - **E2 — a substituted key (active operator MITM):** identical on-wire to E1 — the review surfaces it; the caller
   who compares out-of-band sees the mismatch and **refuses**. This is the whole point.
+- **E3 — this device refuses the pin store itself** (older than one it has held, missing after it held one, or
+  unreadable — [ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 7): no pin
+  is read or written, so every wrap to a foreign key pauses and the notice says why, with a link to the settings
+  hub's *Start a list over*. Only the user, on a device, after a confirmation that names the cost, starts the
+  store over — empty, so every contact is first-seen again and every verification is gone. No server response
+  reaches that write; a server can still withhold the store until the user does it, which is now visible and
+  consented rather than silent.
 
 ## Quality notes
 
@@ -89,11 +96,17 @@ sequenceDiagram
 **EN —** When you share memories with someone, your app quietly remembers their security key the first time —
 no action needed. If it ever changes, you'll be told, because a changed key can mean someone is trying to
 impersonate them. You then decide: does this look right (maybe they got a new phone), or does it look wrong?
+If your device ever can't read that list of remembered keys, it stops sharing with anyone it can't check and tells
+you. You can start the list over in the settings — but only you can, and it costs something real: everyone is
+new to you again, every number you compared is forgotten, and a key that changed in the meantime won't be flagged.
 
 **DE —** Wenn du Erinnerungen mit jemandem teilst, merkt sich deine App beim ersten Mal still dessen
 Sicherheitsschlüssel — ohne dass du etwas tun musst. Ändert er sich je, wirst du informiert, denn ein geänderter
 Schlüssel kann heißen, dass sich jemand als diese Person ausgibt. Du entscheidest dann: passt das (vielleicht ein
-neues Handy), oder wirkt es falsch?
+neues Handy), oder wirkt es falsch? Kann dein Gerät diese Liste gemerkter Schlüssel einmal nicht lesen, teilt es
+mit niemandem mehr, den es nicht prüfen kann, und sagt dir das. Du kannst die Liste in den Einstellungen neu
+beginnen — aber nur du, und es kostet etwas: alle sind für dich wieder neu, jede verglichene Nummer ist vergessen,
+und ein Schlüssel, der sich inzwischen geändert hat, wird nicht mehr gemeldet.
 
 ## Related
 

@@ -51,3 +51,16 @@ acceptanceCriteria:
     # slot per account); the worker's pause and the notices that name a refusal are pinned where they live.
     coverage:
       web: { unit: [src/features/account/identityPins.test.ts, src/features/account/trustMarks.test.ts, src/features/tasks/grantDeliveryWorker.test.ts, src/features/spaces/useMemberDirectory.test.ts, src/app/activeSpace.test.ts] }
+  - id: a-refused-pin-store-is-started-over-only-by-the-user
+    text: A refused pin store can be started over only by the user, on a device, after a confirmation that names the cost (every contact first-seen again, every verification gone, a key that changed meanwhile accepted as new); no server response reaches it. It writes the empty store one version above the served one, never over a copy that opens, and sets this device's mark to the version it wrote — the one place a mark goes down. The residual is stated, not closed — a server can withhold the store until the user resets it, now visibly and with consent.
+    # ADR 0028 Decision 7's way back (inbox #192). Bitten: swapping the mark's set for a raise reddened the
+    # rolled-back case (the reset's own write was refused); an injected write on the refusal path reddened the
+    # no-server-reaches-it negative, whose control serves a readable store to the same paths and sees the writes.
+    # The import restriction (`veyq/trust-reset-one-door`, web/eslint.config.js) is not a coverage surface.
+    coverage:
+      web:
+        unit:
+          - src/features/account/trustReset/trustReset.test.ts
+          - src/features/account/trustReset/TrustResetDialog.test.ts
+          - src/features/account/trustReset/noServerReachesTheReset.test.ts
+          - src/views/SettingsHubView.test.ts

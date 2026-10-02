@@ -72,6 +72,7 @@ import { listSavedKeyWraps, removeSavedKey, type SavedKeyWrap } from '../savedKe
 import { localWrapId } from '../localWrap'
 import { TrustStateRefused, refusalMessageKey } from '../trustMarks'
 import DeviceTrustControl from '../trustDevice/DeviceTrustControl.vue'
+import TrustResetLink from '../trustReset/TrustResetLink.vue'
 
 const { t, locale } = useI18n()
 const router = useRouter()
@@ -372,7 +373,10 @@ async function removeOtherKeys() {
       </div>
 
       <Message v-if="actionError" severity="error" :closable="false">{{ actionError }}</Message>
-      <Message v-if="registerRefusal" severity="warn" :closable="false">{{ t(registerRefusal) }}</Message>
+      <Message v-if="registerRefusal" severity="warn" :closable="false">
+        {{ t(registerRefusal) }}
+        <TrustResetLink />
+      </Message>
 
       <p v-if="loading" class="settings-muted">{{ t('sessions.loading') }}</p>
       <Message v-else-if="loadError === 'failed'" severity="error" :closable="false">

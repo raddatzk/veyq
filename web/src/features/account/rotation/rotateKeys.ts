@@ -16,16 +16,22 @@ import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { accountRotationApi } from '../../../api/client'
 import { withRefresh } from '../../../app/sessionRefresh'
 import { identityPrivate, setUnlocked } from '../../../app/vault'
+import { isCodedError, HttpStatus } from '../../../shared/httpError'
 import { ColdCredentialRefused, proveColdCredential } from '../coldCredential'
-import { resealPinsUnderNewMasterKey } from '../identityPins'
+import { pinStoreDocument } from '../identityPins'
 import { resealFavoritesUnderNewMasterKey } from '../../memory/favorites'
 import { retagItemMarksUnderNewMasterKey } from '../../memory/itemFavorites'
-import { resealRegisterUnderNewMasterKey } from '../deviceRegister'
-import { carryMarks } from '../trustMarks'
+import { registerDocument } from '../deviceRegister'
+import { carryMarks, raiseMarks, TrustStateRefused, type AccountDocumentStore } from '../trustMarks'
 import { commitRotation } from '../../spaces/scopes'
 import { listScopeMembers } from '../../spaces/members'
 
 const ARGON = v1.ARGON
+
+/** Bounds the re-read/re-seal/resubmit loop on a `409 stale_version` — the documents' own writes use the same
+ *  bound (`MAX_WRITE_ATTEMPTS` in `identityPins.ts` / `deviceRegister.ts`); a real conflict is another device
+ *  writing a document while this one rotates. */
+const MAX_PUBLISH_ATTEMPTS = 5
 
 /** Why a rotation refused before it wrote anything. Each maps to one of uc.account.rotate-keys' exception flows. */
 export type RotationRefusal =
@@ -35,6 +41,10 @@ export type RotationRefusal =
   | 'noFloorWrap'
   /** The vault is locked, so there is no current Master Key to prove the offered credential against. */
   | 'vaultLocked'
+  /** E8 — this device refuses the pin store or the device register (ADR 0028 Decision 7). Re-sealing it under the
+   *  new key would launder a rollback into it, or carry an unreadable one across as empty; the way back is the
+   *  user's reset in the settings hub, not a rotation. */
+  | 'trustStateRefused'
 
 /** Thrown before any write. A rotation that refuses has changed nothing, anywhere. */
 export class RotationRefused extends Error {
@@ -57,14 +67,16 @@ export type ScopeOutcome = {
 export type RotationResult = { scopes: ScopeOutcome[] }
 
 /**
- * Rotate. Mints `MK'` and a fresh identity on-device, publishes the account half in one server transaction,
- * re-seals what the old Master Key sealed, re-keys every scope the caller is alone in, and finally swaps the
- * vault over.
+ * Rotate. Mints `MK'` and a fresh identity on-device, publishes the account half — the pin store and the device
+ * register re-sealed under `MK'` included — in one server transaction, re-seals the Memory favorites, re-keys
+ * every scope the caller is alone in, and finally swaps the vault over.
  *
  * **The order is the design.** The publish is the irreversible commit, and everything after it is repair that a
  * re-run can redo (uc.account.rotate-keys §E7 — every step is idempotent against the published state, and the
- * client finishes rather than re-mints). So the re-seals run *after* it: doing them first would, on a failed
- * publish, have thrown the pin store away for a rotation that never happened. And the vault swap runs **last**,
+ * client finishes rather than re-mints). The two trust documents are therefore INSIDE the publish, not after it:
+ * a document left under the retired key is refused by every device (ADR 0028 Decision 7), so it is not repair a
+ * re-run could do — once this function returns the old key is zeroed and no device can ever open it again. The
+ * favorites' re-seal runs after, because an unreadable favorites set is only empty. And the vault swap runs **last**,
  * because the sole-member re-key below opens the caller's existing grants — which are sealed to the **old**
  * identity, the private half of which lives only in the vault until this function replaces it.
  *
@@ -135,26 +147,49 @@ export async function rotateKeys(password: string, secretKeyB64: string): Promis
       wrappedKey: b64std(w.wrappedKey),
       kdfParams: b64std(w.kdfParams),
     })
-    const result = await withRefresh(() =>
-      accountRotationApi().rotateAccountKeys({
-        rotateAccountKeysRequest: {
-          identityPublicKey: b64std(identityPublicKey),
-          wrappedIdentityPrivateKey: wrappedPriv,
-          passwordWrap: wire(passwordWrap),
-          recoveryWrap: wire(recoveryWrap),
-          secretKeyProofSignature,
-        },
-      }),
-    )
-
-    // Master-Key-sealed blobs, re-sealed under MK'. Best-effort on purpose: none is worth failing a rotation that
-    // has already published. Memory pins degrade to empty (an unpinned Memory is still there to re-pin); the
-    // contact pins and the device register do not — a re-seal that never lands leaves a document the new key
-    // cannot open, which this device then refuses as unreadable (ADR 0028 Decision 7).
+    // The publish, carrying the pin store and the device register re-sealed under MK' (ADR 0060 § Consequences):
+    // the server writes them in the same transaction as the account rewrite, so a rotation that cannot write
+    // them does not happen — where re-sealing them after the publish left them under the retired key whenever
+    // that write failed, and every device refuses a document that does not open (ADR 0028 Decision 7).
     //
-    // Memory pins joined this list when they moved off `K_SC` onto the Master Key (ADR 0068). Their two lists
-    // partition the caller's scopes, so the union is every scope a pin set can exist in. Item marks are the fourth
-    // rider: sealed under `K_SC`, but their self-tag's key derives from the Master Key (ADR 0068 §9). They open each
+    // A `409 stale_version` means another device wrote a document meanwhile and NOTHING was written, so the
+    // documents are re-read and re-sealed against what is now stored, and the same keys go up again under the
+    // same signature (the documents are not part of the proof's statement). A document this device refuses —
+    // older than its mark, missing after it held one, unreadable — refuses the rotation before any write.
+    const sealed = { pins: { blob: '', version: 0 }, register: { blob: '', version: 0 } }
+    let result: Awaited<ReturnType<ReturnType<typeof accountRotationApi>['rotateAccountKeys']>>
+    for (let attempt = 1; ; attempt++) {
+      sealed.pins = await resealUnderNewKey(pinStoreDocument, oldMasterKey, newMasterKey)
+      sealed.register = await resealUnderNewKey(registerDocument, oldMasterKey, newMasterKey)
+      try {
+        result = await withRefresh(() =>
+          accountRotationApi().rotateAccountKeys({
+            rotateAccountKeysRequest: {
+              identityPublicKey: b64std(identityPublicKey),
+              wrappedIdentityPrivateKey: wrappedPriv,
+              passwordWrap: wire(passwordWrap),
+              recoveryWrap: wire(recoveryWrap),
+              secretKeyProofSignature,
+              identityPins: sealed.pins,
+              deviceRegister: sealed.register,
+            },
+          }),
+        )
+        break
+      } catch (e) {
+        if (attempt < MAX_PUBLISH_ATTEMPTS && (await isCodedError(e, HttpStatus.conflict, 'stale_version'))) continue
+        throw e
+      }
+    }
+    // This device wrote both at `version + 1` under MK' — it has held them, in the slot the account reads from
+    // once the vault switches (the rest of its marks are carried across below).
+    await raiseMarks(newMasterKey, { pins: sealed.pins.version + 1, register: sealed.register.version + 1 })
+
+    // Memory favorites are re-sealed after the publish, best-effort on purpose, and stay out of the request: one
+    // blob per scope, and an unreadable set degrades to empty by ADR 0068 (an unpinned Memory is still there to
+    // re-pin) — it is not trust state, so failing a published rotation over it would buy nothing. Their two lists
+    // partition the caller's scopes, so the union is every scope a pin set can exist in. Item marks ride here too:
+    // sealed under `K_SC`, but their self-tag's key derives from the Master Key (ADR 0068 §9). They open each
     // scope's `E_0` through the caller's grant, which is why this runs while the vault still holds the old identity.
     await resealBestEffort(oldMasterKey, newMasterKey, [
       ...result.soleMemberScopeIds,
@@ -186,18 +221,34 @@ export async function rotateKeys(password: string, secretKeyB64: string): Promis
   }
 }
 
-/** Re-seal every Master-Key-sealed blob, swallowing failures — see `rotateKeys` on why none may fail it. */
+/**
+ * Read one sealed account document, open it under the OLD Master Key through this device's marks, and seal it
+ * under the new one for the version the rotation will store it at. A refusal there — rolled back, missing after a
+ * mark, unreadable — is a refusal of the rotation: re-sealing a rolled-back copy under MK' would make the rollback
+ * the rotation's own, and the honest way back from a refused document is the user's reset, not this.
+ */
+async function resealUnderNewKey<T>(
+  doc: AccountDocumentStore<T>,
+  oldMk: Uint8Array,
+  newMk: Uint8Array,
+): Promise<{ blob: string; version: number }> {
+  const served = await doc.fetch()
+  let value: T
+  try {
+    value = await doc.open(oldMk, served)
+  } catch (e) {
+    if (e instanceof TrustStateRefused) throw new RotationRefused('trustStateRefused')
+    throw e
+  }
+  return { blob: doc.seal(newMk, value, served.version + 1), version: served.version }
+}
+
+/**
+ * The Master-Key-sealed blobs re-sealed AFTER the publish, each swallowing its failure — see `rotateKeys` on why
+ * none may fail it: the Memory favorites and the item marks' self-tags. Trust state never belongs here: the pin store and the
+ * device register ride inside the publish, because one left under the retired key is refused, not empty.
+ */
 async function resealBestEffort(oldMk: Uint8Array, newMk: Uint8Array, scopeIds: string[]): Promise<void> {
-  try {
-    await resealPinsUnderNewMasterKey(oldMk, newMk)
-  } catch {
-    /* the store stays under the retired key; wraps to foreign keys refuse until it is recovered */
-  }
-  try {
-    await resealRegisterUnderNewMasterKey(oldMk, newMk)
-  } catch {
-    /* an unnamed device row still lists and still revokes (uc.account.sessions §E4) */
-  }
   try {
     await resealFavoritesUnderNewMasterKey(oldMk, newMk, scopeIds)
   } catch {
