@@ -4,13 +4,15 @@
 - **Type:** **Enabler** — structural foundation, no standalone end-user goal
   ([features/README → use-case vs enabler vs ADR vs change-request](../../README.md#use-case-vs-enabler-vs-adr-vs-change-request)).
   It gives every membership a **findable handle + a human name**; the value reaches users through the directory,
-  the group member-add search, and (later) the person/profile view it feeds.
+  the group member-add search, editing your own identity in [uc.spaces.edit-profile](../use-cases/uc.spaces.edit-profile.md),
+  and (later) the person/profile view it feeds.
 - **Provides:** a member's **identity within a tenant** — a per-tenant **`username`** (unique in the tenant,
   plaintext, a pseudonymous handle decoupled from login) plus **`firstName` / `lastName` sealed under `K_tenant`**
   (operator-blind real name), and the **directory visibility rule** (every member sees username + names; only a
   tenant `OWNER` sees `email`). Instance-wide uniqueness stays with **`email`** alone
   ([ADR 0023](../../../decisions/0023-per-tenant-member-identity.md)).
 - **Serves (use-cases/enablers):** the member directory of [uc.spaces.add-member](../use-cases/uc.spaces.add-member.md),
+  editing your own handle and name in [uc.spaces.edit-profile](../use-cases/uc.spaces.edit-profile.md),
   the **group member-add username search** ([ADR 0014](../../../decisions/0014-group-scopes-and-governance.md), G2),
   and the *planned* person/profile view (`~username`, [ADR 0015](../../../decisions/0015-operator-blind-readable-urls.md)).
 - **Depends on:** [uc.admin.create-tenant](../../admin/use-cases/uc.admin.create-tenant.md) +
@@ -77,7 +79,8 @@ member's own group rows) and splits it by sensitivity:
   ordinary members correlate by handle + name, not email.
 
 > **No end-user section.** As an enabler this has no standalone "what this means for you" story — the value
-> reaches the user through the directory + group member-add + profile use-cases it serves.
+> reaches the user through the directory, group member-add and [uc.spaces.edit-profile](../use-cases/uc.spaces.edit-profile.md),
+> which it serves.
 
 ## Related
 
