@@ -33,6 +33,11 @@ const stubs = {
     emits: ['click'],
     template: '<button :class="severity" @click="$emit(\'click\')">{{ label }}</button>',
   },
+  Checkbox: {
+    props: ['modelValue'],
+    emits: ['update:modelValue'],
+    template: '<input type="checkbox" class="opt" :checked="modelValue" @change="$emit(\'update:modelValue\', $event.target.checked)" />',
+  },
 }
 
 const mountDialog = () => mount(ConfirmDialog, { global: { plugins: [realI18n()], stubs } })
@@ -91,5 +96,52 @@ describe('ConfirmDialog', () => {
     await wrapper.find('.dlg-close').trigger('click')
     await expect(answer).resolves.toBe(false)
     expect(wrapper.find('.dlg').exists()).toBe(false)
+  })
+
+  // The opt-in (useConfirm's askWithOption): rendered only for a request that carries one, unchecked each time it
+  // opens, and its ticked state is what the accept answers with.
+  const WITH_OPTION = { ...REQUEST, option: { label: 'Also turn off every link', hint: 'They may have copied any of them.' } }
+
+  it('renders no opt-in for a plain request', async () => {
+    const wrapper = mountDialog()
+    const answer = useConfirm().ask(REQUEST)
+    await flushPromises()
+    expect(wrapper.find('input.opt').exists()).toBe(false)
+    settleConfirm(false)
+    await answer
+  })
+
+  it('answers the ticked opt-in on accept, unchecked by default', async () => {
+    const wrapper = mountDialog()
+    const answer = useConfirm().askWithOption(WITH_OPTION)
+    await flushPromises()
+    expect(wrapper.text()).toContain(WITH_OPTION.option.label)
+    expect(wrapper.text()).toContain(WITH_OPTION.option.hint)
+    expect((wrapper.find('input.opt').element as HTMLInputElement).checked).toBe(false)
+
+    await wrapper.find('input.opt').setValue(true)
+    await accept(wrapper)!.trigger('click')
+    await expect(answer).resolves.toEqual({ option: true })
+  })
+
+  it('control: accepted unticked answers false; a ticked option then cancelled answers nothing', async () => {
+    const wrapper = mountDialog()
+    const plain = useConfirm().askWithOption(WITH_OPTION)
+    await flushPromises()
+    await accept(wrapper)!.trigger('click')
+    await expect(plain).resolves.toEqual({ option: false })
+
+    const cancelled = useConfirm().askWithOption(WITH_OPTION)
+    await flushPromises()
+    await wrapper.find('input.opt').setValue(true)
+    await cancel(wrapper)!.trigger('click')
+    await expect(cancelled).resolves.toBeNull()
+
+    // and the tick does not carry into the next request
+    const next = useConfirm().askWithOption(WITH_OPTION)
+    await flushPromises()
+    expect((wrapper.find('input.opt').element as HTMLInputElement).checked).toBe(false)
+    settleConfirm(false)
+    await next
   })
 })

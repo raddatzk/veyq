@@ -54,9 +54,12 @@ export function listScopeMembers(scopeId: string): Promise<ScopeMember[]> {
  * transfer/tombstone groups they solely owned, grace-tombstone their own scopes with read kept). Operator-blind:
  * no key crosses the wire and the tenant key is NOT rotated (ADR 0025). Distinct from {@link removeGroupMember}
  * (a single group membership + a caller-driven rotation).
+ *
+ * `revokeLinks` (ADR 0075 point 5) also turns off every link of the TENANT scope in the removal's transaction —
+ * each then comes back only by re-issue. Unticked, no parameter is sent at all.
  */
-export function removeTenantMember(tenantId: string, userId: string): Promise<void> {
-  return withRefresh(() => tenantsApi().removeTenantMember({ tenantId, userId }))
+export function removeTenantMember(tenantId: string, userId: string, revokeLinks = false): Promise<void> {
+  return withRefresh(() => tenantsApi().removeTenantMember({ tenantId, userId, ...(revokeLinks ? { revokeLinks } : {}) }))
 }
 
 /**

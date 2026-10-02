@@ -32,7 +32,9 @@ vi.mock('../account/identityPins', () => ({
 }))
 vi.mock('../account/profile/profile', () => ({ getMyProfile: vi.fn() }))
 vi.mock('./spaceIconSignal', () => ({ bumpSpaceIcon: vi.fn() }))
-vi.mock('../../shared/state/useToast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }))
+vi.mock('../memory/share', () => ({ revokeScopeShares: vi.fn() }))
+const { toastSuccess } = vi.hoisted(() => ({ toastSuccess: vi.fn() }))
+vi.mock('../../shared/state/useToast', () => ({ useToast: () => ({ success: toastSuccess, error: vi.fn() }) }))
 // Confirmation is the app's own dialog (cr-web-own-confirm-dialog): the panel awaits `ask()`, so the answer is
 // given here. Stubbing `window.confirm` would now confirm nothing and pass anyway.
 const { confirmAsk } = vi.hoisted(() => ({ confirmAsk: vi.fn() }))
@@ -43,7 +45,9 @@ import { listScopeMembers, removeGroupMember } from './members'
 import { setSpaceIcon, clearSpaceIcon, openGroupIcon, rotateGroupForRemoval } from './scopes'
 import { getMyProfile } from '../account/profile/profile'
 import { bumpSpaceIcon } from './spaceIconSignal'
+import { revokeScopeShares } from '../memory/share'
 import { realI18n, t } from '../../test/i18n'
+import { i18n } from '../../i18n'
 
 const stubs = {
   Button: { props: ['label', 'icon', 'ariaLabel'], emits: ['click'], template: '<button :aria-label="ariaLabel" @click="$emit(\'click\')">{{ label }}</button>' },
@@ -162,5 +166,40 @@ describe('GroupMembersPanel — removing a member is one request (ADR 0024 Decis
     await removeBob(true)
     expect(rotateGroupForRemoval).toHaveBeenCalledTimes(1)
     expect(rotateGroupForRemoval).toHaveBeenCalledWith('g-1', PICKED, 'u-bob', true)
+  })
+})
+
+// W3 (ADR 0075 point 5): a group owner turns off every link of the group at once, behind the confirmation dialog.
+describe('GroupMembersPanel — turn off every link (ADR 0075)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    globalThis.URL.createObjectURL = vi.fn(() => 'blob:mock')
+    globalThis.URL.revokeObjectURL = vi.fn()
+  })
+
+  it('offers it to the owner and, confirmed, sends it for this group', async () => {
+    confirmAsk.mockResolvedValue(true)
+    vi.mocked(revokeScopeShares).mockResolvedValue(3)
+    const w = await mountPanel({ me: 'owner' })
+    await button(w, t('spaceLinks.revokeAll'))!.trigger('click')
+    await flushPromises()
+    expect(confirmAsk).toHaveBeenCalledWith(expect.objectContaining({ message: t('spaceLinks.revokeAllConfirm') }))
+    expect(revokeScopeShares).toHaveBeenCalledWith('g-1')
+    // the result names the count, in the catalog's plural form
+    expect(toastSuccess).toHaveBeenCalledWith(i18n.global.t('spaceLinks.revokedAll', { count: 3 }, 3))
+    expect(i18n.global.t('spaceLinks.revokedAll', { count: 3 }, 3)).toContain('3')
+  })
+
+  it('sends nothing when the confirmation is declined', async () => {
+    confirmAsk.mockResolvedValue(false)
+    const w = await mountPanel({ me: 'owner' })
+    await button(w, t('spaceLinks.revokeAll'))!.trigger('click')
+    await flushPromises()
+    expect(revokeScopeShares).not.toHaveBeenCalled()
+  })
+
+  it('control: a member who does not own the group is not offered it', async () => {
+    const w = await mountPanel({ me: 'stranger' })
+    expect(button(w, t('spaceLinks.revokeAll'))).toBeFalsy()
   })
 })

@@ -9,9 +9,7 @@ const listSharesFor = vi.fn()
 vi.mock('../shareLink', () => ({
   recoverShareLink: vi.fn(() => 'https://x/s/1#k=abc'),
 }))
-// The ADR 0075 predicate stays REAL: W2 is that the panel follows it, so stubbing it would prove nothing.
-vi.mock('../share', async (importOriginal) => ({
-  mintedBeforeKeyChange: (await importOriginal<typeof import('../share')>()).mintedBeforeKeyChange,
+vi.mock('../share', () => ({
   isReissueRequired: vi.fn(),
   listSharesFor: (...a: unknown[]) => listSharesFor(...a),
   revokeShare: vi.fn(),
@@ -32,6 +30,7 @@ const share = (over: Record<string, unknown>) => ({
   shareId: 's', scopeId: SCOPE_ID, nodeId: 'n1', role: ShareRole.Viewer, enabled: true, mine: true,
   createdAt: new Date('2026-01-01T00:00:00Z'), expiresAt: null,
   sealedNote: null, sealedShareName: null, sealedShareKey: 'k', sealedShareKeyEpoch: 1, passwordRequired: false, sealedPassword: null,
+  reissueRequired: false,
   ...over,
 })
 
@@ -70,27 +69,28 @@ describe('ShareDialog — expiry display (cr-share-link-expiry-ui)', () => {
   })
 })
 
-// W2 (ADR 0075): the panel follows the re-activation predicate. A share sealed below the current epoch is one a
-// departed member could have rebuilt, so it is marked and offers renew — never re-activate.
-describe('ShareDialog — renew vs re-activate (ADR 0075, W2)', () => {
+// W1 (ADR 0075 point 4): the panel follows the server's re-activation verdict, served as `reissueRequired`. The
+// client cannot derive it — the removal count is not on the wire — so the marked fixture sits at the CURRENT epoch,
+// where a client-side epoch compare would answer wrong.
+describe('ShareDialog — renew vs re-activate (ADR 0075, W1)', () => {
   const button = (w: ReturnType<typeof mountList>, label: string) => w.find('button[aria-label="' + label + '"]')
 
-  it('marks a disabled share sealed before the key changed and offers no re-activate', async () => {
-    listSharesFor.mockResolvedValue([share({ shareId: 'old', enabled: false, sealedShareKeyEpoch: 0 })])
+  it('marks a disabled share the server says needs renewing and offers no re-activate — even at the current epoch', async () => {
+    listSharesFor.mockResolvedValue([share({ shareId: 'counted', enabled: false, sealedShareKeyEpoch: 1, reissueRequired: true })])
     const w = mountList()
     await flushPromises()
 
-    expect(w.text()).toContain(t('share.keyChangedBadge'))
+    expect(w.text()).toContain(t('share.reissueRequiredBadge'))
     expect(button(w, t('share.reactivate')).exists()).toBe(false)
     expect(button(w, t('share.reissue')).exists()).toBe(true)
   })
 
-  it('control: a share sealed at the current epoch carries no mark and, disabled, keeps its re-activate', async () => {
-    listSharesFor.mockResolvedValue([share({ shareId: 'cur', enabled: false, sealedShareKeyEpoch: 1 })])
+  it('control: a disabled share the server does not mark carries no badge and keeps its re-activate', async () => {
+    listSharesFor.mockResolvedValue([share({ shareId: 'cur', enabled: false, sealedShareKeyEpoch: 1, reissueRequired: false })])
     const w = mountList()
     await flushPromises()
 
-    expect(w.text()).not.toContain(t('share.keyChangedBadge'))
+    expect(w.text()).not.toContain(t('share.reissueRequiredBadge'))
     expect(button(w, t('share.reactivate')).exists()).toBe(true)
   })
 

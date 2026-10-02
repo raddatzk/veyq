@@ -20,7 +20,6 @@ import {
   revokeShare,
   reactivateShare,
   isReissueRequired,
-  mintedBeforeKeyChange,
   readShareName,
   readShareNoteMap,
   hasLocaleText,
@@ -126,9 +125,6 @@ function openReissue(share: ManagedShare) {
   reissueFrom.value = share
   createOpen.value = true
 }
-// The epoch half of the server's re-activation refusal, readable from the list (ADR 0075 Decision 4): such a share is
-// marked and offers renew instead of re-activate.
-const beforeKeyChange = (share: ManagedShare) => mintedBeforeKeyChange(share, props.epochs)
 // Renew: the owner's own share, enabled or not; anyone's share once it is off (the new one is then theirs).
 const canReissue = (share: ManagedShare) => share.mine || !share.enabled
 async function onSaved() {
@@ -206,7 +202,9 @@ function fmtDate(d: Date): string {
             <span v-if="share.passwordRequired" class="veyq-badge"><span class="pi pi-lock" /> {{ t('share.passwordBadge') }}</span>
             <span v-if="!share.mine" class="veyq-badge muted">{{ t('share.byMember') }}</span>
             <span v-if="!share.enabled" class="veyq-badge muted">{{ t('share.disabled') }}</span>
-            <span v-if="beforeKeyChange(share)" class="veyq-badge muted share-key-changed" :title="t('share.keyChangedHint')">{{ t('share.keyChangedBadge') }}</span>
+            <!-- The server's re-activation verdict (ADR 0075 point 4), served on the row: such a link is marked and
+                 offers renew instead of re-activate, so the badge and the refusal cannot disagree. -->
+            <span v-if="share.reissueRequired" class="veyq-badge muted share-reissue-required" :title="t('share.reissueRequiredHint')">{{ t('share.reissueRequiredBadge') }}</span>
           </div>
         </div>
         <div class="share-list-actions">
@@ -241,7 +239,7 @@ function fmtDate(d: Date): string {
             @click="openReissue(share)"
           />
           <Button
-            v-if="!share.enabled && !beforeKeyChange(share)"
+            v-if="!share.enabled && !share.reissueRequired"
             type="button"
             icon="pi pi-refresh"
             :aria-label="t('share.reactivate')"
