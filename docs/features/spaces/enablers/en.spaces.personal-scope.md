@@ -78,7 +78,9 @@ sequenceDiagram
 ## Alternate / exception flows
 
 - **E1 — personal scope already exists:** `POST /api/scopes` is a no-op / `409` (one personal scope per
-  `(user, tenant)`); the client just opens the existing one.
+  `(user, tenant)`); the client just opens the existing one. A unique key on the scope row holds the rule
+  (`ux_scope_personal_owner`), so two creates under two ids at the same moment also end with one scope, and
+  the second gets `409 personal_scope_exists`.
 - **E2 — not unlocked:** without the identity private bundle the client can neither seal nor open a grant →
   birth/open is deferred until after unlock. No partial state.
 - **E3 — grant unwrap fails** (corrupt/foreign grant, a grant not signed by the member's own identity, or

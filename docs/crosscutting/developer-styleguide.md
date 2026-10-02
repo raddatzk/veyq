@@ -247,7 +247,18 @@ not documented; the code is the source of truth for that.
   gate is its update's own `and currentEpoch = ?` (`ScopesStore.renameGroup`): checked in an earlier read, a rotation
   committed between the check and the write, and a name sealed under the old epoch landed. A re-activation reads
   membership under the scope row's lock, which every removal holds (`SharingHandler.reactivate`): read before it, a
-  member being removed adopted a live link in a group it had left.
+  member being removed adopted a live link in a group it had left. The last-owner guard reads the owner count under
+  that lock too (`ScopesStore.changeRole`, `TenantHandler.removeMember`). Checked before it, two co-owners demoting
+  each other both counted two owners and the group was left with none.
+  **A check under a lock is fresh only when the lock is its transaction's first read.** Production MariaDB runs
+  REPEATABLE READ, where the first plain read of a transaction fixes its snapshot. Every plain read after a later
+  `FOR UPDATE` then still sees the state from before the lock. The test H2 reads committed data, so no slice test
+  can show this. So the lock opens the transaction: `changeRole` is its own transaction, and `removeMember` reads its
+  scope ids before its transaction begins.
+  **A rule across different ids needs its own key.** "One personal scope per member and tenant" had no row to
+  compare-and-set, and two creates under two ids collided on nothing. `ux_scope_personal_owner` is that row's
+  compare-and-set, and `personalScopeExists` reads that key, so the loser's replay question is the index's own
+  predicate.
 - *(to decide)* Cross-context communication — direct call vs. domain events — settled when bounded
   contexts are cut.
 

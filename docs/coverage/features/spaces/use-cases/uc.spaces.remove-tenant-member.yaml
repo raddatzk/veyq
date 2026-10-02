@@ -23,9 +23,9 @@ acceptanceCriteria:
       backend: { integration: [MemberRemoveSliceTest.ownerRemovesMemberCutsSharedButKeepsOwnScopeReadable, MemberRemoveSliceTest.nonOwnerForbiddenAndUnknownMemberNotFound, TenantOwnerGateTest.ordinaryMemberWhoOwnsScopesIsRefusedAtEveryOwnerGatedEndpoint, TenantOwnerGateTest.realRootScopeOwnerStillPasses] }
       web: { unit: [src/features/spaces/members.test.ts] }
   - id: orphan-transfer
-    text: A group the removed member solely owned that still has other members auto-transfers OWNER to the oldest remaining member (earliest createdAt); the group carries on, the tenant owner never gains access.
+    text: A group the removed member solely owned that still has other members auto-transfers OWNER to the oldest remaining member (earliest createdAt); the group carries on, the tenant owner never gains access. "Solely" counts a co-owner's demote that overlaps the removal.
     coverage:
-      backend: { integration: [MemberRemoveSliceTest.soleOwnedGroupWithMembersTransfersToOldestRemaining] }
+      backend: { integration: [MemberRemoveSliceTest.soleOwnedGroupWithMembersTransfersToOldestRemaining, OwnerRoleRaceSliceTest.aTenantRemovalOverlappingADemoteLeavesTheGroupAnOwner] }
   - id: orphan-tombstone
     text: A group the removed member was the only member of is grace-tombstoned (cr-0090 soft-delete → scheduled purge), like a deleted group.
     coverage:

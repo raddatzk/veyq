@@ -36,7 +36,9 @@
 
 - **A1 — last-owner guard.** The **last remaining OWNER** cannot be demoted or removed (a group needs ≥1 owner,
   [ADR 0007](../../../decisions/0007-membership-role-grant-relation.md) / [ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) §4).
-  The action is rejected; the caller must first promote another member or delete the group.
+  The action is rejected; the caller must first promote another member or delete the group. The guard holds when
+  changes overlap: every role change, removal-rotation and tenant removal decides under the group row's lock, so two
+  co-owners demoting each other end with one owner, and the second is told what a retry would tell it.
 - **A2 — the remover holds no key.** A tenant owner's removal that cuts a co-shared group they do not hold
   ([uc.spaces.remove-tenant-member](uc.spaces.remove-tenant-member.md) A4) cannot rotate: the rotation is *queued*
   as a `SCOPE_ROTATION` job until a remaining **owner** of the group is next online, who mints `E_{n+1}` +

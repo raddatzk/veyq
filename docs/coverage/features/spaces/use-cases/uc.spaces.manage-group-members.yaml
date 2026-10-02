@@ -10,11 +10,11 @@ acceptanceCriteria:
       backend: { integration: [ScopesSliceTest.promoteDemoteAndLastOwnerGuard] }
       web: { unit: [src/features/spaces/members.test.ts] }
   - id: last-owner-guard
-    text: The last remaining OWNER cannot be demoted or removed; the action is rejected (a group needs ≥1 owner).
+    text: The last remaining OWNER cannot be demoted or removed; the action is rejected (a group needs ≥1 owner). It holds for overlapping changes too — two co-owners demoting each other, or stepping down together, leave one owner.
     coverage:
       backend:
         unit: [RotationPolicyTest.refusesRemovingTheLastOwner, RotationPolicyTest.removesAnOwnerWhileAnotherOwnerRemains]
-        integration: [ScopesSliceTest.promoteDemoteAndLastOwnerGuard, ScopesSliceTest.aRemovalRotationKeepsTheOwnerGateAndTheLastOwnerGuard]
+        integration: [ScopesSliceTest.promoteDemoteAndLastOwnerGuard, ScopesSliceTest.aRemovalRotationKeepsTheOwnerGateAndTheLastOwnerGuard, OwnerRoleRaceSliceTest.twoOwnersDemotingEachOtherLeaveOneOwner, OwnerRoleRaceSliceTest.twoOwnersStepDownTogetherLeaveOneOwner]
   - id: remove-member
     text: A GroupOwner removes a member → the membership is deleted (the group instantly reads as 404 to them, ADR 0042). A non-owner caller is rejected.
     coverage:

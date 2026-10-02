@@ -10,6 +10,11 @@ import com.veyq.app.testing.TestFixtures.seedUser
 import com.veyq.app.testing.answer
 import com.veyq.app.testing.assertWinnerAndLoser
 import com.veyq.app.testing.race
+import com.veyq.app.testing.whileUncommitted
+import com.veyq.app.shared.membership.MembershipEntity
+import com.veyq.app.shared.membership.SignedGrant
+import com.veyq.app.shared.scope.ScopeEntity
+import jakarta.inject.Inject
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -24,6 +29,9 @@ import org.junit.jupiter.api.Test
  */
 @QuarkusTest
 class ScopeCreateRaceSliceTest {
+
+    @Inject lateinit var handler: ScopesHandler
+    @Inject lateinit var store: ScopesStore
 
     private val personalGrant = "cGVyc29uYWwtc2NvcGUtZ3JhbnQ="
     private val groupGrant = "Z3JvdXAtc2NvcGUtZ3JhbnQ="
@@ -40,6 +48,37 @@ class ScopeCreateRaceSliceTest {
             assertWinnerAndLoser(201, 409 to "personal_scope_exists", answers, "round $round")
         }
         assertEquals(201 to null, createPersonal(member(domain), domain, personalBody(TestIds.uuid())))
+    }
+
+    /**
+     * Two creates of one member under two ids: no id collides, so only a key on "one personal scope per member and
+     * tenant" can refuse the second. The first create's commit is held back and the second runs inside that window,
+     * so its "exists?" read misses the first — the order is forced, not likely. Replayed after the first commit, the
+     * second finds the caller's personal scope.
+     */
+    @Test
+    fun overlappingPersonalCreatesUnderTwoIdsCreateOneScope() {
+        val domain = domainOf(seedTenant())
+        val tenantId = domain.removePrefix("t-").removeSuffix(".example.com")
+        repeat(RACE_ROUNDS) { round ->
+            val userId = member(domain)
+            val grant = SignedGrant(personalGrant, TestAdmission.SIGNATURE)
+            val second = whileUncommitted(
+                change = { assertEquals(true, store.createPersonal(TestIds.uuid(), userId, tenantId, grant), "round $round") },
+                overlapping = { handler.createPersonal(userId, tenantId, TestIds.uuid(), grant) },
+            )
+            assertEquals(CreatePersonalOutcome.AlreadyExists, second, "round $round")
+            assertEquals(1L, personalScopesOf(userId, tenantId), "round $round: one personal scope per member and tenant")
+        }
+        // Control: another member's personal create in the same tenant lands.
+        val other = member(domain)
+        assertEquals(201 to null, createPersonal(other, domain, personalBody(TestIds.uuid())))
+        assertEquals(1L, personalScopesOf(other, tenantId))
+    }
+
+    private fun personalScopesOf(userId: String, tenantId: String): Long = QuarkusTransaction.requiringNew().call {
+        val scopeIds = MembershipEntity.find("userId = ?1 and tenantId = ?2", userId, tenantId).list().map { it.scopeId }
+        ScopeEntity.count("id in ?1 and kind = ?2", scopeIds, ScopeEntity.PERSONAL)
     }
 
     /** Two members minting one scope id: the loser has no personal scope, so its replay answers `id_taken`. */

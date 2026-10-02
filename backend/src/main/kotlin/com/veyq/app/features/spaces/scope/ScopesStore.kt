@@ -127,13 +127,11 @@ class ScopesStore(
     /** Whether [userId] belongs to the tenant — an accepted root membership (a group-add candidate's check). */
     fun belongsToTenant(userId: String, tenantId: String): Boolean = membership.belongsToTenant(userId, tenantId)
 
-    /** Whether the caller already has a PERSONAL scope in this tenant (one per member, per tenant). */
-    fun personalScopeExists(userId: String, tenantId: String): Boolean {
-        val scopeIds = MembershipEntity.find("userId = ?1 and tenantId = ?2", userId, tenantId)
-            .list().map { it.scopeId }
-        return scopeIds.isNotEmpty() &&
-            ScopeEntity.count("id in ?1 and kind = ?2", scopeIds, ScopeEntity.PERSONAL) > 0
-    }
+    /** Whether the caller already has a PERSONAL scope in this tenant (one per member, per tenant). It reads the
+     *  unique key itself (`ux_scope_personal_owner`), so it is the replay question for a create that lost on that
+     *  key: every collision there is answered `personal_scope_exists`. */
+    fun personalScopeExists(userId: String, tenantId: String): Boolean =
+        ScopeEntity.count("tenantId = ?1 and personalOwner = ?2", tenantId, userId) > 0
 
     /** Does any scope, of any kind and tenant, already hold the client-minted [scopeId]? */
     fun scopeIdTaken(scopeId: String): Boolean = ScopeEntity.findById(scopeId) != null
@@ -147,6 +145,7 @@ class ScopesStore(
             id = scopeId
             this.tenantId = tenantId
             kind = ScopeEntity.PERSONAL
+            personalOwner = userId // the unique key a second personal create of this member collides on
             createdAt = now
         }.persist()
         MembershipEntity().apply {
@@ -299,13 +298,30 @@ class ScopesStore(
 
     // --- member management + rotation (cr-0088) ---
 
-    /** The number of OWNER memberships on a scope — the last-owner guard (ADR 0007). */
-    fun ownerCount(scopeId: String): Long = membership.ownerCount(scopeId)
+    /** What [changeRole] did: the change landed, or which of its checks refused it. */
+    enum class RoleChange { CHANGED, NOT_OWNER, MEMBER_NOT_FOUND, LAST_OWNER }
 
-    /** A member's role in a scope, or null if they hold no membership there. */
-    fun memberRole(userId: String, scopeId: String): String? = membership.memberRole(userId, scopeId)
+    /**
+     * An owner sets [targetId]'s role on a GROUP (uc.spaces.manage-group-members). The checks run under the scope
+     * row's lock, which is this transaction's first statement: the caller is an OWNER, the target holds a row, and
+     * the change leaves an OWNER ([MembershipPolicy]). Each removal-rotation holds the same lock. Checked before
+     * the lock, two co-owners demoting each other both counted two owners, and the group was left with none
+     * (developer-styleguide §12). The lock has to come first because MariaDB runs REPEATABLE READ. There the first
+     * plain read fixes the transaction's snapshot, so a check read after a later lock would still see the
+     * pre-lock state. H2 reads committed data and would not show it.
+     */
+    @Transactional
+    fun changeRole(callerId: String, targetId: String, scopeId: String, role: String): RoleChange {
+        ScopeEntity.lockRow(scopeId)
+        if (!membership.isScopeOwner(callerId, scopeId)) return RoleChange.NOT_OWNER
+        val current = membership.memberRole(targetId, scopeId) ?: return RoleChange.MEMBER_NOT_FOUND
+        if (MembershipPolicy.isLastOwnerDemote(current, role, membership.ownerCount(scopeId))) return RoleChange.LAST_OWNER
+        setRole(targetId, scopeId, role)
+        return RoleChange.CHANGED
+    }
 
-    /** Set a member's role (promote/demote). No-op if not a member. */
+    /** Set a member's role (promote/demote). No-op if not a member. Decides nothing: an owner's change goes through
+     *  [changeRole]; the tenant removal's orphan promotion calls this under the scope locks it already holds. */
     @Transactional
     fun setRole(userId: String, scopeId: String, role: String) {
         MembershipEntity.find("userId = ?1 and scopeId = ?2", userId, scopeId).firstResult()?.let {
@@ -480,6 +496,11 @@ class ScopesStore(
         val memberCount: Long,
         val ownerCount: Long,
     )
+
+    /** The ids of every scope the user holds a row on in this tenant — the locks a tenant removal takes before it
+     *  plans ([membershipsInTenant] is the plan's read, made under them). */
+    fun scopeIdsInTenant(userId: String, tenantId: String): List<String> =
+        MembershipEntity.find("userId = ?1 and tenantId = ?2", userId, tenantId).list().map { it.scopeId }
 
     /** Every scope the user is a member of in this tenant, each tagged with the scope kind + its member and owner
      *  counts — the input to the per-kind removal cascade (delete shared, orphan-transfer, soft-delete own, cr-0091). */

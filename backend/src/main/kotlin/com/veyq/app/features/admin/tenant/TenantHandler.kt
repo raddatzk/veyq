@@ -433,12 +433,32 @@ class TenantHandler(
      * Every scope cut counts the removal ([ScopesStore.recordRemoval], ADR 0075 point 4); with [revokeLinks] every
      * link of the TENANT scope is also turned off and marked (point 5). A refused removal writes neither.
      * Operator-blind: only membership deletions + a lifecycle timestamp — never a key.
+     *
+     * The plan reads owner counts, so it is made under the locks of every scope the target is in. A group owner's
+     * role change and a removal-rotation hold the same lock. Planned before the locks, a removal that overlapped a
+     * co-owner's demote cut the other owner as "one of two", and the group was left with none. The target's scope
+     * ids are read first, outside the decision's transaction. That transaction then takes their locks, in ascending
+     * id order, as its first statements: on MariaDB's REPEATABLE READ the first plain read fixes the snapshot, so a
+     * plan read after a later lock would still be stale. The gates run again under the locks, so a refusal is what
+     * a replay would get.
      */
-    @Transactional
     fun removeMember(callerId: String, tenantId: String, targetId: String, revokeLinks: Boolean = false): RemoveTenantMemberOutcome {
+        gateRemoval(callerId, tenantId)?.let { return it }
+        val scopeIds = scopes.scopeIdsInTenant(targetId, tenantId).sorted()
+        return QuarkusTransaction.requiringNew().call {
+            scopeIds.forEach { scopes.lockScope(it) }
+            cutUnderLocks(callerId, tenantId, targetId, revokeLinks)
+        }
+    }
+
+    private fun gateRemoval(callerId: String, tenantId: String): RemoveTenantMemberOutcome? {
         access.check(callerId, tenantId, WRITE)
             .refusal(RemoveTenantMemberOutcome.NotFound, RemoveTenantMemberOutcome.Suspended)?.let { return it }
-        if (!store.isOwner(callerId, tenantId)) return RemoveTenantMemberOutcome.NotOwner
+        return if (store.isOwner(callerId, tenantId)) null else RemoveTenantMemberOutcome.NotOwner
+    }
+
+    private fun cutUnderLocks(callerId: String, tenantId: String, targetId: String, revokeLinks: Boolean): RemoveTenantMemberOutcome {
+        gateRemoval(callerId, tenantId)?.let { return it }
         // Impure shell: load the directory (ownerCount pre-resolved per row), ask the pure policy, execute its steps.
         // Every branch and boundary of the decision lives in RemovalPolicy, where it is mutation-verified (ADR 0045 §2).
         val rows = scopes.membershipsInTenant(targetId, tenantId)
@@ -451,7 +471,9 @@ class TenantHandler(
                 // Every scope this removal cuts is locked before anything is deleted, in ascending id order: the
                 // rotation each cut may originate serialises on the scope row, and the lock order is scope →
                 // membership → job (ScopesStore.rotate's). A cut that held a member's row while a rotation held the
-                // scope row would deadlock; one order across scopes keeps two such requests from crossing.
+                // scope row would deadlock; one order across scopes keeps two such requests from crossing. The
+                // locks taken above already cover every scope but one the target joined after its ids were read;
+                // that one is locked here, and only its counts can come from the pre-lock snapshot.
                 plan.steps.filter { it.action != CascadeAction.SOFT_DELETE }.map { it.scopeId }.sorted()
                     .forEach { scopes.lockScope(it) }
                 plan.steps.forEach { execute(it, targetId, now) }

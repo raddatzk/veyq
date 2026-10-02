@@ -1571,6 +1571,13 @@ take first. A re-activation's `enabled` was already row-locked by an earlier CR;
 check read before that lock. So for a race row marked *read, not run*, grep the foreign keys and the existing
 `PESSIMISTIC_WRITE` reads on both rows (`grep -n 'FOREIGN KEY' …/db/migration`, `grep -rn 'PESSIMISTIC_WRITE'`).
 Write the fix as a hypothesis, and re-derive it from the first red.
+**Race every writer of the invariant, not only the pair the row names.** `grep` the decision's read (for the
+last-owner rule, `ownerCount`), and give each caller an overlap test. #272 named two demotes. The read's third
+caller, the tenant removal's plan, left a group with no owner in round 0 as well, and that test is what made the
+fix lock before the plan instead of only around the demote
+(cr-owners-and-personal-scope-hold-under-overlap). **And a lock-based fix names where its transaction's first
+read is.** The slice tests run H2 at READ COMMITTED, and production runs MariaDB at REPEATABLE READ. A check made
+after the lock but in a transaction that read before it passes every H2 test and is stale on MariaDB.
 
 ### Every CR closes with a short, honest retrospective
 
