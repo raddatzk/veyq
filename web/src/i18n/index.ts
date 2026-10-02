@@ -42,6 +42,15 @@ const en = {
     statusPendingConsent: 'Awaiting consent',
     badgeNotAdmitted: 'Admission not verified',
     awaitingAccess: 'Awaiting access',
+    compromiseRotation: {
+      stalled:
+        'A member re-secured their account, and this space needs a new lock — but no owner is left who can fit it. Make someone else an owner. Until then, their old key can still read what’s new here.',
+      failed:
+        'A member re-secured their account, and fitting this space’s new lock kept failing — their old key can still read what’s new here. Start it again, and your device takes it on.',
+    },
+    compromiseRotationMark: 'Needs a new lock',
+    compromiseRotationRequeue: 'Start again',
+    compromiseRotationRequeueFailed: 'That didn’t work. Please try again.',
     pendingTitle: 'Pending invites',
     pendingSub: 'People you invited who have not joined yet. Send their invitation again or cancel it.',
     statusInvited: 'Invited',
@@ -171,14 +180,26 @@ const en = {
     status: {
       secured: 'Secured',
       waiting: 'Waiting for someone else',
+      stalled: 'Nobody can do it',
       failed: 'Not secured',
     },
     statusHint: {
       secured: 'This space has a new lock and only your new keys open it.',
-      waiting:
-        'Someone else in this space has to confirm it’s really you before you’re back in. Until then you’re outside it, and nothing you do alone changes that.',
       failed: 'This space still has its old lock. Try replacing your keys again.',
     },
+    queuedTitle: 'Shared spaces',
+    queuedHint: {
+      waiting:
+        'Another owner of this space fits the new lock the next time they open veyq. Until then, the old key can still read what’s new here. And someone here has to confirm it’s really you before you’re back in.',
+      stalled:
+        'Nobody here can fit the new lock: no other owner is left who can. Make someone else an owner of this space. Until then, the old key can still read what’s new here.',
+      secured:
+        'This space has a new lock the old key can’t open. Someone here still has to confirm it’s really you before you’re back in.',
+      failed:
+        'Fitting the new lock kept failing, so this space still has its old one — the old key can still read what’s new here. Start it again, and another owner takes it on.',
+    },
+    requeue: 'Start again',
+    requeueFailed: 'That didn’t work. Please try again.',
     errorTrustState:
       'This device can’t open one of your lists — the keys you trust or your device names — so replacing your keys would carry it across unchecked. Nothing was changed. Start that list over first, under “Start a list over”.',
   },
@@ -1087,6 +1108,15 @@ const de: typeof en = {
     statusPendingConsent: 'Wartet auf Zustimmung',
     badgeNotAdmitted: 'Aufnahme nicht bestätigt',
     awaitingAccess: 'Wartet auf Zugang',
+    compromiseRotation: {
+      stalled:
+        'Ein Mitglied hat sein Konto neu abgesichert, und dieser Raum braucht ein neues Schloss — aber es gibt keine besitzende Person mehr, die es einbauen kann. Mach jemand anderen zur besitzenden Person. Bis dahin kann sein alter Schlüssel Neues hier noch lesen.',
+      failed:
+        'Ein Mitglied hat sein Konto neu abgesichert, und das neue Schloss dieses Raums ließ sich wiederholt nicht einbauen — sein alter Schlüssel kann Neues hier noch lesen. Stoß es neu an, dann übernimmt dein Gerät.',
+    },
+    compromiseRotationMark: 'Braucht ein neues Schloss',
+    compromiseRotationRequeue: 'Neu anstoßen',
+    compromiseRotationRequeueFailed: 'Das hat nicht geklappt. Bitte versuche es erneut.',
     pendingTitle: 'Ausstehende Einladungen',
     pendingSub: 'Eingeladene Personen, die noch nicht beigetreten sind. Schicke die Einladung erneut oder zieh sie zurück.',
     statusInvited: 'Eingeladen',
@@ -1215,14 +1245,26 @@ const de: typeof en = {
     status: {
       secured: 'Gesichert',
       waiting: 'Wartet auf jemand anderen',
+      stalled: 'Niemand kann es tun',
       failed: 'Nicht gesichert',
     },
     statusHint: {
       secured: 'Dieser Raum hat ein neues Schloss, und nur deine neuen Schlüssel öffnen es.',
-      waiting:
-        'Jemand anderes in diesem Raum muss bestätigen, dass du wirklich du bist, bevor du wieder drin bist. Bis dahin bist du draußen, und daran ändert nichts, was du allein tust.',
       failed: 'Dieser Raum hat noch sein altes Schloss. Versuche das Ersetzen noch einmal.',
     },
+    queuedTitle: 'Geteilte Räume',
+    queuedHint: {
+      waiting:
+        'Eine andere besitzende Person dieses Raums baut das neue Schloss ein, sobald sie veyq das nächste Mal öffnet. Bis dahin kann der alte Schlüssel Neues hier noch lesen. Und jemand hier muss bestätigen, dass du wirklich du bist, bevor du wieder drin bist.',
+      stalled:
+        'Hier kann niemand das neue Schloss einbauen: Es gibt keine andere besitzende Person mehr, die es kann. Mach jemand anderen zur besitzenden Person dieses Raums. Bis dahin kann der alte Schlüssel Neues hier noch lesen.',
+      secured:
+        'Dieser Raum hat ein neues Schloss, das der alte Schlüssel nicht öffnet. Jemand hier muss noch bestätigen, dass du wirklich du bist, bevor du wieder drin bist.',
+      failed:
+        'Das neue Schloss ließ sich wiederholt nicht einbauen, deshalb hat dieser Raum noch sein altes — der alte Schlüssel kann Neues hier noch lesen. Stoß es neu an, dann übernimmt eine andere besitzende Person.',
+    },
+    requeue: 'Neu anstoßen',
+    requeueFailed: 'Das hat nicht geklappt. Bitte versuche es erneut.',
     errorTrustState:
       'Dieses Gerät kann eine deiner Listen nicht öffnen — deine vertrauten Schlüssel oder deine Gerätenamen —, deshalb würde das Ersetzen der Schlüssel sie ungeprüft mitnehmen. Es wurde nichts geändert. Beginne diese Liste zuerst neu, unter „Liste neu beginnen“.',
   },

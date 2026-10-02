@@ -379,15 +379,16 @@ describe('what a rotation posts', () => {
 })
 
 describe('what a rotation leaves behind', () => {
-  it('reports a queued scope as waiting and re-keys nothing there', async () => {
-    // ADR 0060 Decision 6: between rotating and being re-admitted the caller is OUTSIDE every shared scope.
-    // That is the property that stops an attacker rotating their way back in, so the status says it rather
-    // than showing a spinner over it.
+  it('re-keys nothing in a queued scope and synthesises no status for it', async () => {
+    // ADR 0060 Decision 6: between rotating and being re-admitted the caller is OUTSIDE every shared scope, and
+    // how its covering rotation stands is the SERVER's to say, re-readable at any time (listQueuedRotations) — a
+    // `waiting` made up here from the rotation's own response would never be read again, and would outlive a
+    // dead-letter the server knows about.
     const srv = fakeServer({ queued: [SCOPE_SHARED] })
 
     const result = await rotateKeys(PASSWORD, SECRET_KEY_B64)
 
-    expect(result.scopes).toEqual([{ scopeId: SCOPE_SHARED, status: 'waiting' }])
+    expect(result.scopes).toEqual([])
     expect(srv.rotateScope).not.toHaveBeenCalled()
   })
 

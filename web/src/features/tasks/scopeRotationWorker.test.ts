@@ -127,4 +127,27 @@ describe('runScopeRotationWorker', () => {
     expect(declineTask).toHaveBeenCalledWith({ jobId: 'j1', declineRequest: { reason: 'stale_epoch' } })
     expect(failTask).not.toHaveBeenCalled()
   })
+
+  it.each([
+    // An owner demoted between claim and commit (the claim offers rotations to owners only).
+    [403, 'not_scope_owner'],
+    // The one lease an account rotation leaves to the rotator: the one they held when they rotated (ADR 0060 D4).
+    [403, 'rotation_excluded'],
+  ])('declines, not fails, a rotation refused %i %s — this worker may not perform it at all', async (status, code) => {
+    // Each refusal is about this key-holder, never about the job: declining releases it to the scope's other
+    // owners without spending an attempt, where failing would burn attempts until the job dead-letters. The
+    // control is the `rotate-failed` case above: any other error still fails.
+    const claimTask = vi
+      .fn()
+      .mockResolvedValueOnce({ jobId: 'j1', scopeId: 'g1', capabilityTag: SCOPE_ROTATION, attempts: 1 })
+      .mockResolvedValueOnce(null)
+    const failTask = vi.fn().mockResolvedValue(undefined)
+    const declineTask = vi.fn().mockResolvedValue(undefined)
+    mockTasks(claimTask, vi.fn(), failTask, declineTask)
+    vi.mocked(commitRotation).mockRejectedValueOnce(httpError(status, code))
+
+    expect(await runScopeRotationWorker()).toBe(0)
+    expect(declineTask).toHaveBeenCalledWith({ jobId: 'j1', declineRequest: { reason: code } })
+    expect(failTask).not.toHaveBeenCalled()
+  })
 })

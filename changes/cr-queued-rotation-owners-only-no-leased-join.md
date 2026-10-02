@@ -864,7 +864,7 @@ it. D5 also writes the exclusion on older `LEASED` jobs, but none of those carri
           chooses the answer.
         - Write B10 and B11 first and record each red.
       · Done when: `./gradlew check` green.
-- [ ] 3 web:
+- [x] 3 web:
       - D2 in `scopeRotationWorker.ts`.
       - Update the header comment (*"the next remaining key-holder"*, *"coalesces multiple removals"*) and the
         comment at `listScopeMembers`, which now carries a load-bearing ordering: the directory must be read after

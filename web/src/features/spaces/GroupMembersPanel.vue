@@ -30,6 +30,8 @@ import { revokeScopeShares } from '../memory/share'
 import SpaceIconDialog from './SpaceIconDialog.vue'
 import TenantAvatar from '../../shared/ui/TenantAvatar.vue'
 import ChangedKeyReviewDialog from './ChangedKeyReviewDialog.vue'
+import CompromiseRotationNotice from './CompromiseRotationNotice.vue'
+import type { CompromiseRotation } from '../../api/generated/scopes'
 
 // Addressed by scope id (cr-0087) — the settings hub renders one panel per group the caller owns, not the
 // active scope; switching between groups in the rail re-loads via the `scopeId` watch. `name` is the group's
@@ -72,6 +74,9 @@ const iconBusy = ref(false)
 const iconError = ref('')
 // Group lifecycle (cr-0090): the group's own pending-deletion state + the danger-zone controls.
 const purgeAfter = ref<Date | null>(null)
+/** Owner rows only: a compromise rotation queued on this group that needs an owner
+ *  (uc.spaces.complete-queued-rotation E2/E8) — read from the caller's own scope row, filled only for an owner. */
+const stuckRotation = ref<CompromiseRotation | null>(null)
 const isPending = computed(() => purgeAfter.value !== null)
 const confirmingDelete = ref(false)
 const lifecycleBusy = ref(false)
@@ -91,6 +96,7 @@ const { members, isOwner, trust, trustRefusal, unadmitted, reviewTarget, reviewO
     ])
     myUsername.value = me?.username ?? ''
     purgeAfter.value = lifecycle?.purgeAfter ?? null
+    stuckRotation.value = lifecycle?.compromiseRotation ?? null
     // The identity header's avatar: the group's icon opened on-device against our own grant (null → the initial).
     if (iconBytes) groupIcon.set(new Blob([iconBytes as BlobPart], { type: 'image/webp' }))
     else groupIcon.clear()
@@ -438,6 +444,7 @@ async function onRestore() {
       </div>
       <Message v-if="renameError" severity="error" :closable="false">{{ renameError }}</Message>
       <Message v-if="iconError" severity="error" :closable="false">{{ iconError }}</Message>
+      <CompromiseRotationNotice v-if="isOwner" :scope-id="scopeId" :state="stuckRotation" @requeued="stuckRotation = $event" />
 
       <div class="settings-section-header">
         <div>

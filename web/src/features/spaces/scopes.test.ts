@@ -206,7 +206,9 @@ describe('listMyGroups', () => {
     ])
     mockScopes(list, vi.fn())
 
-    expect(await listMyGroups()).toEqual([{ scopeId: G1, tenantId: 't', name: 'Reise-Crew', icon: null, deletedAt: null, purgeAfter: null }])
+    expect(await listMyGroups()).toEqual([
+      { scopeId: G1, tenantId: 't', name: 'Reise-Crew', icon: null, deletedAt: null, purgeAfter: null, compromiseRotation: null },
+    ])
   })
 
   it('opens a group icon sealed under an OLDER epoch by peeling the chain (a rotated group: iconEpoch < currentEpoch)', async () => {

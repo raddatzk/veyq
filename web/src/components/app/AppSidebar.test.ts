@@ -35,7 +35,7 @@ vi.mock('../../features/memory/coverStore', () => ({
 }))
 
 import AppSidebar from './AppSidebar.vue'
-import { listMyTenants } from '../../features/spaces/scopes'
+import { listMyTenants, listMyGroups } from '../../features/spaces/scopes'
 import { activeSpace, clearActiveSpace } from '../../app/activeSpace'
 import { treeStore } from '../../features/memory/treeStore'
 import { favoritesStore } from '../../app/favoritesStore'
@@ -273,5 +273,26 @@ describe('AppSidebar favorites — a pinned Memory shows its cover', () => {
     const row = wrapper.findAll('.mobile-nav-item').find((i) => i.text().includes('Rom 2026'))!
     expect(row.classes()).toContain('mobile-nav-favorite')
     expect(row.get('.sidebar-favorite-cover img').attributes('src')).toBe('blob:cover-1')
+  })
+})
+
+describe('AppSidebar — a space whose compromise rotation needs an owner is marked (uc.spaces.complete-queued-rotation)', () => {
+  it('marks a group on stalled and on failed, and no other', async () => {
+    const group = (scopeId: string, compromiseRotation: string | null) =>
+      ({ scopeId, tenantId: 't-1', name: scopeId, icon: null, role: 'OWNER', deletedAt: null, purgeAfter: null, compromiseRotation })
+    vi.mocked(listMyGroups).mockResolvedValueOnce([group('g-failed', 'failed'), group('g-stalled', 'stalled'), group('g-fine', null)] as never)
+    const wrapper = await mountAt('')
+    const link = (name: string) => wrapper.findAll('.desktop-group-link').find((a) => a.text().includes(name))!
+    expect(link('g-failed').text()).toContain(t('members.compromiseRotationMark'))
+    expect(link('g-stalled').text()).toContain(t('members.compromiseRotationMark'))
+    expect(link('g-fine').text()).not.toContain(t('members.compromiseRotationMark'))
+  })
+
+  it('marks the active tenant row when its root needs an owner', async () => {
+    vi.mocked(listMyTenants).mockResolvedValueOnce([
+      { tenantId: 't-1', name: 'Familie Muster', domain: '127.0.0.1', role: 'OWNER', status: 'ACTIVE', iconEpoch: 0, compromiseRotation: 'failed' },
+    ] as never)
+    const wrapper = await mountAt('')
+    expect(wrapper.get('.sidebar-tenant-space-link').text()).toContain(t('members.compromiseRotationMark'))
   })
 })
