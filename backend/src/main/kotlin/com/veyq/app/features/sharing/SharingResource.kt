@@ -105,16 +105,17 @@ class SharingResource(
                 is HttpFailure -> return httpError(o)
             }
         }
-        return Response.ok(shares.map { (s, reissueRequired) ->
+        return Response.ok(shares.map { (s, reissueRequired, deletable) ->
             ShareSummary(
                 shareId = s.id,
                 scopeId = UUID.fromString(s.scopeId), // the recovery wrap is bound to (scope, node, share), ADR 0072
                 nodeId = UUID.fromString(s.nodeId),
                 role = ShareRole.decode(s.role),
-                sealedName = s.sealedName,
+                sealedName = checkNotNull(s.sealedName) { "a listed share is never a tombstone" },
                 enabled = s.enabled,
                 mine = s.ownerAccount == me,
                 reissueRequired = reissueRequired, // ADR 0075: the predicate the re-activation refusal runs
+                deletable = deletable, // ADR 0029 §7: the predicate the delete gate runs
                 createdAt = s.createdAt.atOffset(ZoneOffset.UTC),
                 expiresAt = s.expiresAt?.atOffset(ZoneOffset.UTC),
                 sealedNote = s.sealedNote, // cr-0115: the manage UI shows + edits it
@@ -130,6 +131,12 @@ class SharingResource(
     override fun revokeShare(shareId: String): Response =
         when (val o = handler.revoke(identity.principal.name, shareId)) {
             RevokeShareOutcome.Done -> Response.noContent().build()
+            is HttpFailure -> httpError(o)
+        }
+
+    override fun deleteShare(shareId: String): Response =
+        when (val o = handler.delete(identity.principal.name, shareId)) {
+            DeleteShareOutcome.Done -> Response.noContent().build()
             is HttpFailure -> httpError(o)
         }
 

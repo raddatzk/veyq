@@ -5,6 +5,8 @@ import com.veyq.app.features.media.BlobEntity
 import com.veyq.app.features.media.BucketEntity
 import com.veyq.app.features.media.MediaEntity
 import com.veyq.app.features.media.MediaStore
+import com.veyq.app.features.media.OwnerKey
+import com.veyq.app.features.sharing.SharingStore
 import com.veyq.app.shared.blobstore.StoreObjectRef
 import com.veyq.app.shared.blobstore.StoreReclaimStore
 import com.veyq.app.shared.config.VeyqConfig
@@ -38,10 +40,16 @@ import java.time.Instant
  *   deletes no store objects itself — it records the key prefixes and `StoreReclaimSweep` drains them. The old
  *   shape reclaimed best-effort after the commit, which is unobservable by construction: the row that named the
  *   key was already gone when the delete failed.
+ *
+ * And it **ends every link on the erased Memories** (ADR 0029 §7). Trashing a Memory leaves its links resolving to
+ * nothing and bringing it back on restore; once the Memory is erased there is nothing to bring back, and a link left
+ * standing kept answering `200` with its sealed title, listed nowhere a member could revoke it. With the links go the
+ * guest identities nothing can use or open any more (inbox #229).
  */
 @ApplicationScoped
 class NodeSubtreePurge(
     private val mediaStore: MediaStore,
+    private val sharing: SharingStore,
     private val reclaim: StoreReclaimStore,
     config: VeyqConfig,
 ) {
@@ -63,8 +71,15 @@ class NodeSubtreePurge(
         if (expired.isEmpty()) return
         val nodeIds = expired.map { it.id }
 
+        // 0. the guest identities whose media or buckets this erases — read while the rows still name them; step 6
+        //    drops the ones nothing references any more.
+        val media = MediaEntity.find("nodeId in ?1", nodeIds).list()
+        val buckets = BucketEntity.find("nodeId in ?1", nodeIds).list()
+        val guests = media.mapNotNull { it.shareIdentityId } +
+            buckets.mapNotNull { (OwnerKey.parse(it.ownerKey) as? OwnerKey.Share)?.shareIdentityId }
+
         // 1. media + derivatives + their blobs, one media at a time through the shared FK-ordered body.
-        MediaEntity.find("nodeId in ?1", nodeIds).list().forEach { mediaStore.purgeMediaRows(it) }
+        media.forEach { mediaStore.purgeMediaRows(it) }
 
         // 2. the subtree's buckets — rows only; every medium that lived in them went above. No revision bump:
         //    a trashed node is already out of every listing, so no open gallery can be watching it.
@@ -84,6 +99,14 @@ class NodeSubtreePurge(
         //    survives this purge. They are dropped only HERE and not at soft-delete, for the same reason as
         //    the covers above — a restore inside the window must hand back the Memory with its marks intact.
         ItemFavoritesEntity.delete("nodeId in ?1", nodeIds)
+
+        // 5. every link on these nodes is deleted — a tombstone (ADR 0029 §7), not a row delete: its id stays held,
+        //    and the identities of guests with uploads elsewhere still hang off it.
+        sharing.tombstoneAllOn(nodeIds)
+
+        // 6. the guests of ANY deleted link whose last media or bucket went above — a link deleted earlier loses its
+        //    guests here, with the last Memory that held their uploads. After steps 1, 2 and 5, which it reads.
+        sharing.dropDeadIdentities(guests)
 
         expired.forEach { NodeEntity.deleteById(it.id) }
     }

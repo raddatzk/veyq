@@ -225,7 +225,74 @@ class ShareSharedScopeSliceTest {
             .body("find { it.shareId == '$newId' }.nodeId", equalTo(memory))
             .body("find { it.shareId == '$newId' }.mine", equalTo(true))
             .body("find { it.shareId == '$newId' }.sealedShareKeyEpoch", equalTo(0))
-            .body("find { it.shareId == '$old' }.enabled", equalTo(false))
+            .body("shareId", not(hasItem(old))) // deleted, not merely off (ADR 0029 §7)
+    }
+
+    /** B4 — a voluntary re-issue (nobody left, the copy at the current epoch) used to leave the old link one
+     *  re-activation from coming back, for any member: the re-issue now deletes it. */
+    @Test
+    fun aReissuedLinkCannotComeBack() {
+        val (tenantId, owner) = seedActiveTenant("g-reissue-dead.example.com")
+        val group = seedGroup(tenantId, owner)
+        val old = createShare(owner, seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY), copyEpoch = 0)
+
+        reissue(owner, old, epoch = 0).then().statusCode(201)
+
+        reactivate(owner, old).then().statusCode(404).body("code", equalTo("share_not_found"))
+        resolves(old, 404)
+    }
+
+    // --- delete (ADR 0029 §7, B2) ---
+
+    @Test
+    fun theOwnerDeletesALinkAndItIsGoneEverywhere() {
+        val (tenantId, owner) = seedActiveTenant("g-delete.example.com")
+        val group = seedGroup(tenantId, owner)
+        val memory = seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
+        val shareId = createShare(owner, memory, copyEpoch = 0)
+        given().header("Authorization", bearer(owner)).`when`().get("/api/shares?nodeId=$memory")
+            .then().statusCode(200).body("find { it.shareId == '$shareId' }.deletable", equalTo(true))
+
+        delete(owner, shareId).then().statusCode(204) // enabled: turned off in the same transaction
+
+        resolves(shareId, 404).body("code", equalTo("share_not_found"))
+        given().header("Authorization", bearer(owner)).`when`().get("/api/shares?nodeId=$memory")
+            .then().statusCode(200).body("shareId", not(hasItem(shareId)))
+        given().header("Authorization", bearer(owner)).`when`().get("/api/shares")
+            .then().statusCode(200).body("shareId", not(hasItem(shareId)))
+        reactivate(owner, shareId).then().statusCode(404).body("code", equalTo("share_not_found"))
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON).body("{}")
+            .`when`().patch("/api/shares/$shareId").then().statusCode(404).body("code", equalTo("share_not_found"))
+        given().header("Authorization", bearer(owner)).`when`().post("/api/shares/$shareId/revoke")
+            .then().statusCode(404).body("code", equalTo("share_not_found"))
+        reissue(owner, shareId, epoch = 0).then().statusCode(404).body("code", equalTo("share_not_found"))
+        delete(owner, shareId).then().statusCode(404).body("code", equalTo("share_not_found"))
+        // the id is never minted again — not even by its owner, on the same Memory
+        postShare(owner, memory, shareId).then().statusCode(409).body("code", equalTo("id_taken"))
+    }
+
+    /** Another member's link is theirs while they are here — note and password copy included; once they have left
+     *  the scope, the orphan is anyone's to delete. The list's `deletable` is the gate's own answer. */
+    @Test
+    fun aCoMembersLinkIsDeletableOnlyOnceItsOwnerLeft() {
+        val (tenantId, owner) = seedActiveTenant("g-delete-co.example.com")
+        val member = seedTenantMember(tenantId, "m@g-delete-co.example.com")
+        val group = seedGroup(tenantId, owner)
+        addMember(tenantId, group, member)
+        val memory = seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
+        val theirs = createShare(member, memory)
+
+        given().header("Authorization", bearer(owner)).`when`().get("/api/shares?nodeId=$memory")
+            .then().statusCode(200).body("find { it.shareId == '$theirs' }.deletable", equalTo(false))
+        delete(owner, theirs).then().statusCode(404).body("code", equalTo("share_not_found"))
+        resolves(theirs, 200)
+
+        removeByRotation(owner, group, member).then().statusCode(201)
+        given().header("Authorization", bearer(owner)).`when`().get("/api/shares?nodeId=$memory")
+            .then().statusCode(200).body("find { it.shareId == '$theirs' }.deletable", equalTo(true))
+        delete(owner, theirs).then().statusCode(204)
+        given().header("Authorization", bearer(owner)).`when`().get("/api/shares?nodeId=$memory")
+            .then().statusCode(200).body("shareId", not(hasItem(theirs)))
     }
 
     @Test
@@ -523,6 +590,30 @@ class ShareSharedScopeSliceTest {
         resolves(after, 200)
     }
 
+    /** Inbox #258 — "turn off every link" means every link: one its owner had already switched off is marked too.
+     *  Without the mark, a link with no recovery copy whose owner is still a member came back with one click right
+     *  after a switch-off that removed nobody — the very revival the mark exists to stop. The count stays the links
+     *  the switch-off turned off. */
+    @Test
+    fun aSwitchOffAlsoMarksALinkThatWasAlreadyOff() {
+        val (tenantId, owner) = seedActiveTenant("g-switch-off-parked.example.com")
+        val coMember = seedTenantMember(tenantId, "c@g-switch-off-parked.example.com")
+        val group = seedGroup(tenantId, owner)
+        addMember(tenantId, group, coMember)
+        val memory = seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
+        val parked = createShare(coMember, memory) // no recovery copy: only the mark can refuse it
+        val live = createShare(coMember, memory)
+        revoke(coMember, parked)
+
+        revokeScopeShares(owner, group).then().statusCode(200).body("revoked", equalTo(1)) // it turned off `live` only
+
+        reactivate(coMember, parked).then().statusCode(409).body("code", equalTo("reissue_required"))
+        resolves(parked, 404)
+        given().header("Authorization", bearer(coMember)).`when`().get("/api/shares?nodeId=$memory")
+            .then().statusCode(200).body("find { it.shareId == '$parked' }.reissueRequired", equalTo(true))
+        reactivate(coMember, live).then().statusCode(409).body("code", equalTo("reissue_required")) // control: the one it turned off
+    }
+
     @Test
     fun aTenantOwnerSwitchesOffTheTenantsLinks() {
         val (tenantId, owner) = seedActiveTenant("t-switch-off.example.com")
@@ -541,14 +632,21 @@ class ShareSharedScopeSliceTest {
      *  point 4). */
     private fun createShare(
         userId: String, nodeId: String, copyEpoch: Int? = null, role: String = "VIEWER", keys: String = """"wrap":"$wrap"""",
-    ): String {
-        val copy = copyEpoch?.let { ""","sealedShareKey":"$shareKey","sealedShareKeyEpoch":$it""" } ?: ""
-        return given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$nodeId","role":"$role",$keys,"sealedName":"$sealedName"$copy}""")
-            .`when`().post("/api/shares")
-            .then().statusCode(201).body("shareId", notNullValue())
-            .extract().path("shareId")
-    }
+    ): String = postShare(userId, nodeId, TestIds.shareId(), copyEpoch, role, keys)
+        .then().statusCode(201).body("shareId", notNullValue())
+        .extract().path("shareId")
+
+    private fun postShare(
+        userId: String, nodeId: String, id: String, copyEpoch: Int? = null, role: String = "VIEWER", keys: String = """"wrap":"$wrap"""",
+    ) = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+        .body(
+            """{"shareId":"$id","nodeId":"$nodeId","role":"$role",$keys,"sealedName":"$sealedName"""" +
+                (copyEpoch?.let { ""","sealedShareKey":"$shareKey","sealedShareKeyEpoch":$it""" } ?: "") + "}",
+        )
+        .`when`().post("/api/shares")
+
+    private fun delete(userId: String, shareId: String) =
+        given().header("Authorization", bearer(userId)).`when`().delete("/api/shares/$shareId")
 
     /** `POST /api/shares/{shareId}/reissue` under [newId], the recovery copy at [epoch] (ADR 0075). */
     private fun reissue(userId: String, shareId: String, epoch: Int, newId: String = TestIds.shareId(), keys: String = """"wrap":"$newWrap"""") =

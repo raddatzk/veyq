@@ -5,6 +5,7 @@ import com.veyq.app.features.media.TestBlob
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.media.BlobEntity
 import com.veyq.app.features.media.MediaEntity
+import com.veyq.app.features.media.StorageQuota
 import com.veyq.app.shared.blobstore.StoreReclaimEntity
 import com.veyq.app.testing.TestFixtures.CONTENT_KEY
 import com.veyq.app.testing.TestFixtures.DROP_PRIVATE_KEY
@@ -19,6 +20,7 @@ import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
+import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.notNullValue
 import org.hamcrest.CoreMatchers.nullValue
@@ -44,6 +46,9 @@ import java.util.UUID
  */
 @QuarkusTest
 class ShareUploaderSliceTest {
+
+    @Inject
+    lateinit var quota: StorageQuota
 
     private val wrap = "d3JhcC1rLW1lbS11bmRlci1zaGFyZQ=="
     private val sealedName = "c2VhbGVkLW5hbWU="
@@ -182,6 +187,41 @@ class ShareUploaderSliceTest {
             // the contributor's primary is there (so the null below is not a missing row) and carries no key
             .body("buckets.find { it.ownerKey == 'share:$contributorIdentity' }.isPrimary", equalTo(true))
             .body("buckets.find { it.ownerKey == 'share:$contributorIdentity' }.wrappedIdentityKey", nullValue())
+    }
+
+    /**
+     * B3 (ADR 0029 §7) — deleting a link deletes the LINK: the photos its guest added belong to the Memory, and an
+     * uploader guest's photo opens only through their identity's wrapped key and the Memory's drop key. Both stay,
+     * and so does every byte (a delete reclaims nothing).
+     */
+    @Test
+    fun theGuestsUploadsSurviveTheirLink() {
+        val (userId, scopeId, tenantId) = seedMemberScope()
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val shareId = createShare(userId, memory, role = "UPLOADER")
+        val (identityId, token) = createIdentityWithToken(shareId)
+        val uploadId = given().contentType(ContentType.JSON)
+            .body("""{"contributorToken":"$token","items":[${TestBlob.SMALL.declare("Ymxvyi13cmFw")}]}""")
+            .`when`().post("/api/shares/$shareId/blob-uploads")
+            .then().statusCode(200).extract().path<String>("results[0].uploadId")
+        given().contentType(ContentType.JSON)
+            .body("""{"contributorToken":"$token","items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId"}]}""")
+            .`when`().post("/api/shares/$shareId/media")
+            .then().statusCode(200)
+        val usageBefore = QuarkusTransaction.requiringNew().call { quota.tenantUsage(tenantId) }
+
+        given().header("Authorization", bearer(userId)).`when`().delete("/api/shares/$shareId").then().statusCode(204)
+
+        val auth = bearer(userId)
+        given().header("Authorization", auth).`when`().get("/api/scopes/$scopeId/nodes/$memory/media").then().statusCode(200)
+            .body("media.size()", equalTo(1))
+            .body("uploaderKeys.find { it.identityId == '$identityId' }.wrappedIdentityKey", equalTo(WRAPPED_UPLOADER_KEY))
+        given().header("Authorization", auth).`when`().get("/api/scopes/$scopeId/nodes/$memory/buckets").then().statusCode(200)
+            .body("buckets.find { it.ownerKey == 'share:$identityId' }.sealedName", equalTo(sealedUploaderName))
+        QuarkusTransaction.requiringNew().run {
+            assertEquals(DROP_PRIVATE_KEY, NodeEntity.findById(memory)!!.sealedDropPrivateKey)
+            assertEquals(usageBefore, quota.tenantUsage(tenantId))
+        }
     }
 
     @Test

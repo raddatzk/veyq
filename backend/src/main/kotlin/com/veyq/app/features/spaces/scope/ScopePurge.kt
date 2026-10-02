@@ -10,6 +10,7 @@ import com.veyq.app.features.media.MediaEntity
 import com.veyq.app.features.media.UploadSessionEntity
 import com.veyq.app.features.sharing.ShareEntity
 import com.veyq.app.features.sharing.ShareIdentityEntity
+import com.veyq.app.features.sharing.ShareRetiredIdEntity
 import com.veyq.app.features.tasks.JobDeclineEntity
 import com.veyq.app.features.tasks.JobEntity
 import com.veyq.app.shared.blobstore.StoreObjectRef
@@ -117,11 +118,13 @@ class ScopePurge(
         if (jobIds.isNotEmpty()) JobDeclineEntity.delete("jobId in ?1", jobIds)
         JobEntity.delete("scopeId", scopeId)
 
-        // Dormant today — v1 shares are personal-scope-only (ADR 0029 §6) and this runs on GROUP scopes — and
-        // erasing rather than retaining is the operator-blind answer, not a concession to the foreign key: the
-        // row holds the owner, the node and a sealed name of a group whose erasure its owner asked for, and with
-        // the scope gone there is no capability left for it to revoke.
+        // A group's links (ADR 0029 §6) go with it: erasing rather than retaining is the operator-blind answer,
+        // not a concession to the foreign key — the row holds the owner, the node and a sealed name of a group whose
+        // erasure its owner asked for, and with the scope gone there is no capability left for it to revoke. Each
+        // id is RETIRED first (ADR 0029 §7): a freed id could be minted again by anyone holding the dead link's id
+        // and key, and every other holder of that link would open the minter's Memory.
         val shareIds = ShareEntity.find("scopeId", scopeId).list().map { it.id }
+        shareIds.forEach { id -> ShareRetiredIdEntity().apply { this.id = id }.persist() }
         if (shareIds.isNotEmpty()) ShareIdentityEntity.delete("shareId in ?1", shareIds)
         ShareEntity.delete("scopeId", scopeId)
 
