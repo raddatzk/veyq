@@ -5,9 +5,11 @@
 // creates them with a role switcher; the UPLOADER (drop-box) variant lists uploader shares and creates them with no
 // switcher (a separate memory action, capability-gated at that action). Each row shows the share's private name (or
 // the role), badges (note present / disabled / by another member), and per-row actions: **copy link** (copy-only —
-// reconstructed via the member-recoverable K_share), edit name+note, revoke / re-activate, and **renew** (re-issue,
-// ADR 0075): a new link with a fresh key, the old one off. A share whose link a departed member may hold is marked
-// and offers no re-activate — re-activation would revive that very link.
+// reconstructed via the member-recoverable K_share), edit name+note, switch off / re-activate, and **renew** (re-issue,
+// ADR 0075): a new link with a fresh key, the old one deleted. A share whose link a departed member may hold is marked
+// and offers no re-activate — re-activation would revive that very link. Switched-off links fold under a count, and
+// each one the server says the caller may delete offers **delete** (ADR 0029 §7) behind a confirm — which is why
+// switching off wears a "ban" icon and the trash can means delete.
 // Operator-blind throughout: names/notes are sealed under K_share and decrypted on device; K_share itself is
 // recovered through the scope's epoch keys (K_SC), which no share link carries (ADR 0036 point 4).
 import { ref, computed, onMounted } from 'vue'
@@ -19,6 +21,7 @@ import {
   listSharesFor,
   revokeShare,
   reactivateShare,
+  deleteShare,
   isReissueRequired,
   readShareName,
   readShareNoteMap,
@@ -48,6 +51,10 @@ const shares = ref<ManagedShare[]>([])
 const loadError = ref(false)
 const revokingId = ref<string | null>(null)
 const reactivatingId = ref<string | null>(null)
+// The switched-off links, folded under a count until opened; the one awaiting the delete confirm.
+const offOpen = ref(false)
+const deleteConfirm = ref<ManagedShare | null>(null)
+const deleting = ref(false)
 const actionError = ref(false)
 const copiedLinkId = ref<string | null>(null)
 
@@ -62,6 +69,11 @@ const reissueFrom = ref<ManagedShare | null>(null)
 const visibleShares = computed(() =>
   shares.value.filter((s) => (props.uploader ? s.role === ShareRole.Uploader : s.role !== ShareRole.Uploader)),
 )
+// Live links first; switched-off ones in a folded section of their own.
+const sections = computed(() => [
+  { key: 'on', foldable: false, shares: visibleShares.value.filter((s) => s.enabled) },
+  { key: 'off', foldable: true, shares: visibleShares.value.filter((s) => !s.enabled) },
+])
 const headerTitle = computed(() => (props.uploader ? t('share.uploaderTitle') : t('share.title')))
 const introText = computed(() => (props.uploader ? t('share.uploaderDialogCopy') : t('share.intro')))
 const createLabel = computed(() => (props.uploader ? t('share.uploaderCreate') : t('share.createNew')))
@@ -175,6 +187,23 @@ async function onReactivate(share: ManagedShare) {
   }
 }
 
+async function onDelete() {
+  const share = deleteConfirm.value
+  if (!share) return
+  deleting.value = true
+  actionError.value = false
+  try {
+    await deleteShare(share.shareId)
+    // Gone for good — the server lists it nowhere any more, so drop it here rather than re-load for it.
+    shares.value = shares.value.filter((s) => s.shareId !== share.shareId)
+  } catch {
+    actionError.value = true
+  } finally {
+    deleting.value = false
+    deleteConfirm.value = null
+  }
+}
+
 function fmtDate(d: Date): string {
   return new Intl.DateTimeFormat(locale.value === 'de' ? 'de-DE' : 'en-US', { dateStyle: 'medium' }).format(d)
 }
@@ -191,79 +220,119 @@ function fmtDate(d: Date): string {
     <p v-else-if="!visibleShares.length" class="share-empty">{{ emptyLabel }}</p>
 
     <ul v-else class="share-list">
-      <li v-for="share in visibleShares" :key="share.shareId" class="share-list-item">
-        <div class="share-list-meta">
-          <strong class="share-list-title">{{ titleFor(share) }}</strong>
-          <span class="share-list-when">{{ t('share.created', { date: fmtDate(share.createdAt) }) }}</span>
-          <span v-if="share.expiresAt" class="share-list-when share-list-expires">{{ t('share.expires', { date: fmtDate(share.expiresAt) }) }}</span>
-          <div class="share-list-badges">
-            <span class="share-list-role">{{ roleLabel(share.role) }}</span>
-            <span v-if="decoded.get(share.shareId)?.hasNote" class="veyq-badge">{{ t('share.hasNote') }}</span>
-            <span v-if="share.passwordRequired" class="veyq-badge"><span class="pi pi-lock" /> {{ t('share.passwordBadge') }}</span>
-            <span v-if="!share.mine" class="veyq-badge muted">{{ t('share.byMember') }}</span>
-            <span v-if="!share.enabled" class="veyq-badge muted">{{ t('share.disabled') }}</span>
-            <!-- The server's re-activation verdict (ADR 0075 point 4), served on the row: such a link is marked and
-                 offers renew instead of re-activate, so the badge and the refusal cannot disagree. -->
-            <span v-if="share.reissueRequired" class="veyq-badge muted share-reissue-required" :title="t('share.reissueRequiredHint')">{{ t('share.reissueRequiredBadge') }}</span>
-          </div>
-        </div>
-        <div class="share-list-actions">
-          <Button
-            v-if="share.enabled && shareLinks.get(share.shareId)"
-            type="button"
-            :icon="copiedLinkId === share.shareId ? 'pi pi-check' : 'pi pi-copy'"
-            :aria-label="t('share.copy')"
-            :title="copiedLinkId === share.shareId ? t('share.copied') : t('share.copy')"
-            severity="secondary"
-            text
-            @click="copyShareLink(share)"
-          />
-          <Button
-            v-if="share.mine && share.sealedShareKey"
-            type="button"
-            icon="pi pi-pencil"
-            :aria-label="t('share.edit')"
-            :title="t('share.edit')"
-            severity="secondary"
-            text
-            @click="openEdit(share)"
-          />
-          <Button
-            v-if="canReissue(share)"
-            type="button"
-            icon="pi pi-replay"
-            :aria-label="t('share.reissue')"
-            :title="t('share.reissue')"
-            severity="secondary"
-            text
-            @click="openReissue(share)"
-          />
-          <Button
-            v-if="!share.enabled && !share.reissueRequired"
-            type="button"
-            icon="pi pi-refresh"
-            :aria-label="t('share.reactivate')"
-            :title="t('share.reactivate')"
-            severity="secondary"
-            text
-            :disabled="reactivatingId === share.shareId"
-            @click="onReactivate(share)"
-          />
-          <Button
-            v-else-if="share.enabled && share.mine"
-            type="button"
-            icon="pi pi-trash"
-            :aria-label="t('share.revoke')"
-            :title="t('share.revoke')"
-            severity="danger"
-            text
-            :disabled="revokingId === share.shareId"
-            @click="onRevoke(share.shareId)"
-          />
-        </div>
-      </li>
+      <template v-for="section in sections" :key="section.key">
+        <li v-if="section.foldable && section.shares.length" class="share-list-fold">
+          <button type="button" class="share-fold-toggle" :aria-expanded="offOpen" @click="offOpen = !offOpen">
+            <i class="pi" :class="offOpen ? 'pi-chevron-down' : 'pi-chevron-right'" aria-hidden="true" />
+            <span>{{ t('share.offCount', { count: section.shares.length }, section.shares.length) }}</span>
+          </button>
+        </li>
+        <template v-if="!section.foldable || offOpen">
+          <li v-for="share in section.shares" :key="share.shareId" class="share-list-item">
+            <div class="share-list-meta">
+              <strong class="share-list-title">{{ titleFor(share) }}</strong>
+              <span class="share-list-when">{{ t('share.created', { date: fmtDate(share.createdAt) }) }}</span>
+              <span v-if="share.expiresAt" class="share-list-when share-list-expires">{{ t('share.expires', { date: fmtDate(share.expiresAt) }) }}</span>
+              <div class="share-list-badges">
+                <span class="share-list-role">{{ roleLabel(share.role) }}</span>
+                <span v-if="decoded.get(share.shareId)?.hasNote" class="veyq-badge">{{ t('share.hasNote') }}</span>
+                <span v-if="share.passwordRequired" class="veyq-badge"><span class="pi pi-lock" /> {{ t('share.passwordBadge') }}</span>
+                <span v-if="!share.mine" class="veyq-badge muted">{{ t('share.byMember') }}</span>
+                <span v-if="!share.enabled" class="veyq-badge muted">{{ t('share.disabled') }}</span>
+                <!-- The server's re-activation verdict (ADR 0075 point 4), served on the row: such a link is marked and
+                     offers renew instead of re-activate, so the badge and the refusal cannot disagree. -->
+                <span v-if="share.reissueRequired" class="veyq-badge muted share-reissue-required" :title="t('share.reissueRequiredHint')">{{ t('share.reissueRequiredBadge') }}</span>
+              </div>
+            </div>
+            <div class="share-list-actions">
+              <Button
+                v-if="share.enabled && shareLinks.get(share.shareId)"
+                type="button"
+                :icon="copiedLinkId === share.shareId ? 'pi pi-check' : 'pi pi-copy'"
+                :aria-label="t('share.copy')"
+                :title="copiedLinkId === share.shareId ? t('share.copied') : t('share.copy')"
+                severity="secondary"
+                text
+                @click="copyShareLink(share)"
+              />
+              <Button
+                v-if="share.mine && share.sealedShareKey"
+                type="button"
+                icon="pi pi-pencil"
+                :aria-label="t('share.edit')"
+                :title="t('share.edit')"
+                severity="secondary"
+                text
+                @click="openEdit(share)"
+              />
+              <Button
+                v-if="canReissue(share)"
+                type="button"
+                icon="pi pi-replay"
+                :aria-label="t('share.reissue')"
+                :title="t('share.reissue')"
+                severity="secondary"
+                text
+                @click="openReissue(share)"
+              />
+              <Button
+                v-if="!share.enabled && !share.reissueRequired"
+                type="button"
+                icon="pi pi-refresh"
+                :aria-label="t('share.reactivate')"
+                :title="t('share.reactivate')"
+                severity="secondary"
+                text
+                :disabled="reactivatingId === share.shareId"
+                @click="onReactivate(share)"
+              />
+              <Button
+                v-else-if="share.enabled && share.mine"
+                type="button"
+                icon="pi pi-ban"
+                :aria-label="t('share.revoke')"
+                :title="t('share.revoke')"
+                severity="danger"
+                text
+                :disabled="revokingId === share.shareId"
+                @click="onRevoke(share.shareId)"
+              />
+              <!-- Delete is offered on a switched-off link only, and only where the server's gate would let it through
+                   (its owner, or anyone once the owner left): deleting a co-member's parked link would destroy their
+                   note and password copy. -->
+              <Button
+                v-if="!share.enabled && share.deletable"
+                type="button"
+                icon="pi pi-trash"
+                :aria-label="t('share.delete')"
+                :title="t('share.delete')"
+                severity="danger"
+                text
+                @click="deleteConfirm = share"
+              />
+            </div>
+          </li>
+        </template>
+      </template>
     </ul>
     <p v-if="actionError" class="share-error">{{ t('share.actionFailed') }}</p>
+
+    <!-- Confirm the irreversible delete (ADR 0029 §7): the link can never come back; its guests' photos stay. -->
+    <Dialog
+      :visible="deleteConfirm !== null"
+      :header="t('share.deleteTitle')"
+      modal
+      class="share-delete-dialog"
+      :closable="!deleting"
+      :close-on-escape="!deleting"
+      @update:visible="deleteConfirm = null"
+    >
+      <p>{{ t('share.deleteConfirm') }}</p>
+      <div class="veyq-dialog-action-row">
+        <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined :disabled="deleting" @click="deleteConfirm = null" />
+        <Button type="button" class="share-delete-confirm" :label="t('share.delete')" icon="pi pi-trash" severity="danger" :loading="deleting" @click="onDelete" />
+      </div>
+    </Dialog>
 
     <ShareCreateDialog
       v-if="createOpen"
@@ -351,6 +420,18 @@ function fmtDate(d: Date): string {
   text-transform: uppercase;
   letter-spacing: 0.02em;
   color: var(--app-accent);
+}
+.share-fold-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0;
+  border: 0;
+  background: none;
+  color: var(--app-muted);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
 }
 .share-list-actions {
   display: flex;
