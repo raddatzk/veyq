@@ -186,7 +186,7 @@ After this CR:
       (§ Inventory 11) says *"the granter's identity public bundle as it was when the grant was written"*, and
       why: the TOFU gate decides whether it is trusted. No shape changes, so no backend or web delta.
       · Done when: the contract guards are green, and `npm run generate:api` then `npm run check` in `web/`.
-- [ ] 2 backend:
+- [x] 2 backend:
       - The migration (the next `V<n>`; re-derive with `ls backend/src/main/resources/db/migration | sort -V |
         tail -1`, it was `V58` at refine, and the sibling CR adds one too), with D1's backfill. Keep its SQL to the
         H2 ∩ MariaDB subset (backend/CLAUDE.md § Migrations).
