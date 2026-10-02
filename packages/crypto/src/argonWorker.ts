@@ -12,8 +12,22 @@ type Pending = { resolve: (value: unknown) => void; reject: (reason: unknown) =>
 
 let worker: Worker | null = null
 let workerUnavailable = false
+let warned = false
 let seq = 0
 const pending = new Map<number, Pending>()
+
+/**
+ * Say once per page that a Worker which EXISTED could not run, so the fallback is visible in devtools: without it a
+ * mis-bundled or CSP-refused worker costs every sign-in its blocked page thread and nothing anywhere says so. Not
+ * called where there is no `Worker` at all (node: vitest, the e2e suites, the admin CLI — the designed path), and
+ * not on a per-request `postMessage` throw, which does not retire the worker. Carries no secret, no parameter and
+ * no error text.
+ */
+function warnOnce(): void {
+  if (warned) return
+  warned = true
+  console.warn('[veyq] Argon2 worker unavailable — deriving on the page thread')
+}
 
 /** The shared worker, or null when Workers aren't available (→ caller uses the sync fallback). */
 function getWorker(): Worker | null {
@@ -39,6 +53,7 @@ function getWorker(): Worker | null {
       // rather than leaving it to hang. The worker is an optimisation; failure degrades, never breaks.
       workerUnavailable = true
       worker = null
+      warnOnce()
       for (const p of pending.values()) {
         try {
           p.resolve(p.fallback())
@@ -51,6 +66,7 @@ function getWorker(): Worker | null {
     return worker
   } catch {
     workerUnavailable = true
+    warnOnce()
     return null
   }
 }
