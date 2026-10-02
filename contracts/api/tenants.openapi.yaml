@@ -1591,6 +1591,7 @@ components:
       $ref: '_common.openapi.yaml#/components/schemas/TenantStatus'
 
     InviteStatus:
+      x-veyq-visibility: enum
       type: string
       description: >
         Lifecycle state of an invite (mirrors the session refresh-token model): ACTIVE until superseded by
@@ -1599,6 +1600,7 @@ components:
       example: ACTIVE
 
     InviteRole:
+      x-veyq-visibility: structure
       type: string
       description: >
         The role the invite grants on acceptance. OWNER cold-births the TENANT scope + seals the first grant
@@ -1747,6 +1749,7 @@ components:
           $ref: "#/components/schemas/DeliveryResult"
 
     InviteBootstrapSecret:
+      x-veyq-visibility: token
       type: string
       description: >
         The raw single-use invite secret, returned to the **Server Owner** who mints a tenant's *bootstrap*

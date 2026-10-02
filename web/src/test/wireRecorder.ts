@@ -1,6 +1,9 @@
 // The suite half of the wire assertion's HTTP surface (cc.security.wire-assertion, ADR 0053 § Decision 3).
 // Its sibling is `canaries.ts`, which derives WHAT to look for; this derives WHERE the suite could have leaked
-// it — every request this process made and every response it received.
+// it — every request this process made and every response it received: URL, request headers, textual bodies, and
+// every response header (`Set-Cookie` included, the only place a web sign-in's refresh token crosses the wire).
+// The orchestrator reads the same file twice: for canaries, and for the capability tokens the contract marks
+// `token` (cc.security.wire-assertion § Capability tokens).
 //
 // **Why the suite and not the orchestrator.** ADR 0053 §3 splits the surfaces by who can reach them. Path
 // params, query strings, capability headers, presigned URLs and error bodies exist only in the calling
@@ -30,6 +33,8 @@ type WireEntry = {
   requestHeaders: Record<string, string>
   requestBody: string | null
   status: number
+  /** Every response header; `set-cookie` as the array [responseHeadersOf] reads — see there for why. */
+  responseHeaders: Record<string, string | string[]>
   responseBody: string | null
 }
 
@@ -59,6 +64,25 @@ function headersOf(init: RequestInit | undefined): Record<string, string> {
   if (raw instanceof Headers) raw.forEach((value, key) => (out[key] = value))
   else if (Array.isArray(raw)) for (const [key, value] of raw) out[key] = value
   else Object.assign(out, raw)
+  return out
+}
+
+/**
+ * Every header of a response, for the token sweep (a refresh-token `Set-Cookie`) and the canary sweep alike.
+ *
+ * **`set-cookie` is read ONLY through `getSetCookie()`, never through `forEach` into the object** — the shape
+ * [headersOf] uses, and the trap. A response may carry several `Set-Cookie`s, and an object keeps one value per
+ * key: `SessionCookie.issue` sends the refresh-token cookie FIRST and the clearing cookie for the other lifetime
+ * second, so the obvious loop records only `veyq_refresh=` (empty) on every sign-in, and the sweep stays green
+ * with nothing to look for (measured under node 23; `wireRecorder.test.ts` pins it).
+ */
+function responseHeadersOf(response: Response): Record<string, string | string[]> {
+  const out: Record<string, string | string[]> = {}
+  response.headers.forEach((value, key) => {
+    if (key !== 'set-cookie') out[key] = value
+  })
+  const cookies = response.headers.getSetCookie()
+  if (cookies.length > 0) out['set-cookie'] = cookies
   return out
 }
 
@@ -101,6 +125,7 @@ export function installWireRecorder(): void {
       requestHeaders: headersOf(init),
       requestBody: recordBody(init?.body),
       status: response.status,
+      responseHeaders: responseHeadersOf(response),
       responseBody,
     }
     appendFileSync(path, `${JSON.stringify(entry)}\n`, 'utf8')

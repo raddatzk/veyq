@@ -227,6 +227,7 @@ paths:
         - $ref: "#/components/parameters/ScopeId"
         - $ref: "#/components/parameters/NodeId"
         - name: If-None-Match
+          x-veyq-visibility: structure
           in: header
           required: false
           description: >
@@ -265,6 +266,7 @@ paths:
             `deleteRevision` advanced past the client's `sinceDelete`.
           headers:
             ETag:
+              x-veyq-visibility: structure
               description: The node's current `mediaRevision` — echo it as `If-None-Match` on the next poll.
               schema: { type: string, example: "7" }
           content:
@@ -1081,6 +1083,7 @@ components:
           example: 2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e
 
     BlobRole:
+      x-veyq-visibility: enum
       type: string
       description: >
         The role a blob plays for its owner — a media's ORIGINAL and its THUMBNAIL/PREVIEW derivatives, or a node's
@@ -1089,6 +1092,7 @@ components:
       example: ORIGINAL
 
     MediaDerivativeKind:
+      x-veyq-visibility: enum
       type: string
       description: The role of a derivative blob — THUMBNAIL (grid) or PREVIEW (lightbox).
       enum: [THUMBNAIL, PREVIEW]

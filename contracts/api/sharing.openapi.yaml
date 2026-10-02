@@ -668,6 +668,7 @@ paths:
         - $ref: "#/components/parameters/MediaId"
         - $ref: "#/components/parameters/SharePassword"
         - name: X-Contributor-Token
+          x-veyq-visibility: token
           in: header
           required: true
           description: The opaque `contributorToken` from `createShareIdentity` — proves this caller owns the media being deleted.
@@ -712,6 +713,7 @@ components:
       schema: { type: string, format: uuid, example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c }
     SharePassword:
       name: X-Share-Password
+      x-veyq-visibility: token
       in: header
       required: false
       description: >
@@ -722,6 +724,7 @@ components:
 
   schemas:
     ShareRole:
+      x-veyq-visibility: enum
       type: string
       description: >
         What a share grants — **VIEWER** (read-only, cr-0100), **CONTRIBUTOR** (view + append photos, cr-0101,
@@ -732,6 +735,7 @@ components:
       example: VIEWER
 
     NodeKind:
+      x-veyq-visibility: enum
       type: string
       description: FOLDER organizes only; MEMORY is the content unit (owns K_mem); CHAPTER is a nested Memory. A share's subtree holds MEMORY (root) + CHAPTER descendants.
       enum: [FOLDER, MEMORY, CHAPTER]

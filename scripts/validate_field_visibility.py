@@ -24,19 +24,42 @@ This inverts the default. Per ADR 0044, for every `components.schemas.*.properti
      to say it is a way to say the opposite (`{contentEncoding: base64, x-veyq-visibility: public}` is a lie no
      one would catch).
 
-**Scope — read this before quoting a green run.** This is a **body-surface** sensor, and it checks the
-*contract*, not the *traffic*. It does not see: path params, query params, `X-Contributor-Token` /
-`X-Share-Password` (capability secrets that cross the wire outside any schema), presigned-URL query strings, DB
-columns with no contract, the free text a server actually puts in an error `message`, or **the S3 object key** —
-the one surface the operator literally lists (that has its own guard, in the backend, because it needs one and
-this cannot be it). Nor does it observe whether a client put ciphertext into a field marked opaque: a marker
-*permits*, it does not verify. Green means **"no unclassified field in a JSON body"**. It never means
-"operator-blind, verified". Anyone who reads it that way has been misled by this file.
+And beyond the body properties, by the same rules 3 and 4:
+
+  6. **A scalar component schema** (a `components.schemas.*` that is neither an object, a container nor opaque —
+     an enum, a bare `type: string`) carries a marker. Rule 2 exempts a `$ref` property because "its target
+     carries its own" — and a scalar target has no properties to carry one, so without this rule the
+     `bootstrapSecret` that `$ref`s `InviteBootstrapSecret` was classified by nobody.
+  7. **Every `in: header` parameter** carries a marker — operation-level, path-level or in
+     `components.parameters`; a `$ref` to one is a container. `X-Contributor-Token` and `X-Share-Password` are
+     capability secrets that cross the wire outside any schema.
+  8. **Every declared response header** (`responses.*.headers.*`, also in `components.responses` /
+     `components.headers`) carries a marker. The web refresh token travels ONLY as a `Set-Cookie` (ADR 0004).
+
+The `token` class is load-bearing beyond this guard: `scripts/run_web_e2e.py` derives its second needle set —
+every capability token a run handled — by reading values at `token`-marked properties, scalar components and
+headers out of its HTTP recording (cc.security.wire-assertion § Capability tokens). A token left unmarked here
+is a token that sweep never looks for.
+
+**The defect that bought rules 6–8.** No leak; a classification hole found while refining the token sweep
+(cr-wire-assertion-capability-tokens): the response copy of the invite secret, both capability headers and the
+refresh-token cookie were unclassified, so a derivation by marker would have skipped exactly the tokens a database
+dump most needs to be searched for.
+
+**Scope — read this before quoting a green run.** It checks the *contract*, not the *traffic*: JSON body
+properties, scalar component schemas, header parameters and declared response headers. It does not see: path
+params, query params, presigned-URL query strings, DB columns with no contract, the free text a server actually
+puts in an error `message`, a header the server sends WITHOUT declaring it, or **the S3 object key** — the one
+surface the operator literally lists (that has its own guard, in the backend, because it needs one and this
+cannot be it). Nor does it observe whether a client put ciphertext into a field marked opaque: a marker
+*permits*, it does not verify. Green means **"no unclassified field in a JSON body, and no unclassified declared
+header"**. It never means "operator-blind, verified". Anyone who reads it that way has been misled by this file.
 """
 from __future__ import annotations
 
 import pathlib
 import sys
+from typing import Iterator
 
 import yaml
 
@@ -58,6 +81,8 @@ CLASSES: dict[str, str] = {
     "public": "the server's own words — operator-authored text, codes and self-description; never user data",
     "pii": "deliberate sensitive plaintext",
 }
+
+HTTP_METHODS = ("get", "put", "post", "delete", "options", "head", "patch", "trace")
 
 errors: list[str] = []
 
@@ -112,6 +137,73 @@ def is_container(prop: dict) -> bool:
     return False
 
 
+def is_scalar_component(schema: dict) -> bool:
+    """A component schema with no properties of its own to carry a class: not an object, container or opaque."""
+    if is_opaque(schema) or is_container(schema):
+        return False
+    if "properties" in schema or "object" in type_names(schema):
+        return False
+    return not any(key in schema for key in ("allOf", "oneOf", "anyOf"))
+
+
+def header_declarations(spec: dict) -> Iterator[tuple[str, dict]]:
+    """Every header a spec declares outside a body — `in: header` parameters and response headers — as `(where, decl)`.
+
+    A `$ref` is skipped: it points at a declaration this walk visits where it is defined (rule 2's container logic,
+    applied to parameters and headers).
+    """
+    components = spec.get("components") or {}
+    for name, param in (components.get("parameters") or {}).items():
+        if (param or {}).get("in") == "header":
+            yield f"components.parameters.{name} (header {param.get('name')})", param
+    for name, header in (components.get("headers") or {}).items():
+        if "$ref" not in (header or {}):
+            yield f"components.headers.{name}", header or {}
+    for name, response in (components.get("responses") or {}).items():
+        for header_name, header in ((response or {}).get("headers") or {}).items():
+            if "$ref" not in (header or {}):
+                yield f"components.responses.{name} response header {header_name}", header or {}
+    for path, item in (spec.get("paths") or {}).items():
+        item = item or {}
+        operations = [(m, item[m]) for m in HTTP_METHODS if isinstance(item.get(m), dict)]
+        for param in item.get("parameters") or []:
+            if "$ref" not in param and param.get("in") == "header":
+                yield f"{path} header {param.get('name')}", param
+        for method, operation in operations:
+            for param in operation.get("parameters") or []:
+                if "$ref" not in param and param.get("in") == "header":
+                    yield f"{method.upper()} {path} header {param.get('name')}", param
+            for status, response in (operation.get("responses") or {}).items():
+                for header_name, header in ((response or {}).get("headers") or {}).items():
+                    if "$ref" not in (header or {}):
+                        yield f"{method.upper()} {path} {status} response header {header_name}", header or {}
+
+
+def classify(where: str, decl: dict, counts: dict[str, int], pii: list[str], kind: str) -> None:
+    """Rules 3 and 4 for one declaration that must carry a marker. `kind` names it in the failure."""
+    marker = decl.get(MARKER)
+    if marker is None:
+        errors.append(
+            f"{where} — {kind} — declares no `{MARKER}`; say what the server may read of it "
+            f"({'/'.join(CLASSES)}) (ADR 0044)")
+        return
+    if marker not in CLASSES:
+        errors.append(
+            f"{where} has `{MARKER}: {marker}` — not a class. ADR 0044's table is the whole set: "
+            f"{', '.join(CLASSES)}")
+        return
+    counts[marker] += 1
+    if marker == "pii":
+        why = decl.get(RATIONALE)
+        if not (isinstance(why, str) and why.strip()):
+            errors.append(
+                f"{where} is `{MARKER}: pii` with no `{RATIONALE}` — name the mechanism that "
+                f"forces this plaintext. Only the plaintext the mechanism requires stays "
+                f"plaintext (ADR 0023)")
+            return
+        pii.append(where)
+
+
 def main() -> int:
     specs = sorted(API.glob("*.openapi.yaml"))
     if not specs:
@@ -121,13 +213,18 @@ def main() -> int:
     counts: dict[str, int] = dict.fromkeys(CLASSES, 0)
     pii: list[str] = []
     n_schemas = n_props = n_opaque = n_containers = n_scalars = 0
+    n_scalar_components = n_headers = 0
 
     for path in specs:
         spec = yaml.safe_load(path.read_text()) or {}
         schemas = ((spec.get("components") or {}).get("schemas") or {})
         for sname, schema in schemas.items():
             n_schemas += 1
-            props = ((schema or {}).get("properties") or {})
+            schema = schema or {}
+            if is_scalar_component(schema):
+                n_scalar_components += 1
+                classify(f"{path.name}:{sname}", schema, counts, pii, "a scalar component schema (rule 6)")
+            props = (schema.get("properties") or {})
             for pname, prop in props.items():
                 n_props += 1
                 prop = prop or {}
@@ -148,27 +245,11 @@ def main() -> int:
                     continue
 
                 n_scalars += 1
-                if marker is None:
-                    errors.append(
-                        f"{where} declares no `{MARKER}` — say what the server may read of it "
-                        f"({'/'.join(CLASSES)}), or seal it with `contentEncoding: base64` (ADR 0044)")
-                    continue
-                if marker not in CLASSES:
-                    errors.append(
-                        f"{where} has `{MARKER}: {marker}` — not a class. ADR 0044's table is the whole set: "
-                        f"{', '.join(CLASSES)}")
-                    continue
+                classify(where, prop, counts, pii, "a scalar property; or seal it with `contentEncoding: base64`")
 
-                counts[marker] += 1
-                if marker == "pii":
-                    why = prop.get(RATIONALE)
-                    if not (isinstance(why, str) and why.strip()):
-                        errors.append(
-                            f"{where} is `{MARKER}: pii` with no `{RATIONALE}` — name the mechanism that "
-                            f"forces this plaintext. Only the plaintext the mechanism requires stays "
-                            f"plaintext (ADR 0023)")
-                        continue
-                    pii.append(where)
+        for where, decl in header_declarations(spec):
+            n_headers += 1
+            classify(f"{path.name}:{where}", decl, counts, pii, "a declared header (rules 7, 8)")
 
     if errors:
         print("FIELD VISIBILITY VALIDATION FAILED:")
@@ -179,11 +260,13 @@ def main() -> int:
     spread = " · ".join(f"{c}={counts[c]}" for c in CLASSES if counts[c])
     print(
         f"field visibility OK: {len(specs)} specs · {n_schemas} schemas · {n_props} properties — "
-        f"{n_opaque} opaque (base64) · {n_containers} containers · {n_scalars} classified ({spread})")
+        f"{n_opaque} opaque (base64) · {n_containers} containers · {n_scalars} classified properties, "
+        f"{n_scalar_components} scalar component schemas, {n_headers} declared headers ({spread})")
     print(f"  deliberate-plaintext budget: {len(pii)} `pii` field(s), each with a rationale:")
     for p in pii:
         print(f"    - {p}")
-    print("  scope: no unclassified field in a JSON body. NOT 'operator-blind, verified' — see the docstring.")
+    print("  scope: no unclassified field in a JSON body, and no unclassified declared header. NOT "
+          "'operator-blind, verified' — see the docstring.")
     return 0
 
 

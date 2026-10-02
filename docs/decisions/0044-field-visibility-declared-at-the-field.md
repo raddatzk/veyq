@@ -93,12 +93,23 @@ The point is the **default**. Today silence means "nobody classified this". Afte
   the server actually receives is a different sensor, with the wire as its oracle:
   [ADR 0053](0053-wire-assertion-canary-sweep.md) decides it. The boundary is deliberate and stays — this is the
   **design** sensor, that is the **traffic** sensor, and they do not overlap.
-- **The claim is narrow, and the validator's docstring must say so.** This is a **body-surface** sensor. It does
-  not see: 11 path params, 4 query params, `X-Contributor-Token` / `X-Share-Password` (capability secrets that
-  cross the wire outside any schema), presigned-URL query strings, 67 DB column names with no contract, error
-  `message` free text, or **the S3 object key** — the one surface the operator literally lists. A green run means
-  *"no unclassified field in a JSON body"*, never *"operator-blind, verified"*. The object key gets its own
-  guard, because it needs one and this cannot be it.
+- **The claim is narrow, and the validator's docstring must say so.** It covers the JSON body properties and,
+  by the same rules, three places a value crosses the wire outside a body property: a **scalar component schema**
+  (a `$ref`'d target with no properties to carry a class — `InviteBootstrapSecret` was classified by nobody until
+  this was ruled), every **`in: header` parameter** (`X-Contributor-Token`, `X-Share-Password`, `If-None-Match`)
+  and every **declared response header** (the refresh-token `Set-Cookie`, the media list's `ETag`). Each was
+  marked when cr-wire-assertion-capability-tokens made the `token` class load-bearing: the e2e run derives its
+  capability-token needles by reading `token`-marked values out of its HTTP recording, so an unmarked token is
+  one no sweep looks for. It does not see: path params, query params, presigned-URL query strings, 67 DB column
+  names with no contract, error `message` free text, a header the server sends without declaring it, or **the
+  S3 object key** — the one surface the operator literally lists. A green run means *"no unclassified field in a
+  JSON body, and no unclassified declared header"*, never *"operator-blind, verified"*. The object key gets its
+  own guard, because it needs one and this cannot be it.
+- **`token` is a class, not an encoding — a base64 capability is `token`, not opaque.** The pairing `handle` is
+  base64 text, but it is a routing capability the server stores only as a hash, not ciphertext: filed as
+  `contentEncoding: base64` it was invisible to the token sweep, and the opacity check it got instead proves
+  nothing about random bytes. The guard forbids a marker on a base64 field (a second way to say "opaque" is a
+  way to say the opposite), so such a field declares its alphabet with a `pattern` and carries `token`.
 - **`x-veyq-*` is claimed here.** It was provably free: `x-field-extra-annotation` (87 uses) was the only
   extension anywhere in `contracts/`.
 - `security-model.md` § *What is encrypted vs. server-visible* stays the rationale and gains a pointer here. The

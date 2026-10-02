@@ -37,6 +37,7 @@ components:
     TenantStatus:
       # Shared by the tenants spec (the Server-Owner's tenant list) and the scopes spec (`MyTenant.status`, the
       # space switcher) — one lifecycle, so one enum (ADR 0038).
+      x-veyq-visibility: enum
       type: string
       description: >
         Lifecycle state of a tenant. SUSPENDED is a reversible, availability-only lockout (ADR 0066): every
