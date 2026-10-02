@@ -90,14 +90,25 @@ class RecoveryStore {
      * mixes the old password and would merely fail, but a `DEVICE_KEY` wrap takes no password at all and would
      * keep granting password-less entry to a device the person may be resetting *because of*.
      *
-     * Returns false if the account lost its PASSWORD floor between release and completion (it cannot, through
-     * any HTTP surface — `deleteWrap` whitelists the device methods — but a reset that silently created a
-     * second floor would be worse than one that refuses).
+     * **The token is spent first, by a compare-and-set** (developer-styleguide §12): only a row still `PENDING`
+     * and unexpired flips to `CONSUMED`, and nothing else runs unless exactly one did. Two completes that both read
+     * the token live therefore cannot both reset — the later commit's password used to win, locking out the person
+     * who had just seen "done" — and the loser has touched nothing when it answers as a replay. The caller's
+     * earlier liveness read only decides that answer for a token that is already dead; it never authorizes this.
+     *
+     * Returns false if the token was no longer live, or if the account lost its PASSWORD floor between release and
+     * completion (it cannot, through any HTTP surface — `deleteWrap` whitelists the device methods — but a reset
+     * that silently created a second floor would be worse than one that refuses).
      */
     @Transactional
     fun applyReset(
         userId: String, mailedEmail: String, wrappedKey: String, kdfParams: String, authPublicKey: String, tokenId: String,
     ): Boolean {
+        val spent = AccountRecoveryEntity.update(
+            "status = ?1 where id = ?2 and status = ?3 and expiresAt > ?4",
+            AccountRecoveryEntity.CONSUMED, tokenId, AccountRecoveryEntity.PENDING, Instant.now(),
+        ) == 1
+        if (!spent) return false
         val user = VeyqUser.findById(userId) ?: return false
         val floor = MasterKeyWrapEntity
             .find("userId = ?1 and method = ?2", userId, WrapMethod.PASSWORD.name)
@@ -108,7 +119,6 @@ class RecoveryStore {
         user.authPublicKey = authPublicKey
 
         MasterKeyWrapEntity.delete("userId = ?1 and method not in ?2", userId, WrapMethod.SURVIVORS)
-        AccountRecoveryEntity.update("status = ?1 where id = ?2", AccountRecoveryEntity.CONSUMED, tokenId)
         // The mailed token plus the Secret Key is the account holder reading the mailbox, so a completed reset
         // confirms the address it was mailed to, iff the account still holds it (ADR 0074 Decision 2). The one thing
         // recovery writes about confirmation; it reads none (Decision 3).
