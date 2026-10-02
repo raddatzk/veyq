@@ -114,7 +114,7 @@ class MediaSliceTest {
 
         // PUT a re-sealed listed-metadata blob (e.g. a corrected date) — opaque, echoed back verbatim (cr-0068)
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"wrappedMeta":"Y29ycmVjdGVk"}""")
+            .body("""{"wrappedMeta":"Y29ycmVjdGVk","metaVersion":0}""")
             .`when`().put("/api/scopes/$scopeId/media/$mediaId/meta")
             .then().statusCode(200).body("wrappedMeta", equalTo("Y29ycmVjdGVk"))
 
@@ -125,16 +125,63 @@ class MediaSliceTest {
 
         // null clears it
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"wrappedMeta":null}""")
+            .body("""{"wrappedMeta":null,"metaVersion":1}""")
             .`when`().put("/api/scopes/$scopeId/media/$mediaId/meta")
             .then().statusCode(200).body("wrappedMeta", nullValue())
+    }
+
+    /**
+     * B3 (ADR 0077): the media tier's write is compare-and-set like the node's. A stale write is `409 stale_version`
+     * with the current tier, writes nothing, and — because nothing changed — does NOT move `media_revision`, so no
+     * open gallery re-fetches a media that did not change. Before the compare-and-set it answered 200 and replaced
+     * the tier. The control lands at the current version and moves both counters.
+     */
+    @Test
+    fun staleMediaMetaWriteIs409AndMovesNoRevision() {
+        val (userId, scopeId) = seedMemberScope()
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val media = completeOne(userId, scopeId, memory, wrap = "YQ==", meta = "djA=") // media_revision = 1
+        listedMedia(userId, scopeId, memory).body("media[0].metaVersion", equalTo(0)).body("mediaRevision", equalTo(1))
+
+        putMeta(userId, scopeId, media, """{"wrappedMeta":"YS12MQ==","metaVersion":0}""").then().statusCode(200)
+        listedMedia(userId, scopeId, memory).body("media[0].metaVersion", equalTo(1)).body("mediaRevision", equalTo(2))
+
+        putMeta(userId, scopeId, media, """{"wrappedMeta":"Yi12MQ==","metaVersion":0}""")
+            .then().statusCode(409)
+            .body("code", equalTo("stale_version"))
+            .body("wrappedMeta", equalTo("YS12MQ=="))
+            .body("metaVersion", equalTo(1))
+        listedMedia(userId, scopeId, memory)
+            .body("media[0].wrappedMeta", equalTo("YS12MQ=="))
+            .body("media[0].metaVersion", equalTo(1))
+            .body("mediaRevision", equalTo(2))
+
+        // control: stating the version the 409 handed back lands, and moves both counters
+        putMeta(userId, scopeId, media, """{"wrappedMeta":"Yi12Mg==","metaVersion":1}""")
+            .then().statusCode(200).body("wrappedMeta", equalTo("Yi12Mg=="))
+        listedMedia(userId, scopeId, memory)
+            .body("media[0].wrappedMeta", equalTo("Yi12Mg=="))
+            .body("media[0].metaVersion", equalTo(2))
+            .body("mediaRevision", equalTo(3))
+    }
+
+    /** B3, the wire half: an update with no version is malformed, and nothing is written. */
+    @Test
+    fun mediaMetaWithoutVersionIs400() {
+        val (userId, scopeId) = seedMemberScope()
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val media = completeOne(userId, scopeId, memory, wrap = "YQ==", meta = "djA=")
+        putMeta(userId, scopeId, media, """{"wrappedMeta":"YS12MQ=="}""").then().statusCode(400)
+        listedMedia(userId, scopeId, memory).body("media[0].wrappedMeta", equalTo("djA="))
+        // control: the same body with its version lands
+        putMeta(userId, scopeId, media, """{"wrappedMeta":"YS12MQ==","metaVersion":0}""").then().statusCode(200)
     }
 
     @Test
     fun updateMetaForUnknownMediaIs404() {
         val (userId, scopeId) = seedMemberScope()
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"wrappedMeta":"Y29ycmVjdGVk"}""")
+            .body("""{"wrappedMeta":"Y29ycmVjdGVk","metaVersion":0}""")
             .`when`().put("/api/scopes/$scopeId/media/${UUID.randomUUID()}/meta")
             .then().statusCode(404).body("code", equalTo("media_not_found"))
     }
@@ -358,7 +405,7 @@ class MediaSliceTest {
 
         // a meta edit re-seals the tier → media_revision bumps + updated_at advances past the cursor
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"wrappedMeta":"Y29ycmVjdGVk"}""")
+            .body("""{"wrappedMeta":"Y29ycmVjdGVk","metaVersion":0}""")
             .`when`().put("/api/scopes/$scopeId/media/$a/meta")
             .then().statusCode(200)
 
@@ -430,6 +477,15 @@ class MediaSliceTest {
     // --- helpers ---
 
     /** Start + complete one media on [nodeId] (in-memory store); returns its mediaId. Optionally seals a listed-metadata tier. */
+    private fun putMeta(userId: String, scopeId: String, mediaId: String, body: String) =
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON).body(body)
+            .`when`().put("/api/scopes/$scopeId/media/$mediaId/meta")
+
+    private fun listedMedia(userId: String, scopeId: String, nodeId: String) =
+        given().header("Authorization", bearer(userId))
+            .`when`().get("/api/scopes/$scopeId/nodes/$nodeId/media")
+            .then().statusCode(200).body("media.size()", equalTo(1))
+
     private fun completeOne(userId: String, scopeId: String, nodeId: String, wrap: String, meta: String? = null): String {
         val uploadId = startOne(userId, scopeId, TestBlob.SMALL, wrap = wrap)
         val metaField = if (meta != null) ""","wrappedMeta":"$meta"""" else ""

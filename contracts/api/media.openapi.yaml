@@ -1383,10 +1383,15 @@ components:
       properties:
         metaVersion:
           x-veyq-visibility: structure
-          type: integer
+          # Nullable in the TYPE on purpose, and refused null by the annotation: a required `type: integer` generates a
+          # primitive Kotlin `Long`, which Jackson fills with 0 when the field is missing — measured with
+          # `MediaSliceTest.mediaMetaWithoutVersionIs400` answering 200 — so an old client would write at version 0
+          # unnoticed. Nullable makes the absence visible; `@NotNull` turns it into the boundary's 400.
+          type: [integer, "null"]
           format: int64
-          description: The version the re-sealed blob was built from; the write succeeds only if it still matches.
+          description: The version the re-sealed blob was built from; the write succeeds only if it still matches. Never null.
           example: 2
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
         wrappedMeta:
           type: [string, "null"]
           description: The re-sealed listed-metadata blob (opaque base64), or null to clear the media's metadata.

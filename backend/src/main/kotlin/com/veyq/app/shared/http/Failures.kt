@@ -75,6 +75,10 @@ object Failures {
      *  client re-reads and rebuilds against the current epoch (ADR 0024). */
     val staleEpoch: HttpFailure = httpFailure("stale_epoch", CONFLICT)
 
+    /** A version-checked write stated a version the stored one has moved past → 409; nothing was written. The
+     *  sealed-meta writes answer it with the blob's current value ([httpStaleSealedMeta], ADR 0077). */
+    val staleVersion: HttpFailure = httpFailure("stale_version", CONFLICT)
+
     /** Slug already taken under the parent (uniqueness) → 409. */
     val slugTaken: HttpFailure = httpFailure("slug_taken", CONFLICT)
 

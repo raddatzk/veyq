@@ -53,6 +53,11 @@ class NodeEntity : PanacheEntityBase {
     @Column(name = "wrapped_meta")
     var wrappedMeta: String? = null
 
+    /** How many times [wrappedMeta] was replaced (ADR 0077): 0 at birth, bumped only by the compare-and-set in
+     *  `NodesStore.applyUpdate`, which every meta write goes through. Not [mediaRevision] — see V66. */
+    @Column(name = "meta_version", nullable = false)
+    var metaVersion: Long = 0
+
     /** A MEMORY's drop private key sealed under its `K_mem` (opaque base64) — set once, by its first UPLOADER share,
      *  never replaced: the media UPLOADER guests added open through it (ADR 0031 point 7). */
     @Column(name = "sealed_drop_private_key")

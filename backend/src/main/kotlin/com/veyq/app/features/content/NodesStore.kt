@@ -19,6 +19,8 @@ data class NodeRow(
     val wrappedMeta: String?,
     /** A MEMORY's drop private key sealed under its `K_mem` (ADR 0031 point 7), or null until its first UPLOADER share. */
     val sealedDropPrivateKey: String? = null,
+    /** How many times [wrappedMeta] was replaced — the version a meta write states (ADR 0077). */
+    val metaVersion: Long = 0,
 )
 
 /** One soft-deleted subtree ROOT in the space's trash (uc.memory.delete-node). `deletedAt` is the marker the
@@ -129,23 +131,49 @@ class NodesStore {
         NodeEntity.find("scopeId = ?1 and deletedAt is null", scopeId).list().map {
             NodeRow(
                 it.id, it.parentId, it.kind, it.encryptedName, it.slugToken, it.orderIndex, it.epoch, it.wrappedContentKey,
-                it.wrappedMeta, it.sealedDropPrivateKey,
+                it.wrappedMeta, it.sealedDropPrivateKey, it.metaVersion,
             )
         }
 
-    /** Re-load the node **inside** the transaction (the one the handler validated may be detached) and mutate
-     *  it — the managed entity is flushed on commit; no `persist()` of a detached instance. */
+    /** What [applyUpdate] did: applied, found no live node, or refused a stale meta write (with the current value). */
+    sealed interface ApplyResult {
+        object Applied : ApplyResult
+        object Missing : ApplyResult
+        data class StaleMeta(val wrappedMeta: String?, val metaVersion: Long) : ApplyResult
+    }
+
+    /**
+     * Apply a partial update. A present [wrappedMeta] is written only if [metaVersion] is still the stored one
+     * (ADR 0077); on a miss **nothing** is written — a rename in the same request included — and the current blob
+     * and version come back for the `409`.
+     *
+     * The compare-and-set runs FIRST, as a bulk UPDATE, before this transaction loads the entity. Loading first and
+     * then running it would leave the managed copy holding the pre-update `wrappedMeta`/`metaVersion`, and the
+     * flush of a rename (every column, without `@DynamicUpdate`) would write those stale values straight back over
+     * the compare-and-set's result. Loaded after it, the entity reads the row as it now is.
+     */
     @Transactional
     fun applyUpdate(
         nodeId: String, encryptedName: String?, slugToken: String?, newParentSlot: String?, orderIndex: Int?,
-        wrappedMeta: String?,
-    ) {
-        val node = NodeEntity.findById(nodeId)?.takeIf { it.deletedAt == null } ?: return
+        wrappedMeta: String?, metaVersion: Long?,
+    ): ApplyResult {
+        if (wrappedMeta != null) {
+            val expected = checkNotNull(metaVersion) { "the handler refuses wrappedMeta without its metaVersion" }
+            val rows = NodeEntity.update(
+                "wrappedMeta = ?1, metaVersion = ?2 where id = ?3 and metaVersion = ?4 and deletedAt is null",
+                wrappedMeta, expected + 1, nodeId, expected,
+            )
+            if (rows == 0) {
+                val current = NodeEntity.findById(nodeId)?.takeIf { it.deletedAt == null } ?: return ApplyResult.Missing
+                return ApplyResult.StaleMeta(current.wrappedMeta, current.metaVersion)
+            }
+        }
+        val node = NodeEntity.findById(nodeId)?.takeIf { it.deletedAt == null } ?: return ApplyResult.Missing
         encryptedName?.let { node.encryptedName = it }
         slugToken?.let { node.slugToken = it }
         newParentSlot?.let { node.parentId = it }
         orderIndex?.let { node.orderIndex = it }
-        wrappedMeta?.let { node.wrappedMeta = it } // partial: present replaces, omitted/null leaves unchanged
+        return ApplyResult.Applied
     }
 
     /**
