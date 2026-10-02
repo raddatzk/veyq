@@ -49,6 +49,9 @@ class ShareWriteProofSliceTest {
         nameGuest(shareId, writeToken = ShareWriteProof.token(TestIds.shareId())).then().statusCode(404)
             .body("code", equalTo("share_not_found"))
         nameGuest(shareId, writeToken = "A").then().statusCode(404).body("code", equalTo("share_not_found")) // not base64
+        // outside the base64 alphabet: the boundary's 400, before any lookup — so the same for an id that exists
+        nameGuest(shareId, writeToken = "!!").then().statusCode(400)
+        nameGuest(TestIds.shareId(), writeToken = "!!").then().statusCode(400)
         assertEquals(0L, identitiesOf(shareId), "no refused proof wrote an identity")
 
         // positive control: the whole link names a guest, and that guest uploads exactly as before

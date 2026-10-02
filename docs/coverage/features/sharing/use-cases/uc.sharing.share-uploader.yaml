@@ -21,6 +21,14 @@ acceptanceCriteria:
         integration: [ShareUploaderSliceTest.uploaderResolveServesNoMediaEvenWithExisting, ShareUploaderSliceTest.theKeysAShareCarriesFollowItsRole, ShareUploaderSliceTest.theDropKeyIsSetOnceOnTheMemory]
       web:
         unit: [src/features/memory/share.test.ts]
+  - id: naming-proves-the-link-key
+    text: An uploader naming themself proves they hold the link's key, as a contributor does (ADR 0076) — the UPLOADER share carries writeVerifier like every role, and createShareIdentity without the K_share-derived X-Share-Write, or with another link's, is the non-enumerable 404 with no identity written; the whole link names the uploader, who then uploads.
+    coverage:
+      backend:
+        integration: [ShareWriteProofSliceTest.anUploaderLinkNeedsTheProofToo]
+      web:
+        unit: [src/features/memory/share.test.ts]
+        e2e: [src/features/memory/shareUploader.e2e.test.ts]
   - id: guest-never-holds-the-memory-key
     text: The guest's client never holds the Memory's key - its uploads are sealed under its own identity key, wrapped to the Memory's drop key. The UPLOADER resolve serves the drop public key sealed under K_share and no wrap, and the client opens no wrap for that role even when one is served; the guest seals its name, blob keys, media meta and EXIF under its own K_up and hands K_up over wrapped to the drop public key. Every reader of the Memory - the curator's gallery and buckets, a viewer link - is served the node's sealed drop private key and the identity's wrapped key, and opens the upload through them; a member's metadata edit re-seals under the same K_up.
     coverage:

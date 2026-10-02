@@ -10,6 +10,9 @@ import java.util.Base64
  * presents the token as `X-Share-Write`. The backend derives nothing — it hashes what it is handed and compares — so
  * a slice test needs only a token that differs per share, and its hash: [token] derives one from the share id under a
  * test-only label (the real derivation is pinned by the crypto conformance vector `share_write_token`, not here).
+ *
+ * A share a test persists as an entity, bypassing `createShare`, holds no verifier and therefore takes no guest — the
+ * fail-closed rule for links minted before ADR 0076. Set `writeVerifier = verifier(id)` on it if the test names one.
  */
 object ShareWriteProof {
     const val HEADER = "X-Share-Write"

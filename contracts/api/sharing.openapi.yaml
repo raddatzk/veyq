@@ -779,7 +779,9 @@ components:
         The link's write proof `base64(HKDF(K_share, "veyq/v1/share-write:" + shareId))` ([ADR 0076](../../docs/decisions/0076-a-guest-write-proves-it-holds-the-links-key.md))
         — derived from the fragment key, so only someone holding the whole link can present it. The server compares
         its SHA-256 with the share's `writeVerifier`. Declared optional, as `X-Share-Password` is, so a request
-        without it gets the gate's non-enumerable `404` — one answer for every way of not holding the key.
+        without it gets the gate's non-enumerable `404` — one answer for every way of not holding the key. A value
+        outside the base64 alphabet is the boundary's `400` instead, answered before any lookup and so the same for
+        every id.
       schema: { type: string, maxLength: 64, pattern: "^[A-Za-z0-9+/]*={0,2}$" }
 
   schemas:
