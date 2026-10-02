@@ -1,5 +1,6 @@
 package com.veyq.app.features.admin.tenant
 
+import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.membership.Admission
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.shared.membership.SignedGrant
@@ -150,6 +151,7 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
             role = MembershipEntity.OWNER
             wrappedGrant = grant.wrappedGrant
             granterUserId = userId
+            granterIdentityPublicKey = VeyqUser.findById(userId)?.identityPublicKey
             grantSignature = grant.signature
             admit(admission)
             createdAt = Instant.now()

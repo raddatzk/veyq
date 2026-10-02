@@ -14,7 +14,8 @@ import Checkbox from 'primevue/checkbox'
 import { listScopeMembers, addGroupMember, resolveGroupMember, setMemberRole, removeGroupMember, memberError, SetMemberRoleRequestRoleEnum, type ScopeMember } from './members'
 import { rotateGroupForRemoval, deleteGroup, restoreGroup, scopeLifecycle, wrapGroupNameKeyForInvitee, renameGroup, setSpaceIcon, clearSpaceIcon, openGroupIcon, openScopeById } from './scopes'
 import { zeroEpochKeys } from './epochs'
-import { acceptKeyChange, IdentityChangedError } from '../account/identityPins'
+import { IdentityChangedError } from '../account/identityPins'
+import { acceptChangedKey } from './acceptChangedKey'
 import { TrustStateRefused, refusalMessageKey } from '../account/trustMarks'
 import TrustResetLink from '../account/trustReset/TrustResetLink.vue'
 import { activeSpace, refreshActiveScope } from '../../app/activeSpace'
@@ -165,13 +166,13 @@ async function submit() {
   }
 }
 
-// Accept a changed invitee key (re-pin) and retry the add. Minimal human path (cr-0098) — the out-of-band
-// safety-number verification that would elevate this to *verified* is the follow-up CR; here accept trusts + re-pins.
+// Accept a changed invitee key (one scope-rotation worker pass, then re-pin — `acceptChangedKey`) and retry the add.
+// Minimal human path (cr-0098): accept trusts + re-pins; the safety-number verification elevates it to *verified*.
 async function acceptChangedKeyAndRetry() {
   const pk = pendingKeyChange.value
   if (!pk) return
   try {
-    await acceptKeyChange(pk.userId, pk.key)
+    await acceptChangedKey(pk.userId, pk.key)
   } catch (e) {
     addError.value = e instanceof TrustStateRefused ? t(refusalMessageKey(e)) : t('groups.addMemberFailed')
     return

@@ -146,6 +146,7 @@ class ScopesStore(
             role = MembershipEntity.OWNER
             wrappedGrant = grant.wrappedGrant
             granterUserId = userId
+            granterIdentityPublicKey = identityKeyOf(userId)
             grantSignature = grant.signature
             createdAt = now
         }.persist()
@@ -176,6 +177,7 @@ class ScopesStore(
             role = MembershipEntity.OWNER
             wrappedGrant = grant.wrappedGrant
             granterUserId = userId
+            granterIdentityPublicKey = identityKeyOf(userId)
             grantSignature = grant.signature
             admit(admission)
             createdAt = now
@@ -234,14 +236,20 @@ class ScopesStore(
             }
         }
 
-    /** The granter of a membership's grant — id, signature and CURRENT identity public key — or null when the grant
-     *  carries no signature (written before grants were signed) or the granter's account is gone. */
+    /** The granter of a membership's grant — id, signature, and the identity public key the grant row recorded when
+     *  it was written (the key that signed it, [MembershipEntity.granterIdentityPublicKey]) — or null when the grant
+     *  carries no signature (written before grants were signed) or no recorded key. Never the granter's CURRENT key:
+     *  after an account rotation that is a key the signature was not made with, and the recipient, which verifies
+     *  before it reads its pin, would refuse every grant the rotator signed (ADR 0028 § What is still open). */
     private fun granterOf(m: MembershipEntity): GranterRow? {
         val granterId = m.granterUserId ?: return null
         val signature = m.grantSignature ?: return null
-        val key = VeyqUser.findById(granterId)?.identityPublicKey ?: return null
+        val key = m.granterIdentityPublicKey ?: return null
         return GranterRow(granterId, signature, key)
     }
+
+    /** The granter's identity public bundle as it is now — what a grant written in this transaction records. */
+    private fun identityKeyOf(granterId: String): String? = VeyqUser.findById(granterId)?.identityPublicKey
 
     /** Whether the caller holds a grant in this scope (is a key-holder there) — the member-directory gate. */
     fun holdsGrant(userId: String, scopeId: String): Boolean = membership.holdsGrant(userId, scopeId)
@@ -369,6 +377,7 @@ class ScopesStore(
         } ?: all
         scope.currentEpoch = plan.newEpoch
         scope.persist()
+        val granterKey = identityKeyOf(granterId)
         ScopeEpochEntity().apply {
             id = UUID.randomUUID().toString()
             this.scopeId = scopeId
@@ -381,6 +390,7 @@ class ScopesStore(
                 it.wrappedGrant = g.grant.wrappedGrant
                 it.grantedEpoch = plan.newEpoch
                 it.granterUserId = granterId
+                it.granterIdentityPublicKey = granterKey
                 it.grantSignature = g.grant.signature
                 it.persist()
             }

@@ -1394,9 +1394,11 @@ components:
         granterIdentityPublicKey:
           type: [string, "null"]
           description: >
-            The granter's current identity public bundle (opaque base64), served here so the recipient needs no
-            directory call. For a shared scope the client runs the TOFU gate on it (a changed key is refused and
-            surfaced); for its own grants the client ignores it and verifies under its own vault key.
+            The granter's identity public bundle as it was when the server wrote the grant (opaque base64) — the
+            key that signed it, so a granter's later account-key rotation leaves the grant verifiable — served here
+            so the recipient needs no directory call. It decides nothing on its own: for a shared scope the client
+            runs the TOFU gate on it (a key that differs from the recipient's pin is refused and surfaced); for its
+            own grants the client ignores it and verifies under its own vault key.
           contentEncoding: base64
           maxLength: 8192
           example: aWRlbnRpdHktcHVibGljLWtleQ==
@@ -1713,9 +1715,11 @@ components:
         granterIdentityPublicKey:
           type: [string, "null"]
           description: >
-            The granter's current identity public bundle (opaque base64), served here so the recipient needs no
-            directory call. For a shared scope the client runs the TOFU gate on it (a changed key is refused and
-            surfaced); for its own grants the client ignores it and verifies under its own vault key.
+            The granter's identity public bundle as it was when the server wrote the grant (opaque base64) — the
+            key that signed it, so a granter's later account-key rotation leaves the grant verifiable — served here
+            so the recipient needs no directory call. It decides nothing on its own: for a shared scope the client
+            runs the TOFU gate on it (a key that differs from the recipient's pin is refused and surfaced); for its
+            own grants the client ignores it and verifies under its own vault key.
           contentEncoding: base64
           maxLength: 8192
           example: aWRlbnRpdHktcHVibGljLWtleQ==

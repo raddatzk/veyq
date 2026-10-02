@@ -2,14 +2,15 @@
 // uc.spaces.verify-identity A/E1/E2 (cr-0099) — review a CHANGED key. The directory key differs from the pin
 // (a legitimate rotation, E1, or an operator substitution, E2 — identical on the wire). Shows the expected
 // (pinned) vs current (directory) safety-numbers side by side; the caller compares out-of-band and either
-// accepts → `acceptKeyChange` (re-pin as pinned; they may then run Verify to reach verified) or refuses →
-// leave it blocked (the wrap/delivery stays gated). Client-only, operator-blind.
+// accepts → `acceptChangedKey` (one scope-rotation worker pass, then re-pin as pinned; they may then run Verify to
+// reach verified) or refuses → leave it blocked (the wrap/delivery stays gated). Client-only, operator-blind.
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import Message from 'primevue/message'
-import { safetyNumber, getPin, acceptKeyChange } from '../account/identityPins'
+import { safetyNumber, getPin } from '../account/identityPins'
+import { acceptChangedKey } from './acceptChangedKey'
 import { TrustStateRefused, refusalMessageKey } from '../account/trustMarks'
 import TrustResetLink from '../account/trustReset/TrustResetLink.vue'
 import { useAsyncAction } from '../../shared/state/useAsyncAction'
@@ -39,7 +40,7 @@ watch(
 
 const { run: runAccept, pending: busy } = useAsyncAction(
   async () => {
-    await acceptKeyChange(props.member.userId, props.member.identityPublicKey)
+    await acceptChangedKey(props.member.userId, props.member.identityPublicKey)
     emit('accepted')
     visible.value = false
   },
@@ -61,6 +62,7 @@ async function accept() {
   <Dialog v-model:visible="visible" :header="t('verify.reviewTitle', { name: '@' + member.username })" modal class="tenant-dialog" :closable="!busy" :close-on-escape="!busy">
     <div class="veyq-form review-body">
       <Message severity="warn" :closable="false">{{ t('verify.reviewIntro') }}</Message>
+      <p class="settings-muted">{{ t('verify.reviewPendingRekey') }}</p>
 
       <div class="review-grid">
         <section class="sn-block">

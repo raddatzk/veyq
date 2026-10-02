@@ -31,6 +31,7 @@ vi.mock('../account/identityPins', () => ({
   IdentityChangedError: class extends Error {},
 }))
 vi.mock('../account/profile/profile', () => ({ getMyProfile: vi.fn() }))
+vi.mock('../tasks/scopeRotationWorker', () => ({ runScopeRotationWorker: vi.fn() }))
 vi.mock('./spaceIconSignal', () => ({ bumpSpaceIcon: vi.fn() }))
 vi.mock('../memory/share', () => ({ revokeScopeShares: vi.fn() }))
 const { toastSuccess } = vi.hoisted(() => ({ toastSuccess: vi.fn() }))
@@ -41,8 +42,10 @@ const { confirmAsk } = vi.hoisted(() => ({ confirmAsk: vi.fn() }))
 vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: confirmAsk }) }))
 
 import GroupMembersPanel from './GroupMembersPanel.vue'
-import { listScopeMembers, removeGroupMember } from './members'
-import { setSpaceIcon, clearSpaceIcon, openGroupIcon, rotateGroupForRemoval } from './scopes'
+import { listScopeMembers, removeGroupMember, resolveGroupMember, addGroupMember } from './members'
+import { setSpaceIcon, clearSpaceIcon, openGroupIcon, rotateGroupForRemoval, wrapGroupNameKeyForInvitee } from './scopes'
+import { acceptKeyChange, IdentityChangedError } from '../account/identityPins'
+import { runScopeRotationWorker } from '../tasks/scopeRotationWorker'
 import { getMyProfile } from '../account/profile/profile'
 import { bumpSpaceIcon } from './spaceIconSignal'
 import { revokeScopeShares } from '../memory/share'
@@ -52,7 +55,11 @@ import { i18n } from '../../i18n'
 const stubs = {
   Button: { props: ['label', 'icon', 'ariaLabel'], emits: ['click'], template: '<button :aria-label="ariaLabel" @click="$emit(\'click\')">{{ label }}</button>' },
   Message: { template: '<div class="msg"><slot /></div>' },
-  InputText: { props: ['modelValue'], template: '<input :value="modelValue" />' },
+  InputText: {
+    props: ['modelValue'],
+    emits: ['update:modelValue'],
+    template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
+  },
   TenantAvatar: { props: ['name', 'icon'], template: '<span class="avatar" :data-icon="icon">{{ name }}</span>' },
   SpaceIconDialog: {
     emits: ['save', 'close'],
@@ -201,5 +208,30 @@ describe('GroupMembersPanel — turn off every link (ADR 0075)', () => {
   it('control: a member who does not own the group is not offered it', async () => {
     const w = await mountPanel({ me: 'stranger' })
     expect(button(w, t('spaceLinks.revokeAll'))).toBeFalsy()
+  })
+})
+
+describe('GroupMembersPanel — accepting an invitee\'s changed key drains the rotation worker first (inbox #233)', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('the worker pass resolves before the pin store is written, then the add is retried', async () => {
+    const events: string[] = []
+    vi.mocked(runScopeRotationWorker).mockImplementation(async () => { events.push('pass'); return 0 })
+    vi.mocked(acceptKeyChange).mockImplementation(async () => { events.push('pin written') })
+    vi.mocked(resolveGroupMember).mockResolvedValue({ userId: 'u-c', identityPublicKey: 'new-key', requiresConsent: true } as never)
+    vi.mocked(wrapGroupNameKeyForInvitee)
+      .mockRejectedValueOnce(new IdentityChangedError('u-c'))
+      .mockResolvedValueOnce('c2VhbGVk')
+    const w = await mountPanel({ me: 'owner' })
+
+    await w.find('#group-add-username').setValue('carol')
+    await w.find('form.group-add-form').trigger('submit')
+    await flushPromises()
+    await button(w, t('groups.acceptKeyChange'))!.trigger('click')
+    await flushPromises()
+
+    expect(events).toEqual(['pass', 'pin written'])
+    expect(acceptKeyChange).toHaveBeenCalledWith('u-c', 'new-key')
+    expect(addGroupMember).toHaveBeenCalledWith('g-1', 'carol', 'u-c', 'c2VhbGVk') // the retried add
   })
 })

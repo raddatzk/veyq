@@ -212,11 +212,16 @@ class TasksStore {
             // at the current epoch. The write is bound to the job's OWN scope (`and scopeId = ?4`) — the caller was
             // authorized against `job.scopeId`, so it may only ever write onto a membership *in that scope*; without
             // this an attacker holding a grant in any scope could target a foreign id (cr-0081).
+            // The worker's identity key as of this write is recorded beside its signature: the reads serve it, so the
+            // grant stays verifiable after the worker's own account rotation (ADR 0028 § What is still open). The
+            // worker is the authenticated lease holder, so its account row exists.
+            val workerKey = VeyqUser.findById(userId)!!.identityPublicKey
             job.resourceRef?.let { membershipId ->
                 MembershipEntity.update(
-                    "wrappedGrant = ?1, grantedEpoch = ?2, granterUserId = ?5, grantSignature = ?6 " +
+                    "wrappedGrant = ?1, grantedEpoch = ?2, granterUserId = ?5, grantSignature = ?6, " +
+                        "granterIdentityPublicKey = ?7 " +
                         "where id = ?3 and scopeId = ?4 and (wrappedGrant is null or grantedEpoch < ?2) and pendingConsent = false",
-                    grant, epoch, membershipId, job.scopeId, userId, signature,
+                    grant, epoch, membershipId, job.scopeId, userId, signature, workerKey,
                 )
             }
         }

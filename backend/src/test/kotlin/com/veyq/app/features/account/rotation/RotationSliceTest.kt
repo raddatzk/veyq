@@ -14,6 +14,7 @@ import com.veyq.app.shared.crypto.TestProofKey
 import com.veyq.app.shared.identity.MasterKeyWrapEntity
 import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.membership.MembershipEntity
+import com.veyq.app.shared.membership.TestAdmission
 import com.veyq.app.testing.TestFixtures.bearer
 import com.veyq.app.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -190,6 +191,58 @@ class RotationSliceTest {
         rotate(user).then().statusCode(200)
             .body("soleMemberScopeIds", hasItem(scope.scopeId))
             .body("queuedScopeIds", not(hasItem(scope.scopeId)))
+    }
+
+    @Test
+    fun aGrantTheRotatorSignedIsStillServedWithTheKeyThatSignedIt() {
+        // Inbox #233, ADR 0028 § What is still open. The rotator R wrote co-owner O2's grant through a real grant
+        // path (R's rotation of the tenant scope re-granting O2) and signed it with R's OLD identity. After R rotates
+        // their account keys, both reads must still pair that signature with the OLD key: O2's client verifies the
+        // signature under the served key BEFORE it consults its pin of R, so serving R's new key fails the grant as
+        // `bad_signature` and O2 — the owner who must complete the covering rotation — cannot open the scope at all.
+        val rotator = seedAccount()
+        val coOwner = seedUser(identityPublicKey = CO_OWNER_PUB)
+        val shared = seedTenantScope()
+        seedGrantedMembership(rotator, shared)
+        seedGrantedMembership(coOwner, shared)
+        given().header("Authorization", bearer(rotator)).contentType(ContentType.JSON)
+            .body(
+                """{"epoch":1,"wrappedPrev":"$ROT_PREV","grants":[
+                   {"userId":"$rotator","wrappedGrant":"$ROTATOR_GRANT","grantSignature":"$SIG_FOR_ROTATOR"},
+                   {"userId":"$coOwner","wrappedGrant":"$CO_OWNER_GRANT","grantSignature":"$SIG_FOR_CO_OWNER"}],
+                   ${TestAdmission.openJson(shared.scopeId)}}""",
+            )
+            .`when`().post("/api/scopes/${shared.scopeId}/epochs").then().statusCode(201)
+        assertGrantServedTo(coOwner, shared, OLD_IDENTITY_PUB) // before: nothing has rotated yet
+
+        rotate(rotator).then().statusCode(200)
+
+        assertGrantServedTo(coOwner, shared, OLD_IDENTITY_PUB)
+
+        // Positive control: a grant R writes AFTER rotating is served with R's NEW key — so the old key above is
+        // the snapshot of the grant's own moment, not a key that simply never updates.
+        val personalId = UUID.randomUUID().toString()
+        given().header("Authorization", bearer(rotator)).header("X-Forwarded-Host", shared.domain)
+            .contentType(ContentType.JSON)
+            .body("""{"scopeId":"$personalId","wrappedGrant":"$ROTATOR_GRANT","grantSignature":"$SIG_FOR_ROTATOR"}""")
+            .`when`().post("/api/scopes").then().statusCode(201)
+        given().header("Authorization", bearer(rotator)).header("X-Forwarded-Host", shared.domain)
+            .`when`().get("/api/scopes").then().statusCode(200)
+            .body("find { it.id == '$personalId' }.granterIdentityPublicKey", equalTo(NEW_IDENTITY_PUB))
+    }
+
+    /** Both reads that serve a grant (`/api/scopes`, `/api/scopes/my-tenants`) hand [recipient] the rotation's grant
+     *  on [scope], signed by the rotator, beside [granterKey]. */
+    private fun assertGrantServedTo(recipient: String, scope: SeededScope, granterKey: String) {
+        given().header("Authorization", bearer(recipient)).header("X-Forwarded-Host", scope.domain)
+            .`when`().get("/api/scopes").then().statusCode(200)
+            .body("find { it.id == '${scope.scopeId}' }.wrappedGrant", equalTo(CO_OWNER_GRANT))
+            .body("find { it.id == '${scope.scopeId}' }.grantSignature", equalTo(SIG_FOR_CO_OWNER))
+            .body("find { it.id == '${scope.scopeId}' }.granterIdentityPublicKey", equalTo(granterKey))
+        given().header("Authorization", bearer(recipient))
+            .`when`().get("/api/scopes/my-tenants").then().statusCode(200)
+            .body("find { it.tenantId == '${scope.tenantId}' }.grantSignature", equalTo(SIG_FOR_CO_OWNER))
+            .body("find { it.tenantId == '${scope.tenantId}' }.granterIdentityPublicKey", equalTo(granterKey))
     }
 
     @Test
@@ -380,7 +433,10 @@ class RotationSliceTest {
     /** A scope plus the tenant it hangs off. The TENANT root scope is keyed `scopeId == tenantId` (cr-0026);
      *  a PERSONAL one gets its own id, which is why the two ids are carried separately — a membership's
      *  `tenant_id` is a foreign key, and passing the scope id there works only for the tenant root. */
-    private data class SeededScope(val scopeId: String, val tenantId: String)
+    private data class SeededScope(val scopeId: String, val tenantId: String) {
+        /** The tenant's host — what a read of the caller's scopes resolves the tenant from. */
+        val domain get() = "rot-$tenantId.example.com"
+    }
 
     private fun seedTenantScope(): SeededScope = seedScope(ScopeEntity.TENANT)
 
@@ -391,7 +447,7 @@ class RotationSliceTest {
         val scopeId = if (kind == ScopeEntity.TENANT) tenantId else UUID.randomUUID().toString()
         QuarkusTransaction.requiringNew().run {
             TenantEntity().apply {
-                id = tenantId; name = "Fam"; domain = "rot-$tenantId.example.com"
+                id = tenantId; name = "Fam"; domain = SeededScope(scopeId, tenantId).domain
                 ownerEmail = "o-$tenantId@example.com"; status = TenantEntity.ACTIVE; createdAt = Instant.now()
             }.persist()
             ScopeEntity().apply {
@@ -503,6 +559,13 @@ class RotationSliceTest {
         const val OLD_PINS = "b2xkLXBpbnM="
         const val NEW_PINS = "bmV3LXBpbnM="
         const val OLD_REGISTER = "b2xkLXJlZ2lzdGVy"
+
+        const val CO_OWNER_PUB = "Y28tb3duZXItaWRlbnRpdHktcHVi"
+        const val ROT_PREV = "cm90LXByZXY="
+        const val ROTATOR_GRANT = "cm90YXRvci1ncmFudA=="
+        const val CO_OWNER_GRANT = "Y28tb3duZXItZ3JhbnQ="
+        const val SIG_FOR_ROTATOR = "c2lnbmVkLWZvci10aGUtcm90YXRvcg=="
+        const val SIG_FOR_CO_OWNER = "c2lnbmVkLWJ5LXRoZS1vbGQta2V5LWZvci10aGUtY28tb3duZXI="
         const val NEW_REGISTER = "bmV3LXJlZ2lzdGVy"
 
         /** The Secret-Key proof key every seeded account registers; [OTHER_KEY] is a Secret Key it does not hold. */

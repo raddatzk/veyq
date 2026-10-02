@@ -78,9 +78,10 @@ sequenceDiagram
   C->>S: originate SCOPE_ROTATION per shared scope
   Note right of S: sees ciphertext, a directory value<br>and epoch indices — never a key
   M->>S: claim the job
-  M->>M: directory key ≠ pin → changed → human review
-  alt accepted out-of-band
-  M->>S: new epoch, re-granted to identity'
+  M->>M: directory key ≠ pin → changed → skipped
+  M->>S: new epoch, re-granted to every other member
+  alt accepted out-of-band (after the rotation)
+  M->>S: grant-delivery wraps the new epoch to identity'
   else not yet reviewed
   Note over U,M: holder stays outside that scope<br>#35;awaiting access
   end
@@ -111,9 +112,9 @@ sequenceDiagram
   and there is no re-mint path, so the proposal is dead: it must be withdrawn and re-issued after
   re-admission.
 - **E6 — a contact accepts the new key but delivery never arrives.** A worker that declined `identity_changed`
-  is excluded from that job permanently, so the accept authorises a wrap that nothing performs
+  is excluded from that job permanently, so an accept alone would authorise a wrap that nothing performs
   ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md) Decision 7). Accepting a changed key
-  must clear that exclusion; until it does, this is the failure mode that strands a rotated account.
+  therefore clears the accepting account's own declines against that contact, and the next claim delivers.
 - **E7 — the rotation is interrupted between steps 4 and 5.** The account holds `MK'` with an unpublished
   identity; the flow is resumable because every step is idempotent against the published state, and the client
   finishes rather than re-mints — re-minting would strand the wraps written in step 4.
@@ -123,6 +124,17 @@ sequenceDiagram
   before writing anything and points at the settings hub's *Start a list over*: re-sealing a rolled-back copy
   under `MK'` would make the rollback the rotation's own, and carrying an unreadable one across as empty is the
   wipe Decision 7 refuses. Starting the list over is the user's own, confirmed act, not a side door of this one.
+- **E9 — another member accepts the new key before the covering rotation reached them.** Every grant this
+  account signed with its old identity is served with the key that signed it
+  ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) § What is still open), so it
+  keeps opening for each member whose pin still holds that key — including the owner who will complete the
+  queued rotation. A member whose pin moves to the new key first refuses those grants (`granter_key_changed`):
+  the retired key is never trusted again. So accepting a changed key first runs one pass of the scope-rotation
+  worker, and an owner who is online covers the scope before their pin moves. What the pass cannot cover (a job
+  leased to someone else at that moment, or a scope where the accepting member is not an owner) stays refused
+  for them until another owner completes it, and the review dialog says so before the accept. The covering
+  rotation itself never needs the new key accepted: its re-grant skips a member whose key reads `changed`, and
+  this account's re-admission follows by grant-delivery once somebody accepts.
 
 ## Quality notes
 

@@ -14,7 +14,7 @@ invariants: [operator-blind E2EE, API-first]
 **Added 2026-10-01 by the #233–#235 refine: Q8 and Q9 are open.** They gate only D10 (#234) and D11 (#235).
 Everything decided below, D1–D9 included, keeps its go. Inbox #233, the granter lock, is **not** folded here: it is
 a different mechanism (which key a grant is verified under), it shares no decision with this CR, and it is now its
-own planned CR, [`cr-grant-verifies-under-its-signing-key`](cr-grant-verifies-under-its-signing-key.md). Where
+own planned CR, `cr-grant-verifies-under-its-signing-key` (landed, CR deleted). Where
 this CR says "the granter lock" or "the proposed row", read that CR (planned).
 
 8. **How do a scope's other owners learn that its compromise rotation needs them (#234)?** D9 tells only the
@@ -421,7 +421,7 @@ CR: it is proposed as a row (§ Proposed inbox rows (#225 fold)). It belongs her
 reachable by honest clients alone.
 
 *Updated by the #233–#235 refine:* the row is inbox #233, and the chain is now **run**, not only read:
-[`cr-grant-verifies-under-its-signing-key`](cr-grant-verifies-under-its-signing-key.md) (planned) § Inventory 5
+`cr-grant-verifies-under-its-signing-key` (landed, CR deleted) § Inventory 5
 (the server serves the rotator's new key beside the signature made with the old one) and 6 (an owner holding that
 grant cannot open the scope, `commitRotation` throws, and accepting the new key does not help).
 
@@ -1155,7 +1155,7 @@ it. D5 also writes the exclusion on older `LEASED` jobs, but none of those carri
 
 The refine does not number rows. Once these have numbers, phase 0 replaces every "the proposed row" in this CR
 with the number. *Updated by the #233–#235 refine:* both are filed. The first is inbox #233, refined into
-[`cr-grant-verifies-under-its-signing-key`](cr-grant-verifies-under-its-signing-key.md), which takes the snapshot
+`cr-grant-verifies-under-its-signing-key` (landed, CR deleted), which takes the snapshot
 shape below and rejects the re-sign shape. The second is inbox #234, folded here as D10.
 - **The granter lock: an account rotation leaves every grant the rotator signed unverifiable, and when that
   covers every owner the queued rotation can never land** (security, rotation, crypto). § Inventory for #225 has
