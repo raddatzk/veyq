@@ -27,7 +27,7 @@ acceptanceCriteria:
     text: Any remaining member may re-enable a deactivated share; doing so transfers owner_account to the re-activating member, so an active share is always owned by a current member (a later removal of the new owner deactivates it again).
     coverage:
       backend:
-        integration: [ShareSharedScopeSliceTest.reactivateByAnotherMemberTransfersOwnershipAndResolves, ShareSharedScopeSliceTest.reactivateByNonMemberIs404]
+        integration: [ShareSharedScopeSliceTest.reactivateByAnotherMemberTransfersOwnershipAndResolves, ShareSharedScopeSliceTest.reactivateByNonMemberIs404, ShareSharedScopeSliceTest.aReactivationByAMemberBeingRemovedLeavesTheLinkOff]
       web:
         unit: [src/features/memory/share.test.ts]
   - id: follows-new-content

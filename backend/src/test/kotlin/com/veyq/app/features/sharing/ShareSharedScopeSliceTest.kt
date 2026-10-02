@@ -712,6 +712,46 @@ class ShareSharedScopeSliceTest {
         }
     }
 
+    @Test
+    fun aReactivationByAMemberBeingRemovedLeavesTheLinkOff() {
+        // The re-activation's checks (membership, the re-issue mark) read before the caller's removal commits, and
+        // its write lands after: the removed member then owned a live link in a group they are no longer in — a
+        // state neither order of the two produces (reactivate first: the removal turns the adopted link off; the
+        // removal first: the caller is no member). Checked under the scope's lock, which every removal holds.
+        repeat(ROUNDS) { round ->
+            val domain = "react-${UUID.randomUUID()}.example.com"
+            val (tenantId, owner) = seedActiveTenant(domain)
+            val member = seedTenantMember(tenantId, "m@$domain")
+            val group = seedGroup(tenantId, owner)
+            addMember(tenantId, group, member)
+            val memory = seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
+            val shareId = createShare(owner, memory)
+            revoke(owner, shareId)
+            val outcome = whileUncommitted(
+                change = {
+                    val decision = scopes.rotate(
+                        group, 1, "cHJldg==", owner, listOf(RotationGrant(owner, SignedGrant("Z3JhbnQ=", TestAdmission.SIGNATURE))),
+                        emptyList(), emptySet(), removes = member,
+                    )
+                    assertTrue(decision is RotationDecision.Commit, "round $round: $decision")
+                },
+                overlapping = { handler.reactivate(member, shareId) },
+            )
+            assertEquals(ReactivateShareOutcome.NotFound, outcome, "round $round")
+            QuarkusTransaction.requiringNew().run {
+                val share = ShareEntity.findById(shareId)!!
+                assertEquals(false, share.enabled, "round $round: a removed member re-activated a link")
+                assertEquals(owner, share.ownerAccount, "round $round")
+            }
+            // Control: a member who stays re-activates a link minted after the removal (the one above is now marked
+            // for re-issue by the removal, ADR 0075).
+            val later = createShare(owner, memory)
+            revoke(owner, later)
+            assertEquals(ReactivateShareOutcome.Done, handler.reactivate(owner, later), "round $round")
+            QuarkusTransaction.requiringNew().run { assertEquals(true, ShareEntity.findById(later)!!.enabled) }
+        }
+    }
+
     // --- helpers ---
 
     /** A share of [role] carrying [keys]; with [copyEpoch], also a recovery copy sealed at that epoch (ADR 0036

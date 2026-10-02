@@ -7,6 +7,7 @@ import com.veyq.app.shared.blobstore.StoreReclaimStore
 import com.veyq.app.shared.membership.MembershipEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
+import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional
 import java.time.Instant
 import java.util.UUID
@@ -593,7 +594,9 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
      */
     @Transactional
     fun deleteBucketReparent(bucketId: String) {
-        val sub = BucketEntity.findById(bucketId) ?: return
+        // Locked first, as [moveMedia] locks its target: a move into this bucket finishes before the reparent reads
+        // which media to carry, and one that comes after finds the bucket gone.
+        val sub = BucketEntity.findById(bucketId, LockModeType.PESSIMISTIC_WRITE) ?: return
         val primary = ensurePrimaryBucket(sub.scopeId, sub.nodeId, sub.ownerKey, primarySealedNameFor(sub.ownerKey))
         MediaEntity.update("bucketId = ?1 where bucketId = ?2", primary.id, bucketId)
         bumpMediaRevision(sub.nodeId) // cr-0113: reparent changed the media's bucketId → advance the ETag
@@ -617,7 +620,10 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
         val target = if (targetBucketId == null) {
             ensurePrimaryBucket(scopeId, nodeId, ownerKey, primarySealedNameFor(ownerKey))
         } else {
-            BucketEntity.findById(targetBucketId)
+            // Under the bucket row's lock, which a sub-bucket delete takes first ([deleteBucketReparent]): read
+            // without it, a move into a bucket being deleted wrote the gone bucket's id and failed its commit on the
+            // foreign key — a 500 where a move into a missing bucket answers false.
+            BucketEntity.findById(targetBucketId, LockModeType.PESSIMISTIC_WRITE)
                 ?.takeIf { it.scopeId == scopeId && it.nodeId == nodeId && it.ownerKey == ownerKey } ?: return false
         }
         media.forEach { it.bucketId = target.id; it.persist() }

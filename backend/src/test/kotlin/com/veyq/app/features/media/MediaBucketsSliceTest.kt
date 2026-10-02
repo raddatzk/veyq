@@ -248,6 +248,55 @@ class MediaBucketsSliceTest {
         }
     }
 
+    @Test
+    fun aMoveIntoASubBucketBeingDeletedIsRefused() {
+        // The move reads its target bucket before the bucket's delete commits and writes after it: the medium was
+        // left pointing at a bucket that no longer exists. The move must see the delete and answer as it would for a
+        // bucket that is gone (Forbidden), leaving the medium where it was.
+        repeat(RACE_ROUNDS) { round ->
+            val (userId, scopeId) = seedMemberScope()
+            val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+            val media = completeOne(userId, scopeId, memory, wrap = "YQ==")
+            val primary = firstPrimaryId(userId, scopeId, memory)
+            val doomed = createSub(userId, scopeId, memory, "ZG9vbWVk")
+            val outcome = whileUncommitted(
+                change = { store.deleteBucketReparent(doomed) },
+                overlapping = { handler.moveMedia(userId, scopeId, memory, listOf(media), doomed) },
+            )
+            assertEquals(MoveMediaOutcome.Forbidden, outcome, "round $round")
+            QuarkusTransaction.requiringNew().run {
+                assertEquals(primary, MediaEntity.findById(media)!!.bucketId, "round $round: the medium points at a deleted bucket")
+                assertNull(BucketEntity.findById(doomed), "round $round")
+            }
+            // Control: a move into a bucket that stays lands.
+            val kept = createSub(userId, scopeId, memory, "a2VwdA==")
+            assertEquals(MoveMediaOutcome.Done, handler.moveMedia(userId, scopeId, memory, listOf(media), kept), "round $round")
+            QuarkusTransaction.requiringNew().run { assertEquals(kept, MediaEntity.findById(media)!!.bucketId) }
+        }
+    }
+
+    @Test
+    fun aSubBucketDeleteOverlappingAMoveIntoItCarriesTheMovedMedium() {
+        // The other order: the move commits first. The delete must wait for it and carry the moved medium to the
+        // primary like every other medium of the bucket, not leave it behind for the foreign key to null out.
+        repeat(RACE_ROUNDS) { round ->
+            val (userId, scopeId) = seedMemberScope()
+            val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+            val media = completeOne(userId, scopeId, memory, wrap = "YQ==")
+            val primary = firstPrimaryId(userId, scopeId, memory)
+            val doomed = createSub(userId, scopeId, memory, "ZG9vbWVk")
+            whileUncommitted(
+                change = { assertTrue(store.moveMedia(scopeId, memory, listOf(media), doomed), "round $round") },
+                overlapping = { store.deleteBucketReparent(doomed) },
+            )
+            QuarkusTransaction.requiringNew().run {
+                assertEquals(primary, MediaEntity.findById(media)!!.bucketId, "round $round: the delete left the moved medium behind")
+                // Control: the delete itself landed.
+                assertNull(BucketEntity.findById(doomed), "round $round")
+            }
+        }
+    }
+
     // --- helpers (mirror MediaTrashSliceTest) ---
 
     private fun createSub(userId: String, scopeId: String, nodeId: String, sealedName: String): String =

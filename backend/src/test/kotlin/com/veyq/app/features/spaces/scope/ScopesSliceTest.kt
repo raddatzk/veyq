@@ -620,6 +620,47 @@ class ScopesSliceTest {
             .body("find { it.id == '$groupId' }.nameEpoch", equalTo(1))
     }
 
+    @Test
+    fun aRenameWhoseGatePassedBeforeARotationCommittedIsStale() {
+        // The epoch gate (`nameEpoch == currentEpoch`) reads the epoch before the write's transaction: a rotation that
+        // commits in between let a name sealed under the pre-rotation epoch land — readable by a member the rotation
+        // removed (ADR 0024). The write itself must re-check the epoch and answer StaleEpoch (inbox #224, #275).
+        repeat(RACE_ROUNDS) { round ->
+            val (owner, scopeId) = seedMemberScope(ScopeEntity.GROUP)
+            val outcome = whileUncommitted(
+                change = { rotateToEpochOne(owner, scopeId, round) },
+                overlapping = { handler.renameGroup(owner, scopeId, renamedName, 0) },
+            )
+            assertEquals(RenameGroupOutcome.StaleEpoch, outcome, "round $round")
+            QuarkusTransaction.requiringNew().run {
+                val scope = ScopeEntity.findById(scopeId)!!
+                assertNull(scope.encryptedName, "round $round: a name sealed under the old epoch landed")
+                assertEquals(1, scope.currentEpoch, "round $round")
+            }
+            // Control: the same rename at the current epoch lands.
+            assertEquals(RenameGroupOutcome.Ok, handler.renameGroup(owner, scopeId, renamedName, 1), "round $round")
+            QuarkusTransaction.requiringNew().run { assertEquals(renamedName, ScopeEntity.findById(scopeId)!!.encryptedName) }
+        }
+    }
+
+    @Test
+    fun anIconSetWhoseGatePassedBeforeARotationCommittedIsStale() {
+        repeat(RACE_ROUNDS) { round ->
+            val (owner, scopeId) = seedMemberScope(ScopeEntity.GROUP)
+            val outcome = whileUncommitted(
+                change = { rotateToEpochOne(owner, scopeId, round) },
+                overlapping = { handler.setScopeIcon(owner, scopeId, sealedIcon, 0) },
+            )
+            assertEquals(SetScopeIconOutcome.StaleEpoch, outcome, "round $round")
+            QuarkusTransaction.requiringNew().run {
+                assertNull(ScopeEntity.findById(scopeId)!!.sealedIcon, "round $round: an icon sealed under the old epoch landed")
+            }
+            // Control: the same set at the current epoch lands.
+            assertEquals(SetScopeIconOutcome.Ok, handler.setScopeIcon(owner, scopeId, sealedIcon, 1), "round $round")
+            QuarkusTransaction.requiringNew().run { assertEquals(sealedIcon, ScopeEntity.findById(scopeId)!!.sealedIcon) }
+        }
+    }
+
     /** The real rotation commit (ADR 0024 §4) of a group whose only member is its owner, from epoch 0 to 1. */
     private fun rotateToEpochOne(owner: String, scopeId: String, round: Int) {
         val decision = scopes.rotate(
