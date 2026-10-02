@@ -26,6 +26,8 @@ const API_MOCKS_SYNTAX = [
   // of `vi.mock` types its factory as nothing, so a payload there is checked against nothing; `vi.mocked(fn)` is
   // typed by the real function. A spread of `importOriginal()`, a member of it and a non-function value stay
   // allowed; a composable (`use*`) keeps its hand-written stub, since it returns reactive UI state, not a model.
+  // LIMIT: the path must spell `features/`, so a test INSIDE features/ that mocks a sibling by a relative path
+  // (`'../../spaces/scopes'`) is not seen, and neither is a module-level `vi.fn()` a test drives directly.
   ...[
     ':function > ObjectExpression.body',
     ':function > BlockStatement > ReturnStatement > ObjectExpression',

@@ -13,13 +13,14 @@ vi.mock('./rotateKeys', () => ({
   requeueQueuedRotation: vi.fn(),
 }))
 vi.mock('../../../app/vault', () => ({ unlockOrigin: () => 'cold' }))
-vi.mock('../../spaces/scopes', () => ({ listMyTenants: vi.fn().mockResolvedValue([]) }))
+vi.mock('../../spaces/scopes', () => ({ listMyTenants: vi.fn() }))
 
 import KeyRotationPanel from './KeyRotationPanel.vue'
 import { listQueuedRotations, requeueQueuedRotation } from './rotateKeys'
 import { listMyTenants } from '../../spaces/scopes'
 import { forgetGroupNamesSeen, rememberGroupName } from '../../spaces/groupNamesSeen'
 import { realI18n, t } from '../../../test/i18n'
+import { myTenant } from '../../../test/models'
 
 const stubs = {
   Button: { props: ['label', 'icon'], emits: ['click'], template: '<button @click="$emit(\'click\')">{{ label }}</button>' },
@@ -46,7 +47,10 @@ const requeueIn = (w: ReturnType<typeof mount>, scopeId: string) =>
   row(w, scopeId).findAll('button').find((b) => b.text() === t('rotation.requeue'))
 
 describe('KeyRotationPanel — the queued rotations, as the server reads them', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(listMyTenants).mockResolvedValue([])
+  })
 
   it('reads the states on mount and shows each with its own badge and hint', async () => {
     const w = await mountPanel()
@@ -104,7 +108,7 @@ describe('KeyRotationPanel — a queued group is labelled, never shown by id', (
   })
 
   it('a tenant root keeps its plaintext name, unmarked', async () => {
-    vi.mocked(listMyTenants).mockResolvedValueOnce([{ tenantId: scopeOf('secured'), name: 'Raddatz' }] as never)
+    vi.mocked(listMyTenants).mockResolvedValueOnce([myTenant({ tenantId: scopeOf('secured'), name: 'Raddatz' })])
     const w = await mountPanel()
     const r = row(w, scopeOf('secured'))
     expect(r.text()).toContain('Raddatz')
