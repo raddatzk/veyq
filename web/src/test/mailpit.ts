@@ -24,6 +24,8 @@ type Envelope = { ID: string; Created: string; To?: { Address: string }[] }
  * undocumented property of the image, and one line here means nobody has to re-check it on a version bump.
  *
  * `limit` is raised off Mailpit's default of 50 so a long run cannot silently truncate a recipient out of view.
+ * Nothing deletes mail any more ([mailCursor]), so the mailbox fills up to Mailpit's own cap; the newest 200 still
+ * hold every mail a suite is waiting for, because that mail is the newest one.
  */
 async function inbox(to: string): Promise<Envelope[]> {
   const list = await fetch(`${MAILPIT}/api/v1/messages?limit=200`).then((r) => r.json())
@@ -32,33 +34,30 @@ async function inbox(to: string): Promise<Envelope[]> {
     .sort((a, b) => Date.parse(b.Created) - Date.parse(a.Created))
 }
 
-/** Poll until a message to `to` exists, and return the newest one's plain-text body. */
-export async function waitForMail(to: string, timeoutMs = 20_000): Promise<string> {
+/**
+ * Where the mailbox stands for `to` BEFORE an action that sends mail: every message already addressed there.
+ *
+ * Taken first so the next [waitForMail] cannot resolve to an older message — a re-issue sends a second mail to
+ * the same address, and an earlier hand run (which shares the default `VEYQ_STAMP`, hence the address) leaves one
+ * behind. A cursor rather than a delete: `scripts/run_web_e2e.py` sweeps EVERY mail the run sent for leaked
+ * plaintext, so a suite that deleted its mail would delete the evidence — nothing in a run deletes mail.
+ */
+export async function mailCursor(to: string): Promise<MailCursor> {
+  return { seen: new Set((await inbox(to)).map((m) => m.ID)) }
+}
+
+export type MailCursor = { readonly seen: ReadonlySet<string> }
+
+/** Poll until a message to `to` arrives that the cursor had not seen, and return the newest one's plain-text body. */
+export async function waitForMail(to: string, { after }: { after: MailCursor }, timeoutMs = 20_000): Promise<string> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
-    const [newest] = await inbox(to)
+    const [newest] = (await inbox(to)).filter((m) => !after.seen.has(m.ID))
     if (newest) {
       const full = await fetch(`${MAILPIT}/api/v1/message/${newest.ID}`).then((r) => r.json())
       return String(full.Text ?? '')
     }
     await new Promise((r) => setTimeout(r, 500))
   }
-  throw new Error(`no mail for ${to} within ${timeoutMs}ms (mailbox ${MAILPIT})`)
-}
-
-/**
- * Delete exactly the messages addressed to `to`, so the next `waitForMail` cannot resolve to an older one.
- *
- * **Recipient-scoped, never global.** A developer's `veyq-mailpit` is `restart: unless-stopped` and holds their
- * own manual smoke mails; wiping it from a test run would be destructive on a real machine, not hypothetically.
- * E2E recipients are stamped per run (`VEYQ_STAMP`), so one recipient is both safe and sufficient.
- */
-export async function clearMailbox(to: string): Promise<void> {
-  const ids = (await inbox(to)).map((m) => m.ID)
-  if (ids.length === 0) return
-  await fetch(`${MAILPIT}/api/v1/messages`, {
-    method: 'DELETE',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ IDs: ids }),
-  })
+  throw new Error(`no new mail for ${to} within ${timeoutMs}ms (mailbox ${MAILPIT})`)
 }

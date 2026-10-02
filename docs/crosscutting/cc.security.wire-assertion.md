@@ -5,8 +5,8 @@
   invariant; it has no standalone end-user goal (not a use-case) and is not a feature substrate (not an
   enabler — it serves every feature that seals anything). Recorded here so its oracle + rationale +
   verification are traceable from the threat model.
-- **Status:** **four surfaces are swept — the database, the object store, the HTTP bodies and the server log**,
-  each armed in the `web-e2e` job. [ADR 0053](../decisions/0053-wire-assertion-canary-sweep.md) settled the
+- **Status:** **six surfaces are swept — the database, the object store, the HTTP bodies, the server log, the
+  database's statement log and the mailbox**, each armed in the `web-e2e` job. [ADR 0053](../decisions/0053-wire-assertion-canary-sweep.md) settled the
   oracle; the surfaces landed one change-request at a time (§ Surfaces below). Only the S3 object key's own guard
   is still *planned*.
 
@@ -61,6 +61,8 @@ in CI.
 | **Object store** — object keys and stored bytes | canary absence | **live** — `scripts/run_web_e2e.py` `sweep_store()`, the suite's bucket mirrored out with the operator tool's own rclone plumbing (`instance_backup.Store.mirror_out`) and both the object **keys** and the object **bytes** searched for that suite's canaries. A suite that stored nothing is skipped **out loud**, and the discriminator is its own `veyq_blob` count rather than a list of which suites upload |
 | **Server log** — every boot log the run retains, and the log of every container of the stack, where an error `message`, a stack trace or a request URI would carry plaintext | canary absence, run-level, after every group, against the **union** of the run's canary files | **live** — `scripts/run_web_e2e.py` `sweep_logs()` over each `backend-*.log` (derived by a recursive glob), and `sweep_containers()` over every service `docker compose ps` reports, read from the run's start (MariaDB, Garage, Traefik, Mailpit). One needle set for every text surface, `canary_needles()`: raw, JSON-escaped (both `ensure_ascii` forms) and percent-encoded (`%20` and `+`), a plain case-sensitive substring with no word boundary. **Armed by positive controls on the same matcher**, never by a count of zero: each boot log must be non-empty, name the database its boot used (Flyway's JDBC line) and carry Quarkus' shutdown line; the store's log must carry a key the run plants at its start — an unsigned, refused request with a space and a non-ASCII character, which Garage logs percent-encoded and the sweep must find through the `pct` needle. The boot pins the JVM's output to UTF-8 (`-Dstdout.encoding`), because under a `C` locale it writes a non-ASCII character as `?` (measured). The no-Docker half is `scripts/validate_wire_log_matcher.py` |
 | **HTTP bodies** — the `contentEncoding: base64` fields | opacity **and** canary absence: a declared-opaque field must not decode to readable text *and* must not be implausibly short; no canary may appear in a URL, a header or a body, in any spelling `canary_needles()` models — the recorder keeps a URL as the client built it, percent-encoded | **live** — `scripts/run_web_e2e.py` `sweep_http()`, over a recording `web/src/test/wireRecorder.ts` makes in the suite process. This is the only surface where path params, query strings, capability headers and presigned URLs exist at all (ADR 0053 §3) |
+| **Statement log** — every SQL statement the database received during the run, reads and since-undone writes included, so a plaintext the end-state dump cannot see (written, then overwritten or deleted inside a suite) | canary absence, run-level, against the **union** of the run's canary files | **live** — `scripts/run_web_e2e.py` `StatementLog` switches MariaDB's general query log on for exactly the run's window (three dynamic `SET GLOBAL`s, no compose or chart change), restores the prior globals from a `finally` (SIGTERM/SIGHUP included; a killed run's leftover is healed by the next run), retains the file as `.e2e-out/<stamp>/mariadb-general.log` and deletes it in the container; `sweep_statements()` searches **only the SQL string literals** — the backend's driver (Connector/J) prepares client-side, so every bound value is an inline literal, and outside them `set autocommit=0` and the migrations' comments would collide with real canaries (`auto`, `range`) — with `canary_needles()` plus `sql-literal`, the driver's own escaping (a backslash before `\`, `'`, `"`, NUL; measured from the driver). **Armed** by a sentinel statement at each end of the window, carrying an apostrophe so only `sql-literal` can find it (the log was on throughout, and literals are still escaped as modelled), and by a `Connect` entry for every database a boot of the run used (derived from the boot logs), so the backend's traffic was captured |
+| **Mailbox** — every mail the run sent, the one surface a third party (the tenant's SMTP provider) reads | canary absence, run-level, against the **union** of the run's canary files | **live** — `scripts/run_web_e2e.py` `sweep_mailbox()` reads every message Mailpit received since the run's start through its API (paged explicitly, fetched raw, retained under `.e2e-out/<stamp>/mailbox/`), parses it with Python's `email` package and searches each **decoded** header and text part and the raw source with `canary_needles()`. Decoding is load-bearing: the product's mail travels as a `Q` encoded-word subject and a quoted-printable body whose soft line breaks split even an ASCII token (measured). **Armed** by a mail the run plants over SMTP whose sentinel (a space, a non-ASCII character) must be found decoded — and is printed as absent from the raw source. No suite deletes mail: `web/src/test/mailpit.ts` waits behind a cursor (`mailCursor` + `waitForMail(to, { after })`) |
 | **S3 object key** | the separate guard ADR 0044 promised it | planned, outside this concern's sweep |
 
 ## What a green sweep does not prove
@@ -94,7 +96,22 @@ Load-bearing, and repeated in the guard's own docstring rather than only here:
   (`access_log … main`, linked to `/dev/stdout`), and nothing here reads it.
 - **Only the store's container log carries a control.** MariaDB, Traefik and Mailpit are swept because the rule
   that includes them is derived, not because anything proves they could show a leak: across the first runs each
-  wrote **0** lines in the run's window (MariaDB's general log is off; Mailpit logs deliveries, not bodies).
+  wrote **0** lines in the run's window (MariaDB writes its general log to the file the statement-log sweep reads,
+  not to its container log; Mailpit logs deliveries, not bodies — the mailbox sweep reads the bodies).
+- **The store keeps no history of object bytes.** An object a client uploaded and deleted inside one suite leaves
+  its key in the store's request log (swept) but its bytes nowhere this sensor reads — Garage keeps no versions,
+  and recording upload bodies in the suite's recorder would put every byte of the store through a JSONL file.
+  Measured on one full run: 10 store `PUT`s and 1 media `DELETE`, so the residue is one object's bytes. Re-open
+  when a suite deletes media routinely.
+- **The statement log sees statements, in their literals.** A value the backend computes and never sends to the
+  database is not there by construction, and a value spliced into SQL text outside a quote would not be searched
+  (none is today — every value is a bound parameter). Its window is the shared `veyq-mariadb`, so the retained file
+  also holds whatever else reached that MariaDB during the run — a developer's own backend or database tool: their
+  data on their disk, in the gitignored `.e2e-out/`, deleted from the container when the window closes. Only a
+  SIGKILL of the orchestrator leaves the log on (until the next run heals it, or the container restarts).
+- **The mailbox sees what reached Mailpit**, not what a production relay adds, keeps or logs. It is shared with a
+  developer's own mail of the same window, and Mailpit prunes its oldest messages past its cap — a run that pushed
+  its own planted mail out fails on the control, loud. Non-text parts are searched raw only.
 - **A log records only what its process chose to write, at the level it shipped with (INFO).** No veyq log
   statement echoes request input today, so on the boot logs a green is mostly the proof that none started to.
   The encoding pin is the e2e boot's; an operator's locale is theirs, and a leak it writes as `Gr??e` still leaks
@@ -122,5 +139,6 @@ The parts that *are* decidable without Docker belong in the buildless glob, the 
 every e2e suite actually contributes canaries, so the sweep cannot report green having swept an empty set
 ([`scripts/validate_e2e_canaries.py`](../../scripts/validate_e2e_canaries.py)); and that the log sweep's needles
 find every spelling of a canary carrying a quote, a backslash, a newline or a non-ASCII character — which no real
-canary does yet, so no run can prove it — and that its controls fail by name on an unarmed log
-([`scripts/validate_wire_log_matcher.py`](../../scripts/validate_wire_log_matcher.py)).
+canary does yet, so no run can prove it — and that its controls fail by name on an unarmed log; that the
+statement log is searched in its literals, in the driver's spelling, with its controls red by name; and that the
+mailbox is read decoded ([`scripts/validate_wire_log_matcher.py`](../../scripts/validate_wire_log_matcher.py)).

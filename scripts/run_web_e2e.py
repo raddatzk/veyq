@@ -27,7 +27,8 @@ through `$VEYQ_GROUP_DIR`, a directory that outlives the boot.
 **The wire assertion (ADR 0053).** Each suite writes the plaintext it recovered by *unsealing the server's own
 responses* to `$VEYQ_CANARY_FILE`; this side then proves none of it is readable where an operator could read it —
 per suite in the database ([sweep]), the HTTP recording ([sweep_http]) and the object store ([sweep_store]), and
-once per run, after every group, in every boot log and container log ([sweep_logs], [sweep_containers]). The two
+once per run, after every group, in every boot log and container log ([sweep_logs], [sweep_containers]), in every
+statement the database received ([sweep_statements]) and in every mail the run sent ([sweep_mailbox]). The two
 halves are deliberately split by what each can reach: only the suite holds the keys, only this process holds
 Docker and the database root credential.
 
@@ -67,7 +68,8 @@ red that was measured against code the run never saw.
 
 **The run directory survives the run** (`.e2e-out/<stamp>/`, gitignored). It holds each boot's log, its
 per-boot config-secret file, its canary file and its HTTP recording, and — once the run-level sweep
-has read them — every container's log over the run's window (`container-<service>.log`). It used to be a `tempfile.TemporaryDirectory` discarded on
+has read them — every container's log over the run's window (`container-<service>.log`), the database's
+statement log (`mariadb-general.log`) and every mail of the run (`mailbox/<id>.eml`). It used to be a `tempfile.TemporaryDirectory` discarded on
 exit, which left the boot log — the surface where an error `message` or a stack trace would carry plaintext —
 not merely unswept but unavailable (ADR 0053 § Decision 4). Nothing prunes it; it is a developer artifact and
 CI throws the runner away.
@@ -87,10 +89,16 @@ from __future__ import annotations
 import base64
 import binascii
 import bisect
+import calendar
+import email
+import email.message
+import email.policy
 import json
 import os
 import re
 import shutil
+import signal
+import smtplib
 import subprocess
 import sys
 import time
@@ -193,6 +201,9 @@ STORE_S3 = "http://127.0.0.1:19000"
 # invite's token travels by mail only (ADR 0055 §2) — and the thing that starts a substrate is the thing that
 # should name its address.
 MAILPIT = "http://127.0.0.1:18025"
+# Its SMTP port as the same compose file publishes it (`11025 -> 1025`) — where every suite's tenant sends, and where
+# [plant_mail_sentinel] delivers the mailbox sweep's control.
+MAILPIT_SMTP = ("127.0.0.1", 11025)
 
 # Readiness is probed on `GET /api/setup`, NOT on `/q/health/ready`. This backend has no `smallrye-health`
 # extension — grep the repo for `q/health` and you get nothing — so the health endpoint the recovered skeleton
@@ -253,7 +264,7 @@ def run(cmd: list[str], **kw: object) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, check=True, **kw)  # type: ignore[arg-type]
 
 
-def compose_up(workdir: Path) -> None:
+def compose_up() -> None:
     """Bring up the bundled stack, then make every half it provides actually USABLE.
 
     The wait is per-service rather than one `up --wait` on the whole project: `--wait` scores any container exit
@@ -263,8 +274,9 @@ def compose_up(workdir: Path) -> None:
     (`/mailpit readyz`, declared by the image rather than by our compose file).
 
     **Then the store, which is the half that changed.** A `--profile s3 up` now leaves Garage *running but not
-    usable*: no layout, no bucket, no key, no grant. Nothing but a backend can close that gap any more, so this
-    ends by booting one whose only job is to do it ([provision_store]).
+    usable*: no layout, no bucket, no key, no grant. Nothing but a backend can close that gap any more, so `main()`
+    follows this by booting one whose only job is to do it ([provision_store]) — after it has switched the statement
+    log on ([StatementLog]), so that boot's statements are inside the window like every other's.
 
     Mailpit is unconditional, not a flag: every suite's tenant is now pointed at it (`e2eBootstrap.birthInstance`)
     because a member invite travels by mail only (ADR 0055 §2). Gating that behind an argument would mean gating
@@ -287,7 +299,6 @@ def compose_up(workdir: Path) -> None:
     log("waiting for mailpit to report healthy")
     run(COMPOSE + ["up", "-d", "--wait", "mailpit"])
     wait_mailbox()
-    provision_store(workdir)
 
 
 def wait_mailbox(timeout: int = 30) -> None:
@@ -404,6 +415,13 @@ def provision_store(workdir: Path, timeout: int = 120) -> None:
 def mysql(sql: str) -> None:
     """Run SQL as root inside the compose mariadb container."""
     run(COMPOSE + ["exec", "-T", "mariadb", "mariadb", "-uroot", f"-p{DB_ROOT_PASSWORD}", "-e", sql])
+
+
+def mysql_row(sql: str) -> list[str]:
+    """Run one SELECT as root and return its single row's columns (batch mode, no header)."""
+    proc = run(COMPOSE + ["exec", "-T", "mariadb", "mariadb", "-uroot", f"-p{DB_ROOT_PASSWORD}", "-N", "-B", "-e", sql],
+               capture_output=True, text=True)
+    return proc.stdout.rstrip("\n").split("\t")
 
 
 def fresh_database(name: str) -> None:
@@ -885,6 +903,35 @@ def canary_needles(canary: str) -> list[tuple[str, str]]:
     return needles
 
 
+# How MariaDB Connector/J writes a string parameter into the statement text it sends — it prepares client-side by
+# default, so a bound value reaches the server (and its statement log) as a quoted SQL literal. MEASURED from the
+# driver the backend ships (3.5.8, `org.mariadb.jdbc.client.socket.Writer.writeStringEscaped`, `javap -c`): with
+# backslash escapes on — the server's `sql_mode` carries no `NO_BACKSLASH_ESCAPES` — exactly these four characters
+# get a backslash in front, NUL included as the raw byte; a newline, a tab and every non-ASCII character go raw.
+# Backslash first, for the reason [DUMP_ESCAPES] gives.
+SQL_LITERAL_ESCAPES = [("\\", "\\\\"), ("'", "\\'"), ('"', '\\"'), ("\0", "\\\0")]
+
+
+def sql_literal(value: str) -> str:
+    """Render a value the way the driver writes it inside a string literal (the body, without the quotes)."""
+    for raw, escaped in SQL_LITERAL_ESCAPES:
+        value = value.replace(raw, escaped)
+    return value
+
+
+def statement_needles(canary: str) -> list[tuple[str, str]]:
+    """The statement log's needles: every text-surface spelling ([canary_needles]) plus the driver's literal (`sql-literal`).
+
+    The `sql` form is a needle of its own rather than an un-escaping of the log, for [dump_escape]'s reason: escaping
+    the needle is total and one-directional, un-escaping a haystack means knowing which backslashes are whose.
+    """
+    needles = canary_needles(canary)
+    escaped = sql_literal(canary)
+    if all(escaped != seen for _, seen in needles):
+        needles.append(("sql-literal", escaped))
+    return needles
+
+
 class Hit(NamedTuple):
     """One canary found on one line of one log — everything a reader needs to act on it, from the job log alone."""
     source: str
@@ -1134,8 +1181,8 @@ def sweep_containers(workdir: Path, canary_files: Iterable[Path], since: str, se
     **The defect that bought it.** No incident; the same gap as the boot log's — nothing read these logs at all.
 
     **Its limit.** Only the store carries a control. Traefik carries no e2e traffic (the suites call the backend
-    and the store directly) and has no access log; MariaDB's general log is off and Mailpit logs deliveries, not
-    bodies — those three are swept because the rule that includes them is derived, not because anything proves
+    and the store directly) and has no access log; MariaDB writes its general log to a file ([sweep_statements])
+    and Mailpit logs deliveries, not bodies ([sweep_mailbox]) — those three are swept because the rule that includes them is derived, not because anything proves
     they could show a leak. The logs are shared by every suite of the run and by a developer's own traffic in the
     same window, so a hit's suite is inferred from the canary, not from the log.
     """
@@ -1185,6 +1232,413 @@ def sweep_containers(workdir: Path, canary_files: Iterable[Path], since: str, se
                 f"control(s) across {len(services)} service(s) (listed above)")
     log(f"wire assertion: {len(carriers)} canary/canaries of the run appear in none of {len(services)} container "
         f"log(s); the store's armed by its planted sentinel")
+    return None
+
+
+# ----------------------------------------------------------------------------------------------------------
+# The statement log — every SQL statement the database received during the run, not only what it ended with
+# ----------------------------------------------------------------------------------------------------------
+
+# MariaDB's general query log is written INSIDE the container, under `/tmp` — outside the data volume
+# (`/var/lib/mysql`), so it never grows the developer's data and is gone with the container. The run's own name
+# is in it, which is what lets a later run recognise a log a killed run left switched on ([StatementLog.open]).
+STATEMENT_LOG_PREFIX = "/tmp/veyq-e2e-"
+
+
+class StatementLog:
+    """MariaDB's general query log, on for EXACTLY the run's window, restored on every exit path Python can see.
+
+    `general_log`, `general_log_file` and `log_output` are dynamic globals (measured on mariadb:11.4: set at runtime,
+    no restart, nothing in either compose file or the chart), so the window is three `SET GLOBAL`s at its start and
+    their inverse at its end. The container is the developer's own `veyq-mariadb`, so the log also records whatever
+    else reaches it in the window — their IntelliJ backend, a database tool — and two rules contain that:
+      - **[close] runs from a `finally`** (and SIGTERM/SIGHUP are turned into an exit that runs it), switching the
+        log off, copying the file into the run's own directory and DELETING it in the container. Only a SIGKILL
+        skips it; a container restart resets the globals to off on its own.
+      - **[open] heals a killed run's leftovers**: a log found ON writing one of this harness's files is switched
+        off, the file deleted, and OFF taken as the state to restore — never restored back to ON, which would keep
+        recording the developer's statements into a file nobody reads.
+
+    The retained copy (`mariadb-general.log`) is the developer's data on their disk, in a gitignored directory —
+    stated in the concern, not filtered: a filter by connection would be a second parser to be wrong in.
+    """
+
+    def __init__(self, stamp: str, workdir: Path) -> None:
+        self.stamp = stamp
+        self.path = f"{STATEMENT_LOG_PREFIX}{stamp}.log"
+        self.retained = workdir / "mariadb-general.log"
+        self.prior: list[str] | None = None
+        self.closed = False
+        # What [close] could not do, reported by the sweep as an unmet control rather than raised mid-cleanup.
+        self.problems: list[str] = []
+
+    def open(self) -> None:
+        general_log, log_file, log_output = mysql_row(
+            "SELECT @@global.general_log, @@global.general_log_file, @@global.log_output")
+        self.prior = [general_log, log_file, log_output]
+        if general_log == "1" and log_file.startswith(STATEMENT_LOG_PREFIX):
+            log(f"found the statement log ALREADY ON, writing {log_file} — a run was killed before it could switch "
+                f"it off. Switching it off, deleting that file, and restoring OFF at the end of this run")
+            mysql("SET GLOBAL general_log = OFF; SET GLOBAL general_log_file = DEFAULT")
+            self.prior = ["0"] + mysql_row("SELECT @@global.general_log_file, @@global.log_output")
+        elif general_log == "1":
+            log(f"found the statement log already ON, writing {log_file} — not this harness's file; it is restored "
+                f"to exactly that at the end of the run")
+        # A file a killed run left behind after switching off holds the same developer statements: delete it too.
+        subprocess.run(COMPOSE + ["exec", "-T", "mariadb", "sh", "-c", f"rm -f {STATEMENT_LOG_PREFIX}*.log"],
+                       capture_output=True)
+        mysql(f"SET GLOBAL log_output = 'FILE'; SET GLOBAL general_log_file = '{self.path}'; "
+              f"SET GLOBAL general_log = ON")
+        log(f"statement log ON for the run's window: {self.path} in the mariadb container "
+            f"(prior: general_log={self.prior[0]}, file={self.prior[1]}, output={self.prior[2]})")
+
+    def plant(self, where: str) -> str:
+        """One statement of the orchestrator's own, carrying a run-unique sentinel — [sweep_statements]' control.
+
+        The sentinel holds an apostrophe, written the way the driver writes one (`\\'`), so it can only be found
+        through the `sql-literal` needle: a sentinel any spelling found would arm nothing in particular.
+        """
+        sentinel = f"veyq statement-log sentinel {self.stamp} {where}: it's Größe"
+        mysql(f"DO '{sql_literal(sentinel)}'")
+        log(f"planted the statement-log sentinel {sentinel!r}")
+        return sentinel
+
+    def close(self) -> None:
+        """Switch the log off and restore the prior globals FIRST, then retain the file and delete it. Idempotent."""
+        if self.closed or self.prior is None:
+            return
+        self.closed = True
+        general_log, log_file, log_output = self.prior
+        try:
+            mysql(f"SET GLOBAL general_log = OFF; SET GLOBAL general_log_file = '{log_file}'; "
+                  f"SET GLOBAL log_output = '{log_output}'; SET GLOBAL general_log = {'ON' if general_log == '1' else 'OFF'}")
+            log(f"statement log restored: general_log={general_log}, file={log_file}, output={log_output}")
+        except subprocess.CalledProcessError as e:
+            self.problems.append(f"restoring the statement-log globals failed ({e}) — check "
+                                 f"`SELECT @@global.general_log` on the mariadb container by hand")
+            log(f"RESTORING THE STATEMENT LOG FAILED: {e}")
+        copied = subprocess.run(COMPOSE + ["exec", "-T", "mariadb", "cat", self.path], capture_output=True)
+        if copied.returncode == 0:
+            self.retained.write_bytes(copied.stdout)
+            log(f"statement log retained as {shown(self.retained)} ({len(copied.stdout)} bytes)")
+        else:
+            self.problems.append(f"the container holds no statement log at {self.path} — it was never switched on, "
+                                 f"or something removed it")
+        removed = subprocess.run(COMPOSE + ["exec", "-T", "mariadb", "rm", "-f", self.path], capture_output=True)
+        if removed.returncode != 0:
+            self.problems.append(f"deleting {self.path} in the mariadb container failed: "
+                                 f"{removed.stderr.decode('utf-8', errors='replace').strip()[-200:]}")
+
+
+# One entry of the general log: `<YYMMDD HH:MM:SS>` on the first entry of a second, else empty, then a tab, the
+# connection id right-aligned, the command, a tab, and the argument — which runs on, raw newlines and all, until the
+# next entry's header. MEASURED on mariadb:11.4 (the phase that built this pasted the lines into the concern).
+STATEMENT_HEADER = re.compile(r"^(?:\d{6} [ \d]\d:\d\d:\d\d)?\t+ *(?P<id>\d+) (?P<command>[A-Z][A-Za-z_ ]*?)\t", re.M)
+# `<user>@<host> on <schema> using <transport>` — the schema is empty for a session that names none.
+CONNECT_ARGUMENT = re.compile(r"\S+ on (?P<schema>\S*) using ")
+
+# The tokens of MariaDB's lexer that can contain a quote without opening a string: a literal of either quote (no
+# `ANSI_QUOTES`, so `"` delimits a string too), a back-ticked identifier, and the three comment forms. A literal or
+# comment left open runs to the end of its entry — never past it, so a malformed statement cannot desynchronise
+# the rest of the file.
+SQL_TOKEN = re.compile(r"""
+      '(?P<single>(?:[^'\\]+|\\.|'')*)(?:'|\Z)
+    | "(?P<double>(?:[^"\\]+|\\.|"")*)(?:"|\Z)
+    | `[^`]*(?:`|\Z)
+    | /\*.*?(?:\*/|\Z)
+    | (?:\#|--(?=[ \t\r\n]|\Z))[^\n]*
+""", re.S | re.X)
+
+# Joins the literals into one haystack. A needle can only straddle two literals if it contains this character.
+LITERAL_JOIN = "\x00"
+
+
+def literal_spans(text: str) -> list[tuple[int, int]]:
+    """Every string literal's body in a general log, as `(start, end)` offsets into the whole text.
+
+    **Why only literals** — the statement log's answer to [INSERT_LINE]. A value the backend sends the database
+    travels as a literal (the driver prepares client-side, [SQL_LITERAL_ESCAPES]); everything outside one is SQL
+    the code wrote: keywords, table and column names, the driver's own session statements, and every comment of
+    every Flyway migration. Searched whole, that is noise a canary cannot avoid — measured: `set autocommit=0`
+    precedes every transaction and the run's canaries include `auto`, and the migrations' comments carry `range`
+    and `auto`. Scoping to literals removes the noise class without excluding a single value.
+    """
+    heads = list(STATEMENT_HEADER.finditer(text))
+    spans: list[tuple[int, int]] = []
+    for i, head in enumerate(heads):
+        end = heads[i + 1].start() if i + 1 < len(heads) else len(text)
+        for token in SQL_TOKEN.finditer(text, head.end(), end):
+            for group in ("single", "double"):
+                if token.group(group) is not None:
+                    spans.append(token.span(group))
+    return spans
+
+
+def literal_hits(source: str, text: str, canaries: Iterable[str]) -> tuple[list[Hit], int]:
+    """Every (line, canary) of a general log some [statement_needles] spelling lands on INSIDE a literal.
+
+    Returns the hits in line order and how many literals were searched — a count the sweep prints, because a log
+    whose literals were never found would otherwise sweep nothing and pass.
+    """
+    spans = literal_spans(text)
+    starts: list[int] = []
+    pieces: list[str] = []
+    at = 0
+    for begin, end in spans:
+        starts.append(at)
+        pieces.append(text[begin:end])
+        at += end - begin + len(LITERAL_JOIN)
+    joined = LITERAL_JOIN.join(pieces)
+    line_starts = [0] + [m.end() for m in re.finditer("\n", text)]
+    hits: dict[tuple[int, str], Hit] = {}
+    for canary in canaries:
+        for variant, needle in statement_needles(canary):
+            for found in occurrences(joined, needle):
+                k = bisect.bisect_right(starts, found) - 1
+                offset = spans[k][0] + (found - starts[k])
+                line_no = bisect.bisect_right(line_starts, offset)
+                if (line_no, canary) in hits:
+                    continue
+                begin = line_starts[line_no - 1]
+                end = text.find("\n", begin)
+                hits[(line_no, canary)] = Hit(source, line_no, variant, canary,
+                                              text[begin:end if end != -1 else len(text)])
+    return sorted(hits.values(), key=lambda h: (h.line_no, h.canary)), len(spans)
+
+
+def connected_schemas(text: str) -> set[str]:
+    """Every schema a `Connect` entry of the log names — the backend's pool opens its connections ON its database."""
+    schemas: set[str] = set()
+    for head in STATEMENT_HEADER.finditer(text):
+        if head.group("command") == "Connect":
+            argument = CONNECT_ARGUMENT.match(text, head.end())
+            if argument and argument.group("schema"):
+                schemas.add(argument.group("schema"))
+    return schemas
+
+
+def booted_databases(workdir: Path) -> set[str]:
+    """Every database a boot of this run was pointed at — derived from the boot logs the run wrote, never listed."""
+    return {db for db in (booted_database(p) for p in workdir.rglob("backend-*.log")) if db}
+
+
+def sweep_statements(retained: Path, canary_files: Iterable[Path], sentinels: Iterable[str],
+                     databases: Iterable[str], problems: Iterable[str] = ()) -> str | None:
+    """Prove no canary of the run was ever SENT to the database — every statement of the run, not its end state.
+
+    **What it asserts** (cc.security.wire-assertion, ADR 0053). MariaDB's general log, on for the run's window
+    ([StatementLog]), holds every statement the server received — writes, reads, and the writes a later statement
+    undid. Each string literal in it ([literal_spans]) is searched for the union of the run's canaries in every
+    spelling [statement_needles] models, the driver's own literal escaping included. Armed by two controls on the
+    same matcher, never by a count of zero: the run's sentinel statements — planted at the window's start and just
+    before it closed — must both be found, through `sql-literal`, so the file is the one being written and nothing
+    switched the log off in between; and every database a boot of the run was pointed at must appear in a
+    `Connect` entry ([booted_databases], [connected_schemas]), so the BACKEND's traffic was captured, not only the
+    orchestrator's own.
+
+    **The defect that bought it.** No incident; the gap the database sweep states about itself — it reads each
+    suite's end state, and a plaintext written and then overwritten or deleted inside the suite leaves no trace
+    there. Measured before this was built: one run carries 7 node PATCHes, 18 PUTs of upserted state and 2
+    DELETEs, before what the server rewrites on its own.
+
+    **Its limit.** It sees statements, so a value the backend computes and never sends to the database is not
+    there by construction; it searches literals, so a value the code splices into SQL text outside a quote is
+    not searched (nothing does today — every value is a bound parameter). A literal NUL-joined to its neighbour
+    can produce a hit only for a canary that itself contains NUL. And the window is shared: it also holds the
+    statements of anything else that reached the same MariaDB during the run, a developer's own backend included.
+    """
+    carriers, unreadable = load_canaries(canary_files)
+    if not carriers:
+        return "the run's canary files hold no canary — a green statement-log sweep would mean nothing"
+    unmet: list[str] = list(unreadable) + list(problems)
+    if retained.is_file():
+        text = retained.read_bytes().decode("utf-8", errors="replace")
+    else:
+        text = ""
+        unmet.append(f"no statement log was retained at {shown(retained)}")
+    source = shown(retained).as_posix()
+    hits, literals = literal_hits(source, text, carriers)
+
+    controls: list[str] = []
+    for sentinel in sentinels:
+        planted, _ = literal_hits(source, text, [sentinel])
+        if planted:
+            controls.append(f"sentinel line {planted[0].line_no} through {planted[0].variant}")
+        else:
+            # Its apostrophe makes `sql-literal` the only needle that can find it, so this also fails when the
+            # server stops writing a literal the way the needles model — `NO_BACKSLASH_ESCAPES` doubles the quote.
+            unmet.append(f"the planted sentinel {sentinel!r} is NOT in the statement log — the log was not on, was "
+                         f"switched off or moved mid-run, or a literal is no longer escaped the way `sql-literal` "
+                         f"models; this sweep proves nothing")
+    connected = connected_schemas(text)
+    required = sorted(databases)
+    for database in required:
+        if database not in connected:
+            unmet.append(f"no `Connect` entry names {database} — the boot pointed at it ran outside the window, "
+                         f"or its connections were not captured")
+    if required and all(db in connected for db in required):
+        controls.append(f"a Connect for each of {len(required)} database(s)")
+    log(f"statement-log sweep: {source} — {text.count(chr(10))} line(s), {len(STATEMENT_HEADER.findall(text))} "
+        f"entr(y/ies), {literals} literal(s), {len(carriers)} canary/canaries, {len(hits)} hit(s); armed: "
+        f"{', '.join(controls) or 'NOTHING'}")
+
+    if hits or unmet:
+        log(f"WIRE ASSERTION FAILED on the statement log — {len(hits)} hit(s), {len(unmet)} unmet control(s):")
+        report_hits(hits, carriers)
+        for reason in unmet:
+            log(f"    control: {reason}")
+        return (f"the wire assertion failed on the statement log: {len(hits)} canary hit(s), {len(unmet)} unmet "
+                f"control(s) (listed above)")
+    log(f"wire assertion: {len(carriers)} canary/canaries of the run appear in none of {literals} literal(s) the "
+        f"database received during the run; armed by both sentinels and every database's Connect")
+    return None
+
+
+# ----------------------------------------------------------------------------------------------------------
+# The mailbox — every mail the run sent, the one surface a third party (the tenant's SMTP provider) reads
+# ----------------------------------------------------------------------------------------------------------
+
+# The page size the mailbox is read with — explicit, because a default page is exactly the number that truncates a
+# read silently.
+MAILBOX_PAGE = 100
+
+
+def plant_mail_sentinel(stamp: str) -> str:
+    """Deliver one mail of the orchestrator's own whose subject and body carry a run-unique sentinel.
+
+    [sweep_mailbox]'s positive control. The sentinel holds a space and a non-ASCII character, and travels the way
+    the product's own mail does (measured on a recovery mail: Vert.x writes the subject as a `Q` encoded-word and
+    the body quoted-printable, soft line breaks included) — so a raw substring search over the message source
+    cannot find it, and only the DECODED read can. Delivered at the start, so finding it also proves the read
+    reaches back to where the run began.
+    """
+    sentinel = f"veyq mailbox sentinel {stamp} Größe"
+    message = email.message.EmailMessage()
+    message["From"] = "e2e-orchestrator@veyq.localhost"
+    message["To"] = f"mailbox-sentinel-{stamp}@veyq.localhost"
+    message["Subject"] = sentinel
+    message.set_content(f"The e2e run's mailbox control.\n{sentinel}\n", cte="quoted-printable")
+    try:
+        with smtplib.SMTP(*MAILPIT_SMTP, timeout=10) as smtp:
+            smtp.send_message(message)
+    except (OSError, smtplib.SMTPException) as e:
+        raise SystemExit(f"[e2e] MAILBOX SMTP UNREACHABLE at {MAILPIT_SMTP[0]}:{MAILPIT_SMTP[1]}: the mailbox "
+                         f"sweep's control could not be planted ({e})") from e
+    log(f"planted the mailbox sentinel {sentinel!r}: one mail over SMTP, subject encoded-word, body quoted-printable")
+    return sentinel
+
+
+def mailpit_json(path: str) -> dict:
+    with urllib.request.urlopen(f"{MAILPIT}{path}", timeout=10) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
+def run_mail_ids(since: float) -> list[str]:
+    """Every message Mailpit received from `since` (a unix time) on — paged with an explicit size, newest first.
+
+    Mailpit lists newest first, so paging stops at the first message older than the run; a page that comes back
+    short is the end of the mailbox.
+    """
+    ids: list[str] = []
+    start = 0
+    while True:
+        page = mailpit_json(f"/api/v1/messages?start={start}&limit={MAILBOX_PAGE}").get("messages") or []
+        for message in page:
+            # `Created` is UTC (`2026-10-01T18:09:34.732Z`); seconds are the grain the run's stamp has anyway.
+            created = calendar.timegm(time.strptime(message["Created"][:19], "%Y-%m-%dT%H:%M:%S"))
+            if created < since:
+                return ids
+            ids.append(message["ID"])
+        if len(page) < MAILBOX_PAGE:
+            return ids
+        start += MAILBOX_PAGE
+
+
+def mail_texts(raw: bytes) -> list[tuple[str, str]]:
+    """A message's DECODED text, as `(where, text)`: each header, then each text part — what a reader would see.
+
+    Parsed by the standard library (`email`, `policy.default`), so an encoded-word is decoded, a quoted-printable or
+    base64 part is decoded, and a soft line break is joined back up; no hand-written MIME parser to be wrong in.
+    """
+    message = email.message_from_bytes(raw, policy=email.policy.default)
+    texts = [(f"header {name}", str(value)) for name, value in message.items()]
+    for number, part in enumerate(message.walk(), start=1):
+        if part.get_content_maintype() == "text":
+            try:
+                texts.append((f"part {number} {part.get_content_type()}", part.get_content()))
+            except (LookupError, ValueError) as e:
+                texts.append((f"part {number} {part.get_content_type()} (undecodable: {e})",
+                              part.get_payload(decode=True).decode("utf-8", errors="replace")))
+    return texts
+
+
+def sweep_mailbox(workdir: Path, canary_files: Iterable[Path], since: float, sentinel: str) -> str | None:
+    """Prove no canary of the run is readable in any mail the run sent — read decoded, and raw.
+
+    **What it asserts** (cc.security.wire-assertion, ADR 0053). Every message Mailpit received from the run's start
+    ([run_mail_ids]) is fetched raw, retained under `mailbox/`, and searched for the union of the run's canaries
+    through [canary_needles] — in each decoded header and text part ([mail_texts]) and in the raw source. Armed by
+    a mail the run plants itself ([plant_mail_sentinel]) whose sentinel must be found in the DECODED text; that it
+    is absent from the raw source is printed, because that absence is what makes the decoded read load-bearing.
+    Nothing in a run deletes mail (the suites take a cursor, `web/src/test/mailpit.ts`), so the read is complete.
+
+    **The defect that bought it.** No incident. Mail is closed by construction — both kinds interpolate only
+    `MailContext(link, domain, expiry)` (ADR 0049) — and the HTTP sweep already searches every mail a suite reads
+    back. What this closes is the rest: mail no suite reads, and the one surface ADR 0049's boundary has no
+    traffic-level sensor for — the one a third party, the tenant's SMTP provider, reads. A future mail kind is
+    where a sealed name would slip in.
+
+    **Its limit.** It sees what reached Mailpit, not what a production relay adds or keeps. The mailbox is shared
+    with a developer's own mail of the same window, and Mailpit prunes its oldest messages past its cap — a run
+    that pushed its own plant out fails on the control, loud. Non-text parts are searched only raw.
+    """
+    carriers, problems = load_canaries(canary_files)
+    if not carriers:
+        return "the run's canary files hold no canary — a green mailbox sweep would mean nothing"
+    unmet: list[str] = list(problems)
+    try:
+        ids = run_mail_ids(since)
+    except (urllib.error.URLError, OSError, KeyError, ValueError) as e:
+        return f"the mailbox could not be listed at {MAILPIT} ({e}) — the mailbox sweep proved nothing"
+    retained = workdir / "mailbox"
+    retained.mkdir(exist_ok=True)
+    hits: list[Hit] = []
+    sentinel_decoded: list[str] = []
+    sentinel_raw = False
+    for message_id in ids:
+        try:
+            with urllib.request.urlopen(f"{MAILPIT}/api/v1/message/{message_id}/raw", timeout=10) as r:
+                raw = r.read()
+        except (urllib.error.URLError, OSError) as e:
+            unmet.append(f"mail {message_id} could not be read raw ({e}) — it was not swept")
+            continue
+        (retained / f"{message_id}.eml").write_bytes(raw)
+        for where, text in mail_texts(raw):
+            hits.extend(needle_hits(f"mail {message_id} {where}", text, carriers))
+            if needle_hits(where, text, [sentinel]):
+                sentinel_decoded.append(where)
+        source = raw.decode("utf-8", errors="replace")
+        hits.extend(needle_hits(f"mail {message_id} raw", source, carriers))
+        sentinel_raw = sentinel_raw or bool(needle_hits("raw", source, [sentinel]))
+    if sentinel_decoded:
+        armed = (f"planted sentinel found decoded in {', '.join(sentinel_decoded)}; in the raw source: "
+                 f"{'FOUND — the transport did not encode it' if sentinel_raw else 'not found (the decoding is load-bearing)'}")
+    else:
+        armed = "planted sentinel NOT found"
+        unmet.append(f"the planted mail's sentinel {sentinel!r} is NOT in any decoded mail of the run — the read "
+                     f"missed it (window, paging, pruning) or the decoding is broken; this sweep proves nothing")
+    log(f"mailbox sweep: {len(ids)} mail(s) since {int(since)}, {len(carriers)} canary/canaries, {len(hits)} hit(s); "
+        f"{armed}")
+
+    if hits or unmet:
+        log(f"WIRE ASSERTION FAILED on the mailbox — {len(hits)} hit(s), {len(unmet)} unmet control(s):")
+        report_hits(hits, carriers)
+        for reason in unmet:
+            log(f"    control: {reason}")
+        return (f"the wire assertion failed on the mailbox: {len(hits)} canary hit(s), {len(unmet)} unmet "
+                f"control(s) across {len(ids)} mail(s) (listed above)")
+    log(f"wire assertion: {len(carriers)} canary/canaries of the run appear in none of {len(ids)} mail(s), decoded "
+        f"or raw; armed by the planted mail")
     return None
 
 
@@ -1729,34 +2183,54 @@ def main(argv: list[str]) -> int:
 
     # Retained, not a tempdir: the boot log is itself a sweep surface (ADR 0053 § Decision 4), and a canary file
     # discarded on exit cannot be re-read when a sweep hit needs explaining. It is created BEFORE the stack comes
-    # up because `compose_up` now ends in a backend boot of its own, whose log belongs here with the rest.
+    # up because the run's first backend boot ([provision_store]) writes its log here with the rest.
     workdir = RUN_ROOT / stamp
     workdir.mkdir(parents=True, exist_ok=True)
     log(f"run artifacts (boot logs, canary files) land in {workdir.relative_to(REPO)}/")
 
-    compose_up(workdir)
-    # The container sweep's control, planted first so that finding it proves the log window reaches the run's start.
-    sentinel = plant_store_sentinel(stamp)
+    # A `kill` (SIGTERM) or a closed terminal (SIGHUP) would otherwise end the process without running a single
+    # `finally` — and the statement log's `finally` is what switches a shared database's query log back off.
+    for signum in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(signum, lambda received, _frame: sys.exit(128 + received))
 
-    # Before any suite: the operator procedure the suites later rehearse is only worth rehearsing if it can be
-    # aimed. This one needs no jar and no instance — it runs here, on the stack `compose_up()` just brought up.
-    rehearse_production_project(workdir)
+    compose_up()
+    statements = StatementLog(stamp, workdir)
+    try:
+        statements.open()
+        sentinels = [statements.plant("start")]
+        provision_store(workdir)
+        # The container sweep's control, planted first so that finding it proves the log window reaches the run's start.
+        sentinel = plant_store_sentinel(stamp)
+        mail_sentinel = plant_mail_sentinel(stamp)
 
-    failures: list[tuple[str, str]] = []
-    for index, members in enumerate(groups, start=1):
-        # Never short-circuit across groups: one broken suite must not hide the state of the others.
-        failures.extend(run_group(index, members, workdir, stamp))
+        # Before any suite: the operator procedure the suites later rehearse is only worth rehearsing if it can be
+        # aimed. This one needs no jar and no instance — it runs here, on the stack `compose_up()` just brought up.
+        rehearse_production_project(workdir)
 
-    # The run-level sweeps: after EVERY group, so each log is complete (its JVM has exited) and a restored
-    # instance's log is swept for the member before it too. They run even when suites failed — a failed suite's log
-    # is the one most likely to hold a stack trace, and a hit there only adds to a run that is already red.
-    canary_files = sorted(workdir.rglob("canaries-*.json"))
-    run_failures = [(name, reason) for name, reason in (
-        ("(run) server-log sweep", sweep_logs(workdir, canary_files)),
-        # Bounded below by the run's own start (the stamp is a unix time): a developer's earlier traffic on these
-        # long-lived containers is not this run's to answer for.
-        ("(run) container-log sweep", sweep_containers(workdir, canary_files, stamp, sentinel)),
-    ) if reason]
+        failures: list[tuple[str, str]] = []
+        for index, members in enumerate(groups, start=1):
+            # Never short-circuit across groups: one broken suite must not hide the state of the others.
+            failures.extend(run_group(index, members, workdir, stamp))
+
+        # The run-level sweeps: after EVERY group, so each log is complete (its JVM has exited) and a restored
+        # instance's log is swept for the member before it too. They run even when suites failed — a failed suite's
+        # log is the one most likely to hold a stack trace, and a hit there only adds to a run that is already red.
+        canary_files = sorted(workdir.rglob("canaries-*.json"))
+        run_failures = [(name, reason) for name, reason in (
+            ("(run) server-log sweep", sweep_logs(workdir, canary_files)),
+            # Bounded below by the run's own start (the stamp is a unix time): a developer's earlier traffic on these
+            # long-lived containers is not this run's to answer for.
+            ("(run) container-log sweep", sweep_containers(workdir, canary_files, stamp, sentinel)),
+            ("(run) mailbox sweep", sweep_mailbox(workdir, canary_files, float(stamp), mail_sentinel)),
+        ) if reason]
+        sentinels.append(statements.plant("end"))
+    finally:
+        statements.close()
+    # After the window closed: the sweep reads the retained copy, and the shared database is already back to normal.
+    statement_failure = sweep_statements(statements.retained, canary_files, sentinels, booted_databases(workdir),
+                                         statements.problems)
+    if statement_failure:
+        run_failures.append(("(run) statement-log sweep", statement_failure))
 
     print("", flush=True)
     log("==================== summary ====================")

@@ -17,7 +17,7 @@ import { fromB64std } from '@veyq/crypto/base64'
 import { login } from '../login/login'
 import { accountApi } from '../../../api/client'
 import { birthInstance, HOST, stamp, type BirthedInstance } from '../../../test/e2eBootstrap'
-import { clearMailbox, waitForMail } from '../../../test/mailpit'
+import { mailCursor, waitForMail } from '../../../test/mailpit'
 import { recordCanaries } from '../../../test/canaries'
 import { ensurePersonalScope, listMyScopes, openPersonalScope } from '../../spaces/scopes'
 import { epochsOf } from '../../spaces/epochsTestUtil'
@@ -57,12 +57,12 @@ describe.runIf(live)('recovery — live', () => {
       const memoryName = `Reisen ${stamp}`
       await createMemory(scopeId, epochsOf(scopeKey), memoryName)
 
-      // 1. Ask for a link. The response says nothing; the mail is the observable effect. Clearing first is what
+      // 1. Ask for a link. The response says nothing; the mail is the observable effect. The cursor is what
       //    makes the read unambiguous: a mail already sitting there — from an earlier hand run, which shares the
       //    default stamp and therefore the address — would be returned as though it were this request's.
-      await clearMailbox(owner.email)
+      const cursor = await mailCursor(owner.email)
       await requestRecovery(owner.email)
-      const body = await waitForMail(owner.email)
+      const body = await waitForMail(owner.email, { after: cursor })
 
       // 2. The mail carries a link, an expiry and the domain — and nothing that names the person or the
       //    account (ADR 0049). The token rides the fragment.
@@ -117,11 +117,11 @@ describe.runIf(live)('recovery — live', () => {
       const owner = instance.owner
       // No sign-in first: recovery is unauthenticated by necessity, so the replay case must be reachable
       // without a session — and after the first test this actor's in-memory wrap is stale anyway.
-      // The first test already delivered a link to this address and SPENT it. Without clearing, a poll that wins
+      // The first test already delivered a link to this address and SPENT it. Without a cursor, a poll that wins
       // the race against the new mail returns that dead token and this test fails for the wrong reason.
-      await clearMailbox(owner.email)
+      const cursor = await mailCursor(owner.email)
       await requestRecovery(owner.email)
-      const token = (await waitForMail(owner.email)).match(/\/recover#([A-Za-z0-9_-]+)/)![1]
+      const token = (await waitForMail(owner.email, { after: cursor })).match(/\/recover#([A-Za-z0-9_-]+)/)![1]
 
       const material = await releaseRecoveryMaterial(token)
       const opened = await openWithSecretKey(material, owner.built.emergencyKit.secretKey)
