@@ -60,6 +60,10 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   `UnexpectedTypeException` at request time, i.e. a **500 on a well-formed request** instead of the 400 the
   annotation was reaching for. A uuid field takes `@NotNull` and nothing else; `maxLength` on one is dead text,
   since the length is the type's. Same trap for any `format:` that changes the generated type.
+  **A required `type: integer` is no presence check.** It generates a primitive Kotlin `Long`/`Int`, and Jackson
+  fills a missing one with 0 — measured: `updateMediaMeta` without `metaVersion` answered 200, not 400. Where
+  absence must be refused, make the type nullable (`[integer, "null"]`) and annotate `@NotNull`, as
+  `MediaMetaUpdate.metaVersion` does; an object, enum or uuid field is refused by deserialization on its own.
 - **Migrations:** Flyway, append-only `V<n>__*.sql`; `schema-management.strategy=none` — Flyway owns the
   schema. **Append-only means an applied migration is never edited — not even a comment in it.** Flyway
   validates the checksum of every applied migration at `migrate-at-start`, so a one-word fix to a `--` comment

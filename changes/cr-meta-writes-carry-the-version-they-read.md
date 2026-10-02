@@ -1,7 +1,7 @@
 ---
 id: cr-meta-writes-carry-the-version-they-read
 title: A sealed-meta write carries the version it was built from, and a stale one answers 409 stale_version
-status: in-progress
+status: done
 satisfies: [uc.memory.concurrent-curation, uc.memory.date, uc.memory.place, uc.memory.cover, en.memory.node-meta, en.memory.media]
 adrs: ["0077", "0072", "0033", "0068", "0036"]
 invariants: [operator-blind E2EE everywhere]
@@ -229,7 +229,7 @@ silently undone.
 
 ## Phases
 
-- [ ] 1 docs (refined state first). Write an ADR at the next free number (run `ls docs/decisions | tail -1`; it
+- [x] 1 docs (refined state first). Write an ADR at the next free number (run `ls docs/decisions | tail -1`; it
   was 0076 at refine) covering D1–D5: *"a write that re-sends what its writer did not edit, and that more than
   one account makes, carries the version it read"*.
   - Write `uc.memory.concurrent-curation` (Q6) and add it to `satisfies:`.
@@ -240,7 +240,7 @@ silently undone.
     `grep -rn "no data loss\|Eventual consistency over locking\|media_rev" docs wiki`.
   - Write a `planned` coverage file for the new use-case.
   - · Done when: `python3 scripts/validate_changes.py` and `python3 scripts/validate_coverage.py` are green.
-- [ ] 2 contracts. D3 on `content`, `media` and `_common`, and `x-veyq-concurrency` on every subject operation
+- [x] 2 contracts. D3 on `content`, `media` and `_common`, and `x-veyq-concurrency` on every subject operation
   (D6, Inventory 17), with the guard written **red first**: run it before the annotations land and record its
   list.
   - This phase reshapes `UpdateNodeRequest` and `MediaMetaUpdate` on existing tags.
@@ -252,18 +252,18 @@ silently undone.
     named above.
   - · Done when: `npm run generate:api` succeeds, the new guard is green after the annotations, and
     `validate_request_bounds.py`, `validate_field_visibility.py` and `validate_contracts_common.py` are green.
-- [ ] 3 backend. D2 migration and the CAS in `NodesStore.applyUpdate` and `MediaStore.setMeta`. The handlers map
+- [x] 3 backend. D2 migration and the CAS in `NodesStore.applyUpdate` and `MediaStore.setMeta`. The handlers map
   the miss to `409` with `StaleSealedMeta`. `metaVersion` goes into both summaries.
   - Classify `OperatorBlindProbeTest`'s view of the new response field.
   - · Done when: DoD B1–B4 are green, red first, and `./gradlew check` is green in `backend/`.
-- [ ] 4 web. D5 in `memoryDate.ts`, `memoryLocation.ts`, `memoryCover.ts`, `useMemory{Date,Location,Cover}.ts`,
+- [x] 4 web. D5 in `memoryDate.ts`, `memoryLocation.ts`, `memoryCover.ts`, `useMemory{Date,Location,Cover}.ts`,
   `treeStore.ts` (`patchNodeMeta` carries the version), `media.ts` `persistMeta` and its three callers, and
   `MediaLightbox.vue` (the notice on a same-field conflict).
   - D7 in `nodeMeta.ts` (the write-path open) and `media.ts` (raw-tier writers; `unsealMeta` returns the place
     name). D8 in `app/itemFavoritesStore.ts` and `app/favoritesStore.ts`. D9 in `useMemoryCover.ts`.
   - The gallery's live poll (`useMediaGalleryLive.ts`) patches `metaVersion` beside `wrappedMeta`.
   - · Done when: DoD W1–W9 are green, red first, and `npm run check` is green in `web/`.
-- [ ] 5 docs close. Coverage refs for the new use-case's criteria. The `developer-styleguide.md` bullet points
+- [x] 5 docs close. Coverage refs for the new use-case's criteria. The `developer-styleguide.md` bullet points
   at the ADR. Inbox #271's status cell says done.
   - · Done when: the trust-chain glob is green.
 
@@ -328,3 +328,20 @@ else's by ADR 0068 §9, and the next toggle replacing it is that ADR's recovery;
 toggle before any load (Inventory 21).
 
 ## Retrospective
+
+- **Two predictions in the refine were wrong, and both were one command away.** Phase 2 said "expected green,
+  backend"; an added *required* response field reddens the server that constructs the summary
+  (`ContentResource.kt:122`). And B2/B3 assumed a missing required `metaVersion` is a boundary 400; a required
+  integer generates a primitive Long that Jackson fills with 0 (`mediaMetaWithoutVersionIs400` answered 200).
+  Root cause: the refine ran the subject locators but not the generator against a sketched schema. *Next time:*
+  when a CR adds a field to a request or response schema, the refine sketches it and runs `./gradlew
+  compileKotlin` once. (Moved: `changes/README.md` § phases, `backend/CLAUDE.md` § validation.)
+- **The refine never asked which gates the touched files sit in.** `nodeMeta.ts` is in the web Stryker scope,
+  which admits only pure files; the first web draft put the PATCH there, and the gate (break 95) stayed green at 98.7 %
+  while the file’s own score dropped from 100 % to 96 % — a green that hid the drift. Found only because I opened the
+  manifest before committing. *Next time:* the inventory greps `web/stryker.mutate.json`,
+  `packages/crypto/stryker.mutate.json` and `backend/pitest.scope.json` for every file it plans to edit.
+- **The guard's own wording needed one honest exception the CR did not foresee:** its reverse angle found
+  `acceptTenantTerms` (a POST outside the verb list carrying `version`, conflict code `terms_version_changed`).
+  The first run on the untouched tree named it, so `conflictCode` became part of the declaration rather than a
+  hard-coded `stale_version`. The red-first run did its job; nothing to change in how we work, only noted.
