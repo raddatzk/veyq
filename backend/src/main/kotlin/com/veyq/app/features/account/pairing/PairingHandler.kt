@@ -54,14 +54,16 @@ class PairingHandler(
     /**
      * Mint the family the granted device will receive, and bind this channel to the caller's account.
      *
-     * Three things happen in one transaction, and the order is deliberate: the family is minted, the channel
-     * records it, and *then* the account's other live channels are superseded — each of which surrenders its own
-     * delegated family, because a ceremony the user walked away from must not leave a live 30-day refresh token
-     * behind (§8, and the same reason the sweep revokes on expiry).
+     * Four things happen in one transaction, and the order is deliberate: the channel is claimed for the account,
+     * the family is minted, the channel records it, and *then* the account's other live channels are superseded —
+     * each of which surrenders its own delegated family, because a ceremony the user walked away from must not
+     * leave a live 30-day refresh token behind (§8, and the same reason the sweep revokes on expiry).
      *
      * A channel may be delegated **once**: `userId` already being set is a wrong-state channel like any other. A
      * second delegation would mint a second family and orphan the first, and an orphan is exactly the token no
-     * sweep can find.
+     * sweep can find. The read below only turns a dead channel away early; the claim decides, because two
+     * delegations can both read the channel unclaimed. **Claim before mint**: a delegation that lost the claim has
+     * minted nothing, so no correctness rests on rolling back a family that already exists.
      *
      * The caller gets the refresh token and no access token: the granted device rotates it into its own pair,
      * and the trusted device has no business holding an access token for a family that is not its own.
@@ -70,8 +72,9 @@ class PairingHandler(
         val row = liveChannel(handle) ?: return@call null
         if (row.status != DevicePairingEntity.ANSWERED || row.userId != null) return@call null
 
+        if (!store.claimDelegation(row.id, userId)) return@call null
         val delegated = sessions.issueDelegated(userId)
-        store.bindDelegation(row.id, userId, delegated.familyId)
+        store.bindDelegation(row.id, delegated.familyId)
 
         val superseded = store.otherLiveChannels(userId, row.id)
         superseded.mapNotNull { it.delegatedFamily() }

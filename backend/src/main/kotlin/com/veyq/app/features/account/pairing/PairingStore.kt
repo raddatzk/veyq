@@ -10,8 +10,9 @@ import java.util.UUID
  *
  * The account travels with the id on purpose: revoking goes through `SessionService.revokeFamilyForUser`, whose
  * statement is account-scoped, so no unscoped "revoke this family" exists anywhere for a later caller to reach
- * for. A family without a bound account cannot occur — `delegatedFamilyId` and `userId` are written in the same
- * statement — and if one ever did, it is skipped rather than revoked blind.
+ * for. A family without a bound account cannot occur — `userId` is claimed before the family is minted, and
+ * `delegatedFamilyId` is written in the same transaction — and if one ever did, it is skipped rather than revoked
+ * blind.
  */
 data class DelegatedFamilyRef(val userId: String, val familyId: String)
 
@@ -76,19 +77,28 @@ class PairingStore {
     }
 
     /**
-     * Bind the channel to the account that delegated, and to the family it minted.
+     * Claim the channel for the account that delegates — a **compare-and-set**, and the delegation's first write:
+     * only an `ANSWERED` channel no account holds yet takes [userId], and the caller goes on only if exactly one row
+     * did (developer-styleguide §12).
      *
      * This is the first and only moment the account exists on the row (ADR 0059 §3). The status is unchanged —
      * a delegated channel is still awaiting its seal — but `userId` being set is what makes a second delegation
      * on the same channel impossible, and that matters: a second one would mint a second family and orphan the
-     * first, leaving a live refresh token no sweep could find.
+     * first, leaving a live refresh token no sweep could find. The `and userId is null` is what decides that, not
+     * the caller's earlier read: two delegations that both read the channel unclaimed reach this line together.
      */
     @Transactional
-    fun bindDelegation(id: String, userId: String, familyId: String) {
+    fun claimDelegation(id: String, userId: String): Boolean =
         DevicePairingEntity.update(
-            "userId = ?1, delegatedFamilyId = ?2 where id = ?3",
-            userId, familyId, id,
-        )
+            "userId = ?1 where id = ?2 and status = ?3 and userId is null",
+            userId, id, DevicePairingEntity.ANSWERED,
+        ) == 1
+
+    /** Record the family the claimed channel minted — a plain update on a row this transaction already claimed with
+     *  [claimDelegation], so nothing else can be writing it. */
+    @Transactional
+    fun bindDelegation(id: String, familyId: String) {
+        DevicePairingEntity.update("delegatedFamilyId = ?1 where id = ?2", familyId, id)
     }
 
     /**
