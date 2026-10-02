@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Guard the no-Docker half of the log, statement-log and mailbox wire assertions: needles, readers, controls.
+"""Guard the no-Docker half of the log, statement-log, mailbox and token wire assertions: needles, readers, controls.
 
-**What it asserts.** Four things about `scripts/run_web_e2e.py`, imported by path and run over synthetic files in a
+**What it asserts.** Five things about `scripts/run_web_e2e.py`, imported by path and run over synthetic files in a
 temporary directory — no Docker, no jar, nothing written into the repo:
   1. **Every spelling is found, under its own variant name.** For synthetic canaries carrying a space, a quote, a
      backslash, a newline, a non-ASCII character and the characters the two JavaScript URL encoders disagree on,
@@ -27,6 +27,15 @@ temporary directory — no Docker, no jar, nothing written into the repo:
      folded `Q` encoded-word subject, a quoted-printable part whose soft line break splits a value, a base64 HTML
      part — is parsed by `mail_texts`, and each synthetic canary is found in the decoded header or part it is in;
      the raw source is checked to hide exactly the encoded ones, so the mail cannot quietly stop testing decoding.
+  5. **Capability tokens are derived by marker, searched raw, and reported as `token:<kind>`.** A synthetic
+     recording with one call per derivation rule — a body property, a `$ref` to the token-marked scalar
+     `InviteBootstrapSecret`, a token-marked header parameter, a refresh-token `Set-Cookie` in `SessionCookie.issue`'s
+     order (token first, clearing cookie second), a bare bearer, and a token first seen in a Mailpit read — is run
+     through `token_needles` against the REAL contracts, and each token must come back under its literal kind, the
+     clearing cookie yielding none and only the mailed token marked mailed; a backend call no operation matches is
+     reported. `canary_needles`, `dump_escape` and `sql_literal` leave a base64url and a hex token unchanged (so the
+     raw form is the only needle); a presigned URL's needle is its request target; and over a synthetic dump the hash control finds a token by its SHA-256
+     while a raw copy is a hit.
 
 **The defect that bought it.** No incident — built with cr-wire-assertion-server-logs because the real canaries
 cannot exercise most of the matcher: measured across every retained e2e run, 0 of 80 distinct canaries carry a
@@ -36,9 +45,15 @@ cr-wire-assertion-history-and-mail for the same reason: no real canary carries a
 escaping has no live instance either, and the literal scope is what keeps `set autocommit=0` (380 times in one
 measured suite) from reddening a canary `auto` on every run. This is changes/README § *split an
 expensive live proof so its no-daemon half runs anywhere*: the half that needs no daemon is proven here, on every
-trust-chain run.
+trust-chain run. The token half came with cr-wire-assertion-capability-tokens: no suite drives a pairing or a token
+refresh, so two of the derivation rules (a header parameter, a token reached only through a `$ref`'d scalar) would
+otherwise rest on whichever suites happen to exercise them, and the cookie trap (the clearing cookie sent last) on
+nothing at all.
 
-**Its limit.** It proves the matcher and the controls over synthetic text. It does not prove that a real run reads
+**Its limit.** For tokens it proves the derivation over a synthetic recording against the real contracts — not that
+a real recording carries what the recorder should write (`web/src/test/wireRecorder.test.ts` pins that), not that the
+server stores a hash where the hash control looks, and not the mailbox or store-log exemptions, which need a live
+Mailpit and store. It proves the matcher and the controls over synthetic text. It does not prove that a real run reads
 the right logs, that the JVM writes them as UTF-8 (`boot()` pins that; the e2e run is its only proof), that the
 container logs are read over the right window, or that the server writes a value in a spelling modelled here —
 `json-ascii` is Python's lower-case `\\uXXXX`, and an encoder writing upper-case hex would not be matched by it.
@@ -51,6 +66,7 @@ everything downstream of these functions.
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import importlib.util
 import io
 import json
@@ -406,11 +422,109 @@ def check_mail() -> int:
     return len(MAIL_CANARIES)
 
 
+# ---- 5 · capability tokens ----------------------------------------------------------------------------------
+
+# Hand-written token values in the shapes the server mints (`Tokens.random()`: 32 bytes, base64url, no padding) — and
+# one hex value, the other alphabet a token-classed value has. Literals, never computed by the code under test.
+ACCESS = "aCc3sS-t0ken_vAlue-0123456789abcdefghijklmno"
+ADMIN_ACCESS = "aDm1n-bearer_0123456789abcdefghijklmnopqrstu"
+REFRESH = "r3fResh-c00kie_0123456789abcdefghijklmnopqr"
+BOOTSTRAP = "b00tStrap-s3cret_0123456789abcdefghijklmnop"
+RECOVERY = "rEc0very-t0ken_0123456789abcdefghijklmnopqr"
+CONTRIBUTOR = "c0ntrib-hdr_0123456789abcdefghijklmnopqrstu"
+HEX_TOKEN = "02f271ff9c3d4e5a6b7c8d9e0f1a2b3c"
+
+# A synthetic recording in the recorder's own shape, one call per derivation rule, written in `SessionCookie.issue`'s
+# cookie order. The recovery token is first seen in a Mailpit read — the mailbox exemption's case.
+RECORDING = [
+    {"method": "GET", "url": "http://127.0.0.1:18025/api/v1/message/m1", "requestHeaders": {},
+     "requestBody": None, "status": 200, "responseHeaders": {"content-type": "application/json"},
+     "responseBody": json.dumps({"Text": f"Reset: https://veyq.localhost/recover#{RECOVERY}"})},
+    {"method": "POST", "url": "http://veyq.localhost:8080/api/recovery/release", "requestHeaders": {},
+     "requestBody": json.dumps({"token": RECOVERY}), "status": 200, "responseHeaders": {}, "responseBody": "{}"},
+    {"method": "POST", "url": "http://veyq.localhost:8080/api/login/verify", "requestHeaders": {},
+     "requestBody": "{}", "status": 200,
+     "responseHeaders": {"content-type": "application/json", "set-cookie": [
+         f"veyq_refresh_session={REFRESH}; Path=/api/token/refresh; HttpOnly; SameSite=Strict",
+         "veyq_refresh=; Path=/api/token/refresh; Max-Age=0; HttpOnly; SameSite=Strict"]},
+     "responseBody": json.dumps({"accessToken": ACCESS, "familyId": "f1"})},
+    {"method": "GET", "url": "http://veyq.localhost:8080/api/scopes", "requestHeaders": {
+        "Authorization": f"Bearer {ACCESS}"}, "requestBody": None, "status": 200, "responseHeaders": {},
+     "responseBody": "[]"},
+    {"method": "POST", "url": "http://127.0.0.1:8090/api/tenants", "requestHeaders": {
+        "Authorization": f"Bearer {ADMIN_ACCESS}"}, "requestBody": "{}", "status": 201, "responseHeaders": {},
+     "responseBody": json.dumps({"tenantId": "t1", "bootstrapSecret": BOOTSTRAP, "delivery": "SENT"})},
+    {"method": "DELETE", "url": "http://veyq.localhost:8080/api/shares/s1/media/m1", "requestHeaders": {
+        "X-Contributor-Token": CONTRIBUTOR}, "requestBody": None, "status": 204, "responseHeaders": {},
+     "responseBody": None},
+    {"method": "PUT", "url": "http://localhost:19000/blobs/k1?X-Amz-Signature=abc", "requestHeaders": {},
+     "requestBody": "[binary 10 bytes — swept at the store, not here]", "status": 200, "responseHeaders": {},
+     "responseBody": None},
+]
+# (token, the kind it must be derived under) — what each rule above must yield, and nothing else.
+EXPECTED_TOKENS = {
+    RECOVERY: "token",                       # a body property marked token
+    REFRESH: "Set-Cookie",                   # a token-marked response header: the cookie value, the clearing one not
+    ACCESS: "accessToken",                   # a body property; its later bearer use does not rename it
+    ADMIN_ACCESS: "Authorization",           # seen only as a bearer
+    BOOTSTRAP: "bootstrapSecret",            # a `$ref` to the token-marked scalar `InviteBootstrapSecret`
+    CONTRIBUTOR: "X-Contributor-Token",      # a token-marked header parameter
+}
+
+
+def check_tokens() -> int:
+    """5 — the second needle set: its derivation by marker, its needle shape, and the sweeps reporting it as `token:`."""
+    for token in (ACCESS, REFRESH, HEX_TOKEN):
+        # D1: a token has no space, quote or backslash, so every text surface's spelling of it IS the raw form.
+        if orchestrator.canary_needles(token) != [("raw", token)]:
+            errors.append(f"tokens: canary_needles({token!r}) is {orchestrator.canary_needles(token)!r}, not the raw "
+                          f"form alone — a token would be searched in spellings no transport gives it")
+        if orchestrator.dump_escape(token) != token or orchestrator.sql_literal(token) != token:
+            errors.append(f"tokens: {token!r} is escaped by the dump or the driver — the raw needle would miss it")
+    # D2a: the cookie values are base64url, so the value is the token as minted; the clearing cookie yields none.
+    if orchestrator.set_cookie_values(RECORDING[2]) != [REFRESH]:
+        errors.append(f"tokens: set_cookie_values gave {orchestrator.set_cookie_values(RECORDING[2])!r}, expected "
+                      f"[{REFRESH!r}] — the token cookie first, the clearing cookie dropped")
+    if orchestrator.token_needle("http://localhost:19000/blobs/k1?X-Amz-Signature=abc") != "/blobs/k1?X-Amz-Signature=abc":
+        errors.append("tokens: a presigned URL's needle is not its request target — the store logs only that")
+
+    with tempfile.TemporaryDirectory(prefix="veyq-wire-token-guard-") as tmp:
+        run = synthetic_run(pathlib.Path(tmp))
+        record = run / "http-1.jsonl"
+        record.write_text("".join(json.dumps(e) + "\n" for e in RECORDING), encoding="utf-8")
+        tokens, problems, mailed = orchestrator.token_needles(record)
+        derived = {value: token.kind for value, token in tokens.items()}
+        if derived != EXPECTED_TOKENS:
+            errors.append(f"tokens: derived {derived!r}, expected {EXPECTED_TOKENS!r}")
+        if problems:
+            errors.append(f"tokens: a recording whose backend calls all exist in the contract reported {problems!r}")
+        if mailed != {RECOVERY}:
+            errors.append(f"tokens: first-read-out-of-a-mail is {mailed!r}, expected only the recovery token")
+        with record.open("a", encoding="utf-8") as f:
+            f.write(json.dumps({"method": "GET", "url": "http://veyq.localhost:8080/api/no-such-operation",
+                                "requestHeaders": {}, "requestBody": None, "status": 404, "responseHeaders": {},
+                                "responseBody": None}) + "\n")
+        if not any("/api/no-such-operation" in p for p in orchestrator.token_needles(record)[1]):
+            errors.append("tokens: a backend call no operation matches was not reported — its tokens would be unseen")
+
+
+    digest = hashlib.sha256(ACCESS.encode()).hexdigest()
+    dump = (f"INSERT INTO `veyq_access_token` VALUES ('a1','{digest}','2026-10-01');\n"
+            f"INSERT INTO `veyq_note` VALUES ('n1','{BOOTSTRAP}');\n")
+    hits, hashed = orchestrator.db_token_findings(dump, {v: orchestrator.Token(k, v) for v, k in EXPECTED_TOKENS.items()})
+    if hits != [(BOOTSTRAP, "veyq_note")]:
+        errors.append(f"tokens: the dump's raw hits are {hits!r}, expected the planted bootstrap secret in veyq_note")
+    if [t.kind for t in hashed] != ["accessToken"]:
+        errors.append(f"tokens: the hash control found {[t.kind for t in hashed]!r}, expected the access token's SHA-256")
+    return len(EXPECTED_TOKENS)
+
+
 spellings = check_spellings()
 cases = check_sweep()
 literals = check_literals() + check_literal_scope()
 statement_cases = check_statement_sweep()
 mails = check_mail()
+token_rules = check_tokens()
 
 if errors:
     print("WIRE LOG MATCHER VALIDATION FAILED:")
@@ -421,4 +535,5 @@ if errors:
 print(f"wire log matcher OK: {spellings} spelling(s) found under their variant; sweep_logs green on a clean "
       f"synthetic run and red, by name, on {cases - 1} unarmed or leaking case(s); statement log: {literals} "
       f"literal check(s), sweep_statements green when clean and red, by name, on {statement_cases} case(s); mailbox: {mails} "
-      f"canaries found by the decoded read")
+      f"canaries found by the decoded read; tokens: {token_rules} derivation rule(s) by marker, raw-only needles, "
+      f"and the hash control")

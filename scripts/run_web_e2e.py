@@ -30,7 +30,9 @@ per suite in the database ([sweep]), the HTTP recording ([sweep_http]) and the o
 once per run, after every group, in every boot log and container log ([sweep_logs], [sweep_containers]), in every
 statement the database received ([sweep_statements]) and in every mail the run sent ([sweep_mailbox]). The two
 halves are deliberately split by what each can reach: only the suite holds the keys, only this process holds
-Docker and the database root credential.
+Docker and the database root credential. Every one of those sweeps also searches a **second needle set** — every
+capability token the run handled, read out of the HTTP recording by the contract's `token` marker
+([token_needles]) — and the database sweep proves it armed by finding the tokens' hashes ([db_token_findings]).
 
 **Why a fresh instance per file.** Every suite cold-births its own Server Owner and asserts
 `setupRequired === true`, and a server is single-owner-per-instance. `ci.yml` used to call this "a fresh in-mem
@@ -67,7 +69,8 @@ not do it for you (it builds test classes, not the fast-jar). The web mirror of 
 red that was measured against code the run never saw.
 
 **The run directory survives the run** (`.e2e-out/<stamp>/`, gitignored). It holds each boot's log, its
-per-boot config-secret file, its canary file and its HTTP recording, and — once the run-level sweep
+per-boot config-secret file, its canary file, its HTTP recording and the dump its database sweep read
+(`database-<tag>.sql`), and — once the run-level sweep
 has read them — every container's log over the run's window (`container-<service>.log`), the database's
 statement log (`mariadb-general.log`) and every mail of the run (`mailbox/<id>.eml`). It used to be a `tempfile.TemporaryDirectory` discarded on
 exit, which left the boot log — the surface where an error `message` or a stack trace would carry plaintext —
@@ -93,6 +96,7 @@ import calendar
 import email
 import email.message
 import email.policy
+import hashlib
 import json
 import os
 import re
@@ -575,7 +579,8 @@ def dump_database(database: str) -> str:
     return proc.stdout
 
 
-def sweep(database: str, canary_file: Path, rel: str) -> str | None:
+def sweep(database: str, canary_file: Path, rel: str, tokens: dict[str, Token] | None = None,
+          retain: Path | None = None) -> str | None:
     """Prove that nothing this suite sealed is readable in the database it ran against. Returns None, else why not.
 
     **What it asserts** (cc.security.wire-assertion, ADR 0053). For the values the suite recovered by unsealing
@@ -603,6 +608,11 @@ def sweep(database: str, canary_file: Path, rel: str) -> str | None:
     sees only flows some suite drives. And passing cannot be arranged from inside the client (the bytes are in a
     database this process does not write), but a canary can still be *removed* — a visible diff, exactly like
     widening an allowlist would be, which is weaker than tamper-proof and should not be stated as more.
+
+    **The second needle set — capability tokens** (`tokens`, [token_needles]). The same rows are searched for every
+    token the suite's recording shows it handled, raw, reported as `token:<kind>`; and the hash control
+    ([db_token_findings]) must find at least one token's hex SHA-256, or the token half proves nothing. The dump is
+    retained (`retain`) so a hit, or a control that failed, can be re-read after the run.
     """
     if not canary_file.is_file():
         return (f"the suite left no canary file at {canary_file.name} — the sweep would have proved the absence "
@@ -616,6 +626,26 @@ def sweep(database: str, canary_file: Path, rel: str) -> str | None:
         dump = dump_database(database)
     except SweepError as e:
         return str(e)
+    if retain is not None:
+        retain.write_text(dump, encoding="utf-8")
+    tokens = tokens or {}
+    token_hits, hashed = db_token_findings(dump, tokens)
+    token_failure = None
+    if token_hits or (tokens and not hashed):
+        log(f"WIRE ASSERTION FAILED for {rel} on capability tokens in {database} — {len(token_hits)} raw hit(s); "
+            f"hash control {'met' if hashed else 'NOT met'}:")
+        for value, table in token_hits:
+            log(f"    {table:<28} <- token:{tokens[value].kind} {value!r}")
+        if not hashed:
+            log(f"    hash control: none of the {len(tokens)} token(s) ({kinds_of(tokens.values())}) has its "
+                f"{TOKEN_HASH().name} in {database} — the dump is not the database these tokens were minted in, or "
+                f"was not read, so 0 raw hits proves nothing")
+        token_failure = (f"the wire assertion failed on capability tokens: {len(token_hits)} raw hit(s) in "
+                         f"{database}{'' if hashed else ', hash control NOT met'} (listed above)")
+    elif tokens:
+        log(f"token sweep: {len(tokens)} capability token(s) from {rel} ({kinds_of(tokens.values())}) appear raw "
+            f"nowhere in {database}; hash control met — {len(hashed)} found by {TOKEN_HASH().name} "
+            f"({kinds_of(hashed)})")
     needles = [(c, dump_escape(c)) for c in canaries]
     hits: list[tuple[str, str]] = []
     seen: set[tuple[str, str]] = set()
@@ -636,10 +666,11 @@ def sweep(database: str, canary_file: Path, rel: str) -> str | None:
         log(f"WIRE ASSERTION FAILED for {rel} — {len(hits)} canary/table hit(s) in {database}:")
         for canary, table in hits:
             log(f"    {table:<28} <- {canary!r}")
-        return f"the wire assertion failed: {len(hits)} canary/table hit(s) in {database} (listed above)"
+        return "; ".join(filter(None, [
+            f"the wire assertion failed: {len(hits)} canary/table hit(s) in {database} (listed above)", token_failure]))
 
     log(f"wire assertion: {len(canaries)} canary/canaries from {rel} appear nowhere in {database}")
-    return None
+    return token_failure
 
 
 def opaque_property_names() -> set[str]:
@@ -714,23 +745,6 @@ def walk_opaque(value, names: set[str], found: list[tuple[str, str]]) -> None:
     elif isinstance(value, list):
         for entry in value:
             walk_opaque(entry, names, found)
-
-
-def set_cookie_values(entry: dict) -> list[str]:
-    """Every NON-EMPTY cookie value a recorded response set: each `Set-Cookie` cut at the first `;`, then at the first `=`.
-
-    A clearing cookie (`veyq_refresh=; Max-Age=0`) yields nothing. The recorder writes `set-cookie` as the array
-    `getSetCookie()` returns (`web/src/test/wireRecorder.ts`), because a flattened header keeps only the last one.
-    """
-    cookies = (entry.get("responseHeaders") or {}).get("set-cookie") or []
-    if isinstance(cookies, str):
-        cookies = [cookies]
-    values = []
-    for cookie in cookies:
-        _, sep, value = cookie.split(";", 1)[0].partition("=")
-        if sep and value.strip():
-            values.append(value.strip())
-    return values
 
 
 def sweep_http(record_file: Path, canary_file: Path, rel: str) -> str | None:
@@ -829,7 +843,8 @@ def stored_blob_count(database: str) -> int:
     return int(proc.stdout.strip() or 0)
 
 
-def sweep_store(bucket: str, database: str, canary_file: Path, rel: str, workdir: Path) -> str | None:
+def sweep_store(bucket: str, database: str, canary_file: Path, rel: str, workdir: Path,
+                tokens: dict[str, Token] | None = None) -> str | None:
     """Prove that nothing the suite sealed is readable in the object store — keys included.
 
     **The orchestrator's surface, not the suite's** (ADR 0053 §3): only this side holds the store credentials.
@@ -837,7 +852,8 @@ def sweep_store(bucket: str, database: str, canary_file: Path, rel: str, workdir
     wrote itself, and not the object key, which is a name the operator reads without opening anything.
 
     Mirrors with the operator tool's own rclone plumbing rather than a second copy of it, so the sweep reads the
-    bucket the documented backup would capture.
+    bucket the documented backup would capture. Keys and bytes are searched for the suite's capability tokens too
+    (`tokens`, [token_needles]), reported as `token:<kind>`.
     """
     if not canary_file.is_file():
         return f"{rel} left no canary file — the store sweep would have proved the absence of nothing."
@@ -874,6 +890,11 @@ def sweep_store(bucket: str, database: str, canary_file: Path, rel: str, workdir
                 hits.append((key, canary, "object key"))
             if canary.encode("utf-8") in blob:
                 hits.append((key, canary, "object bytes"))
+        for value, token in (tokens or {}).items():
+            if token.needle in key:
+                hits.append((key, f"token:{token.kind} {value}", "object key"))
+            if token.needle.encode("utf-8") in blob:
+                hits.append((key, f"token:{token.kind} {value}", "object bytes"))
 
     if hits:
         log(f"WIRE ASSERTION FAILED for {rel} on the store — {len(hits)} hit(s) in {bucket}:")
@@ -881,9 +902,312 @@ def sweep_store(bucket: str, database: str, canary_file: Path, rel: str, workdir
             log(f"    {key:<44} {where} <- {canary!r}")
         return f"the wire assertion failed on the store: {len(hits)} hit(s) in {bucket} (listed above)"
 
-    log(f"wire assertion: {len(canaries)} canary/canaries from {rel} appear in none of "
-        f"{len(objects)} object(s) of {bucket}, key or bytes")
+    log(f"wire assertion: {len(canaries)} canary/canaries and {len(tokens or {})} capability token(s) from {rel} "
+        f"appear in none of {len(objects)} object(s) of {bucket}, key or bytes")
     return None
+
+
+# ----------------------------------------------------------------------------------------------------------
+# Capability tokens — the second needle set: every bearer or capability secret the run handled
+# ----------------------------------------------------------------------------------------------------------
+
+# What `Tokens.hash` stores and looks a token up by: the hex SHA-256 of its UTF-8 bytes (ADR 0004). The hash control
+# finds it in a suite's dump, which proves the dump was read and the token set belongs to that database.
+TOKEN_HASH = hashlib.sha256
+
+HTTP_METHODS = validate_field_visibility.HTTP_METHODS
+TOKEN_CLASS = "token"
+# The kind a bearer credential is reported under when no body or header marker named it first.
+BEARER_KIND = "Authorization"
+
+
+class Operation(NamedTuple):
+    method: str
+    pattern: re.Pattern
+    literal: int  # characters of the path that are not a `{param}` — the more, the more specific the match
+    spec: str
+    operation: dict
+    parameters: list
+
+
+class Contract:
+    """Every operation of `contracts/api/`, indexed to match a recorded call, and the `$ref` resolution its walk needs.
+
+    Read from the contracts, never listed: the token set is whatever the `token` class marks (ADR 0044) — body
+    properties, scalar component schemas (`InviteBootstrapSecret`), header parameters and response headers — plus
+    the bearer of `Authorization`, the one `securityScheme` shape (`type: http, scheme: bearer`).
+    """
+
+    def __init__(self, api: Path) -> None:
+        self.specs = {p.name: (yaml.safe_load(p.read_text()) or {}) for p in sorted(api.glob("*.openapi.yaml"))}
+        self.operations: list[Operation] = []
+        self.bearer = False
+        for name, spec in self.specs.items():
+            for scheme in ((spec.get("components") or {}).get("securitySchemes") or {}).values():
+                if scheme.get("type") == "http" and str(scheme.get("scheme", "")).lower() == "bearer":
+                    self.bearer = True
+            for path, item in (spec.get("paths") or {}).items():
+                for method in HTTP_METHODS:
+                    operation = (item or {}).get(method)
+                    if not isinstance(operation, dict):
+                        continue
+                    pattern = re.compile("^" + re.sub(r"\\\{[^}]*\\\}", "[^/]+", re.escape(path)) + "$")
+                    literal = len(re.sub(r"\{[^}]*\}", "", path))
+                    parameters = list(item.get("parameters") or []) + list(operation.get("parameters") or [])
+                    self.operations.append(Operation(method.upper(), pattern, literal, name, operation, parameters))
+
+    def resolve(self, node, spec: str) -> tuple[dict, str]:
+        """Follow `$ref`s — same-file `#/…` and cross-file `x.yaml#/…` — to the node they name, and its spec."""
+        while isinstance(node, dict) and "$ref" in node:
+            target, _, pointer = node["$ref"].partition("#")
+            spec = Path(target).name if target else spec
+            node = self.specs[spec]
+            for part in pointer.strip("/").split("/"):
+                node = node[part]
+        return (node if isinstance(node, dict) else {}), spec
+
+    def match(self, method: str, path: str) -> Operation | None:
+        """The operation a recorded call hit: the most literal path template that matches, so `/x/mine` beats `/x/{id}`."""
+        found = [op for op in self.operations if op.method == method and op.pattern.match(path)]
+        return max(found, key=lambda op: op.literal) if found else None
+
+
+_CONTRACT: Contract | None = None
+
+
+def contract() -> Contract:
+    """The repo's contracts, loaded once per run. `__file__`-relative, so a copied tree reads its own copy."""
+    global _CONTRACT
+    if _CONTRACT is None:
+        _CONTRACT = Contract(REPO / "contracts" / "api")
+    return _CONTRACT
+
+
+class Token(NamedTuple):
+    """One capability token the run handled: what the contract calls it, and what a sweep searches for."""
+    kind: str
+    needle: str
+    weak: bool = False  # named only by the bearer rule; a marker that names it later wins
+    url: bool = False  # a presigned URL: its needle is its request target, and its addressee (the store) verifies it
+
+
+def token_needle(value: str) -> str:
+    """What a sweep searches for: the token itself, or for a token that is a URL, its request target.
+
+    A presigned URL (`PresignedUrl.url`) is the one URL-valued token. Its capability is its query (the signature),
+    and the party it addresses logs the URI it was handed, not the origin the client used — so the request target
+    (`/bucket/key?X-Amz-…`) is the needle. It is a substring of the URL, so a copy of the whole URL is found too.
+    """
+    parts = urllib.parse.urlsplit(value)
+    if parts.scheme in ("http", "https") and parts.netloc:
+        return parts.path + (f"?{parts.query}" if parts.query else "")
+    return value
+
+
+def set_cookie_values(entry: dict) -> list[str]:
+    """Every NON-EMPTY cookie value a recorded response set: each `Set-Cookie` cut at the first `;`, then at the first `=`.
+
+    A clearing cookie (`veyq_refresh=; Max-Age=0`) yields nothing, which is why `logout`'s marker is harmless. The
+    values are base64url (`Tokens.random()`), so no unquoting is modelled — asserted by
+    `scripts/validate_wire_log_matcher.py`, not assumed.
+    """
+    cookies = (entry.get("responseHeaders") or {}).get("set-cookie") or []
+    if isinstance(cookies, str):
+        cookies = [cookies]
+    values = []
+    for cookie in cookies:
+        _, sep, value = cookie.split(";", 1)[0].partition("=")
+        if sep and value.strip():
+            values.append(value.strip())
+    return values
+
+
+def header_value(headers: dict, name: str):
+    """A recorded header by name, case-insensitively — the client sends `Authorization`, `Headers` lowercases it."""
+    wanted = name.lower()
+    return next((value for key, value in (headers or {}).items() if key.lower() == wanted), None)
+
+
+def walk_tokens(value, schema, spec: str, kind: str, add: Callable[[str, str], None]) -> None:
+    """Collect every value a `token` marker covers, walking a recorded JSON value against the schema that declares it."""
+    schema, spec = contract().resolve(schema, spec)
+    if schema.get(validate_field_visibility.MARKER) == TOKEN_CLASS:
+        if isinstance(value, str) and value:
+            add(value, kind)
+        return
+    for key in ("allOf", "oneOf", "anyOf"):
+        for alternative in schema.get(key) or []:
+            walk_tokens(value, alternative, spec, kind, add)
+    if isinstance(value, dict):
+        properties = schema.get("properties") or {}
+        for name, entry in value.items():
+            if name in properties:
+                walk_tokens(entry, properties[name], spec, name, add)
+    elif isinstance(value, list) and isinstance(schema.get("items"), dict):
+        for entry in value:
+            walk_tokens(entry, schema["items"], spec, kind, add)
+
+
+def json_body(text) -> object:
+    try:
+        return json.loads(text) if text else None
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+
+def origin_of(url: str) -> str:
+    parts = urllib.parse.urlsplit(url)
+    return f"{parts.scheme}://{parts.netloc}"
+
+
+# The calls the token derivation reads: the backend's two listeners. The store and Mailpit are not the contract's.
+BACKEND_ORIGINS = (BASE, ADMIN_BASE)
+
+
+def token_needles(record_file: Path) -> tuple[dict[str, Token], list[str], set[str]]:
+    """Every capability token one suite's recording shows it handled, derived by marker. Returns (tokens, problems, mailed).
+
+    **What it derives** (cc.security.wire-assertion § Capability tokens). Every backend call of the recording is
+    matched to its contract operation; its request and response JSON bodies are walked against the declared schemas
+    and every `token`-classed value is taken ([walk_tokens]); so is every request header the operation declares
+    `token` (`X-Contributor-Token`, `X-Share-Password`), every response header it declares `token` — a `Set-Cookie`
+    contributes its non-empty cookie values ([set_cookie_values]) — and the bearer of `Authorization`. The kind is the
+    name of the marked thing. Needles are derived, never listed (ADR 0053 §2): a name list would forget the 20th.
+
+    **`problems`** names every backend call no operation matches — its tokens would be invisible, so the caller
+    fails on it. **`mailed`** is the tokens the suite first read out of a mail (the earliest recorded call carrying
+    it is a Mailpit read): mail is their channel (ADR 0049/0054), and the mailbox sweep exempts exactly those.
+    """
+    entries = [json.loads(line) for line in record_file.read_text().split("\n") if line.strip()]
+    tokens: dict[str, Token] = {}
+    problems: list[str] = []
+
+    def add(value: str, kind: str, weak: bool = False) -> None:
+        if value not in tokens or (tokens[value].weak and not weak):
+            needle = token_needle(value)
+            tokens[value] = Token(kind, needle, weak, needle != value)
+
+    for entry in entries:
+        if origin_of(entry["url"]) not in BACKEND_ORIGINS:
+            continue
+        path = urllib.parse.urlsplit(entry["url"]).path
+        op = contract().match(entry["method"], path)
+        if op is None:
+            problems.append(f"{entry['method']} {path} matches no operation in contracts/api — its tokens are unseen")
+            continue
+        request_headers = entry.get("requestHeaders") or {}
+        if contract().bearer:
+            authorization = header_value(request_headers, "Authorization") or ""
+            if authorization.lower().startswith("bearer ") and authorization[7:].strip():
+                add(authorization[7:].strip(), BEARER_KIND, weak=True)
+        for parameter in op.parameters:
+            parameter, _ = contract().resolve(parameter, op.spec)
+            if parameter.get("in") == "header" and parameter.get(validate_field_visibility.MARKER) == TOKEN_CLASS:
+                value = header_value(request_headers, parameter["name"])
+                if isinstance(value, str) and value:
+                    add(value, parameter["name"])
+        body, spec = contract().resolve(op.operation.get("requestBody") or {}, op.spec)
+        schema = ((body.get("content") or {}).get("application/json") or {}).get("schema")
+        if schema is not None:
+            walk_tokens(json_body(entry.get("requestBody")), schema, spec, "requestBody", add)
+        responses = op.operation.get("responses") or {}
+        status = entry.get("status")
+        response = next((responses[key] for key in (str(status), f"{str(status)[:1]}XX", "default") if key in responses),
+                        None)
+        if response is None:
+            continue
+        response, spec = contract().resolve(response, op.spec)
+        schema = ((response.get("content") or {}).get("application/json") or {}).get("schema")
+        if schema is not None:
+            walk_tokens(json_body(entry.get("responseBody")), schema, spec, "responseBody", add)
+        for name, header in (response.get("headers") or {}).items():
+            header, _ = contract().resolve(header, spec)
+            if header.get(validate_field_visibility.MARKER) != TOKEN_CLASS:
+                continue
+            if name.lower() == "set-cookie":
+                for value in set_cookie_values(entry):
+                    add(value, name)
+            else:
+                value = header_value(entry.get("responseHeaders") or {}, name)
+                if isinstance(value, str) and value:
+                    add(value, name)
+
+    mailed: set[str] = set()
+    texts = [json.dumps(entry, ensure_ascii=False) for entry in entries]
+    for value, token in tokens.items():
+        first = next((i for i, text in enumerate(texts) if token.needle in text), None)
+        if first is not None and origin_of(entries[first]["url"]) == MAILPIT:
+            mailed.add(value)
+    return tokens, problems, mailed
+
+
+def kinds_of(tokens: Iterable[Token]) -> str:
+    """`accessToken ×3, Set-Cookie ×2` — the printed count by kind a reader compares across runs."""
+    counts: dict[str, int] = {}
+    for token in tokens:
+        counts[token.kind] = counts.get(token.kind, 0) + 1
+    return ", ".join(f"{kind} ×{n}" for kind, n in sorted(counts.items())) or "none"
+
+
+class RunTokens(NamedTuple):
+    """The UNION of a run's token sets, for the run-level surfaces — by needle, with the kind and the recordings."""
+    by_needle: dict[str, Token]
+    carriers: dict[str, list[str]]
+    mailed: set[str]  # needles of tokens some suite first read out of a mail
+
+
+def run_tokens(workdir: Path) -> RunTokens:
+    """Every recording of the run, derived ([token_needles]) and merged — a recording is found by a recursive glob."""
+    by_needle: dict[str, Token] = {}
+    carriers: dict[str, list[str]] = {}
+    mailed: set[str] = set()
+    for record in sorted(workdir.rglob("http-*.jsonl")):
+        tokens, _, first_mailed = token_needles(record)
+        for value, token in tokens.items():
+            if token.needle not in by_needle or (by_needle[token.needle].weak and not token.weak):
+                by_needle[token.needle] = token
+            carriers.setdefault(token.needle, []).append(f"token:{token.kind} from {record.name}")
+            if value in first_mailed:
+                mailed.add(token.needle)
+    return RunTokens(by_needle, carriers, mailed)
+
+
+NO_TOKENS = RunTokens({}, {}, set())
+
+
+def with_tokens(carriers: dict[str, list[str]], tokens: RunTokens) -> dict[str, list[str]]:
+    """One needle → carriers map for a run-level surface: the canaries and the tokens, each labelled by its source."""
+    merged = {needle: list(labels) for needle, labels in carriers.items()}
+    for needle, labels in tokens.carriers.items():
+        merged.setdefault(needle, []).extend(labels)
+    return merged
+
+
+def db_token_findings(dump: str, tokens: dict[str, Token]) -> tuple[list[tuple[str, str]], list[Token]]:
+    """Over a dump's data rows: every (token, table) a raw token lands on, and the tokens whose HASH the dump holds.
+
+    The hash is the control ([TOKEN_HASH]): ADR 0004's "a database dump yields no usable session" means the server
+    keeps the hash where it would otherwise keep the token, so finding hashes proves this dump is the one the
+    tokens' rows were written to — and that it was read at all. A count of zero raw hits proves neither.
+    """
+    needles = [(value, dump_escape(token.needle)) for value, token in tokens.items()]
+    hashes = {TOKEN_HASH(value.encode("utf-8")).hexdigest(): value for value in tokens}
+    hits: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    hashed: set[str] = set()
+    for line in dump.splitlines():
+        match = INSERT_LINE.match(line)
+        if not match:
+            continue
+        table = match.group(1)
+        for value, needle in needles:
+            if needle in line and (value, table) not in seen:
+                seen.add((value, table))
+                hits.append((value, table))
+        for digest, value in hashes.items():
+            if value not in hashed and digest in line:
+                hashed.add(value)
+    return hits, [tokens[value] for value in tokens if value in hashed]
 
 
 # ----------------------------------------------------------------------------------------------------------
@@ -1007,8 +1331,11 @@ def report_hits(hits: list[Hit], carriers: dict[str, list[str]]) -> None:
     """Print each hit in full. CI uploads nothing, so the job log is the only evidence of a hit that survives."""
     for hit in hits:
         shown_line = ANSI.sub("", hit.line).strip()
-        log(f"    {hit.source}:{hit.line_no}  [{hit.variant}]  {hit.canary!r}  "
-            f"(carried by {', '.join(carriers.get(hit.canary) or ['?'])})")
+        labels = carriers.get(hit.canary) or ["?"]
+        # A token leads with its kind, so a reader never takes a leaked capability for a leaked canary.
+        what = f"{labels[0].split(' from ')[0]} " if labels[0].startswith("token:") else ""
+        log(f"    {hit.source}:{hit.line_no}  [{hit.variant}]  {what}{hit.canary!r}  "
+            f"(carried by {', '.join(labels)})")
         log(f"        | {shown_line[:240]}")
 
 
@@ -2172,13 +2499,24 @@ def run_member(index: int, position: int, test_path: Path, inst: Instance, group
             # No sweep on a failed suite: the canary set is incomplete by construction, so a hit or a miss would
             # both be unreadable. The run already fails on this.
             return f"the suite failed (vitest exit {result.returncode})"
+        # The second needle set: every capability token the recording shows the suite handled, derived by the
+        # contract's `token` marker. A backend call no operation matches would hide its tokens, so it fails.
+        tokens, unmatched, mailed = token_needles(record_file) if record_file.is_file() else ({}, [], set())
+        log(f"capability tokens: {len(tokens)} derived from {record_file.name} ({kinds_of(tokens.values())}); "
+            f"{len(mailed)} first read out of a mail")
+        token_failure = None
+        if unmatched:
+            for problem in unmatched:
+                log(f"    token derivation: {problem}")
+            token_failure = f"the token derivation matched {len(unmatched)} backend call(s) to no operation (above)"
         # Three surfaces, three sensors, one canary file (ADR 0053 §3). Run them all and report the FIRST
         # failure rather than stopping at the database: a run that leaks on two surfaces should say so on the
         # second one too, once the first is fixed, and a sweep skipped is a sweep nobody notices is missing.
         for failure in (
-            sweep(database, canary_file, rel),
+            token_failure,
+            sweep(database, canary_file, rel, tokens, workdir / f"database-{tag}.sql"),
             sweep_http(record_file, canary_file, rel),
-            sweep_store(inst.bucket or STORE_BUCKET, database, canary_file, rel, workdir),
+            sweep_store(inst.bucket or STORE_BUCKET, database, canary_file, rel, workdir, tokens),
         ):
             if failure:
                 return failure
