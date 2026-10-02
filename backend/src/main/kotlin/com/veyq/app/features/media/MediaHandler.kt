@@ -20,6 +20,7 @@ import com.veyq.app.shared.membership.AccessMode.READ
 import com.veyq.app.shared.membership.AccessMode.WRITE
 import com.veyq.app.shared.membership.ScopeAccess
 import com.veyq.app.shared.membership.refusal
+import com.veyq.app.shared.persistence.createOrConflict
 import com.veyq.app.shared.scope.ScopeEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
@@ -305,7 +306,7 @@ class MediaHandler(
         declares: List<UploadDeclare>,
         domain: String?,
     ): List<UploadItemResult> {
-        val (checked, opened) = QuarkusTransaction.requiringNew().call {
+        val reserve = {
             val tenant = ScopeEntity.findById(scopeId)?.tenantId?.let { quota.lockTenant(it) }
             // Checked under the lock, not before it: the sessions are inserted together at the end, so a blob id
             // two racing requests (or two items of this one) both claim would otherwise pass the check and fail
@@ -321,6 +322,14 @@ class MediaHandler(
                 checked to checked.map { (d, error) -> if (error != null) null else openSession(scopeId, opener, d) }
             }
         }
+        // The lock orders starts into ONE tenant; a blob id is unique across all of them, so two starts into
+        // different tenants can still both pass the check, and the loser dies on `ux_upload_session_blob_id`. Its
+        // replay answers per item — the taken item `id_taken`, the others opened — so when a declared id is now
+        // taken, the conflict answer is the reservation run again, in the fresh transaction that sees the winner.
+        val (checked, opened) = createOrConflict(
+            conflict = { if (declares.any { store.blobIdTaken(it.blobId) }) reserve() else null },
+            create = reserve,
+        )
         return presignOpened(checked, opened, domain)
     }
 
@@ -438,7 +447,12 @@ class MediaHandler(
         if (!original.boundTo(item.mediaId, "ORIGINAL") || derivSessions.any { (kind, s) -> !s.boundTo(item.mediaId, kind) }) {
             return CompleteItemResult(null, null, "upload_mismatch")
         }
-        if (store.mediaIdTaken(item.mediaId)) return CompleteItemResult(null, null, "id_taken")
+        if (store.mediaIdTaken(item.mediaId)) {
+            // Taken by a concurrent complete of this very upload that committed after the session read above? Then
+            // the session is spent too, and a replay answers by the session first: `upload_not_found`.
+            val spent = store.findSession(scopeId, item.originalUploadId, opener) == null
+            return CompleteItemResult(null, null, if (spent) "upload_not_found" else "id_taken")
+        }
 
         // declare-then-verify every blob up front; a single budget failure fails (and purges) the whole item
         val manifests = HashMap<String, List<Long>?>()
@@ -460,7 +474,7 @@ class MediaHandler(
             (opener as? UploadOpener.Contributor)?.shareIdentityId,
             (opener as? UploadOpener.Member)?.userId, // cr-0113: the member uploader → owner_key "user:{id}" (null on the contributor path)
             item.bucketId,  // cr-0113: an explicit target bucket, else the uploader's primary
-        )
+        ) ?: return CompleteItemResult(null, null, "upload_not_found") // a concurrent complete spent the sessions
         return CompleteItemResult(blobId, mediaId, null)
     }
 
@@ -664,8 +678,10 @@ class MediaHandler(
             OwnerKey.User(userId).format()
         }
         // The client-minted id (ADR 0072): the sealed name is bound to it.
-        return store.createSubBucket(bucketId, scopeId, nodeId, ownerKey, sealedName)
-            ?.let { CreateBucketOutcome.Ok(it) } ?: CreateBucketOutcome.IdTaken
+        return createOrConflict(conflict = { if (store.bucketIdTaken(bucketId)) CreateBucketOutcome.IdTaken else null }) {
+            store.createSubBucket(bucketId, scopeId, nodeId, ownerKey, sealedName)
+                ?.let { CreateBucketOutcome.Ok(it) } ?: CreateBucketOutcome.IdTaken
+        }
     }
 
     /** Rename a sub-bucket (any member may — incl. a contributor's, cr-0123). A primary is not renameable (Forbidden → 403). */

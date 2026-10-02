@@ -15,7 +15,8 @@ import jakarta.transaction.Status
  * So when the transaction fails with a [PersistenceException] anywhere in its causes, [conflict] — the site's own
  * replay question, run in a fresh transaction that now sees the winner — names the answer. Null means the replay
  * question does not explain the failure: it is re-thrown, and a violation of some other index stays the 500 a bug
- * should look like. A failure that is no persistence failure is never re-asked.
+ * should look like. A failure that is no persistence failure is never re-asked. A batch that answers per item has no
+ * single conflict: there the answer is its replay itself, run inside that fresh transaction (`MediaHandler`'s start).
  *
  * The helper owns the transaction, so it sits where the transaction starts — never inside an open one: a failed flush
  * marks a JTA transaction rollback-only, and nothing inside it could recover. A [create] that marks its own
