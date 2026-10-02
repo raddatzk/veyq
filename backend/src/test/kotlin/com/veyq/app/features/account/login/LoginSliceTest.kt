@@ -2,6 +2,7 @@ package com.veyq.app.features.account.login
 
 import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.testing.TestFixtures.newUser
+import com.veyq.app.testing.race
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -247,6 +248,28 @@ class LoginSliceTest {
     }
 
     @Test
+    fun theOrphanAndTheCurrentTokenPresentedTogetherCannotForkTheChain() {
+        // The grace's distance is measured against the family's CURRENT row. An orphan (distance 1) and the current
+        // token lock DIFFERENT token rows, so without a lock on their common parent both measured a CURRENT that the
+        // other was replacing: both answered 200, the family held two live chains, and neither holder ever landed
+        // on distance zero — ADR 0004's detector silenced. Serial, either order revokes (distance 0 or 2).
+        // A test transaction holds the family row while both start, so they queue on it together; 10 rounds, because
+        // that hold made the fork 3 of 5 in the probe, not 5 of 5.
+        repeat(FORK_ROUNDS) { round ->
+            val r1 = login().refreshToken
+            val r2 = refresh(r1).then().statusCode(200).extract().path<String>("refreshToken") // r1 is now one behind
+            val familyId = familyIdOf(r1)
+            val answers = whileFamilyIsHeld(familyId) { race({ refreshAnswer(r1) }, { refreshAnswer(r2) }) }
+            assertTrue(answers.count { it.first == 200 } <= 1, "round $round: at most one presentation may rotate, got $answers")
+            assertTrue(currentRows(familyId) <= 1, "round $round: one family, one CURRENT row, got answers $answers")
+            val again = answers.mapNotNull { it.second }.map { refresh(it).then().extract().statusCode() }
+            assertTrue(again.count { it == 200 } <= 1, "round $round: no two chains may keep rotating, got $again")
+        }
+        // Control: an ordinary refresh still rotates, so a lock that refused everything cannot pass.
+        refresh(login().refreshToken).then().statusCode(200)
+    }
+
+    @Test
     fun unknownRefreshTokenIsPlain401AndRevokesNobody() {
         // A live, innocent refresh family exists alongside the attack.
         val victim = login()
@@ -371,6 +394,47 @@ class LoginSliceTest {
             SessionFamilyEntity.findById(row.familyId)!!.status
         }
 
+    private fun familyIdOf(refreshToken: String): String =
+        QuarkusTransaction.requiringNew().call<String> {
+            RefreshTokenEntity.find("tokenHash", com.veyq.app.shared.crypto.Tokens.hash(refreshToken)).firstResult()!!.familyId
+        }
+
+    private fun currentRows(familyId: String): Long =
+        QuarkusTransaction.requiringNew().call<Long> {
+            RefreshTokenEntity.count("familyId = ?1 and status = ?2", familyId, RefreshTokenEntity.CURRENT)
+        }
+
+    /** A refresh as (status, the new refresh token on success). */
+    private fun refreshAnswer(refreshToken: String): Pair<Int, String?> =
+        refresh(refreshToken).then().extract().let {
+            it.statusCode() to (if (it.statusCode() == 200) it.path<String>("refreshToken") else null)
+        }
+
+    /**
+     * Run [body] while a test transaction holds the family row with `PESSIMISTIC_WRITE` for [HOLD_MS], so every
+     * refresh it starts queues on that row together. The hold lives in the test's own transaction; nothing in
+     * production code waits for a test.
+     */
+    private fun <T> whileFamilyIsHeld(familyId: String, body: () -> T): T {
+        val held = java.util.concurrent.CountDownLatch(1)
+        val pool = java.util.concurrent.Executors.newSingleThreadExecutor()
+        try {
+            val holder = pool.submit {
+                QuarkusTransaction.requiringNew().run {
+                    SessionFamilyEntity.findById(familyId, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+                    held.countDown()
+                    Thread.sleep(HOLD_MS)
+                }
+            }
+            held.await()
+            val result = body()
+            holder.get()
+            return result
+        } finally {
+            pool.shutdownNow()
+        }
+    }
+
     private data class Session(val accessToken: String, val refreshToken: String)
 
     private fun login(): Session {
@@ -417,6 +481,10 @@ class LoginSliceTest {
 
     companion object {
         private const val EMAIL = "login-test@example.com"
+
+        /** The fork needs both refreshes queued on one held row; the probe forked 3 of 5 rounds that way. */
+        private const val FORK_ROUNDS = 10
+        private const val HOLD_MS = 300L
         private val KEYPAIR: KeyPair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair()
         private val OTHER_KEYPAIR: KeyPair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair()
 

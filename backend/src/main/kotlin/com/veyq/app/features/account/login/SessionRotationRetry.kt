@@ -17,6 +17,11 @@ import java.sql.SQLException
  * depends on where the successor's **random** hash sorts, so the rate falls off with the size of the index —
  * measured at ~6 % of requests with the table essentially empty and 0 in 150 at 50 rows and beyond.
  *
+ * Since a rotation takes its **family's** row lock first (`SessionService.rotate`), two refreshes of one token
+ * queue on the family's primary key before either touches `ux_refresh_token_hash`, so this cycle should no longer
+ * form. That is reasoned about InnoDB, not measured — the test datasource is H2 — so the retry stays until a
+ * MariaDB measurement says otherwise.
+ *
  * **Not a general-purpose retry.** It is deliberately local to rotation, bounded, and immediate: rotation is
  * short, it is the only statement pair in this codebase that provokes the cycle, and anything longer would be
  * holding a request open to wait for a lock that is already gone.

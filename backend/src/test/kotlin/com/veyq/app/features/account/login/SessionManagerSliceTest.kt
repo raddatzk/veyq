@@ -155,6 +155,38 @@ class SessionManagerSliceTest {
     }
 
     @Test
+    fun aRefreshRacingARevokeCannotBringTheFamilyBack() {
+        // The real revoke runs in a transaction whose commit the test holds back, and a refresh of the target starts
+        // inside that window. The rotation used to read the family unlocked and save it whole, so its flush wrote the
+        // `ACTIVE` it had read over the revoke that answered 204 — and the new token kept rotating.
+        repeat(ROUNDS) { round ->
+            val caller = login()
+            val target = login()
+            val revoked = java.util.concurrent.CountDownLatch(1)
+            val pool = java.util.concurrent.Executors.newSingleThreadExecutor()
+            val answer = try {
+                val revoke = pool.submit {
+                    QuarkusTransaction.requiringNew().run {
+                        sessions.revokeFamilyForUser(USER_ID, target.familyId)
+                        revoked.countDown()
+                        Thread.sleep(HOLD_MS) // the commit, held back
+                    }
+                }
+                revoked.await()
+                val r = refresh(target.refreshToken).then().extract()
+                revoke.get()
+                r.statusCode() to (if (r.statusCode() == 200) r.path<String>("refreshToken") else null)
+            } finally {
+                pool.shutdownNow()
+            }
+            assertEquals(SessionFamilyEntity.REVOKED, familyStatus(target.familyId), "round $round: the revoke stands, refresh answered $answer")
+            answer.second?.let { refresh(it).then().statusCode(401) }
+            // The live control: the caller's own family is untouched by either.
+            refresh(caller.refreshToken).then().statusCode(200)
+        }
+    }
+
+    @Test
     fun revokingIsIdempotent() {
         val caller = login()
         val target = login()
@@ -347,7 +379,14 @@ class SessionManagerSliceTest {
         given().contentType(ContentType.JSON).body("""{"refreshToken":"$refreshToken"}""")
             .`when`().post("/api/token/refresh")
 
+    private fun familyStatus(familyId: String): String =
+        QuarkusTransaction.requiringNew().call<String> { SessionFamilyEntity.findById(familyId)!!.status }
+
     companion object {
+        /** A refresh racing a revoke; the held commit made the resurrection 5 of 5 in the probe. */
+        private const val ROUNDS = 5
+        private const val HOLD_MS = 300L
+
         private const val EMAIL = "sessions-test@example.com"
         private const val OTHER_EMAIL = "sessions-stranger@example.com"
         private const val USER_ID = "sessions-test-user"
