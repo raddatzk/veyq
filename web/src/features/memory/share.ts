@@ -334,7 +334,9 @@ export function carriedSettings(epochs: EpochKeys, old: ReissuableShare): Reissu
  * the role is the old share's (the server takes it from the old row). A VIEWER/CONTRIBUTOR link wraps `K_mem`; an
  * UPLOADER link seals the Memory's **existing** drop public key — every upload so far is sealed to it (ADR 0031
  * point 7) — and is refused here rather than minting a new one. `stale_epoch` re-opens the scope key and retries
- * once, as {@link createShare} does. The caller shows the returned link once, as after a create.
+ * once, as {@link createShare} does. A share is re-issued at most once: `409 share_deleted` ({@link isShareDeleted})
+ * means another renew — a concurrent one or an earlier one — or a delete got there first; it is never retried, and
+ * the caller re-reads the list. The caller shows the returned link once, as after a create.
  */
 export async function reissueShare(
   old: ReissuableShare,
@@ -508,6 +510,13 @@ export async function deleteShare(shareId: string): Promise<void> {
  *  {@link isReissueRequired}; such a share comes back only through {@link reissueShare}. */
 export async function reactivateShare(shareId: string): Promise<void> {
   await withRefresh(() => sharesApi().reactivateShare({ shareId }))
+}
+
+/** Whether a re-issue was refused because the share is already deleted — renewed once already (a concurrent renew
+ *  won, or an earlier one ran) or deleted (ADR 0075 point 1). Nothing was minted; the one new link, if any, is in
+ *  the list, so the caller re-reads it. */
+export async function isShareDeleted(e: unknown): Promise<boolean> {
+  return isCodedError(e, HttpStatus.conflict, 'share_deleted')
 }
 
 /** Whether a re-activation was refused because a departed member may hold the link (ADR 0075). */

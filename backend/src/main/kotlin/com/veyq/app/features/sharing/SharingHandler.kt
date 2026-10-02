@@ -202,6 +202,9 @@ sealed interface ReissueShareOutcome {
     /** The recovery copy is not sealed at the scope's current epoch (ADR 0024 Decision 6) — a 409, nothing written. */
     object StaleEpoch : ReissueShareOutcome, HttpFailure by Failures.staleEpoch
     object IdTaken : ReissueShareOutcome, HttpFailure by Failures.idTaken
+    /** The share is already deleted — re-issued once already (a concurrent re-issue won, or an earlier one ran) or
+     *  deleted. A member's answer only (inbox #252): a 409, nothing written; the caller re-reads the list. */
+    object ShareDeleted : ReissueShareOutcome, HttpFailure by httpFailure("share_deleted", CONFLICT)
 }
 
 /** A share as the manage list serves it: the row plus [ReissuePolicy]'s answer for it (ADR 0075 point 4) and
@@ -412,7 +415,9 @@ class SharingHandler(
      * old one deleted (ADR 0029 §7), in one transaction ([SharingStore.reissue]). The Memory, the scope and the role come from
      * the old row, so a re-issue can neither move a link nor flip it into or out of UPLOADER. An enabled share is
      * the owner's to re-issue (as revoke); a disabled one any member's, who owns the new share (as re-activation
-     * adopts). Every refusal writes nothing.
+     * adopts). A share is re-issued at most once: a deleted one — tombstoned by an earlier or a concurrent re-issue,
+     * or by a delete — is [ReissueShareOutcome.ShareDeleted] for a member of its scope and the 404 for anyone else;
+     * the store decides it again under the old row's lock. Every refusal writes nothing.
      */
     fun reissue(
         userId: String, shareId: String, newShareId: String, wrap: String?, sealedDropPublicKey: String?,
@@ -420,9 +425,10 @@ class SharingHandler(
         sealedShareName: String?, passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?,
         writeVerifier: String,
     ): ReissueShareOutcome {
-        val old = store.find(shareId) ?: return ReissueShareOutcome.NotFound
+        val old = store.findIncludingDeleted(shareId) ?: return ReissueShareOutcome.NotFound
         access.check(userId, old.scopeId, WRITE)
             .refusal(ReissueShareOutcome.NotFound, ReissueShareOutcome.Suspended, ReissueShareOutcome.Deleting)?.let { return it }
+        if (old.deletedAt != null) return ReissueShareOutcome.ShareDeleted
         if (old.enabled && old.ownerAccount != userId) return ReissueShareOutcome.NotFound
         if (!capabilities.isActive(capabilityFor(old.role))) return ReissueShareOutcome.CapabilityDisabled
         // No drop private key: the old UPLOADER share proves the Memory already holds one (it is set once and
@@ -437,6 +443,7 @@ class SharingHandler(
             SharingStore.ReissueResult.CREATED -> ReissueShareOutcome.Created(newShareId)
             SharingStore.ReissueResult.ID_TAKEN -> ReissueShareOutcome.IdTaken
             SharingStore.ReissueResult.NOT_FOUND -> ReissueShareOutcome.NotFound
+            SharingStore.ReissueResult.DELETED -> ReissueShareOutcome.ShareDeleted
         }
     }
 

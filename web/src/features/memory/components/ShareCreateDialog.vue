@@ -15,7 +15,7 @@ import SelectButton from 'primevue/selectbutton'
 import ToggleSwitch from 'primevue/toggleswitch'
 import DatePicker from 'primevue/datepicker'
 import LocaleMarkdownEditor from '../../../shared/ui/LocaleMarkdownEditor.vue'
-import { createShare, updateShare, reissueShare, readShareNoteMap, readShareName, readSharePassword, hasLocaleText, type LocaleMap, type ManagedShare } from '../share'
+import { createShare, updateShare, reissueShare, isShareDeleted, readShareNoteMap, readShareName, readSharePassword, hasLocaleText, type LocaleMap, type ManagedShare } from '../share'
 import { buildShareLink } from '../shareLink'
 import { ShareRole } from '../../../api/generated/sharing'
 import type { EpochKeys } from '../../spaces/epochs'
@@ -79,6 +79,9 @@ const expiryEnabled = ref(false)
 const expiresAt = ref<Date | null>(null)
 const minExpiry = new Date()
 const error = ref(false)
+// A renew lost to another renew or a delete (`409 share_deleted`, ADR 0075 point 1): nothing was minted, the list is
+// re-read behind the dialog, and a retry could only be refused again — so the submit stays off.
+const alreadyReplaced = ref(false)
 const link = ref('')
 const copied = ref(false)
 
@@ -152,11 +155,19 @@ const { run: runSubmit, pending: busy } = useAsyncAction(
       emit('saved')
     }
   },
-  { onError: () => { error.value = true } },
+  {
+    onError: async (e) => {
+      if (isReissue.value && (await isShareDeleted(e))) {
+        alreadyReplaced.value = true
+        emit('saved') // the parent re-reads the list: the link that won is there, the old one is gone
+      } else error.value = true
+    },
+  },
 )
 
 async function onSubmit() {
-  if (passwordTooShort.value) return // guarded (the button is also disabled) — never mint an under-length password
+  // Both guarded (the button is also disabled): never mint an under-length password, never retry a lost renew.
+  if (passwordTooShort.value || alreadyReplaced.value) return
   error.value = false
   await runSubmit()
 }
@@ -309,7 +320,8 @@ function endOfDay(d: Date): Date {
         </div>
       </div>
 
-      <p v-if="error" class="share-error">{{ isEdit ? t('share.noteSaveFailed') : isReissue ? t('share.reissueFailed') : t('share.createFailed') }}</p>
+      <p v-if="alreadyReplaced" class="share-error">{{ t('share.reissueAlreadyReplaced') }}</p>
+      <p v-else-if="error" class="share-error">{{ isEdit ? t('share.noteSaveFailed') : isReissue ? t('share.reissueFailed') : t('share.createFailed') }}</p>
       <div class="veyq-dialog-action-row">
         <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined :disabled="busy" @click="emit('close')" />
         <Button
@@ -318,7 +330,7 @@ function endOfDay(d: Date): Date {
             : (isEdit ? t('share.noteSave') : isReissue ? t('share.reissueSubmit') : t('share.create'))"
           :icon="isEdit ? 'pi pi-check' : isReissue ? 'pi pi-replay' : 'pi pi-link'"
           :loading="busy"
-          :disabled="busy || passwordTooShort"
+          :disabled="busy || passwordTooShort || alreadyReplaced"
           @click="onSubmit"
         />
       </div>

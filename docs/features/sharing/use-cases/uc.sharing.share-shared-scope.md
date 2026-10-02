@@ -70,7 +70,9 @@ create-gate (scope) and a member-removal hook are new.
   link `404`s exactly as a revoked one — no redirect, which would hand the new link to the person it is meant to cut
   off — can never come back, and the curator hands out the new one. Guests keep the photos they added; a returning guest names themself
   again on the new link and can no longer delete their earlier uploads (a guest's session is per link), and the new
-  link's storage budget starts at zero.
+  link's storage budget starts at zero. A link is renewed **at most once**: of two members renewing the same link at
+  the same moment, exactly one gets a new link; the other — like anyone renewing a link already renewed or deleted —
+  is told so (`409 share_deleted`, nothing made), and the panel re-reads the list, where the one new link is.
 - **A5 — turning off every link of a space sticks.** Three paths turn off every enabled share of a space — whoever
   made it — and **mark** every link of the space, one its owner had already switched off included, so each comes
   back only by renew (A4), never re-activate: a group removal's opt-in

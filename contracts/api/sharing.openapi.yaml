@@ -235,8 +235,11 @@ paths:
         An **enabled** share is re-issued only by its owner (as `revokeShare`); a **disabled** one by any current
         member of its scope, who owns the new share (as `reactivateShare` adopts). The old link then `404`s exactly
         as a revoked one does — no redirect, which would hand the new id to the person the re-issue is for — and,
-        deleted, it leaves the manage list and can never be re-activated, re-issued again or edited. Any refusal
-        writes nothing: the old link keeps its state and the new id stays free.
+        deleted, it leaves the manage list and can never be re-activated or edited. **A share is re-issued at most
+        once:** the re-issue locks the old row before it deletes it, so of two concurrent re-issues exactly one mints
+        a link, and the other — like any later re-issue of a deleted share — is `409 share_deleted`; the caller
+        re-reads the manage list, where the one new link already is. Any refusal writes nothing: the old link keeps
+        its state and the new id stays free.
       security:
         - bearerAuth: []
       parameters:
@@ -271,15 +274,18 @@ paths:
         "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: >
-            No such share, it was deleted, the caller is not a member of its scope, or the share is enabled and not
-            the caller's — one non-enumerable answer.
+            No such share, the caller is not a member of its scope, or the share is enabled and not the caller's —
+            one non-enumerable answer. A deleted share is `404` too, unless the caller is a member of its scope
+            (`409 share_deleted`).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
         "409":
           description: >
-            The new `shareId` is already taken (`id_taken`), the `sealedShareKeyEpoch` is not the scope's current
-            epoch (`stale_epoch` — re-open the scope key and re-seal, ADR 0024 Decision 6), or the space is being
-            deleted and read-only (`scope_deleting`). Nothing is written in any case.
+            The share is already deleted — re-issued once already, by a concurrent re-issue or an earlier one, or
+            deleted (`share_deleted`; re-read the manage list, ADR 0075 point 1) — the new `shareId` is already taken
+            (`id_taken`), the `sealedShareKeyEpoch` is not the scope's current epoch (`stale_epoch` — re-open the
+            scope key and re-seal, ADR 0024 Decision 6), or the space is being deleted and read-only
+            (`scope_deleting`). Nothing is written in any case.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } }
         "422":

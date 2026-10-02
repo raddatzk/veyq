@@ -998,6 +998,7 @@ const en = {
     reissueSubmit: 'Renew link',
     reissuing: 'Renewing…',
     reissueFailed: 'The link could not be renewed.',
+    reissueAlreadyReplaced: 'This link was already renewed or deleted — the list now shows the current links.',
     // ADR 0075: the server's verdict — made before someone left or replaced their keys, or switched off with every link
     reissueRequiredBadge: 'Needs renewing',
     reissueRequiredHint: 'Made before someone left this space or replaced their keys, or switched off with every link here — it may be in the wrong hands. Renew it to cut that off.',
@@ -2012,6 +2013,7 @@ const de: typeof en = {
     reissueSubmit: 'Link erneuern',
     reissuing: 'Wird erneuert…',
     reissueFailed: 'Der Link konnte nicht erneuert werden.',
+    reissueAlreadyReplaced: 'Dieser Link wurde bereits erneuert oder gelöscht — die Liste zeigt jetzt die aktuellen Links.',
     reissueRequiredBadge: 'Muss erneuert werden',
     reissueRequiredHint: 'Erstellt, bevor jemand diesen Bereich verlassen hat oder Schlüssel ersetzt wurden, oder mit allen Links hier abgeschaltet — er könnte in falschen Händen sein. Erneuere ihn, um diesen Zugang zu beenden.',
     disabled: 'Abgeschaltet',

@@ -122,14 +122,21 @@ class SharingStore(
      *  retired it when it erased the row. */
     private fun idTaken(id: String): Boolean = ShareEntity.findById(id) != null || ShareRetiredIdEntity.findById(id) != null
 
-    enum class ReissueResult { CREATED, ID_TAKEN, NOT_FOUND }
+    enum class ReissueResult { CREATED, ID_TAKEN, NOT_FOUND, DELETED }
 
     /** Re-issue [oldId] under the client-minted [newId] (ADR 0075): persist the new share — the old one's scope,
      *  node and role, everything else from the request — and delete the old one ([tombstone], ADR 0029 §7), in
-     *  **one** transaction: a replaced link has nothing left to come back for. `ID_TAKEN`, nothing written, when
-     *  [newId] was ever used. The id check comes first on purpose: a re-issue that deleted the old link and then
-     *  failed would leave the curator with no link at all, believing they had a new one. Never touches the Memory's
-     *  drop key — an UPLOADER re-issue seals to the one it already has. */
+     *  **one** transaction: a replaced link has nothing left to come back for.
+     *
+     *  A share is re-issued **at most once** (inbox #252), spent by a checked compare-and-set (developer-styleguide
+     *  §12): the first write is `deletedAt` set where it is still null, and its row count decides. Of two concurrent
+     *  re-issues the second's update waits on the first's row lock, then matches nothing — `DELETED`, nothing
+     *  written, exactly what a later re-issue of it gets. The old row is read only **after** the spend, under the
+     *  row lock that update holds, so a concurrent edit cannot slip a role change between the read and the
+     *  tombstone. `ID_TAKEN`, nothing written, when [newId] was ever used — checked before the spend on purpose: a
+     *  re-issue that deleted the old link and then failed would leave the curator with no link at all, believing
+     *  they had a new one. Never touches the Memory's drop key — an UPLOADER re-issue seals to the one it already
+     *  has. */
     @Transactional
     fun reissue(
         oldId: String, newId: String, ownerAccount: String, keys: ShareKeys, sealedName: String, expiresAt: Instant?,
@@ -137,7 +144,9 @@ class SharingStore(
         passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?, writeVerifier: String,
     ): ReissueResult {
         if (idTaken(newId)) return ReissueResult.ID_TAKEN
-        val old = liveForUpdate(oldId) ?: return ReissueResult.NOT_FOUND
+        val spent = ShareEntity.update("deletedAt = ?1 where id = ?2 and deletedAt is null", Instant.now(), oldId)
+        if (spent != 1) return if (ShareEntity.findById(oldId) == null) ReissueResult.NOT_FOUND else ReissueResult.DELETED
+        val old = ShareEntity.findById(oldId)!! // the spent row, read under the update's lock
         tombstone(old)
         persistShare(
             newId, ownerAccount, old.scopeId, old.nodeId, old.role, keys, sealedName, expiresAt, sealedNote, sealedShareKey,
@@ -215,9 +224,15 @@ class SharingStore(
      *  to the guest and to every curator operation alike. */
     fun find(shareId: String): ShareEntity? = ShareEntity.findById(shareId)?.takeIf { it.deletedAt == null }
 
-    /** [find] under a row lock, for every write to a share. A write loads the whole row and Hibernate writes every
-     *  column back, so without the lock an edit that read the row before a delete committed would put the deleted
-     *  ciphertext back; locked, it waits for the delete and then finds no share. */
+    /** A share row, a tombstone included — for the ONE reader that answers a deleted share differently from an
+     *  unknown one: a re-issue, whose member caller gets `share_deleted` and re-reads the list (inbox #252). Its
+     *  caller gates scope membership first, so a non-member still cannot tell the two apart. */
+    fun findIncludingDeleted(shareId: String): ShareEntity? = ShareEntity.findById(shareId)
+
+    /** [find] under a row lock, for every write to a share but [reissue], whose compare-and-set takes the same row
+     *  lock as its first write. A write loads the whole row and Hibernate writes every column back, so without the
+     *  lock an edit that read the row before a delete committed would put the deleted ciphertext back; locked, it
+     *  waits for the delete and then finds no share. */
     private fun liveForUpdate(shareId: String): ShareEntity? =
         ShareEntity.findById(shareId, LockModeType.PESSIMISTIC_WRITE)?.takeIf { it.deletedAt == null }
 
