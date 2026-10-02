@@ -69,7 +69,7 @@ media + sensitive metadata; **the share grain**) `→ K_blob` (per media blob). 
 - [uc.memory.cover](use-cases/uc.memory.cover.md) — **planned** (cr-0072): a deliberately chosen, cropped cover
   (`{ mediaId, crop }` on the same `wrappedMeta`), shown on the browse card, the detail header, the map pin and
   the sidebar's Favorites entry — one decrypt per Memory per scope, shared by all four
-- [uc.memory.concurrent-curation](use-cases/uc.memory.concurrent-curation.md) — **planned**
+- [uc.memory.concurrent-curation](use-cases/uc.memory.concurrent-curation.md) — **built**
   ([ADR 0077](../../decisions/0077-a-write-carries-the-version-it-read.md)): two members curate one Memory at once —
   every write of a sealed meta blob (a Memory's date/place/cover, a photo's date/place name/type) states the
   `metaVersion` it read, a stale one answers `409 stale_version` with the current blob, and the writer re-applies
