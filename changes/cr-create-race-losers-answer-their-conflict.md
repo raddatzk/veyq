@@ -33,7 +33,8 @@ invariants: [operator-blind E2EE everywhere]
    each site already has.
 3. **Upload-complete: spend the upload sessions first (CAS), or use D1 as well?** Upload-complete is not a pure
    create. It spends single-use upload sessions, which is exactly
-   [`cr-one-time-secrets-spend-by-compare-and-set`](cr-one-time-secrets-spend-by-compare-and-set.md)'s rule.
+   `cr-one-time-secrets-spend-by-compare-and-set`'s rule (landed 2026-10-02; the rule is
+   [developer-styleguide §12](../docs/crosscutting/developer-styleguide.md)).
    **Recommendation: the CAS (D2).** `attach` deletes its sessions first and branches on the count, so a loser
    writes nothing and throws nothing. That also takes the 500 out of a multi-item batch, where today the loser
    hides the items that had already committed.
