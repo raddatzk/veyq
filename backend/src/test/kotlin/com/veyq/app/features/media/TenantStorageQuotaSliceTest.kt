@@ -1,5 +1,6 @@
 package com.veyq.app.features.media
 
+import com.veyq.app.features.sharing.ShareWriteProof
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.shared.TestIds
 import com.veyq.app.shared.adminchannel.givenAdminChannel
@@ -332,12 +333,12 @@ class TenantStorageQuotaSliceTest {
     /** A CONTRIBUTOR link on Memory A, with one identity. */
     private fun link(f: Tenant): Link {
         val shareId = given().header("Authorization", bearer(f.userId)).contentType(ContentType.JSON)
-            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"${f.memoryA}","role":"CONTRIBUTOR","wrap":"d3JhcA==","sealedName":"c2VhbGVk"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"${f.memoryA}","role":"CONTRIBUTOR","wrap":"d3JhcA==","sealedName":"c2VhbGVk"}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path<String>("shareId")
         val token = given().contentType(ContentType.JSON)
             .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"c2VhbGVkLW5hbWU="}""")
-            .`when`().post("/api/shares/$shareId/identities")
+            .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(201).extract().path<String>("contributorToken")
         return Link(shareId, token)
     }

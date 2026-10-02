@@ -257,7 +257,7 @@ describe('createContributorIdentity (cr-0101)', () => {
     const kMem = v1.randomBytes(32)
 
     const shareId = ADDR.shareId
-    const session = await createContributorIdentity(shareId, SCOPE_ID, { kind: 'read', memoryKey: kMem }, 'Oma')
+    const session = await createContributorIdentity(shareId, SCOPE_ID, { kind: 'read', memoryKey: kMem }, 'Oma', b64url(v1.randomBytes(32)))
 
     const req = create.mock.calls[0][0].createShareIdentityRequest
     // the client mints the identity id (the name is bound to it) and the session carries exactly that id
@@ -271,6 +271,29 @@ describe('createContributorIdentity (cr-0101)', () => {
     const opened = new TextDecoder().decode(v1.open(ctx, kMem, fromB64std(req.sealedDisplayName)))
     expect(opened).toBe('Oma')
     expect(() => v1.open({ ...ctx, identityId: crypto.randomUUID() }, kMem, fromB64std(req.sealedDisplayName))).toThrow(v1.OpenRefused)
+  })
+
+  // ADR 0076: the share stores the hash of a token only the whole link derives — so its id alone names no guest.
+  it('proves the link key: the token it presents hashes to the verifier the share was created with, and only K_share derives it', async () => {
+    const createShareCall = vi.fn().mockResolvedValue({})
+    mockCurator(createShareCall)
+    const kMem = v1.randomBytes(32)
+    const minted = await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Rom')
+    const { writeVerifier } = createShareCall.mock.calls[0][0].createShareRequest
+    const nameGuest = vi.fn().mockResolvedValue({ identityId: 'ignored', contributorToken: 'tok-1' })
+    vi.mocked(publicSharesApi).mockReturnValue({ createShareIdentity: nameGuest } as unknown as ReturnType<typeof publicSharesApi>)
+    const presented = async (fragmentKey: string): Promise<string> => {
+      nameGuest.mockClear()
+      await createContributorIdentity(minted.shareId, SCOPE_ID, { kind: 'read', memoryKey: kMem }, 'Oma', fragmentKey)
+      return nameGuest.mock.calls[0][0].xShareWrite
+    }
+    const hashOf = (token: string) => b64std(v1.sha256Digest(fromB64std(token)))
+
+    const token = await presented(b64url(minted.kShare))
+    expect(hashOf(token)).toBe(writeVerifier) // what the server compares
+    expect(token).not.toBe(writeVerifier) // the share stores the hash, never the token
+    // the same id with another K_share is another proof: nothing about it follows from the id alone
+    expect(hashOf(await presented(b64url(v1.randomBytes(32))))).not.toBe(writeVerifier)
   })
 })
 
@@ -594,6 +617,8 @@ describe('reissueShare (ADR 0075, W1)', () => {
     expect(dec(v1.open({ purpose: 'share-name' }, minted.kShare, fromB64std(r.sealedShareName)))).toBe('For Grandma')
     expect(dec(v1.open({ purpose: 'share-password' }, minted.kShare, fromB64std(r.sealedPassword)))).toBe('correct horse battery')
     expect(r.pwVerifier).toBe(b64std(v1.sha256Digest(v1.sharesPwToken('correct horse battery', fromB64std(r.pwSalt)))))
+    // the write proof is the NEW link's: its key and its id (ADR 0076)
+    expect(r.writeVerifier).toBe(b64std(v1.sha256Digest(v1.shareWriteToken(minted.kShare, r.shareId))))
     // the recovery copy is at the write epoch, bound to the NEW share id
     expect(r.sealedShareKeyEpoch).toBe(EPOCHS.current)
     const ctx = { purpose: 'share-key-recovery', scopeId: SCOPE_ID, nodeId: NODE_ID, shareId: r.shareId, epoch: EPOCHS.current } as const

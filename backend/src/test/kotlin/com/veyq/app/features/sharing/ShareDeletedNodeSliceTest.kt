@@ -268,7 +268,7 @@ class ShareDeletedNodeSliceTest {
 
     private fun createShare(userId: String, nodeId: String, role: String = "VIEWER", extra: String = ""): String =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$nodeId","role":"$role",${shareKeysJson(role, nodeId, wrap)},"sealedName":"$sealedName"$extra}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"$role",${shareKeysJson(role, nodeId, wrap)},"sealedName":"$sealedName"$extra}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).body("shareId", notNullValue())
             .extract().path("shareId")
@@ -288,7 +288,7 @@ class ShareDeletedNodeSliceTest {
     private fun createIdentity(shareId: String): Pair<String, String> {
         val r = given().contentType(ContentType.JSON)
             .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$guestName"${identityKeyJson("UPLOADER")}}""")
-            .`when`().post("/api/shares/$shareId/identities")
+            .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(201).extract()
         return r.path<String>("identityId") to r.path<String>("contributorToken")
     }

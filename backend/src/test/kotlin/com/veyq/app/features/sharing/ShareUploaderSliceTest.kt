@@ -337,7 +337,7 @@ class ShareUploaderSliceTest {
 
         // a VIEWER share accepts neither an identity (upload) nor a delete
         given().contentType(ContentType.JSON).body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedUploaderName"}""")
-            .`when`().post("/api/shares/$shareId/identities")
+            .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(403).body("code", equalTo("share_not_contributable"))
         given().header("X-Contributor-Token", "notARealToken000000000000000000000000000000")
             .`when`().delete("/api/shares/$shareId/media/$mediaId")
@@ -351,12 +351,12 @@ class ShareUploaderSliceTest {
 
     private fun postShare(userId: String, nodeId: String, role: String, keys: String) =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$nodeId","role":"$role",$keys,"sealedName":"$sealedName"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"$role",$keys,"sealedName":"$sealedName"}""")
             .`when`().post("/api/shares")
 
     private fun postIdentity(shareId: String, key: String) =
         given().contentType(ContentType.JSON).body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedUploaderName"$key}""")
-            .`when`().post("/api/shares/$shareId/identities")
+            .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
 
     /** An identity on an UPLOADER share — with the wrapped key such an identity must hand over. */
     private fun createIdentity(shareId: String): String = createIdentityWithToken(shareId).first

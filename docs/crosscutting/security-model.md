@@ -229,6 +229,12 @@ server-blind tokens make this work without the server ever seeing content:
   ([uc.admin.suspend-tenant](../features/admin/use-cases/uc.admin.suspend-tenant.md)).
 - **Consequently:** private (unshared) content is **unscannable** by design; public shares are
   decryptable-on-report — notice-and-takedown works exactly where content is distributed.
+- **A link's id alone opens no write.** The share id is stored raw (members rebuild links from it, seals bind it,
+  every guest request path carries it), so a database copy or an access log holds every id. Naming yourself as a
+  guest — the one write the id used to open — presents a token derived from `K_share`, of which the share keeps only
+  the hash; without the fragment no guest is named and nothing is uploaded
+  ([ADR 0076](../decisions/0076-a-guest-write-proves-it-holds-the-links-key.md)). Reads by an id holder stay
+  possible and serve ciphertext only. A layer-1 control: the operator, being the server, could write anyway.
 - **Revocation is soft, and independent of scope rotation.** Disabling a share / expiry stops *new* access;
   already-downloaded content is not retractable. A scope key rotation (a member removal) does **not** revoke a
   share — a shared `K_mem` is wrapped independently of `K_SC` — so shares are revoked **separately** (a removed

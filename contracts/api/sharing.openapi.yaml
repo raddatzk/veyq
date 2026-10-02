@@ -45,7 +45,7 @@ paths:
         is rejected `422`, a non-member is a non-enumerable `404`. The **client** mints the 256-bit unguessable
         `shareId` ([ADR 0072](../../docs/decisions/0072-a-seal-binds-its-object.md) Decision 3 — the recovery wrap is sealed bound to it) and the server stores the record
         opaquely under it. The link is `/s/{shareId}#k=base64url(K_share)` — the fragment (`K_share`) is built
-        client-side and never sent. An id that already exists — in this scope or any other — is refused `id_taken` and nothing is overwritten; the answer is the same wherever the taken id lives, so it says nothing about another scope. An id is never minted twice: a deleted link's id (`deleteShare`) and the id of a link its space's erasure removed are refused `id_taken` as well — whoever holds a dead link's id and key could otherwise serve every other holder of that link their own Memory ([ADR 0029](../../docs/decisions/0029-public-viewer-share.md) §7). Not idempotent: a retry of a create whose response was lost answers `id_taken` too, and the client re-reads.
+        client-side and never sent; only `writeVerifier`, the hash of a token derived from it, is (ADR 0076). An id that already exists — in this scope or any other — is refused `id_taken` and nothing is overwritten; the answer is the same wherever the taken id lives, so it says nothing about another scope. An id is never minted twice: a deleted link's id (`deleteShare`) and the id of a link its space's erasure removed are refused `id_taken` as well — whoever holds a dead link's id and key could otherwise serve every other holder of that link their own Memory ([ADR 0029](../../docs/decisions/0029-public-viewer-share.md) §7). Not idempotent: a retry of a create whose response was lost answers `id_taken` too, and the client re-reads.
       security:
         - bearerAuth: []
       requestBody:
@@ -60,6 +60,7 @@ paths:
               wrap: d3JhcHBlZC1rLW1lbS11bmRlci1rLXNoYXJl
               sealedName: c2VhbGVkLW5hbWUtdW5kZXItay1zaGFyZQ==
               expiresAt: null
+              writeVerifier: FsNwNHCyCakLiKYUidaFcVAETZT9pNhFigWt85nrvSQ=
       responses:
         "201":
           description: The share was created.
@@ -251,6 +252,7 @@ paths:
               sealedName: c2VhbGVkLW5hbWUtdW5kZXItay1zaGFyZQ==
               sealedShareKey: cmVjb3ZlcmFibGUtc2hhcmUta2V5LXVuZGVyLWtzYw==
               sealedShareKeyEpoch: 1
+              writeVerifier: FsNwNHCyCakLiKYUidaFcVAETZT9pNhFigWt85nrvSQ=
       responses:
         "201":
           description: The new share exists and the old one is deleted.
@@ -494,9 +496,14 @@ paths:
         **Password-protected shares (cr-0164, ADR 0037):** the password gate fronts this write endpoint too —
         with **no** `X-Share-Password` the share is a non-enumerable `404`; a **wrong** token → `403
         share_password_incorrect`. A guest names themselves only after presenting the password.
+        **The key, not only the id (ADR 0076):** the request carries `X-Share-Write`, a token the client derives from
+        `K_share`; the server compares its SHA-256 with the share's `writeVerifier`, after the password gate and
+        before the role check. A missing, malformed or wrong token — and a share that holds no verifier — is the same
+        non-enumerable `404`, so a database copy or a leaked id without the fragment names no guest.
       parameters:
         - $ref: "#/components/parameters/ShareId"
         - $ref: "#/components/parameters/SharePassword"
+        - $ref: "#/components/parameters/ShareWrite"
       requestBody:
         required: true
         content:
@@ -519,7 +526,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_contributable } }
         "404":
-          description: No such share (disabled/expired/unknown, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4)), or it is password-protected and no `X-Share-Password` token was given (cr-0164) — non-enumerable, identical in every case.
+          description: No such share (disabled/expired/unknown, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4)), or it is password-protected and no `X-Share-Password` token was given (cr-0164), or the `X-Share-Write` proof is missing, malformed or wrong, or the share holds no `writeVerifier` (ADR 0076) — non-enumerable, identical in every case.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
         "409":
@@ -763,6 +770,19 @@ components:
         Omit for a share with no password; a locked resolve then returns only `passwordRequired` + `pwSalt` so the
         client can prompt and retry with this header.
       schema: { type: string, maxLength: 64, pattern: "^[A-Za-z0-9+/]*={0,2}$" }
+    ShareWrite:
+      name: X-Share-Write
+      x-veyq-visibility: token
+      in: header
+      required: false
+      description: >
+        The link's write proof `base64(HKDF(K_share, "veyq/v1/share-write:" + shareId))` ([ADR 0076](../../docs/decisions/0076-a-guest-write-proves-it-holds-the-links-key.md))
+        — derived from the fragment key, so only someone holding the whole link can present it. The server compares
+        its SHA-256 with the share's `writeVerifier`. Declared optional, as `X-Share-Password` is, so a request
+        without it gets the gate's non-enumerable `404` — one answer for every way of not holding the key. A value
+        outside the base64 alphabet is the boundary's `400` instead, answered before any lookup and so the same for
+        every id.
+      schema: { type: string, maxLength: 64, pattern: "^[A-Za-z0-9+/]*={0,2}$" }
 
   schemas:
     ShareRole:
@@ -785,7 +805,7 @@ components:
 
     CreateShareRequest:
       type: object
-      required: [shareId, nodeId, role, sealedName]
+      required: [shareId, nodeId, role, sealedName, writeVerifier]
       description: >
         The share's keys follow its role (ADR 0031 point 7). A VIEWER or CONTRIBUTOR share carries `wrap` and no
         drop key. An UPLOADER share carries **no** `wrap` — its guest never holds `K_mem` — and instead the
@@ -930,6 +950,17 @@ components:
           maxLength: 512
           example: c2VhbGVkLXBhc3N3b3Jk
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 512) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        writeVerifier:
+          type: string
+          description: >
+            `SHA-256(writeToken)` where `writeToken = HKDF(K_share, "veyq/v1/share-write:" + shareId)` (opaque base64) —
+            the proof a guest presents as `X-Share-Write` when naming themself (`createShareIdentity`), so the share id
+            alone names no guest ([ADR 0076](../../docs/decisions/0076-a-guest-write-proves-it-holds-the-links-key.md)).
+            Required for **every** role: a VIEWER link can be flipped to CONTRIBUTOR later, and its key never changes.
+          contentEncoding: base64
+          maxLength: 64
+          example: FsNwNHCyCakLiKYUidaFcVAETZT9pNhFigWt85nrvSQ=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     UpdateShareRequest:
       type: object
@@ -998,7 +1029,7 @@ components:
 
     ReissueShareRequest:
       type: object
-      required: [shareId, sealedName, sealedShareKey, sealedShareKeyEpoch]
+      required: [shareId, sealedName, sealedShareKey, sealedShareKeyEpoch, writeVerifier]
       description: >
         The new share of a re-issue (ADR 0075): `createShare`'s body without `nodeId` and `role` — both come from
         the old share — and without `sealedDropPrivateKey`, since an UPLOADER re-issue keeps the Memory's existing
@@ -1106,6 +1137,15 @@ components:
           maxLength: 512
           example: null
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 512) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        writeVerifier:
+          type: string
+          description: >
+            `SHA-256(writeToken)` for the **new** `K_share` and the new share id (opaque base64, ADR 0076) — as
+            `CreateShareRequest.writeVerifier`.
+          contentEncoding: base64
+          maxLength: 64
+          example: FsNwNHCyCakLiKYUidaFcVAETZT9pNhFigWt85nrvSQ=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     ShareCreated:
       type: object

@@ -83,7 +83,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('uploader share e2e (live, real crypto, t
     expect(heldBytes(resolved).some((b) => sameBytes(b, kMem)), 'the resolved session holds no Memory key').toBe(false)
 
     // --- anonymous: name yourself (under your own key) and upload through the share transport ----------------
-    const session = await createContributorIdentity(minted.shareId, resolved.scopeId, resolved.access, UPLOADER_NAME)
+    const session = await createContributorIdentity(minted.shareId, resolved.scopeId, resolved.access, UPLOADER_NAME, fragmentKey)
     const sealKey = sessionSealKey(session, resolved.access)
     expect(sealKey, 'the uploader session carries its own key').not.toBeNull()
     expect(sameBytes(sealKey!, kMem), 'and that key is not the Memory key').toBe(false)

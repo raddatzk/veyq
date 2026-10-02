@@ -25,14 +25,18 @@ exactly as a viewer does, then seals new media under it. **v1 is deliberately na
 1. **Create.** The curator opens one of their Memories → **Share** → chooses the **Contributor** role (instead of
    Viewer). The client mints `K_share` and a **256-bit `shareId`**, computes `symWrap(K_share, K_mem)`, re-seals
    the Memory name under `K_share`, and `POST`s the share record `{ shareId, nodeId, role: CONTRIBUTOR, wrap,
-   sealedName, expiresAt? }`. The server stores the record opaquely under that id.
+   sealedName, writeVerifier, expiresAt? }` — `writeVerifier` is the hash of a write token derived from `K_share`
+   ([ADR 0076](../../../decisions/0076-a-guest-write-proves-it-holds-the-links-key.md)). The server stores the record opaquely under that id.
 2. **Hand off.** The client shows the link **`/s/{shareId}#k=<base64url(K_share)>`** to copy. `K_share` rides the
    fragment — never sent. The curator passes it out-of-band.
 3. **Open + name yourself (anonymous).** A visitor opens the link. The client `GET`s `/api/shares/{shareId}` (**no
    auth**) → the record + the sealed subtree; because the `role` is CONTRIBUTOR, the client shows a **mandatory
    name pre-screen**. The visitor enters a display name; the client **seals it under `K_mem`** and creates an
    **anonymous share identity** under an `identityId` it mints (`POST /api/shares/{shareId}/identities
-   { identityId, sealedDisplayName }` → `{ identityId, contributorToken }`, held on device). The server stores
+   { identityId, sealedDisplayName }` → `{ identityId, contributorToken }`, held on device). The request proves the
+   visitor holds the whole link: `X-Share-Write` carries the token derived from the fragment key, and the server
+   checks its hash against the share's `writeVerifier` — the id alone, from a database copy or a log, names no guest
+   ([ADR 0076](../../../decisions/0076-a-guest-write-proves-it-holds-the-links-key.md)). The server stores
    only the ciphertext name + opaque ids, and serves the name back only to the Memory's members — never on a
    link's resolve, and the pre-screen says so ([ADR 0030](../../../decisions/0030-contributor-public-share.md)
    point 8).
@@ -58,13 +62,13 @@ sequenceDiagram
   participant O as Object store
   actor V as Anonymous<br>contributor
   C->>C: K_share = random#59; wrap = symWrap(K_share, K_mem)#59; sealName under K_share
-  C->>S: POST share { shareId (client-minted), nodeId, CONTRIBUTOR, wrap, sealedName }
+  C->>S: POST share { shareId (client-minted), nodeId, CONTRIBUTOR, wrap, sealedName, writeVerifier }
   S-->>C: shareId
   C->>V: hand off link /s/{shareId}#35;k=…   (fragment, never sent)
   V->>S: GET /api/shares/{shareId}   (no auth)
   S-->>V: record (role CONTRIBUTOR) + sealed subtree — no guest's name
   V->>V: K_mem = unwrap(wrap, K_share)#59; seal display name under K_mem
-  V->>S: POST /identities { identityId (client-minted), sealedDisplayName }
+  V->>S: POST /identities { identityId (client-minted), sealedDisplayName } + X-Share-Write (from K_share)
   S-->>V: identityId + contributorToken
   V->>V: seal photo under fresh K_blob (wrapped under K_mem) + derivatives + meta
   V->>S: POST /blob-uploads (token) → presigned PUTs
@@ -96,7 +100,9 @@ sequenceDiagram
   ([uc.sharing.share-link-storage-limit](uc.sharing.share-link-storage-limit.md)); too many uploads in a window are
   rate-limited (per-share, best-effort) — defense against an abusive link holder.
 - **E3 — link without the fragment key:** inert — without `K_share` nothing decrypts and nothing can be sealed
-  under `K_mem`, so neither viewing nor contributing is possible (both halves required).
+  under `K_mem`, so neither viewing nor contributing is possible (both halves required). The server enforces the
+  write half too: naming yourself without the key-derived proof is the link's non-enumerable `404`, and so is
+  naming yourself on a link minted before the proof existed, until a curator re-issues it.
 
 ## Quality notes
 

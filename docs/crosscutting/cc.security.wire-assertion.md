@@ -78,7 +78,7 @@ capability is never read as a leaked canary.
   backend call of the suite's HTTP recording to its contract operation and takes every value the `token` class
   ([ADR 0044](../decisions/0044-field-visibility-declared-at-the-field.md)) marks: body properties (walked through
   `$ref`s, so the scalar `InviteBootstrapSecret` counts), header parameters (`X-Contributor-Token`,
-  `X-Share-Password`), response headers — a `Set-Cookie` contributes its non-empty cookie values, which is the only
+  `X-Share-Password`, `X-Share-Write`), response headers — a `Set-Cookie` contributes its non-empty cookie values, which is the only
   way a web sign-in's refresh token ever crosses the wire — and the bearer of `Authorization`. The kind is the
   marked thing's name. A backend call no operation matches fails the suite: its tokens would be invisible.
   `validate_field_visibility.py` requires a marker on every declared header and scalar component, so a new token
@@ -165,7 +165,9 @@ Load-bearing, and repeated in the guard's own docstring rather than only here:
   measured one. A suite that drives either extends the set for free.
 - **The read/contributor share id is not a token, by decision.** It is stored raw as `veyq_share.id`, half the
   capability ([ADR 0029](../decisions/0029-public-viewer-share.md); the other half is the fragment key), and is
-  classified `id`; the token sweep does not look for it.
+  classified `id`; the token sweep does not look for it. What a guest write needs besides it is the key-derived
+  `X-Share-Write` proof ([ADR 0076](../decisions/0076-a-guest-write-proves-it-holds-the-links-key.md)), which is a
+  `token` and swept like one.
 - **A presigned URL is searched by its request target, not by its signature alone.** A server that logged the
   signature without the path in front of it would not be matched.
 - **The run's own artifacts carry the raw tokens.** Each `.e2e-out/<stamp>/http-*.jsonl` holds every token the suite

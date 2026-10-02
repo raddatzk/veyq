@@ -256,6 +256,7 @@ export async function createShare(
       sharesApi().createShare({
         createShareRequest: {
           shareId, nodeId, role, wrap, sealedName, expiresAt: expiresAt ?? undefined, sealedNote, sealedShareName, ...recovery,
+          writeVerifier: writeVerifierOf(kShare, shareId),
           passwordRequired: pw?.passwordRequired, pwSalt: pw?.pwSalt, pwVerifier: pw?.pwVerifier, sealedPassword: pw?.sealedPassword,
           sealedDropPublicKey: drop?.sealedDropPublicKey, sealedDropPrivateKey: drop?.sealedDropPrivateKey,
         },
@@ -284,6 +285,13 @@ export async function createShare(
       throw e
     }
   }
+}
+
+/** What the share stores of its write proof (ADR 0076): the hash of the token a guest derives from the link's key and
+ *  presents when naming themself. Every role carries it — a VIEWER link can become a CONTRIBUTOR one, and its key
+ *  never changes. */
+function writeVerifierOf(kShare: Uint8Array, shareId: string): string {
+  return b64std(v1.sha256Digest(v1.shareWriteToken(kShare, shareId)))
 }
 
 /** The recovery copy of [kShare] for the share at [address], sealed under the scope's write key at its current epoch
@@ -358,7 +366,7 @@ export async function reissueShare(
         shareId: old.shareId,
         reissueShareRequest: {
           shareId, wrap, sealedDropPublicKey, sealedName, sealedNote, sealedShareName,
-          expiresAt: settings.expiresAt ?? undefined, ...recovery,
+          expiresAt: settings.expiresAt ?? undefined, ...recovery, writeVerifier: writeVerifierOf(kShare, shareId),
           passwordRequired: pw?.passwordRequired, pwSalt: pw?.pwSalt, pwVerifier: pw?.pwVerifier, sealedPassword: pw?.sealedPassword,
         },
       }),
@@ -531,12 +539,16 @@ export type ContributorSession = { identityId: string; contributorToken: string;
  * `K_up`, seals the name under it and hands `K_up` over wrapped to the Memory's drop public key. Returns the
  * identity id + a capability token that authorizes this session's uploads (+ `K_up`). The server never sees the
  * name (only the ciphertext), the key, or the person.
+ *
+ * The request proves the guest holds the whole link, not only its id (ADR 0076): `X-Share-Write` carries the token
+ * derived from [fragmentKey] (the link's `#k=`), whose hash the share stores.
  */
 export async function createContributorIdentity(
   shareId: string,
   scopeId: string,
   access: ShareAccess,
   displayName: string,
+  fragmentKey: string,
   pwToken?: string,
 ): Promise<ContributorSession> {
   const identityId = crypto.randomUUID() // client-minted: the name and the key wrap are sealed bound to it (ADR 0072)
@@ -548,6 +560,7 @@ export async function createContributorIdentity(
     shareId,
     createShareIdentityRequest: { identityId, sealedDisplayName, wrappedIdentityKey: minted?.wrappedIdentityKey },
     xSharePassword: pwToken, // cr-0164: the password gate fronts the write path too
+    xShareWrite: b64std(v1.shareWriteToken(fromB64url(fragmentKey), shareId)),
   })
   return minted
     ? { identityId, contributorToken, uploaderKey: b64std(minted.uploaderKey) }

@@ -640,7 +640,7 @@ class ShareSharedScopeSliceTest {
         userId: String, nodeId: String, id: String, copyEpoch: Int? = null, role: String = "VIEWER", keys: String = """"wrap":"$wrap"""",
     ) = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
         .body(
-            """{"shareId":"$id","nodeId":"$nodeId","role":"$role",$keys,"sealedName":"$sealedName"""" +
+            """{"shareId":"$id",${ShareWriteProof.field(id)},"nodeId":"$nodeId","role":"$role",$keys,"sealedName":"$sealedName"""" +
                 (copyEpoch?.let { ""","sealedShareKey":"$shareKey","sealedShareKeyEpoch":$it""" } ?: "") + "}",
         )
         .`when`().post("/api/shares")
@@ -651,7 +651,7 @@ class ShareSharedScopeSliceTest {
     /** `POST /api/shares/{shareId}/reissue` under [newId], the recovery copy at [epoch] (ADR 0075). */
     private fun reissue(userId: String, shareId: String, epoch: Int, newId: String = TestIds.shareId(), keys: String = """"wrap":"$newWrap"""") =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"shareId":"$newId",$keys,"sealedName":"$sealedName","sealedShareKey":"$shareKey","sealedShareKeyEpoch":$epoch}""")
+            .body("""{"shareId":"$newId",${ShareWriteProof.field(newId)},$keys,"sealedName":"$sealedName","sealedShareKey":"$shareKey","sealedShareKeyEpoch":$epoch}""")
             .`when`().post("/api/shares/$shareId/reissue")
 
     private fun resolves(shareId: String, status: Int) = given().`when`().get("/api/shares/$shareId").then().statusCode(status)

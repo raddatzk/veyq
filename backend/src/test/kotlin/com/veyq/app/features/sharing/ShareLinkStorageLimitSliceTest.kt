@@ -238,14 +238,14 @@ class ShareLinkStorageLimitSliceTest {
     private fun link(f: Link, shareId: String, role: String): Link {
         val token = given().contentType(ContentType.JSON)
             .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"c2VhbGVkLW5hbWU="${identityKeyJson(role)}}""")
-            .`when`().post("/api/shares/$shareId/identities")
+            .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(201).extract().path<String>("contributorToken")
         return f.copy(shareId = shareId, token = token)
     }
 
     private fun createShare(f: Link, role: String): String =
         given().header("Authorization", bearer(f.ownerId)).contentType(ContentType.JSON)
-            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"${f.memory}","role":"$role",${shareKeysJson(role, f.memory)},"sealedName":"c2VhbGVk"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"${f.memory}","role":"$role",${shareKeysJson(role, f.memory)},"sealedName":"c2VhbGVk"}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path("shareId")
 

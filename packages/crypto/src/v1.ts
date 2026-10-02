@@ -88,6 +88,16 @@ export function slugToken(contentKey: Uint8Array, parentSlot: string, slug: stri
 }
 
 /**
+ * Share write token (ADR 0076): proof that a guest naming themself on a link holds the link's key, not only its
+ * id. writeToken = HKDF(K_share, "veyq/v1/share-write:" + shareId) — a label of its own, so it opens no seal and
+ * says nothing about `K_share`, and the share id in the info binds it to its link (ADR 0072). The share stores
+ * only `sha256Digest(writeToken)`; a database copy holds that hash, never the token.
+ */
+export function shareWriteToken(kShare: Uint8Array, shareId: string): Uint8Array {
+  return hkdf(sha256, kShare, new Uint8Array(0), utf8('veyq/v1/share-write:' + shareId), 32)
+}
+
+/**
  * Media dedup token (AD-09): a per-scope, keyed token of the plaintext so the blind server can deduplicate
  * identical media among members WITHOUT a confirmation-of-file attack (it can't compute tokens — the key is
  * client-held). dedupKey = HKDF(contentKey, "veyq/v1/media-dedup"); token = HMAC-SHA256(dedupKey, SHA256(content)).

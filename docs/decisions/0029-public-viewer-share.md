@@ -32,6 +32,9 @@ Adopt a **public viewer share** as a standalone, operator-blind resource address
 2. **The link.** `/s/{shareId}#k=<base64url(K_share)>` — `K_share` lives in the **fragment**
    ([ADR 0015](0015-operator-blind-readable-urls.md)) and is never transmitted. Access needs **both** the id (from
    the path, seen by the server) **and** the key (from the fragment, not seen) — one without the other is inert.
+   For a guest **write** the server checks the second half too: naming yourself on a link presents a token
+   derived from `K_share`, of which the share stores only the hash
+   ([ADR 0076](0076-a-guest-write-proves-it-holds-the-links-key.md)).
 
 3. **Anonymous resolve.** `GET /api/shares/{shareId}` is **unauthenticated** and returns the record **plus the
    sealed subtree** (nodes + media metadata under `nodeId`, all still sealed under `K_mem`). The viewer unwraps
@@ -77,7 +80,8 @@ Adopt a **public viewer share** as a standalone, operator-blind resource address
    member's shares (§6), and a re-activation flips `enabled` back on (transferring ownership).
 
    **Deleting a link is a tombstone, not a row delete.** The row keeps its id, scope, node, role and dates; every
-   ciphertext column — wrap, drop public key, sealed name, note, label, recovery copy, password fields — and its
+   ciphertext column — wrap, drop public key, sealed name, note, label, recovery copy, password fields, write
+   verifier — and its
    expiry are cleared and `deleted_at` is set. A tombstone `404`s like a revoked link, cannot be re-activated,
    edited or re-issued, and is in no listing. The row stays because the link's guest identities hang off it by
    foreign key, and an UPLOADER identity's wrapped key is the only way members open that guest's uploads

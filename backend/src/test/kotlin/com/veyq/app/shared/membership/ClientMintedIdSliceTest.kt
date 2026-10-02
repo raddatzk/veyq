@@ -1,5 +1,6 @@
 package com.veyq.app.shared.membership
 
+import com.veyq.app.features.sharing.ShareWriteProof
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.media.BlobEntity
 import com.veyq.app.features.media.BucketEntity
@@ -143,7 +144,7 @@ class ClientMintedIdSliceTest {
     // ── createShare + createShareIdentity ────────────────────────────────────────────────────────────────────
 
     private fun shareBody(shareId: String, nodeId: String, role: String = "VIEWER") =
-        """{"shareId":"$shareId","nodeId":"$nodeId","role":"$role","wrap":"bmV3","sealedName":"bmV3"}"""
+        """{"shareId":"$shareId",${ShareWriteProof.field(shareId)},"nodeId":"$nodeId","role":"$role","wrap":"bmV3","sealedName":"bmV3"}"""
 
     @Test
     fun createShareRefusesAnIdTakenInAnotherScope() {
@@ -173,11 +174,11 @@ class ClientMintedIdSliceTest {
             .then().statusCode(201)
         val taken = TestIds.uuid()
         given().contentType(ContentType.JSON).body("""{"identityId":"$taken","sealedDisplayName":"$B64"}""")
-            .`when`().post("/api/shares/$controlShare/identities")
+            .header(ShareWriteProof.HEADER, ShareWriteProof.token(controlShare)).`when`().post("/api/shares/$controlShare/identities")
             .then().statusCode(201).body("identityId", equalTo(taken))
 
         given().contentType(ContentType.JSON).body("""{"identityId":"$taken","sealedDisplayName":"bmV3"}""")
-            .`when`().post("/api/shares/$liveShare/identities")
+            .header(ShareWriteProof.HEADER, ShareWriteProof.token(liveShare)).`when`().post("/api/shares/$liveShare/identities")
             .then().statusCode(409).body("code", equalTo("id_taken"))
         read {
             val i = ShareIdentityEntity.findById(taken)!!
@@ -187,7 +188,7 @@ class ClientMintedIdSliceTest {
 
         val fresh = TestIds.uuid()
         given().contentType(ContentType.JSON).body("""{"identityId":"$fresh","sealedDisplayName":"bmV3"}""")
-            .`when`().post("/api/shares/$liveShare/identities")
+            .header(ShareWriteProof.HEADER, ShareWriteProof.token(liveShare)).`when`().post("/api/shares/$liveShare/identities")
             .then().statusCode(201).body("identityId", equalTo(fresh))
     }
 

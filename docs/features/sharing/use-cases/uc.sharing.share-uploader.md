@@ -25,7 +25,8 @@ client-local** own-view. **v1: role UPLOADER, personal scope, direct-append.**
    mints `K_share`, re-seals the name, and seals the Memory's **drop public key** under `K_share` — **no wrap of
    `K_mem`** ([ADR 0031](../../../decisions/0031-uploader-public-share.md) point 7). The Memory's first UPLOADER
    share mints the drop keypair and brings its private half sealed under `K_mem`, which the server sets on the
-   Memory once. It `POST`s `{ shareId, nodeId, role: UPLOADER, sealedDropPublicKey, sealedDropPrivateKey?, sealedName }`.
+   Memory once. It `POST`s `{ shareId, nodeId, role: UPLOADER, sealedDropPublicKey, sealedDropPrivateKey?, sealedName,
+   writeVerifier }` — the hash of a write token derived from `K_share` ([ADR 0076](../../../decisions/0076-a-guest-write-proves-it-holds-the-links-key.md)).
 2. **Hand off.** The client shows the link `/s/{shareId}#k=<base64url(K_share)>` to copy.
 3. **Open + name yourself (anonymous).** The visitor opens the link; the client `GET`s `/api/shares/{shareId}`
    (**no auth**) → `{ role: UPLOADER, sealedDropPublicKey, nodeId, sealedName, media: [] }` (**no gallery** and
@@ -33,7 +34,8 @@ client-local** own-view. **v1: role UPLOADER, personal scope, direct-append.**
    UPLOADER, the client shows a **mandatory name pre-screen** with a **clear note that uploads are visible only in
    this browser tab**; the visitor names themselves → the client mints the identity's own key `K_up`, seals the
    name under it, and creates an anonymous **share identity** carrying `K_up` wrapped to the drop public key, plus
-   a `contributorToken`.
+   a `contributorToken`. The request carries `X-Share-Write`, the token derived from the fragment key, whose hash the
+   server checks against the share's `writeVerifier`: the id alone names no guest ([ADR 0076](../../../decisions/0076-a-guest-write-proves-it-holds-the-links-key.md)).
 4. **Add photos.** The uploader picks images — through the **same picker** the curator's own gallery uses, so
    [uc.memory.upload](../../memory/use-cases/uc.memory.upload.md) § E3 (Safari's Photos gallery populates
    `input.files` late) holds here unchanged. Each is sealed under `K_up` and uploaded via the **share-scoped**
@@ -60,7 +62,7 @@ sequenceDiagram
   V->>S: GET /api/shares/{shareId}   (no auth)
   S-->>V: { role: UPLOADER, sealedDropPublicKey, sealedName, media: [] }   ← no gallery, no K_mem
   V->>V: drop public key = open(K_share)#59; mint K_up#59; seal name under K_up#59; keep ids + LOCAL previews
-  V->>S: POST /identities { K_up wrapped to the drop key } → identityId + contributorToken
+  V->>S: POST /identities { K_up wrapped to the drop key } + X-Share-Write → identityId + contributorToken
   V->>S: POST /blob-uploads (token) → presigned PUTs
   V->>O: PUT ciphertext chunks (direct)   [never a download]
   V->>S: POST /media (token) → attach to nodeId, stamp identityId

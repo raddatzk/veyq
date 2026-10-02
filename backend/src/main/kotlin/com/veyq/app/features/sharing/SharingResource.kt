@@ -87,6 +87,7 @@ class SharingResource(
             pwSalt = createShareRequest.pwSalt,
             pwVerifier = createShareRequest.pwVerifier,
             sealedPassword = createShareRequest.sealedPassword, // cr-0118: management-only reveal copy
+            writeVerifier = createShareRequest.writeVerifier, // ADR 0076: the hash of the link's key-derived write proof
         )) {
             is CreateShareOutcome.Created -> Response.status(Response.Status.CREATED)
                 .entity(ShareCreated(shareId = o.shareId)).build()
@@ -164,6 +165,7 @@ class SharingResource(
             pwSalt = reissueShareRequest.pwSalt,
             pwVerifier = reissueShareRequest.pwVerifier,
             sealedPassword = reissueShareRequest.sealedPassword,
+            writeVerifier = reissueShareRequest.writeVerifier, // the new K_share's proof (ADR 0076)
         )) {
             is ReissueShareOutcome.Created -> Response.status(Response.Status.CREATED)
                 .entity(ShareCreated(shareId = o.shareId)).build()
@@ -298,9 +300,11 @@ class SharingResource(
     // The one guest call that writes a row before any upload exists, so an unbounded link holder could grow the
     // identity table on its own. Bounded per share in the handler (ShareRateLimiter.allowIdentity).
     @RateLimit(key = RateLimitKey.SHARE)
-    override fun createShareIdentity(shareId: String, createShareIdentityRequest: CreateShareIdentityRequest, xSharePassword: String?): Response =
+    override fun createShareIdentity(
+        shareId: String, createShareIdentityRequest: CreateShareIdentityRequest, xSharePassword: String?, xShareWrite: String?,
+    ): Response =
         when (val o = handler.createIdentity(
-            shareId, xSharePassword, createShareIdentityRequest.identityId.toString(), createShareIdentityRequest.sealedDisplayName,
+            shareId, xSharePassword, xShareWrite, createShareIdentityRequest.identityId.toString(), createShareIdentityRequest.sealedDisplayName,
             createShareIdentityRequest.wrappedIdentityKey,
         )) {
             is CreateIdentityOutcome.Created -> Response.status(Response.Status.CREATED)

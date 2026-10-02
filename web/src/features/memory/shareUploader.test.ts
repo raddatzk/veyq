@@ -92,7 +92,7 @@ const noTiers = { deriveImage: vi.fn(), deriveVideoPoster: vi.fn() } as unknown 
 /** The guest names itself and uploads [PHOTO]; returns what crossed the wire. */
 async function guestUploads(kShare: Uint8Array, api: ReturnType<typeof guestApi>) {
   const resolved = await resolveShare(UPLOADER_SHARE, b64url(kShare))
-  const session = await createContributorIdentity(UPLOADER_SHARE, resolved.scopeId, resolved.access, 'Gast')
+  const session = await createContributorIdentity(UPLOADER_SHARE, resolved.scopeId, resolved.access, 'Gast', b64url(kShare))
   const sealKey = sessionSealKey(session, resolved.access)!
   await addSharePhoto(
     { ...session, shareId: UPLOADER_SHARE, scopeId: resolved.scopeId, sealKey },

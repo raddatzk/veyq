@@ -98,7 +98,7 @@ class SharingStore(
         id: String, ownerAccount: String, scopeId: String, nodeId: String, role: String,
         keys: ShareKeys, sealedName: String, expiresAt: Instant?, sealedNote: String?, sealedShareKey: String?,
         sealedShareKeyEpoch: Int?, sealedShareName: String?,
-        passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?,
+        passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?, writeVerifier: String,
     ): CreateResult {
         if (idTaken(id)) return CreateResult.ID_TAKEN
         if (keys is ShareKeys.Drop) {
@@ -113,7 +113,7 @@ class SharingStore(
         }
         persistShare(
             id, ownerAccount, scopeId, nodeId, role, keys, sealedName, expiresAt, sealedNote, sealedShareKey,
-            sealedShareKeyEpoch, sealedShareName, passwordRequired, pwSalt, pwVerifier, sealedPassword,
+            sealedShareKeyEpoch, sealedShareName, passwordRequired, pwSalt, pwVerifier, sealedPassword, writeVerifier,
         )
         return CreateResult.CREATED
     }
@@ -134,14 +134,14 @@ class SharingStore(
     fun reissue(
         oldId: String, newId: String, ownerAccount: String, keys: ShareKeys, sealedName: String, expiresAt: Instant?,
         sealedNote: String?, sealedShareKey: String, sealedShareKeyEpoch: Int, sealedShareName: String?,
-        passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?,
+        passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?, writeVerifier: String,
     ): ReissueResult {
         if (idTaken(newId)) return ReissueResult.ID_TAKEN
         val old = liveForUpdate(oldId) ?: return ReissueResult.NOT_FOUND
         tombstone(old)
         persistShare(
             newId, ownerAccount, old.scopeId, old.nodeId, old.role, keys, sealedName, expiresAt, sealedNote, sealedShareKey,
-            sealedShareKeyEpoch, sealedShareName, passwordRequired, pwSalt, pwVerifier, sealedPassword,
+            sealedShareKeyEpoch, sealedShareName, passwordRequired, pwSalt, pwVerifier, sealedPassword, writeVerifier,
         )
         return ReissueResult.CREATED
     }
@@ -150,7 +150,7 @@ class SharingStore(
         id: String, ownerAccount: String, scopeId: String, nodeId: String, role: String,
         keys: ShareKeys, sealedName: String, expiresAt: Instant?, sealedNote: String?, sealedShareKey: String?,
         sealedShareKeyEpoch: Int?, sealedShareName: String?,
-        passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?,
+        passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?, writeVerifier: String,
     ) {
         ShareEntity().apply {
             this.id = id
@@ -171,6 +171,7 @@ class SharingStore(
             this.pwSalt = pwSalt
             this.pwVerifier = pwVerifier
             this.sealedPassword = sealedPassword
+            this.writeVerifier = writeVerifier // ADR 0076: for every role — a VIEWER link can become a CONTRIBUTOR one
             // ADR 0075 point 4: the removals this scope has seen so far — a later removal leaves the share below it.
             // Read in this transaction: a removal that commits concurrently is either counted here or makes the
             // share look older than it is, never younger.
@@ -279,6 +280,7 @@ class SharingStore(
         share.pwSalt = null
         share.pwVerifier = null
         share.sealedPassword = null
+        share.writeVerifier = null
         share.expiresAt = null
         dropDeadIdentities(ShareIdentityEntity.find("shareId", share.id).list().map { it.id })
     }

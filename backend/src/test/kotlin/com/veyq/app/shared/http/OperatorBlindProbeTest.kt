@@ -1,8 +1,8 @@
 package com.veyq.app.shared.http
 
+import com.veyq.app.features.sharing.ShareWriteProof
 import com.veyq.app.shared.membership.TestAdmission
 import com.veyq.app.features.media.TestBlob
-import com.veyq.app.shared.TestIds
 import com.veyq.app.shared.crypto.Tokens
 import com.veyq.app.shared.membership.ScopeAccessWorld
 import com.veyq.app.shared.membership.ScopeAccessWorld.Companion.B64
@@ -155,7 +155,7 @@ class OperatorBlindProbeTest {
         },
         // --- sharing (curation) ---
         "createShare" to Probe(Address.NODE) { s ->
-            Call("POST", "/api/shares", """{"shareId":"${TestIds.shareId()}","nodeId":"${s.nodeId}","role":"VIEWER","wrap":"$B64","sealedName":"$B64"}""")
+            Call("POST", "/api/shares", """{${ShareWriteProof.newShare()},"nodeId":"${s.nodeId}","role":"VIEWER","wrap":"$B64","sealedName":"$B64"}""")
         },
         // With `nodeId` only; without it the listing is account-addressed and filters instead of refusing
         // (ScopeAccessSliceTest). A non-member gets `[]`, so every answer is told apart by its rows.
@@ -169,7 +169,7 @@ class OperatorBlindProbeTest {
         "reissueShare" to Probe(Address.SHARE) { s ->
             Call(
                 "POST", "/api/shares/${s.shareId}/reissue",
-                """{"shareId":"${TestIds.shareId()}","wrap":"$B64","sealedName":"$B64","sealedShareKey":"$B64","sealedShareKeyEpoch":0}""",
+                """{${ShareWriteProof.newShare()},"wrap":"$B64","sealedName":"$B64","sealedShareKey":"$B64","sealedShareKeyEpoch":0}""",
             )
         },
         // --- tasks ---
