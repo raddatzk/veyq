@@ -9,6 +9,8 @@ invariants: [operator-blind E2EE everywhere]
 
 ## Open for the owner
 
+**Answered by the owner, 2026-10-03: every recommendation below is taken (Q1–Q7), and implementation has the go.**
+
 1. **Which entities get a version check?** The inbox row asked about every editable entity. Inventory rows 1–16
    sort them by two questions: can more than one account write the row, and does the write re-send something
    the editor did not edit?
