@@ -147,6 +147,11 @@ class OperatorBlindProbeTest {
         "renameGroup" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/name", """{"encryptedName":"$B64","nameEpoch":0}""") },
         "setScopeIcon" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/icon", """{"sealedIcon":"$B64","iconEpoch":0}""") },
         "clearScopeIcon" to Probe(Address.SCOPE) { s -> Call("DELETE", "/api/scopes/${s.scopeId}/icon") },
+        // The control's live group carries no compromise rotation, so it answers `409 rotation_not_failed` — past the gate.
+        "requeueScopeRotation" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/rotation/requeue") },
+        // An account-rotation route that names a scope: the control's owner never rotated, so `404 rotation_not_found`
+        // — a code of its own, answered past the gate, never the gate's `scope_not_found`.
+        "requeueRotationScope" to Probe(Address.SCOPE) { s -> Call("POST", "/api/account/rotation/scopes/${s.scopeId}/requeue") },
         // Host-resolved: the Host names the tenant, so its root is what the gate checks. The suspended persona
         // cannot reach the gate here — the tenant's own domain is refused by TenantSuspensionFilter first.
         "createPersonalScope" to Probe(Address.HOST) { s -> Call("POST", "/api/scopes", """{"scopeId":"${UUID.randomUUID()}","wrappedGrant":"$B64",${TestAdmission.SIGNATURE_JSON}}""", host = s.domain) },
@@ -232,7 +237,7 @@ class OperatorBlindProbeTest {
             "getAccountKeyMaterial", "addAccountWrap", "deleteAccountWrap", "getIdentityPins", "putIdentityPins",
             "getDeviceRegister", "putDeviceRegister", "rotateAccountKeys", "changePassword", "listSessionFamilies",
             "revokeOtherSessionFamilies", "revokeSessionFamily", "delegatePairingSession", "sealPairingChannel",
-            "clearDeclinesForAcceptedKey", "getAccountEmail", "confirmEmail",
+            "clearDeclinesForAcceptedKey", "getAccountEmail", "confirmEmail", "listRotationScopeStates",
         )
         reason(
             "Host-resolved and self-scoped: reads or writes only the caller's own rows on the Host's own tenant, so " +

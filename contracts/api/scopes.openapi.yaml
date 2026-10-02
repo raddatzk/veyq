@@ -517,8 +517,16 @@ paths:
         granted-epoch). Any other `epoch` means the rotation was built on a superseded epoch — it lost a race, or the
         caller's grant lags the scope — and is `409 stale_epoch` with nothing stored; the client re-opens its grant
         and rebuilds once from a **fresh** key. The client mints the new epoch on-device; the server stores only
-        ciphertext. Owner-gated (`403`). Grants for members not listed here are delivered afterwards by
+        ciphertext. Owner-gated (`403 not_scope_owner`). Grants for members not listed here are delivered afterwards by
         grant-delivery (stale-epoch reconcile, ADR 0020/0021).
+
+        **The caller must be a current key-holder who is not excluded** (ADR 0060 Decision 4). After the owner
+        check, under the scope's row lock: a caller whose account rotation queued a still-live rotation job of
+        this scope (the job carries their exclusion) is refused `403 rotation_excluded`, and a caller whose own
+        grant is behind the scope's current epoch, or absent, is refused `409 stale_epoch` — the server does not
+        take the client's word for the grant it built the chain-link from. Nothing is stored on either refusal. A
+        commit that lands also marks every `scope-rotation` job of the scope leased to the caller as rotated, which
+        is what lets that job complete.
 
         **A removal-rotation** names the member it removes (`removesUserId`, ADR 0024 Decision 4): the server
         deletes that membership — with its item favorites and the public shares it created in the group — and
@@ -555,10 +563,41 @@ paths:
               example: { epoch: 1 }
         "400": { description: "Malformed (missing/invalid link or grant), or `revokeLinks` without `removesUserId`.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } } } }
         "401": { description: Generic authentication failure., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } } } }
-        "403": { description: "The caller is a member of the group but not its OWNER (`not_scope_owner`), or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
+        "403": { description: "The caller is a member of the group but not its OWNER (`not_scope_owner`), an account rotation of the caller queued a rotation of this scope that is still live and excludes them (`rotation_excluded`, nothing stored, ADR 0060 Decision 4), or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
         "404": { description: "No such scope — or the caller is not a member of it (indistinguishable, ADR 0042); or `removesUserId` names no member of the group (`member_not_found`, nothing stored).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } } } }
-        "409": { description: "The stated `epoch` is not the scope's current epoch + 1 (the rotation was built on a superseded epoch — `stale_epoch`, nothing stored, re-open + rebuild from a fresh key), the rotation leaves an open admission of the scope neither re-tagged nor dropped (`admissions_incomplete`, nothing stored — re-read the directory and rebuild), `removesUserId` is the last remaining OWNER (`last_owner`, nothing stored), or the group is being deleted and read-only (`scope_deleting`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } } } }
+        "409": { description: "The stated `epoch` is not the scope's current epoch + 1, or the caller's own grant is behind the scope's current epoch or absent (the rotation was, or would be, built on a superseded epoch — `stale_epoch`, nothing stored, re-open + rebuild from a fresh key), the rotation leaves an open admission of the scope neither re-tagged nor dropped (`admissions_incomplete`, nothing stored — re-read the directory and rebuild), `removesUserId` is the last remaining OWNER (`last_owner`, nothing stored), or the group is being deleted and read-only (`scope_deleting`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } } } }
         "422": { description: "The grants name the member `removesUserId` removes (`removed_member_granted`, nothing stored) — the new epoch is never wrapped to the member the rotation removes.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: removed_member_granted } } } }
+
+  /api/scopes/{scopeId}/rotation/requeue:
+    post:
+      tags: [scopes]
+      operationId: requeueScopeRotation
+      summary: An owner queues a dead-lettered compromise rotation of the scope again.
+      description: >
+        When the scope's row reads `compromiseRotation: failed` — a rotation that a member's account rotation
+        queued has dead-lettered, so the old identity still holds the scope's current epoch — an **owner**
+        originates it again (uc.spaces.complete-queued-rotation E8). Under the scope's row lock, for every rotated
+        account whose state on this scope is `failed`, the rotation is originated excluding that account, exactly
+        as their rotation did: it joins the scope's unclaimed rotation job or creates one, and that account is
+        excluded from every live rotation job of the scope. The caller is **not** excluded (unless they are one of
+        those accounts), so their own worker can claim it at once. Answers the row's new value (`null` or
+        `stalled`). Membership is the first gate (ADR 0042), then ownership; any state other than `failed` is
+        `409 rotation_not_failed`. Nothing is written on any refusal.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: scopeId, in: path, required: true, description: Opaque id of the scope., schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Queued again; the row's value now.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScopeRotationRequeued" }
+              example: {}
+        "401": { description: Generic authentication failure., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } } } }
+        "403": { description: "The caller is a member of the scope but not its OWNER (`not_scope_owner`), or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
+        "404": { description: "No such scope — or the caller is not a member of it (indistinguishable, ADR 0042).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } } } }
+        "409": { description: "The scope's compromise rotation is not `failed` (`rotation_not_failed` — nothing to queue again), or the scope is being deleted (`scope_deleting`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: rotation_not_failed } } } }
 
   /api/scopes/{scopeId}:
     delete:
@@ -882,6 +921,26 @@ components:
       description: The opaque access token issued by login / refresh. Any authenticated caller (enforced by code, not this spec).
 
   schemas:
+    CompromiseRotation:
+      x-veyq-visibility: enum
+      type: string
+      description: >
+        **Owner-only**: absent unless the caller is an `OWNER` of the scope and a rotation that a member's account
+        rotation queued on it needs an owner (uc.spaces.complete-queued-rotation). `stalled` — no owner both holds
+        the scope's grant and has not declined the job (promote a co-owner); `failed` — the job dead-lettered, so
+        the old identity still holds the scope's current epoch (`requeueScopeRotation`). `failed` wins over
+        `stalled` where several rotations apply. Derived from job, decline and membership rows; it never names who
+        rotated.
+      enum: [stalled, failed]
+      example: failed
+
+    ScopeRotationRequeued:
+      type: object
+      description: The scope row's compromise-rotation value after a re-queue (absent or `null` = nothing needs an owner).
+      properties:
+        compromiseRotation:
+          $ref: "#/components/schemas/CompromiseRotation"
+
     ScopeKind:
       x-veyq-visibility: enum
       type: string
@@ -1402,6 +1461,8 @@ components:
           contentEncoding: base64
           maxLength: 8192
           example: aWRlbnRpdHktcHVibGljLWtleQ==
+        compromiseRotation:
+          $ref: "#/components/schemas/CompromiseRotation"
 
     ScopeCreated:
       type: object
@@ -1741,6 +1802,8 @@ components:
             When the scheduled job will **hard-erase** a pending-deletion group (`deletedAt + retention`, derived).
             `null` when active. After this instant the group is gone (restore → 404).
           example: null
+        compromiseRotation:
+          $ref: "#/components/schemas/CompromiseRotation"
 
     # A local alias to the _common source, shared with the tenants spec (the ErrorResponse pattern).
     TenantStatus:

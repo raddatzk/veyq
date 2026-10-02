@@ -30,18 +30,24 @@ info:
     **Second consumer — `scope-rotation` (cr-0092, ADR 0025).** A tenant-member removal that cuts a co-shared
     GROUP membership needs the group rotated forward for forward secrecy, but the removing owner is not
     necessarily a key-holder there and so cannot mint the new epoch. The backend originates a `scope-rotation`
-    job (its `scopeId` **is** the group to rotate; no sealed body, no key) and the next online remaining
-    key-holder claims it, mints `E_{n+1}` + re-grants the surviving members on-device via the rotation-commit
+    job (its `scopeId` **is** the group to rotate; no sealed body, no key) and the next online **owner** of the
+    scope claims it — the job is offered to owners only, the only members who may commit a rotation — mints
+    `E_{n+1}` + re-grants the surviving members on-device via the rotation-commit
     (`POST /api/scopes/{scopeId}/epochs`, cr-0089), then completes — closing the job with no `sealedResult`
     (the rotation is already committed). The claimed job carries only the cleartext envelope (no `grantDelivery`
-    target); the worker reads the member directory + epoch links it already has endpoints for. Idempotent +
-    first-online-wins; one live job per scope coalesces multiple removals.
+    target); the worker reads the member directory + epoch links it already has endpoints for, **after** its
+    claim. First-online-wins. An event **joins** a job only while it is `pending`, so many removals before anyone
+    is online still cost one rotation; an event that arrives once a job is claimed gets a job of its own, because
+    the claimed job's worker may already have read the directory the event changed. A job completes only once its
+    lease holder has committed an epoch of the scope while holding the lease (`409 rotation_not_committed`
+    otherwise).
 
     `scope-rotation` has a **second originator**: an account rotating its keys after a compromise
     (`POST /api/account/rotation`, ADR 0060) queues one per shared scope. The job is identical; what differs is
     that the originator is also a member, and must **not** complete their own — a rotator who re-granted
     themselves would let an attacker holding the old identity re-admit only themselves. The exclusion rides on
-    the same per-key-holder decline mechanism the TOFU seam uses, written at origination.
+    the same per-key-holder decline mechanism the TOFU seam uses, written at origination on **every** live
+    rotation job of the scope.
 
     Every operation requires an authenticated caller; authorization is enforced by code, not this spec
     (ADR 0008). Working a job is a **write on its space** (uc.spaces.scope-access A5): nothing is claimed,
@@ -66,7 +72,9 @@ paths:
         `scope ∈ the caller's granted scopes they may write ∧ tag ∈ the sent tags`, treating a `pending` job — or a
         `leased` job whose lease has expired (lazy reclaim) — as claimable (MariaDB `SKIP LOCKED`). A scope in a
         suspended tenant, or one being deleted, is simply not eligible, so its jobs are never handed out
-        (uc.spaces.scope-access A5). Returns `204` when nothing is claimable. For a `grant-delivery` job the response also resolves the delivery target (the
+        (uc.spaces.scope-access A5). Eligibility is **per tag**: a `scope-rotation` job is offered only on a scope
+        the caller also **owns**, so a request naming several tags gets a rotation job only there (ADR 0021 §4).
+        Returns `204` when nothing is claimable. For a `grant-delivery` job the response also resolves the delivery target (the
         pending member's userId + identity public key) so the worker can wrap `K_SC` to it directly.
       security:
         - bearerAuth: []
@@ -106,9 +114,11 @@ paths:
       description: >
         Creates a `pending` job in `scopeId` (the caller must be a member). The body (`type` + params) is
         **sealed client-side** under a `K_SC`-derived key (context `job`) and handed over as opaque
-        `sealedBody`; the server stores it verbatim and never unseals it. Server-structural jobs (like
-        `grant-delivery`) are **not** created here — the backend originates those itself; this is the front
-        door for content-processing jobs a client/agent prepares ready. Membership is the **first** gate (ADR
+        `sealedBody`; the server stores it verbatim and never unseals it. Server-originated jobs — every tag the
+        registry (`contracts/tasks/tags/v1.json`) marks `server-structural` or `server-event`, today
+        `grant-delivery` and `scope-rotation` — are **not** created here (`400 invalid_request`, nothing written);
+        the backend originates those itself, and this is the front door for content-processing jobs a client/agent
+        prepares ready. Membership is the **first** gate (ADR
         0042): a caller who is not a member of `scopeId` gets `404 scope_not_found` — the same answer as for a
         scope id that does not exist, so scope existence is not enumerable. Then the tenant's suspension
         (`403 tenant_suspended`) and the space's deletion grace (`409 scope_deleting`, uc.spaces.scope-access).
@@ -220,7 +230,11 @@ paths:
         re-runs at the current epoch. **Idempotent**: completing an already-`done` job, or a
         `grant-delivery` job whose target already holds a grant, is a success no-op (first-online-wins). Otherwise
         the caller must hold the job's current lease (`409 not_lease_holder`, ADR 0021 §6): idempotency makes a
-        *repeated* completion harmless, it does not make an unclaimed one legitimate.
+        *repeated* completion harmless, it does not make an unclaimed one legitimate. The completion lands only for
+        the worker that holds the lease **at the moment it lands** — a worker whose expired lease another worker
+        reclaimed meanwhile writes nothing, the grant included, and gets `not_lease_holder`. A `scope-rotation` job
+        completes only once its lease holder has committed an epoch of the scope while holding the lease;
+        otherwise `409 rotation_not_committed`, nothing written and the lease kept.
       security:
         - bearerAuth: []
       parameters:
@@ -257,8 +271,10 @@ paths:
         "409":
           description: >
             The job is not currently leased to this worker (`not_lease_holder`), its space is being deleted
-            (`scope_deleting`, uc.spaces.scope-access A5), or a grant-delivery completion states an epoch that is
-            not the scope's current one (`stale_epoch` — nothing written, the lease released, the job re-runs).
+            (`scope_deleting`, uc.spaces.scope-access A5), a grant-delivery completion states an epoch that is
+            not the scope's current one (`stale_epoch` — nothing written, the lease released, the job re-runs), or
+            the holder of a `scope-rotation` job committed no epoch during its lease (`rotation_not_committed` —
+            nothing written, the lease kept).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }

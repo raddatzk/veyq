@@ -795,7 +795,7 @@ it. D5 also writes the exclusion on older `LEASED` jobs, but none of those carri
           on the lease like every other transition (D11), next to the sentence
           `grep -n "Only the lease holder heartbeats, completes" docs/crosscutting/background-tasks.md` finds.
       · Done when: all `scripts/validate_*.py` green.
-- [ ] 1 contracts (descriptions only for D1–D8; the generator emits none for them, so they cause no backend
+- [x] 1 contracts (descriptions only for D1–D8; the generator emits none for them, so they cause no backend
       delta. The #206/#207 fold's error codes are prose on the generic `ErrorResponse`, so this still holds for
       them. **The #225 fold is the exception:** D9 adds two operations, so the generated `AccountRotationApi` gains
       two methods):
