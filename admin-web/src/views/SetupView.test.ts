@@ -7,9 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 
-vi.mock('../features/setup/setupServer', () => ({
-  registerServerOwner: vi.fn().mockResolvedValue({ emergencyKit: { secretKey: 'A3-SECRET' } }),
-}))
+vi.mock('../features/setup/setupServer', () => ({ registerServerOwner: vi.fn() }))
 vi.mock('../features/setup/EmergencyKitSave.vue', () => ({ default: { template: '<div class="stub-kit" />' } }))
 // The breach lookup is the only thing stubbed of the check: the view's real guard runs.
 vi.mock('../shared/pwned', () => ({ pwnedCount: vi.fn() }))
@@ -52,7 +50,10 @@ const i18n = createI18n({
   },
 })
 
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => {
+  vi.clearAllMocks()
+  vi.mocked(registerServerOwner).mockResolvedValue({ userId: 'u-owner', emergencyKit: { secretKey: 'A3-SECRET' } })
+})
 
 describe('SetupView — the breached-password check', () => {
   it('with the box ticked, a hit stops the first submit and the second goes ahead', async () => {

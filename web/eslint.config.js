@@ -62,6 +62,17 @@ const API_MOCKS_SYNTAX = [
       "CallExpression[callee.object.name='vi'][callee.property.name='mock'][arguments.0.value=/api\\/client$/] > ArrowFunctionExpression > ObjectExpression > Property > .value:not(CallExpression[callee.object.name='vi'][callee.property.name='fn'][arguments.length=0])",
     message: 'Mock src/api/client with bare vi.fn() exports; set behaviour per test through stubApi()/fakeApi() from src/test/apiMock.',
   },
+  // S6: a `features/` module mock whose export is a function or a call other than a bare `vi.fn()`. The string form
+  // of `vi.mock` types its factory as nothing, so a payload there is checked against nothing; `vi.mocked(fn)` is
+  // typed by the real function. A spread of `importOriginal()`, a member of it and a non-function value stay
+  // allowed; a composable (`use*`) keeps its hand-written stub, since it returns reactive UI state, not a model.
+  ...[
+    ':function > ObjectExpression.body',
+    ':function > BlockStatement > ReturnStatement > ObjectExpression',
+  ].map((factoryReturn) => ({
+    selector: `CallExpression[callee.object.name='vi'][callee.property.name='mock'][arguments.0.value=/features\\/(?!.*\\.vue$)/] > ${factoryReturn} > Property:not([key.name=/^use[A-Z]/]) > .value:matches(:function, CallExpression):not(CallExpression[callee.object.name='vi'][callee.property.name='fn'][arguments.length=0])`,
+    message: 'Mock a features/ module with bare vi.fn() exports; set behaviour per test through vi.mocked(fn), which is typed by the real function.',
+  })),
 ]
 
 // Flat config (ESLint 10). The type-checked ruleset is deliberately NOT enabled: this is a

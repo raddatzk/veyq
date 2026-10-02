@@ -6,14 +6,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 
-vi.mock('../features/spaces/scopes', () => ({ listMyGroups: vi.fn().mockResolvedValue([]) }))
+vi.mock('../features/spaces/scopes', () => ({ listMyGroups: vi.fn() }))
 vi.mock('../features/settings/AppearancePanel.vue', () => ({ default: { template: '<div class="stub-appearance" />' } }))
 vi.mock('../features/account/sessions/SessionsPanel.vue', () => ({ default: { template: '<div class="stub-sessions" />' } }))
 vi.mock('../features/spaces/TenantMembersPanel.vue', () => ({ default: { template: '<div class="stub-members" />' } }))
 vi.mock('../features/spaces/GroupMembersPanel.vue', () => ({ default: { template: '<div class="stub-group-members" />' } }))
 vi.mock('../features/spaces/CreateGroupDialog.vue', () => ({ default: { template: '<div class="stub-create-group" />' } }))
 vi.mock('../features/account/trustReset/TrustResetPanel.vue', () => ({ default: { template: '<div class="stub-trust-reset" />' } }))
-vi.mock('../features/account/trustReset/refusedDocuments', () => ({ refusedDocuments: vi.fn().mockResolvedValue([]) }))
+vi.mock('../features/account/trustReset/refusedDocuments', () => ({ refusedDocuments: vi.fn() }))
 
 import SettingsHubView from './SettingsHubView.vue'
 import { listMyGroups } from '../features/spaces/scopes'

@@ -14,15 +14,15 @@ import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 
 vi.mock('../features/tenant/tenantInvite', () => ({
   previewInvite: vi.fn(),
-  acceptInvite: vi.fn().mockResolvedValue({}),
-  registerAndAccept: vi.fn().mockResolvedValue({}),
-  bornTenantScope: vi.fn().mockReturnValue({ grant: 'AQ==', scopeRootKey: new Uint8Array(32) }),
-  tenantError: vi.fn().mockResolvedValue({ status: 0, code: null }),
+  acceptInvite: vi.fn(),
+  registerAndAccept: vi.fn(),
+  bornTenantScope: vi.fn(),
+  tenantError: vi.fn(),
 }))
-vi.mock('../features/account/login/login', () => ({ login: vi.fn().mockResolvedValue(undefined) }))
+vi.mock('../features/account/login/login', () => ({ login: vi.fn() }))
 vi.mock('../app/sessionRefresh', () => ({ withRefresh: vi.fn((call: () => unknown) => call()) }))
-vi.mock('../features/account/unlock/unlock', () => ({ unlockMasterKey: vi.fn().mockResolvedValue(undefined) }))
-vi.mock('../features/account/profile/profile', () => ({ sealName: vi.fn().mockResolvedValue(undefined) }))
+vi.mock('../features/account/unlock/unlock', () => ({ unlockMasterKey: vi.fn() }))
+vi.mock('../features/account/profile/profile', () => ({ sealName: vi.fn() }))
 vi.mock('../features/account/emergencyKit/EmergencyKitSave.vue', () => ({
   default: { template: '<div class="stub-kit" />' },
 }))
@@ -42,8 +42,11 @@ vi.mock('vue-router', () => ({
 import TenantJoinView from './TenantJoinView.vue'
 import { setupApi } from '../api/client'
 import { stubApi } from '../test/apiMock'
-import { previewInvite } from '../features/tenant/tenantInvite'
+import { previewInvite, acceptInvite, registerAndAccept, bornTenantScope, tenantError } from '../features/tenant/tenantInvite'
+import { login } from '../features/account/login/login'
 import { unlockMasterKey } from '../features/account/unlock/unlock'
+import { sealName } from '../features/account/profile/profile'
+import { TenantStatus } from '../api/generated/tenants'
 import { kitPayload, type KitData } from '@veyq/crypto/emergencyKit'
 import { importKitFromFile } from '../features/account/emergencyKit/emergencyKit'
 import { realI18n, t } from '../test/i18n'
@@ -104,6 +107,18 @@ async function acceptWith(w: VueWrapper) {
 describe('TenantJoinView — importing the Emergency Kit on the invite-accept screen', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // The happy path past each file's point of interest, typed by the real functions: these used to live in the
+    // mock factory, where nothing checked them against the contract.
+    vi.mocked(login).mockResolvedValue(undefined)
+    vi.mocked(unlockMasterKey).mockResolvedValue(undefined)
+    vi.mocked(acceptInvite).mockResolvedValue({ tenantId: 'tenant-1', status: TenantStatus.Active })
+    vi.mocked(registerAndAccept).mockResolvedValue({ tenantId: 'tenant-1', status: TenantStatus.Active, userId: 'user-1' })
+    vi.mocked(bornTenantScope).mockReturnValue({
+      birth: { grant: 'AQ==', grantSignature: 'AQ==', admissionId: 'admission-1', admissionEpoch: 0, admissionTag: 'AQ==' },
+      scopeRootKey: new Uint8Array(32),
+    })
+    vi.mocked(sealName).mockReturnValue('AQ==')
+    vi.mocked(tenantError).mockResolvedValue({ status: 0, code: null })
     stubApi(setupApi, {
       getSetupStatus: { setupRequired: false, version: { major: 1, build: 0 }, capabilities: [], suites: ['v1'], instanceSalt: 'AAAA' },
     })

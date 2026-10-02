@@ -9,25 +9,24 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // `parseQuotaGib` stays real: the GiB → bytes conversion is what `tenant quota` is asserted on.
 vi.mock('../features/tenants/tenants', async (importOriginal) => ({
   parseQuotaGib: (await importOriginal<typeof import('../features/tenants/tenants')>()).parseQuotaGib,
-  setTenantStorageQuota: vi.fn().mockResolvedValue(undefined),
-  createTenant: vi.fn().mockResolvedValue({ tenantId: 't1', status: 'PENDING' }),
-  listTenants: vi.fn().mockResolvedValue([{ tenantId: 't1', storageUsedBytes: 5, storageQuotaBytes: null }]),
-  resendInvite: vi.fn().mockResolvedValue({ state: 'ACTIVE' }),
-  reassignInvite: vi.fn().mockResolvedValue({ state: 'ACTIVE' }),
-  changeTenantDomain: vi.fn().mockResolvedValue(undefined),
-  revokeTenant: vi.fn().mockResolvedValue(undefined),
-  suspendTenant: vi.fn().mockResolvedValue(undefined),
-  reactivateTenant: vi.fn().mockResolvedValue(undefined),
+  setTenantStorageQuota: vi.fn(),
+  createTenant: vi.fn(),
+  listTenants: vi.fn(),
+  resendInvite: vi.fn(),
+  reassignInvite: vi.fn(),
+  changeTenantDomain: vi.fn(),
+  revokeTenant: vi.fn(),
+  suspendTenant: vi.fn(),
+  reactivateTenant: vi.fn(),
 }))
-vi.mock('../features/instance/release', () => ({
-  getInstanceRelease: vi.fn().mockResolvedValue({ release: '1.4.0' }),
-}))
+vi.mock('../features/instance/release', () => ({ getInstanceRelease: vi.fn() }))
 vi.mock('./adminSession', () => ({ signIn: vi.fn().mockResolvedValue(undefined) }))
 
 import { run } from './cli'
 import { signIn } from './adminSession'
 import * as tenants from '../features/tenants/tenants'
 import { getInstanceRelease } from '../features/instance/release'
+import type { TenantCreated, TenantInviteState, TenantSummary } from '../features/tenants/tenants'
 
 const ENV = { VEYQ_ADMIN_EMAIL: 'owner@example.com', VEYQ_ADMIN_PASSWORD: 'pw' }
 
@@ -44,30 +43,63 @@ async function invoke(argv: string[], env: Record<string, string | undefined> = 
   return { code, out: c.out.join('\n'), err: c.err.join('\n') }
 }
 
-beforeEach(() => vi.clearAllMocks())
+const EXPIRES = new Date('2026-10-10T12:00:00.000Z')
+
+const created: TenantCreated = {
+  tenantId: 't1', status: 'PENDING', inviteExpiresAt: EXPIRES, bootstrapSecret: 'boot-1', delivery: 'FALLBACK_COPYLINK',
+}
+const row: TenantSummary = {
+  tenantId: 't1', name: 'Fam', domain: 'f.example.com', ownerEmail: 'k@example.com', status: 'PENDING',
+  storageUsedBytes: 5, storageQuotaBytes: null,
+}
+const invite = (ownerEmail: string): TenantInviteState => ({
+  ownerEmail, inviteStatus: 'ACTIVE', inviteExpiresAt: EXPIRES, bootstrapSecret: 'boot-2', delivery: 'FALLBACK_COPYLINK',
+})
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  vi.mocked(tenants.setTenantStorageQuota).mockResolvedValue(undefined)
+  vi.mocked(tenants.createTenant).mockResolvedValue(created)
+  vi.mocked(tenants.listTenants).mockResolvedValue([row])
+  vi.mocked(tenants.resendInvite).mockResolvedValue(invite('k@example.com'))
+  vi.mocked(tenants.reassignInvite).mockImplementation(async (_tenantId, ownerEmail) => invite(ownerEmail))
+  vi.mocked(tenants.changeTenantDomain).mockResolvedValue(undefined)
+  vi.mocked(tenants.revokeTenant).mockResolvedValue(undefined)
+  vi.mocked(tenants.suspendTenant).mockResolvedValue(undefined)
+  vi.mocked(tenants.reactivateTenant).mockResolvedValue(undefined)
+  vi.mocked(getInstanceRelease).mockResolvedValue({ release: '1.4.0' })
+})
 
 describe('veyq-admin — command dispatch (uc.admin.create-tenant, uc.admin.suspend-tenant)', () => {
   it('tenant create passes name, domain and owner email through to the facade', async () => {
     const r = await invoke(['tenant', 'create', '--name', 'Fam', '--domain', 'f.example.com', '--owner-email', 'k@example.com'])
     expect(tenants.createTenant).toHaveBeenCalledWith('Fam', 'f.example.com', 'k@example.com')
     expect(r.code).toBe(0)
-    expect(JSON.parse(r.out)).toEqual({ tenantId: 't1', status: 'PENDING' })
+    // The whole TenantCreated reaches stdout — the bootstrap secret included, since a PENDING tenant has no mail
+    // channel yet and the copy-link is the only handoff (ADR 0055 §3). Dates serialise as ISO strings.
+    expect(JSON.parse(r.out)).toEqual({ ...created, inviteExpiresAt: EXPIRES.toISOString() })
   })
 
   it('tenant list prints the tenants as JSON a script can read', async () => {
     const r = await invoke(['tenant', 'list'])
     expect(tenants.listTenants).toHaveBeenCalledOnce()
     // both storage figures ride along, in bytes; null is "no quota" (uc.admin.tenant-storage-quota)
-    expect(JSON.parse(r.out)).toEqual([{ tenantId: 't1', storageUsedBytes: 5, storageQuotaBytes: null }])
+    expect(JSON.parse(r.out)).toEqual([row])
     expect(r.code).toBe(0)
   })
 
   it('tenant resend and reassign carry the invite arguments (the copy-link handoff, from a script)', async () => {
-    expect((await invoke(['tenant', 'resend', '--tenant-id', 't1'])).code).toBe(0)
+    const resent = await invoke(['tenant', 'resend', '--tenant-id', 't1'])
+    expect(resent.code).toBe(0)
+    expect(JSON.parse(resent.out)).toMatchObject({ ownerEmail: 'k@example.com', inviteStatus: 'ACTIVE' })
     expect(tenants.resendInvite).toHaveBeenCalledWith('t1')
     const r = await invoke(['tenant', 'reassign', '--tenant-id', 't1', '--owner-email', 'new@example.com'])
     expect(tenants.reassignInvite).toHaveBeenCalledWith('t1', 'new@example.com')
-    expect(JSON.parse(r.out)).toEqual({ state: 'ACTIVE' })
+    // The re-minted invite is printed whole: a script copies the fresh bootstrap secret out of it.
+    expect(JSON.parse(r.out)).toEqual({
+      ownerEmail: 'new@example.com', inviteStatus: 'ACTIVE', inviteExpiresAt: EXPIRES.toISOString(),
+      bootstrapSecret: 'boot-2', delivery: 'FALLBACK_COPYLINK',
+    })
   })
 
   it('tenant change-domain moves the tenant and reports the bodiless 204 as an explicit success', async () => {

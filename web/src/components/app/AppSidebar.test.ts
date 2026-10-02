@@ -6,11 +6,9 @@ import { createRouter, createMemoryHistory, type Router } from 'vue-router'
 // The tenant list is a network call (onMounted) — hand it a single seeded tenant (a test overrides it for the
 // multi-tenant overview).
 vi.mock('../../features/spaces/scopes', () => ({
-  listMyTenants: vi.fn().mockResolvedValue([
-    { tenantId: 't-1', name: 'Familie Muster', domain: '127.0.0.1', role: 'OWNER', status: 'ACTIVE', iconEpoch: 0 },
-  ]),
-  listMyGroups: vi.fn().mockResolvedValue([]),
-  openMyTenantIcon: vi.fn().mockResolvedValue(null),
+  listMyTenants: vi.fn(),
+  listMyGroups: vi.fn(),
+  openMyTenantIcon: vi.fn(),
 }))
 
 // `onMounted` also asks for the caller's profile, and that one was missed when the tenant list above was
@@ -20,7 +18,7 @@ vi.mock('../../features/spaces/scopes', () => ({
 // directly, so this stub restores today's behaviour rather than changing what the suite asserts.
 vi.mock('../../features/account/profile/profile', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../features/account/profile/profile')>()),
-  getMyProfile: vi.fn().mockResolvedValue({ username: '', sealedName: null }),
+  getMyProfile: vi.fn(),
 }))
 
 // The shared cover store — the rail reads it and holds no key API of its own, which is the property phase 1
@@ -35,7 +33,8 @@ vi.mock('../../features/memory/coverStore', () => ({
 }))
 
 import AppSidebar from './AppSidebar.vue'
-import { listMyTenants, listMyGroups } from '../../features/spaces/scopes'
+import { listMyTenants, listMyGroups, openMyTenantIcon } from '../../features/spaces/scopes'
+import { getMyProfile } from '../../features/account/profile/profile'
 import { activeSpace, clearActiveSpace } from '../../app/activeSpace'
 import { treeStore } from '../../features/memory/treeStore'
 import { favoritesStore } from '../../app/favoritesStore'
@@ -69,6 +68,12 @@ async function mountAt(hash: string) {
 }
 
 beforeEach(() => {
+  vi.mocked(listMyTenants).mockResolvedValue([
+    { tenantId: 't-1', name: 'Familie Muster', domain: '127.0.0.1', role: 'OWNER', status: 'ACTIVE', iconEpoch: 0 },
+  ])
+  vi.mocked(listMyGroups).mockResolvedValue([])
+  vi.mocked(openMyTenantIcon).mockResolvedValue(null)
+  vi.mocked(getMyProfile).mockResolvedValue({ username: '', sealedName: null, requireGroupAddConsent: false })
   clearActiveSpace()
   activeSpace.tenantId = 't-1' // as if the tenant space is the active one
 })

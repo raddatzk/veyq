@@ -34,18 +34,17 @@ vi.mock('vue-router', () => ({ useRoute: () => ({ params: { shareId: SHARE_ID },
 
 // Keep the REAL terms helpers (acceptedTermsVersion/recordTermsAccepted/pickShareTerms) + error classes; override
 // only the two network reads so no resolve crypto runs.
-const resolveShareMock = vi.fn()
-const fetchShareTermsMock = vi.fn()
 vi.mock('../features/memory/share', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../features/memory/share')>()
   return {
     ...actual,
-    resolveShare: (...args: unknown[]) => resolveShareMock(...args),
-    fetchShareTerms: (...args: unknown[]) => fetchShareTermsMock(...args),
+    resolveShare: vi.fn(),
+    fetchShareTerms: vi.fn(),
   }
 })
 
 import ShareView from './ShareView.vue'
+import { resolveShare, fetchShareTerms, type ResolvedShare, type ShareAccess } from '../features/memory/share'
 import { ShareRole } from '../api/generated/sharing'
 import { realI18n } from '../test/i18n'
 
@@ -58,15 +57,18 @@ function mountShareView() {
   })
 }
 
-function viewerShare() {
-  return { memoryName: 'My Memory', noteByLocale: {}, role: ShareRole.Viewer, access: { kind: 'read', memoryKey: new Uint8Array() }, items: [] }
+function viewerShare(): ResolvedShare {
+  return {
+    memoryName: 'My Memory', noteByLocale: {}, role: ShareRole.Viewer, scopeId: 'scope-1',
+    access: { kind: 'read', memoryKey: new Uint8Array() }, items: [],
+  }
 }
 
 describe('ShareView — accountless terms gate', () => {
   beforeEach(() => {
     localStorage.clear()
-    resolveShareMock.mockReset().mockResolvedValue(viewerShare())
-    fetchShareTermsMock.mockReset().mockResolvedValue({
+    vi.mocked(resolveShare).mockReset().mockResolvedValue(viewerShare())
+    vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({
       tenantId: TENANT,
       termsVersion: 1,
       terms: { de: '## Regeln', en: '## Rules' },
@@ -106,7 +108,7 @@ describe('ShareView — accountless terms gate', () => {
 
   it('re-gates when the operator bumps the terms version', async () => {
     localStorage.setItem(ACCEPT_KEY, '1') // previously accepted v1
-    fetchShareTermsMock.mockResolvedValue({ tenantId: TENANT, termsVersion: 2, terms: { en: '## Rules v2' } })
+    vi.mocked(fetchShareTerms).mockResolvedValue({ tenantId: TENANT, termsVersion: 2, terms: { en: '## Rules v2' } })
     const wrapper = mountShareView()
     await flushPromises()
 
@@ -115,7 +117,7 @@ describe('ShareView — accountless terms gate', () => {
   })
 
   it('fails open (shows content, no gate) on a transient terms-fetch error', async () => {
-    fetchShareTermsMock.mockRejectedValue(new Error('network'))
+    vi.mocked(fetchShareTerms).mockRejectedValue(new Error('network'))
     const wrapper = mountShareView()
     await flushPromises()
 
@@ -129,14 +131,14 @@ describe('ShareView — accountless terms gate', () => {
 describe('ShareView — who sees a guest name', () => {
   beforeEach(() => {
     localStorage.clear()
-    fetchShareTermsMock.mockReset().mockResolvedValue({ tenantId: TENANT, termsVersion: 0, terms: {} })
+    vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: TENANT, termsVersion: 0, terms: {} })
   })
 
-  it.each([
+  it.each<[ShareRole, ShareAccess]>([
     [ShareRole.Contributor, { kind: 'read', memoryKey: new Uint8Array(32) }],
-    [ShareRole.Uploader, { kind: 'drop', nodeId: 'n1', dropPublicKey: new Uint8Array() }],
+    [ShareRole.Uploader, { kind: 'drop', nodeId: 'n1', dropPublicKey: { x: new Uint8Array(), m: new Uint8Array() } }],
   ])('the %s name screen says only the Memory\'s members see the name', async (role, access) => {
-    resolveShareMock.mockReset().mockResolvedValue({ ...viewerShare(), role, access })
+    vi.mocked(resolveShare).mockReset().mockResolvedValue({ ...viewerShare(), role, access })
     const wrapper = mountShareView()
     await flushPromises()
 

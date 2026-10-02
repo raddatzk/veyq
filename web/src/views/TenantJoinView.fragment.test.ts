@@ -13,14 +13,14 @@ vi.mock('../features/tenant/tenantInvite', () => ({
   acceptInvite: vi.fn(),
   registerAndAccept: vi.fn(),
   bornTenantScope: vi.fn(),
-  tenantError: vi.fn().mockResolvedValue({ status: 0, code: null }),
+  tenantError: vi.fn(),
 }))
 vi.mock('../features/account/emergencyKit/EmergencyKitSave.vue', () => ({
   default: { template: '<div class="stub-kit" />' },
 }))
 
 import TenantJoinView from './TenantJoinView.vue'
-import { previewInvite } from '../features/tenant/tenantInvite'
+import { previewInvite, tenantError } from '../features/tenant/tenantInvite'
 import { realI18n, t } from '../test/i18n'
 
 const stubs = {
@@ -38,6 +38,7 @@ function mountView() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(tenantError).mockResolvedValue({ status: 0, code: null })
   vi.mocked(previewInvite).mockResolvedValue({
     tenantName: 'Acme', domain: 'acme.example', ownerEmail: 'owner@acme.example', hasAccount: false, role: 'OWNER',
   } as never)

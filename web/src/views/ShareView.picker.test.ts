@@ -35,14 +35,12 @@ vi.mock('../features/memory/useThumbnailPipeline', () => ({
 vi.mock('../api/client', () => ({ sharesApi: vi.fn(), publicSharesApi: vi.fn(), tokenApi: vi.fn() }))
 vi.mock('vue-router', () => ({ useRoute: () => ({ params: { shareId: SHARE_ID }, hash: '#k=AAAA' }) }))
 
-const resolveShareMock = vi.fn()
 vi.mock('../features/memory/share', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../features/memory/share')>()
   return {
     ...actual,
-    resolveShare: (...args: unknown[]) => resolveShareMock(...args),
-    // No terms → no gate in front of the content (ShareView fails open on a terms-fetch error).
-    fetchShareTerms: () => Promise.reject(new Error('no terms in this test')),
+    resolveShare: vi.fn(),
+    fetchShareTerms: vi.fn(),
   }
 })
 
@@ -54,6 +52,7 @@ vi.mock('../features/memory/uploadQueue', async (importOriginal) => {
 import { mount, flushPromises } from '@vue/test-utils'
 import ShareView from './ShareView.vue'
 import { enqueueUploads } from '../features/memory/uploadQueue'
+import { resolveShare, fetchShareTerms } from '../features/memory/share'
 import { ShareRole } from '../api/generated/sharing'
 import { realI18n } from '../test/i18n'
 
@@ -100,7 +99,9 @@ describe('ShareView — the contributor picker inherits E3s re-read window', () 
     localStorage.clear()
     localStorage.setItem(SESSION_KEY, JSON.stringify({ identityId: 'i-1', contributorToken: 'tok' }))
     vi.mocked(enqueueUploads).mockReset()
-    resolveShareMock.mockReset().mockResolvedValue({
+    // No terms → no gate in front of the content (ShareView fails open on a terms-fetch error).
+    vi.mocked(fetchShareTerms).mockReset().mockRejectedValue(new Error('no terms in this test'))
+    vi.mocked(resolveShare).mockReset().mockResolvedValue({
       memoryName: 'Rom 2026',
       noteByLocale: {},
       role: ShareRole.Contributor,

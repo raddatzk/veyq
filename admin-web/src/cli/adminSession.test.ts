@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-vi.mock('../features/auth/login', () => ({ login: vi.fn().mockResolvedValue(undefined) }))
+vi.mock('../features/auth/login', () => ({ login: vi.fn() }))
 
 import { backendUrl, DEFAULT_BACKEND_URL, signIn } from './adminSession'
 import { CliError } from './output'
@@ -11,6 +11,7 @@ import { session } from '../app/session'
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(login).mockResolvedValue(undefined)
   session.apiBase = ''
 })
 
