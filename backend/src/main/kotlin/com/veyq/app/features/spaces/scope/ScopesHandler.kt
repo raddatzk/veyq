@@ -221,17 +221,21 @@ class ScopesHandler(
             .refusal(CreatePersonalOutcome.NoTenant, CreatePersonalOutcome.Suspended)?.let { return it }
         if (store.personalScopeExists(userId, tenantId)) return CreatePersonalOutcome.AlreadyExists
         // The client-minted scope id (ADR 0072): the self-grant is sealed bound to it. A concurrent create's loser
-        // answers as its replay does — the two checks above, in their order.
-        return createOrConflict(
-            conflict = {
-                when {
-                    store.personalScopeExists(userId, tenantId) -> CreatePersonalOutcome.AlreadyExists
-                    store.scopeIdTaken(scopeId) -> CreatePersonalOutcome.IdTaken
-                    else -> null
-                }
-            },
-        ) {
-            if (store.createPersonal(scopeId, userId, tenantId, grant)) CreatePersonalOutcome.Created(scopeId) else CreatePersonalOutcome.IdTaken
+        // answers as its replay does — the two checks above, in their order — whether it loses at the commit or at
+        // the store's own id check, which a winner that committed after the check above already trips.
+        val replay = {
+            when {
+                store.personalScopeExists(userId, tenantId) -> CreatePersonalOutcome.AlreadyExists
+                store.scopeIdTaken(scopeId) -> CreatePersonalOutcome.IdTaken
+                else -> null
+            }
+        }
+        return createOrConflict(conflict = replay) {
+            if (store.createPersonal(scopeId, userId, tenantId, grant)) {
+                CreatePersonalOutcome.Created(scopeId)
+            } else {
+                replay() ?: CreatePersonalOutcome.IdTaken
+            }
         }
     }
 

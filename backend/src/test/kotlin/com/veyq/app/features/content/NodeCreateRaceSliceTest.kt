@@ -49,6 +49,21 @@ class NodeCreateRaceSliceTest {
         assertEquals(201 to null, create(userId, scopeId, TestIds.uuid(), slug()))
     }
 
+    /**
+     * A double-submitted create — one id, one slug: its replay asks the slug first, so the loser answers
+     * `slug_taken`, also when the winner commits between its slug check and the store's own id check.
+     */
+    @Test
+    fun concurrentNodeCreatesOfOneBodyCreateOneNode() {
+        val (userId, scopeId) = seedMemberScope()
+        repeat(RACE_ROUNDS) { round ->
+            val (nodeId, slug) = TestIds.uuid() to slug()
+            val answers = race({ create(userId, scopeId, nodeId, slug) }, { create(userId, scopeId, nodeId, slug) })
+            assertWinnerAndLoser(201, 409 to "slug_taken", answers, "round $round")
+        }
+        assertEquals(201 to null, create(userId, scopeId, TestIds.uuid(), slug()))
+    }
+
     private fun slug(): String = Base64.getEncoder().encodeToString(UUID.randomUUID().toString().toByteArray())
 
     private fun create(userId: String, scopeId: String, nodeId: String, slug: String): Pair<Int, String?> =

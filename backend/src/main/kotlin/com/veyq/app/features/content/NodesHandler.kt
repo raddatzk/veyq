@@ -91,18 +91,18 @@ class NodesHandler(private val store: NodesStore, private val access: ScopeAcces
         // The client-minted id (ADR 0072): the name, K_mem wrap and meta are sealed bound to it, so it is stored
         // verbatim or not at all.
         // A node is unique twice — its id, and its slug under the parent (`ux_node_parent_slug`) — so a concurrent
-        // create's loser re-asks both, in the order above: what its replay answers.
-        return createOrConflict(
-            conflict = {
-                when {
-                    store.slugTaken(slot, slugToken) -> CreateNodeOutcome.SlugTaken
-                    store.idTaken(nodeId) -> CreateNodeOutcome.IdTaken
-                    else -> null
-                }
-            },
-        ) {
+        // create's loser re-asks both, in the order above: what its replay answers. That holds too when it loses at
+        // the store's own id check, which a winner that committed after the slug check above already trips.
+        val replay = {
+            when {
+                store.slugTaken(slot, slugToken) -> CreateNodeOutcome.SlugTaken
+                store.idTaken(nodeId) -> CreateNodeOutcome.IdTaken
+                else -> null
+            }
+        }
+        return createOrConflict(conflict = replay) {
             val created = store.create(nodeId, scopeId, slot, kind, encryptedName, slugToken, orderIndex, epoch, wrappedContentKey, wrappedMeta)
-            if (created) CreateNodeOutcome.Created(nodeId) else CreateNodeOutcome.IdTaken
+            if (created) CreateNodeOutcome.Created(nodeId) else replay() ?: CreateNodeOutcome.IdTaken
         }
     }
 
