@@ -688,7 +688,10 @@ Compare trees, not occurrences. For an **automated, repeated** guard that re-inj
 every run, work on a throwaway *copy* of the tree, not the live one: `scripts/validate_guard_gaps.py`
 copies → forges → runs → discards, so even an abort leaves an orphaned tempdir, never a dirty tree
 (every guard's `__file__`-relative `ROOT` makes a copied `scripts/<guard>.py` resolve to the copy).
-Snapshot-restore is the interactive one-shot; a copy is its automated form.
+Snapshot-restore is the interactive one-shot; a copy is its automated form. **Batching levers into one run is
+sound only across disjoint code paths AND disjoint tests:** a test stops at its first failed assertion, so two
+levers that redden the same test leave the second unproven (`cr-queued-rotation-owners-only-no-leased-join`
+paired "derive from the oldest job" with "drop the re-queue's state gate", and the first answered for both).
 
 **First check the lever is wired to the mechanism at all.** Both traps below assume the lever *reaches* the code
 path; a CR that specifies a mechanism and, separately, the bite that must break it can name two things that never
@@ -1434,7 +1437,10 @@ keypair under `K_SC`, written in the present tense. #190 then landed without it 
 variant — and the paragraph described a design nobody built. The reasoning happened to stand on its own; a CR whose
 decision *rested* on the sibling would not have. So a claim drawn from another CR's plan says so ("planned in
 `cr-…`"), and the CR that lands second re-reads every such claim against the merged tree before its first edit,
-alongside its locators.
+alongside its locators. **Make that re-read a grep:** every sentence that holds only *until* the sibling lands
+carries the same marker (*"until `cr-…` lands"*). `cr-queued-rotation-owners-only-no-leased-join` spread its
+dependence on the granter lock over an inventory, a caveat, an owner answer and a planned exception; the sibling
+removed the lock one commit before implementation began, and only the brief's warning found all four.
 
 ### "Which one is mine?" is a flag, not an id — and dropping the id is the stronger answer
 
@@ -1471,7 +1477,9 @@ row's share) and there were seven — the public share's scope, a shared chapter
 granted epoch, an invitation's name epoch, the caller's own user id, and a member mark's author, which the read
 omits *by design* and so became an accepted gap instead of a field. Each surfaced mid-implementation as a contract
 change, and one as an owner question. Run the reader angle at refine: for every bound field, `grep` the read
-schema the opener consumes for it, and list the misses in the CR. **The same holds for a new KEY a reader needs,
+schema the opener consumes for it, and list the misses in the CR. **A bite on a read field names the persona's
+row in that read before it names the value:** `cr-queued-rotation-owners-only-no-leased-join` asked a grant-less
+owner's row to read `stalled`, and `listMyScopes` serves no row for a grant-less membership by design. **The same holds for a new KEY a reader needs,
 and there the reader is every surface that shows the object, not the schema the key was put on.**
 cr-uploader-never-holds-the-memory-key put an identity's wrapped key on `ShareIdentity`, which only that link's own
 resolve serves; the curator's gallery, the curator's buckets and a viewer link of the same Memory each read the

@@ -1224,7 +1224,7 @@ class ScopesSliceTest {
 
         // The real enqueue path (the member-removal rotation backstop, cr-0092) — not a hand-written row.
         assertTrue(tasks.originateScopeRotation(poisoned, 3), "a rotation job was enqueued on the group")
-        val claimed = tasks.claim(owner, setOf(poisoned), listOf(CapabilityTags.SCOPE_ROTATION), Duration.ofMinutes(5), 3)
+        val claimed = tasks.claim(owner, mapOf(CapabilityTags.SCOPE_ROTATION to setOf(poisoned)), Duration.ofMinutes(5), 3)
         assertNotNull(claimed, "the owner holds a grant on the group, so the rotation job is claimable")
         tasks.decline(owner, claimed!!.jobId, "bite-test")
         QuarkusTransaction.requiringNew().run {

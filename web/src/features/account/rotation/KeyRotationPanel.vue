@@ -21,7 +21,7 @@
 // built panels are the design source. (It used to name DeviceTrustPanel, which stopped being a panel at all
 // when the device rubric was folded into the sessions row — a design-source pointer goes stale silently, since
 // nothing compiles it.)
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
@@ -29,7 +29,9 @@ import SecretKeyField from '../../../shared/ui/SecretKeyField.vue'
 import { account } from '../../../app/account'
 import Password from 'primevue/password'
 import Message from 'primevue/message'
-import { rotateKeys, RotationRefused, type RotationResult } from './rotateKeys'
+import { listQueuedRotations, requeueQueuedRotation, rotateKeys, RotationRefused, type RotationResult } from './rotateKeys'
+import { listMyTenants } from '../../spaces/scopes'
+import type { RotationScopeState } from '../../../api/generated/account'
 import { unlockOrigin } from '../../../app/vault'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
 import EmailAddressSection from '../email/EmailAddressSection.vue'
@@ -44,6 +46,42 @@ const error = ref('')
 /** E8 — the rotation refused because this device refuses a trust document; the error then points at the reset. */
 const trustRefused = ref(false)
 const result = ref<RotationResult | null>(null)
+
+/**
+ * Every rotation this account's rotation queued, as the SERVER reads it (uc.account.rotate-keys §9, ADR 0060
+ * Decision 6) — on every visit, and again right after a rotation, so `waiting` is the server's word from the first
+ * render on, and a rotation that dead-lettered reads `failed` instead of a `waiting` nothing would ever update.
+ */
+const queued = ref<RotationScopeState[]>([])
+/** A tenant root's plaintext name by scope id (scopeId == tenantId); a group's name is sealed under a key this
+ *  account cannot open until it is re-admitted, so it shows by id. */
+const tenantNames = ref<Record<string, string>>({})
+const requeueing = ref<string | null>(null)
+const requeueError = ref('')
+
+async function loadQueued() {
+  try {
+    queued.value = await listQueuedRotations()
+    if (queued.value.length) tenantNames.value = Object.fromEntries((await listMyTenants()).map((tn) => [tn.tenantId, tn.name]))
+  } catch {
+    /* the section stays empty; the rotation itself is unaffected */
+  }
+}
+onMounted(loadQueued)
+
+/** `failed` only: queue it again, this account still excluded; the row shows the state the server answers. */
+async function requeue(scopeId: string) {
+  requeueError.value = ''
+  requeueing.value = scopeId
+  try {
+    const now = await requeueQueuedRotation(scopeId)
+    queued.value = queued.value.map((q) => (q.scopeId === scopeId ? now : q))
+  } catch {
+    requeueError.value = t('rotation.requeueFailed')
+  } finally {
+    requeueing.value = null
+  }
+}
 
 /**
  * Whether this session was *already* opened by a cold credential. It gates nothing — the live proof in
@@ -62,6 +100,7 @@ const { run, pending: busy } = useAsyncAction(
     secretKey.value = ''
     confirmOpen.value = false
     result.value = outcome
+    await loadQueued()
   },
   {
     onError: (e) => {
@@ -149,8 +188,7 @@ async function confirm() {
         </div>
       </template>
 
-      <!-- Step 9: an honest per-scope status. `waiting` is not a spinner — nothing this account does alone
-           moves it, and the copy says so rather than suggesting it will resolve itself (E3). -->
+      <!-- Step 9: an honest per-scope status for what this device re-keyed alone (step 6). -->
       <template v-else>
         <Message severity="info" :closable="false">{{ t('rotation.doneNotRepair') }}</Message>
         <ul class="rotation-results">
@@ -161,6 +199,33 @@ async function confirm() {
           </li>
         </ul>
       </template>
+
+      <!-- The shared spaces a rotation of this account queued, as the server reads them now — on every visit, not
+           only after the rotation that queued them. Until a row reads secured, the old key still reads what is new
+           in that space; the copy says so (forward secrecy, not repair). The re-queue is offered on failed only,
+           the one state it can move; stalled carries the promote-a-co-owner hint instead (E4). -->
+      <section v-if="queued.length" class="rotation-queued">
+        <h3>{{ t('rotation.queuedTitle') }}</h3>
+        <ul class="rotation-results">
+          <li v-for="q in queued" :key="q.scopeId" class="veyq-list-row" :data-queued-scope="q.scopeId">
+            <span v-if="tenantNames[q.scopeId]">{{ tenantNames[q.scopeId] }}</span>
+            <span v-else class="rotation-scope-id">{{ q.scopeId }}</span>
+            <span class="veyq-badge" :class="`is-${q.state}`">{{ t(`rotation.status.${q.state}`) }}</span>
+            <small>{{ t(`rotation.queuedHint.${q.state}`) }}</small>
+            <Button
+              v-if="q.state === 'failed'"
+              type="button"
+              :label="t('rotation.requeue')"
+              icon="pi pi-replay"
+              size="small"
+              outlined
+              :loading="requeueing === q.scopeId"
+              @click="requeue(q.scopeId)"
+            />
+          </li>
+        </ul>
+        <Message v-if="requeueError" severity="error" :closable="false">{{ requeueError }}</Message>
+      </section>
     </section>
 
     <Dialog
@@ -223,6 +288,13 @@ async function confirm() {
   list-style: none;
   margin: 1rem 0 0;
   padding: 0;
+}
+.rotation-queued {
+  margin-top: 1.5rem;
+}
+.rotation-queued h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
 }
 .rotation-scope-id {
   font-family: var(--app-font-mono, monospace);

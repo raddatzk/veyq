@@ -14,11 +14,21 @@ object CapabilityTags {
     const val GRANT_DELIVERY = "02f271ff"
 
     /**
-     * scope-rotation (cr-0092 / ADR 0025): complete a **queued group-key rotation** after a co-shared member was
-     * cut with no key-holder online to rotate synchronously. The next online remaining key-holder claims it,
-     * mints `E_{n+1}` + re-grants the survivors on-device (the cr-0089 rotation-commit), then completes. Unlike
-     * grant-delivery this is **not** reconcilable from DB state (a removal cut advances no epoch), so it is
-     * originated **explicitly** on the removal (`resourceRef == scopeId`); one live job per scope coalesces.
+     * scope-rotation (cr-0092 / ADR 0025, ADR 0060): complete a **queued scope-key rotation** the event causing it
+     * could not perform — a co-shared member cut by a tenant owner who need not hold that group's key, or an account
+     * rotation after a compromise. Offered only to an **owner** of the scope (ADR 0021 §4: only an owner may commit
+     * a rotation), who claims it, reads the directory, mints `E_{n+1}` + re-grants the survivors on-device (the
+     * cr-0089 rotation-commit), then completes — and the completion lands only on that holder's own commit during
+     * its lease ([JobEntity.rotatedEpoch]). Unlike grant-delivery this is **not** reconcilable from DB state (a
+     * removal cut advances no epoch), so it is originated **explicitly** (`resourceRef == scopeId`). An event joins a
+     * job only while it is `PENDING`; once claimed, a later event gets a job of its own ([TasksStore]).
      */
     const val SCOPE_ROTATION = "663157d8"
+
+    /**
+     * Every tag the registry names as server-originated (`server-structural`, `server-event`): the server alone
+     * creates these jobs, so a client's enqueue of one is refused. `QueuedRotationSliceTest` derives the same set from
+     * `contracts/tasks/tags/v1.json` and asserts each member is refused, so a server tag missing here goes red there.
+     */
+    val SERVER_ORIGINATED: Set<String> = setOf(GRANT_DELIVERY, SCOPE_ROTATION)
 }

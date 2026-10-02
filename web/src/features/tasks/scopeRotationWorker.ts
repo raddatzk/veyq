@@ -1,14 +1,18 @@
 // The web worker loop for the **second** consumer of the operator-blind task queue (ADR 0021) — scope-rotation
-// (cr-0092, ADR 0025). When a tenant owner removes a member co-sharing a GROUP the owner doesn't hold, the
-// backend queues a SCOPE_ROTATION job (it can't rotate — it holds no key there). The next remaining key-holder
-// online completes it on-device: mint E_{n+1}, chain-link E_n, re-grant the surviving members (reusing
-// `commitRotation`, cr-0089), then complete. Claimed **globally across every held scope** — a key-holder
-// sitting anywhere (even their own personal scope) drains queued rotations WITHOUT opening the group. Requires
-// an unlocked vault (the rotation opens the caller's own grant on-device). Idempotent + first-online-wins: the
-// backend leases each job to one worker and coalesces multiple removals into one rotation, so a second
-// key-holder simply finds nothing to claim.
+// (cr-0092, ADR 0025; uc.spaces.complete-queued-rotation). When a tenant owner removes a member co-sharing a GROUP
+// the owner doesn't hold, or a member rotates their account keys after a compromise, the backend queues a
+// SCOPE_ROTATION job (it can't rotate — it holds no key there). The next online **owner** of the scope completes it
+// on-device: mint E_{n+1}, chain-link E_n, re-grant the surviving members (reusing `commitRotation`, cr-0089), then
+// complete. The backend offers the job to owners only (the only members who may commit a rotation), so this worker
+// is never handed one it could not finish — except by a race it declines (below). Claimed **globally across every
+// held scope** — an owner sitting anywhere (even their own personal scope) drains queued rotations WITHOUT opening
+// the group. Requires an unlocked vault (the rotation opens the caller's own grant on-device). First-online-wins: the
+// backend leases each job to one worker, and folds events into a job only while nobody has claimed it, so a second
+// owner simply finds nothing to claim. The backend completes the job only after this worker's own commit landed
+// during its lease, so `completeJob` without a commit is refused.
 import { tasksApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
+import { isCodedError, HttpStatus } from '../../shared/httpError'
 import { commitRotation, isStaleEpoch } from '../spaces/scopes'
 import { listScopeMembers } from '../spaces/members'
 import { activeSpace, refreshActiveScope } from '../../app/activeSpace'
@@ -34,6 +38,10 @@ export async function runScopeRotationWorker(): Promise<number> {
     try {
       // The directory AFTER the cut (the ex-member's membership is already deleted server-side), so the rotation
       // re-grants exactly the surviving set — coalesced removals collapse into one forward-secure rotation.
+      // LOAD-BEARING ORDER: this read comes after the claim. The backend joins a later event (a removal, an account
+      // rotation's new identity) only into a job nobody has claimed yet, so every event this job carries committed
+      // before the claim — and therefore before this read. Reading the directory earlier (cached, prefetched, before
+      // the claim) would let a commit seal the new epoch to an identity the event already replaced.
       // This is the server's word on who remains: unlike a group owner's removal (`rotateGroupForRemoval`, which
       // excludes the member it removes by its own choice), this worker did not remove anyone and has nothing of its
       // own to exclude by, so a server that re-lists a cut member gets them re-granted and re-tagged. That holds
@@ -46,14 +54,28 @@ export async function runScopeRotationWorker(): Promise<number> {
       if (activeSpace.scopeId === job.scopeId) await refreshActiveScope()
       rotated++
     } catch (e) {
-      // Still stale after the rotation's own retry: this worker's grant lags the scope (ADR 0024 §4), so it
-      // cannot perform the rotation at all. Decline — released for a current key-holder, no attempt spent —
-      // rather than fail, which would burn the job's attempts on workers that were never able to do it.
-      if (await isStaleEpoch(e)) await declineJob(job.jobId, 'stale_epoch')
+      // A refusal about THIS worker, never about the job: decline — released to the scope's other owners, no
+      // attempt spent — rather than fail, which would burn the job's attempts on a worker that can never do it.
+      //  - still stale after the rotation's own retry: this worker's grant lags the scope (ADR 0024 §4);
+      //  - not_scope_owner: demoted between claim and commit (the claim offers rotations to owners only);
+      //  - rotation_excluded: this account rotated its keys while holding the lease (ADR 0060 Decision 4).
+      // Not a refused OWN grant (`cannot open scope to rotate`): that fails, on purpose. A decline is permanent for
+      // this job, so an owner whose grant opens again later could never take it; a job that fails out dead-letters,
+      // reads `failed`, and is re-queued as a fresh job with no declines (uc.spaces.complete-queued-rotation E8).
+      const refusal = await workerRefusal(e)
+      if (refusal) await declineJob(job.jobId, refusal)
       else await failJob(job.jobId, 'rotate-failed')
     }
   }
   return rotated
+}
+
+/** The decline reason when a rotation was refused for a reason about this worker rather than the job, else null. */
+async function workerRefusal(e: unknown): Promise<string | null> {
+  if (await isStaleEpoch(e)) return 'stale_epoch'
+  if (await isCodedError(e, HttpStatus.forbidden, 'not_scope_owner')) return 'not_scope_owner'
+  if (await isCodedError(e, HttpStatus.forbidden, 'rotation_excluded')) return 'rotation_excluded'
+  return null
 }
 
 async function claimScopeRotation(): Promise<ClaimedJob | null> {
@@ -64,8 +86,9 @@ async function claimScopeRotation(): Promise<ClaimedJob | null> {
 }
 
 async function completeJob(jobId: string): Promise<void> {
-  // No sealedResult: the rotation-commit (`POST /api/scopes/{scopeId}/epochs`) already advanced the epoch; this
-  // just closes the job. The backend marks it DONE idempotently (a re-complete of a DONE job is a no-op).
+  // No sealedResult: the rotation-commit (`POST /api/scopes/{scopeId}/epochs`) already advanced the epoch and marked
+  // this job as rotated by its holder; this just closes the job. The backend marks it DONE idempotently (a re-complete
+  // of a DONE job is a no-op), and refuses `rotation_not_committed` if no commit of ours landed during the lease.
   await withRefresh(() => tasksApi().completeTask({ jobId, completeRequest: {} }))
 }
 

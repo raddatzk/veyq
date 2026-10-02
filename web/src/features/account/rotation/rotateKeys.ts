@@ -7,13 +7,14 @@
 // and nothing in the surface above it — may suggest otherwise.
 //
 // **What this file does NOT do: re-admit the caller to a shared scope.** The server queues a `scope-rotation`
-// job per shared scope for a *different* key-holder, and re-admission runs through that human's changed-key
+// job per shared scope for another *owner* of it, and re-admission runs through that human's changed-key
 // review (ADR 0060 Decision 4). A rotator who could drive their own re-grant would let an attacker holding the
 // old identity re-admit only themselves, which turns the exclusion into the takeover's final step.
 import * as v1 from '@veyq/crypto/v1'
 import { unlockKekAsync, recoveryKekAsync } from '@veyq/crypto/argonWorker'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { accountRotationApi } from '../../../api/client'
+import type { RotationScopeState } from '../../../api/generated/account'
 import { withRefresh } from '../../../app/sessionRefresh'
 import { identityPrivate, setUnlocked } from '../../../app/vault'
 import { isCodedError, HttpStatus } from '../../../shared/httpError'
@@ -54,17 +55,32 @@ export class RotationRefused extends Error {
   }
 }
 
-/** One scope after the rotation, and what still has to happen to it (uc.account.rotate-keys §9). */
+/** One scope this device re-keyed alone, and how that went (uc.account.rotate-keys §6/§9). */
 export type ScopeOutcome = {
   scopeId: string
-  /** `secured` — re-keyed here, and the new identity holds it. `waiting` — queued for another key-holder, and
-   *  the caller is **outside** that scope until a human there accepts the new key. `failed` — the self-served
-   *  re-key did not complete; the scope is unchanged and the old identity still reads it. */
-  status: 'secured' | 'waiting' | 'failed'
+  /** `secured` — re-keyed here, and the new identity holds it. `failed` — the self-served re-key did not
+   *  complete; the scope is unchanged and the old identity still reads it. */
+  status: 'secured' | 'failed'
 }
 
-/** What a completed rotation leaves behind — a per-scope status, never a success tick. */
+/** What a completed rotation re-keyed here — a per-scope status, never a success tick. The shared scopes it queued
+ *  are not in it: how each of those stands is the server's to say, at any time ({@link listQueuedRotations}). */
 export type RotationResult = { scopes: ScopeOutcome[] }
+
+/**
+ * Where every rotation this account's own rotation queued stands, read from the server on every call (uc.account.
+ * rotate-keys §9, ADR 0060 Decision 6): `waiting`, `stalled` (no owner may complete it — make someone else an
+ * owner), `secured`, or `failed` (it dead-lettered: the old key still reads what is new there). Empty for an
+ * account that never rotated.
+ */
+export async function listQueuedRotations(): Promise<RotationScopeState[]> {
+  return withRefresh(() => accountRotationApi().listRotationScopeStates())
+}
+
+/** Queue a dead-lettered rotation of one scope again, this account still excluded from it; answers the new state. */
+export async function requeueQueuedRotation(scopeId: string): Promise<RotationScopeState> {
+  return withRefresh(() => accountRotationApi().requeueRotationScope({ scopeId }))
+}
 
 /**
  * Rotate. Mints `MK'` and a fresh identity on-device, publishes the account half — the pin store and the device
@@ -211,9 +227,7 @@ export async function rotateKeys(password: string, secretKeyB64: string): Promis
     // ago, so the session it leaves behind is cold however it was originally opened.
     setUnlocked(newMasterKey.slice(), identity.priv, 'cold')
 
-    return {
-      scopes: [...secured, ...result.queuedScopeIds.map((scopeId): ScopeOutcome => ({ scopeId, status: 'waiting' }))],
-    }
+    return { scopes: secured }
   } finally {
     oldMasterKey.fill(0)
     secretKey.fill(0)

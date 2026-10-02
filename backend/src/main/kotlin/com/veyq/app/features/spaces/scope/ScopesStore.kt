@@ -2,6 +2,9 @@ package com.veyq.app.features.spaces.scope
 
 import com.veyq.app.features.admin.tenant.TenantStore
 import com.veyq.app.features.sharing.SharingStore
+import com.veyq.app.features.tasks.CompromiseRotationPolicy
+import com.veyq.app.features.tasks.CompromiseRotationState
+import com.veyq.app.features.tasks.TasksStore
 import com.veyq.app.shared.membership.Admission
 import com.veyq.app.shared.membership.SignedGrant
 import com.veyq.app.shared.membership.admission
@@ -42,6 +45,8 @@ data class ScopeRow(
     /** Who posted the caller's grant, their signature over it and their current identity public key (ADR 0028
      *  Decision 6) — the recipient verifies before it opens. Null for a grant written before grants were signed. */
     val granter: GranterRow?,
+    /** Owner-only: whether a compromise rotation queued on this scope needs an owner (`STALLED`/`FAILED`), or null. */
+    val compromiseRotation: CompromiseRotationState? = null,
 )
 
 /** The granter of one grant as a read serves it: its id, its signature over the grant, and its current identity
@@ -65,6 +70,8 @@ data class TenantRow(
     val grantedEpoch: Int?,
     /** The grant's granter (ADR 0028 Decision 6); null whenever the grant is, or when it was never signed. */
     val granter: GranterRow?,
+    /** Owner-only: whether a compromise rotation queued on the tenant root needs an owner, or null. */
+    val compromiseRotation: CompromiseRotationState? = null,
 )
 
 /** A member of a scope — the row behind a `ScopeMember` (the member directory, cr-0077). `hasGrant=false` is a
@@ -114,6 +121,7 @@ class ScopesStore(
     private val membership: MembershipStore,
     private val tenants: TenantStore,
     private val shares: SharingStore,
+    private val tasks: TasksStore,
 ) {
 
     /** Whether [userId] belongs to the tenant — an accepted root membership (a group-add candidate's check). */
@@ -227,17 +235,32 @@ class ScopesStore(
     /** The caller's scopes in this tenant, each with their own grant ciphertext (to open client-side). A
      *  grant-less ("pending") membership is skipped — the member can't open that scope yet, so it never
      *  surfaces as an openable scope (they see the Personal fallback until delivery lands, cr-0076). */
-    fun listMine(userId: String, tenantId: String): List<ScopeRow> =
-        MembershipEntity.find("userId = ?1 and tenantId = ?2", userId, tenantId).list().mapNotNull { m ->
+    fun listMine(userId: String, tenantId: String): List<ScopeRow> {
+        val memberships = MembershipEntity.find("userId = ?1 and tenantId = ?2", userId, tenantId).list()
+        val stuck = stuckCompromiseRotations(memberships)
+        return memberships.mapNotNull { m ->
             m.wrappedGrant?.let { grant ->
                 ScopeEntity.findById(m.scopeId)?.let {
                     ScopeRow(
                         it.id, it.kind, it.tenantId, m.role, it.currentEpoch, m.grantedEpoch, grant, it.encryptedName,
-                        it.nameEpoch, it.sealedIcon, it.iconEpoch, it.deletedAt, granterOf(m),
+                        it.nameEpoch, it.sealedIcon, it.iconEpoch, it.deletedAt, granterOf(m), stuck[it.id],
                     )
                 }
             }
         }
+    }
+
+    /**
+     * For the scopes among [memberships] the caller **owns**, what a compromise rotation queued there needs from an
+     * owner (uc.spaces.complete-queued-rotation E2/E8): `FAILED` if any rotator's failed, else `STALLED`, else nothing.
+     * A plain member's row never carries it — only owners can promote a co-owner or re-queue. One query over the
+     * caller's owned scopes finds the exclusions; the state is derived only for those.
+     */
+    private fun stuckCompromiseRotations(memberships: List<MembershipEntity>): Map<String, CompromiseRotationState> {
+        val owned = memberships.filter { it.role == MembershipEntity.OWNER && it.wrappedGrant != null }.map { it.scopeId }
+        return tasks.compromiseRotations(owned).groupBy({ it.scopeId }, { it.state })
+            .mapNotNull { (scopeId, states) -> CompromiseRotationPolicy.ownerView(states)?.let { scopeId to it } }.toMap()
+    }
 
     /** The granter of a membership's grant — id, signature, and the identity public key the grant row recorded when
      *  it was written (the key that signed it, [MembershipEntity.granterIdentityPublicKey]) — or null when the grant
@@ -348,7 +371,12 @@ class ScopesStore(
      *  the loser reads the winner's epoch and is a clean stale. Without the lock both read the old epoch, both pass
      *  the policy, and the loser dies on `ux_scope_epoch` — the chain still holds, but as an error the client does
      *  not retry. An admission write takes the same lock ([addGrantlessMember], the tenant's member invite), so no
-     *  admission can be tagged at an epoch a concurrent rotation is leaving. */
+     *  admission can be tagged at an epoch a concurrent rotation is leaving.
+     *
+     *  The same lock is what makes the two facts about the caller exact (ADR 0060 Decision 4): every scope-rotation
+     *  origination takes it too, so an account rotation and the rotator's own commit on one scope serialise, and
+     *  whichever commits second sees the other. A commit that lands marks every rotation job of the scope leased to
+     *  the committer ([TasksStore.markRotated]) — the only thing that lets such a job complete. */
     @Transactional
     fun rotate(
         scopeId: String, epoch: Int, wrappedPrev: String, granterId: String,
@@ -359,9 +387,12 @@ class ScopesStore(
         val all = MembershipEntity.find("scopeId", scopeId).list()
         val invites = if (scope.kind == ScopeEntity.TENANT) tenants.openMemberInvites(scope.tenantId) else emptyList()
         val open = all.mapNotNull { it.admissionId }.toSet() + invites.mapNotNull { it.admissionId }
+        val caller = all.firstOrNull { it.userId == granterId }
         val decision = RotationPolicy.plan(
             scope.currentEpoch, epoch, all.map { RotationMember(it.userId, it.pendingConsent, it.role, it.admissionId) },
             open, grants, retags, dropped, removes,
+            callerExcluded = tasks.isRotationExcluded(scopeId, granterId),
+            callerGrantedEpoch = caller?.wrappedGrant?.let { caller.grantedEpoch },
         )
         val plan = (decision as? RotationDecision.Commit)?.plan ?: return decision
         // A removal-rotation deletes the membership in this same transaction (ADR 0024 Decision 4): if anything below
@@ -404,7 +435,16 @@ class ScopesStore(
             m.persist()
         }
         tenants.carryInvites(invites, plan.newEpoch, plan.retags, plan.dropped)
+        tasks.markRotated(scopeId, granterId, plan.newEpoch)
         return decision
+    }
+
+    /** Take the scope row's lock for the caller's transaction — what a tenant removal's cut holds before it deletes,
+     *  so its rotation origination serialises with every other one of the scope (lock order scope → membership →
+     *  job). */
+    @Transactional
+    fun lockScope(scopeId: String) {
+        ScopeEntity.lockRow(scopeId)
     }
 
     // --- group lifecycle: soft-delete + grace + purge (cr-0090) ---
@@ -591,8 +631,10 @@ class ScopesStore(
      * SUSPENDED tenant stays listed with its status but withholds both the grant and the icon: suspension refuses
      * its members every read, this one included (en.spaces.tenant-scope E1a).
      */
-    fun myTenants(userId: String): List<TenantRow> =
-        MembershipEntity.find("userId = ?1 and pendingConsent = false", userId).list()
+    fun myTenants(userId: String): List<TenantRow> {
+        val accepted = MembershipEntity.find("userId = ?1 and pendingConsent = false", userId).list()
+        val stuck = stuckCompromiseRotations(accepted.filter { it.scopeId == it.tenantId })
+        return accepted
             .groupBy { it.tenantId }
             .mapNotNull { (tenantId, memberships) ->
                 // The tenant role keys on the ROOT scope (scopeId == tenantId), mirroring isTenantOwner
@@ -615,8 +657,10 @@ class ScopesStore(
                         rootScope?.iconEpoch ?: 0,
                         root?.grantedEpoch?.takeIf { grant != null },
                         root?.takeIf { grant != null }?.let { granterOf(it) },
+                        stuck[tenantId]?.takeIf { open },
                     )
                 }
             }
             .sortedBy { it.name }
+    }
 }

@@ -146,8 +146,8 @@ export async function enterScope(token: string): Promise<void> {
     // A shared TENANT/GROUP scope may have grant-less members; Personal never does, so it just stops any poll.
     if (opened.kind !== ScopeKind.Personal) startGrantDeliveryPolling(opened.scopeId, opened.kind, activeWriteKey)
     else stopGrantDeliveryPolling()
-    // Also drain any queued group-key rotations (cr-0092): unlike grant-delivery this is scope-agnostic — a
-    // remaining key-holder completes a queued rotation for ANY group they hold, without opening it. Session-level
+    // Also drain any queued scope-key rotations (cr-0092): unlike grant-delivery this is scope-agnostic — an owner
+    // completes a queued rotation for ANY scope they own (the server offers it to owners only), without opening it. Session-level
     // (restarted on each entry, stopped on logout/re-lock in clearActiveSpace), gated on an unlocked vault.
     startScopeRotationPolling(isUnlocked)
   } catch (err) {

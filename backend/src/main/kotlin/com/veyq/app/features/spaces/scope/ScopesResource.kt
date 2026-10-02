@@ -1,7 +1,9 @@
 package com.veyq.app.features.spaces.scope
 
 import com.veyq.app.generated.api.ScopesApi
+import com.veyq.app.features.tasks.CompromiseRotationState
 import com.veyq.app.generated.model.AddGroupMemberRequest
+import com.veyq.app.generated.model.CompromiseRotation
 import com.veyq.app.generated.model.CreateGroupRequest
 import com.veyq.app.generated.model.CreatePersonalScopeRequest
 import com.veyq.app.generated.model.GroupInvitation
@@ -16,6 +18,7 @@ import com.veyq.app.generated.model.ScopeEpochLink
 import com.veyq.app.generated.model.ScopeKind
 import com.veyq.app.generated.model.ScopeMember
 import com.veyq.app.generated.model.ScopeRotated
+import com.veyq.app.generated.model.ScopeRotationRequeued
 import com.veyq.app.generated.model.ScopeSharesRevoked
 import com.veyq.app.generated.model.ScopeSummary
 import com.veyq.app.generated.model.SetMemberRoleRequest
@@ -48,7 +51,10 @@ import com.veyq.app.shared.ratelimit.RateLimitExempt
     reason =
         "Authenticated; every method is membership- or owner-gated on a scope the caller already belongs " +
         "to. Rotation is the costliest; concurrent commits are serialized by the epoch each one states — only the " +
-        "scope's next epoch commits, under a row lock, and the rest are `409 stale_epoch` with nothing stored.",
+        "scope's next epoch commits, under a row lock, and the rest are `409 stale_epoch` with nothing stored. " +
+        "Re-queueing a compromise rotation is bounded by its own state gate, not by request count: it writes only " +
+        "from `failed`, so there is at most one live covering job, and a job needs every attempt failed before it " +
+        "can be re-queued.",
 )
 class ScopesResource(
     private val handler: ScopesHandler,
@@ -97,6 +103,7 @@ class ScopesResource(
                         granterUserId = it.granter?.let { g -> UUID.fromString(g.userId) },
                         grantSignature = it.granter?.signature,
                         granterIdentityPublicKey = it.granter?.identityPublicKey,
+                        compromiseRotation = it.compromiseRotation?.toWire(),
                     )
                 }).build()
             is HttpFailure -> httpError(outcome)
@@ -227,6 +234,7 @@ class ScopesResource(
                     granterUserId = it.granter?.let { g -> UUID.fromString(g.userId) },
                     grantSignature = it.granter?.signature,
                     granterIdentityPublicKey = it.granter?.identityPublicKey,
+                    compromiseRotation = it.compromiseRotation?.toWire(),
                 )
             },
         ).build()
@@ -246,6 +254,20 @@ class ScopesResource(
      *  would guard a different tenant than it thinks (ADR 0066). */
     private fun activeTenantId(): String? = tenant.resolve()?.id
     // ADR 0075 point 5: a scope owner turns off every link of the scope; each comes back only by re-issue.
+    override fun requeueScopeRotation(scopeId: UUID): Response =
+        when (val o = handler.requeueScopeRotation(identity.principal.name, scopeId.toString())) {
+            is RequeueScopeRotationOutcome.Requeued ->
+                Response.ok(ScopeRotationRequeued(compromiseRotation = o.compromiseRotation?.toWire())).build()
+            is HttpFailure -> httpError(o)
+        }
+
+    /** The owner-only row value on the wire: only the two states that need an owner ever reach it. */
+    private fun CompromiseRotationState.toWire(): CompromiseRotation = when (this) {
+        CompromiseRotationState.STALLED -> CompromiseRotation.stalled
+        CompromiseRotationState.FAILED -> CompromiseRotation.failed
+        CompromiseRotationState.WAITING, CompromiseRotationState.SECURED -> error("$this needs no owner and is never served")
+    }
+
     override fun revokeScopeShares(scopeId: UUID): Response =
         when (val o = handler.revokeScopeShares(identity.principal.name, scopeId.toString())) {
             is RevokeScopeSharesOutcome.Ok -> Response.ok(ScopeSharesRevoked(revoked = o.revoked)).build()

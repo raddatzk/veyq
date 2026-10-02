@@ -103,8 +103,12 @@ does not cover, stated rather than hidden:
   a client going *back* from what it has seen. Detecting a fork needs a transparency mechanism.
 - **Rotations queued to another key-holder.** A tenant-member removal that cuts a co-shared group, and an
   account rotation after a compromise ([ADR 0060](0060-key-rotation-after-compromise.md)), are completed by
-  whichever key-holder is next online, and that client knows only the member list the server returns. There is
-  nothing of its own to exclude by, so these hold against an honest operator only.
+  whichever **owner** of the scope is next online, and that client knows only the member list the server returns.
+  There is nothing of its own to exclude by, so these hold against an honest operator only. Within that bound the
+  queue keeps two promises: an event **joins** a queued job only while nobody has claimed it (a claimed job's
+  worker may already have read the directory the event changed, so a later event gets a job of its own), and a
+  job is `done` only once its lease holder committed an epoch while holding the lease — never on the worker's
+  word alone.
 - **A departing member colluding with the operator** — a sockpuppet admission tagged under `E_n` before the
   removal ([ADR 0020](0020-grant-distribution-invite-wrap.md) § Consequences). Closing it needs a member roster
   the client holds itself, a key-tree-sized change not taken.

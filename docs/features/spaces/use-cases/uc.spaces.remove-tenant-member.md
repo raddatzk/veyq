@@ -2,8 +2,8 @@
 
 - **ID:** uc.spaces.remove-tenant-member
 - **Primary actor:** **TenantOwner** (`OWNER` on the TENANT scope, i.e. `scopeId == tenantId`). Rotating the groups
-  the removed member merely co-shared is completed later by **any remaining group key-holder's device** (operator-
-  blind — the server cannot rotate).
+  the removed member merely co-shared is completed later by **a remaining group owner's device** (operator-blind —
+  the server cannot rotate).
 - **Goal:** remove a member from the tenant — **cut their access to shared + group content immediately**, hand over or
   wind down the groups they leave behind, and give them a **grace window to read their own memories** before those
   are erased. Not: snatch away everything they own the moment they leave.
@@ -54,9 +54,11 @@
   the layer-1 cut (deleted membership → 403) is immediate, but the group's forward-secrecy **rotation** must run on
   a key-holder's device (client-driven — the removing tenant owner isn't necessarily even in that group). The
   removal **queues a `SCOPE_ROTATION` job** on the operator-blind task queue
-  ([ADR 0021](../../../decisions/0021-operator-blind-background-tasks.md)); the next online remaining key-holder
-  mints `E_{n+1}` + re-grants the survivors and completes it (reusing the cr-0089 rotation crypto). One live job
-  per scope **coalesces** multiple removals; idempotent + first-online-wins. Not a hole: layer-1 already blocks new
+  ([ADR 0021](../../../decisions/0021-operator-blind-background-tasks.md)); the next online remaining **owner** of
+  the group mints `E_{n+1}` + re-grants the survivors and completes it (reusing the cr-0089 rotation crypto). A
+  removal **joins** the group's still-unclaimed job, so removals before anyone is online cost one rotation; one
+  that arrives after an owner claimed the job gets its own; first-online-wins
+  ([uc.spaces.complete-queued-rotation](uc.spaces.complete-queued-rotation.md)). Not a hole: layer-1 already blocks new
   fetches; until rotation, the ex-member's old grant reads only pre-departure epochs (the "rotation queued until a
   key-holder is online" limit accepted for group removal, [en.spaces.scope-key-rotation](../enablers/en.spaces.scope-key-rotation.md) §E1).
 - **A5 — turn off every link of the space in the same act.** The removal confirmation carries an unchecked box,

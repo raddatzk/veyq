@@ -46,7 +46,7 @@ vault") is an explicit, rare action. This is the established practice for per-us
 1. **Group — always rotate on removal** ([ADR 0024](0024-scope-key-rotation.md)).
    Small `N`, intentional and often sensitive sharing; the `O(N)` burst is small and rotation delivers
    post-removal forward-confidentiality, against a malicious operator as far as
-   [ADR 0024](0024-scope-key-rotation.md) § Guarantee states — a rotation queued to another key-holder, as a
+   [ADR 0024](0024-scope-key-rotation.md) § Guarantee states — a rotation queued to another owner, as a
    tenant removal that cuts a co-shared group is, holds against an honest operator only. **Unchanged.**
 
 2. **Tenant — ACL-revoke by default; no automatic content-key rotation on routine removal.** Removing a member

@@ -10,8 +10,11 @@ reference; the decisions + rationale live in [ADR 0021](../decisions/0021-operat
   reconcile-on-entry**; a push channel (SSE) is a later seam on the same server.
 - **Workers = an equal, self-selecting pool.** Any **interactive client** *or* the headless **agent** is a
   worker on the same protocol. A blind server can't schedule work it can't read, so workers pull and self-select.
-- **Eligibility = holding the scope key.** A worker can only act on a job whose `scopeId` it holds a grant for
-  (it unseals the body with a `K_SC`-derived key). **Capability = opaque tags** the worker can process.
+- **Eligibility = holding the scope key, narrowed per tag.** A worker can only act on a job whose `scopeId` it
+  holds a grant for (it unseals the body with a `K_SC`-derived key). A tag whose work only some key-holders may
+  complete narrows that set: `scope-rotation` is offered only to an **owner** of its scope, the only member who may
+  commit a rotation ([ADR 0021](../decisions/0021-operator-blind-background-tasks.md) §4). **Capability = opaque
+  tags** the worker can process.
 
 ## The job envelope
 
@@ -47,14 +50,17 @@ sequenceDiagram
 - **Claim / lease.** Atomic (`WHERE status='pending'`, MariaDB `SKIP LOCKED`). Every claim leases with a
   **TTL**; expensive jobs **heartbeat** to keep it. Only the lease holder heartbeats, completes, fails or
   declines ([ADR 0021](../decisions/0021-operator-blind-background-tasks.md) §6) — idempotency makes a *repeated*
-  completion harmless, it does not make an *unclaimed* one legitimate. A crash → the lease expires → **lazy
-  reclaim**. `attempts` + a max → **dead-letter**. No job work happens in a deleting scope or a suspended tenant
+  completion harmless, it does not make an *unclaimed* one legitimate. Each of those transitions, the completion
+  included, is a compare-and-set on the lease (`… where status = LEASED and leaseHolder = <caller>`) whose row count
+  decides the answer: a worker whose expired lease was reclaimed between its read and its write writes nothing,
+  and the reclaimer keeps the job. A crash → the lease expires → **lazy reclaim**. `attempts` + a max → **dead-letter**. No job work happens in a deleting scope or a suspended tenant
   ([uc.spaces.scope-access](../features/spaces/use-cases/uc.spaces.scope-access.md)).
 - **Result.** Usually a normal **sealed** write via an existing path (a grant onto a membership, a derivative
   blob, a node update) → mark `done`; the originator observes it through that path. Otherwise an optional sealed
   `sealedResult`. No plaintext result store.
 - **Origination.** The server may originate only **structural, non-sensitive** jobs it already understands
-  (grant-less membership → `grant-delivery`). **Content-processing jobs are client/agent-originated**, so the
+  (grant-less membership → `grant-delivery`), and event jobs it witnessed but cannot complete (a co-shared member
+  cut or an account rotation → `scope-rotation`); a client's enqueue of either tag is refused. **Content-processing jobs are client/agent-originated**, so the
   server never picks a content-semantic type.
 
 ## What the operator sees (honest)

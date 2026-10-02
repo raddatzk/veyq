@@ -15,7 +15,7 @@ import { checkAndPin, IdentityChangedError } from '../account/identityPins'
 import { epochFloor, raiseEpochFloor } from '../account/trustMarks'
 import { deriveGroupNameKey, wrapNameKeyToInvitee, sealGroupName, openGroupNameWith } from './inviteName'
 import { deriveSpaceIconKey, sealIcon, openIcon } from './spaceIcon'
-import { ScopeKind, type ScopeSummary, type MyTenant, type ScopeMember } from '../../api/generated/scopes'
+import { ScopeKind, type CompromiseRotation, type ScopeSummary, type MyTenant, type ScopeMember } from '../../api/generated/scopes'
 import type { PendingMemberInvite } from '../../api/generated/tenants'
 
 /** The seal context of a scope grant (ADR 0072), re-exported — its home is {@link ./grant}, shared with the
@@ -42,10 +42,26 @@ export async function restoreGroup(scopeId: string): Promise<void> {
   await withRefresh(() => scopesApi().restoreGroup({ scopeId }))
 }
 
-/** A scope's pending-deletion state (cr-0090) — null when the caller holds no such scope. No name decryption. */
-export async function scopeLifecycle(scopeId: string): Promise<{ deletedAt: Date | null; purgeAfter: Date | null } | null> {
+/** A scope's pending-deletion state (cr-0090), and — on an owner's row only — whether a compromise rotation queued
+ *  on it needs an owner (uc.spaces.complete-queued-rotation). Null when the caller holds no such scope. No name
+ *  decryption. */
+export async function scopeLifecycle(
+  scopeId: string,
+): Promise<{ deletedAt: Date | null; purgeAfter: Date | null; compromiseRotation: CompromiseRotation | null } | null> {
   const s = (await listMyScopes()).find((x) => x.id === scopeId)
-  return s ? { deletedAt: s.deletedAt ?? null, purgeAfter: s.purgeAfter ?? null } : null
+  return s
+    ? { deletedAt: s.deletedAt ?? null, purgeAfter: s.purgeAfter ?? null, compromiseRotation: s.compromiseRotation ?? null }
+    : null
+}
+
+/**
+ * An owner queues the scope's dead-lettered compromise rotation again (uc.spaces.complete-queued-rotation E8): every
+ * rotated account whose rotation failed is excluded again, this caller is not — so this device's own worker can
+ * claim it on its next pass. Answers the row's new value (null once nothing needs an owner).
+ */
+export async function requeueScopeRotation(scopeId: string): Promise<CompromiseRotation | null> {
+  const r = await withRefresh(() => scopesApi().requeueScopeRotation({ scopeId }))
+  return r.compromiseRotation ?? null
 }
 
 /** Peel the scope's epoch chain from the caller's grant key down to E_0 (ADR 0024). No fetch when unrotated. */
@@ -143,7 +159,11 @@ function openGroupIconAt(scopeId: string, epochs: EpochKeys, iconEpoch: number, 
 /** A group the member holds — the switcher/settings row: opaque id + tenant + the **decrypted** (client-side)
  *  name + its decrypted `icon` bytes (null → the initial) + the caller's own `role` in it (OWNER/MEMBER, cr-0087 —
  *  lets the settings hub list groups I own). */
-export type GroupSpace = { scopeId: string; tenantId: string; name: string; icon: Uint8Array | null; role: string; deletedAt: Date | null; purgeAfter: Date | null }
+export type GroupSpace = {
+  scopeId: string; tenantId: string; name: string; icon: Uint8Array | null; role: string; deletedAt: Date | null; purgeAfter: Date | null
+  /** Owner rows only: a compromise rotation queued here that needs an owner (`stalled`/`failed`), else null. */
+  compromiseRotation: CompromiseRotation | null
+}
 
 /**
  * The member's groups in the active tenant with their names decrypted on-device (en.spaces.group-scope). Each
@@ -166,7 +186,10 @@ export async function listMyGroups(): Promise<GroupSpace[]> {
           epochs = await epochKeysFor(g, await openOwnGrant(g, priv, self))
           const name = g.encryptedName ? openGroupName(g.id, epochs, g.nameEpoch, g.encryptedName) : ''
           const icon = g.sealedIcon ? openGroupIconAt(g.id, epochs, g.iconEpoch, g.sealedIcon) : null
-          return { scopeId: g.id, tenantId: g.tenantId, name, icon, role: g.role, deletedAt: g.deletedAt ?? null, purgeAfter: g.purgeAfter ?? null }
+          return {
+            scopeId: g.id, tenantId: g.tenantId, name, icon, role: g.role, deletedAt: g.deletedAt ?? null,
+            purgeAfter: g.purgeAfter ?? null, compromiseRotation: g.compromiseRotation ?? null,
+          }
         } catch {
           return null
         } finally {

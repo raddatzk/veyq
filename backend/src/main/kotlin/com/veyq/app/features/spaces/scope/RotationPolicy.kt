@@ -31,8 +31,11 @@ data class RotationPlan(
 /** What a rotation request comes to: commit this plan, or refuse it with nothing stored. */
 sealed interface RotationDecision {
     data class Commit(val plan: RotationPlan) : RotationDecision
-    /** The stated epoch is not the scope's next one (`409 stale_epoch`). */
+    /** The stated epoch is not the scope's next one, or the caller's own grant is behind or absent (`409 stale_epoch`). */
     object Stale : RotationDecision
+    /** The caller's account rotation queued a still-live rotation of this scope that excludes them
+     *  (`403 rotation_excluded`, ADR 0060 Decision 4). */
+    object Excluded : RotationDecision
     /** An open admission is neither re-tagged nor dropped (`409 admissions_incomplete`). */
     object AdmissionsIncomplete : RotationDecision
     /** A removal-rotation names someone who holds no membership on the scope (`404 member_not_found`). */
@@ -64,6 +67,16 @@ sealed interface RotationDecision {
  *   and a request that does neither for any one of them is refused. The server checks presence only: it holds no
  *   epoch key, so whether a tag is genuine is every client's question, never this one's.
  *
+ * Two facts about the **caller** come first, both read under the scope row's lock (ADR 0060 Decision 4, #206):
+ * - **Excluded** — a still-live rotation job of the scope carries the caller's rotation exclusion: their account
+ *   rotated after a compromise, and the rotation that excludes their old identity has not landed. For an owner rotator
+ *   the owner gate is no reason at all, so this is where the exclusion binds a client of their own.
+ * - **Behind** — the caller's own grant is older than the scope's epoch, or absent: they hold no key to chain the new
+ *   epoch from, whatever epoch they state. This is the answer the contract already gave for "the caller's grant lags
+ *   the scope", now taken from the server's row instead of the client's word. Once the covering rotation landed (and
+ *   skipped the rotator's changed key) it is what still holds the rotator; once a human re-admits them, neither fact
+ *   applies, which is the intended end of the exclusion.
+ *
  * A **removal-rotation** ([removes] set, ADR 0024 Decision 4) also deletes that member's membership in the same
  * commit, so a removal can never end without its rotation. Its grants must not name that member: the remover's client
  * excluded them by its own choice, and a request that re-grants them anyway is refused rather than trimmed — the
@@ -80,8 +93,12 @@ object RotationPolicy {
         grants: List<RotationGrant>,
         retags: List<Pair<String, String>>,
         dropped: Set<String>,
-        removes: String? = null,
+        removes: String?,
+        callerExcluded: Boolean,
+        callerGrantedEpoch: Int?,
     ): RotationDecision {
+        if (callerExcluded) return RotationDecision.Excluded
+        if (callerGrantedEpoch == null || callerGrantedEpoch < currentEpoch) return RotationDecision.Stale
         if (statedEpoch != currentEpoch + 1) return RotationDecision.Stale
         var remaining = members
         var open = openAdmissions

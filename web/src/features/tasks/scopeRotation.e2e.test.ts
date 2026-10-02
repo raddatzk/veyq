@@ -7,7 +7,8 @@
 //
 // Flow: A removes C from the tenant → the cascade cuts C's co-shared G membership and originates a
 // SCOPE_ROTATION job (A can't rotate G — A holds no key there). A/removed-C cannot claim it; B (the remaining
-// key-holder) claims it via runScopeRotationWorker, mints E_1 + re-grants the survivors on-device, completes.
+// owner, the only one the job is offered to) claims it via runScopeRotationWorker, mints E_1 + re-grants the survivors
+// on-device, and completes — on its own commit, the only one the completion accepts.
 // Asserts the rotation genuinely happened on the live backend: epoch 0 → 1, a real chain-link at epoch 1, B
 // re-granted at epoch 1, C gone, and the job cleared. The pure ex-member lockout crypto (E_0 can't derive E_1)
 // is unit-tested in scopes.test.ts / epochs.test.ts; this proves the whole mechanism is wired live. Its last leg
@@ -36,7 +37,7 @@ async function claimRotation() {
 }
 
 describe.skipIf(!process.env.VEYQ_E2E)('cr-0092 async rotation backstop (live, real crypto)', () => {
-  it('a tenant-member removal queues a rotation a remaining key-holder completes; A/ex-member cannot', async () => {
+  it('a tenant-member removal queues a rotation a remaining owner completes; A/ex-member cannot', async () => {
     // --- A: cold-birth the server owner, then create + accept the tenant as its OWNER ---
     const { owner: A, tenant, salt } = await birthInstance('E2E Rotation')
 
@@ -66,7 +67,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('cr-0092 async rotation backstop (live, r
     await become(C)
     expect(await claimRotation(), 'the removed member cannot claim the rotation').toBeNull()
 
-    // --- B: the remaining key-holder drains the queued rotation on-device (claim → rotate → complete) ---
+    // --- B: the remaining owner drains the queued rotation on-device (claim → rotate → complete) ---
     await become(B)
     const rotated = await runScopeRotationWorker()
     expect(rotated, 'B completed exactly one queued rotation').toBe(1)

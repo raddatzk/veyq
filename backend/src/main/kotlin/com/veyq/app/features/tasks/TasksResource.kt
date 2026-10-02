@@ -51,9 +51,10 @@ class TasksResource(
         }
 
     override fun enqueueTask(enqueueRequest: EnqueueRequest): Response {
-        // Structural tags are server-originated only — reject them at the front door with a clear 400 (the store
-        // enforces this too as defence in depth). A client may only enqueue content-processing jobs.
-        if (enqueueRequest.capabilityTag == CapabilityTags.GRANT_DELIVERY) {
+        // Server-originated tags (the registry's `server-structural` and `server-event`) are created by the server
+        // alone — reject them at the front door with a clear 400 (the store enforces this too as defence in depth).
+        // A client may only enqueue content-processing jobs.
+        if (enqueueRequest.capabilityTag in CapabilityTags.SERVER_ORIGINATED) {
             return httpError(Failures.invalidRequest)
         }
         return when (val outcome = handler.enqueue(

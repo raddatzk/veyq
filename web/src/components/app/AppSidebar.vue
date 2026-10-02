@@ -324,6 +324,9 @@ function closeMobileMenu() {
                 <small v-if="activeSpace.tenantUnavailable" class="sidebar-tenant-awaiting">
                   {{ t('members.awaitingAccess') }}
                 </small>
+                <small v-else-if="activeTenant.compromiseRotation" class="sidebar-tenant-awaiting">
+                  {{ t('members.compromiseRotationMark') }}
+                </small>
                 <small v-else>{{ activeTenant.domain }}</small>
               </span>
             </a>
@@ -434,7 +437,9 @@ function closeMobileMenu() {
         >
           <TenantAvatar v-if="groupIcon(group.scopeId)" :name="group.name" :icon="groupIcon(group.scopeId)" />
           <span v-else class="sidebar-scope-icon pi pi-users" />
-          <span><strong>{{ group.name }}</strong></span>
+          <!-- An owner's mark beside the name: a compromise rotation queued here needs an owner (stalled or failed,
+               uc.spaces.complete-queued-rotation) — the member panel says which and offers what fits. -->
+          <span><strong>{{ group.name }}</strong><small v-if="group.compromiseRotation" class="sidebar-tenant-awaiting">{{ t('members.compromiseRotationMark') }}</small></span>
         </a>
       </RouterLink>
       <!-- Compact strip (measured overflow): only the groups that fit, then a "＋N" chevron menu for the rest. -->
@@ -518,6 +523,7 @@ function closeMobileMenu() {
                 <span>
                   <strong>{{ tenant.name }}</strong>
                   <small v-if="activeSpace.tenantUnavailable" class="sidebar-tenant-awaiting">{{ t('members.awaitingAccess') }}</small>
+                  <small v-else-if="tenant.compromiseRotation" class="sidebar-tenant-awaiting">{{ t('members.compromiseRotationMark') }}</small>
                   <small v-else>{{ tenant.domain }}</small>
                 </span>
               </RouterLink>
@@ -558,7 +564,7 @@ function closeMobileMenu() {
               :class="{ 'mobile-nav-item-active': groupActive(group.scopeId) }"
               @click="closeMobileMenu"
             >
-              <TenantAvatar v-if="groupIcon(group.scopeId)" :name="group.name" :icon="groupIcon(group.scopeId)" /><span v-else class="sidebar-scope-icon pi pi-users" /><span><strong>{{ group.name }}</strong></span>
+              <TenantAvatar v-if="groupIcon(group.scopeId)" :name="group.name" :icon="groupIcon(group.scopeId)" /><span v-else class="sidebar-scope-icon pi pi-users" /><span><strong>{{ group.name }}</strong><small v-if="group.compromiseRotation" class="sidebar-tenant-awaiting">{{ t('members.compromiseRotationMark') }}</small></span>
             </RouterLink>
             <button v-if="canCreateGroup" class="mobile-nav-item" type="button" @click="createGroupOpen = true; closeMobileMenu()">
               <span class="sidebar-scope-icon pi pi-plus" /><span>{{ t('shell.groupCreate') }}</span>

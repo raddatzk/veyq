@@ -63,6 +63,16 @@ class JobEntity : PanacheEntityBase {
     @Column(name = "created_at", nullable = false)
     lateinit var createdAt: Instant
 
+    /**
+     * For a `scope-rotation` job: the epoch a rotation commit of its scope created while this job was leased to the
+     * committer — written by that commit, in its transaction. The completion requires it, so a rotation job is DONE
+     * only on its holder's own commit, never on the worker's word. Not cleared on a reclaim: every holder's lease
+     * starts after every event the job carries, so any holder's commit during any of its leases came after them.
+     * Null on every other tag.
+     */
+    @Column(name = "rotated_epoch")
+    var rotatedEpoch: Int? = null
+
     companion object : PanacheCompanionBase<JobEntity, String> {
         const val PENDING = "PENDING"
         const val LEASED = "LEASED"

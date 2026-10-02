@@ -33,6 +33,8 @@ import { useConfirm } from '../../shared/state/useConfirm'
 import { revokeScopeShares } from '../memory/share'
 import ChangedKeyReviewDialog from './ChangedKeyReviewDialog.vue'
 import TrustResetLink from '../account/trustReset/TrustResetLink.vue'
+import CompromiseRotationNotice from './CompromiseRotationNotice.vue'
+import type { CompromiseRotation } from '../../api/generated/scopes'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -48,6 +50,9 @@ const inviteOpen = ref(false)
 // initial), and — for the owner — set/replace/remove. The name is server-visible plaintext; the icon is sealed and
 // opened on-device against the caller's own grant. Mirrors GroupMembersPanel's owner-gated `group-name-header`.
 const tenantName = ref('')
+/** Owner rows only: a compromise rotation queued on the tenant root that needs an owner
+ *  (uc.spaces.complete-queued-rotation E2/E8), from the switcher's own row of this tenant. */
+const stuckRotation = ref<CompromiseRotation | null>(null)
 const tenantIcon = useObjectUrl() // an owned object URL for the decrypted icon (revoked on replace/unmount)
 const iconDialogOpen = ref(false)
 const iconBusy = ref(false)
@@ -79,6 +84,7 @@ const { members, isOwner, trust, trustRefusal, unadmitted, reviewTarget, reviewO
     // The identity header: the tenant name (plaintext) + its icon opened on-device against our own grant (null when
     // unset / grant-less / unopenable → the initial shows). Every member reads it, not just the owner.
     tenantName.value = mine?.name ?? ''
+    stuckRotation.value = mine?.compromiseRotation ?? null
     const iconBytes = mine ? await openMyTenantIcon(mine) : null
     if (iconBytes) tenantIcon.set(new Blob([iconBytes as BlobPart], { type: 'image/webp' }))
     else tenantIcon.clear()
@@ -271,6 +277,12 @@ async function revoke(invite: PendingMemberInvite) {
         </div>
       </div>
       <Message v-if="iconError" severity="error" :closable="false">{{ iconError }}</Message>
+      <CompromiseRotationNotice
+        v-if="isOwner && activeSpace.scopeId"
+        :scope-id="activeSpace.scopeId"
+        :state="stuckRotation"
+        @requeued="stuckRotation = $event"
+      />
 
       <div class="settings-section-header">
         <div>

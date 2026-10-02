@@ -39,9 +39,10 @@
   The action is rejected; the caller must first promote another member or delete the group.
 - **A2 — the remover holds no key.** A tenant owner's removal that cuts a co-shared group they do not hold
   ([uc.spaces.remove-tenant-member](uc.spaces.remove-tenant-member.md) A4) cannot rotate: the rotation is *queued*
-  as a `SCOPE_ROTATION` job until a remaining key-holder is next online, who mints `E_{n+1}` + re-grants the
-  survivors on-device (the **async rotation backstop**, cr-0092,
-  [en.spaces.scope-key-rotation](../enablers/en.spaces.scope-key-rotation.md) §E1). That device did not remove
+  as a `SCOPE_ROTATION` job until a remaining **owner** of the group is next online, who mints `E_{n+1}` +
+  re-grants the survivors on-device (the **async rotation backstop**, cr-0092,
+  [en.spaces.scope-key-rotation](../enablers/en.spaces.scope-key-rotation.md) §E1;
+  [uc.spaces.complete-queued-rotation](uc.spaces.complete-queued-rotation.md) owns its lifecycle). That device did not remove
   anyone and re-grants the directory the server returns, so this path holds against an honest operator only
   (ADR 0024 § Guarantee). A group owner's own removal never queues: it is step 4's one request.
 - **A3 — a non-owner attempts an action:** rejected (owner-gated, enforced by code, [ADR 0008](../../../decisions/0008-centralized-http-auth.md)).

@@ -25,8 +25,10 @@ info:
 
     `POST /api/account/rotation` ends a compromise (uc.account.rotate-keys, ADR 0060): the Master Key and the
     identity keypair are replaced **together**, in one transaction, and every scope the account shares gets a
-    queued rotation for a different key-holder. It is forward secrecy, not repair — what the old identity
+    queued rotation for another owner of that scope. It is forward secrecy, not repair — what the old identity
     already read stays read — and it receives, as everything here does, only ciphertext and a public key.
+    `GET /api/account/rotation/scopes` reads back, at any time, the state of each rotation queued that way, and
+    `POST /api/account/rotation/scopes/{scopeId}/requeue` queues a dead-lettered one again.
 
     `/api/account/email` shows the caller the address a password reset would mail and whether they have
     confirmed reading it, and runs that confirmation (uc.account.confirm-email-address, ADR 0074). The record
@@ -486,6 +488,97 @@ paths:
               examples:
                 unavailable: { value: { code: rotation_unavailable } }
                 stale: { value: { code: stale_version } }
+
+  /api/account/rotation/scopes:
+    get:
+      tags: [account-rotation]
+      operationId: listRotationScopeStates
+      summary: The state of every rotation the caller's own account rotation queued.
+      description: >
+        For every scope where an account rotation of the **caller** queued a `scope-rotation` job (the scope's
+        jobs carry the caller's rotation exclusion) and the caller is still a member, the state of the newest such
+        job, derived from rows the server already holds (uc.account.rotate-keys §9, ADR 0060 Decision 6) — first
+        match wins:
+        `secured` when the caller's own grant on the scope is behind the scope's epoch or absent (the old identity
+        then holds no grant to the current epoch, whatever the jobs say), or when the job is `done` (its holder
+        committed an epoch during its lease); `failed` when the job dead-lettered — `failed`, or still `leased`
+        with an expired lease and no attempts left; `stalled` when it is live and no owner of the scope both holds
+        a grant and has not declined it (uc.account.rotate-keys E4); `waiting` otherwise. Until a scope reads
+        `secured`, the old identity can still read what is new there. Empty for an account that never rotated.
+        Only the caller's own rows; operator-blind: scope ids the server routes on and one enum per scope.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: One entry per scope a rotation of the caller's account queued.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/RotationScopeState" }
+              example:
+                - { scopeId: 1a2b3c4d-5e6f-4071-8213-9a0b1c2d3e4f, state: waiting }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+
+  /api/account/rotation/scopes/{scopeId}/requeue:
+    post:
+      tags: [account-rotation]
+      operationId: requeueRotationScope
+      summary: Queue a dead-lettered rotation of one scope again, still excluded from it.
+      description: >
+        From the `failed` state only (see `listRotationScopeStates`): originates the scope's rotation again with
+        the caller excluded, exactly as their account rotation did — it joins the scope's unclaimed rotation job
+        if one exists (a removal may have queued one since), creates one otherwise, and excludes the caller from
+        every live rotation job of the scope. From that moment `rotateScope` refuses the caller there again
+        (`403 rotation_excluded`, ADR 0060 Decision 4), which closes the window the dead-letter opened. Answers the
+        scope's new state (`waiting` or `stalled`). Membership is the first gate (ADR 0042): a caller who is not a
+        member of the scope gets `404 scope_not_found`, the answer for a scope id that does not exist; a member
+        whose account rotation never queued a rotation there gets `404 rotation_not_found`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: scopeId, in: path, required: true, description: Opaque id of the scope., schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Queued again; the scope's state now.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RotationScopeState" }
+              example: { scopeId: 1a2b3c4d-5e6f-4071-8213-9a0b1c2d3e4f, state: waiting }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The tenant is suspended (`tenant_suspended`, uc.spaces.scope-access). Nothing was written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_suspended }
+        "404":
+          description: >
+            No such scope, or the caller is not a member of it (`scope_not_found`, indistinguishable, ADR 0042); or
+            the caller is a member and no rotation of their account was ever queued on it (`rotation_not_found`).
+            Nothing was written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: scope_not_found }
+        "409":
+          description: >
+            The state is not `failed` (`rotation_not_failed`) — the rotation is waiting, stalled or secured, so there
+            is nothing to queue again — or the space is being deleted (`scope_deleting`). Nothing was written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: rotation_not_failed }
 
   /api/account/email:
     get:
@@ -1099,16 +1192,40 @@ components:
           x-veyq-visibility: id
           type: array
           description: >
-            Shared scopes that now carry a `scope-rotation` job for a **different** key-holder to complete — the
+            Shared scopes that now carry a `scope-rotation` job for **another owner** to complete — the
             rotator is excluded from claiming their own (ADR 0060 Decision 4: a rotator who could drive their own
             re-grant would let an attacker holding the old identity re-admit only themselves). A scope whose
             rotation was already queued is listed here too: queued is queued, and the client's status must not
             read differently for a coalesced job. Until someone accepts the changed key there, the caller is
-            outside these scopes.
+            outside these scopes. This list is the moment of the rotation; the state of each over time is
+            `GET /api/account/rotation/scopes`.
           items:
             type: string
             maxLength: 36
           example: [1a2b3c4d-5e6f-4071-8213-9a0b1c2d3e4f]
+
+    RotationScopeState:
+      type: object
+      description: >
+        One scope an account rotation of the caller queued, and the state of its covering rotation (see
+        `listRotationScopeStates` for the derivation).
+      required: [scopeId, state]
+      properties:
+        scopeId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: Opaque id of the scope.
+          example: 1a2b3c4d-5e6f-4071-8213-9a0b1c2d3e4f
+        state:
+          x-veyq-visibility: enum
+          type: string
+          description: >
+            `waiting` — an owner who may complete it exists; `stalled` — no owner may (promote a co-owner);
+            `secured` — the old identity holds no grant to the scope's current epoch; `failed` — the job
+            dead-lettered, and it can be queued again.
+          enum: [waiting, stalled, secured, failed]
+          example: waiting
 
     ChangePasswordRequest:
       type: object

@@ -5,6 +5,7 @@ import io.quarkus.hibernate.orm.panache.kotlin.PanacheEntityBase
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
+import jakarta.persistence.LockModeType
 import jakarta.persistence.Table
 import org.hibernate.annotations.DynamicUpdate
 import java.time.Instant
@@ -86,5 +87,14 @@ class ScopeEntity : PanacheEntityBase {
         const val TENANT = "TENANT"
         const val GROUP = "GROUP"
         const val PERSONAL = "PERSONAL"
+
+        /**
+         * Take the scope row's write lock for the caller's transaction — the one serialisation point a rotation
+         * commit, an admission, a grant-delivery completion and every scope-rotation origination of one scope share
+         * (lock order: scope → membership → job). A query rather than `findById`, so the `SELECT … FOR UPDATE`
+         * reaches the database even when the transaction already holds the row in its persistence context (a
+         * tenant removal has read it to plan its cascade). A lock, not a mutation: the stores still own every write.
+         */
+        fun lockRow(id: String): ScopeEntity? = find("id", id).withLock(LockModeType.PESSIMISTIC_WRITE).firstResult()
     }
 }

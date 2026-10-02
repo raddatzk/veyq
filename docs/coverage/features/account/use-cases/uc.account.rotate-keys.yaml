@@ -85,14 +85,40 @@ acceptanceCriteria:
   - id: shared-scopes-queued-not-self-served
     # The negative owes a control, and here it is the same job: the co-member's claim SUCCEEDS on the very job
     # the rotator is refused. Without it the assertion passes equally against a rotation nobody can complete.
-    text: Every shared scope gets a SCOPE_ROTATION job that a DIFFERENT key-holder completes; the rotator may never drive their own re-grant, including on a job that was already queued when the rotation ran. Without this an attacker holding the old identity would mint the new epoch, wrap it to their own new identity and exclude the legitimate holder.
+    text: >
+      Every shared scope gets a SCOPE_ROTATION job that ANOTHER OWNER completes; the rotator may never drive their own
+      re-grant — not by claiming it (on a job already queued when the rotation ran, or a leased one whose lease
+      lapses, from both of which they are excluded), and not by committing the rotation directly with a client of
+      their own: rotateScope refuses them while a live job carries their exclusion (403 rotation_excluded), and
+      afterwards while their own grant is behind (409 stale_epoch), until a human re-admits them. Without this an
+      attacker holding the old identity would mint the new epoch, wrap it to their own new identity and exclude the
+      legitimate holder.
     coverage:
       backend:
+        unit:
+          - RotationPolicyTest.refusesACallerAnAccountRotationExcluded
+          - RotationPolicyTest.refusesACallerWhoseGrantIsBehindTheScope
+          - RotationPolicyTest.refusesACallerWhoHoldsNoGrant
         integration:
           - RotationSliceTest.theRotatorCannotClaimTheirOwnRotationButACoMemberCan
           - RotationSliceTest.aScopeThatAlreadyHadALiveRotationStillExcludesTheRotator
+          - RotationSliceTest.anAccountRotationDuringALeaseGetsItsOwnJobAndExcludesTheRotatorFromBoth
+          - RotationSliceTest.theRotatorCannotCommitWhileTheirExclusionIsLive
+          - RotationSliceTest.afterTheCoveringRotationTheRotatorIsBehindUntilReAdmitted
+  - id: queued-rotation-state-readable
+    text: >
+      §9/E3/E4: the rotator reads, at any time, the server's state of every rotation their rotation queued —
+      waiting, stalled (no owner may complete it), secured (their own grant is behind, or the covering job is done)
+      or failed (it dead-lettered, also when still LEASED with no attempts left) — derived from the newest job
+      carrying their exclusion, never synthesised once by the client; secured is never shown while the old identity
+      can hold the current epoch. From failed, and only from failed, they can queue it again, still excluded: that
+      re-arms rotateScope's refusal (409 rotation_not_failed otherwise, 404 rotation_not_found on a scope their
+      rotation never queued). The security panel reads it on every visit and offers the re-queue on failed only.
+    coverage:
+      backend: { integration: [RotationSliceTest.theRotatorReadsEachQueuedRotationsStateFromTheServer, RotationSliceTest.fromFailedTheRotatorRequeuesAndTheExclusionIsBack] }
+      web: { unit: [src/features/account/rotation/KeyRotationPanel.test.ts, src/features/account/rotation/rotateKeys.test.ts] }
   - id: outside-until-readmitted
-    text: After rotating, the holder is outside every shared scope until a human there accepts the new key through the changed-key review — the worker declines delivery to a changed key and the re-grant loop skips them while the rotation proceeds. The result surface reports this per scope rather than as a success state.
+    text: After rotating, the holder is outside every shared scope until a human there accepts the new key through the changed-key review — the worker declines delivery to a changed key and the re-grant loop skips them while the rotation proceeds. The result surface reports this per scope rather than as a success state — the self-served scopes by the client's own outcome, the queued ones by the server's re-readable state (queued-rotation-state-readable).
     coverage:
       web: { unit: [src/features/account/rotation/rotateKeys.test.ts] }
   - id: accept-clears-the-decline

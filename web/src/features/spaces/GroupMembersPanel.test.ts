@@ -25,6 +25,7 @@ vi.mock('./scopes', () => ({
   setSpaceIcon: vi.fn().mockResolvedValue(undefined),
   clearSpaceIcon: vi.fn().mockResolvedValue(undefined),
   openGroupIcon: vi.fn().mockResolvedValue(null),
+  requeueScopeRotation: vi.fn(),
 }))
 vi.mock('../account/identityPins', () => ({
   acceptKeyChange: vi.fn(),
@@ -43,7 +44,7 @@ vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: conf
 
 import GroupMembersPanel from './GroupMembersPanel.vue'
 import { listScopeMembers, removeGroupMember, resolveGroupMember, addGroupMember } from './members'
-import { setSpaceIcon, clearSpaceIcon, openGroupIcon, rotateGroupForRemoval, wrapGroupNameKeyForInvitee } from './scopes'
+import { setSpaceIcon, clearSpaceIcon, openGroupIcon, rotateGroupForRemoval, wrapGroupNameKeyForInvitee, scopeLifecycle, requeueScopeRotation } from './scopes'
 import { acceptKeyChange, IdentityChangedError } from '../account/identityPins'
 import { runScopeRotationWorker } from '../tasks/scopeRotationWorker'
 import { getMyProfile } from '../account/profile/profile'
@@ -233,5 +234,41 @@ describe('GroupMembersPanel — accepting an invitee\'s changed key drains the r
     expect(events).toEqual(['pass', 'pin written'])
     expect(acceptKeyChange).toHaveBeenCalledWith('u-c', 'new-key')
     expect(addGroupMember).toHaveBeenCalledWith('g-1', 'carol', 'u-c', 'c2VhbGVk') // the retried add
+  })
+})
+
+describe('GroupMembersPanel — a stuck compromise rotation, on an owner row (uc.spaces.complete-queued-rotation)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    globalThis.URL.createObjectURL = vi.fn(() => 'blob:mock')
+    globalThis.URL.revokeObjectURL = vi.fn()
+  })
+
+  const withRow = (compromiseRotation: 'stalled' | 'failed' | null) =>
+    vi.mocked(scopeLifecycle).mockResolvedValue({ deletedAt: null, purgeAfter: null, compromiseRotation })
+
+  it('on failed: says the old key still reads what is new, and re-queues it', async () => {
+    withRow('failed')
+    vi.mocked(requeueScopeRotation).mockResolvedValue(null)
+    const w = await mountPanel({ me: 'owner' })
+    expect(w.text()).toContain(t('members.compromiseRotation.failed'))
+    await button(w, t('members.compromiseRotationRequeue'))!.trigger('click')
+    await flushPromises()
+    expect(requeueScopeRotation).toHaveBeenCalledWith('g-1')
+    expect(w.text()).not.toContain(t('members.compromiseRotation.failed')) // the answered value: nothing stuck now
+  })
+
+  it('on stalled: the notice with the promote hint, and no re-queue — promoting a co-owner is the remedy', async () => {
+    withRow('stalled')
+    const w = await mountPanel({ me: 'owner' })
+    expect(w.text()).toContain(t('members.compromiseRotation.stalled'))
+    expect(button(w, t('members.compromiseRotationRequeue'))).toBeUndefined()
+  })
+
+  it('shows nothing when nothing is stuck', async () => {
+    withRow(null)
+    const w = await mountPanel({ me: 'owner' })
+    expect(w.text()).not.toContain(t('members.compromiseRotation.stalled'))
+    expect(w.text()).not.toContain(t('members.compromiseRotation.failed'))
   })
 })

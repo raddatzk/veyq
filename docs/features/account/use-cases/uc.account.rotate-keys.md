@@ -17,7 +17,7 @@
   `RECOVERY` wraps are rewritten under the **same** KEKs, so the **Emergency Kit stays valid**. Every
   Master-Key-sealed blob is re-sealed and the caller's item marks are re-tagged; the Secret-Key proof key is
   unchanged. Self-served scopes sit at a new
-  epoch granted to the new identity; every shared scope carries a queued rotation for another key-holder to
+  epoch granted to the new identity; every shared scope carries a queued rotation for another owner of it to
   complete. Every other session is revoked. **What the old identity already read is not retracted.**
 
 ## Main flow
@@ -52,15 +52,24 @@
    ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md)).
 6. **Re-key what this account can re-key alone.** For each scope where the holder is the only member — the
    personal scope — the client mints the next epoch, chain-links it and grants it to the **new** identity.
-7. **Queue what it must not re-key alone.** For every shared scope, a `SCOPE_ROTATION` job is originated. It is
-   completed by a **different** key-holder, never by the rotator: `rotateScope` is owner-gated, and a rotator
-   who could drive their own re-grant would let an attacker holding the old identity re-admit only themselves
-   ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md) Decision 4).
+7. **Queue what it must not re-key alone.** For every shared scope, a `SCOPE_ROTATION` job is originated, and the
+   rotator is excluded from every live rotation job of that scope. It is completed by **another owner** of the
+   scope, never by the rotator: a rotator who could drive their own re-grant would let an attacker holding the old
+   identity re-admit only themselves
+   ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md) Decision 4). The exclusion binds where the
+   commit lands, not only at the queue: `rotateScope` refuses the rotator while a live job carries their exclusion
+   (`403 rotation_excluded`), and afterwards while their own grant is behind (`409 stale_epoch`), until a human
+   there re-admits them. The full lifecycle of the queued job is
+   [uc.spaces.complete-queued-rotation](../../spaces/use-cases/uc.spaces.complete-queued-rotation.md).
 8. **Cut the rest.** Every other session family is revoked, so the granted device loses server access as well
    as its future reads.
 9. **Report honestly.** The result screen is a per-scope status, not a success tick: *secured* where step 6
-   finished, *waiting for another member* where step 7 queued, and for each of those, that the holder is
-   outside that scope until someone there accepts the new key.
+   finished, and for every scope step 7 queued, the **server's** state of its covering rotation, re-read on every
+   visit rather than synthesised once: *waiting* (an owner who may complete it exists), *stalled* (none does — E4),
+   *secured* (the rotation landed, or the holder's own grant is already behind, so the old identity holds no grant
+   to the current epoch) or *failed* (the job dead-lettered — E3). Until it is *secured*, the old key still reads
+   what is new in that space, and for each such scope the holder is outside it until someone there accepts the new
+   key.
 
 ```mermaid
 ---
@@ -99,11 +108,19 @@ sequenceDiagram
   remains is containment: revoke the sessions and remove the saved keys
   ([uc.account.sessions](uc.account.sessions.md), [ADR 0058](../../../decisions/0058-revoke-never-takes-key-material.md)).
   This is the same no-escrow property that makes losing every path terminal — stated, not engineered around.
-- **E3 — no other key-holder comes online.** The queued job stays queued, the scope stays at its old epoch, and
-  the old identity keeps reading that scope's new content. The status from step 9 says exactly that; it does
-  not resolve itself, and nothing this account does alone can move it.
+- **E3 — no other owner completes it.** While no owner comes online the job waits, the scope stays at its old
+  epoch, and the old identity keeps reading that scope's new content; step 9 says *waiting*. An owner whose
+  attempts keep failing spends the job's attempts, and after the last one it **dead-letters**: step 9 says
+  *failed*, and from there the holder can **queue it again** — a fresh job, the holder still excluded from it —
+  and so can any owner of the scope, who sees the same state on their own row of that space
+  ([uc.spaces.complete-queued-rotation](../../spaces/use-cases/uc.spaces.complete-queued-rotation.md)). The
+  exclusion's one bound: between the dead-letter and the re-queue, `rotateScope` no longer refuses the holder on the
+  strength of a live job; their grant is still current, so the behind check does not either. That window is
+  visible as *failed*, never silent.
 - **E4 — the rotator is the scope's only owner.** Then nobody may complete the job: `rotateScope` is
-  owner-gated and Decision 4 excludes the rotator. The remedy is to **promote a co-owner first**
+  owner-gated and Decision 4 excludes the rotator. The job is offered only to owners, so it does not dead-letter
+  on members who could never complete it: it waits, and step 9 reads *stalled* — as it does wherever every other
+  owner holds no grant or has declined the job. The remedy is to **promote a co-owner first**
   ([ADR 0014](../../../decisions/0014-group-scopes-and-governance.md)), the same shape
   [ADR 0006](../../../decisions/0006-cold-tenant-scope-birth.md) already uses for the sole-key-holder case —
   and the entry screen names it as a precondition for those scopes rather than letting the user discover it at
@@ -160,7 +177,9 @@ this device's too, is gone. Two honest limits. Anything that person already saw,
 have — rotation stops what comes next, it can't take back what's gone. And you need your Emergency Kit to do
 it, on purpose: it's the one thing they don't have, which is what stops *them* doing this to *you*. In shared
 spaces someone else has to confirm it's really you — best by comparing the security number over a call —
-before you're back in.
+before you're back in. Shared spaces also get their new lock from one of their other owners, and until that
+happens the old device can still read what's new there; the security screen shows each space's state whenever
+you look, and if re-locking one failed, you can start it again.
 
 **DE —** Wenn jemand in dein Konto gekommen ist — etwa weil du einen Anmelde-Code bestätigt hast, der gar
 nicht dein neues Handy war — reicht Abmelden nicht: das Gerät hat weiterhin die Schlüssel zu deinen
@@ -171,7 +190,10 @@ Zwei ehrliche Grenzen. Was diese Person schon gesehen hat, hat sie weiterhin —
 kommt, es holt nichts zurück. Und du brauchst dafür dein Notfall-Kit, mit Absicht: es ist das Einzige, was
 die Person nicht hat, und genau das hindert *sie* daran, das mit *dir* zu machen. In geteilten Räumen muss
 jemand anderes bestätigen, dass du wirklich du bist — am besten, indem ihr die Sicherheitsnummer am Telefon
-vergleicht — bevor du wieder drin bist.
+vergleicht — bevor du wieder drin bist. Geteilte Räume bekommen ihr neues Schloss außerdem von einer ihrer
+anderen besitzenden Personen, und bis dahin kann das alte Gerät dort Neues noch lesen; die Sicherheitsseite zeigt
+den Stand jedes Raums, wann immer du nachsiehst, und ist das neue Schloss für einen gescheitert, kannst du es neu
+anstoßen.
 
 ## Related
 

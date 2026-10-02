@@ -8,8 +8,9 @@ title: Remove a member from a tenant (with the group orphan rule)
 # member's read-only grace on their own space across two accounts) is tracked in the CR; the owner→member
 # remove→drop-out round-trip was verified live (web → real backend → MariaDB).
 # cr-0092 closes A4 (the co-shared-group forward-secrecy half): the removal originates a SCOPE_ROTATION job on
-# the operator-blind task queue (backend origination + coalescing slice tests) that a remaining key-holder
-# completes on-device via the cr-0089 rotation crypto (web scopeRotationWorker + its polling). The three-actor
+# the operator-blind task queue (backend origination + coalescing slice tests) that a remaining group owner
+# completes on-device via the cr-0089 rotation crypto (web scopeRotationWorker + its polling); who completes it and
+# what a completion must prove moved to uc.spaces.complete-queued-rotation. The three-actor
 # forward-secrecy flow (owner-A cuts a member of group G that A doesn't hold → key-holder-B online rotates G
 # forward epoch 0→1 → ex-member gone, survivor re-granted) is verified LIVE against a real backend + MariaDB with
 # real crypto by scopeRotation.e2e.test.ts (VEYQ_E2E). The SCOPE_ROTATION unauth/non-key-holder boundary used to
@@ -40,13 +41,13 @@ acceptanceCriteria:
   - id: coshared-group-rotation
     text: >
       A removed member's co-shared GROUPs each queue a SCOPE_ROTATION job on the operator-blind task queue (the
-      removing owner isn't necessarily a key-holder there, so can't rotate synchronously — cr-0092); the next online
-      remaining key-holder mints E_{n+1} + re-grants the survivors on-device and completes it, restoring forward
-      secrecy for new content. Idempotent + coalescing (one live job per scope); NO job for the tenant scope
-      (ADR 0025 — ACL-revoke) or the member's own/soft-deleted scopes; a non-key-holder cannot claim it. Closes A4.
+      removing owner isn't necessarily a key-holder there, so can't rotate synchronously — cr-0092): the origination
+      half. A second removal joins the group's still-unclaimed job (one rotation for many removals); NO job for the
+      tenant scope (ADR 0025 — ACL-revoke) or the member's own/soft-deleted scopes. Who completes the job and what
+      its completion must prove is uc.spaces.complete-queued-rotation. Closes A4.
     coverage:
-      backend: { integration: [MemberRemoveSliceTest.removalQueuesRotationOnlyForCoSharedGroupsNotOwnScopesOrTenant, MemberRemoveSliceTest.queuedRotationClaimableByRemainingKeyHolderOnlyThenCompletionClearsIt, MemberRemoveSliceTest.secondRemovalCoalescesIntoTheOneLiveRotationJob] }
-      web: { unit: [src/features/tasks/scopeRotationWorker.test.ts], e2e: [src/features/tasks/scopeRotation.e2e.test.ts] }
+      backend: { integration: [MemberRemoveSliceTest.removalQueuesRotationOnlyForCoSharedGroupsNotOwnScopesOrTenant, MemberRemoveSliceTest.secondRemovalCoalescesIntoTheOneLiveRotationJob] }
+      web: { e2e: [src/features/tasks/scopeRotation.e2e.test.ts] }
   - id: operator-blind
     text: The server only deletes/soft-deletes opaque rows + flips a lifecycle timestamp — never a key or a name; the tenant key is not rotated.
     coverage:
