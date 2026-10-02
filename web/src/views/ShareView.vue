@@ -204,7 +204,7 @@ async function submitName() {
   naming.value = true
   nameError.value = false
   try {
-    const created = await createContributorIdentity(shareId, shareScopeId.value, access.value, name, pwToken.value)
+    const created = await createContributorIdentity(shareId, shareScopeId.value, access.value, name, fragmentKey.value, pwToken.value)
     localStorage.setItem(sessionKey, JSON.stringify(created))
     session.value = created
   } catch {
