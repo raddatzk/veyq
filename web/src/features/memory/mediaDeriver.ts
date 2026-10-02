@@ -69,8 +69,8 @@ export { scaleToMaxEdge } from './mediaPixels'
 
 /**
  * The page-thread canvas port: today's `HTMLCanvasElement` + `toBlob`. Chromium runs that encode in an idle
- * period, so in a tab that is not being painted (backgrounded, minimized, occluded) each call waits for one that
- * may not come until a fallback timeout fires.
+ * period, so in a tab that is not being painted (backgrounded, minimized, occluded) a call can wait for one that
+ * may not come until a fallback timeout fires — which is why this port is only the Worker's fallback.
  */
 const PAGE_PORT: CanvasPort<HTMLCanvasElement> = {
   create(width, height) {

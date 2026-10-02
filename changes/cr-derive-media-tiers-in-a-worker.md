@@ -1,7 +1,7 @@
 ---
 id: cr-derive-media-tiers-in-a-worker
 title: the image pixel stage runs in a Worker, so an upload in a backgrounded tab stops waiting about a second per JPEG encode
-status: planned
+status: done
 satisfies: ["uc.memory.upload", "en.memory.derivatives"]
 invariants:
   - "operator-blind — untouched. The Worker is a same-origin module Worker in the user's own browser. It receives the picked Blob and hands back derivative bytes to the page, which seals them exactly as today. No pixel, byte or dimension goes anywhere new, and no phase edits `sealFrame`, `sealMetadata`, `planBlob` or the wire shape."
@@ -269,7 +269,7 @@ before building a Worker around it.
       handles only one class. · Done when: `npm run check` green, B2–B5 green and each red under its lever,
       `contracts/` and `backend/` untouched.
 
-- [ ] 3 measure + docs + coverage — **the after-number, and the claims.** Repeat phase 0's two runs (and
+- [x] 3 measure + docs + coverage — **the after-number, and the claims.** Repeat phase 0's two runs (and
       Safari if it was measured) on the same batch and substrate, and record them beside the before-numbers. The
       **expected** shape, *inferred* from the Inventory: (ii) backgrounded drops from ≥ 24 s towards
       12 × (≈ 0.1 s + wire + control plane), and (i) visible moves within noise. **A visible-tab regression over
@@ -326,4 +326,52 @@ encode varies between ~0.1 s and ~1.2 s from run to run, and per photo it costs 
 **Gate (phase 0), decided:** run (ii)'s pixel stage alone is 6.5–8.9 s over five hidden runs, every one above
 12 × 0.5 s = 6.0 s, and the full batch minus its wire can only be larger. **Proceed.** The margin is narrow
 (8–48 %), and the payoff in desktop Chrome is ≈ 0.5–0.7 s per photo — about a quarter of what the Inventory
-predicted from the preview Chromium.
+predicted from the preview Chromium. *(Superseded by phase 3 below: those five runs were taken on a busy machine,
+and a quiet re-run would have failed this gate.)*
+
+**Phase 3 (after), same bench, before and after interleaved in one window each.** Two windows, because the first
+after-runs exposed a confounder phase 0 had not recorded: machine load (four other agents building).
+
+| Window | Tab state | before (page thread), 12 photos | after (Worker), 12 photos |
+|---|---|---|---|
+| busy (load 1-min 31–37), Chrome 154.0.8037.58 | background tab | 56 581, 22 629, 25 137, 73 616 ms | 7 693, 27 308, 5 172, 14 414 ms |
+| busy, same | visible | median 822 ms (n = 9) | median 859 ms (n = 9, one 1 331 outlier) |
+| quiet (load 1-min 9–14), Chrome 154.0.8037.93 | background tab | 2 842, 2 761, 2 857, 2 980 ms | 2 937, 3 268, 3 170, 2 734 ms |
+| quiet, same | visible | median 791 ms (n = 6) | median 783 ms (n = 6) |
+| quiet, same | minimized | 2 392, 2 421 ms | 2 337, 8 404 ms |
+
+Chrome auto-updated between the windows (a Docker/host restart in between); the quiet hidden page-path encode
+probes were 50–87 ms (1536×2048) and 3–6 ms (384×512), against 1.0–1.7 s in the busy window.
+
+**What that says.** (1) *Quiet desktop Chrome 154 has no paint-gated encode wait*: backgrounded, both paths take
+≈ 230 ms per photo (≈ 3.5× the visible 65 ms), and that factor is the background tab's slower scheduling, which
+the Worker inherits. Phase 0's gate, measured quiet, reads 2.8 s < 6.0 s — **stop**. (2) *Under contention the
+page path collapses and the Worker does not*: median 25.1 s → 7.7 s interleaved (3.3×), and 73.6 → 14.4 s in a
+single back-to-back pair. (3) *Visible: no regression* (+4.5 % busy, −1 % quiet, both inside run-to-run noise).
+(4) *The Worker ran*: the bench wraps the `Worker` constructor and counted 1 construction, 24 posts and 24 `ok`
+replies per batch in every after-run. The per-photo-under-300 ms liveness proof the Traps planned does **not**
+hold — quiet, the page path is under it too, and busy, the Worker is over it — so the counter is the proof.
+(5) Derivative sizes are identical across every before, phase-1 and after run (same bytes per tier per photo).
+
+**Not measured:** the dev-backend runs phase 0 names (pick → first PUT, wire time, wire share) — the implement
+brief forbade touching the owner's dev instance — so Open question 5 still has no wire share to be decided on;
+Safari; Firefox; weak devices.
+
+### Retrospective
+
+- **Planning — the CR's mechanism was measured in one Chromium build and assumed for desktop Chrome.** The ~1 s
+  floor came from the preview Chromium 152; the CR named desktop Chrome as *inferred* and put phase 0 in front of
+  it, which was right — but phase 0 itself was then run (by me) on a machine under heavy parallel load without
+  recording the load, and the gate passed on numbers the quiet machine does not reproduce. Root cause: a
+  performance gate with no substrate rider for *machine load*, on a host that runs five agents at once. Next
+  time: record `vm.loadavg` beside every timing, interleave before/after in one window, and re-take the gate
+  quiet before building on it.
+- **Execution — I built phases 1–2 on a gate I had not stress-tested.** The CR's own rule (*a measurement that has
+  only ever been green has not been tested*) applied: one quiet repeat of phase 0 would have stopped the CR before
+  any code. What landed is still sound — behaviour-preserving, a visible tab unchanged, a 3.3× win under
+  contention — but the owner should decide whether that robustness win is worth a second Worker, since the
+  CR's headline premise (≈ 2 s per photo in any backgrounded Chrome tab) did not hold.
+- **Process.** The scratch bench was wiped by the host restart mid-phase, and a 1Password signing prompt failed
+  three commits in a row before one went through; neither is a code problem, but both cost a re-build of
+  tooling. Rules honoured: signed commits, explicit `git add` paths, snapshot-and-restore for all seven levers,
+  no dev-instance contact.

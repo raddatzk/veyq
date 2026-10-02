@@ -74,6 +74,24 @@ would, so § *The three tiers*' downscale rule is honoured rather than traded fo
 the two derivations are **ordered**, not interchangeable. The intrinsic size that decode measures is handed
 back with the bytes, so the sealed metadata tier's geometry costs no decode of its own either.
 
+**Where the image pixel stage runs: in a Worker where the browser offers one.** Web derives the image tiers in a
+same-origin module Worker on `OffscreenCanvas`; the page thread runs the identical code (one pixel module behind
+a canvas port, so the tiers cannot drift between the two) only as the fallback. The reason is scheduling, not
+CPU: Chromium encodes a page-thread canvas (`toBlob`, and a page-thread `OffscreenCanvas` alike) in an idle
+period, and a tab nobody paints — backgrounded, minimized, occluded — can wait for one; a Worker's encode does
+not. That is the realistic way a large batch is uploaded: pick, then switch away. **How much it buys depends on
+the browser and on how busy the device is, and it can be nothing.** Measured over 12 photos at 3024×4032 (pixel
+stage only, page path vs Worker, interleaved): in the preview Chromium 152 every hidden-tab encode waited ≈ 1 s
+(≈ 2.1 s per photo on the page thread, 89 ms in a Worker); in desktop Chrome 154 on a busy machine the page path
+took 22.6–73.6 s per batch and the Worker 5.2–27.3 s; on the same machine quiet, both took ≈ 2.8–3.2 s
+backgrounded and ≈ 0.8 s visible — no paint-gated wait at all, only the slower scheduling a backgrounded tab
+gets, which reaches its Worker too. A visible tab gains nothing, and nothing claims it does. The Worker is an
+optimisation, never a requirement: no Worker, no `OffscreenCanvas`, or a Worker that fails to load or dies
+finishes the request on the page thread, and the Worker stays off for the session. An undecodable source fails
+in the Worker exactly as it would on the page and uploads original-only, with no page-thread retry. The video
+poster stays on the page thread (a Worker has no `<video>`), so a backgrounded tab still pays that wait once per
+video.
+
 ## Decisions (settled)
 
 1. **Attachment / keying.** The `media` record carries `original` + `derivatives: [{ kind, blob }]` —

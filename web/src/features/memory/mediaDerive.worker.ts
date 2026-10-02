@@ -3,9 +3,11 @@
 // (`OffscreenCanvas` + `convertToBlob`) — so the tiers it produces are the page thread's tiers.
 //
 // Why a Worker at all: Chromium encodes a page-thread canvas (`toBlob`, and `convertToBlob` alike) in an idle
-// period, and a tab that is not being painted (backgrounded, minimized, occluded) waits for one — measured at
-// ≈0.1–1.2 s per encode in a backgrounded desktop Chrome 154 tab, against ~15–25 ms visible. A Worker's encode
-// does not wait on the page's paint cycle. The operator sees nothing new: the picked Blob comes in, derivative
+// period, and a tab that is not being painted (backgrounded, minimized, occluded) can wait for one — ≈1 s per
+// encode in the preview Chromium 152, and ≈1–1.7 s in a backgrounded desktop Chrome 154 tab on a busy machine,
+// against ~15–25 ms visible (a quiet desktop Chrome 154 showed no such wait). A Worker's encode does not wait on
+// the page's paint cycle. en.memory.derivatives § Generation & attachment carries the before/after numbers.
+// The operator sees nothing new: the picked Blob comes in, derivative
 // bytes go back to the page, which seals them exactly as before.
 //
 // Two failure classes, answered apart (the page side treats them differently — `mediaDeriveWorker.ts`):
