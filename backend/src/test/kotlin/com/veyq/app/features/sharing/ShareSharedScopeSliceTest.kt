@@ -10,6 +10,7 @@ import com.veyq.app.testing.TestFixtures.bearer
 import com.veyq.app.testing.TestFixtures.seedNode
 import com.veyq.app.testing.TestFixtures.seedTenant
 import com.veyq.app.testing.TestFixtures.seedUser
+import com.veyq.app.testing.race
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -242,6 +243,44 @@ class ShareSharedScopeSliceTest {
         resolves(old, 404)
     }
 
+    /** Inbox #252 — a share is re-issued at most once: a second re-issue of the replaced link is a named conflict
+     *  (the caller re-reads the list and finds the new link), and it mints nothing. A non-member still gets the
+     *  non-enumerable 404 — the conflict is a member's answer only. */
+    @Test
+    fun aReissuedShareRefusesASecondReissueWithAConflict() {
+        val (tenantId, owner) = seedActiveTenant("g-reissue-twice.example.com")
+        val group = seedGroup(tenantId, owner)
+        val old = createShare(owner, seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY), copyEpoch = 0)
+        reissue(owner, old, epoch = 0).then().statusCode(201)
+        val second = TestIds.shareId()
+
+        reissue(owner, old, epoch = 0, newId = second).then().statusCode(409).body("code", equalTo("share_deleted"))
+        resolves(second, 404)
+        reissue(seedUser(email = "out@g-reissue-twice.example.com"), old, epoch = 0)
+            .then().statusCode(404).body("code", equalTo("share_not_found"))
+    }
+
+    /** Inbox #252 — two re-issues of one share racing each other: exactly one mints its link, the other gets the
+     *  conflict a sequential second re-issue gets. A barrier only makes the race likely, so it runs [ROUNDS] times. */
+    @Test
+    fun twoConcurrentReissuesOfOneShareMintExactlyOneLink() {
+        val (tenantId, owner) = seedActiveTenant("g-reissue-race.example.com")
+        val group = seedGroup(tenantId, owner)
+        val memory = seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
+        repeat(ROUNDS) { round ->
+            val old = createShare(owner, memory, copyEpoch = 0)
+            val ids = listOf(TestIds.shareId(), TestIds.shareId())
+            val answers = race(
+                { reissue(owner, old, epoch = 0, newId = ids[0]).let { it.statusCode to it.path<String?>("code") } },
+                { reissue(owner, old, epoch = 0, newId = ids[1]).let { it.statusCode to it.path<String?>("code") } },
+            )
+            assertEquals(listOf(201 to null, 409 to "share_deleted"), answers.sortedBy { it.first }, "round $round")
+            val live = ids.filter { given().`when`().get("/api/shares/$it").statusCode == 200 }
+            assertEquals(1, live.size, "round $round: one new link, got answers $answers")
+            resolves(old, 404)
+        }
+    }
+
     // --- delete (ADR 0029 §7, B2) ---
 
     @Test
@@ -265,7 +304,7 @@ class ShareSharedScopeSliceTest {
             .`when`().patch("/api/shares/$shareId").then().statusCode(404).body("code", equalTo("share_not_found"))
         given().header("Authorization", bearer(owner)).`when`().post("/api/shares/$shareId/revoke")
             .then().statusCode(404).body("code", equalTo("share_not_found"))
-        reissue(owner, shareId, epoch = 0).then().statusCode(404).body("code", equalTo("share_not_found"))
+        reissue(owner, shareId, epoch = 0).then().statusCode(409).body("code", equalTo("share_deleted")) // inbox #252
         delete(owner, shareId).then().statusCode(404).body("code", equalTo("share_not_found"))
         // the id is never minted again — not even by its owner, on the same Memory
         postShare(owner, memory, shareId).then().statusCode(409).body("code", equalTo("id_taken"))
@@ -722,5 +761,9 @@ class ShareSharedScopeSliceTest {
             id = UUID.randomUUID().toString(); this.userId = userId; this.tenantId = tenantId
             this.scopeId = scopeId; this.role = role; wrappedGrant = "Z3JhbnQ="; createdAt = Instant.now()
         }.persist()
+    }
+
+    private companion object {
+        const val ROUNDS = 5
     }
 }
