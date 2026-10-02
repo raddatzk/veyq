@@ -89,7 +89,9 @@ paths:
             the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4). For UPLOADER: the
             request carries a drop private key the
             Memory already has one of (`drop_key_exists`), or carries none while the Memory has none
-            (`drop_key_missing`) — nothing is written in either case.
+            (`drop_key_missing`) — nothing is written in either case. A taken `shareId` answers `id_taken` before
+            either: so does the loser of a double-submitted create, even one that lost at the Memory's first drop key,
+            because that is what its replay answers.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: id_taken } }
         "422":

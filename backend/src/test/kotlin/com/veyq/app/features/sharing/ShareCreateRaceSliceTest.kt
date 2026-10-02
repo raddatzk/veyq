@@ -4,6 +4,8 @@ import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.shared.TestIds
 import com.veyq.app.testing.RACE_ROUNDS
 import com.veyq.app.testing.TestFixtures.CONTENT_KEY
+import com.veyq.app.testing.TestFixtures.DROP_PRIVATE_KEY
+import com.veyq.app.testing.TestFixtures.DROP_PUBLIC_KEY
 import com.veyq.app.testing.TestFixtures.bearer
 import com.veyq.app.testing.TestFixtures.seedMemberScope
 import com.veyq.app.testing.TestFixtures.seedNode
@@ -41,6 +43,46 @@ class ShareCreateRaceSliceTest {
         assertEquals(201 to null, createShare(userId, memory, TestIds.shareId()))
     }
 
+    /**
+     * The first UPLOADER link of a Memory, double-submitted: both requests carry the drop private key, so both reach
+     * the guarded drop-key update, and the loser's update waits for the winner's and then finds the key set. Its
+     * answer is named by running its replay — the same body again, after both committed — which meets the share id
+     * check first and answers `id_taken`. `drop_key_exists` would send the web client to re-read the node and retry
+     * the one id the winner already holds. A fresh Memory each round: the race is over its first drop key.
+     */
+    @Test
+    fun concurrentUploaderShareCreatesOfOneIdAnswerAsTheirReplay() {
+        val (userId, scopeId) = seedMemberScope()
+        repeat(RACE_ROUNDS) { round ->
+            val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+            val shareId = TestIds.shareId()
+            val answers = race({ createUploaderShare(userId, memory, shareId) }, { createUploaderShare(userId, memory, shareId) })
+            val replay = createUploaderShare(userId, memory, shareId)
+            assertEquals(409 to "id_taken", replay, "round $round: the replay's answer")
+            assertWinnerAndLoser(201, replay, answers, "round $round")
+        }
+        assertEquals(201 to null, createUploaderShare(userId, seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY), TestIds.shareId()))
+    }
+
+    /**
+     * The control for the test above: two DIFFERENT UPLOADER links racing for one Memory's first drop key. Their ids
+     * are both free, so the loser's replay is refused by the drop-key check, and `drop_key_exists` stays its answer —
+     * the one the web client answers by sealing to the winner's key.
+     */
+    @Test
+    fun concurrentUploaderSharesOfTwoIdsKeepOneDropKey() {
+        val (userId, scopeId) = seedMemberScope()
+        repeat(RACE_ROUNDS) { round ->
+            val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+            val (first, second) = TestIds.shareId() to TestIds.shareId()
+            val answers = race({ createUploaderShare(userId, memory, first) }, { createUploaderShare(userId, memory, second) })
+            val loser = if (answers[0].first == 201) second else first
+            val replay = createUploaderShare(userId, memory, loser)
+            assertEquals(409 to "drop_key_exists", replay, "round $round: the replay's answer")
+            assertWinnerAndLoser(201, replay, answers, "round $round")
+        }
+    }
+
     /** A fresh CONTRIBUTOR link each round: identity creation is rate-limited per link. */
     @Test
     fun concurrentIdentityCreatesOfOneIdCreateItOnce() {
@@ -61,6 +103,14 @@ class ShareCreateRaceSliceTest {
     private fun createShare(userId: String, nodeId: String, shareId: String, role: String = "VIEWER"): Pair<Int, String?> =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"shareId":"$shareId",${ShareWriteProof.field(shareId)},"nodeId":"$nodeId","role":"$role","wrap":"$wrap","sealedName":"$sealedName"}""")
+            .`when`().post("/api/shares").then().extract().answer()
+
+    private fun createUploaderShare(userId: String, nodeId: String, shareId: String): Pair<Int, String?> =
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+            .body(
+                """{"shareId":"$shareId",${ShareWriteProof.field(shareId)},"nodeId":"$nodeId","role":"UPLOADER",""" +
+                    """"sealedDropPublicKey":"$DROP_PUBLIC_KEY","sealedDropPrivateKey":"$DROP_PRIVATE_KEY","sealedName":"$sealedName"}""",
+            )
             .`when`().post("/api/shares").then().extract().answer()
 
     private fun createIdentity(shareId: String, identityId: String): Pair<Int, String?> =
