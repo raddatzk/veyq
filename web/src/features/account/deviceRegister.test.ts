@@ -16,7 +16,7 @@ import {
   reconcileWithSessions,
   renameDeviceOfFamily,
   MAX_DEVICES,
-  resealRegisterUnderNewMasterKey,
+  registerDocument,
   type RegisterPlain,
 } from './deviceRegister'
 import { accountDeviceRegisterApi } from '../../api/client'
@@ -511,21 +511,25 @@ describe('the register never goes backwards on this device (ADR 0028 Decision 7)
     await expect(namesOf(['fam1'])).rejects.toMatchObject({ code: 'trust_state_rolled_back' })
   })
 
-  it('the rotation\u2019s re-seal refuses a register below the mark, and a re-seal that lands raises the new key\u2019s', async () => {
-    const newMk = v1.randomBytes(32)
+  it('registerDocument — the register as one whole document — opens through the same marks, and writes nothing on a refusal', async () => {
+    // The rotation and the reset act on the register whole (their behaviour: rotation/rotateKeys.test.ts,
+    // trustReset/trustReset.test.ts, against this real module); this pins that the whole-document view is the same
+    // register — the same open, the same seal context.
     const blob = seal(reg({ d1: dev('Work laptop') }, { fam1: 'd1' }), 4)
     fakeServer({ blob, version: 4 })
     await namesOf(['fam1']) // held v4
     const rolled = fakeServer({ blob: seal(reg({}, {}), 3), version: 3 })
-    await expect(resealRegisterUnderNewMasterKey(MK.slice(), newMk)).rejects.toMatchObject({ code: 'trust_state_rolled_back' })
+    await expect(registerDocument.open(MK.slice(), await registerDocument.fetch())).rejects.toMatchObject({
+      code: 'trust_state_rolled_back',
+    })
     expect(rolled.putDeviceRegister).not.toHaveBeenCalled()
 
+    // Control: at the mark it opens, and what it seals for v5 the ordinary read opens at v5.
     const server = fakeServer({ blob, version: 4 })
-    await resealRegisterUnderNewMasterKey(MK.slice(), newMk)
+    const opened = await registerDocument.open(MK.slice(), await registerDocument.fetch())
+    await registerDocument.write({ blob: registerDocument.seal(MK.slice(), opened, 5), version: 4 })
     expect(server.state.version).toBe(5)
-    vi.mocked(masterKey).mockImplementation(() => newMk.slice()) // the vault has switched
-    fakeServer()
-    await expect(namesOf(['fam1'])).rejects.toMatchObject({ code: 'trust_state_rolled_back' })
+    expect(await namesOf(['fam1'])).toEqual({ fam1: 'Work laptop' })
   })
 
   it('control: served again at the mark, the register is accepted', async () => {

@@ -21,6 +21,10 @@
 // **Best-effort storage, fail-closed reading.** A browser with no IndexedDB (or a denied one) holds no marks, which
 // is again the no-mark case; a write that does not land leaves the mark lower, which is only ever safer for the
 // server and never locks anything. The refusals are the other half: they are decided here, and never degrade.
+//
+// **Marks only rise, with one exception, and it is a person's.** A refused document's way back is the reset the
+// user confirms (ADR 0028 Decision 7): it writes the empty document and SETS the mark to the version it wrote
+// ({@link setMark}). No other path lowers a mark, and no server response reaches that one.
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 import { idbRun } from '../../shared/idb'
@@ -122,6 +126,33 @@ export async function raiseMarks(mk: Uint8Array, raise: MarksRaise): Promise<voi
   }
 }
 
+/**
+ * Set one document's mark to exactly `version` — the only operation here that can LOWER a mark.
+ *
+ * It exists for one caller: the user-confirmed reset (`trustReset/trustReset.ts`, ADR 0028 Decision 7's way back),
+ * which writes the empty document at `served + 1` and must then accept that copy even where the served version
+ * sat below the mark (a rolled-back store) — a reset that merely raised would refuse its own write. Lowering is
+ * sound only there: the mark protects this device from a SERVED older copy, and the copy it accepts is the one it
+ * just wrote itself. `eslint.config.js` (`veyq/trust-reset-one-door`) refuses this import everywhere else.
+ * Best-effort like {@link raiseMarks}; the read and the write share one transaction.
+ */
+export async function setMark(mk: Uint8Array, document: AccountDocument, version: number): Promise<void> {
+  if (!hasStore() || !isMark(version)) return
+  const slot = slotOf(mk)
+  try {
+    await idbRun(DB, STORE, 'readwrite', (s) => {
+      const req = s.get(slot)
+      req.addEventListener('success', () => {
+        s.put({ ...normalize(req.result), [document]: version }, slot)
+      })
+      return req
+    })
+  } catch {
+    /* a mark that did not land is the mark that was there: the reset's write is then refused on the next read,
+       and the person can start over again — never a silent acceptance */
+  }
+}
+
 /** An account-key rotation moves the account to a new slot; the rotating device carries what it held across. */
 export async function carryMarks(fromMk: Uint8Array, toMk: Uint8Array): Promise<void> {
   await raiseMarks(toMk, await readMarks(fromMk))
@@ -139,7 +170,7 @@ export async function carryMarks(fromMk: Uint8Array, toMk: Uint8Array): Promise<
 export async function openAccountDocument<T>(
   document: AccountDocument,
   mk: Uint8Array,
-  served: { blob: string | null; version: number },
+  served: ServedDocument,
   open: (blob: string) => T,
   empty: () => T,
 ): Promise<T> {
@@ -156,6 +187,28 @@ export async function openAccountDocument<T>(
   }
   await raiseMarks(mk, { [document]: served.version })
   return value
+}
+
+/** A served copy of a sealed account document: the opaque blob (null when never written) and its version. */
+export type ServedDocument = { blob: string | null; version: number }
+
+/**
+ * One sealed account document as the two operations that act on it WHOLE need it — the rotation's re-seal under
+ * a new Master Key (`rotation/rotateKeys.ts`) and the user's reset (`trustReset/trustReset.ts`). Each document
+ * module exports one, so neither operation reaches into a module's seal context or endpoints.
+ *
+ * `open` is the module's open through {@link openAccountDocument}: the marks apply, so a refused document is a
+ * `TrustStateRefused` here exactly as on every other read.
+ */
+export interface AccountDocumentStore<T> {
+  readonly document: AccountDocument
+  fetch(): Promise<ServedDocument>
+  open(mk: Uint8Array, served: ServedDocument): Promise<T>
+  /** Seal `value` under `mk` for the version it will be STORED at — the write's `version + 1`. */
+  seal(mk: Uint8Array, value: T, storedVersion: number): string
+  empty(): T
+  /** The document's own version-guarded PUT; `409 stale_version` when `version` is no longer the stored one. */
+  write(update: { blob: string; version: number }): Promise<void>
 }
 
 /** The vault's Master Key, used for one call and zeroed. Null when locked: then there is no account to key by. */

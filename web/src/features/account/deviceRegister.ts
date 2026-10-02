@@ -30,7 +30,7 @@ import { accountDeviceRegisterApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import { isCodedError, HttpStatus } from '../../shared/httpError'
 import { masterKey } from '../../app/vault'
-import { openAccountDocument, raiseMarks } from './trustMarks'
+import { openAccountDocument, raiseMarks, type AccountDocumentStore } from './trustMarks'
 
 /** The register's seal context at a stored `version` (ADR 0072, vector `seal.sym.device-register`, domain-separate
  *  from the pins): bound to the version the server stores it at, so a blob served under another does not open. */
@@ -227,31 +227,26 @@ async function mutateAndSave(base: OpenedRegister, apply: (reg: RegisterPlain) =
 }
 
 /**
- * Re-seal the device register from the **old** Master Key to a **new** one — key rotation (ADR 0060, step 4).
- * The sibling of `resealPinsUnderNewMasterKey`, and it exists for the same reason: mid-rotation the vault still
- * holds the old Master Key, so [mutateAndSave] would seal under the key being retired.
+ * The register as one whole document (`trustMarks.ts` § `AccountDocumentStore`) — the pin store's sibling
+ * (`identityPins.ts` § `pinStoreDocument`), for the same two operations: key rotation re-seals it under the new
+ * Master Key inside its own request (mid-rotation the vault still holds the old key, so [mutateAndSave] would seal
+ * under the one being retired), and the user's reset writes its `empty()` when this device refuses the register.
  *
- * It opens through the same marks as every read, under the old key's slot, and raises the new key's — the pin
- * store's sibling rule (`resealPinsUnderNewMasterKey`). Best-effort: a re-seal that never lands leaves a register
- * the new key cannot open, which every later read refuses as `trust_state_unreadable`. That costs display names
- * and register writes, not access — rows still list and revoke unnamed (uc.account.sessions §E4) — but it no
- * longer repairs itself by starting over empty (ADR 0028 § What is still open).
- *
- * The contents cross unchanged, including the wrap join rows. That looks wrong for a moment and is right: the
- * rotation deletes every device wrap server-side, so those rows are already stale — and pruning them **here**
- * would be an internal removal (the rule above forbids it), where the honest path is the next
+ * On the rotation the contents cross unchanged, including the wrap join rows. That looks wrong for a moment and
+ * is right: the rotation deletes every device wrap server-side, so those rows are already stale — and pruning
+ * them **there** would be an internal removal (the rule above forbids it), where the honest path is the next
  * [reconcileWithSessions], whose frozen delta against the server's served wrap list removes them as derived
  * truth.
  */
-export async function resealRegisterUnderNewMasterKey(oldMk: Uint8Array, newMk: Uint8Array): Promise<void> {
-  const res = await withRefresh(() => accountDeviceRegisterApi().getDeviceRegister())
-  const reg = await openRegister(oldMk, res)
-  await withRefresh(() =>
-    accountDeviceRegisterApi().putDeviceRegister({
-      deviceRegisterUpdate: { blob: sealRegister(newMk, reg, res.version + 1), version: res.version },
-    }),
-  )
-  await raiseMarks(newMk, { register: res.version + 1 })
+export const registerDocument: AccountDocumentStore<RegisterPlain> = {
+  document: 'register',
+  fetch: () => withRefresh(() => accountDeviceRegisterApi().getDeviceRegister()),
+  open: openRegister,
+  seal: sealRegister,
+  empty,
+  write: async (deviceRegisterUpdate) => {
+    await withRefresh(() => accountDeviceRegisterApi().putDeviceRegister({ deviceRegisterUpdate }))
+  },
 }
 
 /**

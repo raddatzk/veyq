@@ -18,7 +18,7 @@ import { accountIdentityPinsApi, tasksApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import { isCodedError, HttpStatus } from '../../shared/httpError'
 import { masterKey, identityPrivate } from '../../app/vault'
-import { openAccountDocument, raiseMarks } from './trustMarks'
+import { openAccountDocument, raiseMarks, type AccountDocumentStore } from './trustMarks'
 
 /** The pin store's seal context at a stored `version` (ADR 0072, vector `seal.sym.identity-pins`): bound to the
  *  version the server stores it at, so a blob served under another version does not open. */
@@ -202,36 +202,26 @@ export async function acceptKeyChange(userId: string, identityPublicKeyB64: stri
 }
 
 /**
- * Re-seal the pin store from the **old** Master Key to a **new** one — key rotation (ADR 0060, step 4).
+ * The pin store as one whole document (`trustMarks.ts` § `AccountDocumentStore`), for the two operations that
+ * act on it whole:
  *
- * It takes both keys explicitly instead of reading the vault, and that is the whole reason it exists: during a
- * rotation the vault still holds the *old* Master Key (it must — the sole-member scope re-key that follows opens
- * grants with the old identity), so every other function in this file would seal under exactly the key the
- * rotation is retiring.
+ *  - **key rotation** (ADR 0060 step 4) opens it under the OLD Master Key and re-seals it under the new one inside
+ *    the rotation's own request — so a re-seal that cannot land fails the rotation instead of stranding the store
+ *    under a retired key. Both keys are explicit, because mid-rotation the vault still holds the old one. The pins
+ *    cross verbatim: rotating THIS account's identity says nothing about anybody else's key;
+ *  - **the user's reset** (`trustReset/trustReset.ts`) writes its `empty()` when this device refuses the store.
  *
- * **It opens through the same marks as every other read** (ADR 0028 Decision 7), under the old key's slot: a
- * re-seal is a write, and re-sealing a rolled-back store under the new key would make the rollback the rotation's
- * own. The mark it raises is the new key's, since that is the slot the account reads from once the vault switches;
- * the rotation carries the rest of this device's marks across itself.
- *
- * **Best-effort by design** — the rotation runs it *after* the irreversible publish, so a re-seal before it would,
- * on a failed publish, have re-keyed the pins for a rotation that never happened. **A re-seal that never lands is
- * no longer a quiet loss:** the store stays sealed under the retired key, the new one cannot open it, and every
- * later read is refused as `trust_state_unreadable` rather than starting over empty. There is no recovery path for
- * that yet (ADR 0028 § What is still open).
- *
- * The pins themselves are carried across verbatim: rotating **this** account's identity says nothing about
- * anybody else's key, so dropping them would manufacture a `changed` for every contact at once.
+ * `open` is {@link openPins}, so the marks apply to both exactly as to every read.
  */
-export async function resealPinsUnderNewMasterKey(oldMk: Uint8Array, newMk: Uint8Array): Promise<void> {
-  const res = await withRefresh(() => accountIdentityPinsApi().getIdentityPins())
-  const pins = await openPins(oldMk, res)
-  await withRefresh(() =>
-    accountIdentityPinsApi().putIdentityPins({
-      identityPinsUpdate: { blob: sealPins(newMk, pins, res.version + 1), version: res.version },
-    }),
-  )
-  await raiseMarks(newMk, { pins: res.version + 1 })
+export const pinStoreDocument: AccountDocumentStore<PinMap> = {
+  document: 'pins',
+  fetch: () => withRefresh(() => accountIdentityPinsApi().getIdentityPins()),
+  open: openPins,
+  seal: sealPins,
+  empty: (): PinMap => ({}),
+  write: async (identityPinsUpdate) => {
+    await withRefresh(() => accountIdentityPinsApi().putIdentityPins({ identityPinsUpdate }))
+  },
 }
 
 /** Read a contact's current pin (or null), for a UI surface that shows trust state. No write. */

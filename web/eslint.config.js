@@ -11,6 +11,19 @@ const SETTINGS_DOOR = [
   "Property[key.name='name'][value.value='settings']", // { name: 'settings' }
 ].map((selector) => ({ selector, message: SETTINGS_DOOR_MESSAGE }))
 
+// `veyq/trust-reset-one-door` below: the two imports that can start a refused trust document over.
+const TRUST_RESET_IMPORT = {
+  regex: '(^|/)trustReset(\\.[jt]s)?$',
+  allowTypeImports: true,
+  message:
+    'Only TrustResetDialog.vue starts a trust document over (ADR 0028 Decision 7): no response, refusal, worker or boot path may reach the reset. Link to the settings hub with TrustResetLink instead.',
+}
+const SET_MARK_IMPORT = {
+  regex: '(^|/)trustMarks(\\.[jt]s)?$',
+  importNames: ['setMark'],
+  message: 'setMark lowers a trust mark; only the user-confirmed reset (trustReset/trustReset.ts) may call it.',
+}
+
 // Flat config (ESLint 10). The type-checked ruleset is deliberately NOT enabled: this is a
 // baseline guardrail (cr-0131 / audit P1a), not a strictness sweep. Unused-locals/params are
 // covered by tsconfig (`noUnusedLocals`/`noUnusedParameters`); ESLint adds the Vue-template
@@ -83,6 +96,43 @@ export default defineConfigWithVueTs(
     },
   },
   {
+    // Starting a refused trust document over (ADR 0028 Decision 7's way back, inbox #192) writes the EMPTY pin
+    // store or device register — exactly what Decision 7 refuses to read a refused document as — so the whole
+    // defence is who can cause it: the server can cause the refusal, never this write. So the reset module is
+    // imported by its one confirm dialog and nothing else (no response handler, no worker, no boot step), and
+    // `setMark` — the only operation that LOWERS a trust mark — by the reset module and nothing else. Its own
+    // test and the dialog's may import the reset; the dialog may not import `setMark`.
+    // It is `@typescript-eslint/no-restricted-imports`, not the core rule, on purpose: flat config resolves a rule by
+    // name and the last block wins, so a `no-restricted-imports` here would silently replace `veyq/one-sign-out`'s
+    // patterns for every `.vue` file (and the real-catalog block would replace this one for tests). A different
+    // rule name stacks. Type-only imports are allowed: a type cannot call anything.
+    // LIMIT: it pins who IMPORTS the function, not that the dialog calls it only on a click — the dialog's own
+    // test owns that. A dynamic `import()` or a re-export through a third module is not seen either.
+    name: 'veyq/trust-reset-one-door',
+    files: ['src/**/*.{ts,vue}'],
+    ignores: [
+      'src/features/account/trustReset/trustReset.ts',
+      'src/features/account/trustReset/trustReset.test.ts',
+      'src/features/account/trustReset/TrustResetDialog.vue',
+      'src/features/account/trustReset/TrustResetDialog.test.ts',
+    ],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': ['error', { patterns: [TRUST_RESET_IMPORT, SET_MARK_IMPORT] }],
+    },
+  },
+  {
+    // The three files that may import the reset still may not lower a mark themselves.
+    name: 'veyq/trust-reset-one-door-set-mark',
+    files: [
+      'src/features/account/trustReset/trustReset.test.ts',
+      'src/features/account/trustReset/TrustResetDialog.vue',
+      'src/features/account/trustReset/TrustResetDialog.test.ts',
+    ],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': ['error', { patterns: [SET_MARK_IMPORT] }],
+    },
+  },
+  {
     // The shell offers exactly one door into the settings hub: ProfileMenu's settings item (ADR 0022 §5). A second
     // door is how the hub drifts back into scattered preference screens, so every STATIC spelling of a navigation
     // to it is refused outside the files that legitimately hold one: the path and its deep links (`'/settings'`,
@@ -91,7 +141,9 @@ export default defineConfigWithVueTs(
     // `ProfileMenu.vue` IS the door, and `SettingsHubView.vue` navigates INSIDE the hub (a door from the hub to the
     // hub has nothing to catch). `ConfirmEmailView.vue` is the second door: a page outside the shell that a mail
     // link opens, whose one onward step is the Security card showing the address it just confirmed
-    // (uc.account.confirm-email-address). A further legitimate door is one more `ignores` entry. LIMIT: a path
+    // (uc.account.confirm-email-address). `TrustResetLink.vue` is the third: every trust-state refusal notice
+    // carries it to the hub's one reset (ADR 0028 Decision 7's way back), as ONE component rather than a door per
+    // notice. A further legitimate door is one more `ignores` entry. LIMIT: a path
     // assembled at runtime is not a literal and is not seen (`'/' + 'settings'`, a variable passed as `path`,
     // `window.location`). And flat config resolves a rule by name, last block wins: a later block that sets
     // `no-restricted-syntax` for these files replaces these selectors rather than adding to them.
@@ -99,7 +151,7 @@ export default defineConfigWithVueTs(
     files: ['src/**/*.{ts,vue}'],
     ignores: [
       'src/**/*.test.ts', 'src/router.ts', 'src/components/app/ProfileMenu.vue', 'src/views/SettingsHubView.vue',
-      'src/views/ConfirmEmailView.vue',
+      'src/views/ConfirmEmailView.vue', 'src/features/account/trustReset/TrustResetLink.vue',
     ],
     rules: {
       'no-restricted-syntax': ['error', ...SETTINGS_DOOR],

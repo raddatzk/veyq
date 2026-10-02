@@ -164,6 +164,41 @@ const en = {
         'Someone else in this space has to confirm it’s really you before you’re back in. Until then you’re outside it, and nothing you do alone changes that.',
       failed: 'This space still has its old lock. Try replacing your keys again.',
     },
+    errorTrustState:
+      'This device can’t open one of your lists — the keys you trust or your device names — so replacing your keys would carry it across unchecked. Nothing was changed. Start that list over first, under “Start a list over”.',
+  },
+  trustReset: {
+    navTitle: 'Start a list over',
+    title: 'Start a list over',
+    sub: 'This device keeps two lists for your account: the keys you trust and the names of your devices. When the server hands this device a copy it can’t accept, the list stays blocked until you start it over.',
+    none: 'This device can read both lists. There is nothing to start over.',
+    loadFailed: 'This device could not check your lists right now. Please try again.',
+    document: {
+      pins: 'The keys you trust',
+      register: 'Your device names',
+    },
+    code: {
+      trust_state_rolled_back: 'The server returned an older copy than this device has already seen.',
+      trust_state_unreadable: 'The copy the server returned could not be opened.',
+    },
+    action: 'Start over…',
+    confirmTitle: {
+      pins: 'Start the keys you trust over?',
+      register: 'Start your device names over?',
+    },
+    cost: {
+      pins: 'Every contact will be new to you again. Every security number you compared is forgotten, and a key that changed in the meantime will be accepted as new — without the warning that would have told you.',
+      register:
+        'Every device will be unnamed until it next signs in, and removing another device’s saved key from here won’t be offered until then. Every session is still listed and can still be ended.',
+    },
+    serverCanWait:
+      'Only do this if the list doesn’t come back. The server can’t start it over for you — but it could hold it back until you do.',
+    acknowledge: 'I understand what starting over costs.',
+    confirm: 'Start over',
+    failed: 'The list could not be started over. Nothing was changed — please try again.',
+    done: 'Started over. This device reads the new, empty list from now on.',
+    alreadyReadable: 'This device can read the list again, so nothing was changed.',
+    link: 'Start this list over',
   },
   sessions: {
     title: 'Devices and sessions',
@@ -1154,6 +1189,41 @@ const de: typeof en = {
         'Jemand anderes in diesem Raum muss bestätigen, dass du wirklich du bist, bevor du wieder drin bist. Bis dahin bist du draußen, und daran ändert nichts, was du allein tust.',
       failed: 'Dieser Raum hat noch sein altes Schloss. Versuche das Ersetzen noch einmal.',
     },
+    errorTrustState:
+      'Dieses Gerät kann eine deiner Listen nicht öffnen — deine vertrauten Schlüssel oder deine Gerätenamen —, deshalb würde das Ersetzen der Schlüssel sie ungeprüft mitnehmen. Es wurde nichts geändert. Beginne diese Liste zuerst neu, unter „Liste neu beginnen“.',
+  },
+  trustReset: {
+    navTitle: 'Liste neu beginnen',
+    title: 'Liste neu beginnen',
+    sub: 'Dieses Gerät führt für dein Konto zwei Listen: deine vertrauten Schlüssel und die Namen deiner Geräte. Liefert der Server diesem Gerät eine Fassung, die es nicht annehmen kann, bleibt die Liste gesperrt, bis du sie neu beginnst.',
+    none: 'Dieses Gerät kann beide Listen lesen. Es gibt nichts neu zu beginnen.',
+    loadFailed: 'Dieses Gerät konnte deine Listen gerade nicht prüfen. Bitte versuche es erneut.',
+    document: {
+      pins: 'Deine vertrauten Schlüssel',
+      register: 'Deine Gerätenamen',
+    },
+    code: {
+      trust_state_rolled_back: 'Der Server hat eine ältere Fassung geliefert, als dieses Gerät schon gesehen hat.',
+      trust_state_unreadable: 'Die Fassung vom Server ließ sich nicht öffnen.',
+    },
+    action: 'Neu beginnen…',
+    confirmTitle: {
+      pins: 'Deine vertrauten Schlüssel neu beginnen?',
+      register: 'Deine Gerätenamen neu beginnen?',
+    },
+    cost: {
+      pins: 'Alle deine Kontakte sind für dich wieder neu. Jede verglichene Sicherheitsnummer ist vergessen, und ein Schlüssel, der sich inzwischen geändert hat, wird als neu angenommen — ohne die Warnung, die es dir gesagt hätte.',
+      register:
+        'Jedes Gerät bleibt unbenannt, bis es sich das nächste Mal anmeldet, und den gespeicherten Schlüssel eines anderen Geräts von hier zu entfernen, wird bis dahin nicht angeboten. Jede Sitzung wird weiter angezeigt und lässt sich weiter beenden.',
+    },
+    serverCanWait:
+      'Tu das nur, wenn die Liste nicht zurückkommt. Der Server kann sie nicht für dich neu beginnen — er könnte sie aber zurückhalten, bis du es tust.',
+    acknowledge: 'Ich verstehe, was das Neubeginnen kostet.',
+    confirm: 'Neu beginnen',
+    failed: 'Die Liste konnte nicht neu begonnen werden. Es wurde nichts geändert — bitte versuche es erneut.',
+    done: 'Neu begonnen. Dieses Gerät liest ab jetzt die neue, leere Liste.',
+    alreadyReadable: 'Dieses Gerät kann die Liste wieder lesen, deshalb wurde nichts geändert.',
+    link: 'Diese Liste neu beginnen',
   },
   sessions: {
     title: 'Geräte und Sitzungen',

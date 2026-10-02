@@ -16,6 +16,7 @@ import { rotateGroupForRemoval, deleteGroup, restoreGroup, scopeLifecycle, wrapG
 import { zeroEpochKeys } from './epochs'
 import { acceptKeyChange, IdentityChangedError } from '../account/identityPins'
 import { TrustStateRefused, refusalMessageKey } from '../account/trustMarks'
+import TrustResetLink from '../account/trustReset/TrustResetLink.vue'
 import { activeSpace, refreshActiveScope } from '../../app/activeSpace'
 import { getMyProfile } from '../account/profile/profile'
 import { isUnauthorized, isCodedError, HttpStatus } from '../../shared/httpError'
@@ -441,7 +442,10 @@ async function onRestore() {
 
       <Message v-if="actionError" severity="error" :closable="false">{{ actionError }}</Message>
       <!-- This device refused its own pin store (ADR 0028 Decision 7): no wrap to a foreign key until it reads. -->
-      <Message v-if="trustRefusal" severity="warn" :closable="false">{{ t(trustRefusal) }}</Message>
+      <Message v-if="trustRefusal" severity="warn" :closable="false">
+        {{ t(trustRefusal) }}
+        <TrustResetLink />
+      </Message>
 
       <p v-if="loading" class="settings-muted">{{ t('members.loading') }}</p>
       <Message v-else-if="loadError === 'notAuthorized'" severity="warn" :closable="false">

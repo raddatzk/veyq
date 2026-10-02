@@ -28,6 +28,7 @@ import NodeMutationDialog from '../features/memory/components/NodeMutationDialog
 import DeleteNodeDialog from '../features/memory/components/DeleteNodeDialog.vue'
 import ShareDialog from '../features/memory/components/ShareDialog.vue'
 import SpaceTrashDialog from '../features/memory/components/SpaceTrashDialog.vue'
+import TrustResetLink from '../features/account/trustReset/TrustResetLink.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -204,6 +205,7 @@ async function onDeleteDone() {
     <div v-else-if="activeSpace.status === 'error' || treeStore.error" class="home-state">
       <p>{{ t('home.error') }}</p>
       <p v-if="activeSpace.trustRefusal">{{ t(activeSpace.trustRefusal) }}</p>
+      <TrustResetLink v-if="activeSpace.trustRefusal" />
     </div>
     <template v-else>
       <Message v-if="isPendingDeletion" severity="warn" :closable="false" class="pending-delete-banner">

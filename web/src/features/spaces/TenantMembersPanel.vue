@@ -31,6 +31,7 @@ import { useObjectUrl } from '../../shared/state/useObjectUrls'
 import { useToast } from '../../shared/state/useToast'
 import { useConfirm } from '../../shared/state/useConfirm'
 import ChangedKeyReviewDialog from './ChangedKeyReviewDialog.vue'
+import TrustResetLink from '../account/trustReset/TrustResetLink.vue'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -260,7 +261,10 @@ async function revoke(invite: PendingMemberInvite) {
 
       <Message v-if="actionError" severity="error" :closable="false">{{ actionError }}</Message>
       <!-- This device refused its own pin store (ADR 0028 Decision 7): no wrap to a foreign key until it reads. -->
-      <Message v-if="trustRefusal" severity="warn" :closable="false">{{ t(trustRefusal) }}</Message>
+      <Message v-if="trustRefusal" severity="warn" :closable="false">
+        {{ t(trustRefusal) }}
+        <TrustResetLink />
+      </Message>
 
       <!-- A re-issue has no link to surface any more: the fresh secret went to the invitee (ADR 0055 §2). This
            is the confirmation, dismissible, not a handoff. -->

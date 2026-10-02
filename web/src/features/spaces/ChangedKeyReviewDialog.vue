@@ -11,6 +11,7 @@ import Dialog from 'primevue/dialog'
 import Message from 'primevue/message'
 import { safetyNumber, getPin, acceptKeyChange } from '../account/identityPins'
 import { TrustStateRefused, refusalMessageKey } from '../account/trustMarks'
+import TrustResetLink from '../account/trustReset/TrustResetLink.vue'
 import { useAsyncAction } from '../../shared/state/useAsyncAction'
 
 const props = defineProps<{ member: { userId: string; username: string; identityPublicKey: string } }>()
@@ -21,6 +22,8 @@ const { t } = useI18n()
 const expected = ref('') // the pinned key's safety-number (what the caller trusted before)
 const current = ref('') // the directory key's safety-number (what is shown now)
 const error = ref('')
+/** The accept failed on a refused pin store — the error then links to the settings hub's reset. */
+const trustRefused = ref(false)
 
 watch(
   visible,
@@ -40,7 +43,12 @@ const { run: runAccept, pending: busy } = useAsyncAction(
     emit('accepted')
     visible.value = false
   },
-  { onError: (e) => { error.value = e instanceof TrustStateRefused ? t(refusalMessageKey(e)) : t('verify.acceptFailed') } },
+  {
+    onError: (e) => {
+      trustRefused.value = e instanceof TrustStateRefused
+      error.value = e instanceof TrustStateRefused ? t(refusalMessageKey(e)) : t('verify.acceptFailed')
+    },
+  },
 )
 
 async function accept() {
@@ -65,7 +73,10 @@ async function accept() {
         </section>
       </div>
 
-      <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
+      <Message v-if="error" severity="error" :closable="false">
+        {{ error }}
+        <TrustResetLink v-if="trustRefused" />
+      </Message>
 
       <div class="veyq-dialog-action-row">
         <Button type="button" :label="t('verify.refuse')" icon="pi pi-times" severity="secondary" outlined :disabled="busy" @click="visible = false" />
