@@ -205,6 +205,24 @@ not documented; the code is the source of truth for that.
   exists. `OperatorBlindProbeTest` enforces this for every operation it derives from the contract — a new one is
   red until it is probed or named on the test's exclusion list with a reason.
   ([ADR 0042](../decisions/0042-http-failure-projection.md); cr-0161 the projection, cr-0162 the ordering.)
+- **A single-use transition is a checked compare-and-set, first in its transaction.** A secret the docs call
+  single-use (an invite, a recovery token, a pairing channel's delegation, a mailed confirmation) is spent by a
+  guarded `UPDATE … where id = ? and status = <live>` whose row count the caller reads and branches on, and that
+  update is the transaction's first write. Two redeems that both read the row live then cannot both win, and the
+  loser has written nothing a unique index would have to undo, so it answers exactly as a replay of the spent
+  secret does — not with the `500` of a collision, and not with a second success. The earlier unlocked read only
+  tells an unknown secret from a dead one; it never authorizes. Checks that read what a concurrent redeem writes
+  (the account it births, a profile, a parent's status) run after the spend, and a refusal there rolls the spend
+  back. Examples: `PairingStore.markCollected`, `TenantStore.consumeLiveInvite`. Two corollaries, both measured
+  as real defects before they were rules (cr-one-time-secrets-spend-by-compare-and-set):
+  - **A row that other writers transition by status is never saved as a managed entity.** Without
+    `@DynamicUpdate` the flush writes every column, so a writer that changed only another column writes back the
+    status it read: a tenant rotation's re-tag brought a revoked invite back to `ACTIVE`. Such a writer updates its
+    own columns in a bulk update guarded on the live status (`TenantStore.carryInvites`).
+  - **When the decision reads more than one row, the serializing write is a row lock on their parent, taken
+    first.** `SessionService.rotate` locks the session family before it reads the presented and the `CURRENT`
+    refresh token: their own row locks ordered only presentations of the same token, so an orphan and the current
+    token both rotated and the chain forked ([ADR 0004](../decisions/0004-session-tokens.md)).
 - *(to decide)* Cross-context communication — direct call vs. domain events — settled when bounded
   contexts are cut.
 
