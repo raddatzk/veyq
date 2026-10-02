@@ -200,6 +200,23 @@ acceptanceCriteria:
     coverage:
       web:
         unit: [src/features/memory/media.test.ts]
+  - id: pixel-stage-off-the-page-thread
+    text: >-
+      The image pixel stage runs in a Worker where the browser offers one; a Worker that cannot run finishes the
+      request on the page thread; an undecodable source still uploads original-only without a page-thread retry.
+      Every image caller (member and contributor upload, standalone cover, space icon) reaches it through the one
+      `createBrowserDeriver`, and the whole request crosses — an icon's WebP type and background fill included.
+    coverage:
+      web:
+        unit: [src/features/memory/mediaDeriveWorker.test.ts]
+    gaps:
+      - surface: web
+        reason: >
+          The unit tests drive stub Workers; no CI run loads the real module Worker, and a Worker that never loads
+          (a mis-bundled URL, a CSP refusal) degrades silently to the page thread with every test still green.
+          That the real Worker runs is measured by hand only, and not by timing: a quiet desktop Chrome shows no
+          page-path wait to fall below, so the proof is a bundled page that counts the Worker's posts and replies
+          (24 of 24 answered per 12-photo batch, en.memory.derivatives § Generation & attachment).
   - id: sealed-original-filename
     text: The original's filename is sealed into the lazy panel bundle at upload and is NEVER sent — no request payload carries it, so uc.memory.gallery's "no pixel, no filename" stays a true statement about the server's view now that the name exists at all. Both AddMediaSource construction sites (the upload queue and the cover upload) pass it.
     coverage:

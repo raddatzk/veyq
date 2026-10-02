@@ -1348,6 +1348,16 @@ network-bound gain, so the number bounds the decision *here* and not everywhere 
 where the follow-up will look for it, which is the inbox row for the work it gates, not a retrospective that is
 deleted with its CR.
 
+**On this host, machine load is part of a timing's substrate — record it, and interleave before with after.**
+Five agents share one Mac, so a timing taken "now" is taken under whatever they are building.
+`cr-derive-media-tiers-in-a-worker`'s phase-0 gate (*is the backgrounded pixel stage over 6 s?*) passed at
+6.5–8.9 s and code was built on it; the same bench, quiet, measured 2.8 s on both paths — the gate would have
+stopped the CR — while under load the page path took 22.6–73.6 s and the change under test 5.2–27.3 s. Neither
+reading was wrong; each was a different substrate, and only one was written down. So every timing carries
+`sysctl -n vm.loadavg` beside it, a before/after pair runs alternately in one window rather than hours apart,
+and a gate that authorises building is taken again quiet before it does — a gate measured once is § *bite the
+MEASUREMENT* left undone.
+
 ### Where a mapping depends on a library's output, one un-mocked test runs BEFORE the mapping
 
 **A suite that mocks the library proves the mapping and never the tag name, so an invented name passes
