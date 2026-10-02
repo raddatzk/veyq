@@ -131,7 +131,7 @@ describe('listTree', () => {
     const encryptedName = sealUnder(scopeKey, F1, 0, 'Trips')
     mockContent({
       listNodes: vi.fn<ContentApi['listNodes']>().mockResolvedValue([
-        { id: F1, parentId: null, kind: 'FOLDER', epoch: 0, encryptedName, slugToken: 'x', orderIndex: 0 },
+        { id: F1, parentId: null, kind: 'FOLDER', epoch: 0, encryptedName, slugToken: 'x', orderIndex: 0, metaVersion: 0 },
       ]),
     })
     const tree = await listTree(SCOPE_ID, epochsOf(scopeKey))
@@ -144,7 +144,7 @@ describe('listTree', () => {
     const encryptedName = sealUnder(scopeKey, '5c09e000-0000-4000-8000-0000000000f1', 0, 'Trips')
     mockContent({
       listNodes: vi.fn<ContentApi['listNodes']>().mockResolvedValue([
-        { id: '5c09e000-0000-4000-8000-0000000000f2', parentId: null, kind: 'FOLDER', epoch: 0, encryptedName, slugToken: 'x', orderIndex: 0 },
+        { id: '5c09e000-0000-4000-8000-0000000000f2', parentId: null, kind: 'FOLDER', epoch: 0, encryptedName, slugToken: 'x', orderIndex: 0, metaVersion: 0 },
       ]),
     })
     await expect(listTree(SCOPE_ID, epochsOf(scopeKey))).rejects.toBeInstanceOf(v1.OpenRefused)

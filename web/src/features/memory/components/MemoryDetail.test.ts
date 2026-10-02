@@ -546,9 +546,9 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
   it('the open-time date self-heal from a stale tree keeps a place a peer set meanwhile', async () => {
     const memoryKey = v1.randomBytes(32)
     const store = galleryFakeStore()
-    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    fakeApi(mediaApi, store.api)
     vi.stubGlobal('fetch', store.fetchStub)
-    vi.mocked(exifr.parse).mockResolvedValue({ DateTimeOriginal: new Date(Date.UTC(2026, 2, 3, 12)) } as never)
+    vi.mocked(exifr.parse).mockResolvedValue({ DateTimeOriginal: new Date(Date.UTC(2026, 2, 3, 12)) })
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
     const peers = sealNodeMeta(memoryKey, THIS_NODE, { v: 1, location: { ...GEOCODED, derivedMode: 'fixed' } })
     updateNode.mockRejectedValueOnce(staleNode(peers, 1))
@@ -571,9 +571,9 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
   it('the location self-heal does not move a place a peer fixed meanwhile', async () => {
     const memoryKey = v1.randomBytes(32)
     const store = galleryFakeStore()
-    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    fakeApi(mediaApi, store.api)
     vi.stubGlobal('fetch', store.fetchStub)
-    vi.mocked(exifr.parse).mockResolvedValue({ latitude: 48.85, longitude: 2.35 } as never)
+    vi.mocked(exifr.parse).mockResolvedValue({ latitude: 48.85, longitude: 2.35 })
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
     const stale = sealNodeMeta(memoryKey, THIS_NODE, { v: 1, location: { name: 'Boulder gym', nameSource: 'manual', derivedMode: 'auto' } })
     const fixed = sealNodeMeta(memoryKey, THIS_NODE, { v: 1, location: { name: 'Lisbon', nameSource: 'manual', derivedMode: 'fixed', derived: { lat: 38.7, lng: -9.1 } } })
@@ -583,7 +583,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     await flushPromises()
     await flushPromises()
 
-    const locationWrites = updateNode.mock.calls.filter((c) => unsealMemoryLocation(SCOPE_ID, memoryKey, { id: NODE_ID, wrappedMeta: c[0].updateNodeRequest.wrappedMeta })?.name === 'Boulder gym')
+    const locationWrites = updateNode.mock.calls.filter((c) => unsealMemoryLocation(SCOPE_ID, memoryKey, { id: NODE_ID, wrappedMeta: c[0].updateNodeRequest.wrappedMeta ?? null })?.name === 'Boulder gym')
     expect(locationWrites).toHaveLength(1) // the stale attempt, refused — and no retry over the peer's fixed place
     expect(updateNode).toHaveBeenCalledTimes(1)
   })

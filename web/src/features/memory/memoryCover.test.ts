@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { stubApi } from '../../test/apiMock'
+import { fakeApi, stubApi } from '../../test/apiMock'
+import type { ContentApi } from '../../api/generated/content'
 import { mediaItem } from '../../test/models'
 
 vi.mock('../../api/client', () => ({
@@ -209,8 +210,8 @@ describe('setMemoryCover', () => {
   /** W5 (ADR 0077): a cover save from a stale tree meets a 409 whose blob holds a peer's place — the retry keeps it. */
   it('W5: on 409 stale_version re-applies only the cover on the current blob — a peer\'s place survives', async () => {
     const location = { name: 'Lisbon', nameSource: 'manual', derivedMode: 'fixed' }
-    const updateNode = vi.fn().mockRejectedValueOnce(staleWith(sealMeta({ v: 1, location }), 2)).mockResolvedValueOnce(undefined)
-    vi.mocked(contentApi).mockReturnValue({ updateNode } as unknown as ReturnType<typeof contentApi>)
+    const updateNode = vi.fn<ContentApi['updateNode']>().mockRejectedValueOnce(staleWith(sealMeta({ v: 1, location }), 2)).mockResolvedValueOnce(undefined)
+    fakeApi(contentApi, { updateNode })
     const cover: MemoryCover = { source: { kind: 'media', mediaId: 'm-3' }, crop: FULL_FRAME }
 
     const state = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, cover, { wrappedMeta: null, metaVersion: 1 })
@@ -227,14 +228,14 @@ describe('setMemoryCover', () => {
     const peers = sealMeta({ v: 1, cover: peersCover })
     const mine: MemoryCover = { source: { kind: 'media', mediaId: 'mine' }, crop: FULL_FRAME }
 
-    const surfaced = vi.fn().mockRejectedValueOnce(staleWith(peers, 2)).mockResolvedValue(undefined)
-    vi.mocked(contentApi).mockReturnValue({ updateNode: surfaced } as unknown as ReturnType<typeof contentApi>)
+    const surfaced = vi.fn<ContentApi['updateNode']>().mockRejectedValueOnce(staleWith(peers, 2)).mockResolvedValue(undefined)
+    fakeApi(contentApi, { updateNode: surfaced })
     const err = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, mine, { wrappedMeta: null, metaVersion: 1 }).catch((e) => e)
     expect(err).toBeInstanceOf(MetaConflictError)
     expect(surfaced).toHaveBeenCalledTimes(1)
 
-    const reapplied = vi.fn().mockRejectedValueOnce(staleWith(peers, 2)).mockResolvedValue(undefined)
-    vi.mocked(contentApi).mockReturnValue({ updateNode: reapplied } as unknown as ReturnType<typeof contentApi>)
+    const reapplied = vi.fn<ContentApi['updateNode']>().mockRejectedValueOnce(staleWith(peers, 2)).mockResolvedValue(undefined)
+    fakeApi(contentApi, { updateNode: reapplied })
     const state = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, mine, { wrappedMeta: null, metaVersion: 1 }, false)
     expect(reapplied).toHaveBeenCalledTimes(2)
     expect(unsealMemoryCover(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: state.wrappedMeta })).toEqual(mine)

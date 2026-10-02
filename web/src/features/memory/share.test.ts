@@ -644,7 +644,7 @@ describe('reissueShare (ADR 0075, W1)', () => {
     const drop = v1.generateDropKey()
     const sealedDropPrivateKey = b64std(v1.seal({ purpose: 'drop-private-key', scopeId: SCOPE_ID, nodeId: NODE_ID }, kMem, v1.serializeDropKey(drop)))
     stubApi(contentApi, {
-      listNodes: [{ id: NODE_ID, epoch: 0, parentId: null, kind: 'MEMORY', encryptedName: 'AQ==', slugToken: 'AQ==', orderIndex: 0, sealedDropPrivateKey }],
+      listNodes: [{ id: NODE_ID, epoch: 0, parentId: null, kind: 'MEMORY', encryptedName: 'AQ==', slugToken: 'AQ==', orderIndex: 0, sealedDropPrivateKey, metaVersion: 0 }],
     })
     const { old, reissue } = await oldShare(kMem, ShareRole.Uploader, '')
 

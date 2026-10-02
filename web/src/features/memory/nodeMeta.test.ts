@@ -4,6 +4,7 @@ import { b64std, fromB64std } from '@veyq/crypto/base64'
 import * as base64 from '@veyq/crypto/base64'
 import { editField, nodeMetaState, openNodeMetaForWrite, sealNodeMeta, unsealNodeMeta } from './nodeMeta'
 import { MetaConflictError, MetaUnreadableError } from './sealedMetaWrite'
+import { treeNode } from '../../test/models'
 
 // Assertion-strength KAT for the wrappedMeta envelope (cr-0177, ADR 0045). nodeMeta was untested: the seal
 // context 'node-meta' was unpinned, and unsealNodeMeta's best-effort (E3) fall-throughs to { v: 1 } had no oracle.
@@ -103,7 +104,7 @@ describe('openNodeMetaForWrite — only an ABSENT blob is fresh (ADR 0077 point 
 
 describe('nodeMetaState', () => {
   it('is the blob and the version the tree holds, nothing else', () => {
-    expect(nodeMetaState({ wrappedMeta: 'YQ==', metaVersion: 7, id: 'n' } as never)).toEqual({ wrappedMeta: 'YQ==', metaVersion: 7 })
+    expect(nodeMetaState(treeNode({ wrappedMeta: 'YQ==', metaVersion: 7, id: 'n' }))).toEqual({ wrappedMeta: 'YQ==', metaVersion: 7 })
   })
 })
 

@@ -63,6 +63,7 @@ import {
   type PresignedUrl,
 } from '../../api/generated/media'
 import { fakeApi, stubApi } from '../../test/apiMock'
+import { mediaItem } from '../../test/models'
 import { MetaConflictError, MetaUnreadableError } from './sealedMetaWrite'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
@@ -840,7 +841,7 @@ describe('setMediaMeta — sealed capturedAt override in the listed-metadata tie
     const memoryKey = v1.randomBytes(32)
     const tier = { v: 1, capturedAt: ORIG, gpsLat: 38.7, gpsLng: -9.1, placeName: 'Lisboa', placeLevel: 'city', future: 'kept' }
     const media = target(MEDIA_ID, memoryKey, tier)
-    expect(unsealMeta(SCOPE_ID, memoryKey, { ...media, original: {} as never, derivatives: [] })?.placeName).toBe('Lisboa')
+    expect(unsealMeta(SCOPE_ID, memoryKey, mediaItem(media))?.placeName).toBe('Lisboa')
 
     await setMediaMeta(SCOPE_ID, media, memoryKey, CORRECTED)
 
