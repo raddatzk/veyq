@@ -29,8 +29,7 @@ tags:
     description: >
       Public viewer shares — the curator's create/list/revoke (authenticated) plus the anonymous guest
       resolve + gated presigned blob GET (unauthenticated). One tag = one resource interface owning the
-      `/api/shares` subtree, plus the one scope-addressed switch-off of every share of a scope
-      (`/api/scopes/{scopeId}/shares/revoke`).
+      `/api/shares` subtree.
 
 paths:
   /api/shares:
@@ -133,51 +132,6 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
         "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
-
-  /api/scopes/{scopeId}/shares/revoke:
-    post:
-      tags: [sharing]
-      operationId: revokeScopeShares
-      summary: Turn off every link of a scope — they come back only by re-issue.
-      description: >
-        A scope **owner** (group owner, tenant owner, the personal scope's owner) turns off **every** enabled public
-        share of the scope, whoever created it, in one transaction: each one's link then `404`s, and each is marked
-        so it comes back only through `reissueShare` — a new id and a new `K_share` — never `reactivateShare`
-        ([ADR 0075](../../docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md) point 5). A
-        switch-off says "a link may have leaked", and a link with no recovery copy leaks like any other, so the mark
-        holds for every share it turns off. A share minted afterwards is untouched. Answers how many links it turned
-        off; idempotent — a second call answers `revoked: 0`. Membership-gated first (a non-member gets the same
-        `404` as an unknown scope, ADR 0042), then owner-gated. No body.
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: scopeId
-          in: path
-          required: true
-          description: The scope whose shares are turned off.
-          schema: { type: string, format: uuid, example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c }
-      responses:
-        "200":
-          description: Every enabled share of the scope is off and marked; the body counts them.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/ScopeSharesRevoked" }
-              example: { revoked: 2 }
-        "401":
-          description: Generic authentication failure.
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
-        "403":
-          description: >
-            The caller is a member of the scope but not its owner (`not_scope_owner`), or the tenant is suspended
-            (`tenant_suspended`, uc.spaces.scope-access).
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } }
-        "404":
-          description: No such scope, or the caller is not a member of it (indistinguishable, ADR 0042).
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
-        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
 
   /api/shares/{shareId}/revoke:
     post:
@@ -1118,17 +1072,6 @@ components:
           minLength: 43
           maxLength: 43
           example: 3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i
-
-    ScopeSharesRevoked:
-      type: object
-      required: [revoked]
-      properties:
-        revoked:
-          x-veyq-visibility: measure
-          type: integer
-          minimum: 0
-          description: How many enabled shares the switch-off turned off — 0 when there were none (idempotent).
-          example: 2
 
     ShareSummary:
       type: object
