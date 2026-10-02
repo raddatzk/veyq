@@ -1,6 +1,7 @@
 // Bootstrap User — create the local dev principal from .run/.env and record its derived key material back into
-// the same file. Reuses the real cold-account-birth crypto (buildAccount) + the existing endpoints, so it is
-// operator-blind: only ciphertext + public keys are POSTed; the password never leaves this process.
+// the same file. Reuses the real cold-account-birth crypto (buildAccount) and calls the API through the generated
+// clients (apiTransport.mts), so it is operator-blind — only ciphertext + public keys are POSTed; the password never
+// leaves this process — and a contract change turns it red at `npm run typecheck`, not at its next run.
 //
 // The human fills the inputs in .run/.env (copy from .run/.env.example):
 //   VEYQ_USERNAME, VEYQ_PASSWORD, VEYQ_EMAIL, VEYQ_TENANT, VEYQ_TENANT_DOMAIN, and the optional
@@ -20,24 +21,22 @@
 //    successfully-born owner: the account existed in the DB, its Secret Key existed only in this process, and
 //    .run/.env still held the previous run's. Anything after 4a therefore warns instead of exiting.
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
-import { request as httpRequest } from 'node:http'
 import { fileURLToPath } from 'node:url'
-import { execFileSync } from 'node:child_process'
 import * as v1 from '@veyq/crypto/v1'
 import { fromB64std, b64std } from '@veyq/crypto/base64'
 import { buildAccount } from '@veyq/crypto/accountBirth'
 import { sealName } from '../src/features/account/profile/memberName'
 import { admissionVerifies, sealGrant, tagAdmission } from '../src/features/spaces/grant'
-import { awaitInvite } from './devSeed.mts'
-import { MAILPIT, MAILPIT_SMTP_PORT, mailCursor, waitForMail } from '../src/test/mailpit'
+import { MAILPIT, MAILPIT_SMTP_PORT, mailCursor, mailpitReachable, waitForMail } from '../src/test/mailpit'
+import { Configuration as SetupConfiguration, SetupApi } from '../src/api/generated'
+import { Configuration as AuthConfiguration, LoginApi } from '../src/api/generated/auth'
+import { AccountApi, Configuration as AccountConfiguration } from '../src/api/generated/account'
+import { Configuration as TenantsConfiguration, TenantsApi } from '../src/api/generated/tenants'
+import { Configuration as ScopesConfiguration, ScopesApi } from '../src/api/generated/scopes'
+import { Configuration as TasksConfiguration, TasksApi, type ClaimedJob } from '../src/api/generated/tasks'
+import { BASE, adminChannel, describeFailure, publicChannel, tenantChannel } from './apiTransport.mts'
 
 const ENV_FILE = fileURLToPath(new URL('../../.run/.env', import.meta.url))
-const BASE = process.env.VEYQ_BASE ?? 'http://localhost:8080'
-// The backend's admin listener: the only door the Server-Owner operations answer on — the public port 404s them
-// (ADR 0065). 8090 is its dev default (veyq.admin-channel.port).
-const ADMIN_BASE = process.env.VEYQ_ADMIN_BASE ?? 'http://127.0.0.1:8090'
-const DB_CONTAINER = process.env.VEYQ_DB_CONTAINER ?? 'veyq-mariadb'
-const INVITE_FILE = process.env.VEYQ_INVITE_FILE ?? fileURLToPath(new URL('../../backend/build/dev-invites.jsonl', import.meta.url))
 /** Where the backend reaches Mailpit's SMTP. Dotted on purpose: `TenantMailSettingsUpdate.host` is pinned to
  *  `^([a-z0-9](-?[a-z0-9])*\.)+[a-z]{2,}$`, so a bare `localhost` is a 400. `*.localhost` resolves to loopback. */
 const SMTP_HOST = process.env.VEYQ_SMTP_HOST ?? 'mailpit.localhost'
@@ -60,41 +59,27 @@ function writeEnv(fields: Record<string, string>): void {
   writeFileSync(ENV_FILE, `# Local dev principal (gitignored). Inputs filled by you; SECRET_KEY + WRAPPED_MASTERKEY\n# filled by \`npm run bootstrap:user\`. Throwaway dev creds for a local instance — never committed.\n${body}\n`)
 }
 
-// --- HTTP: plain fetch for non-tenant calls; node:http for tenant-scoped (fetch drops a manual Host header) -
-const json = (r: Response) => r.json() as Promise<any>
-const post = (path: string, b: unknown, token?: string, base = BASE) =>
-  fetch(`${base}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(b) })
+// --- API calls: the generated clients, over the three channels apiTransport.mts configures ----------------------
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
-const backendPort = new URL(BASE).port || '80'
 
-/** A tenant-scoped call over node:http (honours an explicit Host, which fetch/undici strips). */
-function tenant(method: string, path: string, token: string, host: string, body?: unknown): Promise<{ status: number; body: any }> {
-  const data = body === undefined ? undefined : JSON.stringify(body)
-  return new Promise((resolve, reject) => {
-    const req = httpRequest({
-      host: '127.0.0.1', port: backendPort, path, method,
-      headers: { host, authorization: `Bearer ${token}`, ...(data ? { 'content-type': 'application/json', 'content-length': Buffer.byteLength(data) } : {}) },
-    }, (res) => {
-      let buf = ''
-      res.setEncoding('utf8')
-      res.on('data', (c) => (buf += c))
-      res.on('end', () => resolve({ status: res.statusCode ?? 0, body: buf ? JSON.parse(buf) : undefined }))
-    })
-    req.on('error', reject)
-    if (data) req.write(data)
-    req.end()
-  })
+/** Run one generated call, or end the run with what the backend answered. Only for steps before 4a. */
+async function orFail<T>(what: string, call: Promise<T>): Promise<T> {
+  try { return await call } catch (e) { return fail(`${what} failed: ${await describeFailure(e)}`) }
+}
+/** The same, for the optional steps after 4a: throw, and let the caller downgrade it to a warning. */
+async function orThrow<T>(what: string, call: Promise<T>): Promise<T> {
+  try { return await call } catch (e) { throw new Error(`${what} failed: ${await describeFailure(e)}`) }
 }
 
-async function awaitBackend(timeoutMs = 90_000): Promise<any> {
+async function awaitBackend(timeoutMs = 90_000) {
+  const setupApi = new SetupApi(new SetupConfiguration(publicChannel()))
   const deadline = Date.now() + timeoutMs
   let last = ''
   while (Date.now() < deadline) {
-    try { const r = await fetch(`${BASE}/api/setup`); if (r.ok) return await json(r); last = `status ${r.status}` }
-    catch (e) { last = (e as Error).message }
+    try { return await setupApi.getSetupStatus() } catch (e) { last = await describeFailure(e) }
     await sleep(750)
   }
-  fail(`backend did not answer ${BASE}/api/setup within ${timeoutMs}ms (${last})`)
+  return fail(`backend did not answer ${BASE}/api/setup within ${timeoutMs}ms (${last})`)
 }
 
 // --- run --------------------------------------------------------------------------------------------------
@@ -111,8 +96,14 @@ const u2Username = (env.VEYQ_USER2_USERNAME ?? '').trim().toLowerCase()
 const u2Email = (env.VEYQ_USER2_EMAIL ?? '').trim()
 const u2Password = env.VEYQ_USER2_PASSWORD ?? ''
 
-const numeric = /^[0-9.]+$/.test(domain)
-const createDomain = numeric ? (process.env.VEYQ_CREATE_DOMAIN ?? 'local.veyq.test') : domain
+// An IP literal is refused HERE, before anything is born. The contract's hostname pattern refuses it too, but only
+// at `POST /api/tenants` — after the owner exists and before step 4a persists its Secret Key, which would strand
+// an owner nobody can unlock. The dev tenant is a `*.localhost` domain instead: valid under that pattern, loopback
+// by RFC 6761, and forwarded as-is by the dev proxy. This is the only copy of the shape the seeder keeps; every
+// other shape error is the contract's 400.
+if (/^[0-9.]+$/.test(domain)) {
+  fail(`VEYQ_TENANT_DOMAIN=${domain} is an IP literal, which no tenant can have — use a *.localhost domain (e.g. veyq.localhost)`)
+}
 
 /**
  * The Emergency Kit already in .run/.env, when there is a usable one — so a re-seed after `down -v` keeps the
@@ -139,54 +130,56 @@ const built = await buildAccount(email, password, fromB64std(setup.instanceSalt)
   secretKey: reusableSecretKey(env.VEYQ_SECRET_KEY, 'owner'),
 })
 const m = built.material
-const ownerRes = await post('/api/setup/owner', {
-  email,
-  suiteId: m.suiteId, identityPublicKey: m.identityPublicKey, wrappedIdentityPrivateKey: m.wrappedIdentityPrivateKey,
-  authPublicKey: m.authPublicKey, masterKeyWraps: m.masterKeyWraps, secretKeyProofPublicKey: m.secretKeyProofPublicKey,
-}, undefined, ADMIN_BASE)
-if (!ownerRes.ok) fail(`setup/owner failed: ${ownerRes.status} ${await ownerRes.text()}`)
+await orFail('setup/owner', new SetupApi(new SetupConfiguration(adminChannel())).createServerOwner({
+  createServerOwnerRequest: {
+    email,
+    suiteId: m.suiteId, identityPublicKey: m.identityPublicKey, wrappedIdentityPrivateKey: m.wrappedIdentityPrivateKey,
+    authPublicKey: m.authPublicKey, masterKeyWraps: m.masterKeyWraps, secretKeyProofPublicKey: m.secretKeyProofPublicKey,
+  },
+}))
 console.log(`owner: created ${email}`)
 
 // 2 — log in (account-level token)
-const ch = await json(await post('/api/login/challenge', { email }))
+const loginApi = new LoginApi(new AuthConfiguration(publicChannel()))
+const ch = await orFail('login challenge', loginApi.requestLoginChallenge({ loginChallengeRequest: { email } }))
 const auth = v1.deriveAuthKeypair(password, v1.deriveAuthSalt(fromB64std(ch.instanceSalt), email), v1.ARGON)
-const verify = await post('/api/login/verify', { email, nonce: ch.nonce, signature: b64std(v1.authSign(auth.privateKey, fromB64std(ch.nonce))) })
-if (!verify.ok) fail(`login failed: ${verify.status} ${await verify.text()}`)
-const token = (await json(verify)).accessToken as string
+const { accessToken: token } = await orFail('login', loginApi.verifyLogin({
+  loginVerifyRequest: { email, nonce: ch.nonce, signature: b64std(v1.authSign(auth.privateKey, fromB64std(ch.nonce))) },
+}))
+const onTenant = tenantChannel(domain, token)
+const tenantsApi = new TenantsApi(new TenantsConfiguration(onTenant))
 
 // 3 — the configured-domain tenant, accepted as the existing user (TENANT grant sealed to our own identity)
-const created = await post('/api/tenants', { tenantName, domain: createDomain, ownerEmail: email }, token, ADMIN_BASE)
-if (!created.ok) fail(`createTenant failed: ${created.status} ${await created.text()}`)
-const { tenantId } = await json(created)
-const bootstrapSecret = await awaitInvite(INVITE_FILE, email)
-if (numeric) {
-  execFileSync('docker', ['exec', DB_CONTAINER, 'mariadb', '-uveyq', '-pchange-me', 'veyq',
-    '-e', `UPDATE veyq_tenant SET domain='${domain}' WHERE id='${tenantId}'`], { stdio: 'inherit' })
-}
+// The owner invite's secret comes back to the Server Owner who minted it (`TenantCreated.bootstrapSecret`), so no
+// mailbox or dev-invite file is read for it.
+const { tenantId, bootstrapSecret } = await orFail('createTenant', new TenantsApi(new TenantsConfiguration(adminChannel(token)))
+  .createTenant({ createTenantRequest: { tenantName, domain, ownerEmail: email } }))
 // Keep the freshly-minted TENANT scope key (K_tenant): the grant wraps it, and — holding it here — we can seal
 // the optional real name at accept, exactly as TenantJoinView does at an owner cold-birth (cr-0106).
 const tenantScopeKey = v1.randomBytes(32)
 // Bound to the tenant scope (its id IS the tenant id) at the birth epoch 0; the name to (tenant scope, our id) (ADR 0072).
 // The birth is what TenantJoinView sends: the grant signed by our identity (ADR 0028 Decision 6) and our own
 // admission self-tagged under E_0 (ADR 0020 move 6).
-const ownerId = (await tenant('GET', '/api/account/key-material', token, domain)).body?.userId as string
+const { userId: ownerId } = await orFail('key-material', new AccountApi(new AccountConfiguration(onTenant)).getAccountKeyMaterial())
 const ownerPub = b64std(v1.serializeIdentityPublic(built.identity.pub))
 const tenantBirth = sealGrant(tenantScopeKey, { scopeId: tenantId, kind: 'TENANT', epoch: 0 }, { userId: ownerId, identityPublicKeyB64: ownerPub }, built.identity.priv.sign)
 const ownerAdmission = tagAdmission(tenantScopeKey, { scopeId: tenantId, kind: 'TENANT' }, 0, null)
 const sealedName = firstName || lastName ? sealName(tenantScopeKey, { scopeId: tenantId, userId: ownerId }, { firstName, lastName }) : undefined
-const accepted = await tenant('POST', '/api/tenants/accept', token, domain, {
-  bootstrapSecret, username, grant: tenantBirth.wrappedGrant, grantSignature: tenantBirth.grantSignature, ...ownerAdmission,
-  ...(sealedName ? { sealedName } : {}),
-})
-if (accepted.status >= 300) fail(`accept failed: ${accepted.status} ${JSON.stringify(accepted.body)}`)
+await orFail('accept', tenantsApi.acceptTenantInvite({
+  acceptInviteRequest: {
+    bootstrapSecret, username, grant: tenantBirth.wrappedGrant, grantSignature: tenantBirth.grantSignature, ...ownerAdmission,
+    ...(sealedName ? { sealedName } : {}),
+  },
+}))
 console.log(`tenant: ${domain} created + accepted${sealedName ? ' + name sealed' : ''}`)
 
 // 4 — the owner's PERSONAL scope
 const personalScopeId = crypto.randomUUID() // client-minted: the grant is bound to it (ADR 0072)
 const personalGrant = sealGrant(v1.randomBytes(32), { scopeId: personalScopeId, kind: 'PERSONAL', epoch: 0 }, { userId: ownerId, identityPublicKeyB64: ownerPub }, built.identity.priv.sign)
-const scopeRes = await tenant('POST', '/api/scopes', token, domain, { scopeId: personalScopeId, ...personalGrant })
-if (scopeRes.status >= 300) fail(`createPersonalScope failed: ${scopeRes.status} ${JSON.stringify(scopeRes.body)}`)
-console.log(`scope: personal scope ${scopeRes.body?.scopeId ?? ''} created`)
+const scope = await orFail('createPersonalScope', new ScopesApi(new ScopesConfiguration(onTenant)).createPersonalScope({
+  createPersonalScopeRequest: { scopeId: personalScopeId, ...personalGrant },
+}))
+console.log(`scope: personal scope ${scope.scopeId} created`)
 
 // 4a — the owner is complete: record its material NOW. Everything below is optional, and an optional step must
 // never be able to take the owner's Secret Key down with it (it exists nowhere but this process until here).
@@ -210,14 +203,19 @@ console.log(`env: owner key material written to ${ENV_FILE}`)
 // `username: null` shape keeps it off the sealed-password path (no config-secret KEK needed), and the host is a
 // dotted name that resolves to loopback because the contract's host pattern rejects a bare `localhost`.
 async function configureMail(): Promise<boolean> {
-  if (!(await fetch(`${MAILPIT}/api/v1/info`).then((r) => r.ok).catch(() => false))) {
+  if (!(await mailpitReachable())) {
     console.warn(`mail: no Mailpit at ${MAILPIT} — skipping mail settings (start it: docker compose -f infra/docker-compose.yml --profile mail up -d)`)
     return false
   }
-  const res = await tenant('PUT', `/api/tenants/${tenantId}/mail-settings`, token, domain, {
-    host: SMTP_HOST, port: MAILPIT_SMTP_PORT, from: `noreply@${createDomain}`, username: null, tls: false, enabled: true,
-  })
-  if (res.status >= 300) { console.warn(`mail: updateTenantMailSettings failed: ${res.status} ${JSON.stringify(res.body)}`); return false }
+  try {
+    await tenantsApi.updateTenantMailSettings({
+      tenantId,
+      tenantMailSettingsUpdate: { host: SMTP_HOST, port: MAILPIT_SMTP_PORT, from: `noreply@${domain}`, username: null, tls: false, enabled: true },
+    })
+  } catch (e) {
+    console.warn(`mail: updateTenantMailSettings failed: ${await describeFailure(e)}`)
+    return false
+  }
   console.log(`mail: ${domain} sends via Mailpit (${SMTP_HOST}:${MAILPIT_SMTP_PORT}) — read it at ${MAILPIT}`)
   return true
 }
@@ -238,45 +236,47 @@ async function onboardUser2(): Promise<void> {
   const cursor = await mailCursor(u2Email)
   // The invite carries our admission tag under K_tenant (ADR 0020 move 6) — without it no worker delivers to user2.
   const invite = tagAdmission(tenantScopeKey, { scopeId: tenantId, kind: 'TENANT' }, 0, null)
-  const inv = await tenant('POST', `/api/tenants/${tenantId}/member-invites`, token, domain, { email: u2Email, ...invite })
-  if (inv.status >= 300) throw new Error(`inviteTenantMember failed: ${inv.status} ${JSON.stringify(inv.body)}`)
+  await orThrow('inviteTenantMember', tenantsApi.inviteTenantMember({ tenantId, memberInviteRequest: { email: u2Email, ...invite } }))
   const body = await waitForMail(u2Email, { after: cursor })
   const link = body.match(/\/tenant\/accept#([A-Za-z0-9_-]+)/)
   if (!link) throw new Error(`no invite link in the mail to ${u2Email}`)
   const u2 = await buildAccount(u2Email, u2Password, fromB64std(setup.instanceSalt), {
     secretKey: reusableSecretKey(env.VEYQ_USER2_SECRET_KEY, 'user2'),
   })
-  const u2Accept = await post('/api/tenants/accept/register', {
-    bootstrapSecret: link[1],
-    userId: crypto.randomUUID(),
-    username: u2Username,
-    account: {
-      suiteId: u2.material.suiteId,
-      identityPublicKey: u2.material.identityPublicKey,
-      wrappedIdentityPrivateKey: u2.material.wrappedIdentityPrivateKey,
-      authPublicKey: u2.material.authPublicKey,
-      masterKeyWraps: u2.material.masterKeyWraps,
-      secretKeyProofPublicKey: u2.material.secretKeyProofPublicKey,
+  await orThrow('user2 accept/register', new TenantsApi(new TenantsConfiguration(publicChannel())).registerAndAcceptTenantInvite({
+    registerAndAcceptRequest: {
+      bootstrapSecret: link[1],
+      userId: crypto.randomUUID(),
+      username: u2Username,
+      account: {
+        suiteId: u2.material.suiteId,
+        identityPublicKey: u2.material.identityPublicKey,
+        wrappedIdentityPrivateKey: u2.material.wrappedIdentityPrivateKey,
+        authPublicKey: u2.material.authPublicKey,
+        masterKeyWraps: u2.material.masterKeyWraps,
+        secretKeyProofPublicKey: u2.material.secretKeyProofPublicKey,
+      },
     },
-  })
-  if (!u2Accept.ok) throw new Error(`user2 accept/register failed: ${u2Accept.status} ${await u2Accept.text()}`)
+  }))
   // Deliver the tenant grant: claim the grant-delivery job the backend originated for the new grant-less
   // membership (retry briefly in case origination lags), wrap K_tenant to user2's identity, complete.
-  let job: any = null
-  for (let i = 0; i < 5 && !job; i++) {
-    const claim = await tenant('POST', '/api/tasks/claim', token, domain, { capabilityTags: ['02f271ff'], scopeId: tenantId })
-    if (claim.status === 200 && claim.body?.grantDelivery) job = claim.body
-    else await sleep(400)
+  const tasksApi = new TasksApi(new TasksConfiguration(onTenant))
+  let job: ClaimedJob | null | undefined = null
+  for (let i = 0; i < 5 && !job?.grantDelivery; i++) {
+    job = await orThrow('claimTask', tasksApi.claimTask({ claimRequest: { capabilityTags: ['02f271ff'], scopeId: tenantId } }))
+    if (!job?.grantDelivery) await sleep(400)
   }
-  if (!job) throw new Error('grant-delivery job for user2 was not claimable')
+  const target = job?.grantDelivery
+  if (!job || !target) throw new Error('grant-delivery job for user2 was not claimable')
   // The same checks a key-holder's worker runs: the admission verifies under K_tenant, then a signed wrap.
-  const target = job.grantDelivery
   if (!admissionVerifies(tenantScopeKey, 0, { scopeId: tenantId, kind: 'TENANT' }, target.targetUserId, target)) {
     throw new Error('user2\'s admission does not verify under K_tenant — refusing to wrap to it')
   }
   const signed = sealGrant(tenantScopeKey, { scopeId: tenantId, kind: 'TENANT', epoch: 0 }, { userId: target.targetUserId, identityPublicKeyB64: target.identityPublicKey }, built.identity.priv.sign)
-  const done = await tenant('POST', `/api/tasks/${job.jobId}/complete`, token, domain, { sealedResult: signed.wrappedGrant, epoch: 0, grantSignature: signed.grantSignature })
-  if (done.status >= 300) throw new Error(`grant-delivery complete failed: ${done.status} ${JSON.stringify(done.body)}`)
+  await orThrow('grant-delivery complete', tasksApi.completeTask({
+    jobId: job.jobId,
+    completeRequest: { sealedResult: signed.wrappedGrant, epoch: 0, grantSignature: signed.grantSignature },
+  }))
   u2SecretKey = u2.emergencyKit.secretKey
   u2WrappedKey = u2.material.masterKeyWraps.find((w) => w.method === 'PASSWORD')!.wrappedKey
   console.log(`user2: ${u2Email} joined ${domain} as MEMBER (@${u2Username}) + tenant grant delivered`)

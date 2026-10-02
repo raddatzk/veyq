@@ -8,10 +8,10 @@ import { httpError } from '../test/httpError'
 import { mount, flushPromises } from '@vue/test-utils'
 
 vi.mock('../features/account/recovery/recovery', () => ({
-  requestRecovery: vi.fn().mockResolvedValue(undefined),
+  requestRecovery: vi.fn(),
   releaseRecoveryMaterial: vi.fn(),
   openWithSecretKey: vi.fn(),
-  completeRecovery: vi.fn().mockResolvedValue(undefined),
+  completeRecovery: vi.fn(),
 }))
 vi.mock('../shared/pwned', () => ({ pwnedCount: vi.fn() }))
 const push = vi.fn()
@@ -78,6 +78,7 @@ describe('RecoverView', () => {
     // `clearAllMocks` clears calls, not implementations — so a test that makes the request REJECT would otherwise
     // leak that into every later test. Restated per test rather than left to the module factory.
     vi.mocked(requestRecovery).mockResolvedValue(undefined)
+    vi.mocked(completeRecovery).mockResolvedValue(undefined)
     window.history.replaceState(null, '', '/recover')
   })
 

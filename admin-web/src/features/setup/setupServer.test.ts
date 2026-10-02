@@ -6,6 +6,8 @@ vi.mock('../../api/client', () => ({ setupApi: vi.fn() }))
 
 import { buildCreateServerOwnerRequest, registerServerOwner } from './setupServer'
 import { setupApi } from '../../api/client'
+import type { SetupStatus } from '../../api/generated'
+import { fakeApi } from '../../test/apiMock'
 import * as v1 from '@veyq/crypto/v1'
 import { TEST_ARGON, PRODUCTION_ARGON_TIMEOUT_MS } from '@veyq/crypto/testArgon'
 
@@ -85,10 +87,12 @@ describe('Model B auth derivation (ADR 0003)', () => {
 
 describe('registerServerOwner — API error propagation', () => {
   it('rejects when the server rejects the registration (drives the setup-failed UX)', async () => {
-    vi.mocked(setupApi).mockReturnValue({
-      getSetupStatus: () => Promise.resolve({ setupRequired: true, suites: ['v1'], instanceSalt: 'AAAAAAAAAAAAAAAAAAAAAA==' }),
+    fakeApi(setupApi, {
+      getSetupStatus: async (): Promise<SetupStatus> => ({
+        setupRequired: true, version: { major: 1, build: 0 }, capabilities: [], suites: ['v1'], instanceSalt: 'AAAAAAAAAAAAAAAAAAAAAA==',
+      }),
       createServerOwner: () => Promise.reject(new Error('setup_already_complete')),
-    } as unknown as ReturnType<typeof setupApi>)
+    })
     await expect(
       registerServerOwner('owner@example.com', 'correct horse battery'),
     ).rejects.toThrow('setup_already_complete')

@@ -21,6 +21,8 @@ import { unsealMemoryDate, type MemoryDate } from './memoryDate'
 import { sealNodeMeta } from './nodeMeta'
 import type { MediaItem, MediaMeta } from './media'
 import { contentApi } from '../../api/client'
+import { fakeApi, stubApi } from '../../test/apiMock'
+import type { ContentApi } from '../../api/generated/content'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 
@@ -166,9 +168,7 @@ describe('setMemoryLocation — read-modify-write (preserves the date)', () => {
   const loc: MemoryLocation = { name: 'Teneriffa', nameSource: 'manual', derivedMode: 'fixed', derived: { lat: 28.27, lng: -16.61 } }
 
   function mockUpdate() {
-    const updateNode = vi.fn().mockResolvedValue(undefined)
-    vi.mocked(contentApi).mockReturnValue({ updateNode } as unknown as ReturnType<typeof contentApi>)
-    return updateNode
+    return stubApi(contentApi, { updateNode: undefined }).updateNode
   }
 
   it('setting a location keeps the existing date', async () => {
@@ -205,10 +205,10 @@ describe('setMemoryLocation — read-modify-write (preserves the date)', () => {
   /** W5 (ADR 0077): a place save from a stale tree meets a 409 whose blob holds a peer's date — the retry keeps it. */
   it('W5: on 409 stale_version re-applies only the place on the current blob — a peer\'s date survives', async () => {
     const peers = sealNodeMeta(nodeKey, NODE, { v: 1, date })
-    const updateNode = vi.fn()
+    const updateNode = vi.fn<ContentApi['updateNode']>()
       .mockRejectedValueOnce({ response: new Response(JSON.stringify({ code: 'stale_version', wrappedMeta: peers, metaVersion: 8 }), { status: 409 }) })
       .mockResolvedValueOnce(undefined)
-    vi.mocked(contentApi).mockReturnValue({ updateNode } as unknown as ReturnType<typeof contentApi>)
+    fakeApi(contentApi, { updateNode })
 
     const state = await setMemoryLocation(SCOPE_ID, NODE_ID, nodeKey, loc, { wrappedMeta: null, metaVersion: 7 })
 

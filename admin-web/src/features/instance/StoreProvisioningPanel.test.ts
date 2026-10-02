@@ -23,15 +23,7 @@ vi.mock('./storeProvisioning', async () => {
 import StoreProvisioningPanel from './StoreProvisioningPanel.vue'
 import { getInstanceStoreProvisioning } from './storeProvisioning'
 import { i18n } from '../../i18n'
-
-/** A thrown generated-client error carrying an HTTP response — the shape `decodeHttpError` reads. */
-function httpError(status: number, code?: string): Error {
-  const body = code ? JSON.stringify({ code }) : ''
-  const response = new Response(body, { status, headers: { 'content-type': 'application/json' } })
-  const e = new Error(`http ${status}`)
-  ;(e as unknown as { response: Response }).response = response
-  return e
-}
+import { httpError } from '../../test/httpError'
 
 const stubs = {
   Message: { props: ['severity'], template: '<div class="msg" :data-severity="severity"><slot /></div>' },

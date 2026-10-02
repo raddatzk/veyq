@@ -2,19 +2,22 @@ import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest'
 import { PRODUCTION_ARGON_TIMEOUT_MS } from '@veyq/crypto/testArgon'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
+import { fakeApi } from '../../../test/apiMock'
+import type { LoginApi } from '../../../api/generated/auth'
+import type { AccountApi, AccountPasswordApi, MasterKeyWrap } from '../../../api/generated/account'
 
 // The API, vault and account state are stubbed; the crypto is real (changePassword.ts hardcodes production
 // ARGON, so a cheap-params trick would derive a DIFFERENT keypair than the code under test — there is no
 // params argument to share a lighter cost through, unlike rotateKeys). See packages/crypto/src/testArgon.ts § "production
 // owns the derivation".
-const requestLoginChallenge = vi.fn()
-const changePasswordCall = vi.fn().mockResolvedValue(undefined)
-const getAccountKeyMaterial = vi.fn()
+const requestLoginChallenge = vi.fn<LoginApi['requestLoginChallenge']>()
+const changePasswordCall = vi.fn<AccountPasswordApi['changePassword']>().mockResolvedValue(undefined)
+const getAccountKeyMaterial = vi.fn<AccountApi['getAccountKeyMaterial']>()
 
 vi.mock('../../../api/client', () => ({
-  loginApi: () => ({ requestLoginChallenge }),
-  accountPasswordApi: () => ({ changePassword: changePasswordCall }),
-  accountApi: () => ({ getAccountKeyMaterial }),
+  loginApi: vi.fn(),
+  accountPasswordApi: vi.fn(),
+  accountApi: vi.fn(),
 }))
 vi.mock('../../../app/sessionRefresh', () => ({ withRefresh: (f: () => unknown) => f() }))
 
@@ -30,6 +33,7 @@ vi.mock('../../../app/vault', () => ({
 vi.mock('../../../app/account', () => ({ account: { email: 'change-pw@example.com' } }))
 
 import { changePassword, ChangePasswordRefused } from './changePassword'
+import { accountApi, accountPasswordApi, loginApi } from '../../../api/client'
 
 const INSTANCE_SALT = new Uint8Array(16).fill(7)
 const SECRET_KEY = v1.randomBytes(32)
@@ -41,7 +45,7 @@ const NEW_PASSWORD = 'a brand new password'
 // The stored PASSWORD floor, built exactly as account birth builds it — at production ARGON too, because the
 // proof refuses any served profile other than the one the client writes (ADR 0017 rule 5). The default floor is
 // built once for the file; nothing here mutates it.
-function storedFloor(masterKeyBytes = MK, secret = SECRET_KEY, password = OLD_PASSWORD) {
+function storedFloor(masterKeyBytes = MK, secret = SECRET_KEY, password = OLD_PASSWORD): MasterKeyWrap {
   const salt = v1.randomBytes(16)
   const kek = v1.kekPasswordSecret(secret, password, salt, v1.ARGON)
   return {
@@ -61,8 +65,16 @@ describe('changePassword', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     held.mk = MK.slice()
+    fakeApi(loginApi, { requestLoginChallenge })
+    fakeApi(accountPasswordApi, { changePassword: changePasswordCall })
+    fakeApi(accountApi, { getAccountKeyMaterial })
     requestLoginChallenge.mockResolvedValue({ instanceSalt: b64std(INSTANCE_SALT), nonce: b64std(new Uint8Array(32)) })
-    getAccountKeyMaterial.mockResolvedValue({ suiteId: 'v1', wraps: [floor], wrappedIdentityPrivateKey: 'aWdub3JlZA==' })
+    getAccountKeyMaterial.mockResolvedValue({
+      userId: 'user-1',
+      suiteId: 'v1',
+      wraps: [floor],
+      wrappedIdentityPrivateKey: 'aWdub3JlZA==',
+    })
   })
 
   it('the deliberate path signs the NEW auth key with the OLD keypair', async () => {
@@ -146,6 +158,7 @@ describe('changePassword', () => {
   // (`rotateKeys.test.ts`); both must redden together, or the shared proof has stopped reaching one of them.
   it('refuses when the floor opens a DIFFERENT Master Key than this session holds', async () => {
     getAccountKeyMaterial.mockResolvedValue({
+      userId: 'user-1',
       suiteId: 'v1',
       wraps: [storedFloor(v1.randomBytes(32))],
       wrappedIdentityPrivateKey: 'aWdub3JlZA==',

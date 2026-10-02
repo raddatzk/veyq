@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 
 vi.mock('../../api/client', () => ({
   contentApi: vi.fn(),
@@ -20,8 +20,9 @@ import {
 } from './memoryDate'
 import type { MediaItem, MediaMeta } from './media'
 import type { TreeNode } from './tree'
-import { NodeKind } from '../../api/generated/content'
+import { NodeKind, type ContentApi } from '../../api/generated/content'
 import { contentApi } from '../../api/client'
+import { fakeApi, stubApi } from '../../test/apiMock'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { epochMsToIsoDate } from '../../shared/isoDate'
@@ -94,8 +95,7 @@ const LISBON = { name: 'Lisbon', nameSource: 'manual', derivedMode: 'fixed' }
 
 describe('setMemoryDate', () => {
   it('re-seals under K_mem and PATCHes wrappedMeta via updateNode, stating the version it was built from', async () => {
-    const updateNode = vi.fn().mockResolvedValue(undefined)
-    vi.mocked(contentApi).mockReturnValue({ updateNode } as unknown as ReturnType<typeof contentApi>)
+    const { updateNode } = stubApi(contentApi, { updateNode: undefined })
 
     const date: MemoryDate = { mode: 'range', from: '2026-05-01', to: '2026-05-09' }
     const state = await setMemoryDate(SCOPE_ID, NODE_ID, nodeKey, date, fresh(null, 3))
@@ -112,8 +112,7 @@ describe('setMemoryDate', () => {
   })
 
   it('read-modify-write: setting a date preserves a sibling location in the same blob (cr-0069)', async () => {
-    const updateNode = vi.fn().mockResolvedValue(undefined)
-    vi.mocked(contentApi).mockReturnValue({ updateNode } as unknown as ReturnType<typeof contentApi>)
+    stubApi(contentApi, { updateNode: undefined })
 
     // a blob that already carries a location (sealed as the RMW envelope would)
     const withLocation = sealMetaJson(
@@ -135,15 +134,15 @@ describe('setMemoryDate', () => {
    */
   it('W1: on 409 stale_version re-applies only the date on the current blob — a peer\'s place survives', async () => {
     const peers = sealMetaJson(JSON.stringify({ v: 1, location: LISBON }))
-    const updateNode = vi.fn().mockRejectedValueOnce(stale(peers, 5)).mockResolvedValueOnce(undefined)
-    vi.mocked(contentApi).mockReturnValue({ updateNode } as unknown as ReturnType<typeof contentApi>)
+    const updateNode = vi.fn<ContentApi['updateNode']>().mockRejectedValueOnce(stale(peers, 5)).mockResolvedValueOnce(undefined)
+    fakeApi(contentApi, { updateNode })
 
     const date: MemoryDate = { mode: 'single', from: '2026-05-01', to: '2026-05-01' }
     const state = await setMemoryDate(SCOPE_ID, NODE_ID, nodeKey, date, fresh(null, 4))
 
     expect(updateNode).toHaveBeenCalledTimes(2)
     expect(updateNode.mock.calls[1][0].updateNodeRequest.metaVersion).toBe(5)
-    const retried = opened(updateNode.mock.calls[1][0].updateNodeRequest.wrappedMeta)
+    const retried = opened(updateNode.mock.calls[1][0].updateNodeRequest.wrappedMeta!)
     expect(retried.date).toEqual(date)
     expect(retried.location).toEqual(LISBON)
     expect(state).toEqual({ wrappedMeta: updateNodeRequestOf(updateNode, 1).wrappedMeta, metaVersion: 6 })
@@ -153,8 +152,8 @@ describe('setMemoryDate', () => {
   it('W3: a same-field conflict makes no retry and surfaces the current value', async () => {
     const opener = sealMetaJson(JSON.stringify({ v: 1, date: { mode: 'single', from: '2026-01-01', to: '2026-01-01' } }))
     const peers = sealMetaJson(JSON.stringify({ v: 1, date: { mode: 'single', from: '2026-02-02', to: '2026-02-02' } }))
-    const updateNode = vi.fn().mockRejectedValueOnce(stale(peers, 2)).mockResolvedValue(undefined)
-    vi.mocked(contentApi).mockReturnValue({ updateNode } as unknown as ReturnType<typeof contentApi>)
+    const updateNode = vi.fn<ContentApi['updateNode']>().mockRejectedValueOnce(stale(peers, 2)).mockResolvedValue(undefined)
+    fakeApi(contentApi, { updateNode })
 
     const err = await setMemoryDate(SCOPE_ID, NODE_ID, nodeKey, { mode: 'auto' }, fresh(opener, 1)).catch((e) => e)
 
@@ -166,8 +165,8 @@ describe('setMemoryDate', () => {
   /** W6 (#273, live defect): a present blob that does not open is never rebuilt from empty — no PATCH at all.
    *  Before, the save PATCHed `{v, date}` and the place sealed in the unopenable blob was gone. */
   it('W6: a date save over a blob that does not open makes no PATCH and throws MetaUnreadableError', async () => {
-    const updateNode = vi.fn().mockResolvedValue(undefined)
-    vi.mocked(contentApi).mockReturnValue({ updateNode } as unknown as ReturnType<typeof contentApi>)
+    const updateNode = vi.fn<ContentApi['updateNode']>().mockResolvedValue(undefined)
+    fakeApi(contentApi, { updateNode })
     const otherKeys = b64std(v1.seal(metaCtx(NODE_ID), v1.randomBytes(32), new TextEncoder().encode(JSON.stringify({ v: 1, location: LISBON }))))
 
     const err = await setMemoryDate(SCOPE_ID, NODE_ID, nodeKey, { mode: 'auto' }, fresh(otherKeys, 1)).catch((e) => e)
@@ -191,8 +190,8 @@ describe('reconcileMemoryDate (the auto self-heal)', () => {
    */
   it('W2: re-checks "manual is never overwritten" on the conflict blob — no second write', async () => {
     const peers = sealMetaJson(JSON.stringify({ v: 1, date: { mode: 'single', from: '2025-12-24', to: '2025-12-24' } }))
-    const updateNode = vi.fn().mockRejectedValueOnce(stale(peers, 3)).mockResolvedValue(undefined)
-    vi.mocked(contentApi).mockReturnValue({ updateNode } as unknown as ReturnType<typeof contentApi>)
+    const updateNode = vi.fn<ContentApi['updateNode']>().mockRejectedValueOnce(stale(peers, 3)).mockResolvedValue(undefined)
+    fakeApi(contentApi, { updateNode })
 
     const { state, wrote } = await reconcileMemoryDate(SCOPE_ID, NODE_ID, nodeKey, dated(), fresh(null, 2))
 
@@ -202,26 +201,26 @@ describe('reconcileMemoryDate (the auto self-heal)', () => {
   })
 
   it('writes the materialized range from an auto blob, stating its version', async () => {
-    const updateNode = vi.fn().mockResolvedValue(undefined)
-    vi.mocked(contentApi).mockReturnValue({ updateNode } as unknown as ReturnType<typeof contentApi>)
+    const updateNode = vi.fn<ContentApi['updateNode']>().mockResolvedValue(undefined)
+    fakeApi(contentApi, { updateNode })
     const { wrote } = await reconcileMemoryDate(SCOPE_ID, NODE_ID, nodeKey, dated(), fresh(null, 7))
     expect(wrote).toBe(true)
     expect(updateNode.mock.calls[0][0].updateNodeRequest.metaVersion).toBe(7)
-    expect(opened(updateNode.mock.calls[0][0].updateNodeRequest.wrappedMeta).date).toEqual({ mode: 'auto', from: '2026-03-02', to: '2026-03-02' })
+    expect(opened(updateNode.mock.calls[0][0].updateNodeRequest.wrappedMeta!).date).toEqual({ mode: 'auto', from: '2026-03-02', to: '2026-03-02' })
   })
 
   /** W6 for the self-heal: an unopenable blob stops it — no PATCH (it used to re-seal `{v, date}` over it). */
   it('W6: an unopenable blob stops the self-heal without a write', async () => {
-    const updateNode = vi.fn().mockResolvedValue(undefined)
-    vi.mocked(contentApi).mockReturnValue({ updateNode } as unknown as ReturnType<typeof contentApi>)
+    const updateNode = vi.fn<ContentApi['updateNode']>().mockResolvedValue(undefined)
+    fakeApi(contentApi, { updateNode })
     const otherKeys = b64std(v1.seal(metaCtx(NODE_ID), v1.randomBytes(32), new TextEncoder().encode(JSON.stringify({ v: 1, location: LISBON }))))
     await expect(reconcileMemoryDate(SCOPE_ID, NODE_ID, nodeKey, dated(), fresh(otherKeys, 1))).rejects.toBeInstanceOf(MetaUnreadableError)
     expect(updateNode).not.toHaveBeenCalled()
   })
 })
 
-function updateNodeRequestOf(updateNode: ReturnType<typeof vi.fn>, call: number) {
-  return updateNode.mock.calls[call][0].updateNodeRequest as { wrappedMeta: string; metaVersion: number }
+function updateNodeRequestOf(updateNode: Mock<ContentApi['updateNode']>, call: number) {
+  return updateNode.mock.calls[call][0].updateNodeRequest
 }
 
 describe('computeAutoRange', () => {

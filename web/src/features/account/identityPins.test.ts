@@ -2,6 +2,9 @@ import 'fake-indexeddb/auto'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
 import { httpError } from '../../test/httpError'
+import { fakeApi } from '../../test/apiMock'
+import type { AccountIdentityPinsApi as PinsApi, IdentityPins } from '../../api/generated/account'
+import type { TasksApi } from '../../api/generated/tasks'
 
 // The pin store's API + vault are mocked; the crypto (seal/unseal under the Master Key) is REAL, so the tests
 // prove a genuine round-trip and the version-guarded union-merge, not a stub.
@@ -46,28 +49,24 @@ const unsealPins = (blob: string, version: number): Record<string, { key: string
   JSON.parse(dec.decode(v1.open(pinsAt(version), MK, fromB64std(blob)))).pins
 
 // A fake server store with REAL optimistic concurrency: a PUT whose version != the stored version is a 409.
-function fakeServer(initial: { blob: string | null; version: number } = { blob: null, version: 0 }) {
-  const state = { ...initial }
+function fakeServer(initial: IdentityPins = { blob: null, version: 0 }) {
+  const state: IdentityPins = { ...initial }
   const stale = () => httpError(409, 'stale_version')
-  const getIdentityPins = vi.fn(async () => ({ blob: state.blob, version: state.version }))
-  const putIdentityPins = vi.fn(async ({ identityPinsUpdate }: { identityPinsUpdate: { blob: string; version: number } }) => {
+  const getIdentityPins = vi.fn<PinsApi['getIdentityPins']>(async () => ({ blob: state.blob, version: state.version }))
+  const putIdentityPins = vi.fn<PinsApi['putIdentityPins']>(async ({ identityPinsUpdate }) => {
     if (identityPinsUpdate.version !== state.version) throw stale()
     state.blob = identityPinsUpdate.blob
     state.version += 1
     return { blob: state.blob, version: state.version }
   })
-  vi.mocked(accountIdentityPinsApi).mockReturnValue(
-    { getIdentityPins, putIdentityPins } as unknown as ReturnType<typeof accountIdentityPinsApi>,
-  )
+  fakeApi(accountIdentityPinsApi, { getIdentityPins, putIdentityPins })
   return { state, getIdentityPins, putIdentityPins, stale }
 }
 
 /** The decline-clearing an accept drives (ADR 0060 Decision 7) — installed per test so each can read its calls. */
 function fakeDeclines() {
-  const clearDeclinesForAcceptedKey = vi.fn(async () => ({ cleared: 1 }))
-  vi.mocked(tasksApi).mockReturnValue(
-    { clearDeclinesForAcceptedKey } as unknown as ReturnType<typeof tasksApi>,
-  )
+  const clearDeclinesForAcceptedKey = vi.fn<TasksApi['clearDeclinesForAcceptedKey']>(async () => ({ cleared: 1 }))
+  fakeApi(tasksApi, { clearDeclinesForAcceptedKey })
   return clearDeclinesForAcceptedKey
 }
 
@@ -133,7 +132,7 @@ describe('checkAndPin (TOFU)', () => {
     const srv = fakeServer()
     // Make the FIRST PUT lose to a concurrent device that just pinned contact "other" at v0→v1.
     let firstPut = true
-    srv.putIdentityPins.mockImplementation(async ({ identityPinsUpdate }: { identityPinsUpdate: { blob: string; version: number } }) => {
+    srv.putIdentityPins.mockImplementation(async ({ identityPinsUpdate }) => {
       if (firstPut) {
         firstPut = false
         srv.state.blob = seal({ other: { key: 'b3RoZXIta2V5', state: 'pinned', firstSeenAt: 1 } }, 1)
@@ -253,7 +252,7 @@ describe('markVerified (out-of-band compare → verified)', () => {
   it('verified wins a same-contact 409: re-asserts verified over a concurrent pinned, merges the other pin', async () => {
     const srv = fakeServer({ blob: seal({ u1: { key: 'a2V5', state: 'pinned', firstSeenAt: 7 } }, 1), version: 1 })
     let firstPut = true
-    srv.putIdentityPins.mockImplementation(async ({ identityPinsUpdate }: { identityPinsUpdate: { blob: string; version: number } }) => {
+    srv.putIdentityPins.mockImplementation(async ({ identityPinsUpdate }) => {
       if (firstPut) {
         firstPut = false
         // A concurrent device re-pinned u1 (same key, still pinned) and added another contact.
@@ -280,7 +279,7 @@ describe('markVerified (out-of-band compare → verified)', () => {
   it('aborts on a 409 re-base if the concurrent device changed the key (moved under the compare)', async () => {
     const srv = fakeServer({ blob: seal({ u1: { key: 'a2V5', state: 'pinned', firstSeenAt: 7 } }, 1), version: 1 })
     let firstPut = true
-    srv.putIdentityPins.mockImplementation(async ({ identityPinsUpdate }: { identityPinsUpdate: { blob: string; version: number } }) => {
+    srv.putIdentityPins.mockImplementation(async ({ identityPinsUpdate }) => {
       if (firstPut) {
         firstPut = false
         srv.state.blob = seal({ u1: { key: 'bmV3', state: 'pinned', firstSeenAt: 7 } }, 2) // key moved

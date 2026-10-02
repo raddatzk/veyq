@@ -13,7 +13,12 @@ export const MAILPIT = process.env.VEYQ_MAILPIT ?? 'http://localhost:18025'
 /** Mailpit's SMTP port as published on the host — `infra/docker-compose.yml` maps `11025 -> 1025`. */
 export const MAILPIT_SMTP_PORT = 11025
 
-type Envelope = { ID: string; Created: string; To?: { Address: string }[] }
+/** Whether a Mailpit answers at [MAILPIT] at all — `bootstrap:user` points a tenant at it only when one does. */
+export async function mailpitReachable(): Promise<boolean> {
+  return fetch(`${MAILPIT}/api/v1/info`).then((r) => r.ok).catch(() => false)
+}
+
+type Envelope ={ ID: string; Created: string; To?: { Address: string }[] }
 
 /**
  * Every message currently addressed to `to`, **newest first**.

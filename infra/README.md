@@ -789,24 +789,23 @@ app, restore the capture from step 2 onto an empty instance (§ Restore), and pi
 `VEYQ_ADMIN_IMAGE` back to the two lines step 3 kept. There is no other way back: the migrations carry no down path, so an instance that has booted
 on the new schema cannot be handed to the old image.
 
-## Seeding a reproducible dev instance (cr-0046)
+## Seeding the local dev principal
 
-Bring up a known `{Server Owner + 127.0.0.1 tenant owner + personal scope}` in one command and persist it
-(credentials **and** raw key material) to a gitignored `web/scripts/.seed/dev-seed.json` a harness can load:
+`npm run bootstrap:user` (IntelliJ: *Bootstrap User*) births one user who is Server Owner **and** owner of a
+`*.localhost` tenant with a personal scope, over the real API, and writes its key material back into `.run/.env`
+([`web/CLAUDE.md`](../web/CLAUDE.md) § Prove your work owns the inputs and the cold start):
 
 ```sh
 docker compose -f infra/docker-compose.yml down -v && docker compose -f infra/docker-compose.yml up -d
-# start the backend writing the dev-invite file (so the seeder reads the bootstrap secret deterministically):
-VEYQ_TENANT_INVITE_DEV_FILE=$PWD/backend/build/dev-invites.jsonl ./gradlew -p backend quarkusDev
-cd web && npm run seed:dev
+# start the backend (IntelliJ: Run Backend), then:
+cd web && npm run bootstrap:user
 ```
 
-The seeders talk to two bases: `VEYQ_BASE` (the public port, default `http://localhost:8080`) for everything a
-member does, and `VEYQ_ADMIN_BASE` (the admin listener, default `http://127.0.0.1:8090`) for setup and tenant
-creation — which the public port 404s. `npm run bootstrap:user` reads the same two.
+It talks to two bases: `VEYQ_BASE` (the public port, default `http://localhost:8080`) for everything a member
+does, and `VEYQ_ADMIN_BASE` (the admin listener, default `http://127.0.0.1:8090`) for setup and tenant creation —
+which the public port 404s.
 
-`veyq.tenant.invite.dev-file` (dev/test only, never written in production) is the second sink of the invite
-line the logging mailer already emits — no console-log scraping. `seed:dev` creates the tenant under a hostname
-(`POST /api/tenants` rejects a numeric domain) and remaps the domain to `127.0.0.1` in the dev DB so the web
-dev server (which presents `Host: 127.0.0.1`) resolves it. Load it from a harness via `web/scripts/devSeed.mts`
-(`loadDevSeed()` / `vaultFromSeed()`).
+It reads the owner invite's secret from `createTenant`'s own response, so it needs neither a mailbox nor the
+backend's dev-invite file for the owner; the second user's invite comes from Mailpit. The tenant's domain is a
+`*.localhost` name, never an IP literal: the contract's hostname pattern refuses one, and no seeder writes to the
+database to get around it.

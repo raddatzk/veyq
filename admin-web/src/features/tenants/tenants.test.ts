@@ -7,20 +7,38 @@ vi.mock('../../api/client', () => ({ tenantsApi: vi.fn() }))
 
 import { createTenant, listTenants, parseQuotaGib, reassignInvite, resendInvite, revokeTenant, setTenantStorageQuota } from './tenants'
 import { tenantsApi } from '../../api/client'
+import type { TenantCreated, TenantInviteState } from '../../api/generated/tenants'
+import { stubApi } from '../../test/apiMock'
+
+const INVITE: TenantInviteState = {
+  ownerEmail: 'k@example.com',
+  inviteStatus: 'ACTIVE',
+  inviteExpiresAt: new Date('2026-07-03T12:00:00Z'),
+  bootstrapSecret: 'secret',
+  delivery: 'SENT',
+}
+const CREATED: TenantCreated = {
+  tenantId: 't1',
+  status: 'PENDING',
+  inviteExpiresAt: INVITE.inviteExpiresAt,
+  bootstrapSecret: INVITE.bootstrapSecret,
+  delivery: 'SENT',
+}
 
 describe('tenants facade (uc.admin.create-tenant, web Slice A)', () => {
-  const api = {
-    createTenant: vi.fn().mockResolvedValue({ tenantId: 't1', status: 'PENDING' }),
-    listTenants: vi.fn().mockResolvedValue([]),
-    resendTenantInvite: vi.fn().mockResolvedValue({}),
-    reassignTenantInvite: vi.fn().mockResolvedValue({}),
-    revokeTenant: vi.fn().mockResolvedValue(undefined),
-    setTenantStorageQuota: vi.fn().mockResolvedValue(undefined),
-  }
+  let api: ReturnType<typeof stubTenants>
+  const stubTenants = () =>
+    stubApi(tenantsApi, {
+      createTenant: CREATED,
+      listTenants: [],
+      resendTenantInvite: INVITE,
+      reassignTenantInvite: INVITE,
+      revokeTenant: undefined,
+      setTenantStorageQuota: undefined,
+    })
 
   beforeEach(() => {
-    vi.mocked(tenantsApi).mockReturnValue(api as never)
-    Object.values(api).forEach((m) => m.mockClear())
+    api = stubTenants()
   })
 
   it('create wraps name/domain/email in a CreateTenantRequest', async () => {

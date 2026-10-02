@@ -3,10 +3,6 @@
 # `prepare` script. Regenerate after a contract change; never hand-edit.
 src/api/generated/
 
-# Local dev seed (cr-0046): throwaway accounts incl. raw key material for a local instance. Dev/test only,
-# never committed. Produced by `npm run seed:dev`; loaded by harnesses via scripts/devSeed.mts.
-scripts/.seed/
-
 # Stryker mutation testing: the HTML/JSON reports + the in-place backup/temp dir are build
 # artifacts. The incremental report (reports/stryker-incremental.json) is the CI *cache* (ADR 0045 §4),
 # restored via actions/cache — never committed.

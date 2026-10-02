@@ -4,19 +4,31 @@ import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { buildAccount } from '@veyq/crypto/accountBirth'
 import { openWithSecretKey, completeRecovery, requestRecovery } from './recovery'
-import type { RecoveryMaterial } from '../../../api/generated/auth'
+import type { LoginApi, RecoveryApi, RecoveryMaterial } from '../../../api/generated/auth'
+import { loginApi, recoveryApi } from '../../../api/client'
+import { fakeApi } from '../../../test/apiMock'
 
 // The API is stubbed: this file's job is the crypto round-trip, not the transport. What it must prove is that
 // the wrap minted at account birth is openable by the Secret Key ALONE, that the proof the server compares is
 // reproducible only that way, and that the replacement floor still needs the password.
-const requestPasswordRecovery = vi.fn().mockResolvedValue(undefined)
-const completePasswordRecovery = vi.fn().mockResolvedValue(undefined)
-const requestLoginChallenge = vi.fn()
+const requestPasswordRecovery = vi.fn<RecoveryApi['requestPasswordRecovery']>().mockResolvedValue(undefined)
+const completePasswordRecovery = vi.fn<RecoveryApi['completePasswordRecovery']>().mockResolvedValue(undefined)
+const requestLoginChallenge = vi.fn<LoginApi['requestLoginChallenge']>()
 
 vi.mock('../../../api/client', () => ({
-  recoveryApi: () => ({ requestPasswordRecovery, completePasswordRecovery, releaseRecoveryMaterial: vi.fn() }),
-  loginApi: () => ({ requestLoginChallenge }),
+  recoveryApi: vi.fn(),
+  loginApi: vi.fn(),
 }))
+
+/** The two clients recovery reaches, each method a typed driver the tests read back. */
+function serveApis() {
+  fakeApi(recoveryApi, {
+    requestPasswordRecovery,
+    completePasswordRecovery,
+    releaseRecoveryMaterial: vi.fn<RecoveryApi['releaseRecoveryMaterial']>(),
+  })
+  fakeApi(loginApi, { requestLoginChallenge })
+}
 
 const INSTANCE_SALT = new Uint8Array(16).fill(7)
 const EMAIL = 'recover-me@example.com'
@@ -51,6 +63,7 @@ async function mintAccount() {
 describe('recovery — opening the withheld wrap', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    serveApis()
     requestLoginChallenge.mockResolvedValue({ instanceSalt: b64std(INSTANCE_SALT), nonce: b64std(new Uint8Array(32)) })
   })
 
@@ -95,6 +108,7 @@ describe('recovery — opening the withheld wrap', () => {
 describe('recovery — setting the new password', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    serveApis()
     requestLoginChallenge.mockResolvedValue({ instanceSalt: b64std(INSTANCE_SALT), nonce: b64std(new Uint8Array(32)) })
   })
 

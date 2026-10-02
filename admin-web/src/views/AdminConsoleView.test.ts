@@ -19,7 +19,7 @@ import { createRouter, createMemoryHistory } from 'vue-router'
 import { createI18n } from 'vue-i18n'
 
 vi.mock('../features/tenants/tenants', () => ({ listTenants: vi.fn() }))
-vi.mock('../features/auth/login', () => ({ logout: vi.fn().mockResolvedValue(undefined) }))
+vi.mock('../features/auth/login', () => ({ logout: vi.fn() }))
 // Stubbed with the real component's PROPS/EMITS surface, not a bare div: the case below asserts what the
 // parent does to `visible`, which a prop-less stub cannot carry.
 vi.mock('../features/tenants/CreateTenantDialog.vue', () => ({
@@ -35,7 +35,9 @@ vi.mock('../features/instance/ReleaseVersionPanel.vue', () => ({ default: { temp
 
 import AdminConsoleView from './AdminConsoleView.vue'
 import { listTenants } from '../features/tenants/tenants'
+import { logout } from '../features/auth/login'
 import { resetServerRole } from '../app/serverRole'
+import { httpError } from '../test/httpError'
 
 const i18n = createI18n({
   legacy: false,
@@ -56,13 +58,6 @@ const i18n = createI18n({
   },
 })
 
-/** A thrown generated-client error carrying an HTTP response — the shape `httpStatus` reads. */
-function httpError(status: number): Error {
-  const e = new Error(`http ${status}`)
-  ;(e as unknown as { response: Response }).response = new Response('', { status })
-  return e
-}
-
 async function mountConsole() {
   const router = createRouter({
     history: createMemoryHistory(),
@@ -80,6 +75,7 @@ async function mountConsole() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(logout).mockResolvedValue(undefined)
   resetServerRole()
 })
 
@@ -110,7 +106,7 @@ describe('AdminConsoleView — the root Server-Owner gate', () => {
 
   it('renders the console for the Server Owner, listing the tenants it administers', async () => {
     vi.mocked(listTenants).mockResolvedValue([
-      { tenantId: 'tn-7', name: 'Acme', domain: 'acme.example', ownerEmail: 'o@acme.example', status: 'PENDING', storageUsedBytes: 0, storageQuotaBytes: null } as never,
+      { tenantId: 'tn-7', name: 'Acme', domain: 'acme.example', ownerEmail: 'o@acme.example', status: 'PENDING', storageUsedBytes: 0, storageQuotaBytes: null },
     ])
     const { w } = await mountConsole()
     expect(w.find('.admin-shell__nav').exists()).toBe(true)
@@ -121,8 +117,8 @@ describe('AdminConsoleView — the root Server-Owner gate', () => {
   // uc.admin.tenant-storage-quota: the list shows each tenant's usage beside its quota, or that it has none.
   it('shows each tenant’s storage usage beside its quota in the list', async () => {
     vi.mocked(listTenants).mockResolvedValue([
-      { tenantId: 'tn-1', name: 'Capped', domain: 'c.example', ownerEmail: 'o@c.example', status: 'ACTIVE', storageUsedBytes: 3 * 1024 ** 2, storageQuotaBytes: 10 * 1024 ** 3 } as never,
-      { tenantId: 'tn-2', name: 'Open', domain: 'o.example', ownerEmail: 'o@o.example', status: 'ACTIVE', storageUsedBytes: 0, storageQuotaBytes: null } as never,
+      { tenantId: 'tn-1', name: 'Capped', domain: 'c.example', ownerEmail: 'o@c.example', status: 'ACTIVE', storageUsedBytes: 3 * 1024 ** 2, storageQuotaBytes: 10 * 1024 ** 3 },
+      { tenantId: 'tn-2', name: 'Open', domain: 'o.example', ownerEmail: 'o@o.example', status: 'ACTIVE', storageUsedBytes: 0, storageQuotaBytes: null },
     ])
     const { w } = await mountConsole()
     const lines = w.findAll('.admin-shell__storage').map((s) => s.text())
@@ -131,7 +127,7 @@ describe('AdminConsoleView — the root Server-Owner gate', () => {
 
   it('opens a tenant’s detail page from the list', async () => {
     vi.mocked(listTenants).mockResolvedValue([
-      { tenantId: 'tn-7', name: 'Acme', domain: 'acme.example', ownerEmail: 'o@acme.example', status: 'PENDING', storageUsedBytes: 0, storageQuotaBytes: null } as never,
+      { tenantId: 'tn-7', name: 'Acme', domain: 'acme.example', ownerEmail: 'o@acme.example', status: 'PENDING', storageUsedBytes: 0, storageQuotaBytes: null },
     ])
     const { w } = await mountConsole()
     const item = w.findAll('.admin-shell__nav button').find((b) => b.text().includes('Acme'))!
@@ -154,7 +150,7 @@ describe('AdminConsoleView — creating a tenant', () => {
     expect(w.findComponent({ name: 'CreateTenantDialog' }).props('visible')).toBe(true)
 
     vi.mocked(listTenants).mockResolvedValue([
-      { tenantId: 'tn-9', name: 'Fresh', domain: 'fresh.example', ownerEmail: 'o@fresh.example', status: 'PENDING', storageUsedBytes: 0, storageQuotaBytes: null } as never,
+      { tenantId: 'tn-9', name: 'Fresh', domain: 'fresh.example', ownerEmail: 'o@fresh.example', status: 'PENDING', storageUsedBytes: 0, storageQuotaBytes: null },
     ])
     w.findComponent({ name: 'CreateTenantDialog' }).vm.$emit('created')
     await flushPromises()

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { httpError } from '../test/httpError'
+import { setupStatus } from '../test/models'
 
 vi.mock('../features/account/instance/instance', () => ({ getSetupStatus: vi.fn() }))
 
@@ -24,7 +25,7 @@ describe('handleTenantSuspended (uc.spaces.scope-access A7)', () => {
   })
 
   it('for another tenant, leaves the space for this domain’s home and refreshes the tenant list', async () => {
-    vi.mocked(getSetupStatus).mockResolvedValue({ setupRequired: false } as never) // this domain answers
+    vi.mocked(getSetupStatus).mockResolvedValue(setupStatus()) // this domain answers
     expect(await handleTenantSuspended(httpError(403, 'tenant_suspended'))).toBe('other-tenant')
     expect(serverState.suspended).toBe(false)
     expect(suspensionSignals.leaveHome).toBe(1)

@@ -15,15 +15,7 @@ vi.mock('./release', () => ({ getInstanceRelease: vi.fn() }))
 import ReleaseVersionPanel from './ReleaseVersionPanel.vue'
 import { getInstanceRelease } from './release'
 import { i18n } from '../../i18n'
-
-/** A thrown generated-client error carrying an HTTP response — the shape `decodeHttpError` reads. */
-function httpError(status: number, code?: string): Error {
-  const body = code ? JSON.stringify({ code }) : ''
-  const response = new Response(body, { status, headers: { 'content-type': 'application/json' } })
-  const e = new Error(`http ${status}`)
-  ;(e as unknown as { response: Response }).response = response
-  return e
-}
+import { httpError } from '../../test/httpError'
 
 const stubs = {
   Message: { props: ['severity'], template: '<div class="msg"><slot /></div>' },

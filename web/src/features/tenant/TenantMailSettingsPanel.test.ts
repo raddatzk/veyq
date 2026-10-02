@@ -25,10 +25,11 @@ import TenantMailSettingsPanel from './TenantMailSettingsPanel.vue'
 import { getTenantMailSettings, updateTenantMailSettings } from './tenantMailSettings'
 import { activeSpace, clearActiveSpace } from '../../app/activeSpace'
 import { ScopeKind } from '../../api/generated/scopes'
+import type { TenantMailSettings } from '../../api/generated/tenants'
 import { realI18n, t } from '../../test/i18n'
 import { requestEmailConfirmation } from '../account/email/emailConfirmation'
 
-const READY_VIEW = {
+const READY_VIEW: TenantMailSettings = {
   host: 'smtp.example.com', port: 587, from: 'noreply@x.z', username: 'fam',
   tls: true, enabled: true, passwordSet: true, subjectTemplate: null, bodyTemplate: null, configSecretState: 'OK',
 }
@@ -66,7 +67,7 @@ describe('TenantMailSettingsPanel (uc.admin.tenant-mail-settings, web)', () => {
     activeSpace.kind = ScopeKind.Tenant
     activeSpace.scopeId = 't-1'
     activeSpace.tenantId = 't-1'
-    vi.mocked(updateTenantMailSettings).mockResolvedValue(READY_VIEW as never)
+    vi.mocked(updateTenantMailSettings).mockResolvedValue(READY_VIEW)
   })
 
   it('renders a read-only notice (not the editor) when the read is owner-gated 403', async () => {
@@ -77,7 +78,7 @@ describe('TenantMailSettingsPanel (uc.admin.tenant-mail-settings, web)', () => {
   })
 
   it('shows the leave-blank-keeps hint and OMITS the password when the field is left empty', async () => {
-    vi.mocked(getTenantMailSettings).mockResolvedValue(READY_VIEW as never)
+    vi.mocked(getTenantMailSettings).mockResolvedValue(READY_VIEW)
     const wrapper = await mountPanel()
     expect(wrapper.text()).toContain(t('mail.passwordSetHint'))
 
@@ -88,7 +89,7 @@ describe('TenantMailSettingsPanel (uc.admin.tenant-mail-settings, web)', () => {
   })
 
   it('sends a freshly typed password and then clears it from the field (no lingering plaintext)', async () => {
-    vi.mocked(getTenantMailSettings).mockResolvedValue({ ...READY_VIEW, passwordSet: false } as never)
+    vi.mocked(getTenantMailSettings).mockResolvedValue({ ...READY_VIEW, passwordSet: false })
     const wrapper = await mountPanel()
     const pw = wrapper.find('input[type="password"]')
     await pw.setValue('hunter2')
@@ -102,7 +103,7 @@ describe('TenantMailSettingsPanel (uc.admin.tenant-mail-settings, web)', () => {
   })
 
   it('surfaces a rejected template (400 invalid_mail_template) with the allowed-variables message', async () => {
-    vi.mocked(getTenantMailSettings).mockResolvedValue(READY_VIEW as never)
+    vi.mocked(getTenantMailSettings).mockResolvedValue(READY_VIEW)
     vi.mocked(updateTenantMailSettings).mockRejectedValue(httpError(400, 'invalid_mail_template'))
     const wrapper = await mountPanel()
     await saveButton(wrapper).trigger('click')
@@ -112,7 +113,7 @@ describe('TenantMailSettingsPanel (uc.admin.tenant-mail-settings, web)', () => {
   })
 
   it('surfaces the KEK-unavailable case (503 mail_secret_unavailable) understandably, not as a generic error', async () => {
-    vi.mocked(getTenantMailSettings).mockResolvedValue({ ...READY_VIEW, passwordSet: false } as never)
+    vi.mocked(getTenantMailSettings).mockResolvedValue({ ...READY_VIEW, passwordSet: false })
     vi.mocked(updateTenantMailSettings).mockRejectedValue(httpError(503, 'mail_secret_unavailable'))
     const wrapper = await mountPanel()
     await wrapper.find('input[type="password"]').setValue('hunter2')
@@ -123,21 +124,21 @@ describe('TenantMailSettingsPanel (uc.admin.tenant-mail-settings, web)', () => {
   })
 
   it('shows the config is send-ready when enabled + host + a stored password are all present', async () => {
-    vi.mocked(getTenantMailSettings).mockResolvedValue(READY_VIEW as never)
+    vi.mocked(getTenantMailSettings).mockResolvedValue(READY_VIEW)
     const wrapper = await mountPanel()
     expect(wrapper.text()).toContain(t('mail.sendReady'))
   })
 
   it('proactively flags a changed config-secret key (MISMATCH) and is not send-ready', async () => {
     // The stored password was sealed under a key the server no longer has — a real, detected state (ADR 0050 amendment).
-    vi.mocked(getTenantMailSettings).mockResolvedValue({ ...READY_VIEW, configSecretState: 'MISMATCH' } as never)
+    vi.mocked(getTenantMailSettings).mockResolvedValue({ ...READY_VIEW, configSecretState: 'MISMATCH' })
     const wrapper = await mountPanel()
     expect(wrapper.text()).toContain(t('mail.keyMismatch'))
     expect(wrapper.text()).not.toContain(t('mail.sendReady'))
   })
 
   it('proactively shows the KEK-unavailable message when the server can’t seal secrets (ABSENT)', async () => {
-    vi.mocked(getTenantMailSettings).mockResolvedValue({ ...READY_VIEW, configSecretState: 'ABSENT' } as never)
+    vi.mocked(getTenantMailSettings).mockResolvedValue({ ...READY_VIEW, configSecretState: 'ABSENT' })
     const wrapper = await mountPanel()
     expect(wrapper.text()).toContain(t('mail.kekUnavailable'))
     expect(wrapper.text()).not.toContain(t('mail.sendReady'))
@@ -145,7 +146,7 @@ describe('TenantMailSettingsPanel (uc.admin.tenant-mail-settings, web)', () => {
 
   it('is honest that enabled alone does not send — it lists what is still missing', async () => {
     // enabled is ticked, but no host and no stored password ⇒ nothing can be sent, and inviting is refused.
-    vi.mocked(getTenantMailSettings).mockResolvedValue({ ...READY_VIEW, host: null, passwordSet: false } as never)
+    vi.mocked(getTenantMailSettings).mockResolvedValue({ ...READY_VIEW, host: null, passwordSet: false })
     const wrapper = await mountPanel()
     expect(wrapper.text()).toContain(t('mail.notSendReady'))
     expect(wrapper.text()).toContain(t('mail.missingHost'))
@@ -157,7 +158,7 @@ describe('TenantMailSettingsPanel (uc.admin.tenant-mail-settings, web)', () => {
   it('shows an auth-less host (no username, no password) as send-ready and never demands a password', async () => {
     // A legit auth-less MTA: enabled + host but NO username ⇒ the backend sends with no login (SmtpTenantInviteMailer
     // keys auth on `username`), so the panel must mirror that — send-ready, and a password is NOT listed as missing.
-    vi.mocked(getTenantMailSettings).mockResolvedValue({ ...READY_VIEW, username: null, passwordSet: false } as never)
+    vi.mocked(getTenantMailSettings).mockResolvedValue({ ...READY_VIEW, username: null, passwordSet: false })
     const wrapper = await mountPanel()
     expect(wrapper.text()).toContain(t('mail.sendReady'))
     expect(wrapper.text()).not.toContain(t('mail.missingPassword'))
@@ -167,7 +168,7 @@ describe('TenantMailSettingsPanel (uc.admin.tenant-mail-settings, web)', () => {
   it('does not let an ABSENT KEK block an auth-less host — the KEK is irrelevant with no password to unseal', async () => {
     // No username ⇒ nothing is ever unsealed, so the config-secret KEK state must not dominate the readiness view
     // (else the panel would show "KEK unavailable" while the backend happily sends). Send-ready, no KEK banner.
-    vi.mocked(getTenantMailSettings).mockResolvedValue({ ...READY_VIEW, username: null, passwordSet: false, configSecretState: 'ABSENT' } as never)
+    vi.mocked(getTenantMailSettings).mockResolvedValue({ ...READY_VIEW, username: null, passwordSet: false, configSecretState: 'ABSENT' })
     const wrapper = await mountPanel()
     expect(wrapper.text()).toContain(t('mail.sendReady'))
     expect(wrapper.text()).not.toContain(t('mail.kekUnavailable'))
@@ -178,7 +179,7 @@ describe('TenantMailSettingsPanel (uc.admin.tenant-mail-settings, web)', () => {
     w.findAll('button').find((b) => b.text() === t('emailConfirm.send'))
 
   it('offers a confirmation to yourself once a save leaves the relay able to send, and sends it on request', async () => {
-    vi.mocked(getTenantMailSettings).mockResolvedValue(READY_VIEW as never)
+    vi.mocked(getTenantMailSettings).mockResolvedValue(READY_VIEW)
     vi.mocked(requestEmailConfirmation).mockResolvedValue(undefined)
     const wrapper = await mountPanel()
     expect(offerButton(wrapper)).toBeUndefined() // nothing before a save
@@ -197,8 +198,8 @@ describe('TenantMailSettingsPanel (uc.admin.tenant-mail-settings, web)', () => {
 
   it('does not offer it after a save that cannot send', async () => {
     const notReady = { ...READY_VIEW, enabled: false }
-    vi.mocked(getTenantMailSettings).mockResolvedValue(notReady as never)
-    vi.mocked(updateTenantMailSettings).mockResolvedValue(notReady as never)
+    vi.mocked(getTenantMailSettings).mockResolvedValue(notReady)
+    vi.mocked(updateTenantMailSettings).mockResolvedValue(notReady)
     const wrapper = await mountPanel()
     await saveButton(wrapper).trigger('click')
     await flushPromises()
@@ -207,7 +208,7 @@ describe('TenantMailSettingsPanel (uc.admin.tenant-mail-settings, web)', () => {
   })
 
   it('renders a refused offer by its status, and keeps the offer up to retry', async () => {
-    vi.mocked(getTenantMailSettings).mockResolvedValue(READY_VIEW as never)
+    vi.mocked(getTenantMailSettings).mockResolvedValue(READY_VIEW)
     vi.mocked(requestEmailConfirmation).mockRejectedValue(httpError(503, 'mail_unavailable'))
     const wrapper = await mountPanel()
     await saveButton(wrapper).trigger('click')

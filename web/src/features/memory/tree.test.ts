@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 
 vi.mock('../../api/client', () => ({
   contentApi: vi.fn(),
@@ -10,22 +10,26 @@ vi.mock('../../api/client', () => ({
 import { listTree, listTrash, restoreNode, createFolder, createMemory, createChapter, openMemory, openContentKey, nodeContentKey, type TreeNode } from './tree'
 import { epochsOf } from '../spaces/epochsTestUtil'
 import { contentApi } from '../../api/client'
+import { fakeApi } from '../../test/apiMock'
+import type { ContentApi } from '../../api/generated/content'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const scopeKey = v1.randomBytes(32)
 
-function mockContent(over: Partial<Record<'createNode' | 'listNodes' | 'updateNode' | 'deleteNode' | 'listTrashedNodes' | 'restoreNode', unknown>>) {
-  vi.mocked(contentApi).mockReturnValue({
+type NodeMethod = 'createNode' | 'listNodes' | 'updateNode' | 'deleteNode' | 'listTrashedNodes' | 'restoreNode'
+
+function mockContent(over: { [K in NodeMethod]?: Mock<ContentApi[K]> }) {
+  fakeApi(contentApi, {
     createNode: echoCreate(),
-    listNodes: vi.fn().mockResolvedValue([]),
-    updateNode: vi.fn(),
-    deleteNode: vi.fn(),
-    listTrashedNodes: vi.fn().mockResolvedValue([]),
-    restoreNode: vi.fn(),
+    listNodes: vi.fn<ContentApi['listNodes']>().mockResolvedValue([]),
+    updateNode: vi.fn<ContentApi['updateNode']>(),
+    deleteNode: vi.fn<ContentApi['deleteNode']>(),
+    listTrashedNodes: vi.fn<ContentApi['listTrashedNodes']>().mockResolvedValue([]),
+    restoreNode: vi.fn<ContentApi['restoreNode']>(),
     ...over,
-  } as unknown as ReturnType<typeof contentApi>)
+  })
 }
 
 beforeEach(() => vi.clearAllMocks())
@@ -33,7 +37,7 @@ beforeEach(() => vi.clearAllMocks())
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 /** A createNode mock that echoes the client-minted node id back, as the server does (ADR 0072). */
 function echoCreate() {
-  return vi.fn().mockImplementation(async (p: { createNodeRequest: { nodeId: string } }) => ({ nodeId: p.createNodeRequest.nodeId }))
+  return vi.fn<ContentApi['createNode']>(async (p) => ({ nodeId: p.createNodeRequest.nodeId }))
 }
 const nameCtx = (nodeId: string, epoch = 0) => ({ purpose: 'node-name', scopeId: SCOPE_ID, nodeId, epoch }) as const
 const kmemCtx = (nodeId: string, epoch = 0) => ({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId, epoch }) as const
@@ -54,9 +58,9 @@ describe('createMemory', () => {
     // name round-trips under K_SC, bound to this node; the server only ever saw ciphertext
     expect(new TextDecoder().decode(v1.open(nameCtx(nodeId), scopeKey, fromB64(req.encryptedName)))).toBe('Italien 2026')
     // wrapped K_mem opens to exactly the returned key
-    expect(Array.from(openMemory(SCOPE_ID, scopeKey, { id: nodeId, epoch: 0, wrappedContentKey: req.wrappedContentKey })!)).toEqual(Array.from(memoryKey))
+    expect(Array.from(openMemory(SCOPE_ID, scopeKey, { id: nodeId, epoch: 0, wrappedContentKey: req.wrappedContentKey ?? null })!)).toEqual(Array.from(memoryKey))
     // ...and is refused on any other node's row (a server moving the wrap gets no key)
-    expect(() => openMemory(SCOPE_ID, scopeKey, { id: crypto.randomUUID(), epoch: 0, wrappedContentKey: req.wrappedContentKey }))
+    expect(() => openMemory(SCOPE_ID, scopeKey, { id: crypto.randomUUID(), epoch: 0, wrappedContentKey: req.wrappedContentKey ?? null }))
       .toThrow(v1.OpenRefused)
     // slug token = blinded MAC under K_SC over the root parent slot (the scope id) + the slug
     expect(req.slugToken).toBe(b64std(v1.slugToken(scopeKey, SCOPE_ID, 'italien-2026')))
@@ -80,7 +84,7 @@ describe('createChapter — recursive K_mem (cr-0060)', () => {
     // the name is still sealed under K_SC (whole-tree navigation), the slug too
     expect(new TextDecoder().decode(v1.open(nameCtx(nodeId), scopeKey, fromB64(req.encryptedName)))).toBe('Tag 1')
     expect(req.slugToken).toBe(b64std(v1.slugToken(scopeKey, MEM, 'tag-1')))
-    const row = { id: nodeId, epoch: 0, wrappedContentKey: req.wrappedContentKey }
+    const row = { id: nodeId, epoch: 0, wrappedContentKey: req.wrappedContentKey ?? null }
     // the K_mem opens under the PARENT key…
     expect(Array.from(openContentKey(SCOPE_ID, parentKey, row)!)).toEqual(Array.from(chapterKey))
     // …and NOT under K_SC (a wrong KEK can't open it — crypto-enforced least privilege)
@@ -126,8 +130,8 @@ describe('listTree', () => {
     const F1 = '5c09e000-0000-4000-8000-0000000000f1'
     const encryptedName = sealUnder(scopeKey, F1, 0, 'Trips')
     mockContent({
-      listNodes: vi.fn().mockResolvedValue([
-        { id: F1, parentId: null, kind: 'FOLDER', epoch: 0, encryptedName, slugToken: 'x', orderIndex: 0 },
+      listNodes: vi.fn<ContentApi['listNodes']>().mockResolvedValue([
+        { id: F1, parentId: null, kind: 'FOLDER', epoch: 0, encryptedName, slugToken: 'x', orderIndex: 0, metaVersion: 0 },
       ]),
     })
     const tree = await listTree(SCOPE_ID, epochsOf(scopeKey))
@@ -139,8 +143,8 @@ describe('listTree', () => {
   it('refuses a name the server moved onto another node\'s row', async () => {
     const encryptedName = sealUnder(scopeKey, '5c09e000-0000-4000-8000-0000000000f1', 0, 'Trips')
     mockContent({
-      listNodes: vi.fn().mockResolvedValue([
-        { id: '5c09e000-0000-4000-8000-0000000000f2', parentId: null, kind: 'FOLDER', epoch: 0, encryptedName, slugToken: 'x', orderIndex: 0 },
+      listNodes: vi.fn<ContentApi['listNodes']>().mockResolvedValue([
+        { id: '5c09e000-0000-4000-8000-0000000000f2', parentId: null, kind: 'FOLDER', epoch: 0, encryptedName, slugToken: 'x', orderIndex: 0, metaVersion: 0 },
       ]),
     })
     await expect(listTree(SCOPE_ID, epochsOf(scopeKey))).rejects.toBeInstanceOf(v1.OpenRefused)
@@ -163,7 +167,7 @@ describe('listTrash', () => {
     const OLD = '5c09e000-0000-4000-8000-0000000000a1'
     const NEW = '5c09e000-0000-4000-8000-0000000000a2'
     mockContent({
-      listTrashedNodes: vi.fn().mockResolvedValue([
+      listTrashedNodes: vi.fn<ContentApi['listTrashedNodes']>().mockResolvedValue([
         { id: OLD, parentId: null, kind: 'MEMORY', epoch: 0, encryptedName: sealUnder(e0, OLD, 0, 'Rom 2024'), deletedAt, purgeAfter },
         { id: NEW, parentId: 'f1', kind: 'FOLDER', epoch: 1, encryptedName: sealUnder(e1, NEW, 1, 'Reisen'), deletedAt, purgeAfter },
       ]),
@@ -183,7 +187,7 @@ describe('restoreNode', () => {
     const e0 = v1.randomBytes(32)
     const e1 = v1.randomBytes(32)
     const epochs = { current: 1, keys: new Map([[0, e0], [1, e1]]) }
-    const restore = vi.fn()
+    const restore = vi.fn<ContentApi['restoreNode']>()
     mockContent({ restoreNode: restore })
 
     await restoreNode(SCOPE_ID, epochs, { id: 'n1', parentId: null, epoch: 0, name: 'Rom 2026' })
@@ -197,7 +201,7 @@ describe('restoreNode', () => {
   })
 
   it('re-seals the name in the SAME request as the token derived from it, on the taken-name retry', async () => {
-    const restore = vi.fn()
+    const restore = vi.fn<ContentApi['restoreNode']>()
     mockContent({ restoreNode: restore })
     const epochs = epochsOf(scopeKey)
 
@@ -205,6 +209,7 @@ describe('restoreNode', () => {
     await restoreNode(SCOPE_ID, epochs, { id: N1, parentId: 'f1', epoch: 0, name: 'Rom 2026' }, 'Rom 2026 (2)')
 
     const req = restore.mock.calls[0][0].restoreNodeRequest
+    if (req.encryptedName == null) throw new Error('the taken-name retry sent no name')
     // both halves describe the NEW name, and they travel together — a node is never live carrying a slug its
     // own name does not produce
     expect(req.slugToken).toBe(b64std(v1.slugToken(scopeKey, 'f1', 'rom-2026-2')))

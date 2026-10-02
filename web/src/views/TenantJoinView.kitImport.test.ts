@@ -14,22 +14,20 @@ import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 
 vi.mock('../features/tenant/tenantInvite', () => ({
   previewInvite: vi.fn(),
-  acceptInvite: vi.fn().mockResolvedValue({}),
-  registerAndAccept: vi.fn().mockResolvedValue({}),
-  bornTenantScope: vi.fn().mockReturnValue({ grant: 'AQ==', scopeRootKey: new Uint8Array(32) }),
-  tenantError: vi.fn().mockResolvedValue({ status: 0, code: null }),
+  acceptInvite: vi.fn(),
+  registerAndAccept: vi.fn(),
+  bornTenantScope: vi.fn(),
+  tenantError: vi.fn(),
 }))
-vi.mock('../features/account/login/login', () => ({ login: vi.fn().mockResolvedValue(undefined) }))
+vi.mock('../features/account/login/login', () => ({ login: vi.fn() }))
 vi.mock('../app/sessionRefresh', () => ({ withRefresh: vi.fn((call: () => unknown) => call()) }))
-vi.mock('../features/account/unlock/unlock', () => ({ unlockMasterKey: vi.fn().mockResolvedValue(undefined) }))
-vi.mock('../features/account/profile/profile', () => ({ sealName: vi.fn().mockResolvedValue(undefined) }))
+vi.mock('../features/account/unlock/unlock', () => ({ unlockMasterKey: vi.fn() }))
+vi.mock('../features/account/profile/profile', () => ({ sealName: vi.fn() }))
 vi.mock('../features/account/emergencyKit/EmergencyKitSave.vue', () => ({
   default: { template: '<div class="stub-kit" />' },
 }))
 vi.mock('@veyq/crypto/accountBirth', () => ({ buildAccount: vi.fn() }))
-vi.mock('../api/client', () => ({
-  setupApi: () => ({ getSetupStatus: vi.fn().mockResolvedValue({ instanceSalt: 'AAAA' }) }),
-}))
+vi.mock('../api/client', () => ({ setupApi: vi.fn() }))
 // Only the file/QR decode is faked; `parseKit`/`kitPayload` stay real, so the pasted token this test hands the
 // field is the one the kit generator actually emits.
 vi.mock('../features/account/emergencyKit/emergencyKit', async (orig) => ({
@@ -42,11 +40,17 @@ vi.mock('vue-router', () => ({
 }))
 
 import TenantJoinView from './TenantJoinView.vue'
-import { previewInvite } from '../features/tenant/tenantInvite'
+import { setupApi } from '../api/client'
+import { stubApi } from '../test/apiMock'
+import { previewInvite, acceptInvite, registerAndAccept, bornTenantScope, tenantError } from '../features/tenant/tenantInvite'
+import { login } from '../features/account/login/login'
 import { unlockMasterKey } from '../features/account/unlock/unlock'
+import { sealName } from '../features/account/profile/profile'
+import { TenantStatus } from '../api/generated/tenants'
 import { kitPayload, type KitData } from '@veyq/crypto/emergencyKit'
 import { importKitFromFile } from '../features/account/emergencyKit/emergencyKit'
 import { realI18n, t } from '../test/i18n'
+import { invitePreview, setupStatus } from '../test/models'
 
 const OWNER_EMAIL = 'owner@acme.example'
 // 32 bytes, as a real kit carries — the parser rejects a Secret Key of any other length.
@@ -71,9 +75,9 @@ const mounted: VueWrapper[] = []
 
 /** The sign-in branch: `hasAccount: true` and a locked vault → the screen asks for password + Secret Key. */
 async function mountSignInBranch(): Promise<VueWrapper> {
-  vi.mocked(previewInvite).mockResolvedValue({
-    tenantName: 'Acme', domain: 'acme.example', ownerEmail: OWNER_EMAIL, hasAccount: true, role: 'OWNER',
-  } as never)
+  vi.mocked(previewInvite).mockResolvedValue(
+    invitePreview({ tenantName: 'Acme', domain: 'acme.example', ownerEmail: OWNER_EMAIL, hasAccount: true }),
+  )
   const w = mount(TenantJoinView, { global: { plugins: [realI18n()], stubs } })
   mounted.push(w)
   await flushPromises()
@@ -104,6 +108,21 @@ async function acceptWith(w: VueWrapper) {
 describe('TenantJoinView — importing the Emergency Kit on the invite-accept screen', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // The happy path past each file's point of interest, typed by the real functions: these used to live in the
+    // mock factory, where nothing checked them against the contract.
+    vi.mocked(login).mockResolvedValue(undefined)
+    vi.mocked(unlockMasterKey).mockResolvedValue(undefined)
+    vi.mocked(acceptInvite).mockResolvedValue({ tenantId: 'tenant-1', status: TenantStatus.Active })
+    vi.mocked(registerAndAccept).mockResolvedValue({ tenantId: 'tenant-1', status: TenantStatus.Active, userId: 'user-1' })
+    vi.mocked(bornTenantScope).mockReturnValue({
+      birth: { grant: 'AQ==', grantSignature: 'AQ==', admissionId: 'admission-1', admissionEpoch: 0, admissionTag: 'AQ==' },
+      scopeRootKey: new Uint8Array(32),
+    })
+    vi.mocked(sealName).mockReturnValue('AQ==')
+    vi.mocked(tenantError).mockResolvedValue({ status: 0, code: null })
+    stubApi(setupApi, {
+      getSetupStatus: setupStatus(),
+    })
     Object.defineProperty(navigator, 'mediaDevices', { value: { getUserMedia: vi.fn() }, configurable: true })
   })
 

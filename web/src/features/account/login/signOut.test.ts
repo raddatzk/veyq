@@ -3,17 +3,19 @@
 // revoke that never reached the server is carried to the sign-in page as one word, read once.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { httpError } from '../../../test/httpError'
+import { fakeApi } from '../../../test/apiMock'
+import type { SessionApi } from '../../../api/generated/auth'
 
 const { endSession, clearSessionVault, clearDeviceKey, logout } = vi.hoisted(() => ({
   endSession: vi.fn(),
   clearSessionVault: vi.fn(),
   clearDeviceKey: vi.fn(),
-  logout: vi.fn(),
+  logout: vi.fn<SessionApi['logout']>(),
 }))
 vi.mock('../../../app/sessionEnd', () => ({ endSession }))
 vi.mock('../rememberMe/sessionVault', () => ({ clearSessionVault }))
 vi.mock('../rememberMe/deviceKeyWrap', () => ({ clearDeviceKey }))
-vi.mock('../../../api/client', () => ({ sessionApi: () => ({ logout }) }))
+vi.mock('../../../api/client', () => ({ sessionApi: vi.fn() }))
 // The refresh-and-retry is `sessionRefresh`'s own test; here a failed call is the failure the sequence sees.
 vi.mock('../../../app/sessionRefresh', async (actual) => ({
   ...(await actual<typeof import('../../../app/sessionRefresh')>()),
@@ -21,23 +23,18 @@ vi.mock('../../../app/sessionRefresh', async (actual) => ({
 }))
 
 import { signOut, takeSignOutNotice } from './signOut'
+import { sessionApi } from '../../../api/client'
+import { memoryStorage } from '../../../test/memoryStorage'
 
-/** `sessionStorage` is per tab and survives the document load the ending starts — that is what the notice rides. */
-function fakeSessionStorage() {
-  const map = new Map<string, string>()
-  return {
-    getItem: (k: string) => map.get(k) ?? null,
-    setItem: (k: string, v: string) => void map.set(k, v),
-    removeItem: (k: string) => void map.delete(k),
-  }
-}
 
 const order: string[] = []
 
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.stubGlobal('sessionStorage', fakeSessionStorage())
+  // `sessionStorage` is per tab and survives the document load the ending starts — that is what the notice rides.
+  vi.stubGlobal('sessionStorage', memoryStorage())
   order.length = 0
+  fakeApi(sessionApi, { logout })
   clearSessionVault.mockImplementation(async () => void order.push('session-vault'))
   clearDeviceKey.mockImplementation(async () => void order.push('device-key'))
   logout.mockImplementation(async () => void order.push('revoke'))

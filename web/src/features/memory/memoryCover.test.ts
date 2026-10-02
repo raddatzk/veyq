@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { fakeApi, stubApi } from '../../test/apiMock'
+import type { ContentApi } from '../../api/generated/content'
+import { mediaItem } from '../../test/models'
 
 vi.mock('../../api/client', () => ({
   contentApi: vi.fn(),
@@ -32,6 +35,7 @@ import { MetaConflictError } from './sealedMetaWrite'
 import { listMedia, openGrid, openBlob } from './media'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
+
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const nodeKey = v1.randomBytes(32)
@@ -156,8 +160,7 @@ describe('unsealMemoryCover', () => {
 
 describe('setMemoryCover', () => {
   it('re-seals under K_mem and PATCHes wrappedMeta via updateNode', async () => {
-    const updateNode = vi.fn().mockResolvedValue(undefined)
-    vi.mocked(contentApi).mockReturnValue({ updateNode } as unknown as ReturnType<typeof contentApi>)
+    const { updateNode } = stubApi(contentApi, { updateNode: undefined })
 
     const cover: MemoryCover = { source: { kind: 'media', mediaId: 'm-3' }, crop: { x: 0.1, y: 0.2, width: 0.5, height: 0.28 } }
     const { wrappedMeta: sealed } = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, cover, { wrappedMeta: null, metaVersion: 0 })
@@ -170,8 +173,7 @@ describe('setMemoryCover', () => {
   })
 
   it('read-modify-write: setting a cover preserves a sibling date + location', async () => {
-    const updateNode = vi.fn().mockResolvedValue(undefined)
-    vi.mocked(contentApi).mockReturnValue({ updateNode } as unknown as ReturnType<typeof contentApi>)
+    stubApi(contentApi, { updateNode: undefined })
 
     const date = { mode: 'single', from: '2026-05-01', to: '2026-05-01' }
     const location = { name: 'Teneriffa', nameSource: 'manual', derivedMode: 'fixed' }
@@ -187,8 +189,7 @@ describe('setMemoryCover', () => {
   })
 
   it('read-modify-write: removing a cover (null) drops it but keeps the date + location', async () => {
-    const updateNode = vi.fn().mockResolvedValue(undefined)
-    vi.mocked(contentApi).mockReturnValue({ updateNode } as unknown as ReturnType<typeof contentApi>)
+    stubApi(contentApi, { updateNode: undefined })
 
     const date = { mode: 'single', from: '2026-05-01', to: '2026-05-01' }
     const location = { name: 'Teneriffa', nameSource: 'manual', derivedMode: 'fixed' }
@@ -209,8 +210,8 @@ describe('setMemoryCover', () => {
   /** W5 (ADR 0077): a cover save from a stale tree meets a 409 whose blob holds a peer's place — the retry keeps it. */
   it('W5: on 409 stale_version re-applies only the cover on the current blob — a peer\'s place survives', async () => {
     const location = { name: 'Lisbon', nameSource: 'manual', derivedMode: 'fixed' }
-    const updateNode = vi.fn().mockRejectedValueOnce(staleWith(sealMeta({ v: 1, location }), 2)).mockResolvedValueOnce(undefined)
-    vi.mocked(contentApi).mockReturnValue({ updateNode } as unknown as ReturnType<typeof contentApi>)
+    const updateNode = vi.fn<ContentApi['updateNode']>().mockRejectedValueOnce(staleWith(sealMeta({ v: 1, location }), 2)).mockResolvedValueOnce(undefined)
+    fakeApi(contentApi, { updateNode })
     const cover: MemoryCover = { source: { kind: 'media', mediaId: 'm-3' }, crop: FULL_FRAME }
 
     const state = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, cover, { wrappedMeta: null, metaVersion: 1 })
@@ -227,14 +228,14 @@ describe('setMemoryCover', () => {
     const peers = sealMeta({ v: 1, cover: peersCover })
     const mine: MemoryCover = { source: { kind: 'media', mediaId: 'mine' }, crop: FULL_FRAME }
 
-    const surfaced = vi.fn().mockRejectedValueOnce(staleWith(peers, 2)).mockResolvedValue(undefined)
-    vi.mocked(contentApi).mockReturnValue({ updateNode: surfaced } as unknown as ReturnType<typeof contentApi>)
+    const surfaced = vi.fn<ContentApi['updateNode']>().mockRejectedValueOnce(staleWith(peers, 2)).mockResolvedValue(undefined)
+    fakeApi(contentApi, { updateNode: surfaced })
     const err = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, mine, { wrappedMeta: null, metaVersion: 1 }).catch((e) => e)
     expect(err).toBeInstanceOf(MetaConflictError)
     expect(surfaced).toHaveBeenCalledTimes(1)
 
-    const reapplied = vi.fn().mockRejectedValueOnce(staleWith(peers, 2)).mockResolvedValue(undefined)
-    vi.mocked(contentApi).mockReturnValue({ updateNode: reapplied } as unknown as ReturnType<typeof contentApi>)
+    const reapplied = vi.fn<ContentApi['updateNode']>().mockRejectedValueOnce(staleWith(peers, 2)).mockResolvedValue(undefined)
+    fakeApi(contentApi, { updateNode: reapplied })
     const state = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, mine, { wrappedMeta: null, metaVersion: 1 }, false)
     expect(reapplied).toHaveBeenCalledTimes(2)
     expect(unsealMemoryCover(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: state.wrappedMeta })).toEqual(mine)
@@ -277,7 +278,7 @@ describe('loadNodeCover', () => {
   })
 
   it('a media-source cover resolves the chosen media’s thumbnail tier (listMedia + openGrid)', async () => {
-    vi.mocked(listMedia).mockResolvedValue([{ mediaId: 'm1' }] as never)
+    vi.mocked(listMedia).mockResolvedValue([mediaItem({ mediaId: 'm1' })])
     vi.mocked(openGrid).mockResolvedValue(new Uint8Array([9]))
     const crop = FULL_FRAME
     const node = { id: NODE_ID, wrappedMeta: sealMeta({ v: 1, cover: { source: { kind: 'media', mediaId: 'm1' }, crop } }, SCOPE) }
@@ -290,7 +291,7 @@ describe('loadNodeCover', () => {
   })
 
   it('a dangling media source (the chosen media is gone) falls back to null (E2, never a broken tile)', async () => {
-    vi.mocked(listMedia).mockResolvedValue([{ mediaId: 'other' }] as never)
+    vi.mocked(listMedia).mockResolvedValue([mediaItem({ mediaId: 'other' })])
     const node = { id: NODE_ID, wrappedMeta: sealMeta({ v: 1, cover: { source: { kind: 'media', mediaId: 'm1' }, crop: FULL_FRAME } }, SCOPE) }
     expect(await loadNodeCover(SCOPE, nodeKey, node)).toBeNull()
   })

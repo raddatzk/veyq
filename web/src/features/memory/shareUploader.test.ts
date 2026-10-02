@@ -17,7 +17,17 @@ vi.mock('../../api/client', () => ({
 import { resolveShare, createContributorIdentity, sessionSealKey, addSharePhoto, openShareOriginal } from './share'
 import { listMediaPage, openOriginal, unsealMeta, setMediaMeta, listBuckets, openBucketName, type MediaDeriver } from './media'
 import { publicSharesApi, mediaApi, bucketsApi } from '../../api/client'
-import { NodeKind, ShareRole, type PublicShare } from '../../api/generated/sharing'
+import {
+  NodeKind,
+  ShareRole,
+  type PublicShare,
+  type ShareBlobUploadResultItem,
+  type ShareBlobUploadsResponse,
+  type ShareMediaBatchResponse,
+  type SharingApi,
+} from '../../api/generated/sharing'
+import type { BlobDownloadsBatchResponse, MediaApi, MediaListPage, PresignedUrl } from '../../api/generated/media'
+import { fakeApi, stubApi } from '../../test/apiMock'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url, fromB64std } from '@veyq/crypto/base64'
 
@@ -44,7 +54,7 @@ function uploaderShare() {
   const sealedDropPrivateKey = b64std(
     v1.seal({ purpose: 'drop-private-key', scopeId: SCOPE_ID, nodeId: NODE_ID }, kMem, v1.serializeDropKey(drop)),
   )
-  const resolve = {
+  const resolve: PublicShare = {
     role: ShareRole.Uploader,
     passwordRequired: false,
     scopeId: SCOPE_ID,
@@ -66,25 +76,24 @@ function uploaderShare() {
 const store = new Map<string, Uint8Array>()
 
 /** The share-scoped API as the guest sees it, recording what the guest sent. */
-function guestApi(resolve: unknown) {
-  const api: Record<string, ReturnType<typeof vi.fn>> = {
-    resolveShare: vi.fn().mockResolvedValue(resolve),
-    createShareIdentity: vi.fn(async () => ({ identityId: 'ignored', contributorToken: 'tok-1' })),
-    startShareBlobUploads: vi.fn(async ({ shareBlobUploadsRequest }: any) => ({
-      results: shareBlobUploadsRequest.items.map((_: unknown, i: number) => ({
-        uploadId: `up-${i}`, presignedPuts: [{ index: 0, url: `mem://up-${i}/0` }], error: null,
-      })),
+function guestApi(resolve: PublicShare) {
+  const startShareBlobUploads = vi.fn<SharingApi['startShareBlobUploads']>(async ({ shareBlobUploadsRequest }): Promise<ShareBlobUploadsResponse> => ({
+    results: shareBlobUploadsRequest.items.map((_, i): ShareBlobUploadResultItem => ({
+      uploadId: `up-${i}`, presignedPuts: [{ index: 0, url: `mem://up-${i}/0` }], error: null,
     })),
-    completeShareMedia: vi.fn(async ({ shareMediaBatchRequest }: any) => ({
+  }))
+  return fakeApi(publicSharesApi, {
+    resolveShare: async () => resolve,
+    createShareIdentity: vi.fn<SharingApi['createShareIdentity']>().mockResolvedValue({ identityId: 'ignored', contributorToken: 'tok-1' }),
+    startShareBlobUploads,
+    completeShareMedia: async ({ shareMediaBatchRequest }): Promise<ShareMediaBatchResponse> => ({
       results: [{
-        blobId: api.startShareBlobUploads.mock.calls[0][0].shareBlobUploadsRequest.items[0].blobId,
+        blobId: startShareBlobUploads.mock.calls[0][0].shareBlobUploadsRequest.items[0].blobId,
         mediaId: shareMediaBatchRequest.items[0].mediaId,
         error: null,
       }],
-    })),
-  }
-  vi.mocked(publicSharesApi).mockReturnValue(api as unknown as ReturnType<typeof publicSharesApi>)
-  return api
+    }),
+  })
 }
 
 const noTiers = { deriveImage: vi.fn(), deriveVideoPoster: vi.fn() } as unknown as MediaDeriver
@@ -145,7 +154,7 @@ describe('an UPLOADER guest never holds K_mem (ADR 0031 point 7)', () => {
     )
     const kUp = v1.openAs(
       { purpose: 'upload-identity-key', scopeId: SCOPE_ID, nodeId: NODE_ID, identityId: identity.identityId },
-      v1.dropKeySecret(drop), v1.dropKeyPublic(drop), fromB64std(identity.wrappedIdentityKey),
+      v1.dropKeySecret(drop), v1.dropKeyPublic(drop), fromB64std(identity.wrappedIdentityKey!),
     )
     expect(v1.open(blobKeyCtx, kUp, wrappedBlobKey)).toHaveLength(32)
     // and the display name is the guest's too, not the Memory's
@@ -163,19 +172,18 @@ describe('an UPLOADER guest never holds K_mem (ADR 0031 point 7)', () => {
       mediaId: declared.ownerId, blobId: declared.blobId, chunkCount: declared.chunkCount, byteSize: declared.byteSize,
       wrappedBlobKey: declared.wrappedBlobKey, derivatives: [], wrappedMeta: completed.wrappedMeta,
     }
-    const presigned = { results: [{ blobId: declared.blobId, presignedGets: [{ index: 0, url: 'mem://up-0/0' }], error: null }] }
+    const presignedGets: PresignedUrl[] = [{ index: 0, url: 'mem://up-0/0' }]
 
     // the curator: a media page carries the node's drop key and the guest's wrapped key beside the row
-    const updateMediaMeta = vi.fn(async () => ({}))
-    vi.mocked(mediaApi).mockReturnValue({
-      listNodeMedia: vi.fn(async () => ({
+    fakeApi(mediaApi, {
+      listNodeMedia: async (): Promise<MediaListPage> => ({
         media: [{ ...row, updatedAt: new Date(), ownerKey: `share:${identityId}` }],
         mediaRevision: 1, deleteRevision: 0,
-        sealedDropPrivateKey, uploaderKeys: [{ identityId, wrappedIdentityKey: identity.wrappedIdentityKey }],
-      })),
-      presignBlobDownloads: vi.fn(async () => presigned),
-      updateMediaMeta,
-    } as unknown as ReturnType<typeof mediaApi>)
+        sealedDropPrivateKey, uploaderKeys: [{ identityId, wrappedIdentityKey: identity.wrappedIdentityKey! }],
+      }),
+      presignBlobDownloads: async (): Promise<BlobDownloadsBatchResponse> => ({ results: [{ presignedGets, error: null }] }),
+      updateMediaMeta: vi.fn<MediaApi['updateMediaMeta']>().mockResolvedValue({}),
+    })
     const page = await listMediaPage(SCOPE_ID, NODE_ID)
     if (page.notModified) throw new Error('unreachable')
     const [item] = page.items
@@ -190,15 +198,15 @@ describe('an UPLOADER guest never holds K_mem (ADR 0031 point 7)', () => {
     expect(unsealMeta(SCOPE_ID, kMem, { ...item, wrappedMeta: edited.wrappedMeta! })?.capturedAtOverride).toBe(1_700_000_000_000)
 
     // the curator's buckets: the guest's primary carries its wrapped key, and its name opens through it
-    vi.mocked(bucketsApi).mockReturnValue({
-      listNodeBuckets: vi.fn(async () => ({
+    stubApi(bucketsApi, {
+      listNodeBuckets: {
         buckets: [{
           bucketId: crypto.randomUUID(), ownerKey: `share:${identityId}`, isPrimary: true, mediaCount: 1,
           shareId: UPLOADER_SHARE, sealedName: identity.sealedDisplayName, wrappedIdentityKey: identity.wrappedIdentityKey,
         }],
         sealedDropPrivateKey,
-      })),
-    } as unknown as ReturnType<typeof bucketsApi>)
+      },
+    })
     const [primary] = await listBuckets(SCOPE_ID, NODE_ID)
     expect(openBucketName(SCOPE_ID, NODE_ID, kMem, primary)).toBe('Gast')
 
@@ -213,10 +221,7 @@ describe('an UPLOADER guest never holds K_mem (ADR 0031 point 7)', () => {
       media: [{ ...row, nodeId: NODE_ID, identityId }],
       identities: [{ identityId, wrappedIdentityKey: identity.wrappedIdentityKey! }],
     } satisfies PublicShare
-    vi.mocked(publicSharesApi).mockReturnValue({
-      resolveShare: vi.fn(async () => viewerResolve),
-      resolveShareBlob: vi.fn(async () => ({ presignedGets: presigned.results[0].presignedGets })),
-    } as unknown as ReturnType<typeof publicSharesApi>)
+    stubApi(publicSharesApi, { resolveShare: viewerResolve, resolveShareBlob: { presignedGets } })
     const viewer = await resolveShare(VIEWER_SHARE, b64url(kViewer))
     expect(viewer.items).toHaveLength(1)
     expect(await openShareOriginal(VIEWER_SHARE, viewer.items[0])).toEqual(PHOTO)

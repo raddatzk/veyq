@@ -35,6 +35,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { useMediaGalleryLive } from './useMediaGalleryLive'
 import { listMediaPage, deleteMedia, restoreMedia, type MediaItem } from './media'
 import { realI18n } from '../../test/i18n'
+import { mediaItem, treeNode } from '../../test/models'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -43,9 +44,9 @@ beforeEach(() => {
 })
 
 const KEY = new Uint8Array(32)
-const item = (id: string): MediaItem => ({ mediaId: id, hasDerivatives: true }) as unknown as MediaItem
+const item = (id: string): MediaItem => mediaItem({ mediaId: id })
 const page = (items: MediaItem[], mediaIds: string[] | null = null) =>
-  ({ notModified: false, items, mediaRevision: 1, deleteRevision: 0, mediaIds }) as never
+  ({ notModified: false, items, mediaRevision: 1, deleteRevision: 0, mediaIds })
 
 /** Mount a harness exposing the composable + a spy onSettle. */
 function setup() {
@@ -55,7 +56,7 @@ function setup() {
       setup(_, { expose }) {
         const api = useMediaGalleryLive({
           scopeId: () => 'scope-1',
-          node: () => ({ id: 'node-1', name: 'n' }) as never,
+          node: () => treeNode(),
           memoryKey: () => KEY,
           onSettle,
         })
@@ -65,7 +66,7 @@ function setup() {
     }),
     { global: { plugins: [realI18n()] } },
   )
-  return { vm: wrapper.vm as never as UnwrapRef<ReturnType<typeof useMediaGalleryLive>>, onSettle, wrapper }
+  return { vm: wrapper.vm as unknown as UnwrapRef<ReturnType<typeof useMediaGalleryLive>>, onSettle, wrapper }
 }
 
 describe('useMediaGalleryLive', () => {

@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
 import { httpError } from '../test/httpError'
+import { setupStatus } from '../test/models'
 
 vi.mock('../features/account/instance/instance', () => ({ getSetupStatus: vi.fn() }))
 // The refresh endpoint is stubbed at the client, not at `./sessionRefresh`: the real `refreshSession` →
@@ -19,12 +20,14 @@ vi.mock('./devAutoUnlock', () => ({ maybeDevAutoUnlock: vi.fn() }))
 import { boot } from './boot'
 import { getSetupStatus } from '../features/account/instance/instance'
 import { tokenApi } from '../api/client'
+import { fakeApi } from '../test/apiMock'
 import { serverState } from '../shared/state/serverState'
 import { EXPECTED_MAJOR } from '../shared/state/capabilities'
 import { idbRun } from '../shared/idb'
 import { REMEMBER_KEY } from './convenienceTiers'
 import { isRemembered } from '../features/account/rememberMe/deviceKeyWrap'
 import { cacheSessionVault, loadSessionVault } from '../features/account/rememberMe/sessionVault'
+import { memoryStorage } from '../test/memoryStorage'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -52,29 +55,10 @@ describe('boot on a suspended tenant’s own domain', () => {
 
 // A set-up instance whose refresh endpoint answers `failure` — the remembered-session branch of boot.
 function refreshAnswers(failure: unknown) {
-  vi.mocked(getSetupStatus).mockResolvedValue({
-    setupRequired: false,
-    capabilities: [],
-    version: { major: EXPECTED_MAJOR, build: 'test' },
-  } as never)
-  vi.mocked(tokenApi).mockReturnValue({
-    refreshSession: () => Promise.reject(failure),
-  } as unknown as ReturnType<typeof tokenApi>)
-}
-
-/** A minimal in-memory `Storage`, fresh per call. */
-function memoryStorage(): Storage {
-  const mem = new Map<string, string>()
-  return {
-    getItem: (k: string) => mem.get(k) ?? null,
-    setItem: (k: string, v: string) => void mem.set(k, String(v)),
-    removeItem: (k: string) => void mem.delete(k),
-    clear: () => mem.clear(),
-    key: (i: number) => [...mem.keys()][i] ?? null,
-    get length() {
-      return mem.size
-    },
-  }
+  vi.mocked(getSetupStatus).mockResolvedValue(
+    setupStatus({ setupRequired: false, capabilities: [], version: { major: EXPECTED_MAJOR, build: 0 } }),
+  )
+  fakeApi(tokenApi, { refreshSession: () => Promise.reject(failure) })
 }
 
 /** Both local convenience tiers as real stored state: the remember-me record in IndexedDB and a session vault. */

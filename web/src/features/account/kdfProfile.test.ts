@@ -49,6 +49,8 @@ import { unlockMasterKey, unlockWithDevice } from './unlock/unlock'
 import { ColdCredentialRefused, proveColdCredential } from './coldCredential'
 import { openWithSecretKey } from './recovery/recovery'
 import type { RecoveryMaterial } from '../../api/generated/auth'
+import type { AccountKeyMaterial } from '../../api/generated/account'
+import { stubApi } from '../../test/apiMock'
 
 const PASSWORD = 'correct horse battery'
 const WRAP_ID = 'device-wrap-id-1'
@@ -65,7 +67,8 @@ function account(profile: v1.ArgonParams, salt = v1.randomBytes(16)) {
     wrappedKey: b64std(v1.seal({ purpose: 'master-key' }, kek, mk)),
     kdfParams: b64std(v1.encodeKdfParams(profile, salt)),
   }
-  const material = {
+  const material: AccountKeyMaterial = {
+    userId: 'user-1',
     suiteId: 'v1',
     wraps: [
       { method: 'PASSWORD', ...wrap },
@@ -75,9 +78,7 @@ function account(profile: v1.ArgonParams, salt = v1.randomBytes(16)) {
   }
   const recovery: RecoveryMaterial = { email: 'a@example.com', suiteId: 'v1', ...wrap, wrappedIdentityPrivateKey: material.wrappedIdentityPrivateKey }
   for (const spy of [unlockKekAsync, deviceKekAsync, recoveryKekAsync]) spy.mockResolvedValue(kek)
-  vi.mocked(accountApi).mockReturnValue({
-    getAccountKeyMaterial: () => Promise.resolve(material),
-  } as unknown as ReturnType<typeof accountApi>)
+  stubApi(accountApi, { getAccountKeyMaterial: material })
   return { id, mk, secretKey: b64std(secretKey), recovery }
 }
 

@@ -28,6 +28,7 @@ import { activeSpace, clearActiveSpace } from '../../app/activeSpace'
 import { ScopeKind } from '../../api/generated/scopes'
 import { confirmRequest, settleConfirm } from '../../shared/state/useConfirm'
 import { realI18n, t } from '../../test/i18n'
+import { myTenant } from '../../test/models'
 
 const stubs = {
   Button: {
@@ -75,13 +76,13 @@ describe('TenantTermsPanel — the languages that carry terms', () => {
     activeSpace.kind = ScopeKind.Tenant
     activeSpace.scopeId = 't-1'
     activeSpace.tenantId = 't-1'
-    vi.mocked(listMyTenants).mockResolvedValue([{ tenantId: 't-1', role: 'OWNER' }] as never)
+    vi.mocked(listMyTenants).mockResolvedValue([myTenant({ tenantId: 't-1', role: 'OWNER' })])
   })
 
   it('lists only the languages that have terms — a language with none gets no box', async () => {
     // BITE 1 (lever: render `SUPPORTED_LOCALES` instead of the map's keys). This is the whole point of the CR:
     // before it, the missing language was an empty textarea that said nothing about whether that was deliberate.
-    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 2, acceptedVersion: 2, terms: { de: '# Bedingungen' } } as never)
+    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 2, acceptedVersion: 2, terms: { de: '# Bedingungen' } })
     const w = await mountPanel()
 
     expect(rows(w)).toHaveLength(1)
@@ -94,7 +95,7 @@ describe('TenantTermsPanel — the languages that carry terms', () => {
   it('treats a server null the same as an absent locale, and an empty string as a language that exists', async () => {
     // BITE 2 (lever: collapse the map with `filter(v => v)`). `LocalizedMarkdown` spells "not there" two ways;
     // only `''` means "somebody added this language and has not written it yet".
-    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 1, acceptedVersion: 1, terms: { de: '', en: null } } as never)
+    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 1, acceptedVersion: 1, terms: { de: '', en: null } })
     const w = await mountPanel()
 
     expect(langs(w)).toEqual(['Deutsch'])
@@ -102,8 +103,8 @@ describe('TenantTermsPanel — the languages that carry terms', () => {
   })
 
   it('sends an absent language as absent, not as an empty string', async () => {
-    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 1, acceptedVersion: 1, terms: { de: 'DE' } } as never)
-    vi.mocked(updateTenantTerms).mockResolvedValue({ termsVersion: 1, acceptedVersion: 1, terms: { de: 'DE' } } as never)
+    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 1, acceptedVersion: 1, terms: { de: 'DE' } })
+    vi.mocked(updateTenantTerms).mockResolvedValue({ termsVersion: 1, acceptedVersion: 1, terms: { de: 'DE' } })
     const w = await mountPanel()
 
     await saveButton(w).trigger('click')
@@ -113,7 +114,7 @@ describe('TenantTermsPanel — the languages that carry terms', () => {
   })
 
   it('shows nothing but the empty state when the tenant has no terms at all', async () => {
-    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 0, acceptedVersion: 0, terms: null } as never)
+    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 0, acceptedVersion: 0, terms: null })
     const w = await mountPanel()
 
     expect(rows(w)).toHaveLength(0)
@@ -125,20 +126,20 @@ describe('TenantTermsPanel — the languages that carry terms', () => {
   it('says out loud that a language with no text will not survive the save', async () => {
     // inbox #138's measured trap: the backend drops a blank locale on normalize, so the row the owner just
     // added vanishes on reload. The row is still the right intermediate state — what was missing is saying so.
-    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 1, acceptedVersion: 1, terms: { de: '', en: 'EN' } } as never)
+    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 1, acceptedVersion: 1, terms: { de: '', en: 'EN' } })
     const w = await mountPanel()
     expect(w.text()).toContain(t('terms.blankLocaleWarning', { langs: 'Deutsch' }))
   })
 
   it('stays quiet when every language it lists actually holds text', async () => {
-    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 1, acceptedVersion: 1, terms: { de: 'DE', en: 'EN' } } as never)
+    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 1, acceptedVersion: 1, terms: { de: 'DE', en: 'EN' } })
     const w = await mountPanel()
     expect(w.text()).not.toContain(t('terms.blankLocaleWarning', { langs: 'Deutsch' }))
   })
 
   it('renders read-only for a member who is not the owner', async () => {
-    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 2, acceptedVersion: 2, terms: { en: '# Terms' } } as never)
-    vi.mocked(listMyTenants).mockResolvedValue([{ tenantId: 't-1', role: 'MEMBER' }] as never)
+    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 2, acceptedVersion: 2, terms: { en: '# Terms' } })
+    vi.mocked(listMyTenants).mockResolvedValue([myTenant({ tenantId: 't-1', role: 'MEMBER' })])
     const w = await mountPanel()
 
     expect(w.text()).toContain(t('terms.readonlyNote'))
@@ -155,15 +156,15 @@ describe('TenantTermsPanel — the starter template asks', () => {
     activeSpace.kind = ScopeKind.Tenant
     activeSpace.scopeId = 't-1'
     activeSpace.tenantId = 't-1'
-    vi.mocked(listMyTenants).mockResolvedValue([{ tenantId: 't-1', role: 'OWNER' }] as never)
+    vi.mocked(listMyTenants).mockResolvedValue([myTenant({ tenantId: 't-1', role: 'OWNER' })])
   })
 
   // BITE 3 (lever: restore the silent `if (!trim()) …` skip). Two cases, and they are not the same case: with
   // the skip back the EMPTY one still passes — the template still lands — while the overwrite one goes red.
   // That asymmetry is what says the dialog is about the overwrite and not merely about the insert.
   it('asks before filling an empty language, and fills it on yes', async () => {
-    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 0, acceptedVersion: 0, terms: { de: '' } } as never)
-    vi.mocked(updateTenantTerms).mockResolvedValue({ termsVersion: 1, acceptedVersion: 0, terms: { de: TERMS_TEMPLATE.de } } as never)
+    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 0, acceptedVersion: 0, terms: { de: '' } })
+    vi.mocked(updateTenantTerms).mockResolvedValue({ termsVersion: 1, acceptedVersion: 0, terms: { de: TERMS_TEMPLATE.de } })
     const w = await mountPanel()
 
     await templateButton(w, 0)!.trigger('click')
@@ -176,8 +177,8 @@ describe('TenantTermsPanel — the starter template asks', () => {
   })
 
   it('asks with the overwrite named when the language already holds text, and replaces it on yes', async () => {
-    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 3, acceptedVersion: 3, terms: { de: 'Selbst geschrieben.' } } as never)
-    vi.mocked(updateTenantTerms).mockResolvedValue({ termsVersion: 4, acceptedVersion: 3, terms: { de: TERMS_TEMPLATE.de } } as never)
+    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 3, acceptedVersion: 3, terms: { de: 'Selbst geschrieben.' } })
+    vi.mocked(updateTenantTerms).mockResolvedValue({ termsVersion: 4, acceptedVersion: 3, terms: { de: TERMS_TEMPLATE.de } })
     const w = await mountPanel()
 
     await templateButton(w, 0)!.trigger('click')
@@ -190,8 +191,8 @@ describe('TenantTermsPanel — the starter template asks', () => {
   })
 
   it('leaves the text alone when the overwrite is declined', async () => {
-    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 3, acceptedVersion: 3, terms: { de: 'Selbst geschrieben.' } } as never)
-    vi.mocked(updateTenantTerms).mockResolvedValue({ termsVersion: 3, acceptedVersion: 3, terms: { de: 'Selbst geschrieben.' } } as never)
+    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 3, acceptedVersion: 3, terms: { de: 'Selbst geschrieben.' } })
+    vi.mocked(updateTenantTerms).mockResolvedValue({ termsVersion: 3, acceptedVersion: 3, terms: { de: 'Selbst geschrieben.' } })
     const w = await mountPanel()
 
     await templateButton(w, 0)!.trigger('click')
@@ -203,7 +204,7 @@ describe('TenantTermsPanel — the starter template asks', () => {
   })
 
   it('asks before removing a language, and a “no” keeps it', async () => {
-    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 3, acceptedVersion: 3, terms: { de: 'DE', en: 'EN' } } as never)
+    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 3, acceptedVersion: 3, terms: { de: 'DE', en: 'EN' } })
     const w = await mountPanel()
 
     const remove = w.findAll('button').find((b) => b.attributes('aria-label') === t('localeEditor.removeLang', { lang: 'Deutsch' }))
@@ -215,7 +216,7 @@ describe('TenantTermsPanel — the starter template asks', () => {
   })
 
   it('removes the language once the question is answered yes', async () => {
-    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 3, acceptedVersion: 3, terms: { de: 'DE', en: 'EN' } } as never)
+    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 3, acceptedVersion: 3, terms: { de: 'DE', en: 'EN' } })
     const w = await mountPanel()
 
     const remove = w.findAll('button').find((b) => b.attributes('aria-label') === t('localeEditor.removeLang', { lang: 'Deutsch' }))

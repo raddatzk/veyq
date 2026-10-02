@@ -52,6 +52,8 @@ import { bumpSpaceIcon } from './spaceIconSignal'
 import { revokeScopeShares } from '../memory/share'
 import { realI18n, t } from '../../test/i18n'
 import { i18n } from '../../i18n'
+import type { ScopeMember } from '../../api/generated/scopes'
+import { memberProfile } from '../../test/models'
 
 const stubs = {
   Button: { props: ['label', 'icon', 'ariaLabel'], emits: ['click'], template: '<button :aria-label="ariaLabel" @click="$emit(\'click\')">{{ label }}</button>' },
@@ -77,11 +79,13 @@ const stubs = {
   },
 }
 
-const OWNER_ROW = [{ userId: 'u-own', username: 'owner', role: 'OWNER', hasGrant: true, pendingConsent: false }]
+const OWNER_ROW: ScopeMember[] = [
+  { userId: 'u-own', username: 'owner', role: 'OWNER', identityPublicKey: 'AA==', hasGrant: true, pendingConsent: false },
+]
 
 async function mountPanel(opts: { me: string; icon?: Uint8Array | null } = { me: 'owner' }) {
-  vi.mocked(listScopeMembers).mockResolvedValue(OWNER_ROW as never)
-  vi.mocked(getMyProfile).mockResolvedValue({ username: opts.me } as never)
+  vi.mocked(listScopeMembers).mockResolvedValue(OWNER_ROW)
+  vi.mocked(getMyProfile).mockResolvedValue(memberProfile({ username: opts.me }))
   vi.mocked(openGroupIcon).mockResolvedValue(opts.icon ?? null)
   const wrapper = mount(GroupMembersPanel, { props: { scopeId: 'g-1', name: 'Familie' }, global: { plugins: [realI18n()], stubs } })
   await flushPromises()
@@ -134,7 +138,7 @@ describe('GroupMembersPanel — space icon (GROUP slice)', () => {
 })
 
 describe('GroupMembersPanel — removing a member is one request (ADR 0024 Decision 4)', () => {
-  const BOB = { userId: 'u-bob', username: 'bob', role: 'MEMBER', hasGrant: true, pendingConsent: false }
+  const BOB: ScopeMember = { userId: 'u-bob', username: 'bob', role: 'MEMBER', identityPublicKey: 'Qk9C', hasGrant: true, pendingConsent: false }
   const PICKED = [...OWNER_ROW, BOB]
 
   beforeEach(() => {
@@ -145,8 +149,8 @@ describe('GroupMembersPanel — removing a member is one request (ADR 0024 Decis
 
   async function removeBob(tickRevokeLinks = false) {
     // The server lists bob before the removal — and keeps listing him after it.
-    vi.mocked(listScopeMembers).mockResolvedValue(PICKED as never)
-    vi.mocked(getMyProfile).mockResolvedValue({ username: 'owner' } as never)
+    vi.mocked(listScopeMembers).mockResolvedValue(PICKED)
+    vi.mocked(getMyProfile).mockResolvedValue(memberProfile({ username: 'owner' }))
     vi.mocked(openGroupIcon).mockResolvedValue(null)
     vi.mocked(rotateGroupForRemoval).mockResolvedValue(1)
     const w = mount(GroupMembersPanel, { props: { scopeId: 'g-1', name: 'Familie' }, global: { plugins: [realI18n()], stubs } })
@@ -219,7 +223,7 @@ describe('GroupMembersPanel — accepting an invitee\'s changed key drains the r
     const events: string[] = []
     vi.mocked(runScopeRotationWorker).mockImplementation(async () => { events.push('pass'); return 0 })
     vi.mocked(acceptKeyChange).mockImplementation(async () => { events.push('pin written') })
-    vi.mocked(resolveGroupMember).mockResolvedValue({ userId: 'u-c', identityPublicKey: 'new-key', requiresConsent: true } as never)
+    vi.mocked(resolveGroupMember).mockResolvedValue({ userId: 'u-c', username: 'carol', identityPublicKey: 'new-key', requiresConsent: true })
     vi.mocked(wrapGroupNameKeyForInvitee)
       .mockRejectedValueOnce(new IdentityChangedError('u-c'))
       .mockResolvedValueOnce('c2VhbGVk')

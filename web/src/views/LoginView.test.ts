@@ -26,7 +26,7 @@ vi.mock('../features/account/trustDevice/trustDevice', () => ({
 vi.mock('../features/account/rememberMe/deviceKeyWrap', () => ({
   enrolDeviceKey: vi.fn(),
   clearDeviceKey: vi.fn(),
-  isRememberSupported: () => true,
+  isRememberSupported: vi.fn(),
 }))
 vi.mock('../features/account/rememberMe/sessionVault', () => ({
   cacheSessionVault: vi.fn(),
@@ -43,8 +43,8 @@ vi.mock('@veyq/crypto/emergencyKit', () => ({
 }))
 vi.mock('../features/account/deviceRegister', () => ({ rememberThisDeviceWrap: vi.fn() }))
 vi.mock('../features/account/deviceIdentity', () => ({
-  deviceId: () => 'this-device',
-  guessDeviceLabel: () => 'Firefox · macOS',
+  deviceId: vi.fn(),
+  guessDeviceLabel: vi.fn(),
 }))
 vi.mock('../features/account/sessions/sessions', () => ({ revokeOtherSessionFamilies: vi.fn() }))
 vi.mock('../app/pendingRoute', () => ({ takeRoute: () => null }))
@@ -65,7 +65,8 @@ import { signOut, takeSignOutNotice } from '../features/account/login/signOut'
 import { session } from '../app/session'
 import { unlockMasterKey, unlockWithDevice } from '../features/account/unlock/unlock'
 import { trustThisDevice, untrustThisDevice, isTrusted } from '../features/account/trustDevice/trustDevice'
-import { enrolDeviceKey, clearDeviceKey } from '../features/account/rememberMe/deviceKeyWrap'
+import { enrolDeviceKey, clearDeviceKey, isRememberSupported } from '../features/account/rememberMe/deviceKeyWrap'
+import { deviceId, guessDeviceLabel } from '../features/account/deviceIdentity'
 import { cacheSessionVault, clearSessionVault } from '../features/account/rememberMe/sessionVault'
 import { revokeOtherSessionFamilies } from '../features/account/sessions/sessions'
 import { LoginVerifyRequestSessionScopeEnum } from '../api/generated/auth'
@@ -168,6 +169,9 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
     vi.mocked(untrustThisDevice).mockResolvedValue(undefined)
     vi.mocked(enrolDeviceKey).mockResolvedValue('wrap-2')
     vi.mocked(clearDeviceKey).mockResolvedValue(undefined)
+    vi.mocked(isRememberSupported).mockReturnValue(true)
+    vi.mocked(deviceId).mockReturnValue('this-device')
+    vi.mocked(guessDeviceLabel).mockReturnValue('Firefox · macOS')
     vi.mocked(cacheSessionVault).mockResolvedValue(undefined)
     vi.mocked(clearSessionVault).mockResolvedValue(undefined)
     vi.mocked(revokeOtherSessionFamilies).mockResolvedValue(undefined)

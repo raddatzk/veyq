@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { httpError } from '../test/httpError'
+import { fakeApi, stubApi } from '../test/apiMock'
+import type { TokenPair } from '../api/generated/auth'
 
 vi.mock('../api/client', () => ({ tokenApi: vi.fn() }))
 // The ending runs for real — its has-a-session check is half of what E1/E2 assert here — with only the two steps
@@ -28,9 +30,7 @@ afterEach(() => {
 
 /** The refresh endpoint answers with `failure`. */
 function refreshFails(failure: unknown) {
-  vi.mocked(tokenApi).mockReturnValue({
-    refreshSession: () => Promise.reject(failure),
-  } as unknown as ReturnType<typeof tokenApi>)
+  fakeApi(tokenApi, { refreshSession: () => Promise.reject(failure) })
 }
 
 describe('a rejected refresh ends the session (uc.account.sign-out E1, E2)', () => {
@@ -100,14 +100,14 @@ describe('session refresh (uc.account.login)', () => {
     // one-generation grace covers the damage; this stops the waste).
     session.accessToken = 'a1'
     let calls = 0
-    let release: (v: { accessToken: string; refreshToken: string }) => void = () => {}
-    const inFlight = new Promise<{ accessToken: string; refreshToken: string }>((r) => (release = r))
-    vi.mocked(tokenApi).mockReturnValue({
+    let release: (v: TokenPair) => void = () => {}
+    const inFlight = new Promise<TokenPair>((r) => (release = r))
+    fakeApi(tokenApi, {
       refreshSession: () => {
         calls++
         return inFlight
       },
-    } as unknown as ReturnType<typeof tokenApi>)
+    })
 
     const unauthorized = httpError(401)
     let inner = 0
@@ -128,12 +128,12 @@ describe('session refresh (uc.account.login)', () => {
     // settled promise that is still handed out would leave the session wedged on a stale answer.
     session.accessToken = 'a1'
     let calls = 0
-    vi.mocked(tokenApi).mockReturnValue({
-      refreshSession: () => {
+    fakeApi(tokenApi, {
+      refreshSession: async (): Promise<TokenPair> => {
         calls++
-        return Promise.resolve({ accessToken: `a${calls + 1}`, refreshToken: `r${calls + 1}` })
+        return { accessToken: `a${calls + 1}`, refreshToken: `r${calls + 1}` }
       },
-    } as unknown as ReturnType<typeof tokenApi>)
+    })
 
     await refreshSession()
     await refreshSession()
@@ -144,9 +144,7 @@ describe('session refresh (uc.account.login)', () => {
   it('rotates the tokens on refresh', async () => {
     session.accessToken = 'a1'
     session.refreshToken = 'r1'
-    vi.mocked(tokenApi).mockReturnValue({
-      refreshSession: () => Promise.resolve({ accessToken: 'a2', refreshToken: 'r2' }),
-    } as unknown as ReturnType<typeof tokenApi>)
+    stubApi(tokenApi, { refreshSession: { accessToken: 'a2', refreshToken: 'r2' } })
 
     await refreshSession()
 
@@ -161,12 +159,12 @@ describe('session refresh (uc.account.login)', () => {
     session.accessToken = 'a1'
     session.refreshToken = null
     let sent: { refreshToken?: string } | undefined
-    vi.mocked(tokenApi).mockReturnValue({
-      refreshSession: (req: { refreshRequest: { refreshToken?: string } }) => {
+    fakeApi(tokenApi, {
+      refreshSession: async (req): Promise<TokenPair> => {
         sent = req.refreshRequest
-        return Promise.resolve({ accessToken: 'a2' })
+        return { accessToken: 'a2' }
       },
-    } as unknown as ReturnType<typeof tokenApi>)
+    })
 
     await refreshSession()
 

@@ -17,9 +17,10 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { useMediaTrash } from './useMediaTrash'
 import { listTrash, restoreMedia, purgeMedia, type MediaItem } from './media'
 import { realI18n, t } from '../../test/i18n'
+import { mediaItem, treeNode } from '../../test/models'
 
 const KEY = new Uint8Array(32)
-const item = (id: string): MediaItem => ({ mediaId: id, hasDerivatives: true }) as unknown as MediaItem
+const item = (id: string): MediaItem => mediaItem({ mediaId: id })
 
 /** Mount a harness that exposes the composable's return + the two host callbacks as spies. */
 function setup() {
@@ -30,7 +31,7 @@ function setup() {
       setup(_, { expose }) {
         const api = useMediaTrash({
           scopeId: () => 'scope-1',
-          node: () => ({ id: 'node-1', wrappedMeta: null }) as never,
+          node: () => treeNode(),
           memoryKey: () => KEY,
           reloadGallery,
           liftTombstone,
@@ -42,7 +43,7 @@ function setup() {
     { global: { plugins: [realI18n()] } },
   )
   // `wrapper.vm` unwraps the exposed refs at runtime; type it as the unwrapped shape (refs → values, fns intact).
-  return { vm: wrapper.vm as never as UnwrapRef<ReturnType<typeof useMediaTrash>>, reloadGallery, liftTombstone, wrapper }
+  return { vm: wrapper.vm as unknown as UnwrapRef<ReturnType<typeof useMediaTrash>>, reloadGallery, liftTombstone, wrapper }
 }
 
 beforeEach(() => vi.clearAllMocks())

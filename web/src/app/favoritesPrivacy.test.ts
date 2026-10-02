@@ -19,6 +19,7 @@ vi.mock('./vault', () => ({ masterKey: vi.fn() }))
 
 import { toggleFavorite, clearFavorites, loadFavoritesFor } from './favoritesStore'
 import { favoritesApi } from '../api/client'
+import { fakeApi } from '../test/apiMock'
 import { masterKey } from './vault'
 import * as v1 from '@veyq/crypto/v1'
 import { fromB64std } from '@veyq/crypto/base64'
@@ -39,13 +40,13 @@ beforeEach(() => {
   clearFavorites()
   stored = null
   vi.mocked(masterKey).mockReturnValue(MK)
-  vi.mocked(favoritesApi).mockReturnValue({
-    getFavorites: vi.fn(() => Promise.resolve({ ciphertext: stored })),
-    putFavorites: vi.fn(({ putFavoritesRequest }: { putFavoritesRequest: { ciphertext: string } }) => {
+  fakeApi(favoritesApi, {
+    getFavorites: () => Promise.resolve({ ciphertext: stored }),
+    putFavorites: ({ putFavoritesRequest }) => {
       stored = putFavoritesRequest.ciphertext
       return Promise.resolve()
-    }),
-  } as unknown as ReturnType<typeof favoritesApi>)
+    },
+  })
 })
 
 describe("a member's Memory pins are private to them", () => {

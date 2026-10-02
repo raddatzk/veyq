@@ -45,6 +45,7 @@ import { registerPlayback, revokePlayback } from '../../../sw/register'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 import { galleryFakeStore } from './galleryFakeStore'
+import { fakeApi } from '../../../test/apiMock'
 import { resetPlaceNameCache } from '../placeName'
 import { realI18n, t } from '../../../test/i18n'
 
@@ -64,7 +65,7 @@ function stubDeriver(): MediaDeriver {
 /** Seed two image media and return the listed items + the live fake store. */
 async function seedTwo(memoryKey: Uint8Array) {
   const store = galleryFakeStore()
-  vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+  fakeApi(mediaApi, store.api)
   vi.stubGlobal('fetch', store.fetchStub)
   await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/png' }, stubDeriver())
   await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(2) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
@@ -102,7 +103,7 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
 
     // media 0: original=up-0, THUMBNAIL=up-1, PREVIEW=up-2 → the lightbox opens the PREVIEW, never the original
     const presigned = store.api.presignBlobDownloads.mock.calls.flatMap(
-      (c: any) => c[0].blobDownloadsBatchRequest.items.map((it: any) => it.blobId),
+      (c) => c[0].blobDownloadsBatchRequest.items.map((it) => it.blobId),
     )
     expect(presigned).toContain(store.blobIdOfUpload('up-2'))
     expect(presigned).not.toContain(store.blobIdOfUpload('up-0'))
@@ -151,7 +152,7 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
 
     // media 1: PREVIEW=up-5 → next paged to it; now next is disabled at the end
     const presigned = store.api.presignBlobDownloads.mock.calls.flatMap(
-      (c: any) => c[0].blobDownloadsBatchRequest.items.map((it: any) => it.blobId),
+      (c) => c[0].blobDownloadsBatchRequest.items.map((it) => it.blobId),
     )
     expect(presigned).toContain(store.blobIdOfUpload('up-5'))
     expect(wrapper.find('.media-lightbox-title small').text()).toBe(t('media.itemPosition', { index: 2, count: 2 }))
@@ -212,7 +213,7 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
 
     // the original (up-0), never a derivative, is fetched for download
     const presigned = store.api.presignBlobDownloads.mock.calls.flatMap(
-      (c: any) => c[0].blobDownloadsBatchRequest.items.map((it: any) => it.blobId),
+      (c) => c[0].blobDownloadsBatchRequest.items.map((it) => it.blobId),
     )
     expect(presigned).toEqual([store.blobIdOfUpload('up-0')])
     // the original decrypts to the stub's 8 bytes filled with 1 → not a known signature → .bin
@@ -226,7 +227,7 @@ describe('MediaLightbox — video playback + mediaType backfill (cr-inline-video
   /** Seed one media with an explicit source type + original bytes. */
   async function seedVideoLike(memoryKey: Uint8Array, mediaType: string, bytes: Uint8Array) {
     const store = galleryFakeStore()
-    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    fakeApi(mediaApi, store.api)
     vi.stubGlobal('fetch', store.fetchStub)
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([bytes as BlobPart]), mediaType }, stubDeriver())
     const items = await listMedia(SCOPE_ID, NODE_ID)
@@ -252,7 +253,7 @@ describe('MediaLightbox — video playback + mediaType backfill (cr-inline-video
 
     // play fetched the ORIGINAL (up-0), never a derivative, and swapped in a typed <video>
     const presigned = store.api.presignBlobDownloads.mock.calls.flatMap(
-      (c: any) => c[0].blobDownloadsBatchRequest.items.map((it: any) => it.blobId),
+      (c) => c[0].blobDownloadsBatchRequest.items.map((it) => it.blobId),
     )
     expect(presigned).toEqual([store.blobIdOfUpload('up-0')])
     const video = wrapper.find('.media-lightbox-stage video')
@@ -311,7 +312,7 @@ describe('MediaLightbox — Slice 2 SW switchover (cr-inline-video-playback, ADR
 
   async function seedVideo(memoryKey: Uint8Array) {
     const store = galleryFakeStore()
-    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    fakeApi(mediaApi, store.api)
     vi.stubGlobal('fetch', store.fetchStub)
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([FTYP_MP4 as BlobPart]), mediaType: 'video/mp4' }, stubDeriver())
     return { store, items: await listMedia(SCOPE_ID, NODE_ID) }
@@ -357,7 +358,7 @@ describe('MediaLightbox — Slice 2 SW switchover (cr-inline-video-playback, ADR
 
     // fell back: fetched the ORIGINAL (up-0) and played a decrypted blob: URL — no SW handle
     const presigned = store.api.presignBlobDownloads.mock.calls.flatMap(
-      (c: any) => c[0].blobDownloadsBatchRequest.items.map((it: any) => it.blobId),
+      (c) => c[0].blobDownloadsBatchRequest.items.map((it) => it.blobId),
     )
     expect(presigned).toEqual([store.blobIdOfUpload('up-0')])
     expect(wrapper.find('.media-lightbox-stage video').attributes('src')).toMatch(/^blob:/)
@@ -411,10 +412,10 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
       DateTimeOriginal: new Date(Date.UTC(2021, 4, 1, 10, 0, 0)),
       Make: 'Canon', Model: 'EOS R', LensModel: 'RF 50mm', FocalLength: 50, FNumber: 1.8, ExposureTime: 0.008, ISO: 200,
       latitude: 48.137, longitude: 11.575,
-    } as never)
+    })
 
     const store = galleryFakeStore()
-    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    fakeApi(mediaApi, store.api)
     vi.stubGlobal('fetch', store.fetchStub)
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(3) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
     const items = await listMedia(SCOPE_ID, NODE_ID)
@@ -452,10 +453,10 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
       GPSAltitude: 519.4, GPSAltitudeRef: { 0: 0 },
       GPSImgDirection: 215.3, GPSImgDirectionRef: 'T', GPSHPositioningError: 4.8,
       latitude: 48.137, longitude: 11.575,
-    } as never)
+    })
 
     const store = galleryFakeStore()
-    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    fakeApi(mediaApi, store.api)
     vi.stubGlobal('fetch', store.fetchStub)
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(3) as BlobPart]), mediaType: 'image/jpeg', name: 'IMG_0042.HEIC' }, stubDeriver())
     const items = await listMedia(SCOPE_ID, NODE_ID)
@@ -481,10 +482,10 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
 
   it('a flash value of 16 reads as "did not fire" — the bitfield, not a truthiness test', async () => {
     const memoryKey = v1.randomBytes(32)
-    vi.mocked(exifr.parse).mockResolvedValue({ Make: 'Canon', Flash: 16 } as never)
+    vi.mocked(exifr.parse).mockResolvedValue({ Make: 'Canon', Flash: 16 })
 
     const store = galleryFakeStore()
-    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    fakeApi(mediaApi, store.api)
     vi.stubGlobal('fetch', store.fetchStub)
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(5) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
     const items = await listMedia(SCOPE_ID, NODE_ID)
@@ -503,9 +504,9 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
   // --- the resolved place name (uc.memory.place, ADR 0016) ------------------------------------------------
   /** One geotagged photo, listed and ready to open. */
   async function seedGeotagged(memoryKey: Uint8Array) {
-    vi.mocked(exifr.parse).mockResolvedValue({ Make: 'Canon', latitude: 48.137, longitude: 11.575 } as never)
+    vi.mocked(exifr.parse).mockResolvedValue({ Make: 'Canon', latitude: 48.137, longitude: 11.575 })
     const store = galleryFakeStore()
-    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    fakeApi(mediaApi, store.api)
     const geo = vi.fn(async (url: string, init?: RequestInit) =>
       String(url).includes('geo.example')
         ? ({ ok: true, status: 200, json: async () => ({ address: { city: 'München', country: 'Deutschland' } }) } as unknown as Response)
@@ -604,9 +605,9 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
     mapConfig.geocoder = null // no geocoder: this test is about the needle, not the name
     vi.mocked(exifr.parse).mockResolvedValue({
       Make: 'Canon', latitude: 48.137, longitude: 11.575, GPSImgDirection: 215.3, GPSImgDirectionRef: 'T',
-    } as never)
+    })
     const store = galleryFakeStore()
-    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    fakeApi(mediaApi, store.api)
     vi.stubGlobal('fetch', store.fetchStub)
     const memoryKey = v1.randomBytes(32)
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(2) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
@@ -623,10 +624,10 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
 
   it('shows the no-detail message when the item carries no sealed EXIF', async () => {
     const memoryKey = v1.randomBytes(32)
-    vi.mocked(exifr.parse).mockResolvedValue(undefined as never) // no readable EXIF → nothing sealed
+    vi.mocked(exifr.parse).mockResolvedValue(undefined) // no readable EXIF → nothing sealed
 
     const store = galleryFakeStore()
-    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    fakeApi(mediaApi, store.api)
     vi.stubGlobal('fetch', store.fetchStub)
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(4) as BlobPart]), mediaType: 'image/png' }, stubDeriver())
     const items = await listMedia(SCOPE_ID, NODE_ID)
@@ -641,9 +642,9 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
 
 describe('MediaLightbox — correct the capture time (cr-0065/0066)', () => {
   async function seedOne(memoryKey: Uint8Array, exifRaw: unknown) {
-    vi.mocked(exifr.parse).mockResolvedValue(exifRaw as never)
+    vi.mocked(exifr.parse).mockResolvedValue(exifRaw)
     const store = galleryFakeStore()
-    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    fakeApi(mediaApi, store.api)
     vi.stubGlobal('fetch', store.fetchStub)
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(9) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
     const items = await listMedia(SCOPE_ID, NODE_ID)

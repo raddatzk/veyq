@@ -34,13 +34,12 @@ vi.mock('../features/memory/useThumbnailPipeline', () => ({
   useThumbnailPipeline: () => ({ thumbs: new Map(), reconcile: vi.fn(), decrypt: vi.fn().mockResolvedValue(undefined), revokeAll: vi.fn() }),
 }))
 
-const resolveShareMock = vi.fn()
 vi.mock('../features/memory/share', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../features/memory/share')>()
   return {
     ...actual,
-    resolveShare: (...args: unknown[]) => resolveShareMock(...args),
-    fetchShareTerms: vi.fn().mockRejectedValue(new Error('no terms')), // fails open → no gate, straight to content
+    resolveShare: vi.fn(),
+    fetchShareTerms: vi.fn(),
   }
 })
 
@@ -55,12 +54,13 @@ vi.mock('../features/memory/uploadQueue', async (orig) => {
 })
 
 import ShareView from './ShareView.vue'
+import { resolveShare, fetchShareTerms, type ShareItem } from '../features/memory/share'
 import { ShareRole } from '../api/generated/sharing'
 import { realI18n } from '../test/i18n'
 
 /** A shared media whose sealed metadata tier carries `capturedAt` — the key the grid sorts on — sealed bound to
  *  (scope, media) exactly as the media layer does. */
-function sharedItem(mediaId: string, capturedAt: number) {
+function sharedItem(mediaId: string, capturedAt: number): ShareItem {
   const memoryKey = v1.randomBytes(32)
   const bytes = new TextEncoder().encode(JSON.stringify({ v: 1, capturedAt }))
   return {
@@ -108,14 +108,15 @@ function gridOrder(wrapper: ReturnType<typeof mount>): string[] {
 beforeEach(() => {
   localStorage.clear()
   hoisted.ref.batches.length = 0
-  resolveShareMock.mockReset()
+  vi.mocked(resolveShare).mockReset()
+  vi.mocked(fetchShareTerms).mockReset().mockRejectedValue(new Error('no terms')) // fails open → no gate, straight to content
   vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ width: 960, height: 0, top: 0, left: 0, right: 960, bottom: 0, x: 0, y: 0, toJSON: () => ({}) })
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
 })
 
 describe('ShareView — one order for every grid tile', () => {
   it('a settling upload hands its grid slot to the real tile — the position does not move', async () => {
-    resolveShareMock.mockResolvedValue({
+    vi.mocked(resolveShare).mockResolvedValue({
       memoryName: 'My Memory', noteByLocale: {}, role: ShareRole.Viewer, scopeId: SCOPE_ID,
       access: { kind: 'read', memoryKey: v1.randomBytes(32) }, items: [sharedItem(MEDIA_0, OLD)],
     })
