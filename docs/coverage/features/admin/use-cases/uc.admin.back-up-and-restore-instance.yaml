@@ -75,9 +75,9 @@ acceptanceCriteria:
       # restores onto a freshly INSTALLED target — a fresh database, bucket and key path plus one app boot, which
       # migrates the schema and provisions the store (ADR 0067) and is therefore the operator's own step 1 — then
       # signs in for real (`login` + `unlockMasterKey`: Argon2 over the password and the Emergency Kit's Secret
-      # Key, no injected vault) and compares the fetched plaintext byte for byte. The fixture is NOT
-      # `web/scripts/devSeed.mts`: every suite bootstraps through `birthInstance()`, and a `vaultFromSeed()`
-      # inject would bypass the password-derived unlock that "the keys their owners already hold" is about.
+      # Key, no injected vault) and compares the fetched plaintext byte for byte. Every suite bootstraps
+      # through `birthInstance()`; an injected vault would bypass the password-derived unlock that "the keys
+      # their owners already hold" is about.
       web:
         e2e:
           - src/features/instanceBackup/restore.a-capture.e2e.test.ts

@@ -22,7 +22,6 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { request as httpRequest } from 'node:http'
 import { fileURLToPath } from 'node:url'
-import { execFileSync } from 'node:child_process'
 import * as v1 from '@veyq/crypto/v1'
 import { fromB64std, b64std } from '@veyq/crypto/base64'
 import { buildAccount } from '@veyq/crypto/accountBirth'
@@ -36,7 +35,6 @@ const BASE = process.env.VEYQ_BASE ?? 'http://localhost:8080'
 // The backend's admin listener: the only door the Server-Owner operations answer on — the public port 404s them
 // (ADR 0065). 8090 is its dev default (veyq.admin-channel.port).
 const ADMIN_BASE = process.env.VEYQ_ADMIN_BASE ?? 'http://127.0.0.1:8090'
-const DB_CONTAINER = process.env.VEYQ_DB_CONTAINER ?? 'veyq-mariadb'
 const INVITE_FILE = process.env.VEYQ_INVITE_FILE ?? fileURLToPath(new URL('../../backend/build/dev-invites.jsonl', import.meta.url))
 /** Where the backend reaches Mailpit's SMTP. Dotted on purpose: `TenantMailSettingsUpdate.host` is pinned to
  *  `^([a-z0-9](-?[a-z0-9])*\.)+[a-z]{2,}$`, so a bare `localhost` is a 400. `*.localhost` resolves to loopback. */
@@ -111,8 +109,14 @@ const u2Username = (env.VEYQ_USER2_USERNAME ?? '').trim().toLowerCase()
 const u2Email = (env.VEYQ_USER2_EMAIL ?? '').trim()
 const u2Password = env.VEYQ_USER2_PASSWORD ?? ''
 
-const numeric = /^[0-9.]+$/.test(domain)
-const createDomain = numeric ? (process.env.VEYQ_CREATE_DOMAIN ?? 'local.veyq.test') : domain
+// An IP literal is refused HERE, before anything is born. The contract's hostname pattern refuses it too, but only
+// at `POST /api/tenants` — after the owner exists and before step 4a persists its Secret Key, which would strand
+// an owner nobody can unlock. The dev tenant is a `*.localhost` domain instead: valid under that pattern, loopback
+// by RFC 6761, and forwarded as-is by the dev proxy. This is the only copy of the shape the seeder keeps; every
+// other shape error is the contract's 400.
+if (/^[0-9.]+$/.test(domain)) {
+  fail(`VEYQ_TENANT_DOMAIN=${domain} is an IP literal, which no tenant can have — use a *.localhost domain (e.g. veyq.localhost)`)
+}
 
 /**
  * The Emergency Kit already in .run/.env, when there is a usable one — so a re-seed after `down -v` keeps the
@@ -155,14 +159,10 @@ if (!verify.ok) fail(`login failed: ${verify.status} ${await verify.text()}`)
 const token = (await json(verify)).accessToken as string
 
 // 3 — the configured-domain tenant, accepted as the existing user (TENANT grant sealed to our own identity)
-const created = await post('/api/tenants', { tenantName, domain: createDomain, ownerEmail: email }, token, ADMIN_BASE)
+const created = await post('/api/tenants', { tenantName, domain, ownerEmail: email }, token, ADMIN_BASE)
 if (!created.ok) fail(`createTenant failed: ${created.status} ${await created.text()}`)
 const { tenantId } = await json(created)
 const bootstrapSecret = await awaitInvite(INVITE_FILE, email)
-if (numeric) {
-  execFileSync('docker', ['exec', DB_CONTAINER, 'mariadb', '-uveyq', '-pchange-me', 'veyq',
-    '-e', `UPDATE veyq_tenant SET domain='${domain}' WHERE id='${tenantId}'`], { stdio: 'inherit' })
-}
 // Keep the freshly-minted TENANT scope key (K_tenant): the grant wraps it, and — holding it here — we can seal
 // the optional real name at accept, exactly as TenantJoinView does at an owner cold-birth (cr-0106).
 const tenantScopeKey = v1.randomBytes(32)
@@ -215,7 +215,7 @@ async function configureMail(): Promise<boolean> {
     return false
   }
   const res = await tenant('PUT', `/api/tenants/${tenantId}/mail-settings`, token, domain, {
-    host: SMTP_HOST, port: MAILPIT_SMTP_PORT, from: `noreply@${createDomain}`, username: null, tls: false, enabled: true,
+    host: SMTP_HOST, port: MAILPIT_SMTP_PORT, from: `noreply@${domain}`, username: null, tls: false, enabled: true,
   })
   if (res.status >= 300) { console.warn(`mail: updateTenantMailSettings failed: ${res.status} ${JSON.stringify(res.body)}`); return false }
   console.log(`mail: ${domain} sends via Mailpit (${SMTP_HOST}:${MAILPIT_SMTP_PORT}) — read it at ${MAILPIT}`)

@@ -196,6 +196,27 @@ export default defineConfigWithVueTs(
     },
   },
   {
+    // A dev seeder is a client of the API like any other (cr-api-callers-typed-by-the-contract). It reaches the
+    // backend through the generated client and nothing else: no seeder shells out, so none can `docker exec`
+    // past the API into the database. The one seeder that did gave a tenant the domain `127.0.0.1`, which the
+    // contract's hostname pattern refuses and which the ingress projector re-checks precisely because a row can
+    // arrive "by any path that skips" the boundary; the dev tenant is a `*.localhost` domain instead.
+    // LIMIT: a dynamic `import('node:child_process')` or a `require` is not seen.
+    name: 'veyq/seeders-use-the-generated-client',
+    files: ['scripts/**/*.mts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            { name: 'node:child_process', message: 'A seeder talks to the API only — no shelling out (and so no `docker exec` into the DB).' },
+            { name: 'child_process', message: 'A seeder talks to the API only — no shelling out (and so no `docker exec` into the DB).' },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // Test files, test kits, dev seeders and build config may use `any` for terse fixtures /
     // untyped tooling boundaries. Production `src` code stays held to no-explicit-any (currently
     // zero violations — the guard exists to keep it that way).

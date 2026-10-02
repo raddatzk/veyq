@@ -7,7 +7,7 @@
 // could never run under `scripts/run_web_e2e.py` — which is why every suite now takes this path instead.
 //
 // The block is short but pulls eight symbols from five modules, so it is extracted rather than copied three
-// times. `web/scripts/seed-dev.mts` is deliberately untouched: it still serves the local IntelliJ dev flow.
+// times. The local dev principal is born by `web/scripts/bootstrap-user.mts` on the same `*.localhost` footing.
 //
 // One tenant domain serves every suite: `veyq.localhost` is a VALID dotted domain (so `POST /api/tenants` and the
 // invite mailer's hostname check both accept it) AND resolves to loopback per RFC 6761 (so it works as the fetch

@@ -27,9 +27,8 @@ here; the server is blind.
   path stubs nothing and the real module runs — and a passthrough mock (`withRefresh: (f) => f()`) is green
   either way, so no red announces it. After a move, prove the new mocks bite by sabotaging the *real* module
   (make the export throw): every suite that mocks it must stay green, and the module's own test must go red.
-- **Dev credentials come from a seeder — never hardcode or guess them. Two paths, and they are NOT
-  interchangeable:**
-  - **`npm run bootstrap:user` (the primary local principal).** Inputs live in **`<repo-root>/.run/.env`**
+- **Dev credentials come from the seeder — never hardcode or guess them.**
+  - **`npm run bootstrap:user` (the local principal).** Inputs live in **`<repo-root>/.run/.env`**
     (gitignored — note it is at the **repo root**, not `web/.run/`; template `<repo-root>/.run/.env.example`):
     `VEYQ_EMAIL` / `VEYQ_PASSWORD` / `VEYQ_TENANT` / `VEYQ_TENANT_DOMAIN`, and the seeder writes back
     `VEYQ_SECRET_KEY` + `VEYQ_WRAPPED_MASTERKEY`. It creates ONE user that is Server Owner AND tenant owner
@@ -41,8 +40,11 @@ here; the server is blind.
     `veyq.localhost`, points the tenant at Mailpit so member invites can actually be sent, and rewrites
     `WRAPPED_MASTERKEY` — then browse `veyq.localhost:<viteport>`. **`SECRET_KEY` is re-used, not re-minted**,
     when `.run/.env` already holds a usable one, so the kit you copied into a browser survives a re-seed
-    (`buildAccount(..., { secretKey })` — dev bootstrap only; every real birth mints fresh entropy). Prefer this
-    over `seed:dev` for a manual smoke: it is one command and needs no dev-invite file.
+    (`buildAccount(..., { secretKey })` — dev bootstrap only; every real birth mints fresh entropy). It reads the
+    owner's bootstrap invite out of the backend's dev-invite file (`awaitInvite`, `scripts/devSeed.mts`), so the
+    backend must run with `VEYQ_TENANT_INVITE_DEV_FILE` set, as `.run/Run Backend.run.xml` does; without it the
+    seeder throws after 15 s. Against a stale or wrong DB, `POST /api/login/verify` answers **401**
+    (password-derived auth doesn't match the registered identity) — not a crypto bug; re-seed a fresh instance.
     - **It writes the owner's material as soon as the owner is complete**, before the optional second user — a
       failure in an optional step warns and leaves a usable owner behind. It used to write last, so a failing
       user2 threw away the Secret Key of an owner that already existed in the DB (irrecoverable: a wipe + re-seed
@@ -54,30 +56,20 @@ here; the server is blind.
       `apply:'serve'` Vite middleware (`/__dev/seed-credentials`, never built) and the consumer is
       `import.meta.env.DEV`-gated (tree-shaken); `npm run verify:no-backdoor` fails the build if either sentinel
       reaches `dist/`. A plain `npm run dev` (no `?devlogin`) is unchanged. **Never remove the DEV gate.**
-  - **`npm run seed:dev` (cr-0046, the e2e-test seeder).** Mints a Server Owner + a **`127.0.0.1`** tenant owner
-    and writes **`web/scripts/.seed/dev-seed.json`** (gitignored) with creds **and** raw key material; loaded by
-    `scripts/devSeed.mts` → `loadDevSeed()` / `vaultFromSeed()` and read automatically by `media.e2e.test.ts`
-    when `VEYQ_EMAIL` etc. are unset. (`POST /api/tenants` rejects a numeric domain, so it creates the tenant
-    under a hostname and remaps the domain to `127.0.0.1` in the dev DB.)
-  - **Footgun:** the two seed different tenants (`veyq.localhost` vs `127.0.0.1`). Logging in on the **wrong
-    host/creds** — or against a DB seeded by the *other* path — fails at `POST /api/login/verify` with **401**
-    (password-derived auth doesn't match the registered identity), NOT a crypto bug. Match host ↔ creds ↔ the
-    seeder that populated the running DB. Either seeder wants a **fresh** instance first
-    (`docker compose -f infra/docker-compose.yml down -v && up -d`, then restart the backend so Flyway recreates
-    the schema).
 - **Run the Memory shell locally (cr-0030):** `npm run dev` (Vite proxies `/api` → `127.0.0.1:8080`). The active
   tenant is resolved server-side from the **Host** (port stripped); the signed-in user must belong to it. The
-  default flow: browse `127.0.0.1:5173` → the tenant whose **`domain` is `127.0.0.1`** (`npm run seed:dev` sets
-  this up) → login → unlock auto-births the personal scope and the browse renders. If no tenant claims the Host
-  you get the *“no space”* state (expected).
+  default flow: browse `veyq.localhost:<viteport>` → the tenant `bootstrap:user` created → login → unlock and the
+  browse renders. If no tenant claims the Host you get the *“no space”* state (expected).
 - **Multiple workspaces in parallel from one dev server (cr-0051):** the dev proxy forwards the **real browser
   Host** (`changeOrigin: false`), so register each tenant under its own `*.localhost` hostname (e.g.
   `workspace-a.localhost`) and browse `workspace-a.localhost:5173` vs `workspace-b.localhost:5173` — each resolves
   its own tenant. `*.localhost` resolves to loopback in browsers without `/etc/hosts` (prefer it over `*.local`,
   which is mDNS on macOS); for another suffix, add it to `allowedHosts` in `vite.config.ts`. `VEYQ_SMOKE_HOST=<host>`
   pins one fixed tenant regardless of the browser URL (headless smoke). **Footgun:** with the real Host forwarded,
-  `localhost:5173` ≠ `127.0.0.1:5173` (only `127.0.0.1` carries the seed tenant) — the canonical dev URL stays
-  `127.0.0.1:5173`.
+  `localhost:5173`, `127.0.0.1:5173` and `veyq.localhost:5173` are three different tenants to the backend — browse
+  the one `.run/.env` names. A dev tenant is never an IP literal: the contract's hostname pattern refuses one, so
+  `bootstrap:user` refuses an all-digits `VEYQ_TENANT_DOMAIN` before it births anyone, and no seeder writes to the
+  database to get around the pattern.
 
 ## Conventions
 - **Reuse the existing UI, swap only the data layer — never invent new UI.** **Which reference tree, and which
