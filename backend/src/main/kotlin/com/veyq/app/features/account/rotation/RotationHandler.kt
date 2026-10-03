@@ -18,7 +18,7 @@ import com.veyq.app.shared.http.FailureStatus.NOT_FOUND
 import com.veyq.app.shared.http.Failures
 import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.http.httpFailure
-import com.veyq.app.shared.identity.VeyqUser
+import com.veyq.app.shared.identity.AccountStore
 import com.veyq.app.shared.membership.AccessMode.WRITE
 import com.veyq.app.shared.membership.MembershipStore
 import com.veyq.app.shared.membership.ScopeAccess
@@ -47,6 +47,10 @@ sealed interface RotationOutcome {
      * the same new keys and the same signature (the documents are not part of the proof's statement).
      */
     data object TrustStateStale : RotationOutcome, HttpFailure by httpFailure("stale_version", CONFLICT)
+
+    /** The caller's session was revoked by a reset, a password change or another rotation this request waited
+     *  for — nothing was written. */
+    data object SessionEnded : RotationOutcome, HttpFailure by Failures.authenticationFailed
 }
 
 /** Outcome of the rotator queueing one of their dead-lettered rotations again (uc.account.rotate-keys E3). */
@@ -88,6 +92,7 @@ class RotationHandler(
     private val identityPins: IdentityPinsStore,
     private val deviceRegister: DeviceRegisterStore,
     private val access: ScopeAccess,
+    private val accounts: AccountStore,
     config: VeyqConfig,
 ) {
     private val maxAttempts: Int = config.tasks().maxAttempts()
@@ -116,6 +121,11 @@ class RotationHandler(
      *
      * The superseded channels' delegated families need no separate revoke: they are ACTIVE families of this
      * account other than the caller's own, so the account-wide cut below already reaches them.
+     *
+     * **The account row is locked first** (`AccountStore.lock`, inbox #297): the proof is checked against the
+     * identity as it is after anything this waited for, the caller's session is re-read under the lock, and a wrap
+     * or a delegation racing this either commits before it — and is superseded, deleted or cut here — or decides
+     * after it and is refused.
      */
     fun rotate(
         userId: String,
@@ -147,7 +157,8 @@ class RotationHandler(
         pins: ResealedDocument,
         register: ResealedDocument,
     ): RotationOutcome = QuarkusTransaction.requiringNew().call<RotationOutcome> {
-        val user = VeyqUser.findById(userId) ?: return@call RotationOutcome.Unavailable
+        val user = accounts.lock(userId) ?: return@call RotationOutcome.Unavailable
+        if (!sessions.isLiveSessionOf(userId, presentedAccessToken)) return@call RotationOutcome.SessionEnded
         val statement = SecretKeyProof.rotationStatement(
             currentIdentityPublicKey = user.identityPublicKey,
             identityPublicKey = identityPublicKey,

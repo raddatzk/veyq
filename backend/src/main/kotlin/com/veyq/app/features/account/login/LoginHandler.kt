@@ -65,7 +65,11 @@ class LoginHandler(
         val challenge = LoginChallengeEntity.find("nonce = ?1 and email = ?2", nonce, normalized)
             .withLock(LockModeType.PESSIMISTIC_WRITE).firstResult()
         if (challenge != null) LoginChallengeEntity.deleteById(challenge.nonce) // single-use, consumed under the lock
-        val user = accounts.findByEmail(normalized)
+        // The account row, LOCKED (inbox #297): a password reset or change replaces the auth key and revokes every
+        // family it can see, and a family this verify inserts is not one it can see before it commits. Under the
+        // lock this reads the key the cleanup installed — a signature by the replaced password fails — or the cleanup
+        // waits for this commit and revokes the family issued here.
+        val user = accounts.findByEmail(normalized, lock = true)
 
         val ok = verifySignature(challenge, user, signatureB64)
         return if (ok && user != null) sessions.issue(user.id) else null

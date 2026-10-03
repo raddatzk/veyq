@@ -77,6 +77,11 @@ acceptanceCriteria:
           - RotationSliceTest.aStaleRegisterVersionRollsTheWholeRotationBack
           - RotationSliceTest.anAccountWithNoDocumentYetGetsBothBornInTheRotation
       web: { unit: [src/features/account/rotation/rotateKeys.test.ts] }
+  - id: nothing-outlives-the-rotation-it-raced
+    text: A device wrap or a pairing delegation racing the rotation either committed before it — and is deleted, superseded or cut by it — or decides after it and is refused, so no channel bound under the old Master Key survives it; a rotation from a session a password change revoked while it waited writes nothing.
+    coverage:
+      backend:
+        integration: [CredentialResetRaceSliceTest.aDeviceWrapDoesNotSurviveTheResetChangeOrRotationItRaced, CredentialResetRaceSliceTest.aPairingDelegationDoesNotSurviveTheResetChangeOrRotationItRaced, CredentialResetRaceSliceTest.aChangeOrRotationDecidesAgainstWhatTheCleanupItWaitedForWrote]
   - id: self-served-scopes-rekeyed
     text: Every scope the holder is the sole member of (the personal scope) is advanced to a new epoch, chain-linked to its predecessor and granted to the NEW identity, so the old identity reads no post-rotation content there.
     coverage:

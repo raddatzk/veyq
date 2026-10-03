@@ -6,6 +6,7 @@ import com.veyq.app.shared.http.FailureStatus.FORBIDDEN
 import com.veyq.app.shared.http.FailureStatus.NOT_FOUND
 import com.veyq.app.shared.http.FailureStatus.RATE_LIMITED
 import com.veyq.app.shared.http.FailureStatus.SERVICE_UNAVAILABLE
+import com.veyq.app.shared.http.FailureStatus.UNAUTHORIZED
 import com.veyq.app.shared.http.FailureStatus.UNPROCESSABLE
 
 /**
@@ -99,6 +100,10 @@ object Failures {
 
     /** A structurally-valid request whose cross-field/state preconditions fail → 400. */
     val invalidRequest: HttpFailure = httpFailure("invalid_request", BAD_REQUEST)
+
+    /** The caller's session ended while the request waited — a reset, a password change or a key rotation revoked
+     *  it (inbox #297). The same answer the authentication layer gives a revoked token, because it is one. */
+    val authenticationFailed: HttpFailure = httpFailure("authentication_failed", UNAUTHORIZED)
 
     /** Too many requests against a rate-limited endpoint → 429. */
     val rateLimited: HttpFailure = httpFailure("rate_limited", RATE_LIMITED)

@@ -6,6 +6,7 @@ import com.veyq.app.generated.model.AddWrapResult
 import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.http.httpError
 import io.quarkus.security.Authenticated
+import io.quarkus.security.credential.TokenCredential
 import io.quarkus.security.identity.SecurityIdentity
 import jakarta.ws.rs.core.Response
 import com.veyq.app.shared.ratelimit.RateLimitExempt
@@ -32,6 +33,8 @@ class AccountWrapsResource(
     override fun addAccountWrap(addWrapRequest: AddWrapRequest): Response =
         when (val outcome = handler.addWrap(
             identity.principal.name,
+            // Re-read under the account lock: the session this request was let in on may end while it waits.
+            identity.getCredential(TokenCredential::class.java)?.token,
             addWrapRequest.method.value,
             addWrapRequest.wrappedKey,
             addWrapRequest.kdfParams,

@@ -9,11 +9,13 @@ import com.veyq.app.generated.model.PairingDelegateResult
 import com.veyq.app.generated.model.PairingOpenRequest
 import com.veyq.app.generated.model.PairingSealRequest
 import com.veyq.app.shared.http.FailureStatus.NOT_FOUND
+import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.http.httpError
 import com.veyq.app.shared.http.httpFailure
 import com.veyq.app.shared.ratelimit.RateLimit
 import com.veyq.app.shared.ratelimit.RateLimitKey
 import io.quarkus.security.Authenticated
+import io.quarkus.security.credential.TokenCredential
 import io.quarkus.security.identity.SecurityIdentity
 import jakarta.annotation.security.PermitAll
 import jakarta.ws.rs.core.Response
@@ -62,11 +64,18 @@ class PairingResource(
 
     @Authenticated
     @RateLimit(key = RateLimitKey.USER)
-    override fun delegatePairingSession(pairingDelegateRequest: PairingDelegateRequest): Response {
-        val refreshToken = handler.delegate(pairingDelegateRequest.handle, identity.principal.name)
-            ?: return channelInvalid()
-        return Response.ok(PairingDelegateResult(refreshToken = refreshToken)).build()
-    }
+    override fun delegatePairingSession(pairingDelegateRequest: PairingDelegateRequest): Response =
+        when (
+            val outcome = handler.delegate(
+                pairingDelegateRequest.handle,
+                identity.principal.name,
+                identity.getCredential(TokenCredential::class.java)?.token,
+            )
+        ) {
+            is DelegateOutcome.Delegated -> Response.ok(PairingDelegateResult(refreshToken = outcome.refreshToken)).build()
+            DelegateOutcome.ChannelInvalid -> channelInvalid()
+            is HttpFailure -> httpError(outcome)
+        }
 
     @Authenticated
     @RateLimit(key = RateLimitKey.USER)

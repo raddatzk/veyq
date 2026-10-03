@@ -189,6 +189,17 @@ class SessionService : AccessTokenResolver {
         return family.userId
     }
 
+    /**
+     * Whether [accessToken] still names a live session of [userId], read now — not when the request was
+     * authenticated. A writer that must not outlive the reset, password change or rotation it raced asks this under
+     * the account lock (`AccountStore.lock`, inbox #297): the request was let in before the cleanup committed, and
+     * only this read, after the lock wait, sees that its session has since been revoked. A missing token is no live
+     * session.
+     */
+    @Transactional
+    fun isLiveSessionOf(userId: String, accessToken: String?): Boolean =
+        accessToken != null && resolveUserId(accessToken) == userId
+
     /** Revoke the family of the presented access token. Idempotent — a missing/invalid token is a no-op. */
     @Transactional
     fun revokeByAccessToken(accessToken: String) {

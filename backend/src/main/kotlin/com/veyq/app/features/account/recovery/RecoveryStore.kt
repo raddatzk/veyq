@@ -1,5 +1,6 @@
 package com.veyq.app.features.account.recovery
 
+import com.veyq.app.shared.identity.AccountStore
 import com.veyq.app.shared.identity.MasterKeyWrapEntity
 import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.identity.WrapMethod
@@ -29,7 +30,7 @@ data class RecoveryMaterialRow(
  * unlocks but cannot log in, and both are lockouts.
  */
 @ApplicationScoped
-class RecoveryStore {
+class RecoveryStore(private val accounts: AccountStore) {
 
     /** Mint a token, superseding any outstanding one for that account: one live recovery per user at a time,
      *  so an older mail cannot still be redeemed after the person asked again. */
@@ -90,7 +91,8 @@ class RecoveryStore {
      * mixes the old password and would merely fail, but a `DEVICE_KEY` wrap takes no password at all and would
      * keep granting password-less entry to a device the person may be resetting *because of*.
      *
-     * **The token is spent first, by a compare-and-set** (developer-styleguide §12): only a row still `PENDING`
+     * **The account row is locked first** (`AccountStore.lock`, inbox #297), then **the token is spent, by a
+     * compare-and-set** — the first write (developer-styleguide §12): only a row still `PENDING`
      * and unexpired flips to `CONSUMED`, and nothing else runs unless exactly one did. Two completes that both read
      * the token live therefore cannot both reset — the later commit's password used to win, locking out the person
      * who had just seen "done" — and the loser has touched nothing when it answers as a replay. The caller's
@@ -104,12 +106,15 @@ class RecoveryStore {
     fun applyReset(
         userId: String, mailedEmail: String, wrappedKey: String, kdfParams: String, authPublicKey: String, tokenId: String,
     ): Boolean {
+        // The account row first (`AccountStore.lock`, inbox #297): a sign-in, a device wrap or a delegation racing
+        // this then either committed before it — and its family and wrap are among those ended below — or decides
+        // after it, against the new auth key and a revoked session.
+        val user = accounts.lock(userId) ?: return false
         val spent = AccountRecoveryEntity.update(
             "status = ?1 where id = ?2 and status = ?3 and expiresAt > ?4",
             AccountRecoveryEntity.CONSUMED, tokenId, AccountRecoveryEntity.PENDING, Instant.now(),
         ) == 1
         if (!spent) return false
-        val user = VeyqUser.findById(userId) ?: return false
         val floor = MasterKeyWrapEntity
             .find("userId = ?1 and method = ?2", userId, WrapMethod.PASSWORD.name)
             .firstResult() ?: return false
