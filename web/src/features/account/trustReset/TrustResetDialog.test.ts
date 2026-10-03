@@ -6,7 +6,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 
-vi.mock('./trustReset', () => ({ resetAccountDocument: vi.fn(async () => 'reset') }))
+vi.mock('./trustReset', () => ({ resetAccountDocument: vi.fn() }))
 
 import TrustResetDialog from './TrustResetDialog.vue'
 import { resetAccountDocument } from './trustReset'
@@ -40,7 +40,10 @@ const confirmButton = (w: ReturnType<typeof mountDialog>) => w.findAll('button')
 const cancelButton = (w: ReturnType<typeof mountDialog>) => w.findAll('button').find((b) => b.text() === t('common.cancel'))!
 
 describe('TrustResetDialog — the one door to the reset', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(resetAccountDocument).mockResolvedValue('reset')
+  })
 
   it('confirm is disabled until the acknowledgement is ticked, and an unticked click resets nothing', async () => {
     const w = mountDialog()

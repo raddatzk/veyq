@@ -7,7 +7,7 @@ const loadNodeCover = vi.hoisted(() => vi.fn<typeof import('./memoryCover').load
 vi.mock('./memoryCover', async (orig) => ({ ...(await orig<typeof import('./memoryCover')>()), loadNodeCover }))
 vi.mock('./tree', async (orig) => ({
   ...(await orig<typeof import('./tree')>()),
-  nodeContentKey: () => new Uint8Array(32).fill(7), // a key is always openable here; the un-tried rule is its own case
+  nodeContentKey: vi.fn(),
 }))
 // activeSpace is imported for `scopeId` + `activeEpochKeys` only — keep the real module out of the way of a
 // test that is about the cache, not about opening a scope.
@@ -22,6 +22,7 @@ vi.mock('../../app/activeSpace', async (orig) => ({
 
 import { covers, ensureCovers, resetCovers } from './coverStore'
 import { treeStore, patchNodeMeta } from './treeStore'
+import { nodeContentKey } from './tree'
 
 const revoked: string[] = []
 let minted = 0
@@ -38,6 +39,8 @@ beforeEach(() => {
   treeStore.nodes = [
     { id: 'n1', name: 'Rom', kind: 'MEMORY', parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'k', wrappedMeta: 'meta-1' },
   ] as unknown as typeof treeStore.nodes
+  // A key is always openable here; the un-tried rule is its own case.
+  vi.mocked(nodeContentKey).mockImplementation(() => new Uint8Array(32).fill(7))
   loadNodeCover.mockReset()
   loadNodeCover.mockImplementation(async () => ({ blob: new Blob([new Uint8Array([1])]), crop: { x: 0, y: 0, width: 1, height: 1 } }))
   resetCovers()

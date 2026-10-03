@@ -12,19 +12,19 @@ vi.mock('./members', () => ({
   resolveGroupMember: vi.fn(),
   setMemberRole: vi.fn(),
   removeGroupMember: vi.fn(),
-  memberError: vi.fn().mockResolvedValue({ status: 0, code: null }),
+  memberError: vi.fn(),
   SetMemberRoleRequestRoleEnum: { Owner: 'OWNER', Member: 'MEMBER' },
 }))
 vi.mock('./scopes', () => ({
   rotateGroupForRemoval: vi.fn(),
   deleteGroup: vi.fn(),
   restoreGroup: vi.fn(),
-  scopeLifecycle: vi.fn().mockResolvedValue(null),
+  scopeLifecycle: vi.fn(),
   wrapGroupNameKeyForInvitee: vi.fn(),
   renameGroup: vi.fn(),
-  setSpaceIcon: vi.fn().mockResolvedValue(undefined),
-  clearSpaceIcon: vi.fn().mockResolvedValue(undefined),
-  openGroupIcon: vi.fn().mockResolvedValue(null),
+  setSpaceIcon: vi.fn(),
+  clearSpaceIcon: vi.fn(),
+  openGroupIcon: vi.fn(),
   requeueScopeRotation: vi.fn(),
 }))
 vi.mock('../account/identityPins', () => ({
@@ -43,7 +43,7 @@ const { confirmAsk } = vi.hoisted(() => ({ confirmAsk: vi.fn() }))
 vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: confirmAsk }) }))
 
 import GroupMembersPanel from './GroupMembersPanel.vue'
-import { listScopeMembers, removeGroupMember, resolveGroupMember, addGroupMember } from './members'
+import { listScopeMembers, removeGroupMember, resolveGroupMember, addGroupMember, memberError } from './members'
 import { setSpaceIcon, clearSpaceIcon, openGroupIcon, rotateGroupForRemoval, wrapGroupNameKeyForInvitee, scopeLifecycle, requeueScopeRotation } from './scopes'
 import { acceptKeyChange, IdentityChangedError } from '../account/identityPins'
 import { runScopeRotationWorker } from '../tasks/scopeRotationWorker'
@@ -93,6 +93,14 @@ async function mountPanel(opts: { me: string; icon?: Uint8Array | null } = { me:
 }
 
 const button = (w: ReturnType<typeof mount>, label: string) => w.findAll('button').find((b) => b.text() === label)
+
+beforeEach(() => {
+  vi.mocked(memberError).mockResolvedValue({ status: 0, code: null })
+  vi.mocked(scopeLifecycle).mockResolvedValue(null)
+  vi.mocked(setSpaceIcon).mockResolvedValue(undefined)
+  vi.mocked(clearSpaceIcon).mockResolvedValue(undefined)
+  vi.mocked(openGroupIcon).mockResolvedValue(null)
+})
 
 describe('GroupMembersPanel — space icon (GROUP slice)', () => {
   beforeEach(() => {

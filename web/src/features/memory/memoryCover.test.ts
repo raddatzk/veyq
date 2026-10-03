@@ -16,7 +16,7 @@ vi.mock('./media', () => ({
   listMedia: vi.fn(),
   openGrid: vi.fn(),
   openBlob: vi.fn(),
-  hasDerivatives: vi.fn(() => true),
+  hasDerivatives: vi.fn(),
 }))
 
 import {
@@ -32,7 +32,7 @@ import {
 } from './memoryCover'
 import { contentApi } from '../../api/client'
 import { MetaConflictError } from './sealedMetaWrite'
-import { listMedia, openGrid, openBlob } from './media'
+import { listMedia, openGrid, openBlob, hasDerivatives } from './media'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 
@@ -49,7 +49,10 @@ function sealMeta(blob: object, scopeId = SCOPE_ID, nodeId = NODE_ID): string {
   return b64std(v1.seal(metaCtx(scopeId, nodeId), nodeKey, new TextEncoder().encode(JSON.stringify(blob))))
 }
 
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => {
+  vi.clearAllMocks()
+  vi.mocked(hasDerivatives).mockReturnValue(true)
+})
 
 describe('normalizeCoverCrop', () => {
   it('passes a valid on-image crop through unchanged', () => {

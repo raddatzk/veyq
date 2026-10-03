@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-vi.mock('./scopeRotationWorker', () => ({ runScopeRotationWorker: vi.fn().mockResolvedValue(0) }))
+vi.mock('./scopeRotationWorker', () => ({ runScopeRotationWorker: vi.fn() }))
 
 import { startScopeRotationPolling, stopScopeRotationPolling } from './scopeRotationPolling'
 import { runScopeRotationWorker } from './scopeRotationWorker'
@@ -11,6 +11,7 @@ const setVisibility = (state: 'visible' | 'hidden') =>
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(runScopeRotationWorker).mockResolvedValue(0)
   vi.useFakeTimers()
   setVisibility('visible')
 })

@@ -5,13 +5,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('./media', async (orig) => ({
   ...(await orig<typeof import('./media')>()),
   listMediaPage: vi.fn(),
-  openGrid: vi.fn(async () => new Uint8Array([1, 2, 3])),
-  deleteMedia: vi.fn(async () => {}),
-  restoreMedia: vi.fn(async () => {}),
-  hasDerivatives: () => true,
-  unsealMeta: () => ({ w: 100, h: 100 }),
-  effectiveCapturedAt: (m: unknown) => (m ? 1 : undefined),
-  newestCursor: () => undefined,
+  openGrid: vi.fn(),
+  deleteMedia: vi.fn(),
+  restoreMedia: vi.fn(),
+  hasDerivatives: vi.fn(),
+  unsealMeta: vi.fn(),
+  effectiveCapturedAt: vi.fn(),
+  newestCursor: vi.fn(),
 }))
 vi.mock('./mediaRevisionPolling', () => ({
   startMediaRevisionPolling: vi.fn(),
@@ -33,7 +33,17 @@ vi.mock('../../shared/state/useToast', () => ({
 import { defineComponent, h, type UnwrapRef } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import { useMediaGalleryLive } from './useMediaGalleryLive'
-import { listMediaPage, deleteMedia, restoreMedia, type MediaItem } from './media'
+import {
+  listMediaPage,
+  deleteMedia,
+  restoreMedia,
+  openGrid,
+  hasDerivatives,
+  unsealMeta,
+  effectiveCapturedAt,
+  newestCursor,
+  type MediaItem,
+} from './media'
 import { realI18n } from '../../test/i18n'
 import { mediaItem, treeNode } from '../../test/models'
 
@@ -41,6 +51,13 @@ beforeEach(() => {
   vi.clearAllMocks()
   vi.spyOn(URL, 'createObjectURL').mockImplementation(() => 'blob:x')
   vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+  vi.mocked(openGrid).mockImplementation(async () => new Uint8Array([1, 2, 3]))
+  vi.mocked(deleteMedia).mockResolvedValue(undefined)
+  vi.mocked(restoreMedia).mockResolvedValue(undefined)
+  vi.mocked(hasDerivatives).mockReturnValue(true)
+  vi.mocked(unsealMeta).mockReturnValue({ v: 1, w: 100, h: 100 })
+  vi.mocked(effectiveCapturedAt).mockImplementation((m) => (m ? 1 : undefined))
+  vi.mocked(newestCursor).mockReturnValue(undefined)
 })
 
 const KEY = new Uint8Array(32)

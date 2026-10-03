@@ -11,11 +11,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
 vi.mock('./changePassword', () => ({
-  changePassword: vi.fn().mockResolvedValue(undefined),
+  changePassword: vi.fn(),
   ChangePasswordRefused: class extends Error {},
 }))
 vi.mock('../rememberMe/deviceKeyWrap', () => ({
-  isRememberSupported: () => false,
+  isRememberSupported: vi.fn(),
   rememberThisDevice: vi.fn(),
 }))
 vi.mock('../../../shared/state/useCapabilities', () => ({ useCapabilities: () => ({ hasCapability: () => false }) }))
@@ -26,6 +26,7 @@ vi.mock('../../../shared/pwned', () => ({ pwnedCount: vi.fn() }))
 import ChangePasswordPanel from './ChangePasswordPanel.vue'
 import { changePassword } from './changePassword'
 import { pwnedCount } from '../../../shared/pwned'
+import { isRememberSupported } from '../rememberMe/deviceKeyWrap'
 import { realI18n, t } from '../../../test/i18n'
 
 const stubs = {
@@ -54,7 +55,11 @@ const passwords = (w: ReturnType<typeof mount>) => w.findAll('input[type="passwo
 const submitDisabled = (w: ReturnType<typeof mount>) =>
   w.find('button[type="submit"]').attributes('disabled') !== undefined
 
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => {
+  vi.clearAllMocks()
+  vi.mocked(changePassword).mockResolvedValue(undefined)
+  vi.mocked(isRememberSupported).mockReturnValue(false)
+})
 
 describe('ChangePasswordPanel — the password floor', () => {
   it('refuses a new password under the floor and names it; accepts exactly at the floor', async () => {

@@ -8,14 +8,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
 vi.mock('../account/identityPins', () => ({
-  safetyNumber: vi.fn((k: string) => `sn-${k}`),
-  getPin: vi.fn().mockResolvedValue({ key: 'old-key', state: 'pinned', firstSeenAt: 0 }),
+  safetyNumber: vi.fn(),
+  getPin: vi.fn(),
   acceptKeyChange: vi.fn(),
 }))
 vi.mock('../tasks/scopeRotationWorker', () => ({ runScopeRotationWorker: vi.fn() }))
 
 import ChangedKeyReviewDialog from './ChangedKeyReviewDialog.vue'
-import { acceptKeyChange, safetyNumber } from '../account/identityPins'
+import { acceptKeyChange, getPin, safetyNumber } from '../account/identityPins'
 import { runScopeRotationWorker } from '../tasks/scopeRotationWorker'
 import { realI18n, t } from '../../test/i18n'
 
@@ -30,6 +30,11 @@ const member = { userId: 'u-r', username: 'rotator', identityPublicKey: 'new-key
 const mountDialog = (m = member) =>
   mount(ChangedKeyReviewDialog, { props: { member: m, visible: true }, global: { plugins: [realI18n()], stubs } })
 const accept = (w: ReturnType<typeof mountDialog>) => w.findAll('button').find((b) => b.text() === t('verify.accept'))!
+
+beforeEach(() => {
+  vi.mocked(safetyNumber).mockImplementation((k) => `sn-${k}`)
+  vi.mocked(getPin).mockResolvedValue({ key: 'old-key', state: 'pinned', firstSeenAt: 0 })
+})
 
 describe('ChangedKeyReviewDialog — accept drains the scope-rotation worker before the pin moves (inbox #233)', () => {
   beforeEach(() => vi.clearAllMocks())
@@ -101,8 +106,7 @@ describe('ChangedKeyReviewDialog — a key that cannot be read (inbox #246)', ()
 
   it('a pinned key that cannot be read says so, and the current number still shows', async () => {
     vi.mocked(safetyNumber).mockImplementation(refuseBad)
-    const { getPin } = await import('../account/identityPins')
-    vi.mocked(getPin).mockResolvedValueOnce({ key: 'bad-key', state: 'pinned', firstSeenAt: 0 } as Awaited<ReturnType<typeof getPin>>)
+    vi.mocked(getPin).mockResolvedValueOnce({ key: 'bad-key', state: 'pinned', firstSeenAt: 0 })
     const w = mountDialog()
     await flushPromises()
 

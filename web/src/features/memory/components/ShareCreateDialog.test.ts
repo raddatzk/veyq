@@ -8,30 +8,36 @@ import { describe, it, expect, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
 // The dialog decrypts an editShare on mount; stub the share data layer so it mounts crypto/network-free.
-const createShare = vi.fn().mockResolvedValue({ shareId: 's1', kShare: new Uint8Array(32) })
-const updateShare = vi.fn().mockResolvedValue(undefined)
-const reissueShare = vi.fn()
-// The real predicate is share.test.ts's; here it answers for the error the stubbed reissue throws.
-const isShareDeleted = vi.fn(async (e: unknown) => e === SHARE_DELETED)
-const SHARE_DELETED = new Error('409 share_deleted')
 // The dialog assembles the link itself now (the origin is a UI concern), so `shareLink` is its own stub.
-vi.mock('../shareLink', () => ({
-  buildShareLink: vi.fn((shareId: string) => `https://x/s/${shareId}#k=abc`),
-}))
+vi.mock('../shareLink', () => ({ buildShareLink: vi.fn() }))
 vi.mock('../share', () => ({
-  createShare: (...a: unknown[]) => createShare(...a),
-  updateShare: (...a: unknown[]) => updateShare(...a),
-  reissueShare: (...a: unknown[]) => reissueShare(...a),
-  isShareDeleted: (e: unknown) => isShareDeleted(e),
-  readShareName: vi.fn(() => ''),
-  readShareNoteMap: vi.fn(() => ({})),
-  readSharePassword: vi.fn(() => ''),
-  hasLocaleText: vi.fn(() => false),
+  createShare: vi.fn(),
+  updateShare: vi.fn(),
+  reissueShare: vi.fn(),
+  isShareDeleted: vi.fn(),
+  readShareName: vi.fn(),
+  readShareNoteMap: vi.fn(),
+  readSharePassword: vi.fn(),
+  hasLocaleText: vi.fn(),
 }))
 
 import ShareCreateDialog from './ShareCreateDialog.vue'
 import { ShareRole } from '../../../api/generated/sharing'
 import { realI18n, t } from '../../../test/i18n'
+import { buildShareLink } from '../shareLink'
+import * as share from '../share'
+
+const createShare = vi.mocked(share.createShare).mockResolvedValue({ shareId: 's1', kShare: new Uint8Array(32) })
+const updateShare = vi.mocked(share.updateShare).mockResolvedValue(undefined)
+const reissueShare = vi.mocked(share.reissueShare)
+const SHARE_DELETED = new Error('409 share_deleted')
+// The real predicate is share.test.ts's; here it answers for the error the stubbed reissue throws.
+vi.mocked(share.isShareDeleted).mockImplementation(async (e: unknown) => e === SHARE_DELETED)
+vi.mocked(share.readShareName).mockReturnValue('')
+vi.mocked(share.readShareNoteMap).mockReturnValue({})
+vi.mocked(share.readSharePassword).mockReturnValue('')
+vi.mocked(share.hasLocaleText).mockReturnValue(false)
+vi.mocked(buildShareLink).mockImplementation((shareId) => `https://x/s/${shareId}#k=abc`)
 
 const stubs = {
   Dialog: { props: ['visible'], template: '<div v-if="visible"><slot /></div>' },

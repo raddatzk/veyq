@@ -42,8 +42,8 @@ vi.mock('../../../app/vault', () => ({
   unlockOrigin: vi.fn(),
   identityPrivate: vi.fn(),
 }))
-vi.mock('../../memory/favorites', () => ({ resealFavoritesUnderNewMasterKey: vi.fn(async () => {}) }))
-vi.mock('../../memory/itemFavorites', () => ({ retagItemMarksUnderNewMasterKey: vi.fn(async () => {}) }))
+vi.mock('../../memory/favorites', () => ({ resealFavoritesUnderNewMasterKey: vi.fn() }))
+vi.mock('../../memory/itemFavorites', () => ({ retagItemMarksUnderNewMasterKey: vi.fn() }))
 vi.mock('../../spaces/members', () => ({ listScopeMembers: vi.fn() }))
 
 // The two Argon-bearing KEK derivations run for REAL but at a light cost. They stay **input-sensitive**, which
@@ -207,6 +207,8 @@ beforeEach(() => {
   vi.mocked(masterKey).mockImplementation(() => MK.slice())
   vi.mocked(identityPrivate).mockImplementation(() => oldPriv())
   vi.mocked(listScopeMembers).mockResolvedValue([])
+  vi.mocked(resealFavoritesUnderNewMasterKey).mockResolvedValue(undefined)
+  vi.mocked(retagItemMarksUnderNewMasterKey).mockResolvedValue(undefined)
 })
 
 describe('the cold-credential gate (ADR 0060 Decision 2)', () => {

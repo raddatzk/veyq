@@ -32,7 +32,7 @@ vi.mock('../../../app/vault', () => ({ masterKey: () => MASTER_KEY }))
 // This device's trust-state marks (ADR 0028 Decision 7), as the store would hand them back for MASTER_KEY — the
 // panel must carry exactly these into the envelope, so the new device starts from them.
 const LINKER_MARKS = { pins: 5, register: 3, epochs: { 'scope-a': 2 } }
-vi.mock('../trustMarks', () => ({ readMarks: vi.fn(async () => LINKER_MARKS) }))
+vi.mock('../trustMarks', () => ({ readMarks: vi.fn() }))
 
 // A tripwire, not a dependency: this panel does not import the device register today, and the point of the spy
 // is that it fires the day somebody adds it. The onboarded device writes its own entry (write moment 1, from
@@ -169,6 +169,7 @@ beforeEach(() => {
   collect.mockResolvedValue({})
   delegate.mockResolvedValue(REFRESH_TOKEN)
   seal.mockResolvedValue(undefined)
+  vi.mocked(readMarks).mockResolvedValue(LINKER_MARKS)
 })
 
 afterEach(() => vi.useRealTimers())

@@ -8,9 +8,8 @@ import { mount } from '@vue/test-utils'
 
 vi.mock('./members', () => ({
   DeliveryResult: { Sent: 'SENT', FallbackCopylink: 'FALLBACK_COPYLINK', Failed: 'FAILED' },
-  // SENT is the only success the server can return on this path now — the other two are 503s.
-  inviteMember: vi.fn().mockResolvedValue({ email: 'x@y.z', inviteStatus: 'ACTIVE', inviteExpiresAt: new Date(), delivery: 'SENT' }),
-  memberError: vi.fn().mockResolvedValue({ status: 0, code: null }),
+  inviteMember: vi.fn(),
+  memberError: vi.fn(),
 }))
 
 import InviteMemberDialog from './InviteMemberDialog.vue'
@@ -35,7 +34,12 @@ const mountDialog = () =>
   mount(InviteMemberDialog, { props: { visible: true, tenantId: 't-1' }, global: { plugins: [realI18n()], stubs } })
 
 describe('InviteMemberDialog (uc.spaces.add-member, web)', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    // SENT is the only success the server can return on this path now — the other two are 503s.
+    vi.mocked(inviteMember).mockResolvedValue({ email: 'x@y.z', inviteStatus: 'ACTIVE', inviteExpiresAt: new Date(), delivery: 'SENT' })
+    vi.mocked(memberError).mockResolvedValue({ status: 0, code: null })
+  })
 
   it('invites a trimmed + lowercased email, then emits invited and confirms who it went to (stays open)', async () => {
     const wrapper = mountDialog()

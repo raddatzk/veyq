@@ -5,17 +5,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('./media', async (orig) => ({
   ...(await orig<typeof import('./media')>()),
   listTrash: vi.fn(),
-  restoreMedia: vi.fn(async () => {}),
-  purgeMedia: vi.fn(async () => {}),
-  openGrid: vi.fn(async () => new Uint8Array([1, 2, 3])),
-  hasDerivatives: () => true,
-  unsealMeta: () => ({ w: 100, h: 100 }),
+  restoreMedia: vi.fn(),
+  purgeMedia: vi.fn(),
+  openGrid: vi.fn(),
+  hasDerivatives: vi.fn(),
+  unsealMeta: vi.fn(),
 }))
 
 import { defineComponent, h, type UnwrapRef } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import { useMediaTrash } from './useMediaTrash'
-import { listTrash, restoreMedia, purgeMedia, type MediaItem } from './media'
+import { listTrash, restoreMedia, purgeMedia, openGrid, hasDerivatives, unsealMeta, type MediaItem } from './media'
 import { realI18n, t } from '../../test/i18n'
 import { mediaItem, treeNode } from '../../test/models'
 
@@ -46,7 +46,14 @@ function setup() {
   return { vm: wrapper.vm as unknown as UnwrapRef<ReturnType<typeof useMediaTrash>>, reloadGallery, liftTombstone, wrapper }
 }
 
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => {
+  vi.clearAllMocks()
+  vi.mocked(restoreMedia).mockResolvedValue(undefined)
+  vi.mocked(purgeMedia).mockResolvedValue(undefined)
+  vi.mocked(openGrid).mockImplementation(async () => new Uint8Array([1, 2, 3]))
+  vi.mocked(hasDerivatives).mockReturnValue(true)
+  vi.mocked(unsealMeta).mockReturnValue({ v: 1, w: 100, h: 100 })
+})
 
 describe('useMediaTrash', () => {
   it('loadTrash lists the trashed media, decrypts a thumbnail per item, and lands ready', async () => {

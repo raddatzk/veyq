@@ -12,12 +12,13 @@ vi.mock('./onboardTail', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./onboardTail')>()),
   runOnboardTail: vi.fn(),
 }))
-vi.mock('../rememberMe/deviceKeyWrap', () => ({ isRememberSupported: () => true }))
+vi.mock('../rememberMe/deviceKeyWrap', () => ({ isRememberSupported: vi.fn() }))
 vi.mock('../../../shared/state/useCapabilities', () => ({ useCapabilities: () => ({ hasCapability: () => true }) }))
 
 import { useGrantReceiver } from './useGrantReceiver'
 import { collectPairingChannel } from './pairingChannel'
 import { runOnboardTail } from './onboardTail'
+import { isRememberSupported } from '../rememberMe/deviceKeyWrap'
 import { channelKeys, mintPairingSecret, sealGrant, type PairingGrant } from './pairing'
 import { realI18n, t } from '../../../test/i18n'
 
@@ -58,6 +59,7 @@ beforeEach(() => {
   vi.useFakeTimers()
   collect.mockResolvedValue({})
   tail.mockResolvedValue(undefined)
+  vi.mocked(isRememberSupported).mockReturnValue(true)
 })
 
 afterEach(() => vi.useRealTimers())

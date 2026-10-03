@@ -15,7 +15,7 @@ vi.mock('./deviceKey', () => ({
   clearTrust: vi.fn(),
   generateDeviceKey: vi.fn(),
   deviceFactor: vi.fn(),
-  isTrustSupported: () => true,
+  isTrustSupported: vi.fn(),
 }))
 
 import { trustThisDevice, untrustThisDevice } from './trustDevice'
@@ -34,6 +34,7 @@ function mockWrapsApi(add: Mock<AddWrap>, del: Mock<DeleteWrap>) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(device.isTrustSupported).mockReturnValue(true)
   vi.mocked(device.generateDeviceKey).mockResolvedValue({} as CryptoKey)
   vi.mocked(device.deviceFactor).mockResolvedValue(new Uint8Array(32).fill(7))
 })

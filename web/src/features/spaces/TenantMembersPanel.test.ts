@@ -13,14 +13,14 @@ vi.mock('./members', () => ({
   reissueMemberInvite: vi.fn(),
   revokeMemberInvite: vi.fn(),
   removeTenantMember: vi.fn(),
-  memberError: vi.fn().mockResolvedValue({ status: 0, code: null }),
+  memberError: vi.fn(),
 }))
 vi.mock('../memory/share', () => ({ revokeScopeShares: vi.fn() }))
 vi.mock('./scopes', () => ({
   listMyTenants: vi.fn(),
   setSpaceIcon: vi.fn(),
   clearSpaceIcon: vi.fn(),
-  openMyTenantIcon: vi.fn().mockResolvedValue(null),
+  openMyTenantIcon: vi.fn(),
 }))
 // Confirmation is the app's own dialog (cr-web-own-confirm-dialog): the panel awaits `ask()`, so the answer is
 // given here. Stubbing `window.confirm` would now confirm nothing and pass anyway.
@@ -28,9 +28,9 @@ const { confirmAsk, confirmAskWithOption } = vi.hoisted(() => ({ confirmAsk: vi.
 vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: confirmAsk, askWithOption: confirmAskWithOption }) }))
 
 import TenantMembersPanel from './TenantMembersPanel.vue'
-import { listScopeMembers, listMemberInvites, reissueMemberInvite, revokeMemberInvite, removeTenantMember } from './members'
+import { listScopeMembers, listMemberInvites, reissueMemberInvite, revokeMemberInvite, removeTenantMember, memberError } from './members'
 import { revokeScopeShares } from '../memory/share'
-import { listMyTenants } from './scopes'
+import { listMyTenants, openMyTenantIcon } from './scopes'
 import { activeSpace, clearActiveSpace } from '../../app/activeSpace'
 import { ScopeKind, type ScopeMember } from '../../api/generated/scopes'
 import type { PendingMemberInvite } from '../../api/generated/tenants'
@@ -44,6 +44,11 @@ const stubs = {
   InputText: { props: ['modelValue'], template: '<input :value="modelValue" />' },
   InviteMemberDialog: true,
 }
+
+beforeEach(() => {
+  vi.mocked(memberError).mockResolvedValue({ status: 0, code: null })
+  vi.mocked(openMyTenantIcon).mockResolvedValue(null)
+})
 
 // sealedName is null here (no K_tenant in the test → names stay sealed) so the rows show the @username.
 const MEMBERS: ScopeMember[] = [
