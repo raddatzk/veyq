@@ -108,6 +108,10 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      entities deleted across every `ScopeEraser` implementation, so a table that drops out of its owning
      package's eraser is red. Without the union (the guard read only `ScopePurge.eraseScope`) the extraction
      would have made every media delete invisible to it, or — kept hard-wired — blocked on all of them
+  37 the media `NodeSubtreeEraser` deleted outright — rejected: `validate_node_subtree_erasure` derives the
+     node-keyed entities from their `node_id` column and requires an eraser to reach each. No foreign key points
+     at `veyq_node`, so nothing at runtime refuses the purge; before that guard the scope, blob and reclaim
+     guards were all green on this exact forgery while the purge orphaned every media, bucket and blob row
 Open gaps — a forgery the guard still passes (a documented limit, not a defect to fix blindly):
   4b a lying `status: planned` on an implemented use-case passes. **Left open on purpose** — the obvious rule
      "planned ⇒ no coverage refs" is *false in general*: a use-case can be legitimately `planned` while carrying
@@ -585,6 +589,19 @@ def forge_media_eraser_drops_a_table(root: pathlib.Path) -> str:
     return "the media ScopeEraser no longer deleting MediaEntity (must be REJECTED — veyq_media would block the scope row)"
 
 
+MEDIA_NODE_ERASER = "backend/src/main/kotlin/com/veyq/app/features/media/MediaNodeSubtreeEraser.kt"
+
+
+def forge_media_node_eraser_deleted(root: pathlib.Path) -> str:
+    # The whole media step of the node subtree purge removed. Nothing else names veyq_media or veyq_bucket on that
+    # path, and no FK onto veyq_node refuses the node-row delete, so the orphans are silent at runtime.
+    f = root / MEDIA_NODE_ERASER
+    if not f.is_file():
+        raise ForgeError(f"{MEDIA_NODE_ERASER} is missing — the media node eraser moved or was deleted")
+    f.unlink()
+    return "the media NodeSubtreeEraser deleted (must be REJECTED — media and buckets would outlive their node)"
+
+
 def forge_core_imports_media(root: pathlib.Path) -> str:
     # A core file reaching into the Memories application. core/ may not exist on the tree yet, so the file is
     # planted with its directory; the import is the bare line the guard reads.
@@ -782,6 +799,7 @@ CASES = [
     ("34", "validate_shared_imports_no_features.py", forge_core_imports_media, False),
     ("35", "validate_blob_reference_arity.py", forge_contributor_forgets_derivative_arm, False),
     ("36", "validate_scope_erasure_arity.py", forge_media_eraser_drops_a_table, False),
+    ("37", "validate_node_subtree_erasure.py", forge_media_node_eraser_deleted, False),
 ]
 
 
