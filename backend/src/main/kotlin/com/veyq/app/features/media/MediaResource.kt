@@ -1,5 +1,9 @@
 package com.veyq.app.features.media
 
+import com.veyq.app.core.blob.UploadDeclare
+import com.veyq.app.core.blob.DerivativeDeclare
+import com.veyq.app.core.blob.CompleteItem
+import com.veyq.app.core.blob.WindowRequest
 import com.veyq.app.generated.api.MediaApi
 import com.veyq.app.generated.model.BlobRef
 import com.veyq.app.generated.model.CoverBlobCommitRequest

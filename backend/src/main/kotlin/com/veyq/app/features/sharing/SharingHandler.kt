@@ -1,17 +1,17 @@
 package com.veyq.app.features.sharing
 
+import com.veyq.app.core.blob.UploadOpener
+import com.veyq.app.core.blob.UploadDeclare
+import com.veyq.app.core.blob.DerivativeDeclare
+import com.veyq.app.core.blob.CompleteItem
+import com.veyq.app.core.blob.UploadItemResult
+import com.veyq.app.core.blob.WindowRequest
+import com.veyq.app.core.blob.WindowItemResult
+import com.veyq.app.core.blob.CompleteItemResult
 import com.veyq.app.core.node.NodeEntity
 import com.veyq.app.core.sharing.ShareEntity
 import com.veyq.app.features.admin.tenant.TenantTermsHandler
-import com.veyq.app.features.media.CompleteItem
-import com.veyq.app.features.media.CompleteItemResult
-import com.veyq.app.features.media.DerivativeDeclare
 import com.veyq.app.features.media.MediaHandler
-import com.veyq.app.features.media.UploadDeclare
-import com.veyq.app.features.media.UploadItemResult
-import com.veyq.app.features.media.UploadOpener
-import com.veyq.app.features.media.WindowItemResult
-import com.veyq.app.features.media.WindowRequest
 import com.veyq.app.features.platform.capabilities.CapabilityIds
 import com.veyq.app.features.platform.capabilities.CapabilityRegistry
 import com.veyq.app.features.spaces.scope.ScopesStore
