@@ -1,19 +1,20 @@
 package com.veyq.app.features.sharing
 
+import com.veyq.app.core.sharing.ShareEntity
+import com.veyq.app.features.content.NodeEntity
+import com.veyq.app.features.spaces.scope.RotationDecision
+import com.veyq.app.features.spaces.scope.RotationGrant
+import com.veyq.app.features.spaces.scope.ScopesStore
 import com.veyq.app.shared.TestIds
 import com.veyq.app.shared.membership.MembershipEntity
+import com.veyq.app.shared.membership.SignedGrant
 import com.veyq.app.shared.membership.TestAdmission
-import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.testing.TestFixtures.CONTENT_KEY
 import com.veyq.app.testing.TestFixtures.bearer
 import com.veyq.app.testing.TestFixtures.seedNode
 import com.veyq.app.testing.TestFixtures.seedTenant
 import com.veyq.app.testing.TestFixtures.seedUser
-import com.veyq.app.features.spaces.scope.RotationDecision
-import com.veyq.app.features.spaces.scope.RotationGrant
-import com.veyq.app.features.spaces.scope.ScopesStore
-import com.veyq.app.shared.membership.SignedGrant
 import com.veyq.app.testing.race
 import com.veyq.app.testing.whileUncommitted
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -21,6 +22,8 @@ import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
 import jakarta.inject.Inject
+import java.time.Instant
+import java.util.UUID
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.hasItem
 import org.hamcrest.CoreMatchers.not
@@ -28,8 +31,6 @@ import org.hamcrest.CoreMatchers.notNullValue
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import java.time.Instant
-import java.util.UUID
 
 /**
  * Slice tests for shared-scope public shares (uc.sharing.share-shared-scope, cr-0104, ADR 0029 §6): any member of

@@ -1,6 +1,6 @@
 package com.veyq.app.features.sharing
 
-import com.veyq.app.features.media.BlobEntity
+import com.veyq.app.core.blob.BlobEntity
 import com.veyq.app.features.media.MediaEntity
 import com.veyq.app.features.media.TestBlob
 import com.veyq.app.shared.blobstore.FakePresigningBlobStore
@@ -15,13 +15,13 @@ import io.quarkus.test.junit.QuarkusTestProfile
 import io.quarkus.test.junit.TestProfile
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
+import java.net.URI
+import java.time.Instant
+import java.util.UUID
 import org.hamcrest.CoreMatchers.notNullValue
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Test
-import java.net.URI
-import java.time.Instant
-import java.util.UUID
 
 /**
  * The **guest** half of per-request presigning (ADR 0063). `MediaPresignDomainSliceTest` proves the mechanism on

@@ -1,6 +1,6 @@
 package com.veyq.app.features.content
 
-import com.veyq.app.features.media.BlobEntity
+import com.veyq.app.core.blob.BlobEntity
 import com.veyq.app.features.media.MediaEntity
 import com.veyq.app.features.media.MediaStore
 import com.veyq.app.features.media.TestBlob
@@ -13,14 +13,14 @@ import com.veyq.app.testing.whileUncommitted
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject
+import java.time.Instant
+import java.util.Base64
+import java.util.UUID
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import java.time.Instant
-import java.util.Base64
-import java.util.UUID
 
 /**
  * The scope row serializes a scope's node tree (developer-styleguide §12): a create, a move, a trash, a restore and

@@ -1,5 +1,7 @@
 package com.veyq.app.features.sharing
 
+import com.veyq.app.core.sharing.ShareEntity
+import com.veyq.app.core.sharing.ShareIdentityEntity
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.media.TestBlob
 import com.veyq.app.shared.TestIds
@@ -10,9 +12,9 @@ import com.veyq.app.testing.TestFixtures.seedMemberScope
 import com.veyq.app.testing.TestFixtures.seedNode
 import com.veyq.app.testing.TestFixtures.shareKeysJson
 import io.quarkus.narayana.jta.QuarkusTransaction
+import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
-import io.quarkus.test.junit.QuarkusTest
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.notNullValue
 import org.junit.jupiter.api.Assertions.assertEquals

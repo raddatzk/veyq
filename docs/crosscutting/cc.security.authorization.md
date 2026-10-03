@@ -71,7 +71,7 @@ other**: a share guest has no account, so no membership, grant or scope role can
 
 The values themselves are never copied here — read them at their definition sites:
 `shared/identity/ServerRoles.kt` (#2) · `shared/membership/MembershipEntity.kt` (#5) ·
-`features/sharing/Entities.kt` (#6). Guards #3–#5 all live in the one query-only leaf
+`core/sharing/Entities.kt` (#6). Guards #3–#5 all live in the one query-only leaf
 `shared/membership/MembershipStore.kt` ([ADR 0007](../decisions/0007-membership-role-grant-relation.md)); #6/#7
 are private to `features/sharing/SharingHandler.kt`.
 
