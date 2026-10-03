@@ -42,7 +42,8 @@ const props = defineProps<{
   /** The uploader (drop-box) variant: role fixed to UPLOADER, no switcher. Identical otherwise. */
   uploader?: boolean
 }>()
-const emit = defineEmits<{ close: []; saved: [] }>()
+// `reissue`: the edit asks its parent to renew this share instead (#303) — the renew is the parent's own dialog.
+const emit = defineEmits<{ close: []; saved: []; reissue: [share: ManagedShare] }>()
 const { t } = useI18n()
 
 const isEdit = computed(() => !!props.editShare)
@@ -113,6 +114,12 @@ const roleOptions = computed(() => [
 ])
 const roleHint = computed(() =>
   role.value === ShareRole.Contributor ? t('share.roleContributorHint') : t('share.roleViewerHint'),
+)
+// #303 (ADR 0076 point 5): a link minted before the write verifier refuses every new guest as a CONTRIBUTOR, and an
+// edit never adds a verifier (point 2) — only a renew stores one. So such a link, graded CONTRIBUTOR, warns and offers
+// that renew. The server says which links those are; the verifier itself is never on the wire.
+const roleNeedsReissue = computed(
+  () => isEdit.value && !!props.editShare?.writeVerifierMissing && role.value === ShareRole.Contributor,
 )
 
 const { run: runSubmit, pending: busy } = useAsyncAction(
@@ -239,6 +246,19 @@ function endOfDay(d: Date): Date {
         <label>{{ t('share.roleLabel') }}</label>
         <SelectButton v-model="role" :options="roleOptions" option-label="label" option-value="value" :allow-empty="false" :disabled="busy" class="share-role-switcher" />
         <p class="share-hint">{{ roleHint }}</p>
+        <div v-if="roleNeedsReissue" class="share-role-needs-reissue">
+          <p class="share-hint share-reissue-warning">{{ t('share.roleNeedsReissue') }}</p>
+          <Button
+            type="button"
+            :label="t('share.reissue')"
+            icon="pi pi-replay"
+            severity="secondary"
+            outlined
+            size="small"
+            :disabled="busy"
+            @click="emit('reissue', editShare!)"
+          />
+        </div>
       </div>
       <p v-else-if="uploader && !isEdit && !isReissue" class="share-hint share-uploader-desc">{{ t('share.roleUploaderHint') }}</p>
       <p v-if="isReissue" class="share-hint share-reissue-warning">{{ t('share.reissueWarning') }}</p>

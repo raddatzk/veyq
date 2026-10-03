@@ -41,9 +41,11 @@ vi.mocked(buildShareLink).mockImplementation((shareId) => `https://x/s/${shareId
 
 const stubs = {
   Dialog: { props: ['visible'], template: '<div v-if="visible"><slot /></div>' },
+  // Each option is a button that picks it, so a test can re-grade the role.
   SelectButton: {
-    props: ['options'],
-    template: '<div class="select-button"><span v-for="o in options" :key="o.value" class="opt">{{ o.label }}</span></div>',
+    props: ['options', 'modelValue'],
+    emits: ['update:modelValue'],
+    template: '<div class="select-button"><button v-for="o in options" :key="o.value" class="opt" @click="$emit(\'update:modelValue\', o.value)">{{ o.label }}</button></div>',
   },
   Button: { props: ['label'], emits: ['click'], template: '<button @click="$emit(\'click\')">{{ label }}</button>' },
   InputText: true,
@@ -179,5 +181,40 @@ describe('ShareCreateDialog — a renew that lost (#252)', () => {
     await flushPromises()
     expect(reissueShare).toHaveBeenCalledTimes(2)
     expect(w.emitted('saved')).toHaveLength(1)
+  })
+})
+
+// #303 (ADR 0076 point 5): a link minted before the write verifier takes no new guest as a CONTRIBUTOR, and an edit
+// never adds a verifier (ADR 0076 point 2) — so re-grading such a link to CONTRIBUTOR warns, and offers the renew that
+// stores one. The server's `writeVerifierMissing` is the fact; the verifier itself is never on the wire.
+describe('ShareCreateDialog — a role edit onto a link that holds no verifier (#303)', () => {
+  const pick = (w: ReturnType<typeof mountDialog>, label: string) =>
+    w.findAll('.select-button button').find((b) => b.text() === label)!.trigger('click')
+  const warning = (w: ReturnType<typeof mountDialog>) => w.find('.share-role-needs-reissue')
+
+  it('warns once CONTRIBUTOR is picked on a VIEWER link without a verifier, and its renew asks for that share', async () => {
+    const s = editShareWith({ writeVerifierMissing: true })
+    const w = mountDialog({ editShare: s })
+    await flushPromises()
+    expect(warning(w).exists()).toBe(false) // as a VIEWER link it takes no guest, so there is nothing to warn about
+    await pick(w, t('share.roleContributor'))
+    expect(warning(w).text()).toContain(t('share.roleNeedsReissue'))
+    await warning(w).findAll('button').find((b) => b.text() === t('share.reissue'))!.trigger('click')
+    expect(w.emitted('reissue')).toEqual([[s]])
+    await pick(w, t('share.roleViewer'))
+    expect(warning(w).exists()).toBe(false)
+  })
+
+  it('warns on a CONTRIBUTOR link without a verifier as soon as it opens', async () => {
+    const w = mountDialog({ editShare: editShareWith({ role: ShareRole.Contributor, writeVerifierMissing: true }) })
+    await flushPromises()
+    expect(warning(w).text()).toContain(t('share.roleNeedsReissue'))
+  })
+
+  it('control: a link that holds its verifier switches to CONTRIBUTOR without a warning', async () => {
+    const w = mountDialog({ editShare: editShareWith({ writeVerifierMissing: false }) })
+    await flushPromises()
+    await pick(w, t('share.roleContributor'))
+    expect(warning(w).exists()).toBe(false)
   })
 })

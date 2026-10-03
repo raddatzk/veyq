@@ -133,6 +133,31 @@ class ShareWriteProofSliceTest {
         assertEquals(mapOf(contributor to true, uploader to true, viewer to false, intact to false), rows)
     }
 
+    /**
+     * #303 — the role edit needs the verifier fact whatever the role: a VIEWER link without one turns into a
+     * CONTRIBUTOR link that refuses every guest, so the row says so before the switch. A link with its verifier is
+     * the control, in both roles.
+     */
+    @Test
+    fun theManageListSaysWhichLinksHoldNoVerifierWhateverTheirRole() {
+        val (userId, scopeId) = seedMemberScope()
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val viewer = createShare(userId, memory, "VIEWER")
+        val contributor = createShare(userId, memory, "CONTRIBUTOR")
+        val intactViewer = createShare(userId, memory, "VIEWER")
+        val intactContributor = createShare(userId, memory, "CONTRIBUTOR")
+        QuarkusTransaction.requiringNew().run {
+            ShareEntity.update("writeVerifier = null where id in ?1", listOf(viewer, contributor))
+        }
+
+        val rows = given().header("Authorization", bearer(userId)).queryParam("nodeId", memory)
+            .`when`().get("/api/shares").then().statusCode(200)
+            .extract().jsonPath().getList<Map<String, Any>>("")
+            .associate { it["shareId"] as String to it["writeVerifierMissing"] }
+
+        assertEquals(mapOf(viewer to true, contributor to true, intactViewer to false, intactContributor to false), rows)
+    }
+
     /** B4 — a share is never created without a verifier: the field is required for every role. */
     @Test
     fun createWithoutAVerifierIs400AndStoresNothing() {

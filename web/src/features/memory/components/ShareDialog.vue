@@ -328,8 +328,10 @@ function fmtDate(d: Date): string {
     <p v-if="actionError" class="share-error">{{ t('share.actionFailed') }}</p>
 
 
+    <!-- Keyed by mode + share: an edit that hands over to the renew (#303) mounts afresh, so the form pre-fills again. -->
     <ShareCreateDialog
       v-if="createOpen"
+      :key="reissueFrom ? `reissue:${reissueFrom.shareId}` : editShare ? `edit:${editShare.shareId}` : 'new'"
       :scope-id="scopeId"
       :node-id="nodeId"
       :memory-key="memoryKey"
@@ -340,6 +342,7 @@ function fmtDate(d: Date): string {
       :uploader="uploader"
       @saved="onSaved"
       @close="onDialogClose"
+      @reissue="openReissue"
     />
   </Dialog>
 </template>

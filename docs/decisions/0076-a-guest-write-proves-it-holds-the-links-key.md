@@ -45,7 +45,9 @@ true: the server checked only the id.
    new guest until a curator re-issues it. An existing guest's token keeps working — only naming oneself is gated.
    The manage list says which links those are: each guest-taking row carries `newGuestsRefused`, derived from the
    missing verifier and the role — the same two facts the refusal decides on — and the panel marks it beside the
-   renew.
+   renew. Every row also carries the missing verifier on its own (`writeVerifierMissing`), because a VIEWER link
+   without one becomes such a link the moment its role edit picks CONTRIBUTOR, and point 2 keeps the edit from
+   fixing it: the role edit warns and offers the renew instead.
 
 ## Consequences
 

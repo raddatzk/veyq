@@ -1180,7 +1180,7 @@ components:
 
     ShareSummary:
       type: object
-      required: [shareId, scopeId, nodeId, role, sealedName, enabled, mine, reissueRequired, deletable, newGuestsRefused, createdAt]
+      required: [shareId, scopeId, nodeId, role, sealedName, enabled, mine, reissueRequired, deletable, newGuestsRefused, writeVerifierMissing, createdAt]
       properties:
         shareId:
           x-veyq-visibility: id
@@ -1288,6 +1288,15 @@ components:
             before guest naming proved the link's key (ADR 0076 point 5) — so `createShareIdentity` refuses every new
             guest until the link is re-issued (`reissueShare` stores a verifier); a guest named before keeps
             uploading. Derived from what the share already stores, not a new fact about it.
+          example: false
+        writeVerifierMissing:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            True when this link holds no write verifier, whatever its role (ADR 0076 point 5) — `newGuestsRefused` is
+            this fact for a role that takes guests. A VIEWER link without one turns into a CONTRIBUTOR link that refuses
+            every new guest, and an edit never adds a verifier (ADR 0076 point 2), so the manage UI warns on that role
+            change and offers `reissueShare` instead. Derived from what the share already stores.
           example: false
         expiresAt:
           x-veyq-visibility: time

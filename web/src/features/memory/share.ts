@@ -468,6 +468,9 @@ export type ManagedShare = {
   /** True when this guest link holds no write verifier (minted before ADR 0076), so it takes no new guest until it is
    *  re-issued ({@link reissueShare}). The server's answer: the verifier is never on the wire. */
   newGuestsRefused: boolean
+  /** True when the link holds no write verifier, whatever its role — so as a CONTRIBUTOR it would refuse every new
+   *  guest, and an edit cannot fix that (ADR 0076 point 2): the role edit warns and offers the renew (#303). */
+  writeVerifierMissing: boolean
 }
 
 /** List every share on one Memory visible to a scope member (cr-0104) — the manage-shares panel. Scoped by
@@ -493,6 +496,7 @@ export async function listSharesFor(nodeId: string): Promise<ManagedShare[]> {
       reissueRequired: r.reissueRequired,
       deletable: r.deletable,
       newGuestsRefused: r.newGuestsRefused,
+      writeVerifierMissing: r.writeVerifierMissing,
     }))
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
 }

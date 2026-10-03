@@ -1043,6 +1043,7 @@ const en = {
     // ADR 0076 point 5: a guest link minted before guest names needed the link's key
     newGuestsRefusedBadge: 'Takes no new guests',
     newGuestsRefusedHint: 'Made before guests had to prove they hold the whole link — nobody new can join through it until it is renewed. Guests who already joined keep uploading.',
+    roleNeedsReissue: 'This link was made before guests had to prove they hold the whole link, so with photos added it would take no guests at all. Renew it first — the new link can then be switched to “View + add photos”.',
     disabled: 'Switched off',
     byMember: 'By another member',
     loadFailed: 'Your links could not be loaded.',
@@ -2097,6 +2098,7 @@ const de: typeof en = {
     reissueRequiredHint: 'Erstellt, bevor jemand diesen Bereich verlassen hat oder Schlüssel ersetzt wurden, oder mit allen Links hier abgeschaltet — er könnte in falschen Händen sein. Erneuere ihn, um diesen Zugang zu beenden.',
     newGuestsRefusedBadge: 'Nimmt keine neuen Gäste auf',
     newGuestsRefusedHint: 'Erstellt, bevor Gäste nachweisen mussten, dass sie den ganzen Link haben — niemand Neues kann darüber beitreten, bis er erneuert ist. Wer schon beigetreten ist, lädt weiter hoch.',
+    roleNeedsReissue: 'Dieser Link wurde erstellt, bevor Gäste nachweisen mussten, dass sie den ganzen Link haben — mit Fotos hinzufügen nähme er deshalb gar keine Gäste auf. Erneuere ihn zuerst; den neuen Link kannst du dann auf „Ansehen + Fotos hinzufügen“ umstellen.',
     disabled: 'Abgeschaltet',
     byMember: 'Von einem anderen Mitglied',
     loadFailed: 'Deine Links konnten nicht geladen werden.',

@@ -119,6 +119,8 @@ class SharingResource(
                 reissueRequired = reissueRequired, // ADR 0075: the predicate the re-activation refusal runs
                 deletable = deletable, // ADR 0029 §7: the predicate the delete gate runs
                 newGuestsRefused = newGuestsRefused, // ADR 0076 point 5: re-issue to let new guests in (#270)
+                // …and the same missing verifier for any role: the role edit warns before it makes a guest link (#303)
+                writeVerifierMissing = s.writeVerifier == null,
                 createdAt = s.createdAt.atOffset(ZoneOffset.UTC),
                 expiresAt = s.expiresAt?.atOffset(ZoneOffset.UTC),
                 sealedNote = s.sealedNote, // cr-0115: the manage UI shows + edits it
