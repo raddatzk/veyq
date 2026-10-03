@@ -172,7 +172,13 @@ to `ACTIVE` after the revoke had answered `204`. So `SessionService.rotate` lock
 the token rows, on every path. Every rotation and every revoke of a family write that row, so they all queue on
 it: the distance is computed against committed state, and a revoke lands either before the rotation reads the
 family (the refresh answers `401`) or after it commits (the family ends `REVOKED`). The reverse order — token row,
-then family — deadlocks on H2 when the orphan and the current token arrive together.
+then family — deadlocks when the orphan and the current token arrive together, and nothing retries that deadlock:
+the fork race test reds on it. The `CURRENT` row is read with a lock as well, though the family lock already
+orders its writers: a plain read at MariaDB's REPEATABLE READ saw the snapshot fixed before the lock wait, so the
+loser of a same-token race found the presented row itself as `CURRENT` and revoked the family (800 of 800 races,
+inbox #302). READ COMMITTED ([ADR 0078](0078-production-reads-committed-like-its-tests.md)) closes that alone; the
+locking read keeps the decision correct at any isolation, and costs nothing the grace does not take anyway — it
+writes that row.
 
 **No schema change.** The distance is `CURRENT.generation - presented.generation`, read via
 `family_id + status`, an index that already exists. This is also the first time `generation` is **read**:
@@ -187,9 +193,10 @@ presentation revokes the family is therefore narrowed, not deleted.
 
 **What this does not settle.** Clients still owe a shared in-flight refresh per tab — this decision makes a
 concurrent refresh *harmless*, not *free*, and a client that fires six of them still wastes five rotations.
-And it says nothing about the deadlock the same concurrency provokes in the unique index over token hashes
-(a retryable `SQLSTATE 40001` that reached the client as a `500`), which is a storage concern, not a session
-one — answered separately by a bounded retry around rotation (`SessionRotationRetry`).
+The deadlock the same concurrency once provoked in the unique index over token hashes (a `SQLSTATE 40001` that
+reached the client as a `500`) no longer forms: two refreshes of one token queue on the family row before either
+touches that index — 0 deadlocks in 1 600 family-first refreshes on MariaDB 11.4, against 17 token-first (inbox
+#262). The bounded retry that once answered it is gone, so a deadlock here is a lock-order defect and looks like one.
 
 ## Decision — web refresh cookie lifetimes (session vs persistent)
 

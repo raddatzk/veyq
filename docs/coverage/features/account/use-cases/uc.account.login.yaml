@@ -48,18 +48,14 @@ acceptanceCriteria:
     coverage:
       backend:
         integration: [LoginSliceTest.refreshAfterALostResponseRotatesInsteadOfRevoking, LoginSliceTest.concurrentRefreshOfOneTokenKeepsTheFamily, LoginSliceTest.graceDoesNotIncrementSoTheNextStaleCallerIsStillAtDistanceOne]
-  - id: refresh-deadlock-is-retried
-    text: A rotation the database rolls back as a deadlock victim (SQLSTATE 40001) is replayed rather than
-      surfaced as a 500, which a client cannot tell apart from a dead session.
+  - id: refresh-concurrency-decided-on-the-family
+    text: Every rotation of one family queues on the family's row lock, taken before any token row, and the grace
+      reads the family's CURRENT row under a lock too — so two refreshes of one token both rotate and keep the
+      family whatever the isolation level, an orphan and the current token presented together cannot both rotate,
+      and a reversed lock order surfaces as a failed refresh instead of a deadlock a retry hides.
     coverage:
       backend:
-        unit: [SessionRotationRetryTest.retriesADeadlockVictimAndSucceeds, SessionRotationRetryTest.givesUpRatherThanLoopingForever, SessionRotationRetryTest.doesNotRetryAnythingThatIsNotASerializationFailure, SessionRotationRetryTest.findsTheSqlStateThroughTheWHOLEcauseChain]
-    gaps:
-      - surface: backend
-        reason: >
-          No test on this stack can produce the deadlock itself. The cycle is an InnoDB insert-intention gap
-          lock in ux_refresh_token_hash and the test profile is H2, so the retry is proven by injection —
-          a body throwing the exception the driver throws, wrapped as Hibernate wraps it — never end to end.
+        integration: [LoginSliceTest.twoRefreshesOfOneTokenQueuedOnTheFamilyBothRotateAndKeepIt, LoginSliceTest.theOrphanAndTheCurrentTokenPresentedTogetherCannotForkTheChain]
   - id: refresh-is-single-flight-per-tab
     text: Authed calls that 401 together share one refresh request instead of each presenting the same token.
     coverage:
