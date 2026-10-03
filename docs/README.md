@@ -18,6 +18,7 @@ docs/
     use-cases/uc.<feature>.<goal>.md
     enablers/en.<feature>.<name>.md
   crosscutting/                     # cross-feature concerns/models + styleguides (some cc.*)
+  apps/                             # applications on the platform (ADR 0079): Memories, plus concept-only docs
   decisions/NNNN-<slug>.md          # ADRs
   architecture/README.md            # the synthesized whole-system view (the map above all)
   coverage/                         # acceptance coverage, mirrors the use-case tree
