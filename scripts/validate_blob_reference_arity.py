@@ -12,7 +12,8 @@ independent keys:
     `fk_derivative_blob`. This one is asserted at 2 deliberately. An arm *gaining* a foreign key is a real
     change in what the database guarantees, and it should turn this guard red and be recorded, not land
     silently as an improvement nobody notices.
-  - *live twin* — that `SharingStore.subtreeBlobIds` enumerates all three arms in its own body.
+  - *live twin* — that `SharingStore.subtreeBlobIds` (the cover arm) plus every `SharedSubtreeContributor.authorizedBlobIds`
+    (the media and derivative arms) enumerate all three.
 
 The first three keys pin how many arms **exist**. Only the fourth pins that the predicate already running over
 them in production **enumerates** them — and that is the one carrying the invariant, because the three
@@ -108,6 +109,10 @@ NOT_REFERENCE_SCHEMA = ["V53__upload_session_binding.sql:blob_id"]
 # The three arms as `subtreeBlobIds` spells them in its own body. Each is the accessor that arm is READ by, so
 # removing the arm removes the marker.
 LIVE_TWIN_FN = "fun subtreeBlobIds"
+# Where the media and derivative arms live since core stopped naming them: every implementation of the interface,
+# found by its declaration, contributes its `authorizedBlobIds` body to the live twin.
+CONTRIBUTOR_IMPL = ": SharedSubtreeContributor"
+CONTRIBUTOR_FN = "override fun authorizedBlobIds"
 EXPECTED_LIVE_TWIN_ARMS = {
     "media": "ids.add(m.blobId)",
     "derivative": "MediaDerivativeEntity",
@@ -154,13 +159,10 @@ def fk_arms() -> list[str]:
     return sorted(found)
 
 
-def live_twin_body() -> list[str] | None:
-    """The body of `subtreeBlobIds`, or None where the function is gone."""
-    if not SHARING_STORE.exists():
-        return None
-    lines = SHARING_STORE.read_text(encoding="utf-8").splitlines()
+def _fn_body(lines: list[str], fn: str) -> list[str] | None:
+    """The lines of the first function whose declaration line contains `fn`, up to its member-level `    }`."""
     for i, line in enumerate(lines):
-        if LIVE_TWIN_FN not in line:
+        if fn not in line:
             continue
         body = [line]
         for following in lines[i + 1:]:
@@ -169,6 +171,25 @@ def live_twin_body() -> list[str] | None:
                 return body
         return body
     return None
+
+
+def live_twin_body() -> list[str] | None:
+    """The live twin: core's `subtreeBlobIds` body plus every contributor's `authorizedBlobIds` body, or None where
+    the core function is gone. The media and derivative arms live in the implementations of `SharedSubtreeContributor`
+    (cr-platform-core-boundaries step 7), so the check follows the arms to where they are."""
+    if not SHARING_STORE.exists():
+        return None
+    body = _fn_body(SHARING_STORE.read_text(encoding="utf-8").splitlines(), LIVE_TWIN_FN)
+    if body is None:
+        return None
+    for path in sorted(KOTLIN_MAIN.rglob("*.kt")):
+        text = path.read_text(encoding="utf-8")
+        if CONTRIBUTOR_IMPL not in text:
+            continue
+        found = _fn_body(text.splitlines(), CONTRIBUTOR_FN)
+        if found is not None:
+            body += found
+    return body
 
 
 def compare(key: str, expected: list[str], actual: list[str], errors: list[str]) -> None:
@@ -220,8 +241,8 @@ def main() -> int:
         for arm, marker in sorted(EXPECTED_LIVE_TWIN_ARMS.items()):
             if marker not in text:
                 errors.append(
-                    f"live twin: SharingStore.subtreeBlobIds no longer enumerates the {arm} arm "
-                    f"(`{marker}` is gone from its body). The three declaration keys above are UNCHANGED by "
+                    f"live twin: neither SharingStore.subtreeBlobIds nor any SharedSubtreeContributor.authorizedBlobIds "
+                    f"enumerates the {arm} arm (`{marker}` is gone from those bodies). The three declaration keys above are UNCHANGED by "
                     f"this — the arm still exists, the predicate just stopped seeing it, which is how a share "
                     f"silently stops serving a blob it should serve."
                 )
@@ -235,7 +256,7 @@ def main() -> int:
     print(
         f"OK: 3 veyq_blob reference arms ({', '.join(EXPECTED_ENTITY_ARMS)}), "
         f"{len(EXPECTED_FK_ARMS)} of them foreign-key backed, "
-        f"all {len(EXPECTED_LIVE_TWIN_ARMS)} enumerated by SharingStore.subtreeBlobIds."
+        f"all {len(EXPECTED_LIVE_TWIN_ARMS)} enumerated by the live twin (subtreeBlobIds + the contributors)."
     )
     return 0
 

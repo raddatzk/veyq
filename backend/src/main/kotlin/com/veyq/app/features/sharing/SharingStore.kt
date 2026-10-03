@@ -3,6 +3,8 @@ package com.veyq.app.features.sharing
 import com.veyq.app.core.blob.BlobEntity
 import com.veyq.app.core.node.NodeEntity
 import com.veyq.app.core.sharing.ShareEntity
+import com.veyq.app.core.sharing.ShareMediaRow
+import com.veyq.app.core.sharing.SharedSubtreeContributor
 import com.veyq.app.core.sharing.ShareIdentityEntity
 import com.veyq.app.core.sharing.ShareRetiredIdEntity
 import com.veyq.app.features.media.BucketEntity
@@ -13,6 +15,7 @@ import com.veyq.app.features.media.OwnerKey
 import com.veyq.app.shared.crypto.Tokens
 import com.veyq.app.shared.scope.ScopeEntity
 import jakarta.enterprise.context.ApplicationScoped
+import jakarta.enterprise.inject.Instance
 import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional
 import java.time.Instant
@@ -31,31 +34,6 @@ data class ShareNodeRow(
     val wrappedMeta: String?,
     /** The Memory's drop private key sealed under its `K_mem` — every reader of the subtree opens uploads through it. */
     val sealedDropPrivateKey: String?,
-)
-
-/** One media under a shared subtree — the original blob ref + role-tagged derivatives, tagged with its owning node. */
-data class ShareMediaRow(
-    val nodeId: String,
-    val mediaId: String,
-    val blobId: String,
-    val chunkCount: Int,
-    val byteSize: Long,
-    val manifest: List<Long>?,
-    val wrappedBlobKey: String,
-    val derivatives: List<ShareDerivativeRow>,
-    val wrappedMeta: String?,
-    /** The guest identity that added this media; null for a member's. `resolve` serves it for an uploader's only. */
-    val identityId: String?,
-)
-
-/** One derivative tier's blob ref under a shared subtree. */
-data class ShareDerivativeRow(
-    val kind: String,
-    val blobId: String,
-    val chunkCount: Int,
-    val byteSize: Long,
-    val manifest: List<Long>?,
-    val wrappedBlobKey: String,
 )
 
 /** The sealed subtree of a share: its nodes (for the `K_mem` chain) + every media attached under it. */
@@ -84,6 +62,8 @@ data class ShareBlobRef(val storageKey: String, val chunkCount: Int)
 class SharingStore(
     /** cr-0107: the delete-own path bumps the node's live-updates counters via the media store's single bump helper. */
     private val mediaStore: MediaStore,
+    /** What the application hangs under a shared node (today: media + derivatives). Merged without order. */
+    private val contributors: Instance<SharedSubtreeContributor>,
 ) {
 
     fun findNode(nodeId: String): NodeEntity? = NodeEntity.findById(nodeId)
@@ -473,17 +453,8 @@ class SharingStore(
                 sealedDropPrivateKey = n.sealedDropPrivateKey,
             )
         }
-        // `deletedAt is null` — a trashed medium (uc.memory.delete-media, cr-0110) is a soft-delete, so without
-        // this predicate the guest paths keep serving it for the whole retention window. Both share reads must
-        // carry it: this listing and [subtreeBlobIds], which authorizes the blob GET.
-        val media = MediaEntity.find("scopeId = ?1 and nodeId in ?2 and deletedAt is null", scopeId, liveIds).list().mapNotNull { m ->
-            val blob = BlobEntity.findById(m.blobId) ?: return@mapNotNull null
-            val derivatives = MediaDerivativeEntity.find("mediaId = ?1", m.id).list().mapNotNull { d ->
-                val derivBlob = BlobEntity.findById(d.blobId) ?: return@mapNotNull null
-                ShareDerivativeRow(d.kind, derivBlob.id, derivBlob.chunkCount, derivBlob.byteSize, decodeManifest(derivBlob.manifest), derivBlob.wrappedBlobKey)
-            }
-            ShareMediaRow(m.nodeId, m.id, blob.id, blob.chunkCount, blob.byteSize, decodeManifest(blob.manifest), blob.wrappedBlobKey, derivatives, m.wrappedMeta, m.shareIdentityId)
-        }
+        // The media rows are the contributors' own read, with their own live predicate (see SharedSubtreeContributor).
+        val media = contributors.flatMap { it.rows(scopeId, liveIds) }
         return SubtreeData(nodes, media)
     }
 
@@ -498,7 +469,7 @@ class SharingStore(
         return ShareBlobRef(blob.storageKey, blob.chunkCount)
     }
 
-    /** Every blob id attached under the subtree: live media originals + derivatives + node cover blobs. */
+    /** Every blob id attached under the subtree: the contributors' (live media originals + derivatives) + node cover blobs. */
     private fun subtreeBlobIds(scopeId: String, rootNodeId: String): Set<String> {
         val subtreeIds = collectSubtreeIds(scopeId, rootNodeId)
         // `deletedAt is null` — the sibling of [subtree]'s predicate, deliberately its OWN read (ADR 0061).
@@ -508,12 +479,8 @@ class SharingStore(
         if (liveNodes.isEmpty()) return emptySet() // the shared root itself is trashed
         val liveIds = liveNodes.map { it.id }
         val ids = HashSet<String>()
-        // Trashed media are excluded here too — else the listing hides a medium the blob GET still presigns.
-        val media = MediaEntity.find("scopeId = ?1 and nodeId in ?2 and deletedAt is null", scopeId, liveIds).list()
-        for (m in media) {
-            ids.add(m.blobId)
-            MediaDerivativeEntity.find("mediaId = ?1", m.id).list().forEach { ids.add(it.blobId) }
-        }
+        // The media + derivative arms are the contributors' (each with its own trashed-media predicate).
+        contributors.forEach { ids.addAll(it.authorizedBlobIds(scopeId, liveIds)) }
         liveNodes.mapNotNull { it.coverBlobId }.forEach { ids.add(it) }
         return ids
     }
@@ -533,8 +500,4 @@ class SharingStore(
         }
         return out.toList()
     }
-
-    // Manifest = a JSON array of per-chunk ciphertext sizes (mirrors MediaStore's hand-rolled encoding).
-    private fun decodeManifest(s: String?): List<Long>? =
-        s?.trim()?.removeSurrounding("[", "]")?.takeIf { it.isNotBlank() }?.split(",")?.map { it.trim().toLong() }
 }

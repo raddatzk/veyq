@@ -1,6 +1,7 @@
 package com.veyq.app.features.sharing
 
 import com.veyq.app.core.sharing.ShareEntity
+import com.veyq.app.core.sharing.ShareMediaRow
 import com.veyq.app.features.media.DerivativeDeclare
 import com.veyq.app.features.media.UploadDeclare
 import com.veyq.app.features.media.WindowRequest
