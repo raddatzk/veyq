@@ -329,7 +329,7 @@ class SharingStore(
         for (id in candidateIds.toSet()) {
             val identity = ShareIdentityEntity.findById(id) ?: continue
             if (ShareEntity.findById(identity.shareId)?.deletedAt == null) continue
-            if (identityUsages.any { it.stillReferenced(id) }) continue
+            if (!GuestIdentityUsage.unreferenced(identityUsages, id)) continue
             ShareIdentityEntity.deleteById(id)
         }
     }

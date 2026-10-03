@@ -719,12 +719,14 @@ class SharingHandler(
 
     /**
      * The application that writes under [share]'s root, picked by the root's node kind — called only after the guest
-     * gate has passed. Null (read as "not contributable") only for a root that is gone or of a kind no application
-     * registers: unreachable while [create] refuses such a root, so it fails closed rather than guessing a writer.
+     * gate has passed. Null (read as "not contributable") for a root that is gone, of a kind no application
+     * registers — unreachable while [create] refuses such a root — or of a kind **more than one** claims: exactly one
+     * per kind is the contract (`ShareGuestWrites`), and picking the first would rest on CDI bean order. Every case
+     * fails closed rather than guessing a writer; `ShareGuestWritesPartitionSliceTest` pins the partition.
      */
     private fun writesFor(share: ShareEntity): ShareGuestWrites? {
         val kind = store.findNode(share.nodeId)?.kind ?: return null
-        return guestWrites.firstOrNull { it.supports(kind) }
+        return guestWrites.filter { it.supports(kind) }.singleOrNull()
     }
 
     private enum class PwCheck { OK, MISSING, WRONG, TOO_MANY }

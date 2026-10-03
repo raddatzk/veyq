@@ -51,9 +51,12 @@ both are silently wrong, so they are recorded here rather than re-derived:
       dead branch is named and never runs. That half is held by the slice tests in `ScopesSliceTest`, which
       execute the purge, not by any grep.
   (e) Eraser discovery is textual: a class is an eraser when a `class … : ScopeEraser` line appears in a file,
-      and every `XEntity.delete(` after that file's first `fun eraseScope` counts. An eraser the purge never
-      collects (not a bean) is named and never runs — `ScopeEraserOrderSliceTest` and the purge slice tests,
-      which execute it, hold that half, as in (d).
+      and every `XEntity.delete(` after that file's first `fun eraseScope` counts. The declaration regex
+      rejects a `=` or `{` anywhere before the `:` — a primary-constructor default argument or a lambda — and
+      does not follow an abstract base class that implements the interface, so such an eraser is not
+      discovered: the guard is red although the eraser exists (conservative, never a false green). An eraser
+      the purge never collects (not a bean) is named and never runs — `ScopeEraserOrderSliceTest` and the
+      purge slice tests, which execute it, hold that half, as in (d).
 """
 from __future__ import annotations
 
