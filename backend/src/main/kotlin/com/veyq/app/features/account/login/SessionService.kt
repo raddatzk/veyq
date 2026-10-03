@@ -2,6 +2,7 @@ package com.veyq.app.features.account.login
 
 import com.veyq.app.shared.auth.AccessTokenResolver
 import com.veyq.app.shared.crypto.Tokens
+import com.veyq.app.shared.identity.AccountStore
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional
@@ -49,7 +50,7 @@ data class SessionFamilyView(
  * **hash matches** a stored superseded row, which cannot be forged without the token itself.
  */
 @ApplicationScoped
-class SessionService : AccessTokenResolver {
+class SessionService(private val accounts: AccountStore) : AccessTokenResolver {
 
     /** Issue a fresh nameless session family for a user. */
     @Transactional
@@ -242,9 +243,17 @@ class SessionService : AccessTokenResolver {
      * token resolves to no family this revokes **nothing**: falling through to [revokeAllForUser]'s no-exception
      * form would sign the caller out of the device it is holding, which is the single outcome this endpoint
      * exists to avoid — so the trap is closed here rather than left to each caller to remember.
+     *
+     * **The account row is locked first** (`AccountStore.lock`, inbox #316), as by every other cleanup that ends an
+     * account's other devices. The revoke below enumerates ACTIVE families, and a family a pairing delegation is
+     * minting is not one it can see before that commits: without the lock a device this signs out could delegate
+     * while it ran, and the delegated session outlived the sign-out that ended the device that made it. Under the
+     * lock the delegation either committed first (its family is revoked here) or re-reads its session after this
+     * commits (and is refused). A password change and a rotation call this already holding the lock.
      */
     @Transactional
     fun revokeOtherFamilies(userId: String, presentedAccessToken: String): Long {
+        accounts.lock(userId)
         val current = familyIdOf(presentedAccessToken) ?: return 0
         return revokeAllForUser(userId, current)
     }

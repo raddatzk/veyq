@@ -11,6 +11,7 @@ import { session } from './session'
 import { clearVault, vaultState } from './vault'
 import { dropConvenienceTiers } from './convenienceTiers'
 import { endAllPlaybacks } from '../sw/register'
+import { leaveEndingNotice, type EndingNotice } from './endingNotice'
 
 /** The same-origin channel the other tabs of this instance listen on. Its one message carries nothing but its
  *  type: no account, no id (uc.account.sign-out § Quality notes). */
@@ -35,10 +36,14 @@ export function holdsSession(): boolean {
  * End this tab's session and tell the other tabs. Runs only when the tab holds a session, and at most once:
  * a second trigger while an ending runs joins it. The check is made synchronously, before anything awaits, so a
  * caller may drop the tokens right after calling this.
+ *
+ * [notice] is what the sign-in page says afterwards, left only when this call starts an ending: a tab that holds no
+ * session loads nothing, and a notice left there would surface on some later sign-in page instead.
  */
-export function endSession(): Promise<void> {
+export function endSession(notice: EndingNotice | null = null): Promise<void> {
   if (ending) return ending
   if (!holdsSession()) return Promise.resolve()
+  leaveEndingNotice(notice)
   ending = runEnding(true)
   return ending
 }

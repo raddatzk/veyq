@@ -66,6 +66,7 @@ import { rememberThisDevice, rememberThisDeviceWrap } from '../deviceRegister'
 import { account } from '../../../app/account'
 import { readMarks } from '../trustMarks'
 import { realI18n, t } from '../../../test/i18n'
+import { endingExplanation } from '../../../app/endingNotice'
 
 const open = vi.mocked(openPairingChannel)
 const collect = vi.mocked(collectPairingChannel)
@@ -211,6 +212,42 @@ describe('AddDevicePanel — the trusted half (uc.account.onboard-device, ADR 00
     expect(seal).toHaveBeenCalledTimes(1)
     expect(order[0]).toBeLessThan(order[1])
     expect(w.find('.msg').text()).toBe(t('pairing.sealed'))
+  })
+
+  // E6: a delegation (or a seal) whose session ended while it waited answers 401, its refresh is refused, and the
+  // ending loads the sign-in page — so the panel's own error would vanish unread. Both calls therefore run under the
+  // explanation the ending hands the sign-in page; read at the moment each call goes out, against the real module.
+  it('delegates and seals under the interrupted-grant explanation, and only while the grant runs', async () => {
+    const seen: (string | null)[] = []
+    delegate.mockImplementation(async () => {
+      seen.push(endingExplanation())
+      return REFRESH_TOKEN
+    })
+    seal.mockImplementation(async () => void seen.push(endingExplanation()))
+    const w = mountPanel()
+    await showCode(w)
+    await answerArrives(w)
+    // Control: nothing explains an ending before the grant — the comparison screen's own refusals are not E6.
+    expect(endingExplanation()).toBeNull()
+
+    await nameAndSlide(w)
+
+    expect(seen).toEqual(['grantInterrupted', 'grantInterrupted'])
+    expect(endingExplanation()).toBeNull()
+  })
+
+  it('a refused grant leaves the explanation behind it, not in force', async () => {
+    // The other way out of the grant: a refusal the panel shows itself must not leave a later, unrelated ending
+    // explaining itself as an interrupted grant.
+    delegate.mockRejectedValue(httpError(404, 'pairing_channel_invalid'))
+    const w = mountPanel()
+    await showCode(w)
+    await answerArrives(w)
+
+    await nameAndSlide(w)
+
+    expect(w.text()).toContain(t('pairing.grantFailed'))
+    expect(endingExplanation()).toBeNull()
   })
 
   it('seals the account’s Master Key, the delegated token, the typed name and this device’s marks to the answering key', async () => {

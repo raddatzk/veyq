@@ -5,6 +5,7 @@
 import { tokenApi } from '../api/client'
 import { clearTokens, session, setTokens } from './session'
 import { endSession } from './sessionEnd'
+import { endingExplanation } from './endingNotice'
 import { isAuthoritativeRejection, isUnauthorized } from '../shared/httpError'
 import { handleTenantSuspended, isTenantSuspended } from './tenantSuspension'
 
@@ -56,8 +57,9 @@ async function rotateSession(): Promise<void> {
   } catch (e) {
     if (await isSessionRefusal(e)) {
       // `endSession` decides whether this tab holds a session before it awaits anything, so the tokens can go
-      // right after; it is awaited so no caller acts on the failure while the document load is under way.
-      const ended = endSession()
+      // right after; it is awaited so no caller acts on the failure while the document load is under way. A step
+      // running under `explainEnding` (a pairing grant) has the sign-in page say what the ending interrupted.
+      const ended = endSession(endingExplanation())
       clearTokens()
       await ended
     }

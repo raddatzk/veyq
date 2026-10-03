@@ -370,6 +370,9 @@ const en = {
     gone: 'This code is no longer valid — start again.',
     startFailed: 'The code could not be created. Please try again.',
     grantFailed: 'Access could not be given. No device was let in — start over.',
+    // uc.account.onboard-device E6 — shown on the sign-in page, because the ending replaced the panel.
+    grantInterrupted:
+      'You were signed out while giving a device access, so no device was let in. This device’s session was ended elsewhere: by a password change or reset, by replacing your keys, or by a sign-out from another device. Sign in again, then start adding the device over.',
     // --- The device being let in (uc.account.onboard-device steps 2-7). ---
     joinTitle: 'Adding this device',
     joinIntro: 'Your other device is waiting. It will show a number — check it is the same one you see here.',
@@ -1441,6 +1444,8 @@ const de: typeof en = {
     gone: 'Dieser Code gilt nicht mehr — fang neu an.',
     startFailed: 'Der Code konnte nicht erstellt werden. Bitte versuch es erneut.',
     grantFailed: 'Der Zugriff konnte nicht freigegeben werden. Es wurde kein Gerät hereingelassen — fang neu an.',
+    grantInterrupted:
+      'Du wurdest abgemeldet, während du einem Gerät Zugriff geben wolltest — es wurde kein Gerät hereingelassen. Die Sitzung dieses Geräts wurde anderswo beendet: durch eine Passwortänderung oder -zurücksetzung, durch das Ersetzen deiner Schlüssel oder durch eine Abmeldung auf einem anderen Gerät. Melde dich wieder an und füge das Gerät dann noch einmal hinzu.',
     joinTitle: 'Dieses Gerät wird hinzugefügt',
     joinIntro: 'Dein anderes Gerät wartet. Es zeigt gleich eine Zahl — prüfe, dass es dieselbe ist wie hier.',
     joinCompare: 'Wenn die Zahlen nicht übereinstimmen: abbrechen. Dann hat etwas anderes als dieses Gerät geantwortet.',

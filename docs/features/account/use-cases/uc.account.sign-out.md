@@ -57,7 +57,9 @@ This is a property with several triggers, so it lives here and not under any one
   moment must not cost an unlock. Neither is a 408 or a 429, which a proxy in front of the instance may answer:
   they say *not now*, not *no* — nor a `403 tenant_suspended`, which a suspended tenant's own domain answers to
   every call without looking at the session ([uc.spaces.scope-access](../../spaces/use-cases/uc.spaces.scope-access.md)
-  A7). The same line decides E4: a sign-out refused that way did not revoke the family.
+  A7). The same line decides E4: a sign-out refused that way did not revoke the family. A rejection that cuts off
+  a pairing grant has the sign-in page say so, with the same one-word notice E4 uses
+  ([uc.account.onboard-device](uc.account.onboard-device.md) E6); any other rejection's ending says nothing.
 - **E2 — the tab holds no session.** The sign-in page at boot, a public share, a device waiting in a pairing
   ceremony: such a tab ignores the other-tab message, and a refresh rejected at boot is the ordinary *not
   signed in* path, not an ending. Without this, an ending on the sign-in page would load the sign-in page

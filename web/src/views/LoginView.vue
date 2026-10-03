@@ -236,6 +236,8 @@ function showSignOutNotice(left: SignOutNotice | null) {
   if (left === 'everywhere') notice.value = t('sessions.lockedDone')
   else if (left === 'everywhereUnconfirmed') warning.value = t('sessions.lockedDoneStillHere')
   else if (left === 'unconfirmed') warning.value = t('login.signOutUnconfirmed')
+  // uc.account.onboard-device E6: the session ended under a grant, so the panel that would have said so is gone.
+  else if (left === 'grantInterrupted') warning.value = t('pairing.grantInterrupted')
 }
 
 /** The way back: reveal the Secret-Key field again on the still-live session, persisting nothing. */

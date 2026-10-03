@@ -282,8 +282,9 @@ not documented; the code is the source of truth for that.
   selection is itself the lock. A share create, a re-issue and an item-favorite write take the scope row a removal
   holds; a group create and a group add take the tenant root a tenant removal holds; a purge selects with
   `FOR UPDATE` and a restore is a guarded update (cr-a-gate-holds-until-its-write-commits). A sign-in, a device wrap
-  and a pairing delegation take the account row (`AccountStore.lock`) that a password reset, a password change and a
-  key rotation take first, and re-read under it what those change — the auth key, the caller's session (inbox #297).
+  and a pairing delegation take the account row (`AccountStore.lock`) that a password reset, a password change, a
+  key rotation and a sign-out everywhere else take first, and re-read under it what those change — the auth key, the
+  caller's session (inbox #297, #316).
   The scope row is also the node tree's serializer: a node create, update, trash and restore and the trash purge
   take it first (`NodesStore.lockScope`); a guest's new identity and its upload re-check the link under the row lock
   its delete holds (`SharingStore.admitsGuests`).

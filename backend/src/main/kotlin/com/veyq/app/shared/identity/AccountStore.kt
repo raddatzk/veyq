@@ -33,7 +33,8 @@ class AccountStore {
      * transaction has not committed. So every one of them, and every writer that adds such a row (a sign-in, a new
      * device wrap, a pairing delegation), takes this lock first, and a writer re-reads under it what the cleanup
      * changes: the auth key it verifies against, the session it acts under. A sign-in by email locks the same row
-     * through [findByEmail].
+     * through [findByEmail]. A sign-out everywhere else ends the other devices' sessions too, and takes it as well
+     * (`SessionService.revokeOtherFamilies`, inbox #316).
      *
      * The lock is the first read of the account in its transaction: a lock on an entity this transaction already
      * loaded hands back the loaded copy, with the values from before the wait.
