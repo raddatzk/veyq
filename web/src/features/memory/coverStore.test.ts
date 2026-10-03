@@ -2,7 +2,8 @@
 // neither defect is live: the store is new, so there is nothing to redden against on the untouched tree.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-const loadNodeCover = vi.hoisted(() => vi.fn())
+// Typed by the real function (inbox #287): an untyped `vi.fn()` took a `{ x, y, w, h }` crop `CoverCrop` does not have.
+const loadNodeCover = vi.hoisted(() => vi.fn<typeof import('./memoryCover').loadNodeCover>())
 vi.mock('./memoryCover', async (orig) => ({ ...(await orig<typeof import('./memoryCover')>()), loadNodeCover }))
 vi.mock('./tree', async (orig) => ({
   ...(await orig<typeof import('./tree')>()),
@@ -38,7 +39,7 @@ beforeEach(() => {
     { id: 'n1', name: 'Rom', kind: 'MEMORY', parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'k', wrappedMeta: 'meta-1' },
   ] as unknown as typeof treeStore.nodes
   loadNodeCover.mockReset()
-  loadNodeCover.mockImplementation(async () => ({ blob: new Blob([new Uint8Array([1])]), crop: { x: 0, y: 0, w: 1, h: 1 } }))
+  loadNodeCover.mockImplementation(async () => ({ blob: new Blob([new Uint8Array([1])]), crop: { x: 0, y: 0, width: 1, height: 1 } }))
   resetCovers()
 })
 afterEach(() => vi.unstubAllGlobals())
