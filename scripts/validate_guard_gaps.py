@@ -101,6 +101,9 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      from the Memories application (ADR 0079), so an application cannot grow a back-edge into the platform. The
      `core/` tree does not exist yet, so the forgery creates it; the guard must stay green without it and go red
      with the planted file
+  35 a share-subtree contributor whose `authorizedBlobIds` forgets the derivative arm — rejected:
+     `validate_blob_reference_arity` follows the arms into every `SharedSubtreeContributor`, not only core's
+     `subtreeBlobIds` (the arm is red because of the follow: the file is present and still implements it)
 Open gaps — a forgery the guard still passes (a documented limit, not a defect to fix blindly):
   4b a lying `status: planned` on an implemented use-case passes. **Left open on purpose** — the obvious rule
      "planned ⇒ no coverage refs" is *false in general*: a use-case can be legitimately `planned` while carrying
@@ -237,6 +240,11 @@ TRASH_PURGE = "backend/src/main/kotlin/com/veyq/app/features/media/MediaTrashPur
 TENANT_HANDLER = "backend/src/main/kotlin/com/veyq/app/features/admin/tenant/TenantHandler.kt"
 TENANT_REPROJECT_CALL = "        if (outcome is SuspendOutcome.Done) reproject()\n"
 TRASH_PURGE_CTOR_ANCHOR = "    private val store: MediaStore,\n"
+# The derivative arm of the share blob-GET authorization, which lives in the media implementation of
+# `SharedSubtreeContributor` (cr-platform-core-boundaries step 7) — the place the live-twin check must follow it to.
+MEDIA_SHARE_CONTRIBUTOR = "backend/src/main/kotlin/com/veyq/app/features/media/MediaSharedSubtreeContributor.kt"
+DERIVATIVE_ARM_LINE = '            MediaDerivativeEntity.find("mediaId = ?1", m.id).list().forEach { ids.add(it.blobId) }\n'
+
 # Where a Host read through an alias constant is forged: the recovery resource is where the hand parse that
 # bought validate_lookup_single_home used to live, so it is where a copy of it would plausibly come back.
 RECOVERY_RESOURCE = "backend/src/main/kotlin/com/veyq/app/features/account/recovery/RecoveryResource.kt"
@@ -528,6 +536,19 @@ def forge_fourth_blob_reference_arm(root: pathlib.Path) -> str:
     return "a fourth column referencing veyq_blob, in Kotlin and SQL (must be REJECTED — consumers are now short an arm)"
 
 
+def forge_contributor_forgets_derivative_arm(root: pathlib.Path) -> str:
+    # The media contributor's `authorizedBlobIds` stops enumerating derivative blobs: the share listing still
+    # serves them, the blob GET 404s, and every declaration key of the arity guard is UNCHANGED. The file is
+    # present and still implements the interface, so this is red only because the guard FOLLOWS the arms into
+    # the contributor's body — a guard that merely scanned core's function would stay green on a missing arm
+    # it can no longer see.
+    f = root / MEDIA_SHARE_CONTRIBUTOR
+    if not f.is_file():
+        raise ForgeError(f"{MEDIA_SHARE_CONTRIBUTOR} is missing — the media contributor moved or was deleted")
+    f.write_text(_sub(f.read_text(), DERIVATIVE_ARM_LINE, ""))
+    return "a share-subtree contributor whose authorizedBlobIds forgets the derivative arm (must be REJECTED)"
+
+
 def forge_direct_store_delete_bypass(root: pathlib.Path) -> str:
     # A purge that deletes store objects inline instead of recording them for the sweep. Spelled the way the
     # NAIVE locator misses, and this one is not hypothetical: the receiver is named something other than
@@ -744,6 +765,7 @@ CASES = [
     ("32", "validate_wiki_sources.py", forge_wiki_backlink_removed,        False),
     ("33", "validate_wiki_sources.py", forge_wiki_prose_contradicts_doc,   True),
     ("34", "validate_shared_imports_no_features.py", forge_core_imports_media, False),
+    ("35", "validate_blob_reference_arity.py", forge_contributor_forgets_derivative_arm, False),
 ]
 
 
