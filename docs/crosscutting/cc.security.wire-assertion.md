@@ -127,8 +127,12 @@ Load-bearing, and repeated in the guard's own docstring rather than only here:
 - **The log sensor reads the e2e topology, which is not the deployed one.** The suites call the backend and the
   store directly, so the reverse proxy carries no e2e traffic, and the dev stack has no admin container at all.
   Neither compose file nor the chart enables a Traefik access log, so that one is empty by default. **The admin
-  nginx is not**: its base image logs every request line — method, URI and query string — to stdout
-  (`access_log … main`, linked to `/dev/stdout`), and nothing here reads it.
+  nginx logs every request, and nothing here reads it** — so its format is trimmed instead of swept
+  (`admin-web/nginx.conf.template`, one image for both deployment targets): method, path *without* the query
+  string, status, size, user agent, forwarded-for; no Referer. No admin flow carries a token in a URI (the SPA's
+  routes take no query, the Admin API's path parameters are opaque ids), so the trim removes nothing legitimate.
+  What remains: nginx's *error* log names the whole request line, query included, on a failed upstream (measured
+  on 1.30.5), and a cluster ingress in front of the chart's optional `admin.domain` keeps its own access log.
 - **Only the store's container log carries a control.** MariaDB, Traefik and Mailpit are swept because the rule
   that includes them is derived, not because anything proves they could show a leak: across the first runs each
   wrote **0** lines in the run's window (MariaDB writes its general log to the file the statement-log sweep reads,
