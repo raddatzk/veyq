@@ -14,6 +14,7 @@ import com.veyq.app.shared.scope.ScopeEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.scheduler.Scheduled
 import jakarta.enterprise.context.ApplicationScoped
+import jakarta.persistence.LockModeType
 import org.jboss.logging.Logger
 import java.time.Duration
 import java.time.Instant
@@ -96,7 +97,10 @@ class NodeSubtreePurge(
 
         // 0. the guest identities whose media or buckets this erases — read while the rows still name them; step 6
         //    drops the ones nothing references any more.
-        val media = MediaEntity.find("nodeId in ?1", nodeIds).list()
+        //    The selection is the media rows' lock, as every other erase of a media row takes it (`purgeMedia`, the
+        //    retention purge, a guest's delete): one that holds a row finishes first and the row is no longer
+        //    selected. Selected plainly, this then deleted a row already gone and rolled the whole erase back.
+        val media = MediaEntity.find("nodeId in ?1 order by id", nodeIds).withLock(LockModeType.PESSIMISTIC_WRITE).list()
         val buckets = BucketEntity.find("nodeId in ?1", nodeIds).list()
         val guests = media.mapNotNull { it.shareIdentityId } +
             buckets.mapNotNull { (OwnerKey.parse(it.ownerKey) as? OwnerKey.Share)?.shareIdentityId }

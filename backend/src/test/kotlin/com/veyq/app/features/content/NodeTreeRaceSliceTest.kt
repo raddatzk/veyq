@@ -1,5 +1,9 @@
 package com.veyq.app.features.content
 
+import com.veyq.app.features.media.BlobEntity
+import com.veyq.app.features.media.MediaEntity
+import com.veyq.app.features.media.MediaStore
+import com.veyq.app.features.media.TestBlob
 import com.veyq.app.shared.config.VeyqConfig
 import com.veyq.app.testing.RACE_ROUNDS
 import com.veyq.app.testing.TestFixtures.CONTENT_KEY
@@ -12,6 +16,7 @@ import jakarta.inject.Inject
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.time.Instant
 import java.util.Base64
@@ -35,6 +40,7 @@ class NodeTreeRaceSliceTest {
     @Inject lateinit var store: NodesStore
     @Inject lateinit var purge: NodeSubtreePurge
     @Inject lateinit var config: VeyqConfig
+    @Inject lateinit var media: MediaStore
 
     @Test
     fun aNodeCreatedUnderAFolderBeingTrashedIsRefused() {
@@ -113,7 +119,44 @@ class NodeTreeRaceSliceTest {
         }
     }
 
+    /**
+     * A trashed photo purged while the trash purge erases its Memory: the erase selected the photo unlocked, and its
+     * delete of a row the photo's purge had just removed rolled the whole erase back — retried next run, so nothing
+     * was lost, but the subtree could starve. Selected under the lock, it waits for the photo's purge and skips it.
+     */
+    @Test
+    fun aPhotoPurgedWhileItsSubtreeIsErasedDoesNotRollTheEraseBack() {
+        repeat(RACE_ROUNDS) { round ->
+            val (_, scopeId) = seedMemberScope()
+            val (memory, chapter) = expiredSubtree(scopeId)
+            val photo = trashedPhoto(scopeId, memory)
+            whileUncommitted(
+                change = { assertTrue(media.purgeMedia(scopeId, photo), "round $round") },
+                overlapping = { purge.run() },
+            )
+            assertEquals(listOf(null, null), tx { listOf(memory, chapter).map { NodeEntity.findById(it) } }, "round $round: the erase rolled back")
+        }
+    }
+
     // --- helpers ---
+
+    /** A trashed photo in [nodeId] — one the member-expedited purge may erase. */
+    private fun trashedPhoto(scopeId: String, nodeId: String): String {
+        val mediaId = UUID.randomUUID().toString()
+        tx {
+            val blobId = UUID.randomUUID().toString()
+            BlobEntity().apply {
+                id = blobId; this.scopeId = scopeId; storageKey = UUID.randomUUID().toString()
+                chunkCount = TestBlob.SMALL.chunkCount; byteSize = TestBlob.SMALL.byteSize; wrappedBlobKey = "Ymxvyi13cmFw"
+                createdAt = Instant.now()
+            }.persist()
+            MediaEntity().apply {
+                id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; this.blobId = blobId
+                createdAt = Instant.now(); deletedAt = Instant.now()
+            }.persist()
+        }
+        return mediaId
+    }
 
     private fun createMemory(userId: String, scopeId: String, nodeId: String, parent: String): CreateNodeOutcome =
         handler.create(userId, scopeId, nodeId, parent, NodeEntity.MEMORY, "bmV3", slug(), 0, 0, CONTENT_KEY, null)
