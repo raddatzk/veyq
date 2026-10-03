@@ -232,7 +232,7 @@ class SharingStore(
     /** [find] under a row lock, for every write to a share but [reissue], whose compare-and-set takes the same row
      *  lock as its first write. Without the lock an edit that read the row before a delete committed would write its
      *  own ciphertext onto the tombstone, and a re-activation would turn it back on; locked, it waits for the delete
-     *  and then finds no share. */
+     *  and then finds no share (`ShareDeleteRaceSliceTest`, red without the lock). */
     fun liveForUpdate(shareId: String): ShareEntity? =
         ShareEntity.findById(shareId, LockModeType.PESSIMISTIC_WRITE)?.takeIf { it.deletedAt == null }
 
