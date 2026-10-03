@@ -229,6 +229,15 @@ class SharingStore(
      *  caller gates scope membership first, so a non-member still cannot tell the two apart. */
     fun findIncludingDeleted(shareId: String): ShareEntity? = ShareEntity.findById(shareId)
 
+    /** Whether a share is enabled, and who owns it, tombstones included — by a scalar read that loads no entity, for
+     *  a re-issue that re-checks them under the scope lock before [reissue] spends the row: a row loaded first would
+     *  stay in the transaction's context, and the spend's own read would hand back that pre-spend copy. */
+    fun enabledAndOwnerOf(shareId: String): Pair<Boolean, String>? =
+        ShareEntity.getEntityManager()
+            .createQuery("select s.enabled, s.ownerAccount from ShareEntity s where s.id = :id", Array<Any>::class.java)
+            .setParameter("id", shareId).resultList.firstOrNull()
+            ?.let { (it[0] as Boolean) to (it[1] as String) }
+
     /** [find] under a row lock, for every write to a share but [reissue], whose compare-and-set takes the same row
      *  lock as its first write. Without the lock an edit that read the row before a delete committed would write its
      *  own ciphertext onto the tombstone, and a re-activation would turn it back on; locked, it waits for the delete

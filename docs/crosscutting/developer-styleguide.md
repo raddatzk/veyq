@@ -266,11 +266,18 @@ not documented; the code is the source of truth for that.
   member being removed adopted a live link in a group it had left. The last-owner guard reads the owner count under
   that lock too (`ScopesStore.changeRole`, `TenantHandler.removeMember`). Checked before it, two co-owners demoting
   each other both counted two owners and the group was left with none.
-  **A check under a lock is fresh only when the lock is its transaction's first read.** Production MariaDB runs
-  REPEATABLE READ, where the first plain read of a transaction fixes its snapshot. Every plain read after a later
-  `FOR UPDATE` then still sees the state from before the lock. The test H2 reads committed data, so no slice test
-  can show this. So the lock opens the transaction: `changeRole` is its own transaction, and `removeMember` reads its
-  scope ids before its transaction begins.
+  **A check under a lock reads what is committed when it runs, because every connection runs READ COMMITTED**, the
+  isolation the test H2 runs ([ADR 0078](../decisions/0078-production-reads-committed-like-its-tests.md)). At
+  MariaDB's default REPEATABLE READ the first plain read fixed the snapshot, so a check after a later lock was stale
+  on production and fresh in every slice test. `scripts/run_backend_races_on_mariadb.py` runs the race classes on
+  the pinned engine. One trap holds at any isolation: a lock on an entity the transaction already loaded hands back
+  the loaded copy. So a scope row is locked through `ScopeEntity.lockRow`, which refreshes it.
+  **A gate read outside its write's transaction is sound only where some serial order of the two writes explains
+  the outcome.** It is not where a concurrent cleanup enumerates the rows it must clean (a member's removal, a purge)
+  before the gated write's row exists: the write then re-checks under a lock the cleanup also holds, or the cleanup's
+  selection is itself the lock. A share create, a re-issue and an item-favorite write take the scope row a removal
+  holds; a group create and a group add take the tenant root a tenant removal holds; a purge selects with
+  `FOR UPDATE` and a restore is a guarded update (cr-a-gate-holds-until-its-write-commits).
   **A rule across different ids needs its own key.** "One personal scope per member and tenant" had no row to
   compare-and-set, and two creates under two ids collided on nothing. `ux_scope_personal_owner` is that row's
   compare-and-set, and `personalScopeExists` reads that key, so the loser's replay question is the index's own
