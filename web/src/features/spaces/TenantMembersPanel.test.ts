@@ -35,6 +35,7 @@ import { activeSpace, clearActiveSpace } from '../../app/activeSpace'
 import { ScopeKind, type ScopeMember } from '../../api/generated/scopes'
 import type { PendingMemberInvite } from '../../api/generated/tenants'
 import { realI18n, t } from '../../test/i18n'
+import { i18n } from '../../i18n'
 import { myTenant } from '../../test/models'
 
 const stubs = {
@@ -178,6 +179,21 @@ describe('TenantMembersPanel — removal and the links of the space (ADR 0075)',
     await removePartner()
     expect(confirmAskWithOption).toHaveBeenCalledWith(expect.objectContaining({ option: expect.objectContaining({ label: t('members.removeRevokeLinks') }) }))
     expect(removeTenantMember).toHaveBeenCalledWith('t-1', 'u-pend', true)
+  })
+
+  // inbox #259: a removal cuts the app's access, not a link the member copied — that keeps opening its Memory
+  // until it is renewed or turned off (uc.spaces.remove-tenant-member postconditions, ADR 0075 point 4). The
+  // confirmation must not promise more, in either language.
+  it('the confirmation says a copied link keeps working until renewed or turned off, in EN and DE', async () => {
+    confirmAskWithOption.mockResolvedValue(null)
+    await removePartner()
+    expect(confirmAskWithOption).toHaveBeenCalledWith(expect.objectContaining({ message: t('members.removeConfirm') }))
+    const de = (i18n.global.getLocaleMessage('de') as { members: { removeConfirm: string } }).members.removeConfirm
+    for (const copy of [t('members.removeConfirm'), de]) {
+      expect(copy).toMatch(/Link/i)
+      expect(copy).toMatch(/renew|erneuert/)
+      expect(copy).not.toMatch(/everything shared right away|alles Geteilte/)
+    }
   })
 
   it('control: unticked, the same removal turns off no link', async () => {

@@ -67,7 +67,7 @@ const en = {
     remove: 'Remove member',
     removeConfirmTitle: 'Remove member',
     removeConfirm:
-      'Remove this member? They lose access to everything shared right away. Their own memories stay readable to them for 30 days, then are erased. This can’t be undone.',
+      'Remove this member? They lose access to this space and its shared groups in the app right away. A link to a Memory they may have copied keeps working until it is renewed or turned off. Their own memories stay readable to them for 30 days, then are erased. This can’t be undone.',
     removed: 'Member removed.',
     actionFailed: 'That action failed. Please try again.',
     // ADR 0075: the removal confirmation's opt-in — also turn off every link of the tenant space
@@ -1153,7 +1153,7 @@ const de: typeof en = {
     remove: 'Mitglied entfernen',
     removeConfirmTitle: 'Mitglied entfernen',
     removeConfirm:
-      'Dieses Mitglied entfernen? Es verliert sofort den Zugriff auf alles Geteilte. Die eigenen Erinnerungen dieser Person bleiben 30 Tage lang lesbar und werden dann gelöscht. Das lässt sich nicht rückgängig machen.',
+      'Dieses Mitglied entfernen? Es verliert in der App sofort den Zugriff auf diesen Bereich und seine geteilten Gruppen. Ein Link zu einer Erinnerung, den es kopiert haben kann, funktioniert weiter, bis er erneuert oder abgeschaltet wird. Die eigenen Erinnerungen dieser Person bleiben 30 Tage lang lesbar und werden dann gelöscht. Das lässt sich nicht rückgängig machen.',
     removed: 'Mitglied entfernt.',
     actionFailed: 'Die Aktion ist fehlgeschlagen. Bitte erneut versuchen.',
     removeRevokeLinks: 'Auch alle Links dieses Bereichs abschalten',
