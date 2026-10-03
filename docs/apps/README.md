@@ -20,7 +20,7 @@ the rejected alternatives). German: *Anwendung*. Never "plugin" or "app".
 
 | Application | State |
 |---|---|
-| [Memories](memories.md) | Built. Its code is not yet separated from core. |
+| [Memories](memories.md) | Built. Backend: core (`com.veyq.app.core`) no longer imports it, but it is not yet its own package or module; web: not separated. What is and is not done: [ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Consequences. |
 | [Inventory](inventory.md) | Concept only. |
 | [Expenses](expenses.md) | Concept only. |
 | [Files](files.md) | Concept only. |

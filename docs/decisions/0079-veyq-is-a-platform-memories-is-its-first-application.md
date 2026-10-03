@@ -22,7 +22,7 @@ Measured 2026-10-03 (substrate: branch `main` of this repo, `grep`/`ls` over the
 `veyq_share` and `veyq_bucket` already key on a `node_id`; the backend has one feature package per area
 (`backend/src/main/kotlin/com/veyq/app/features/{account,admin,content,media,sharing,spaces,tasks,platform}`)
 and `shared/`; the node `kind` is closed to `[FOLDER, MEMORY, CHAPTER]` in `contracts/api/content.openapi.yaml`.
-**No code has moved for this decision yet** — see Consequences.
+That was the state when this was decided; what has moved since is under Consequences.
 
 ## Decision
 
@@ -93,14 +93,21 @@ application to be separated from.
 - **An append-only application cannot make the server keep its order.** The server may drop or reorder entries
   it holds unless a sequence number or hash chain is bound into each entry's associated data (ADR 0072 binds an
   object, not its neighbours). Each such application states that gap; it is not a platform property.
-- **The code does not match this yet.** Backend packages and web features are still named per feature, and the
-  node `kind` is a closed enum in the contract. Moving them is a change-request series; until it lands, docs
-  describing the target say so.
+- **The code matches this only in part.** Phase 1 of the change-request series (inbox #324) drew the backend
+  boundary inside the one Gradle module: `com.veyq.app.core.{node,blob,sharing,quota,scope}` hold the node, blob,
+  upload-session and share entities, storage usage, and five interfaces through which core reaches Memories code
+  without importing it — `ScopeEraser`, `NodeSubtreeEraser`, `GuestIdentityUsage`, `SharedSubtreeContributor`, `ShareGuestWrites` — and neither `core/`
+  nor `shared/` imports Memories code. Not done: the Gradle module split; the web side; the node `kind` is still
+  the closed `FOLDER`/`MEMORY`/`CHAPTER` set (contract and `NodeEntity`); `NodesStore`, `NodesHandler`,
+  `SharingStore`, `SharingHandler`, `ScopePurge` and `NodeSubtreePurge` still live in `features.*` packages; and
+  `ScopesStore` (`features.spaces`) still imports the item-favorites entity to clear a removed member's favorites.
+  Docs describing the target say which of these they rely on.
 - **Guards move with the code.** `validate_shared_imports_no_features.py` encodes feature → shared; the
   application → core, never core → application and never application → application rules need the same form of
   guard (an import check over the moved packages, bite-tested with a core file importing an application) before
-  the first package moves, or the direction is prose. The test trees stay out of scope of the import check for the
-  reasons that guard's docstring gives.
+  the first package moves, or the direction is prose. The core → application half now exists in the same guard
+  (`core/` and `shared/` may not import the Memories packages); application → application does not yet. The
+  test trees stay out of scope of the import check for the reasons that guard's docstring gives.
 - **Rejected: a generic record store** (core offers "put a sealed record under a key", applications are just
   clients of it). It would make the server a database of blobs with no shape, give up per-kind authorization,
   quota and trash rules, and push every integrity rule into clients that cannot see each other.

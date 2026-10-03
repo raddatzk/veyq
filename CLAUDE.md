@@ -23,8 +23,10 @@ The server is **operator-blind**: it stores and serves only ciphertext.
 - `backend/` + `web/` — the two user-facing surfaces. A CR's phase order is
   **contracts → backend → web**. **Target** ([ADR 0079](docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)):
   each splits into **core** (the platform) and **applications** (Memories first; compiled in, no runtime
-  loading; an application may use core, never the reverse, never another application). **Not moved yet** —
-  today the code is still organised per feature; [`docs/apps/`](docs/apps/README.md) maps what belongs where.
+  loading; an application may use core, never the reverse, never another application). **Partly moved** —
+  the backend has `com.veyq.app.core` (guarded: it imports no Memories code) inside the one Gradle module, the
+  rest of the backend, Memories included, and all of `web/` are still organised per feature; ADR 0079's Consequences say what is not done, and
+  [`docs/apps/`](docs/apps/README.md) maps what belongs where.
 - `admin-web/` — the **Server-Owner administration** surface: its own package, its own container, reachable
   localhost-only by default ([ADR 0065](docs/decisions/0065-admin-ui-cli-separate-service.md)). A pure client
   of the existing backend Admin API — no DB, no KEK, no backend surface of its own. It holds tenant CRUD,
