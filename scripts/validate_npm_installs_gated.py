@@ -28,10 +28,6 @@ the gate's own docstring said so as its limit. The two Dockerfiles' `npm ci` wer
 `build` job `needs: test`, and `test` installs through the gate. That argument was prose; this makes it a check.
 
 **Its limits — what a green run does NOT prove.**
-  - **The arm64 image's platform-only packages.** The gating job runs on x64, and npm installs a platform-restricted
-    optional package only on its own platform, so the packages the arm64 image build installs and an x64 install
-    does not (5 arm64-only entries in the lockfile on 2026-10-03: the esbuild, rolldown and lightningcss
-    bindings) are never scanned for a deprecation mark.
   - **Spellings it does not parse.** An install reached through `npx`, `yarn`/`pnpm`, a shell variable or alias, a
     nested `sh -c '…'` string, a heredoc `RUN`, or a third-party `uses:` action that installs on its own is
     invisible; so is one in a script a step calls (no tracked script but the gate runs npm's install today).
