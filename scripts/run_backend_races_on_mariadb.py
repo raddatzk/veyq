@@ -16,8 +16,9 @@ the non-race methods of a race class are cheap and prove the class still boots o
 name, binds a free 127.0.0.1 port, is created fresh per run (`--rm`, a fresh database each time) and is stopped
 in a `finally`. Its image is read from `infra/docker-compose.yml`, so the pin has one home.
 
-**Not a `validate_*` guard and no coverage claim.** It needs Docker, and no CI workflow runs it yet, so nothing it
-proves counts as coverage (ADR 0040). It is a hand-run proof with a committed recipe.
+**Not a `validate_*` guard; a CI job, not yet an admitted one.** It needs Docker, so it runs as `ci.yml`'s
+`backend-races` job, not in the buildless glob. No run has executed that job yet (the repository has no remote), so
+until a run's log shows the race classes executed it admits nothing (ADR 0040), and a hand run stays the proof.
 
 Usage:
     python3 scripts/run_backend_races_on_mariadb.py [--tests PATTERN ...]   # from the repo root
