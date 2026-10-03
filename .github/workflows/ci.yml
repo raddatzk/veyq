@@ -129,3 +129,18 @@ jobs:
 
       - name: Run web E2E suites against a live backend
         run: python3 scripts/run_web_e2e.py
+
+      # A red wire sweep is only debuggable from what it retained: boot logs, the HTTP recordings, the dumps, the
+      # statement log and the mailbox. Kept on success too, so a green run can be compared against a red one.
+      # They carry throwaway tokens and keys of throwaway instances (cc.security.wire-assertion § what a green
+      # sweep does not prove). `include-hidden-files` because the directory itself is dot-named, and the
+      # action's default skips hidden paths.
+      - name: Keep the e2e run directory
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-out
+          path: .e2e-out/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7

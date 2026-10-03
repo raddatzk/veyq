@@ -172,8 +172,10 @@ Load-bearing, and repeated in the guard's own docstring rather than only here:
   signature without the path in front of it would not be matched.
 - **The run's own artifacts carry the raw tokens.** Each `.e2e-out/<stamp>/http-*.jsonl` holds every token the suite
   handled, refresh cookies included — throwaway credentials of throwaway instances, gitignored, and the reason the
-  derivation can exist at all. Once `.e2e-out/` is uploaded from CI they leave the machine; whoever arranges that
-  arranges where they go. The retained `database-<tag>.sql` hold only the hashes.
+  derivation can exist at all. The `web-e2e` job uploads `.e2e-out/` as the `e2e-out` artifact on every run, red or
+  green, kept seven days, so those tokens and keys leave the machine and are readable by whoever can read the
+  repository's Actions artifacts — still throwaway, and that is the whole of what makes the upload acceptable.
+  The retained `database-<tag>.sql` hold only the hashes.
 - **Passing cannot be arranged from inside the client, but a canary can still be removed.** The oracle is
   outside the code — the bytes are in a database the client process does not write — so an agent cannot satisfy
   the sweep by weakening an assertion. Deleting a canary is a visible diff, exactly like widening an allowlist
