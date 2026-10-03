@@ -204,6 +204,8 @@ const en = {
     },
     groupNameUnavailable: 'Group (name unavailable until you’re re-admitted)',
     groupNameLastSeen: 'Name as this device last saw it — it may have changed.',
+    personalSpace: 'Your personal space',
+    scopeNameUnavailable: 'A space this device hasn’t opened (its name isn’t available here)',
     requeue: 'Start again',
     requeueFailed: 'That didn’t work. Please try again.',
     errorTrustState:
@@ -1285,6 +1287,8 @@ const de: typeof en = {
     },
     groupNameUnavailable: 'Gruppe (Name nicht verfügbar, bis du wieder aufgenommen bist)',
     groupNameLastSeen: 'Name, wie ihn dieses Gerät zuletzt gesehen hat — er kann sich geändert haben.',
+    personalSpace: 'Dein persönlicher Bereich',
+    scopeNameUnavailable: 'Ein Bereich, den dieses Gerät nicht geöffnet hat (sein Name ist hier nicht verfügbar)',
     requeue: 'Neu anstoßen',
     requeueFailed: 'Das hat nicht geklappt. Bitte versuche es erneut.',
     errorTrustState:

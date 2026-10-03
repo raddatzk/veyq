@@ -30,9 +30,10 @@ import { account } from '../../../app/account'
 import Password from 'primevue/password'
 import Message from 'primevue/message'
 import { listQueuedRotations, requeueQueuedRotation, rotateKeys, RotationRefused, type RotationResult } from './rotateKeys'
-import { listMyTenants } from '../../spaces/scopes'
+import { listMyScopes, listMyTenants } from '../../spaces/scopes'
 import { groupNameSeen } from '../../spaces/groupNamesSeen'
 import type { RotationScopeState } from '../../../api/generated/account'
+import { ScopeKind } from '../../../api/generated/scopes'
 import { unlockOrigin } from '../../../app/vault'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
 import EmailAddressSection from '../email/EmailAddressSection.vue'
@@ -58,18 +59,39 @@ const queued = ref<RotationScopeState[]>([])
  *  account cannot open until it is re-admitted, so its row shows the name this page last opened, marked as
  *  possibly out of date ({@link groupNameSeen}, memory only), or a neutral label — never the raw id (inbox #280). */
 const tenantNames = ref<Record<string, string>>({})
+/** The kind of each scope the active tenant lists for this account, by scope id — so the result list (the scopes
+ *  this device re-keyed alone, whose ids the rotation answers without a kind) can name the personal space as such
+ *  (inbox #281). A sole-member scope of another tenant is not listed here and reads neutral. */
+const scopeKinds = ref<Record<string, ScopeKind>>({})
 const requeueing = ref<string | null>(null)
 const requeueError = ref('')
 
 async function loadQueued() {
   try {
     queued.value = await listQueuedRotations()
-    if (queued.value.length) tenantNames.value = Object.fromEntries((await listMyTenants()).map((tn) => [tn.tenantId, tn.name]))
   } catch {
     /* the section stays empty; the rotation itself is unaffected */
   }
+  await loadLabels()
 }
 onMounted(loadQueued)
+
+/** The device-local labels both lists use instead of a raw scope id; a failed read leaves the neutral label. */
+async function loadLabels() {
+  const alone = result.value?.scopes.length ?? 0
+  if (!queued.value.length && !alone) return
+  try {
+    tenantNames.value = Object.fromEntries((await listMyTenants()).map((tn) => [tn.tenantId, tn.name]))
+  } catch {
+    /* neutral labels */
+  }
+  if (!alone) return
+  try {
+    scopeKinds.value = Object.fromEntries((await listMyScopes()).map((s) => [s.id, s.kind]))
+  } catch {
+    /* neutral labels */
+  }
+}
 
 /** `failed` only: queue it again, this account still excluded; the row shows the state the server answers. */
 async function requeue(scopeId: string) {
@@ -194,8 +216,14 @@ async function confirm() {
       <template v-else>
         <Message severity="info" :closable="false">{{ t('rotation.doneNotRepair') }}</Message>
         <ul class="rotation-results">
-          <li v-for="s in result.scopes" :key="s.scopeId" class="veyq-list-row">
-            <span class="rotation-scope-id">{{ s.scopeId }}</span>
+          <li v-for="s in result.scopes" :key="s.scopeId" class="veyq-list-row" :data-alone-scope="s.scopeId">
+            <span v-if="tenantNames[s.scopeId]">{{ tenantNames[s.scopeId] }}</span>
+            <span v-else-if="scopeKinds[s.scopeId] === ScopeKind.Personal">{{ t('rotation.personalSpace') }}</span>
+            <span v-else-if="groupNameSeen(s.scopeId)">
+              {{ groupNameSeen(s.scopeId) }}
+              <small class="rotation-name-stale">{{ t('rotation.groupNameLastSeen') }}</small>
+            </span>
+            <span v-else class="rotation-name-stale">{{ t('rotation.scopeNameUnavailable') }}</span>
             <span class="veyq-badge" :class="`is-${s.status}`">{{ t(`rotation.status.${s.status}`) }}</span>
             <small>{{ t(`rotation.statusHint.${s.status}`) }}</small>
           </li>
@@ -301,11 +329,6 @@ async function confirm() {
 .rotation-queued h3 {
   margin: 0 0 0.5rem;
   font-size: 1rem;
-}
-.rotation-scope-id {
-  font-family: var(--app-font-mono, monospace);
-  font-size: 0.85em;
-  color: var(--app-muted);
 }
 .rotation-name-stale {
   color: var(--app-muted);
