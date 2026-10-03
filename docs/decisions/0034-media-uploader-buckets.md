@@ -106,7 +106,8 @@ the experience in [uc.memory.buckets](../features/memory/use-cases/uc.memory.buc
   contributors; kept to avoid churning the shipped sharing feature in this CR, flagged for cleanup when sharing is
   next touched.
 - **Migration adds** the `veyq_bucket` table + `media.bucket_id` + `media.created_by`; existing media backfill to
-  `created_by = user:{owner}` (or their `share:{id}`) and `bucket_id = null` (→ their primary, lazy).
+  `created_by = user:{owner}` (or their `share:{id}`) and `bucket_id = null` (→ their primary, lazy). That list-time
+  backfill was deleted before V1 (inbox #264): every medium since is born with both, and V1 carries no older rows.
 
 ## Alternatives considered
 

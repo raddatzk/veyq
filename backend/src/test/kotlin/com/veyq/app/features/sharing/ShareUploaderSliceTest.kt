@@ -5,6 +5,7 @@ import com.veyq.app.features.media.TestBlob
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.content.NodesStore
 import com.veyq.app.features.media.BlobEntity
+import com.veyq.app.features.media.BucketEntity
 import com.veyq.app.features.media.MediaEntity
 import com.veyq.app.features.media.StorageQuota
 import com.veyq.app.shared.blobstore.StoreReclaimEntity
@@ -413,9 +414,21 @@ class ShareUploaderSliceTest {
                 id = blobId; this.scopeId = scopeId; storageKey = UUID.randomUUID().toString()
                 chunkCount = TestBlob.SMALL.chunkCount; byteSize = TestBlob.SMALL.byteSize; wrappedBlobKey = "Ymxvyi13cmFw"; createdAt = Instant.now()
             }.persist()
+            if (identityId == null) {
+                MediaEntity().apply {
+                    id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; this.blobId = blobId; createdAt = Instant.now()
+                }.persist()
+                return@run
+            }
+            // as `MediaStore.attach` does: a guest's upload lands in their primary bucket, named by their identity
+            val bucket = BucketEntity().apply {
+                id = UUID.randomUUID().toString(); this.scopeId = scopeId; this.nodeId = nodeId
+                ownerKey = "share:$identityId"; sealedName = ShareIdentityEntity.findById(identityId)?.sealedDisplayName
+                isPrimary = true; createdAt = Instant.now()
+            }.also { it.persist() }
             MediaEntity().apply {
                 id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; this.blobId = blobId
-                shareIdentityId = identityId; createdAt = Instant.now()
+                shareIdentityId = identityId; createdBy = bucket.ownerKey; bucketId = bucket.id; createdAt = Instant.now()
             }.persist()
         }
         return mediaId

@@ -11,7 +11,7 @@ title: Buckets — group a Memory's media by who contributed it
 # "Beiträge"-tab click-through is pending a session with the dev backend up.
 acceptanceCriteria:
   - id: uploader-stamp-on-media
-    text: Every uploaded medium carries an operator-visible uploader stamp — a member's created_by = owner_key "user:{id}" XOR a contributor's "share:{shareIdentityId}" — set at attach and returned by the per-node media list (ownerKey/bucketId), so a client can group. A medium with no member stamp (a pre-cr0113 owner upload) is lazily backfilled to the owner's primary at list time.
+    text: Every uploaded medium carries an operator-visible uploader stamp — a member's created_by = owner_key "user:{id}" XOR a contributor's "share:{shareIdentityId}" — set at attach and returned by the per-node media list (ownerKey/bucketId), so a client can group. Attach is the only insert, so no medium lacks either (the list-time backfill for pre-cr0113 rows was deleted before V1, inbox #264).
     coverage:
       backend:
         integration: [MediaBucketsSliceTest.uploadStampsOwnerKeyAndMaterializesPrimary]
