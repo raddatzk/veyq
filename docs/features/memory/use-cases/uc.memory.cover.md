@@ -44,7 +44,9 @@ and offsets it.
    (1–3×) to frame it. Save normalizes the pan/zoom back to the `0..1` crop rectangle.
 3. On save, the client seals `cover { source, crop }` — `source` = the media `mediaId` or the uploaded blob ref —
    into the node's `wrappedMeta` under `K_mem` (read-modify-write — the sibling date/location are preserved) and
-   PATCHes it via `updateNode`. Switching away from an uploaded cover reclaims its standalone blob. The detail
+   PATCHes it via `updateNode`. Switching away from an uploaded cover reclaims its standalone blob once that write
+   has landed, decided from the cover the write replaced ([ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md)
+   point 3), not from the editor's copy. The detail
    header re-renders; the browse card and the map pin pick it up.
 4. **Everywhere the Memory shows**, its cover is rendered from the same sealed crop over the chosen media's
    decrypted thumbnail: the **browse card**, the **detail header**, the **map pin**, and the **sidebar Favorites

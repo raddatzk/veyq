@@ -240,6 +240,26 @@ describe('setMemoryCover', () => {
     expect(reapplied).toHaveBeenCalledTimes(2)
     expect(unsealMemoryCover(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: state.wrappedMeta })).toEqual(mine)
   })
+
+  /** inbox #284: `replaced` is the cover the LANDED write replaced — the 409's current blob, not the caller's copy. */
+  it('reports the cover it replaced from the blob the write landed on, not from the copy it was handed', async () => {
+    const peersUpload = { source: { kind: 'upload', ref: { blobId: 'peer-blob', chunkCount: 1, byteSize: 9, wrappedBlobKey: 'a2V5' } }, crop: FULL_FRAME }
+    const mineOld = sealMeta({ v: 1, cover: { source: { kind: 'media', mediaId: 'mine-old' }, crop: FULL_FRAME } })
+    const updateNode = vi.fn<ContentApi['updateNode']>()
+      .mockRejectedValueOnce(staleWith(sealMeta({ v: 1, cover: peersUpload }), 2))
+      .mockResolvedValue(undefined)
+    fakeApi(contentApi, { updateNode })
+    const mine: MemoryCover = { source: { kind: 'media', mediaId: 'mine' }, crop: FULL_FRAME }
+
+    const state = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, mine, { wrappedMeta: mineOld, metaVersion: 1 }, false)
+
+    expect(state.replaced).toEqual(normalizeMemoryCover(peersUpload, NODE_ID))
+    expect(state.replaced?.source.kind).toBe('upload')
+
+    stubApi(contentApi, { updateNode: undefined })
+    const plain = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, null, { wrappedMeta: mineOld, metaVersion: 1 })
+    expect(plain.replaced).toEqual({ source: { kind: 'media', mediaId: 'mine-old' }, crop: FULL_FRAME })
+  })
 })
 
 describe('sameMemoryCover', () => {

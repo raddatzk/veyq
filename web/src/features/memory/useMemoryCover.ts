@@ -94,19 +94,23 @@ export function useMemoryCover(ctx: MemoryCoverContext) {
   /**
    * Apply the cover dialog's save intent (cr-0072 media + cr-0073 upload): read-modify-write the node meta under
    * K_mem (the date + location are preserved). An **upload** uploads + commits a standalone cover blob (whose
-   * commit atomically reclaims any prior cover blob); switching **away** from a prior upload cover reclaims its
-   * now-orphaned blob via `deleteCoverBlob`. `keep` re-seals the current source with a moved crop only.
+   * commit atomically reclaims any prior cover blob); a save that replaced an **uploaded** cover reclaims that
+   * blob via `deleteCoverBlob` once the write has landed. `keep` re-seals the current source with a moved crop only.
    *
    * Version-checked like every meta write (ADR 0077): a peer's cover written meanwhile re-opens the editor on it —
-   * unless this save already moved the node's one cover blob (`blobMoved`), in which case its own cover is
+   * unless this save already moved the node's one cover blob (an upload), in which case its own cover is
    * re-applied: re-opening on the peer's cover would show a cover whose blob this save just replaced.
+   *
+   * The reclaim is decided from the cover the landed write replaced, never from this tree copy (inbox #284): the
+   * node has ONE cover-blob slot and the delete takes whatever sits in it, so a stale copy naming an upload deleted
+   * a peer's newer one, and a stale copy naming none left a replaced upload behind. Write first, then delete: a
+   * failed delete leaves a blob the node still holds (the next upload's commit or the node's delete reclaims it),
+   * where deleting first left a cover the meta still named and nothing could open.
    */
   async function onCoverSave(intent: CoverSaveIntent) {
     const key = ctx.memoryKey()
     if (!key) return
     const nodeId = ctx.node().id
-    const priorUpload = storedCover.value?.source.kind === 'upload'
-    let blobMoved = false
     try {
       let cover: MemoryCover | null
       if (intent.kind === 'upload') {
@@ -116,27 +120,24 @@ export function useMemoryCover(ctx: MemoryCoverContext) {
           lastModified: intent.file.lastModified,
           name: intent.file.name,
         })
-        blobMoved = true
         cover = { source: { kind: 'upload', ref }, crop: intent.crop }
       } else if (intent.kind === 'media') {
-        if (priorUpload) {
-          await deleteCoverBlob(ctx.scopeId(), nodeId) // reclaim the now-orphaned upload blob
-          blobMoved = true
-        }
         cover = { source: { kind: 'media', mediaId: intent.mediaId }, crop: intent.crop }
       } else if (intent.kind === 'keep') {
         const source = storedCover.value?.source
         if (!source) return
         cover = { source, crop: intent.crop }
       } else {
-        if (priorUpload) {
-          await deleteCoverBlob(ctx.scopeId(), nodeId)
-          blobMoved = true
-        }
         cover = null
       }
-      const state = await setMemoryCover(ctx.scopeId(), nodeId, key, cover, nodeMetaState(ctx.node()), !blobMoved)
+      const blobMoved = intent.kind === 'upload'
+      const { replaced, ...state } = await setMemoryCover(ctx.scopeId(), nodeId, key, cover, nodeMetaState(ctx.node()), !blobMoved)
       ctx.onMetaUpdated({ nodeId, ...state })
+      if (!blobMoved && replaced?.source.kind === 'upload' && cover?.source.kind !== 'upload') {
+        await deleteCoverBlob(ctx.scopeId(), nodeId).catch(() => {
+          /* the node still holds the blob; the next upload's commit or the node's delete reclaims it */
+        })
+      }
     } catch (e) {
       // best-effort: keep the header stable; a retry re-seals. A refusal for lack of room is the one failure the
       // user must hear about — the cover would otherwise just not appear — and it reads as the uploads tray's does.

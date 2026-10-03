@@ -49,8 +49,12 @@ one-element set over the stored one.
      overwritten"*, and writes nothing when that decision says so.
    - A **backfill** re-applies its one field, and writes nothing when the fresh blob already has it.
    - The **cover editor** is the one exception: once its save has moved the node's single cover-blob slot
-     (an upload, or a switch away from an uploaded cover), its own cover wins on the retry — re-opening on the
-     peer's cover would show a cover whose blob that save just replaced.
+     (an upload, whose commit replaces whatever blob the slot held), its own cover wins on the retry —
+     re-opening on the peer's cover would show a cover whose blob that save just replaced. A switch **away** from
+     an uploaded cover moves nothing before its write: it surfaces a peer's cover like any editor, and reclaims
+     the slot only after the write has landed, and only when the cover that write replaced — read from the blob
+     the server accepted it over, never from the editor's own copy — was an upload. The slot's delete takes
+     whatever sits in it, so deciding from a stale copy deleted a peer's newer upload or left a replaced one.
 4. **A writer never seals a blob it could not open, nor one rebuilt from a projection.** Only an **absent** blob
    is a fresh one; a present blob that does not open or parse is refused — a self-heal or backfill stops, an
    editor says so. Writers start from the raw opened blob and keep every field verbatim, known or not. Reads stay
