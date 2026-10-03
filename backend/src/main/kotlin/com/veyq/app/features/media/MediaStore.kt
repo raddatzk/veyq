@@ -4,7 +4,6 @@ import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.sharing.ShareIdentityEntity
 import com.veyq.app.shared.blobstore.StoreObjectRef
 import com.veyq.app.shared.blobstore.StoreReclaimStore
-import com.veyq.app.shared.membership.MembershipEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
@@ -391,7 +390,7 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
             m.id, blob.id, blob.chunkCount, blob.byteSize, blob.wrappedBlobKey, decodeManifest(blob.manifest),
             derivatives, m.wrappedMeta, m.updatedAt ?: m.createdAt, // cr-0107: coalesce for pre-backfill safety
             m.deletedAt, m.deletedBy, // cr-0110: null for live media, populated in the trashed listing
-            m.createdBy ?: m.shareIdentityId?.let { OwnerKey.Share(it).format() }, m.bucketId, // cr-0113
+            m.createdBy, m.bucketId, // cr-0113: `attach` stamps both
             m.metaVersion,
         )
     }
@@ -511,16 +510,6 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
         s?.trim()?.removeSurrounding("[", "]")?.takeIf { it.isNotBlank() }?.split(",")?.map { it.trim().toLong() }
 
     // --- buckets (en.memory.buckets, ADR 0034, cr-0113) ----------------------
-
-    /** The scope's owner userId (its sole/oldest membership) — the fallback attribution for pre-cr0113 member media. */
-    fun scopeOwnerUserId(scopeId: String): String? =
-        MembershipEntity.find("scopeId = ?1", scopeId).firstResult()?.userId
-
-    /** A media's owner_key: the denormalized `created_by`, else the contributor `share:{id}`, else the scope owner. */
-    private fun ownerKeyOf(m: MediaEntity, scopeOwnerUserId: String?): String =
-        m.createdBy
-            ?: m.shareIdentityId?.let { OwnerKey.Share(it).format() }
-            ?: OwnerKey.User(scopeOwnerUserId ?: "unknown").format()
 
     /** The owner_key for a NEW upload: a contributor `share:{id}`, else a member `user:{id}`. */
     private fun ownerKeyFor(uploaderUserId: String?, shareIdentityId: String?): String =
@@ -663,12 +652,16 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
      */
     @Transactional
     fun moveMedia(scopeId: String, nodeId: String, mediaIds: List<String>, targetBucketId: String?): Boolean {
-        val scopeOwner = scopeOwnerUserId(scopeId)
         val media = mediaIds.map { id ->
             MediaEntity.findById(id)?.takeIf { it.scopeId == scopeId && it.nodeId == nodeId && it.deletedAt == null } ?: return false
         }
         // One shared root only — a single distinct source owner_key; more than one would be a cross-owner move.
-        val ownerKey = media.map { ownerKeyOf(it, scopeOwner) }.distinct().singleOrNull() ?: return false
+        // `created_by` is the owner: `attach`, the only media insert, stamps it. The fallbacks this once had for
+        // media from before buckets (the guest identity, then the scope's first member) had no input left, and the
+        // second would have attributed another member's photo to the scope owner and let a cross-owner move through
+        // (inbox #305). A medium without it is a bug, and must fail like one.
+        val ownerKey = media.map { checkNotNull(it.createdBy) { "media ${it.id} has no created_by" } }.distinct().singleOrNull()
+            ?: return false
         val target = if (targetBucketId == null) {
             ensurePrimaryBucket(scopeId, nodeId, ownerKey, primarySealedNameFor(ownerKey))
         } else {
