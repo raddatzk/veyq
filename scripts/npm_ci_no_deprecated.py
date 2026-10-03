@@ -23,7 +23,7 @@ archived, abandoned or unmaintained without that mark passes (the root CLAUDE.md
 § jsqr is the standing example — neither archived nor deprecated, and stale). Only the npm tree: Gradle has no
 such mark, and the Dockerfiles' own `npm ci` installs the same lockfile ungated. Only at install time: a package
 deprecated after the last run is caught by the next one, not before. And only where it is called — every
-`npm ci` in `.github/workflows/` goes through it today, but nothing enforces that a new one will. It needs the
+npm install in `.github/workflows/` goes through it, which `validate_npm_installs_gated.py` holds. It needs the
 network and a full install, so it is not a buildless `validate_*.py`; it replaces `npm ci` in the CI jobs
 instead. Runnable locally the same way:
 
