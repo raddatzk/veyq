@@ -30,9 +30,13 @@ nested into **Chapters**. Product language **Memory / Chapter** is unchanged; fo
 | Seals bound to their object | [ADR 0072](../decisions/0072-a-seal-binds-its-object.md) |
 | Concurrent writes to a sealed blob | [ADR 0077](../decisions/0077-a-write-carries-the-version-it-read.md) |
 
-## Not separated yet
+## Separated only in part
 
-Measured (`ls backend/src/main/kotlin/com/veyq/app/features` and `grep -rl MEMORY` over it): the backend's
-`content` package holds the node tree and the handling of the `MEMORY` kind together, `media` and `sharing` are
-their own feature packages, and the web's `features/memory` holds both tree and Memory screens. Splitting core
-from this application is a change-request series, not done.
+Measured 2026-10-04 (`ls backend/src/main/kotlin/com/veyq/app/core backend/src/main/kotlin/com/veyq/app/features`):
+the backend's `core` packages hold the node, blob, upload-session and share entities and storage usage, and import
+no Memories code; core reaches media and favorites through interfaces they implement. But Memories is not its own
+package: the node tree's handler and store (`features.content`), the share handler and store
+(`features.sharing`), and `media` are still feature packages, the node `kind` is still the closed
+`FOLDER`/`MEMORY`/`CHAPTER` set, and the web's `features/memory` holds both tree and Memory screens. The rest of
+the series is not done; [ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)
+Consequences lists it.

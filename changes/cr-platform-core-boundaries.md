@@ -1,7 +1,7 @@
 ---
 id: cr-platform-core-boundaries
 title: Platform phase 1 — core packages stop importing the Memories application, inside the one Gradle module
-status: planned
+status: in-progress
 satisfies: [en.memory.tree, en.spaces.tenant-scope]
 adrs: ["0079", "0072", "0013", "0012"]
 invariants: [operator-blind E2EE everywhere, self-hostable by default, API-first]
@@ -19,9 +19,9 @@ invariants: [operator-blind E2EE everywhere, self-hostable by default, API-first
 ## Goal
 
 [ADR 0079](../docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) decides that veyq is a
-platform and Memories its first application, and that an application depends on core, never the reverse. No code
-has moved yet (inbox #324). This CR is that restructuring's **phase 1: draw the boundary inside the existing
-single Gradle module, with no behaviour change.**
+platform and Memories its first application, and that an application depends on core, never the reverse. This CR is
+that restructuring's **phase 1: draw the boundary inside the existing single Gradle module, with no behaviour
+change.** All nine steps are merged on `main`; § State says what is still owed before the CR closes.
 
 After it, the **core** packages — the existing `shared/` plus four new ones, `core.node`, `core.blob`,
 `core.sharing`, `core.quota` (all under `com.veyq.app.core`) — import nothing from the Memories application
@@ -33,6 +33,31 @@ bite-test proves it can go red.
 The point of doing this before any new application: each interface is proven by the existing suite on the
 one application that exists, with no new behaviour to confound a failure. A new node kind is the *next* CR, not
 this one.
+
+## State (measured 2026-10-04, `main` @ `58f3de0b`, after step 6 merged)
+
+All nine steps are merged (hash on each step below). **Not closed yet**, because two things are owed:
+- a reviewer fix to the guards (`scripts/`) and to `SharingStore`/`SharingHandler` is in flight in a parallel
+  session;
+- the MariaDB race suite (the `backend-races` job; step 6 names `NodeTreeRaceSliceTest`, step 8
+  `GuestWriteRaceSliceTest`) has not been run on the merged tree.
+
+Where the build differs from the plan below (the code is right; the plan is kept as written):
+- `ScopeEraser` lives in a fifth core package, `core.scope`; `GuestIdentityUsage` lives in `core.sharing`, not
+  `core.node`; the upload DTOs (row 17) moved to `core.blob` (`core/blob/Upload.kt`).
+  `ls backend/src/main/kotlin/com/veyq/app/core` lists `blob node quota scope sharing`.
+- `ScopePurge` (`features.spaces.scope`) and `NodeSubtreePurge` (`features.content`) keep their packages and now
+  only sort and run the erasers by `phase`. `NodesStore`, `NodesHandler`, `SharingStore` and `SharingHandler` also
+  stay in `features.*`. They import no Memories code, but they are not under `core/`, so the core-import guard
+  does not read them.
+
+**Named remainder — accepted, not fixed here.** `features/spaces/scope/ScopesStore.kt` still imports
+`features.content.itemfavorites.ItemFavoritesEntity` and deletes a removed member's item favorites in both removal paths
+(`removeMembership` and the removal-rotation, ADR 0068). It is out of this CR because it is a **membership-removal hook**, a different seam from the
+erasers: nothing is erased, one user loses access to one scope. The core-import guard does not see it
+(`features.spaces` is not `core/`). The follow-up is a `MembershipEraser`-style interface (core calls it when a
+membership ends; item favorites implements it), which lets the import go. Until then it is the one hit row 2's
+locator still returns.
 
 ## Context & constraints
 
@@ -106,7 +131,7 @@ parallel. Steps 2a and 2b both touch `ScopePurge`, `MediaStore` and `SharingStor
 both edit `ScopePurge`/`NodeSubtreePurge` and the guard files, and steps 7 and 8 both edit `SharingStore` and
 `SharingHandler`: run **5 ‖ 7 and 6 ‖ 8 only after step 2**, and keep 7 before 8.
 
-- [ ] 1 core-import guard — extend `scripts/validate_shared_imports_no_features.py` (or a sibling) so that
+- [x] 1 core-import guard *(merged `c772bb78`)* — extend `scripts/validate_shared_imports_no_features.py` (or a sibling) so that
       `core/**` and `shared/**` may not import `features.media`, `features.memory` or the favorites packages
       (`features.content.favorites`, `features.content.itemfavorites`). A missing `core/` directory is **not** an
       error until step 2a creates it (the guard must be green on the untouched tree; run its predicate against
@@ -118,7 +143,7 @@ both edit `ScopePurge`/`NodeSubtreePurge` and the guard files, and steps 7 and 8
       red; the same forgery against a file that imports only `shared.*` stays green.
       · Done when: `python3 scripts/validate_shared_imports_no_features.py` and
       `python3 scripts/validate_guard_gaps.py` green.
-- [ ] 2a move entities, part 1 — `BlobEntity` and `UploadSessionEntity` out of `features/media/Entities.kt` into
+- [x] 2a move entities, part 1 *(merged `d5ccf7df`)* — `BlobEntity` and `UploadSessionEntity` out of `features/media/Entities.kt` into
       `core.blob` (split the file; `Media`, `MediaDerivative`, `Bucket` stay); `features/sharing/Entities.kt`
       moves wholesale to `core.sharing`. Pure package change: fix imports in main and **all** test files,
       including same-package users (row 8; run `./gradlew compileTestKotlin` and read the red, do not guess).
@@ -126,22 +151,22 @@ both edit `ScopePurge`/`NodeSubtreePurge` and the guard files, and steps 7 and 8
       and `python3 scripts/validate_blob_reference_arity.py` green and **their own source unedited** in this
       commit (`git diff --stat HEAD~1 -- scripts/` shows only step-1-style anchors if any, and a reviewer can see
       why).
-- [ ] 2b move entities, part 2 — `NodeEntity` into `core.node` (its media columns stay, row 6). Same method.
+- [x] 2b move entities, part 2 *(merged `38196f01`)* — `NodeEntity` into `core.node` (its media columns stay, row 6). Same method.
       · Done when: as 2a.
-- [ ] 3 split `StorageQuota` — new `core.quota.StorageUsage` with `tenantUsage`, `usageByTenant`, `lockTenant`
+- [x] 3 split `StorageQuota` *(merged `368b2e68`)* — new `core.quota.StorageUsage` with `tenantUsage`, `usageByTenant`, `lockTenant`
       (core SQL only, row 4); `features/media` keeps the remainder (`linkUsage`, `linkFits`, `tenantFits`)
       delegating to `StorageUsage`. No interface: one implementation, and the dependency already points
       media → core. `TenantHandler` and `TenantStorageHandler` switch to `StorageUsage`; `MediaHandler` keeps
       calling the media remainder (row 5).
       · Done when: `./gradlew check` green; named proofs `TenantStorageQuotaSliceTest`, `ShareUploaderSliceTest`,
       `TenantSuspendSliceTest` green.
-- [ ] 4 allow-list instead of deny-list — `MediaHandler.completeOne` (returns `"illegal_target"`) and
+- [x] 4 allow-list instead of deny-list *(merged `6e468b52`)* — `MediaHandler.completeOne` (returns `"illegal_target"`) and
       `commitCover` (`IllegalTarget`): replace `kind == FOLDER` by "kind is not `MEMORY` or `CHAPTER`".
       Behaviour-neutral because `NodesHandler.parentAllows` ends `else -> false`, so kinds are closed (row 18) —
       **state in the commit that this stops being true the day a kind is added, which is the point.**
       · Done when: `./gradlew check` green; named proofs `MediaSliceTest.mediaOnFolderIsIllegalTarget` and
       `NodeCoverSliceTest.coverOnFolderIsIllegalTarget` green.
-- [ ] 5 `ScopeEraser` — core interface `interface ScopeEraser { val phase: Int; fun eraseScope(scopeId: String) }`
+- [x] 5 `ScopeEraser` *(merged `54239ea7`)* — core interface `interface ScopeEraser { val phase: Int; fun eraseScope(scopeId: String) }`
       replacing `ScopePurge`'s hard-coded media/sharing/favorites entity deletes (row 11). Constraints that stay
       true: `reclaim.record` for `Blob`/`UploadSession` runs **while the rows still name their keys** (stays in
       core); the delete order derivative → media → blob is FK-ordered, so the media eraser runs before core's
@@ -156,7 +181,7 @@ both edit `ScopePurge`/`NodeSubtreePurge` and the guard files, and steps 7 and 8
       FK order is a runtime failure, so the test must hit a real scope with media in it).
       · Done when: `./gradlew check`, `validate_scope_erasure_arity.py`, `validate_store_reclaim_arity.py`,
       `validate_guard_gaps.py` green.
-- [ ] 6 `NodeSubtreeEraser` + `GuestIdentityUsage` (both `core.node`) — `NodeSubtreePurge` keeps its class name
+- [x] 6 *(merged `62435591`)* `NodeSubtreeEraser` + `GuestIdentityUsage` (both `core.node`) — `NodeSubtreePurge` keeps its class name
       and its `eraseExpiredIn` signature (tests inject it). The media eraser takes steps 0–2 of row 12 (lock
       media + buckets, collect guest ids; `purgeMediaRows`; delete buckets) and **returns the guest-id set**
       before core's step 5 (`tombstoneAllOn`); core keeps step 3 (cover blobs: `NodeEntity.coverBlobId` +
@@ -167,7 +192,7 @@ both edit `ScopePurge`/`NodeSubtreePurge` and the guard files, and steps 7 and 8
       · Done when: `./gradlew check` green; named proofs `NodeTrashSliceTest`, `NodeTreeRaceSliceTest`,
       `ShareDeletedNodeSliceTest`, `NodeCoverSliceTest`, plus a new **order test** that fails if
       `dropDeadIdentities` runs before the media eraser's guest set is returned.
-- [ ] 7 `SharedSubtreeContributor` (`core.sharing`) — `SharingStore.subtree` and `subtreeBlobIds` keep
+- [x] 7 *(merged `4741681a`)* `SharedSubtreeContributor` (`core.sharing`) — `SharingStore.subtree` and `subtreeBlobIds` keep
       `collectSubtreeIds`, the live-node predicate, node rows and the cover arm; the media and derivative arms move
       to the media implementation (`authorizedBlobIds`). **Keep the two `deletedAt is null` predicates
       separate** (row 15). Update `validate_blob_reference_arity.py`'s live-twin check (`LIVE_TWIN_FN`, the markers
@@ -178,7 +203,7 @@ both edit `ScopePurge`/`NodeSubtreePurge` and the guard files, and steps 7 and 8
       to see green first).
       · Done when: `./gradlew check`, `validate_blob_reference_arity.py`, `validate_guard_gaps.py` green; named
       proofs `ShareDeletedNodeSliceTest`, `ShareTrashedMediaSliceTest` green.
-- [ ] 8 `ShareGuestWrites` (`core.sharing`, dispatch by `NodeEntity.kind` via `supports(kind)`) — the sites are
+- [x] 8 *(merged `523f4164` DTO move, `071ea47c` dispatch)* `ShareGuestWrites` (`core.sharing`, dispatch by `NodeEntity.kind` via `supports(kind)`) — the sites are
       `SharingHandler.startForLink`, `windowForScope`, `completeForNode`, `deleteMedia` (row 16);
       `SharingStore.deleteContributedMedia` moves to the media implementation. **Prerequisite inside this step:**
       move `UploadDeclare`, `WindowRequest`, `CompleteItem`, `UploadOpener`, `WindowItemResult`,
@@ -188,15 +213,20 @@ both edit `ScopePurge`/`NodeSubtreePurge` and the guard files, and steps 7 and 8
       step; split it into the DTO move and the dispatch if a single commit would not stay reviewable.
       · Done when: `./gradlew check` green; named proofs `ShareUploaderSliceTest`, `GuestWriteRaceSliceTest`,
       `ShareUploadWindowSliceTest`, `ShareWriteProofSliceTest` green.
-- [ ] 9 verify — core imports nothing from the Memories application, across the whole tree.
-      · Done when: `grep -rn "features.media\|features.content.\(favorites\|itemfavorites\)" $M/core $M/shared`
-      is empty (run from `backend/`), and the step-1 guard is green on the final tree.
+- [x] 9 verify *(measured 2026-10-04; (a) went empty once two KDoc-only hits lost their qualified package name)*
+      — `core/` and `shared/` import nothing from the Memories application; one named coupling outside them stays.
+      · Done when (run from `backend/`):
+      (a) `grep -rn "features.media\|features.content.\(favorites\|itemfavorites\)" $M/core $M/shared` is
+      **empty** — comments included, so no KDoc names a Memories package qualified either;
+      (b) row 2's locator returns **exactly one** line, the accepted remainder named in § State
+      (`features/spaces/scope/ScopesStore.kt` importing `ItemFavoritesEntity`) — any second hit is a regression;
+      (c) the step-1 guard is green on the final tree.
 
 ## Definition of done
 
 - **The enforcement exists and is bitten.** The core-import guard (step 1) is green on the final tree, and its
   forged-file case in `validate_guard_gaps.py` is red when the forgery is planted (bite recorded in the commit
-  message). The grep in step 9 is empty. Each interface step (5–8) carries its own bite and its ordering test.
+  message). Step 9's greps return what it names: (a) empty, (b) only the accepted `ScopesStore` remainder. Each interface step (5–8) carries its own bite and its ordering test.
 - **Behaviour is unchanged.** `./gradlew check` is green with **no test deleted or weakened** — account the
   suite per assertion where a test moved, not by count (`changes/README.md`). **No contract diff:**
   `git diff main -- contracts/` is empty, and `git diff main --stat -- backend/src/main/resources/db/` is empty

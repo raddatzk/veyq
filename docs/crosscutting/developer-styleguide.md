@@ -32,7 +32,11 @@
   the list**; it cannot be out of date about itself, whereas the roll-call that used to stand here named six
   slices of which two existed and omitted nine. `shared/` must not depend on a feature;
   [`validate_shared_imports_no_features.py`](../../scripts/validate_shared_imports_no_features.py) holds that for
-  its imports.
+  its imports. The same guard holds its **core half**
+  ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)): neither `shared/` nor
+  `core/` (`com.veyq.app.core`, the platform packages) may import the Memories application — `features.media`,
+  `features.memory` or the favorites packages. Core reaches Memories behaviour through an interface Memories
+  implements (`ScopeEraser`, `NodeSubtreeEraser`, …), never through an import.
 - **Dependencies stay directed.** If a feature builds on a `shared/` slice, that slice must not reach back into
   the feature; share neutral rules through small interfaces.
 
