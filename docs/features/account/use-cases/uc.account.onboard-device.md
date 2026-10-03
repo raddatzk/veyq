@@ -126,6 +126,13 @@ flowchart TB
   enrols no wrap and holds the Master Key for the session only, so closing the browser ends it and a later
   visit is a fresh pairing. This is the right shape for a machine that is not yours, and it is the same
   degradation [uc.account.remember-this-device](uc.account.remember-this-device.md) already defines.
+- **E6 — the trusted device's session ends during the grant.** A password reset or change, a key rotation or a
+  sign-out everywhere else, run from elsewhere while the trusted device delegates or seals, wins: the server
+  re-reads the delegating session under the account lock and refuses a dead one with `401`, so no session is
+  minted and no envelope sealed. Its refresh is refused too, so the trusted device runs
+  [uc.account.sign-out](uc.account.sign-out.md)'s ending — and because that ending replaces the screen, the sign-in
+  page says what happened: signed out mid-grant, no device let in, sign in and start again. The new device hears
+  nothing (there is no refusal to relay to it, as in E2) and ends at E1 when the channel expires.
 
 ## Quality notes
 

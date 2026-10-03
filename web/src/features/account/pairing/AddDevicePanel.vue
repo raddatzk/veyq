@@ -58,6 +58,7 @@ import {
 import { startPairingAnswerPolling, stopPairingAnswerPolling } from './pairingAnswerPolling'
 import { account } from '../../../app/account'
 import { masterKey } from '../../../app/vault'
+import { explainEnding } from '../../../app/endingNotice'
 import { readMarks } from '../trustMarks'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
 import type * as v1 from '@veyq/crypto/v1'
@@ -220,9 +221,14 @@ function acceptAnswer(read: () => v1.Identity['pub'], next: 'comparing' | 'prove
 /**
  * The confirmation ran. Delegate, then seal — and only from here, so that a declined or unreached comparison
  * reaches neither call.
+ *
+ * **Both run under `explainEnding`** (uc.account.onboard-device E6). The server refuses a delegation or a seal whose
+ * session a reset, a password change, a rotation or a sign-out elsewhere ended while it waited (`401`), the refresh
+ * that follows is refused too, and the session ending loads the sign-in page — so `grantFailed` below would be gone
+ * before anyone read it. The sign-in page says instead that this device was signed out mid-grant and let no one in.
  */
 const { run: runGrant, pending: granting } = useAsyncAction(
-  async () => {
+  () => explainEnding('grantInterrupted', async () => {
     const pub = answeringKey.value
     const keys = channel.value
     const mk = masterKey()
@@ -239,7 +245,7 @@ const { run: runGrant, pending: granting } = useAsyncAction(
     })
     await sealPairingChannel(keys.handle, envelope)
     step.value = 'sealed'
-  },
+  }),
   { onError: () => { error.value = t('pairing.grantFailed') } },
 )
 

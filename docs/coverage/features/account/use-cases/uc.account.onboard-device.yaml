@@ -266,6 +266,27 @@ acceptanceCriteria:
           - src/features/account/pairing/grantEnvelopePolling.test.ts
           - src/features/account/pairing/AddDevicePanel.test.ts
           - src/features/account/pairing/JoinDeviceCard.test.ts
+  - id: a-grant-interrupted-by-the-session-ending-says-so
+    text: >-
+      When the trusted device's session is ended elsewhere while it delegates or seals (E6), the delegation is
+      refused with 401 and mints nothing, and the trusted device's ending lands on a sign-in page that says it was
+      signed out mid-grant and let no device in. The same refusal outside a grant explains nothing, and a tab that
+      holds no session leaves no notice behind.
+    coverage:
+      # Three seams, each with its control: the server refuses a delegation whose session a reset, change, rotation
+      # or sign-out everywhere else ended while it waited; the panel runs delegate AND seal under the explanation
+      # (read at call time, null before and after, null after a refusal the panel shows itself); a refused refresh
+      # under that explanation leaves it for the sign-in page, which shows it. The new device's side is E1's `gone`,
+      # already pinned under a-pairing-is-single-use-short-lived-and-not-probeable.
+      backend:
+        integration:
+          - CredentialResetRaceSliceTest.aPairingDelegationDoesNotSurviveTheResetChangeOrRotationItRaced
+          - CredentialResetRaceSliceTest.aPairingDelegationDoesNotSurviveASignOutEverywhereElseItRaced
+      web:
+        unit:
+          - src/features/account/pairing/AddDevicePanel.test.ts
+          - src/app/endingNotice.test.ts
+          - src/views/LoginView.test.ts
   - id: the-onboarded-device-writes-its-own-register-entry
     text: >-
       The label chosen during the ceremony travels inside the sealed envelope and is written to the device

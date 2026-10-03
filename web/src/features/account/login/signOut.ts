@@ -13,19 +13,11 @@ import { isSessionRefusal, withRefresh } from '../../../app/sessionRefresh'
 import { endSession } from '../../../app/sessionEnd'
 import { clearDeviceKey } from '../rememberMe/deviceKeyWrap'
 import { clearSessionVault } from '../rememberMe/sessionVault'
+import { leaveEndingNotice, takeEndingNotice, type EndingNotice } from '../../../app/endingNotice'
 
-/**
- * What the sign-in page says after a sign-out, carried across the new document as one word — never account data.
- * - `unconfirmed`: the revoke did not reach the server (E4). The refresh cookie is still live, so this browser
- *   can come back signed in, though locked; the sign-in card's own sign-out is the retry.
- * - `everywhere` / `everywhereUnconfirmed`: the locked screen's *sign out everywhere*, whose other half — every
- *   other device — already succeeded (uc.account.sessions E3).
- */
-export type SignOutNotice = 'unconfirmed' | 'everywhere' | 'everywhereUnconfirmed'
-
-// This tab's `sessionStorage`: it survives the document load in the same tab and nowhere else.
-const NOTICE_KEY = 'veyq.sign-out-notice'
-const NOTICES: readonly SignOutNotice[] = ['unconfirmed', 'everywhere', 'everywhereUnconfirmed']
+/** What the sign-in page says after an ending, carried across the new document as one word — never account data.
+ *  The words and their storage live in `app/endingNotice.ts`, because a refused refresh leaves one too. */
+export type SignOutNotice = EndingNotice
 
 /**
  * Sign this tab out: delete the convenience wraps and revoke the family while the session works, then end the
@@ -45,26 +37,11 @@ export async function signOut(opts: { everywhere?: boolean } = {}): Promise<void
     // is what signing out wanted. Any other failure (offline, 5xx, a suspended tenant) leaves the cookie standing.
     reached = await isSessionRefusal(e)
   }
-  leaveNotice(opts.everywhere ? (reached ? 'everywhere' : 'everywhereUnconfirmed') : reached ? null : 'unconfirmed')
+  leaveEndingNotice(opts.everywhere ? (reached ? 'everywhere' : 'everywhereUnconfirmed') : reached ? null : 'unconfirmed')
   await endSession()
 }
 
-function leaveNotice(notice: SignOutNotice | null): void {
-  if (!notice) return
-  try {
-    sessionStorage.setItem(NOTICE_KEY, notice)
-  } catch {
-    /* storage denied — the sign-in page then says nothing, and the sign-out itself still ran */
-  }
-}
-
-/** The notice the last sign-out in this tab left, or null. Read ONCE: taking it removes it. */
+/** The notice the last ending in this tab left, or null. Read ONCE: taking it removes it. */
 export function takeSignOutNotice(): SignOutNotice | null {
-  try {
-    const raw = sessionStorage.getItem(NOTICE_KEY)
-    sessionStorage.removeItem(NOTICE_KEY)
-    return NOTICES.find((n) => n === raw) ?? null
-  } catch {
-    return null
-  }
+  return takeEndingNotice()
 }

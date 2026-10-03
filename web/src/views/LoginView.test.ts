@@ -466,6 +466,14 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
     expect(buttonLabelled(wrapper, t('login.signOut'))).toBeDefined()
   })
 
+  it('says the session ended while a device was being given access, and that none was let in (uc.account.onboard-device E6)', async () => {
+    vi.mocked(takeSignOutNotice).mockReturnValue('grantInterrupted')
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(t('pairing.grantInterrupted'))
+  })
+
   it('says a sign-out did not reach the server, and offers the retry (uc.account.sign-out E4)', async () => {
     vi.mocked(takeSignOutNotice).mockReturnValue('unconfirmed')
     session.accessToken = 'restored'
