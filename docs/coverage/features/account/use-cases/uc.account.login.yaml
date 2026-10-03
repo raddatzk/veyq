@@ -32,13 +32,14 @@ acceptanceCriteria:
     text: Refreshing rotates the access+refresh pair and the chain keeps rotating.
     coverage:
       backend: { integration: [LoginSliceTest.refreshRotatesAndChains] }
-      web: { unit: [src/app/sessionRefresh.test.ts] }
+      web: { unit: [src/app/sessionRefresh.test.ts], e2e: [src/features/account/pairing/pairing.e2e.test.ts] }
   - id: refresh-reuse-detection
     text: A replayed superseded refresh token two or more generations behind revokes the whole family
       (reuse detection) — and so does one at distance zero, the successor a grace rotation already replaced.
     coverage:
       backend:
         integration: [LoginSliceTest.replayedSupersededRefreshRevokesFamily, LoginSliceTest.theOrphanedSuccessorIsAClone]
+      web: { e2e: [src/features/account/pairing/pairing.e2e.test.ts] }
   - id: refresh-one-generation-grace
     text: A superseded refresh token exactly one generation behind the family's current one rotates instead of
       revoking — a client whose successor never reached it (a dropped response, or a sibling call that lost the

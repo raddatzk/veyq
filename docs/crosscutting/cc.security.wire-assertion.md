@@ -163,10 +163,12 @@ Load-bearing, and repeated in the guard's own docstring rather than only here:
   spelling (upper-case hex escapes, base64) is outside them — base64 deliberately, because it is the opacity
   oracle's case.
 - **The token sweep sees the tokens some suite handled, through the calls some suite made.** Every web sign-in
-  yields a refresh token through its `Set-Cookie`; no suite drives `token/refresh` (node's `fetch` keeps no cookie
-  jar, so a suite would have to forward the cookie by hand) and none drives a pairing, so a rotated refresh token
-  and a pairing `handle` are swept for nothing — both are hashed in code, which is a code-level fact, not a
-  measured one. A suite that drives either extends the set for free.
+  yields a refresh token through its `Set-Cookie`. Rotation and pairing are driven by one suite,
+  `web/src/features/account/pairing/pairing.e2e.test.ts`, which carries the refresh cookie by hand (node's `fetch`
+  keeps no cookie jar) through the product's own refresh and through a paired device's adoption — so rotated
+  refresh tokens, the pairing `handle` and the delegated grant token are needles, with their hashes in the dump as
+  the control (bitten: logging the rotated tokens and the handle turned the log sweep red on each by kind). A flow
+  no suite drives still mints tokens nothing sweeps.
 - **The read/contributor share id is not a token, by decision.** It is stored raw as `veyq_share.id`, half the
   capability ([ADR 0029](../decisions/0029-public-viewer-share.md); the other half is the fragment key), and is
   classified `id`; the token sweep does not look for it. What a guest write needs besides it is the key-derived

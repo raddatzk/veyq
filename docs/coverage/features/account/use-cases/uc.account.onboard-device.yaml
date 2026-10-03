@@ -36,9 +36,10 @@ acceptanceCriteria:
       # refreshing — the control the criterion names (`SessionManagerSliceTest` mints it with `issueDelegated`;
       # the pairing slice does it through a real channel, in both directions). The Master-Key half is client-side
       # by construction — the server relays one sealed envelope it cannot open — so web carries it: the grant
-      # opens to the key, and the tail installs the adopted family id beside the unlocked vault. Not claimed: one
-      # live device holding both at once, which needs two live sessions of one account that the e2e harness does
-      # not stand up.
+      # opens to the key, and the tail installs the adopted family id beside the unlocked vault. The e2e drives both
+      # halves against one live server with two sessions of one account: the opened grant is the trusted device's
+      # Master Key, the adopted family rotates, and its clone revocation leaves the granting family refreshing. Not
+      # claimed: the unlock tail on that device, which needs IndexedDB the node e2e process does not have.
       backend:
         integration:
           - SessionManagerSliceTest.aDelegatedFamilyListsRotatesAndRevokesLikeAnyOtherAndTakesNothingWithIt
@@ -49,6 +50,7 @@ acceptanceCriteria:
           - src/features/account/pairing/pairing.test.ts
           - src/features/account/pairing/AddDevicePanel.test.ts
           - src/features/account/pairing/onboardTail.test.ts
+        e2e: [src/features/account/pairing/pairing.e2e.test.ts]
   - id: the-onboarded-device-keeps-the-session-it-was-granted
     text: >-
       The onboarded device survives a reload. The handed-over refresh token reaches it in the envelope, is spent
@@ -86,6 +88,7 @@ acceptanceCriteria:
           - src/features/account/pairing/onboardTail.test.ts
           - src/features/account/pairing/JoinDeviceCard.test.ts
           - src/features/account/pairing/SignInWithCodeCard.test.ts
+        e2e: [src/features/account/pairing/pairing.e2e.test.ts]
   - id: no-password-and-no-secret-key-reaches-the-new-device
     text: >-
       Neither the password nor the Secret Key is typed on, sent to, or derivable by the onboarded device, at any
