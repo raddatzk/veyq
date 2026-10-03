@@ -40,6 +40,7 @@ acceptanceCriteria:
           - EmailConfirmationSliceTest.supersededTokenConfirmsNothing
           - EmailConfirmationSliceTest.tokenConfirmsAtMostOnce
           - EmailConfirmationSliceTest.expiredTokenConfirmsNothing
+      web: { e2e: [src/features/account/email/emailConfirmation.e2e.test.ts] }
   - id: mail-only-through-a-member-tenants-relay
     text: A confirmation is mailed only through the relay of the tenant the request's Host resolves to, and only for a member of that tenant, in veyq-fixed copy over the closed link/domain/expiry set. A non-member is refused and nothing is mailed.
     coverage:
@@ -47,6 +48,7 @@ acceptanceCriteria:
         integration:
           - EmailConfirmationSliceTest.nonMemberIsRefusedAndNothingIsMailed
           - EmailConfirmationSliceTest.mailCarriesOnlyLinkDomainExpiry
+      web: { e2e: [src/features/account/email/emailConfirmation.e2e.test.ts] }
   - id: no-mail-no-confirmation
     text: A tenant that cannot send answers 503 mail_unavailable and mints nothing. No copy-link is ever offered.
     coverage:
@@ -72,3 +74,4 @@ acceptanceCriteria:
         unit:
           - src/features/account/email/EmailAddressSection.test.ts
           - src/features/tenant/TenantMailSettingsPanel.test.ts
+        e2e: [src/features/account/email/emailConfirmation.e2e.test.ts]
