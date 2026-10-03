@@ -97,6 +97,10 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   32 a declared doc's every link back to its wiki page removed — rejected: `validate_wiki_sources` requires each
      `docs/` source to link the page, so whoever edits the doc sees the published page that restates it. Before
      it, a page told users the opposite of its doc and was found because a user asked (inbox #120)
+  34 a `core/node/` file importing `features.media` — rejected: `validate_shared_imports_no_features` bars core
+     from the Memories application (ADR 0079), so an application cannot grow a back-edge into the platform. The
+     `core/` tree does not exist yet, so the forgery creates it; the guard must stay green without it and go red
+     with the planted file
 Open gaps — a forgery the guard still passes (a documented limit, not a defect to fix blindly):
   4b a lying `status: planned` on an implemented use-case passes. **Left open on purpose** — the obvious rule
      "planned ⇒ no coverage refs" is *false in general*: a use-case can be legitimately `planned` while carrying
@@ -542,6 +546,19 @@ def forge_direct_store_delete_bypass(root: pathlib.Path) -> str:
     return "a purge deleting store objects inline under a renamed, fully-qualified receiver (must be REJECTED)"
 
 
+CORE_NODE_FORGERY = "backend/src/main/kotlin/com/veyq/app/core/node/GuardGapProbe.kt"
+
+
+def forge_core_imports_media(root: pathlib.Path) -> str:
+    # A core file reaching into the Memories application. core/ may not exist on the tree yet, so the file is
+    # planted with its directory; the import is the bare line the guard reads.
+    f = root / CORE_NODE_FORGERY
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text("package com.veyq.app.core.node\n\nimport com.veyq.app.features.media.MediaEntity\n\n"
+                 "class GuardGapProbe\n")
+    return "a core/node file importing features.media (must be REJECTED — core depends on no application)"
+
+
 def forge_unmounted_config_secret(root: pathlib.Path) -> str:
     f = root / PROD_COMPOSE
     if not f.is_file():
@@ -726,6 +743,7 @@ CASES = [
     ("31", "validate_wiki_sources.py", forge_wiki_pair_declares_fewer,     False),
     ("32", "validate_wiki_sources.py", forge_wiki_backlink_removed,        False),
     ("33", "validate_wiki_sources.py", forge_wiki_prose_contradicts_doc,   True),
+    ("34", "validate_shared_imports_no_features.py", forge_core_imports_media, False),
 ]
 
 
@@ -810,10 +828,16 @@ def check_case(snap: pathlib.Path, verdicts: dict[str, bool],
 
 
 def main() -> int:
+    # `--case ID` (repeatable) runs only the named cases: a narrow loop while writing a forgery. The full run, with
+    # no argument, is what CI and the trust-chain loop do.
+    wanted = {a for a in sys.argv[2:]} if sys.argv[1:2] == ["--case"] else None
+    cases = [c for c in CASES if wanted is None or c[0] in wanted]
+    if wanted is not None and {c[0] for c in cases} != wanted:
+        raise SystemExit(f"GUARD-GAP VALIDATION FAILED: unknown case id(s) {sorted(wanted - {c[0] for c in cases})}")
     snap = snapshot()
     try:
         verdicts: dict[str, bool] = {}
-        errors = [e for c in CASES if (e := check_case(snap, verdicts, *c))]
+        errors = [e for c in cases if (e := check_case(snap, verdicts, *c))]
     finally:
         shutil.rmtree(snap, ignore_errors=True)
     if errors:
@@ -821,7 +845,7 @@ def main() -> int:
         for e in errors:
             print("  -", e)
         return 1
-    print(f"guard gaps OK: {len(CASES)} pinned case(s) hold (closed holes stay rejected, open gaps stay open)")
+    print(f"guard gaps OK: {len(cases)} pinned case(s) hold (closed holes stay rejected, open gaps stay open)")
     return 0
 
 
