@@ -32,6 +32,9 @@ COPY packages/crypto /src/packages/crypto
 # openapitools.json travels with the manifest: `prepare` runs generate:api during `npm ci`, and both the JAR
 # verifier and the generator read the pinned version from it (without it the verifier fails the install).
 COPY web/package.json web/openapitools.json ./
+# Not run through scripts/npm_ci_no_deprecated.py, and covered anyway: this installs the root lockfile that
+# container.yml's `test` job scanned through it on the same commit, and the image `build` job `needs: test`.
+# scripts/validate_npm_installs_gated.py holds both premises — keep `npm ci` (never `npm install`) and the COPY.
 RUN npm ci
 COPY web/ ./
 # verify:no-backdoor is the prod guard from `npm run check` that asserts the dev auto-unlock seam
