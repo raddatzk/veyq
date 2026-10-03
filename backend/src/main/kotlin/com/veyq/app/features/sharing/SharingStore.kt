@@ -2,15 +2,12 @@ package com.veyq.app.features.sharing
 
 import com.veyq.app.core.blob.BlobEntity
 import com.veyq.app.core.node.NodeEntity
+import com.veyq.app.core.sharing.GuestIdentityUsage
 import com.veyq.app.core.sharing.ShareEntity
 import com.veyq.app.core.sharing.ShareMediaRow
 import com.veyq.app.core.sharing.SharedSubtreeContributor
 import com.veyq.app.core.sharing.ShareIdentityEntity
 import com.veyq.app.core.sharing.ShareRetiredIdEntity
-import com.veyq.app.features.media.BucketEntity
-import com.veyq.app.features.media.MediaDerivativeEntity
-import com.veyq.app.features.media.MediaEntity
-import com.veyq.app.features.media.OwnerKey
 import com.veyq.app.shared.crypto.Tokens
 import com.veyq.app.shared.scope.ScopeEntity
 import jakarta.enterprise.context.ApplicationScoped
@@ -61,6 +58,8 @@ data class ShareBlobRef(val storageKey: String, val chunkCount: Int)
 class SharingStore(
     /** What the application hangs under a shared node (today: media + derivatives). Merged without order. */
     private val contributors: Instance<SharedSubtreeContributor>,
+    /** What of the application still names a guest identity (today: media + buckets). Combined with "any". */
+    private val identityUsages: Instance<GuestIdentityUsage>,
 ) {
 
     fun findNode(nodeId: String): NodeEntity? = NodeEntity.findById(nodeId)
@@ -330,8 +329,7 @@ class SharingStore(
         for (id in candidateIds.toSet()) {
             val identity = ShareIdentityEntity.findById(id) ?: continue
             if (ShareEntity.findById(identity.shareId)?.deletedAt == null) continue
-            if (MediaEntity.count("shareIdentityId", id) > 0) continue
-            if (BucketEntity.count("ownerKey", OwnerKey.Share(id).format()) > 0) continue
+            if (identityUsages.any { it.stillReferenced(id) }) continue
             ShareIdentityEntity.deleteById(id)
         }
     }
