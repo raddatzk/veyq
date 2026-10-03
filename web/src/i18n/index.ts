@@ -112,6 +112,10 @@ const en = {
     reviewPendingRekey:
       'If this member changed their keys while a shared space is still waiting for its new key, accepting first gives it that key wherever you can. Where you can’t, the space stays closed to you until another member does it.',
     acceptFailed: 'Could not accept the key. Please try again.',
+    currentUnreadable:
+      'The key the server sent for this member cannot be read on this device, so there is no safety number to compare. Refuse for now: nothing is shared with a key that cannot be checked.',
+    expectedUnreadable:
+      'The key you trusted before cannot be read on this device, so its number is missing. Compare the current number with the one this member sees in their own app.',
     trustRolledBack:
       'The server returned an older list of the keys you trust than this device has already seen. Nothing is shared with a key it cannot check until the current list is back.',
     trustUnreadable:
@@ -1188,6 +1192,10 @@ const de: typeof en = {
     reviewPendingRekey:
       'Wenn dieses Mitglied seine Schlüssel getauscht hat, während ein geteilter Bereich noch auf seinen neuen Schlüssel wartet, gibt das Akzeptieren ihm diesen Schlüssel zuerst, wo du das kannst. Wo nicht, bleibt der Bereich für dich zu, bis ein anderes Mitglied das erledigt.',
     acceptFailed: 'Der Schlüssel konnte nicht akzeptiert werden. Bitte erneut versuchen.',
+    currentUnreadable:
+      'Der Schlüssel, den der Server für dieses Mitglied geschickt hat, lässt sich auf diesem Gerät nicht lesen, daher gibt es keine Sicherheitsnummer zum Vergleichen. Lehne vorerst ab: Mit einem Schlüssel, der sich nicht prüfen lässt, wird nichts geteilt.',
+    expectedUnreadable:
+      'Der Schlüssel, dem du zuvor vertraut hast, lässt sich auf diesem Gerät nicht lesen, daher fehlt seine Nummer. Vergleiche die aktuelle Nummer mit der, die dieses Mitglied in der eigenen App sieht.',
     trustRolledBack:
       'Der Server hat eine ältere Liste deiner vertrauten Schlüssel geliefert, als dieses Gerät schon gesehen hat. Mit Schlüsseln, die sich nicht prüfen lassen, wird nichts geteilt, bis die aktuelle Liste wieder da ist.',
     trustUnreadable:
