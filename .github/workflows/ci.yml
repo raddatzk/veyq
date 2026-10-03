@@ -48,6 +48,30 @@ jobs:
         working-directory: backend
         run: ./gradlew --no-daemon check
 
+  backend-races:
+    name: Backend races on MariaDB
+    # The race classes `./gradlew check` runs on H2, run again on the production engine. H2 cannot show what MariaDB
+    # does under overlap: on 2026-10-03 three races green on H2 were red there (ADR 0078). The runner derives the
+    # race classes from the code and starts its own throwaway MariaDB from the image infra/docker-compose.yml pins
+    # (tag + digest), so the pin keeps one home — which is why this job declares no `services:`, as web-e2e does not.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Java
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Validate the Gradle wrapper JAR
+        uses: gradle/actions/wrapper-validation@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+
+      - name: Run the race classes on MariaDB
+        run: python3 scripts/run_backend_races_on_mariadb.py
+
   frontend:
     name: Frontend checks
     runs-on: ubuntu-latest

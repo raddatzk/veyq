@@ -2,7 +2,6 @@ package com.veyq.app.features.account.login
 
 import com.veyq.app.shared.auth.AccessTokenResolver
 import com.veyq.app.shared.crypto.Tokens
-import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional
@@ -96,26 +95,26 @@ class SessionService : AccessTokenResolver {
      * Rotate a refresh token. Returns null (→ 401) on any failure; presenting a superseded token revokes the
      * family unless it is exactly one generation behind (ADR 0004 § the one-generation grace).
      *
-     * **Not `@Transactional` — the transaction is opened below, per attempt.** A deadlock arrives as a
-     * rollback of the whole transaction, so a retry has to be able to start a new one; an interceptor-managed
-     * transaction around this method could only ever be retried by its caller. There is no outer transaction
-     * to join here in any case: the only callers are the two `TokenResource` endpoints.
+     * **No retry.** A deadlock here would be a lock-order defect, and it must surface as one: the family's row lock
+     * is taken first on every path, so two rotations queue on it and never hold a token row the other waits for
+     * (measured on MariaDB 11.4, inbox #262: 0 deadlocks in 1 600 family-first refreshes). A retry used to sit
+     * here, and with it a reversed lock order deadlocked and was retried into a green run (the test log named a
+     * deadlock 24 times and no test failed); without it, `LoginSliceTest`'s fork race answers a `500` and reds.
      */
-    fun refresh(presented: String): RotatedTokens? =
-        withDeadlockRetry { QuarkusTransaction.requiringNew().call<RotatedTokens?> { rotate(presented) } }
+    @Transactional
+    fun refresh(presented: String): RotatedTokens? = rotate(presented)
 
     /**
-     * One rotation attempt. **The family's row lock comes first**, before any token row is read (ADR 0004 § the
+     * One rotation. **The family's row lock comes first**, before any token row is read (ADR 0004 § the
      * one-generation grace). The distance below reads two rows — the presented token and the family's `CURRENT` —
      * and a lock on the presented row alone serializes only presentations of that same token: an orphan and the
      * current token lock different rows, so both measured a `CURRENT` the other was replacing and the chain forked.
      * Every rotation and every revoke of one family write the family row, so locking it first queues them all on
      * one row: the distance is decided against committed state, and a revoke lands either before this reads the
      * family (→ 401) or after this commits (the family ends `REVOKED`), never under it. Family first, token second,
-     * on every path; nothing locks a token row and then its family. **No test guards that order**: reversed, the
-     * orphan and the current token each hold a token row while waiting for the family, H2 reports a deadlock, and
-     * [withDeadlockRetry] retries it into a green run (measured 2026-10-02: the test log named a deadlock 24 times,
-     * and no test failed; in this order it names none).
+     * on every path; nothing locks a token row and then its family. Reversed, the orphan and the current token each
+     * hold a token row while waiting for the family and deadlock — `LoginSliceTest`'s fork race then reds on the
+     * `500` (see [refresh]).
      *
      * Under that lock the managed writes below (`family.status`, `family.lastUsedAt`, `current.status`) are safe even
      * where two writers change the same column: no other writer of the family can interleave with them.
@@ -141,10 +140,13 @@ class SessionService : AccessTokenResolver {
             // successor — a dropped response, or a sibling call that lost the race — and it rotates. Zero
             // means it IS a successor that an earlier grace already replaced, and two or more is an ordinary
             // replay: both are clone signals (ADR 0004).
-            // KNOWN DEFECT on MariaDB (inbox #262's measurement): this is a plain read, so under REPEATABLE READ it
-            // sees the snapshot the family-id query above opened BEFORE the family lock was waited for — the winner's
-            // successor is invisible, `current` is the presented row itself, and a true race revokes the family
-            // (800 of 800 races measured). H2 reads committed rows here, so no test sees it. A locking read fixes it.
+            // A LOCKING read, though the family lock already orders every writer of this row (inbox #302). The loser
+            // of a same-token race decides after the winner committed, and must see the winner's successor here; a
+            // plain read at MariaDB's REPEATABLE READ saw the snapshot the family-id query fixed BEFORE the lock wait,
+            // found the presented row itself as CURRENT and revoked the family (800 of 800 races). READ COMMITTED
+            // (ADR 0078) closes that on its own; a locking read reads the latest committed row at ANY isolation, so
+            // this decision no longer rests on a connection setting. It costs no lock this path would not take: the
+            // grace writes this very row below.
             val current = currentTokenOf(family.id)
             if (current == null || current.generation - row.generation != 1) {
                 family.status = SessionFamilyEntity.REVOKED
@@ -167,10 +169,10 @@ class SessionService : AccessTokenResolver {
         return RotatedTokens(access, refresh, family.id)
     }
 
-    /** The family's live refresh token — the one row per family whose status is CURRENT (see [mint]). */
+    /** The family's live refresh token — the one row per family whose status is CURRENT (see [mint]) — locked. */
     private fun currentTokenOf(familyId: String): RefreshTokenEntity? =
         RefreshTokenEntity.find("familyId = ?1 and status = ?2", familyId, RefreshTokenEntity.CURRENT)
-            .firstResult()
+            .withLock(LockModeType.PESSIMISTIC_WRITE).firstResult()
 
     /**
      * Resolve the user behind a bearer access token, or null if the token is unknown, expired, or its
@@ -186,6 +188,17 @@ class SessionService : AccessTokenResolver {
         if (family.status != SessionFamilyEntity.ACTIVE) return null
         return family.userId
     }
+
+    /**
+     * Whether [accessToken] still names a live session of [userId], read now — not when the request was
+     * authenticated. A writer that must not outlive the reset, password change or rotation it raced asks this under
+     * the account lock (`AccountStore.lock`, inbox #297): the request was let in before the cleanup committed, and
+     * only this read, after the lock wait, sees that its session has since been revoked. A missing token is no live
+     * session.
+     */
+    @Transactional
+    fun isLiveSessionOf(userId: String, accessToken: String?): Boolean =
+        accessToken != null && resolveUserId(accessToken) == userId
 
     /** Revoke the family of the presented access token. Idempotent — a missing/invalid token is a no-op. */
     @Transactional

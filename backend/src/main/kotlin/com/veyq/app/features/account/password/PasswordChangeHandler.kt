@@ -5,9 +5,10 @@ import com.veyq.app.shared.crypto.Ed25519Verifier
 import com.veyq.app.shared.crypto.SecretKeyProof
 import com.veyq.app.shared.http.FailureStatus.CONFLICT
 import com.veyq.app.shared.http.FailureStatus.FORBIDDEN
+import com.veyq.app.shared.http.Failures
 import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.http.httpFailure
-import com.veyq.app.shared.identity.VeyqUser
+import com.veyq.app.shared.identity.AccountStore
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import java.util.Base64
@@ -29,6 +30,10 @@ sealed interface PasswordChangeOutcome {
 
     /** The account has no `PASSWORD` floor to rewrite — nothing was written. */
     data object Unavailable : PasswordChangeOutcome, HttpFailure by httpFailure("password_change_unavailable", CONFLICT)
+
+    /** The caller's session was revoked by a reset, another change or a rotation this request waited for —
+     *  nothing was written. */
+    data object SessionEnded : PasswordChangeOutcome, HttpFailure by Failures.authenticationFailed
 }
 
 /**
@@ -47,6 +52,7 @@ sealed interface PasswordChangeOutcome {
 class PasswordChangeHandler(
     private val store: PasswordChangeStore,
     private val sessions: SessionService,
+    private val accounts: AccountStore,
 ) {
 
     /**
@@ -61,6 +67,11 @@ class PasswordChangeHandler(
      * resolves it from the token, never from the request, exactly as rotation's own spared-session mechanism
      * does. This is the one place this flow must NOT copy `RecoveryStore`'s behaviour: recovery has no session
      * to spare and revokes everything; this flow has one, and must not revoke it.
+     *
+     * **The account row is locked first** (`AccountStore.lock`, inbox #297), so the attestation is checked against
+     * the auth key as it is after any reset or change this waited for, the caller's session is re-read under the
+     * same lock, and a sign-in, wrap or delegation racing this either commits before it (and is ended by it) or
+     * decides after it.
      */
     fun change(
         userId: String,
@@ -71,7 +82,8 @@ class PasswordChangeHandler(
         attestationSignature: String,
         secretKeyProofSignature: String,
     ): PasswordChangeOutcome = QuarkusTransaction.requiringNew().call<PasswordChangeOutcome> {
-        val user = VeyqUser.findById(userId)
+        val user = accounts.lock(userId)
+        if (!sessions.isLiveSessionOf(userId, presentedAccessToken)) return@call PasswordChangeOutcome.SessionEnded
         val currentAuthPublicKey = user?.authPublicKey
         val verified = currentAuthPublicKey != null && Ed25519Verifier.verify(
             decode(currentAuthPublicKey), decode(newAuthPublicKey), decode(attestationSignature),

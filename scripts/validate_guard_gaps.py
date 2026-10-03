@@ -204,7 +204,7 @@ BACKEND_TEST_CLASS = "ShareNoteSliceTest"
 BACKEND_TEST_METHOD = "createWithNoteThenAnonymousResolveReturnsIt"
 BACKEND_TEST_REF = f"{BACKEND_TEST_CLASS}.{BACKEND_TEST_METHOD}"
 # A criterion-level gap (a covered surface's refs stopping short) — its surface is what case 19 forges.
-COV_LOGIN = "docs/coverage/features/account/use-cases/uc.account.login.yaml"
+COV_GALLERY = "docs/coverage/features/memory/use-cases/uc.memory.gallery.yaml"
 CRITERION_GAP_SURFACE = "      - surface: backend\n"
 # The use-case gap that keeps an owed surface from being silent (case 22 removes it; 4b leans on it), and a
 # Server-Owner use-case's admin-web gap (case 23 removes it, leaving the web gap after it in place).
@@ -312,7 +312,7 @@ def forge_backend_tests_never_run_in_ci(root: pathlib.Path) -> str:
 
 
 def forge_criterion_gap_demoted_surface(root: pathlib.Path) -> str:
-    f = root / COV_LOGIN
+    f = root / COV_GALLERY
     f.write_text(_sub(f.read_text(), CRITERION_GAP_SURFACE, "      - surface: http\n"))
     return "a criterion-level gap naming `http`, the demoted surface (must be REJECTED — the list is now read)"
 

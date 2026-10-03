@@ -1,6 +1,7 @@
 package com.veyq.app.shared.identity
 
 import jakarta.enterprise.context.ApplicationScoped
+import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional
 import java.time.Instant
 import java.util.UUID
@@ -20,7 +21,24 @@ class AccountStore {
     /** The account under [email], or null. The **only** user-by-email lookup (`validate_lookup_single_home.py`
      *  rule C), and it normalizes for itself ([normalizeEmail]) so no caller can look up a different spelling of
      *  the address than the one [createAccount] stored. */
-    fun findByEmail(email: String): VeyqUser? = VeyqUser.find("email", normalizeEmail(email)).firstResult()
+    fun findByEmail(email: String, lock: Boolean = false): VeyqUser? =
+        VeyqUser.find("email", normalizeEmail(email))
+            .let { if (lock) it.withLock(LockModeType.PESSIMISTIC_WRITE) else it }.firstResult()
+
+    /**
+     * The account row, locked for the rest of the caller's transaction: **the serializing parent of an account's
+     * credentials** (developer-styleguide §12, inbox #297). A password reset, a password change and a key rotation
+     * each end what the account's other devices hold — they revoke its session families, delete its device wraps,
+     * supersede its pairing channels — and each finds those rows by a selection that cannot see one another
+     * transaction has not committed. So every one of them, and every writer that adds such a row (a sign-in, a new
+     * device wrap, a pairing delegation), takes this lock first, and a writer re-reads under it what the cleanup
+     * changes: the auth key it verifies against, the session it acts under. A sign-in by email locks the same row
+     * through [findByEmail].
+     *
+     * The lock is the first read of the account in its transaction: a lock on an entity this transaction already
+     * loaded hands back the loaded copy, with the values from before the wait.
+     */
+    fun lock(userId: String): VeyqUser? = VeyqUser.findById(userId, LockModeType.PESSIMISTIC_WRITE)
 
     /** Persist a new account (identity + wraps) with the given server role. Returns the new user id. */
     @Transactional

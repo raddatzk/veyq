@@ -3,12 +3,24 @@ package com.veyq.app.features.account.pairing
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.config.VeyqConfig
 import com.veyq.app.shared.crypto.Tokens
+import com.veyq.app.shared.http.Failures
+import com.veyq.app.shared.http.HttpFailure
+import com.veyq.app.shared.identity.AccountStore
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import java.time.Instant
 
 /** What a collect returned. Both fields are absent until their step happened — presence is the whole state. */
 data class CollectedChannel(val answer: String?, val envelope: String?)
+
+/** What a delegation did. Every dead or wrong-state channel is one [ChannelInvalid] (see [PairingHandler]). */
+sealed interface DelegateOutcome {
+    /** The delegated family's refresh token, to be sealed to the answering device. */
+    data class Delegated(val refreshToken: String) : DelegateOutcome
+    data object ChannelInvalid : DelegateOutcome
+    /** The delegating session was revoked by a reset, a password change or a rotation this request waited for. */
+    data object SessionEnded : DelegateOutcome, HttpFailure by Failures.authenticationFailed
+}
 
 /**
  * The device-pairing ceremony (ADR 0059), server side.
@@ -28,6 +40,7 @@ data class CollectedChannel(val answer: String?, val envelope: String?)
 class PairingHandler(
     private val store: PairingStore,
     private val sessions: SessionService,
+    private val accounts: AccountStore,
     config: VeyqConfig,
 ) {
     private val ttl = config.pairing().channel().ttl()
@@ -67,12 +80,25 @@ class PairingHandler(
      *
      * The caller gets the refresh token and no access token: the granted device rotates it into its own pair,
      * and the trusted device has no business holding an access token for a family that is not its own.
+     *
+     * **Under the account lock, and only for a session still live under it** (inbox #297). A reset, a password
+     * change and a rotation revoke every family they can see and a rotation supersedes every live channel, and
+     * neither this claim nor this mint is one they can see before it commits: without the lock the delegated
+     * family outlived the reset that revoked the delegating session, and against a rotation so did a channel whose
+     * envelope would carry the old Master Key. The lock comes before the claim, the transaction's first write.
      */
-    fun delegate(handle: String, userId: String): String? = QuarkusTransaction.requiringNew().call<String?> {
-        val row = liveChannel(handle) ?: return@call null
-        if (row.status != DevicePairingEntity.ANSWERED || row.userId != null) return@call null
+    fun delegate(handle: String, userId: String, presentedAccessToken: String?): DelegateOutcome =
+        QuarkusTransaction.requiringNew().call<DelegateOutcome> {
+            delegateLocked(handle, userId, presentedAccessToken)
+        }
 
-        if (!store.claimDelegation(row.id, userId)) return@call null
+    private fun delegateLocked(handle: String, userId: String, presentedAccessToken: String?): DelegateOutcome {
+        val row = liveChannel(handle) ?: return DelegateOutcome.ChannelInvalid
+        if (row.status != DevicePairingEntity.ANSWERED || row.userId != null) return DelegateOutcome.ChannelInvalid
+
+        accounts.lock(userId)
+        if (!sessions.isLiveSessionOf(userId, presentedAccessToken)) return DelegateOutcome.SessionEnded
+        if (!store.claimDelegation(row.id, userId)) return DelegateOutcome.ChannelInvalid
         val delegated = sessions.issueDelegated(userId)
         store.bindDelegation(row.id, delegated.familyId)
 
@@ -81,7 +107,7 @@ class PairingHandler(
             .forEach { sessions.revokeFamilyForUser(it.userId, it.familyId) }
         store.supersede(superseded.map { it.id })
 
-        delegated.refreshToken
+        return DelegateOutcome.Delegated(delegated.refreshToken)
     }
 
     /**

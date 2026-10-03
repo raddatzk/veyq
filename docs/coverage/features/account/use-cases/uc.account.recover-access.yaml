@@ -60,6 +60,11 @@ acceptanceCriteria:
     coverage:
       backend: { integration: [RecoverySliceTest.resetDropsDeviceKeyWrapsToo] }
       web: { e2e: [src/features/account/recovery/recovery.e2e.test.ts] }
+  - id: nothing-outlives-the-reset-it-raced
+    text: A sign-in with the replaced password, a device wrap or a pairing delegation racing the reset either committed before it — and is ended by it — or decides after it and is refused. The account row is locked first by both sides, and the racing writer re-reads the auth key and its own session under that lock.
+    coverage:
+      backend:
+        integration: [CredentialResetRaceSliceTest.aSignInWithTheReplacedPasswordDoesNotSurviveTheResetOrChangeItRaced, CredentialResetRaceSliceTest.aDeviceWrapDoesNotSurviveTheResetChangeOrRotationItRaced, CredentialResetRaceSliceTest.aPairingDelegationDoesNotSurviveTheResetChangeOrRotationItRaced, CredentialResetRaceSliceTest.aCleanupThatStartsWhileASignInOrAWrapIsUncommittedStillEndsIt]
   - id: nothing-is-re-encrypted
     text: The Master Key, identity keypair, scope keys and all sealed content are unchanged by a reset, and the Emergency Kit stays valid because the Secret Key does not change.
     coverage:

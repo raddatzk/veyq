@@ -223,6 +223,23 @@ class LoginSliceTest {
     }
 
     @Test
+    fun twoRefreshesOfOneTokenQueuedOnTheFamilyBothRotateAndKeepIt() {
+        // The deterministic form of the race above (inbox #302): a test transaction holds the family row while both
+        // refreshes read the token's family id and queue on that lock, so the loser always decides AFTER the winner
+        // committed. Its grace must then measure distance one against the winner's successor. Reading the CURRENT
+        // row from a snapshot taken before the lock wait (MariaDB at REPEATABLE READ, with a plain read) finds the
+        // presented row itself, measures distance zero and revokes the family — 800 of 800 races before ADR 0078.
+        repeat(FORK_ROUNDS) { round ->
+            val r1 = login().refreshToken
+            val familyId = familyIdOf(r1)
+            val answers = whileFamilyIsHeld(familyId) { race({ refreshAnswer(r1) }, { refreshAnswer(r1) }) }
+            assertEquals(listOf(200, 200), answers.map { it.first }, "round $round: both presentations rotate, got $answers")
+            assertEquals("ACTIVE", familyStatusOf(r1), "round $round: a same-token race must not revoke, got $answers")
+            assertEquals(1L, currentRows(familyId), "round $round: one family, one CURRENT row, got $answers")
+        }
+    }
+
+    @Test
     fun graceDoesNotIncrementSoTheNextStaleCallerIsStillAtDistanceOne() {
         // The regression test for the shape of the grace. If it MINTED A HIGHER generation, the first stale
         // presentation would pass and the second would sit two behind and revoke — so the rule would collapse
@@ -260,6 +277,9 @@ class LoginSliceTest {
             val r2 = refresh(r1).then().statusCode(200).extract().path<String>("refreshToken") // r1 is now one behind
             val familyId = familyIdOf(r1)
             val answers = whileFamilyIsHeld(familyId) { race({ refreshAnswer(r1) }, { refreshAnswer(r2) }) }
+            // Only 200 or 401: a 500 is the deadlock a reversed lock order (token row, then family) produces here, and
+            // nothing retries it any more (inbox #302) — so this line is what holds the lock order.
+            assertTrue(answers.all { it.first == 200 || it.first == 401 }, "round $round: a refresh failed, got $answers")
             assertTrue(answers.count { it.first == 200 } <= 1, "round $round: at most one presentation may rotate, got $answers")
             assertTrue(currentRows(familyId) <= 1, "round $round: one family, one CURRENT row, got answers $answers")
             val again = answers.mapNotNull { it.second }.map { refresh(it).then().extract().statusCode() }

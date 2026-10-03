@@ -30,8 +30,9 @@ an overlap is what production does.
 ## Consequences
 
 - **The suite's race evidence counts for production.** `DatasourceIsolationTest` reds in `./gradlew check` if the
-  line goes. `scripts/run_backend_races_on_mariadb.py` runs every race class on the pinned image; it is a hand-run
-  proof until a CI job runs it, and claims no coverage until then (ADR 0040).
+  line goes. `scripts/run_backend_races_on_mariadb.py` runs every race class on the pinned image, as `ci.yml`'s
+  `backend-races` job. No run has executed that job yet, so it admits nothing until one has (ADR 0040); a hand run
+  is the proof until then.
 - **Only the inside of a transaction changes.** A read outside one (autocommit) already saw committed data, and the
   slice tests already ran this way.
 - **Two reads in one transaction may disagree.** That was always the tests' world. A decision that needs two reads
