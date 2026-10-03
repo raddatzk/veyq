@@ -97,7 +97,6 @@ class MediaResource(
                 derivatives = item.derivatives.orEmpty().map { DerivativeDeclare(it.kind.value, it.uploadId.toString()) },
                 wrappedMeta = item.wrappedMeta,
                 wrappedExif = item.wrappedExif,
-                bucketId = item.bucketId?.toString(), // cr-0113: an explicit target bucket, else the caller's primary
             )
         }
         return when (val o = handler.complete(identity.principal.name, scopeId.toString(), items)) {

@@ -67,7 +67,6 @@ data class CompleteItem(
     val derivatives: List<DerivativeDeclare>,
     val wrappedMeta: String?,
     val wrappedExif: String?,
-    val bucketId: String? = null, // cr-0113: an explicit target bucket; null = the uploader's primary
 )
 
 /** Per-item result of `start`: success carries the session + presigned PUTs (null when the store can't presign). */
@@ -482,7 +481,6 @@ class MediaHandler(
             item.wrappedExif,
             (opener as? UploadOpener.Contributor)?.shareIdentityId,
             (opener as? UploadOpener.Member)?.userId, // cr-0113: the member uploader → owner_key "user:{id}" (null on the contributor path)
-            item.bucketId,  // cr-0113: an explicit target bucket, else the uploader's primary
             admitted,
         ) ?: return CompleteItemResult(null, null, "upload_not_found") // sessions spent concurrently, or no longer admitted
         return CompleteItemResult(blobId, mediaId, null)

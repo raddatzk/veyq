@@ -82,8 +82,8 @@ the experience in [uc.memory.buckets](../features/memory/use-cases/uc.memory.buc
    reparent, move) + sub-bucket authz (owner-gated at cr-0113, **member-gated since cr-0123** — §6); and the web **"Beiträge" tab** as the full **organizer** — a hierarchy
    picker (your primary + sub-buckets), create/rename/delete sub-buckets, move media between your own buckets, a
    **virtual own-primary** that materializes on first use — **always available**. **Deferred:** uploading directly
-   into a *selected* sub-bucket (the `bucketId` is plumbed to `attach`; the web upload flow still targets the
-   primary — move covers it), a **camera/source filter** + a **capture-time-shift** tool (the EXIF metadata isn't
+   into a *selected* sub-bucket (an upload lands in the uploader's primary and a move files it; the complete call
+   carries no target bucket, so building it adds one, with the bucket's lock `moveMedia` takes), a **camera/source filter** + a **capture-time-shift** tool (the EXIF metadata isn't
    surfaced in the fresh client), and group/tenant **self-identification** in the organizer UI — now a pure UI
    nicety, not an authz need: cr-0123 relaxed the server gate to **member**, so there is no own-bucket gate to
    self-identify against.

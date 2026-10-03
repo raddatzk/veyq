@@ -166,7 +166,6 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
         wrappedExif: String?,
         shareIdentityId: String? = null, // cr-0101: the contributor identity, when attached via a CONTRIBUTOR share
         uploaderUserId: String? = null,  // cr-0113: the member uploader (member path); null on the contributor path
-        targetBucketId: String? = null,  // cr-0113: an explicit target bucket; null = the uploader's primary
         admitted: () -> Boolean = { true },
     ): Pair<String, String>? {
         if (!admitted()) return null
@@ -177,7 +176,7 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
         }
         val scopeId = original.scopeId
         val ownerKey = ownerKeyFor(uploaderUserId, shareIdentityId)
-        val bucket = resolveAttachBucket(scopeId, nodeId, ownerKey, targetBucketId)
+        val bucket = ensurePrimaryBucket(scopeId, nodeId, ownerKey, primarySealedNameFor(ownerKey))
         val originalBlobId = persistBlob(original, originalManifest)
         val now = Instant.now()
         MediaEntity().apply {
@@ -189,7 +188,7 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
             this.wrappedExif = wrappedExif
             this.shareIdentityId = shareIdentityId
             this.createdBy = ownerKey // cr-0113: the buckets attribution (denormalized owner_key)
-            this.bucketId = bucket.id // cr-0113: the resolved primary (or explicit) bucket
+            this.bucketId = bucket.id // cr-0113: the uploader's primary; a move files it elsewhere
             createdAt = now
             updatedAt = now // cr-0107: the keyset cursor starts at creation time
         }.persist()
@@ -586,15 +585,6 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
         }.also { it.persist() }
     }
 
-    /** Resolve the bucket a new media attaches to: an explicit caller-owned bucket in this node, else the uploader's primary. */
-    private fun resolveAttachBucket(scopeId: String, nodeId: String, ownerKey: String, targetBucketId: String?): BucketEntity {
-        if (targetBucketId != null) {
-            BucketEntity.findById(targetBucketId)
-                ?.takeIf { it.scopeId == scopeId && it.nodeId == nodeId && it.ownerKey == ownerKey }
-                ?.let { return it }
-        }
-        return ensurePrimaryBucket(scopeId, nodeId, ownerKey, primarySealedNameFor(ownerKey))
-    }
 
     /**
      * The node's buckets for the "Beiträge" tab (uc.memory.buckets): each bucket (primaries first) with its live media
