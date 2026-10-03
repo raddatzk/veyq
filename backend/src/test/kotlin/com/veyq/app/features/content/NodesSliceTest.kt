@@ -1,5 +1,6 @@
 package com.veyq.app.features.content
 
+import com.veyq.app.core.node.NodeEntity
 import com.veyq.app.features.media.MediaStore
 import com.veyq.app.testing.RACE_ROUNDS
 import com.veyq.app.testing.TestFixtures.CONTENT_KEY
@@ -13,12 +14,12 @@ import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
 import jakarta.inject.Inject
+import java.util.UUID
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.hasItems
 import org.hamcrest.CoreMatchers.notNullValue
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import java.util.UUID
 
 /**
  * Slice tests for the Memory tree (en.memory.tree, cr-0027): create folder/Memory/chapter + list; slug

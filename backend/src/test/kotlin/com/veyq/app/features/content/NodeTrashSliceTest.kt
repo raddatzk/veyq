@@ -1,6 +1,7 @@
 package com.veyq.app.features.content
 
 import com.veyq.app.core.blob.BlobEntity
+import com.veyq.app.core.node.NodeEntity
 import com.veyq.app.features.content.itemfavorites.ItemFavoritesEntity
 import com.veyq.app.features.media.BucketEntity
 import com.veyq.app.features.media.MediaDerivativeEntity

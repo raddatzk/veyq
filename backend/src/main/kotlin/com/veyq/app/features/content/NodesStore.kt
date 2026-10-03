@@ -1,5 +1,6 @@
 package com.veyq.app.features.content
 
+import com.veyq.app.core.node.NodeEntity
 import com.veyq.app.shared.scope.ScopeEntity
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional

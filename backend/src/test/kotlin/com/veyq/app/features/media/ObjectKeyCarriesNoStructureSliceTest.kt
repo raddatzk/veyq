@@ -2,7 +2,7 @@ package com.veyq.app.features.media
 
 import com.veyq.app.core.blob.BlobEntity
 import com.veyq.app.core.blob.UploadSessionEntity
-import com.veyq.app.features.content.NodeEntity
+import com.veyq.app.core.node.NodeEntity
 import com.veyq.app.shared.blobstore.BlobStore.Companion.chunkKey
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.shared.membership.TenantRoots

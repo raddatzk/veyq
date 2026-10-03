@@ -1,8 +1,8 @@
 package com.veyq.app.features.sharing
 
 import com.veyq.app.core.blob.BlobEntity
+import com.veyq.app.core.node.NodeEntity
 import com.veyq.app.features.admin.tenant.TenantTermsAcceptanceEntity
-import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.media.MediaEntity
 import com.veyq.app.features.media.TestBlob
 import com.veyq.app.shared.scope.ScopeEntity

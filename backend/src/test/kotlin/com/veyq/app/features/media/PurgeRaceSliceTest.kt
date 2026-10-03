@@ -2,7 +2,7 @@ package com.veyq.app.features.media
 
 import com.veyq.app.core.blob.BlobEntity
 import com.veyq.app.core.blob.UploadSessionEntity
-import com.veyq.app.features.content.NodeEntity
+import com.veyq.app.core.node.NodeEntity
 import com.veyq.app.features.spaces.scope.RestoreGroupOutcome
 import com.veyq.app.features.spaces.scope.ScopePurge
 import com.veyq.app.features.spaces.scope.ScopesHandler

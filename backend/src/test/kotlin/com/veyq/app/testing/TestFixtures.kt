@@ -1,7 +1,7 @@
 package com.veyq.app.testing
 
+import com.veyq.app.core.node.NodeEntity
 import com.veyq.app.features.account.login.SessionService
-import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.shared.membership.TenantRoots

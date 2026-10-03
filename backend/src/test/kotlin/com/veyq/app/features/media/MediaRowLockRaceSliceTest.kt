@@ -1,7 +1,7 @@
 package com.veyq.app.features.media
 
 import com.veyq.app.core.blob.BlobEntity
-import com.veyq.app.features.content.NodeEntity
+import com.veyq.app.core.node.NodeEntity
 import com.veyq.app.features.sharing.SharingStore
 import com.veyq.app.testing.RACE_ROUNDS
 import com.veyq.app.testing.TestFixtures.CONTENT_KEY

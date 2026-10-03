@@ -1,8 +1,8 @@
 package com.veyq.app.features.sharing
 
+import com.veyq.app.core.node.NodeEntity
 import com.veyq.app.core.sharing.ShareEntity
 import com.veyq.app.features.admin.tenant.TenantTermsHandler
-import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.media.CompleteItem
 import com.veyq.app.features.media.CompleteItemResult
 import com.veyq.app.features.media.DerivativeDeclare
