@@ -55,6 +55,7 @@ it stores and serves only ciphertext. The product center is the **Memory** (nest
   archived, or abandoned by its maintainers, or whose only living successor is commercial/closed (that breaks
   *self-hostable by default*). Prefer the **actively-maintained, vendor-neutral standard** over a single
   vendor's client. When a dep we rely on becomes deprecated, replacing it is **in-scope now**, not someday.
+  The npm half is a gate: CI installs through `scripts/npm_ci_no_deprecated.py`, red on `npm warn deprecated`.
   (E.g. MinIO's OSS server was archived in 2026 and its successor AIStor is commercial — so the bundled store
   stays a generic **S3-compatible OSS** one, and the backend signs via the vendor-neutral **AWS S3 SDK**,
   never a MinIO-locked client.)

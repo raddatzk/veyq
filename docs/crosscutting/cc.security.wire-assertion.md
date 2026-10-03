@@ -127,8 +127,12 @@ Load-bearing, and repeated in the guard's own docstring rather than only here:
 - **The log sensor reads the e2e topology, which is not the deployed one.** The suites call the backend and the
   store directly, so the reverse proxy carries no e2e traffic, and the dev stack has no admin container at all.
   Neither compose file nor the chart enables a Traefik access log, so that one is empty by default. **The admin
-  nginx is not**: its base image logs every request line — method, URI and query string — to stdout
-  (`access_log … main`, linked to `/dev/stdout`), and nothing here reads it.
+  nginx logs every request, and nothing here reads it** — so its format is trimmed instead of swept
+  (`admin-web/nginx.conf.template`, one image for both deployment targets): method, path *without* the query
+  string, status, size, user agent, forwarded-for; no Referer. No admin flow carries a token in a URI (the SPA's
+  routes take no query, the Admin API's path parameters are opaque ids), so the trim removes nothing legitimate.
+  What remains: nginx's *error* log names the whole request line, query included, on a failed upstream (measured
+  on 1.30.5), and a cluster ingress in front of the chart's optional `admin.domain` keeps its own access log.
 - **Only the store's container log carries a control.** MariaDB, Traefik and Mailpit are swept because the rule
   that includes them is derived, not because anything proves they could show a leak: across the first runs each
   wrote **0** lines in the run's window (MariaDB writes its general log to the file the statement-log sweep reads,
@@ -159,10 +163,12 @@ Load-bearing, and repeated in the guard's own docstring rather than only here:
   spelling (upper-case hex escapes, base64) is outside them — base64 deliberately, because it is the opacity
   oracle's case.
 - **The token sweep sees the tokens some suite handled, through the calls some suite made.** Every web sign-in
-  yields a refresh token through its `Set-Cookie`; no suite drives `token/refresh` (node's `fetch` keeps no cookie
-  jar, so a suite would have to forward the cookie by hand) and none drives a pairing, so a rotated refresh token
-  and a pairing `handle` are swept for nothing — both are hashed in code, which is a code-level fact, not a
-  measured one. A suite that drives either extends the set for free.
+  yields a refresh token through its `Set-Cookie`. Rotation and pairing are driven by one suite,
+  `web/src/features/account/pairing/pairing.e2e.test.ts`, which carries the refresh cookie by hand (node's `fetch`
+  keeps no cookie jar) through the product's own refresh and through a paired device's adoption — so rotated
+  refresh tokens, the pairing `handle` and the delegated grant token are needles, with their hashes in the dump as
+  the control (bitten: logging the rotated tokens and the handle turned the log sweep red on each by kind). A flow
+  no suite drives still mints tokens nothing sweeps.
 - **The read/contributor share id is not a token, by decision.** It is stored raw as `veyq_share.id`, half the
   capability ([ADR 0029](../decisions/0029-public-viewer-share.md); the other half is the fragment key), and is
   classified `id`; the token sweep does not look for it. What a guest write needs besides it is the key-derived
@@ -172,8 +178,10 @@ Load-bearing, and repeated in the guard's own docstring rather than only here:
   signature without the path in front of it would not be matched.
 - **The run's own artifacts carry the raw tokens.** Each `.e2e-out/<stamp>/http-*.jsonl` holds every token the suite
   handled, refresh cookies included — throwaway credentials of throwaway instances, gitignored, and the reason the
-  derivation can exist at all. Once `.e2e-out/` is uploaded from CI they leave the machine; whoever arranges that
-  arranges where they go. The retained `database-<tag>.sql` hold only the hashes.
+  derivation can exist at all. The `web-e2e` job uploads `.e2e-out/` as the `e2e-out` artifact on every run, red or
+  green, kept seven days, so those tokens and keys leave the machine and are readable by whoever can read the
+  repository's Actions artifacts — still throwaway, and that is the whole of what makes the upload acceptable.
+  The retained `database-<tag>.sql` hold only the hashes.
 - **Passing cannot be arranged from inside the client, but a canary can still be removed.** The oracle is
   outside the code — the bytes are in a database the client process does not write — so an agent cannot satisfy
   the sweep by weakening an assertion. Deleting a canary is a visible diff, exactly like widening an allowlist
