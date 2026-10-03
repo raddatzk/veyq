@@ -5,7 +5,7 @@ it stores and serves only ciphertext. The product center is the **Memory** (nest
 
 ## Hard invariants — never violate
 - **Operator-blind E2EE everywhere.** The server sees only ciphertext + opaque metadata (IDs,
-  sizes, coarse timestamps, scope/membership, blinded tokens). A user's unshared personal space
+  sizes, exact server-observed timestamps, scope/membership, blinded tokens). A user's unshared personal space
   is confidential even from the operator. No path may break this.
 - **Product language: Memory / Chapter.** Folders organize only. Never "Album" / "Explorer".
 - **Self-hostable by default**; central infrastructure always optional. This is **also the security
