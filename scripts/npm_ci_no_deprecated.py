@@ -19,6 +19,15 @@ this install skipped — no directory at its path: another platform's esbuild, r
 is asked of the registry directly (`npm view <name>@<version> deprecated`). A query the registry does not answer
 is red, never read as "not deprecated".
 
+**One CI job asks the registry, the others pass `--skip-registry-check`** (inbox #312). The registry half is ~54
+queries (~16 s, network-dependent) whose answer depends only on the lockfile, and every gated job installs the
+same lockfile at the same commit — so asking it once per commit is the whole check, four times is three repeats.
+The flag is an opt-out on purpose: a run without it (every local run, and a new CI caller that forgets it) asks
+the registry, so forgetting costs time, never coverage. The asking job is the one whose workflow fires on every
+branch and every lockfile change the others fire on and whose job every image build `needs:` (the arm64 image is
+where another platform's bindings are actually installed) — `validate_npm_installs_gated.py` pins all three, and
+that exactly one job asks. The offline half (the lockfile's own `deprecated` marks) still runs everywhere.
+
 **The defect that bought it** (inbox #213 → #232, 2026-10-01). `@vue/test-utils` pulled `js-beautify`, which
 pulled `glob@10.5.0`, deprecated by its maintainer; `npm ci` printed the warning on every install and nothing
 failed, so the rule *"never keep a deprecated dependency"* was held by whoever happened to read an install log.
@@ -40,6 +49,7 @@ before. And only where it is called — every npm install in `.github/workflows/
 
     python3 scripts/npm_ci_no_deprecated.py            # a full install, as CI does
     python3 scripts/npm_ci_no_deprecated.py --ignore-scripts
+    python3 scripts/npm_ci_no_deprecated.py --skip-registry-check   # the non-designated CI jobs only
 """
 from __future__ import annotations  # the repo's scripts run on Python 3.9
 
@@ -52,6 +62,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Callable
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+SKIP_REGISTRY = "--skip-registry-check"  # this script's own flag, never passed on to npm
 
 DEPRECATED = re.compile(r"^npm (?:warn|WARN) deprecated (?P<pkg>\S+?):?(?:\s|$)")
 SUMMARY = re.compile(r"^(?:added|removed|changed) \d+ packages?|^up to date")
@@ -99,17 +110,20 @@ def registry_deprecated(specs: list[str], view: Callable[[str], tuple[int, str]]
     return marked, failed
 
 
-def check_lockfile(lock: dict, root: pathlib.Path,
-                   view: Callable[[str], tuple[int, str]] = npm_view) -> tuple[list[str], list[str], int]:
+def check_lockfile(lock: dict, root: pathlib.Path, view: Callable[[str], tuple[int, str]] = npm_view,
+                   ask_registry: bool = True) -> tuple[list[str], list[str], int]:
     """The lockfile half (inbox #306): (deprecated specs, specs the registry could not answer for, how many specs
-    this install skipped). npm warns only for what it installs, so every entry it skipped is asked for directly."""
+    this install skipped). npm warns only for what it installs, so every entry it skipped is asked for directly —
+    unless `ask_registry` is off, which leaves that to the one CI job that asks (inbox #312)."""
     skipped = not_installed(lock, root)
-    marked, failed = registry_deprecated(skipped, view)
+    marked, failed = registry_deprecated(skipped, view) if ask_registry else ([], [])
     return sorted(set(locked_deprecated(lock)) | set(marked)), failed, len(skipped)
 
 
 def main(argv: list[str]) -> int:
     cwd = ROOT
+    ask_registry = SKIP_REGISTRY not in argv
+    argv = [a for a in argv if a != SKIP_REGISTRY]
     cmd = ["npm", "ci", *argv, "--loglevel=notice"]
     proc = subprocess.Popen(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                             errors="replace")
@@ -123,7 +137,8 @@ def main(argv: list[str]) -> int:
         print(f"npm ci failed (exit {code}) in {cwd}", file=sys.stderr)
         return code
     deprecated, summary = scan(lines)
-    in_lock, unanswered, skipped = check_lockfile(json.loads((ROOT / "package-lock.json").read_text()), ROOT)
+    in_lock, unanswered, skipped = check_lockfile(json.loads((ROOT / "package-lock.json").read_text()), ROOT,
+                                                  ask_registry=ask_registry)
     deprecated = sorted(set(deprecated) | set(in_lock))
     if unanswered:
         print(f"\nREFUSED: the registry gave no answer for {len(unanswered)} locked package(s) this install skipped, "
@@ -141,6 +156,11 @@ def main(argv: list[str]) -> int:
         print("\nREFUSED: npm ci printed no install summary, so this process cannot tell 'no deprecation "
               "warning' from 'no output' — was the install silenced?", file=sys.stderr)
         return 1
+    if not ask_registry:
+        print(f"npm ci: no deprecated package in the installed tree, nor marked in the lockfile; the {skipped} locked "
+              f"package(s) this platform skipped were not asked of the registry ({SKIP_REGISTRY}: the designated "
+              "job asks for this commit).")
+        return 0
     print(f"npm ci: no deprecated package in the installed tree, nor among the {skipped} locked package(s) this "
           "platform skipped.")
     return 0

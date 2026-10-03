@@ -118,6 +118,10 @@ jobs:
       # One workspace install, then each package proves itself. `admin-web` is gated here for the same reason
       # the app is: the image build compiles but runs no tests, so without this a broken admin surface could
       # still publish :latest alongside a green app image (ADR 0065 — one release, two images).
+      # The ONE gated install that asks the registry about the locked packages this platform skipped (the arm64
+      # image's bindings among them): this workflow fires on every branch and lockfile change the other gated
+      # ones do, and every image build `needs:` this job. The others pass --skip-registry-check (inbox #312);
+      # validate_npm_installs_gated.py holds both.
       - name: Install workspace dependencies
         run: python3 scripts/npm_ci_no_deprecated.py
       - name: Shared crypto checks
