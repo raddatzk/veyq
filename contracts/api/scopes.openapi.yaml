@@ -48,6 +48,7 @@ paths:
             example:
               scopeId: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
               wrappedGrant: AQ==
+              grantSignature: c2lnbmF0dXJl
       responses:
         "201":
           description: The personal scope was created and the caller holds its grant.
@@ -105,10 +106,20 @@ paths:
                 - id: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
                   kind: TENANT
                   tenantId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+                  role: MEMBER
+                  currentEpoch: 0
+                  grantedEpoch: 0
+                  nameEpoch: 0
+                  iconEpoch: 0
                   wrappedGrant: AQ==
                 - id: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
                   kind: PERSONAL
                   tenantId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+                  role: OWNER
+                  currentEpoch: 0
+                  grantedEpoch: 0
+                  nameEpoch: 0
+                  iconEpoch: 0
                   wrappedGrant: AQ==
         "401":
           description: Generic authentication failure.
@@ -149,6 +160,10 @@ paths:
               scopeId: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
               encryptedName: c2VhbGVkLW5hbWU=
               wrappedGrant: AQ==
+              grantSignature: c2lnbmF0dXJl
+              admissionId: ad6e8b2c-1f2d-4e4a-8b6c-7c3f0e2a9b1d
+              admissionEpoch: 0
+              admissionTag: 88EIUGAHsCDogfZhvV7MYpQw2hEWWL6ClJP2OcAj6Wg=
       responses:
         "201":
           description: The group scope was created and the caller holds its grant.
@@ -226,10 +241,12 @@ paths:
                 items: { $ref: "#/components/schemas/ScopeMember" }
               example:
                 - userId: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
+                  username: kevin
                   role: OWNER
                   identityPublicKey: aWRlbnRpdHktcHVibGljLWtleQ==
                   hasGrant: true
                 - userId: 5b6c7c3f-0e2a-9b1d-4a6e-8b2c1f2d3e4a
+                  username: partner
                   role: MEMBER
                   identityPublicKey: bWVtYmVyLXB1YmxpYy1rZXk=
                   hasGrant: false
@@ -875,6 +892,7 @@ paths:
                   addedBy: kevin
                   sealedNameKey: Z3JvdXAtbmFtZS1rZXktc2VhbGVkLXRvLWludml0ZWU=
                   encryptedName: c2VhbGVkLW5hbWU=
+                  nameEpoch: 0
         "401":
           description: Generic authentication failure.
           content:

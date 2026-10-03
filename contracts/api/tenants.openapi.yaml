@@ -72,6 +72,8 @@ paths:
                 tenantId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
                 status: PENDING
                 inviteExpiresAt: 2026-07-03T12:00:00Z
+                bootstrapSecret: 87olM0gSJLPgnKSjdNkC4pPQyuvMVguyb5kHoJyU9Cc
+                delivery: FALLBACK_COPYLINK
         "400":
           description: The request was malformed (missing/invalid name, domain or email).
           content:
@@ -165,6 +167,8 @@ paths:
                 ownerEmail: kevin@example.com
                 inviteStatus: ACTIVE
                 inviteExpiresAt: 2026-07-03T12:00:00Z
+                bootstrapSecret: 87olM0gSJLPgnKSjdNkC4pPQyuvMVguyb5kHoJyU9Cc
+                delivery: FALLBACK_COPYLINK
         "401":
           description: Generic authentication failure.
           content:
@@ -222,6 +226,8 @@ paths:
                 ownerEmail: partner@example.com
                 inviteStatus: ACTIVE
                 inviteExpiresAt: 2026-07-03T12:00:00Z
+                bootstrapSecret: 87olM0gSJLPgnKSjdNkC4pPQyuvMVguyb5kHoJyU9Cc
+                delivery: FALLBACK_COPYLINK
         "400":
           description: The request was malformed (missing/invalid email).
           content:
@@ -962,6 +968,7 @@ paths:
                 passwordSet: true
                 subjectTemplate: null
                 bodyTemplate: null
+                configSecretState: OK
         "401":
           description: Generic authentication failure.
           content:
@@ -1035,6 +1042,7 @@ paths:
                 passwordSet: true
                 subjectTemplate: "You're invited to {{domain}}"
                 bodyTemplate: "You've been invited to {{domain}}. Accept: {{link}} (expires {{expiry}})."
+                configSecretState: OK
         "400":
           description: >
             The request was malformed (invalid host/port/from/username), or a template references a `{{tag}}`
@@ -1254,6 +1262,7 @@ paths:
                 domain: family.example.com
                 ownerEmail: kevin@example.com
                 hasAccount: false
+                role: OWNER
         "400":
           description: The request was malformed (missing/blank bootstrap secret).
           content:
@@ -1295,6 +1304,7 @@ paths:
             schema: { $ref: "#/components/schemas/AcceptInviteRequest" }
             example:
               bootstrapSecret: 87olM0gSJLPgnKSjdNkC4pPQyuvMVguyb5kHoJyU9Cc
+              username: kevin
               grant: AQ==
       responses:
         "200":
