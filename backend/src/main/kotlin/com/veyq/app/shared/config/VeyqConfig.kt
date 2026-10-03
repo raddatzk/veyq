@@ -350,7 +350,8 @@ interface VeyqConfig {
              *  `veyq.blob-store.presign-ttl-seconds`, so a session with no new window past that TTL can receive no
              *  further byte. What this buffers is only a PUT that started inside the TTL and is still streaming —
              *  one 256 KiB chunk. **Also the reclaim list's not-before** (`StoreReclaimStore.record`, ADR 0062
-             *  Decision 1): it carries the same meaning there, so lowering it below the TTL breaks both. */
+             *  Decision 1): it carries the same meaning there, so lowering it below the TTL breaks both —
+             *  `BlobStoreStartupCheck` refuses to start on a value that does not exceed the TTL. */
             @WithDefault("PT1H")
             fun retention(): Duration
 
