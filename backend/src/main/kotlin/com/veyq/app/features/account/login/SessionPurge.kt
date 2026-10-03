@@ -24,6 +24,14 @@ class SessionPurge(private val sessions: SessionService) {
     // "no token" again by primary key, so a family that gained a token in between survives. `QuarkusTransaction`
     // per step, as `ScopePurge.run()` does: each step opens and closes its own session, which on the scheduler
     // thread is what the old sweep-wide `@Transactional` was there for ("EntityManager is closed", cr-0053).
+    //
+    // The access-token delete stays ONE statement, and it is the one step a login or refresh waits out whole: most
+    // rows are expired when it runs, so MariaDB full-scans and next-key-locks the table, and every new token's insert
+    // queues behind it (held open, a login and a refresh both waited the full hold). Measured at the same scale with
+    // 16 000 expired rows (inbox #245): 45–50 ms at load 8–20, 92 ms with twice the expired rows, 137–235 ms at load
+    // 30–180 — under the owner's 100 ms gate on a host not overloaded, so not batched. Batched by primary key (pick
+    // 1 000 ids by a snapshot read, delete `id in (…)`) no probe waited at all and each batch took 8–19 ms; that is
+    // the shape to take if the gate trips.
     @Scheduled(every = "{veyq.session.purge.every}")
     fun run() {
         val now = Instant.now()
