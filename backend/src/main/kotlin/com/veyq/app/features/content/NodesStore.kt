@@ -52,6 +52,17 @@ class NodesStore {
     // back a Memory whose cover is already gone. So this store no longer touches the blob store at all — the
     // one-way dependency (media → content) is restored, and the purge worker owns both directions.
 
+    /**
+     * The scope row's lock — the serializer of the scope's node tree (developer-styleguide §12). Every write that
+     * decides by a parent or a subtree takes it first, in the transaction that writes: a create and an update in
+     * [NodesHandler], [deleteSubtree], [restoreSubtree] and `NodeSubtreePurge`. A trash enumerates the subtree it
+     * stamps, so a create or a move that read its parent live before the trash committed would otherwise land under a
+     * trashed parent after it; a purge enumerates what is due, so a restore committed in between would be erased.
+     */
+    fun lockScope(scopeId: String) {
+        ScopeEntity.lockRow(scopeId)
+    }
+
     /** Resolve a parent slot within the scope: the scope id (root), a node in the same scope, or missing. */
     fun parentSlot(scopeId: String, parentSlot: String): ParentSlot {
         if (parentSlot == scopeId) return ParentSlot.Root
@@ -84,8 +95,8 @@ class NodesStore {
 
     /** Would moving `nodeId` under `newParentSlot` create a cycle (the slot is the node or a descendant)?
      *  No `deletedAt` predicate: it **inherits** one. The handler resolves `newParentSlot` through [parentSlot]
-     *  first, which filters — and a delete marks a whole subtree, so no live node ever hangs under a trashed
-     *  ancestor for this walk to climb through. */
+     *  first, which filters — and a delete marks a whole subtree under the scope lock a create and a move also take,
+     *  so no live node ever hangs under a trashed ancestor for this walk to climb through. */
     fun wouldCycle(scopeId: String, nodeId: String, newParentSlot: String): Boolean {
         var cur = newParentSlot
         while (cur != scopeId) {
@@ -135,10 +146,12 @@ class NodesStore {
             )
         }
 
-    /** What [applyUpdate] did: applied, found no live node, or refused a stale meta write (with the current value). */
+    /** What [applyUpdate] did: applied, found no live node, refused a move its parent no longer allows, or refused a
+     *  stale meta write (with the current value). */
     sealed interface ApplyResult {
         object Applied : ApplyResult
         object Missing : ApplyResult
+        object IllegalMove : ApplyResult
         data class StaleMeta(val wrappedMeta: String?, val metaVersion: Long) : ApplyResult
     }
 
@@ -151,12 +164,23 @@ class NodesStore {
      * managed copy would hold the pre-update `wrappedMeta`/`metaVersion`; today `@DynamicUpdate` keeps a rename's
      * flush off those columns, but this order does not lean on that — loaded after it, the entity reads the row as
      * it now is, so no flush can write a stale meta back over the compare-and-set's result.
+     *
+     * Under the tree's lock ([lockScope]), taken before anything else: a move's parent and its cycle check are decided
+     * again under it (the handler's are the fast path), and every write finds the node as a trash that held the lock
+     * left it — a move or a slug written onto a subtree being trashed would land on a node the trash just stamped.
+     * Neither check loads the moved node itself, so the order above holds.
      */
     @Transactional
     fun applyUpdate(
-        nodeId: String, encryptedName: String?, slugToken: String?, newParentSlot: String?, orderIndex: Int?,
+        scopeId: String, nodeId: String, encryptedName: String?, slugToken: String?, newParentSlot: String?, orderIndex: Int?,
         wrappedMeta: String?, metaVersion: Long?,
     ): ApplyResult {
+        lockScope(scopeId)
+        if (newParentSlot != null &&
+            (parentSlot(scopeId, newParentSlot) is ParentSlot.Missing || wouldCycle(scopeId, nodeId, newParentSlot))
+        ) {
+            return ApplyResult.IllegalMove
+        }
         if (wrappedMeta != null) {
             val expected = checkNotNull(metaVersion) { "the handler refuses wrappedMeta without its metaVersion" }
             val rows = NodeEntity.update(
@@ -191,6 +215,7 @@ class NodesStore {
      */
     @Transactional
     fun deleteSubtree(scopeId: String, nodeId: String) {
+        lockScope(scopeId) // before the enumeration below: a create or move under the subtree lands before it or not at all
         // No `deletedAt is null` here — the SECOND of the three reads that deliberately keep seeing trashed rows
         // (ADR 0061). The traversal must reach descendants whatever their own state, or re-deleting a partially
         // deleted subtree stops early and strands the rest (uc.memory.delete-node E3).
@@ -231,6 +256,7 @@ class NodesStore {
 
     @Transactional
     fun restoreSubtree(scopeId: String, nodeId: String, slugToken: String, encryptedName: String?): RestoreResult {
+        lockScope(scopeId) // the purge's lock: it erases what it selected under it, or finds this restore committed
         val all = NodeEntity.find("scopeId", scopeId).list()
         val root = all.firstOrNull { it.id == nodeId && it.deletedAt != null } ?: return RestoreResult.NOT_FOUND
         // Only a trash ROOT restores. A trashed node under a trashed parent comes back **with** that parent;

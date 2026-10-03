@@ -46,7 +46,7 @@ class NodesSliceTest {
             val renamed = "cmVuYW1lZA==" // "renamed"
             whileUncommitted(
                 change = { media.bumpMediaRevision(memory) },
-                overlapping = { nodes.applyUpdate(memory, renamed, null, null, null, null, null) },
+                overlapping = { nodes.applyUpdate(scopeId, memory, renamed, null, null, null, null, null) },
             )
             QuarkusTransaction.requiringNew().run {
                 val node = NodeEntity.findById(memory)!!

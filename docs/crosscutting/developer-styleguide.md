@@ -284,6 +284,8 @@ not documented; the code is the source of truth for that.
   `FOR UPDATE` and a restore is a guarded update (cr-a-gate-holds-until-its-write-commits). A sign-in, a device wrap
   and a pairing delegation take the account row (`AccountStore.lock`) that a password reset, a password change and a
   key rotation take first, and re-read under it what those change — the auth key, the caller's session (inbox #297).
+  The scope row is also the node tree's serializer: a node create, update, trash and restore and the trash purge
+  take it first (`NodesStore.lockScope`).
   **A rule across different ids needs its own key.** "One personal scope per member and tenant" had no row to
   compare-and-set, and two creates under two ids collided on nothing. `ux_scope_personal_owner` is that row's
   compare-and-set, and `personalScopeExists` reads that key, so the loser's replay question is the index's own
