@@ -41,6 +41,7 @@ const share = (over: Record<string, unknown>) => ({
   reissueRequired: false,
   deletable: true,
   newGuestsRefused: false,
+  writeVerifierMissing: false,
   ...over,
 })
 
@@ -108,6 +109,23 @@ describe('ShareDialog — a link that takes no new guest until renewed (#270)', 
 
     expect(w.find('.share-list-item').exists()).toBe(true)
     expect(w.find('.share-new-guests-refused').exists()).toBe(false)
+  })
+
+  // #303: the edit dialog's renew offer (a role edit onto a link without a verifier) opens the renew of that share.
+  it('the edit dialog asking for a renew turns into the renew of that share', async () => {
+    const old = share({ shareId: 'old', writeVerifierMissing: true })
+    listSharesFor.mockResolvedValue([old])
+    const w = mountList()
+    await flushPromises()
+    await button(w, t('share.edit')).trigger('click')
+    expect(w.findComponent({ name: 'ShareCreateDialog' }).props('editShare')).toMatchObject({ shareId: 'old' })
+
+    w.findComponent({ name: 'ShareCreateDialog' }).vm.$emit('reissue', old)
+    await flushPromises()
+
+    const dialog = w.findComponent({ name: 'ShareCreateDialog' })
+    expect(dialog.props('reissueFrom')).toMatchObject({ shareId: 'old' })
+    expect(dialog.props('editShare')).toBeNull()
   })
 })
 

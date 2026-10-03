@@ -23,12 +23,13 @@ acceptanceCriteria:
           - TenantStorageQuotaSliceTest.aPurgeFreesTheUsage
           - TenantStorageQuotaSliceTest.anotherTenantsObjectsDoNotCount
   - id: the-server-owner-sets-the-quota
-    text: The Server Owner sets, changes and clears a tenant's quota (none by default) and sees each tenant's usage and quota, only on the admin channel (the operation carries the admin-channel marker); no tenant-owner operation writes it. Lowering it below usage deletes nothing.
+    text: The Server Owner sets, changes and clears a tenant's quota (none by default; clearing is its own call, so an update without a number is refused, never read as a clear) and sees each tenant's usage and quota, only on the admin channel (the operation carries the admin-channel marker); no tenant-owner operation writes it. Lowering it below usage deletes nothing.
     coverage:
       backend:
         integration:
           - TenantStorageQuotaSliceTest.theServerOwnerSetsTheQuotaOnTheListenerAndThePublicPortDoesNotKnowIt
-          - TenantStorageQuotaSliceTest.aTenantOwnerCannotSetTheirOwnQuota
+          - TenantStorageQuotaSliceTest.aTenantOwnerCannotSetOrClearTheirOwnQuota
+          - TenantStorageQuotaSliceTest.anUpdateWithoutTheQuotaIs400AndKeepsIt
           - TenantStorageQuotaSliceTest.clearingTheQuotaAdmitsTheNextStart
           - TenantStorageQuotaSliceTest.aNegativeQuotaIs400AndAnUnknownTenantIs404
           - TenantStorageQuotaSliceTest.noQuotaIsTheDefaultAndAdmitsAnything

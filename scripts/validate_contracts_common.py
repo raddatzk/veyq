@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Guard the still-duplicated shared OpenAPI components against cross-spec drift (audit #76 / P3f, ADR 0038).
+"""Guard the still-duplicated shared OpenAPI components against cross-spec drift (audit #76 / P3f, ADR 0038) —
+and every example against its own schema's required set (assertion 4, inbox #307).
 
 `ErrorResponse` was extracted to `contracts/api/_common.openapi.yaml` and is now `$ref`'d by all 9 specs — a
 single source that cannot drift, so it is no longer guarded here. What stays copied across the per-domain specs
@@ -20,6 +21,14 @@ What it asserts:
      see it. This ≥1-overlap rule is the hardening over the original ≥2 heuristic, which silently missed a drop
      on a 2-value family (e.g. `[OWNER]` for membership-role, overlap 1) and every drift of 1-value
      `suite-version` (F6, review-2026-07-14).
+  4. **Every request/response `example` carries its schema's required properties** — the other drift a spec holds
+     against itself: a schema grows a required field and the example beside it never learns. Walked through `$ref`
+     (across files), `properties` and array `items`, so a nested item's required set counts too. Bought by inbox
+     #307: the `resendTenantInvite`/`reassignTenantInvite` 200 examples lacked the `bootstrapSecret` and
+     `delivery` their schema requires, and the first run named 16 such examples across three specs. **Its limit:**
+     presence only — never a value's type, enum, pattern or bound; never the `examples:` map, a parameter's or a
+     property's own `example`; and not through `allOf`/`oneOf`/`anyOf` (no example in the specs needs it today).
+     A required field whose example is `null` passes, which is right for a nullable one and wrong for no other.
 
 Deliberately NOT asserted: collection-wrapping style (bare array vs `{results}`/`{items}` vs a domain key) — that
 mixes intentional batch-vs-list conventions, so it is a design call, not a drift bug (see the inbox #76 note).
@@ -129,6 +138,60 @@ def check_shared_enums(specs: dict[str, dict]) -> None:
             errors.append(f"shared-enum: canonical family '{fam}' matched no enum in any spec — stale guard entry")
 
 
+def check_examples_carry_required(specs: dict[str, dict]) -> int:
+    """Assertion 4: every request/response media-type `example` carries its schema's required properties — at every
+    depth the example reaches through `$ref` (across spec files, `_common` included), `properties` and array `items`.
+    Returns the number of object examples checked, so the summary can say the walk reached something."""
+    every = dict(specs)
+    every["_common.openapi.yaml"] = yaml.safe_load((API / "_common.openapi.yaml").read_text()) or {}
+
+    def deref(fname: str, schema: object) -> tuple[str, object]:
+        for _ in range(16):  # a $ref chain this deep is a cycle, not a schema
+            if not (isinstance(schema, dict) and "$ref" in schema):
+                break
+            target, _, pointer = schema["$ref"].partition("#")
+            fname = pathlib.PurePosixPath(target).name if target else fname
+            schema = every[fname]
+            for part in pointer.strip("/").split("/"):
+                schema = schema[part]
+        return fname, schema
+
+    checked = 0
+
+    def walk(fname: str, schema: object, example: object, where: str) -> None:
+        nonlocal checked
+        fname, schema = deref(fname, schema)
+        if not isinstance(schema, dict):
+            return
+        if isinstance(example, list) and isinstance(schema.get("items"), dict):
+            for i, item in enumerate(example):
+                walk(fname, schema["items"], item, f"{where}[{i}]")
+        elif isinstance(example, dict):
+            props = schema.get("properties") or {}
+            if "required" in schema:
+                checked += 1
+                missing = [k for k in schema["required"] if k not in example]
+                if missing:
+                    errors.append(f"example: {where} omits required {missing}")
+            for key, value in example.items():
+                if key in props:
+                    walk(fname, props[key], value, f"{where}.{key}")
+
+    for fname, spec in specs.items():
+        for path, item in (spec.get("paths") or {}).items():
+            for method, op in (item or {}).items():
+                if not isinstance(op, dict):
+                    continue
+                name = f"{fname} {op.get('operationId', method + ' ' + path)}"
+                bodies = [("request", (op.get("requestBody") or {}).get("content"))]
+                bodies += [(code, (resp or {}).get("content")) for code, resp in (op.get("responses") or {}).items()]
+                for label, content in bodies:
+                    for media in (content or {}).values():
+                        if isinstance(media, dict) and "example" in media:
+                            walk(fname, media.get("schema"), media["example"], f"{name} {label}")
+    return checked
+
+
 def main() -> int:
     specs = load_specs()
     if not specs:
@@ -138,6 +201,9 @@ def main() -> int:
     check_named_component(specs, "parameters.ScopeId", {"example", "description"}, "path-param")
     check_named_component(specs, "parameters.TenantId", {"example", "description"}, "path-param")
     check_shared_enums(specs)
+    examples = check_examples_carry_required(specs)
+    if not examples:
+        errors.append("example: no object example with a required set was reached — the walk is broken")
 
     if errors:
         print("CONTRACTS COMMON-COMPONENT VALIDATION FAILED:")
@@ -146,7 +212,8 @@ def main() -> int:
         return 1
     print(
         f"contracts common components OK: {len(specs)} specs — bearerAuth/path-params consistent, "
-        f"{len(CANONICAL_ENUMS)} shared enum families aligned (ErrorResponse is single-sourced in _common)")
+        f"{len(CANONICAL_ENUMS)} shared enum families aligned (ErrorResponse is single-sourced in _common), "
+        f"{examples} object examples carry their required properties")
     return 0
 
 

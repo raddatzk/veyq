@@ -343,11 +343,17 @@ class TenantsResource(
 
     // The tenant's quota (uc.admin.tenant-storage-quota, ADR 0073 §1): Server-Owner-gated by the class-level
     // @RolesAllowed and answered only on the admin listener (`x-veyq-channel: admin`). No tenant-owner route writes it.
+    // "No quota" is its own operation (inbox #304): a set without its number is a 400, never a clear.
     override fun setTenantStorageQuota(tenantId: UUID, tenantStorageQuotaUpdate: TenantStorageQuotaUpdate): Response =
-        when (val o = storageHandler.setQuota(tenantId.toString(), tenantStorageQuotaUpdate.quotaBytes)) {
-            SetQuotaOutcome.Done -> Response.noContent().build()
-            is HttpFailure -> httpError(o)
-        }
+        storageHandler.setQuota(tenantId.toString(), tenantStorageQuotaUpdate.quotaBytes.validated()).toResponse()
+
+    override fun clearTenantStorageQuota(tenantId: UUID): Response =
+        storageHandler.setQuota(tenantId.toString(), null).toResponse()
+
+    private fun SetQuotaOutcome.toResponse(): Response = when (this) {
+        SetQuotaOutcome.Done -> Response.noContent().build()
+        is HttpFailure -> httpError(this)
+    }
 
 
     private fun InviteOutcome.toResponse(): Response = when (this) {

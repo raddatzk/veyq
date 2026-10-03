@@ -35,6 +35,7 @@ describe('tenants facade (uc.admin.create-tenant, web Slice A)', () => {
       reassignTenantInvite: INVITE,
       revokeTenant: undefined,
       setTenantStorageQuota: undefined,
+      clearTenantStorageQuota: undefined,
     })
 
   beforeEach(() => {
@@ -66,11 +67,14 @@ describe('tenants facade (uc.admin.create-tenant, web Slice A)', () => {
     })
   })
 
-  it('setTenantStorageQuota wraps the bytes (or null to clear) in a TenantStorageQuotaUpdate', async () => {
+  it('setTenantStorageQuota wraps the bytes in a TenantStorageQuotaUpdate, and null clears through its own call (#304)', async () => {
     await setTenantStorageQuota('t1', 1024)
     expect(api.setTenantStorageQuota).toHaveBeenCalledWith({ tenantId: 't1', tenantStorageQuotaUpdate: { quotaBytes: 1024 } })
+    expect(api.clearTenantStorageQuota).not.toHaveBeenCalled()
     await setTenantStorageQuota('t1', null)
-    expect(api.setTenantStorageQuota).toHaveBeenLastCalledWith({ tenantId: 't1', tenantStorageQuotaUpdate: { quotaBytes: null } })
+    // A null quota is refused by the server (400): "no quota" is never a field value, only clearTenantStorageQuota.
+    expect(api.clearTenantStorageQuota).toHaveBeenCalledWith({ tenantId: 't1' })
+    expect(api.setTenantStorageQuota).toHaveBeenCalledTimes(1)
   })
 
   it('parseQuotaGib reads GiB as bytes, none as null, and anything else as not a quota', () => {

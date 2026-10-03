@@ -228,7 +228,8 @@ class OperatorBlindProbeTest {
             "Server-Owner route: @RolesAllowed(SERVER_OWNER) plus its own lifecycle guards; it administers tenants, " +
                 "it does not act inside one.",
             "createTenant", "listTenants", "resendTenantInvite", "reassignTenantInvite", "changeTenantDomain",
-            "revokeTenant", "suspendTenant", "reactivateTenant", "setTenantStorageQuota", "getInstanceRelease",
+            "revokeTenant", "suspendTenant", "reactivateTenant", "setTenantStorageQuota", "clearTenantStorageQuota",
+            "getInstanceRelease",
             "getInstanceStoreProvisioning",
         )
         reason(

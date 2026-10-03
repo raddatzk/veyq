@@ -28,6 +28,9 @@ transitively through `$ref` (across spec files), inline objects, `items`, `allOf
      Measured twice before this rule: `updateMediaMeta` without `metaVersion`, then `putIdentityPins` /
      `putDeviceRegister` without `version`, `updateTenantStorage` without its limit (0 = link uploads off) and
      `updateTenantMailSettings` without `tls` (false = STARTTLS off) — every one answered 200, not 400.
+     There is no exception: a null that would itself mean something cannot be told from absence once Jackson
+     bound it, so that meaning gets an operation of its own — `setTenantStorageQuota` read null as "no quota", so
+     a request without the field cleared the quota, until `clearTenantStorageQuota` took that meaning (inbox #304).
 
 The failure names the list — spec, schema, property, rule — never a count.
 
@@ -76,14 +79,6 @@ PRESENCE_MIN1_RE = re.compile(CONSTRAINT + r"(?:NotBlank|NotEmpty)\b")
 NOT_NULL_RE = re.compile(CONSTRAINT + r"NotNull\b")
 # The schema types the generator turns into a Kotlin primitive, with the default Jackson binds a missing one to.
 PRIMITIVE_DEFAULTS = {"integer": 0, "number": 0, "boolean": False}
-# Rule 5's known exceptions: a required primitive whose null is itself a value, so `@NotNull` cannot refuse its
-# absence (Jackson binds a missing one to that null). Each entry is an open defect, not a design — delete it with
-# the fix.
-ABSENT_BINDS_TO_A_MEANINGFUL_NULL = {
-    "tenants.openapi.yaml:TenantStorageQuotaUpdate.quotaBytes":
-        "null clears the tenant's quota, so a Server Owner request without the field clears it; refusing that "
-        "needs absence told from null (e.g. an explicit clear), a contract change for admin-web (found 2026-10-03)",
-}
 ANY_CONSTRAINT_RE = re.compile(CONSTRAINT + r"\w+")
 
 errors: list[str] = []
@@ -327,8 +322,6 @@ def check_presence(where: str, prop: dict) -> None:
     kind = next(iter(kinds))
     nullable = "null" in types_of(s) or s is not prop
     if nullable:
-        if where in ABSENT_BINDS_TO_A_MEANINGFUL_NULL:
-            return
         if not NOT_NULL_RE.search(annotation_of(prop)):
             errors.append(f"{where} [presence] — a required nullable `{kind}` without `@NotNull`: a missing field "
                           f"reaches the handler as null.")

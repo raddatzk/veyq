@@ -72,6 +72,8 @@ paths:
                 tenantId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
                 status: PENDING
                 inviteExpiresAt: 2026-07-03T12:00:00Z
+                bootstrapSecret: 87olM0gSJLPgnKSjdNkC4pPQyuvMVguyb5kHoJyU9Cc
+                delivery: FALLBACK_COPYLINK
         "400":
           description: The request was malformed (missing/invalid name, domain or email).
           content:
@@ -165,6 +167,8 @@ paths:
                 ownerEmail: kevin@example.com
                 inviteStatus: ACTIVE
                 inviteExpiresAt: 2026-07-03T12:00:00Z
+                bootstrapSecret: 87olM0gSJLPgnKSjdNkC4pPQyuvMVguyb5kHoJyU9Cc
+                delivery: FALLBACK_COPYLINK
         "401":
           description: Generic authentication failure.
           content:
@@ -222,6 +226,8 @@ paths:
                 ownerEmail: partner@example.com
                 inviteStatus: ACTIVE
                 inviteExpiresAt: 2026-07-03T12:00:00Z
+                bootstrapSecret: 87olM0gSJLPgnKSjdNkC4pPQyuvMVguyb5kHoJyU9Cc
+                delivery: FALLBACK_COPYLINK
         "400":
           description: The request was malformed (missing/invalid email).
           content:
@@ -962,6 +968,7 @@ paths:
                 passwordSet: true
                 subjectTemplate: null
                 bodyTemplate: null
+                configSecretState: OK
         "401":
           description: Generic authentication failure.
           content:
@@ -1035,6 +1042,7 @@ paths:
                 passwordSet: true
                 subjectTemplate: "You're invited to {{domain}}"
                 bodyTemplate: "You've been invited to {{domain}}. Accept: {{link}} (expires {{expiry}})."
+                configSecretState: OK
         "400":
           description: >
             The request was malformed (invalid host/port/from/username), or a template references a `{{tag}}`
@@ -1071,8 +1079,9 @@ paths:
       summary: Read a tenant's storage usage, its quota and its per-link limit (owner-gated).
       description: >
         Returns what the tenant's objects occupy in the store (`usedBytes`), the **quota** the Server Owner set for
-        the tenant (`quotaBytes`, null when none — read-only here: only `setTenantStorageQuota` writes it, so the
-        owner cannot raise their own ceiling, ADR 0073 §1) and the **per-link limit** every
+        the tenant (`quotaBytes`, null when none — read-only here: only `setTenantStorageQuota` and
+        `clearTenantStorageQuota` write it, so the owner cannot raise their own ceiling, ADR 0073 §1) and the
+        **per-link limit** every
         CONTRIBUTOR and UPLOADER link of the tenant stores at most (`shareLinkLimitBytes`, 10 GiB until changed)
         ([ADR 0073](../../docs/decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md) §4).
         `usedBytes` is derived when read, never counted: the declared size of every blob in the tenant's scopes
@@ -1178,12 +1187,14 @@ paths:
         reason: >-
           One writer: the Server Owner; the write carries only the quota typed.
       x-veyq-channel: admin
-      summary: Set, change or clear a tenant's storage quota.
+      summary: Set or change a tenant's storage quota.
       description: >
         The Server Owner caps how much of the instance's store one tenant may hold
         ([ADR 0073](../../docs/decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md) §1): the ceiling
         belongs to whoever pays for the store the tenant's objects go to, and today that is always the instance's.
-        `quotaBytes: null` clears it — no quota is the default. Every upload start into the tenant's scopes (a
+        `quotaBytes` is required and never null: no quota — the default — is only ever set by
+        `clearTenantStorageQuota`, so a request that lost its field is refused rather than read as "unlimited".
+        Every upload start into the tenant's scopes (a
         member's upload, a cover, a link upload) is then reserved against it under a lock on the tenant, and a
         request that does not fit is refused `quota_exceeded` (ADR 0073 §5). A quota lowered below the current usage
         deletes nothing; it refuses the next start. Any tenant status. No tenant-owner operation writes the quota.
@@ -1200,13 +1211,47 @@ paths:
             example: { quotaBytes: 107374182400 }
       responses:
         "204":
-          description: The quota was stored (or cleared).
+          description: The quota was stored.
         "400":
-          description: The request was malformed (a missing or negative quota).
+          description: The request was malformed (a missing, null or negative quota).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+        "404":
+          description: No tenant with that id.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_found }
+    delete:
+      tags: [tenants]
+      operationId: clearTenantStorageQuota
+      x-veyq-channel: admin
+      summary: Clear a tenant's storage quota — the tenant then has none.
+      description: >
+        The one way to say "no quota" ([ADR 0073](../../docs/decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md)
+        §1): an explicit call, so an update that lost its field can never mean it. Idempotent — clearing a tenant
+        that has no quota answers `204` too. Any tenant status. Server-Owner only.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+      responses:
+        "204":
+          description: The tenant has no quota.
         "401":
           description: Generic authentication failure.
           content:
@@ -1254,6 +1299,7 @@ paths:
                 domain: family.example.com
                 ownerEmail: kevin@example.com
                 hasAccount: false
+                role: OWNER
         "400":
           description: The request was malformed (missing/blank bootstrap secret).
           content:
@@ -1295,6 +1341,7 @@ paths:
             schema: { $ref: "#/components/schemas/AcceptInviteRequest" }
             example:
               bootstrapSecret: 87olM0gSJLPgnKSjdNkC4pPQyuvMVguyb5kHoJyU9Cc
+              username: kevin
               grant: AQ==
       responses:
         "200":
@@ -1586,7 +1633,9 @@ components:
           x-veyq-visibility: measure
           type: [integer, "null"]
           format: int64
-          description: The tenant's storage quota, set by the Server Owner (`setTenantStorageQuota`); null = none.
+          description: >-
+            The tenant's storage quota, set by the Server Owner (`setTenantStorageQuota`, `clearTenantStorageQuota`);
+            null = none.
           example: 107374182400
 
     TenantInviteState:
@@ -2057,17 +2106,20 @@ components:
 
     TenantStorageQuotaUpdate:
       type: object
-      description: The Server Owner's quota for one tenant (ADR 0073 §1). `null` clears it.
+      description: >-
+        The Server Owner's quota for one tenant (ADR 0073 §1). Always a number: no quota is
+        `clearTenantStorageQuota`, never a null or absent field.
       required: [quotaBytes]
       properties:
         quotaBytes:
           x-veyq-visibility: measure
+          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (backend/CLAUDE.md)
           type: [integer, "null"]
           format: int64
           minimum: 0
-          description: The most the tenant may hold in the store, in bytes; null = no quota.
+          description: The most the tenant may hold in the store, in bytes. `0` refuses every upload start.
           example: 107374182400
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
 
     ErrorResponse:
       $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'
