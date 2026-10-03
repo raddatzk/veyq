@@ -220,7 +220,8 @@ paths:
         so the client drops any id it no longer sees (catching a delete and a net-zero delete+add); pure adds/edits
         stay delta-only. First load: omit `If-None-Match`/`since` for the full list. The client unwraps each
         `K_blob` under `K_mem`, presigns the downloads (`blob-downloads-batch`), and opens the chunks with
-        `openFrame`. **Operator-blind** — opaque counters, opaque ids, coarse timestamps; never content, never a key.
+        `openFrame`. **Operator-blind** — opaque counters, opaque ids, exact timestamps (`updatedAt` to the millisecond); never
+        content, never a key.
       security:
         - bearerAuth: []
       parameters:

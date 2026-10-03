@@ -19,9 +19,9 @@ CSAM, share-links, review-and-removal, external services, contact-and-deletion) 
 version. We **adopt that model** (the refine's ruling, like the buckets adoption).
 
 **No tension with operator-blindness.** The terms are the operator's **public policy** (served to everyone,
-including pre-auth on the login page), and acceptance is **coarse operational metadata** (who accepted which
-version when) — never user content. It is in fact the one honest surface where the content-blind operator states
-policy + the honest-operator caveat + the public-share decryptable-on-report.
+including pre-auth on the login page), and acceptance is **operational metadata** (who accepted which
+version, and when — to the second) — never user content. It is in fact the one honest surface where the
+content-blind operator states policy + the honest-operator caveat + the public-share decryptable-on-report.
 
 **The acceptance-storage split (the refine's key nuance).** An authenticated **member** has an account, so the
 server records their accepted version. An anonymous **public-share visitor** has **no account**, so the server
@@ -67,9 +67,9 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    transient terms-fetch error leaves the visitor viewing (a gate is operational, not enforcement; locking someone
    out on a network blip is worse than none), mirroring the member path's fail-open terms refresh.
 
-4. **Operator-blind boundary.** The terms text is public; a member's `accepted_terms_version` is coarse
-   operational metadata (like membership/role); the anonymous acceptance is client-only. **No user content, no new
-   blindness cost** — recorded in the [security model](../crosscutting/security-model.md).
+4. **Operator-blind boundary.** The terms text is public; a member's `accepted_terms_version` and its
+   `accepted_at` are operational metadata (like membership/role); the anonymous acceptance is client-only. **No
+   user content, no new blindness cost** — recorded in the [security model](../crosscutting/security-model.md).
 
 5. **Two acceptance tiers, one login surface still deferred.** The operator sets/edits terms (admin UI, versioned).
    The **member** accept/re-accept gate is server-side (v1, cr-0114); the **accountless-share** accept/re-accept

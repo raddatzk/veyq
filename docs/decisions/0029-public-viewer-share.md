@@ -122,7 +122,7 @@ Adopt a **public viewer share** as a standalone, operator-blind resource address
   never the scope or a sibling Memory.
 - **New server-visible operational surface** (all non-sensitive): the opaque `shareId`, the wrapped key, the
   plaintext `role`, and the `K_share`-sealed name. No content, no identity, no viewer. A deleted link leaves its
-  id, scope, node, role and the coarse `deleted_at` behind — the operator served its deletion anyway.
+  id, scope, node, role and its `deleted_at` (to the second) behind — the operator served its deletion anyway.
 - **Scope rotation does not revoke a share.** A share wraps `symWrap(K_share, K_mem)`, independent of `K_SC`.
   Removing a scope member rotates `K_SC` forward (a new epoch, [ADR 0024](0024-scope-key-rotation.md)) but leaves
   `K_mem` — and therefore the share — **untouched**: the publicly-shared Memory keeps working, **including content

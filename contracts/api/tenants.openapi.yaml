@@ -886,7 +886,8 @@ paths:
         The signed-in **member** accepts the tenant's terms at the version they were shown. The server records
         `accepted_terms_version = version` for `(caller, tenant)` — **only if** `version` equals the current
         `terms_version`, else `409 terms_version_changed` (the operator bumped them meanwhile → the client
-        re-reads and re-presents). Acceptance is **coarse operational metadata** (like membership), never
+        re-reads and re-presents). Acceptance — which version, and when, to the second — is **operational
+        metadata** (like membership), never
         content. `@Authenticated`; a non-member is `404` (uc.account.accept-terms, ADR 0035).
       security:
         - bearerAuth: []

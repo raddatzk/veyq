@@ -117,7 +117,7 @@ video.
 
 - **Operator-blind end to end.** Derivatives are generated and sealed on the client; the store/server hold
   only ciphertext + role tags + wraps. A smaller derivative leaks no more than the original already does
-  (coarse size).
+  (its exact ciphertext size — nothing pads it).
 - **The pixel stage is verified by property, not by bytes.** The *sealing* of every derivative stays
   vector-gated and byte-exact (`chunk_frame`, [en.memory.media](en.memory.media.md)). The *pixel* stage before
   it — decode → downscale → JPEG re-encode — runs on the browser's own codecs and **is not byte-reproducible**:

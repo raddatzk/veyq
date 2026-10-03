@@ -43,7 +43,7 @@ is *why* there are two, not a convenience.
 ## Operator-blind: a favorite is ciphertext
 
 A plaintext `favorite` boolean per node or per item would break the
-[operator-blind invariant](../../../crosscutting/security-model.md): it sanctions only *IDs, sizes, coarse
+[operator-blind invariant](../../../crosscutting/security-model.md): it sanctions only *IDs, sizes,
 timestamps, scope/membership, blinded tokens* as server-visible metadata. A pin is a **preference** — **none of
 those** — so a plaintext flag would leak to the operator *what matters to you* among the (opaque) nodes and
 items. The invariant therefore forces a favorite to be **ciphertext**:

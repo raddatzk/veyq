@@ -4,8 +4,8 @@
 Operator-blindness is veyq's first hard invariant — *"no path may break this"* (`CLAUDE.md`) — and it was the
 only major claim in the repo that nothing checked. Nine validators guarded doc links, feature format, coverage
 refs, shared components, ADR quoting and scope vocabulary; none guarded the invariant the product exists for.
-`security-model.md` § *What is encrypted vs. server-visible* drew the line in **kinds** ("sizes", "coarse
-timestamps"); the contracts are written in **field names**. Nothing connected the two, so the enumeration was
+`security-model.md` § *What is encrypted vs. server-visible* drew the line in **kinds** ("sizes",
+"timestamps"); the contracts are written in **field names**. Nothing connected the two, so the enumeration was
 advice to whoever remembered to read it — and a plaintext `title: {type: string}` added to a spec would land
 silently, with the client filling it a phase later.
 
@@ -74,7 +74,7 @@ CLASSES: dict[str, str] = {
     "id": "an opaque identifier the server routes and authorizes on",
     "structure": "scope, membership, parentage, bucket shape, ordering index, epoch",
     "measure": "sizes, counts, offsets",
-    "time": "coarse timestamps",
+    "time": "server timestamps, as written (nothing rounds them)",
     "enum": "a closed set the contract itself declares",
     "flag": "a boolean the server acts on",
     "token": "a bearer or capability secret in transit",

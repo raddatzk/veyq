@@ -758,7 +758,7 @@ components:
           x-veyq-visibility: time
           type: string
           format: date-time
-          description: When the subtree was soft-deleted. Operational metadata — coarse, and of the same kind the media trash already discloses.
+          description: When the subtree was soft-deleted, to the second. Operational metadata of the same kind the media trash already discloses.
           example: "2026-08-17T10:15:30Z"
         purgeAfter:
           x-veyq-visibility: time

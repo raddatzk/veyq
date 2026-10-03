@@ -99,7 +99,7 @@ create-gate (scope) and a member-removal hook are new.
 ## Quality notes
 
 - **Operator-blind, unchanged.** The share record is the same opaque shape (`shareId`, `symWrap(K_share, K_mem)`,
-  `role`, sealed name, `nodeId`, `owner_account`, `enabled`, and a deleted link's coarse `deleted_at`); a
+  `role`, sealed name, `nodeId`, `owner_account`, `enabled`, and a deleted link's `deleted_at`, to the second); a
   shared-scope share adds **no** new operator-visible signal. The server never sees `K_share`, `K_mem`, names, or the visitor.
 - **Already-read is not retractable.** Deactivation stops *new* access; a removed member who kept both the link
   and the ciphertext they already fetched can replay *that* — and, because they kept `K_mem`, could decrypt further

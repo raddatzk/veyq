@@ -45,8 +45,8 @@
 
 ## Quality notes
 
-- **Operator-blind.** The server sees an **opaque counter** + opaque `mediaId`s + coarse timestamps + the poll
-  access-pattern it already sees on reads — never content, never a key. No new operator-visible signal. (The full
+- **Operator-blind.** The server sees an **opaque counter** + opaque `mediaId`s + exact timestamps (a medium's
+  change time, to the millisecond) + the poll access-pattern it already sees on reads — never content, never a key. No new operator-visible signal. (The full
   rationale + the rejected alternatives: [ADR 0033](../../../decisions/0033-live-media-updates-revision-polling.md).)
 - **Cheap idle, cheap active.** Idle re-opens/polls are an **O(1)** counter compare → `304`; an active upload is a
   **keyset delta**, not a full re-list. Neither re-serializes the whole gallery — the failure mode a naïve

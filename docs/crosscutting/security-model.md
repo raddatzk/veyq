@@ -105,8 +105,8 @@ request the **user** turned on, straight to the chosen provider.
   subtree, and two links into one space are therefore linkable by anyone holding both (the ids of the shared
   node and its media already made the subtree linkable; the scope id extends that to sibling Memories of one
   space); the tenant's **terms text + `terms_version`** (the operator's *public* policy,
-  served to everyone incl. pre-auth) and a member's **`accepted_terms_version`** (coarse acceptance metadata, like
-  membership — never content, [ADR 0035](../decisions/0035-server-terms-of-service.md)); the **account email**
+  served to everyone incl. pre-auth) and a member's **`accepted_terms_version`** and when they accepted it
+  (acceptance metadata, like membership — never content, [ADR 0035](../decisions/0035-server-terms-of-service.md)); the **account email**
   (plaintext — the login identifier and the source of the deterministic auth salt,
   [ADR 0003](../decisions/0003-operator-blind-password-auth.md); named here to close a prior inventory gap); a
   tenant's **per-tenant SMTP config** (host/port/from/username/TLS + the owner-authored invite **template text** —
