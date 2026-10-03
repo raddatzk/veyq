@@ -1,7 +1,7 @@
 ---
 id: cr-a-gate-holds-until-its-write-commits
 title: A check that decides a write still holds when the write commits — on MariaDB too
-status: in-progress
+status: done
 satisfies: []
 adrs: ["0004", "0020", "0075"]
 invariants: [operator-blind E2EE everywhere]
@@ -146,3 +146,18 @@ No coverage claim for the MariaDB run (no CI job runs it — row). The permanent
 removed line is red in `./gradlew check`), not a grep.
 
 ## Retrospective
+- **Planning: the rows named one site; the class had seven, and the costliest member was in none of them.** #288
+  named the re-activation; the first MariaDB run of the race classes also reddened the refresh grace *and* a refresh
+  chain fork (`theOrphanAndTheCurrentTokenPresentedTogetherCannotForkTheChain`) that no refine had read. Root
+  cause: no race test had ever run on the production engine, so a whole axis of evidence was assumed. Fix: the
+  runner, ADR 0078, and the line in `backend/CLAUDE.md`. **Next time:** a lock or gate change runs the MariaDB race
+  run before anything is called fixed.
+- **Process: the brief arrived with the rule already written** (§12's "the lock is the first read"), one day before
+  the sweep measured the class it was written for — and the sweep replaced it. Writing a rule from one site is
+  cheap to undo here, but it framed #289 as "prove this rule" instead of "find what the engine does". Both
+  directions: I took the rule as given for the first hour of reading.
+- **Execution: one red was taken by injection where a live one was available.** The `lockRow` refresh landed
+  before its test existed, so the invite race's red was recorded by reverting it (snapshot-and-restore) rather than
+  on the untouched tree — the ordering `changes/README.md` asks for (guard → red → fix) slipped once. And
+  `whileUncommitted` cannot hold a writer that opens its own transaction; the tenant removal is held as its first
+  writes (the trap is now in `Race.kt`'s KDoc).
