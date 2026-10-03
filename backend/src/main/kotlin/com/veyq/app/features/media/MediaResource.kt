@@ -207,8 +207,8 @@ class MediaResource(
             is HttpFailure -> httpError(o)
         }
 
-    override fun deleteCoverBlob(scopeId: UUID, nodeId: UUID): Response =
-        when (val o = handler.deleteCover(identity.principal.name, scopeId.toString(), nodeId.toString())) {
+    override fun deleteCoverBlob(scopeId: UUID, nodeId: UUID, blobId: UUID): Response =
+        when (val o = handler.deleteCover(identity.principal.name, scopeId.toString(), nodeId.toString(), blobId.toString())) {
             CoverDeleteOutcome.Done -> Response.noContent().build()
             is HttpFailure -> httpError(o)
         }

@@ -116,9 +116,8 @@ describe('useMemoryCover — a peer changed the cover meanwhile', () => {
 /**
  * inbox #284: whether the node's uploaded cover blob is reclaimed is decided from the cover the landed write REPLACED
  * (`setMemoryCover`'s `replaced`, read from the blob the server accepted the write over — the tree copy, or the
- * 409's current blob on a re-run), never from the tree copy the editor opened with. The node has ONE cover-blob slot
- * and the delete takes whatever sits in it, so deciding from a stale copy deleted a peer's newer upload, or left a
- * replaced upload behind.
+ * 409's current blob on a re-run), never from the tree copy the editor opened with. The node has ONE cover-blob slot,
+ * so deciding from a stale copy deleted a peer's newer upload, or left a replaced upload behind.
  */
 describe('useMemoryCover — the old uploaded cover is reclaimed from the current state', () => {
   const crop = { x: 0, y: 0, width: 1, height: 1 }
@@ -157,7 +156,9 @@ describe('useMemoryCover — the old uploaded cover is reclaimed from the curren
     vi.mocked(deleteCoverBlob).mockImplementation(async () => void order.push('delete'))
     await harness().onCoverSave({ kind: 'remove' })
     expect(order).toEqual(['write', 'delete'])
-    expect(deleteCoverBlob).toHaveBeenCalledWith('s', 'n')
+    // inbox #308: the delete names the replaced upload, so a peer's upload landing in the slot meanwhile is refused
+    // by the server instead of deleted
+    expect(deleteCoverBlob).toHaveBeenCalledWith('s', 'n', 'replaced')
   })
 
   it('a new upload deletes nothing itself — its commit already reclaimed the slot\'s prior blob', async () => {

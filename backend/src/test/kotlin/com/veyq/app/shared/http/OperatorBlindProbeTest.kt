@@ -118,7 +118,7 @@ class OperatorBlindProbeTest {
         "commitCoverBlob" to Probe(Address.SCOPE) { s ->
             Call("POST", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/cover-blob", """{"uploadId":"${s.uploadId}"}""")
         },
-        "deleteCoverBlob" to Probe(Address.SCOPE) { s -> Call("DELETE", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/cover-blob") },
+        "deleteCoverBlob" to Probe(Address.SCOPE) { s -> Call("DELETE", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/cover-blob?blobId=${UUID.randomUUID()}") },
         "getMediaExif" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/media/${s.mediaId}/exif") },
         "updateMediaMeta" to Probe(Address.SCOPE) { s ->
             Call("PUT", "/api/scopes/${s.scopeId}/media/${s.mediaId}/meta", """{"wrappedMeta":"$B64","metaVersion":0}""")

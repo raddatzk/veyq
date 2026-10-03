@@ -53,8 +53,11 @@ one-element set over the stored one.
      re-opening on the peer's cover would show a cover whose blob that save just replaced. A switch **away** from
      an uploaded cover moves nothing before its write: it surfaces a peer's cover like any editor, and reclaims
      the slot only after the write has landed, and only when the cover that write replaced — read from the blob
-     the server accepted it over, never from the editor's own copy — was an upload. The slot's delete takes
-     whatever sits in it, so deciding from a stale copy deleted a peer's newer upload or left a replaced one.
+     the server accepted it over, never from the editor's own copy — was an upload; deciding from a stale copy
+     deleted a peer's newer upload or left a replaced one. The delete names that replaced upload, and the server
+     clears the slot only while it still holds it — the compare is the clearing write's own predicate. A peer's
+     upload committed between the write and the delete is refused (`409 cover_replaced`), not deleted: its commit
+     already reclaimed the named blob, so the client has nothing left to do.
 4. **A writer never seals a blob it could not open, nor one rebuilt from a projection.** Only an **absent** blob
    is a fresh one; a present blob that does not open or parse is refused — a self-heal or backfill stops, an
    editor says so. Writers start from the raw opened blob and keep every field verbatim, known or not. Reads stay

@@ -102,8 +102,9 @@ export function useMemoryCover(ctx: MemoryCoverContext) {
    * re-applied: re-opening on the peer's cover would show a cover whose blob this save just replaced.
    *
    * The reclaim is decided from the cover the landed write replaced, never from this tree copy (inbox #284): the
-   * node has ONE cover-blob slot and the delete takes whatever sits in it, so a stale copy naming an upload deleted
-   * a peer's newer one, and a stale copy naming none left a replaced upload behind. Write first, then delete: a
+   * node has ONE cover-blob slot, so a stale copy naming an upload deleted a peer's newer one, and a stale copy
+   * naming none left a replaced upload behind. The delete names that replaced upload, and the server refuses it
+   * when a peer's upload has landed in the slot since (inbox #308) — nothing is left to delete then. Write first, then delete: a
    * failed delete leaves a blob the node still holds (the next upload's commit or the node's delete reclaims it),
    * where deleting first left a cover the meta still named and nothing could open.
    */
@@ -134,7 +135,7 @@ export function useMemoryCover(ctx: MemoryCoverContext) {
       const { replaced, ...state } = await setMemoryCover(ctx.scopeId(), nodeId, key, cover, nodeMetaState(ctx.node()), !blobMoved)
       ctx.onMetaUpdated({ nodeId, ...state })
       if (!blobMoved && replaced?.source.kind === 'upload' && cover?.source.kind !== 'upload') {
-        await deleteCoverBlob(ctx.scopeId(), nodeId).catch(() => {
+        await deleteCoverBlob(ctx.scopeId(), nodeId, replaced.source.ref.blobId).catch(() => {
           /* the node still holds the blob; the next upload's commit or the node's delete reclaims it */
         })
       }
