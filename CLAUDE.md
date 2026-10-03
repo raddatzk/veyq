@@ -1,13 +1,15 @@
 # veyq
 
-Self-hostable, end-to-end-encrypted **memory-sharing** app. The server is **operator-blind**:
-it stores and serves only ciphertext. The product center is the **Memory** (nested into **Chapters**).
+Self-hostable, end-to-end-encrypted **platform** for sealed, shareable objects; its first **application**
+is **Memories** — memory-sharing, the product center today ([ADR 0079](docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)).
+The server is **operator-blind**: it stores and serves only ciphertext.
 
 ## Hard invariants — never violate
 - **Operator-blind E2EE everywhere.** The server sees only ciphertext + opaque metadata (IDs,
   sizes, exact server-observed timestamps, scope/membership, blinded tokens). A user's unshared personal space
   is confidential even from the operator. No path may break this.
-- **Product language: Memory / Chapter.** Folders organize only. Never "Album" / "Explorer".
+- **Product language: Memory / Chapter** — it belongs to the Memories application. Folders organize only.
+  Never "Album" / "Explorer". Say "application" (de: *Anwendung*), never "plugin" or "app".
 - **Self-hostable by default**; central infrastructure always optional. This is **also the security
   guarantee**, not only a sovereignty one: confidentiality is designed to hold against an *actively* malicious
   operator exactly where the user serves their own client ([ADR 0026](docs/decisions/0026-client-trust-tiers.md));
@@ -19,7 +21,10 @@ it stores and serves only ciphertext. The product center is the **Memory** (nest
 ## Repository shape
 - `contracts/` — OpenAPI + crypto vectors: the source of truth code is generated from.
 - `backend/` + `web/` — the two user-facing surfaces. A CR's phase order is
-  **contracts → backend → web**.
+  **contracts → backend → web**. **Target** ([ADR 0079](docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)):
+  each splits into **core** (the platform) and **applications** (Memories first; compiled in, no runtime
+  loading; an application may use core, never the reverse, never another application). **Not moved yet** —
+  today the code is still organised per feature; [`docs/apps/`](docs/apps/README.md) maps what belongs where.
 - `admin-web/` — the **Server-Owner administration** surface: its own package, its own container, reachable
   localhost-only by default ([ADR 0065](docs/decisions/0065-admin-ui-cli-separate-service.md)). A pure client
   of the existing backend Admin API — no DB, no KEK, no backend surface of its own. It holds tenant CRUD,
