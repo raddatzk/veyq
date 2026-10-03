@@ -297,6 +297,20 @@ class MediaSliceTest {
     }
 
     @Test
+    fun mediaOnAnUnknownKindIsIllegalTarget() {
+        // The allow-list bites on a kind that is none of FOLDER/MEMORY/CHAPTER (a deny-list of FOLDER would let it through).
+        val (userId, scopeId) = seedMemberScope()
+        val alien = seedNode(scopeId, "ALIEN", wrappedContentKey = CONTENT_KEY)
+        val uploadId = startOne(userId, scopeId, TestBlob.SMALL, wrap = "aw==")
+
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","nodeId":"$alien"}]}""")
+            .`when`().post("/api/scopes/$scopeId/media-batch")
+            .then().statusCode(200)
+            .body("results[0].error", equalTo("illegal_target"))
+    }
+
+    @Test
     fun overCapDeclarationIsBudgetExceeded() {
         val (userId, scopeId) = seedMemberScope()
         // a well-formed declaration beyond the per-blob cap (`veyq.blob.max-bytes`) — declare-then-verify rejects at start

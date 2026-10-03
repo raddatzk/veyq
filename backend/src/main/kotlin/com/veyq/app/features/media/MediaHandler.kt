@@ -153,7 +153,7 @@ sealed interface CoverCommitOutcome {
     data class Ok(val ref: BlobRefData) : CoverCommitOutcome
     /** No such scope/node/upload, or the caller holds no grant (a 404, no reveal). */
     object NoTarget : CoverCommitOutcome, HttpFailure by Failures.nodeNotFound
-    /** The target node is a FOLDER (owns no `K_mem`) — a 422. */
+    /** The target node's kind attaches no media (e.g. a FOLDER, which owns no `K_mem`) — a 422. */
     object IllegalTarget : CoverCommitOutcome, HttpFailure by httpFailure("illegal_target", UNPROCESSABLE)
     /** The upload was not started as this node's cover — its wrap would not open here (ADR 0072) — a 422. */
     object UploadMismatch : CoverCommitOutcome, HttpFailure by httpFailure("upload_mismatch", UNPROCESSABLE)
@@ -433,6 +433,14 @@ class MediaHandler(
         items.map { completeOne(scopeId, it, opener, admitted) }
 
     /**
+     * Allow-list, not a FOLDER deny-list: media attaches only to a node that owns a `K_mem` and a gallery.
+     * Behaviour-neutral while `NodesHandler.parentAllows` ends `else -> false` (the kinds are closed: FOLDER,
+     * MEMORY, CHAPTER). It stops being neutral the day a kind is added — which is the point: a new kind then
+     * refuses media until someone opts it in here, instead of silently inheriting it.
+     */
+    private fun attachesMedia(kind: String): Boolean = kind == NodeEntity.MEMORY || kind == NodeEntity.CHAPTER
+
+    /**
      * Complete one logical media (original + derivative uploads). The item is **atomic**: the node + every
      * upload session are resolved first, then **every** blob is declare-then-verified, and only if all pass are
      * the blobs + media + derivative rows attached. On a budget failure the item's staged objects are purged.
@@ -440,7 +448,7 @@ class MediaHandler(
     private fun completeOne(scopeId: String, item: CompleteItem, opener: UploadOpener, admitted: () -> Boolean): CompleteItemResult {
         val node = store.findNode(scopeId, item.nodeId)
             ?: return CompleteItemResult(null, null, "node_not_found")
-        if (node.kind == NodeEntity.FOLDER) return CompleteItemResult(null, null, "illegal_target")
+        if (!attachesMedia(node.kind)) return CompleteItemResult(null, null, "illegal_target")
 
         val original = store.findSession(scopeId, item.originalUploadId, opener)
             ?: return CompleteItemResult(null, null, "upload_not_found")
@@ -617,13 +625,13 @@ class MediaHandler(
      * same declare-then-verify as `complete` (stat the stored objects against the byte budget, purge + fail on
      * excess), then persist one `veyq_blob` + point the node's `cover_blob_id` at it, atomically reclaiming any
      * prior cover blob (its row goes and its store objects are recorded for reclaim, in the same transaction). No `veyq_media` row — the cover never lists in the
-     * gallery. Guards mirror `complete`: member gate (non-member → NoTarget/404), FOLDER → IllegalTarget/422.
+     * gallery. Guards mirror `complete`: member gate (non-member → NoTarget/404), a kind that attaches no media → IllegalTarget/422.
      */
     fun commitCover(userId: String, scopeId: String, nodeId: String, uploadId: String): CoverCommitOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(CoverCommitOutcome.NoTarget, CoverCommitOutcome.Suspended, CoverCommitOutcome.Deleting)?.let { return it }
         val node = store.findNode(scopeId, nodeId) ?: return CoverCommitOutcome.NoTarget
-        if (node.kind == NodeEntity.FOLDER) return CoverCommitOutcome.IllegalTarget
+        if (!attachesMedia(node.kind)) return CoverCommitOutcome.IllegalTarget
         val session = store.findSession(scopeId, uploadId, UploadOpener.Member(userId)) ?: return CoverCommitOutcome.NoTarget
         // The cover's K_blob wrap is sealed bound to (this node, COVER) (ADR 0072).
         if (!session.boundTo(node.id, "COVER")) return CoverCommitOutcome.UploadMismatch
