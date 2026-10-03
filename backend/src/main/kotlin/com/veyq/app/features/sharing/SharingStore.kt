@@ -245,6 +245,19 @@ class SharingStore(
     fun liveForUpdate(shareId: String): ShareEntity? =
         ShareEntity.findById(shareId, LockModeType.PESSIMISTIC_WRITE)?.takeIf { it.deletedAt == null }
 
+    /**
+     * Whether the share still takes a guest's write — live and enabled — read under the row lock a delete takes
+     * first ([delete]), refreshed in case this transaction already holds a copy. A guest's write calls it first in
+     * the transaction that writes: a delete drops each identity nothing references any more ([dropDeadIdentities]),
+     * counting when it runs, so a write gated only before it committed landed after the count — a photo whose
+     * identity was gone, or an identity on a dead link nothing would drop (`GuestWriteRaceSliceTest`).
+     */
+    fun admitsGuests(shareId: String): Boolean {
+        val share = ShareEntity.find("id", shareId).withLock(LockModeType.PESSIMISTIC_WRITE).firstResult()
+            ?.also { ShareEntity.getEntityManager().refresh(it) } ?: return false
+        return share.deletedAt == null && share.enabled
+    }
+
     /** The scope of a live share, by a scalar read that loads no entity — for a caller that must lock the scope
      *  before it loads the share ([liveForUpdate] on an entity already loaded would hand back that unrefreshed copy). */
     fun liveScopeOf(shareId: String): String? =

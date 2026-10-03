@@ -597,6 +597,9 @@ class SharingHandler(
         if (!rateLimiter.allowIdentity(shareId)) return CreateIdentityOutcome.RateLimited
         // The client-minted identity id (ADR 0072): the sealed display name is bound to it.
         return createOrConflict(conflict = { if (store.identityIdTaken(identityId)) CreateIdentityOutcome.IdTaken else null }) {
+            // The link again, under the row lock its delete holds: gated only above, a guest named itself on a link
+            // deleted in between, and nothing would ever drop that identity.
+            if (!store.admitsGuests(shareId)) return@createOrConflict CreateIdentityOutcome.NotFound
             store.createIdentity(identityId, shareId, sealedDisplayName, wrappedIdentityKey)
                 ?.let { CreateIdentityOutcome.Created(identityId, it) } ?: CreateIdentityOutcome.IdTaken
         }
@@ -660,7 +663,11 @@ class SharingHandler(
                 wrappedExif = it.wrappedExif,
             )
         }
-        return ShareCompleteOutcome.Results(mediaHandler.completeForNode(share.scopeId, completeItems, UploadOpener.Contributor(identity.id)))
+        // Each item's attach re-checks the link first, under the row lock its delete holds: gated only above, an upload
+        // landed after a delete counted the identity's media and dropped it — a photo nobody could open. Refused, the
+        // item answers `upload_not_found`: a deleted link's upload can no longer complete.
+        val admitted = { store.admitsGuests(shareId) }
+        return ShareCompleteOutcome.Results(mediaHandler.completeForNode(share.scopeId, completeItems, UploadOpener.Contributor(identity.id), admitted))
     }
 
     /**

@@ -145,7 +145,9 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
      * Promote a media's verified sessions to blobs + attach to the node, consuming every session. The original
      * session becomes `veyq_media.blob_id`; each derivative becomes its own blob + a `veyq_media_derivative`
      * row. One transaction — all blobs, the media, and the derivative rows commit together. Returns
-     * (originalBlobId, mediaId), or null — nothing written — when a session was already spent.
+     * (originalBlobId, mediaId), or null — nothing written — when a session was already spent, or [admitted] refuses.
+     * [admitted] is the caller's gate asked again, before anything else in this transaction — a guest's link under
+     * the row lock its delete holds (`SharingHandler.completeUploads`); a member's complete passes none.
      *
      * The sessions are single-use, so they are **spent first** (developer-styleguide §12): each delete is the
      * transaction's first write and its row count decides. Two completes of one upload both found the session live;
@@ -165,7 +167,9 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
         shareIdentityId: String? = null, // cr-0101: the contributor identity, when attached via a CONTRIBUTOR share
         uploaderUserId: String? = null,  // cr-0113: the member uploader (member path); null on the contributor path
         targetBucketId: String? = null,  // cr-0113: an explicit target bucket; null = the uploader's primary
+        admitted: () -> Boolean = { true },
     ): Pair<String, String>? {
+        if (!admitted()) return null
         val sessionIds = listOf(original.id) + derivatives.map { it.session.id }
         if (sessionIds.sumOf { UploadSessionEntity.delete("id = ?1", it) } != sessionIds.size.toLong()) {
             QuarkusTransaction.setRollbackOnly() // a session spent elsewhere: unspend the ones this call took
