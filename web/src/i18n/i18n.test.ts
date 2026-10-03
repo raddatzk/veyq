@@ -2,7 +2,8 @@
 // view that is deleted or moved (Setup went to admin-web, ADR 0065) leaves its strings behind, and nothing
 // fails, because an unused key renders nowhere. This test is what makes a dead group visible the day it dies
 // (32 of 818 keys when it was written).
-import { readFileSync, readdirSync } from 'node:fs'
+import { readdirSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { i18n, SUPPORTED_LOCALES } from './index'
@@ -22,36 +23,40 @@ function flatten(o: Record<string, unknown>, prefix = ''): string[] {
  *  taught here, never allowlisted. Its limit: a template head counts every key under it as used — web builds
  *  `tenant.join.*`, `media.uploadStatus.*`, `media.marks.filter.*`, `rotation.status.*`,
  *  `rotation.statusHint.*` and `shell.theme*` dynamically, so a dead key inside those is invisible. */
-function quotedKeysInSources(dir: string, catalog: string): { literals: Set<string>; heads: Set<string> } {
+async function quotedKeysInSources(dir: string, catalog: string): Promise<{ literals: Set<string>; heads: Set<string> }> {
   const literals = new Set<string>()
   const heads = new Set<string>()
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const path = join(dir, entry.name)
-    if (entry.isDirectory()) {
-      if (entry.name === 'generated') continue // the API client, not ours to translate
-      const inner = quotedKeysInSources(path, catalog)
-      inner.literals.forEach((k) => literals.add(k))
-      inner.heads.forEach((h) => heads.add(h))
-    } else if (entry.name.endsWith('.ts') || entry.name.endsWith('.vue')) {
-      if (entry.name.endsWith('.test.ts') || path === catalog) continue // tests build their own catalogs
-      const text = readFileSync(path, 'utf8')
-      for (const m of text.matchAll(/(['"`])([a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)+)\1/g)) literals.add(m[2])
-      for (const m of text.matchAll(/`((?:[a-zA-Z0-9_]+\.)+[a-zA-Z0-9_]*)\$\{/g)) heads.add(m[1])
-    }
+  // inbox #311: the scan's cost is opening ~230 files, not matching them (≤ 3 ms) — one blocking read after
+  // another took up to 4.6 s while the rest of the suite loaded the machine. Listing is cheap; the reads are
+  // issued together so their waits overlap.
+  const reads = sourceFiles(dir, catalog).map((path) => readFile(path, 'utf8'))
+  for (const text of await Promise.all(reads)) {
+    for (const m of text.matchAll(/(['"`])([a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)+)\1/g)) literals.add(m[2])
+    for (const m of text.matchAll(/`((?:[a-zA-Z0-9_]+\.)+[a-zA-Z0-9_]*)\$\{/g)) heads.add(m[1])
   }
   return { literals, heads }
 }
 
+function sourceFiles(dir: string, catalog: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name)
+    if (entry.isDirectory()) return entry.name === 'generated' ? [] : sourceFiles(path, catalog) // the API client, not ours to translate
+    if (!entry.name.endsWith('.ts') && !entry.name.endsWith('.vue')) return []
+    return entry.name.endsWith('.test.ts') || path === catalog ? [] : [path] // tests build their own catalogs
+  })
+}
+
 describe('web message catalog', () => {
-  it('uses every key it carries', () => {
+  it('uses every key it carries', async () => {
     const src = new URL('..', import.meta.url).pathname
-    const { literals, heads } = quotedKeysInSources(src, join(src, 'i18n', 'index.ts'))
+    const { literals, heads } = await quotedKeysInSources(src, join(src, 'i18n', 'index.ts'))
     expect(literals.size).toBeGreaterThan(100) // a scan that found almost nothing proves nothing
 
     // EN is enough: `const de: typeof en` makes the typecheck hold DE to EN's key set.
     const messages = (i18n.global as unknown as { getLocaleMessage(l: string): Record<string, unknown> })
       .getLocaleMessage(SUPPORTED_LOCALES[0])
-    const unused = flatten(messages).filter((k) => !literals.has(k) && ![...heads].some((h) => k.startsWith(h)))
+    const headList = [...heads]
+    const unused = flatten(messages).filter((k) => !literals.has(k) && !headList.some((h) => k.startsWith(h)))
     expect(unused, 'catalog keys no source uses').toEqual([])
   })
 })
