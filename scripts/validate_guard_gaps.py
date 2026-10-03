@@ -104,6 +104,10 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   35 a share-subtree contributor whose `authorizedBlobIds` forgets the derivative arm — rejected:
      `validate_blob_reference_arity` follows the arms into every `SharedSubtreeContributor`, not only core's
      `subtreeBlobIds` (the arm is red because of the follow: the file is present and still implements it)
+  36 the media `ScopeEraser` stops deleting `veyq_media` — rejected: `validate_scope_erasure_arity` unions the
+     entities deleted across every `ScopeEraser` implementation, so a table that drops out of its owning
+     package's eraser is red. Without the union (the guard read only `ScopePurge.eraseScope`) the extraction
+     would have made every media delete invisible to it, or — kept hard-wired — blocked on all of them
 Open gaps — a forgery the guard still passes (a documented limit, not a defect to fix blindly):
   4b a lying `status: planned` on an implemented use-case passes. **Left open on purpose** — the obvious rule
      "planned ⇒ no coverage refs" is *false in general*: a use-case can be legitimately `planned` while carrying
@@ -570,6 +574,17 @@ def forge_direct_store_delete_bypass(root: pathlib.Path) -> str:
 CORE_NODE_FORGERY = "backend/src/main/kotlin/com/veyq/app/core/node/GuardGapProbe.kt"
 
 
+MEDIA_SCOPE_ERASER = "backend/src/main/kotlin/com/veyq/app/features/media/MediaScopeEraser.kt"
+
+
+def forge_media_eraser_drops_a_table(root: pathlib.Path) -> str:
+    # The media step stops deleting `veyq_media`. veyq_media is reachable from veyq_scope and has no ON DELETE
+    # CASCADE, so with its only delete gone the scope row is held hostage by it at runtime.
+    f = root / MEDIA_SCOPE_ERASER
+    f.write_text(_sub(f.read_text(), '        MediaEntity.delete("scopeId", scopeId)\n', ""))
+    return "the media ScopeEraser no longer deleting MediaEntity (must be REJECTED — veyq_media would block the scope row)"
+
+
 def forge_core_imports_media(root: pathlib.Path) -> str:
     # A core file reaching into the Memories application. core/ may not exist on the tree yet, so the file is
     # planted with its directory; the import is the bare line the guard reads.
@@ -766,6 +781,7 @@ CASES = [
     ("33", "validate_wiki_sources.py", forge_wiki_prose_contradicts_doc,   True),
     ("34", "validate_shared_imports_no_features.py", forge_core_imports_media, False),
     ("35", "validate_blob_reference_arity.py", forge_contributor_forgets_derivative_arm, False),
+    ("36", "validate_scope_erasure_arity.py", forge_media_eraser_drops_a_table, False),
 ]
 
 

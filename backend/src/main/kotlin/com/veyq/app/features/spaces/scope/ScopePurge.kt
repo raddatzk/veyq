@@ -2,14 +2,7 @@ package com.veyq.app.features.spaces.scope
 
 import com.veyq.app.core.blob.BlobEntity
 import com.veyq.app.core.blob.UploadSessionEntity
-import com.veyq.app.core.node.NodeEntity
-import com.veyq.app.core.sharing.ShareEntity
-import com.veyq.app.core.sharing.ShareIdentityEntity
-import com.veyq.app.core.sharing.ShareRetiredIdEntity
-import com.veyq.app.features.content.favorites.FavoritesEntity
-import com.veyq.app.features.content.itemfavorites.ItemFavoritesEntity
-import com.veyq.app.features.media.MediaDerivativeEntity
-import com.veyq.app.features.media.MediaEntity
+import com.veyq.app.core.scope.ScopeEraser
 import com.veyq.app.features.tasks.JobDeclineEntity
 import com.veyq.app.features.tasks.JobEntity
 import com.veyq.app.shared.blobstore.StoreObjectRef
@@ -17,6 +10,7 @@ import com.veyq.app.shared.blobstore.StoreReclaimStore
 import com.veyq.app.shared.config.VeyqConfig
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.shared.scope.ScopeEntity
+import io.quarkus.arc.All
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.scheduler.Scheduled
 import jakarta.enterprise.context.ApplicationScoped
@@ -49,7 +43,13 @@ class ScopePurge(
     private val store: ScopesStore,
     private val reclaim: StoreReclaimStore,
     config: VeyqConfig,
+    @All erasers: MutableList<ScopeEraser>,
 ) {
+    // Sorted by the explicit phase, never by bean order; split once at core's own blob delete (ScopeEraser).
+    private val sorted = erasers.sortedBy { it.phase }
+    private val beforeBlobRows = sorted.filter { it.phase < ScopeEraser.BLOB_ROWS_PHASE }
+    private val afterBlobRows = sorted.filter { it.phase > ScopeEraser.BLOB_ROWS_PHASE }
+
     private val log = Logger.getLogger(ScopePurge::class.java)
     private val retention: Duration = config.scope().delete().retention()
 
@@ -82,13 +82,13 @@ class ScopePurge(
      * Erase one scope and everything under it, FK-safe: each blob's and each open upload session's store objects
      * are recorded for reclaim while their rows still name the storage keys, then the DB rows go child-first —
      * epoch links before the scope row that owns the FK. Most child tables carry `scope_id`;
-     * `veyq_media_derivative` is deleted by its media ids, `veyq_job_decline` by its job ids and
-     * `veyq_share_identity` by its share ids.
+     * `veyq_job_decline` is deleted by its job ids. The media, favorites, node and share rows are the
+     * [ScopeEraser] implementations' (their owning packages), run in `phase` order around core's blob delete.
      *
      * The read-before-delete order survives; only what it feeds changed. The objects themselves are
      * `StoreReclaimSweep`'s, which is why nothing here can leave a row pointing at bytes that are already gone.
      *
-     * **This list is the enumeration, and `scripts/validate_scope_erasure_arity.py` is what keeps it complete.**
+     * **This list plus every [ScopeEraser] is the enumeration, and `scripts/validate_scope_erasure_arity.py` is what keeps it complete.**
      * The rule is not "remember to add the new table" but *every table reachable by foreign key from
      * `veyq_scope` is deleted here or carries `ON DELETE CASCADE`* — anything else refuses the final
      * `ScopeEntity.deleteById` and the group can never be erased at all. Four tables were missing when the guard
@@ -109,30 +109,19 @@ class ScopePurge(
         val sessions = UploadSessionEntity.find("scopeId", scopeId).list()
         reclaim.record(sessions.map { StoreObjectRef(it.storageKey, it.chunkCount) })
 
-        val mediaIds = MediaEntity.find("scopeId", scopeId).list().map { it.id }
-        if (mediaIds.isNotEmpty()) MediaDerivativeEntity.delete("mediaId in ?1", mediaIds)
-        MediaEntity.delete("scopeId", scopeId)
+        // Phases below BLOB_ROWS_PHASE: rows that reference veyq_blob (media, derivatives) go first.
+        beforeBlobRows.forEach { it.eraseScope(scopeId) }
         BlobEntity.delete("scopeId", scopeId)
         UploadSessionEntity.delete("scopeId", scopeId)
-        FavoritesEntity.delete("scopeId", scopeId)
-        ItemFavoritesEntity.delete("scopeId", scopeId)
-        NodeEntity.delete("scopeId", scopeId)
+        // Phases above it: favorites, item favorites, nodes, the group's links (ADR 0029 §6/§7).
+        afterBlobRows.forEach { it.eraseScope(scopeId) }
         ScopeEpochEntity.delete("scopeId", scopeId)
         MembershipEntity.delete("scopeId", scopeId)
 
+        // `veyq_job_decline` references `veyq_job`, so declines go first, by job id.
         val jobIds = JobEntity.find("scopeId", scopeId).list().map { it.id }
         if (jobIds.isNotEmpty()) JobDeclineEntity.delete("jobId in ?1", jobIds)
         JobEntity.delete("scopeId", scopeId)
-
-        // A group's links (ADR 0029 §6) go with it: erasing rather than retaining is the operator-blind answer,
-        // not a concession to the foreign key — the row holds the owner, the node and a sealed name of a group whose
-        // erasure its owner asked for, and with the scope gone there is no capability left for it to revoke. Each
-        // id is RETIRED first (ADR 0029 §7): a freed id could be minted again by anyone holding the dead link's id
-        // and key, and every other holder of that link would open the minter's Memory.
-        val shareIds = ShareEntity.find("scopeId", scopeId).list().map { it.id }
-        shareIds.forEach { id -> ShareRetiredIdEntity().apply { this.id = id }.persist() }
-        if (shareIds.isNotEmpty()) ShareIdentityEntity.delete("shareId in ?1", shareIds)
-        ShareEntity.delete("scopeId", scopeId)
 
         ScopeEntity.deleteById(scopeId)
     }

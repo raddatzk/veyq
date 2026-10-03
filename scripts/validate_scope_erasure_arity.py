@@ -3,7 +3,9 @@
 erased with it or cascades (uc.spaces.delete-group, ADR 0014 §6).
 
 **What it asserts.** The transitive closure of foreign keys *below* `veyq_scope` is computed from the migrations,
-and every table in it must be either named by `ScopePurge.eraseScope` or carry `ON DELETE CASCADE`. A table that
+and every table in it must be either named by `ScopePurge.eraseScope` **or by the `eraseScope` of any class
+implementing `ScopeEraser`** (the erasure is a core list plus one step per owning package, cr-platform-core-
+boundaries step 5), or carry `ON DELETE CASCADE`. A table that
 is neither holds the scope row hostage: `eraseScope`'s final `ScopeEntity.deleteById` raises a constraint
 violation, the transaction rolls back, and the group stays in pending-deletion forever with its bytes
 unreclaimed — on the operator's own disk, under self-hosting.
@@ -15,7 +17,8 @@ The closure is read from three keys that are all cheap and all textual:
     live database holds rather than the ones a `CREATE TABLE` once spelled.
   - *closure* — a walk from `veyq_scope` down those edges. Transitive, not one-hop: a child of a child blocks the
     scope row just as hard as a direct child does.
-  - *erased* — the entities `eraseScope` deletes, resolved through their `@Table(name = …)` to table names, so
+  - *erased* — the entities deleted by `ScopePurge.eraseScope` and by every file declaring a class that
+    implements `ScopeEraser`, unioned and resolved through their `@Table(name = …)` to table names, so
     the guard compares schema against schema and never against a Kotlin class name.
 
 **The defect that bought it.** A live one, found 2026-08-17 and fixed with `cr-scope-erasure-fk-closure`:
@@ -26,7 +29,7 @@ with `JdbcSQLIntegrityConstraintViolationException … delete from veyq_scope wh
 tree. The four were found by this predicate, run before the fix existed; the same run was the discovery, the bite
 and the fix-list.
 
-**Its limit.** Four, and the first two are the shapes reached for first — both are the easier thing to write and
+**Its limit.** Five, and the first two are the shapes reached for first — both are the easier thing to write and
 both are silently wrong, so they are recorded here rather than re-derived:
 
   (a) *One-hop* — "every table that `REFERENCES veyq_scope`". It reports **2** where the truth is 4, because
@@ -47,6 +50,10 @@ both are silently wrong, so they are recorded here rather than re-derived:
       Deleting `veyq_job` before `veyq_job_decline` names both and still throws at runtime; a delete behind a
       dead branch is named and never runs. That half is held by the slice tests in `ScopesSliceTest`, which
       execute the purge, not by any grep.
+  (e) Eraser discovery is textual: a class is an eraser when a `class … : ScopeEraser` line appears in a file,
+      and every `XEntity.delete(` after that file's first `fun eraseScope` counts. An eraser the purge never
+      collects (not a bean) is named and never runs — `ScopeEraserOrderSliceTest` and the purge slice tests,
+      which execute it, hold that half, as in (d).
 """
 from __future__ import annotations
 
@@ -60,6 +67,8 @@ MIGRATIONS = ROOT / "backend" / "src" / "main" / "resources" / "db" / "migration
 KOTLIN_MAIN = ROOT / "backend" / "src" / "main" / "kotlin"
 PURGE = KOTLIN_MAIN / "com" / "veyq" / "app" / "features" / "spaces" / "scope" / "ScopePurge.kt"
 ERASE_FN = "private fun eraseScope"
+ERASER_FN = "fun eraseScope"
+ERASER_CLASS = re.compile(r"^\s*(?:\w+\s+)*class\s+\w+[^{=]*:\s*(?:[\w.,\s]*,\s*)?ScopeEraser\b", re.MULTILINE)
 ROOT_TABLE = "veyq_scope"
 
 VERSION = re.compile(r"V(\d+)__")
@@ -148,6 +157,18 @@ def erased_tables(errors: list[str]) -> set[str]:
         return set()
 
     entities = set(ERASED_ENTITY.findall(source.split(ERASE_FN, 1)[1]))
+    erasers = 0
+    for path in sorted(KOTLIN_MAIN.rglob("*.kt")):
+        text = path.read_text(encoding="utf-8")
+        if ERASER_CLASS.search(text) and ERASER_FN in text:
+            erasers += 1
+            entities |= set(ERASED_ENTITY.findall(text.split(ERASER_FN, 1)[1]))
+    if not erasers:
+        errors.append(
+            "no class implementing `ScopeEraser` with a `fun eraseScope` was found under backend main Kotlin. "
+            "Media, favorites, nodes and shares are erased by those, so zero of them means the closure below "
+            "would report their tables as uncovered for the wrong reason — or the discovery pattern drifted."
+        )
     table_of: dict[str, str] = {}
     for path in sorted(KOTLIN_MAIN.rglob("*.kt")):
         for match in ENTITY_TABLE.finditer(path.read_text(encoding="utf-8")):
@@ -159,7 +180,7 @@ def erased_tables(errors: list[str]) -> set[str]:
             tables.add(table_of[entity])
         else:
             errors.append(
-                f"eraseScope deletes `{entity}`, but no `@Table(name = …)` in backend main Kotlin maps it to a "
+                f"the erasure deletes `{entity}`, but no `@Table(name = …)` in backend main Kotlin maps it to a "
                 f"table. The closure below cannot tell whether that delete covers a blocking table, so it is "
                 f"reported as uncovered rather than assumed away."
             )
@@ -194,9 +215,9 @@ def main() -> int:
     for edge in blocking:
         errors.append(
             f"`{edge['child']}` (FK -> {edge['parent']}, {edge['loc']}) is reachable from {ROOT_TABLE} but is "
-            f"neither deleted by ScopePurge.eraseScope nor `ON DELETE CASCADE`. Its foreign key refuses the "
+            f"neither deleted by ScopePurge.eraseScope or a ScopeEraser nor `ON DELETE CASCADE`. Its foreign key refuses the "
             f"scope row, so the hard-erasure of every group in the tick rolls back and no group is ever "
-            f"reclaimed. Delete it in eraseScope child-first, or give the constraint a cascade."
+            f"reclaimed. Delete it in eraseScope or in the ScopeEraser of the package that owns it, child-first, or give the constraint a cascade."
         )
 
     if errors:
@@ -208,7 +229,7 @@ def main() -> int:
     cascading = sum(1 for e in reached if e["cascade"])
     print(
         f"OK: all {len(reached)} tables in the FK closure below {ROOT_TABLE} are erased with it "
-        f"({len(reached) - cascading} by ScopePurge.eraseScope, {cascading} by ON DELETE CASCADE)."
+        f"({len(reached) - cascading} by ScopePurge.eraseScope / ScopeEraser, {cascading} by ON DELETE CASCADE)."
     )
     return 0
 
