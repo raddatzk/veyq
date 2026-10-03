@@ -103,7 +103,8 @@ That is an intra-media access pattern**: which parts of a video were watched, re
 This is **new, not pre-existing**: every current read path fetches a blob *whole*, so today the operator learns
 only that a blob was accessed, never *which parts in which order*. Range streaming is what introduces the
 per-chunk-subset pattern. It is also **finer than the metadata the invariant already permits** — `CLAUDE.md`
-allows *coarse timestamps* and *sizes*; a position-within-one-medium-over-time trace is more granular than either.
+allows *timestamps* and *sizes* — when a blob was written or fetched, and how big it is; a
+position-within-one-medium-over-time trace is more granular than either.
 
 **The owner has decided this is acceptable:** the intra-media access pattern is **not** an exclusion criterion for
 video playback. The alternatives were weighed and rejected — hiding the pattern would require either fetching the
@@ -154,7 +155,7 @@ therefore applies [ADR 0013 §6](0013-blob-storage-presigned-direct-to-store.md)
   same client-integrity tier as the rest of the web client ([ADR 0026](0026-client-trust-tiers.md)) — it does not
   move the active-operator boundary. Confidentiality of already-stored bytes still holds; the operator still
   cannot read content, only observe the (now finer) access pattern above.
-- **`security-model.md` gains one honest line** so its *"coarse timestamps"* wording is not read as stronger than
+- **`security-model.md` gains one honest line** so its *timestamps and sizes* wording is not read as stronger than
   it now is: the per-chunk fetch pattern of a *playing* medium is observable — an accepted intra-media
   access-pattern leak, scoped to range-streamed playback.
 - **No new crypto and no contract change for the field.** Playback reuses `K_blob`/`openFrame` verbatim; the

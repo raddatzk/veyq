@@ -75,8 +75,8 @@ is [ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md). This us
   opted-in viewer can re-resolve in **their** language on demand. Nominatim returns names from OSM `name:<lang>`
   tags via `accept-language` with **graceful fallback to the local name** (no hard error on an unsupported
   language) — so de+en are well covered and further locales degrade, never break.
-- **Operator-blind — the *veyq* operator is the adversary.** The veyq server sees the node shape + coarse
-  timestamps + the **opaque `wrappedMeta`** blob; never a place name or a coordinate. The **opt-in
+- **Operator-blind — the *veyq* operator is the adversary.** The veyq server sees the node shape + its
+  timestamps (to the second) + the **opaque `wrappedMeta`** blob; never a place name or a coordinate. The **opt-in
   reverse-geocoding request is a different, consented trust boundary**: it goes **client-direct** to the provider
   (never through the veyq backend — proxying would let the operator see the coordinate), carries **no veyq
   identity** (a bare coordinate), and is transparent. The threat-model clarification + this third-party boundary

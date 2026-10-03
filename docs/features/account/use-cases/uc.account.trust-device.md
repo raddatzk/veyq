@@ -161,7 +161,8 @@ stateDiagram-v2
   KEK, the device key, or the Master Key. The add/remove-wrap endpoints are **authenticated** and act only
   on the **caller's own** wraps.
 - **Metadata exposed: a trusted-device count.** Because each trusted device is its own persistent wrap row,
-  the operator can see *how many* devices an account trusts and their coarse creation times — the same
+  the operator can see *how many* devices an account trusts. A wrap row stores no time; when a device was
+  enrolled is visible only as the request the server answered at that moment — the same
   device-*count* visibility already accepted for sessions ([ADR 0004](../../../decisions/0004-session-tokens.md)).
   Nothing per-login is re-uploaded on either side: a DEVICE wrap is inherently per-device and long-lived, and
   a session family carries no client blob at all, so there is nothing to correlate that the count doesn't

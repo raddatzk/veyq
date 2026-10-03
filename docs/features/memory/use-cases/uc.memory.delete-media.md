@@ -80,7 +80,8 @@ delete *whose* — is deferred to a later groups/moderation refine.)
 ## Quality notes
 
 - **Operator-blind, unchanged.** Delete flips `deleted_at`/`deleted_by`; purge removes **opaque blob objects**.
-  The **trash state** (a trashed flag + who + when) is coarse **operator-visible operational metadata**, exactly as
+  The **trash state** (a trashed flag + who + when, to the millisecond) is **operator-visible operational
+  metadata**, exactly as
   listed in the [security model](../../../crosscutting/security-model.md) *(what is encrypted vs. server-visible)* —
   never content, never a key.
 - **Reversible vs. irreversible (the security model's posture).** Any-member reversible trash + `deleted_by` audit;

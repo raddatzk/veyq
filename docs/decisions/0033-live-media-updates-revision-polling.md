@@ -8,7 +8,8 @@
 An open Memory gallery should reflect **other members' media changes live** — a contributor's uploads appear,
 a removed member's photos disappear — without a manual reload (inbox #48). Two coupled needs: a **cheap
 "did it change?"** check (fast opens, no work when idle) and **live insert/remove** of others' changes. The
-server is **operator-blind**: it sees opaque `mediaId`s + node membership + coarse timestamps, never content.
+server is **operator-blind**: it sees opaque `mediaId`s + node membership + exact timestamps (a medium's
+`updated_at` to the millisecond), never content.
 
 The obvious shape — and the one an earlier version of this product shipped — is a **hanging long-poll** carrying
 a **keyset cursor** `(updatedAt, id)` for adds/edits **plus a SHA-256 hash over the sorted `mediaId` set** for
@@ -115,7 +116,7 @@ add/edit never carries the O(N) id-set, and nothing does per idle tick.
 ## Consequences
 
 - **Idle is cheap (O(1) 304), an active upload is cheap (delta only — no id-set until a delete), deletes are robust
-  (the id-set, gated by `delete_revision`), and it stays operator-blind** — two counters + opaque ids + coarse
+  (the id-set, gated by `delete_revision`), and it stays operator-blind** — two counters + opaque ids + exact
   timestamps, no content, no new operator-visible signal beyond the poll access-pattern the operator already sees
   on reads.
 - **A live poll also tightens the `auto`-date self-heal window** ([uc.memory.date](../features/memory/use-cases/uc.memory.date.md)):

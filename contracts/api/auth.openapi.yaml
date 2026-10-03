@@ -881,7 +881,9 @@ components:
           x-veyq-visibility: time
           type: string
           format: date-time
-          description: When this family last rotated its tokens — the coarse "last seen" of that device.
+          description: >
+            When this family last rotated its tokens, to the second. It moves only on a token refresh, so as
+            that device's "last seen" it trails real use by up to one access-token lifetime.
           example: 2026-08-12T07:45:00Z
         current:
           x-veyq-visibility: flag

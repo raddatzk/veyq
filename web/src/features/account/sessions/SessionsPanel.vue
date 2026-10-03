@@ -15,7 +15,7 @@
 // work on a locked device — that is the whole point: cutting off a lost device is exactly what you do before
 // you can unlock anywhere else. Names ("Kevin's iPhone") are the only vault-dependent half: they come from the
 // Master-Key-sealed device register (en.account.device-register) and are layered on **after** the list renders,
-// never awaited by it. A locked device therefore still shows coarse dates and a short id, which is a complete
+// never awaited by it. A locked device therefore still shows the dates and a short id, which is a complete
 // and fully actionable list. The trap this panel must never fall into is disabling the action it exists to offer.
 //
 // This panel is also the register's **repair** surface (write moment 3): it is the only place holding BOTH
@@ -191,7 +191,7 @@ const dateFormat = computed(
   () => new Intl.DateTimeFormat(locale.value === 'de' ? 'de-DE' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' }),
 )
 
-/** A coarse timestamp, or an em dash — the server always sends both, so absence is a shape change, not a state. */
+/** A timestamp shown to the minute (the server's: to the second), or an em dash — the server always sends both, so absence is a shape change, not a state. */
 function when(value: Date | undefined): string {
   return value ? dateFormat.value.format(value) : '—'
 }

@@ -93,7 +93,7 @@ open).
   does not open is refused, because rebuilding it from empty would re-seal one field and drop every sibling
   ([ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md) point 4).
 - **Operator-blind at the node level** ([ADR 0012](../../../decisions/0012-content-key-hierarchy.md)): the server
-  sees the node shape + coarse timestamps + this opaque blob; never its contents.
+  sees the node shape + its timestamps (to the second) + this opaque blob; never its contents.
 
 ## Related
 

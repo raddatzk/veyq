@@ -3,7 +3,7 @@
 
 **What it asserts.** In `contracts/api/auth.openapi.yaml`, `components.schemas.SessionFamily` has exactly the
 property set {id, createdAt, lastUsedAt, current}, and none of those properties is `contentEncoding: base64`.
-A family may carry an opaque id, two coarse timestamps and the server-set current marker — and nothing else.
+A family may carry an opaque id, two timestamps and the server-set current marker — and nothing else.
 
 The rule behind it is a *removed mechanism*, not a guarded one. An earlier design stored a client-encrypted
 device name on the family; a name blob re-sent unchanged across logins lets a blind operator **re-link a
@@ -31,7 +31,7 @@ Two adjacent guards were considered and do not cover this:
 the server — it cannot see a name smuggled through a path or query param, an error `message`, a header, or a
 DB column with no contract field, and it says nothing about any other schema. Nor does it look inside the
 device register's own blob: that is ciphertext by construction, and its contents are the client's business.
-Green means exactly: **`SessionFamily` still carries the four opaque/coarse fields and no ciphertext.**
+Green means exactly: **`SessionFamily` still carries the four plaintext metadata fields and no ciphertext.**
 """
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ import yaml
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SPEC = ROOT / "contracts" / "api" / "auth.openapi.yaml"
 
-# ADR 0004: an opaque id, two coarse timestamps, and the marker the SERVER sets for the caller's own family.
+# ADR 0004: an opaque id, two timestamps, and the marker the SERVER sets for the caller's own family.
 ALLOWED = {"id", "createdAt", "lastUsedAt", "current"}
 
 

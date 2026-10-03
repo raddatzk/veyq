@@ -101,7 +101,7 @@ smaller upload is the bonus, not the argument.
   they are an accepted member of — what a Master-Key rotation re-tags (§9). The server already holds exactly these
   rows under the caller's id, so it learns nothing, and the caller learns only its own.
 
-Operator visibility does not change in kind: the same opaque rows, sizes and coarse timestamps.
+Operator visibility does not change in kind: the same opaque rows, sizes and timestamps (`updated_at`, to the second).
 
 **6. Presentation is aggregate only.** The gallery filter is *everyone's favorites* / *only mine*; the grid
 shows a **count** on the tile's heart. No faces, no names, no per-member attribution anywhere in the UI.

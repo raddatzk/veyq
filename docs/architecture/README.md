@@ -75,7 +75,7 @@ flowchart TB
   C -->|"contracts API — ciphertext + opaque metadata + blinded tokens"| B
   C -->|"presigned direct-to-store — ciphertext blob chunks (never via the backend)"| S
   C -.->|"consented, client-direct — a bare coordinate, opt-in (never via the backend)"| T
-  B -->|"opaque rows (ids, kinds, sizes, coarse timestamps, wraps, blinded tokens)"| DB
+  B -->|"opaque rows (ids, kinds, sizes, exact timestamps, wraps, blinded tokens)"| DB
   B -->|"presign only — issues short-TTL URLs; never sees a blob byte"| S
   B -.- NB
 
@@ -84,8 +84,9 @@ flowchart TB
 ```
 
 **The trust boundary is the backend, and the adversary is on the inside of it.** What crosses it is ciphertext
-plus operational metadata the server needs to route and bill bytes: ids, kinds, sizes, coarse timestamps,
-membership, wraps, blinded tokens. What never crosses: a key, a password, a name, a day, a coordinate, a pixel.
+plus operational metadata the server needs to route and bill bytes: ids, kinds, sizes, timestamps (exact —
+to the second, nothing rounds them), membership, wraps, blinded tokens. What never crosses: a key, a password, a
+name, a day, a coordinate, a pixel.
 
 **Third parties are a separate, consented boundary.** A client may reach a geocoder or tile server *directly* —
 never proxied — so that using one leaks a bare coordinate to *that* party and still nothing to the veyq

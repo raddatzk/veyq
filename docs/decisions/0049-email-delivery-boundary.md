@@ -45,7 +45,7 @@ consented third party.**
    (link / domain / expiry) — never a veyq session, user-id, or content. In a **self-hosted** deployment the
    operator runs their own SMTP, so this boundary collapses to the operator themselves (moot, as with the
    self-hosted operator-blind case).
-4. **Send-time recipient + coarse timing is conceded operational metadata, like membership** — stated in the
+4. **Send-time recipient + the time of sending is conceded operational metadata, like membership** — stated in the
    security-model inventory (which also now lists the account email and the owner-authored template text, a
    server-held operator-visible field), never treated as content.
 
