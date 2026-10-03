@@ -67,7 +67,7 @@ jobs:
       # one place a defect would be a defect in BOTH surfaces, so its own suite failing must not read as a
       # web failure.
       - name: Install dependencies
-        run: npm ci
+        run: python3 scripts/npm_ci_no_deprecated.py
 
       - name: Run shared crypto checks
         working-directory: packages/crypto
@@ -120,7 +120,7 @@ jobs:
         run: ./gradlew --no-daemon quarkusBuild
 
       - name: Install frontend dependencies
-        run: npm ci
+        run: python3 scripts/npm_ci_no_deprecated.py
 
       # Docker-free: who owns the config-secret key a restore places, and that an unplaceable one is refused
       # before the first write. Beside the rehearsal below, which drives the same tool as one user end to end.

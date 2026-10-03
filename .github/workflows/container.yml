@@ -119,7 +119,7 @@ jobs:
       # the app is: the image build compiles but runs no tests, so without this a broken admin surface could
       # still publish :latest alongside a green app image (ADR 0065 — one release, two images).
       - name: Install workspace dependencies
-        run: npm ci
+        run: python3 scripts/npm_ci_no_deprecated.py
       - name: Shared crypto checks
         working-directory: packages/crypto
         run: npm run check
