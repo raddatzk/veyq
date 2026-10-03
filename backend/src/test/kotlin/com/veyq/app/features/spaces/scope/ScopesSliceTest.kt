@@ -1,5 +1,6 @@
 package com.veyq.app.features.spaces.scope
 
+import com.veyq.app.core.blob.UploadOpener
 import com.veyq.app.core.blob.BlobEntity
 import com.veyq.app.core.blob.UploadSessionEntity
 import com.veyq.app.core.node.NodeEntity
@@ -7,7 +8,6 @@ import com.veyq.app.core.sharing.ShareEntity
 import com.veyq.app.core.sharing.ShareIdentityEntity
 import com.veyq.app.features.media.MediaStore
 import com.veyq.app.features.media.TestBlob
-import com.veyq.app.features.media.UploadOpener
 import com.veyq.app.features.sharing.ShareWriteProof
 import com.veyq.app.features.tasks.CapabilityTags
 import com.veyq.app.features.tasks.JobDeclineEntity

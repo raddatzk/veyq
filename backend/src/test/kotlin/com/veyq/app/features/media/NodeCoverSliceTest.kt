@@ -1,5 +1,6 @@
 package com.veyq.app.features.media
 
+import com.veyq.app.core.blob.UploadOpener
 import com.veyq.app.core.blob.BlobEntity
 import com.veyq.app.core.node.NodeEntity
 import com.veyq.app.shared.blobstore.StoreReclaimEntity

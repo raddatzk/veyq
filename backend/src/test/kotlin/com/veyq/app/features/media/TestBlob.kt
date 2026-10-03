@@ -1,5 +1,6 @@
 package com.veyq.app.features.media
 
+import com.veyq.app.core.blob.UploadDeclare
 import com.veyq.app.core.blob.UploadSessionEntity
 import com.veyq.app.shared.blobstore.BlobStore.Companion.chunkKeys
 import com.veyq.app.shared.blobstore.FakePresigningBlobStore

@@ -1,5 +1,6 @@
 package com.veyq.app.features.media
 
+import com.veyq.app.core.blob.UploadDeclare
 import com.veyq.app.core.quota.StorageUsage
 import com.veyq.app.shared.tenant.TenantEntity
 import jakarta.enterprise.context.ApplicationScoped

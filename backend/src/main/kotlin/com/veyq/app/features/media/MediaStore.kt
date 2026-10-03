@@ -1,5 +1,7 @@
 package com.veyq.app.features.media
 
+import com.veyq.app.core.blob.UploadOpener
+import com.veyq.app.core.blob.UploadDeclare
 import com.veyq.app.core.blob.BlobEntity
 import com.veyq.app.core.blob.UploadSessionEntity
 import com.veyq.app.core.node.NodeEntity
@@ -275,7 +277,7 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
     @Transactional
     fun trashMedia(scopeId: String, mediaId: String, userId: String): String? {
         // The read is the row's lock, as every delete of the row takes it (`purgeMedia`, a guest's
-        // `deleteContributedMedia`): one that holds it finishes first, and this then finds nothing — the 404 a replay
+        // `MediaShareGuestWrites.deleteOwn`): one that holds it finishes first, and this then finds nothing — the 404 a replay
         // gets. Read plainly, the trash flushed onto a row the delete had removed and answered 500 (inbox #313).
         val media = MediaEntity.findById(mediaId, LockModeType.PESSIMISTIC_WRITE)?.takeIf { it.scopeId == scopeId } ?: return null
         if (media.deletedAt != null) return media.nodeId // already trashed — idempotent

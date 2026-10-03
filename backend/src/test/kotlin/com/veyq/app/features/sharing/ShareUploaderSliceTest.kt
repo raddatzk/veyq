@@ -8,6 +8,7 @@ import com.veyq.app.core.sharing.ShareIdentityEntity
 import com.veyq.app.features.content.NodesStore
 import com.veyq.app.features.media.BucketEntity
 import com.veyq.app.features.media.MediaEntity
+import com.veyq.app.features.media.MediaShareGuestWrites
 import com.veyq.app.features.media.TestBlob
 import com.veyq.app.shared.TestIds
 import com.veyq.app.shared.blobstore.StoreReclaimEntity
@@ -58,6 +59,9 @@ class ShareUploaderSliceTest {
 
     @Inject
     lateinit var sharing: SharingStore
+
+    @Inject
+    lateinit var guestWrites: MediaShareGuestWrites
 
     @Inject
     lateinit var nodes: NodesStore
@@ -352,8 +356,8 @@ class ShareUploaderSliceTest {
             val identity = createIdentity(createShare(userId, memory, role = "UPLOADER"))
             val mediaId = seedMedia(scopeId, memory, identityId = identity)
             val second = whileUncommitted(
-                change = { assertEquals(true, sharing.deleteContributedMedia(scopeId, mediaId, identity), "round $round") },
-                overlapping = { sharing.deleteContributedMedia(scopeId, mediaId, identity) },
+                change = { assertEquals(true, guestWrites.deleteOwn(scopeId, mediaId, identity), "round $round") },
+                overlapping = { guestWrites.deleteOwn(scopeId, mediaId, identity) },
             )
             assertEquals(false, second, "round $round: the second delete answers as a replay")
             QuarkusTransaction.requiringNew().run { assertNull(MediaEntity.findById(mediaId), "round $round") }

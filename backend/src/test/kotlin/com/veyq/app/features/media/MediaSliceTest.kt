@@ -1,7 +1,6 @@
 package com.veyq.app.features.media
 
 import com.veyq.app.core.node.NodeEntity
-import com.veyq.app.features.sharing.SharingStore
 import com.veyq.app.testing.TestFixtures.CONTENT_KEY
 import com.veyq.app.testing.TestFixtures.bearer
 import com.veyq.app.testing.TestFixtures.seedMemberScope
@@ -32,7 +31,7 @@ class MediaSliceTest {
 
     /** cr-0107: drives the real share delete-own path (cr-0102) to exercise the delete_revision bump + id-set. */
     @Inject
-    lateinit var sharing: SharingStore
+    lateinit var sharing: MediaShareGuestWrites
 
     @Test
     fun startCompleteListRoundTrip() {
@@ -446,7 +445,7 @@ class MediaSliceTest {
         // make b contributor-owned so the real cr-0102 delete-own path authorizes it, then delete it: that path
         // bumps BOTH counters (cr-0107) — media_revision 2→3, delete_revision 0→1
         QuarkusTransaction.requiringNew().run { MediaEntity.findById(b)!!.shareIdentityId = "id-X" }
-        sharing.deleteContributedMedia(scopeId, b, "id-X")
+        sharing.deleteOwn(scopeId, b, "id-X")
 
         // a poll whose sinceDelete (0) lags delete_revision (1) gets the current id-set — only a remains, b dropped
         given().header("Authorization", bearer(userId)).header("If-None-Match", "2")
@@ -471,7 +470,7 @@ class MediaSliceTest {
         // net-zero: delete b (media_revision 2→3, delete_revision 0→1) then add c (media_revision 3→4). The count
         // returns to 2 but the SET changed — a count-only signal would miss it; the id-set catches it.
         QuarkusTransaction.requiringNew().run { MediaEntity.findById(b)!!.shareIdentityId = "id-X" }
-        sharing.deleteContributedMedia(scopeId, b, "id-X")
+        sharing.deleteOwn(scopeId, b, "id-X")
         val c = completeOne(userId, scopeId, memory, wrap = "Yw==")
 
         // the poll: c rides the delta (past the cursor) AND the id-set is present (a delete advanced delete_revision),
