@@ -141,6 +141,10 @@ class SessionService : AccessTokenResolver {
             // successor — a dropped response, or a sibling call that lost the race — and it rotates. Zero
             // means it IS a successor that an earlier grace already replaced, and two or more is an ordinary
             // replay: both are clone signals (ADR 0004).
+            // KNOWN DEFECT on MariaDB (inbox #262's measurement): this is a plain read, so under REPEATABLE READ it
+            // sees the snapshot the family-id query above opened BEFORE the family lock was waited for — the winner's
+            // successor is invisible, `current` is the presented row itself, and a true race revokes the family
+            // (800 of 800 races measured). H2 reads committed rows here, so no test sees it. A locking read fixes it.
             val current = currentTokenOf(family.id)
             if (current == null || current.generation - row.generation != 1) {
                 family.status = SessionFamilyEntity.REVOKED

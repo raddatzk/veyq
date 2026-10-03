@@ -18,9 +18,12 @@ import java.sql.SQLException
  * measured at ~6 % of requests with the table essentially empty and 0 in 150 at 50 rows and beyond.
  *
  * Since a rotation takes its **family's** row lock first (`SessionService.rotate`), two refreshes of one token
- * queue on the family's primary key before either touches `ux_refresh_token_hash`, so this cycle should no longer
- * form. That is reasoned about InnoDB, not measured — the test datasource is H2 — so the retry stays until a
- * MariaDB measurement says otherwise.
+ * queue on the family's primary key before either touches `ux_refresh_token_hash`, and the cycle no longer forms.
+ * Measured on MariaDB 11.4 (inbox #262, rotate's statements replayed, two refreshes of one token released together
+ * on near-empty tables): token-first, 17 deadlocks in 1 600 requests; family-first, none in 1 600. So the reason this
+ * exists is gone. It stays only until rotate's grace path is fixed on MariaDB (that same measurement found it
+ * revoking the family on every such race), and goes with that fix — at which point a reversed lock order turns the
+ * H2 race tests red instead of being retried into a green run.
  *
  * **Not a general-purpose retry.** It is deliberately local to rotation, bounded, and immediate: rotation is
  * short, it is the only statement pair in this codebase that provokes the cycle, and anything longer would be
