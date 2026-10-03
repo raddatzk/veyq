@@ -1106,12 +1106,24 @@ describe('uploadCoverBlob / deleteCoverBlob — standalone cover blob (cr-0073)'
     expect(store.captured.startItems).toHaveLength(1)
   })
 
-  it('deleteCoverBlob detaches via the endpoint', async () => {
+  it('deleteCoverBlob detaches via the endpoint, naming the blob it expects in the slot', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
-    await deleteCoverBlob(SCOPE_ID, NODE_ID)
-    expect(store.api.deleteCoverBlob).toHaveBeenCalledWith({ scopeId: SCOPE_ID, nodeId: NODE_ID })
+    await deleteCoverBlob(SCOPE_ID, NODE_ID, 'blob-old')
+    expect(store.api.deleteCoverBlob).toHaveBeenCalledWith({ scopeId: SCOPE_ID, nodeId: NODE_ID, blobId: 'blob-old' })
     expect(store.captured.coverDeletedNode).toBe(NODE_ID)
+  })
+
+  // inbox #308: a peer's upload committed into the node's one slot after our meta write already reclaimed the blob
+  // we expected — the server refuses to take the peer's, and there is nothing left for us to delete.
+  it('deleteCoverBlob treats `409 cover_replaced` as nothing to delete, and rethrows any other failure', async () => {
+    const coded = (code: string) => ({ response: new Response(JSON.stringify({ code }), { status: 409 }) })
+    fakeApi(mediaApi, { deleteCoverBlob: vi.fn<MediaApi['deleteCoverBlob']>().mockRejectedValue(coded('cover_replaced')) })
+    await expect(deleteCoverBlob(SCOPE_ID, NODE_ID, 'blob-old')).resolves.toBeUndefined()
+
+    // Control: the same status with another code is a real failure.
+    fakeApi(mediaApi, { deleteCoverBlob: vi.fn<MediaApi['deleteCoverBlob']>().mockRejectedValue(coded('scope_deleting')) })
+    await expect(deleteCoverBlob(SCOPE_ID, NODE_ID, 'blob-old')).rejects.toBeDefined()
   })
 })
 

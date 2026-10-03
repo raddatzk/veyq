@@ -7,13 +7,17 @@ import com.veyq.app.testing.TestFixtures.bearer
 import com.veyq.app.testing.TestFixtures.seedMemberScope
 import com.veyq.app.testing.TestFixtures.seedNode
 import com.veyq.app.testing.TestFixtures.seedUser
+import com.veyq.app.testing.RACE_ROUNDS
+import com.veyq.app.testing.whileUncommitted
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
+import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.notNullValue
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import java.util.UUID
@@ -34,6 +38,12 @@ import java.util.UUID
  */
 @QuarkusTest
 class NodeCoverSliceTest {
+
+    @Inject
+    lateinit var store: MediaStore
+
+    @Inject
+    lateinit var handler: MediaHandler
 
     @Test
     fun commitAttachesCoverBlobWithNoMediaRow() {
@@ -105,7 +115,7 @@ class NodeCoverSliceTest {
         val storageKey = QuarkusTransaction.requiringNew().call { BlobEntity.findById(blobId)!!.storageKey }
 
         given().header("Authorization", bearer(userId))
-            .`when`().delete("/api/scopes/$scopeId/nodes/$memory/cover-blob")
+            .`when`().delete("/api/scopes/$scopeId/nodes/$memory/cover-blob?blobId=$blobId")
             .then().statusCode(204)
 
         assertEquals("upload_not_found", downloadError(userId, scopeId, blobId)) // reclaimed
@@ -120,8 +130,71 @@ class NodeCoverSliceTest {
 
         // idempotent — deleting again (no cover blob) still answers 204
         given().header("Authorization", bearer(userId))
-            .`when`().delete("/api/scopes/$scopeId/nodes/$memory/cover-blob")
+            .`when`().delete("/api/scopes/$scopeId/nodes/$memory/cover-blob?blobId=$blobId")
             .then().statusCode(204)
+    }
+
+    /**
+     * The node has ONE cover-blob slot, and the client deletes the upload its meta write replaced only after that
+     * write landed (ADR 0077 point 3). A peer's upload committed in between sits in the slot by then: a delete that
+     * took whatever the slot held reclaimed the peer's new cover, and the peer's sealed meta named a blob that was
+     * gone (inbox #308). The delete names the blob it expects and is refused when the slot holds another one; the
+     * expected blob is already gone — the peer's commit reclaimed it. Control: the same delete naming the blob the
+     * slot does hold lands.
+     */
+    @Test
+    fun aDeleteNamingAReplacedCoverIsRefusedAndKeepsThePeersUpload() {
+        val (userId, scopeId) = seedMemberScope()
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val mine = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.SMALL, "bWluZQ==", memory, "COVER"))
+        val peers = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.SMALL, "cGVlcg==", memory, "COVER"))
+
+        given().header("Authorization", bearer(userId))
+            .`when`().delete("/api/scopes/$scopeId/nodes/$memory/cover-blob?blobId=$mine")
+            .then().statusCode(409).body("code", equalTo("cover_replaced"))
+
+        assertEquals("store_unavailable", downloadError(userId, scopeId, peers), "the peer's upload was reclaimed")
+        QuarkusTransaction.requiringNew().run {
+            val node = NodeEntity.findById(memory)!!
+            assertEquals(peers, node.coverBlobId, "the delete cleared the peer's cover from the slot")
+            assertNotNull(node.coverByteSize)
+        }
+
+        // Control: naming the blob the slot holds detaches and reclaims it.
+        given().header("Authorization", bearer(userId))
+            .`when`().delete("/api/scopes/$scopeId/nodes/$memory/cover-blob?blobId=$peers")
+            .then().statusCode(204)
+        assertEquals("upload_not_found", downloadError(userId, scopeId, peers))
+        QuarkusTransaction.requiringNew().run { assertNull(NodeEntity.findById(memory)!!.coverBlobId) }
+    }
+
+    /**
+     * The compare must be the clearing write's own predicate, not a read before it (developer-styleguide §12): a
+     * peer's commit in flight when the delete reads the slot still holds the expected blob, and commits the new one
+     * before the delete writes. The delete waits for it and must then see the peer's blob, refuse, and leave both
+     * the slot and the new blob row alone.
+     */
+    @Test
+    fun aDeleteOverlappingAPeersCommitDoesNotTakeItsUpload() {
+        repeat(RACE_ROUNDS) { round ->
+            val (userId, scopeId) = seedMemberScope()
+            val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+            val mine = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.SMALL, "bWluZQ==", memory, "COVER"))
+            val upload = startOne(userId, scopeId, TestBlob.SMALL, "cGVlcg==", memory, "COVER")
+            var peers: String? = null
+            val outcome = whileUncommitted(
+                change = {
+                    val session = store.findSession(scopeId, upload, UploadOpener.Member(userId))!!
+                    peers = store.commitCover(memory, session, null)!!.blobId
+                },
+                overlapping = { handler.deleteCover(userId, scopeId, memory, mine) },
+            )
+            assertEquals(CoverDeleteOutcome.Replaced, outcome, "round $round")
+            assertEquals("store_unavailable", downloadError(userId, scopeId, peers!!), "round $round: the peer's upload was reclaimed")
+            QuarkusTransaction.requiringNew().run {
+                assertEquals(peers, NodeEntity.findById(memory)!!.coverBlobId, "round $round: the delete cleared the peer's cover")
+            }
+        }
     }
 
     /**

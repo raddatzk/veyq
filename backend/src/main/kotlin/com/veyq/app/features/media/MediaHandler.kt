@@ -10,6 +10,7 @@ import com.veyq.app.shared.blobstore.presignGets
 import com.veyq.app.shared.blobstore.presignPuts
 import com.veyq.app.shared.config.VeyqConfig
 import com.veyq.app.shared.http.FailureStatus.BAD_REQUEST
+import com.veyq.app.shared.http.FailureStatus.CONFLICT
 import com.veyq.app.shared.http.FailureStatus.FORBIDDEN
 import com.veyq.app.shared.http.FailureStatus.NOT_FOUND
 import com.veyq.app.shared.http.FailureStatus.UNPROCESSABLE
@@ -168,6 +169,9 @@ sealed interface CoverDeleteOutcome {
     object Done : CoverDeleteOutcome
     /** No such scope/node, or the caller holds no grant (a 404). */
     object NoTarget : CoverDeleteOutcome, HttpFailure by Failures.nodeNotFound
+    /** The slot holds another blob than the expected one — a peer's upload replaced it, and that commit already
+     *  reclaimed the expected blob; nothing written (inbox #308) — a 409. */
+    object Replaced : CoverDeleteOutcome, HttpFailure by httpFailure("cover_replaced", CONFLICT)
 }
 
 sealed interface DeleteMediaOutcome {
@@ -632,13 +636,20 @@ class MediaHandler(
         return store.commitCover(node.id, session, manifest)?.let(CoverCommitOutcome::Ok) ?: CoverCommitOutcome.NoTarget
     }
 
-    /** Detach + reclaim the node's standalone cover blob (cr-0073). Idempotent — a node with no cover → Done. */
-    fun deleteCover(userId: String, scopeId: String, nodeId: String): CoverDeleteOutcome {
+    /**
+     * Detach + reclaim the node's standalone cover blob (cr-0073), only while its slot still holds [expectedBlobId]
+     * — the upload the caller's meta write replaced (ADR 0077 point 3). A slot holding another blob is a peer's newer
+     * upload, whose commit already reclaimed the expected one → Replaced, nothing written. Idempotent — a node with no
+     * cover → Done.
+     */
+    fun deleteCover(userId: String, scopeId: String, nodeId: String, expectedBlobId: String): CoverDeleteOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(CoverDeleteOutcome.NoTarget, CoverDeleteOutcome.Suspended, CoverDeleteOutcome.Deleting)?.let { return it }
         if (store.findNode(scopeId, nodeId) == null) return CoverDeleteOutcome.NoTarget
-        store.clearCover(scopeId, nodeId)
-        return CoverDeleteOutcome.Done
+        return when (store.clearCover(scopeId, nodeId, expectedBlobId)) {
+            MediaStore.ClearCoverResult.CLEARED, MediaStore.ClearCoverResult.EMPTY -> CoverDeleteOutcome.Done
+            MediaStore.ClearCoverResult.REPLACED -> CoverDeleteOutcome.Replaced
+        }
     }
 
     fun download(userId: String, scopeId: String, blobIds: List<String>, domain: String?): DownloadOutcome {

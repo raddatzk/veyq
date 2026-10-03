@@ -460,19 +460,31 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
         return BlobRefData(blobId, session.chunkCount, session.byteSize, session.wrappedBlobKey, manifest)
     }
 
+    /** What [clearCover] did: detached the expected blob, found an empty slot (or no live node), or found another blob. */
+    enum class ClearCoverResult { CLEARED, EMPTY, REPLACED }
+
     /**
-     * Detach the node's cover blob (cr-0073): clear its `cover_blob_id`/`cover_byte_size`, delete the
-     * `veyq_blob` row and put its store objects on the reclaim list — all in one transaction. A node (or scope)
-     * with no cover blob records nothing and is idempotent; a null node likewise (the endpoint answers 204
-     * either way).
+     * Detach the node's cover blob (cr-0073) — only while the slot still holds [expectedBlobId] (inbox #308): clear
+     * its `cover_blob_id`/`cover_byte_size`, delete the `veyq_blob` row and put its store objects on the reclaim
+     * list — all in one transaction. An empty slot records nothing and is idempotent ([ClearCoverResult.EMPTY]).
+     *
+     * The compare is the clearing UPDATE's own predicate and its first write (developer-styleguide §12), never a
+     * read before it: a peer's `commitCover` in flight holds the node row, so this update waits for its commit and
+     * then matches no row, where a read made before the wait saw the expected blob and deleted the peer's new one.
      */
     @Transactional
-    fun clearCover(scopeId: String, nodeId: String) {
-        val node = NodeEntity.findById(nodeId)?.takeIf { it.scopeId == scopeId && it.deletedAt == null } ?: return
-        deleteBlobRow(node.coverBlobId)
-        node.coverBlobId = null
-        node.coverByteSize = null
-        node.persist()
+    fun clearCover(scopeId: String, nodeId: String, expectedBlobId: String): ClearCoverResult {
+        val cleared = NodeEntity.update(
+            "coverBlobId = null, coverByteSize = null " +
+                "where id = ?1 and scopeId = ?2 and deletedAt is null and coverBlobId = ?3",
+            nodeId, scopeId, expectedBlobId,
+        )
+        if (cleared == 1) {
+            deleteBlobRow(expectedBlobId)
+            return ClearCoverResult.CLEARED
+        }
+        val slot = NodeEntity.findById(nodeId)?.takeIf { it.scopeId == scopeId && it.deletedAt == null }?.coverBlobId
+        return if (slot == null) ClearCoverResult.EMPTY else ClearCoverResult.REPLACED
     }
 
     /** Delete a blob row by id (if present) and put its store objects on the reclaim list, in the caller's

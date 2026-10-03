@@ -564,12 +564,17 @@ paths:
     delete:
       tags: [media]
       operationId: deleteCoverBlob
-      summary: Detach + reclaim the node's standalone cover blob.
+      summary: Detach + reclaim the node's standalone cover blob — only if it is still the expected one.
       description: >
         Clear the node's `cover_blob_id`, delete its `veyq_blob` row, and hand the blob's store objects to the
         reclaim list. Used when an uploaded cover is removed (the sealed node meta drops its `cover` separately,
-        via `updateNode`). Idempotent — a node with no cover blob answers `204`. Guards: the caller holds a grant
-        for the scope. `deleteNode` performs the same reclaim via the `cover_blob_id` column, so this is the
+        via `updateNode`). The request names the blob it expects in the slot (`blobId`, the upload the landed
+        meta write replaced): the node has ONE cover-blob slot, and between the client's meta write and this
+        delete a peer may commit a new upload into it. The compare is the clearing write's own predicate
+        (`… where cover_blob_id = ?`), so a peer's commit that lands first, or is in flight, is seen. A slot that
+        holds another blob answers `409 cover_replaced` and writes nothing — the expected blob was already
+        reclaimed by that commit, so there is nothing left to delete. Idempotent — a node with no cover blob
+        answers `204`. Guards: the caller holds a grant for the scope. `deleteNode` performs the same reclaim via the `cover_blob_id` column, so this is the
         explicit client-driven detach. The row, its reference and the reclaim entry are written in **one**
         transaction, so a crash can leave neither a blob row nor a forgotten object; one scheduled sweep then
         drains that list, retrying a refused delete and marking a permanently failed one
@@ -580,6 +585,13 @@ paths:
       parameters:
         - $ref: "#/components/parameters/ScopeId"
         - $ref: "#/components/parameters/NodeId"
+        - name: blobId
+          in: query
+          required: true
+          description: >
+            The cover blob the caller expects in the node's slot — the uploaded cover its meta write replaced. The
+            server clears the slot only while it still holds this blob.
+          schema: { type: string, format: uuid, example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a }
       responses:
         "204":
           description: The cover blob row is gone and its objects are queued for reclaim (or the node had none).
@@ -592,7 +604,13 @@ paths:
           description: No such scope/node, or the caller holds no grant for the scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
-        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
+        "409":
+          description: >
+            The node's cover slot holds another blob than `blobId` (`cover_replaced` — a peer's upload replaced it,
+            and its commit already reclaimed the expected one; nothing was written), or the space is being deleted
+            and read-only (`scope_deleting`, uc.spaces.delete-group A4).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: cover_replaced } }
 
   /api/scopes/{scopeId}/media/{mediaId}/exif:
     get:

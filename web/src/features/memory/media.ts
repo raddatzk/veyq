@@ -13,7 +13,7 @@
 import exifr from 'exifr'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
-import { isHttpStatus, HttpStatus } from '../../shared/httpError'
+import { isCodedError, isHttpStatus, HttpStatus } from '../../shared/httpError'
 import { mediaApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import { type MediaListPage, type MediaSummary, type PresignedUrl, type MediaDerivativeKind } from '../../api/generated/media'
@@ -877,9 +877,17 @@ export async function uploadCoverBlob(
  * Detach + reclaim a node's standalone cover blob (cr-0073) — the client-driven counterpart to `deleteNode`'s
  * cascade. Called when an **uploaded** cover is superseded by a media cover or removed (a fresh upload commit
  * already reclaims the prior blob atomically, so a replace-upload-with-upload needs no explicit delete).
+ *
+ * `blobId` is the upload the caller's write replaced: the node has ONE cover-blob slot, and a peer's upload may
+ * have landed in it since. The server clears the slot only while it still holds `blobId`, and answers
+ * `409 cover_replaced` otherwise — that peer's commit already reclaimed our blob, so there is nothing to delete.
  */
-export async function deleteCoverBlob(scopeId: string, nodeId: string): Promise<void> {
-  await withRefresh(() => mediaApi().deleteCoverBlob({ scopeId, nodeId }))
+export async function deleteCoverBlob(scopeId: string, nodeId: string, blobId: string): Promise<void> {
+  try {
+    await withRefresh(() => mediaApi().deleteCoverBlob({ scopeId, nodeId, blobId }))
+  } catch (e) {
+    if (!(await isCodedError(e, HttpStatus.conflict, 'cover_replaced'))) throw e
+  }
 }
 
 // --- delete / restore / trash (uc.memory.delete-media, cr-0110) -------------
