@@ -16,15 +16,15 @@ vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
 vi.mock('./tenants', async (importOriginal) => ({
   GIB: (await importOriginal<typeof import('./tenants')>()).GIB,
   parseQuotaGib: (await importOriginal<typeof import('./tenants')>()).parseQuotaGib,
-  setTenantStorageQuota: vi.fn().mockResolvedValue(undefined),
+  setTenantStorageQuota: vi.fn(),
   listTenants: vi.fn(),
-  resendInvite: vi.fn().mockResolvedValue({ bootstrapSecret: 'sek' }),
-  reassignInvite: vi.fn().mockResolvedValue({ bootstrapSecret: 'sek' }),
-  revokeTenant: vi.fn().mockResolvedValue(undefined),
-  changeTenantDomain: vi.fn().mockResolvedValue(undefined),
-  suspendTenant: vi.fn().mockResolvedValue(undefined),
-  reactivateTenant: vi.fn().mockResolvedValue(undefined),
-  tenantError: vi.fn().mockResolvedValue({ status: 0, code: null }),
+  resendInvite: vi.fn(),
+  reassignInvite: vi.fn(),
+  revokeTenant: vi.fn(),
+  changeTenantDomain: vi.fn(),
+  suspendTenant: vi.fn(),
+  reactivateTenant: vi.fn(),
+  tenantError: vi.fn(),
 }))
 vi.mock('../../shared/inviteLink', () => ({
   buildInviteLink: vi.fn().mockReturnValue('https://acme.example/#invite=sek'),
@@ -37,8 +37,8 @@ const { confirmAsk } = vi.hoisted(() => ({ confirmAsk: vi.fn() }))
 vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: confirmAsk }) }))
 
 import TenantDetailPanel from './TenantDetailPanel.vue'
-import { listTenants, revokeTenant, resendInvite, suspendTenant, reactivateTenant, changeTenantDomain, tenantError, setTenantStorageQuota } from './tenants'
-import type { TenantSummary } from './tenants'
+import { listTenants, revokeTenant, resendInvite, reassignInvite, suspendTenant, reactivateTenant, changeTenantDomain, tenantError, setTenantStorageQuota } from './tenants'
+import type { TenantInviteState, TenantSummary } from './tenants'
 import { httpError } from '../../test/httpError'
 
 const i18n = createI18n({
@@ -84,6 +84,10 @@ const PENDING: TenantSummary = { tenantId: 't-1', name: 'Acme', domain: 'acme.ex
 const ACTIVE: TenantSummary = { tenantId: 't-2', name: 'Live', domain: 'live.example', ownerEmail: 'o@live.example', status: 'ACTIVE', ...NO_QUOTA }
 const SUSPENDED: TenantSummary = { tenantId: 't-3', name: 'Offline', domain: 'off.example', ownerEmail: 'o@off.example', status: 'SUSPENDED', ...NO_QUOTA }
 const GiB = 1024 ** 3
+const INVITE: TenantInviteState = {
+  ownerEmail: 'owner@acme.example', inviteStatus: 'ACTIVE', inviteExpiresAt: new Date('2026-10-10T12:00:00.000Z'),
+  bootstrapSecret: 'sek', delivery: 'FALLBACK_COPYLINK',
+}
 
 const mountPanel = (tenantId = 't-1') => mount(TenantDetailPanel, { props: { tenantId }, global: { plugins: [i18n], stubs } })
 const btn = (w: ReturnType<typeof mountPanel>, label: string) => w.findAll('button').find((b) => b.text() === label)!
@@ -96,6 +100,14 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
     vi.clearAllMocks()
     confirmAsk.mockResolvedValue(true)
     vi.mocked(listTenants).mockResolvedValue([PENDING])
+    vi.mocked(setTenantStorageQuota).mockResolvedValue(undefined)
+    vi.mocked(resendInvite).mockResolvedValue(INVITE)
+    vi.mocked(reassignInvite).mockResolvedValue(INVITE)
+    vi.mocked(revokeTenant).mockResolvedValue(undefined)
+    vi.mocked(changeTenantDomain).mockResolvedValue(undefined)
+    vi.mocked(suspendTenant).mockResolvedValue(undefined)
+    vi.mocked(reactivateTenant).mockResolvedValue(undefined)
+    vi.mocked(tenantError).mockResolvedValue({ status: 0, code: null })
   })
 
   it('renders a PENDING tenant with its invite controls (reassign / resend / revoke)', async () => {

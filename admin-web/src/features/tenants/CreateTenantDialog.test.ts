@@ -6,13 +6,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 
-vi.mock('./tenants', () => ({
-  createTenant: vi.fn().mockResolvedValue({ tenantId: 't-1', bootstrapSecret: 's' }),
-  tenantError: vi.fn().mockResolvedValue({ status: 0, code: null }),
-}))
+vi.mock('./tenants', () => ({ createTenant: vi.fn(), tenantError: vi.fn() }))
 
 import CreateTenantDialog from './CreateTenantDialog.vue'
-import { createTenant, tenantError } from './tenants'
+import { createTenant, tenantError, type TenantCreated } from './tenants'
+
+const CREATED: TenantCreated = {
+  tenantId: 't-1', status: 'PENDING', inviteExpiresAt: new Date('2026-10-10T12:00:00.000Z'), bootstrapSecret: 's',
+  delivery: 'FALLBACK_COPYLINK',
+}
 
 const i18n = createI18n({
   legacy: false,
@@ -60,7 +62,11 @@ async function fillForm(wrapper: ReturnType<typeof mountDialog>, name: string, d
 }
 
 describe('CreateTenantDialog (uc.admin.create-tenant, web Slice A)', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(createTenant).mockResolvedValue(CREATED)
+    vi.mocked(tenantError).mockResolvedValue({ status: 0, code: null })
+  })
 
   it('submits a trimmed name/email + lowercased domain, then emits created and shows the copy-link view', async () => {
     const wrapper = mountDialog()

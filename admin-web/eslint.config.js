@@ -1,6 +1,7 @@
 import pluginVue from 'eslint-plugin-vue'
 import { defineConfigWithVueTs, vueTsConfigs } from '@vue/eslint-config-typescript'
 import { argonThroughTheWorker } from '@veyq/crypto/eslint-argon-door'
+import { plugin as featureMocks } from './eslint/featureMocks.js'
 
 // `veyq-admin/api-mocks-typed-by-the-contract` below — the same selectors as web's block of that name.
 const API_MOCK_HELPER = 'Mock a generated …Api through stubApi()/fakeApi() from src/test/apiMock, which type each payload by its model.'
@@ -22,19 +23,9 @@ const API_MOCKS_SYNTAX = [
       "CallExpression[callee.object.name='vi'][callee.property.name='mock'][arguments.0.value=/api\\/client$/] > ArrowFunctionExpression > ObjectExpression > Property > .value:not(CallExpression[callee.object.name='vi'][callee.property.name='fn'][arguments.length=0])",
     message: 'Mock src/api/client with bare vi.fn() exports; set behaviour per test through stubApi()/fakeApi() from src/test/apiMock.',
   },
-  // S6: a `features/` module mock whose export is a function or a call other than a bare `vi.fn()`. The string form
-  // of `vi.mock` types its factory as nothing, so a payload there is checked against nothing; `vi.mocked(fn)` is
-  // typed by the real function. A spread of `importOriginal()`, a member of it and a non-function value stay
-  // allowed; a composable (`use*`) keeps its hand-written stub, since it returns reactive UI state, not a model.
-  // LIMIT: the path must spell `features/`, so a test INSIDE features/ that mocks a sibling by a relative path
-  // (`'../../spaces/scopes'`) is not seen, and neither is a module-level `vi.fn()` a test drives directly.
-  ...[
-    ':function > ObjectExpression.body',
-    ':function > BlockStatement > ReturnStatement > ObjectExpression',
-  ].map((factoryReturn) => ({
-    selector: `CallExpression[callee.object.name='vi'][callee.property.name='mock'][arguments.0.value=/features\\/(?!.*\\.vue$)/] > ${factoryReturn} > Property:not([key.name=/^use[A-Z]/]) > .value:matches(:function, CallExpression):not(CallExpression[callee.object.name='vi'][callee.property.name='fn'][arguments.length=0])`,
-    message: 'Mock a features/ module with bare vi.fn() exports; set behaviour per test through vi.mocked(fn), which is typed by the real function.',
-  })),
+  // S6 — a `features/` module mock exports bare `vi.fn()`s — is a rule of its own, `veyq-admin/feature-mocks-bare-fn`
+  // (eslint/featureMocks.js), enabled in the same block: which module a RELATIVE mock path reaches depends on the
+  // file it is written in, which a selector cannot see (inbox #309).
   // S7: `as never` switches a typed seam off — `vi.mocked(f).mockResolvedValue(x as never)` checks `x` against nothing.
   // A payload comes from a builder annotated with its model; a cast that must stay names its target
   // (`as unknown as <T>`), which a reader can grep for. LIMIT: `as unknown as <Model>` is not seen here; the
@@ -112,8 +103,10 @@ export default defineConfigWithVueTs(
     // annotates its return type with the model).
     name: 'veyq-admin/api-mocks-typed-by-the-contract',
     files: ['src/**/*.test.ts'],
+    plugins: { 'veyq-admin': featureMocks },
     rules: {
       'no-restricted-syntax': ['error', ...API_MOCKS_SYNTAX],
+      'veyq-admin/feature-mocks-bare-fn': 'error', // S6
     },
   },
   {
