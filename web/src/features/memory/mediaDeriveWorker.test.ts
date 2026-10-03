@@ -160,3 +160,71 @@ describe('a source failure is not retried on the page thread (B4)', () => {
     expect(page.decodes).not.toHaveBeenCalled()
   })
 })
+
+describe('a Worker that existed and could not run says so, once per page (#267)', () => {
+  const WARNING = '[veyq] media worker unavailable — deriving images on the page thread'
+
+  beforeEach(() => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  })
+  afterEach(() => vi.restoreAllMocks())
+
+  it('two requests in flight when the Worker dies fire `error` twice, and the warning once', async () => {
+    stubPageCanvas()
+    stubWorker('die')
+    const { createBrowserDeriver } = await freshDeriverModule()
+    const deriver = createBrowserDeriver()
+
+    await Promise.all([deriver.deriveImage(blob(), ICON), deriver.deriveImage(blob(), ICON)])
+
+    expect(console.warn).toHaveBeenCalledTimes(1)
+    expect(console.warn).toHaveBeenCalledWith(WARNING)
+  })
+
+  it('a Worker answering `infra` warns', async () => {
+    stubPageCanvas()
+    stubWorker(({ id }) => ({ id, ok: false, kind: 'infra', error: 'offscreen_canvas_unavailable' }))
+    const { createBrowserDeriver } = await freshDeriverModule()
+
+    await createBrowserDeriver().deriveImage(blob(), ICON)
+
+    expect(console.warn).toHaveBeenCalledTimes(1)
+    expect(console.warn).toHaveBeenCalledWith(WARNING)
+  })
+
+  it('a Worker that cannot be constructed warns once, and finishes on the page path', async () => {
+    const page = stubPageCanvas()
+    class UnbuildableWorker {
+      constructor() {
+        throw new DOMException('refused', 'SecurityError')
+      }
+    }
+    vi.stubGlobal('Worker', UnbuildableWorker as unknown as typeof Worker)
+    const { createBrowserDeriver } = await freshDeriverModule()
+    const deriver = createBrowserDeriver()
+
+    await deriver.deriveImage(blob(), ICON)
+    await deriver.deriveImage(blob(), ICON)
+
+    expect(page.decodes).toHaveBeenCalledTimes(2)
+    expect(console.warn).toHaveBeenCalledTimes(1)
+    expect(console.warn).toHaveBeenCalledWith(WARNING)
+  })
+
+  it('stays silent where no Worker exists, where the Worker answered, and on a source failure', async () => {
+    stubPageCanvas()
+    vi.stubGlobal('Worker', undefined)
+    const none = await freshDeriverModule()
+    await none.createBrowserDeriver().deriveImage(blob(), ICON)
+
+    stubWorker(({ id }) => ({ id, ok: true, bytes: new Uint8Array([9]), source: { w: 1, h: 1 } }))
+    const ok = await freshDeriverModule()
+    await ok.createBrowserDeriver().deriveImage(blob(), ICON)
+
+    stubWorker(({ id }) => ({ id, ok: false, kind: 'source', error: 'undecodable' }))
+    const bad = await freshDeriverModule()
+    await expect(bad.createBrowserDeriver().deriveImage(blob(), ICON)).rejects.toThrow('undecodable')
+
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+})

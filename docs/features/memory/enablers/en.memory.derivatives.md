@@ -87,7 +87,9 @@ took 22.6–73.6 s per batch and the Worker 5.2–27.3 s; on the same machine qu
 backgrounded and ≈ 0.8 s visible — no paint-gated wait at all, only the slower scheduling a backgrounded tab
 gets, which reaches its Worker too. A visible tab gains nothing, and nothing claims it does. The Worker is an
 optimisation, never a requirement: no Worker, no `OffscreenCanvas`, or a Worker that fails to load or dies
-finishes the request on the page thread, and the Worker stays off for the session. An undecodable source fails
+finishes the request on the page thread, and the Worker stays off for the session — with one console warning per
+page when a Worker existed and could not run, and `web`'s `check` fails a build that emits no Worker chunk
+(`verify:media-worker`). An undecodable source fails
 in the Worker exactly as it would on the page and uploads original-only, with no page-thread retry. The video
 poster stays on the page thread (a Worker has no `<video>`), so a backgrounded tab still pays that wait once per
 video.
