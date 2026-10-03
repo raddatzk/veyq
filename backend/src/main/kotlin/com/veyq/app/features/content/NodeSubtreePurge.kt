@@ -2,20 +2,16 @@ package com.veyq.app.features.content
 
 import com.veyq.app.core.blob.BlobEntity
 import com.veyq.app.core.node.NodeEntity
-import com.veyq.app.features.content.itemfavorites.ItemFavoritesEntity
-import com.veyq.app.features.media.BucketEntity
-import com.veyq.app.features.media.MediaEntity
-import com.veyq.app.features.media.MediaStore
-import com.veyq.app.features.media.OwnerKey
+import com.veyq.app.core.node.NodeSubtreeEraser
 import com.veyq.app.features.sharing.SharingStore
 import com.veyq.app.shared.blobstore.StoreObjectRef
 import com.veyq.app.shared.blobstore.StoreReclaimStore
 import com.veyq.app.shared.config.VeyqConfig
 import com.veyq.app.shared.scope.ScopeEntity
+import io.quarkus.arc.All
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.scheduler.Scheduled
 import jakarta.enterprise.context.ApplicationScoped
-import jakarta.persistence.LockModeType
 import java.time.Duration
 import java.time.Instant
 import org.jboss.logging.Logger
@@ -34,7 +30,7 @@ import org.jboss.logging.Logger
  * The purge finally owns the whole subtree instead of just its covers.
  *
  * Two shape decisions, both deliberate:
- * - **Rows through [MediaStore.purgeMediaRows]**, the shared per-media body — so the FK order (derivative →
+ * - **Rows through `MediaStore.purgeMediaRows`** (the media eraser), the shared per-media body — so the FK order (derivative →
  *   media → blob) and the chunk-key enumeration stay in one place rather than becoming a fourth copy. Not
  *   `ScopePurge.eraseScope`'s set-based shape: that erases by *scope* and lets the scope-row delete cascade the
  *   rest, and its own docstring says a per-media copy is the wrong shape **there**. A node subtree is not a
@@ -52,11 +48,16 @@ import org.jboss.logging.Logger
  */
 @ApplicationScoped
 class NodeSubtreePurge(
-    private val mediaStore: MediaStore,
     private val sharing: SharingStore,
     private val reclaim: StoreReclaimStore,
     config: VeyqConfig,
+    @All erasers: MutableList<NodeSubtreeEraser>,
 ) {
+    // Sorted by the explicit phase, never by bean order; split once at core's own cover-blob erase (NodeSubtreeEraser).
+    private val sorted = erasers.sortedBy { it.phase }
+    private val beforeCovers = sorted.filter { it.phase < NodeSubtreeEraser.COVER_BLOBS_PHASE }
+    private val afterCovers = sorted.filter { it.phase > NodeSubtreeEraser.COVER_BLOBS_PHASE }
+
     private val log = Logger.getLogger(NodeSubtreePurge::class.java)
     private val retention: Duration = config.node().trash().retention()
 
@@ -96,24 +97,13 @@ class NodeSubtreePurge(
         if (expired.isEmpty()) return
         val nodeIds = expired.map { it.id }
 
-        // 0. the guest identities whose media or buckets this erases — read while the rows still name them; step 6
-        //    drops the ones nothing references any more.
-        //    The selection is the media rows' lock, as every other erase of a media row takes it (`purgeMedia`, the
-        //    retention purge, a guest's delete): one that holds a row finishes first and the row is no longer
-        //    selected. Selected plainly, this then deleted a row already gone and rolled the whole erase back.
-        val media = MediaEntity.find("nodeId in ?1 order by id", nodeIds).withLock(LockModeType.PESSIMISTIC_WRITE).list()
-        val buckets = BucketEntity.find("nodeId in ?1", nodeIds).list()
-        val guests = media.mapNotNull { it.shareIdentityId } +
-            buckets.mapNotNull { (OwnerKey.parse(it.ownerKey) as? OwnerKey.Share)?.shareIdentityId }
+        // Phases below COVER_BLOBS_PHASE: the media application's rows (its locks, its buckets, its blobs through the
+        // FK-ordered body). Each returns the guest identities its rows named, read while they still did; the last
+        // step drops the ones nothing references any more.
+        val guests = HashSet<String>()
+        beforeCovers.forEach { guests += it.erase(scopeId, nodeIds) }
 
-        // 1. media + derivatives + their blobs, one media at a time through the shared FK-ordered body.
-        media.forEach { mediaStore.purgeMediaRows(it) }
-
-        // 2. the subtree's buckets — rows only; every medium that lived in them went above. No revision bump:
-        //    a trashed node is already out of every listing, so no open gallery can be watching it.
-        BucketEntity.delete("nodeId in ?1", nodeIds)
-
-        // 3. the standalone COVER blobs. This reclaim used to sit in `NodesStore.deleteSubtree` (cr-0073) and
+        // The standalone COVER blobs. This reclaim used to sit in `NodesStore.deleteSubtree` (cr-0073) and
         //    moved here: under a soft-delete, reclaiming a cover when the user deletes hands a later restore
         //    back a Memory whose cover is already gone. `cover_blob_id` is the only reference to these rows.
         val coverBlobIds = expired.mapNotNull { it.coverBlobId }
@@ -123,17 +113,16 @@ class NodeSubtreePurge(
             BlobEntity.delete("id in ?1", coverBlobIds)
         }
 
-        // 4. every member's item-favorite blob for these nodes. Keyed on the node, not the scope: the scope
-        //    survives this purge. They are dropped only HERE and not at soft-delete, for the same reason as
-        //    the covers above — a restore inside the window must hand back the Memory with its marks intact.
-        ItemFavoritesEntity.delete("nodeId in ?1", nodeIds)
+        // Phases above it: every member's item-favorite blob for these nodes.
+        afterCovers.forEach { guests += it.erase(scopeId, nodeIds) }
 
-        // 5. every link on these nodes is deleted — a tombstone (ADR 0029 §7), not a row delete: its id stays held,
+        // Every link on these nodes is deleted — a tombstone (ADR 0029 §7), not a row delete: its id stays held,
         //    and the identities of guests with uploads elsewhere still hang off it.
         sharing.tombstoneAllOn(nodeIds)
 
-        // 6. the guests of ANY deleted link whose last media or bucket went above — a link deleted earlier loses its
-        //    guests here, with the last Memory that held their uploads. After steps 1, 2 and 5, which it reads.
+        // The guests of ANY deleted link whose last media or bucket went above — a link deleted earlier loses its
+        //    guests here, with the last Memory that held their uploads. After every eraser above and the tombstones,
+        //    which it reads (GuestIdentityUsage).
         sharing.dropDeadIdentities(guests)
 
         expired.forEach { NodeEntity.deleteById(it.id) }
