@@ -36,18 +36,17 @@ acceptanceCriteria:
         unit: [src/features/tenant/TenantMailSettingsPanel.test.ts]
   - id: unconfigured-blocks-member-invites
     # Was `unconfigured-falls-back-to-copy-link`, justified as self-hostability. ADR 0055 reversed it and priced
-    # the cost: a mailer becomes a precondition for admitting members. The copy-link + dev-file path itself
+    # the cost: a mailer becomes a precondition for admitting members. The copy-link path itself
     # survives — it is what the Server-Owner's bootstrap invite still uses — so its tests stay; what no longer
     # reaches it is a *member* invite.
     text: >-
       With no SMTP configured, sending disabled, or the KEK absent, this tenant cannot admit members at all —
       inviting is refused with 503 `mail_unavailable` rather than degraded to a copy-link (ADR 0055 §2). The
-      copy-link + dev-file path still exists underneath, serving only the Server-Owner's bootstrap invite to a
+      copy-link path still exists underneath, serving only the Server-Owner's bootstrap invite to a
       PENDING tenant, which by construction can have no mail settings.
     coverage:
       backend:
-        integration: [SmtpInviteMailSendTest.anUnconfiguredTenantCannotSendAndAttemptsNoSmtp, MemberAddSliceTest.aTenantThatCannotSendMailIsRefusedAndMintsNothing]
-        unit: [TenantInviteMailerDevFileTest.appendsOneJsonLinePerInviteWhenDevFileSet]
+        integration: [SmtpInviteMailSendTest.anUnconfiguredTenantCannotSendAndAttemptsNoSmtp, MemberAddSliceTest.aTenantThatCannotSendMailIsRefusedAndMintsNothing, TenantsSliceTest.createReturns201Pending]
   - id: kek-unavailable-surfaced-in-ui
     text: When the server has no config-secret KEK, sealing a supplied password is refused (503 mail_secret_unavailable, ADR 0050). The web form surfaces that as an understandable "the server can't encrypt secrets — an admin must configure the KEK" message, so a self-hoster without a KEK learns why saving fails rather than hitting a generic error.
     coverage:

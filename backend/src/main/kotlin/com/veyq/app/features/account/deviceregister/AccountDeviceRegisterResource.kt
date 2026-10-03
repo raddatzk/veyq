@@ -6,6 +6,7 @@ import com.veyq.app.generated.model.DeviceRegisterUpdate
 import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.http.httpError
 import com.veyq.app.shared.ratelimit.RateLimitExempt
+import com.veyq.app.shared.validation.validated
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
 import jakarta.ws.rs.core.Response
@@ -40,7 +41,7 @@ class AccountDeviceRegisterResource(
     }
 
     override fun putDeviceRegister(deviceRegisterUpdate: DeviceRegisterUpdate): Response =
-        when (val r = handler.store(identity.principal.name, deviceRegisterUpdate.blob, deviceRegisterUpdate.version)) {
+        when (val r = handler.store(identity.principal.name, deviceRegisterUpdate.blob, deviceRegisterUpdate.version.validated())) {
             is PutResult.Written -> Response.ok(DeviceRegister(blob = deviceRegisterUpdate.blob, version = r.version)).build()
             is HttpFailure -> httpError(r)
         }

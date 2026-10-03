@@ -29,6 +29,7 @@ import com.veyq.app.shared.http.httpError
 import com.veyq.app.shared.membership.Admission
 import com.veyq.app.shared.membership.SignedGrant
 import com.veyq.app.shared.tenant.RequestTenant
+import com.veyq.app.shared.validation.validated
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
 import jakarta.ws.rs.core.Response
@@ -80,7 +81,7 @@ class ScopesResource(
         when (val outcome = handler.createGroup(
             identity.principal.name, activeTenantId(), createGroupRequest.scopeId.toString(), createGroupRequest.encryptedName,
             SignedGrant(createGroupRequest.wrappedGrant, createGroupRequest.grantSignature),
-            Admission(createGroupRequest.admissionId.toString(), createGroupRequest.admissionEpoch, createGroupRequest.admissionTag),
+            Admission(createGroupRequest.admissionId.toString(), createGroupRequest.admissionEpoch.validated(), createGroupRequest.admissionTag),
         )) {
             is CreateGroupOutcome.Created ->
                 Response.status(Response.Status.CREATED)
@@ -112,7 +113,7 @@ class ScopesResource(
     override fun addGroupMember(scopeId: UUID, addGroupMemberRequest: AddGroupMemberRequest): Response =
         when (val outcome = handler.addGroupMember(
             identity.principal.name, scopeId.toString(), addGroupMemberRequest.username, addGroupMemberRequest.sealedNameKey,
-            Admission(addGroupMemberRequest.admissionId.toString(), addGroupMemberRequest.admissionEpoch, addGroupMemberRequest.admissionTag),
+            Admission(addGroupMemberRequest.admissionId.toString(), addGroupMemberRequest.admissionEpoch.validated(), addGroupMemberRequest.admissionTag),
         )) {
             is AddGroupMemberOutcome.Added -> Response.status(Response.Status.CREATED).entity(scopeMember(outcome.row)).build()
             is HttpFailure -> httpError(outcome)
@@ -192,7 +193,7 @@ class ScopesResource(
 
     override fun renameGroup(scopeId: UUID, renameGroupRequest: RenameGroupRequest): Response =
         when (val o = handler.renameGroup(
-            identity.principal.name, scopeId.toString(), renameGroupRequest.encryptedName, renameGroupRequest.nameEpoch,
+            identity.principal.name, scopeId.toString(), renameGroupRequest.encryptedName, renameGroupRequest.nameEpoch.validated(),
         )) {
             RenameGroupOutcome.Ok -> Response.noContent().build()
             is HttpFailure -> httpError(o)
@@ -200,7 +201,7 @@ class ScopesResource(
 
     override fun setScopeIcon(scopeId: UUID, setScopeIconRequest: SetScopeIconRequest): Response =
         when (val o = handler.setScopeIcon(
-            identity.principal.name, scopeId.toString(), setScopeIconRequest.sealedIcon, setScopeIconRequest.iconEpoch,
+            identity.principal.name, scopeId.toString(), setScopeIconRequest.sealedIcon, setScopeIconRequest.iconEpoch.validated(),
         )) {
             SetScopeIconOutcome.Ok -> Response.noContent().build()
             is HttpFailure -> httpError(o)

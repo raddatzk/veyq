@@ -49,8 +49,8 @@ has for tenant-owner invites ([uc.admin.create-tenant](../../admin/use-cases/uc.
   avoid, so the response carries only the invite's state.
 - **The invite secret is never logged.** The delivery mailer emits only non-secret metadata (email + expiry); the
   redeemable bootstrap token reaches the invitee **by mail and by nothing else** — not through the API response,
-  not through the dev-file (a member invite is refused before minting when the tenant cannot send, so it never
-  reaches the logging fallback that writes it), and never a server log, in any launch mode. A production runtime
+  not through the logging fallback (a member invite is refused before minting when the tenant cannot send, so it
+  never reaches it), and never a server log, in any launch mode. A production runtime
   logs a secret-free "not delivered" warning.
 - **Admission stays owner-only.** Every action here is gated on the tenant OWNER membership — the same gate that
   mints a member invite.

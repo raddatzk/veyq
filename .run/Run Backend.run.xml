@@ -40,7 +40,6 @@
           <entry key="VEYQ_BLOB_STORE_TYPE" value="garage" />
           <entry key="VEYQ_BLOB_STORE_GARAGE_ADMIN_ENDPOINT" value="http://localhost:19003" />
           <entry key="VEYQ_BLOB_STORE_GARAGE_ADMIN_TOKEN" value="veyq-dev-admin-token" />
-          <entry key="VEYQ_TENANT_INVITE_DEV_FILE" value="$PROJECT_DIR$/backend/build/dev-invites.jsonl" />
         </map>
       </option>
     </ExternalSystemSettings>

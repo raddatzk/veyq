@@ -16,7 +16,11 @@ This asserts, with no daemon and no root:
      bytes intact, a looser existing mode tightened;
   3. that `cmd_restore` refuses an unplaceable key BEFORE it constructs its `Database`, the seam in front of the
      first write — with a positive control on the same fixture that does reach that seam, so a refusal cannot be
-     a fixture that never got that far.
+     a fixture that never got that far;
+  4. that `cmd_capture` run by a user who cannot read the key (inbox #250: on the production recipe it lives on
+     the app's uid-10001 volume) refuses with a message naming `sudo -E`, not a `PermissionError` traceback, and
+     before the capture directory exists — for a key whose directory it cannot search and for one it cannot
+     read — with the same kind of positive control. Skipped as root, which reads both.
 
 What it cannot show: an actual `fchown` to another uid (that needs root), and that uid 10001 then reads the key
 in a running container — that is the live proof on the production recipe, recorded where the coverage of
@@ -140,17 +144,78 @@ def restore_cases(tmp: pathlib.Path) -> None:
           outcome.startswith("refused:") and "cannot hand" in outcome and not wrote, f"{outcome}, wrote={wrote}")
 
 
+def capture_reaches_seam(tmp: pathlib.Path, label: str, lock) -> tuple[str, bool]:
+    """Drive `cmd_capture` against a key `lock` makes unreadable (or not); report how it ended and whether the
+    capture directory was created."""
+    volume = tmp / f"volume-{label}"
+    volume.mkdir()
+    key = volume / ib.KEY_NAME
+    key.write_bytes(b"k")
+    into = tmp / f"capture-{label}"
+    args = argparse.Namespace(into=str(into), config_secret_file=str(key), key_beside_dump=False,
+                              key_into=str(tmp / f"kept-{label}.key"))
+
+    class StubDatabase:
+        def __init__(self, *_a, **_k):
+            pass
+
+        def describe(self):
+            return "stub"
+
+        def domains(self):
+            raise ReachedDatabase()
+
+    class StubStore:
+        def __init__(self, *_a, **_k):
+            pass
+
+    saved = (ib.Database, ib.Store, ib.require_db_password)
+    ib.Database, ib.Store, ib.require_db_password = StubDatabase, StubStore, (lambda: "x")
+    lock(volume, key)
+    try:
+        ib.cmd_capture(args)
+        outcome = "returned"
+    except ReachedDatabase:
+        outcome = "reached-database"
+    except ib.BackupError as e:
+        outcome = f"refused: {e}"
+    except OSError as e:
+        outcome = f"traceback: {e!r}"
+    finally:
+        os.chmod(volume, 0o700)
+        os.chmod(key, 0o600)
+        ib.Database, ib.Store, ib.require_db_password = saved
+    return outcome, into.exists()
+
+
+def capture_cases(tmp: pathlib.Path) -> None:
+    if os.geteuid() == 0:
+        print("skip capture: running as root, which reads a key whatever its mode")
+        return
+    outcome, wrote = capture_reaches_seam(tmp, "readable", lambda volume, key: None)
+    check("capture (control): a readable key passes the gate and reaches the database",
+          outcome == "reached-database", f"{outcome}, wrote={wrote}")
+    for label, lock in [
+        ("an unsearchable volume", lambda volume, key: os.chmod(volume, 0o000)),
+        ("an unreadable key", lambda volume, key: os.chmod(key, 0o000)),
+    ]:
+        outcome, wrote = capture_reaches_seam(tmp, label.replace(" ", "-"), lock)
+        check(f"capture: {label} is refused naming `sudo -E`, before the capture directory exists",
+              outcome.startswith("refused:") and "sudo -E" in outcome and not wrote, f"{outcome}, wrote={wrote}")
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory(prefix="veyq-backup-selftest-") as tmp:
         tmp_path = pathlib.Path(tmp)
         plan_cases()
         place_cases(tmp_path)
         restore_cases(tmp_path)
+        capture_cases(tmp_path)
     if failures:
         print(f"[selftest] {len(failures)} failure(s)", file=sys.stderr)
         return 1
-    print("[selftest] the restored key takes its directory's owner, and an unplaceable one is refused before the "
-          "first write")
+    print("[selftest] the restored key takes its directory's owner, and an unplaceable or unreadable one is refused "
+          "before the first write")
     return 0
 
 

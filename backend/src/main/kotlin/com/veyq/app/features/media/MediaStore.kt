@@ -570,24 +570,14 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
     }
 
     /**
-     * The node's buckets for the "Beiträge" tab (uc.memory.buckets). Materializes a primary per distinct uploader
-     * among the live media and lazily backfills pre-cr0113 rows (sets their `created_by` + `bucket_id`), so every
-     * live medium groups under a concrete bucket; returns each bucket (primaries first) with its live media count.
+     * The node's buckets for the "Beiträge" tab (uc.memory.buckets): each bucket (primaries first) with its live media
+     * count. Every medium already names its bucket — [attach], the one insert, resolves it, and no write clears it:
+     * a bucket delete reparents its media first ([deleteBucketReparent]) or erases them with it (`NodeSubtreePurge`),
+     * and media never change node. The lazy backfill this once ran for media from before buckets (V35) was deleted
+     * before V1 (inbox #264), which has no such rows to carry.
      */
     @Transactional
-    fun listBuckets(scopeId: String, nodeId: String): List<BucketRow> {
-        val scopeOwner = scopeOwnerUserId(scopeId)
-        val liveMedia = MediaEntity.find("scopeId = ?1 and nodeId = ?2 and deletedAt is null", scopeId, nodeId).list()
-        for (m in liveMedia) {
-            val ownerKey = ownerKeyOf(m, scopeOwner)
-            var dirty = false
-            if (m.createdBy == null) { m.createdBy = ownerKey; dirty = true }
-            if (m.bucketId == null) {
-                m.bucketId = ensurePrimaryBucket(scopeId, nodeId, ownerKey, primarySealedNameFor(ownerKey)).id
-                dirty = true
-            }
-            if (dirty) m.persist()
-        }
+    fun listBuckets(nodeId: String): List<BucketRow> {
         return BucketEntity.find("nodeId = ?1 order by isPrimary desc, createdAt", nodeId).list().map { b ->
             val count = MediaEntity.count("nodeId = ?1 and bucketId = ?2 and deletedAt is null", nodeId, b.id).toInt()
             val identity = contributorIdentityOf(b)

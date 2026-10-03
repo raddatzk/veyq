@@ -669,6 +669,26 @@ def read_manifest(backup: Path) -> dict:
 # --------------------------------------------------------------------------------------------------------
 
 
+def key_readable(source: Path) -> bool:
+    """Whether leg (c) is there to capture — False when absent, a refusal when this user cannot read it.
+
+    On the production recipe the key lives on the `veyq-config-secret` volume, owned by the app's uid 10001 and
+    `0600`, so only that uid and root read it (inbox #250). Read here, before anything is written: found
+    unreadable only at the copy, the dump and the mirror would already lie on disk beside a `PermissionError`.
+    """
+    try:
+        if not source.is_file():
+            return False
+        with source.open("rb"):
+            return True
+    except PermissionError:
+        raise BackupError(
+            f"--config-secret-file {source}: this tool (uid {effective_uid()}) cannot read it. On the production "
+            f"recipe it lives on the veyq-config-secret volume, owned by the application's uid and readable only "
+            f"by it and root. Run the capture as root with your environment kept (`sudo -E`), so the database and "
+            f"store credentials come along.") from None
+
+
 def cmd_capture(args: argparse.Namespace) -> int:
     db = Database(args, require_db_password())
     store = Store(args)
@@ -678,7 +698,7 @@ def cmd_capture(args: argparse.Namespace) -> int:
 
     # Leg (c)'s destination, decided BEFORE anything is written: a refusal here leaves no half-capture behind.
     key_source = Path(args.config_secret_file)
-    key_present = key_source.is_file()
+    key_present = key_readable(key_source)
     if args.key_beside_dump:
         key_dest: Path | None = backup / KEY_NAME
     elif args.key_into:

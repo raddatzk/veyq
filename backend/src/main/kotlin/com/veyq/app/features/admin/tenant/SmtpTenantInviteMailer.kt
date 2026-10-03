@@ -13,7 +13,7 @@ import java.time.format.DateTimeFormatter
  * it resolves the tenant's own mail settings by the tenant **id** it is handed (the domain only shapes the link
  * and the From address), and when that tenant has **enabled + fully configured** SMTP (and the KEK is present so
  * the password can be unsealed), it renders the invite over the closed variable set ([InviteMailRenderer]) and sends it from the tenant's own address. Otherwise it
- * **delegates to [LoggingTenantInviteMailer]** (copy-link + the cr-0046 dev-file). Since ADR 0055 §2 that
+ * **delegates to [LoggingTenantInviteMailer]** (the copy-link). Since ADR 0055 §2 that
  * delegation is reachable **only for the Server-Owner's tenant-bootstrap invite** — a PENDING tenant has no mail
  * settings by construction, which is exactly what bounds the surviving copy-link (§3) — and for the dev/seed loop
  * that rides it. A **member** invite is refused at [canSend] before it is minted, so it never arrives here.

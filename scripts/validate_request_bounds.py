@@ -21,6 +21,13 @@ transitively through `$ref` (across spec files), inline objects, `items`, `allOf
   4. **no string bound on a type-changing `format`.** `format: uuid` generates `java.util.UUID` (`date-time` an
      `OffsetDateTime`): a String validator there is an `UnexpectedTypeException` — a 500 on a well-formed request
      — and a string bound in the schema is dead text, since the length is the type's (`backend/CLAUDE.md`).
+  5. **a required primitive refuses its absence.** A required `integer`/`number`/`boolean` generates a Kotlin
+     primitive, which Jackson fills with 0/false when the field is missing — so a missing field passes as that
+     default unless something refuses it. Either its `minimum` already excludes the default (a missing
+     `chunkCount` is 0 < `@Min(1)`), or it is typed nullable (`[integer, "null"]`) and annotated `@NotNull`.
+     Measured twice before this rule: `updateMediaMeta` without `metaVersion`, then `putIdentityPins` /
+     `putDeviceRegister` without `version`, `updateTenantStorage` without its limit (0 = link uploads off) and
+     `updateTenantMailSettings` without `tls` (false = STARTTLS off) — every one answered 200, not 400.
 
 The failure names the list — spec, schema, property, rule — never a count.
 
@@ -35,8 +42,8 @@ guard, on the tree the fix landed on, named 59 such gaps across eight specs.
 `MediaSliceTest.startBlobUploadsValidatesInsideEachItem` and
 `ShareContributorSliceTest.shareUploadOverItsItemBoundIs400` — one per mechanism, not per field. It does not see
 path/query/header **parameters** (the `jaxrs-spec` generator derives their annotations itself, and no test sends
-an out-of-range one), **response** schemas, **presence** (`required`, `@NotNull`/`@NotBlank` beyond N = 1 — the
-schema says presence with `required`), nor a bound on the **elements** of a scalar array (`items.maxLength`),
+an out-of-range one), **response** schemas, **presence** beyond rule 5 (a missing object, enum or uuid field is
+refused by deserialization on its own; `@NotBlank` beyond N = 1), nor a bound on the **elements** of a scalar array (`items.maxLength`),
 which a field annotation cannot express. And it ties the annotation to the schema only — never either to the
 DB column (`validate_maxlength_storage.py` does that for base64 caps) or to what a client sends, so a bound that
 is the *wrong value* is green here.
@@ -66,6 +73,17 @@ MAX_RE = re.compile(CONSTRAINT + r"Max\((-?\d+)\)")
 PATTERN_RE = re.compile(CONSTRAINT + r'Pattern\(regexp\s*=\s*"((?:[^"\\]|\\.)*)"\)')
 EMAIL_RE = re.compile(CONSTRAINT + r"Email\b")
 PRESENCE_MIN1_RE = re.compile(CONSTRAINT + r"(?:NotBlank|NotEmpty)\b")
+NOT_NULL_RE = re.compile(CONSTRAINT + r"NotNull\b")
+# The schema types the generator turns into a Kotlin primitive, with the default Jackson binds a missing one to.
+PRIMITIVE_DEFAULTS = {"integer": 0, "number": 0, "boolean": False}
+# Rule 5's known exceptions: a required primitive whose null is itself a value, so `@NotNull` cannot refuse its
+# absence (Jackson binds a missing one to that null). Each entry is an open defect, not a design — delete it with
+# the fix.
+ABSENT_BINDS_TO_A_MEANINGFUL_NULL = {
+    "tenants.openapi.yaml:TenantStorageQuotaUpdate.quotaBytes":
+        "null clears the tenant's quota, so a Server Owner request without the field clears it; refusing that "
+        "needs absence told from null (e.g. an explicit clear), a contract change for admin-web (found 2026-10-03)",
+}
 ANY_CONSTRAINT_RE = re.compile(CONSTRAINT + r"\w+")
 
 errors: list[str] = []
@@ -133,7 +151,7 @@ class Walker:
             return self.constrained_memo[key]
         self.constrained_memo[key] = False  # cycle guard
         result = False
-        for pname, prop in self.properties(schema, file):
+        for pname, prop, _ in self.properties(schema, file):
             ann = annotation_of(prop)
             if ANY_CONSTRAINT_RE.search(ann) or declared_bounds(unwrap_nullable(prop)):
                 result = True
@@ -153,8 +171,9 @@ class Walker:
                 yield from self.properties(part, rfile)
             else:
                 yield from self.properties(part, file)
+        required = set(s.get("required") or [])
         for pname, prop in (s.get("properties") or {}).items():
-            yield pname, prop or {}
+            yield pname, prop or {}, pname in required
 
     # -- the walk ---------------------------------------------------------------------------------------------
 
@@ -162,10 +181,12 @@ class Walker:
         if (file, label) in self.visited:
             return
         self.visited.add((file, label))
-        for pname, prop in self.properties(schema, file):
+        for pname, prop, required in self.properties(schema, file):
             self.n_props += 1
             where = f"{file}:{label}.{pname}"
             check_property(where, prop)
+            if required:
+                check_presence(where, prop)
             target = self.object_target(prop, file, f"{label}.{pname}")
             if target is None:
                 continue
@@ -297,6 +318,28 @@ def check_property(where: str, prop: dict) -> None:
         fail("annotation→bound", "`@Email` enforces a format the schema does not declare (`format: email`).")
 
 
+def check_presence(where: str, prop: dict) -> None:
+    """Rule 5 — a required primitive whose absence would bind to the type's default must be refused."""
+    s = unwrap_nullable(prop)
+    kinds = types_of(s) - {"null"}
+    if len(kinds) != 1 or next(iter(kinds)) not in PRIMITIVE_DEFAULTS:
+        return
+    kind = next(iter(kinds))
+    nullable = "null" in types_of(s) or s is not prop
+    if nullable:
+        if where in ABSENT_BINDS_TO_A_MEANINGFUL_NULL:
+            return
+        if not NOT_NULL_RE.search(annotation_of(prop)):
+            errors.append(f"{where} [presence] — a required nullable `{kind}` without `@NotNull`: a missing field "
+                          f"reaches the handler as null.")
+        return
+    default = PRIMITIVE_DEFAULTS[kind]
+    if kind != "boolean" and "minimum" in s and s["minimum"] > default:
+        return  # a missing field binds to 0, which the `@Min` (rule 1) already refuses
+    errors.append(f"{where} [presence] — a required `{kind}` generates a Kotlin primitive, so a missing field binds "
+                  f"to {str(default).lower()} and passes. Type it `[{kind}, \"null\"]` and annotate `@NotNull`.")
+
+
 def main() -> int:
     specs = load_specs()
     if not specs:
@@ -326,7 +369,7 @@ def main() -> int:
     print(
         f"request bounds OK: {n_bodies} request bodies · {len(walker.visited)} reachable object schemas · "
         f"{walker.n_props} properties — every bound annotated value for value, nothing annotated beyond the "
-        f"schema, every constrained nested object cascaded with @Valid.")
+        f"schema, every constrained nested object cascaded with @Valid, every required primitive refusing its absence.")
     print("  scope: annotation PRESENT and equal to its schema. NOT its effect, parameters, responses — see the "
           "docstring.")
     return 0

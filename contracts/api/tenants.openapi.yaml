@@ -1675,13 +1675,14 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
         admissionEpoch:
           x-veyq-visibility: structure
-          type: integer
+          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (backend/CLAUDE.md)
+          type: [integer, "null"]
           description: >
             The scope epoch whose key computed `admissionTag`. A worker admits only a tag at its own current epoch, so
             a tag made before a rotation does not admit (ADR 0020 move 6).
           minimum: 0
           example: 0
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
         admissionTag:
           type: string
           description: >
@@ -1974,16 +1975,20 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256)'
         tls:
           x-veyq-visibility: flag
-          type: boolean
+          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (backend/CLAUDE.md)
+          type: [boolean, "null"]
           description: Whether to use STARTTLS.
           example: true
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
         enabled:
           x-veyq-visibility: flag
-          type: boolean
+          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (backend/CLAUDE.md)
+          type: [boolean, "null"]
           description: >
             Whether email sending is enabled. Off means member invites and password recovery are refused on this
             tenant, not degraded to a copy-link (ADR 0055).
           example: true
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
         subjectTemplate:
           x-veyq-visibility: public
           type: [string, "null"]
@@ -2039,12 +2044,13 @@ components:
       properties:
         shareLinkLimitBytes:
           x-veyq-visibility: measure
-          type: integer
+          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (backend/CLAUDE.md)
+          type: [integer, "null"]
           format: int64
           minimum: 0
           description: The most any one CONTRIBUTOR or UPLOADER link of the tenant stores, in bytes.
           example: 5368709120
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
 
     TenantStorageQuotaUpdate:
       type: object

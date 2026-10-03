@@ -979,12 +979,13 @@ components:
           example: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
         fromChunk:
           x-veyq-visibility: structure
-          type: integer
+          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (backend/CLAUDE.md)
+          type: [integer, "null"]
           format: int32
           description: The first chunk index (0-based) of the window to sign; it must lie inside the blob.
           minimum: 0
           example: 64
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
 
     BlobUploadWindowsResponse:
       type: object

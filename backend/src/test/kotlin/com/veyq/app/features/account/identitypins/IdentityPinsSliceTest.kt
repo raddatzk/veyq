@@ -84,6 +84,18 @@ class IdentityPinsSliceTest {
     }
 
     @Test
+    fun aWriteWithoutItsVersionIs400AndStoresNothing() {
+        // A missing `version` must not bind to 0 — on a born-empty store 0 is exactly the version that wins, so an
+        // old client would write unchecked.
+        val token = issueToken(seedUser())
+        given().header("Authorization", "Bearer $token").contentType(ContentType.JSON)
+            .body("""{"blob":"$BLOB_1"}""")
+            .`when`().put(PATH)
+            .then().statusCode(400)
+        get(token).then().statusCode(200).body("blob", nullValue()).body("version", equalTo(0))
+    }
+
+    @Test
     fun missingTokenIsGeneric401() {
         given().`when`().get(PATH)
             .then().statusCode(401).body("code", equalTo("authentication_failed"))

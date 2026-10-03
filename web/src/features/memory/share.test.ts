@@ -354,7 +354,7 @@ describe('addSharePhoto — the contributor transport signs each next window (AD
     const api = fakeApi(publicSharesApi, {
       startShareBlobUploads,
       presignShareBlobUploadWindows: async ({ shareBlobUploadWindowsRequest }) => ({
-        results: shareBlobUploadWindowsRequest.items.map(({ uploadId, fromChunk }) => ({ presignedPuts: puts(uploadId, fromChunk, 3), error: null })),
+        results: shareBlobUploadWindowsRequest.items.map(({ uploadId, fromChunk }) => ({ presignedPuts: puts(uploadId, fromChunk!, 3), error: null })),
       }),
       // An honest server stores the media and its original under the ids the client minted, and echoes them.
       completeShareMedia: async ({ shareMediaBatchRequest }) => ({

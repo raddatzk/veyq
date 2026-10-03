@@ -130,10 +130,10 @@ Open gaps — a forgery the guard still passes (a documented limit, not a defect
   15 a `$PROJECT_DIR$`-rooted path inside a run configuration's `<env>`/`<entry>` value pointing nowhere passes
      `validate_run_configs`, which resolves a configuration's *subject* (the `package.json` plus the script it
      names, the Gradle project, the shell working directory) and never an env value. **Left open on purpose** —
-     a build output legitimately does not exist on a clean tree (`VEYQ_TENANT_INVITE_DEV_FILE` →
-     `backend/build/dev-invites.jsonl`, written by the backend it configures), so resolving env paths would
-     make that guard red on arrival, and red-because-wrong is indistinguishable from red-because-broken for
-     every later reader. The same limit covers the value that actually bites — a
+     a build output legitimately does not exist on a clean tree (an env value naming a file the backend it
+     configures writes under `backend/build/`), so resolving env paths would make that guard red on arrival,
+     and red-because-wrong is indistinguishable from red-because-broken for every later reader. The same limit
+     covers the value that actually bites — a
      `VEYQ_BLOB_STORE_PUBLIC_ENDPOINT` disagreeing with the origin you browse is green here and a broken
      presigned URL in the browser — which no file-shaped assertion can decide at all. Pinned so the limit in
      that guard's docstring is executable rather than a sentence.
@@ -567,19 +567,21 @@ def forge_tenant_suspend_without_reproject(root: pathlib.Path) -> str:
 
 
 def forge_run_config_env_path_into_the_void(root: pathlib.Path) -> str:
-    # validate_run_configs resolves a configuration's SUBJECT and never an env value, so point an env value at
-    # a path that does not exist and it still reports green. No module-level anchor for this one on purpose: the
-    # forgery finds any `$PROJECT_DIR$`-rooted env value itself, because the one that exists today
-    # (VEYQ_TENANT_INVITE_DEV_FILE) is a developer-tunable line — pinning its spelling would turn an innocent
-    # edit into a red guard, which is the opposite of what a gap-pin is for.
-    env_path = re.compile(r'(<(?:entry|env)\s+(?:key|name)="[^"]+"\s+value=")\$PROJECT_DIR\$/[^"]*(")')
+    # validate_run_configs resolves a configuration's SUBJECT and never an env value, so add an env value naming
+    # a path that does not exist and it still reports green. The forgery brings its own entry rather than bending
+    # an existing one: env values are developer-tunable lines, and since the dev-invite file left (inbox #285)
+    # none of them is a `$PROJECT_DIR$` path at all — pinning one's spelling would turn an innocent edit red.
+    env_map = re.compile(r"(<envs>|<map>)")
     for f in sorted((root / ".run").glob("*.xml")):
         src = f.read_text()
-        if env_path.search(src):
-            f.write_text(env_path.sub(r"\1$PROJECT_DIR$/does-not-exist/guard-gap-probe.jsonl\2", src, count=1))
+        if env_map.search(src):
+            probe = '<entry key="VEYQ_GUARD_GAP_PROBE" value="$PROJECT_DIR$/does-not-exist/guard-gap-probe.jsonl" />'
+            if "<envs>" in src:
+                probe = probe.replace("<entry key=", "<env name=")
+            f.write_text(env_map.sub(lambda m: m.group(1) + probe, src, count=1))
             return ("a run configuration's env value pointing at a path that does not exist "
                     "(the env-values-unresolved open gap)")
-    raise ForgeError("no .run/*.xml carries a $PROJECT_DIR$-rooted env value — re-anchor this forgery")
+    raise ForgeError("no .run/*.xml carries an env map — re-anchor this forgery")
 
 
 def forge_host_read_through_an_alias(root: pathlib.Path) -> str:

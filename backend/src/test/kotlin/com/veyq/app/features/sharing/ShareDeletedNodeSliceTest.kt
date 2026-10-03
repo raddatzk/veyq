@@ -219,9 +219,9 @@ class ShareDeletedNodeSliceTest {
         val (g3, g3Token) = createIdentity(uploader)
         val m3 = upload(uploader, g3Token)
         given().header("X-Contributor-Token", g3Token).`when`().delete("/api/shares/$uploader/media/$m3").then().statusCode(204)
-        // G5: a media row with no bucket naming them — the pre-bucket shape `MediaStore.listBuckets` still backfills.
-        // Every upload through the link is born with its primary bucket, which would hold G2 on its own; this row
-        // is what asserts that the MEDIA reference holds an identity by itself.
+        // G5: a media row with no bucket naming them, seeded — no upload makes one, since every upload through the
+        // link is born with its primary bucket, which would hold G2 on its own; this row is what asserts that the
+        // MEDIA reference holds an identity by itself.
         val (g5, _) = createIdentity(uploader)
         seedMedia(scopeId, memory, identityId = g5)
 

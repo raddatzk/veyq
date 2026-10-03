@@ -1018,14 +1018,15 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 1048576) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         version:
           x-veyq-visibility: structure
-          type: integer
+          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (backend/CLAUDE.md)
+          type: [integer, "null"]
           format: int64
           description: >
             The version the client last read (the write succeeds only if it still matches the stored version).
             `0` for the first write of a born-empty store.
           minimum: 0
           example: 3
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
 
     DeviceRegister:
       type: object
@@ -1072,14 +1073,15 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 65532) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         version:
           x-veyq-visibility: structure
-          type: integer
+          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (backend/CLAUDE.md)
+          type: [integer, "null"]
           format: int64
           description: >
             The version the client last read (the write succeeds only if it still matches the stored version).
             `0` for the first write of a born-empty register.
           minimum: 0
           example: 3
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
 
     RotatedWrap:
       type: object

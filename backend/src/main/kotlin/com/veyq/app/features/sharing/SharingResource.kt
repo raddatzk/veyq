@@ -33,6 +33,7 @@ import com.veyq.app.generated.model.UpdateShareRequest
 import com.veyq.app.generated.model.NodeKind
 import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.http.httpError
+import com.veyq.app.shared.validation.validated
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
 import jakarta.annotation.security.PermitAll
@@ -160,7 +161,7 @@ class SharingResource(
             expiresAt = reissueShareRequest.expiresAt?.toInstant(),
             sealedNote = reissueShareRequest.sealedNote,
             sealedShareKey = reissueShareRequest.sealedShareKey,
-            sealedShareKeyEpoch = reissueShareRequest.sealedShareKeyEpoch,
+            sealedShareKeyEpoch = reissueShareRequest.sealedShareKeyEpoch.validated(),
             sealedShareName = reissueShareRequest.sealedShareName,
             passwordRequired = reissueShareRequest.passwordRequired ?: false,
             pwSalt = reissueShareRequest.pwSalt,
@@ -346,7 +347,7 @@ class SharingResource(
             "volume by a link holder stays open, as for the guest reads (cc.security.rate-limit \u00a7 Unbounded by decision).",
     )
     override fun presignShareBlobUploadWindows(shareId: String, shareBlobUploadWindowsRequest: ShareBlobUploadWindowsRequest, xSharePassword: String?): Response {
-        val requests = shareBlobUploadWindowsRequest.items.map { WindowRequest(it.uploadId.toString(), it.fromChunk) }
+        val requests = shareBlobUploadWindowsRequest.items.map { WindowRequest(it.uploadId.toString(), it.fromChunk.validated()) }
         return when (val o = handler.windowUploads(shareId, xSharePassword, shareBlobUploadWindowsRequest.contributorToken, requests, signingDomain())) {
             is ShareWindowOutcome.Results -> Response.ok(
                 ShareBlobUploadWindowsResponse(

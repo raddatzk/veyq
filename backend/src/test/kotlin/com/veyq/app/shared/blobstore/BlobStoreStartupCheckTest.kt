@@ -2,8 +2,11 @@ package com.veyq.app.shared.blobstore
 
 import io.quarkus.runtime.LaunchMode
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.time.Duration
 
 /**
  * Unit test for the fail-loud store requirement (cr-0105, ADR 0013 §1): a byte-path store is mandatory outside
@@ -52,5 +55,22 @@ class BlobStoreStartupCheckTest {
         // The message is what an operator reads when the boot aborts, so it has to name the key and the value.
         val refusal = BlobStoreStartupCheck.bucketNameRefusal("Blobs")
         assertTrue(refusal.contains("veyq.blob-store.bucket=Blobs"), refusal)
+    }
+
+    @Test
+    fun anUploadRetentionThatOutlastsThePresignTtlIsAccepted() {
+        assertNull(BlobStoreStartupCheck.retentionRefusal(Duration.ofHours(1), 600), "the defaults")
+        assertNull(BlobStoreStartupCheck.retentionRefusal(Duration.ofSeconds(601), 600), "one second past the TTL")
+    }
+
+    @Test
+    fun anUploadRetentionNotPastThePresignTtlIsRefusedNamingBothSettings() {
+        // Equal is refused too: a PUT signed at the TTL's last second may still be streaming when the window ends.
+        for (retention in listOf(Duration.ofSeconds(600), Duration.ofMinutes(5))) {
+            val refusal = BlobStoreStartupCheck.retentionRefusal(retention, 600)
+            assertNotNull(refusal, "refused: $retention")
+            assertTrue(refusal!!.contains("veyq.media.upload.retention=$retention"), refusal)
+            assertTrue(refusal.contains("veyq.blob-store.presign-ttl-seconds=600"), refusal)
+        }
     }
 }

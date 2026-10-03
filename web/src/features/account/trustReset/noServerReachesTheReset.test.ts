@@ -72,7 +72,7 @@ const sealedAt = (doc: Doc, version: number) => {
  *  so a write is never masked by a conflict. */
 function fakeServer(served: { pins: IdentityPins; register: DeviceRegister }) {
   const land = <D extends Doc>(doc: D, update: IdentityPinsUpdate | DeviceRegisterUpdate): (typeof served)[D] => {
-    served[doc] = { blob: update.blob, version: update.version + 1 }
+    served[doc] = { blob: update.blob, version: update.version! + 1 }
     return { ...served[doc] }
   }
   const putIdentityPins = vi.fn<AccountIdentityPinsApi['putIdentityPins']>(async ({ identityPinsUpdate }) =>

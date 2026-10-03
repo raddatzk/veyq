@@ -112,6 +112,18 @@ class TenantTermsSliceTest {
     }
 
     @Test
+    fun anAcceptWithoutItsVersionIs400() {
+        // A missing `version` binds the primitive to 0, which `minimum: 1` refuses — the refusal is the bound's, so
+        // lowering that bound to 0 would let an unversioned accept through.
+        val (tenantId, _) = seedActiveTenant("terms-noversion.example.com", "owner@terms-noversion.example.com")
+        val member = seedUser(email = "member@terms-noversion.example.com")
+        seedMembership(tenantId, member, MembershipEntity.MEMBER)
+        given().header("Authorization", bearer(member)).contentType(ContentType.JSON).body("{}")
+            .`when`().post("/api/tenants/$tenantId/terms/accept")
+            .then().statusCode(400)
+    }
+
+    @Test
     fun readOrAcceptByANonMemberIs404() {
         val (tenantId, owner) = seedActiveTenant("terms-outsider.example.com", "owner@terms-outsider.example.com")
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
