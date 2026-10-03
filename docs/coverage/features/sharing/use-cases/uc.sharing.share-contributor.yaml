@@ -27,15 +27,15 @@ acceptanceCriteria:
         unit: [src/features/memory/share.test.ts]
         e2e: [src/features/memory/shareContributor.e2e.test.ts]
   - id: naming-proves-the-link-key
-    text: Naming yourself proves the visitor holds the link's key, not only its id (ADR 0076). Every share is created with writeVerifier = SHA-256(writeToken), writeToken = HKDF(K_share, "veyq/v1/share-write:" + shareId), for every role (a VIEWER link can be flipped to CONTRIBUTOR); createShareIdentity presents the token as X-Share-Write. A missing, malformed or wrong token, the stored verifier itself, a token derived for another link, and a share holding no verifier all answer the non-enumerable 404 and write no identity; the whole link names a guest, who then uploads through the contributor token as before. A guest named before a verifier went missing keeps uploading.
+    text: Naming yourself proves the visitor holds the link's key, not only its id (ADR 0076). Every share is created with writeVerifier = SHA-256(writeToken), writeToken = HKDF(K_share, "veyq/v1/share-write:" + shareId), for every role (a VIEWER link can be flipped to CONTRIBUTOR); createShareIdentity presents the token as X-Share-Write. A missing, malformed or wrong token, the stored verifier itself, a token derived for another link, and a share holding no verifier all answer the non-enumerable 404 and write no identity; the whole link names a guest, who then uploads through the contributor token as before. A guest named before a verifier went missing keeps uploading. The manage list marks each CONTRIBUTOR or UPLOADER link holding no verifier (newGuestsRefused) — and no VIEWER link, and no link that holds one — and the panel shows that mark on the row.
     coverage:
       # The slice holds the server half — each refusal beside its positive control on the same share; the web unit
       # holds the derivation through the real createShare/createContributorIdentity; the e2e names a guest through
       # the proof against a real backend.
       backend:
-        integration: [ShareWriteProofSliceTest.anIdWithoutTheKeyNamesNoGuest, ShareWriteProofSliceTest.aViewerLinkFlippedToContributorIsGatedByTheSameProof, ShareWriteProofSliceTest.aShareWithoutAVerifierTakesNoNewGuestButKeepsItsOld, ShareWriteProofSliceTest.createWithoutAVerifierIs400AndStoresNothing]
+        integration: [ShareWriteProofSliceTest.anIdWithoutTheKeyNamesNoGuest, ShareWriteProofSliceTest.aViewerLinkFlippedToContributorIsGatedByTheSameProof, ShareWriteProofSliceTest.aShareWithoutAVerifierTakesNoNewGuestButKeepsItsOld, ShareWriteProofSliceTest.createWithoutAVerifierIs400AndStoresNothing, ShareWriteProofSliceTest.theManageListMarksAGuestLinkThatHoldsNoVerifier]
       web:
-        unit: [src/features/memory/share.test.ts]
+        unit: [src/features/memory/share.test.ts, src/features/memory/components/ShareDialog.test.ts]
         e2e: [src/features/memory/shareContributor.e2e.test.ts]
   - id: sealed-name-anonymous-identity
     text: Before contributing, the visitor must enter a display name (mandatory). The client seals it under K_mem and creates an anonymous share identity under a client-minted id via POST /api/shares/{shareId}/identities { identityId, sealedDisplayName } -> { identityId, contributorToken }. The server stores only the K_mem-sealed name (ciphertext) + the token hash + shareId; it never sees the name. The sealed name -> identity is the forward-compat hook for buckets (a later slice).

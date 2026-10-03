@@ -35,6 +35,7 @@ const share = (over: Record<string, unknown>) => ({
   sealedNote: null, sealedShareName: null, sealedShareKey: 'k', sealedShareKeyEpoch: 1, passwordRequired: false, sealedPassword: null,
   reissueRequired: false,
   deletable: true,
+  newGuestsRefused: false,
   ...over,
 })
 
@@ -81,6 +82,29 @@ const button = (w: ReturnType<typeof mountList>, label: string) => w.find('butto
 async function openOff(w: ReturnType<typeof mountList>) {
   await w.find('.share-fold-toggle').trigger('click')
 }
+
+// #270 (ADR 0076 point 5): a guest link minted before the write verifier takes no new guest until renewed. The panel
+// follows the server's `newGuestsRefused` and marks the row, beside the renew its owner already has.
+describe('ShareDialog — a link that takes no new guest until renewed (#270)', () => {
+  it('marks a live link the server says refuses new guests, and its owner can renew it', async () => {
+    listSharesFor.mockResolvedValue([share({ shareId: 'old', role: ShareRole.Contributor, newGuestsRefused: true })])
+    const w = mountList()
+    await flushPromises()
+
+    expect(w.find('.share-new-guests-refused').text()).toBe(t('share.newGuestsRefusedBadge'))
+    expect(w.find('.share-new-guests-refused').attributes('title')).toBe(t('share.newGuestsRefusedHint'))
+    expect(button(w, t('share.reissue')).exists()).toBe(true)
+  })
+
+  it('control: a link the server does not mark carries no such badge', async () => {
+    listSharesFor.mockResolvedValue([share({ shareId: 'new', role: ShareRole.Contributor, newGuestsRefused: false })])
+    const w = mountList()
+    await flushPromises()
+
+    expect(w.find('.share-list-item').exists()).toBe(true)
+    expect(w.find('.share-new-guests-refused').exists()).toBe(false)
+  })
+})
 
 describe('ShareDialog — renew vs re-activate (ADR 0075, W1)', () => {
   it('marks a disabled share the server says needs renewing and offers no re-activate — even at the current epoch', async () => {

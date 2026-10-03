@@ -1031,6 +1031,9 @@ const en = {
     // ADR 0075: the server's verdict — made before someone left or replaced their keys, or switched off with every link
     reissueRequiredBadge: 'Needs renewing',
     reissueRequiredHint: 'Made before someone left this space or replaced their keys, or switched off with every link here — it may be in the wrong hands. Renew it to cut that off.',
+    // ADR 0076 point 5: a guest link minted before guest names needed the link's key
+    newGuestsRefusedBadge: 'Takes no new guests',
+    newGuestsRefusedHint: 'Made before guests had to prove they hold the whole link — nobody new can join through it until it is renewed. Guests who already joined keep uploading.',
     disabled: 'Switched off',
     byMember: 'By another member',
     loadFailed: 'Your links could not be loaded.',
@@ -2074,6 +2077,8 @@ const de: typeof en = {
     reissueAlreadyReplaced: 'Dieser Link wurde bereits erneuert oder gelöscht — die Liste zeigt jetzt die aktuellen Links.',
     reissueRequiredBadge: 'Muss erneuert werden',
     reissueRequiredHint: 'Erstellt, bevor jemand diesen Bereich verlassen hat oder Schlüssel ersetzt wurden, oder mit allen Links hier abgeschaltet — er könnte in falschen Händen sein. Erneuere ihn, um diesen Zugang zu beenden.',
+    newGuestsRefusedBadge: 'Nimmt keine neuen Gäste auf',
+    newGuestsRefusedHint: 'Erstellt, bevor Gäste nachweisen mussten, dass sie den ganzen Link haben — niemand Neues kann darüber beitreten, bis er erneuert ist. Wer schon beigetreten ist, lädt weiter hoch.',
     disabled: 'Abgeschaltet',
     byMember: 'Von einem anderen Mitglied',
     loadFailed: 'Deine Links konnten nicht geladen werden.',

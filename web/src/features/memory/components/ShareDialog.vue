@@ -248,6 +248,9 @@ function fmtDate(d: Date): string {
                 <!-- The server's re-activation verdict (ADR 0075 point 4), served on the row: such a link is marked and
                      offers renew instead of re-activate, so the badge and the refusal cannot disagree. -->
                 <span v-if="share.reissueRequired" class="veyq-badge muted share-reissue-required" :title="t('share.reissueRequiredHint')">{{ t('share.reissueRequiredBadge') }}</span>
+                <!-- ADR 0076 point 5: a guest link minted before the write verifier takes no new guest until renewed —
+                     the server's answer, since the verifier is never on the wire (#270). -->
+                <span v-if="share.newGuestsRefused" class="veyq-badge muted share-new-guests-refused" :title="t('share.newGuestsRefusedHint')">{{ t('share.newGuestsRefusedBadge') }}</span>
               </div>
             </div>
             <div class="share-list-actions">

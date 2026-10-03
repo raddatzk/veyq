@@ -210,9 +210,12 @@ sealed interface ReissueShareOutcome {
     object ShareDeleted : ReissueShareOutcome, HttpFailure by httpFailure("share_deleted", CONFLICT)
 }
 
-/** A share as the manage list serves it: the row plus [ReissuePolicy]'s answer for it (ADR 0075 point 4) and
- *  whether the caller may delete it — the gate's own answer (ADR 0029 §7). */
-data class ListedShare(val share: ShareEntity, val reissueRequired: Boolean, val deletable: Boolean)
+/** A share as the manage list serves it: the row plus [ReissuePolicy]'s answer for it (ADR 0075 point 4), whether
+ *  the caller may delete it — the gate's own answer (ADR 0029 §7) — and whether naming a new guest on it is refused
+ *  for want of a write verifier (ADR 0076 point 5). */
+data class ListedShare(
+    val share: ShareEntity, val reissueRequired: Boolean, val deletable: Boolean, val newGuestsRefused: Boolean,
+)
 
 /** The shares on one Memory node (cr-0104) — `[]` for a non-member or an unknown node, a refusal only for a member. */
 sealed interface NodeSharesOutcome {
@@ -414,12 +417,14 @@ class SharingHandler(
         return ReactivateShareOutcome.Done
     }
 
-    /** The manage list's rows, each with [reissueRequired] and [deletable] for [userId] — the scope read once per
-     *  scope, not once per row. */
+    /** The manage list's rows, each with [reissueRequired], [deletable] for [userId] and [refusesNewGuests] — the
+     *  scope read once per scope, not once per row. */
     private fun listed(userId: String, rows: List<ShareEntity>): List<ListedShare> {
         val scopesById = rows.map { it.scopeId }.distinct().mapNotNull { scopes.find(it) }.associateBy { it.id }
         return rows.map { s ->
-            ListedShare(s, scopesById[s.scopeId]?.let { reissueRequired(s, it) } ?: true, deletable(userId, s))
+            ListedShare(
+                s, scopesById[s.scopeId]?.let { reissueRequired(s, it) } ?: true, deletable(userId, s), refusesNewGuests(s),
+            )
         }
     }
 
@@ -681,6 +686,12 @@ class SharingHandler(
         if (matchesVerifier(pwToken, verifier)) return PwCheck.OK // a malformed token is a wrong attempt // correct password always passes, even past an exhausted budget
         return if (passwordAttemptLimiter.allow(share.id)) PwCheck.WRONG else PwCheck.TOO_MANY
     }
+
+    /** ADR 0076 point 5, as the manage list serves it (inbox #270): a link that takes guests but holds no verifier —
+     *  minted before the column — refuses every new guest in [createIdentity] until it is re-issued. The same two
+     *  facts that gate decides on: [holdsTheKey]'s null verifier, and the role check after it. */
+    private fun refusesNewGuests(share: ShareEntity): Boolean =
+        share.writeVerifier == null && ShareAccessPolicy.canUpload(share.role)
 
     /** ADR 0076: [writeToken] is the preimage of the share's write verifier. No verifier, no token, a wrong or a
      *  malformed one — all false. No attempt limiter: the token has 256 bits. */

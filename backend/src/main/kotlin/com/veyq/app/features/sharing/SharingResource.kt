@@ -106,7 +106,7 @@ class SharingResource(
                 is HttpFailure -> return httpError(o)
             }
         }
-        return Response.ok(shares.map { (s, reissueRequired, deletable) ->
+        return Response.ok(shares.map { (s, reissueRequired, deletable, newGuestsRefused) ->
             ShareSummary(
                 shareId = s.id,
                 scopeId = UUID.fromString(s.scopeId), // the recovery wrap is bound to (scope, node, share), ADR 0072
@@ -117,6 +117,7 @@ class SharingResource(
                 mine = s.ownerAccount == me,
                 reissueRequired = reissueRequired, // ADR 0075: the predicate the re-activation refusal runs
                 deletable = deletable, // ADR 0029 §7: the predicate the delete gate runs
+                newGuestsRefused = newGuestsRefused, // ADR 0076 point 5: re-issue to let new guests in (#270)
                 createdAt = s.createdAt.atOffset(ZoneOffset.UTC),
                 expiresAt = s.expiresAt?.atOffset(ZoneOffset.UTC),
                 sealedNote = s.sealedNote, // cr-0115: the manage UI shows + edits it
