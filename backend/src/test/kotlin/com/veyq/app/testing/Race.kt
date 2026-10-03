@@ -43,6 +43,10 @@ const val OVERLAP_HOLD_MS = 300L
  * its own write then waits for [change]'s commit — the shape of every managed write that can revert another
  * writer's column (developer-styleguide §12). Deterministic, not likely: the order is forced, so one round already
  * shows the defect; the callers still run [RACE_ROUNDS] rounds on fresh rows.
+ *
+ * [change] must write in the transaction this opens. A writer that opens its own (`QuarkusTransaction.requiringNew`,
+ * as `TenantHandler.removeMember` does) commits inside the hold, and the race overlaps nothing — green for the wrong
+ * reason. Hold such a writer as its first writes, through the store calls it makes (`RemovalRaceSliceTest`).
  */
 fun <T> whileUncommitted(change: () -> Unit, overlapping: () -> T): T {
     val changed = CountDownLatch(1)

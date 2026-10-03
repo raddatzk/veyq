@@ -63,10 +63,11 @@ class ScopePurge(
     // `purge()` stays the externally-callable transactional entry (tests / a future manual re-key).
     @Scheduled(every = "{veyq.scope.delete.purge.every}")
     fun run() {
-        val purgeable = QuarkusTransaction.requiringNew().call { store.listPurgeable(Instant.now().minus(retention)) }
+        val cutoff = Instant.now().minus(retention)
+        val purgeable = QuarkusTransaction.requiringNew().call { store.listPurgeable(cutoff) }
         purgeable.forEach { scopeId ->
             try {
-                QuarkusTransaction.requiringNew().run { eraseScope(scopeId) }
+                QuarkusTransaction.requiringNew().run { eraseScope(scopeId, cutoff) }
             } catch (e: Exception) {
                 log.error("hard-erasure of scope $scopeId failed; it stays purgeable and the sweep continues", e)
             }
@@ -93,7 +94,12 @@ class ScopePurge(
      * `ScopeEntity.deleteById` and the group can never be erased at all. Four tables were missing when the guard
      * was written, and the two job ones had been blocking every real tick since `veyq_job` was introduced.
      */
-    private fun eraseScope(scopeId: String) {
+    private fun eraseScope(scopeId: String, cutoff: Instant? = null) {
+        // The scope row's lock first, and the worklist's predicate again under it: a restore takes the same lock
+        // ([ScopesStore.restore]). Decided only by the worklist's earlier read, a group restored in between was erased
+        // anyway (developer-styleguide §12). [purge] is the forced erase, and asks no cutoff.
+        val scope = ScopeEntity.lockRow(scopeId) ?: return
+        if (cutoff != null && scope.deletedAt?.isBefore(cutoff) != true) return
         val blobs = BlobEntity.find("scopeId", scopeId).list()
         reclaim.record(blobs.map { StoreObjectRef(it.storageKey, it.chunkCount) })
         // An upload still OPEN in the scope — last windowed inside `veyq.media.upload.retention`, so its own sweep has

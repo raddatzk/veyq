@@ -614,8 +614,11 @@ class ScopesHandler(
         if (store.scopeKind(scopeId) != ScopeEntity.GROUP) return RestoreGroupOutcome.NotGroup
         if (!store.isScopeOwner(callerId, scopeId)) return RestoreGroupOutcome.NotOwner
         if (state != Access.Deleting) return RestoreGroupOutcome.NotDeleted
-        store.restore(scopeId)
-        return RestoreGroupOutcome.Ok
+        return when (store.restore(scopeId)) {
+            ScopesStore.Restore.RESTORED -> RestoreGroupOutcome.Ok
+            ScopesStore.Restore.NOT_DELETED -> RestoreGroupOutcome.NotDeleted
+            ScopesStore.Restore.GONE -> RestoreGroupOutcome.ScopeNotFound // erased by the purge since the gate read it
+        }
     }
 
     /**

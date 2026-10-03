@@ -470,10 +470,18 @@ class ScopesStore(
         ScopeEntity.findById(scopeId)?.let { it.deletedAt = now; it.persist() }
     }
 
-    /** Restore a soft-deleted group: clear `deletedAt` (active again). */
+    enum class Restore { RESTORED, NOT_DELETED, GONE }
+
+    /** Restore a soft-deleted group: clear `deletedAt` (active again), decided under the scope row's lock, which the
+     *  purge's erase takes first (`ScopePurge`): a restore waits out an erase in flight and then finds the group
+     *  [Restore.GONE], and an erase that comes after finds it restored. */
     @Transactional
-    fun restore(scopeId: String) {
-        ScopeEntity.findById(scopeId)?.let { it.deletedAt = null; it.persist() }
+    fun restore(scopeId: String): Restore {
+        val scope = ScopeEntity.lockRow(scopeId) ?: return Restore.GONE
+        if (scope.deletedAt == null) return Restore.NOT_DELETED
+        scope.deletedAt = null
+        scope.persist()
+        return Restore.RESTORED
     }
 
     /** The ids of GROUP scopes whose grace period has elapsed (`deletedAt < cutoff`) — the purge worklist. */

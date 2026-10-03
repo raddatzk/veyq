@@ -112,7 +112,7 @@ write adds — a read-write cycle no serial order produces. **Safe by serial ord
 | `MediaStore.purgeMedia` vs `restoreMedia` | — | **real** | the purge's read is the lock |
 | `MediaStore.purgeSessionsIdleSince` vs `touchWindow` | — | **real** (a live upload's session dropped) | purge selects with a lock |
 | `ScopePurge.eraseScope` vs `ScopesHandler.restoreGroup` | — | **real** (a restored group erased) | the erase locks the scope and re-checks; restore is a guarded update |
-| `MediaStore.attach` into a bucket vs `deleteBucketReparent` | — | **real** (`fk_media_bucket` → 500) | the bucket is locked when the attach resolves it |
+| `MediaStore.attach` into a bucket vs `deleteBucketReparent` | — | unreachable: no caller passes `targetBucketId` (`grep -rn 'targetBucketId' backend/src/main/kotlin` — only `moveMedia`'s own) | row: delete the parameter or wire it |
 | `NodesHandler.create`/`update` (move) vs `deleteSubtree`; `restoreSubtree` vs `NodeSubtreePurge` | — | **real** | **split** → row (decision 3) |
 | `LoginHandler.verify`, `KeyMaterialHandler.addWrap`, `PairingHandler.delegate` vs reset / password change / rotation | — | **real** | **split** → row |
 | guest `completeUploads`/`createIdentity` vs share delete's identity drop | — | **real** | **split** → row |
