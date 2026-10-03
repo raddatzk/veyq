@@ -1,6 +1,6 @@
 package com.veyq.app.features.admin.tenant
 
-import com.veyq.app.features.media.StorageQuota
+import com.veyq.app.core.quota.StorageUsage
 import com.veyq.app.shared.http.FailureStatus
 import com.veyq.app.shared.http.Failures
 import com.veyq.app.shared.http.HttpFailure
@@ -26,7 +26,7 @@ sealed interface TenantStorageOutcome {
  * The tenant owner's storage settings (uc.sharing.share-link-storage-limit, ADR 0073 §4): read the tenant's usage,
  * set the one per-link limit every CONTRIBUTOR and UPLOADER link stores at most. The mail-settings shape
  * ([TenantMailSettingsHandler]): membership gate → tenant → owner → store; a non-owner member is 403, a non-member
- * 404. Usage comes from [StorageQuota], the one place a total is summed — this handler never sums on its own.
+ * 404. Usage comes from [StorageUsage], the one place a total is summed — this handler never sums on its own.
  *
  * A new limit binds from each link's next start and deletes nothing (ADR 0073 §5). The write is a plain UPDATE of
  * the tenant row, so it waits for, and is waited on by, the row lock a link start holds while it reserves.
@@ -34,7 +34,7 @@ sealed interface TenantStorageOutcome {
 @ApplicationScoped
 class TenantStorageHandler(
     private val store: TenantStore,
-    private val quota: StorageQuota,
+    private val quota: StorageUsage,
     private val access: ScopeAccess,
 ) {
 
