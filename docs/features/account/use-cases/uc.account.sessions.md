@@ -1,11 +1,13 @@
 # UC: Manage active sessions (see every login, sign out remotely)
 
 - **ID:** uc.account.sessions
-- **Primary actor:** Account holder with an **authenticated session** — unlocked or not
+- **Primary actor:** Account holder with an **authenticated session** — the list is shown unlocked; a locked
+  device reaches only E3's sign-out-everywhere
 - **Goal:** See **every** active session of the account and end any of them **remotely**, so a login on a
   device that is lost, borrowed or no longer trusted can be cut off from the device still in hand.
-- **Preconditions:** An authenticated session exists. **No unlock is required** — this is an auth-layer
-  control ([ADR 0004](../../../decisions/0004-session-tokens.md)).
+- **Preconditions:** An authenticated session exists. Listing and revoking need **no unlock** at the server —
+  this is an auth-layer control ([ADR 0004](../../../decisions/0004-session-tokens.md)); the screen that shows
+  the list sits in the settings hub, which does (§ Two layers, one list).
 - **Postconditions (success):** The chosen session families are `REVOKED`; their refresh tokens are dead, so
   the devices holding them fall back to a full login. The caller's own session is untouched unless the caller
   revoked it explicitly. No content key, and **no wrap, is affected by a revoke** — a revoked session takes away
@@ -15,8 +17,8 @@
 
 ## Two layers, one list
 
-The list is assembled from **two sources with different gates**, and keeping them apart is what makes this
-use-case work on a locked device:
+The list is assembled from **two sources with different gates**, and keeping them apart is what keeps revoking
+available to a locked device:
 
 - **The set** — which families exist, when each was created, when each was last used, which one is *you* —
   comes from the server and needs **only a session**. So does revoking.
@@ -36,12 +38,10 @@ flowchart LR
   V --> A["Revoke: needs only a session"]
 ```
 
-A locked device therefore shows a complete and fully actionable list — every session, every revoke — with
-coarse dates instead of names. That is the whole degradation, and it is deliberate: **the security action
-must never be gated behind the cosmetic half.** What a locked device still lacks is a *way in* — see **E3**,
-which owns that obligation. **Not reachable today:** the panel mounts only in the settings hub, whose route
-requires an unlocked vault (`router.ts`), so no locked device ever sees this list; a locked device gets E3's
-card, whose one action is to sign every device out.
+**The security action must never be gated behind the cosmetic half**, which is why a revoke needs only a
+session. A locked device does not see the list, though: the panel mounts only in the settings hub, whose route
+requires an unlocked vault (`router.ts`). What a locked device gets is E3's card, whose one action is to sign
+every device out — complete without names, and E3 says why it shows no list.
 
 ## Main flow — see the sessions
 
@@ -144,8 +144,8 @@ Key again.
   take, so the list cannot be used to probe which ids exist.
 - **E2 — the caller revokes its own family:** permitted, and it means "log me out here too". The client runs
   [uc.account.sign-out](uc.account.sign-out.md)'s sequence rather than continuing with dead tokens.
-- **E3 — locked vault, and the way in.** The list renders with ids and coarse dates, no names; revoking works
-  normally. *Reaching* that state is the half that had to be built: every shell route requires an unlocked
+- **E3 — locked vault, and the way in.** A locked device sees no list; signing every device out works with a
+  session alone. *Reaching* that state is the half that had to be built: every shell route requires an unlocked
   vault — permanently now, `scripts/validate_shell_route_gate.py` — and the sign-in form's Secret-Key field is
   `required` on a device holding no wrap for the account, so on the fresh or foreign device this flow exists
   for there was no way in at all. The entry point therefore sits **on the sign-in form, not behind it**: a
@@ -194,8 +194,8 @@ Key again.
     sign out here — persists nothing at all.**
 
   And **the locked ceiling does not rise with the later increments**: the names and both joins — device↔family
-  and device↔wrap — live in the Master-Key-sealed register, so a locked caller never gets them. The locked list
-  stays anonymous, the locked *revoke* stays session-level, and the wrap escalation is simply absent there, by
+  and device↔wrap — live in the Master-Key-sealed register, so a locked caller never gets them. There is no
+  locked list, the locked *revoke* stays session-level (every device at once), and the wrap escalation is simply absent there, by
   construction rather than by omission. Do not plan a richer locked screen for "after naming"; there is no such
   thing. Device linking is not the exception it looks like: it adds an action that reads **nothing** sealed —
   it is a way *out* of the locked state, not a locked view of what unlocking would show.
@@ -226,7 +226,8 @@ Key again.
   fresh nonce every single login. Storing the name only in the register removes the mechanism instead of
   guarding it: with no per-family ciphertext there is nothing to correlate. **This is why a per-family name
   field must not come back**, however convenient it looks.
-- **Metadata the operator sees is unchanged:** a family count, coarse timestamps, opaque ids. The count was
+- **Metadata the operator sees is unchanged:** a family count, two timestamps per family (created, last used —
+  stored to the second, not rounded), opaque ids. The count was
   already accepted ([uc.account.trust-device](uc.account.trust-device.md) makes the same trade for wraps).
 - **The current session is marked by the server**, not guessed by the client. The server knows which family
   the request arrived on; that is self-knowledge about the caller, not a new fact about the account. The flag

@@ -2,7 +2,7 @@ useCase: uc.account.sessions
 feature: account
 title: Manage active sessions — see every login, sign out remotely
 # cr-account-sessions-list-and-revoke delivers it: `GET /api/sessions`, `DELETE /api/sessions/{id}` and
-# `POST /api/sessions/revoke-others` on the auth spec, a `SessionFamily` carrying its opaque id + both coarse
+# `POST /api/sessions/revoke-others` on the auth spec, a `SessionFamily` carrying its opaque id + both
 # timestamps + the server-set current marker, the three endpoints over the existing session families, and the
 # Settings → Personal → Sessions panel with per-row revoke and sign-out-everywhere-else.
 #
@@ -97,11 +97,12 @@ acceptanceCriteria:
   - id: works-locked-names-never-reach-the-server
     text: >-
       Listing and revoking require only a session, never an unlocked vault, so a locked device can still cut off
-      a lost one — it renders ids and coarse dates in place of names. Correspondingly no request in this
-      use-case carries a device name, user-agent or any client-built label, and no column stores one: the server
-      holds exactly what it held before (opaque id, coarse timestamps, count). A locked panel therefore also
-      offers neither wrap action — both joins are sealed, so the locked ceiling does not rise with the
-      escalation increment either (E3); their absence there is by construction, not by omission.
+      a lost one — through E3's sign-out-everywhere, because the panel itself mounts only in the unlock-gated
+      settings hub. Correspondingly no request in this use-case carries a device name, user-agent or any
+      client-built label, and no column stores one: the server holds exactly what it held before (opaque id, two
+      timestamps, count). The panel rendered over a locked vault (its unit test's control, not a route) shows ids
+      and dates in place of names and offers neither wrap action — both joins are sealed, so the locked ceiling
+      does not rise with the escalation increment either (E3); their absence is by construction, not by omission.
     coverage:
       # Structural, so the assertion is over SHAPE: a family exposes exactly id/createdAt/lastUsedAt/current, a
       # register response exactly blob/version, and the whole backend suite unlocks nothing. The contract half is

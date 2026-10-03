@@ -24,15 +24,22 @@ strategy; they do not choose it.
    component holds. **Signatures** (login auth, key-directory, derivative-signing) are **not** HNDL-urgent —
    there is no harvest-now-decrypt-later for a one-time verification — so PQ urgency is deliberately asymmetric:
    **high for encryption (now)**, **low for signatures (Ed25519 now → hybrid ML-DSA later)**.
-3. **Crypto-agility is non-negotiable.** Every wrapped key and encrypted artifact carries a **versioned suite
-   id**. New artifacts use the current suite; old artifacts stay readable under their stored suite id — this is
-   what makes adopting, and later upgrading, post-quantum crypto safe without breaking the model or forcing a
-   re-encryption migration.
+3. **Crypto-agility is non-negotiable.** A suite is named by a **versioned suite id**, and its seals are bound to
+   it: `wrapAad` (`packages/crypto/src/primitives.ts`) puts `v1` into the authenticated data of every seal and
+   wrap, and every derivation label reads `veyq/v1/…`, so a seal written under one suite never opens as another's.
+   A media frame (`sealFrame`) binds only its index and count — it is reached through a content key that is
+   itself sealed under `v1`.
+   The id is stored **per account** (`veyq_user.suite_id`, sent as `suiteId` when the account is born), not in
+   the bytes of each artifact — enough while exactly one suite exists. The goal stands: new artifacts use the
+   current suite and old ones stay readable under the suite that wrote them, which is what makes adopting, and
+   later upgrading, post-quantum crypto safe without breaking the model or forcing a re-encryption migration.
+   The suite that comes second therefore has to bring the per-artifact label that tells a reader which suite
+   wrote a blob; until then nothing re-wraps old data onto a newer suite.
 4. **The conformance vectors are a suite's byte definition, and they come first.**
    `contracts/crypto/vectors/v1.json` is the single source of truth for what a suite *is* on the wire, and every
    seal purpose has exactly one vector ([ADR 0072](0072-a-seal-binds-its-object.md) Decision 6).
    `packages/crypto/src/v1.ts` is pinned to it by `packages/crypto/src/v1.conformance.test.ts`. Since the
-   native surfaces were dropped (commit `7a1c4e9f`), that web test is the **only** stack asserting the file's
+   native surfaces were dropped (commit `7a1c4e9f`), that TypeScript test is the **only** stack asserting the file's
    seals, so for them it is a single-implementation **regression pin** — it stops a refactor from silently
    moving a suite's bytes, not a cross-stack parity proof. The backend performs no content crypto
    (`backend/CLAUDE.md`). Its Ed25519 login-auth check runs against the stored `authPublicKey` and never against
@@ -58,7 +65,8 @@ strategy; they do not choose it.
 - **Signatures may stay classical now and go hybrid later** without HNDL risk — a deliberate,
   documented asymmetry that avoids paying the PQ-signature size/perf cost before it buys anything.
 - **The versioned suite id decouples the format from the algorithm** — upgrades are additive, old artifacts
-  never break, and no flag-day re-encryption is needed.
+  never break, and no flag-day re-encryption is needed, once the second suite labels its artifacts (rule 3);
+  with one suite and a per-account id, that is the design, not yet a property of the bytes.
 - **The vectors are what makes rule 3 enforceable.** A versioned suite id only keeps old artifacts readable if
   the bytes behind a version cannot quietly move. The vector file is that pin: a refactor that shifts them
   fails a red test instead of silently orphaning stored ciphertext. It was also meant as the seam between two

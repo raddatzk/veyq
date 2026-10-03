@@ -7,12 +7,14 @@
 // PR-only job, run via `npm run mutation`.
 //
 // WHAT is mutated lives in stryker.mutate.json (the canonical scope, shared with the CI meta-check so the
-// two never drift). It is v1.ts only — the KAT-pinned primitive tier — NOT the argon*.worker wiring layer
-// (ADR 0045 §3); see that file's _comment for the measured evidence.
+// two never drift): the pure crypto-logic files that stayed in web/. v1.ts and the rest of the primitive
+// tier moved to @veyq/crypto and are gated by packages/crypto/stryker.config.mjs. That file's _comment
+// carries the measured evidence for what is in and what is out (ADR 0045 §3).
 //
-// inPlace (not Stryker's default copy-to-sandbox): v1.conformance.test.ts reads the shared crypto vectors
-// at ../../../../contracts/crypto/vectors/v1.json — OUTSIDE the web/ sandbox root, so a copied sandbox
-// can't see them and the KAT dry-run fails before a single mutant runs. inPlace mutates the real tree and
+// inPlace (not Stryker's default copy-to-sandbox): web suites (identityPins.test.ts,
+// argonParams.conformance.test.ts) read the shared crypto vectors at
+// ../../../../contracts/crypto/vectors/v1.json — OUTSIDE the web/ sandbox root, so a copied sandbox can't
+// see them and the dry-run fails before a single mutant runs. inPlace mutates the real tree and
 // restores it after; the files are git-tracked, so an interrupted run is recoverable with `git checkout`.
 import { readFileSync } from 'node:fs'
 
@@ -27,17 +29,13 @@ const config = {
   reporters: ['clear-text', 'html', 'json'],
   // Incremental report doubles as the CI cache (ADR 0045 §4) — a PR re-runs only changed mutants.
   incremental: true,
-  // break: the gate goes red below this. v1.ts measures 100% (134 mutants, zero survivors, zero
-  // equivalents). The 5-point margin is NOT slack for a known gap — there is none — it is deliberate headroom
-  // for a FUTURE equivalent mutant: one semantically identical to the original, therefore unkillable by any
-  // assertion, which at break=100 would red the gate with no fix available. 95 is "high" per ADR 0045 §4.
-  // What that margin costs, stated plainly: the gate catches a COLLAPSE, not a single weakened assertion —
-  // and it cannot, because the rest of v1.ts is redundantly pinned by feature-test round-trips (AEAD mutants
-  // throw; value mutants fail decryption), so one decayed assertion does not move the score either way.
-  // Bite-proven: `describe.skip`-ing the KAT conformance suite drops v1.ts to 86.57% -> Stryker exits 1. The
-  // battery uniquely detects ~18 mutants — in the functions no feature round-trip exercises end-to-end
-  // (journalSeal/Open, dedupToken, kekRecovery, deriveAuthSalt, slugToken) plus the three
-  // decodeKdfParams length-guard mutants, whose only test lives in this same suite.
+  // break: the gate goes red below this. No score is restated here: what each file measured lives in
+  // stryker.mutate.json's _comment, and a number copied into this comment drifts from it. The 5-point margin
+  // is deliberate headroom for a FUTURE equivalent mutant (one semantically identical to the original, so
+  // unkillable by any assertion), which at break=100 would red the gate with no fix available; 95 is "high"
+  // per ADR 0045 §4. What it costs: the gate catches a COLLAPSE, not a single weakened assertion. Where every
+  // equivalent is instead disabled at its own line, the margin buys only blindness, which is why
+  // packages/crypto runs at break=100 (ADR 0045 §4).
   // `high`/`low` only colour the report.
   thresholds: { high: 100, low: 95, break: 95 },
 }

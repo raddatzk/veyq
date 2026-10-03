@@ -71,9 +71,10 @@ into **named session families**. No JWTs.
   display name a user sees comes from the client's **Master-Key-sealed device register** — the same
   sealed-synced-blob shape as
   [en.account.identity-pinning](../features/account/enablers/en.account.identity-pinning.md) — which also
-  carries the device↔family join. So an "active sessions" view on any **unlocked** device shows names, while
-  the **locked** view shows the id + a coarse created-date; listing and revoking themselves need only a
-  session. What this settles:
+  carries the device↔family join. So the "active sessions" view, which is shown only on an **unlocked**
+  device, shows names; listing and revoking themselves need only a session, which is what lets a **locked**
+  device sign every device out without a list
+  ([uc.account.sessions](../features/account/use-cases/uc.account.sessions.md) E3). What this settles:
   - **A per-family name ciphertext must not come back.** It was the earlier design here, and it carried a
     standing obligation: a name blob resent unchanged across logins lets the operator **correlate** a
     device's re-logins and re-link otherwise-unlinkable families, so every login had to re-encrypt with a
@@ -87,7 +88,8 @@ into **named session families**. No JWTs.
     label is coarse — a browser + platform guess, never a device identity. Because it lives in a
     user-owned register rather than on a family, the user can **rename it**; two identically-guessed laptops
     are a starting point, not a dead end.
-  - The operator sees opaque family ids, coarse timestamps and a device *count* — **never** a cleartext
+  - The operator sees opaque family ids, two timestamps per family (created, last used — not rounded) and a
+    device *count* — **never** a cleartext
     device/user-agent string, and no per-family blob at all. (A server-generated cleartext codename was
     considered and **rejected** — operator-meaningless, and superseded by client-side naming.)
 - **Transport — a cookie for a browser, and one body-carried exception that exists to be spent.** The refresh
@@ -225,10 +227,10 @@ refresh re-decide its own lifetime, breaking the same-named-cookie rule this sec
 - **A lost or raced refresh costs a rotation, not the session.** Before the grace rule, every interrupted
   refresh response and every pair of simultaneous refreshes ended the family; a client could provoke it by
   ordinary means and a flaky network by none at all.
-- **Operator stays blind.** The server sees opaque family ids, coarse timestamps, and a device *count* —
-  never a cleartext device fingerprint, and no name in any form. Listing and revoking work at the **auth
-  layer** (no unlock needed); **reading** the names needs unlock (they are sealed under the Master Key), so
-  the locked sessions view shows only id + coarse created-date.
+- **Operator stays blind.** The server sees opaque family ids, two timestamps per family, and a device
+  *count* — never a cleartext device fingerprint, and no name in any form. Listing and revoking work at the
+  **auth layer** (no unlock needed); **reading** the names needs unlock (they are sealed under the Master Key),
+  and the sessions view is shown only unlocked — a locked device gets sign-out-everywhere, not a list.
 - **Smaller blast radius.** The powerful long-lived credential travels only to the refresh endpoint, not
   on every request.
 - **Cost:** more moving parts than a single token — a refresh endpoint, rotation/generation bookkeeping,

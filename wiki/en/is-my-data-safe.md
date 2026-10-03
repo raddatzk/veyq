@@ -1,4 +1,4 @@
-<!-- speaks-for: docs/crosscutting/security-model.md, docs/features/memory/use-cases/uc.memory.gallery.md, docs/features/spaces/use-cases/uc.spaces.verify-identity.md, docs/features/spaces/use-cases/uc.spaces.enforce-verified-identities.md, docs/features/account/use-cases/uc.account.recover-access.md; pair: de/sind-meine-daten-sicher.md -->
+<!-- speaks-for: docs/crosscutting/security-model.md, docs/features/memory/use-cases/uc.memory.gallery.md, docs/features/spaces/use-cases/uc.spaces.verify-identity.md, docs/features/spaces/use-cases/uc.spaces.enforce-verified-identities.md, docs/features/account/use-cases/uc.account.recover-access.md, docs/features/sharing/use-cases/uc.sharing.share-contributor.md, docs/features/sharing/use-cases/uc.sharing.share-uploader.md; pair: de/sind-meine-daten-sicher.md -->
 # Is my data safe?
 
 **In one sentence:** veyq is **end-to-end encrypted** — your photos, videos, journal text and the
@@ -47,7 +47,9 @@ Sharing is the one moment you **choose** to lower the wall — always by your ex
   not to us; we still can't read it.
 - A **public link** can be opened by **anyone who has the link**. The secret that unlocks it lives
   **in the link itself** and never reaches our server — so a public share is "readable by
-  link-holders, still not by us."
+  link-holders, still not by us." The address without that secret can read nothing — and add nothing: on
+  a link that lets guests add photos, their app first has to prove it holds the secret, so someone who
+  only has the address (say, from a copy of our database) cannot upload anything through it.
 
 Three honest limits:
 - **Un-sharing doesn't un-download.** Revoking access stops *future* access; it can't reach back and

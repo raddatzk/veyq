@@ -56,22 +56,25 @@ database for random bytes proves nothing while burying the strings that matter.
 covers the other:
 
 - the **suite** makes the calls, so only it sees path params, query strings, capability headers, presigned URLs
-  and error bodies;
-- the **orchestrator** holds Docker, the database root credential, the store credentials and the captured boot
-  log, so only it sees the DB, the object store and the server log.
+  and error bodies — it records them, and the orchestrator sweeps that recording;
+- the **orchestrator** holds Docker, the database root credential, the store credentials and the retained logs,
+  so only it sees the DB, the object store and the server log.
 
-They are joined by a canary file the suite writes and the orchestrator reads. `docker exec` stays in the
-orchestrator: reaching for it from a Vitest suite is exactly the coupling that made the previous seeded
+They are joined by files the suite writes and the orchestrator reads: the canary file and the HTTP recording.
+What a run sweeps today, surface by surface, is listed once, in `scripts/run_web_e2e.py`'s module docstring.
+`docker exec` stays in the orchestrator: reaching for it from a Vitest suite is exactly the coupling that made the previous seeded
 bootstrap unrunnable in CI, and it was deleted from that path on purpose.
 
-**4 · The orchestrator must retain the boot log.** It currently writes each boot's log into a per-run temp
-directory that is discarded on exit, so the log surface — where an error `message` or a stack trace would carry
-plaintext — is not merely unswept but unavailable.
+**4 · The orchestrator retains every boot log, and sweeps it.** Each boot's log is kept in a run directory that
+survives the run (`.e2e-out/<stamp>/`) and is searched once per run, after every group, with controls that prove
+each log was read complete (`sweep_logs`). It used to be a temp directory discarded on exit, which left the log
+surface — where an error `message` or a stack trace would carry plaintext — not merely unswept but unavailable.
 
-**5 · Slice by surface, database first.** The DB is the surface the spike has already read end to end, so the
-first change-request builds the derivation, the seam and the sweep against it alone. The store, the log and the
-HTTP opacity check follow as their own change-requests once the mechanics stand. The S3 object key keeps the
-separate guard ADR 0044 promised it.
+**5 · Slice by surface, database first.** The DB is the surface the spike had already read end to end, so the
+first change-request built the derivation, the seam and the sweep against it alone. The store, the log and the
+HTTP opacity check followed as their own change-requests once the mechanics stood. The S3 object key keeps the
+separate guard ADR 0044 promised it (`ObjectKeyCarriesNoStructureSliceTest`), and the store sweep reads keys as
+well as bytes.
 
 ## Consequences
 
@@ -79,9 +82,9 @@ separate guard ADR 0044 promised it.
   are in a database this process does not write. That is weaker than tamper-proof and should not be overstated —
   a canary can still be removed, and that removal is a visible diff, exactly like widening an allowlist would be.
   What the external oracle buys is that *passing* cannot be arranged from inside the client.
-- **The residual gap is coverage, not correctness.** The sweep only sees flows some suite drives. With four
-  suites today, most of the product is unobserved — which is why e2e breadth is tracked as debt in
-  [architecture §11](../architecture/README.md), and why this sensor gets stronger for free as suites are added
+- **The residual gap is coverage, not correctness.** The sweep only sees flows some suite drives (the
+  `web/src/**/*.e2e.test.ts` files), so much of the product is unobserved — which is why e2e breadth is
+  tracked as debt in [architecture §11](../architecture/README.md), and why this sensor gets stronger for free as suites are added
   rather than needing to be revisited.
 - **Derivation moves the residual risk rather than removing it.** A value the client never seals is not a canary,
   correctly — but a value that *should* have been sealed and was sent in the clear is invisible to this sensor,
