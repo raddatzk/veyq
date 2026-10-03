@@ -35,7 +35,7 @@ its entire blast radius on the one arm the database does not protect. What was w
 precondition any such sweep needs — this guard — and it protects a **live** twin of the same predicate today,
 `SharingStore.subtreeBlobIds`, which decides which blobs a share serves.
 
-**Its limit.** Two, and neither is closable by making this grep cleverer:
+**Its limit.** Three, and none is closable by making this grep cleverer:
 
   (a) It counts **declaration sites**. A reference column not named `*blob_id` escapes the entity and schema
       keys entirely, as does a `@Column(` whose name literal sits on a later line — no such site exists today
@@ -44,7 +44,9 @@ precondition any such sweep needs — this guard — and it protects a **live** 
   (b) The live-twin key reads **text in one named function**. It therefore sees neither a *second* consumer
       written later — a new reclaim predicate elsewhere gets no protection from this guard at all — nor an arm
       that is named in the body but unreachable (dead branch, always-empty query). It proves the arm is
-      *mentioned*, not that it is *reached*.
+      *mentioned*, not that it is *reached*. The markers are literal spellings: a contributor that collects
+      the media arm as `ids += m.blobId` instead of `ids.add(m.blobId)` enumerates it and is still red
+      (conservative, never a false green) — re-spell the marker, do not loosen it to a bare `blobId`.
   (c) A `*blob_id` column declared a **non-reference** (`NOT_REFERENCE_*`, each with its reason) is trusted on
       that reason. The list is checked for staleness, not for truth: were such a column ever to start pointing at
       a live blob row, this guard would not notice. It names one column today, the upload session's minted id.
