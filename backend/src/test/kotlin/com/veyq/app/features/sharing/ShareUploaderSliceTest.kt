@@ -337,6 +337,27 @@ class ShareUploaderSliceTest {
             .then().statusCode(404).body("code", equalTo("share_media_not_found"))
     }
 
+    /**
+     * A guest's delete reads its media under that row's lock: a second delete of the same upload (a retry, a double
+     * tap) waits for the first and finds nothing, the `404` a replay gets. Read plainly before the wait, it deleted
+     * the rows the first had already removed, found none, and answered 500 (the shape of inbox #310).
+     */
+    @Test
+    fun aDeleteOwnOverlappingItselfAnswersAsAReplay() {
+        repeat(RACE_ROUNDS) { round ->
+            val (userId, scopeId) = seedMemberScope()
+            val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+            val identity = createIdentity(createShare(userId, memory, role = "UPLOADER"))
+            val mediaId = seedMedia(scopeId, memory, identityId = identity)
+            val second = whileUncommitted(
+                change = { assertEquals(true, sharing.deleteContributedMedia(scopeId, mediaId, identity), "round $round") },
+                overlapping = { sharing.deleteContributedMedia(scopeId, mediaId, identity) },
+            )
+            assertEquals(false, second, "round $round: the second delete answers as a replay")
+            QuarkusTransaction.requiringNew().run { assertNull(MediaEntity.findById(mediaId), "round $round") }
+        }
+    }
+
     @Test
     fun foreignIdentityDeleteIs404() {
         val (userId, scopeId) = seedMemberScope()

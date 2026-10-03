@@ -17,6 +17,7 @@ import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.notNullValue
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
@@ -194,6 +195,64 @@ class NodeCoverSliceTest {
             QuarkusTransaction.requiringNew().run {
                 assertEquals(peers, NodeEntity.findById(memory)!!.coverBlobId, "round $round: the delete cleared the peer's cover")
             }
+        }
+    }
+
+    /**
+     * A commit reclaims the blob the slot holds when it writes, not the one it saw before: a peer's commit in flight
+     * holds the node row and reclaims the old cover itself. Read before the wait, the commit deleted that old row a
+     * second time, found none, and answered 500 (inbox #310). Locked first, it reclaims the peer's blob and takes the
+     * slot; each blob is reclaimed once.
+     */
+    @Test
+    fun aCommitOverlappingAPeersCommitReclaimsThePeersCover() {
+        repeat(RACE_ROUNDS) { round ->
+            val (userId, scopeId) = seedMemberScope()
+            val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+            val old = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.SMALL, "b2xk", memory, "COVER"))
+            val peerUpload = startOne(userId, scopeId, TestBlob.SMALL, "cGVlcg==", memory, "COVER")
+            val mineUpload = startOne(userId, scopeId, TestBlob.SMALL, "bWluZQ==", memory, "COVER")
+            var peers: String? = null
+            val outcome = whileUncommitted(
+                change = {
+                    val session = store.findSession(scopeId, peerUpload, UploadOpener.Member(userId))!!
+                    peers = store.commitCover(memory, session, null)!!.blobId
+                },
+                overlapping = { handler.commitCover(userId, scopeId, memory, mineUpload) },
+            )
+            val mine = assertInstanceOf(CoverCommitOutcome.Ok::class.java, outcome, "round $round").ref.blobId
+            QuarkusTransaction.requiringNew().run {
+                assertEquals(mine, NodeEntity.findById(memory)!!.coverBlobId, "round $round: the later commit holds the slot")
+            }
+            assertEquals("store_unavailable", downloadError(userId, scopeId, mine), "round $round")
+            assertEquals("upload_not_found", downloadError(userId, scopeId, peers!!), "round $round: the peer's blob leaked")
+            assertEquals("upload_not_found", downloadError(userId, scopeId, old), "round $round")
+        }
+    }
+
+    /**
+     * The same read-before-lock against a delete: the delete in flight holds the node row and reclaims the cover, and
+     * the commit, having read that cover before the wait, deleted its row again and answered 500 (inbox #310). Locked
+     * first, it finds the slot empty and only attaches its own.
+     */
+    @Test
+    fun aCommitOverlappingADeleteFindsTheSlotEmpty() {
+        repeat(RACE_ROUNDS) { round ->
+            val (userId, scopeId) = seedMemberScope()
+            val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+            val old = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.SMALL, "b2xk", memory, "COVER"))
+            val oldStorageKey = QuarkusTransaction.requiringNew().call { BlobEntity.findById(old)!!.storageKey }
+            val mineUpload = startOne(userId, scopeId, TestBlob.SMALL, "bWluZQ==", memory, "COVER")
+            val outcome = whileUncommitted(
+                change = { assertEquals(MediaStore.ClearCoverResult.CLEARED, store.clearCover(scopeId, memory, old)) },
+                overlapping = { handler.commitCover(userId, scopeId, memory, mineUpload) },
+            )
+            val mine = assertInstanceOf(CoverCommitOutcome.Ok::class.java, outcome, "round $round").ref.blobId
+            QuarkusTransaction.requiringNew().run {
+                assertEquals(mine, NodeEntity.findById(memory)!!.coverBlobId, "round $round")
+            }
+            assertEquals(1L, QuarkusTransaction.requiringNew().call { StoreReclaimEntity.count("storageKey", oldStorageKey) },
+                "round $round: the deleted cover is reclaimed exactly once")
         }
     }
 

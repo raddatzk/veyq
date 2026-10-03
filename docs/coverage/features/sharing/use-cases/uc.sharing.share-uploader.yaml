@@ -55,7 +55,7 @@ acceptanceCriteria:
     text: DELETE /api/shares/{shareId}/media/{mediaId} carries the contributor token; the server deletes the media + reclaims its blobs iff the media's share_identity_id equals the token's identity (a single-row ownership check, not gallery filtering). Reachable only in-session (after a reload the client no longer holds the id); the media otherwise remains (the curator can delete it from their own gallery).
     coverage:
       backend:
-        integration: [ShareUploaderSliceTest.uploaderNamesUploadsAttachesStampedAndDeletesOwn, ShareUploaderSliceTest.foreignIdentityDeleteIs404, ShareUploaderSliceTest.badTokenDeleteIs403]
+        integration: [ShareUploaderSliceTest.uploaderNamesUploadsAttachesStampedAndDeletesOwn, ShareUploaderSliceTest.aDeleteOwnOverlappingItselfAnswersAsAReplay, ShareUploaderSliceTest.foreignIdentityDeleteIs404, ShareUploaderSliceTest.badTokenDeleteIs403]
       web:
         unit: [src/features/memory/share.test.ts, src/features/memory/uploadQueue.test.ts]
   - id: ephemerality-warned
