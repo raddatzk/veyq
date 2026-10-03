@@ -1,4 +1,4 @@
-<!-- speaks-for: docs/crosscutting/security-model.md, docs/features/memory/use-cases/uc.memory.gallery.md, docs/features/spaces/use-cases/uc.spaces.verify-identity.md, docs/features/spaces/use-cases/uc.spaces.enforce-verified-identities.md, docs/features/account/use-cases/uc.account.recover-access.md; pair: en/is-my-data-safe.md -->
+<!-- speaks-for: docs/crosscutting/security-model.md, docs/features/memory/use-cases/uc.memory.gallery.md, docs/features/spaces/use-cases/uc.spaces.verify-identity.md, docs/features/spaces/use-cases/uc.spaces.enforce-verified-identities.md, docs/features/account/use-cases/uc.account.recover-access.md, docs/features/sharing/use-cases/uc.sharing.share-contributor.md, docs/features/sharing/use-cases/uc.sharing.share-uploader.md; pair: en/is-my-data-safe.md -->
 # Sind meine Daten sicher?
 
 **In einem Satz:** veyq ist **Ende-zu-Ende-verschlüsselt** — deine Fotos, Videos, Tagebuchtexte und
@@ -51,7 +51,10 @@ ausdrückliche Handlung:
   gegeben — nicht uns; wir können ihn weiterhin nicht lesen.
 - Einen **öffentlichen Link** kann **jede Person öffnen, die den Link hat**. Der Schlüssel, der ihn
   entsperrt, steckt **im Link selbst** und erreicht unseren Server nie — eine öffentliche Freigabe ist
-  also „lesbar für alle mit dem Link, weiterhin nicht für uns".
+  also „lesbar für alle mit dem Link, weiterhin nicht für uns". Die Adresse ohne diesen Schlüssel kann
+  nichts lesen — und nichts hinzufügen: Bei einem Link, über den Gäste Fotos beisteuern dürfen, muss ihre
+  App erst beweisen, dass sie den Schlüssel hat. Wer nur die Adresse kennt (etwa aus einer Kopie unserer
+  Datenbank), kann darüber nichts hochladen.
 
 Drei ehrliche Grenzen:
 - **Entteilen macht das Heruntergeladene nicht rückgängig.** Ein Entzug stoppt den *künftigen* Zugriff;

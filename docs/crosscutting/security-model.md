@@ -93,7 +93,8 @@ request the **user** turned on, straight to the chosen provider.
   shares; scope and membership (who belongs to which tenant/group); a member's **per-tenant username,
   identity public key, and group-add-consent flag** — visible to, and effectively **enumerable by**, any
   fellow tenant member (anyone can create a group to run the member-resolve, [ADR 0014](../decisions/0014-group-scopes-and-governance.md) §5);
-  coarse timestamps for ordering; sizes; job-queue and op-log offsets; presence facts; a media
+  server timestamps (created, changed, trashed, last rotated) for ordering — stored as written, to the second (a
+  medium's change time to the millisecond); nothing rounds them, so they tell *when*, never *what*; sizes; job-queue and op-log offsets; presence facts; a media
   item's **trash state** (a trashed flag + who trashed it + when, until the scheduled purge); a media item's
   **uploader attribution + bucket structure** (an opaque `owner_key` per medium — `user:{id}` / `share:{id}` —
   plus its `bucket_id` and the bucket rows' shape: node, parentage, `is_primary`, per-bucket counts; the
@@ -110,7 +111,7 @@ request the **user** turned on, straight to the chosen provider.
   [ADR 0003](../decisions/0003-operator-blind-password-auth.md); named here to close a prior inventory gap); a
   tenant's **per-tenant SMTP config** (host/port/from/username/TLS + the owner-authored invite **template text** —
   operator-visible operational config) and the **send-fact** of every mail veyq sends — a member invite, a
-  password-recovery link and an address confirmation (recipient + coarse timing, once a tenant has configured
+  password-recovery link and an address confirmation (recipient + send time, once a tenant has configured
   SMTP), plus the account's **`email_confirmed_at`** (when its holder last showed they read that address —
   operational metadata of the address's own class, gating nothing,
   [ADR 0074](../decisions/0074-address-control-is-recorded-where-nothing-else-proves-it.md)), while the SMTP **password is a server-held secret sealed at rest** (AES-256-GCM
@@ -125,11 +126,11 @@ These operational fields are exactly what lets the server **sort, paginate, rout
 bill** without decrypting. It is a conscious trade-off: a stricter "encrypt operational metadata too"
 mode is possible at the cost of those capabilities. The server never sees content — only structure.
 
-**One access-pattern finer than "coarse timestamps" is knowingly conceded, for range-streamed video playback.**
+**One access-pattern finer than a per-blob timestamp is knowingly conceded, for range-streamed video playback.**
 Every non-streamed read fetches a blob **whole**, so the operator normally learns only *that* a blob was accessed.
 Playing a video streams it **range by range** ([ADR 0047](../decisions/0047-inline-video-playback-range-streaming.md)):
 the object store then observes **which ciphertext chunks a playing client fetches, and when** — an *intra-media*
-access pattern (which parts were watched, re-watched, skipped, seeked to), more granular than the coarse
+access pattern (which parts were watched, re-watched, skipped, seeked to), more granular than the
 timestamps or sizes above. The owner accepted this for playback: hiding it would mean either downloading the whole
 original first or proxying bytes through the server (breaking operator-blindness). It is scoped to playback and
 changes nothing about content, which the server still never reads.
@@ -198,8 +199,8 @@ Standard, well-reviewed primitives only (no home-grown crypto); **post-quantum f
 (a hybrid KEM, secure if either component holds) because decade-lived memories make harvest-now-decrypt-later
 real, while signatures stay classical for now; and **crypto-agility** via a versioned suite id, so upgrades never
 break old data. Built today, that id is stored **per account** (`veyq_user.suite_id`) and bound into every wrap's
-authenticated data (`wrapAad`), not carried in the bytes of each artifact — ADR 0017's "every artifact carries"
-holds only while one suite exists, and nothing re-wraps old data onto a newer suite. Content itself is
+authenticated data (`wrapAad`), not carried in the bytes of each artifact — enough while one suite exists, so a
+second suite has to bring a per-artifact label first; nothing re-wraps old data onto a newer suite. Content itself is
 AES-256-GCM alone; the hybrid KEM wraps keys. The strategy, its rejected alternatives, and the conformance
 vectors that pin a suite's bytes are all
 [ADR 0017](../decisions/0017-crypto-primitives-and-post-quantum-strategy.md).

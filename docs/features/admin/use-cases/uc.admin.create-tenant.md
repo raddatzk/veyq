@@ -71,7 +71,7 @@ sequenceDiagram
 
 ## Alternate / exception flows
 
-- **A1 — domain taken or invalid:** rejected at creation; nothing is created, no email sent.
+- **A1 — domain taken or invalid:** rejected at creation; nothing is created and no invite is minted.
 - **A2 — invite expired or already used:** acceptance is rejected; the Server Owner can re-issue a fresh
   invite for the still-`PENDING` tenant (see *Server Owner management* below).
 - **A3 — owner email is an existing user:** the acceptance path uses **login** instead of cold
@@ -150,8 +150,8 @@ stateDiagram-v2
 - **One tenant = one domain (for now).** The schema leaves room for more, but multi-domain and
   tenant self-service are SaaS concerns (inbox #41), not part of this use-case.
 - **The operator controls availability, never confidentiality.** A Server Owner can
-  [suspend](uc.admin.suspend-tenant.md) a tenant or block its owner (an unavoidable operator power), but
-  never read its content.
+  [suspend](uc.admin.suspend-tenant.md) a whole tenant (an unavoidable operator power: whoever runs the server
+  can stop serving it), but never read its content.
 - **On-premise collapses the operator/owner split.** In the common self-hosted case (one server, usually one
   tenant, self-administered) the Server Owner *is* the Tenant Owner — they enter their own email and accept
   their own invite; the single flow already covers it, no special-case path.
@@ -161,13 +161,14 @@ stateDiagram-v2
 > escrow forbidden, succession deferred to SaaS) — is the decision record
 > [ADR 0006](../../../decisions/0006-cold-tenant-scope-birth.md) (Consequences), not restated here.
 
-## Proposed CR cut (decided separately)
+## CR cut (both slices built)
 
-Two natural slices, in dependency order — the **structural** act carries no crypto, the **activation**
+Two slices, in dependency order — the **structural** act carries no crypto, the **activation**
 act is where the scope key work lands:
 
 - **Slice A — structural (`cr-0009`, ✅ built):** create `PENDING` tenant + domain mapping + single-use
-  invite + email + Server Owner management (list / resend / reassign / revoke). No client crypto.
+  invite, delivered as a link the Server Owner copies (no mail — Act 1) + Server Owner management (list /
+  re-issue / reassign / revoke). No client crypto.
   Delivered on contracts → backend → http → web (coverage:
   [uc.admin.create-tenant.yaml](../../../coverage/features/admin/use-cases/uc.admin.create-tenant.yaml)).
 - **Slice B — activation (`cr-0010`, ✅ built):** invite acceptance (register-and-accept for a new owner,
@@ -181,16 +182,17 @@ act is where the scope key work lands:
 **EN —** As the operator of a veyq server, you can set up a separate, isolated space — a *tenant* — for
 a family, a group of friends, or a club, each on its own web address. You don't become a member of it
 and you can't read what's inside: you just enter a name, the web address, and the email of the person
-who should own it. They get an invite, sign in (or create their account), and from that moment **they**
-hold the keys to that space — not you. A space only comes alive once its owner has accepted; until then
+who should own it. You get an invite link and pass it on to them yourself — veyq sends no mail for this;
+they open it, sign in (or create their account), and from that moment **they** hold the keys to that
+space — not you. A space only comes alive once its owner has accepted; until then
 it's just a reserved address.
 
 **DE —** Als Betreiber eines veyq-Servers kannst du einen eigenen, abgeschotteten Bereich — einen
 *Tenant* — für eine Familie, einen Freundeskreis oder einen Verein anlegen, jeweils unter einer eigenen
 Web-Adresse. Du wirst **nicht** Mitglied und kannst die Inhalte nicht lesen: Du gibst nur einen Namen,
-die Web-Adresse und die E-Mail der Person ein, der der Bereich gehören soll. Diese Person bekommt eine
-Einladung, meldet sich an (oder legt ihr Konto an) — und ab dann hält **sie** die Schlüssel zu diesem
-Bereich, nicht du. Ein Bereich wird erst lebendig, wenn sein Owner angenommen hat; bis dahin ist es nur
+die Web-Adresse und die E-Mail der Person ein, der der Bereich gehören soll. Du bekommst einen
+Einladungslink und gibst ihn selbst an diese Person weiter — veyq verschickt dafür keine Mail. Sie öffnet ihn,
+meldet sich an (oder legt ihr Konto an) — und ab dann hält **sie** die Schlüssel zu diesem Bereich, nicht du. Ein Bereich wird erst lebendig, wenn sein Owner angenommen hat; bis dahin ist es nur
 eine reservierte Adresse.
 
 ## Related

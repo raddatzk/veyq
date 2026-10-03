@@ -12,8 +12,8 @@ product exists for.
 
 [`security-model.md`](../crosscutting/security-model.md) § *What is encrypted vs. server-visible* already draws
 the line, and draws it well: media bytes, journal text, titles, captions, places, tags, GPS and capture time are
-sealed; ids, scope and membership, coarse timestamps, sizes, blinded tokens and the tenant's terms are visible.
-But it draws it in **kinds** — "sizes", "coarse timestamps" — and the contracts are written in **field names**.
+sealed; ids, scope and membership, timestamps, sizes, blinded tokens and the tenant's terms are visible.
+But it draws it in **kinds** — "sizes", "timestamps" — and the contracts are written in **field names**.
 No mechanism connects the two, so the enumeration is advice to whoever remembers to read it.
 
 The contract is where the hole opens. This is an API-first repo: a field exists in a spec before any client can
@@ -51,7 +51,7 @@ request or response body defines inline properties — every named field lives u
    | `id` | an opaque identifier the server routes and authorizes on | *"existence and IDs"* |
    | `structure` | scope, membership, parentage, bucket shape, ordering index, epoch | *"scope and membership … the bucket rows' shape"* |
    | `measure` | sizes, counts, offsets | *"sizes; job-queue and op-log offsets"* |
-   | `time` | coarse timestamps | *"coarse timestamps for ordering"* |
+   | `time` | server timestamps, as written (nothing rounds them) | *"server timestamps (created, changed, trashed, last rotated) for ordering"* |
    | `enum` | a closed set the contract itself declares | — (the contract is the disclosure) |
    | `flag` | a boolean the server acts on | *"group-add-consent flag"*, *"trash state"* |
    | `token` | a bearer or capability secret in transit | — (never at rest in plaintext) |
