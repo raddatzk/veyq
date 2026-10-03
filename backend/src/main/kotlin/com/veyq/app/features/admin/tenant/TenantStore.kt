@@ -23,7 +23,7 @@ data class TenantView(
     val status: String,
     val inviteStatus: String?,
     val inviteExpiresAt: Instant?,
-    /** What the tenant holds in the store (ADR 0073 §2), from `StorageQuota` — this store never sums. */
+    /** What the tenant holds in the store (ADR 0073 §2), from `StorageUsage` — this store never sums. */
     val storageUsedBytes: Long,
     /** The Server Owner's quota for the tenant; null = none (ADR 0073 §1). */
     val storageQuotaBytes: Long?,

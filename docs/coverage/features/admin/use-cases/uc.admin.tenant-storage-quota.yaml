@@ -2,7 +2,7 @@ useCase: uc.admin.tenant-storage-quota
 feature: admin
 title: A tenant's storage quota — the ceiling is set by whoever pays for the store
 # Built by cr-tenant-storage-quota (inbox #155, second half; ADR 0073). The quota lives on the tenant row (V56,
-# nullable, none by default). `StorageQuota` in the media feature holds the one tenant SUM — asked for one tenant
+# nullable, none by default). `StorageUsage` in `core.quota` holds the one tenant SUM — asked for one tenant
 # under the lock, or grouped for every tenant by the Server Owner's list — and every start (member, cover, link)
 # goes through one locked transaction in `MediaHandler`: lock the tenant row, check the quota and (for a link) the
 # per-link limit independently, insert or refuse whole, commit, then presign. Each term of the SUM is pinned by a

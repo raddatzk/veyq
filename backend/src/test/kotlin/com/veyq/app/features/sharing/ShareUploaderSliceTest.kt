@@ -7,7 +7,7 @@ import com.veyq.app.features.content.NodesStore
 import com.veyq.app.features.media.BlobEntity
 import com.veyq.app.features.media.BucketEntity
 import com.veyq.app.features.media.MediaEntity
-import com.veyq.app.features.media.StorageQuota
+import com.veyq.app.core.quota.StorageUsage
 import com.veyq.app.shared.blobstore.StoreReclaimEntity
 import com.veyq.app.testing.TestFixtures.CONTENT_KEY
 import com.veyq.app.testing.TestFixtures.DROP_PRIVATE_KEY
@@ -52,7 +52,7 @@ import java.util.UUID
 class ShareUploaderSliceTest {
 
     @Inject
-    lateinit var quota: StorageQuota
+    lateinit var quota: StorageUsage
 
     @Inject
     lateinit var sharing: SharingStore
