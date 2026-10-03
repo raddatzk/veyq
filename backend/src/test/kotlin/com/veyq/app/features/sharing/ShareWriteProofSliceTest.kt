@@ -108,6 +108,31 @@ class ShareWriteProofSliceTest {
         uploadAs(shareId, earlier)
     }
 
+    /**
+     * B5 (#270) — the manage list marks each guest-taking link that holds no verifier, so its curator knows which
+     * links to renew: a CONTRIBUTOR and an UPLOADER link without one are marked; a VIEWER link without one is not (it
+     * takes no guest), and neither is a link that has its verifier — the control that the mark is not on every row.
+     */
+    @Test
+    fun theManageListMarksAGuestLinkThatHoldsNoVerifier() {
+        val (userId, scopeId) = seedMemberScope()
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val contributor = createShare(userId, memory, "CONTRIBUTOR")
+        val uploader = createShare(userId, memory, "UPLOADER")
+        val viewer = createShare(userId, memory, "VIEWER")
+        val intact = createShare(userId, memory, "CONTRIBUTOR")
+        QuarkusTransaction.requiringNew().run {
+            ShareEntity.update("writeVerifier = null where id in ?1", listOf(contributor, uploader, viewer))
+        }
+
+        val rows = given().header("Authorization", bearer(userId)).queryParam("nodeId", memory)
+            .`when`().get("/api/shares").then().statusCode(200)
+            .extract().jsonPath().getList<Map<String, Any>>("")
+            .associate { it["shareId"] as String to it["newGuestsRefused"] }
+
+        assertEquals(mapOf(contributor to true, uploader to true, viewer to false, intact to false), rows)
+    }
+
     /** B4 — a share is never created without a verifier: the field is required for every role. */
     @Test
     fun createWithoutAVerifierIs400AndStoresNothing() {

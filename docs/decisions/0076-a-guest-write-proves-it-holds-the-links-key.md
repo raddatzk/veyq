@@ -43,6 +43,9 @@ true: the server checked only the id.
    reads too stays a cheap later step if a read-side reason appears.
 5. **A link with no verifier fails closed.** The column is nullable; a link minted before this decision takes no
    new guest until a curator re-issues it. An existing guest's token keeps working — only naming oneself is gated.
+   The manage list says which links those are: each guest-taking row carries `newGuestsRefused`, derived from the
+   missing verifier and the role — the same two facts the refusal decides on — and the panel marks it beside the
+   renew.
 
 ## Consequences
 

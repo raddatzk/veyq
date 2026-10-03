@@ -1175,7 +1175,7 @@ components:
 
     ShareSummary:
       type: object
-      required: [shareId, scopeId, nodeId, role, sealedName, enabled, mine, reissueRequired, deletable, createdAt]
+      required: [shareId, scopeId, nodeId, role, sealedName, enabled, mine, reissueRequired, deletable, newGuestsRefused, createdAt]
       properties:
         shareId:
           x-veyq-visibility: id
@@ -1275,6 +1275,15 @@ components:
             member of its scope. The server computes it with the predicate the delete runs, so the panel's offer and
             the refusal cannot disagree.
           example: true
+        newGuestsRefused:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            True when this link takes guests (CONTRIBUTOR or UPLOADER) but holds no write verifier — it was minted
+            before guest naming proved the link's key (ADR 0076 point 5) — so `createShareIdentity` refuses every new
+            guest until the link is re-issued (`reissueShare` stores a verifier); a guest named before keeps
+            uploading. Derived from what the share already stores, not a new fact about it.
+          example: false
         expiresAt:
           x-veyq-visibility: time
           type: [string, "null"]

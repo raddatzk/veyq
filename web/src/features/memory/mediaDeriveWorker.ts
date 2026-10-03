@@ -7,8 +7,9 @@
 //     optimisation, never a requirement;
 //   - a source failure (the Worker answers `source`) REJECTS, with no page-thread retry: the same bytes would fail
 //     the same way there, at twice the cost, and `deriveTiers`' catch already makes that upload original-only.
-// A Worker that never loads (mis-bundled URL, CSP refusal) therefore degrades silently to today's behaviour; the
-// unit tests only see that fallback, so only a live backgrounded-tab measurement proves the Worker path ran.
+// A Worker that never loads (mis-bundled URL, CSP refusal) degrades to the page thread, and says so once (`warnOnce`);
+// that the build emitted the Worker at all is `verify:media-worker` (`scripts/assert-media-worker-in-dist.mjs`).
+// The unit tests only see the fallback, so only a live backgrounded-tab measurement proves the Worker path ran.
 import type { DeriveOpts, DeriveRequest, DeriveResponse } from './mediaDerive.worker'
 
 export type DeriveResult = { bytes: Uint8Array; source: { w: number; h: number } | null }
@@ -23,6 +24,7 @@ type Pending = {
 // to probe and make posters, and opening a gallery must not spawn a Worker for nothing.
 let worker: Worker | null = null
 let workerUnavailable = false
+let warned = false
 let seq = 0
 const pending = new Map<number, Pending>()
 
@@ -30,9 +32,23 @@ function finishOnFallback(p: Pending): void {
   p.fallback().then(p.resolve, p.reject)
 }
 
+/**
+ * Say once per page that a Worker which EXISTED could not run, so the fallback is visible in devtools: without it a
+ * mis-bundled or CSP-refused Worker puts every image derivation back on the page thread — where a backgrounded tab
+ * waits on each encode — and nothing anywhere says so. Not called where there is no `Worker` at all (node: vitest,
+ * the e2e suites — the designed path), nor on a `source` failure, which is the input's and not the Worker's.
+ * Carries no file name, no parameter and no error text.
+ */
+function warnOnce(): void {
+  if (warned) return
+  warned = true
+  console.warn('[veyq] media worker unavailable — deriving images on the page thread')
+}
+
 /** Retire the Worker for the rest of the session and finish every outstanding request on the page thread. */
 function latch(): void {
   workerUnavailable = true
+  warnOnce()
   worker?.terminate()
   worker = null
   const outstanding = [...pending.values()]
@@ -48,6 +64,9 @@ function getWorker(): Worker | null {
     return null
   }
   try {
+    // ONE expression, on purpose: Vite emits the Worker chunk only for `new Worker(new URL('…', import.meta.url))`
+    // spelled together. Hoist the URL into a variable and the build stays green, emits no chunk, and every
+    // derivation falls back to the page thread — `verify:media-worker` is what turns that red.
     worker = new Worker(new URL('./mediaDerive.worker.ts', import.meta.url), { type: 'module' })
     worker.addEventListener('message', (event: MessageEvent<DeriveResponse>) => {
       const msg = event.data
@@ -68,6 +87,7 @@ function getWorker(): Worker | null {
     return worker
   } catch {
     workerUnavailable = true
+    warnOnce()
     return null
   }
 }

@@ -465,6 +465,9 @@ export type ManagedShare = {
   /** True when the caller may delete this share ({@link deleteShare}): it is theirs, or its owner has left the
    *  scope. The server's own gate answer (ADR 0029 §7) — the client cannot tell whether a co-member is still here. */
   deletable: boolean
+  /** True when this guest link holds no write verifier (minted before ADR 0076), so it takes no new guest until it is
+   *  re-issued ({@link reissueShare}). The server's answer: the verifier is never on the wire. */
+  newGuestsRefused: boolean
 }
 
 /** List every share on one Memory visible to a scope member (cr-0104) — the manage-shares panel. Scoped by
@@ -489,6 +492,7 @@ export async function listSharesFor(nodeId: string): Promise<ManagedShare[]> {
       sealedPassword: r.sealedPassword ?? null,
       reissueRequired: r.reissueRequired,
       deletable: r.deletable,
+      newGuestsRefused: r.newGuestsRefused,
     }))
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
 }

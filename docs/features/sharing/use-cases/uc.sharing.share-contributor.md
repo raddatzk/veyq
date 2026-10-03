@@ -102,7 +102,8 @@ sequenceDiagram
 - **E3 — link without the fragment key:** inert — without `K_share` nothing decrypts and nothing can be sealed
   under `K_mem`, so neither viewing nor contributing is possible (both halves required). The server enforces the
   write half too: naming yourself without the key-derived proof is the link's non-enumerable `404`, and so is
-  naming yourself on a link minted before the proof existed, until a curator re-issues it.
+  naming yourself on a link minted before the proof existed, until a curator re-issues it — the manage list marks
+  each such link ("Takes no new guests"), so the curator knows which to renew.
 
 ## Quality notes
 
