@@ -151,7 +151,8 @@ const en = {
     errorNoFloor: 'This account has no password sign-in to check against, so it can’t be changed here.',
     errorFailed: 'Your password could not be changed. Nothing was changed — please try again.',
     done: 'Your password is changed.',
-    doneNote: 'Every other device is signed out and needs the new password to sign in again.',
+    doneNote:
+      'Every other device is signed out and loses its saved key. To get back in, each one needs the new password and your Secret Key — or to be added again from this device with “Add a device”.',
     rememberDevice: 'Remember this device',
     changeAgain: 'Change it again',
   },
@@ -161,7 +162,7 @@ const en = {
     factNotRepair:
       'It stops what comes next — it can’t take back what’s gone. Anything that person already saw, they still have.',
     factSignsOut:
-      'Every other device is signed out and loses its saved key. Each one needs your password again to get back in.',
+      'Every other device is signed out and loses its saved key. To get back in, each one needs your password and your Secret Key — or to be added again from this device with “Add a device”.',
     factNeedsKit:
       'You need your Emergency Kit. That’s on purpose: it’s the one thing they don’t have, and it’s what stops them doing this to you.',
     factSharedSpaces:
@@ -326,7 +327,7 @@ const en = {
     lockedDoneStillHere: 'Every other device was signed out. This device could not be signed out — use “Sign out” below.',
     lockedBack: 'I have my Secret Key after all',
     lockedBackHint: 'Unlock here without saving anything on this device.',
-    hint: 'Device names are stored scrambled and never reach the server, so they appear only once you unlock — on a locked screen you see dates instead. A device you have not signed in on since naming arrived shows no name yet, and stays fully signable-out either way. Signing a device out cuts it off from the server; if a device is really gone, its row also offers “Sign out + remove key”, so your password alone no longer opens it there. That button sits on another device’s row — never on the one you are using — and only where this app knows that device kept a saved key.',
+    hint: 'Device names are stored scrambled and never reach the server; this app unscrambles them here, on your unlocked device. A device you have not signed in on since naming arrived shows no name yet, and stays fully signable-out either way. Signing a device out cuts it off from the server; if a device is really gone, its row also offers “Sign out + remove key”, so your password alone no longer opens it there. That button sits on another device’s row — never on the one you are using — and only where this app knows that device kept a saved key.',
   },
   // uc.account.onboard-device (ADR 0059) — adding a device from one that is already signed in and unlocked.
   pairing: {
@@ -487,7 +488,7 @@ const en = {
     requestSent:
       'If an account exists for that address, a link is on its way. It stops working after an hour. Check spam if it does not arrive.',
     mailUnavailable:
-      'This server cannot send email yet, so no link can go out. Ask whoever runs it to set up email — your account is fine, and the reset works as soon as they have.',
+      'This space cannot send email yet, so no link can go out. Ask an owner of this space to set up email in its settings — your account is fine, and the reset works as soon as they have.',
     requestFailed: 'The request did not go through. Check your connection and try again.',
     stepKey: 'Enter your Secret Key',
     stepKeyIntro:
@@ -1235,7 +1236,8 @@ const de: typeof en = {
     errorNoFloor: 'Dieses Konto hat keine Passwort-Anmeldung, gegen die geprüft werden könnte — hier also nicht änderbar.',
     errorFailed: 'Dein Passwort konnte nicht geändert werden. Es wurde nichts geändert — bitte versuche es erneut.',
     done: 'Dein Passwort ist geändert.',
-    doneNote: 'Alle anderen Geräte werden abgemeldet und brauchen das neue Passwort, um sich wieder anzumelden.',
+    doneNote:
+      'Alle anderen Geräte werden abgemeldet und verlieren ihren gespeicherten Schlüssel. Um wieder hineinzukommen, braucht jedes das neue Passwort und deinen Secret Key — oder es wird von diesem Gerät aus über „Gerät hinzufügen“ neu hinzugefügt.',
     rememberDevice: 'Dieses Gerät merken',
     changeAgain: 'Noch einmal ändern',
   },
@@ -1245,7 +1247,7 @@ const de: typeof en = {
     factNotRepair:
       'Es stoppt, was danach kommt — es holt nichts zurück. Was diese Person schon gesehen hat, hat sie weiterhin.',
     factSignsOut:
-      'Alle anderen Geräte werden abgemeldet und verlieren ihren gespeicherten Schlüssel. Jedes braucht danach wieder dein Passwort.',
+      'Alle anderen Geräte werden abgemeldet und verlieren ihren gespeicherten Schlüssel. Um wieder hineinzukommen, braucht jedes dein Passwort und deinen Secret Key — oder es wird von diesem Gerät aus über „Gerät hinzufügen“ neu hinzugefügt.',
     factNeedsKit:
       'Du brauchst dein Notfall-Kit. Das ist Absicht: es ist das Einzige, was die Person nicht hat, und genau das hindert sie daran, das mit dir zu machen.',
     factSharedSpaces:
@@ -1402,7 +1404,7 @@ const de: typeof en = {
     lockedDoneStillHere: 'Alle anderen Geräte wurden abgemeldet. Dieses Gerät konnte nicht abgemeldet werden — nutze unten „Abmelden“.',
     lockedBack: 'Ich habe meinen Secret Key doch dabei',
     lockedBackHint: 'Hier entsperren, ohne dass etwas auf diesem Gerät gespeichert wird.',
-    hint: 'Gerätenamen liegen verschlüsselt und erreichen den Server nie — sie erscheinen deshalb erst nach dem Entsperren, auf einem gesperrten Bildschirm siehst du stattdessen Daten. Ein Gerät, auf dem du dich seit Einführung der Namen nicht angemeldet hast, zeigt noch keinen Namen und lässt sich trotzdem vollständig abmelden. Ein abgemeldetes Gerät kommt nicht mehr an den Server; ist ein Gerät wirklich weg, bietet seine Zeile zusätzlich „Abmelden + Schlüssel entfernen“, damit dein Passwort es dort nicht mehr allein öffnet. Diese Schaltfläche steht in der Zeile eines anderen Geräts — nie bei dem, das du gerade benutzt — und nur dort, wo diese App weiß, dass das Gerät einen gespeicherten Schlüssel behalten hat.',
+    hint: 'Gerätenamen liegen verschlüsselt und erreichen den Server nie; diese App entschlüsselt sie hier, auf deinem entsperrten Gerät. Ein Gerät, auf dem du dich seit Einführung der Namen nicht angemeldet hast, zeigt noch keinen Namen und lässt sich trotzdem vollständig abmelden. Ein abgemeldetes Gerät kommt nicht mehr an den Server; ist ein Gerät wirklich weg, bietet seine Zeile zusätzlich „Abmelden + Schlüssel entfernen“, damit dein Passwort es dort nicht mehr allein öffnet. Diese Schaltfläche steht in der Zeile eines anderen Geräts — nie bei dem, das du gerade benutzt — und nur dort, wo diese App weiß, dass das Gerät einen gespeicherten Schlüssel behalten hat.',
   },
   pairing: {
     navTitle: 'Gerät hinzufügen',
@@ -1549,7 +1551,7 @@ const de: typeof en = {
     requestSent:
       'Falls es ein Konto zu dieser Adresse gibt, ist ein Link unterwegs. Er wird nach einer Stunde ungültig. Schau auch im Spam nach.',
     mailUnavailable:
-      'Dieser Server kann noch keine E-Mails verschicken, deshalb geht kein Link raus. Bitte wende dich an die Person, die ihn betreibt — mit deinem Konto ist alles in Ordnung, und sobald E-Mail eingerichtet ist, funktioniert das Zurücksetzen.',
+      'Dieser Bereich kann noch keine E-Mails verschicken, deshalb geht kein Link raus. Bitte eine Person, der dieser Bereich gehört, E-Mail in seinen Einstellungen einzurichten — mit deinem Konto ist alles in Ordnung, und sobald E-Mail eingerichtet ist, funktioniert das Zurücksetzen.',
     requestFailed: 'Die Anfrage ist nicht durchgekommen. Prüfe deine Verbindung und versuch es nochmal.',
     stepKey: 'Secret Key eingeben',
     stepKeyIntro:
