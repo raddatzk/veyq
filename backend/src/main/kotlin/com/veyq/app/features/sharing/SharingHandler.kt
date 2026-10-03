@@ -272,25 +272,40 @@ class SharingHandler(
         // be public-shared (ADR 0029 §6, ADR 0030).
         if (node.kind != NodeEntity.MEMORY) return CreateShareOutcome.IllegalScope
         // ADR 0024 Decision 6, as NodesHandler checks it: a recovery copy sealed under an epoch other than the scope's
-        // current one is refused — an older one is an epoch a member removed since still holds. Unlocked, like theirs.
+        // current one is refused — an older one is an epoch a member removed since still holds.
         if (sealedShareKeyEpoch != null && sealedShareKeyEpoch != scopes.currentEpoch(node.scopeId)) {
             return CreateShareOutcome.StaleEpoch
         }
         // The client-minted share id (ADR 0072): the recovery wrap and every contributor name are bound to it. A
         // double-submitted create's loser answers as its replay does.
         val replay = { if (store.idTaken(shareId)) SharingStore.CreateResult.ID_TAKEN else null }
+        var refused: CreateShareOutcome? = null
         val stored = createOrConflict(conflict = replay) {
-            store.create(
-                shareId, userId, node.scopeId, nodeId, role, keys, sealedName, expiresAt, sealedNote, sealedShareKey,
-                sealedShareKeyEpoch, sealedShareName,
-                passwordRequired, pwSalt, pwVerifier, sealedPassword, writeVerifier,
-            )
+            // The two checks above, again under the scope row's lock, taken first: every removal holds it while it
+            // turns the removed member's links off (developer-styleguide §12). Checked only before it, a member being
+            // removed created a link that removal never saw, and kept it live in a group they had left.
+            scopes.lockScope(node.scopeId)
+            refused = access.check(userId, node.scopeId, WRITE)
+                .refusal(CreateShareOutcome.NoNode, CreateShareOutcome.Suspended, CreateShareOutcome.Deleting)
+                ?: CreateShareOutcome.StaleEpoch.takeIf {
+                    sealedShareKeyEpoch != null && sealedShareKeyEpoch != scopes.currentEpoch(node.scopeId)
+                }
+            if (refused != null) {
+                null
+            } else {
+                store.create(
+                    shareId, userId, node.scopeId, nodeId, role, keys, sealedName, expiresAt, sealedNote, sealedShareKey,
+                    sealedShareKeyEpoch, sealedShareName,
+                    passwordRequired, pwSalt, pwVerifier, sealedPassword, writeVerifier,
+                )
+            }
         }
+        refused?.let { return it }
         // A double-submitted Memory's FIRST UPLOADER link loses at the guarded drop-key update, not at the commit: both
         // carry the private key, and the loser's update waits for the winner's and finds the key set. Its replay meets
         // the id check first and answers `id_taken` — `drop_key_exists` would send the client to re-seal and retry the
-        // id the winner holds. So that refusal re-asks the replay question, in a fresh transaction: under MariaDB's
-        // REPEATABLE READ the loser's own still reads the snapshot its first id check took, before the winner's share.
+        // id the winner holds. So that refusal re-asks the replay question, in a fresh transaction once the loser's
+        // has ended, as `createOrConflict` does for a failed commit.
         // Two DIFFERENT links racing for the first drop key keep `drop_key_exists`: their ids are free.
         val created = if (stored == SharingStore.CreateResult.DROP_KEY_EXISTS) {
             QuarkusTransaction.requiringNew().call(replay) ?: stored
@@ -298,6 +313,7 @@ class SharingHandler(
             stored
         }
         return when (created) {
+            null -> CreateShareOutcome.NoNode // unreachable: a null store result is a refusal, answered above
             SharingStore.CreateResult.CREATED -> CreateShareOutcome.Created(shareId)
             SharingStore.CreateResult.ID_TAKEN -> CreateShareOutcome.IdTaken
             SharingStore.CreateResult.DROP_KEY_EXISTS -> CreateShareOutcome.DropKeyExists
@@ -459,25 +475,45 @@ class SharingHandler(
         writeVerifier: String,
     ): ReissueShareOutcome {
         val old = store.findIncludingDeleted(shareId) ?: return ReissueShareOutcome.NotFound
-        access.check(userId, old.scopeId, WRITE)
-            .refusal(ReissueShareOutcome.NotFound, ReissueShareOutcome.Suspended, ReissueShareOutcome.Deleting)?.let { return it }
-        if (old.deletedAt != null) return ReissueShareOutcome.ShareDeleted
-        if (old.enabled && old.ownerAccount != userId) return ReissueShareOutcome.NotFound
+        reissueRefusal(userId, old.scopeId, old.deletedAt != null, old.enabled, old.ownerAccount)?.let { return it }
         if (!capabilities.isActive(capabilityFor(old.role))) return ReissueShareOutcome.CapabilityDisabled
         // No drop private key: the old UPLOADER share proves the Memory already holds one (it is set once and
         // never cleared), and every upload so far is sealed to it (ADR 0031 point 7).
         val keys = shareKeys(old.role, wrap, sealedDropPublicKey, null) ?: return ReissueShareOutcome.InvalidRequest
         if (sealedShareKeyEpoch != scopes.currentEpoch(old.scopeId)) return ReissueShareOutcome.StaleEpoch
-        val created = store.reissue(
-            old.id, newShareId, userId, keys, sealedName, expiresAt, sealedNote, sealedShareKey, sealedShareKeyEpoch,
-            sealedShareName, passwordRequired, pwSalt, pwVerifier, sealedPassword, writeVerifier,
-        )
-        return when (created) {
-            SharingStore.ReissueResult.CREATED -> ReissueShareOutcome.Created(newShareId)
-            SharingStore.ReissueResult.ID_TAKEN -> ReissueShareOutcome.IdTaken
-            SharingStore.ReissueResult.NOT_FOUND -> ReissueShareOutcome.NotFound
-            SharingStore.ReissueResult.DELETED -> ReissueShareOutcome.ShareDeleted
+        return QuarkusTransaction.requiringNew().call {
+            // The checks above, again under the scope row's lock, taken first: every removal holds it while it turns
+            // the removed member's links off, and a re-activation holds it while it adopts one (developer-styleguide
+            // §12). Checked only before it, a member being removed re-issued a live link that removal never saw. The
+            // share's state is read by a scalar query, so the row the store spends is first loaded after the spend.
+            scopes.lockScope(old.scopeId)
+            val (enabled, owner) = store.enabledAndOwnerOf(shareId) ?: return@call ReissueShareOutcome.NotFound
+            reissueRefusal(userId, old.scopeId, false, enabled, owner)?.let { return@call it }
+            if (sealedShareKeyEpoch != scopes.currentEpoch(old.scopeId)) return@call ReissueShareOutcome.StaleEpoch
+            when (
+                store.reissue(
+                    old.id, newShareId, userId, keys, sealedName, expiresAt, sealedNote, sealedShareKey, sealedShareKeyEpoch,
+                    sealedShareName, passwordRequired, pwSalt, pwVerifier, sealedPassword, writeVerifier,
+                )
+            ) {
+                SharingStore.ReissueResult.CREATED -> ReissueShareOutcome.Created(newShareId)
+                SharingStore.ReissueResult.ID_TAKEN -> ReissueShareOutcome.IdTaken
+                SharingStore.ReissueResult.NOT_FOUND -> ReissueShareOutcome.NotFound
+                SharingStore.ReissueResult.DELETED -> ReissueShareOutcome.ShareDeleted
+            }
         }
+    }
+
+    /** A re-issue's refusals that a removal, a delete or an adoption can turn: the caller's membership, a deleted
+     *  share, an enabled one that is not the caller's. The store's compare-and-set decides "deleted" again. */
+    private fun reissueRefusal(
+        userId: String, scopeId: String, deleted: Boolean, enabled: Boolean, owner: String,
+    ): ReissueShareOutcome? {
+        access.check(userId, scopeId, WRITE)
+            .refusal(ReissueShareOutcome.NotFound, ReissueShareOutcome.Suspended, ReissueShareOutcome.Deleting)?.let { return it }
+        if (deleted) return ReissueShareOutcome.ShareDeleted
+        if (enabled && owner != userId) return ReissueShareOutcome.NotFound
+        return null
     }
 
     /**

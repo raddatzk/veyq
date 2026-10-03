@@ -17,7 +17,6 @@ import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.shared.membership.MembershipStore
 import com.veyq.app.shared.scope.ScopeEntity
 import jakarta.enterprise.context.ApplicationScoped
-import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional
 import java.time.Instant
 import java.util.UUID
@@ -306,9 +305,7 @@ class ScopesStore(
      * row's lock, which is this transaction's first statement: the caller is an OWNER, the target holds a row, and
      * the change leaves an OWNER ([MembershipPolicy]). Each removal-rotation holds the same lock. Checked before
      * the lock, two co-owners demoting each other both counted two owners, and the group was left with none
-     * (developer-styleguide §12). The lock has to come first because MariaDB runs REPEATABLE READ. There the first
-     * plain read fixes the transaction's snapshot, so a check read after a later lock would still see the
-     * pre-lock state. H2 reads committed data and would not show it.
+     * (developer-styleguide §12). The checks read committed data under the lock on both engines (ADR 0078).
      */
     @Transactional
     fun changeRole(callerId: String, targetId: String, scopeId: String, role: String): RoleChange {
@@ -400,7 +397,7 @@ class ScopesStore(
         grants: List<RotationGrant>, retags: List<Pair<String, String>>, dropped: Set<String>, removes: String? = null,
         revokeLinks: Boolean = false,
     ): RotationDecision {
-        val scope = ScopeEntity.findById(scopeId, LockModeType.PESSIMISTIC_WRITE)!!
+        val scope = ScopeEntity.lockRow(scopeId)!!
         val all = MembershipEntity.find("scopeId", scopeId).list()
         val invites = if (scope.kind == ScopeEntity.TENANT) tenants.openMemberInvites(scope.tenantId) else emptyList()
         val open = all.mapNotNull { it.admissionId }.toSet() + invites.mapNotNull { it.admissionId }
@@ -473,10 +470,18 @@ class ScopesStore(
         ScopeEntity.findById(scopeId)?.let { it.deletedAt = now; it.persist() }
     }
 
-    /** Restore a soft-deleted group: clear `deletedAt` (active again). */
+    enum class Restore { RESTORED, NOT_DELETED, GONE }
+
+    /** Restore a soft-deleted group: clear `deletedAt` (active again), decided under the scope row's lock, which the
+     *  purge's erase takes first (`ScopePurge`): a restore waits out an erase in flight and then finds the group
+     *  [Restore.GONE], and an erase that comes after finds it restored. */
     @Transactional
-    fun restore(scopeId: String) {
-        ScopeEntity.findById(scopeId)?.let { it.deletedAt = null; it.persist() }
+    fun restore(scopeId: String): Restore {
+        val scope = ScopeEntity.lockRow(scopeId) ?: return Restore.GONE
+        if (scope.deletedAt == null) return Restore.NOT_DELETED
+        scope.deletedAt = null
+        scope.persist()
+        return Restore.RESTORED
     }
 
     /** The ids of GROUP scopes whose grace period has elapsed (`deletedAt < cutoff`) — the purge worklist. */
@@ -543,7 +548,7 @@ class ScopesStore(
 
     /** Whether [admission] is stated at the scope's current epoch, read under the rotation's lock. */
     private fun admissionIsCurrent(scopeId: String, admission: Admission): Boolean =
-        ScopeEntity.findById(scopeId, LockModeType.PESSIMISTIC_WRITE)?.currentEpoch == admission.epoch
+        ScopeEntity.lockRow(scopeId)?.currentEpoch == admission.epoch
 
     /** Whether a user's account-global "ask before adding me to groups" preference is on (cr-0094). */
     fun requiresGroupAddConsent(userId: String): Boolean =

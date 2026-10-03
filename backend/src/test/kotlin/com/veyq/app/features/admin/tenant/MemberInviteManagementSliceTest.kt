@@ -6,6 +6,11 @@ import com.veyq.app.testing.TestFixtures.bearer
 import com.veyq.app.testing.TestFixtures.seedTenant
 import com.veyq.app.testing.TestFixtures.seedUser
 import com.veyq.app.testing.race
+import com.veyq.app.testing.whileUncommitted
+import com.veyq.app.features.spaces.scope.RotationDecision
+import com.veyq.app.features.spaces.scope.RotationGrant
+import com.veyq.app.features.spaces.scope.ScopesStore
+import com.veyq.app.shared.membership.SignedGrant
 import com.veyq.app.shared.membership.MembershipEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
@@ -39,6 +44,7 @@ import java.util.concurrent.Executors
 class MemberInviteManagementSliceTest {
 
     @Inject lateinit var store: TenantStore
+    @Inject lateinit var scopes: ScopesStore
 
     @Test
     fun ownerListsPendingMemberInvitesOutsiderIs404() {
@@ -262,6 +268,64 @@ class MemberInviteManagementSliceTest {
             .then().statusCode(404).body("code", equalTo("tenant_not_found"))
     }
 
+    // --- an invite written while a tenant rotation holds the scope row (cr-a-gate-holds-until-its-write-commits) ---
+
+    @Test
+    fun anInviteMintedAtAnEpochARotationIsLeavingIsStale(): Unit = TestMailbox(STALE_MINT_SMTP_PORT).start().use { mail ->
+        // The mint compares the admission's epoch with the tenant scope's under the rotation's lock. The gate before
+        // it had loaded that scope row, and a lock on a loaded row handed back the copy from before the lock: an
+        // admission at the epoch the rotation left was minted, behind a rotation that could not carry it.
+        repeat(ROUNDS) { round ->
+            val domain = "stale-mint-$round.example.com"
+            val (tenantId, owner) = seedActiveTenant(domain, "owner@$domain", mail)
+            val answer = whileUncommitted(
+                change = { assertTrue(rotateTenant(tenantId, owner, emptyList()) is RotationDecision.Commit, "round $round") },
+                overlapping = { invite(owner, tenantId, "m@$domain", epoch = 0).statusCode() },
+            )
+            assertEquals(409, answer, "round $round: an admission at the left epoch is stale")
+            assertTrue(tx { store.openMemberInvites(tenantId) }.isEmpty(), "round $round: nothing minted")
+            // Control: the admission at the epoch the rotation reached is minted.
+            invite(owner, tenantId, "m@$domain", epoch = 1).then().statusCode(201)
+        }
+    }
+
+    @Test
+    fun aReissueDuringATenantRotationCarriesTheNewTag(): Unit = TestMailbox(STALE_REISSUE_SMTP_PORT).start().use { mail ->
+        // A reissue copies the outstanding invite's admission onto the fresh one. Read before a tenant rotation's
+        // commit, it copied the tag the rotation was replacing, and the rotation's carry missed the fresh invite it
+        // never saw: the person was invited behind an epoch nobody re-tagged them for.
+        repeat(ROUNDS) { round ->
+            val domain = "stale-reissue-$round.example.com"
+            val (tenantId, owner) = seedActiveTenant(domain, "owner@$domain", mail)
+            seedMemberInvite(tenantId, "m@$domain", "stale-reissue-secret-$round")
+            val inviteId = firstPendingInviteId(tenantId)
+            val admissionId = tx { store.listPendingMemberInvites(tenantId).first().admission!!.id }
+            val answer = whileUncommitted(
+                change = {
+                    val decision = rotateTenant(tenantId, owner, listOf(admissionId to RETAGGED))
+                    assertTrue(decision is RotationDecision.Commit, "round $round: $decision")
+                },
+                overlapping = {
+                    given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
+                        .`when`().post("/api/tenants/$tenantId/member-invites/$inviteId/reissue").statusCode()
+                },
+            )
+            assertEquals(200, answer, "round $round")
+            val fresh = tx { store.openMemberInvites(tenantId).single() }
+            assertEquals(1 to RETAGGED, fresh.admissionEpoch to fresh.admissionTag, "round $round: the fresh invite's tag")
+        }
+    }
+
+    private fun rotateTenant(tenantId: String, owner: String, retags: List<Pair<String, String>>) = scopes.rotate(
+        tenantId, 1, "cHJldg==", owner, listOf(RotationGrant(owner, SignedGrant("Z3JhbnQ=", TestAdmission.SIGNATURE))),
+        retags, emptySet(),
+    )
+
+    private fun invite(owner: String, tenantId: String, email: String, epoch: Int) =
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
+            .body("""{"email":"$email",${TestAdmission.json(epoch)}}""")
+            .`when`().post("/api/tenants/$tenantId/member-invites")
+
     // --- helpers ---
 
     /** An ACTIVE tenant + its TENANT scope + a granted OWNER. Returns (tenantId, ownerUserId). */
@@ -313,6 +377,8 @@ class MemberInviteManagementSliceTest {
         // MemberAddSliceTest 13930-13933.
         const val REISSUE_SMTP_PORT = 13934
         const val REISSUE_FLOOD_SMTP_PORT = 13935
+        const val STALE_MINT_SMTP_PORT = 13942
+        const val STALE_REISSUE_SMTP_PORT = 13943
 
         /** One round of a race can pass by luck; each round spends a fresh secret. */
         const val ROUNDS = 5

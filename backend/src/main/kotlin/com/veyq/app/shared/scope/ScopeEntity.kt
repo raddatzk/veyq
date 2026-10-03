@@ -96,11 +96,16 @@ class ScopeEntity : PanacheEntityBase {
 
         /**
          * Take the scope row's write lock for the caller's transaction — the one serialisation point a rotation
-         * commit, an admission, a grant-delivery completion and every scope-rotation origination of one scope share
-         * (lock order: scope → membership → job). A query rather than `findById`, so the `SELECT … FOR UPDATE`
-         * reaches the database even when the transaction already holds the row in its persistence context (a
-         * tenant removal has read it to plan its cascade). A lock, not a mutation: the stores still own every write.
+         * commit, an admission, a grant-delivery completion, every scope-rotation origination and every removal of one
+         * scope share (lock order: scope → membership → job; several scope rows in id order). Returns the row as it is
+         * under the lock. A query, so the `SELECT … FOR UPDATE` reaches the database even when the transaction already
+         * holds the row in its persistence context (the `ScopeAccess` gate loads it, a tenant removal reads it to plan
+         * its cascade) — and then a refresh, because a query hands back that loaded copy unchanged: a `currentEpoch`
+         * read from it was the one from before the lock, at any isolation (an invite minted at an epoch a rotation had
+         * just left, ADR 0078). The query flushes this transaction's pending changes to the row first, so the refresh
+         * loses none. A lock, not a mutation: the stores still own every write.
          */
-        fun lockRow(id: String): ScopeEntity? = find("id", id).withLock(LockModeType.PESSIMISTIC_WRITE).firstResult()
+        fun lockRow(id: String): ScopeEntity? =
+            find("id", id).withLock(LockModeType.PESSIMISTIC_WRITE).firstResult()?.also { getEntityManager().refresh(it) }
     }
 }

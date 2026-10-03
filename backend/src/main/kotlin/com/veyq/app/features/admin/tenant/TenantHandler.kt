@@ -378,6 +378,10 @@ class TenantHandler(
             .refusal(ReissueOutcome.NotFound, ReissueOutcome.Suspended)?.let { return@commitThenSend MintResult.Rejected(it) }
         val tenant = store.findTenant(tenantId) ?: return@commitThenSend MintResult.Rejected(ReissueOutcome.NotFound)
         if (!store.isOwner(callerId, tenantId)) return@commitThenSend MintResult.Rejected(ReissueOutcome.NotOwner)
+        // The tenant rotation's lock, before the invite is read: the fresh invite copies its admission, and a rotation
+        // carries only the invites it reads under this lock. Read before it, a reissue copied the tag a committing
+        // rotation was replacing onto an invite that rotation never saw.
+        store.lockTenantScope(tenantId)
         val invite = store.findPendingMemberInvite(tenantId, inviteId) ?: return@commitThenSend MintResult.Rejected(ReissueOutcome.InviteNotFound)
         // Before the supersede, not after: mintMemberInvite kills the outstanding invite as it mints, so refusing
         // later would leave the invitee with nothing on a tenant that never could have sent (ADR 0055 §2).
@@ -438,9 +442,8 @@ class TenantHandler(
      * role change and a removal-rotation hold the same lock. Planned before the locks, a removal that overlapped a
      * co-owner's demote cut the other owner as "one of two", and the group was left with none. The target's scope
      * ids are read first, outside the decision's transaction. That transaction then takes their locks, in ascending
-     * id order, as its first statements: on MariaDB's REPEATABLE READ the first plain read fixes the snapshot, so a
-     * plan read after a later lock would still be stale. The gates run again under the locks, so a refusal is what
-     * a replay would get.
+     * id order — the order every multi-scope lock takes — as its first statements. The gates run again under the
+     * locks, so a refusal is what a replay would get.
      */
     fun removeMember(callerId: String, tenantId: String, targetId: String, revokeLinks: Boolean = false): RemoveTenantMemberOutcome {
         gateRemoval(callerId, tenantId)?.let { return it }

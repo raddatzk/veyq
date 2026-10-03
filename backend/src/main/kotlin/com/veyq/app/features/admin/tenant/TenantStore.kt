@@ -10,7 +10,6 @@ import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.shared.tenant.TenantHostResolver
 import jakarta.enterprise.context.ApplicationScoped
-import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional
 import java.time.Instant
 import java.util.UUID
@@ -115,7 +114,7 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
      */
     @Transactional
     fun lockTenantScope(tenantId: String) {
-        ScopeEntity.findById(tenantId, LockModeType.PESSIMISTIC_WRITE)
+        ScopeEntity.lockRow(tenantId)
     }
 
     /**
@@ -198,7 +197,7 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
         tenantId: String, email: String, tokenHash: String, expiresAt: Instant, admission: Admission?, checkEpoch: Boolean,
     ): String? {
         if (checkEpoch && admission != null &&
-            ScopeEntity.findById(tenantId, LockModeType.PESSIMISTIC_WRITE)?.currentEpoch != admission.epoch
+            ScopeEntity.lockRow(tenantId)?.currentEpoch != admission.epoch
         ) return null
         TenantInviteEntity.update(
             "status = ?1 where tenantId = ?2 and ownerEmail = ?3 and status = ?4",

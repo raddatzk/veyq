@@ -286,14 +286,16 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
      */
     @Transactional
     fun restoreMedia(scopeId: String, mediaId: String): String? {
+        // A guarded update, not a read and a managed write: a purge holds the row while it erases it, and this waits
+        // and then matches nothing — the 404 a replay gets — where a flush of a row read before the erase was a 500
+        // (developer-styleguide §12). `updatedAt` re-surfaces it in the live keyset delta (cr-0107).
+        val restored = MediaEntity.update(
+            "deletedAt = null, deletedBy = null, updatedAt = ?1 where id = ?2 and scopeId = ?3 and deletedAt is not null",
+            Instant.now(), mediaId, scopeId,
+        ) == 1
         val media = MediaEntity.findById(mediaId)?.takeIf { it.scopeId == scopeId } ?: return null
-        if (media.deletedAt == null) return media.nodeId // already live — idempotent
-        media.deletedAt = null
-        media.deletedBy = null
-        media.updatedAt = Instant.now() // re-surface via the keyset delta (cr-0107)
-        media.persist()
-        bumpMediaRevision(media.nodeId)
-        return media.nodeId
+        if (restored) bumpMediaRevision(media.nodeId)
+        return media.nodeId // restored now, or already live — idempotent
     }
 
     /** The node's TRASHED media, newest-trashed first (cr-0110) — the Trash tab list (rows carry deletedAt/deletedBy). */
@@ -327,7 +329,10 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
      */
     @Transactional
     fun purgeMedia(scopeId: String, mediaId: String): Boolean {
-        val media = MediaEntity.findById(mediaId)?.takeIf { it.scopeId == scopeId && it.deletedAt != null } ?: return false
+        // The read is the row's lock, so a restore that committed first is seen live, and one that comes after waits
+        // and finds nothing to restore. Read plainly, a photo restored in between was erased anyway.
+        val media = MediaEntity.findById(mediaId, LockModeType.PESSIMISTIC_WRITE)
+            ?.takeIf { it.scopeId == scopeId && it.deletedAt != null } ?: return false
         purgeMediaRows(media)
         return true
     }
@@ -339,7 +344,11 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
      */
     @Transactional
     fun purgeTrashedBefore(cutoff: Instant): Int {
-        val expired = MediaEntity.find("deletedAt is not null and deletedAt < ?1", cutoff).list()
+        // The selection is the lock, and the predicate is re-checked on what it locked: a restore that committed while
+        // this waited is live now and stays. Selected by a plain read, a photo restored in between was erased anyway.
+        val expired = MediaEntity.find("deletedAt is not null and deletedAt < ?1", cutoff)
+            .withLock(LockModeType.PESSIMISTIC_WRITE).list()
+            .filter { it.deletedAt?.isBefore(cutoff) == true }
         expired.forEach { purgeMediaRows(it) }
         return expired.size
     }
@@ -358,7 +367,11 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
      */
     @Transactional
     fun purgeSessionsIdleSince(cutoff: Instant): Int {
-        val stale = UploadSessionEntity.find("lastWindowAt < ?1", cutoff).list()
+        // The selection is the lock, re-checked on what it locked: an upload whose next window committed while this
+        // waited keeps its session. Selected by a plain read, a live upload's session was dropped mid-transfer.
+        val stale = UploadSessionEntity.find("lastWindowAt < ?1", cutoff)
+            .withLock(LockModeType.PESSIMISTIC_WRITE).list()
+            .filter { it.lastWindowAt.isBefore(cutoff) }
         reclaim.record(stale.map { StoreObjectRef(it.storageKey, it.chunkCount) })
         stale.forEach { UploadSessionEntity.deleteById(it.id) }
         return stale.size

@@ -238,7 +238,7 @@ class TasksStore {
         // completion, or a worker still on an older grant, sealed a key the member cannot write with. Refused and
         // released (the claim's attempt rolled back, like a decline) so the job re-runs at the current epoch.
         // The scope row is read under the lock a rotation takes (ScopesStore.rotate), so the two serialize.
-        val current = ScopeEntity.findById(job.scopeId, LockModeType.PESSIMISTIC_WRITE)?.currentEpoch ?: 0
+        val current = ScopeEntity.lockRow(job.scopeId)?.currentEpoch ?: 0
         if (epoch != current) {
             JobEntity.update(
                 "status = ?1, leaseHolder = null, leaseExpiresAt = null, attempts = attempts - 1 " +

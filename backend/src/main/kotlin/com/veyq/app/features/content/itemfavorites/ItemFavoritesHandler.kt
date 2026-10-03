@@ -7,6 +7,7 @@ import com.veyq.app.shared.membership.AccessMode.READ
 import com.veyq.app.shared.membership.AccessMode.WRITE
 import com.veyq.app.shared.membership.ScopeAccess
 import com.veyq.app.shared.membership.refusal
+import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 
 sealed interface GetItemFavoritesOutcome {
@@ -57,10 +58,22 @@ class ItemFavoritesHandler(private val store: ItemFavoritesStore, private val ac
             .map { OwnItemFavorites(it.scopeId, it.nodeId, it.ciphertext) }
     }
 
+    /**
+     * The gate runs twice: first as the fast path, then under the scope row's lock, taken first, in the write's own
+     * transaction. Every removal holds that lock while it deletes the removed member's rows (developer-styleguide §12),
+     * so checked only before it, a member being removed wrote a row the removal never saw, into a group they had left.
+     */
     fun put(userId: String, scopeId: String, nodeId: String, ciphertext: String): PutItemFavoritesOutcome {
-        access.check(userId, scopeId, WRITE)
-            .refusal(PutItemFavoritesOutcome.NoScope, PutItemFavoritesOutcome.Suspended, PutItemFavoritesOutcome.Deleting)?.let { return it }
-        store.upsert(userId, scopeId, nodeId, ciphertext)
-        return PutItemFavoritesOutcome.Stored
+        refusal(userId, scopeId)?.let { return it }
+        return QuarkusTransaction.requiringNew().call {
+            store.lockScope(scopeId)
+            refusal(userId, scopeId)?.let { return@call it }
+            store.upsert(userId, scopeId, nodeId, ciphertext)
+            PutItemFavoritesOutcome.Stored
+        }
     }
+
+    private fun refusal(userId: String, scopeId: String): PutItemFavoritesOutcome? =
+        access.check(userId, scopeId, WRITE)
+            .refusal(PutItemFavoritesOutcome.NoScope, PutItemFavoritesOutcome.Suspended, PutItemFavoritesOutcome.Deleting)
 }

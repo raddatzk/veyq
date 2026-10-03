@@ -1,5 +1,6 @@
 package com.veyq.app.features.content.itemfavorites
 
+import com.veyq.app.shared.scope.ScopeEntity
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 import java.time.Instant
@@ -31,6 +32,11 @@ class ItemFavoritesStore {
      * is the handler's question, because a row can outlive the membership it was written under.
      */
     fun listOwn(userId: String): List<ItemFavoritesEntity> = ItemFavoritesEntity.list("userId = ?1", userId)
+
+    /** The scope row's lock, which every removal of a member holds while it deletes that member's rows. */
+    fun lockScope(scopeId: String) {
+        ScopeEntity.lockRow(scopeId)
+    }
 
     /** Last-write-wins upsert of the **caller's own** blob for the node. */
     @Transactional

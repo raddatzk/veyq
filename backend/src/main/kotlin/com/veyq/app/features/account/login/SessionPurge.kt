@@ -16,8 +16,9 @@ import java.time.Instant
 class SessionPurge(private val sessions: SessionService) {
 
     // Every step commits in its OWN short transaction, and the families go in batches. One transaction for the
-    // whole sweep stalled sign-in: under MariaDB's REPEATABLE READ a delete next-key-locks every index record it
-    // scans until commit, so the token and family scans held every login and refresh for the purge's whole
+    // whole sweep stalled sign-in: under MariaDB's REPEATABLE READ (the server default; every connection now runs
+    // READ COMMITTED, ADR 0078) a delete next-key-locked every index record it scanned until commit, so the token
+    // and family scans held every login and refresh for the purge's whole
     // duration. Measured on MariaDB 11.4 at ~4 M refresh rows (cr-session-purge-cost-on-mariadb): the sweep took
     // 19–31 s, a refresh waited it out, and a login deadlocked against it. Split, and with V59's index, the worst
     // probe wait was ~22 ms. The family ids come from a plain read (a snapshot, no lock); each batch delete checks

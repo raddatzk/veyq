@@ -24,6 +24,7 @@ import com.veyq.app.shared.membership.ScopeAccess
 import com.veyq.app.shared.membership.refusal
 import com.veyq.app.shared.persistence.createOrConflict
 import com.veyq.app.shared.scope.ScopeEntity
+import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 
 /** Outcome of birthing a personal scope. */
@@ -253,6 +254,12 @@ class ScopesHandler(
             }
         }
         return createOrConflict(conflict = replay) {
+            // The gate again, under the tenant root's lock, taken first: a tenant removal holds it while it plans its
+            // cascade from the member's memberships (developer-styleguide §12). Checked only before it, a member being
+            // removed created a space that cascade never saw, and kept it in a tenant they had left.
+            store.lockScope(tenantId)
+            access.check(userId, tenantId, WRITE)
+                .refusal(CreatePersonalOutcome.NoTenant, CreatePersonalOutcome.Suspended)?.let { return@createOrConflict it }
             if (store.createPersonal(scopeId, userId, tenantId, grant)) {
                 CreatePersonalOutcome.Created(scopeId)
             } else {
@@ -277,6 +284,10 @@ class ScopesHandler(
             .refusal(CreateGroupOutcome.NoTenant, CreateGroupOutcome.Suspended)?.let { return it }
         // The client-minted scope id (ADR 0072): the self-grant and the group name are sealed bound to it.
         return createOrConflict(conflict = { if (store.scopeIdTaken(scopeId)) CreateGroupOutcome.IdTaken else null }) {
+            // The gate again, under the tenant root's lock a tenant removal holds, as [createPersonal] does.
+            store.lockScope(tenantId)
+            access.check(userId, tenantId, WRITE)
+                .refusal(CreateGroupOutcome.NoTenant, CreateGroupOutcome.Suspended)?.let { return@createOrConflict it }
             if (store.createGroup(scopeId, userId, tenantId, encryptedName, grant, admission)) CreateGroupOutcome.Created(scopeId) else CreateGroupOutcome.IdTaken
         }
     }
@@ -353,14 +364,46 @@ class ScopesHandler(
     fun addGroupMember(
         callerId: String, scopeId: String, username: String, sealedNameKey: String?, admission: Admission,
     ): AddGroupMemberOutcome {
+        val tenantId = when (val gate = addGate(callerId, scopeId, username)) {
+            is AddGate.Refused -> return gate.outcome
+            is AddGate.Open -> gate.tenantId
+        }
+        // The gates again, under the locks of the tenant root and the group, in id order (the order a tenant removal
+        // takes every lock in), taken first in the write's transaction (developer-styleguide §12). A tenant removal
+        // of the target holds the root's lock and one of the caller holds the group's. Checked only before them, a
+        // member being removed from the tenant was added to a group after the removal had cut their memberships.
+        return QuarkusTransaction.requiringNew().call {
+            listOf(tenantId, scopeId).sorted().forEach { store.lockScope(it) }
+            when (val gate = addGate(callerId, scopeId, username)) {
+                is AddGate.Refused -> gate.outcome
+                is AddGate.Open -> addUnderLocks(gate.tenantId, gate.targetId, scopeId, sealedNameKey, callerId, admission)
+            }
+        }
+    }
+
+    private sealed interface AddGate {
+        data class Refused(val outcome: AddGroupMemberOutcome) : AddGate
+        data class Open(val tenantId: String, val targetId: String) : AddGate
+    }
+
+    /** Every refusal of [addGroupMember] that reads state a concurrent write can change, in the order they answer. */
+    private fun addGate(callerId: String, scopeId: String, username: String): AddGate {
         access.check(callerId, scopeId, WRITE)
-            .refusal(AddGroupMemberOutcome.ScopeNotFound, AddGroupMemberOutcome.Suspended, AddGroupMemberOutcome.Deleting)?.let { return it }
-        if (store.scopeKind(scopeId) != ScopeEntity.GROUP) return AddGroupMemberOutcome.ScopeNotFound
-        if (!store.isScopeOwner(callerId, scopeId)) return AddGroupMemberOutcome.NotOwner
-        val tenantId = store.scopeTenantId(scopeId) ?: return AddGroupMemberOutcome.ScopeNotFound
-        val targetId = store.resolveUsernameInTenant(tenantId, username) ?: return AddGroupMemberOutcome.MemberNotFound
-        if (!store.belongsToTenant(targetId, tenantId)) return AddGroupMemberOutcome.MemberNotFound
-        if (store.holdsAnyRow(targetId, scopeId)) return AddGroupMemberOutcome.AlreadyMember
+            .refusal(AddGroupMemberOutcome.ScopeNotFound, AddGroupMemberOutcome.Suspended, AddGroupMemberOutcome.Deleting)
+            ?.let { return AddGate.Refused(it) }
+        if (store.scopeKind(scopeId) != ScopeEntity.GROUP) return AddGate.Refused(AddGroupMemberOutcome.ScopeNotFound)
+        if (!store.isScopeOwner(callerId, scopeId)) return AddGate.Refused(AddGroupMemberOutcome.NotOwner)
+        val tenantId = store.scopeTenantId(scopeId) ?: return AddGate.Refused(AddGroupMemberOutcome.ScopeNotFound)
+        val targetId = store.resolveUsernameInTenant(tenantId, username)
+            ?: return AddGate.Refused(AddGroupMemberOutcome.MemberNotFound)
+        if (!store.belongsToTenant(targetId, tenantId)) return AddGate.Refused(AddGroupMemberOutcome.MemberNotFound)
+        if (store.holdsAnyRow(targetId, scopeId)) return AddGate.Refused(AddGroupMemberOutcome.AlreadyMember)
+        return AddGate.Open(tenantId, targetId)
+    }
+
+    private fun addUnderLocks(
+        tenantId: String, targetId: String, scopeId: String, sealedNameKey: String?, callerId: String, admission: Admission,
+    ): AddGroupMemberOutcome {
         // Consent-first (cr-0096, ADR 0027): if the target asked to be consulted, record a soft `pendingConsent`
         // membership grant-delivery skips — so `K_SC` is gated **before** the wrap — carrying the wrapped name-key
         // `K_name`. The owner must have derived + sealed it (learned consent is required from the prior resolve);
@@ -571,8 +614,11 @@ class ScopesHandler(
         if (store.scopeKind(scopeId) != ScopeEntity.GROUP) return RestoreGroupOutcome.NotGroup
         if (!store.isScopeOwner(callerId, scopeId)) return RestoreGroupOutcome.NotOwner
         if (state != Access.Deleting) return RestoreGroupOutcome.NotDeleted
-        store.restore(scopeId)
-        return RestoreGroupOutcome.Ok
+        return when (store.restore(scopeId)) {
+            ScopesStore.Restore.RESTORED -> RestoreGroupOutcome.Ok
+            ScopesStore.Restore.NOT_DELETED -> RestoreGroupOutcome.NotDeleted
+            ScopesStore.Restore.GONE -> RestoreGroupOutcome.ScopeNotFound // erased by the purge since the gate read it
+        }
     }
 
     /**
