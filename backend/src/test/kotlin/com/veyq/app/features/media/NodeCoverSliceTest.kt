@@ -316,6 +316,19 @@ class NodeCoverSliceTest {
     }
 
     @Test
+    fun coverOnAnUnknownKindIsIllegalTarget() {
+        // The allow-list bites on a kind that is none of FOLDER/MEMORY/CHAPTER (a deny-list of FOLDER would let it through).
+        val (userId, scopeId) = seedMemberScope()
+        val alien = seedNode(scopeId, "ALIEN", wrappedContentKey = CONTENT_KEY)
+        val uploadId = startOne(userId, scopeId, TestBlob.SMALL, "Zm9sZA==")
+
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+            .body("""{"uploadId":"$uploadId"}""")
+            .`when`().post("/api/scopes/$scopeId/nodes/$alien/cover-blob")
+            .then().statusCode(422).body("code", equalTo("illegal_target"))
+    }
+
+    @Test
     fun commitUnknownUploadIs404() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
