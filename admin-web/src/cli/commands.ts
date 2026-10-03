@@ -60,7 +60,7 @@ export const COMMANDS: Record<string, Command> = {
   },
   'tenant resend': {
     usage: 'tenant resend --tenant-id <id>',
-    summary: "Re-mint and resend a pending tenant's invite to the same owner email.",
+    summary: "Re-mint a pending tenant's invite for the same owner email (no mail: hand over the copy-link).",
     flags: { 'tenant-id': tenantId },
     run: (f) => resendInvite(f['tenant-id']),
   },

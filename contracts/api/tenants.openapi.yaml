@@ -144,18 +144,20 @@ paths:
       tags: [tenants]
       operationId: resendTenantInvite
       x-veyq-channel: admin
-      summary: Re-mint and resend the invite for a pending tenant.
+      summary: Re-mint the invite for a pending tenant, bound to the same owner email.
       description: >
         Soft-supersedes the current ACTIVE invite (→ SUPERSEDED) and mints a fresh ACTIVE one with a new
-        TTL, then re-sends the invite email to the same owner address. PENDING tenants only. Server-Owner
-        only.
+        TTL, bound to the same owner address, and returns its `bootstrapSecret` for the Server Owner to hand
+        over. No mail goes out: a PENDING tenant has no mail settings by construction
+        ([ADR 0055](../../docs/decisions/0055-mail-is-a-precondition-not-a-capability.md) §3), so `delivery`
+        answers `FALLBACK_COPYLINK` and the copy-link is the channel. PENDING tenants only. Server-Owner only.
       security:
         - bearerAuth: []
       parameters:
         - $ref: "#/components/parameters/TenantId"
       responses:
         "200":
-          description: A fresh invite was minted and re-sent.
+          description: A fresh invite was minted; its copy-link secret is returned.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/TenantInviteState" }
@@ -196,9 +198,10 @@ paths:
       summary: Re-bind a pending tenant's invite to a different owner email.
       description: >
         Changes the intended owner email, soft-supersedes the current ACTIVE invite, mints a fresh ACTIVE
-        one bound to the new email, and sends it there. This is what keeps the strict email-binding painless
-        (an existing user with a different primary email is invited at the right address). PENDING tenants
-        only. Server-Owner only.
+        one bound to the new email, and returns its `bootstrapSecret` for the Server Owner to hand over — as on
+        `resendTenantInvite`, no mail goes out and `delivery` answers `FALLBACK_COPYLINK`. This is what keeps the
+        strict email-binding painless (an existing user with a different primary email is invited at the right
+        address). PENDING tenants only. Server-Owner only.
       security:
         - bearerAuth: []
       parameters:
@@ -211,7 +214,7 @@ paths:
             example: { ownerEmail: partner@example.com }
       responses:
         "200":
-          description: The invite was re-bound to the new email and re-sent.
+          description: The invite was re-bound to the new email and re-minted; its copy-link secret is returned.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/TenantInviteState" }

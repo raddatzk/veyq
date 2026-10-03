@@ -20,7 +20,8 @@ export function listTenants(): Promise<TenantSummary[]> {
   return tenantsApi().listTenants()
 }
 
-/** Re-mint and resend a pending tenant's invite to the same owner email. */
+/** Re-mint a pending tenant's invite for the same owner email. No mail goes out (a PENDING tenant has no mail
+ *  settings, ADR 0055 §3): the returned `bootstrapSecret` is the copy-link the Server Owner hands over. */
 export function resendInvite(tenantId: string): Promise<TenantInviteState> {
   return tenantsApi().resendTenantInvite({ tenantId })
 }

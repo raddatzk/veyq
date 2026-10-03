@@ -21,11 +21,13 @@ naming `glob@10.5.0`.
 **Its limits — what a green run does NOT prove.** Only what the registry marks `deprecated`: a package that is
 archived, abandoned or unmaintained without that mark passes (the root CLAUDE.md rule is wider; `web/CLAUDE.md`
 § jsqr is the standing example — neither archived nor deprecated, and stale). Only the npm tree: Gradle has no
-such mark, and the Dockerfiles' own `npm ci` installs the same lockfile ungated. Only at install time: a package
-deprecated after the last run is caught by the next one, not before. And only where it is called — every
-`npm ci` in `.github/workflows/` goes through it today, but nothing enforces that a new one will. It needs the
-network and a full install, so it is not a buildless `validate_*.py`; it replaces `npm ci` in the CI jobs
-instead. Runnable locally the same way:
+such mark. Not inside the images: the Dockerfiles' own `npm ci` does not call it, and is covered because it
+installs the lockfile this run scanned, in a build job that `needs:` this one — except for the arm64 image's
+platform-only packages, which an x64 run never installs (`validate_npm_installs_gated.py` holds the premises and
+states that gap). Only at install time: a package deprecated after the last run is caught by the next one, not
+before. And only where it is called — every npm install in `.github/workflows/` goes through it, which
+`validate_npm_installs_gated.py` holds. It needs the network and a full install, so it is not a buildless
+`validate_*.py`; it replaces `npm ci` in the CI jobs instead. Runnable locally the same way:
 
     python3 scripts/npm_ci_no_deprecated.py            # a full install, as CI does
     python3 scripts/npm_ci_no_deprecated.py --ignore-scripts

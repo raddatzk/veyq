@@ -32,6 +32,9 @@ COPY admin-web/package.json admin-web/openapitools.json ./
 # "Cannot find native binding" at the first `vite build`. Measured here, on the first build of this file.
 # web/'s manifest is deliberately absent from the context — npm skips the workspace it cannot see, and this
 # image has no business carrying the app's dependencies.
+# Not run through scripts/npm_ci_no_deprecated.py, and covered anyway: this installs the root lockfile that
+# container.yml's `test` job scanned through it on the same commit, and the image `build` job `needs: test`.
+# scripts/validate_npm_installs_gated.py holds both premises — keep `npm ci` (never `npm install`) and the COPY.
 RUN npm ci
 COPY admin-web/ ./
 # Two artifacts out of one install: the static site nginx serves, and the `veyq-admin` CLI bundle — the
