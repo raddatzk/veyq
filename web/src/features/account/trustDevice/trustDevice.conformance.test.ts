@@ -17,7 +17,7 @@ vi.mock('./deviceKey', () => ({
   clearTrust: vi.fn(),
   generateDeviceKey: vi.fn(),
   deviceFactor: vi.fn(),
-  isTrustSupported: () => true,
+  isTrustSupported: vi.fn(),
 }))
 // The real suite, with two seams: the salt draw and the KEK's cost parameters (both set per test below).
 vi.mock('@veyq/crypto/v1', async (importOriginal) => {
@@ -58,6 +58,7 @@ const hex = (u: Uint8Array) => Array.from(u, (b) => b.toString(16).padStart(2, '
 describe('trustThisDevice derives the DEVICE-wrap KEK of the shared crypto vector', () => {
   it('derives kek.device_password_argon2id from the vector inputs and seals the wrap under it', async () => {
     const real = await vi.importActual<typeof import('@veyq/crypto/v1')>('@veyq/crypto/v1')
+    vi.mocked(device.isTrustSupported).mockReturnValue(true)
     vi.mocked(device.loadTrust).mockResolvedValue(null)
     vi.mocked(device.generateDeviceKey).mockResolvedValue({} as CryptoKey)
     vi.mocked(device.deviceFactor).mockResolvedValue(unhex(K.device_factor))

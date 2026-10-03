@@ -36,8 +36,8 @@ vi.mock('../deviceRegister', () => ({
   renameDeviceOfFamily: vi.fn(),
 }))
 vi.mock('../deviceIdentity', () => ({
-  deviceId: () => 'this-device',
-  guessDeviceLabel: () => 'Firefox · macOS',
+  deviceId: vi.fn(),
+  guessDeviceLabel: vi.fn(),
 }))
 vi.mock('../savedKeys', () => ({ listSavedKeyWraps: vi.fn(), removeSavedKey: vi.fn() }))
 vi.mock('../localWrap', () => ({ localWrapId: vi.fn() }))
@@ -62,6 +62,7 @@ import { signOut } from '../login/signOut'
 import { readRegisterView, reconcileWithSessions, renameDeviceOfFamily } from '../deviceRegister'
 import { listSavedKeyWraps, removeSavedKey } from '../savedKeys'
 import { localWrapId } from '../localWrap'
+import { deviceId, guessDeviceLabel } from '../deviceIdentity'
 import { TrustStateRefused } from '../trustMarks'
 import { isTrusted, untrustThisDevice, isTrustSupported } from '../trustDevice/trustDevice'
 import { isRemembered, clearDeviceKey } from '../rememberMe/deviceKeyWrap'
@@ -142,6 +143,8 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     vi.mocked(untrustThisDevice).mockResolvedValue(undefined)
     vi.mocked(clearDeviceKey).mockResolvedValue(undefined)
     confirmAsk.mockResolvedValue(true)
+    vi.mocked(deviceId).mockReturnValue('this-device')
+    vi.mocked(guessDeviceLabel).mockReturnValue('Firefox · macOS')
   })
 
   it('lists every active family with both dates and marks exactly the one the server flagged', async () => {

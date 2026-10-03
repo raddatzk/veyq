@@ -4,8 +4,8 @@ import { httpError } from '../../../test/httpError'
 import { mount } from '@vue/test-utils'
 
 vi.mock('../tree', () => ({
-  listTrash: vi.fn().mockResolvedValue([]),
-  restoreNode: vi.fn().mockResolvedValue(undefined),
+  listTrash: vi.fn(),
+  restoreNode: vi.fn(),
 }))
 
 import SpaceTrashDialog from './SpaceTrashDialog.vue'

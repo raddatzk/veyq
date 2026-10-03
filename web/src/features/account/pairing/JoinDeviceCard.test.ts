@@ -22,8 +22,7 @@ vi.mock('./onboardTail', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./onboardTail')>()),
   runOnboardTail: vi.fn(),
 }))
-const rememberSupported = vi.fn(() => true)
-vi.mock('../rememberMe/deviceKeyWrap', () => ({ isRememberSupported: () => rememberSupported() }))
+vi.mock('../rememberMe/deviceKeyWrap', () => ({ isRememberSupported: vi.fn() }))
 const capable = vi.fn(() => true)
 vi.mock('../../../shared/state/useCapabilities', () => ({
   useCapabilities: () => ({ hasCapability: () => capable() }),
@@ -32,6 +31,7 @@ vi.mock('../../../shared/state/useCapabilities', () => ({
 import JoinDeviceCard from './JoinDeviceCard.vue'
 import { answerPairingChannel, collectPairingChannel } from './pairingChannel'
 import { runOnboardTail, OnboardTailError } from './onboardTail'
+import { isRememberSupported } from '../rememberMe/deviceKeyWrap'
 import { readTransportAnswer, checkNumber, sealGrant, channelKeys, mintPairingSecret, type PairingGrant } from './pairing'
 import { realI18n, t } from '../../../test/i18n'
 import * as v1 from '@veyq/crypto/v1'
@@ -48,6 +48,7 @@ const relayReadsTheKey = (posted: string): v1.Identity['pub'] => {
 const answer = vi.mocked(answerPairingChannel)
 const collect = vi.mocked(collectPairingChannel)
 const tail = vi.mocked(runOnboardTail)
+const rememberSupported = vi.mocked(isRememberSupported)
 
 /** The secret the scanned code carried, and the channel it derives on this card and on the device that showed it. */
 const SECRET = mintPairingSecret()

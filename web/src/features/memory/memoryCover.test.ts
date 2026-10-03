@@ -16,7 +16,7 @@ vi.mock('./media', () => ({
   listMedia: vi.fn(),
   openGrid: vi.fn(),
   openBlob: vi.fn(),
-  hasDerivatives: vi.fn(() => true),
+  hasDerivatives: vi.fn(),
 }))
 
 import {
@@ -32,7 +32,7 @@ import {
 } from './memoryCover'
 import { contentApi } from '../../api/client'
 import { MetaConflictError } from './sealedMetaWrite'
-import { listMedia, openGrid, openBlob } from './media'
+import { listMedia, openGrid, openBlob, hasDerivatives } from './media'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 
@@ -49,7 +49,10 @@ function sealMeta(blob: object, scopeId = SCOPE_ID, nodeId = NODE_ID): string {
   return b64std(v1.seal(metaCtx(scopeId, nodeId), nodeKey, new TextEncoder().encode(JSON.stringify(blob))))
 }
 
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => {
+  vi.clearAllMocks()
+  vi.mocked(hasDerivatives).mockReturnValue(true)
+})
 
 describe('normalizeCoverCrop', () => {
   it('passes a valid on-image crop through unchanged', () => {
@@ -239,6 +242,26 @@ describe('setMemoryCover', () => {
     const state = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, mine, { wrappedMeta: null, metaVersion: 1 }, false)
     expect(reapplied).toHaveBeenCalledTimes(2)
     expect(unsealMemoryCover(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: state.wrappedMeta })).toEqual(mine)
+  })
+
+  /** inbox #284: `replaced` is the cover the LANDED write replaced — the 409's current blob, not the caller's copy. */
+  it('reports the cover it replaced from the blob the write landed on, not from the copy it was handed', async () => {
+    const peersUpload = { source: { kind: 'upload', ref: { blobId: 'peer-blob', chunkCount: 1, byteSize: 9, wrappedBlobKey: 'a2V5' } }, crop: FULL_FRAME }
+    const mineOld = sealMeta({ v: 1, cover: { source: { kind: 'media', mediaId: 'mine-old' }, crop: FULL_FRAME } })
+    const updateNode = vi.fn<ContentApi['updateNode']>()
+      .mockRejectedValueOnce(staleWith(sealMeta({ v: 1, cover: peersUpload }), 2))
+      .mockResolvedValue(undefined)
+    fakeApi(contentApi, { updateNode })
+    const mine: MemoryCover = { source: { kind: 'media', mediaId: 'mine' }, crop: FULL_FRAME }
+
+    const state = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, mine, { wrappedMeta: mineOld, metaVersion: 1 }, false)
+
+    expect(state.replaced).toEqual(normalizeMemoryCover(peersUpload, NODE_ID))
+    expect(state.replaced?.source.kind).toBe('upload')
+
+    stubApi(contentApi, { updateNode: undefined })
+    const plain = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, null, { wrappedMeta: mineOld, metaVersion: 1 })
+    expect(plain.replaced).toEqual({ source: { kind: 'media', mediaId: 'mine-old' }, crop: FULL_FRAME })
   })
 })
 

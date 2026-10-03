@@ -20,15 +20,13 @@ vi.mock('../../app/vault', () => ({ masterKey: () => (vault.mk ? vault.mk.slice(
 // The rider opens each scope's E_0 through the caller's own grant; here every scope opens to a COPY of K_SC (the
 // rider zeroes what it opened), and a scope listed in `unopenable` does not open at all.
 const scopes = vi.hoisted(() => ({ unopenable: new Set<string>(), key: null as Uint8Array | null }))
-vi.mock('../spaces/scopes', () => ({
-  openScopeById: vi.fn(async (scopeId: string) =>
-    scopes.unopenable.has(scopeId) ? null : { epochs: { current: 0, keys: new Map([[0, scopes.key!.slice()]]) } },
-  ),
-}))
+vi.mock('../spaces/scopes', () => ({ openScopeById: vi.fn() }))
 
 import { loadItemFavorites, saveItemFavorites, retagItemMarksUnderNewMasterKey } from './itemFavorites'
 import { itemFavoritesStore, loadItemFavoritesFor, toggleItemFavorite, clearItemFavorites, markCount } from '../../app/itemFavoritesStore'
 import { itemFavoritesApi, ownItemFavoritesApi } from '../../api/client'
+import { openScopeById } from '../spaces/scopes'
+import { ScopeKind } from '../../api/generated/scopes'
 
 const SCOPE = 'c0ffee00-0000-4000-8000-0000000000a1'
 const NODE = 'c0ffee00-0000-4000-8000-0000000000b1'
@@ -70,6 +68,14 @@ beforeEach(() => {
   vault.mk = null
   scopes.unopenable.clear()
   scopes.key = K_SC
+  vi.mocked(openScopeById).mockImplementation(async (scopeId) => {
+    if (scopes.unopenable.has(scopeId)) return null
+    const key = scopes.key!.slice()
+    return {
+      scopeId, tenantId: 'tenant-1', kind: ScopeKind.Group, key, epochs: { current: 0, keys: new Map([[0, key]]) },
+      nameEpoch: 0, deletedAt: null, purgeAfter: null,
+    }
+  })
 })
 
 describe('which item-mark entry is mine (ADR 0068 §9)', () => {

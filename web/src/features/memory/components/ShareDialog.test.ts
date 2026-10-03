@@ -5,26 +5,31 @@
 import { describe, it, expect, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
-const listSharesFor = vi.fn()
-const deleteShare = vi.fn()
-vi.mock('../shareLink', () => ({
-  recoverShareLink: vi.fn(() => 'https://x/s/1#k=abc'),
-}))
+vi.mock('../shareLink', () => ({ recoverShareLink: vi.fn() }))
 vi.mock('../share', () => ({
   isReissueRequired: vi.fn(),
-  listSharesFor: (...a: unknown[]) => listSharesFor(...a),
+  listSharesFor: vi.fn(),
   revokeShare: vi.fn(),
   reactivateShare: vi.fn(),
-  deleteShare: (...a: unknown[]) => deleteShare(...a),
-  readShareName: vi.fn(() => 'A share'),
-  readShareNoteMap: vi.fn(() => ({})),
-  hasLocaleText: vi.fn(() => false),
+  deleteShare: vi.fn(),
+  readShareName: vi.fn(),
+  readShareNoteMap: vi.fn(),
+  hasLocaleText: vi.fn(),
 }))
 
 import ShareDialog from './ShareDialog.vue'
 import { confirmRequest, settleConfirm } from '../../../shared/state/useConfirm'
 import { ShareRole } from '../../../api/generated/sharing'
 import { realI18n, t } from '../../../test/i18n'
+import { recoverShareLink } from '../shareLink'
+import * as shareModule from '../share'
+
+const listSharesFor = vi.mocked(shareModule.listSharesFor)
+const deleteShare = vi.mocked(shareModule.deleteShare)
+vi.mocked(recoverShareLink).mockReturnValue('https://x/s/1#k=abc')
+vi.mocked(shareModule.readShareName).mockReturnValue('A share')
+vi.mocked(shareModule.readShareNoteMap).mockReturnValue({})
+vi.mocked(shareModule.hasLocaleText).mockReturnValue(false)
 
 const SCOPE_ID = '5c09e000-0000-4000-8000-0000000000cd'
 const EPOCHS = { current: 1, keys: new Map([[0, new Uint8Array(32)], [1, new Uint8Array(32)]]) }

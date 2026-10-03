@@ -55,3 +55,35 @@ describe('web message catalog', () => {
     expect(unused, 'catalog keys no source uses').toEqual([])
   })
 })
+
+// inbox #248: four sentences that said what the code does not do, each pinned to the code fact that decides it, in
+// both languages. A credential change (rotation, password change) deletes every master-key wrap but the password
+// and recovery ones (`WrapMethod.SURVIVORS`), so another device needs the password AND the Secret Key — or a link
+// from a signed-in device (uc.account.onboard-device). The recovery mail goes through the TENANT's relay
+// (`RecoveryMailer` → `TenantMailSender`), which an owner of the space sets up. And the sessions panel is never
+// shown locked: every shell route requires an unlocked vault (`LockedSignOut` is the locked device's one action).
+describe('web message catalog — copy says what the code does (#248)', () => {
+  const messages = (locale: string) =>
+    (i18n.global as unknown as { getLocaleMessage(l: string): Record<string, Record<string, unknown>> }).getLocaleMessage(locale)
+  const copy = (locale: string, group: string, key: string) => messages(locale)[group][key] as string
+
+  for (const locale of SUPPORTED_LOCALES) {
+    it(`${locale}: a credential change asks other devices for the password and the Secret Key, or to be added again`, () => {
+      for (const [group, key] of [['rotation', 'factSignsOut'], ['changePassword', 'doneNote']]) {
+        const text = copy(locale, group, key)
+        expect(text, `${group}.${key}`).toContain('Secret Key')
+        expect(text, `${group}.${key}`).toContain(copy(locale, 'pairing', 'navTitle')) // the other way back in
+      }
+    })
+
+    it(`${locale}: the recovery's missing mail is the space owner's to set up, not the server's`, () => {
+      const text = copy(locale, 'recovery', 'mailUnavailable')
+      expect(text).toMatch(/owner|gehört/)
+      expect(text).not.toMatch(/whoever runs|betreibt/)
+    })
+
+    it(`${locale}: the sessions hint promises nothing about a locked screen`, () => {
+      expect(copy(locale, 'sessions', 'hint')).not.toMatch(/\blocked\b|gesperrt/i)
+    })
+  }
+})

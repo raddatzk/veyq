@@ -31,7 +31,7 @@ vi.mock('../../../api/client', () => ({
 vi.mock('../rememberMe/deviceKeyWrap', () => ({
   enrolDeviceKey: vi.fn(),
   restoreDeviceKey: vi.fn(),
-  isRememberSupported: () => true,
+  isRememberSupported: vi.fn(),
 }))
 vi.mock('../rememberMe/sessionVault', () => ({
   cacheSessionVault: vi.fn(),
@@ -41,8 +41,8 @@ vi.mock('../rememberMe/sessionVault', () => ({
 vi.mock('../deviceRegister', () => ({ rememberThisDevice: vi.fn(), rememberThisDeviceWrap: vi.fn() }))
 vi.mock('../localWrap', () => ({ localWrapId: vi.fn() }))
 vi.mock('../deviceIdentity', () => ({
-  deviceId: () => 'this-device',
-  guessDeviceLabel: () => 'THE-UA-GUESS',
+  deviceId: vi.fn(),
+  guessDeviceLabel: vi.fn(),
 }))
 vi.mock('../trustDevice/trustDevice', () => ({
   trustThisDevice: vi.fn(),
@@ -55,7 +55,8 @@ import { unlockWithGrantedMasterKey } from '../unlock/unlock'
 import { accountApi, tokenApi, accountIdentityPinsApi } from '../../../api/client'
 import { checkAndPin } from '../identityPins'
 import { channelKeys, mintPairingSecret, openGrant, sealGrant } from './pairing'
-import { enrolDeviceKey } from '../rememberMe/deviceKeyWrap'
+import { enrolDeviceKey, isRememberSupported } from '../rememberMe/deviceKeyWrap'
+import { deviceId, guessDeviceLabel } from '../deviceIdentity'
 import { cacheSessionVault } from '../rememberMe/sessionVault'
 import { rememberThisDevice, rememberThisDeviceWrap } from '../deviceRegister'
 import { localWrapId } from '../localWrap'
@@ -127,6 +128,9 @@ beforeEach(() => {
   vi.mocked(rememberThisDeviceWrap).mockResolvedValue(undefined)
   vi.mocked(enrolDeviceKey).mockResolvedValue('wrap-new')
   vi.mocked(cacheSessionVault).mockResolvedValue(undefined)
+  vi.mocked(isRememberSupported).mockReturnValue(true)
+  vi.mocked(deviceId).mockReturnValue('this-device')
+  vi.mocked(guessDeviceLabel).mockReturnValue('THE-UA-GUESS')
 })
 
 /** Write moment 1 is fire-and-forget (`void … .then(…)`), so it lands a few microtasks after the unlock. */

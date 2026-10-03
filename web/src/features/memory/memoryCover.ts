@@ -141,7 +141,9 @@ export function unsealMemoryCover(
  * `date`/`location`** in every case, including ones a peer wrote meanwhile. A peer's change to the COVER itself
  * throws `MetaConflictError` — unless `surfaceConflict` is false: once the save has moved the node's one cover
  * blob (an upload, or a switch away from an uploaded cover), its own cover is re-applied instead, because the
- * peer's cover may point at the blob it just replaced. Returns the state the server confirmed.
+ * peer's cover may point at the blob it just replaced. Returns the state the server confirmed, and the cover the
+ * landed write `replaced` — read from the blob the server accepted the write over (`current`, or the 409's current
+ * blob on a re-run), so the caller decides what to reclaim from the server's state, not from its own copy (#284).
  */
 export async function setMemoryCover(
   scopeId: string,
@@ -150,12 +152,15 @@ export async function setMemoryCover(
   cover: MemoryCover | null,
   current: SealedMetaState,
   surfaceConflict = true,
-): Promise<SealedMetaState> {
+): Promise<SealedMetaState & { replaced: MemoryCover | null }> {
   const openedWith = unsealNodeMeta(nodeKey, { scopeId, nodeId }, current.wrappedMeta).cover
-  const { state } = await writeNodeMeta(
-    scopeId, nodeId, nodeKey, current, editField('cover', cover, openedWith, surfaceConflict),
-  )
-  return state
+  const edit = editField('cover', cover, openedWith, surfaceConflict)
+  let replaced: MemoryCover | null = null
+  const { state } = await writeNodeMeta(scopeId, nodeId, nodeKey, current, (meta, ctx) => {
+    replaced = normalizeMemoryCover(meta.cover, nodeId) // before the edit drops or swaps it in place
+    return edit(meta, ctx)
+  })
+  return { ...state, replaced }
 }
 
 /** Whether two covers are equal (same source + all four crop fields) — the editor re-seals only when this is false. */

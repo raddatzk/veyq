@@ -67,7 +67,7 @@ const en = {
     remove: 'Remove member',
     removeConfirmTitle: 'Remove member',
     removeConfirm:
-      'Remove this member? They lose access to everything shared right away. Their own memories stay readable to them for 30 days, then are erased. This can’t be undone.',
+      'Remove this member? They lose access to this space and its shared groups in the app right away. A link to a Memory they may have copied keeps working until it is renewed or turned off. Their own memories stay readable to them for 30 days, then are erased. This can’t be undone.',
     removed: 'Member removed.',
     actionFailed: 'That action failed. Please try again.',
     // ADR 0075: the removal confirmation's opt-in — also turn off every link of the tenant space
@@ -112,6 +112,10 @@ const en = {
     reviewPendingRekey:
       'If this member changed their keys while a shared space is still waiting for its new key, accepting first gives it that key wherever you can. Where you can’t, the space stays closed to you until another member does it.',
     acceptFailed: 'Could not accept the key. Please try again.',
+    currentUnreadable:
+      'The key the server sent for this member cannot be read on this device, so there is no safety number to compare. Refuse for now: nothing is shared with a key that cannot be checked.',
+    expectedUnreadable:
+      'The key you trusted before cannot be read on this device, so its number is missing. Compare the current number with the one this member sees in their own app.',
     trustRolledBack:
       'The server returned an older list of the keys you trust than this device has already seen. Nothing is shared with a key it cannot check until the current list is back.',
     trustUnreadable:
@@ -147,7 +151,8 @@ const en = {
     errorNoFloor: 'This account has no password sign-in to check against, so it can’t be changed here.',
     errorFailed: 'Your password could not be changed. Nothing was changed — please try again.',
     done: 'Your password is changed.',
-    doneNote: 'Every other device is signed out and needs the new password to sign in again.',
+    doneNote:
+      'Every other device is signed out and loses its saved key. To get back in, each one needs the new password and your Secret Key — or to be added again from this device with “Add a device”.',
     rememberDevice: 'Remember this device',
     changeAgain: 'Change it again',
   },
@@ -157,7 +162,7 @@ const en = {
     factNotRepair:
       'It stops what comes next — it can’t take back what’s gone. Anything that person already saw, they still have.',
     factSignsOut:
-      'Every other device is signed out and loses its saved key. Each one needs your password again to get back in.',
+      'Every other device is signed out and loses its saved key. To get back in, each one needs your password and your Secret Key — or to be added again from this device with “Add a device”.',
     factNeedsKit:
       'You need your Emergency Kit. That’s on purpose: it’s the one thing they don’t have, and it’s what stops them doing this to you.',
     factSharedSpaces:
@@ -200,6 +205,8 @@ const en = {
     },
     groupNameUnavailable: 'Group (name unavailable until you’re re-admitted)',
     groupNameLastSeen: 'Name as this device last saw it — it may have changed.',
+    personalSpace: 'Your personal space',
+    scopeNameUnavailable: 'A space this device hasn’t opened (its name isn’t available here)',
     requeue: 'Start again',
     requeueFailed: 'That didn’t work. Please try again.',
     errorTrustState:
@@ -320,7 +327,7 @@ const en = {
     lockedDoneStillHere: 'Every other device was signed out. This device could not be signed out — use “Sign out” below.',
     lockedBack: 'I have my Secret Key after all',
     lockedBackHint: 'Unlock here without saving anything on this device.',
-    hint: 'Device names are stored scrambled and never reach the server, so they appear only once you unlock — on a locked screen you see dates instead. A device you have not signed in on since naming arrived shows no name yet, and stays fully signable-out either way. Signing a device out cuts it off from the server; if a device is really gone, its row also offers “Sign out + remove key”, so your password alone no longer opens it there. That button sits on another device’s row — never on the one you are using — and only where this app knows that device kept a saved key.',
+    hint: 'Device names are stored scrambled and never reach the server; this app unscrambles them here, on your unlocked device. A device you have not signed in on since naming arrived shows no name yet, and stays fully signable-out either way. Signing a device out cuts it off from the server; if a device is really gone, its row also offers “Sign out + remove key”, so your password alone no longer opens it there. That button sits on another device’s row — never on the one you are using — and only where this app knows that device kept a saved key.',
   },
   // uc.account.onboard-device (ADR 0059) — adding a device from one that is already signed in and unlocked.
   pairing: {
@@ -481,7 +488,7 @@ const en = {
     requestSent:
       'If an account exists for that address, a link is on its way. It stops working after an hour. Check spam if it does not arrive.',
     mailUnavailable:
-      'This server cannot send email yet, so no link can go out. Ask whoever runs it to set up email — your account is fine, and the reset works as soon as they have.',
+      'This space cannot send email yet, so no link can go out. Ask an owner of this space to set up email in its settings — your account is fine, and the reset works as soon as they have.',
     requestFailed: 'The request did not go through. Check your connection and try again.',
     stepKey: 'Enter your Secret Key',
     stepKeyIntro:
@@ -772,7 +779,8 @@ const en = {
     deleteFailed: 'Could not delete it. Please try again.',
     meta: {
       conflict: 'Someone else changed this meanwhile. It now shows their version — save again to replace it.',
-      unreadable: 'This Memory’s details could not be read, so nothing was saved.',
+      unreadable:
+        'This Memory’s details (date, place, cover) can’t be opened: they are damaged, or were replaced by something this app didn’t write. They can’t be changed, so nothing was saved, and trying again won’t help. Its photos are not affected.',
     },
     date: {
       title: 'Date',
@@ -950,7 +958,8 @@ const en = {
     capturedAtCorrected: 'Corrected',
     capturedAtSaveFailed: 'Could not save the capture time.',
     capturedAtConflict: 'Someone else changed the capture time meanwhile. It now shows theirs — save again to replace it.',
-    metaUnreadable: 'This photo’s details could not be read, so nothing was saved.',
+    metaUnreadable:
+      'This photo’s details (its time and place) can’t be opened: they are damaged, or were replaced by something this app didn’t write. They can’t be changed, so nothing was saved, and trying again won’t help. The photo itself is not affected.',
     sortNewest: 'Newest first',
     sortOldest: 'Oldest first',
     // Item marks (ADR 0068). Every string here is written against one rule: a mark is SHARED with the space,
@@ -1145,7 +1154,7 @@ const de: typeof en = {
     remove: 'Mitglied entfernen',
     removeConfirmTitle: 'Mitglied entfernen',
     removeConfirm:
-      'Dieses Mitglied entfernen? Es verliert sofort den Zugriff auf alles Geteilte. Die eigenen Erinnerungen dieser Person bleiben 30 Tage lang lesbar und werden dann gelöscht. Das lässt sich nicht rückgängig machen.',
+      'Dieses Mitglied entfernen? Es verliert in der App sofort den Zugriff auf diesen Bereich und seine geteilten Gruppen. Ein Link zu einer Erinnerung, den es kopiert haben kann, funktioniert weiter, bis er erneuert oder abgeschaltet wird. Die eigenen Erinnerungen dieser Person bleiben 30 Tage lang lesbar und werden dann gelöscht. Das lässt sich nicht rückgängig machen.',
     removed: 'Mitglied entfernt.',
     actionFailed: 'Die Aktion ist fehlgeschlagen. Bitte erneut versuchen.',
     removeRevokeLinks: 'Auch alle Links dieses Bereichs abschalten',
@@ -1188,6 +1197,10 @@ const de: typeof en = {
     reviewPendingRekey:
       'Wenn dieses Mitglied seine Schlüssel getauscht hat, während ein geteilter Bereich noch auf seinen neuen Schlüssel wartet, gibt das Akzeptieren ihm diesen Schlüssel zuerst, wo du das kannst. Wo nicht, bleibt der Bereich für dich zu, bis ein anderes Mitglied das erledigt.',
     acceptFailed: 'Der Schlüssel konnte nicht akzeptiert werden. Bitte erneut versuchen.',
+    currentUnreadable:
+      'Der Schlüssel, den der Server für dieses Mitglied geschickt hat, lässt sich auf diesem Gerät nicht lesen, daher gibt es keine Sicherheitsnummer zum Vergleichen. Lehne vorerst ab: Mit einem Schlüssel, der sich nicht prüfen lässt, wird nichts geteilt.',
+    expectedUnreadable:
+      'Der Schlüssel, dem du zuvor vertraut hast, lässt sich auf diesem Gerät nicht lesen, daher fehlt seine Nummer. Vergleiche die aktuelle Nummer mit der, die dieses Mitglied in der eigenen App sieht.',
     trustRolledBack:
       'Der Server hat eine ältere Liste deiner vertrauten Schlüssel geliefert, als dieses Gerät schon gesehen hat. Mit Schlüsseln, die sich nicht prüfen lassen, wird nichts geteilt, bis die aktuelle Liste wieder da ist.',
     trustUnreadable:
@@ -1223,7 +1236,8 @@ const de: typeof en = {
     errorNoFloor: 'Dieses Konto hat keine Passwort-Anmeldung, gegen die geprüft werden könnte — hier also nicht änderbar.',
     errorFailed: 'Dein Passwort konnte nicht geändert werden. Es wurde nichts geändert — bitte versuche es erneut.',
     done: 'Dein Passwort ist geändert.',
-    doneNote: 'Alle anderen Geräte werden abgemeldet und brauchen das neue Passwort, um sich wieder anzumelden.',
+    doneNote:
+      'Alle anderen Geräte werden abgemeldet und verlieren ihren gespeicherten Schlüssel. Um wieder hineinzukommen, braucht jedes das neue Passwort und deinen Secret Key — oder es wird von diesem Gerät aus über „Gerät hinzufügen“ neu hinzugefügt.',
     rememberDevice: 'Dieses Gerät merken',
     changeAgain: 'Noch einmal ändern',
   },
@@ -1233,7 +1247,7 @@ const de: typeof en = {
     factNotRepair:
       'Es stoppt, was danach kommt — es holt nichts zurück. Was diese Person schon gesehen hat, hat sie weiterhin.',
     factSignsOut:
-      'Alle anderen Geräte werden abgemeldet und verlieren ihren gespeicherten Schlüssel. Jedes braucht danach wieder dein Passwort.',
+      'Alle anderen Geräte werden abgemeldet und verlieren ihren gespeicherten Schlüssel. Um wieder hineinzukommen, braucht jedes dein Passwort und deinen Secret Key — oder es wird von diesem Gerät aus über „Gerät hinzufügen“ neu hinzugefügt.',
     factNeedsKit:
       'Du brauchst dein Notfall-Kit. Das ist Absicht: es ist das Einzige, was die Person nicht hat, und genau das hindert sie daran, das mit dir zu machen.',
     factSharedSpaces:
@@ -1277,6 +1291,8 @@ const de: typeof en = {
     },
     groupNameUnavailable: 'Gruppe (Name nicht verfügbar, bis du wieder aufgenommen bist)',
     groupNameLastSeen: 'Name, wie ihn dieses Gerät zuletzt gesehen hat — er kann sich geändert haben.',
+    personalSpace: 'Dein persönlicher Bereich',
+    scopeNameUnavailable: 'Ein Bereich, den dieses Gerät nicht geöffnet hat (sein Name ist hier nicht verfügbar)',
     requeue: 'Neu anstoßen',
     requeueFailed: 'Das hat nicht geklappt. Bitte versuche es erneut.',
     errorTrustState:
@@ -1388,7 +1404,7 @@ const de: typeof en = {
     lockedDoneStillHere: 'Alle anderen Geräte wurden abgemeldet. Dieses Gerät konnte nicht abgemeldet werden — nutze unten „Abmelden“.',
     lockedBack: 'Ich habe meinen Secret Key doch dabei',
     lockedBackHint: 'Hier entsperren, ohne dass etwas auf diesem Gerät gespeichert wird.',
-    hint: 'Gerätenamen liegen verschlüsselt und erreichen den Server nie — sie erscheinen deshalb erst nach dem Entsperren, auf einem gesperrten Bildschirm siehst du stattdessen Daten. Ein Gerät, auf dem du dich seit Einführung der Namen nicht angemeldet hast, zeigt noch keinen Namen und lässt sich trotzdem vollständig abmelden. Ein abgemeldetes Gerät kommt nicht mehr an den Server; ist ein Gerät wirklich weg, bietet seine Zeile zusätzlich „Abmelden + Schlüssel entfernen“, damit dein Passwort es dort nicht mehr allein öffnet. Diese Schaltfläche steht in der Zeile eines anderen Geräts — nie bei dem, das du gerade benutzt — und nur dort, wo diese App weiß, dass das Gerät einen gespeicherten Schlüssel behalten hat.',
+    hint: 'Gerätenamen liegen verschlüsselt und erreichen den Server nie; diese App entschlüsselt sie hier, auf deinem entsperrten Gerät. Ein Gerät, auf dem du dich seit Einführung der Namen nicht angemeldet hast, zeigt noch keinen Namen und lässt sich trotzdem vollständig abmelden. Ein abgemeldetes Gerät kommt nicht mehr an den Server; ist ein Gerät wirklich weg, bietet seine Zeile zusätzlich „Abmelden + Schlüssel entfernen“, damit dein Passwort es dort nicht mehr allein öffnet. Diese Schaltfläche steht in der Zeile eines anderen Geräts — nie bei dem, das du gerade benutzt — und nur dort, wo diese App weiß, dass das Gerät einen gespeicherten Schlüssel behalten hat.',
   },
   pairing: {
     navTitle: 'Gerät hinzufügen',
@@ -1535,7 +1551,7 @@ const de: typeof en = {
     requestSent:
       'Falls es ein Konto zu dieser Adresse gibt, ist ein Link unterwegs. Er wird nach einer Stunde ungültig. Schau auch im Spam nach.',
     mailUnavailable:
-      'Dieser Server kann noch keine E-Mails verschicken, deshalb geht kein Link raus. Bitte wende dich an die Person, die ihn betreibt — mit deinem Konto ist alles in Ordnung, und sobald E-Mail eingerichtet ist, funktioniert das Zurücksetzen.',
+      'Dieser Bereich kann noch keine E-Mails verschicken, deshalb geht kein Link raus. Bitte eine Person, der dieser Bereich gehört, E-Mail in seinen Einstellungen einzurichten — mit deinem Konto ist alles in Ordnung, und sobald E-Mail eingerichtet ist, funktioniert das Zurücksetzen.',
     requestFailed: 'Die Anfrage ist nicht durchgekommen. Prüfe deine Verbindung und versuch es nochmal.',
     stepKey: 'Secret Key eingeben',
     stepKeyIntro:
@@ -1824,7 +1840,8 @@ const de: typeof en = {
     deleteFailed: 'Konnte nicht gelöscht werden. Bitte versuche es erneut.',
     meta: {
       conflict: 'Jemand anderes hat das inzwischen geändert. Jetzt steht dort diese Version — speichere erneut, um sie zu ersetzen.',
-      unreadable: 'Die Angaben dieser Erinnerung ließen sich nicht lesen, deshalb wurde nichts gespeichert.',
+      unreadable:
+        'Die Angaben dieser Erinnerung (Datum, Ort, Titelbild) lassen sich nicht öffnen: Sie sind beschädigt oder wurden durch etwas ersetzt, das diese App nicht geschrieben hat. Sie lassen sich nicht ändern, deshalb wurde nichts gespeichert, und ein erneuter Versuch hilft nicht. Ihre Fotos sind davon nicht betroffen.',
     },
     date: {
       title: 'Datum',
@@ -2002,7 +2019,8 @@ const de: typeof en = {
     capturedAtCorrected: 'Korrigiert',
     capturedAtSaveFailed: 'Aufnahmezeit konnte nicht gespeichert werden.',
     capturedAtConflict: 'Jemand anderes hat die Aufnahmezeit inzwischen geändert. Jetzt steht dort diese Änderung — speichere erneut, um sie zu ersetzen.',
-    metaUnreadable: 'Die Angaben zu diesem Foto ließen sich nicht lesen, deshalb wurde nichts gespeichert.',
+    metaUnreadable:
+      'Die Angaben zu diesem Foto (Zeit und Ort) lassen sich nicht öffnen: Sie sind beschädigt oder wurden durch etwas ersetzt, das diese App nicht geschrieben hat. Sie lassen sich nicht ändern, deshalb wurde nichts gespeichert, und ein erneuter Versuch hilft nicht. Das Foto selbst ist davon nicht betroffen.',
     sortNewest: 'Neueste zuerst',
     sortOldest: 'Älteste zuerst',
     marks: {

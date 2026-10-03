@@ -9,15 +9,15 @@ vi.mock('../media', () => ({
   createBucket: vi.fn(),
   renameBucket: vi.fn(),
   deleteBucket: vi.fn(),
-  moveBucketMedia: vi.fn(async () => {}),
-  deleteMedia: vi.fn(async () => {}),
-  restoreMedia: vi.fn(async () => {}),
-  openBucketName: vi.fn(() => 'Aaa Contributor'),
-  unsealMeta: vi.fn(() => ({ w: 100, h: 100 })),
-  isVideoMediaType: vi.fn(() => false),
-  hasDerivatives: vi.fn(() => true),
+  moveBucketMedia: vi.fn(),
+  deleteMedia: vi.fn(),
+  restoreMedia: vi.fn(),
+  openBucketName: vi.fn(),
+  unsealMeta: vi.fn(),
+  isVideoMediaType: vi.fn(),
+  hasDerivatives: vi.fn(),
 }))
-vi.mock('../../spaces/members', () => ({ listScopeMembers: vi.fn(async () => []) }))
+vi.mock('../../spaces/members', () => ({ listScopeMembers: vi.fn() }))
 
 // The undo affordance is now a global toast (cr-0157): stub the shared composable so the test can capture the
 // `showUndo({ onUndo })` call and invoke the restore action (the toast surface itself lives in App.vue).
@@ -28,7 +28,19 @@ vi.mock('../../../shared/state/useToast', () => ({
 }))
 
 import MemoryBuckets from './MemoryBuckets.vue'
-import { listBuckets, deleteMedia, restoreMedia, type MediaItem, type BucketItem } from '../media'
+import {
+  listBuckets,
+  deleteMedia,
+  restoreMedia,
+  moveBucketMedia,
+  openBucketName,
+  unsealMeta,
+  isVideoMediaType,
+  hasDerivatives,
+  type MediaItem,
+  type BucketItem,
+} from '../media'
+import { listScopeMembers } from '../../spaces/members'
 import { realI18n } from '../../../test/i18n'
 import { mediaItem } from '../../../test/models'
 
@@ -61,6 +73,14 @@ function mountBuckets(mediaItems: MediaItem[]) {
 beforeEach(() => {
   vi.clearAllMocks()
   localStorage.clear() // the picker remembers the last bucket per node — reset between tests
+  vi.mocked(moveBucketMedia).mockResolvedValue(undefined)
+  vi.mocked(deleteMedia).mockResolvedValue(undefined)
+  vi.mocked(restoreMedia).mockResolvedValue(undefined)
+  vi.mocked(openBucketName).mockReturnValue('Aaa Contributor')
+  vi.mocked(unsealMeta).mockReturnValue({ v: 1, w: 100, h: 100 })
+  vi.mocked(isVideoMediaType).mockReturnValue(false)
+  vi.mocked(hasDerivatives).mockReturnValue(true)
+  vi.mocked(listScopeMembers).mockResolvedValue([])
 })
 
 const selectBucket = (w: Awaited<ReturnType<typeof mountBuckets>>, id: string) =>

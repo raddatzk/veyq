@@ -13,7 +13,7 @@ vi.mock('../trustDevice/deviceKey', () => ({
   clearTrust: vi.fn(),
   generateDeviceKey: vi.fn(),
   saveTrust: vi.fn(),
-  isTrustSupported: () => true,
+  isTrustSupported: vi.fn(),
 }))
 
 import { unlockWithDevice } from './unlock'
@@ -64,6 +64,7 @@ beforeAll(() => {
 beforeEach(() => {
   clearVault()
   vi.clearAllMocks()
+  vi.mocked(device.isTrustSupported).mockReturnValue(true)
 })
 
 describe('unlockWithDevice (uc.account.trust-device)', () => {

@@ -3,22 +3,7 @@
 // file, status and badge, and the cancel control aborts it.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// addMedia emits one progress tick (→ the file flips preparing → uploading, cr-0105 follow-up) then stays pending
-// until aborted, so it sits in 'uploading' for the assertions.
-vi.mock('../media', () => ({
-  addMedia: vi.fn(
-    (
-      _s: unknown, _n: unknown, _k: unknown, _src: unknown, _d: unknown,
-      opts?: { signal?: AbortSignal; onProgress?: (p: number) => void },
-    ) =>
-      new Promise((_resolve, reject) => {
-        opts?.onProgress?.(0) // first PUT progress → 'uploading' (past the pre-network 'preparing' phase)
-        const abort = () => reject(new DOMException('cancelled', 'AbortError'))
-        if (opts?.signal?.aborted) return abort()
-        opts?.signal?.addEventListener('abort', abort)
-      }),
-  ),
-}))
+vi.mock('../media', () => ({ addMedia: vi.fn() }))
 
 import { mount, flushPromises } from '@vue/test-utils'
 import UploadStatusMenu from './UploadStatusMenu.vue'
@@ -32,6 +17,17 @@ const mountTray = () => mount(UploadStatusMenu, { global: { plugins: [realI18n()
 beforeEach(() => {
   clearUploads()
   vi.clearAllMocks()
+  // addMedia emits one progress tick (→ the file flips preparing → uploading, cr-0105 follow-up) then stays pending
+  // until aborted, so it sits in 'uploading' for the assertions.
+  vi.mocked(addMedia).mockImplementation(
+    (_s, _n, _k, _src, _d, opts) =>
+      new Promise<{ blobId: string; mediaId: string }>((_resolve, reject) => {
+        opts?.onProgress?.(0) // first PUT progress → 'uploading' (past the pre-network 'preparing' phase)
+        const abort = () => reject(new DOMException('cancelled', 'AbortError'))
+        if (opts?.signal?.aborted) return abort()
+        opts?.signal?.addEventListener('abort', abort)
+      }),
+  )
 })
 
 describe('UploadStatusMenu', () => {

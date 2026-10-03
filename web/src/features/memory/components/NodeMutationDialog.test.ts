@@ -4,15 +4,15 @@ import { httpError } from '../../../test/httpError'
 import { mount } from '@vue/test-utils'
 
 vi.mock('../tree', () => ({
-  createFolder: vi.fn().mockResolvedValue('node-1'),
-  createMemory: vi.fn().mockResolvedValue({ nodeId: 'node-1', memoryKey: new Uint8Array(32) }),
-  createChapter: vi.fn().mockResolvedValue({ nodeId: 'node-1', chapterKey: new Uint8Array(32) }),
-  renameNode: vi.fn().mockResolvedValue(undefined),
+  createFolder: vi.fn(),
+  createMemory: vi.fn(),
+  createChapter: vi.fn(),
+  renameNode: vi.fn(),
 }))
 vi.mock('../geocode', () => ({ reverseGeocode: vi.fn() }))
 
 import NodeMutationDialog from './NodeMutationDialog.vue'
-import { createFolder, createMemory, renameNode } from '../tree'
+import { createFolder, createMemory, createChapter, renameNode } from '../tree'
 import { epochsOf } from '../../spaces/epochsTestUtil'
 import { setMapsConsent, setTileUrl, setGeocoderUrl } from '../../../shared/state/useMapConfig'
 import { realI18n, t } from '../../../test/i18n'
@@ -54,6 +54,10 @@ beforeEach(() => {
   setMapsConsent(false) // default: maps opt-in off → no location step (existing create-memory behaviour)
   setTileUrl('https://tiles.example/{z}/{x}/{y}.png')
   setGeocoderUrl('') // geocoding off in these tests → names are typed (no network)
+  vi.mocked(createFolder).mockResolvedValue('node-1')
+  vi.mocked(createMemory).mockResolvedValue({ nodeId: 'node-1', memoryKey: new Uint8Array(32) })
+  vi.mocked(createChapter).mockResolvedValue({ nodeId: 'node-1', chapterKey: new Uint8Array(32) })
+  vi.mocked(renameNode).mockResolvedValue(undefined)
 })
 
 describe('NodeMutationDialog', () => {

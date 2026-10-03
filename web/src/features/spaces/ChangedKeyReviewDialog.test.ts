@@ -8,28 +8,33 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
 vi.mock('../account/identityPins', () => ({
-  safetyNumber: vi.fn((k: string) => `sn-${k}`),
-  getPin: vi.fn().mockResolvedValue({ key: 'old-key', state: 'pinned', firstSeenAt: 0 }),
+  safetyNumber: vi.fn(),
+  getPin: vi.fn(),
   acceptKeyChange: vi.fn(),
 }))
 vi.mock('../tasks/scopeRotationWorker', () => ({ runScopeRotationWorker: vi.fn() }))
 
 import ChangedKeyReviewDialog from './ChangedKeyReviewDialog.vue'
-import { acceptKeyChange } from '../account/identityPins'
+import { acceptKeyChange, getPin, safetyNumber } from '../account/identityPins'
 import { runScopeRotationWorker } from '../tasks/scopeRotationWorker'
 import { realI18n, t } from '../../test/i18n'
 
 const stubs = {
   Dialog: { props: ['visible'], template: '<div v-if="visible"><slot /></div>' },
-  Button: { props: ['label'], emits: ['click'], template: '<button @click="$emit(\'click\')">{{ label }}</button>' },
+  Button: { props: ['label', 'disabled'], emits: ['click'], template: '<button :disabled="disabled" @click="$emit(\'click\')">{{ label }}</button>' },
   Message: { template: '<div class="msg"><slot /></div>' },
   TrustResetLink: true,
 }
 
 const member = { userId: 'u-r', username: 'rotator', identityPublicKey: 'new-key' }
-const mountDialog = () =>
-  mount(ChangedKeyReviewDialog, { props: { member, visible: true }, global: { plugins: [realI18n()], stubs } })
+const mountDialog = (m = member) =>
+  mount(ChangedKeyReviewDialog, { props: { member: m, visible: true }, global: { plugins: [realI18n()], stubs } })
 const accept = (w: ReturnType<typeof mountDialog>) => w.findAll('button').find((b) => b.text() === t('verify.accept'))!
+
+beforeEach(() => {
+  vi.mocked(safetyNumber).mockImplementation((k) => `sn-${k}`)
+  vi.mocked(getPin).mockResolvedValue({ key: 'old-key', state: 'pinned', firstSeenAt: 0 })
+})
 
 describe('ChangedKeyReviewDialog — accept drains the scope-rotation worker before the pin moves (inbox #233)', () => {
   beforeEach(() => vi.clearAllMocks())
@@ -73,5 +78,41 @@ describe('ChangedKeyReviewDialog — accept drains the scope-rotation worker bef
     expect(runScopeRotationWorker).toHaveBeenCalledTimes(1)
     expect(acceptKeyChange).toHaveBeenCalledWith('u-r', 'new-key')
     expect(w.emitted('accepted')).toHaveLength(1)
+  })
+})
+
+// inbox #246: the served key is decoded on this device to draw its safety number. A key the decoder refuses (the
+// identity codec rejects malformed fields) must leave a stated reason and no way to accept it — not an unhandled
+// error under two blank boxes.
+describe('ChangedKeyReviewDialog — a key that cannot be read (inbox #246)', () => {
+  beforeEach(() => vi.clearAllMocks())
+  const refuseBad = (k: string) => {
+    if (k === 'bad-key') throw new Error('malformed identity public key')
+    return `sn-${k}`
+  }
+
+  it('a served key the decoder refuses shows why, and the accept is not offered', async () => {
+    vi.mocked(safetyNumber).mockImplementation(refuseBad)
+    const w = mountDialog({ ...member, identityPublicKey: 'bad-key' })
+    await flushPromises()
+
+    expect(w.text()).toContain(t('verify.currentUnreadable'))
+    expect(w.find('code.expected').text()).toBe('sn-old-key')
+    expect(accept(w).attributes('disabled')).toBeDefined()
+    await accept(w).trigger('click')
+    await flushPromises()
+    expect(acceptKeyChange).not.toHaveBeenCalled()
+  })
+
+  it('a pinned key that cannot be read says so, and the current number still shows', async () => {
+    vi.mocked(safetyNumber).mockImplementation(refuseBad)
+    vi.mocked(getPin).mockResolvedValueOnce({ key: 'bad-key', state: 'pinned', firstSeenAt: 0 })
+    const w = mountDialog()
+    await flushPromises()
+
+    expect(w.text()).toContain(t('verify.expectedUnreadable'))
+    expect(w.text()).not.toContain(t('verify.currentUnreadable'))
+    expect(w.find('code.current').text()).toBe('sn-new-key')
+    expect(accept(w).attributes('disabled')).toBeUndefined()
   })
 })

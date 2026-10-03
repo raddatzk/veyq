@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-vi.mock('./grantDeliveryWorker', () => ({ runGrantDeliveryWorker: vi.fn().mockResolvedValue(0) }))
+vi.mock('./grantDeliveryWorker', () => ({ runGrantDeliveryWorker: vi.fn() }))
 
 import { startGrantDeliveryPolling, stopGrantDeliveryPolling } from './grantDeliveryPolling'
 import { runGrantDeliveryWorker } from './grantDeliveryWorker'
@@ -14,6 +14,7 @@ const setVisibility = (state: 'visible' | 'hidden') =>
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(runGrantDeliveryWorker).mockResolvedValue(0)
   vi.useFakeTimers()
   setVisibility('visible')
 })

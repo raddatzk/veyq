@@ -9,9 +9,9 @@ vi.mock('../../app/sessionRefresh', () => ({ withRefresh: (f: () => unknown) => 
 // `stale_epoch` predicate stays real: which error the worker declines on is the thing under test.
 vi.mock('../spaces/scopes', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../spaces/scopes')>()),
-  commitRotation: vi.fn().mockResolvedValue(2),
+  commitRotation: vi.fn(),
 }))
-vi.mock('../spaces/members', () => ({ listScopeMembers: vi.fn().mockResolvedValue([{ userId: 'u2' }]) }))
+vi.mock('../spaces/members', () => ({ listScopeMembers: vi.fn() }))
 // Hoisted so the (hoisted) vi.mock factory can close over the same mutable object the tests reach into.
 const { activeSpace } = vi.hoisted(() => ({ activeSpace: { scopeId: null as string | null } }))
 vi.mock('../../app/activeSpace', () => ({ activeSpace, refreshActiveScope: vi.fn() }))
@@ -21,6 +21,7 @@ import { SCOPE_ROTATION, GRANT_DELIVERY } from './capabilityTags'
 import { tasksApi } from '../../api/client'
 import { fakeApi } from '../../test/apiMock'
 import type { TasksApi } from '../../api/generated/tasks'
+import type { ScopeMember } from '../../api/generated/scopes'
 import { commitRotation } from '../spaces/scopes'
 import { listScopeMembers } from '../spaces/members'
 import { refreshActiveScope } from '../../app/activeSpace'
@@ -34,9 +35,14 @@ function mockTasks(
   fakeApi(tasksApi, { claimTask, completeTask, failTask, declineTask })
 }
 
+/** The surviving directory the worker fetches post-cut and rotates forward. */
+const SURVIVORS: ScopeMember[] = [{ userId: 'u2', username: 'u2', role: 'MEMBER', identityPublicKey: 'AA==', hasGrant: true }]
+
 beforeEach(() => {
   vi.clearAllMocks()
   activeSpace.scopeId = null
+  vi.mocked(commitRotation).mockResolvedValue(2)
+  vi.mocked(listScopeMembers).mockResolvedValue(SURVIVORS)
 })
 
 describe('runScopeRotationWorker', () => {
@@ -55,7 +61,7 @@ describe('runScopeRotationWorker', () => {
     expect(claimTask).toHaveBeenNthCalledWith(1, { claimRequest: { capabilityTags: [SCOPE_ROTATION] } })
     // Rotate the surviving directory (fetched post-cut) forward, then close the job with no sealedResult.
     expect(listScopeMembers).toHaveBeenCalledWith('g1')
-    expect(commitRotation).toHaveBeenCalledWith('g1', [{ userId: 'u2' }])
+    expect(commitRotation).toHaveBeenCalledWith('g1', SURVIVORS)
     expect(completeTask).toHaveBeenCalledWith({ jobId: 'j1', completeRequest: {} })
   })
 

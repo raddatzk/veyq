@@ -23,6 +23,12 @@ const { t } = useI18n()
 const expected = ref('') // the pinned key's safety-number (what the caller trusted before)
 const current = ref('') // the directory key's safety-number (what is shown now)
 const error = ref('')
+// inbox #246: a key this device cannot decode has no safety number. An unreadable served (current) key disables
+// the accept — there is nothing to compare, and pinning bytes the identity codec refuses would only fail later; an
+// unreadable pinned (expected) key only loses its reference number, since the out-of-band compare is against the
+// current one.
+const currentUnreadable = ref(false)
+const expectedUnreadable = ref(false)
 /** The accept failed on a refused pin store — the error then links to the settings hub's reset. */
 const trustRefused = ref(false)
 
@@ -32,11 +38,24 @@ watch(
     if (!open) return
     error.value = ''
     const pin = await getPin(props.member.userId).catch(() => null)
-    expected.value = pin ? safetyNumber(pin.key) : ''
-    current.value = safetyNumber(props.member.identityPublicKey)
+    const expectedNumber = pin ? numberOf(pin.key) : ''
+    expected.value = expectedNumber ?? ''
+    expectedUnreadable.value = expectedNumber === null
+    const currentNumber = numberOf(props.member.identityPublicKey)
+    current.value = currentNumber ?? ''
+    currentUnreadable.value = currentNumber === null
   },
   { immediate: true },
 )
+
+/** The key's safety number, or `null` when the identity codec refuses its bytes. */
+function numberOf(keyB64: string): string | null {
+  try {
+    return safetyNumber(keyB64)
+  } catch {
+    return null
+  }
+}
 
 const { run: runAccept, pending: busy } = useAsyncAction(
   async () => {
@@ -75,6 +94,9 @@ async function accept() {
         </section>
       </div>
 
+      <Message v-if="currentUnreadable" severity="error" :closable="false">{{ t('verify.currentUnreadable') }}</Message>
+      <Message v-else-if="expectedUnreadable" severity="warn" :closable="false">{{ t('verify.expectedUnreadable') }}</Message>
+
       <Message v-if="error" severity="error" :closable="false">
         {{ error }}
         <TrustResetLink v-if="trustRefused" />
@@ -82,7 +104,7 @@ async function accept() {
 
       <div class="veyq-dialog-action-row">
         <Button type="button" :label="t('verify.refuse')" icon="pi pi-times" severity="secondary" outlined :disabled="busy" @click="visible = false" />
-        <Button type="button" :label="t('verify.accept')" icon="pi pi-shield" severity="warn" :loading="busy" @click="accept" />
+        <Button type="button" :label="t('verify.accept')" icon="pi pi-shield" severity="warn" :loading="busy" :disabled="currentUnreadable" @click="accept" />
       </div>
     </div>
   </Dialog>

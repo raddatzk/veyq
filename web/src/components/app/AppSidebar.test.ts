@@ -23,7 +23,9 @@ vi.mock('../../features/account/profile/profile', async (importOriginal) => ({
 
 // The shared cover store — the rail reads it and holds no key API of its own, which is the property phase 1
 // exists for. Driven directly here so a favorite can be given a cover without opening a scope.
-const storeCovers = vi.hoisted(() => ({ map: new Map<string, { url: string; crop: unknown }>() }))
+// Typed by the store's own `LoadedCover` (inbox #287): typed `crop: unknown`, this holder took a `{ x, y, w, h }`
+// crop — a shape `CoverCrop` does not have — and every test here stayed green on it.
+const storeCovers = vi.hoisted(() => ({ map: new Map<string, LoadedCover>() }))
 vi.mock('../../features/memory/coverStore', () => ({
   // A plain getter, not a `computed`: the hoisted holder is not reactive, so a computed would cache the first
   // map it saw and every later test would assert against the previous one's covers.
@@ -39,6 +41,7 @@ import { getMyProfile } from '../../features/account/profile/profile'
 import { activeSpace, clearActiveSpace } from '../../app/activeSpace'
 import { treeStore } from '../../features/memory/treeStore'
 import type { TreeNode } from '../../features/memory/tree'
+import type { LoadedCover } from '../../features/memory/memoryCover'
 import { favoritesStore } from '../../app/favoritesStore'
 
 import { realI18n, t } from '../../test/i18n'
@@ -231,7 +234,7 @@ describe('AppSidebar favorites — a pinned Memory shows its cover', () => {
   beforeEach(() => {
     treeStore.nodes = [MEMORY]
     favoritesStore.ids = new Set(['n1'])
-    storeCovers.map = new Map([['n1', { url: 'blob:cover-1', crop: { x: 0, y: 0, w: 1, h: 1 } }]])
+    storeCovers.map = new Map([['n1', { url: 'blob:cover-1', crop: { x: 0, y: 0, width: 1, height: 1 } }]])
   })
   afterEach(() => {
     treeStore.nodes = []

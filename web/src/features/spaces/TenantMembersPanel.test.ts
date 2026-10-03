@@ -13,14 +13,14 @@ vi.mock('./members', () => ({
   reissueMemberInvite: vi.fn(),
   revokeMemberInvite: vi.fn(),
   removeTenantMember: vi.fn(),
-  memberError: vi.fn().mockResolvedValue({ status: 0, code: null }),
+  memberError: vi.fn(),
 }))
 vi.mock('../memory/share', () => ({ revokeScopeShares: vi.fn() }))
 vi.mock('./scopes', () => ({
   listMyTenants: vi.fn(),
   setSpaceIcon: vi.fn(),
   clearSpaceIcon: vi.fn(),
-  openMyTenantIcon: vi.fn().mockResolvedValue(null),
+  openMyTenantIcon: vi.fn(),
 }))
 // Confirmation is the app's own dialog (cr-web-own-confirm-dialog): the panel awaits `ask()`, so the answer is
 // given here. Stubbing `window.confirm` would now confirm nothing and pass anyway.
@@ -28,13 +28,14 @@ const { confirmAsk, confirmAskWithOption } = vi.hoisted(() => ({ confirmAsk: vi.
 vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: confirmAsk, askWithOption: confirmAskWithOption }) }))
 
 import TenantMembersPanel from './TenantMembersPanel.vue'
-import { listScopeMembers, listMemberInvites, reissueMemberInvite, revokeMemberInvite, removeTenantMember } from './members'
+import { listScopeMembers, listMemberInvites, reissueMemberInvite, revokeMemberInvite, removeTenantMember, memberError } from './members'
 import { revokeScopeShares } from '../memory/share'
-import { listMyTenants } from './scopes'
+import { listMyTenants, openMyTenantIcon } from './scopes'
 import { activeSpace, clearActiveSpace } from '../../app/activeSpace'
 import { ScopeKind, type ScopeMember } from '../../api/generated/scopes'
 import type { PendingMemberInvite } from '../../api/generated/tenants'
 import { realI18n, t } from '../../test/i18n'
+import { i18n } from '../../i18n'
 import { myTenant } from '../../test/models'
 
 const stubs = {
@@ -43,6 +44,11 @@ const stubs = {
   InputText: { props: ['modelValue'], template: '<input :value="modelValue" />' },
   InviteMemberDialog: true,
 }
+
+beforeEach(() => {
+  vi.mocked(memberError).mockResolvedValue({ status: 0, code: null })
+  vi.mocked(openMyTenantIcon).mockResolvedValue(null)
+})
 
 // sealedName is null here (no K_tenant in the test → names stay sealed) so the rows show the @username.
 const MEMBERS: ScopeMember[] = [
@@ -178,6 +184,21 @@ describe('TenantMembersPanel — removal and the links of the space (ADR 0075)',
     await removePartner()
     expect(confirmAskWithOption).toHaveBeenCalledWith(expect.objectContaining({ option: expect.objectContaining({ label: t('members.removeRevokeLinks') }) }))
     expect(removeTenantMember).toHaveBeenCalledWith('t-1', 'u-pend', true)
+  })
+
+  // inbox #259: a removal cuts the app's access, not a link the member copied — that keeps opening its Memory
+  // until it is renewed or turned off (uc.spaces.remove-tenant-member postconditions, ADR 0075 point 4). The
+  // confirmation must not promise more, in either language.
+  it('the confirmation says a copied link keeps working until renewed or turned off, in EN and DE', async () => {
+    confirmAskWithOption.mockResolvedValue(null)
+    await removePartner()
+    expect(confirmAskWithOption).toHaveBeenCalledWith(expect.objectContaining({ message: t('members.removeConfirm') }))
+    const de = (i18n.global.getLocaleMessage('de') as { members: { removeConfirm: string } }).members.removeConfirm
+    for (const copy of [t('members.removeConfirm'), de]) {
+      expect(copy).toMatch(/Link/i)
+      expect(copy).toMatch(/renew|erneuert/)
+      expect(copy).not.toMatch(/everything shared right away|alles Geteilte/)
+    }
   })
 
   it('control: unticked, the same removal turns off no link', async () => {

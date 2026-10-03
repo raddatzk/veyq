@@ -25,8 +25,7 @@ vi.mock('./onboardTail', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./onboardTail')>()),
   runOnboardTail: vi.fn(),
 }))
-const rememberSupported = vi.fn(() => true)
-vi.mock('../rememberMe/deviceKeyWrap', () => ({ isRememberSupported: () => rememberSupported() }))
+vi.mock('../rememberMe/deviceKeyWrap', () => ({ isRememberSupported: vi.fn() }))
 const capable = vi.fn(() => true)
 vi.mock('../../../shared/state/useCapabilities', () => ({
   useCapabilities: () => ({ hasCapability: () => capable() }),
@@ -35,6 +34,7 @@ vi.mock('../../../shared/state/useCapabilities', () => ({
 import SignInWithCodeCard from './SignInWithCodeCard.vue'
 import { openPairingChannel, answerPairingChannel, collectPairingChannel } from './pairingChannel'
 import { runOnboardTail, OnboardTailError } from './onboardTail'
+import { isRememberSupported } from '../rememberMe/deviceKeyWrap'
 import {
   parseSignInPayload,
   parsePairingPayload,
@@ -50,6 +50,7 @@ const open = vi.mocked(openPairingChannel)
 const answer = vi.mocked(answerPairingChannel)
 const collect = vi.mocked(collectPairingChannel)
 const tail = vi.mocked(runOnboardTail)
+const rememberSupported = vi.mocked(isRememberSupported)
 
 const CODE = '481502'
 const GRANT: PairingGrant = {

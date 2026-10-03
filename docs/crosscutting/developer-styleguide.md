@@ -188,7 +188,11 @@ restating the code. Avoid `// loop over the items` and comments that drift from 
   `vi.mocked(fn)`, which is typed by the real function (a `use*` composable keeps its hand-written stub); and a test
   never casts `as never` — a payload comes from a builder annotated with its model (`src/test/models.ts` for those
   several files serve), and a cast that must stay names its target, `as unknown as <T>`. The lint block
-  `veyq/api-mocks-typed-by-the-contract` (admin-web: `veyq-admin/…`) keeps the three forms out. What bought it:
+  `veyq/api-mocks-typed-by-the-contract` (admin-web: `veyq-admin/…`) keeps the three forms out. In web the
+  feature-mock half is its own rule, `veyq-web/feature-mocks-bare-fn` (`web/eslint/featureMocks.js`), because it
+  resolves a RELATIVE mock path against the test's own location: as a selector it saw only a path that spells
+  `features/`, so 77 mocks in 30 tests inside `features/` went unchecked, three of them serving a payload that was
+  not the model. admin-web's selector still has that limit. What bought it:
   179 `as unknown as ReturnType<typeof xApi>` casts let `ShareIdentity.sealedDisplayName` be removed from the contract
   while the fixture serving it stayed green; typed, the feature mocks named fields that did not exist (admin-web's
   `{ state: 'ACTIVE' }` on `TenantInviteState`), and of 114 `as never` most hid nothing — the ones that did hid
