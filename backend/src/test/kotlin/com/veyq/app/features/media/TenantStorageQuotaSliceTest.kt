@@ -220,7 +220,7 @@ class TenantStorageQuotaSliceTest {
         }
     }
 
-    // --- setTenantStorageQuota: channel, gate, set, clear ---
+    // --- setTenantStorageQuota / clearTenantStorageQuota: channel, gate, set, clear ---
 
     @Test
     fun theServerOwnerSetsTheQuotaOnTheListenerAndThePublicPortDoesNotKnowIt() {
@@ -233,13 +233,20 @@ class TenantStorageQuotaSliceTest {
         assertEquals(null, quotaOf(f.tenantId), "the public port wrote nothing")
         putQuota(so, f.tenantId, "123").then().statusCode(204) // control: the listener answers
         assertEquals(123L, quotaOf(f.tenantId))
+        given().header("Authorization", bearer(so))
+            .`when`().delete("/api/tenants/${f.tenantId}/storage-quota")
+            .then().statusCode(404)
+        assertEquals(123L, quotaOf(f.tenantId), "the public port cleared nothing")
     }
 
     @Test
-    fun aTenantOwnerCannotSetTheirOwnQuota() {
+    fun aTenantOwnerCannotSetOrClearTheirOwnQuota() {
         val f = fixture()
         putQuota(f.userId, f.tenantId, "999999999").then().statusCode(403).body("code", equalTo("not_server_owner"))
         assertEquals(null, quotaOf(f.tenantId))
+        setQuota(f.tenantId, 7L)
+        clearQuota(f.userId, f.tenantId).then().statusCode(403).body("code", equalTo("not_server_owner"))
+        assertEquals(7L, quotaOf(f.tenantId))
     }
 
     @Test
@@ -248,9 +255,24 @@ class TenantStorageQuotaSliceTest {
         val so = seedUser(serverRole = "SERVER_OWNER")
         putQuota(so, f.tenantId, "0").then().statusCode(204)
         memberStart(f, f.scopeA, s).then().statusCode(200).body("results[0].error", equalTo("quota_exceeded"))
-        putQuota(so, f.tenantId, "null").then().statusCode(204)
+        clearQuota(so, f.tenantId).then().statusCode(204)
         assertEquals(null, quotaOf(f.tenantId))
         memberStart(f, f.scopeA, s).then().statusCode(200).body("results[0].error", nullValue())
+    }
+
+    /** inbox #304: absence is never "no quota". An update without the field, or with null, is refused and keeps the
+     *  quota it would have erased; clearing is its own call ([clearingTheQuotaAdmitsTheNextStart]). */
+    @Test
+    fun anUpdateWithoutTheQuotaIs400AndKeepsIt() {
+        val f = fixture()
+        val so = seedUser(serverRole = "SERVER_OWNER")
+        putQuota(so, f.tenantId, "5").then().statusCode(204) // control: the same call with the field is taken
+        givenAdminChannel().header("Authorization", bearer(so)).contentType(ContentType.JSON)
+            .body("{}")
+            .`when`().put("/api/tenants/${f.tenantId}/storage-quota")
+            .then().statusCode(400)
+        putQuota(so, f.tenantId, "null").then().statusCode(400)
+        assertEquals(5L, quotaOf(f.tenantId), "a refused update erased nothing")
     }
 
     @Test
@@ -259,6 +281,7 @@ class TenantStorageQuotaSliceTest {
         val so = seedUser(serverRole = "SERVER_OWNER")
         putQuota(so, f.tenantId, "-1").then().statusCode(400)
         putQuota(so, UUID.randomUUID().toString(), "1").then().statusCode(404).body("code", equalTo("tenant_not_found"))
+        clearQuota(so, UUID.randomUUID().toString()).then().statusCode(404).body("code", equalTo("tenant_not_found"))
     }
 
     /** A lowered quota deletes nothing, and both readers see the usage beside it. */
@@ -276,7 +299,7 @@ class TenantStorageQuotaSliceTest {
             .`when`().get("/api/tenants/${f.tenantId}/storage").then().statusCode(200)
             .body("usedBytes", equalTo(s.byteSize.toInt()))
             .body("quotaBytes", equalTo(1))
-        putQuota(so, f.tenantId, "null").then().statusCode(204)
+        clearQuota(so, f.tenantId).then().statusCode(204)
         given().header("Authorization", bearer(f.userId))
             .`when`().get("/api/tenants/${f.tenantId}/storage").then().statusCode(200)
             .body("usedBytes", equalTo(s.byteSize.toInt())) // nothing was deleted
@@ -394,6 +417,10 @@ class TenantStorageQuotaSliceTest {
         givenAdminChannel().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"quotaBytes":$quota}""")
             .`when`().put("/api/tenants/$tenantId/storage-quota")
+
+    private fun clearQuota(userId: String, tenantId: String): Response =
+        givenAdminChannel().header("Authorization", bearer(userId))
+            .`when`().delete("/api/tenants/$tenantId/storage-quota")
 
     private fun setQuota(tenantId: String, bytes: Long?) =
         QuarkusTransaction.requiringNew().run { TenantEntity.findById(tenantId)!!.storageQuotaBytes = bytes }

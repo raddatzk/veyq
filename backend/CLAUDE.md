@@ -67,7 +67,9 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   `Long`/`Int`/`Boolean`, and Jackson fills a missing one with 0/false — measured: `updateMediaMeta` without
   `metaVersion` answered 200, not 400, and so did a mail-settings update without `tls` (STARTTLS off). Unless its
   `minimum` already excludes 0, make the type nullable (`[integer, "null"]`), annotate `@NotNull`, and read it in
-  the resource with `.validated()`; `validate_request_bounds.py` (rule 5) names one that is not. An object, enum or
+  the resource with `.validated()` (`validate_request_bounds.py` rule 5 holds it). A null that would *mean*
+  something ("no quota") is not a field value at all but an operation of its own (`clearTenantStorageQuota`): once
+  bound, absence and null are the same. An object, enum or
   uuid field is refused by deserialization on its own.
 - **Migrations:** Flyway, append-only `V<n>__*.sql`; `schema-management.strategy=none` — Flyway owns the
   schema. **Append-only means an applied migration is never edited — not even a comment in it.** Flyway

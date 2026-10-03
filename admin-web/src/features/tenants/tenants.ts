@@ -75,10 +75,13 @@ export function parseQuotaGib(input: string): number | null | undefined {
 /**
  * Set, change or clear (`null`) a tenant's storage quota (uc.admin.tenant-storage-quota, ADR 0073 §1): the most the
  * tenant may hold in this instance's store. Every upload start into the tenant is reserved against it from then on;
- * a quota below the current usage deletes nothing, it refuses the next upload. No quota is the default.
+ * a quota below the current usage deletes nothing, it refuses the next upload. No quota is the default — and it is
+ * its own call: the server refuses a null quota, so an update that lost its number can never clear one (#304).
  */
 export function setTenantStorageQuota(tenantId: string, quotaBytes: number | null): Promise<void> {
-  return tenantsApi().setTenantStorageQuota({ tenantId, tenantStorageQuotaUpdate: { quotaBytes } })
+  return quotaBytes === null
+    ? tenantsApi().clearTenantStorageQuota({ tenantId })
+    : tenantsApi().setTenantStorageQuota({ tenantId, tenantStorageQuotaUpdate: { quotaBytes } })
 }
 
 
