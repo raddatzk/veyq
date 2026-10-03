@@ -2,7 +2,6 @@ package com.veyq.app.features.media
 
 import com.veyq.app.core.blob.BlobEntity
 import com.veyq.app.core.node.NodeEntity
-import com.veyq.app.features.sharing.SharingStore
 import com.veyq.app.testing.RACE_ROUNDS
 import com.veyq.app.testing.TestFixtures.CONTENT_KEY
 import com.veyq.app.testing.TestFixtures.seedMemberScope
@@ -21,7 +20,7 @@ import org.junit.jupiter.api.Test
 
 /**
  * A member's write to a media row reads that row under its lock (developer-styleguide §12), as every delete of it
- * does (`purgeMedia`, `SharingStore.deleteContributedMedia`). A trash or a move that read a guest's upload before the
+ * does (`purgeMedia`, `MediaShareGuestWrites.deleteOwn`). A trash or a move that read a guest's upload before the
  * guest's delete of it committed flushed onto a row that was gone and answered 500; under the lock it waits for the
  * delete and then finds nothing — the answer its replay gets.
  *
@@ -32,14 +31,14 @@ import org.junit.jupiter.api.Test
 class MediaRowLockRaceSliceTest {
 
     @Inject lateinit var store: MediaStore
-    @Inject lateinit var sharing: SharingStore
+    @Inject lateinit var sharing: MediaShareGuestWrites
 
     @Test
     fun aTrashOfAGuestUploadBeingDeletedAnswersNotFound() {
         repeat(RACE_ROUNDS) { round ->
             val g = guestUpload()
             val trashed = whileUncommitted(
-                change = { assertTrue(sharing.deleteContributedMedia(g.scopeId, g.mediaId, g.identityId), "round $round") },
+                change = { assertTrue(sharing.deleteOwn(g.scopeId, g.mediaId, g.identityId), "round $round") },
                 overlapping = { runCatching { store.trashMedia(g.scopeId, g.mediaId, g.userId) } },
             )
             assertEquals(Result.success(null), trashed, "round $round: the trash of a deleted photo")
@@ -54,7 +53,7 @@ class MediaRowLockRaceSliceTest {
         repeat(RACE_ROUNDS) { round ->
             val g = guestUpload()
             val moved = whileUncommitted(
-                change = { assertTrue(sharing.deleteContributedMedia(g.scopeId, g.mediaId, g.identityId), "round $round") },
+                change = { assertTrue(sharing.deleteOwn(g.scopeId, g.mediaId, g.identityId), "round $round") },
                 overlapping = { runCatching { store.moveMedia(g.scopeId, g.nodeId, listOf(g.mediaId), null) } },
             )
             assertEquals(Result.success(false), moved, "round $round: the move of a deleted photo")

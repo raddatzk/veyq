@@ -10,7 +10,6 @@ import com.veyq.app.core.sharing.ShareRetiredIdEntity
 import com.veyq.app.features.media.BucketEntity
 import com.veyq.app.features.media.MediaDerivativeEntity
 import com.veyq.app.features.media.MediaEntity
-import com.veyq.app.features.media.MediaStore
 import com.veyq.app.features.media.OwnerKey
 import com.veyq.app.shared.crypto.Tokens
 import com.veyq.app.shared.scope.ScopeEntity
@@ -60,8 +59,6 @@ data class ShareBlobRef(val storageKey: String, val chunkCount: Int)
  */
 @ApplicationScoped
 class SharingStore(
-    /** cr-0107: the delete-own path bumps the node's live-updates counters via the media store's single bump helper. */
-    private val mediaStore: MediaStore,
     /** What the application hangs under a shared node (today: media + derivatives). Merged without order. */
     private val contributors: Instance<SharedSubtreeContributor>,
 ) {
@@ -404,30 +401,6 @@ class SharingStore(
         if (ids.isEmpty()) return emptyMap()
         return ShareIdentityEntity.find("id in ?1 and wrappedIdentityKey is not null", ids).list()
             .associate { it.id to it.wrappedIdentityKey!! }
-    }
-
-    /**
-     * Delete one contributed media the caller owns (cr-0102, the UPLOADER/CONTRIBUTOR delete-own). Authorized
-     * **iff** the media is in [scopeId] and its `share_identity_id` equals [identityId] — a single-row
-     * **ownership** check, never gallery filtering. Deletes the media row + its derivative rows + all blob rows,
-     * and puts their store objects (original + every derivative) on the reclaim list in the same transaction.
-     * False when no such media is owned by this identity (→ a non-enumerable 404).
-     */
-    @Transactional
-    fun deleteContributedMedia(scopeId: String, mediaId: String, identityId: String): Boolean {
-        // The read is the row's lock (as `MediaStore.purgeMedia`): a second delete of the same upload, or a purge,
-        // that holds it finishes first, and this then finds nothing — the 404 a replay gets. Read plainly, it deleted
-        // rows already gone and answered 500.
-        val media = MediaEntity.findById(mediaId, LockModeType.PESSIMISTIC_WRITE)
-            ?.takeIf { it.scopeId == scopeId && it.shareIdentityId == identityId } ?: return false
-        val nodeId = media.nodeId // captured before the row is deleted — the node whose gallery must reconcile
-        mediaStore.purgeMediaRows(media) // derivative → media → blob rows, FK order (shared helper)
-        // cr-0107 (ADR 0033): a media-row removal moves BOTH counters — media_revision (the change signal) and
-        // delete_revision (which gates the id-set), so an open gallery's next poll gets the current mediaId set
-        // and drops the removed tile. Same transaction ⇒ atomic with the delete. (A LIVE media is removed here —
-        // unlike the two trash purges — so it bumps; purgeMediaRows leaves the revision bump to the caller.)
-        mediaStore.bumpMediaRevision(nodeId, deleted = true)
-        return true
     }
 
     /** The sealed subtree rooted at [rootNodeId] within [scopeId]: nodes (for the `K_mem` chain) + its live media. */

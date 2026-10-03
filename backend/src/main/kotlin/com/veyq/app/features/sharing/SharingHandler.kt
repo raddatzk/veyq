@@ -1,6 +1,5 @@
 package com.veyq.app.features.sharing
 
-import com.veyq.app.core.blob.UploadOpener
 import com.veyq.app.core.blob.UploadDeclare
 import com.veyq.app.core.blob.DerivativeDeclare
 import com.veyq.app.core.blob.CompleteItem
@@ -10,8 +9,8 @@ import com.veyq.app.core.blob.WindowItemResult
 import com.veyq.app.core.blob.CompleteItemResult
 import com.veyq.app.core.node.NodeEntity
 import com.veyq.app.core.sharing.ShareEntity
+import com.veyq.app.core.sharing.ShareGuestWrites
 import com.veyq.app.features.admin.tenant.TenantTermsHandler
-import com.veyq.app.features.media.MediaHandler
 import com.veyq.app.features.platform.capabilities.CapabilityIds
 import com.veyq.app.features.platform.capabilities.CapabilityRegistry
 import com.veyq.app.features.spaces.scope.ScopesStore
@@ -35,6 +34,7 @@ import com.veyq.app.shared.persistence.createOrConflict
 import com.veyq.app.shared.scope.ScopeEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
+import jakarta.enterprise.inject.Instance
 import jakarta.transaction.Transactional
 import java.security.MessageDigest
 import java.time.Instant
@@ -245,7 +245,8 @@ sealed interface ShareTermsOutcome {
 class SharingHandler(
     private val store: SharingStore,
     private val blobStore: BlobStore,
-    private val mediaHandler: MediaHandler,
+    /** Who writes under a share's root, by the root's node kind (see [ShareGuestWrites]); core only gates and dispatches. */
+    private val guestWrites: Instance<ShareGuestWrites>,
     private val rateLimiter: ShareRateLimiter,
     private val passwordAttemptLimiter: SharePasswordAttemptLimiter,
     private val capabilities: CapabilityRegistry,
@@ -270,8 +271,8 @@ class SharingHandler(
         access.check(userId, node.scopeId, WRITE)
             .refusal(CreateShareOutcome.NoNode, CreateShareOutcome.Suspended, CreateShareOutcome.Deleting)?.let { return it }
         // Any member of the node's scope may share (cr-0104) — personal, group, or tenant; only a MEMORY node can
-        // be public-shared (ADR 0029 §6, ADR 0030).
-        if (node.kind != NodeEntity.MEMORY) return CreateShareOutcome.IllegalScope
+        // be public-shared (ADR 0029 §6, ADR 0030) — i.e. a kind some application registers guest writes for.
+        if (guestWrites.none { it.supports(node.kind) }) return CreateShareOutcome.IllegalScope
         // ADR 0024 Decision 6, as NodesHandler checks it: a recovery copy sealed under an epoch other than the scope's
         // current one is refused — an older one is an epoch a member removed since still holds.
         if (sealedShareKeyEpoch != null && sealedShareKeyEpoch != scopes.currentEpoch(node.scopeId)) {
@@ -618,7 +619,8 @@ class SharingHandler(
         if (!ShareAccessPolicy.canUpload(share.role)) return ShareUploadOutcome.NotContributable
         val identity = store.findIdentity(shareId, contributorToken) ?: return ShareUploadOutcome.NotContributable
         if (!rateLimiter.allowUpload(shareId)) return ShareUploadOutcome.RateLimited
-        return ShareUploadOutcome.Results(mediaHandler.startForLink(share.scopeId, share.id, identity.id, declares, domain))
+        val writes = writesFor(share) ?: return ShareUploadOutcome.NotContributable
+        return ShareUploadOutcome.Results(writes.start(share.scopeId, share.id, identity.id, declares, domain))
     }
 
     /**
@@ -637,7 +639,8 @@ class SharingHandler(
         }
         if (!ShareAccessPolicy.canUpload(share.role)) return ShareWindowOutcome.NotContributable
         val identity = store.findIdentity(shareId, contributorToken) ?: return ShareWindowOutcome.NotContributable
-        return ShareWindowOutcome.Results(mediaHandler.windowForScope(share.scopeId, UploadOpener.Contributor(identity.id), requests, domain))
+        val writes = writesFor(share) ?: return ShareWindowOutcome.NotContributable
+        return ShareWindowOutcome.Results(writes.window(share.scopeId, identity.id, requests, domain))
     }
 
     /** Complete a contributor upload — attach to the share's own Memory node, stamped with the identity. */
@@ -668,7 +671,8 @@ class SharingHandler(
         // landed after a delete counted the identity's media and dropped it — a photo nobody could open. Refused, the
         // item answers `upload_not_found`: a deleted link's upload can no longer complete.
         val admitted = { store.admitsGuests(shareId) }
-        return ShareCompleteOutcome.Results(mediaHandler.completeForNode(share.scopeId, completeItems, UploadOpener.Contributor(identity.id), admitted))
+        val writes = writesFor(share) ?: return ShareCompleteOutcome.NotContributable
+        return ShareCompleteOutcome.Results(writes.complete(share.scopeId, completeItems, identity.id, admitted))
     }
 
     /**
@@ -687,7 +691,8 @@ class SharingHandler(
         }
         if (!ShareAccessPolicy.canUpload(share.role)) return ShareDeleteOutcome.NotContributable
         val identity = store.findIdentity(shareId, contributorToken) ?: return ShareDeleteOutcome.NotContributable
-        if (!store.deleteContributedMedia(share.scopeId, mediaId, identity.id)) return ShareDeleteOutcome.NotFound
+        val writes = writesFor(share) ?: return ShareDeleteOutcome.NotContributable
+        if (!writes.deleteOwn(share.scopeId, mediaId, identity.id)) return ShareDeleteOutcome.NotFound
         return ShareDeleteOutcome.Done
     }
 
@@ -711,6 +716,16 @@ class SharingHandler(
      *  VIEWER/CONTRIBUTOR → the public-links toggle. Kept coarser than the role (2 capabilities, 3 roles). */
     private fun capabilityFor(role: String): String =
         if (role == ShareEntity.UPLOADER) CapabilityIds.SHARING_UPLOADER_LINKS else CapabilityIds.SHARING_PUBLIC_LINKS
+
+    /**
+     * The application that writes under [share]'s root, picked by the root's node kind — called only after the guest
+     * gate has passed. Null (read as "not contributable") only for a root that is gone or of a kind no application
+     * registers: unreachable while [create] refuses such a root, so it fails closed rather than guessing a writer.
+     */
+    private fun writesFor(share: ShareEntity): ShareGuestWrites? {
+        val kind = store.findNode(share.nodeId)?.kind ?: return null
+        return guestWrites.firstOrNull { it.supports(kind) }
+    }
 
     private enum class PwCheck { OK, MISSING, WRONG, TOO_MANY }
 
