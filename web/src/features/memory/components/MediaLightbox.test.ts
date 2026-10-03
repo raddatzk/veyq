@@ -730,4 +730,25 @@ describe('MediaLightbox — correct the capture time (cr-0065/0066)', () => {
     expect(new Date((wrapper.find('#captured-at-input').element as HTMLInputElement).value).getTime()).toBe(PEER) // …on theirs
     expect(wrapper.emitted('updated')?.at(-1)?.[0]).toEqual({ mediaId: items[0].mediaId, wrappedMeta: peers, metaVersion: 1 })
   })
+
+  /**
+   * inbox #290 (ADR 0077 point 4, no reset): a listed tier that does not open is never rebuilt from empty. The save
+   * is refused before anything is sent, and the editor says in words that these details cannot be changed.
+   */
+  it('a details tier that does not open refuses the save with a message, and sends nothing', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { store, items } = await seedOne(memoryKey, { DateTimeOriginal: new Date(Date.UTC(2021, 4, 1, 10, 0, 0)) })
+    const damaged = { ...items[0], wrappedMeta: b64std(v1.randomBytes(64)) } // present, and opens under no key
+
+    const wrapper = mountLightbox(memoryKey, [damaged], 0)
+    await flushPromises()
+    await wrapper.find(`[aria-label="${t('media.editCapturedAt')}"]`).trigger('click')
+    await wrapper.find('#captured-at-input').setValue('2019-08-15T08:30')
+    await wrapper.find('.media-lightbox-date-form').trigger('submit')
+    await flushPromises()
+
+    expect(store.api.updateMediaMeta).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain(t('media.metaUnreadable'))
+    expect(wrapper.text()).not.toContain(t('media.capturedAtSaveFailed'))
+  })
 })

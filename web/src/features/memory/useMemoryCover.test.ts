@@ -19,7 +19,7 @@ vi.mock('./memoryCover', () => ({
 import { deleteCoverBlob, uploadCoverBlob, type BlobRef } from './media'
 import { setMemoryCover, unsealMemoryCover, type MemoryCover } from './memoryCover'
 import { useMemoryCover } from './useMemoryCover'
-import { MetaConflictError } from './sealedMetaWrite'
+import { MetaConflictError, MetaUnreadableError } from './sealedMetaWrite'
 import { i18n } from '../../i18n'
 import type { TreeNode } from './tree'
 
@@ -100,6 +100,16 @@ describe('useMemoryCover — a peer changed the cover meanwhile', () => {
     expect(onMetaUpdated).toHaveBeenCalledWith({ nodeId: 'n', wrappedMeta: 'cGVlcg==', metaVersion: 6 })
     expect(api.coverEditorOpen.value).toBe(true)
     expect(error).toHaveBeenCalledWith(i18n.global.t('memory.meta.conflict'))
+  })
+
+  // inbox #290: a blob that does not open is refused, never rebuilt (ADR 0077 point 4, no reset) — and the refusal
+  // says so in words, rather than leaving an editor that silently does nothing.
+  it('a details blob that does not open says it cannot be changed, and moves no blob', async () => {
+    const api = harness()
+    vi.mocked(setMemoryCover).mockRejectedValue(new MetaUnreadableError())
+    await api.onCoverSave({ kind: 'remove' })
+    expect(error).toHaveBeenCalledWith(i18n.global.t('memory.meta.unreadable'))
+    expect(deleteCoverBlob).not.toHaveBeenCalled()
   })
 })
 

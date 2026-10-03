@@ -778,7 +778,8 @@ const en = {
     deleteFailed: 'Could not delete it. Please try again.',
     meta: {
       conflict: 'Someone else changed this meanwhile. It now shows their version — save again to replace it.',
-      unreadable: 'This Memory’s details could not be read, so nothing was saved.',
+      unreadable:
+        'This Memory’s details (date, place, cover) can’t be opened: they are damaged, or were replaced by something this app didn’t write. They can’t be changed, so nothing was saved, and trying again won’t help. Its photos are not affected.',
     },
     date: {
       title: 'Date',
@@ -956,7 +957,8 @@ const en = {
     capturedAtCorrected: 'Corrected',
     capturedAtSaveFailed: 'Could not save the capture time.',
     capturedAtConflict: 'Someone else changed the capture time meanwhile. It now shows theirs — save again to replace it.',
-    metaUnreadable: 'This photo’s details could not be read, so nothing was saved.',
+    metaUnreadable:
+      'This photo’s details (its time and place) can’t be opened: they are damaged, or were replaced by something this app didn’t write. They can’t be changed, so nothing was saved, and trying again won’t help. The photo itself is not affected.',
     sortNewest: 'Newest first',
     sortOldest: 'Oldest first',
     // Item marks (ADR 0068). Every string here is written against one rule: a mark is SHARED with the space,
@@ -1836,7 +1838,8 @@ const de: typeof en = {
     deleteFailed: 'Konnte nicht gelöscht werden. Bitte versuche es erneut.',
     meta: {
       conflict: 'Jemand anderes hat das inzwischen geändert. Jetzt steht dort diese Version — speichere erneut, um sie zu ersetzen.',
-      unreadable: 'Die Angaben dieser Erinnerung ließen sich nicht lesen, deshalb wurde nichts gespeichert.',
+      unreadable:
+        'Die Angaben dieser Erinnerung (Datum, Ort, Titelbild) lassen sich nicht öffnen: Sie sind beschädigt oder wurden durch etwas ersetzt, das diese App nicht geschrieben hat. Sie lassen sich nicht ändern, deshalb wurde nichts gespeichert, und ein erneuter Versuch hilft nicht. Ihre Fotos sind davon nicht betroffen.',
     },
     date: {
       title: 'Datum',
@@ -2014,7 +2017,8 @@ const de: typeof en = {
     capturedAtCorrected: 'Korrigiert',
     capturedAtSaveFailed: 'Aufnahmezeit konnte nicht gespeichert werden.',
     capturedAtConflict: 'Jemand anderes hat die Aufnahmezeit inzwischen geändert. Jetzt steht dort diese Änderung — speichere erneut, um sie zu ersetzen.',
-    metaUnreadable: 'Die Angaben zu diesem Foto ließen sich nicht lesen, deshalb wurde nichts gespeichert.',
+    metaUnreadable:
+      'Die Angaben zu diesem Foto (Zeit und Ort) lassen sich nicht öffnen: Sie sind beschädigt oder wurden durch etwas ersetzt, das diese App nicht geschrieben hat. Sie lassen sich nicht ändern, deshalb wurde nichts gespeichert, und ein erneuter Versuch hilft nicht. Das Foto selbst ist davon nicht betroffen.',
     sortNewest: 'Neueste zuerst',
     sortOldest: 'Älteste zuerst',
     marks: {
