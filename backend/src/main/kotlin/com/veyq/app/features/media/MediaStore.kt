@@ -272,7 +272,10 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
      */
     @Transactional
     fun trashMedia(scopeId: String, mediaId: String, userId: String): String? {
-        val media = MediaEntity.findById(mediaId)?.takeIf { it.scopeId == scopeId } ?: return null
+        // The read is the row's lock, as every delete of the row takes it (`purgeMedia`, a guest's
+        // `deleteContributedMedia`): one that holds it finishes first, and this then finds nothing — the 404 a replay
+        // gets. Read plainly, the trash flushed onto a row the delete had removed and answered 500 (inbox #313).
+        val media = MediaEntity.findById(mediaId, LockModeType.PESSIMISTIC_WRITE)?.takeIf { it.scopeId == scopeId } ?: return null
         if (media.deletedAt != null) return media.nodeId // already trashed — idempotent
         media.deletedAt = Instant.now()
         media.deletedBy = userId
@@ -553,7 +556,9 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
      * styleguide §12: the parent's row lock): a second resolve of a missing primary waits for the first and then finds
      * it. Read without it, two first uploads of one uploader both found none and both created one
      * (`MediaCreateRaceSliceTest.concurrentFirstUploadsOfOneUploaderShareOnePrimary`). The lock is only taken —
-     * nothing here reads the node, so a copy this transaction already holds does not matter.
+     * nothing here reads the node, so a copy this transaction already holds does not matter. A caller that also locks
+     * a bucket or media rows takes those first (bucket → media → node: [deleteBucketReparent], [moveMedia]), the order
+     * a trash or a guest's delete (media → node) agrees with.
      */
     private fun ensurePrimaryBucket(scopeId: String, nodeId: String, ownerKey: String, sealedName: String?): BucketEntity {
         NodeEntity.find("id", nodeId).withLock(LockModeType.PESSIMISTIC_WRITE).firstResult()
@@ -638,6 +643,10 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
         // Locked first, as [moveMedia] locks its target: a move into this bucket finishes before the reparent reads
         // which media to carry, and one that comes after finds the bucket gone.
         val sub = BucketEntity.findById(bucketId, LockModeType.PESSIMISTIC_WRITE) ?: return
+        // Its media next, before the primary's node lock: bucket → media → node is the order [moveMedia] takes too,
+        // and a trash or a guest's delete of one of them holds media → node — taken the other way round, two of these
+        // could each hold what the other waits for.
+        MediaEntity.find("bucketId = ?1 order by id", bucketId).withLock(LockModeType.PESSIMISTIC_WRITE).list()
         val primary = ensurePrimaryBucket(sub.scopeId, sub.nodeId, sub.ownerKey, primarySealedNameFor(sub.ownerKey))
         MediaEntity.update("bucketId = ?1 where bucketId = ?2", primary.id, bucketId)
         bumpMediaRevision(sub.nodeId) // cr-0113: reparent changed the media's bucketId → advance the ETag
@@ -649,11 +658,22 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
      * from the source media** — they must all share one `owner_key` (else a cross-owner move ⇒ false/403) — and the
      * target bucket must have that same owner. Every medium is in this node + live. Returns false (⇒ 403) on any
      * mismatch. The caller-is-member gate lives in the handler (cr-0123).
+     *
+     * Locks in the order a sub-bucket delete takes them ([deleteBucketReparent]): the target bucket, then each medium
+     * (sorted, so two moves cannot cross), then the node (the primary's resolve, the revision bump). The target
+     * bucket first: read without its lock, a move into a bucket being deleted wrote the gone bucket's id and failed
+     * its commit on the foreign key — a 500 where a move into a missing bucket answers false. Each medium under its
+     * lock, as every delete of it takes it: read plainly, a move of a guest's upload that the guest deleted in between
+     * flushed onto a gone row, or answered success for it (inbox #313); now it finds nothing and answers false.
      */
     @Transactional
     fun moveMedia(scopeId: String, nodeId: String, mediaIds: List<String>, targetBucketId: String?): Boolean {
-        val media = mediaIds.map { id ->
-            MediaEntity.findById(id)?.takeIf { it.scopeId == scopeId && it.nodeId == nodeId && it.deletedAt == null } ?: return false
+        val explicit = targetBucketId?.let { id ->
+            BucketEntity.findById(id, LockModeType.PESSIMISTIC_WRITE)?.takeIf { it.scopeId == scopeId && it.nodeId == nodeId } ?: return false
+        }
+        val media = mediaIds.distinct().sorted().map { id ->
+            MediaEntity.findById(id, LockModeType.PESSIMISTIC_WRITE)
+                ?.takeIf { it.scopeId == scopeId && it.nodeId == nodeId && it.deletedAt == null } ?: return false
         }
         // One shared root only — a single distinct source owner_key; more than one would be a cross-owner move.
         // `created_by` is the owner: `attach`, the only media insert, stamps it. The fallbacks this once had for
@@ -662,14 +682,10 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
         // (inbox #305). A medium without it is a bug, and must fail like one.
         val ownerKey = media.map { checkNotNull(it.createdBy) { "media ${it.id} has no created_by" } }.distinct().singleOrNull()
             ?: return false
-        val target = if (targetBucketId == null) {
-            ensurePrimaryBucket(scopeId, nodeId, ownerKey, primarySealedNameFor(ownerKey))
-        } else {
-            // Under the bucket row's lock, which a sub-bucket delete takes first ([deleteBucketReparent]): read
-            // without it, a move into a bucket being deleted wrote the gone bucket's id and failed its commit on the
-            // foreign key — a 500 where a move into a missing bucket answers false.
-            BucketEntity.findById(targetBucketId, LockModeType.PESSIMISTIC_WRITE)
-                ?.takeIf { it.scopeId == scopeId && it.nodeId == nodeId && it.ownerKey == ownerKey } ?: return false
+        val target = when {
+            explicit == null -> ensurePrimaryBucket(scopeId, nodeId, ownerKey, primarySealedNameFor(ownerKey))
+            explicit.ownerKey == ownerKey -> explicit
+            else -> return false
         }
         media.forEach { it.bucketId = target.id; it.persist() }
         bumpMediaRevision(nodeId) // cr-0113: a re-bucket changes the listing's bucketId → advance the ETag so clients re-list
