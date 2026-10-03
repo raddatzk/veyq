@@ -558,11 +558,17 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
         }
 
     /**
-     * Find-or-create the uploader's PRIMARY bucket in a node (lazy, virtual-until-first-use). Primary uniqueness
-     * `(node, owner_key)` is enforced HERE under the caller's transaction (no DB partial index in the H2 ∩ MariaDB
-     * subset). Refreshes a still-missing sealed name (a contributor primary materialized before its identity name).
+     * Find-or-create the uploader's PRIMARY bucket in a node (lazy, virtual-until-first-use). Refreshes a still-missing
+     * sealed name (a contributor primary materialized before its identity name).
+     *
+     * One primary per `(node, owner_key)` is held by the node row's lock, taken first (ADR 0034 §4, developer-
+     * styleguide §12: the parent's row lock): a second resolve of a missing primary waits for the first and then finds
+     * it. Read without it, two first uploads of one uploader both found none and both created one
+     * (`MediaCreateRaceSliceTest.concurrentFirstUploadsOfOneUploaderShareOnePrimary`). The lock is only taken —
+     * nothing here reads the node, so a copy this transaction already holds does not matter.
      */
     private fun ensurePrimaryBucket(scopeId: String, nodeId: String, ownerKey: String, sealedName: String?): BucketEntity {
+        NodeEntity.find("id", nodeId).withLock(LockModeType.PESSIMISTIC_WRITE).firstResult()
         val existing = BucketEntity.find("nodeId = ?1 and ownerKey = ?2 and isPrimary = true", nodeId, ownerKey).firstResult()
         if (existing != null) {
             if (existing.sealedName == null && sealedName != null) { existing.sealedName = sealedName; existing.persist() }

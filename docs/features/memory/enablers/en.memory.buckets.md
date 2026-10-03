@@ -41,8 +41,8 @@
   parent_bucket_id?,         -- null = primary; else exactly ONE level under a primary
   sealed_name? + suite_id,   -- AEAD under K_mem; primary's derived name is sealed too; sub-buckets carry their own
   is_primary
-  -- WANTED: one primary per (node_id, owner_key) -- content-blind (owner_key is not ciphertext).
-  -- NOT ENFORCED today: V35 carries only a plain ix_bucket_node_owner. See "Lifecycle" below.
+  -- One primary per (node_id, owner_key) -- content-blind (owner_key is not ciphertext); held by the node
+  -- row's lock, not an index (V35 carries only a plain ix_bucket_node_owner). See "Lifecycle" below.
   -- Sub-bucket names are NOT unique either way (ciphertext, the server can't compare them).
   ```
 - **`veyq_media` gains:** **`bucket_id`** (nullable FK, **`ON DELETE SET NULL`**, `null` = the owner's primary) and
@@ -55,13 +55,9 @@
   `(node_id, owner_key)` on the uploader's **first upload** (or first sub-bucket). An uploader with no media has
   **no row** and does not appear. Its name is **derived** (member = the per-tenant username; contributor = the
   identity's sealed name) and **sealed under `K_mem`** so the grouping view is uniform + operator-blind; the
-  primary is **not renameable**. The model wants exactly **one primary per `(node, owner_key)`** — but
-  **nothing enforces it**: the find-or-create is a read-then-write with no constraint behind it, so two
-  concurrent resolves of the same missing primary each create one. Reachability is low (the web upload queue is
-  sequential; `listBuckets` only materializes for pre-cr0113 media), which is why this is booked as debt rather
-  than fixed in place — the portable index and the dedup it needs are in
-  [ADR 0034](../../../decisions/0034-media-uploader-buckets.md) §4 and
-  [architecture §11](../../../architecture/README.md).
+  primary is **not renameable**. Exactly **one primary per `(node, owner_key)`**: the find-or-create runs under
+  the node row's lock, so two concurrent first uploads share one
+  ([ADR 0034](../../../decisions/0034-media-uploader-buckets.md) §4).
 - **Sub-buckets.** **One level** under a primary (the parent must be a primary), **owner inherited** from the
   parent, a **`K_mem`-sealed** user-chosen name. **No reparenting**, no arbitrary nesting.
 - **Reparent-on-delete.** Deleting a sub-bucket sets its media **`bucket_id = null`** (they fall back to the

@@ -56,15 +56,13 @@ the experience in [uc.memory.buckets](../features/memory/use-cases/uc.memory.buc
    **`K_mem`-sealed** user text; because they are ciphertext there is **no server-side name uniqueness** — the
    only uniqueness this model wants is the content-blind **one primary per `(node, owner_key)`**.
 
-   **That uniqueness is not enforced today, and the find-or-create is best-effort.** Two requests that resolve
-   the same missing primary concurrently each create one. The intended `UNIQUE (node_id, owner_key) WHERE
-   is_primary` is a **partial** index, which the H2 ∩ MariaDB common subset does not have — but the portable
-   form does: a marker column carrying `owner_key` **only** when `is_primary` (else `NULL`, and NULLs do not
-   collide), plus a plain `UNIQUE (node_id, marker)`. That is the same shape `veyq_node` already uses for slug
-   uniqueness (`ux_node_parent_slug`, V10), where the store's `slugTaken` pre-check exists for the friendly
-   error and the **index** is the guarantee. Buckets have the pre-check and not the index — **due when buckets
-   are next touched**, with a dedup of any primaries that already doubled
-   ([architecture §11](../architecture/README.md)).
+   **The node row's lock holds it.** Every find-or-create of a primary (`MediaStore.ensurePrimaryBucket`, which an
+   attach, a sub-bucket create, a move and a sub-bucket delete all go through) takes the node row's lock first and
+   reads under it, so a second resolve of a missing primary waits for the first and then finds it (developer-styleguide
+   §12, the parent's row lock). Read without it, two first uploads of one uploader each created a primary.
+   **Not a unique key** (a marker column set only when `is_primary`, under a plain `UNIQUE`): with a key the loser's
+   whole attach fails and the guest's or member's upload rolls back, where under the lock it lands in the winner's
+   primary. A key would also guard a future insert that bypasses the one function; none exists.
 
 5. **One-level nesting.** Sub-buckets sit **one level** under a primary (the parent must be a primary), **owner
    inherited** from the parent. No arbitrary depth, **no reparenting**.
