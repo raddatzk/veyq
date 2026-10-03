@@ -112,6 +112,9 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      node-keyed entities from their `node_id` column and requires an eraser to reach each. No foreign key points
      at `veyq_node`, so nothing at runtime refuses the purge; before that guard the scope, blob and reclaim
      guards were all green on this exact forgery while the purge orphaned every media, bucket and blob row
+  38 a `core/node/` file naming `features.media` by a fully-qualified reference inline, with no import — rejected:
+     `validate_shared_imports_no_features` reads qualified names on lexer-masked source, not only `import` lines.
+     The compiler does not care which form a back-edge takes; before, this exact shape was green
 Open gaps — a forgery the guard still passes (a documented limit, not a defect to fix blindly):
   4b a lying `status: planned` on an implemented use-case passes. **Left open on purpose** — the obvious rule
      "planned ⇒ no coverage refs" is *false in general*: a use-case can be legitimately `planned` while carrying
@@ -612,6 +615,19 @@ def forge_core_imports_media(root: pathlib.Path) -> str:
     return "a core/node file importing features.media (must be REJECTED — core depends on no application)"
 
 
+def forge_core_names_media_inline(root: pathlib.Path) -> str:
+    # The back-edge without an import: a fully-qualified call inline. A KDoc link of the same name sits beside it,
+    # and the guard must read the code line, not the comment (the comment alone stays green — see its docstring).
+    f = root / CORE_NODE_FORGERY
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text("package com.veyq.app.core.node\n\n"
+                 "/** Counts [com.veyq.app.features.media.MediaEntity] rows. */\n"
+                 "class GuardGapProbe {\n"
+                 "    fun n(): Long = com.veyq.app.features.media.MediaEntity.count()\n"
+                 "}\n")
+    return "a core/node file naming features.media fully-qualified inline, no import (must be REJECTED)"
+
+
 def forge_unmounted_config_secret(root: pathlib.Path) -> str:
     f = root / PROD_COMPOSE
     if not f.is_file():
@@ -800,6 +816,7 @@ CASES = [
     ("35", "validate_blob_reference_arity.py", forge_contributor_forgets_derivative_arm, False),
     ("36", "validate_scope_erasure_arity.py", forge_media_eraser_drops_a_table, False),
     ("37", "validate_node_subtree_erasure.py", forge_media_node_eraser_deleted, False),
+    ("38", "validate_shared_imports_no_features.py", forge_core_names_media_inline, False),
 ]
 
 
