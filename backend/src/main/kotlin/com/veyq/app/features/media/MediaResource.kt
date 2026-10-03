@@ -29,6 +29,7 @@ import com.veyq.app.shared.http.Failures
 import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.http.httpError
 import com.veyq.app.shared.http.httpStaleSealedMeta
+import com.veyq.app.shared.validation.validated
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
 import com.veyq.app.shared.tenant.RequestTenant
@@ -227,7 +228,7 @@ class MediaResource(
     }
 
     override fun presignBlobUploadWindows(scopeId: UUID, blobUploadWindowsRequest: BlobUploadWindowsRequest): Response {
-        val requests = blobUploadWindowsRequest.items.map { WindowRequest(it.uploadId.toString(), it.fromChunk) }
+        val requests = blobUploadWindowsRequest.items.map { WindowRequest(it.uploadId.toString(), it.fromChunk.validated()) }
         return when (val o = handler.window(identity.principal.name, scopeId.toString(), requests, signingDomain())) {
             is WindowOutcome.Results -> Response.ok(
                 BlobUploadWindowsResponse(

@@ -397,7 +397,7 @@ describe('the shared tail — a linked device starts from its linker\u2019s trus
     // The write lands, and the store answers with what it now holds.
     put.mockImplementation(async ({ identityPinsUpdate }) => ({
       blob: identityPinsUpdate.blob,
-      version: identityPinsUpdate.version + 1,
+      version: identityPinsUpdate.version! + 1,
     }))
     expect(await checkAndPin('u1', 'a2V5LW9uZQ==')).toBe('firstUse')
   })

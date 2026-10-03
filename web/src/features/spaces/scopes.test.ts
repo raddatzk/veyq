@@ -682,7 +682,7 @@ describe('renameGroup (cr-0097 — re-seal the name under the current epoch)', (
     const req = rename.mock.calls[0][0].renameGroupRequest
     expect(req.nameEpoch).toBe(0)
     // The posted ciphertext decrypts under K_name derived from the epoch key back to the NEW plaintext.
-    expect(openGroupNameWith(deriveGroupNameKey(key), G1, req.nameEpoch, req.encryptedName)).toBe('Neu')
+    expect(openGroupNameWith(deriveGroupNameKey(key), G1, req.nameEpoch!, req.encryptedName)).toBe('Neu')
   })
 
   it('retries once on 409 stale_epoch (a concurrent rotation), then succeeds', async () => {

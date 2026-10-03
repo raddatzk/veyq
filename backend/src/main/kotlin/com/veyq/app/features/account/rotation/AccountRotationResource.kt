@@ -9,6 +9,7 @@ import com.veyq.app.generated.model.RotationScopeState
 import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.http.httpError
 import com.veyq.app.shared.ratelimit.RateLimitExempt
+import com.veyq.app.shared.validation.validated
 import io.quarkus.security.Authenticated
 import io.quarkus.security.credential.TokenCredential
 import io.quarkus.security.identity.SecurityIdentity
@@ -52,8 +53,8 @@ class AccountRotationResource(
                 passwordWrap = rotateAccountKeysRequest.passwordWrap.toRewritten(),
                 recoveryWrap = rotateAccountKeysRequest.recoveryWrap.toRewritten(),
                 secretKeyProofSignature = rotateAccountKeysRequest.secretKeyProofSignature,
-                pins = rotateAccountKeysRequest.identityPins.let { ResealedDocument(it.blob, it.version) },
-                register = rotateAccountKeysRequest.deviceRegister.let { ResealedDocument(it.blob, it.version) },
+                pins = rotateAccountKeysRequest.identityPins.let { ResealedDocument(it.blob, it.version.validated()) },
+                register = rotateAccountKeysRequest.deviceRegister.let { ResealedDocument(it.blob, it.version.validated()) },
             )
         ) {
             is RotationOutcome.Applied -> Response.ok(

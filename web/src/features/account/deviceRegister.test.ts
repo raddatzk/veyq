@@ -470,9 +470,9 @@ describe('what never reaches the server', () => {
     expect(body.blob).not.toContain('Firefox')
     expect(body.blob).not.toContain('wrap-id-should-not-be-legible')
     // The PUT of a born-empty register (version 0) is stored at version 1 — the version its seal is bound to.
-    expect(open(body.blob, body.version + 1).devices.me.label).toBe('Firefox · macOS')
-    expect(open(body.blob, body.version + 1).wraps).toEqual({ 'wrap-id-should-not-be-legible': 'me' })
-    expect(() => open(body.blob, body.version)).toThrow(new v1.OpenRefused('device-register'))
+    expect(open(body.blob, body.version! + 1).devices.me.label).toBe('Firefox · macOS')
+    expect(open(body.blob, body.version! + 1).wraps).toEqual({ 'wrap-id-should-not-be-legible': 'me' })
+    expect(() => open(body.blob, body.version!)).toThrow(new v1.OpenRefused('device-register'))
   })
 
   // sealRegister and unsealRegister enumerate the maps BY NAME, so a map that reaches `RegisterPlain` and the

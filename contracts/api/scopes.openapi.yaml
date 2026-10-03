@@ -1050,13 +1050,14 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
         admissionEpoch:
           x-veyq-visibility: structure
-          type: integer
+          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (backend/CLAUDE.md)
+          type: [integer, "null"]
           description: >
             The scope epoch whose key computed `admissionTag`. A worker admits only a tag at its own current epoch, so
             a tag made before a rotation does not admit (ADR 0020 move 6).
           minimum: 0
           example: 0
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
         admissionTag:
           type: string
           description: >
@@ -1086,14 +1087,15 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         nameEpoch:
           x-veyq-visibility: structure
-          type: integer
+          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (backend/CLAUDE.md)
+          type: [integer, "null"]
           description: >
             The content-key epoch the client sealed `encryptedName` under — must equal the scope's **current** epoch
             (the server rejects a stale value with `409 stale_epoch`). The server writes it to the scope's
             `name_epoch` so members peel to it and derive `K_name` (cr-0097/ADR 0027).
           minimum: 0
           example: 0
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
 
     SetScopeIconRequest:
       type: object
@@ -1116,14 +1118,15 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 21884) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         iconEpoch:
           x-veyq-visibility: structure
-          type: integer
+          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (backend/CLAUDE.md)
+          type: [integer, "null"]
           description: >
             The content-key epoch the client sealed `sealedIcon` under — must equal the scope's **current** epoch
             (the server rejects a stale value with `409 stale_epoch`). The server writes it to the scope's
             `icon_epoch` so members peel to it and derive `K_icon` (uc.spaces.set-space-icon).
           minimum: 0
           example: 0
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
 
     ResolveGroupMemberRequest:
       type: object
@@ -1190,13 +1193,14 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
         admissionEpoch:
           x-veyq-visibility: structure
-          type: integer
+          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (backend/CLAUDE.md)
+          type: [integer, "null"]
           description: >
             The scope epoch whose key computed `admissionTag`. A worker admits only a tag at its own current epoch, so
             a tag made before a rotation does not admit (ADR 0020 move 6).
           minimum: 0
           example: 0
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
         admissionTag:
           type: string
           description: >

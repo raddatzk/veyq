@@ -145,7 +145,7 @@ function fakeStore(opts: { window?: number; forbidFirstPut?: number[]; putDelayM
     presignBlobUploadWindows: vi.fn<MediaApi['presignBlobUploadWindows']>(async ({ blobUploadWindowsRequest }): Promise<BlobUploadWindowsResponse> => ({
       results: blobUploadWindowsRequest.items.map(({ uploadId, fromChunk }): BlobUploadWindowResultItem => {
         events.push(`window:${fromChunk}`)
-        return { presignedPuts: putsOf(uploadId, fromChunk, sessions.get(uploadId)!.chunkCount), error: null }
+        return { presignedPuts: putsOf(uploadId, fromChunk!, sessions.get(uploadId)!.chunkCount), error: null }
       }),
     })),
     completeMedia: vi.fn<MediaApi['completeMedia']>(async ({ mediaBatchRequest }): Promise<MediaBatchResponse> => {

@@ -38,6 +38,7 @@ import com.veyq.app.shared.identity.WrapData
 import com.veyq.app.shared.ratelimit.RateLimit
 import com.veyq.app.shared.ratelimit.RateLimitExempt
 import com.veyq.app.shared.ratelimit.RateLimitKey
+import com.veyq.app.shared.validation.validated
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
 import jakarta.annotation.security.PermitAll
@@ -134,7 +135,7 @@ class TenantsResource(
     override fun inviteTenantMember(tenantId: UUID, memberInviteRequest: MemberInviteRequest): Response =
         when (val outcome = handler.inviteMember(
             identity.principal.name, tenantId.toString(), memberInviteRequest.email,
-            Admission(memberInviteRequest.admissionId.toString(), memberInviteRequest.admissionEpoch, memberInviteRequest.admissionTag),
+            Admission(memberInviteRequest.admissionId.toString(), memberInviteRequest.admissionEpoch.validated(), memberInviteRequest.admissionTag),
         )) {
             // No bootstrapSecret on the wire: a member invite's token is minted for the invited person and
             // travels by mail only (ADR 0055 §2). `delivery` can only be SENT here — the other outcomes are 503s.
@@ -297,8 +298,8 @@ class TenantsResource(
                 from = tenantMailSettingsUpdate.from,
                 username = tenantMailSettingsUpdate.username,
                 password = tenantMailSettingsUpdate.password,
-                tls = tenantMailSettingsUpdate.tls,
-                enabled = tenantMailSettingsUpdate.enabled,
+                tls = tenantMailSettingsUpdate.tls.validated(),
+                enabled = tenantMailSettingsUpdate.enabled.validated(),
                 subjectTemplate = tenantMailSettingsUpdate.subjectTemplate,
                 bodyTemplate = tenantMailSettingsUpdate.bodyTemplate,
             )
@@ -332,7 +333,7 @@ class TenantsResource(
 
     @Authenticated
     override fun updateTenantStorage(tenantId: UUID, tenantStorageUpdate: TenantStorageUpdate): Response =
-        storageHandler.updateShareLinkLimit(identity.principal.name, tenantId.toString(), tenantStorageUpdate.shareLinkLimitBytes)
+        storageHandler.updateShareLinkLimit(identity.principal.name, tenantId.toString(), tenantStorageUpdate.shareLinkLimitBytes.validated())
             .toResponse()
 
     private fun TenantStorageOutcome.toResponse(): Response = when (this) {

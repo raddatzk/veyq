@@ -66,6 +66,17 @@ class TenantStorageSliceTest {
     }
 
     @Test
+    fun aMissingLimitIs400AndLeavesTheLimit() {
+        // A missing limit must not bind to 0 — 0 is a real limit (link uploads off), so it would switch them off.
+        val (tenantId, ownerId) = seedActiveTenant()
+        given().header("Authorization", bearer(ownerId)).contentType(ContentType.JSON)
+            .body("{}")
+            .`when`().put("/api/tenants/$tenantId/storage")
+            .then().statusCode(400)
+        assertEquals(TenantEntity.DEFAULT_SHARE_LINK_LIMIT_BYTES, QuarkusTransaction.requiringNew().call { TenantEntity.findById(tenantId)!!.shareLinkLimitBytes })
+    }
+
+    @Test
     fun aNonOwnerMemberIs403OnReadAndWrite() {
         val (tenantId, _) = seedActiveTenant()
         val member = seedUser()

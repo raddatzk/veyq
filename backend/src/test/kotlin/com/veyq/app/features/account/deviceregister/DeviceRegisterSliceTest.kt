@@ -98,6 +98,17 @@ class DeviceRegisterSliceTest {
     }
 
     @Test
+    fun aWriteWithoutItsVersionIs400AndStoresNothing() {
+        // A missing `version` must not bind to 0 — on a born-empty register 0 is exactly the version that wins.
+        val token = issueToken(seedUser())
+        given().header("Authorization", "Bearer $token").contentType(ContentType.JSON)
+            .body("""{"blob":"$BLOB_1"}""")
+            .`when`().put(PATH)
+            .then().statusCode(400)
+        get(token).then().statusCode(200).body("blob", nullValue()).body("version", equalTo(0))
+    }
+
+    @Test
     fun registerIsPerAccountNotShared() {
         val mine = issueToken(seedUser())
         put(mine, BLOB_1, 0).then().statusCode(200)

@@ -119,6 +119,20 @@ class TenantMailSettingsSliceTest {
     }
 
     @Test
+    fun aMissingTlsOrEnabledIs400AndNotStored() {
+        // A missing boolean must not bind to false — a missing `tls` would silently turn STARTTLS off.
+        val (tenantId, owner) = seedActiveTenant("mail-nobool.example.com", "owner@mail-nobool.example.com")
+        for (field in listOf("\"tls\":true,", "\"enabled\":true,")) {
+            given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
+                .body(settingsBody().replace(field, ""))
+                .`when`().put("/api/tenants/$tenantId/mail-settings")
+                .then().statusCode(400)
+        }
+        val row = QuarkusTransaction.requiringNew().call<com.veyq.app.features.admin.tenant.MailSettingsRow?> { store.mailSettingsFor(tenantId) }
+        assertNull(row, "a refused update must not create a settings row")
+    }
+
+    @Test
     fun nonOwnerMemberIsForbidden() {
         val (tenantId, _) = seedActiveTenant("mail-authz.example.com", "owner@mail-authz.example.com")
         val member = seedUser(email = "member@mail-authz.example.com")
