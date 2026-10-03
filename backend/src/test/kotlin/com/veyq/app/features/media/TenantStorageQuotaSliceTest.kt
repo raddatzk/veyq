@@ -1,7 +1,7 @@
 package com.veyq.app.features.media
 
 import com.veyq.app.core.blob.UploadSessionEntity
-import com.veyq.app.features.content.NodeEntity
+import com.veyq.app.core.node.NodeEntity
 import com.veyq.app.features.sharing.ShareWriteProof
 import com.veyq.app.shared.TestIds
 import com.veyq.app.shared.adminchannel.givenAdminChannel

@@ -1,8 +1,8 @@
 package com.veyq.app.shared.membership
 
-import com.veyq.app.features.sharing.ShareWriteProof
-import com.veyq.app.features.content.NodeEntity
+import com.veyq.app.core.node.NodeEntity
 import com.veyq.app.features.media.TestBlob
+import com.veyq.app.features.sharing.ShareWriteProof
 import com.veyq.app.shared.TestIds
 import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.shared.tenant.TenantEntity
@@ -13,9 +13,9 @@ import com.veyq.app.testing.TestFixtures.shareKeysJson
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
-import org.hamcrest.Matchers.notNullValue
 import java.time.Instant
 import java.util.UUID
+import org.hamcrest.Matchers.notNullValue
 
 /**
  * One seeded instance holding a space in every state the scope-access gate tells apart

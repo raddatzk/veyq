@@ -1,7 +1,7 @@
 package com.veyq.app.features.spaces.scope
 
+import com.veyq.app.core.node.NodeEntity
 import com.veyq.app.core.sharing.ShareEntity
-import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.content.itemfavorites.ItemFavoritesEntity
 import com.veyq.app.features.sharing.ShareWriteProof
 import com.veyq.app.shared.TestIds

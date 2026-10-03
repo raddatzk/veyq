@@ -1,5 +1,6 @@
 package com.veyq.app.features.content
 
+import com.veyq.app.core.node.NodeEntity
 import com.veyq.app.shared.http.Failures
 import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.membership.AccessMode.READ

@@ -1,6 +1,6 @@
 package com.veyq.app.features.media
 
-import com.veyq.app.features.content.NodeEntity
+import com.veyq.app.core.node.NodeEntity
 import com.veyq.app.features.sharing.SharingStore
 import com.veyq.app.testing.TestFixtures.CONTENT_KEY
 import com.veyq.app.testing.TestFixtures.bearer
@@ -12,13 +12,13 @@ import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
 import jakarta.inject.Inject
+import java.util.UUID
 import org.hamcrest.CoreMatchers.endsWith
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.hasItem
 import org.hamcrest.CoreMatchers.notNullValue
 import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.Test
-import java.util.UUID
 
 /**
  * Slice tests for media blobs (en.memory.media, cr-0028) against the **in-memory store** (dev/test metadata

@@ -1,21 +1,23 @@
 package com.veyq.app.features.media
 
+import com.veyq.app.core.node.NodeEntity
 import com.veyq.app.shared.TestIds
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.shared.membership.TenantRoots
-import com.veyq.app.features.content.NodeEntity
+import com.veyq.app.testing.RACE_ROUNDS
 import com.veyq.app.testing.TestFixtures.CONTENT_KEY
 import com.veyq.app.testing.TestFixtures.bearer
 import com.veyq.app.testing.TestFixtures.seedMemberScope
 import com.veyq.app.testing.TestFixtures.seedNode
 import com.veyq.app.testing.TestFixtures.seedUser
-import com.veyq.app.testing.RACE_ROUNDS
 import com.veyq.app.testing.whileUncommitted
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
 import jakarta.inject.Inject
+import java.time.Instant
+import java.util.UUID
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.notNullValue
 import org.hamcrest.CoreMatchers.nullValue
@@ -23,8 +25,6 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import java.time.Instant
-import java.util.UUID
 
 /**
  * Slice tests for media uploader buckets (uc.memory.buckets, en.memory.buckets, ADR 0034, cr-0113). Covers: an

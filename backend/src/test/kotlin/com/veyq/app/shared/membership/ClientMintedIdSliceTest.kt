@@ -1,9 +1,9 @@
 package com.veyq.app.shared.membership
 
 import com.veyq.app.core.blob.BlobEntity
+import com.veyq.app.core.node.NodeEntity
 import com.veyq.app.core.sharing.ShareEntity
 import com.veyq.app.core.sharing.ShareIdentityEntity
-import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.media.BucketEntity
 import com.veyq.app.features.media.MediaEntity
 import com.veyq.app.features.media.TestBlob
