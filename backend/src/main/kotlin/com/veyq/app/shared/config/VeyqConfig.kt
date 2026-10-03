@@ -239,9 +239,6 @@ interface VeyqConfig {
             @WithDefault("P30D")
             fun retention(): Duration
 
-            /** Dev-only JSONL sink for invite links (absent in prod). */
-            fun devFile(): Optional<String>
-
             fun purge(): Interval
         }
     }

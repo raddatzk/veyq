@@ -45,7 +45,7 @@ keeps the copy-link (§5).**
    the DB holds only ciphertext + nonce, the field is **write-only** over the API (never returned or logged —
    reads expose only a `passwordSet` boolean), and it is decrypted only at send time to build the client.
 4. **Per-tenant, no server-level default.** Mail settings exist only at tenant scope (the owner's choice), so
-   there is no instance-wide secret. The `LoggingTenantInviteMailer` copy-link fallback (+ the cr-0046 dev-file)
+   there is no instance-wide secret. The `LoggingTenantInviteMailer` copy-link fallback
    that a tenant without settings once fell back to now serves **only the owner-bootstrap invite** of §5 —
    [ADR 0055](0055-mail-is-a-precondition-not-a-capability.md) made a working mailer a precondition for every
    other mail-bound action, so a tenant with no sendable settings is refused rather than degraded.
@@ -67,8 +67,8 @@ keeps the copy-link (§5).**
 
 - **Per-tenant sending identity, runtime-editable.** Each tenant's invites come from its own domain; the owner
   reconfigures SMTP with no redeploy. Self-hostable: any SMTP server works.
-- **The dev loop is untouched.** No tenant has mail settings in dev ⇒ the logging mailer + dev-file run ⇒
-  `seed:dev` still reads the token. A **Mailpit** (`mail` profile) container is available for a tenant to point
+- **The dev loop is untouched.** No tenant has mail settings in dev ⇒ the logging mailer runs, and the seed reads
+  the bootstrap secret from `createTenant`'s response (the dev-invite file it once read is gone, inbox #285). A **Mailpit** (`mail` profile) container is available for a tenant to point
   at for smoke. (MailHog archived → Mailpit, per no-EOL-deps.)
 - **New machinery:** the first server-held secret at rest ([ADR 0050](0050-operator-config-secret-encryption.md));
   a per-tenant `MailClient` built at send time (a per-tenant client cache is a deferred optimization — invites are

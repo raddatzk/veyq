@@ -226,9 +226,8 @@ const mailReady = await configureMail()
 // the online key-holder — we drain the grant-delivery job the backend originated (claim → wrap K_tenant to
 // user2's identity → complete), exactly what a key-holder's device does in the web client (cr-0076).
 //
-// The invite token is read out of the MAILBOX, not the dev-invite file: a member invite is minted for the
-// invited person and never returned to the caller (ADR 0055 §2), and the mailer's dev-file append only ever
-// carried the owner-bootstrap invite it falls back on. Throws rather than `fail()`s — the caller downgrades any
+// The invite token is read out of the MAILBOX: a member invite is minted for the invited person and never
+// returned to the caller (ADR 0055 §2). Throws rather than `fail()`s — the caller downgrades any
 // failure here to a warning, because the owner above is already usable and already persisted.
 async function onboardUser2(): Promise<void> {
   if (!mailReady) throw new Error('no sendable mail settings — a MEMBER invite has no other channel (ADR 0055)')

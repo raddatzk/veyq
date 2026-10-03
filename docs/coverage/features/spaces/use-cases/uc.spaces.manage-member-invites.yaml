@@ -57,7 +57,7 @@ acceptanceCriteria:
       web:
         unit: [src/features/spaces/TenantMembersPanel.test.ts]
   - id: invite-secret-never-logged
-    text: The raw invite bootstrap token — a redeemable secret — is never emitted to a log, in any launch mode. Every invite the shared delivery mailer sends (mint, resend, re-issue) logs only non-secret metadata (email + expiry); the secret reaches the invitee via the API response or the opt-in dev-file only. A production runtime logs a secret-free "not delivered" warning instead of the link.
+    text: The raw invite bootstrap token — a redeemable secret — is never emitted to a log, in any launch mode. Every invite the shared delivery mailer sends (mint, resend, re-issue) logs only non-secret metadata (email + expiry); the secret reaches the invitee via the API response only. A production runtime logs a secret-free "not delivered" warning instead of the link.
     coverage:
       backend:
-        integration: [TenantInviteMailerDevFileTest.neverLogsTheRawBootstrapToken]
+        integration: [TenantInviteMailerLogTest.neverLogsTheRawBootstrapToken]

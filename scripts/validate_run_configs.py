@@ -31,7 +31,7 @@ configuration *works*.
     value (store endpoint, `VEYQ_BLOB_STORE_PUBLIC_ENDPOINT`, a port) are unchecked. A configuration whose
     `PUBLIC_ENDPOINT` disagrees with the origin you browse is green here and broken in the browser.
   - Paths embedded in `<env>` values are deliberately **not** resolved: build outputs legitimately do not
-    exist yet on a clean tree (`VEYQ_TENANT_INVITE_DEV_FILE` → `backend/build/dev-invites.jsonl`), so
+    exist yet on a clean tree (a file the configured backend writes under `backend/build/`), so
     requiring them would make the guard red on arrival — red-because-wrong, which is indistinguishable from
     red-because-broken for every later reader.
   - It sees the files that exist, never the one that is **missing**: `.run/` carried no admin-surface
