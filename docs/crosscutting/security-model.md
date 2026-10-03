@@ -122,6 +122,12 @@ request the **user** turned on, straight to the chosen provider.
   carries only link + domain + expiry + neutral copy, never sealed metadata
   ([ADR 0049](../decisions/0049-email-delivery-boundary.md)).
 
+**Applications widen what is visible by one fact: the node `kind`.** The kind of every node is a server-visible
+column already (`FOLDER`, `MEMORY`, `CHAPTER` today). Once an application adds kinds, it also shows the operator
+**which applications a scope uses**, and the rows, timestamps and sizes each kind produces
+([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)). Each application's concept
+doc lists the further metadata its own kinds expose ([docs/apps](../apps/README.md)).
+
 These operational fields are exactly what lets the server **sort, paginate, route, authorize and
 bill** without decrypting. It is a conscious trade-off: a stricter "encrypt operational metadata too"
 mode is possible at the cost of those capabilities. The server never sees content — only structure.
@@ -192,6 +198,21 @@ flowchart TB
   [ADR 0012](../decisions/0012-content-key-hierarchy.md).
 - The identity private key is protected by the **Master Key**, itself wrapped **separately by each
   unlock method**. Adding or removing a method changes one wrap, never the content.
+
+## Applications are compiled in — never loaded
+
+veyq's applications are first-party and built into the release; there is no runtime loading of application code
+on the server or in the client. Code running in the client reaches every key of the user's unlocked scopes, so a
+way to add code after the fact would be a way to read everything, and the release identity
+([ADR 0057](../decisions/0057-release-identity-and-deployment-recipe.md)) and the client trust tiers
+([ADR 0026](../decisions/0026-client-trust-tiers.md)) would no longer say what runs
+([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Decision 5).
+
+**Known gap, per application:** the server holds an application's entries and chooses what it serves. Binding an
+entry to its object ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md)) does not bind it to its
+neighbours, so for an append-only application (a ledger) a server can **drop or reorder** entries unless a
+sequence number or hash chain is bound into each entry's associated data. That is the same limit as freshness
+above, and each such application states it in its concept doc ([docs/apps](../apps/README.md)).
 
 ## Cryptographic stance
 

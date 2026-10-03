@@ -11,6 +11,12 @@ This is the **target model**; first-build scope is tracked via the inbox and cha
 operator-blind) are realised by the enabler [en.spaces.personal-scope](../features/spaces/enablers/en.spaces.personal-scope.md);
 the tenant root scope is born at tenant activation.
 
+Everything in this document is the **platform's** ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)):
+scopes, memberships, grants, shares and the node tree. The tree is domain-neutral — each node has a `kind`, and
+`FOLDER`, `MEMORY` and `CHAPTER` are the kinds that exist today; Memory and Chapter are the **Memories**
+application's ([docs/apps](../apps/README.md)). An application is created on demand inside a scope; a tenant
+does not activate one.
+
 ## Scope — the unit content is keyed on
 
 A **scope** is the unit business data is keyed on, addressed by an **opaque scope ID (UUID)**, never by
@@ -193,7 +199,7 @@ it can decrypt any names or metadata. The operator must not learn private names 
 - Business data is addressed by **opaque scope/node IDs**; the **tenant context is resolved from the
   request `Host`** (tenant↔domain). No tenant or scope *name* appears in the path.
 - **No cross-scope move** — moving across scopes is a copy + re-encrypt, not a tree move.
-- No cycles; **no folder inside a Memory**.
+- No cycles; **no folder inside a Memory** (a Memories rule — a kind decides what may nest under it).
 - **Slug uniqueness per parent** across folders, Memories and chapters, via blinded slug tokens.
 - A personal scope has **no other key-holder** unless the owner explicitly shares.
 - The **same rules apply to all scope kinds**.
