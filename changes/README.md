@@ -1575,9 +1575,16 @@ Write the fix as a hypothesis, and re-derive it from the first red.
 last-owner rule, `ownerCount`), and give each caller an overlap test. #272 named two demotes. The read's third
 caller, the tenant removal's plan, left a group with no owner in round 0 as well, and that test is what made the
 fix lock before the plan instead of only around the demote
-(cr-owners-and-personal-scope-hold-under-overlap). **And a lock-based fix names where its transaction's first
-read is.** The slice tests run H2 at READ COMMITTED, and production runs MariaDB at REPEATABLE READ. A check made
-after the lock but in a transaction that read before it passes every H2 test and is stale on MariaDB.
+(cr-owners-and-personal-scope-hold-under-overlap). **And a race green on H2 is a claim about H2.** Production
+ran MariaDB at REPEATABLE READ while the tests ran READ COMMITTED; the first run of the race classes on the pinned
+engine reddened three tests the suite had been green on for weeks, one of them (a refresh chain forking) a defect
+no refine had named. Both now run READ COMMITTED (ADR 0078), and a CR that changes a lock, a gate or a transaction
+boundary runs `scripts/run_backend_races_on_mariadb.py` before it calls the race fixed.
+**Sweep a gate-then-write class from the cleanup's side.** A list of gates outside their write's transaction is
+long and mostly harmless; the real ones are where a concurrent cleanup (a member's removal, a purge) enumerates
+the rows the gated write adds. Keyed on the cleanups (`grep` the bulk deletes and updates by a set, and the
+`@Scheduled` purges), cr-a-gate-holds-until-its-write-commits found thirteen real ones in five clusters and could
+name every other gate safe in one line each.
 
 ### Every CR closes with a short, honest retrospective
 
