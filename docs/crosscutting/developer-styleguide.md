@@ -282,8 +282,9 @@ not documented; the code is the source of truth for that.
   selection is itself the lock. A share create, a re-issue and an item-favorite write take the scope row a removal
   holds; a group create and a group add take the tenant root a tenant removal holds; a purge selects with
   `FOR UPDATE` and a restore is a guarded update (cr-a-gate-holds-until-its-write-commits). A sign-in, a device wrap
-  and a pairing delegation take the account row (`AccountStore.lock`) that a password reset, a password change and a
-  key rotation take first, and re-read under it what those change — the auth key, the caller's session (inbox #297).
+  and a pairing delegation take the account row (`AccountStore.lock`) that a password reset, a password change, a
+  key rotation and a sign-out everywhere else take first, and re-read under it what those change — the auth key, the
+  caller's session (inbox #297, #316).
   **A rule across different ids needs its own key.** "One personal scope per member and tenant" had no row to
   compare-and-set, and two creates under two ids collided on nothing. `ux_scope_personal_owner` is that row's
   compare-and-set, and `personalScopeExists` reads that key, so the loser's replay question is the index's own

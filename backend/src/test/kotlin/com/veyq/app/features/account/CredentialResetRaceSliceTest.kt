@@ -14,6 +14,7 @@ import com.veyq.app.features.account.rotation.RotationStore
 import com.veyq.app.shared.crypto.SecretKeyProof
 import com.veyq.app.shared.crypto.TestProofKey
 import com.veyq.app.shared.crypto.Tokens
+import com.veyq.app.shared.identity.AccountStore
 import com.veyq.app.shared.identity.MasterKeyWrapEntity
 import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.identity.WrapMethod
@@ -39,7 +40,8 @@ import java.util.UUID
 
 /**
  * A sign-in, a new device wrap and a pairing delegation each race the three operations that end an account's other
- * devices: a password reset, a password change and a key rotation (inbox #297, developer-styleguide §12).
+ * devices: a password reset, a password change and a key rotation (inbox #297, developer-styleguide §12) — and a
+ * delegation races the fourth, a sign-out everywhere else (inbox #316).
  *
  * Each of those cleanups enumerates what it ends — the account's ACTIVE session families, its device wraps, its live
  * pairing channels — and none sees a row another transaction has not committed yet. A writer that read the account
@@ -67,6 +69,7 @@ class CredentialResetRaceSliceTest {
     @Inject lateinit var pairings: PairingHandler
     @Inject lateinit var logins: LoginHandler
     @Inject lateinit var keyMaterial: KeyMaterialHandler
+    @Inject lateinit var accounts: AccountStore
 
     private enum class Cleanup { RESET, CHANGE, ROTATION }
 
@@ -134,6 +137,52 @@ class CredentialResetRaceSliceTest {
         }
         // Control: the same delegation, raced against nothing, mints.
         assertEquals(200, delegate(seedAccount().otherToken, answeredChannel()))
+    }
+
+    @Test
+    fun aPairingDelegationDoesNotSurviveASignOutEverywhereElseItRaced() {
+        // "Sign out everywhere else" (uc.account.sessions) is the fourth cleanup that ends an account's other devices,
+        // and it ends their families by the same enumeration (inbox #316). A device it signs out could delegate while
+        // it ran: serially that delegation is either revoked with the rest or refused as a dead session. Unlike a
+        // reset it replaces no credential a sign-in could beat it to — the password still signs in a moment later —
+        // so the race is the delegation: a session minted by a device that is being signed out.
+        repeat(RACE_ROUNDS) { round ->
+            val signedOut = seedAccount()
+            val handle = answeredChannel()
+            val status = whileUncommitted(
+                change = { sessions.revokeOtherFamilies(signedOut.id, signedOut.ownToken) },
+                overlapping = { delegate(signedOut.otherToken, handle) },
+            )
+            val label = "round $round (delegation answered $status)"
+            assertEquals(0L, liveFamiliesBeyond(signedOut, Cleanup.CHANGE), "$label: a delegated session outlived the sign-out everywhere else")
+            assertEquals(401, status, "$label: the delegation's session was ended by the sign-out it waited for")
+        }
+        // Control: the sign-out alone spares the device that asked for it, so the zeros above are the race's and not a
+        // revoke that took everything.
+        val alone = seedAccount()
+        sessions.revokeOtherFamilies(alone.id, alone.ownToken)
+        assertEquals(1L, liveFamiliesBeyond(alone, Cleanup.RESET), "the sign-out everywhere else spares its own session")
+    }
+
+    @Test
+    fun aSignOutEverywhereElseThatStartsWhileADelegationIsUncommittedStillEndsIt() {
+        // The other order: the delegation holds its transaction open, and the sign-out must wait for it and end what it
+        // minted rather than enumerate past the uncommitted family. Held as its store calls, in its order:
+        // `PairingHandler.delegate` opens a transaction of its own and would commit inside the hold.
+        repeat(RACE_ROUNDS) { round ->
+            val delegating = seedAccount()
+            val held = answeredChannel()
+            whileUncommitted(
+                change = {
+                    accounts.lock(delegating.id)
+                    val row = checkNotNull(pairingStore.findByHandleHash(Tokens.hash(held)))
+                    check(pairingStore.claimDelegation(row.id, delegating.id)) { "round $round: the held claim" }
+                    pairingStore.bindDelegation(row.id, sessions.issueDelegated(delegating.id).familyId)
+                },
+                overlapping = { sessions.revokeOtherFamilies(delegating.id, delegating.ownToken) },
+            )
+            assertEquals(0L, liveFamiliesBeyond(delegating, Cleanup.CHANGE), "round $round: the sign-out left the held delegation's session alive")
+        }
     }
 
     @Test

@@ -94,6 +94,15 @@ acceptanceCriteria:
           - SessionManagerSliceTest.signOutEverywhereElseEndsEveryOtherFamilyAndKeepsTheCallers
           - SessionManagerSliceTest.signOutEverywhereElseIsIdempotentWithNothingElseToEnd
       web: { unit: [src/features/account/sessions/SessionsPanel.test.ts] }
+  - id: nothing-outlives-the-sign-out-everywhere-else-it-raced
+    text: A pairing delegation by a device that a sign-out everywhere else ends either committed before it — and its
+      delegated session is revoked with the rest — or decides after it and is refused as a dead session; no
+      delegated session outlives the sign-out that ended the device that made it.
+    coverage:
+      backend:
+        integration:
+          - CredentialResetRaceSliceTest.aPairingDelegationDoesNotSurviveASignOutEverywhereElseItRaced
+          - CredentialResetRaceSliceTest.aSignOutEverywhereElseThatStartsWhileADelegationIsUncommittedStillEndsIt
   - id: works-locked-names-never-reach-the-server
     text: >-
       Listing and revoking require only a session, never an unlocked vault, so a locked device can still cut off
