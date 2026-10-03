@@ -286,8 +286,8 @@ class SharingHandler(
         // A double-submitted Memory's FIRST UPLOADER link loses at the guarded drop-key update, not at the commit: both
         // carry the private key, and the loser's update waits for the winner's and finds the key set. Its replay meets
         // the id check first and answers `id_taken` — `drop_key_exists` would send the client to re-seal and retry the
-        // id the winner holds. So that refusal re-asks the replay question, in a fresh transaction: under MariaDB's
-        // REPEATABLE READ the loser's own still reads the snapshot its first id check took, before the winner's share.
+        // id the winner holds. So that refusal re-asks the replay question, in a fresh transaction once the loser's
+        // has ended, as `createOrConflict` does for a failed commit.
         // Two DIFFERENT links racing for the first drop key keep `drop_key_exists`: their ids are free.
         val created = if (stored == SharingStore.CreateResult.DROP_KEY_EXISTS) {
             QuarkusTransaction.requiringNew().call(replay) ?: stored
