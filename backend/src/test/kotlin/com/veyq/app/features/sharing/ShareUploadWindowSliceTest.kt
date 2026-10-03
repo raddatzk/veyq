@@ -1,9 +1,9 @@
 package com.veyq.app.features.sharing
 
-import com.veyq.app.shared.TestIds
+import com.veyq.app.core.blob.UploadSessionEntity
 import com.veyq.app.features.media.MediaBudgetBranchSliceTest
 import com.veyq.app.features.media.TestBlob
-import com.veyq.app.features.media.UploadSessionEntity
+import com.veyq.app.shared.TestIds
 import com.veyq.app.shared.blobstore.FakePresigningBlobStore
 import com.veyq.app.testing.TestFixtures.CONTENT_KEY
 import com.veyq.app.testing.TestFixtures.bearer

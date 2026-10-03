@@ -1,29 +1,29 @@
 package com.veyq.app.features.spaces.scope
 
-import com.veyq.app.shared.membership.MembershipEntity
+import com.veyq.app.core.blob.BlobEntity
+import com.veyq.app.core.blob.UploadSessionEntity
+import com.veyq.app.core.sharing.ShareEntity
+import com.veyq.app.core.sharing.ShareIdentityEntity
+import com.veyq.app.core.sharing.ShareRetiredIdEntity
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.content.favorites.FavoritesEntity
 import com.veyq.app.features.content.itemfavorites.ItemFavoritesEntity
-import com.veyq.app.features.media.BlobEntity
 import com.veyq.app.features.media.MediaDerivativeEntity
 import com.veyq.app.features.media.MediaEntity
-import com.veyq.app.features.media.UploadSessionEntity
-import com.veyq.app.features.sharing.ShareEntity
-import com.veyq.app.features.sharing.ShareIdentityEntity
-import com.veyq.app.features.sharing.ShareRetiredIdEntity
 import com.veyq.app.features.tasks.JobDeclineEntity
 import com.veyq.app.features.tasks.JobEntity
 import com.veyq.app.shared.blobstore.StoreObjectRef
 import com.veyq.app.shared.blobstore.StoreReclaimStore
 import com.veyq.app.shared.config.VeyqConfig
+import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.shared.scope.ScopeEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.scheduler.Scheduled
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
-import org.jboss.logging.Logger
 import java.time.Duration
 import java.time.Instant
+import org.jboss.logging.Logger
 
 /**
  * Scheduled hard-purge of soft-deleted groups (uc.spaces.delete-group, cr-0090, ADR 0014 §6). A group the owner

@@ -1,5 +1,6 @@
 package com.veyq.app.features.sharing
 
+import com.veyq.app.core.sharing.ShareEntity
 import com.veyq.app.shared.membership.ScopeAccessWorld
 import com.veyq.app.shared.membership.ScopeAccessWorld.Companion.B64
 import com.veyq.app.testing.TestFixtures.bearer
@@ -8,10 +9,10 @@ import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.QuarkusTestProfile
 import io.quarkus.test.junit.TestProfile
 import io.restassured.RestAssured.given
-import org.hamcrest.Matchers.equalTo
-import org.junit.jupiter.api.Test
 import java.time.Instant
 import java.util.UUID
+import org.hamcrest.Matchers.equalTo
+import org.junit.jupiter.api.Test
 
 /**
  * Re-activating a share publishes its link again, so it passes the check creating one does: the instance

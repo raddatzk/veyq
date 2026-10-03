@@ -1,4 +1,4 @@
-package com.veyq.app.features.sharing
+package com.veyq.app.core.sharing
 
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheCompanionBase
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheEntityBase

@@ -1,8 +1,8 @@
 package com.veyq.app.features.spaces.scope
 
+import com.veyq.app.core.sharing.ShareEntity
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.content.itemfavorites.ItemFavoritesEntity
-import com.veyq.app.features.sharing.ShareEntity
 import com.veyq.app.features.sharing.ShareWriteProof
 import com.veyq.app.shared.TestIds
 import com.veyq.app.shared.identity.TenantProfileEntity
@@ -23,12 +23,12 @@ import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
 import jakarta.inject.Inject
+import java.time.Instant
+import java.util.UUID
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import java.time.Instant
-import java.util.UUID
 
 /**
  * A write a member's removal would clean up is refused once that removal has committed — also when the write's own

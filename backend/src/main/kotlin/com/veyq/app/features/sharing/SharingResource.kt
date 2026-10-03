@@ -1,5 +1,6 @@
 package com.veyq.app.features.sharing
 
+import com.veyq.app.core.sharing.ShareEntity
 import com.veyq.app.features.media.DerivativeDeclare
 import com.veyq.app.features.media.UploadDeclare
 import com.veyq.app.features.media.WindowRequest
@@ -7,15 +8,16 @@ import com.veyq.app.generated.api.SharingApi
 import com.veyq.app.generated.model.CreateShareIdentityRequest
 import com.veyq.app.generated.model.CreateShareRequest
 import com.veyq.app.generated.model.LocalizedMarkdown
+import com.veyq.app.generated.model.NodeKind
 import com.veyq.app.generated.model.PresignedUrl
 import com.veyq.app.generated.model.PublicShare
 import com.veyq.app.generated.model.ReissueShareRequest
 import com.veyq.app.generated.model.ShareBlobDownload
 import com.veyq.app.generated.model.ShareBlobUploadResultItem
-import com.veyq.app.generated.model.ShareBlobUploadsRequest
 import com.veyq.app.generated.model.ShareBlobUploadWindowResultItem
 import com.veyq.app.generated.model.ShareBlobUploadWindowsRequest
 import com.veyq.app.generated.model.ShareBlobUploadWindowsResponse
+import com.veyq.app.generated.model.ShareBlobUploadsRequest
 import com.veyq.app.generated.model.ShareBlobUploadsResponse
 import com.veyq.app.generated.model.ShareCreated
 import com.veyq.app.generated.model.ShareIdentity
@@ -30,20 +32,19 @@ import com.veyq.app.generated.model.ShareRole
 import com.veyq.app.generated.model.ShareSummary
 import com.veyq.app.generated.model.ShareTerms
 import com.veyq.app.generated.model.UpdateShareRequest
-import com.veyq.app.generated.model.NodeKind
 import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.http.httpError
+import com.veyq.app.shared.ratelimit.RateLimit
+import com.veyq.app.shared.ratelimit.RateLimitExempt
+import com.veyq.app.shared.ratelimit.RateLimitKey
+import com.veyq.app.shared.tenant.RequestTenant
 import com.veyq.app.shared.validation.validated
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
 import jakarta.annotation.security.PermitAll
-import com.veyq.app.shared.tenant.RequestTenant
 import jakarta.ws.rs.core.Response
 import java.time.ZoneOffset
 import java.util.UUID
-import com.veyq.app.shared.ratelimit.RateLimit
-import com.veyq.app.shared.ratelimit.RateLimitExempt
-import com.veyq.app.shared.ratelimit.RateLimitKey
 
 /**
  * HTTP adapter for public viewer shares (uc.sharing.share-public-viewer, cr-0100). Implements the generated

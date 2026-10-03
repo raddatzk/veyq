@@ -1,13 +1,13 @@
 package com.veyq.app.shared.membership
 
-import com.veyq.app.features.sharing.ShareWriteProof
+import com.veyq.app.core.blob.BlobEntity
+import com.veyq.app.core.sharing.ShareEntity
+import com.veyq.app.core.sharing.ShareIdentityEntity
 import com.veyq.app.features.content.NodeEntity
-import com.veyq.app.features.media.BlobEntity
 import com.veyq.app.features.media.BucketEntity
 import com.veyq.app.features.media.MediaEntity
 import com.veyq.app.features.media.TestBlob
-import com.veyq.app.features.sharing.ShareEntity
-import com.veyq.app.features.sharing.ShareIdentityEntity
+import com.veyq.app.features.sharing.ShareWriteProof
 import com.veyq.app.shared.TestIds
 import com.veyq.app.shared.membership.ScopeAccessWorld.Companion.B64
 import com.veyq.app.shared.scope.ScopeEntity
@@ -17,12 +17,12 @@ import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
 import io.restassured.specification.RequestSpecification
+import kotlin.test.assertEquals
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.notNullValue
 import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import kotlin.test.assertEquals
 
 /**
  * The client mints the id of every sealed object it creates, and the server stores it under exactly that id

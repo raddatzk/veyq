@@ -1,5 +1,6 @@
 package com.veyq.app.features.media
 
+import com.veyq.app.core.blob.UploadSessionEntity
 import com.veyq.app.shared.blobstore.FakePresigningBlobStore
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.shared.membership.TenantRoots
@@ -15,14 +16,14 @@ import io.quarkus.test.junit.TestProfile
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
 import jakarta.inject.Inject
+import java.time.Duration
+import java.time.Instant
+import java.util.UUID
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.notNullValue
 import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import java.time.Duration
-import java.time.Instant
-import java.util.UUID
 
 /**
  * The member half of windowed presigning (uc.memory.upload, ADR 0013 §2): `start` signs only a blob's first window,

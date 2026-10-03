@@ -1,9 +1,9 @@
 package com.veyq.app.features.sharing
 
-import com.veyq.app.features.media.TestBlob
+import com.veyq.app.core.blob.BlobEntity
 import com.veyq.app.features.content.NodeEntity
-import com.veyq.app.features.media.BlobEntity
 import com.veyq.app.features.media.MediaEntity
+import com.veyq.app.features.media.TestBlob
 import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.testing.TestFixtures.CONTENT_KEY
 import com.veyq.app.testing.TestFixtures.bearer
@@ -13,13 +13,13 @@ import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
+import java.time.Instant
+import java.util.UUID
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.hasItem
 import org.hamcrest.CoreMatchers.not
 import org.hamcrest.CoreMatchers.notNullValue
 import org.junit.jupiter.api.Test
-import java.time.Instant
-import java.util.UUID
 
 /**
  * Slice tests for the **trash ∩ share** interaction (uc.memory.delete-media cr-0110/0111 meets

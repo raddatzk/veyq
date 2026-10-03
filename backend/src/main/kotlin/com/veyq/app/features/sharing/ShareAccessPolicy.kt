@@ -1,5 +1,7 @@
 package com.veyq.app.features.sharing
 
+import com.veyq.app.core.sharing.ShareEntity
+
 /**
  * The pure share-access decision (ADR 0045 §2, ADR 0031), lifted out of [SharingHandler] so the write-only
  * drop-box boundary is unit-tested and mutation-verified without a Quarkus boot. Given a share's already-loaded

@@ -1,7 +1,7 @@
 package com.veyq.app.features.content
 
+import com.veyq.app.core.blob.BlobEntity
 import com.veyq.app.features.content.itemfavorites.ItemFavoritesEntity
-import com.veyq.app.features.media.BlobEntity
 import com.veyq.app.features.media.BucketEntity
 import com.veyq.app.features.media.MediaEntity
 import com.veyq.app.features.media.MediaStore
@@ -15,9 +15,9 @@ import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.scheduler.Scheduled
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
-import org.jboss.logging.Logger
 import java.time.Duration
 import java.time.Instant
+import org.jboss.logging.Logger
 
 /**
  * Scheduled hard-purge of soft-deleted node subtrees (uc.memory.delete-node, ADR 0061 Decision 6). A node the

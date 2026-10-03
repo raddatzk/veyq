@@ -1,12 +1,14 @@
 package com.veyq.app.features.sharing
 
-import com.veyq.app.shared.TestIds
-import com.veyq.app.features.media.TestBlob
+import com.veyq.app.core.blob.BlobEntity
+import com.veyq.app.core.sharing.ShareEntity
+import com.veyq.app.core.sharing.ShareIdentityEntity
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.content.NodeSubtreePurge
-import com.veyq.app.features.media.BlobEntity
 import com.veyq.app.features.media.BucketEntity
 import com.veyq.app.features.media.MediaEntity
+import com.veyq.app.features.media.TestBlob
+import com.veyq.app.shared.TestIds
 import com.veyq.app.shared.config.VeyqConfig
 import com.veyq.app.testing.TestFixtures.CONTENT_KEY
 import com.veyq.app.testing.TestFixtures.WRAPPED_UPLOADER_KEY
@@ -20,6 +22,8 @@ import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
 import jakarta.inject.Inject
+import java.time.Instant
+import java.util.UUID
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.hasItem
 import org.hamcrest.CoreMatchers.not
@@ -29,8 +33,6 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
-import java.time.Instant
-import java.util.UUID
 
 /**
  * Slice tests for the **node trash ∩ share** interaction (uc.memory.delete-node / ADR 0061 meets

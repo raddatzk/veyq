@@ -1,7 +1,8 @@
 package com.veyq.app.features.media
 
-import com.veyq.app.shared.tenant.TenantEntity
+import com.veyq.app.core.blob.UploadSessionEntity
 import com.veyq.app.shared.blobstore.FakePresigningBlobStore
+import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.testing.TestFixtures.CONTENT_KEY
 import com.veyq.app.testing.TestFixtures.bearer
 import com.veyq.app.testing.TestFixtures.seedMemberScope
@@ -14,11 +15,11 @@ import io.quarkus.test.junit.TestProfile
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
 import jakarta.inject.Inject
+import java.net.URI
+import java.util.UUID
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Test
-import java.net.URI
-import java.util.UUID
 
 /**
  * Where a presigned URL's origin comes from (ADR 0063, amending ADR 0013 §4): **the tenant the request resolved
