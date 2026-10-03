@@ -4,7 +4,6 @@ import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.sharing.ShareIdentityEntity
 import com.veyq.app.shared.blobstore.StoreObjectRef
 import com.veyq.app.shared.blobstore.StoreReclaimStore
-import com.veyq.app.shared.membership.MembershipEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
@@ -145,7 +144,9 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
      * Promote a media's verified sessions to blobs + attach to the node, consuming every session. The original
      * session becomes `veyq_media.blob_id`; each derivative becomes its own blob + a `veyq_media_derivative`
      * row. One transaction — all blobs, the media, and the derivative rows commit together. Returns
-     * (originalBlobId, mediaId), or null — nothing written — when a session was already spent.
+     * (originalBlobId, mediaId), or null — nothing written — when a session was already spent, or [admitted] refuses.
+     * [admitted] is the caller's gate asked again, before anything else in this transaction — a guest's link under
+     * the row lock its delete holds (`SharingHandler.completeUploads`); a member's complete passes none.
      *
      * The sessions are single-use, so they are **spent first** (developer-styleguide §12): each delete is the
      * transaction's first write and its row count decides. Two completes of one upload both found the session live;
@@ -164,8 +165,9 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
         wrappedExif: String?,
         shareIdentityId: String? = null, // cr-0101: the contributor identity, when attached via a CONTRIBUTOR share
         uploaderUserId: String? = null,  // cr-0113: the member uploader (member path); null on the contributor path
-        targetBucketId: String? = null,  // cr-0113: an explicit target bucket; null = the uploader's primary
+        admitted: () -> Boolean = { true },
     ): Pair<String, String>? {
+        if (!admitted()) return null
         val sessionIds = listOf(original.id) + derivatives.map { it.session.id }
         if (sessionIds.sumOf { UploadSessionEntity.delete("id = ?1", it) } != sessionIds.size.toLong()) {
             QuarkusTransaction.setRollbackOnly() // a session spent elsewhere: unspend the ones this call took
@@ -173,7 +175,7 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
         }
         val scopeId = original.scopeId
         val ownerKey = ownerKeyFor(uploaderUserId, shareIdentityId)
-        val bucket = resolveAttachBucket(scopeId, nodeId, ownerKey, targetBucketId)
+        val bucket = ensurePrimaryBucket(scopeId, nodeId, ownerKey, primarySealedNameFor(ownerKey))
         val originalBlobId = persistBlob(original, originalManifest)
         val now = Instant.now()
         MediaEntity().apply {
@@ -185,7 +187,7 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
             this.wrappedExif = wrappedExif
             this.shareIdentityId = shareIdentityId
             this.createdBy = ownerKey // cr-0113: the buckets attribution (denormalized owner_key)
-            this.bucketId = bucket.id // cr-0113: the resolved primary (or explicit) bucket
+            this.bucketId = bucket.id // cr-0113: the uploader's primary; a move files it elsewhere
             createdAt = now
             updatedAt = now // cr-0107: the keyset cursor starts at creation time
         }.persist()
@@ -270,7 +272,10 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
      */
     @Transactional
     fun trashMedia(scopeId: String, mediaId: String, userId: String): String? {
-        val media = MediaEntity.findById(mediaId)?.takeIf { it.scopeId == scopeId } ?: return null
+        // The read is the row's lock, as every delete of the row takes it (`purgeMedia`, a guest's
+        // `deleteContributedMedia`): one that holds it finishes first, and this then finds nothing — the 404 a replay
+        // gets. Read plainly, the trash flushed onto a row the delete had removed and answered 500 (inbox #313).
+        val media = MediaEntity.findById(mediaId, LockModeType.PESSIMISTIC_WRITE)?.takeIf { it.scopeId == scopeId } ?: return null
         if (media.deletedAt != null) return media.nodeId // already trashed — idempotent
         media.deletedAt = Instant.now()
         media.deletedBy = userId
@@ -388,7 +393,7 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
             m.id, blob.id, blob.chunkCount, blob.byteSize, blob.wrappedBlobKey, decodeManifest(blob.manifest),
             derivatives, m.wrappedMeta, m.updatedAt ?: m.createdAt, // cr-0107: coalesce for pre-backfill safety
             m.deletedAt, m.deletedBy, // cr-0110: null for live media, populated in the trashed listing
-            m.createdBy ?: m.shareIdentityId?.let { OwnerKey.Share(it).format() }, m.bucketId, // cr-0113
+            m.createdBy, m.bucketId, // cr-0113: `attach` stamps both
             m.metaVersion,
         )
     }
@@ -509,16 +514,6 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
 
     // --- buckets (en.memory.buckets, ADR 0034, cr-0113) ----------------------
 
-    /** The scope's owner userId (its sole/oldest membership) — the fallback attribution for pre-cr0113 member media. */
-    fun scopeOwnerUserId(scopeId: String): String? =
-        MembershipEntity.find("scopeId = ?1", scopeId).firstResult()?.userId
-
-    /** A media's owner_key: the denormalized `created_by`, else the contributor `share:{id}`, else the scope owner. */
-    private fun ownerKeyOf(m: MediaEntity, scopeOwnerUserId: String?): String =
-        m.createdBy
-            ?: m.shareIdentityId?.let { OwnerKey.Share(it).format() }
-            ?: OwnerKey.User(scopeOwnerUserId ?: "unknown").format()
-
     /** The owner_key for a NEW upload: a contributor `share:{id}`, else a member `user:{id}`. */
     private fun ownerKeyFor(uploaderUserId: String?, shareIdentityId: String?): String =
         when {
@@ -554,11 +549,19 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
         }
 
     /**
-     * Find-or-create the uploader's PRIMARY bucket in a node (lazy, virtual-until-first-use). Primary uniqueness
-     * `(node, owner_key)` is enforced HERE under the caller's transaction (no DB partial index in the H2 ∩ MariaDB
-     * subset). Refreshes a still-missing sealed name (a contributor primary materialized before its identity name).
+     * Find-or-create the uploader's PRIMARY bucket in a node (lazy, virtual-until-first-use). Refreshes a still-missing
+     * sealed name (a contributor primary materialized before its identity name).
+     *
+     * One primary per `(node, owner_key)` is held by the node row's lock, taken first (ADR 0034 §4, developer-
+     * styleguide §12: the parent's row lock): a second resolve of a missing primary waits for the first and then finds
+     * it. Read without it, two first uploads of one uploader both found none and both created one
+     * (`MediaCreateRaceSliceTest.concurrentFirstUploadsOfOneUploaderShareOnePrimary`). The lock is only taken —
+     * nothing here reads the node, so a copy this transaction already holds does not matter. A caller that also locks
+     * a bucket or media rows takes those first (bucket → media → node: [deleteBucketReparent], [moveMedia]), the order
+     * a trash or a guest's delete (media → node) agrees with.
      */
     private fun ensurePrimaryBucket(scopeId: String, nodeId: String, ownerKey: String, sealedName: String?): BucketEntity {
+        NodeEntity.find("id", nodeId).withLock(LockModeType.PESSIMISTIC_WRITE).firstResult()
         val existing = BucketEntity.find("nodeId = ?1 and ownerKey = ?2 and isPrimary = true", nodeId, ownerKey).firstResult()
         if (existing != null) {
             if (existing.sealedName == null && sealedName != null) { existing.sealedName = sealedName; existing.persist() }
@@ -576,15 +579,6 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
         }.also { it.persist() }
     }
 
-    /** Resolve the bucket a new media attaches to: an explicit caller-owned bucket in this node, else the uploader's primary. */
-    private fun resolveAttachBucket(scopeId: String, nodeId: String, ownerKey: String, targetBucketId: String?): BucketEntity {
-        if (targetBucketId != null) {
-            BucketEntity.findById(targetBucketId)
-                ?.takeIf { it.scopeId == scopeId && it.nodeId == nodeId && it.ownerKey == ownerKey }
-                ?.let { return it }
-        }
-        return ensurePrimaryBucket(scopeId, nodeId, ownerKey, primarySealedNameFor(ownerKey))
-    }
 
     /**
      * The node's buckets for the "Beiträge" tab (uc.memory.buckets): each bucket (primaries first) with its live media
@@ -649,6 +643,10 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
         // Locked first, as [moveMedia] locks its target: a move into this bucket finishes before the reparent reads
         // which media to carry, and one that comes after finds the bucket gone.
         val sub = BucketEntity.findById(bucketId, LockModeType.PESSIMISTIC_WRITE) ?: return
+        // Its media next, before the primary's node lock: bucket → media → node is the order [moveMedia] takes too,
+        // and a trash or a guest's delete of one of them holds media → node — taken the other way round, two of these
+        // could each hold what the other waits for.
+        MediaEntity.find("bucketId = ?1 order by id", bucketId).withLock(LockModeType.PESSIMISTIC_WRITE).list()
         val primary = ensurePrimaryBucket(sub.scopeId, sub.nodeId, sub.ownerKey, primarySealedNameFor(sub.ownerKey))
         MediaEntity.update("bucketId = ?1 where bucketId = ?2", primary.id, bucketId)
         bumpMediaRevision(sub.nodeId) // cr-0113: reparent changed the media's bucketId → advance the ETag
@@ -660,23 +658,34 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
      * from the source media** — they must all share one `owner_key` (else a cross-owner move ⇒ false/403) — and the
      * target bucket must have that same owner. Every medium is in this node + live. Returns false (⇒ 403) on any
      * mismatch. The caller-is-member gate lives in the handler (cr-0123).
+     *
+     * Locks in the order a sub-bucket delete takes them ([deleteBucketReparent]): the target bucket, then each medium
+     * (sorted, so two moves cannot cross), then the node (the primary's resolve, the revision bump). The target
+     * bucket first: read without its lock, a move into a bucket being deleted wrote the gone bucket's id and failed
+     * its commit on the foreign key — a 500 where a move into a missing bucket answers false. Each medium under its
+     * lock, as every delete of it takes it: read plainly, a move of a guest's upload that the guest deleted in between
+     * flushed onto a gone row, or answered success for it (inbox #313); now it finds nothing and answers false.
      */
     @Transactional
     fun moveMedia(scopeId: String, nodeId: String, mediaIds: List<String>, targetBucketId: String?): Boolean {
-        val scopeOwner = scopeOwnerUserId(scopeId)
-        val media = mediaIds.map { id ->
-            MediaEntity.findById(id)?.takeIf { it.scopeId == scopeId && it.nodeId == nodeId && it.deletedAt == null } ?: return false
+        val explicit = targetBucketId?.let { id ->
+            BucketEntity.findById(id, LockModeType.PESSIMISTIC_WRITE)?.takeIf { it.scopeId == scopeId && it.nodeId == nodeId } ?: return false
+        }
+        val media = mediaIds.distinct().sorted().map { id ->
+            MediaEntity.findById(id, LockModeType.PESSIMISTIC_WRITE)
+                ?.takeIf { it.scopeId == scopeId && it.nodeId == nodeId && it.deletedAt == null } ?: return false
         }
         // One shared root only — a single distinct source owner_key; more than one would be a cross-owner move.
-        val ownerKey = media.map { ownerKeyOf(it, scopeOwner) }.distinct().singleOrNull() ?: return false
-        val target = if (targetBucketId == null) {
-            ensurePrimaryBucket(scopeId, nodeId, ownerKey, primarySealedNameFor(ownerKey))
-        } else {
-            // Under the bucket row's lock, which a sub-bucket delete takes first ([deleteBucketReparent]): read
-            // without it, a move into a bucket being deleted wrote the gone bucket's id and failed its commit on the
-            // foreign key — a 500 where a move into a missing bucket answers false.
-            BucketEntity.findById(targetBucketId, LockModeType.PESSIMISTIC_WRITE)
-                ?.takeIf { it.scopeId == scopeId && it.nodeId == nodeId && it.ownerKey == ownerKey } ?: return false
+        // `created_by` is the owner: `attach`, the only media insert, stamps it. The fallbacks this once had for
+        // media from before buckets (the guest identity, then the scope's first member) had no input left, and the
+        // second would have attributed another member's photo to the scope owner and let a cross-owner move through
+        // (inbox #305). A medium without it is a bug, and must fail like one.
+        val ownerKey = media.map { checkNotNull(it.createdBy) { "media ${it.id} has no created_by" } }.distinct().singleOrNull()
+            ?: return false
+        val target = when {
+            explicit == null -> ensurePrimaryBucket(scopeId, nodeId, ownerKey, primarySealedNameFor(ownerKey))
+            explicit.ownerKey == ownerKey -> explicit
+            else -> return false
         }
         media.forEach { it.bucketId = target.id; it.persist() }
         bumpMediaRevision(nodeId) // cr-0113: a re-bucket changes the listing's bucketId → advance the ETag so clients re-list

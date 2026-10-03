@@ -10,11 +10,14 @@ import com.veyq.app.testing.TestFixtures.seedNode
 import com.veyq.app.testing.answer
 import com.veyq.app.testing.assertWinnerAndLoser
 import com.veyq.app.testing.race
+import com.veyq.app.testing.whileUncommitted
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
+import jakarta.inject.Inject
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
 import java.util.UUID
 
@@ -26,6 +29,8 @@ import java.util.UUID
  */
 @QuarkusTest
 class MediaCreateRaceSliceTest {
+
+    @Inject lateinit var store: MediaStore
 
     /** Two completes of one upload: the sessions are spent first, so the loser's item is `upload_not_found`. */
     @Test
@@ -132,6 +137,36 @@ class MediaCreateRaceSliceTest {
             assertSameAnswers(listOf(200 to listOf(null), 200 to listOf("id_taken")), answers, "round $round")
         }
         assertEquals(200 to listOf<String?>(null), start(userId, scopeB, TestBlob.SMALL.declare("d3JhcA==")))
+    }
+
+    /**
+     * Two first uploads of one uploader into one Memory: each resolves the uploader's missing primary bucket. Read
+     * without the node row's lock, both found none and both created one — the uploader listed twice in the "Beiträge"
+     * tab, their media split across the two (ADR 0034 §4). Under it, the second waits for the first and lands in its
+     * primary. Forced, not likely: the first attach is held uncommitted ([whileUncommitted]) while the second runs.
+     */
+    @Test
+    fun concurrentFirstUploadsOfOneUploaderShareOnePrimary() {
+        repeat(RACE_ROUNDS) { round ->
+            val (userId, scopeId) = seedMemberScope()
+            val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+            val (first, second) = startOne(userId, scopeId) to startOne(userId, scopeId)
+            val answer = whileUncommitted(
+                change = {
+                    val session = UploadSessionEntity.findById(first.uploadId)!!
+                    assertNotNull(store.attach(first.mediaId, session, memory, null, emptyList(), null, null, uploaderUserId = userId), "round $round")
+                },
+                overlapping = { complete(userId, scopeId, completeBody(memory, second)) },
+            )
+            assertEquals(200 to listOf<String?>(null), answer, "round $round: the second upload lands")
+            QuarkusTransaction.requiringNew().run {
+                val primaries = BucketEntity.list("nodeId = ?1 and ownerKey = ?2 and isPrimary = true", memory, OwnerKey.User(userId).format())
+                assertEquals(1, primaries.size, "round $round: one uploader, ${primaries.size} primary buckets")
+                listOf(first, second).forEach {
+                    assertEquals(primaries.single().id, MediaEntity.findById(it.mediaId)!!.bucketId, "round $round: ${it.mediaId}")
+                }
+            }
+        }
     }
 
     /** The two answers of a race, in either order. */

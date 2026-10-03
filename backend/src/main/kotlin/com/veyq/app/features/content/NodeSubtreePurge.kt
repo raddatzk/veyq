@@ -10,9 +10,12 @@ import com.veyq.app.features.sharing.SharingStore
 import com.veyq.app.shared.blobstore.StoreObjectRef
 import com.veyq.app.shared.blobstore.StoreReclaimStore
 import com.veyq.app.shared.config.VeyqConfig
+import com.veyq.app.shared.scope.ScopeEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.scheduler.Scheduled
 import jakarta.enterprise.context.ApplicationScoped
+import jakarta.persistence.LockModeType
+import org.jboss.logging.Logger
 import java.time.Duration
 import java.time.Instant
 
@@ -35,7 +38,7 @@ import java.time.Instant
  *   `ScopePurge.eraseScope`'s set-based shape: that erases by *scope* and lets the scope-row delete cascade the
  *   rest, and its own docstring says a per-media copy is the wrong shape **there**. A node subtree is not a
  *   scope — neighbouring nodes, buckets and the scope row all survive it.
- * - **One transaction covers the rows AND the reclaim entries** (ADR 0062). `QuarkusTransaction`, not
+ * - **One transaction per scope covers its rows AND their reclaim entries** (ADR 0062). `QuarkusTransaction`, not
  *   `@Transactional` on [run]: a self-invoked `@Transactional` method would not be intercepted at all. This job
  *   deletes no store objects itself — it records the key prefixes and `StoreReclaimSweep` drains them. The old
  *   shape reclaimed best-effort after the commit, which is unobservable by construction: the row that named the
@@ -53,27 +56,51 @@ class NodeSubtreePurge(
     private val reclaim: StoreReclaimStore,
     config: VeyqConfig,
 ) {
+    private val log = Logger.getLogger(NodeSubtreePurge::class.java)
     private val retention: Duration = config.node().trash().retention()
 
+    /** One transaction per scope, a failure logged and stepped over — `ScopePurge.run`'s shape, for its reason: one
+     *  scope that cannot be erased must not hold back every other scope's on every later tick. */
     @Scheduled(every = "{veyq.node.trash.purge.every}")
     fun run() {
-        QuarkusTransaction.requiringNew().run { eraseExpired(Instant.now().minus(retention)) }
+        val cutoff = Instant.now().minus(retention)
+        val scopes = QuarkusTransaction.requiringNew().call {
+            NodeEntity.getEntityManager().createQuery(
+                "select distinct n.scopeId from NodeEntity n where n.deletedAt is not null and n.deletedAt < :cutoff",
+                String::class.java,
+            ).setParameter("cutoff", cutoff).resultList
+        }
+        scopes.forEach { scopeId ->
+            try {
+                QuarkusTransaction.requiringNew().run { eraseExpiredIn(scopeId, cutoff) }
+            } catch (e: Exception) {
+                log.error("purge of the expired trash in scope $scopeId failed; it stays due and the sweep continues", e)
+            }
+        }
     }
 
     /**
-     * Erase every node whose marker is older than [cutoff], recording every store object it drops. The whole
-     * subtree shares one `deletedAt` — `NodesStore.deleteSubtree` re-stamps even already-trashed descendants
-     * precisely so it ages out together — so selecting on the marker alone reaches a complete subtree, never
-     * half of one.
+     * Erase every node of [scopeId] whose marker is older than [cutoff], recording every store object it drops. The
+     * whole subtree shares one `deletedAt` — `NodesStore.deleteSubtree` re-stamps even already-trashed descendants
+     * precisely so it ages out together — so selecting on the marker alone reaches a complete subtree, never half of
+     * one. Joins its caller's transaction ([run] opens one per scope).
+     *
+     * The scope row's lock first, and the selection under it: a restore takes the same lock
+     * (`NodesStore.restoreSubtree`), so it either commits before this selects — and its subtree is no longer due — or
+     * finds the rows gone. Selected before the lock, a subtree restored in between was erased anyway.
      */
-    private fun eraseExpired(cutoff: Instant) {
-        val expired = NodeEntity.find("deletedAt is not null and deletedAt < ?1", cutoff).list()
+    fun eraseExpiredIn(scopeId: String, cutoff: Instant) {
+        ScopeEntity.lockRow(scopeId) ?: return // the scope's own purge erased its nodes with it
+        val expired = NodeEntity.find("scopeId = ?1 and deletedAt is not null and deletedAt < ?2", scopeId, cutoff).list()
         if (expired.isEmpty()) return
         val nodeIds = expired.map { it.id }
 
         // 0. the guest identities whose media or buckets this erases — read while the rows still name them; step 6
         //    drops the ones nothing references any more.
-        val media = MediaEntity.find("nodeId in ?1", nodeIds).list()
+        //    The selection is the media rows' lock, as every other erase of a media row takes it (`purgeMedia`, the
+        //    retention purge, a guest's delete): one that holds a row finishes first and the row is no longer
+        //    selected. Selected plainly, this then deleted a row already gone and rolled the whole erase back.
+        val media = MediaEntity.find("nodeId in ?1 order by id", nodeIds).withLock(LockModeType.PESSIMISTIC_WRITE).list()
         val buckets = BucketEntity.find("nodeId in ?1", nodeIds).list()
         val guests = media.mapNotNull { it.shareIdentityId } +
             buckets.mapNotNull { (OwnerKey.parse(it.ownerKey) as? OwnerKey.Share)?.shareIdentityId }

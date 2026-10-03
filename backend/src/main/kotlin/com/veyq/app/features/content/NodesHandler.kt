@@ -106,6 +106,10 @@ class NodesHandler(private val store: NodesStore, private val access: ScopeAcces
             }
         }
         return createOrConflict(conflict = replay) {
+            // The parent again, under the tree's lock (NodesStore.lockScope): read above only, a parent trashed in
+            // between took its subtree without this node, which then stayed live under it.
+            store.lockScope(scopeId)
+            if (store.parentSlot(scopeId, slot) is ParentSlot.Missing) return@createOrConflict CreateNodeOutcome.IllegalStructure
             val created = store.create(nodeId, scopeId, slot, kind, encryptedName, slugToken, orderIndex, epoch, wrappedContentKey, wrappedMeta)
             if (created) CreateNodeOutcome.Created(nodeId) else replay() ?: CreateNodeOutcome.IdTaken
         }
@@ -141,9 +145,10 @@ class NodesHandler(private val store: NodesStore, private val access: ScopeAcces
         if (slugToken != null && store.slugTaken(targetSlot, slugToken, exceptNodeId = nodeId)) {
             return UpdateNodeOutcome.SlugTaken
         }
-        return when (val r = store.applyUpdate(nodeId, encryptedName, slugToken, moveSlot, orderIndex, wrappedMeta, metaVersion)) {
+        return when (val r = store.applyUpdate(scopeId, nodeId, encryptedName, slugToken, moveSlot, orderIndex, wrappedMeta, metaVersion)) {
             NodesStore.ApplyResult.Applied -> UpdateNodeOutcome.Updated
             NodesStore.ApplyResult.Missing -> UpdateNodeOutcome.NotFound
+            NodesStore.ApplyResult.IllegalMove -> UpdateNodeOutcome.IllegalStructure
             is NodesStore.ApplyResult.StaleMeta -> UpdateNodeOutcome.StaleMeta(r.wrappedMeta, r.metaVersion)
         }
     }

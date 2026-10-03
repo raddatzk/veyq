@@ -1072,15 +1072,6 @@ components:
           format: uuid
           description: The MEMORY/CHAPTER node to attach the media to.
           example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
-        bucketId:
-          x-veyq-visibility: id
-          type: [string, "null"]
-          format: uuid
-          description: >
-            Optional target bucket to attach into — must be one of the **caller's own** buckets in this node.
-            Omitted/null ⇒ the caller's **primary** bucket (lazily created on first upload). ADR 0034 /
-            [en.memory.buckets](../../docs/features/memory/enablers/en.memory.buckets.md).
-          example: null
         derivatives:
           type: [array, "null"]
           description: >
@@ -1268,8 +1259,8 @@ components:
           type: [string, "null"]
           format: uuid
           description: >
-            The bucket this media lives in, or **null = the uploader's primary** (resolved lazily). Set when the
-            media was attached into an explicit sub-bucket or moved.
+            The bucket this media lives in: its uploader's primary from the upload on, another of that owner's
+            buckets after a move. Null reads as the uploader's primary.
           example: null
         metaVersion:
           x-veyq-visibility: structure

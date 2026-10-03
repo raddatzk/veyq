@@ -67,7 +67,6 @@ data class CompleteItem(
     val derivatives: List<DerivativeDeclare>,
     val wrappedMeta: String?,
     val wrappedExif: String?,
-    val bucketId: String? = null, // cr-0113: an explicit target bucket; null = the uploader's primary
 )
 
 /** Per-item result of `start`: success carries the session + presigned PUTs (null when the store can't presign). */
@@ -426,16 +425,19 @@ class MediaHandler(
      * only for its [opener] — who is also whom the media is attributed to: a member's `owner_key` (cr-0113), or a
      * **contributor `shareIdentityId`** (the CONTRIBUTOR share upload path, cr-0101). The caller does its own
      * authorization. Each item's `nodeId` is honoured (the share path sets it to the shared root node).
+     * [admitted] re-asks the caller's gate first in each attach's transaction ([MediaStore.attach]).
      */
-    fun completeForNode(scopeId: String, items: List<CompleteItem>, opener: UploadOpener): List<CompleteItemResult> =
-        items.map { completeOne(scopeId, it, opener) }
+    fun completeForNode(
+        scopeId: String, items: List<CompleteItem>, opener: UploadOpener, admitted: () -> Boolean = { true },
+    ): List<CompleteItemResult> =
+        items.map { completeOne(scopeId, it, opener, admitted) }
 
     /**
      * Complete one logical media (original + derivative uploads). The item is **atomic**: the node + every
      * upload session are resolved first, then **every** blob is declare-then-verified, and only if all pass are
      * the blobs + media + derivative rows attached. On a budget failure the item's staged objects are purged.
      */
-    private fun completeOne(scopeId: String, item: CompleteItem, opener: UploadOpener): CompleteItemResult {
+    private fun completeOne(scopeId: String, item: CompleteItem, opener: UploadOpener, admitted: () -> Boolean): CompleteItemResult {
         val node = store.findNode(scopeId, item.nodeId)
             ?: return CompleteItemResult(null, null, "node_not_found")
         if (node.kind == NodeEntity.FOLDER) return CompleteItemResult(null, null, "illegal_target")
@@ -479,8 +481,8 @@ class MediaHandler(
             item.wrappedExif,
             (opener as? UploadOpener.Contributor)?.shareIdentityId,
             (opener as? UploadOpener.Member)?.userId, // cr-0113: the member uploader → owner_key "user:{id}" (null on the contributor path)
-            item.bucketId,  // cr-0113: an explicit target bucket, else the uploader's primary
-        ) ?: return CompleteItemResult(null, null, "upload_not_found") // a concurrent complete spent the sessions
+            admitted,
+        ) ?: return CompleteItemResult(null, null, "upload_not_found") // sessions spent concurrently, or no longer admitted
         return CompleteItemResult(blobId, mediaId, null)
     }
 

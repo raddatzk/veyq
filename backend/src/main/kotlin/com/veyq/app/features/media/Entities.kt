@@ -231,7 +231,7 @@ class MediaDerivativeEntity : PanacheEntityBase {
  * A lazy virtual **primary** ([isPrimary] = true, [parentBucketId] null) per uploader + optional one-level
  * **sub-buckets** ([parentBucketId] = the primary). The name is sealed under `K_mem` ([sealedName], opaque
  * base64) — null for a member's primary (the client shows the operator-visible username). Primary uniqueness
- * `(node_id, owner_key)` is enforced in code (ADR 0034; no DB partial index in the H2 ∩ MariaDB subset).
+ * `(node_id, owner_key)` is held by the node row's lock in `MediaStore.ensurePrimaryBucket` (ADR 0034 §4).
  */
 @Entity
 @Table(name = "veyq_bucket")
