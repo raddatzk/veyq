@@ -445,13 +445,18 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
      * The session is single-use, so it is **spent first**, as [attach] spends its own (developer-styleguide §12): two
      * commits of one upload both found it live, and the loser's delete waits for the winner's and then hits no row.
      * It answers what a replay answers — the upload is gone — instead of dying at the blob's primary key with a 500.
+     *
+     * The prior cover is read under the node row's lock, which a peer's commit and [clearCover] hold while they
+     * reclaim it (inbox #310): read before the wait, it named a blob the peer had already deleted, the delete found
+     * no row and the commit answered 500 — and a second commit left the peer's new cover unreclaimed.
      */
     @Transactional
     fun commitCover(nodeId: String, session: UploadSessionEntity, manifest: List<Long>?): BlobRefData? {
         if (UploadSessionEntity.delete("id = ?1", session.id) != 1L) return null
         // No `deletedAt` predicate: the handler already resolved this node through the filtering [findNode]
-        // gate before the verify step; this is the in-tx reload of that same row.
-        val node = NodeEntity.findById(nodeId)!! // resolved by the handler before verify; reloaded in-tx
+        // gate before the verify step. This is the transaction's first load of the row, so the lock reads it as
+        // committed now (ADR 0078) — a lock on a row already loaded here would hand back that stale copy.
+        val node = NodeEntity.findById(nodeId, LockModeType.PESSIMISTIC_WRITE)!!
         deleteBlobRow(node.coverBlobId)
         val blobId = persistBlob(session, manifest)
         node.coverBlobId = blobId

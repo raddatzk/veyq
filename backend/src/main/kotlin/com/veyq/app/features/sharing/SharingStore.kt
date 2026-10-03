@@ -419,7 +419,10 @@ class SharingStore(
      */
     @Transactional
     fun deleteContributedMedia(scopeId: String, mediaId: String, identityId: String): Boolean {
-        val media = MediaEntity.findById(mediaId)
+        // The read is the row's lock (as `MediaStore.purgeMedia`): a second delete of the same upload, or a purge,
+        // that holds it finishes first, and this then finds nothing — the 404 a replay gets. Read plainly, it deleted
+        // rows already gone and answered 500.
+        val media = MediaEntity.findById(mediaId, LockModeType.PESSIMISTIC_WRITE)
             ?.takeIf { it.scopeId == scopeId && it.shareIdentityId == identityId } ?: return false
         val nodeId = media.nodeId // captured before the row is deleted — the node whose gallery must reconcile
         mediaStore.purgeMediaRows(media) // derivative → media → blob rows, FK order (shared helper)
