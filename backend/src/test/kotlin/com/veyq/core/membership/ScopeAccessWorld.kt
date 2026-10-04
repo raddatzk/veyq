@@ -1,7 +1,7 @@
 package com.veyq.core.membership
 
 import com.veyq.core.node.NodeEntity
-import com.veyq.memories.media.TestBlob
+import com.veyq.core.testing.TestBlob
 import com.veyq.core.sharing.ShareWriteProof
 import com.veyq.core.TestIds
 import com.veyq.core.scope.ScopeEntity

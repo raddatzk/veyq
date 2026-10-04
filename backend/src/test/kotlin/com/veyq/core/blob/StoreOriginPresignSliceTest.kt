@@ -1,5 +1,6 @@
-package com.veyq.memories.media
+package com.veyq.core.blob
 
+import com.veyq.core.testing.TestBlob
 import com.veyq.core.testing.TestFixtures.bearer
 import com.veyq.core.testing.TestFixtures.seedMemberScope
 import com.veyq.core.testing.TestFixtures.seedTenant
@@ -23,7 +24,7 @@ import java.util.UUID
  * **Why this cannot be a unit test, given [com.veyq.core.blobstore.S3BlobStorePresigningTest] already
  * covers the mode.** That class calls the signer with a domain it chose itself. The property A3 states is about
  * a *request*: what the `Host` header can and cannot make the server do. Reaching that needs the whole chain
- * live — `TenantHostResolver` reading the `tenant` table, `MediaHandler` handing what it found to the store, and
+ * live — `TenantHostResolver` reading the `tenant` table, `BlobUploadHandler` handing what it found to the store, and
  * a **real** [com.veyq.core.blobstore.S3BlobStore] built by [com.veyq.core.blobstore.BlobStoreProducer]
  * from this profile's config. `MediaPresignDomainSliceTest` deliberately runs against
  * `FakePresigningBlobStore`, which echoes whatever domain it is handed and therefore cannot see a signing mode

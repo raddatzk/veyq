@@ -1,5 +1,7 @@
 package com.veyq.memories.media
 
+import com.veyq.core.testing.FakePresignProfile
+import com.veyq.core.testing.TestBlob
 import com.veyq.core.blob.UploadSessionEntity
 import com.veyq.core.blobstore.FakePresigningBlobStore
 import com.veyq.core.membership.MembershipEntity
@@ -34,7 +36,7 @@ import org.junit.jupiter.api.Test
  * boot): the in-memory store cannot presign, and a window is nothing but presigned URLs.
  */
 @QuarkusTest
-@TestProfile(MediaBudgetBranchSliceTest.FakePresignProfile::class)
+@TestProfile(FakePresignProfile::class)
 class UploadWindowSliceTest {
 
     @Inject

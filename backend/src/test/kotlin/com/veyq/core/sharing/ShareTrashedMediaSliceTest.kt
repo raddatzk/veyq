@@ -3,7 +3,7 @@ package com.veyq.core.sharing
 import com.veyq.core.blob.BlobEntity
 import com.veyq.core.node.NodeEntity
 import com.veyq.memories.media.MediaEntity
-import com.veyq.memories.media.TestBlob
+import com.veyq.core.testing.TestBlob
 import com.veyq.core.scope.ScopeEntity
 import com.veyq.core.testing.TestFixtures.CONTENT_KEY
 import com.veyq.core.testing.TestFixtures.bearer

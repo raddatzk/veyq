@@ -2,7 +2,8 @@ package com.veyq.core.sharing
 
 import com.veyq.core.blob.UploadSessionEntity
 import com.veyq.memories.media.MediaEntity
-import com.veyq.memories.media.TestBlob
+import com.veyq.core.quota.StorageQuota
+import com.veyq.core.testing.TestBlob
 import com.veyq.core.TestIds
 import com.veyq.core.membership.MembershipEntity
 import com.veyq.core.membership.TenantRoots
@@ -19,6 +20,7 @@ import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
 import io.restassured.response.Response
+import jakarta.inject.Inject
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
@@ -45,6 +47,25 @@ class ShareLinkStorageLimitSliceTest {
 
     private val s = TestBlob.SMALL
     private val d = TestBlob.ofPlaintext(100) // a derivative of a size no original here has, so its bytes are visible
+
+    @Inject
+    lateinit var quota: StorageQuota
+
+    /**
+     * The link's usage read directly, both terms at once: a contributed medium with a derivative (the blob term)
+     * plus an open session (the session term), beside a member's upload into the same Memory that is not the
+     * link's. 300 = 44 + 128 + 128 is what the one-SQL `linkUsage` returned before its blob term moved behind
+     * `UploadAdmission` (recorded on the tree before that split): the split is exact only if the terms still add up.
+     */
+    @Test
+    fun aLinksUsageIsItsContributedBlobsPlusItsOpenSessions() {
+        val f = fixture()
+        contribute(f, s, derivative = d)
+        startOk(f, d)
+        memberUpload(f, d)
+        assertEquals(300L, s.byteSize + 2 * d.byteSize, "the fixture's sizes")
+        assertEquals(300L, QuarkusTransaction.requiringNew().call { quota.linkUsage(f.shareId) })
+    }
 
     /** The live defect (red before the fix): a link start over the limit left sessions open for the scope. */
     @Test

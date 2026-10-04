@@ -12,8 +12,8 @@ import jakarta.persistence.LockModeType
  * drifts. Sizes are the declared `byte_size`, which `complete` holds to the stored size chunk by chunk (ADR 0013
  * §3). Nothing here filters on `deleted_at`: trash is still in the store, so it counts until it is purged
  * (ADR 0073 §2). It reads only blobs, sessions, scopes and tenants — no application table — so any application
- * that stores blobs is counted without this class knowing it exists. The Memories-specific limits (the per-link
- * limit and the upload-declaration check) stay in the Memories application's `StorageQuota`, which delegates here.
+ * that stores blobs is counted without this class knowing it exists. The checks against a declaration (the tenant
+ * quota and the per-link limit) are [StorageQuota]'s, which delegates here.
  *
  * The tenant total is one SQL text ([tenantUsageSql]) asked for one tenant under [lockTenant], or grouped for every
  * tenant by the Server Owner's list — never one query per tenant, and never a second SUM elsewhere.

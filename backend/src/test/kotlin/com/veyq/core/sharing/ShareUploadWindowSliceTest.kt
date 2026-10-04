@@ -1,8 +1,9 @@
 package com.veyq.core.sharing
 
+import com.veyq.core.testing.FakePresignProfile
 import com.veyq.core.blob.UploadSessionEntity
 import com.veyq.memories.media.MediaBudgetBranchSliceTest
-import com.veyq.memories.media.TestBlob
+import com.veyq.core.testing.TestBlob
 import com.veyq.core.TestIds
 import com.veyq.core.blobstore.FakePresigningBlobStore
 import com.veyq.core.testing.TestFixtures.CONTENT_KEY
@@ -28,7 +29,7 @@ import org.junit.jupiter.api.Test
  * Shares [MediaBudgetBranchSliceTest]'s profile ([FakePresigningBlobStore]) so a window has URLs to sign.
  */
 @QuarkusTest
-@TestProfile(MediaBudgetBranchSliceTest.FakePresignProfile::class)
+@TestProfile(FakePresignProfile::class)
 class ShareUploadWindowSliceTest {
 
     @Inject

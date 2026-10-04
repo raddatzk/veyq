@@ -12,8 +12,8 @@ shared widely, so anyone holding one can fill the instance's store until the dis
 
 What already exists, measured at refine on `main` @ `a494436`:
 
-- **One door into the store.** `MediaHandler.startOne` is the only caller of `presignPut`
-  (`grep -rn presignPut backend/src/main/kotlin`). Every stored object starts as a `veyq_upload_session` row with
+- **One door into the store.** `presignPut` is reached only through `presignPuts`, whose one caller is core's
+  `BlobUploadHandler.presignWindow` — every start and every window (`grep -rn 'presignPuts(' backend/src/main/kotlin`). Every stored object starts as a `veyq_upload_session` row with
   a declared size.
 - **Every stored object has a row that reaches its tenant.** Originals, derivatives and covers each get a
   `veyq_blob` (`scope_id` → `veyq_scope.tenant_id`). A blob row is deleted in the same transaction that writes its

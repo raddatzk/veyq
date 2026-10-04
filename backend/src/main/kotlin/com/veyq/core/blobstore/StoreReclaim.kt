@@ -93,7 +93,7 @@ class StoreReclaimEntity : PanacheEntityBase {
  * transaction gets the old defect back in a new shape (a committed row delete and a lost key), and it would be
  * invisible. `MANDATORY` turns that into a boot-loud failure at the call site instead. Two paths therefore open
  * their own transaction before calling in ([com.veyq.core.spaces.scope.ScopePurge] per scope, and the
- * over-budget purge in `MediaHandler`, which deliberately leaves its session rows standing); every other caller
+ * over-budget purge in `BlobUploadHandler`, which deliberately leaves its session rows standing); every other caller
  * is already inside a `@Transactional` store method.
  */
 @ApplicationScoped

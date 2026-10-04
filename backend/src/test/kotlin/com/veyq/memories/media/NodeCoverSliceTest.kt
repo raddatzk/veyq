@@ -1,5 +1,7 @@
 package com.veyq.memories.media
 
+import com.veyq.core.blob.BlobUploadStore
+import com.veyq.core.testing.TestBlob
 import com.veyq.core.blob.UploadOpener
 import com.veyq.core.blob.BlobEntity
 import com.veyq.core.node.NodeEntity
@@ -44,6 +46,9 @@ class NodeCoverSliceTest {
 
     @Inject
     lateinit var store: MediaStore
+
+    @Inject
+    lateinit var blobs: BlobUploadStore
 
     @Inject
     lateinit var handler: MediaHandler
@@ -187,7 +192,7 @@ class NodeCoverSliceTest {
             var peers: String? = null
             val outcome = whileUncommitted(
                 change = {
-                    val session = store.findSession(scopeId, upload, UploadOpener.Member(userId))!!
+                    val session = blobs.findSession(scopeId, upload, UploadOpener.Member(userId))!!
                     peers = store.commitCover(memory, session, null)!!.blobId
                 },
                 overlapping = { handler.deleteCover(userId, scopeId, memory, mine) },
@@ -217,7 +222,7 @@ class NodeCoverSliceTest {
             var peers: String? = null
             val outcome = whileUncommitted(
                 change = {
-                    val session = store.findSession(scopeId, peerUpload, UploadOpener.Member(userId))!!
+                    val session = blobs.findSession(scopeId, peerUpload, UploadOpener.Member(userId))!!
                     peers = store.commitCover(memory, session, null)!!.blobId
                 },
                 overlapping = { handler.commitCover(userId, scopeId, memory, mineUpload) },

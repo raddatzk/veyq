@@ -1,7 +1,9 @@
 package com.veyq.memories.media
 
+import com.veyq.core.blob.BlobUploadHandler
 import com.veyq.core.blob.CompleteItem
 import com.veyq.core.blob.CompleteItemResult
+import com.veyq.core.blob.UploadCompletions
 import com.veyq.core.blob.UploadDeclare
 import com.veyq.core.blob.UploadItemResult
 import com.veyq.core.blob.UploadOpener
@@ -15,26 +17,28 @@ import jakarta.transaction.Transactional
 
 /**
  * The Memories half of a guest's write on a share: a share is rooted at a MEMORY (ADR 0029 §6, ADR 0030), so this is
- * the implementation for that kind. It only forwards to the media handler's link paths and owns the delete-own.
+ * the implementation for that kind. It only forwards to core's generic upload (its link paths and the completion dispatcher, which reaches
+ * [MediaUploadCompletion]) and owns the delete-own.
  */
 @ApplicationScoped
 class MediaShareGuestWrites(
-    private val handler: MediaHandler,
+    private val uploads: BlobUploadHandler,
+    private val completions: UploadCompletions,
     private val store: MediaStore,
 ) : ShareGuestWrites {
 
-    // MEMORY only, not [MediaHandler]'s wider "may hold media" set (MEMORY or CHAPTER): a share's root is a Memory,
+    // MEMORY only, not [MediaUploadCompletion]'s wider "may hold media" set (MEMORY or CHAPTER): a share's root is a Memory,
     // and what a CHAPTER may hold is not what may be shared.
     override fun supports(nodeKind: String): Boolean = nodeKind == NodeEntity.MEMORY
 
     override fun start(scopeId: String, shareId: String, identityId: String, declares: List<UploadDeclare>, domain: String?): List<UploadItemResult> =
-        handler.startForLink(scopeId, shareId, identityId, declares, domain)
+        uploads.startForLink(scopeId, shareId, identityId, declares, domain)
 
     override fun window(scopeId: String, identityId: String, requests: List<WindowRequest>, domain: String?): List<WindowItemResult> =
-        handler.windowForScope(scopeId, UploadOpener.Contributor(identityId), requests, domain)
+        uploads.windowForScope(scopeId, UploadOpener.Contributor(identityId), requests, domain)
 
     override fun complete(scopeId: String, items: List<CompleteItem>, identityId: String, admitted: () -> Boolean): List<CompleteItemResult> =
-        handler.completeForNode(scopeId, items, UploadOpener.Contributor(identityId), admitted)
+        completions.complete(scopeId, items, UploadOpener.Contributor(identityId), admitted)
 
     /**
      * Authorized **iff** the media is in [scopeId] and its `share_identity_id` equals [identityId] — a single-row

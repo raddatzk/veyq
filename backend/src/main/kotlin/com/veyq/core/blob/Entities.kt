@@ -17,7 +17,7 @@ import org.hibernate.annotations.DynamicUpdate
  *
  * **Bound to its opener** (ADR 0013 §2): exactly one of [openerUserId] (a member upload) and
  * [openerShareIdentityId] (a contributor upload) is set, and every read that acts on the session —
- * [MediaStore.findSession] — matches it. A row from before the columns existed has neither and matches nobody.
+ * [BlobUploadStore.findSession] — matches it. A row from before the columns existed has neither and matches nobody.
  * [lastWindowAt] is the session's liveness: set at `start`, touched by every window, and what the stale-session
  * purge keys on.
  *

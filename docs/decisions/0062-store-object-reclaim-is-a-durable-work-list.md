@@ -128,13 +128,13 @@ messaging pattern this codebase does not have.
     what turns the question from unanswerable into answerable: before it, an object whose row was legitimately
     deleted a second ago was indistinguishable from one leaked a year ago.
   - **A `storage_key` can legitimately appear twice**, so nothing may assume one row per key.
-    `MediaStore.persistBlob` gives a committed blob the same `storage_key` as the upload session it was promoted
+    `BlobUploadStore.persistBlob` gives a committed blob the same `storage_key` as the upload session it was promoted
     from, and the over-budget purge records a session's objects while deliberately leaving its row standing —
     which is why `veyq_store_reclaim` carries no unique index on that column.
   - **It starts read-only because of the stock, not because the race is unsolvable — and the window that
     excludes the race is stateable, so no design here needs a heuristic.** The write paths leave no moment at
     which an object exists unnamed. At **presign** time: `presignPut` is reached only through `presignPuts`,
-    whose one caller (`MediaHandler.presignWindow`) runs *after* `MediaStore.createSession` has committed
+    whose one caller (`BlobUploadHandler.presignWindow`) runs *after* `BlobUploadStore.createSession` has committed
     (`@Transactional`, with no enclosing transaction on the resource or handler), the `storage_key` and every
     chunk key are server-minted and signed into the URL by SigV4, and `persistBlob` writes no object at all — it
     inherits the session's key, and both callers delete the session row in the same transaction that inserts the

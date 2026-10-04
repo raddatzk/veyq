@@ -1,5 +1,8 @@
 package com.veyq.memories.media
 
+import com.veyq.core.testing.FakePresignProfile
+import com.veyq.core.blob.UploadSessionPurge
+import com.veyq.core.testing.TestBlob
 import com.veyq.core.blob.UploadSessionEntity
 import com.veyq.core.node.NodeEntity
 import com.veyq.core.blobstore.BlobStore.Companion.chunkKey
@@ -12,7 +15,6 @@ import com.veyq.core.testing.TestFixtures.seedMemberScope
 import com.veyq.core.testing.TestFixtures.seedNode
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
-import io.quarkus.test.junit.QuarkusTestProfile
 import io.quarkus.test.junit.TestProfile
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
@@ -25,26 +27,22 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
 
 /**
- * Reaches `MediaHandler`'s `verifyBlob`/`BlobVerify.Budget`/`purge` path (cr-media-budget-branch-coverage) —
+ * Reaches `BlobUploadHandler`'s `verifyBlob`/`BlobVerify.Budget`/`purge` path (cr-media-budget-branch-coverage) —
  * entered by zero tests before this class, hermetic or E2E, because `verifyBlob` short-circuits to `Ok`
- * whenever `!blobStore.canPresign` (`MediaHandler.kt:280`), true for every other hermetic test's
+ * whenever `!blobStore.canPresign` (`BlobUploadHandler.verifyBlob`), true for every other hermetic test's
  * [com.veyq.core.blobstore.InMemoryBlobStore]. [FakePresigningBlobStore] answers `canPresign = true` with
  * a scriptable `stat()`, active only in this class via `getEnabledAlternatives()` — every other hermetic test's
  * `BlobStore` wiring (`RecordingBlobStore` → `InMemoryBlobStore`) is unaffected.
  *
  * Not a leak-prevention test: `purge` deliberately leaves the session row standing rather than deleting it
- * (`MediaHandler.kt:287-298`) — `UploadSessionPurge`'s own age-based sweep, a different and already-covered call
+ * (`BlobUploadHandler.purge`) — `UploadSessionPurge`'s own age-based sweep, a different and already-covered call
  * site, reclaims the same objects even if this class did not exist. What this class actually proves is that
  * `verifyBlob`'s real-vs-declared comparison and the two callers' atomic purge-the-whole-item behavior are
  * correct — neither was exercised by anything before.
  */
 @QuarkusTest
-@TestProfile(MediaBudgetBranchSliceTest.FakePresignProfile::class)
+@TestProfile(FakePresignProfile::class)
 class MediaBudgetBranchSliceTest {
-
-    class FakePresignProfile : QuarkusTestProfile {
-        override fun getEnabledAlternatives(): Set<Class<*>> = setOf(FakePresigningBlobStore::class.java)
-    }
 
     @Inject
     lateinit var fakeStore: FakePresigningBlobStore
@@ -95,7 +93,7 @@ class MediaBudgetBranchSliceTest {
             assert(StoreReclaimEntity.count("storageKey", thumbKey) == 1L) {
                 "the item is atomic — a sibling session that verified fine must still be purged"
             }
-            // purge deliberately does NOT delete the session rows (MediaHandler.kt:287-298) — the opposite
+            // purge deliberately does NOT delete the session rows (BlobUploadHandler.purge) — the opposite
             // assertion shape from every other reclaim-record test in this suite; UploadSessionPurge takes it
             // from here on its own retention clock.
             assertNotNull(UploadSessionEntity.findById(original), "purge leaves the session row standing")

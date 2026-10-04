@@ -1,5 +1,6 @@
-package com.veyq.memories.media
+package com.veyq.core.testing
 
+import com.veyq.core.blob.ChunkFrames
 import com.veyq.core.blob.UploadDeclare
 import com.veyq.core.blob.UploadSessionEntity
 import com.veyq.core.blobstore.BlobStore.Companion.chunkKeys

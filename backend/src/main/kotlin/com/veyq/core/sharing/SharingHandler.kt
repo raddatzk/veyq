@@ -1,5 +1,7 @@
 package com.veyq.core.sharing
 
+import com.veyq.core.quota.StorageQuota
+import com.veyq.core.quota.UploadAdmission
 import com.veyq.core.blob.UploadDeclare
 import com.veyq.core.blob.DerivativeDeclare
 import com.veyq.core.blob.CompleteItem
@@ -253,6 +255,8 @@ class SharingHandler(
     private val scopes: ScopesStore,
     private val tenantTerms: TenantTermsHandler,
     private val access: ScopeAccess,
+    /** Which application measures a link's usage, by the root's node kind (see [UploadAdmission]). */
+    private val quota: StorageQuota,
 ) {
 
     fun create(
@@ -620,6 +624,9 @@ class SharingHandler(
         val identity = store.findIdentity(shareId, contributorToken) ?: return ShareUploadOutcome.NotContributable
         if (!rateLimiter.allowUpload(shareId)) return ShareUploadOutcome.RateLimited
         val writes = writesFor(share) ?: return ShareUploadOutcome.NotContributable
+        // A link whose usage no single application measures is never admitted (fail closed, [UploadAdmission]); the
+        // reservation asks again under the tenant lock, and refuses there too.
+        if (admissionFor(share) == null) return ShareUploadOutcome.NotContributable
         return ShareUploadOutcome.Results(writes.start(share.scopeId, share.id, identity.id, declares, domain))
     }
 
@@ -728,6 +735,11 @@ class SharingHandler(
         val kind = store.findNode(share.nodeId)?.kind ?: return null
         return guestWrites.filter { it.supports(kind) }.singleOrNull()
     }
+
+    /** The one [UploadAdmission] that measures [share]'s link, by its root's kind exactly as [writesFor] picks the
+     *  writer; null — none or several — refuses the start. */
+    private fun admissionFor(share: ShareEntity): UploadAdmission? =
+        store.findNode(share.nodeId)?.kind?.let(quota::admissionFor)
 
     private enum class PwCheck { OK, MISSING, WRONG, TOO_MANY }
 

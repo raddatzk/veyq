@@ -1,5 +1,6 @@
 package com.veyq.memories.media
 
+import com.veyq.core.testing.TestBlob
 import com.veyq.core.blob.BlobEntity
 import com.veyq.core.blob.UploadSessionEntity
 import com.veyq.core.node.NodeEntity
@@ -31,7 +32,7 @@ import org.junit.jupiter.api.Test
  * stayed perfectly encrypted and every other test in this repo stayed green** — because no other test looks at
  * the key. That is the whole reason this file exists: the failure is invisible to correctness testing.
  *
- * Today the key is a bare `UUID.randomUUID()` ([MediaHandler.startOne]), which is right, and it is one helpful
+ * Today the key is a bare `UUID.randomUUID()` (`BlobUploadHandler.openSession`), which is right, and it is one helpful
  * edit away from being wrong. So this asserts two different things:
  *
  *  1. **Shape** — the minted key is a bare UUID and nothing else. This pins today's implementation.

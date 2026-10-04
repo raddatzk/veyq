@@ -1,22 +1,12 @@
 package com.veyq.memories.media
 
-import com.veyq.core.blob.UploadOpener
-import com.veyq.core.blob.UploadDeclare
+import com.veyq.core.blob.BlobUploadHandler
+import com.veyq.core.blob.BlobUploadHandler.BlobVerify
+import com.veyq.core.blob.BlobUploadStore
 import com.veyq.core.blob.CompleteItem
-import com.veyq.core.blob.UploadItemResult
-import com.veyq.core.blob.WindowRequest
-import com.veyq.core.blob.WindowItemResult
 import com.veyq.core.blob.CompleteItemResult
-import com.veyq.core.blob.UploadSessionEntity
-import com.veyq.core.node.NodeEntity
-import com.veyq.core.blobstore.BlobStore
-import com.veyq.core.blobstore.BlobStore.Companion.chunkKeys
-import com.veyq.core.blobstore.PresignedRef
-import com.veyq.core.blobstore.StoreObjectRef
-import com.veyq.core.blobstore.StoreReclaimStore
-import com.veyq.core.blobstore.presignGets
-import com.veyq.core.blobstore.presignPuts
-import com.veyq.core.config.VeyqConfig
+import com.veyq.core.blob.UploadCompletions
+import com.veyq.core.blob.UploadOpener
 import com.veyq.core.http.FailureStatus.BAD_REQUEST
 import com.veyq.core.http.FailureStatus.CONFLICT
 import com.veyq.core.http.FailureStatus.FORBIDDEN
@@ -30,27 +20,7 @@ import com.veyq.core.membership.AccessMode.WRITE
 import com.veyq.core.membership.ScopeAccess
 import com.veyq.core.membership.refusal
 import com.veyq.core.persistence.createOrConflict
-import com.veyq.core.scope.ScopeEntity
-import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
-import java.util.UUID
-
-/** Per-item result of `presign-download`. */
-data class DownloadItemResult(val presignedGets: List<PresignedRef>?, val error: String?)
-
-sealed interface StartOutcome {
-    data class Results(val items: List<UploadItemResult>) : StartOutcome
-    object Suspended : StartOutcome, HttpFailure by Failures.tenantSuspended
-    object Deleting : StartOutcome, HttpFailure by Failures.scopeDeleting
-    object NoScope : StartOutcome, HttpFailure by Failures.scopeNotFound
-}
-
-sealed interface WindowOutcome {
-    data class Results(val items: List<WindowItemResult>) : WindowOutcome
-    object Suspended : WindowOutcome, HttpFailure by Failures.tenantSuspended
-    object Deleting : WindowOutcome, HttpFailure by Failures.scopeDeleting
-    object NoScope : WindowOutcome, HttpFailure by Failures.scopeNotFound
-}
 
 sealed interface CompleteOutcome {
     data class Results(val items: List<CompleteItemResult>) : CompleteOutcome
@@ -75,12 +45,6 @@ sealed interface ListMediaOutcome {
     /** The client's `If-None-Match` equals the node's `media_revision` — nothing changed (a 304, no media query ran). */
     object NotModified : ListMediaOutcome
     object NoNode : ListMediaOutcome, HttpFailure by Failures.nodeNotFound
-}
-
-sealed interface DownloadOutcome {
-    data class Results(val items: List<DownloadItemResult>) : DownloadOutcome
-    object Suspended : DownloadOutcome, HttpFailure by Failures.tenantSuspended
-    object NoScope : DownloadOutcome, HttpFailure by Failures.scopeNotFound
 }
 
 sealed interface MediaExifOutcome {
@@ -206,286 +170,25 @@ sealed interface MoveMediaOutcome {
 }
 
 /**
- * Use-case logic for media blobs (en.memory.media, cr-0028). Operator-blind, batch-shaped, per-item results.
- * Scope access is the one gate, [ScopeAccess], asked first (uc.spaces.scope-access): a non-member sees a top-level
- * 404, not a reveal. Direct-to-
- * store: bytes never flow through here — `start` presigns a blob's first window of PUTs and `window` each next one,
- * `complete` stats the stored objects (declare-then-verify), `download` presigns GETs. A session acts only for its
- * [UploadOpener], and every window is authorized again, so a removed member stops at their next window (ADR 0013 §2).
- *
- * Two gates (ADR 0013 §3): the **declared** shape is checked at `start` — a size over the cap is
- * `budget_exceeded`, a `chunkCount` the size does not derive (or a size no frame sequence has) is `shape_invalid` —
- * and the **actual** objects are verified against it at `complete`: every chunk at exactly its derived length, else
- * purge + `budget_exceeded`. The in-memory dev store has no transport, so its `complete` trusts the declaration (manifest
- * null); the byte path is covered by the opt-in store e2e.
+ * Use-case logic for the Memories media (en.memory.media, cr-0028): the member's completion of an upload, the
+ * gallery listing, meta, trash, covers and buckets. Operator-blind, batch-shaped, per-item results. Scope access is
+ * the one gate, [ScopeAccess], asked first (uc.spaces.scope-access): a non-member sees a top-level 404, not a reveal.
+ * The generic upload — start, windows, verify, download — is core's [BlobUploadHandler]; what a completed upload
+ * becomes is [MediaUploadCompletion], reached through core's [UploadCompletions] dispatcher.
  */
 @ApplicationScoped
 class MediaHandler(
     private val store: MediaStore,
-    private val blobStore: BlobStore,
-    private val reclaim: StoreReclaimStore,
+    private val blobs: BlobUploadStore,
+    private val uploads: BlobUploadHandler,
+    private val completions: UploadCompletions,
     private val access: ScopeAccess,
-    private val quota: StorageQuota,
-    config: VeyqConfig,
 ) {
-    private val maxBytes: Long = config.blob().maxBytes()
-    private val window: Int = config.blob().presignWindow()
-
-    fun start(userId: String, scopeId: String, declares: List<UploadDeclare>, domain: String?): StartOutcome {
-        access.check(userId, scopeId, WRITE)
-            .refusal(StartOutcome.NoScope, StartOutcome.Suspended, StartOutcome.Deleting)?.let { return it }
-        return StartOutcome.Results(reserveAndOpen(scopeId, UploadOpener.Member(userId), linkShareId = null, declares, domain))
-    }
-
-    /**
-     * The start of an upload link — CONTRIBUTOR or UPLOADER link [shareId], opened by its identity [identityId]. The
-     * caller does its own authorization (the link's gate), which runs first; the reservation is [reserveAndOpen]'s,
-     * with the per-link limit checked beside the tenant quota.
-     */
-    fun startForLink(scopeId: String, shareId: String, identityId: String, declares: List<UploadDeclare>, domain: String?): List<UploadItemResult> =
-        reserveAndOpen(scopeId, UploadOpener.Contributor(identityId), linkShareId = shareId, declares, domain)
-
-    /**
-     * Every start into the store — a member's upload, a cover, a link upload — reserved against what the tenant may
-     * hold (ADR 0073 §5). Bytes never flow through here. One transaction:
-     *  1. lock the tenant row, so concurrent starts into the tenant serialize (uc.admin.tenant-storage-quota A5);
-     *  2. check each item on its own ([admissibility]);
-     *  3. ask [StorageQuota] whether the admissible items fit **together**: the tenant quota always, and the per-link
-     *     limit too when [linkShareId] names a link. The two are independent, and either one refuses the whole
-     *     request — every admissible item `quota_exceeded`, no session inserted — so a photo never lands without its
-     *     derivatives; admitting item by item would reserve an original alone until the stale-session purge;
-     *  4. otherwise insert every admissible session, and commit.
-     * Presigning runs after the commit: the lock covers the check and the inserts only, never up to 256 × window
-     * signatures.
-     */
-    private fun reserveAndOpen(
-        scopeId: String,
-        opener: UploadOpener,
-        linkShareId: String?,
-        declares: List<UploadDeclare>,
-        domain: String?,
-    ): List<UploadItemResult> {
-        val reserve = {
-            val tenant = ScopeEntity.findById(scopeId)?.tenantId?.let { quota.lockTenant(it) }
-            // Checked under the lock, not before it: the sessions are inserted together at the end, so a blob id
-            // two racing requests (or two items of this one) both claim would otherwise pass the check and fail
-            // the unique index at insert — a 500 instead of `id_taken`.
-            val checked = admissibility(declares)
-            val admissible = checked.filter { (_, error) -> error == null }.map { (d, _) -> d }
-            val fits = tenant != null &&
-                quota.tenantFits(tenant, admissible) &&
-                (linkShareId == null || quota.linkFits(tenant, linkShareId, admissible))
-            if (!fits) {
-                checked.map { (d, error) -> d to (error ?: "quota_exceeded") } to checked.map { null }
-            } else {
-                checked to checked.map { (d, error) -> if (error != null) null else openSession(scopeId, opener, d) }
-            }
-        }
-        // The lock orders starts into ONE tenant; a blob id is unique across all of them, so two starts into
-        // different tenants can still both pass the check, and the loser dies on `ux_upload_session_blob_id`. Its
-        // replay answers per item — the taken item `id_taken`, the others opened — so when a declared id is now
-        // taken, the conflict answer is the reservation run again, in the fresh transaction that sees the winner.
-        val (checked, opened) = createOrConflict(
-            conflict = { if (declares.any { store.blobIdTaken(it.blobId) }) reserve() else null },
-            create = reserve,
-        )
-        return presignOpened(checked, opened, domain)
-    }
-
-    /**
-     * Sign the next window of each open session — authorized again exactly like [start], because a window is where
-     * a member removed since then must stop. The window itself is [windowForScope].
-     */
-    fun window(userId: String, scopeId: String, requests: List<WindowRequest>, domain: String?): WindowOutcome {
-        access.check(userId, scopeId, WRITE)
-            .refusal(WindowOutcome.NoScope, WindowOutcome.Suspended, WindowOutcome.Deleting)?.let { return it }
-        return WindowOutcome.Results(windowForScope(scopeId, UploadOpener.Member(userId), requests, domain))
-    }
-
-    /**
-     * The member-less core of [window]: per item, the session [opener] opened in `scopeId`, re-signed for chunks
-     * `[fromChunk, min(fromChunk + window, chunkCount))`, and marked live for the stale-session purge. An unknown
-     * session, a consumed one and another caller's are all `upload_not_found`, so a probe learns nothing; a
-     * `fromChunk` outside the blob is `range_invalid`. The caller does its own authorization.
-     */
-    fun windowForScope(scopeId: String, opener: UploadOpener, requests: List<WindowRequest>, domain: String?): List<WindowItemResult> =
-        requests.map { windowOne(scopeId, opener, it, domain) }
-
-    private fun windowOne(scopeId: String, opener: UploadOpener, r: WindowRequest, domain: String?): WindowItemResult {
-        val session = store.findSession(scopeId, r.uploadId, opener)
-            ?: return WindowItemResult(presignedPuts = null, error = "upload_not_found")
-        if (r.fromChunk !in 0 until session.chunkCount) return WindowItemResult(presignedPuts = null, error = "range_invalid")
-        if (!blobStore.canPresign) return WindowItemResult(presignedPuts = null, error = "store_unavailable")
-        store.touchWindow(session.id)
-        return WindowItemResult(presignedPuts = presignWindow(session.storageKey, session.byteSize, session.chunkCount, r.fromChunk, domain), error = null)
-    }
-
-    /** The PUTs of the window starting at [fromChunk], each signed for its chunk's exact length (ADR 0013 §3). */
-    private fun presignWindow(storageKey: String, byteSize: Long, chunkCount: Int, fromChunk: Int, domain: String?): List<PresignedRef>? =
-        blobStore.presignPuts(storageKey, fromChunk until minOf(fromChunk + window, chunkCount), { ChunkFrames.chunkLength(byteSize, it) }, domain)
-
-    /**
-     * Each declared item paired with the code that refuses it on its own, or null when it is admissible (ADR 0013 §3,
-     * ADR 0072): over the per-blob cap, a shape the size does not derive, or a blob id already taken — by a blob, an
-     * open session, or an earlier item of the same request.
-     */
-    private fun admissibility(declares: List<UploadDeclare>): List<Pair<UploadDeclare, String?>> {
-        val claimed = HashSet<String>()
-        return declares.map { d ->
-            val error = when {
-                d.byteSize > maxBytes -> "budget_exceeded"
-                // The frame size fixes the shape (ADR 0013 §3): a count the size does not derive is a client bug, not a
-                // big file, so it gets its own code. The size is checked first — chunkCount() is defined only where it holds.
-                !ChunkFrames.isPossible(d.byteSize) || d.chunkCount != ChunkFrames.chunkCount(d.byteSize) -> "shape_invalid"
-                // The client-minted blob id (ADR 0072): taken by a blob or by another open session, anywhere → refused,
-                // and the same answer wherever it lives.
-                !claimed.add(d.blobId) || store.blobIdTaken(d.blobId) -> "id_taken"
-                else -> null
-            }
-            d to error
-        }
-    }
-
-    /** A session inserted for one admissible item, with the object-key prefix its chunks are stored under. */
-    private data class Opened(val uploadId: String, val storageKey: String)
-
-    /** Insert the session for one admissible item; joins the caller's transaction when there is one. */
-    private fun openSession(scopeId: String, opener: UploadOpener, d: UploadDeclare): Opened {
-        val storageKey = UUID.randomUUID().toString()
-        return Opened(store.createSession(scopeId, opener, storageKey, d), storageKey)
-    }
-
-    /**
-     * The per-item results of a start whose sessions are committed: each opened session with its first window of
-     * PUTs, each refused item with its code. The session is metadata; presigned PUTs require a transport-capable
-     * store — only the %test in-memory stub cannot presign (puts = null), %dev/%prod always have a real store
-     * (BlobStoreStartupCheck, ADR 0013). Only the first window: the rest is signed window by window, so the TTL
-     * never has to cover a whole file.
-     */
-    private fun presignOpened(checked: List<Pair<UploadDeclare, String?>>, opened: List<Opened?>, domain: String?): List<UploadItemResult> =
-        checked.mapIndexed { i, (d, error) ->
-            val o = opened[i] ?: return@mapIndexed UploadItemResult(uploadId = null, presignedPuts = null, error = error)
-            UploadItemResult(uploadId = o.uploadId, presignedPuts = presignWindow(o.storageKey, d.byteSize, d.chunkCount, 0, domain), error = null)
-        }
-
+    /** The member's `completeMedia`: the access check, then core's dispatcher, attributing each item to [userId]. */
     fun complete(userId: String, scopeId: String, items: List<CompleteItem>): CompleteOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(CompleteOutcome.NoScope, CompleteOutcome.Suspended, CompleteOutcome.Deleting)?.let { return it }
-        return CompleteOutcome.Results(completeForNode(scopeId, items, UploadOpener.Member(userId)))
-    }
-
-    /**
-     * The member-less core of [complete]: verify + attach each item, scoped only by `scopeId`, resolving each upload
-     * only for its [opener] — who is also whom the media is attributed to: a member's `owner_key` (cr-0113), or a
-     * **contributor `shareIdentityId`** (the CONTRIBUTOR share upload path, cr-0101). The caller does its own
-     * authorization. Each item's `nodeId` is honoured (the share path sets it to the shared root node).
-     * [admitted] re-asks the caller's gate first in each attach's transaction ([MediaStore.attach]).
-     */
-    fun completeForNode(
-        scopeId: String, items: List<CompleteItem>, opener: UploadOpener, admitted: () -> Boolean = { true },
-    ): List<CompleteItemResult> =
-        items.map { completeOne(scopeId, it, opener, admitted) }
-
-    /**
-     * Allow-list, not a FOLDER deny-list: media attaches only to a node that owns a `K_mem` and a gallery.
-     * Behaviour-neutral while `NodesHandler.parentAllows` ends `else -> false` (the kinds are closed: FOLDER,
-     * MEMORY, CHAPTER). It stops being neutral the day a kind is added — which is the point: a new kind then
-     * refuses media until someone opts it in here, instead of silently inheriting it.
-     */
-    private fun attachesMedia(kind: String): Boolean = kind == NodeEntity.MEMORY || kind == NodeEntity.CHAPTER
-
-    /**
-     * Complete one logical media (original + derivative uploads). The item is **atomic**: the node + every
-     * upload session are resolved first, then **every** blob is declare-then-verified, and only if all pass are
-     * the blobs + media + derivative rows attached. On a budget failure the item's staged objects are purged.
-     */
-    private fun completeOne(scopeId: String, item: CompleteItem, opener: UploadOpener, admitted: () -> Boolean): CompleteItemResult {
-        val node = store.findNode(scopeId, item.nodeId)
-            ?: return CompleteItemResult(null, null, "node_not_found")
-        if (!attachesMedia(node.kind)) return CompleteItemResult(null, null, "illegal_target")
-
-        val original = store.findSession(scopeId, item.originalUploadId, opener)
-            ?: return CompleteItemResult(null, null, "upload_not_found")
-        val derivSessions = item.derivatives.map { d ->
-            val s = store.findSession(scopeId, d.uploadId, opener)
-                ?: return CompleteItemResult(null, null, "upload_not_found")
-            d.kind to s
-        }
-        val allSessions = listOf(original) + derivSessions.map { it.second }
-        // Each blob's K_blob wrap is sealed bound to (media, role) (ADR 0072): a session started for another media or
-        // in another role would land a blob nobody can open where it is attached, so the item is refused whole.
-        if (!original.boundTo(item.mediaId, "ORIGINAL") || derivSessions.any { (kind, s) -> !s.boundTo(item.mediaId, kind) }) {
-            return CompleteItemResult(null, null, "upload_mismatch")
-        }
-        if (store.mediaIdTaken(item.mediaId)) {
-            // Taken by a concurrent complete of this very upload that committed after the session read above? Then
-            // the session is spent too, and a replay answers by the session first: `upload_not_found`.
-            val spent = store.sessionSpent(original.id)
-            return CompleteItemResult(null, null, if (spent) "upload_not_found" else "id_taken")
-        }
-
-        // declare-then-verify every blob up front; a single budget failure fails (and purges) the whole item
-        val manifests = HashMap<String, List<Long>?>()
-        for (session in allSessions) {
-            when (val v = verifyBlob(session)) {
-                is BlobVerify.Ok -> manifests[session.id] = v.manifest
-                BlobVerify.Budget -> {
-                    purge(allSessions)
-                    return CompleteItemResult(null, null, "budget_exceeded")
-                }
-            }
-        }
-
-        val (blobId, mediaId) = store.attach(
-            item.mediaId, original, item.nodeId, manifests[original.id],
-            derivSessions.map { (kind, s) -> DerivativeAttach(kind, s, manifests[s.id]) },
-            item.wrappedMeta,
-            item.wrappedExif,
-            (opener as? UploadOpener.Contributor)?.shareIdentityId,
-            (opener as? UploadOpener.Member)?.userId, // cr-0113: the member uploader → owner_key "user:{id}" (null on the contributor path)
-            admitted,
-        ) ?: return CompleteItemResult(null, null, "upload_not_found") // sessions spent concurrently, or no longer admitted
-        return CompleteItemResult(blobId, mediaId, null)
-    }
-
-    private sealed interface BlobVerify {
-        data class Ok(val manifest: List<Long>?) : BlobVerify
-        object Budget : BlobVerify
-    }
-
-    /**
-     * Stat a session's stored objects against its declaration: every chunk present at **exactly** its derived length
-     * (ADR 0013 §3). "The total does not exceed `byteSize`" would pass a short chunk — a frame no client sealed — and
-     * this is the check that still holds on a store that ignores the signed `Content-Length`. A session whose shape
-     * the size does not derive (one opened before `start` refused such shapes) cannot match and fails the same way.
-     * Ok carries the manifest (null on the dev store).
-     */
-    private fun verifyBlob(session: UploadSessionEntity): BlobVerify {
-        if (!blobStore.canPresign) return BlobVerify.Ok(null) // dev store: no transport, trust the declaration
-        if (!ChunkFrames.isPossible(session.byteSize) || session.chunkCount != ChunkFrames.chunkCount(session.byteSize)) {
-            return BlobVerify.Budget
-        }
-        val sizes = chunkKeys(session.storageKey, session.chunkCount).map { blobStore.stat(it) }
-        val exact = sizes.withIndex().all { (i, size) -> size == ChunkFrames.chunkLength(session.byteSize, i) }
-        return if (exact) BlobVerify.Ok(sizes.filterNotNull()) else BlobVerify.Budget
-    }
-
-    /**
-     * Record every chunk object staged for the item's sessions for reclaim (after a budget failure). Objects
-     * only — the sessions' **rows** are deliberately left standing here rather than deleted inline, and
-     * [UploadSessionPurge] reclaims them on the same age predicate as a genuinely abandoned upload. That makes
-     * this the one site whose keys were never at risk under the old best-effort delete, and it keeps that
-     * property: the row still names the `storage_key` afterwards.
-     *
-     * **Its own transaction, because this path has none** (ADR 0062 Decision 2): the handler is not
-     * `@Transactional` and `StoreReclaimStore.record` is `MANDATORY`, so the requirement is enforced rather than
-     * remembered. The old `canPresign` gate is gone with the delete it guarded — recording is cheap, correct on
-     * every store, and gating it would put a hole in the hermetic suite's only view of this path.
-     */
-    private fun purge(sessions: List<UploadSessionEntity>) {
-        QuarkusTransaction.requiringNew().run {
-            reclaim.record(sessions.map { StoreObjectRef(it.storageKey, it.chunkCount) })
-        }
+        return CompleteOutcome.Results(completions.complete(scopeId, items, UploadOpener.Member(userId)))
     }
 
     /**
@@ -585,14 +288,14 @@ class MediaHandler(
         access.check(userId, scopeId, WRITE)
             .refusal(CoverCommitOutcome.NoTarget, CoverCommitOutcome.Suspended, CoverCommitOutcome.Deleting)?.let { return it }
         val node = store.findNode(scopeId, nodeId) ?: return CoverCommitOutcome.NoTarget
-        if (!attachesMedia(node.kind)) return CoverCommitOutcome.IllegalTarget
-        val session = store.findSession(scopeId, uploadId, UploadOpener.Member(userId)) ?: return CoverCommitOutcome.NoTarget
+        if (!MediaUploadCompletion.attachesMedia(node.kind)) return CoverCommitOutcome.IllegalTarget
+        val session = blobs.findSession(scopeId, uploadId, UploadOpener.Member(userId)) ?: return CoverCommitOutcome.NoTarget
         // The cover's K_blob wrap is sealed bound to (this node, COVER) (ADR 0072).
         if (!session.boundTo(node.id, "COVER")) return CoverCommitOutcome.UploadMismatch
-        val manifest = when (val v = verifyBlob(session)) {
+        val manifest = when (val v = uploads.verifyBlob(session)) {
             is BlobVerify.Ok -> v.manifest
             BlobVerify.Budget -> {
-                purge(listOf(session))
+                uploads.purge(listOf(session))
                 return CoverCommitOutcome.Budget
             }
         }
@@ -614,20 +317,6 @@ class MediaHandler(
             MediaStore.ClearCoverResult.CLEARED, MediaStore.ClearCoverResult.EMPTY -> CoverDeleteOutcome.Done
             MediaStore.ClearCoverResult.REPLACED -> CoverDeleteOutcome.Replaced
         }
-    }
-
-    fun download(userId: String, scopeId: String, blobIds: List<String>, domain: String?): DownloadOutcome {
-        access.check(userId, scopeId, READ)
-            .refusal(DownloadOutcome.NoScope, DownloadOutcome.Suspended)?.let { return it }
-        return DownloadOutcome.Results(blobIds.map { downloadOne(scopeId, it, domain) })
-    }
-
-    private fun downloadOne(scopeId: String, blobId: String, domain: String?): DownloadItemResult {
-        val blob = store.findBlob(scopeId, blobId)
-            ?: return DownloadItemResult(presignedGets = null, error = "upload_not_found")
-        val gets = blobStore.presignGets(blob.storageKey, blob.chunkCount, domain)
-            ?: return DownloadItemResult(presignedGets = null, error = "store_unavailable")
-        return DownloadItemResult(presignedGets = gets, error = null)
     }
 
     // --- buckets (uc.memory.buckets, ADR 0034, cr-0113 · curation relaxed cr-0123) — member-gated: a member may

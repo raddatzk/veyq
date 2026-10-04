@@ -1,5 +1,6 @@
 package com.veyq.memories.media
 
+import com.veyq.core.testing.TestBlob
 import com.veyq.core.blob.BlobEntity
 import com.veyq.core.node.NodeEntity
 import com.veyq.core.blobstore.BlobStore
