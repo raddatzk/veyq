@@ -239,7 +239,7 @@ allowlist: run them serially, or accept a mechanical conflict on those two files
       `location`, `browse` repointed; `web/stryker.mutate.json` still lists a file that exists
       (`python3 scripts/mutation_meta_check.py` needs a built report — run `validate_coverage` and read the manifest
       by hand instead, and say so in the commit).
-- [ ] 4 the registry and the composition root — `core/applications/registry.ts` (types + register/lookup, write-once,
+- [x] 4 the registry and the composition root — `core/applications/registry.ts` (types + register/lookup, write-once,
       unsupported-kind fallback), `web/src/applications.ts` (`registerApplications()`), `main.ts` and
       `src/test/setup.ts` call it; Memories registers its kinds with **no slot filled yet**. The registry's header
       states the build-time rule (Decision 3) and the single-claim rule.

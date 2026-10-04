@@ -6,8 +6,13 @@ import { config, enableAutoUnmount } from '@vue/test-utils'
 import { beforeEach, afterEach } from 'vitest'
 import { installWireRecorder } from './wireRecorder'
 import ToastService from 'primevue/toastservice'
+import { registerApplications } from '../applications'
 
 config.global.plugins.push(ToastService)
+
+// The shell asks the application registry what to render (ADR 0079); fill it as `main.ts` does, once per test file
+// (the module graph is per file, so the write-once registry starts empty each time).
+registerApplications()
 
 // Unmount every wrapper after each test. A component left mounted keeps its library timers alive past the file's
 // teardown, and one that lands after vitest has deleted the DOM globals throws an unhandled error that fails the
