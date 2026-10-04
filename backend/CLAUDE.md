@@ -7,7 +7,11 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   `backend/`, it checks every project: `:core` (`backend/core`, the platform — its tests run as `:core:test`),
   `:apps:memories` (`backend/apps/memories`, the Memories application; its tests run as `:apps:memories:test`), the
   root (`:test`, the composition — no main code — and only the whole-app tests: `OperatorBlindProbeTest`, the posture
-  and entity sweeps, `ModuleCompositionTest`) and `:test-support` (the helpers the tests share; no tests). **A test
+  and entity sweeps, `ModuleCompositionTest`) and `:test-support` (the helpers the tests share; no tests). A new
+  application is one more `:apps:<name>`; what a module must have (an `include`, a `beans.xml`, the convention script,
+  its Dockerfile `COPY`s) and which edges it may declare (`:core`, and `:test-support` for tests — never another
+  application) is `scripts/validate_backend_module_graph.py`'s, its docstring the list. `:core`'s tests boot core
+  with **no** application (`CoreAloneSliceTest`). **A test
   lives where what it exercises runs:** in `:core` if it passes with core alone, in `:apps:memories` if it needs
   Memories at runtime — every share creation (core refuses a share on a kind no application supports), every
   `MEMORY`/`CHAPTER` placement, a seam's registered partition — even when its package is core's. **A `--tests`
@@ -26,7 +30,9 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   does under overlap — on 2026-10-03 three races green on H2 were red there ([ADR 0078](../docs/decisions/0078-production-reads-committed-like-its-tests.md)).
 - **Every dependency is checksum-verified** (`gradle/verification-metadata.xml`, ADR 0057 §6), and so is the
   wrapper's distribution (`distributionSha256Sum`) and the wrapper JAR itself (`scripts/gradle_wrapper_jar.sha256`
-  — a `./gradlew wrapper` that rewrites the JAR owes it a line, cross-checked as its header says). A dependency, plugin or Quarkus bump therefore regenerates
+  — a `./gradlew wrapper` that rewrites the JAR owes it a line, cross-checked as its header says). A dependency, plugin or Quarkus bump — **or a new
+  module**: a project that applies `io.quarkus` resolves configurations of its own, and the first one resolved five
+  POMs no other project did (`:core`'s `quarkusGenerateAppModel`, 2026-10-04) — therefore regenerates
   the metadata by hand (Dependabot is remembered not to): `GRADLE_USER_HOME=$(mktemp -d) ./gradlew
   --write-verification-metadata sha256 help check quarkusBuild pitest`. **The empty Gradle home is the point** —
   a warm cache hides what a cold one fetches: the first write, from a warm cache, missed
@@ -96,7 +102,8 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   uuid field is refused by deserialization on its own.
 - **Migrations:** Flyway; `schema-management.strategy=none` — Flyway owns the schema. **One global version
   scheme across modules:** `V<yyyymmddHHMM>__<module>_<slug>.sql` (the UTC minute you write it; `<module>` is
-  `core` or `memories`), each in its owner's `src/main/resources/db/migration/` (`backend/core/…` for core,
+  `core` or an application's name — `memories` — as `settings.gradle.kts` includes it, `:apps:<name>`), each in its
+  owner's `src/main/resources/db/migration/` (`backend/core/…` for core,
   `backend/apps/memories/…` for Memories; the guard holds the name to the directory) — one classpath path, `db/migration`, so Flyway reads them
   as one set and two files of one version fail startup. The schema starts from two baselines,
   `V202610041200__core_baseline.sql` and `V202610041201__memories_baseline.sql`; a Memories migration references

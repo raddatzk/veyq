@@ -97,10 +97,10 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   32 a declared doc's every link back to its wiki page removed — rejected: `validate_wiki_sources` requires each
      `docs/` source to link the page, so whoever edits the doc sees the published page that restates it. Before
      it, a page told users the opposite of its doc and was found because a user asked (inbox #120)
-  34 a `core/node/` file importing `memories.media` — rejected: `validate_kernel_imports_no_slices` bars core
-     from the Memories application (ADR 0079), so an application cannot grow a back-edge into the platform. The
-     forgery creates its directory if it is missing; the guard must stay green without it and go red with the
-     planted file
+  34 `:core`'s build file depending on `:apps:memories` — rejected: `validate_backend_module_graph` rule (b) holds
+     the module direction (ADR 0079 Decision 4: core depends on no application). Since the module split a core
+     *file* importing Memories does not compile, so the edge it would need is the one place a text check can see
+     the back-edge before a build; Gradle refuses that edge too, as a cycle, but only when it builds
   35 a share-subtree contributor whose `authorizedBlobIds` forgets the derivative arm — rejected:
      `validate_blob_reference_arity` follows the arms into every `SharedSubtreeContributor`, not only core's
      `subtreeBlobIds` (the arm is red because of the follow: the file is present and still implements it)
@@ -112,9 +112,6 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      node-keyed entities from their `node_id` column and requires an eraser to reach each. No foreign key points
      at `veyq_node`, so nothing at runtime refuses the purge; before that guard the scope, blob and reclaim
      guards were all green on this exact forgery while the purge orphaned every media, bucket and blob row
-  38 a `core/node/` file naming `memories.media` by a fully-qualified reference inline, with no import — rejected:
-     `validate_kernel_imports_no_slices` reads qualified names on lexer-masked source, not only `import` lines.
-     The compiler does not care which form a back-edge takes; before, this exact shape was green
   39 a core `shared/ui/` file importing `features/memory/memoryNodes` — rejected: `validate_web_core_imports_no_applications`
      resolves a relative specifier against the importing file, so the web core cannot grow a back-edge into the
      Memories application (ADR 0079). The same file importing `features/account/…` stays green by hand-run control —
@@ -129,9 +126,6 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   44 a bare side-effect `import '…'` of the application in a core file — rejected: the third spelling of the edge
   45 a core file naming the Memories node kind — rejected: the shell asks the registry, it does not know the kinds
   46 `import.meta.glob` in a core file — rejected: discovery by glob would hide an edge from the import rule
-  47 a `core/spaces/` file importing `memories.media` — rejected: `validate_kernel_imports_no_slices` derives
-     the platform as every main file whose `package` is not a Memories one, not as a list of directories (phase 1
-     read only the then `core/` and `shared/` trees). Before, `features.spaces.ScopesStore` imported the item-favorites entity and the guard was green
   48 a kernel (tenant) file importing a slice (the admin tenant feature) — rejected: `validate_kernel_imports_no_slices`
      reads kernel membership from its declared `KERNEL` list, not from a directory (the kernel was `shared/`
      until the package rename folded it into `com.veyq.core.<feature>`); every package off the list is a slice
@@ -139,6 +133,18 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      holds core to the node kind `FOLDER`; the kinds Memories owns are answered through `NodeKindRules` and the other
      seams (ADR 0079). The import rule cannot see this edge — a kind is a value, not a package, and the generated
      enum is no Memories package. A KDoc naming the kind sits beside it and must not be what is read
+  50 a forged second application (`backend/apps/other`, included, copied by the Dockerfile, indexed) depending on
+     `:apps:memories` — rejected: `validate_backend_module_graph` rule (b) — an application never depends on another
+     (ADR 0079 Decision 4). Gradle accepts that edge without complaint, and no real second application exists yet,
+     so a forged one is the only lever; everything else about it is made valid so (b) is what rejects it
+  51 a `:core` main file declaring a `com.veyq.memories` package — rejected: `validate_backend_module_graph` rule
+     (d), no package in two modules. Kotlin compiles the split and Quarkus indexes both halves; the package name
+     would then claim an owner the file's module is not
+Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
+(a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
+which the Gradle module split retired: `:core` has no edge to an application, so either shape fails
+`:core:compileKotlin` (`Unresolved reference 'memories'`) — a check no buildless forgery can run, and a text rule
+beside it would be a weaker copy. Case 34 now pins the edge such an import would need.
 Open gaps — a forgery the guard still passes (a documented limit, not a defect to fix blindly):
   4b a lying `status: planned` on an implemented use-case passes. **Left open on purpose** — the obvious rule
      "planned ⇒ no coverage refs" is *false in general*: a use-case can be legitimately `planned` while carrying
@@ -234,6 +240,8 @@ import sys
 import tempfile
 import textwrap
 
+import backend_tree  # where the backend's test and fixture roots live — resolved by glob, never spelled here
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 # Anchors the forgeries edit. If one drifts (a coverage file relocated, a test class renamed), the forgery
@@ -320,12 +328,12 @@ def forge_backend_empty_fun(root: pathlib.Path) -> str:
 
 
 def _backend_test_file(root: pathlib.Path) -> pathlib.Path:
-    # Every module keeps its tests in its own `src/test` (`backend/src/test`, `backend/core/src/test`, …).
-    tests = [t for t in (root / "backend").rglob("*.kt")
-             if t.stem == BACKEND_TEST_CLASS and "test" in t.parts and "build" not in t.parts]
-    if not tests:
-        raise ForgeError(f"backend test class {BACKEND_TEST_CLASS} not found (renamed?)")
-    return tests[0]
+    # The class is found in whichever module's test root holds it (`backend_tree.test_roots()`, the fixture roots
+    # beside them), read on the real tree the snapshot copied, then mapped into the copy `root`.
+    tests = backend_tree.kotlin_files(backend_tree.test_roots() + backend_tree.fixture_roots(), f"{BACKEND_TEST_CLASS}.kt")
+    if len(tests) != 1:
+        raise ForgeError(f"backend test class {BACKEND_TEST_CLASS} found {len(tests)} times, not once (renamed? moved?)")
+    return root / tests[0].relative_to(ROOT)
 
 
 def forge_backend_ref_env_gated(root: pathlib.Path) -> str:
@@ -632,36 +640,51 @@ def forge_media_node_eraser_deleted(root: pathlib.Path) -> str:
     return "the media NodeSubtreeEraser deleted (must be REJECTED — media and buckets would outlive their node)"
 
 
-def forge_core_imports_media(root: pathlib.Path) -> str:
-    # A core file reaching into the Memories application. The file is planted with its directory; the import is the bare line the guard reads.
+CORE_BUILD = "backend/core/build.gradle.kts"
+CORE_BUILD_DEPS_ANCHOR = "dependencies {\n"
+
+
+def forge_core_depends_on_application(root: pathlib.Path) -> str:
+    # The edge a core file importing Memories would need to compile: a `compileOnly` one, which ships nothing and
+    # still makes every Memories class visible to core.
+    f = root / CORE_BUILD
+    f.write_text(_sub(f.read_text(), CORE_BUILD_DEPS_ANCHOR,
+                      CORE_BUILD_DEPS_ANCHOR + '    compileOnly(project(":apps:memories"))\n'))
+    return ":core's build file depending on :apps:memories (must be REJECTED — core depends on no application)"
+
+
+SETTINGS = "backend/settings.gradle.kts"
+DOCKERFILE = "Dockerfile"
+# The Dockerfile's build-base `COPY` of Memories' build file; the forged application's is planted beside it.
+MEMORIES_BUILD_COPY = "backend/apps/memories/build.gradle.kts"
+
+
+def forge_application_depends_on_application(root: pathlib.Path) -> str:
+    # A second application, valid in every respect the module guard checks — included, indexed, copied by the
+    # Dockerfile, named by the convention — except for one edge: to the first application.
+    app = root / "backend/apps/other"
+    (app / "src/main/resources/META-INF").mkdir(parents=True)
+    (app / "src/main/resources/META-INF/beans.xml").write_text("")
+    (app / "build.gradle.kts").write_text(
+        'plugins {\n    kotlin("jvm")\n}\n\napply(from = "../../gradle/module.gradle.kts")\n\n'
+        'dependencies {\n    implementation(project(":core"))\n    implementation(project(":apps:memories"))\n}\n')
+    s = root / SETTINGS
+    s.write_text(s.read_text() + '\ninclude(":apps:other")\n')
+    d = root / DOCKERFILE
+    text = d.read_text()
+    if MEMORIES_BUILD_COPY not in text or "backend/apps/memories/src" not in text:
+        raise ForgeError(f"the Dockerfile no longer copies {MEMORIES_BUILD_COPY} and its src — re-anchor this forgery")
+    text = text.replace(MEMORIES_BUILD_COPY, f"{MEMORIES_BUILD_COPY} backend/apps/other/build.gradle.kts", 1)
+    d.write_text(text.replace("backend/apps/memories/src", "backend/apps/memories/src backend/apps/other/src", 1))
+    return "a forged second application depending on :apps:memories (must be REJECTED — no application → application)"
+
+
+def forge_core_declares_application_package(root: pathlib.Path) -> str:
     f = root / CORE_NODE_FORGERY
-    f.parent.mkdir(parents=True, exist_ok=True)
-    f.write_text("package com.veyq.core.node\n\nimport com.veyq.memories.media.MediaEntity\n\n"
-                 "class GuardGapProbe\n")
-    return "a core/node file importing memories.media (must be REJECTED — core depends on no application)"
-
-
-def forge_core_names_media_inline(root: pathlib.Path) -> str:
-    # The back-edge without an import: a fully-qualified call inline. A KDoc link of the same name sits beside it,
-    # and the guard must read the code line, not the comment (the comment alone stays green — see its docstring).
-    f = root / CORE_NODE_FORGERY
-    f.parent.mkdir(parents=True, exist_ok=True)
-    f.write_text("package com.veyq.core.node\n\n"
-                 "/** Counts [com.veyq.memories.media.MediaEntity] rows. */\n"
-                 "class GuardGapProbe {\n"
-                 "    fun n(): Long = com.veyq.memories.media.MediaEntity.count()\n"
-                 "}\n")
-    return "a core/node file naming memories.media fully-qualified inline, no import (must be REJECTED)"
-
-
-def forge_platform_feature_imports_media(root: pathlib.Path) -> str:
-    # A platform file that is no kernel package reaching into the Memories application: the shape ScopesStore had.
-    f = root / "backend/core/src/main/kotlin/com/veyq/core/spaces/GuardGapProbe.kt"
     if not f.parent.is_dir():
-        raise ForgeError(f"{f.parent.relative_to(root)} is missing — core/spaces moved")
-    f.write_text("package com.veyq.core.spaces\n\nimport com.veyq.memories.media.MediaEntity\n\n"
-                 "class GuardGapProbe\n")
-    return "a core/spaces file importing memories.media (must be REJECTED — the platform is every non-Memories file)"
+        raise ForgeError(f"{f.parent.relative_to(root)} is missing — core/node moved")
+    f.write_text("package com.veyq.memories.media\n\nclass GuardGapProbe\n")
+    return "a :core main file declaring the Memories package com.veyq.memories.media (must be REJECTED — one module per package)"
 
 
 def forge_core_names_memory_kind(root: pathlib.Path) -> str:
@@ -932,11 +955,10 @@ CASES = [
     ("31", "validate_wiki_sources.py", forge_wiki_pair_declares_fewer,     False),
     ("32", "validate_wiki_sources.py", forge_wiki_backlink_removed,        False),
     ("33", "validate_wiki_sources.py", forge_wiki_prose_contradicts_doc,   True),
-    ("34", "validate_kernel_imports_no_slices.py", forge_core_imports_media, False),
+    ("34", "validate_backend_module_graph.py", forge_core_depends_on_application, False),
     ("35", "validate_blob_reference_arity.py", forge_contributor_forgets_derivative_arm, False),
     ("36", "validate_scope_erasure_arity.py", forge_media_eraser_drops_a_table, False),
     ("37", "validate_node_subtree_erasure.py", forge_media_node_eraser_deleted, False),
-    ("38", "validate_kernel_imports_no_slices.py", forge_core_names_media_inline, False),
     ("39", WEB_GUARD, forge_web_core_imports_application, False),
     ("40", WEB_GUARD, forge_web_core_reexports_application, False),
     ("41", WEB_GUARD, forge_web_core_dynamic_imports_application, False),
@@ -945,9 +967,10 @@ CASES = [
     ("44", WEB_GUARD, forge_web_core_side_effect_import, False),
     ("45", WEB_GUARD, forge_web_core_names_memory_kind, False),
     ("46", WEB_GUARD, forge_web_core_glob, False),
-    ("47", "validate_kernel_imports_no_slices.py", forge_platform_feature_imports_media, False),
     ("48", "validate_kernel_imports_no_slices.py", forge_kernel_imports_slice, False),
     ("49", "validate_kernel_imports_no_slices.py", forge_core_names_memory_kind, False),
+    ("50", "validate_backend_module_graph.py", forge_application_depends_on_application, False),
+    ("51", "validate_backend_module_graph.py", forge_core_declares_application_package, False),
 ]
 
 

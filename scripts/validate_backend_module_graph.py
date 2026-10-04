@@ -2,16 +2,36 @@
 """Guard the backend's Gradle module layout where Gradle and Quarkus would let it go wrong without an error (ADR 0079,
 cr-platform-gradle-modules). Buildless: it reads the build files, the config files and the Dockerfile, never a build.
 
-**What it asserts.** Rules carry the letters the change-request gave them; the missing ones join with the steps that
-create their subjects. The modules are the projects `settings.gradle.kts` includes (`:apps:x` is `backend/apps/x`).
-The project edges are read from the build files (`<configuration>(project(":x"))`): `implementation`/`api`/
-`runtimeOnly` are runtime edges, `testImplementation`/`testRuntimeOnly` test edges, `compileOnly` none. A module the
-root reaches over runtime edges **ships** (its jar is in the fast-jar's `quarkus-app/lib/main`); `:test-support` is
-reached over test edges only and ships nothing.
+**What it asserts.** The rules carry the letters they were built under (a–g). The modules are the projects
+`settings.gradle.kts` includes (`:apps:x` is `backend/apps/x`). The project edges are read from the build files
+(`<configuration>(project(":x"))`): `implementation`/`api`/`runtimeOnly` are runtime edges,
+`testImplementation`/`testRuntimeOnly` test edges, `compileOnly` neither (it is still an edge for rule (b)). A
+module the root reaches over runtime edges **ships** (its jar is in the fast-jar's `quarkus-app/lib/main`);
+`:test-support` is reached over test edges only and ships nothing.
 
+- **(a) The settings name every module, and only the three kinds there are.** The included projects equal the
+  directories below `backend/` holding a `build.gradle.kts` (build output excluded). A module directory the settings
+  do not include is compiled by nothing — its classes, migrations and tests silently never run — and an include
+  without a build file configures an empty project. Every included project is `:core` (the platform),
+  `:test-support` (the test helpers) or `:apps:<name>` (an application, ADR 0079 Decision 1): rule (b)'s direction
+  is defined for exactly those, so a fourth kind is red until the direction is decided for it.
+- **(b) The dependency direction (ADR 0079 Decision 4).** Every project edge, any configuration: `:core` depends on
+  no project except `:test-support` over a test configuration; an application depends on `:core` and, over a test
+  configuration, on `:test-support` — **never on another application** and never on the root; `:test-support`
+  depends on `:core` only (an edge to an application would put that application into `:core`'s tests, which must
+  boot core alone); `:test-support` is reached over test configurations only, from anywhere. The root composes any
+  module. Gradle refuses `:core` → application as a cycle, but nothing in Gradle refuses `:apps:a` → `:apps:b`.
 - **(c) Every module is indexed.** Each included project has `src/main/resources/META-INF/beans.xml`. Without it
   Quarkus does not index the jar: injected beans fail the build, but an `@All` list silently loses the module's
-  implementations and its generated `@Path` interfaces answer 404 (spike, ADR 0079's change-request).
+  implementations and its generated `@Path` interfaces answer 404 (measured on the deliverable: the fast-jar boots
+  and the Memories routes 404).
+- **(d) No package spans two modules.** Every package a shipped project declares — its hand-written main Kotlin
+  (the `package` lines) and its generated API (the `SpecSet` packages of `gradle/openapi.gradle.kts`, attributed to
+  the project whose build file names that owner in `extra["veyq.openapi.owner"]`) — is declared by that project
+  alone. Kotlin compiles a split package and Quarkus indexes both halves, so nothing fails; but the package no
+  longer says its owner, and the platform/application boundary the names carry (`com.veyq.core.*`,
+  `com.veyq.<application>.*`) is a lie for the half that sits elsewhere. `:test-support` is test code and declares
+  its helpers inside core's packages on purpose (`com.veyq.core.blobstore.RecordingBlobStore`); it is not judged.
 - **(e) The image builds every module.** The Dockerfile's `backend-build-base` stage copies each included project's
   `build.gradle.kts` — its warm-up `gradlew help` configures every included project and dies on one with no
   directory (measured: "Configuring project ':core' without an existing directory is not allowed") — and some stage
@@ -45,17 +65,22 @@ reached over test edges only and ships nothing.
   `@QuarkusTest`'s application (measured under Quarkus 3.36.0), so a file there is silently never read by the tests
   it was written for.
 
-**The defect that bought it.** None yet: built with cr-platform-gradle-modules step 6, which moved the base file into
-`:core`, left the root's profile files beside a comment-only anchor and gave each module with `@QuarkusTest`s its own
-`%test` file beside its own anchor. Every failure mode it names is silent at runtime — an ambiguous key is resolved
-by classpath order, a profile file with no anchor or in a test-fixtures output is skipped, an unindexed module
-shrinks an `@All` list — and each was measured in this tree before the layout relied on it.
+**The defect that bought it.** None: built with cr-platform-gradle-modules (steps 6 and 8b), which split the
+backend into `:core`, `:apps:memories` and `:test-support`. Every failure mode it names is silent — an ambiguous key
+is resolved by classpath order, a profile file with no anchor or in a test-fixtures output is skipped, an unindexed
+module shrinks an `@All` list and 404s its routes, an un-included module directory is compiled by nobody, an
+application → application edge and a split package compile — and the runtime ones were measured in this tree
+before the layout relied on them. Rule (b) is the only place the "never another application" half of ADR 0079
+Decision 4 is checked at all; its bite is a forged second application, since no real one exists yet.
 
 **Its limit.** It reads text: an `include` built by code, a `projectDir` re-pointed in the settings, a project
-dependency written another way than `project(":x")` (a version catalog accessor, a variable), or a Dockerfile `COPY`
-of a whole parent directory is not modelled — the first three make a module or an edge invisible to the rules (an
-invisible edge shrinks a classpath, so a conflict through it goes unseen), the last reads as a missing copy (red,
-never a false green). (e) does not know which other files a module's build reads at configuration time (`:core`'s
+dependency written another way than `project(":x")` (a version catalog accessor, a variable,
+`project(path = …)`), or a Dockerfile `COPY` of a whole parent directory is not modelled — the first three make a
+module or an edge invisible to the rules (an invisible edge shrinks a classpath, so a conflict through it goes
+unseen, and an app → app edge spelled that way passes (b)), the last reads as a missing copy (red, never a false
+green). (b) judges declared edges, not imports: a `:core` file importing an application without an edge does not
+compile, which is the compiler's check, not this one. (d) reads `package` lines (comments masked by the Kotlin
+lexer) and the generator's `SpecSet` literals; a package derived another way is not seen. (e) does not know which other files a module's build reads at configuration time (`:core`'s
 `pitest.scope.json`); the warm-up run in a directory holding only the copied files is the proof for those. (c) checks
 the file exists, not that it is the module's own index (a `beans.xml` with `bean-discovery-mode="none"` passes). For
 (g), it reads files, not the classpath: a config source declared another way (`quarkus.config.locations`, a
@@ -72,11 +97,26 @@ import sys
 from collections import defaultdict
 
 import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
+from kotlin_lexer import mask  # the one Kotlin lexer in scripts/: comments + literals blanked, offsets kept
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 BACKEND = backend_tree.BACKEND
 SETTINGS = BACKEND / "settings.gradle.kts"
 MODULE_SCRIPT = BACKEND / "gradle" / "module.gradle.kts"
+OPENAPI_SCRIPT = BACKEND / "gradle" / "openapi.gradle.kts"
+CORE = ":core"
+TEST_SUPPORT = ":test-support"
+APPLICATION = re.compile(r"^:apps:[\w-]+$")
+# Any project reference in a dependencies block, with the configuration around it — `testImplementation(
+# testFixtures(project(":core")))` is a `testImplementation` edge, and `"api"(project(…))` (a script plugin's
+# string-named configuration) is an `api` one.
+ANY_EDGE = re.compile(r'"?\b(\w+)"?\s*\(\s*(?:\w+\s*\(\s*)?project\s*\(\s*"(:[^"]*)"\s*\)')
+TEST_EDGE_CONFIGS = {"testImplementation", "testRuntimeOnly", "testCompileOnly"}
+# `SpecSet(coreOwner, coreSpecs, "com.veyq.core.generated", …)` — the owner (a literal or a `val`) and the package root.
+SPEC_SET = re.compile(r'\bSpecSet\(\s*("?)(\w+)\1\s*,\s*\w+\s*,\s*"([\w.]+)"')
+OWNER_VAL = re.compile(r'\bval\s+(\w+)\s*=\s*"(\w+)"')
+OPENAPI_OWNER = re.compile(r'extra\["veyq\.openapi\.owner"\]\s*=\s*"(\w+)"')
+PACKAGE_LINE = re.compile(r"^\s*package\s+([\w.]+)", re.M)
 DOCKERFILE = ROOT / "Dockerfile"
 BUILD_BASE_STAGE = "backend-build-base"
 BASE_NAME = "application.properties"
@@ -224,6 +264,128 @@ def shipped_modules() -> set[str]:
     return {projects[p].relative_to(BACKEND).as_posix() for p in runtime_closure({":"}) if p != ":" and p in projects}
 
 
+def build_file_dirs() -> dict[str, pathlib.Path]:
+    """`{project path: directory}` for every directory below `backend/` that holds a `build.gradle.kts`."""
+    found = {}
+    for f in BACKEND.glob("**/build.gradle.kts"):
+        rel_parts = f.parent.relative_to(BACKEND).parts
+        if backend_tree._SKIP & set(rel_parts):
+            continue
+        found[":" + ":".join(rel_parts)] = f.parent
+    return found
+
+
+def rule_a() -> list[str]:
+    errors = []
+    included = {p for p in backend_tree.gradle_projects() if p != ":"}
+    on_disk = {p for p in build_file_dirs() if p != ":"}
+    for p in sorted(on_disk - included):
+        errors.append(f"(a) backend/{p.strip(':').replace(':', '/')}/build.gradle.kts belongs to no project "
+                      f"{rel(SETTINGS)} includes: Gradle compiles nothing there — its classes, migrations and tests "
+                      f"silently never run. Include it, or delete the directory.")
+    for p in sorted(included - on_disk):
+        errors.append(f"(a) {rel(SETTINGS)} includes {p}, which has no build.gradle.kts — an empty project.")
+    for p in sorted(included):
+        if p not in (CORE, TEST_SUPPORT) and not APPLICATION.match(p):
+            errors.append(f"(a) {p} is neither {CORE} (the platform), {TEST_SUPPORT} (the test helpers) nor "
+                          f":apps:<name> (an application, ADR 0079) — rule (b) has no direction for it.")
+    return errors
+
+
+def all_edges(project: str) -> list[tuple[str, str]]:
+    """Every `(configuration, target project)` edge `project`'s build file declares, comments stripped."""
+    f = build_file(project)
+    text = re.sub(r"//[^\n]*", "", f.read_text(encoding="utf-8")) if f.is_file() else ""
+    return [(config, ":" + target.strip(":")) for config, target in ANY_EDGE.findall(text)]
+
+
+def edge_refusal(src: str, config: str, dst: str, included: set[str]) -> str | None:
+    """Why the edge `src` → `dst` over `config` breaks the direction, or None when it is allowed."""
+    if dst not in included:
+        return f"{dst} is no project {rel(SETTINGS)} includes"
+    if dst == src:
+        return "a project depending on itself"
+    if dst == TEST_SUPPORT:
+        return None if config in TEST_EDGE_CONFIGS else (
+            f"{TEST_SUPPORT} is test code and reaches a project over a test configuration only "
+            f"({', '.join(sorted(TEST_EDGE_CONFIGS))}), never over `{config}` — it would ship")
+    if src == ":":
+        return None  # the composition root composes every module
+    if src == CORE:
+        return f"{CORE} depends on no application and on nothing else (ADR 0079 Decision 4)"
+    if src == TEST_SUPPORT:
+        return None if dst == CORE else (
+            f"{TEST_SUPPORT} reaches {CORE} only: an edge to {dst} puts it into {CORE}'s tests, which boot core alone")
+    if APPLICATION.match(src):
+        if dst == CORE:
+            return None
+        if APPLICATION.match(dst):
+            return (f"an application never depends on another application (ADR 0079 Decision 4) — refer to its "
+                    f"objects through a core object reference (a scope id and a node id)")
+        return f"an application depends on {CORE} only"
+    return f"{src} is no module kind rule (b) has a direction for (see rule (a))"
+
+
+def rule_b() -> list[str]:
+    projects = backend_tree.gradle_projects()
+    included = set(projects)
+    errors = []
+    for src in sorted(projects):
+        for config, dst in all_edges(src):
+            why = edge_refusal(src, config, dst, included)
+            if why:
+                where = rel(build_file(src))
+                errors.append(f"(b) {where}: `{config}(project(\"{dst}\"))` — {why}.")
+    if not any(all_edges(p) for p in projects if p != ":"):
+        errors.append(f"(b) no module's build file declares a project edge — the direction rule read nothing. "
+                      f"If the edges are written another way now, teach ANY_EDGE that spelling.")
+    return errors
+
+
+def generated_packages() -> tuple[dict[str, set[str]], list[str]]:
+    """`{project: generated packages}` from `gradle/openapi.gradle.kts`'s spec sets and each build file's owner."""
+    text = re.sub(r"//[^\n]*", "", OPENAPI_SCRIPT.read_text(encoding="utf-8")) if OPENAPI_SCRIPT.is_file() else ""
+    vals = dict(OWNER_VAL.findall(text))
+    roots = {}
+    for quoted, owner, root in SPEC_SET.findall(text):
+        roots[owner if quoted else vals.get(owner, owner)] = root
+    errors = []
+    if not roots:
+        errors.append(f"(d) {rel(OPENAPI_SCRIPT)} declares no `SpecSet(owner, specs, \"<package root>\", …)` — the "
+                      f"generated packages are no longer read. If the generation moved, re-point this rule.")
+    out: dict[str, set[str]] = defaultdict(set)
+    for p in backend_tree.gradle_projects():
+        f = build_file(p)
+        text = re.sub(r"//[^\n]*", "", f.read_text(encoding="utf-8")) if f.is_file() else ""
+        for owner in OPENAPI_OWNER.findall(text):
+            if owner not in roots:
+                errors.append(f"(d) {rel(f)} generates the `{owner}` spec set, which {rel(OPENAPI_SCRIPT)} does "
+                              f"not declare (it knows {sorted(roots)}).")
+                continue
+            out[p] |= {roots[owner], roots[owner] + ".api", roots[owner] + ".model"}
+    return out, errors
+
+
+def rule_d() -> list[str]:
+    declared, errors = generated_packages()
+    homes: dict[str, set[str]] = defaultdict(set)
+    for project, packages in declared.items():
+        for pkg in packages:
+            homes[pkg].add(project)
+    for f in backend_tree.main_kotlin():
+        m = PACKAGE_LINE.search(mask(f.read_text(encoding="utf-8")))
+        if m:
+            homes[m.group(1)].add(backend_tree.project_of(f) or f"<no project: {rel(f.parent)}>")
+    if not homes:
+        errors.append("(d) no main Kotlin file declares a package — the split-package rule read nothing.")
+    for pkg, projects in sorted(homes.items()):
+        if len(projects) > 1:
+            errors.append(f"(d) package {pkg} is declared by {len(projects)} modules ({', '.join(sorted(projects))}) — "
+                          f"a package belongs to one module, the one its name says (core's `com.veyq.core.*`, an "
+                          f"application's `com.veyq.<application>.*`).")
+    return errors
+
+
 def rule_c(mods: list[str]) -> list[str]:
     return [f"(c) backend/{mod}/src/main/resources/META-INF/beans.xml is missing: Quarkus does not index the module, so "
             f"its injected beans fail the build and — silently — an @All list loses its implementations and its "
@@ -292,14 +454,17 @@ def main() -> int:
     if not mods:
         print(f"BACKEND MODULE GRAPH VALIDATION FAILED:\n  - {rel(SETTINGS)} includes no module — the module rules read nothing.")
         return 1
-    errors = rule_c(mods) + rule_e(mods) + rule_f(mods) + rule_g(files)
+    errors = rule_a() + rule_b() + rule_c(mods) + rule_d() + rule_e(mods) + rule_f(mods) + rule_g(files)
     if errors:
         print("BACKEND MODULE GRAPH VALIDATION FAILED:")
         for e in errors:
             print(f"  - {e}")
         return 1
     cps = classpaths(files)
-    print(f"OK: {len(mods)} module(s) ({', '.join(mods)}) indexed, copied by the Dockerfile and named by the "
+    edge_count = sum(len(all_edges(p)) for p in backend_tree.gradle_projects())
+    print(f"OK: {len(mods)} module(s) ({', '.join(mods)}), each with a build file and included; {edge_count} project "
+          f"edge(s), none against the direction (no application → application); no package in two modules; "
+          f"indexed, copied by the Dockerfile and named by the "
           f"convention (in the fast-jar: {', '.join(sorted(shipped_modules()))}); {len(files)} config file(s) on {len(cps)} "
           f"classpath(s) ({', '.join(cps)}), on each every (profile, key) defined once, one base, every profile "
           f"file anchored.")

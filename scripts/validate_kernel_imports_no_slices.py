@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Guard the backend's two import directions: the platform kernel names no feature slice, and no platform file
-names Memories application code (developer-styleguide § 1, ADR 0007's shape, ADR 0079).
+"""Guard what the module boundary cannot: inside core, the kernel names no feature slice; and no platform file
+names a node kind an application owns (developer-styleguide § 1, ADR 0007's shape, ADR 0079).
 
 **What it asserts.** Over every hand-written main Kotlin file (every `src/main/kotlin` under `backend/`, found by
 `backend_tree`), read through the Kotlin lexer so comments and string contents do not count:
@@ -18,21 +18,23 @@ names Memories application code (developer-styleguide § 1, ADR 0007's shape, AD
   `com.veyq.core.scope.ScopeEntity`, `com.veyq.core.membership.MembershipEntity`) with the slice's
   store still its only writer. Every `KERNEL` entry must be declared by some main file, so the list cannot rot into
   names that guard nothing, and a run in which no file is kernel is red.
-- **Platform rule (ADR 0079).** veyq is a platform and Memories its first application; an application depends on
-  core, never the reverse. So no main file **whose `package` is not a Memories package** names a Memories package
-  (`APPLICATION`) in code. The platform is derived as the inverse of the application — every main file that is not
-  Memories' — rather than listed, so a new platform package is covered the day it appears; it is the cut the Gradle
-  module split makes (`:core` cannot see `:apps:memories`). A run in which no file declares a Memories package is
-  red too: the application list would then name nothing, and every platform file would pass by default.
-- **Node-kind rule (ADR 0079, `cr-platform-gradle-modules` step 4).** Core knows the node kind `FOLDER` only; the
-  kinds an application owns (`APPLICATION_KINDS`: Memories' `MEMORY` and `CHAPTER`) are named only by that
-  application's code, which answers for them through core's `NodeKindRules`, `ShareGuestWrites`,
-  `UploadCompletion` and `UploadAdmission`. So no platform main file names one of them as a whole word **in code**
+- **Node-kind rule (ADR 0079).** Core knows the node kind `FOLDER` only; the kinds an application owns
+  (`APPLICATION_KINDS`: Memories' `MEMORY` and `CHAPTER`) are named only by that application's code, which answers
+  for them through core's `NodeKindRules`, `ShareGuestWrites`, `UploadCompletion` and `UploadAdmission`. A
+  **platform** file is every main file outside an application module (a project `:apps:<name>`, read by
+  `backend_tree.project_of`), an **application** file one inside. So no platform main file names one of them as a
+  whole word **in code**
   — a constant, an enum entry (`NodeKind.MEMORY`) or a string literal (`kind == "MEMORY"` says what the constant
   said, so literals are read here, unlike the two rules above; comments are not). The generated `NodeKind` enum
   lists both: it is the contract's, closed until `kind` is opened, and lives in build output, which this guard does
   not read; core's resources decode into it without naming an entry. Each kind must still be named in code by some
-  Memories main file, so the list cannot rot into names that guard nothing.
+  application main file, so the list cannot rot into names that guard nothing.
+
+**What it no longer asserts: core importing an application.** Until the Gradle module split it also held every
+non-Memories main file away from the `com.veyq.memories` packages. That is the build's now: `:core` has no project
+edge to an application (`validate_backend_module_graph.py` rule (b); a `:core` → application edge is also a cycle
+Gradle refuses), so such an import does not compile — measured: `Unresolved reference 'memories'` from
+`:core:compileKotlin`. A text rule beside the compiler would only be a second, weaker copy of it.
 
 **Why a declared list (owner's decision, 2026-10-04, `cr-platform-gradle-modules` open question 3).** The layering
 was once a directory: the kernel lived under `shared/`, the slices under `features/`, and the guard barred
@@ -45,21 +47,18 @@ promoted its one-shot proof to this guard. The rule had been prose in the develo
 not depend on a feature") with nothing reading it, and the 2026-09-23 review found four imports breaking it:
 `SessionTokenIdentityProvider` on `SessionService`, and three tenant-kernel classes on the tenant entity, which then
 still lived in the admin feature. A cycle through the kernel is the kind that grows: every slice may depend on the
-kernel, so one back-edge makes every slice reachable from every other. **What widened the platform rule:** phase 1
-barred only two directories, and `features.spaces.ScopesStore` imported the item-favorites entity to clear a
-removed member's favorites — a platform → Memories edge the guard could not see. The inverse derivation was red on
-exactly that line on the untouched tree (2026-10-04, `cr-platform-gradle-modules` step 0); the edge is now the core
-`MembershipEraser` that item favorites implements.
+kernel, so one back-edge makes every slice reachable from every other.
 
-**What bought the node-kind rule.** No incident: the import rule cannot see a kind, because a kind is a string,
-not a package — after phase 1, `NodesHandler.parentAllows` still decided where a `MEMORY` and a `CHAPTER` may
-live, and the platform rule was green on it. The rule was red on exactly the four core lines (the two constants on
+**What bought the node-kind rule.** No incident: neither an import rule nor the compiler can see a kind, because a
+kind is a string, not a package — after phase 1, `NodesHandler.parentAllows` still decided where a `MEMORY` and a
+`CHAPTER` may live, and the import rule of that time was green on it. The rule was red on exactly the four core lines (the two constants on
 `NodeEntity`'s companion and the two `parentAllows` arms that name them) on the tree before the step moved them
 behind `NodeKindRules`.
 
-**Its limit.** Membership is read from the file's `package` line, not its directory: Kotlin allows a package that
-differs from the path, and a file that declares a Memories or kernel package is treated as one wherever it sits
-(the module split makes the path the boundary for the platform rule; the kernel stays a declaration). A slice
+**Its limit.** Kernel membership is read from the file's `package` line, not its directory: Kotlin allows a
+package that differs from the path, and a file that declares a kernel package is treated as one wherever it sits
+(`validate_backend_module_graph.py` rule (d) holds a package to one module). For the node-kind rule, platform or
+application is the module the file sits in. A slice
 importing another slice is not this guard's subject — slices may use each other. Two things are not checked, on
 purpose:
 - **The test tree.** Kernel *tests* legitimately import slices — `OperatorBlindProbeTest`, the rate-limit tests,
@@ -73,11 +72,9 @@ purpose:
   literals — see above.)
 - **A kind spelled otherwise.** The node-kind rule matches the kind's own spelling as a whole word; a core file
   that assembles it (`"MEM" + "ORY"`) or compares case-insensitively passes. That is evasion, not a slip, and no
-  text rule decides it. Before the lexer, only `import`
-  lines were read and an inline qualified reference was green (2026-10-04 review; pinned rejected by
-  `validate_guard_gaps` case 38).
-The web counterpart of the *platform rule* is `validate_web_core_imports_no_applications.py` (no allowlist: any
-violation is red). The *kernel rule* has none on the web side: `shared/ui/SecretKeyField.vue` imports the Emergency
+  text rule decides it.
+The web counterpart of the backend's core → application boundary is `validate_web_core_imports_no_applications.py`
+(no allowlist: any violation is red) — the web has no module boundary to hand that rule to. The *kernel rule* has none on the web side: `shared/ui/SecretKeyField.vue` imports the Emergency
 Kit's read half from `features/account/`, a known inversion the ui-web styleguide names, so a web kernel → slice
 guard would be red on the day it was born.
 """
@@ -110,11 +107,6 @@ KERNEL = [
     "com.veyq.core.tenant",
     "com.veyq.core.validation",
 ]
-# The Memories application, as the platform may not see it: its whole namespace, so a new Memories package is
-# covered the day it appears.
-APPLICATION = [
-    "com.veyq.memories",
-]
 # The node kinds Memories owns (ADR 0079 Decision 3). Core names `FOLDER` only.
 APPLICATION_KINDS = [
     "MEMORY",
@@ -123,8 +115,12 @@ APPLICATION_KINDS = [
 KIND_REF = re.compile(r"(?<!\w)(" + "|".join(re.escape(k) for k in APPLICATION_KINDS) + r")(?!\w)")
 # A qualified name in code, not preceded by another name part. Its package is resolved against the declared ones.
 QUALIFIED = re.compile(r"(?<![\w.])com\.veyq(?:\.\w+)+")
-APPLICATION_REF = re.compile(r"(?<![\w.])(" + "|".join(re.escape(p) for p in APPLICATION) + r")(?![\w])")
 PACKAGE = re.compile(r"^\s*package\s+([\w.]+)", re.M)
+
+
+def in_application(path: pathlib.Path) -> bool:
+    """True for a file inside an application module (a project `:apps:<name>`)."""
+    return (backend_tree.project_of(path) or "").startswith(":apps:")
 
 
 def under(package: str | None, roots: list[str]) -> bool:
@@ -164,20 +160,20 @@ def main() -> int:
         errors.append("KERNEL names packages no main file declares — the list has rotted or the package moved: "
                       + ", ".join(stale))
     kernel = [r for r in read if under(r[1], KERNEL)]
-    platform = [r for r in read if not under(r[1], APPLICATION)]
+    platform = [r for r in read if not in_application(r[0])]
     application_files = len(read) - len(platform)
     if not kernel:
         errors.append("no main Kotlin file declares a KERNEL package; the kernel rule would pass every file by "
                       "default. If the kernel moved, move KERNEL with it.")
     if not application_files:
-        errors.append("no main Kotlin file declares a Memories package "
-                      f"({', '.join(APPLICATION)}); the platform rule would pass every file by default. If Memories "
-                      "moved, move APPLICATION with it.")
-    application_named = {k.group(1) for path, pkg, _, _ in read if under(pkg, APPLICATION)
+        errors.append("no main Kotlin file sits in an application module (:apps:<name>); the node-kind rule would "
+                      "read every file as platform and find the kinds named by nobody. If the modules moved, "
+                      "re-point backend_tree.")
+    application_named = {k.group(1) for path, _, _, _ in read if in_application(path)
                          for line in code_of[path] for k in KIND_REF.finditer(line)}
     unnamed = [k for k in APPLICATION_KINDS if k not in application_named]
     if application_files and unnamed:
-        errors.append("APPLICATION_KINDS names kinds no Memories main file names in code — the list has rotted or "
+        errors.append("APPLICATION_KINDS names kinds no application main file names in code — the list has rotted or "
                       "the kind was renamed: " + ", ".join(unnamed))
     if errors:
         print("KERNEL-IMPORTS FAILED —")
@@ -193,20 +189,15 @@ def main() -> int:
                     hits[(path, lineno)] = (f"  - {path.relative_to(ROOT)}:{lineno}: kernel names slice {target}: "
                                             f"{source[lineno - 1].strip()}")
     for path, _, source, masked in platform:
-        for lineno, line in enumerate(masked, start=1):
-            if APPLICATION_REF.search(line):
-                hits.setdefault((path, lineno), f"  - {path.relative_to(ROOT)}:{lineno}: platform names the Memories "
-                                                f"application: {source[lineno - 1].strip()}")
         for lineno, line in enumerate(code_of[path], start=1):
             k = KIND_REF.search(line)
             if k:
-                hits.setdefault((path, lineno), f"  - {path.relative_to(ROOT)}:{lineno}: platform names the Memories "
-                                                f"node kind {k.group(1)}: {source[lineno - 1].strip()}")
+                hits.setdefault((path, lineno), f"  - {path.relative_to(ROOT)}:{lineno}: platform names the "
+                                                f"application node kind {k.group(1)}: {source[lineno - 1].strip()}")
 
     if hits:
-        print("KERNEL-IMPORTS FAILED — a kernel package names a slice, or a platform file names the Memories "
-              "application (by import or fully-qualified reference) or one of its node kinds "
-              "(developer-styleguide § 1, ADR 0079):")
+        print("KERNEL-IMPORTS FAILED — a kernel package names a slice (by import or fully-qualified reference), "
+              "or a platform file names a node kind an application owns (developer-styleguide § 1, ADR 0079):")
         print("\n".join(hits[k] for k in sorted(hits)))
         print("Share the rule through a small interface in the kernel that the slice implements, or move the entity "
               "into the kernel with the slice's store still its only writer. A rule about a Memories node kind is "
@@ -216,8 +207,8 @@ def main() -> int:
 
     print(f"kernel imports OK: {len(kernel)} kernel file(s) in {len(KERNEL)} declared package(s), none names one of "
           f"the {len(declared - {p for p in declared if under(p, KERNEL)})} slice package(s) in code; "
-          f"{len(platform)} platform file(s) (every main file outside the {application_files} of Memories' packages), "
-          f"none names the Memories application or its node kinds ({', '.join(APPLICATION_KINDS)})")
+          f"{len(platform)} platform file(s) (every main file outside the {application_files} in application modules), "
+          f"none names an application node kind ({', '.join(APPLICATION_KINDS)})")
     return 0
 
 

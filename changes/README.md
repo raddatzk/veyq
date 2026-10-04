@@ -579,6 +579,16 @@ symbol first, then choose the shape — the shape that keeps every anchor green 
 (break 95) stayed green at 98.7 % while that file fell from 100 % to 96 %. So the inventory greps the three manifests for
 every file a CR edits, and a file in one keeps its I/O next door.
 
+### A move re-points its readers first, on the layout it is about to leave
+
+**A guard that globs is layout-independent, so rewire it before anything moves, in a commit of its own that is green
+on the untouched tree** — then a green after the move is the move's, not a reader that stopped seeing it. The
+platform module split did this three times (the backend tree helper before the package rename, the spec helper
+before the contracts split, the test homes before the guards that judge them), and the one reader it skipped — a
+hard-coded fallback directory the rename rewrote to the new path — stayed green when re-pointed at the old one, the
+exact hole this order exists to close. The same order holds for the last step of a series: the move lands green
+first, and only then do the guards that judge its result change.
+
 ### Promote one-shot proofs to permanent guards
 
 When a CR's correctness rests on a structural invariant it

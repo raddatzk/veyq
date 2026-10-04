@@ -79,7 +79,9 @@ existing keys are the documented exemption**: they derive as they always have, a
 Memories context — that would be a suite `v2` and a re-encryption for no gain, since there is no earlier
 application to be separated from.
 
-**10. One backend image.** A modular monolith: one container, one database, applications as packages of it.
+**10. One backend image.** A modular monolith: one container, one database, one deployable — the root build's one
+fast-jar. Core and each application are build modules of it, compiled in and never built, published or deployed
+on their own.
 
 ## Consequences
 
@@ -93,27 +95,52 @@ application to be separated from.
 - **An append-only application cannot make the server keep its order.** The server may drop or reorder entries
   it holds unless a sequence number or hash chain is bound into each entry's associated data (ADR 0072 binds an
   object, not its neighbours). Each such application states that gap; it is not a platform property.
-- **The code matches this only in part.** Phase 1 of the change-request series (inbox #324) drew the backend
-  boundary inside the one Gradle module: `com.veyq.core.{node,blob,sharing,quota,scope}` hold the node, blob,
-  upload-session and share entities, the generic blob upload (start, windows, verify, download, session purge) and
-  the storage quota, and nine interfaces through which core reaches Memories code without importing it —
-  `ScopeEraser`, `NodeSubtreeEraser`, `MembershipEraser`, `GuestIdentityUsage`, `SharedSubtreeContributor`,
-  `ShareGuestWrites`, `UploadCompletion` (what a verified upload becomes on a node of the kind, today Memories'
-  media), `UploadAdmission` (what a share link's guests contributed, for its per-link limit) and `NodeKindRules`
-  (where a node of the kind may live in the tree; core's own answers for `FOLDER`, Memories' for `MEMORY` and
-  `CHAPTER`) — and no platform file imports Memories code. The last three fail closed like `ShareGuestWrites`: a
-  kind no application (or two) claims takes no uploads (`illegal_target`) and is placed nowhere
-  (`illegal_structure`), and a link whose usage no single application measures is refused
-  (`share_not_contributable`). Hand-written core code names the node kind `FOLDER` only — the same guard holds it. Core still speaks media in one place: the completion item (`CompleteItem`'s
-  `mediaId`, `derivatives`, `wrappedExif`), because core's share contract serves a guest's completion. (`MembershipEraser` is a different seam from the erasers: nothing of the scope is
-  erased, one user loses access to one scope, and item favorites drop that user's rows.) Every class is named for its owner: the platform is `com.veyq.core.<feature>`, Memories
-  `com.veyq.memories.<feature>`, and so is the generated API (`com.veyq.core.generated`, `com.veyq.memories.generated`):
-  the contracts name their owner too — core's specs in `contracts/api/` (among them `blob.openapi.yaml`, the three
-  generic blob operations, served by core's `BlobResource`), the Memories specs in `contracts/api/memories/`, every
-  schema two owners share defined once in core's `_common.openapi.yaml`. Inside core the
-  kernel/slice layering is a declared list, not a directory: the packages every slice builds on are `KERNEL` in
-  `validate_kernel_imports_no_slices.py`, and a kernel package names no slice. Core and Memories are Gradle modules, `:core` (`backend/core`) and `:apps:memories` (`backend/apps/memories`, depending on `:core` — the reverse edge is a cycle Gradle refuses), whose jars the one fast-jar carries; each module runs its own tests (the core behaviour that needs an application at runtime — a share, a `MEMORY` placement — with Memories'), and the root only the whole-app ones. Not done: the node `kind` is still the contract's
-  closed `FOLDER`/`MEMORY`/`CHAPTER` enum, which core's generated API decodes.
+- **The backend is split as decided; core still knows Memories in named places.** Core and each application are
+  Gradle modules below `backend/`: `:core` (`backend/core`) and `:apps:<name>` (`:apps:memories` in
+  `backend/apps/memories`), plus `:test-support`, the test helpers, on no runtime classpath. The root `backend/`
+  holds no main code; it composes the modules into the one fast-jar, where each module's jar is
+  `lib/main/com.veyq.veyq-<module>.jar`. The direction is the build's: `:core` has no edge to an application (Gradle
+  refuses it as a cycle, so a core file importing Memories does not compile), and `validate_backend_module_graph.py`
+  holds what Gradle allows — no application depends on another, no package is declared in two modules, every module
+  is included, indexed (an unindexed module boots green with its routes answering 404 and its seam implementations
+  missing — measured on the deliverable), copied by the Dockerfile and named. Every class is named for its owner —
+  the platform `com.veyq.core.<feature>`, an application `com.veyq.<application>.<feature>`, the generated API
+  `com.veyq.core.generated` / `com.veyq.<application>.generated` — and so are the contracts: core's specs in
+  `contracts/api/` (`_common.openapi.yaml`, which every shared schema is defined in once, is core's), an
+  application's in `contracts/api/<application>/`. Each module owns its migrations under one global version scheme
+  (`V<yyyymmddHHMM>__<module>_<slug>.sql`, the module named by the settings; [backend/CLAUDE.md](../../backend/CLAUDE.md)
+  § Migrations): a core migration names no application table, an application's references only core's and its own.
+  Core reaches application code through nine interfaces — `ScopeEraser`, `NodeSubtreeEraser`, `MembershipEraser`,
+  `GuestIdentityUsage`, `SharedSubtreeContributor`, `ShareGuestWrites`, `UploadCompletion` (what a verified upload
+  becomes on a node of the kind, today Memories' media), `UploadAdmission` (what a share link's guests contributed,
+  for its per-link limit) and `NodeKindRules` (where a node of the kind may live; core answers for `FOLDER`, Memories
+  for `MEMORY` and `CHAPTER`) — and the last four fail closed: a kind no application (or two) claims takes no
+  uploads (`illegal_target`), is placed nowhere (`illegal_structure`), is shared by no one (`illegal_scope`), and a
+  link whose usage no single application measures is refused (`share_not_contributable`). (`MembershipEraser` is a
+  different seam from the erasers: nothing of the scope is erased, one user loses access to one scope.) Hand-written
+  core code names the node kind `FOLDER` only (`validate_kernel_imports_no_slices.py`). Each module runs its own
+  tests; `:core`'s test application is core with no application at all, and `CoreAloneSliceTest` pins what that
+  means — every seam holds exactly core's own implementations, every refusal above holds, and the generic blob
+  upload starts, windows and downloads — while the root's `ModuleCompositionTest` pins the composed sets.
+  **What core still knows of Memories**, each a decision a later change takes, not an oversight: the node `kind` is
+  the contract's closed `FOLDER`/`MEMORY`/`CHAPTER` enum, which core's generated API decodes (so the convention is
+  guarded, not typed); `veyq_node` carries Memories-flavoured columns in core's baseline (`cover_blob_id`,
+  `cover_byte_size`, `media_revision`, `delete_revision` — moving a column is a schema change, not a rename);
+  `ShareGuestWrites.supports` gates share *creation*, so core alone refuses every share and share policy is tested
+  with an application present; the guest completion item is media-shaped (`CompleteItem`'s `mediaId`,
+  `derivatives`, `wrappedExif`) because core's share contract serves the two `/api/shares/{shareId}/media`
+  operations (moving them out needs a core guest-write gate service first); `BlobRole`
+  (`ORIGINAL`/`THUMBNAIL`/`PREVIEW`/`COVER`) is a closed enum in core's `blob.openapi.yaml`; and the upload retention
+  and purge keys keep their `veyq.media.*` names though core reads them.
+  **Open prerequisites for the next application** (on inbox #325–#327, where it will be refined): a generic
+  `veyq_node_attachment(node_id, slot, blob_id)` table with real foreign keys, built with the first application that
+  needs a blob (Expenses or Files) and cut on that case — `validate_blob_reference_arity` pins today's three
+  `veyq_blob` arms, so a fourth is red until the reclaim predicates learn it; the generalisation of the cover columns
+  and revision counters above; and a seal purpose plus key rule for blobs that are not Memories' — the server side
+  is neutral (a blob's `K_blob` wrap, `owner_id` and `blob_role` are opaque strings core stores and compares), but the
+  `blob-key` seal derives under a Memory's `K_mem` and `BlobRole` is closed in three places (the contract, the crypto
+  package, its web re-export), so a new role or key is an [ADR 0072](0072-a-seal-binds-its-object.md) stored-format
+  decision, not a rename. The node `kind` open to values core does not interpret is not decided yet.
   **The web side is separated by import direction, not by name or by kind:** `web/src/features/memory` is the
   application, and no core file imports it except the composition root `web/src/applications.ts`; the shell asks a
   build-time registry (`web/src/core/applications/registry.ts`) what to render for a node kind, which slot an
@@ -126,15 +153,14 @@ application to be separated from.
   (inbox #329); the i18n catalog is one file and `styles/memory.css` is global; `NodeKind` is the generated closed
   enum, so the convention that core never names `MEMORY`/`CHAPTER` is guarded, not typed.
   Docs describing the target say which of these they rely on.
-- **Guards move with the code.** `validate_kernel_imports_no_slices.py` encodes slice → kernel; the
-  application → core, never core → application and never application → application rules need the same form of
-  guard (an import check over the moved packages, bite-tested with a core file importing an application) before
-  the first package moves, or the direction is prose. The core → application half now exists in the same guard
-  (no main file outside the Memories packages may import them — the platform derived as the inverse of the
-  application, not as a list of directories) and on the web as
+- **Guards move with the code, and the build is one of them.** On the backend, core → application is the
+  compiler's (no edge, so no import) and every other direction is `validate_backend_module_graph.py`'s — including
+  application → application, bitten with a forged second application because no real one exists; inside core,
+  `validate_kernel_imports_no_slices.py` keeps the kernel → slice rule (a declared kernel list) and the node-kind
+  rule, which no import check can see. On the web there is no module boundary, so the direction is a text guard:
   `validate_web_core_imports_no_applications.py` (core may not import `features/memory`, discover code by glob, or
-  name the Memories node kinds; no allowlist); application → application exists on neither side yet. The
-  test trees stay out of scope of the import check for the reasons that guard's docstring gives.
+  name the Memories node kinds; no allowlist). Application → application has no web guard yet — there is one
+  application. The test trees stay out of the import checks, for the reasons the kernel guard's docstring gives.
 - **Rejected: a generic record store** (core offers "put a sealed record under a key", applications are just
   clients of it). It would make the server a database of blobs with no shape, give up per-kind authorization,
   quota and trash rules, and push every integrity rule into clients that cannot see each other.
