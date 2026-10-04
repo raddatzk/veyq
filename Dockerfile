@@ -51,6 +51,10 @@ WORKDIR /code/backend
 # original (the mutation gate is ADR 0045 / #99), which is why it did not copy them.
 COPY backend/gradlew backend/gradlew.bat backend/build.gradle.kts backend/settings.gradle.kts backend/gradle.properties backend/pitest.scope.json ./
 COPY backend/gradle ./gradle
+# Every module settings.gradle.kts includes needs its directory and build file here, or the warm-up dies configuring
+# it ("Configuring project ':core' without an existing directory is not allowed"). The modules are project
+# dependencies of the one fast-jar, not images of their own (ADR 0079); validate_backend_module_graph.py rule (e).
+COPY backend/core/build.gradle.kts ./core/
 # Cache-friendly warmup: downloads Gradle wrapper/distribution and plugin metadata once
 RUN ./gradlew --no-daemon help
 

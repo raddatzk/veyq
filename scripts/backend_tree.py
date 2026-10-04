@@ -17,6 +17,7 @@ Not a guard (no `validate_` prefix): it asserts nothing and is imported by the g
 from __future__ import annotations
 
 import pathlib
+import re
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 BACKEND = ROOT / "backend"
@@ -47,9 +48,46 @@ def fixture_roots() -> list[pathlib.Path]:
     return _roots("testFixtures", "kotlin")
 
 
+def resource_roots() -> list[pathlib.Path]:
+    """Every `src/{main,testFixtures,test}/resources` under `backend/` — where the config files sit."""
+    return sorted(r for s in ("main", "testFixtures", "test") for r in _roots(s, "resources"))
+
+
 def migration_roots() -> list[pathlib.Path]:
     """Every `src/main/resources/db/migration` under `backend/`."""
     return _roots("main", "resources/db/migration")
+
+
+def gradle_projects() -> dict[str, pathlib.Path]:
+    """`{Gradle project path: directory}` — the root `:` (`backend/`) and every project `settings.gradle.kts`
+    includes, `:apps:x` living in `backend/apps/x` (Gradle's default; a re-pointed `projectDir` is not modelled)."""
+    text = re.sub(r"//[^\n]*", "", (BACKEND / "settings.gradle.kts").read_text(encoding="utf-8"))
+    paths = [p for args in re.findall(r"\binclude\s*\(([^)]*)\)", text) for p in re.findall(r'"([^"]+)"', args)]
+    projects = {":": BACKEND}
+    for p in paths:
+        p = ":" + p.lstrip(":")
+        projects[p] = BACKEND.joinpath(*p.strip(":").split(":"))
+    return projects
+
+
+def project_of(path: pathlib.Path) -> str | None:
+    """The Gradle project whose directory holds `path` — the deepest one — or None when `path` sits in a directory
+    below `backend/` that no included project owns (a module directory the settings do not include)."""
+    path = path.resolve()
+    best: tuple[int, str] | None = None
+    for name, d in gradle_projects().items():
+        try:
+            rel = path.relative_to(d.resolve())
+        except ValueError:
+            continue
+        # A path in a nested project directory belongs to that project, never to an enclosing one: so a file
+        # under `backend/<x>/src/...` belongs to the root only when `<x>` is `src` itself.
+        if name == ":" and rel.parts and rel.parts[0] != "src":
+            continue
+        depth = len(d.resolve().parts)
+        if best is None or depth > best[0]:
+            best = (depth, name)
+    return best[1] if best else None
 
 
 def kotlin_files(roots: list[pathlib.Path], pattern: str = "*.kt") -> list[pathlib.Path]:

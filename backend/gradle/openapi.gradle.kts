@@ -41,7 +41,12 @@ run {
     val placed = specSets.flatMap { it.specs }.map { it.canonicalFile }.toSet() + commonSpec.canonicalFile
     val stray = fileTree(contractsDir) { include("**/*.openapi.yaml") }.files.filter { it.canonicalFile !in placed }
     if (stray.isNotEmpty()) throw GradleException("specs owned by no generation set (gradle/openapi.gradle.kts): ${stray.sorted()}")
-    specSets.forEach { if (it.specs.isEmpty()) throw GradleException("the ${it.owner} spec set is empty — the glob lost its specs") }
+}
+// An empty set is refused when it would generate, not while the build is configured: the Dockerfile's warm-up
+// (`gradlew help` in the `backend-build-base` stage) configures the build before `contracts/` is copied in, and a
+// configuration-time refusal broke that warm-up — so the image did not build — with no `./gradlew check` red.
+fun requireSpecs(set: SpecSet) {
+    if (set.specs.isEmpty()) throw GradleException("the ${set.owner} spec set is empty — the glob lost its specs")
 }
 
 /** Every schema `_common` defines — read from the file, never listed, so a schema moved there is mapped the day it lands. */
@@ -91,7 +96,10 @@ val generateTasks = specSets.map { set ->
         description = "Generate Kotlin models + JAX-RS interfaces from the ${set.owner} specs."
         inputs.files(set.specs + commonSpec)
         outputs.dirs(apiDir(set), modelsDir(set))
-        doFirst { delete(apiDir(set), modelsDir(set)) }
+        doFirst {
+            requireSpecs(set)
+            delete(apiDir(set), modelsDir(set))
+        }
         doLast {
             set.specs.forEach { spec ->
                 runGenerator(
