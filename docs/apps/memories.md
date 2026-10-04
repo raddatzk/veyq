@@ -15,7 +15,7 @@ nested into **Chapters**. Product language **Memory / Chapter** is unchanged; fo
   exemption to the application-id context ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Decision 9).
 - **Domain data:** media and its derivatives, uploader buckets, a Memory's sealed `wrappedMeta` (date, place,
   cover), item favorites. The media tables key on `node_id` (measured:
-  `grep -n "node_id" backend/src/main/resources/db/migration/V*__memories_baseline.sql`).
+  `grep -n "node_id" backend/apps/memories/src/main/resources/db/migration/V*__memories_baseline.sql`).
 - **Screens and behaviour:** gallery and lightbox, upload with client-generated derivatives, covers, date and
   place curation, the map, live updates. Their state is the use-cases and enablers under
   [`docs/features/memory/`](../features/memory/_index.md); this page points at them and does not restate them.
@@ -34,14 +34,15 @@ nested into **Chapters**. Product language **Memory / Chapter** is unchanged; fo
 
 ## Separated only in part
 
-Measured 2026-10-04 (`ls backend/core/src/main/kotlin/com/veyq/core backend/src/main/kotlin/com/veyq/memories`):
+Measured 2026-10-04 (`ls backend/core/src/main/kotlin/com/veyq/core backend/apps/memories/src/main/kotlin/com/veyq/memories`):
 every backend class lives in its owner's package — the platform in `com.veyq.core` (the node tree in
 `core.content`/`core.node`, sharing in `core.sharing`), Memories in `com.veyq.memories` (`media`, `favorites`,
 `itemfavorites`) — and core imports no Memories code; core reaches media and favorites through interfaces they
 implement. The generic blob upload and the storage quota are core's (`core.blob`, `core.quota`): Memories attaches its media
 through `UploadCompletion`, measures a link's contributed blobs through `UploadAdmission`, and places its `MEMORY`
-and `CHAPTER` in the tree through `NodeKindRules` (core places only `FOLDER`). Core is its own Gradle module (`:core`, `backend/core`); Memories is not
-yet — it still lives in the root `backend/` project — the node `kind` is still the contract's closed `FOLDER`/`MEMORY`/`CHAPTER` enum, and on the web `features/memory` is the application (core imports it nowhere but the composition root and asks a
+and `CHAPTER` in the tree through `NodeKindRules` (core places only `FOLDER`). Core and Memories are Gradle modules of their own (`:core` in
+`backend/core`, `:apps:memories` in `backend/apps/memories`, which depends on core and never the reverse), composed
+by the root `backend/` into the one fast-jar; Memories' tests still run in the root project. The node `kind` is still the contract's closed `FOLDER`/`MEMORY`/`CHAPTER` enum, and on the web `features/memory` is the application (core imports it nowhere but the composition root and asks a
 registry for what to render), though its directory name and five single-claim slots are still Memories-shaped. The
 rest of the series is not done; [ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)
 Consequences lists it.

@@ -1254,7 +1254,7 @@ with the config, the Dockerfile and the race runner, which cannot be green apart
     already scans `:test-support` (bite (4) of 8a measured here), and `race_classes()` still scans test + fixture
     roots (8a narrows it to `test_roots()`).
 
-### 7 — `:apps:memories`
+### 7 — `:apps:memories` — **done 2026-10-04**
 
 - **Change.** `git mv` `com.veyq.memories.*`, the Memories specs' generation, the Memories baseline migration, the
   Quarkus-free tests of that code into `backend/apps/memories` (`ChunkFramesTest` is core's since step 3); `beans.xml` (the module generates
@@ -1276,6 +1276,61 @@ with the config, the Dockerfile and the race runner, which cannot be green apart
   `:core:compileKotlin` fails. (4) a `memories_` migration in the core root → the migration guard red; a Memories
   migration with a later timestamp referencing `veyq_media` → green and applied after the core baseline on a fresh H2.
 - **Done when:** the above.
+- **Outcome (what 8a inherits).** One commit (move, build, guard, Dockerfile, pin line, docs together, green). Substrate:
+  worktree branch off `main` `e9e1b050`. Deviations, each named: (1) **No test moved.** The step moves "the Quarkus-free
+  tests of that code", and there are none: every one of the 17 files under `src/test/kotlin/com/veyq/memories` is a
+  `@QuarkusTest` (measured: `grep -c '@QuarkusTest'` per file, 1 each), so every test stays in the root for 8a and the
+  `classname#name` set needs no declared move. Hence `:apps:memories` has **no** `io.quarkus` plugin, no
+  `testImplementation(project(":test-support"))` and no `src/test/resources` yet — all three are 8a's, the day its
+  first `@QuarkusTest` lands (its build file says so); rule (g) has no Memories test classpath to judge until then.
+  (2) `validate_migration_versions.py` now holds the name's module to the directory (rule 1, its limit (c) rewritten):
+  the module is the Gradle project owning the migration root (`:core` → `core`, `:apps:<x>` → `<x>`, via
+  `backend_tree.project_of`); the composition root `:` and an un-included directory own none. On the pre-move layout it
+  was red on exactly the Memories baseline in the root. (3) `validate_guard_gaps`' four Memories forgery paths re-pointed
+  to `backend/apps/memories/…`. Docs whose locator commands named the root's main tree (`docs/apps/{memories,files}.md`,
+  ADR 0073, `cc.security.authorization`, five inbox rows) and the module state in ADR 0079 Consequences and
+  `backend/CLAUDE.md` were updated. **Proofs run:** `./gradlew --offline clean check quarkusBuild` green, 5m27s
+  (`e9e1b050` `check quarkusBuild` in a fresh worktree: 5m30s — both cold compiles), the `classname#name` set
+  **identical** to `e9e1b050`'s (1153, 0 failed, 2 skipped; diff empty). Fast-jar: one `quarkus-app`; `lib/main` gains
+  `com.veyq.veyq-memories.jar` and nothing else, `lib/boot` identical, `quarkus-app-dependencies.txt` gains the one line
+  `com.veyq:memories::jar:unspecified`; the root's `app/veyq-backend-unspecified.jar` now holds only the anchor and the
+  three profile files; the veyq-owned entries (app jar + `com.veyq.*` jars) are the same 1371 apart from the Kotlin
+  module file (`veyq-backend.kotlin_module` → `veyq-memories.kotlin_module`), 182 of them moved app jar → Memories jar
+  (the classes and the baseline), 175 classes differ in bytes and **all 175 are `javap -p -c -constants`-equal** (Kotlin
+  metadata's module name; no `$veyq_*` mangling — Memories has no `internal` member). Fresh-database boot (`%prod`) of
+  both fast-jars against a throwaway MariaDB of the pinned image (own name, free port, `--rm`, stopped after): both
+  `Migrating … "202610041200 - core baseline"` then `"202610041201 - memories baseline"` (the latter now from
+  `veyq-memories.jar`), `Successfully applied 2 migrations … now at version v202610041201`, 36 tables, and the same
+  answers (`/api/scopes`, `/api/item-favorites`, `/api/scopes/x/nodes/y/media`, `/api/scopes/x/favorites` 401;
+  `/api/no-such-route` 404). MariaDB race suite through the runner (throwaway container, scratch `DOCKER_CONFIG`):
+  32 classes, 383 tests, 0 failed, all in `:` (the project map did not grow — no test lives in the module). Dockerfile
+  build-base warm-up without Docker (exactly its `COPY` files, `./gradlew --offline help`): green; without the
+  `apps/memories` copy: `Configuring project ':apps' without an existing directory is not allowed`. Cold-home write
+  (`--write-verification-metadata sha256 help check quarkusBuild pitest`, empty `GRADLE_USER_HOME`): **no metadata
+  change** (the module applies no Quarkus plugin, so it resolves no configuration the build did not), then the cold
+  verify run without the flag in a second empty home: green (PIT 99/99 killed). `scripts/validate_*.py` (53) and
+  `validate_guard_gaps` green. **Bites** (each restored): `beans.xml` of `:apps:memories` deleted → rule (c) red, and the
+  root's `@QuarkusTest`s fail at boot (`Found 15 deployment problems`, unsatisfied `MediaStore`/`MediaHandler`/… —
+  but **only through the tests' own injection points**); the same jar packaged and booted against MariaDB **starts
+  cleanly**: Flyway still applies the Memories baseline (a resource needs no index) while `/api/item-favorites`,
+  `/media` and `/favorites` answer **404** — R1 measured on the deliverable; `implementation(project(":apps:memories"))`
+  in `:core` → `Circular dependency between the following tasks`; a `:core` file importing `com.veyq.memories.media` →
+  `:core:compileKotlin` `Unresolved reference 'memories'` (and the kernel guard red); `:apps:memories` removed from the
+  settings and the root → `:core:compileKotlin --rerun-tasks` green; a pinned `memories_` migration in `:core`'s root →
+  the migration guard red (module mismatch); a pinned later `memories_` migration in the Memories root referencing
+  `veyq_media` → guard green, and an H2 boot migrates core baseline → Memories baseline → it (3 applied); a
+  `V202610041200__memories_dup.sql` in the Memories root → guard red (duplicate) and the boot fails `Found more than one
+  migration with version 202610041200` naming `veyq-core.jar` and `veyq-memories.jar`; the pin line pointing at the old
+  path → red (vanished + unpinned); either Dockerfile `COPY` of the module dropped → rule (e) red. **Not run** (`[LIVE]`,
+  by instruction): `docker build .`, `run_web_e2e.py`.
+  **What 8a must know:** (a) a missing Memories `beans.xml` is caught today only by rule (c) and by root tests that
+  inject Memories beans; the fast-jar itself boots green with the Memories routes 404 and the Memories seams empty — once
+  the tests move, 8a's composition test in the root (every module's beans present, the `@All` unions) is what must go
+  red on that lever, so bite it with exactly that deletion. (b) When the first test moves into `:apps:memories`, the
+  module takes `id("io.quarkus")`, `testImplementation(project(":test-support"))`, `quarkus-junit`/`rest-assured`/
+  `kotlin("test")`, and its own `src/test/resources/application-test.properties` beside a comment-only anchor, and the
+  cold-home write/verify pair is due then (a Quarkus-applied module resolves configurations this step did not).
+  (c) The root holds no main code; the root's `@QuarkusTest`s see Memories through `implementation(project(":apps:memories"))`.
 
 ### 8a — Test separation and the shared test helpers
 

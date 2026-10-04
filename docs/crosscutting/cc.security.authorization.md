@@ -85,7 +85,7 @@ Six rules decide it, and they compose. Applied to a new endpoint they give the a
 have given — and unlike a table they cannot go stale.
 
 1. **Every operation carries a layer-1 annotation.** Not a convention — default-deny makes it mandatory. For the
-   exact set: `grep -rn '@PermitAll\|@Authenticated\|@RolesAllowed' backend/src/main/kotlin`.
+   exact set: `grep -rn '@PermitAll\|@Authenticated\|@RolesAllowed' backend/core/src/main/kotlin backend/apps/memories/src/main/kotlin`.
 
 2. **Scope-addressed → membership first, always.** Wherever the caller names a `scopeId` they could have guessed:
 

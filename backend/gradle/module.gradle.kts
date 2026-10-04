@@ -1,5 +1,5 @@
 // What every backend module repeats (ADR 0079; cr-platform-gradle-modules step 6). A module is a subproject below
-// `backend/` (`:core` today) whose jar the root's `quarkusBuild` puts into `quarkus-app/lib/main` — it is never built,
+// `backend/` (`:core`, `:apps:memories`) whose jar the root's `quarkusBuild` puts into `quarkus-app/lib/main` — it is never built,
 // published or deployed on its own: the one deliverable is the root's fast-jar.
 //
 // Applied with `apply(from = …)` AFTER the module's own `plugins {}` block, which applies the Kotlin, all-open and
