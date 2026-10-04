@@ -4,16 +4,22 @@ and every example against its own schema's required set (assertion 4, inbox #307
 
 `ErrorResponse` was extracted to `contracts/api/_common.openapi.yaml` and is now `$ref`'d by all 9 specs — a
 single source that cannot drift, so it is no longer guarded here. What stays copied across the per-domain specs
-(each still a self-contained document a generator consumes on its own): the `bearerAuth` scheme (×8), the
-`ScopeId`/`TenantId` path-params, and several shared enums. This guard keeps *those* copies byte-consistent —
+(each still a self-contained document a generator consumes on its own): the `bearerAuth` scheme, every path
+parameter more than one spec defines, and several shared enums. This guard keeps *those* copies byte-consistent —
 the single-source guarantee for the components not worth an external `$ref` (bearerAuth's `description` carries
 real per-domain nuance; the enums are inline, so `$ref`-ing them would change the generated type). `_common`
-itself is excluded from the scan — it is the source, not a copy.
+itself is excluded from the copy scans — it is the source, not a copy — and is read by the enum walk (rule 3),
+which checks a family's values wherever they are spelled. The specs are found by `contract_specs` (recursively:
+core's at the top of `contracts/api`, an application's in its own directory).
 
 What it asserts:
   1. Every spec's `components.securitySchemes.bearerAuth` has the same `type`+`scheme` (ignoring the per-domain
      `description`).
-  2. Every spec's shared path-params (`ScopeId`, `TenantId`) are structurally identical (ignoring example/description).
+  2. Every path parameter (`components.parameters`) that **more than one spec** defines is structurally identical
+     across them (ignoring example/description). The set is **derived** on every run, never listed: it was
+     `ScopeId`/`TenantId` once, which left the `NodeId` and `MediaId` copies free to drift unseen — and the
+     contracts split by owner puts each such pair into two owners' specs, where a drift is a wire change between a
+     core and an application route. A parameter defined once is no copy and is not checked.
   3. Every copy of a shared enum (node-kind, derivative-kind, membership-role, credential-method, suite-version)
      carries the SAME values. An enum that shares **≥1** value with a canonical family but is not exactly it —
      nor a declared intentional variant — is drift. **Principled limit:** a *full rename* (0 shared values) is
@@ -40,8 +46,10 @@ import sys
 
 import yaml
 
+import contract_specs
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-API = ROOT / "contracts" / "api"
+API = contract_specs.API
 
 # Shared enum families: canonical (sorted) value set. An enum that shares >=1 value with a family but is not
 # exactly it — nor a declared intentional variant — is drift. (A 0-overlap full rename is a principled blind spot.)
@@ -75,12 +83,17 @@ def strip_keys(obj: object, keys: set[str]) -> object:
 
 
 def load_specs() -> dict[str, dict]:
-    specs = {}
-    for path in sorted(API.glob("*.openapi.yaml")):
-        if path.name == "_common.openapi.yaml":
-            continue  # the shared-component source, not a per-domain copy — never a drift target
-        specs[path.name] = yaml.safe_load(path.read_text()) or {}
-    return specs
+    # `_common` is the shared-component source, not a per-domain copy — never a drift target.
+    return {contract_specs.key(p): yaml.safe_load(p.read_text()) or {} for p in contract_specs.specs(common=False)}
+
+
+def shared_parameters(specs: dict[str, dict]) -> list[str]:
+    """Every `components.parameters` name more than one spec defines — the copies rule 2 holds identical."""
+    owners: dict[str, int] = {}
+    for spec in specs.values():
+        for name in ((spec.get("components") or {}).get("parameters") or {}):
+            owners[name] = owners.get(name, 0) + 1
+    return sorted(name for name, count in owners.items() if count > 1)
 
 
 def check_named_component(specs: dict[str, dict], dotted: str, ignore: set[str], label: str) -> None:
@@ -117,7 +130,8 @@ def walk_enums(obj: object, path: str, out: list[tuple[str, tuple[str, ...]]]) -
 
 def check_shared_enums(specs: dict[str, dict]) -> None:
     families_seen: set[str] = set()
-    for fname, spec in specs.items():
+    common = yaml.safe_load(contract_specs.COMMON.read_text()) or {}
+    for fname, spec in [*specs.items(), (contract_specs.key(contract_specs.COMMON), common)]:
         found: list[tuple[str, tuple[str, ...]]] = []
         walk_enums(spec, fname, found)
         for path, values in found:
@@ -143,14 +157,14 @@ def check_examples_carry_required(specs: dict[str, dict]) -> int:
     depth the example reaches through `$ref` (across spec files, `_common` included), `properties` and array `items`.
     Returns the number of object examples checked, so the summary can say the walk reached something."""
     every = dict(specs)
-    every["_common.openapi.yaml"] = yaml.safe_load((API / "_common.openapi.yaml").read_text()) or {}
+    every[contract_specs.key(contract_specs.COMMON)] = yaml.safe_load(contract_specs.COMMON.read_text()) or {}
 
     def deref(fname: str, schema: object) -> tuple[str, object]:
         for _ in range(16):  # a $ref chain this deep is a cycle, not a schema
             if not (isinstance(schema, dict) and "$ref" in schema):
                 break
             target, _, pointer = schema["$ref"].partition("#")
-            fname = pathlib.PurePosixPath(target).name if target else fname
+            fname = contract_specs.ref_key(fname, target)
             schema = every[fname]
             for part in pointer.strip("/").split("/"):
                 schema = schema[part]
@@ -198,8 +212,9 @@ def main() -> int:
         print(f"no specs found under {API.relative_to(ROOT)}")
         return 1
     check_named_component(specs, "securitySchemes.bearerAuth", {"description"}, "bearer-auth")
-    check_named_component(specs, "parameters.ScopeId", {"example", "description"}, "path-param")
-    check_named_component(specs, "parameters.TenantId", {"example", "description"}, "path-param")
+    params = shared_parameters(specs)
+    for name in params:
+        check_named_component(specs, f"parameters.{name}", {"example", "description"}, "path-param")
     check_shared_enums(specs)
     examples = check_examples_carry_required(specs)
     if not examples:
@@ -211,7 +226,8 @@ def main() -> int:
             print("  -", e)
         return 1
     print(
-        f"contracts common components OK: {len(specs)} specs — bearerAuth/path-params consistent, "
+        f"contracts common components OK: {len(specs)} specs — bearerAuth and the {len(params)} path-params "
+        f"several specs define ({', '.join(params)}) consistent, "
         f"{len(CANONICAL_ENUMS)} shared enum families aligned (ErrorResponse is single-sourced in _common), "
         f"{examples} object examples carry their required properties")
     return 0

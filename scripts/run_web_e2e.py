@@ -123,6 +123,7 @@ import instance_backup
 # The opacity oracle needs the set of properties a spec DECLARES opaque. It is derived from the
 # contracts here, never listed, by reusing the guard's own predicate — one definition of "opaque",
 # not two that agree today (changes/README § a guard derives its anchor set from the code).
+import contract_specs
 import validate_field_visibility
 
 REPO = Path(__file__).resolve().parent.parent
@@ -680,14 +681,23 @@ def opaque_property_names() -> set[str]:
     contracts, not an assumption: across all ten specs the opaque names and the plain ones are **disjoint**
     (38 against 126, intersection empty). `scripts/validate_opaque_names_disjoint.py` keeps it that way — if a
     name ever landed in both, this oracle would quietly stop checking the opaque one.
+
+    The specs come from `contract_specs` (recursive: core's and every application's directory), and the oracle
+    refuses to answer unless it read `contract_specs.OPAQUE_LOCATION_CANARY` — no opaque *name* is
+    application-only, so a reader that lost an application's specs would return the same name set and look armed.
     """
     names: set[str] = set()
-    for spec in sorted((REPO / "contracts" / "api").glob("*.yaml")):
+    locations: set[str] = set()
+    for spec in contract_specs.specs():
         doc = yaml.safe_load(spec.read_text()) or {}
-        for schema in ((doc.get("components") or {}).get("schemas") or {}).values():
+        for schema_name, schema in ((doc.get("components") or {}).get("schemas") or {}).items():
             for prop, body in (schema.get("properties") or {}).items():
                 if validate_field_visibility.is_opaque(body):
                     names.add(prop)
+                    locations.add(f"{contract_specs.key(spec)}#{schema_name}.{prop}")
+    if contract_specs.OPAQUE_LOCATION_CANARY not in locations:
+        raise SystemExit(f"the opaque-name oracle did not read {contract_specs.OPAQUE_LOCATION_CANARY} — it no longer "
+                         "sees every spec directory, so the opacity sweep would run unarmed for that application")
     return names
 
 
@@ -939,7 +949,11 @@ class Contract:
     """
 
     def __init__(self, api: Path) -> None:
-        self.specs = {p.name: (yaml.safe_load(p.read_text()) or {}) for p in sorted(api.glob("*.openapi.yaml"))}
+        # From `contract_specs`, keyed by the path below `api` and found recursively: an application's specs sit in a
+        # directory of their own, and a top-level glob would leave their operations unmatched (their tokens unseen).
+        if api.resolve() != contract_specs.API.resolve():
+            raise SystemExit(f"Contract reads {contract_specs.API} (contract_specs), not {api}")
+        self.specs = {contract_specs.key(p): (yaml.safe_load(p.read_text()) or {}) for p in contract_specs.specs()}
         self.operations: list[Operation] = []
         self.bearer = False
         for name, spec in self.specs.items():
@@ -960,7 +974,7 @@ class Contract:
         """Follow `$ref`s — same-file `#/…` and cross-file `x.yaml#/…` — to the node they name, and its spec."""
         while isinstance(node, dict) and "$ref" in node:
             target, _, pointer = node["$ref"].partition("#")
-            spec = Path(target).name if target else spec
+            spec = contract_specs.ref_key(spec, target)
             node = self.specs[spec]
             for part in pointer.strip("/").split("/"):
                 node = node[part]

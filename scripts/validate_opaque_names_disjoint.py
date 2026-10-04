@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Guard that no property name is declared opaque in one spec and plaintext in another (ADR 0044, ADR 0053).
 
-**What it asserts.** Across every `contracts/api/*.openapi.yaml`, the set of property names carrying
+**What it asserts.** Across every spec under `contracts/api/` (`contract_specs`, recursive, `_common` included), the set of property names carrying
 `contentEncoding: base64` and the set of property names not carrying it are **disjoint**. It reuses
 `validate_field_visibility.is_opaque` rather than re-deciding what "opaque" means, so there is one definition
 and not two that agree today.
@@ -21,7 +21,10 @@ the contracts is one spec edit from being weaker than it reads.
 declared `contentEncoding: base64` in every spec is consistent and still wrong, and that is
 `validate_field_visibility.py`'s question, not this one. Nor does a green run say the sweep is armed, that
 any suite exercised the field, or that the value in it is actually sealed — those are the e2e run's
-answers. Green means exactly: **a property name means one thing across the whole contract surface.**
+answers. Green means exactly: **a property name means one thing across the whole contract surface.** It also
+asserts it read `contract_specs.OPAQUE_LOCATION_CANARY`, an opaque property at a location only an application's
+spec directory holds: no opaque *name* is application-only, so a reader that stopped seeing that directory would
+keep the same name sets and stay green — only a location can tell.
 """
 from __future__ import annotations
 
@@ -30,21 +33,30 @@ import sys
 
 import yaml
 
+import contract_specs
 import validate_field_visibility
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-SPECS = ROOT / "contracts" / "api"
 
 
 def main() -> int:
     opaque: dict[str, str] = {}
     plain: dict[str, str] = {}
-    for spec in sorted(SPECS.glob("*.yaml")):
+    opaque_locations: set[str] = set()
+    specs = contract_specs.specs()
+    for spec in specs:
         doc = yaml.safe_load(spec.read_text()) or {}
         for schema_name, schema in ((doc.get("components") or {}).get("schemas") or {}).items():
             for prop, body in (schema.get("properties") or {}).items():
-                where = f"{spec.name}#{schema_name}.{prop}"
+                where = f"{contract_specs.key(spec)}#{schema_name}.{prop}"
+                if validate_field_visibility.is_opaque(body):
+                    opaque_locations.add(where)
                 (opaque if validate_field_visibility.is_opaque(body) else plain).setdefault(prop, where)
+
+    if contract_specs.OPAQUE_LOCATION_CANARY not in opaque_locations:
+        print(f"OPAQUE-NAME DISJOINTNESS FAILED — the canary {contract_specs.OPAQUE_LOCATION_CANARY} was not read "
+              "as opaque: this reader no longer sees every spec directory (or the canary moved — re-point it).")
+        return 1
 
     both = sorted(set(opaque) & set(plain))
     if both:
@@ -56,7 +68,7 @@ def main() -> int:
         return 1
 
     print(f"opaque names OK: {len(opaque)} opaque and {len(plain)} plaintext property name(s) across "
-          f"{len(list(SPECS.glob('*.yaml')))} spec(s), disjoint")
+          f"{len(specs)} spec(s), disjoint (canary {contract_specs.OPAQUE_LOCATION_CANARY} read)")
     return 0
 
 

@@ -63,8 +63,10 @@ from typing import Iterator
 
 import yaml
 
+import contract_specs
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-API = ROOT / "contracts" / "api"
+API = contract_specs.API
 
 MARKER = "x-veyq-visibility"
 RATIONALE = "x-veyq-rationale"
@@ -205,10 +207,7 @@ def classify(where: str, decl: dict, counts: dict[str, int], pii: list[str], kin
 
 
 def main() -> int:
-    specs = sorted(API.glob("*.openapi.yaml"))
-    if not specs:
-        print(f"no specs found under {API.relative_to(ROOT)}")
-        return 1
+    specs = contract_specs.specs()  # recursive, `_common` included; raises on none, or on no application spec
 
     counts: dict[str, int] = dict.fromkeys(CLASSES, 0)
     pii: list[str] = []
@@ -223,12 +222,12 @@ def main() -> int:
             schema = schema or {}
             if is_scalar_component(schema):
                 n_scalar_components += 1
-                classify(f"{path.name}:{sname}", schema, counts, pii, "a scalar component schema (rule 6)")
+                classify(f"{contract_specs.key(path)}:{sname}", schema, counts, pii, "a scalar component schema (rule 6)")
             props = (schema.get("properties") or {})
             for pname, prop in props.items():
                 n_props += 1
                 prop = prop or {}
-                where = f"{path.name}:{sname}.{pname}"
+                where = f"{contract_specs.key(path)}:{sname}.{pname}"
                 marker = prop.get(MARKER)
 
                 if is_opaque(prop) or is_container(prop):
@@ -249,7 +248,7 @@ def main() -> int:
 
         for where, decl in header_declarations(spec):
             n_headers += 1
-            classify(f"{path.name}:{where}", decl, counts, pii, "a declared header (rules 7, 8)")
+            classify(f"{contract_specs.key(path)}:{where}", decl, counts, pii, "a declared header (rules 7, 8)")
 
     if errors:
         print("FIELD VISIBILITY VALIDATION FAILED:")

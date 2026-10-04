@@ -45,8 +45,10 @@ import backend_tree  # where the backend's sources live — resolved by glob, ne
 
 import yaml
 
+import contract_specs
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-API = ROOT / "contracts" / "api"
+API = contract_specs.API
 
 # The largest value a MariaDB TEXT column (65 535 bytes) can hold that is also a valid (multiple-of-4) base64
 # length. A base64 char is one ASCII byte, so chars == bytes for these fields.
@@ -109,10 +111,7 @@ def column_is_mediumtext(column: str) -> bool:
 
 
 def main() -> int:
-    specs = sorted(API.glob("*.openapi.yaml"))
-    if not specs:
-        print(f"no specs found under {API.relative_to(ROOT)}")
-        return 1
+    specs = contract_specs.specs()  # recursive, `_common` included; raises on none, or on no application spec
 
     n_b64 = n_capped = 0
     seen_allowlist: set[tuple[str, str, str]] = set()
@@ -131,8 +130,8 @@ def main() -> int:
                     continue
                 n_b64 += 1
                 n_capped += 1
-                key = (path.name, sname, pname)
-                where = f"{path.name}:{sname}.{pname}"
+                key = (contract_specs.key(path), sname, pname)
+                where = f"{key[0]}:{sname}.{pname}"
 
                 if cap % 4 != 0:
                     errors.append(
