@@ -5,144 +5,37 @@ info:
   description: >
     Encrypted media **blobs** attached to a Memory tree (en.memory.media, cr-0028). A blob is a fixed-size
     sequence of **chunked-AEAD** ciphertext objects, sealed client-side under a fresh random **`K_blob`**
-    (wrapped under the target Memory's `K_mem`, [ADR 0012](../../docs/decisions/0012-content-key-hierarchy.md)),
+    (wrapped under the target Memory's `K_mem`, [ADR 0012](../../../docs/decisions/0012-content-key-hierarchy.md)),
     transferred **direct-to-store** via short-TTL presigned URLs
-    ([ADR 0013](../../docs/decisions/0013-blob-storage-presigned-direct-to-store.md)) — bytes never flow through
-    the backend. The control plane is **batch-shaped** (lists + per-item results) from the start; the first
-    slice exercises **length-1 lists**.
+    ([ADR 0013](../../../docs/decisions/0013-blob-storage-presigned-direct-to-store.md)) — bytes never flow through
+    the backend. The blob transfer itself — start, next windows, downloads — is core's (`../blob.openapi.yaml`,
+    ADR 0079); this spec is what Memories makes of a blob: completing uploads into media attached to a node,
+    listing, metadata, trash, covers and buckets. The control plane is **batch-shaped** (lists + per-item results)
+    from the start; the first slice exercises **length-1 lists**.
 
     **Operator-blind:** the server + object store hold only ciphertext chunks + opaque metadata
     (`chunkCount`, `byteSize`, the per-chunk size `manifest`), the `K_blob` wrap, and the media→node link; never
     a plaintext byte, a content key, or a filename in clear. Guards (enforced by code, ADR 0008): the caller
     holds a grant for the scope; a media target must be a **MEMORY** or **CHAPTER** (a FOLDER owns no `K_mem`);
     declare-then-verify on `complete` enforces the byte budget against the stored objects. **No content dedup**
-    ([ADR 0013 §5](../../docs/decisions/0013-blob-storage-presigned-direct-to-store.md#5-no-content-dedup)).
+    ([ADR 0013 §5](../../../docs/decisions/0013-blob-storage-presigned-direct-to-store.md#5-no-content-dedup)).
 tags:
   - name: media
     description: >
-      Encrypted media blobs under a scope: start uploads (presign PUT) → complete + attach to a node → list a
-      node's media → presign GET for download. One tag = one resource interface owning the media subtree under
-      `/api/scopes/{scopeId}` (distinct from the `content` nodes resource).
+      Encrypted media under a scope: complete uploads (started through core's `blob` resource) + attach to a
+      node → list a node's media → read and update its sealed metadata, trash, covers. One tag = one resource
+      interface owning the media subtree under `/api/scopes/{scopeId}` (distinct from the `content` nodes
+      resource and core's `blob` resource).
   - name: buckets
     description: >
       Per-uploader **buckets** within a Memory node — the attribution axis
-      ([en.memory.buckets](../../docs/features/memory/enablers/en.memory.buckets.md), ADR 0034). A lazy virtual
+      ([en.memory.buckets](../../../docs/features/memory/enablers/en.memory.buckets.md), ADR 0034). A lazy virtual
       **primary** bucket per uploader (keyed by an opaque `owner_key`) plus optional **one-level sub-buckets** with
       `K_mem`-sealed names; media link via `bucketId` + a denormalized `createdBy`. Operator-blind — opaque
       `owner_key` + structure, sealed names, **own-bucket authz** (`owner_key == caller`). A distinct resource
       interface from `media`, sharing the node subtree.
 
 paths:
-  /api/scopes/{scopeId}/blob-uploads-batch:
-    post:
-      tags: [media]
-      operationId: startBlobUploads
-      summary: Start N blob uploads — reserve sessions + presign the first window of PUTs.
-      description: >
-        For each requested blob the client declares its `chunkCount`, total `byteSize`, and the `wrappedBlobKey`
-        (`K_blob` under `K_mem`), plus the ids that wrap is sealed bound to ([ADR 0072](../../docs/decisions/0072-a-seal-binds-its-object.md)): the client-minted
-        `blobId`, the `ownerId` it belongs to (the media id `completeMedia` will carry, or the node for a cover) and
-        its `role`. A `blobId` already taken — by a blob or an open upload session, in any scope — fails that item
-        `id_taken`. The server opens an upload session **bound to the caller** and returns, per
-        item, an `uploadId` plus short-TTL presigned **PUT** URLs for the blob's **first window** of chunks (the
-        server's `veyq.blob.presign-window`, default 64 chunks) — or a per-item error. The caller PUTs each
-        ciphertext chunk **directly to the object store**, asks `blob-upload-windows` for each next window (and to
-        re-sign one whose URLs expired), and calls `media-batch` to complete + attach. The in-memory store cannot
-        presign and answers `store_unavailable`.
-        **Tenant quota ([ADR 0073](../../docs/decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md)):**
-        when the Server Owner has set one, the request's admissible items are reserved together against what the
-        tenant already holds (every blob in its scopes, trash included until purged, plus its open sessions): all of
-        them fit, or every one is refused `quota_exceeded` and no session is opened.
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: "#/components/parameters/ScopeId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/BlobUploadsBatchRequest" }
-            example:
-              items:
-                - blobId: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
-                  ownerId: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e
-                  role: ORIGINAL
-                  chunkCount: 2
-                  byteSize: 400000
-                  wrappedBlobKey: d3JhcHBlZC1rLWJsb2I=
-      responses:
-        "200":
-          description: Per-item upload results (success carries the presigned PUTs; failure carries a code).
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/BlobUploadsBatchResponse" }
-        "400":
-          description: Malformed request (missing/invalid fields).
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
-        "401":
-          description: Generic authentication failure.
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
-        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
-        "404":
-          description: No such scope, or the caller is not an accepted member of it (indistinguishable, uc.spaces.scope-access).
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
-        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
-        "503":
-          description: The configured object store cannot presign (e.g. the in-memory dev store).
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: store_unavailable } }
-
-  /api/scopes/{scopeId}/blob-upload-windows:
-    post:
-      tags: [media]
-      operationId: presignBlobUploadWindows
-      summary: Presign the next window of PUTs for N open upload sessions.
-      description: >
-        For each item the server resolves the upload session `uploadId` and returns presigned **PUT** URLs for its
-        chunks `[fromChunk, min(fromChunk + window, chunkCount))`, each signed for its chunk's exact
-        `Content-Length` — the same URLs `startBlobUploads` would have issued, under a fresh TTL. The client asks
-        for each next window as it goes, and re-signs from the first chunk it has not sent when a window's URLs
-        expired ([ADR 0013 §2](../../docs/decisions/0013-blob-storage-presigned-direct-to-store.md#2-presigned-direct-to-store-is-the-only-transport-no-proxied-fallback)).
-        Every request is **authorized again** like `startBlobUploads` (a removed member is refused at the next
-        window), and a session resolves only for **the account that opened it**; each window marks the session
-        live for the stale-session reclaim.
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: "#/components/parameters/ScopeId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/BlobUploadWindowsRequest" }
-            example:
-              items:
-                - uploadId: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
-                  fromChunk: 64
-      responses:
-        "200":
-          description: Per-item window results (success carries the presigned PUTs; failure carries a code).
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/BlobUploadWindowsResponse" }
-        "400":
-          description: Malformed request (missing/invalid fields).
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
-        "401":
-          description: Generic authentication failure.
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
-        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
-        "404":
-          description: No such scope, or the caller is not an accepted member of it (indistinguishable, uc.spaces.scope-access).
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
-        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
-
   /api/scopes/{scopeId}/media-batch:
     post:
       tags: [media]
@@ -150,12 +43,12 @@ paths:
       summary: Complete a media's uploads (original + derivatives) + attach to a node.
       description: >
         Each item is **one logical media**: an `originalUploadId` plus up to two role-tagged `derivatives`
-        (THUMBNAIL, PREVIEW — generated client-side, [en.memory.derivatives](../../docs/features/memory/enablers/en.memory.derivatives.md)).
+        (THUMBNAIL, PREVIEW — generated client-side, [en.memory.derivatives](../../../docs/features/memory/enablers/en.memory.derivatives.md)).
         The server verifies **every** upload session of the item, **stats the stored chunk objects** per blob
         (declare-then-verify: every chunk must be present at exactly the length its declared `byteSize` derives,
         else the objects are purged and the item fails `budget_exceeded`), records one `blob` per upload (each
         with its own per-chunk size `manifest` and `K_blob` wrap), and one `media` row under the client-minted
-        `mediaId` ([ADR 0072](../../docs/decisions/0072-a-seal-binds-its-object.md)) linking the original blob to `nodeId` with a derivative row per derivative. Each
+        `mediaId` ([ADR 0072](../../../docs/decisions/0072-a-seal-binds-its-object.md)) linking the original blob to `nodeId` with a derivative row per derivative. Each
         upload must have been started for this media in the role it is used in — the original as `ORIGINAL`, each
         derivative as its `kind`, all with `ownerId = mediaId` — else the item fails `upload_mismatch`, since its
         `K_blob` wrap would not open where it is attached. A `mediaId` already taken, in any scope, fails the item
@@ -194,12 +87,12 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
-        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
+        "403": { $ref: "../_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: No such scope, or the caller is not an accepted member of it (indistinguishable, uc.spaces.scope-access).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
-        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
+        "409": { $ref: "../_common.openapi.yaml#/components/responses/ScopeDeleting" }
 
   /api/scopes/{scopeId}/nodes/{nodeId}/media:
     get:
@@ -281,7 +174,7 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
-        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
+        "403": { $ref: "../_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: No such scope/node, or the caller holds no grant for the scope.
           content:
@@ -314,7 +207,7 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
-        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
+        "403": { $ref: "../_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: No such scope/node, or the caller holds no grant for the scope.
           content:
@@ -328,7 +221,7 @@ paths:
         the **caller's own primary** (lazily materialized); with `parentBucketId` (a primary's id) it nests under
         **that** root — so a member can add sub-buckets under a **contributor's** root to organize contributions —
         and the new bucket inherits **that root's** `ownerKey`. The parent must be a primary (`403` otherwise). The
-        client mints the bucket's id (`bucketId`, [ADR 0072](../../docs/decisions/0072-a-seal-binds-its-object.md)) and supplies the `sealedName` (sealed under
+        client mints the bucket's id (`bucketId`, [ADR 0072](../../../docs/decisions/0072-a-seal-binds-its-object.md)) and supplies the `sealedName` (sealed under
         `K_mem`, bound to that id); the server never sees it in clear. Sub-buckets do not nest further.
         Operator-blind — the name is stored as ciphertext. An id that already exists — in this scope or any other — is refused `id_taken` and nothing is overwritten; the answer is the same wherever the taken id lives, so it says nothing about another scope. Not idempotent: a retry of a create whose response was lost answers `id_taken` too, and the client re-reads.
       security:
@@ -420,7 +313,7 @@ paths:
           description: No such scope/node/bucket, or the caller holds no grant for the scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: bucket_not_found } }
-        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
+        "409": { $ref: "../_common.openapi.yaml#/components/responses/ScopeDeleting" }
     delete:
       tags: [buckets]
       operationId: deleteBucket
@@ -451,7 +344,7 @@ paths:
           description: No such scope/node, or the caller holds no grant for the scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
-        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
+        "409": { $ref: "../_common.openapi.yaml#/components/responses/ScopeDeleting" }
 
   /api/scopes/{scopeId}/nodes/{nodeId}/media-moves:
     post:
@@ -501,7 +394,7 @@ paths:
           description: No such scope/node/media/bucket, or the caller holds no grant for the scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
-        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
+        "409": { $ref: "../_common.openapi.yaml#/components/responses/ScopeDeleting" }
 
   /api/scopes/{scopeId}/nodes/{nodeId}/cover-blob:
     post:
@@ -552,12 +445,12 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
-        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
+        "403": { $ref: "../_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: No such scope/node/upload, or the caller holds no grant for the scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
-        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
+        "409": { $ref: "../_common.openapi.yaml#/components/responses/ScopeDeleting" }
         "422":
           description: The target node is a FOLDER (owns no `K_mem`, so it can carry no cover — `illegal_target`), or the upload was not started as this node's cover (`upload_mismatch`).
           content:
@@ -579,7 +472,7 @@ paths:
         explicit client-driven detach. The row, its reference and the reclaim entry are written in **one**
         transaction, so a crash can leave neither a blob row nor a forgotten object; one scheduled sweep then
         drains that list, retrying a refused delete and marking a permanently failed one
-        ([ADR 0062](../../docs/decisions/0062-store-object-reclaim-is-a-durable-work-list.md)). The objects
+        ([ADR 0062](../../../docs/decisions/0062-store-object-reclaim-is-a-durable-work-list.md)). The objects
         therefore go up to one sweep interval after the `204` — nothing readable references them in between.
       security:
         - bearerAuth: []
@@ -600,7 +493,7 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
-        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
+        "403": { $ref: "../_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: No such scope/node, or the caller holds no grant for the scope.
           content:
@@ -642,7 +535,7 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
-        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
+        "403": { $ref: "../_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: No such scope/media, or the caller holds no grant for the scope.
           content:
@@ -691,7 +584,7 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
-        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
+        "403": { $ref: "../_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: No such scope/media, or the caller holds no grant for the scope.
           content:
@@ -728,12 +621,12 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
-        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
+        "403": { $ref: "../_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: No such scope/media, or the caller holds no grant for the scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: media_not_found } }
-        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
+        "409": { $ref: "../_common.openapi.yaml#/components/responses/ScopeDeleting" }
 
   /api/scopes/{scopeId}/media/{mediaId}/restore:
     post:
@@ -757,12 +650,12 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
-        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
+        "403": { $ref: "../_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: No such scope/media (e.g. already purged), or the caller holds no grant for the scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: media_not_found } }
-        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
+        "409": { $ref: "../_common.openapi.yaml#/components/responses/ScopeDeleting" }
 
   /api/scopes/{scopeId}/media/{mediaId}/purge:
     post:
@@ -789,57 +682,12 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
-        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
+        "403": { $ref: "../_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: No such trashed media (unknown, already purged, or still live), or no grant for the scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: media_not_found } }
-        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
-
-  /api/scopes/{scopeId}/blob-downloads-batch:
-    post:
-      tags: [media]
-      operationId: presignBlobDownloads
-      summary: Presign GET for N blobs — one URL per chunk.
-      description: >
-        For each requested `blobId` the server returns one short-TTL presigned **GET** URL per chunk (in chunk
-        order) — or a per-item error. The caller GETs each ciphertext chunk **directly from the object store**
-        and opens it with `openFrame`. The in-memory store answers `store_unavailable`.
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: "#/components/parameters/ScopeId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/BlobDownloadsBatchRequest" }
-            example:
-              items:
-                - blobId: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
-      responses:
-        "200":
-          description: Per-item download results (success carries the presigned GETs; failure carries a code).
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/BlobDownloadsBatchResponse" }
-        "400":
-          description: Malformed request.
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
-        "401":
-          description: Generic authentication failure.
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
-        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
-        "404":
-          description: No such scope, or the caller is not an accepted member of it (indistinguishable, uc.spaces.scope-access).
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
-        "503":
-          description: The configured object store cannot presign (e.g. the in-memory dev store).
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: store_unavailable } }
+        "409": { $ref: "../_common.openapi.yaml#/components/responses/ScopeDeleting" }
 
 components:
   securitySchemes:
@@ -875,165 +723,6 @@ components:
       schema: { type: string, format: uuid, example: 5b6c7c3f-0e2a-9b1d-4a6e-8b2c1f2d3e4a }
 
   schemas:
-    # --- start uploads -------------------------------------------------------
-    BlobUploadsBatchRequest:
-      type: object
-      required: [items]
-      properties:
-        items:
-          type: array
-          minItems: 1
-          maxItems: 256
-          items: { $ref: "#/components/schemas/BlobUploadRequestItem" }
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 256) @field:jakarta.validation.Valid'
-
-    BlobUploadRequestItem:
-      type: object
-      required: [blobId, ownerId, role, chunkCount, byteSize, wrappedBlobKey]
-      properties:
-        blobId:
-          x-veyq-visibility: id
-          type: string
-          format: uuid
-          description: >
-            The client-minted UUIDv4 id of this blob (ADR 0072 Decision 3) — its `wrappedBlobKey` is sealed bound to it, so the blob is stored under exactly this id. Taken ⇒ this item fails `id_taken`.
-          example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
-        ownerId:
-          x-veyq-visibility: id
-          type: string
-          format: uuid
-          description: >
-            What the blob belongs to — the client-minted media id `completeMedia` will carry, or the node id for a cover. The `wrappedBlobKey` is sealed bound to it; completion checks it.
-          example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e
-        role:
-          $ref: "#/components/schemas/BlobRole"
-        chunkCount:
-          x-veyq-visibility: measure
-          type: integer
-          format: int32
-          description: >
-            Number of ciphertext chunks the blob is sealed into. Not a free choice: it is derived from `byteSize`
-            by the contract's frame size (`chunk_frame_size` in `contracts/crypto/vectors/v1.json`, ADR 0013 §3) —
-            every frame but the last is full, so `chunkCount = ⌈byteSize / (nonceBytes + plaintextBytes +
-            tagBytes)⌉` — and any other value is refused per item (`shape_invalid`). No maximum of its own: the
-            ceiling is the server's per-blob byte cap.
-          minimum: 1
-          example: 2
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1)'
-        byteSize:
-          x-veyq-visibility: measure
-          type: integer
-          format: int64
-          description: >
-            Total ciphertext byte size declared up front — the sum of the blob's sealed frames. It fixes the blob's
-            shape (`chunk_frame_size` in the crypto vectors): `chunkCount` and every chunk's exact length follow
-            from it, and a size no frame sequence has — under one empty frame (28), or whose last frame of several
-            would carry no plaintext — is refused per item (`shape_invalid`). Verified on complete: every chunk
-            must be present at exactly its derived length.
-          minimum: 28
-          example: 400000
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(28)'
-        wrappedBlobKey:
-          type: string
-          description: The blob's random `K_blob` wrapped under the Memory's `K_mem` (opaque base64).
-          contentEncoding: base64
-          maxLength: 256
-          example: d3JhcHBlZC1rLWJsb2I=
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
-
-    BlobUploadsBatchResponse:
-      type: object
-      required: [results]
-      properties:
-        results:
-          type: array
-          items: { $ref: "#/components/schemas/BlobUploadResultItem" }
-
-    BlobUploadResultItem:
-      type: object
-      description: One per request item, in order. Success carries `uploadId` + `presignedPuts`; failure carries `error`.
-      properties:
-        uploadId:
-          x-veyq-visibility: id
-          type: [string, "null"]
-          format: uuid
-          description: The opaque upload session id, on success.
-          example: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
-        presignedPuts:
-          type: [array, "null"]
-          description: >
-            Presigned PUT URLs for the blob's **first window** of chunks only (chunks `0` to `min(window,
-            chunkCount) - 1`, in chunk order); every later chunk is signed by `presignBlobUploadWindows`. Each is
-            signed for its chunk's exact `Content-Length` (full frames, then the remainder), so the store refuses a
-            body of any other length.
-          items: { $ref: "#/components/schemas/PresignedUrl" }
-        error:
-          x-veyq-visibility: public
-          type: [string, "null"]
-          description: Per-item error code (`budget_exceeded` = the declared `byteSize` is over the per-blob cap, `shape_invalid` = the declared `chunkCount`/`byteSize` is no shape the frame size allows — a client bug, not a large file, `id_taken` = the `blobId` already exists, `quota_exceeded` = the request's admissible items together do not fit the tenant's storage quota, so every one of them is refused and no session is opened — no retry can help (ADR 0073 §5–§6), `store_unavailable`); null on success.
-          maxLength: 64
-          example: null
-
-    # --- next upload window --------------------------------------------------
-    BlobUploadWindowsRequest:
-      type: object
-      required: [items]
-      properties:
-        items:
-          type: array
-          minItems: 1
-          maxItems: 256
-          items: { $ref: "#/components/schemas/BlobUploadWindowRequestItem" }
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 256) @field:jakarta.validation.Valid'
-
-    BlobUploadWindowRequestItem:
-      type: object
-      required: [uploadId, fromChunk]
-      properties:
-        uploadId:
-          x-veyq-visibility: id
-          type: string
-          format: uuid
-          description: The open upload session, as `startBlobUploads` returned it.
-          example: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
-        fromChunk:
-          x-veyq-visibility: structure
-          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (backend/CLAUDE.md)
-          type: [integer, "null"]
-          format: int32
-          description: The first chunk index (0-based) of the window to sign; it must lie inside the blob.
-          minimum: 0
-          example: 64
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
-
-    BlobUploadWindowsResponse:
-      type: object
-      required: [results]
-      properties:
-        results:
-          type: array
-          items: { $ref: "#/components/schemas/BlobUploadWindowResultItem" }
-
-    BlobUploadWindowResultItem:
-      type: object
-      description: One per request item, in order. Success carries `presignedPuts`; failure carries `error`.
-      properties:
-        presignedPuts:
-          type: [array, "null"]
-          description: >
-            Presigned PUT URLs for chunks `fromChunk` to `min(fromChunk + window, chunkCount) - 1`, in chunk order,
-            each signed for its chunk's exact `Content-Length`.
-          items: { $ref: "#/components/schemas/PresignedUrl" }
-        error:
-          x-veyq-visibility: public
-          type: [string, "null"]
-          description: >
-            Per-item error code; null on success. `upload_not_found` = no such session, it is no longer open, or
-            the caller did not open it — one code for all three, so a probe learns nothing. `range_invalid` =
-            `fromChunk` lies outside the blob. `store_unavailable` = the configured store cannot presign.
-          maxLength: 64
-          example: null
-
     # --- complete + attach ---------------------------------------------------
     MediaBatchRequest:
       type: object
@@ -1118,15 +807,6 @@ components:
           format: uuid
           description: The upload session for this derivative blob, opened by `startBlobUploads`.
           example: 2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e
-
-    BlobRole:
-      x-veyq-visibility: enum
-      type: string
-      description: >
-        The role a blob plays for its owner — a media's ORIGINAL and its THUMBNAIL/PREVIEW derivatives, or a node's
-        COVER. Its `K_blob` wrap is sealed bound to it (ADR 0072), so a blob attached in another role does not open.
-      enum: [ORIGINAL, THUMBNAIL, PREVIEW, COVER]
-      example: ORIGINAL
 
     MediaDerivativeKind:
       x-veyq-visibility: enum
@@ -1249,7 +929,7 @@ components:
           description: >
             The uploader's opaque **`owner_key`** — `user:{userId}` (a member) or `share:{shareIdentityId}` (a
             public contributor) — the attribution the buckets grouping reads
-            ([en.memory.buckets](../../docs/features/memory/enablers/en.memory.buckets.md), ADR 0034).
+            ([en.memory.buckets](../../../docs/features/memory/enablers/en.memory.buckets.md), ADR 0034).
             Operator-visible coarse metadata; never a cleartext name. Null only for a pre-buckets row not yet
             attributed.
           maxLength: 64
@@ -1614,75 +1294,7 @@ components:
           maxLength: 256
           example: d3JhcHBlZC1rLWJsb2I=
 
-    # --- presign downloads ---------------------------------------------------
-    BlobDownloadsBatchRequest:
-      type: object
-      required: [items]
-      properties:
-        items:
-          type: array
-          minItems: 1
-          maxItems: 256
-          items: { $ref: "#/components/schemas/BlobDownloadRequestItem" }
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 256)'
-
-    BlobDownloadRequestItem:
-      type: object
-      required: [blobId]
-      properties:
-        blobId:
-          x-veyq-visibility: id
-          type: string
-          format: uuid
-          example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
-
-    BlobDownloadsBatchResponse:
-      type: object
-      required: [results]
-      properties:
-        results:
-          type: array
-          items: { $ref: "#/components/schemas/BlobDownloadResultItem" }
-
-    BlobDownloadResultItem:
-      type: object
-      description: One per request item, in order. Success carries `presignedGets`; failure carries `error`.
-      properties:
-        presignedGets:
-          type: [array, "null"]
-          description: One presigned GET URL per chunk, in chunk order.
-          items: { $ref: "#/components/schemas/PresignedUrl" }
-        error:
-          x-veyq-visibility: public
-          type: [string, "null"]
-          description: Per-item error code (`upload_not_found` = unknown blob, `store_unavailable`); null on success.
-          maxLength: 64
-          example: null
-
-    # --- shared --------------------------------------------------------------
-    PresignedUrl:
-      type: object
-      required: [index, url]
-      properties:
-        index:
-          x-veyq-visibility: structure
-          type: integer
-          format: int32
-          description: Chunk index (0-based, in chunk order).
-          example: 0
-        url:
-          x-veyq-visibility: token
-          type: string
-          description: >
-            A short-TTL, single-object, single-method presigned URL (PUT or GET) against the object store. A `PUT`
-            must carry exactly `Content-Type: application/octet-stream`: the header is signed, so the store refuses
-            any other type. A `GET` is served as `application/octet-stream` with `Content-Disposition: attachment`,
-            whatever the object was stored as ([ADR 0013
-            §6](../../docs/decisions/0013-blob-storage-presigned-direct-to-store.md#6-store-responses-are-inert--enforced-by-the-signer)).
-          maxLength: 4096
-          example: https://store.example.com/veyq/9b1d4a6e/0?X-Amz-Signature=...
-
     ErrorResponse:
-      $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'
+      $ref: '../_common.openapi.yaml#/components/schemas/ErrorResponse'
     StaleSealedMeta:
-      $ref: '_common.openapi.yaml#/components/schemas/StaleSealedMeta'
+      $ref: '../_common.openapi.yaml#/components/schemas/StaleSealedMeta'

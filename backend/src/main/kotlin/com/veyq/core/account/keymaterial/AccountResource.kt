@@ -1,8 +1,8 @@
 package com.veyq.core.account.keymaterial
 
-import com.veyq.app.generated.api.AccountApi
-import com.veyq.app.generated.model.AccountKeyMaterial
-import com.veyq.app.generated.model.MasterKeyWrap
+import com.veyq.core.generated.api.AccountApi
+import com.veyq.core.generated.model.AccountKeyMaterial
+import com.veyq.core.generated.model.MasterKeyWrap
 import com.veyq.core.http.FailureStatus.SERVER_ERROR
 import com.veyq.core.http.httpError
 import com.veyq.core.http.httpFailure

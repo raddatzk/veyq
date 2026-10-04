@@ -1,8 +1,8 @@
 package com.veyq.core.account.email
 
-import com.veyq.app.generated.api.AccountEmailApi
-import com.veyq.app.generated.model.AccountEmail
-import com.veyq.app.generated.model.EmailConfirmationRequest
+import com.veyq.core.generated.api.AccountEmailApi
+import com.veyq.core.generated.model.AccountEmail
+import com.veyq.core.generated.model.EmailConfirmationRequest
 import com.veyq.core.http.FailureStatus
 import com.veyq.core.http.Failures
 import com.veyq.core.http.HttpFailure

@@ -1,7 +1,8 @@
 // Thin factory over the contracts-generated clients. The whole app is same-origin, so the basePath is the
 // in-memory `session.apiBase` ('' → relative `/api/...`). Keeping construction here means views/features
-// depend on our typed surface, never on the generator's runtime details. The setup, auth and account specs
-// generate into separate client packages (`./generated`, `./generated/auth`, `./generated/account`).
+// depend on our typed surface, never on the generator's runtime details. Every spec generates into a client package
+// of its own (`./generated` for setup, `./generated/<spec>` for the rest) — core's specs and the Memories
+// application's (`contracts/api/memories/`: `./generated/media`, `./generated/favorites`) alike.
 import { Configuration, SetupApi } from './generated'
 import {
   Configuration as AuthConfiguration,
@@ -24,13 +25,14 @@ import {
 } from './generated/account'
 import { Configuration as TenantsConfiguration, TenantsApi } from './generated/tenants'
 import { Configuration as ScopesConfiguration, ScopesApi } from './generated/scopes'
+import { ContentApi, Configuration as ContentConfiguration } from './generated/content'
 import {
-  ContentApi,
   FavoritesApi,
   ItemFavoritesApi,
   OwnItemFavoritesApi,
-  Configuration as ContentConfiguration,
-} from './generated/content'
+  Configuration as FavoritesConfiguration,
+} from './generated/favorites'
+import { BlobApi, Configuration as BlobConfiguration } from './generated/blob'
 import { MediaApi, BucketsApi, Configuration as MediaConfiguration } from './generated/media'
 import { TasksApi, Configuration as TasksConfiguration } from './generated/tasks'
 import { SharingApi, Configuration as SharingConfiguration } from './generated/sharing'
@@ -126,20 +128,26 @@ export function contentApi(): ContentApi {
 }
 
 export function favoritesApi(): FavoritesApi {
-  return new FavoritesApi(new ContentConfiguration(bearerParams()))
+  return new FavoritesApi(new FavoritesConfiguration(bearerParams()))
 }
 
-// The item marks inside one Memory (ADR 0068) — the `item-favorites` tag on the content spec → its own
-// ItemFavoritesApi, same content config/auth. A separate resource from `favoritesApi` because the two objects
-// have different audiences, not because the paths differ.
+// The item marks inside one Memory (ADR 0068) — the `item-favorites` tag on the favorites spec → its own
+// ItemFavoritesApi, same config/auth. A separate resource from `favoritesApi` because the two objects have
+// different audiences, not because the paths differ.
 export function itemFavoritesApi(): ItemFavoritesApi {
-  return new ItemFavoritesApi(new ContentConfiguration(bearerParams()))
+  return new ItemFavoritesApi(new FavoritesConfiguration(bearerParams()))
 }
 
 // The caller's own item marks across every scope (ADR 0068 §9) — the `own-item-favorites` tag, read only by an
 // account-key rotation's re-tag.
 export function ownItemFavoritesApi(): OwnItemFavoritesApi {
-  return new OwnItemFavoritesApi(new ContentConfiguration(bearerParams()))
+  return new OwnItemFavoritesApi(new FavoritesConfiguration(bearerParams()))
+}
+
+// The platform's generic blob transfer (core's `blob` tag, ADR 0079): start an upload, sign each next window,
+// presign downloads. Completing an upload is the application's (`mediaApi().completeMedia`, `commitCoverBlob`).
+export function blobApi(): BlobApi {
+  return new BlobApi(new BlobConfiguration(bearerParams()))
 }
 
 export function mediaApi(): MediaApi {

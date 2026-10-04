@@ -1,7 +1,7 @@
 package com.veyq.core.account.login
 
-import com.veyq.app.generated.api.SessionApi
-import com.veyq.app.generated.model.SessionFamily
+import com.veyq.core.generated.api.SessionApi
+import com.veyq.core.generated.model.SessionFamily
 import com.veyq.core.http.bearerToken
 import io.quarkus.security.Authenticated
 import io.quarkus.security.credential.TokenCredential

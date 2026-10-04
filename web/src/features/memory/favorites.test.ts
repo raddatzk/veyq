@@ -6,7 +6,7 @@ vi.mock('../../app/sessionRefresh', () => ({ withRefresh: (fn: () => unknown) =>
 import { loadFavorites, saveFavorites } from './favorites'
 import { favoritesApi } from '../../api/client'
 import { fakeApi } from '../../test/apiMock'
-import type { FavoritesApi } from '../../api/generated/content'
+import type { FavoritesApi } from '../../api/generated/favorites'
 import * as v1 from '@veyq/crypto/v1'
 import { fromB64std } from '@veyq/crypto/base64'
 

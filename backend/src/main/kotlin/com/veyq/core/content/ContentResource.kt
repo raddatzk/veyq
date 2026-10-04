@@ -1,13 +1,13 @@
 package com.veyq.core.content
 
-import com.veyq.app.generated.api.ContentApi
-import com.veyq.app.generated.model.CreateNodeRequest
-import com.veyq.app.generated.model.NodeCreated
-import com.veyq.app.generated.model.NodeKind
-import com.veyq.app.generated.model.NodeSummary
-import com.veyq.app.generated.model.RestoreNodeRequest
-import com.veyq.app.generated.model.TrashedNodeSummary
-import com.veyq.app.generated.model.UpdateNodeRequest
+import com.veyq.core.generated.api.ContentApi
+import com.veyq.core.generated.model.CreateNodeRequest
+import com.veyq.core.generated.model.NodeCreated
+import com.veyq.core.generated.model.NodeKind
+import com.veyq.core.generated.model.NodeSummary
+import com.veyq.core.generated.model.RestoreNodeRequest
+import com.veyq.core.generated.model.TrashedNodeSummary
+import com.veyq.core.generated.model.UpdateNodeRequest
 import com.veyq.core.config.VeyqConfig
 import com.veyq.core.http.HttpFailure
 import com.veyq.core.http.httpError

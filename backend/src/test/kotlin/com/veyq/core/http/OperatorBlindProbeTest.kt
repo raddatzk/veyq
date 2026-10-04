@@ -32,8 +32,9 @@ import java.util.jar.JarFile
 /**
  * The **enforcement guard** for the scope-access gate (uc.spaces.scope-access, ADR 0042): every operation in the
  * contract is either **probed** here against each state the gate tells apart, or named on a **reasoned exclusion
- * list**. The operation set is not listed — it is **derived** from the generated `com.veyq.app.generated.api`
- * interfaces, i.e. from `contracts/api/`, so an operation nobody classified is red on the day it is added.
+ * list**. The operation set is not listed — it is **derived** from the generated API interfaces of every owner
+ * (`com.veyq.core.generated.api`, `com.veyq.memories.generated.api`), i.e. from `contracts/api/`, so an operation
+ * nobody classified is red on the day it is added.
  *
  * Each probe runs on its own [ScopeAccessWorld] (a probe the gate lets through may mutate) with five personas:
  *  1. **Stranger** — the real id and an invented one answer identically, with the membership 404. A difference is
@@ -405,13 +406,17 @@ class OperatorBlindProbeTest {
     }
 
     /**
-     * Every method of every interface in `com.veyq.app.generated.api` carrying an HTTP verb — the method name is
-     * the operationId. Found on the test classpath rather than listed, which is the point: a listed set is exactly
-     * what the hand-kept probe rows were, and they missed `restoreNode` and `listTrashedNodes`.
+     * Every method of every interface in [API_PACKAGES] carrying an HTTP verb — the method name is the operationId.
+     * Found on the test classpath rather than listed, which is the point: a listed set is exactly what the hand-kept
+     * probe rows were, and they missed `restoreNode` and `listTrashedNodes`. Each owner's package must yield its
+     * anchor interface, so a package that went missing (renamed, or its module not on the classpath) is red here
+     * rather than a smaller set that passes.
      */
     private fun contractOperations(): List<Operation> {
-        val names = generatedApiClassNames()
-        check(names.any { it.endsWith(".ContentApi") }) { "found no generated API interfaces on the classpath: $names" }
+        val names = API_PACKAGES.flatMap(::generatedApiClassNames)
+        for (anchor in listOf("com.veyq.core.generated.api.ContentApi", "com.veyq.core.generated.api.BlobApi", "com.veyq.memories.generated.api.MediaApi")) {
+            check(anchor in names) { "found no $anchor among the generated API interfaces on the classpath: $names" }
+        }
         return names.flatMap { name ->
             val type = Class.forName(name, false, javaClass.classLoader)
             val base = type.getAnnotation(Path::class.java)?.value.orEmpty()
@@ -422,8 +427,8 @@ class OperatorBlindProbeTest {
         }
     }
 
-    private fun generatedApiClassNames(): List<String> {
-        val dir = API_PACKAGE.replace('.', '/')
+    private fun generatedApiClassNames(apiPackage: String): List<String> {
+        val dir = apiPackage.replace('.', '/')
         return System.getProperty("java.class.path").split(File.pathSeparator).map(::File).flatMap { entry ->
             when {
                 entry.isDirectory -> File(entry, dir).listFiles().orEmpty().map { it.name }
@@ -433,11 +438,12 @@ class OperatorBlindProbeTest {
                 }
                 else -> emptyList()
             }
-        }.filter { it.endsWith(".class") && '$' !in it }.map { "$API_PACKAGE.${it.removeSuffix(".class")}" }.distinct()
+        }.filter { it.endsWith(".class") && '$' !in it }.map { "$apiPackage.${it.removeSuffix(".class")}" }.distinct()
     }
 
     private companion object {
-        const val API_PACKAGE = "com.veyq.app.generated.api"
+        /** One generated API package per owner (contracts/api/ → core, contracts/api/memories/ → Memories). */
+        val API_PACKAGES = listOf("com.veyq.core.generated.api", "com.veyq.memories.generated.api")
         val VERBS = linkedMapOf(
             "GET" to GET::class.java, "POST" to POST::class.java, "PUT" to PUT::class.java,
             "PATCH" to PATCH::class.java, "DELETE" to DELETE::class.java,

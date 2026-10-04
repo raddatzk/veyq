@@ -14,9 +14,10 @@ import exifr from 'exifr'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { isCodedError, isHttpStatus, HttpStatus } from '../../shared/httpError'
-import { mediaApi } from '../../api/client'
+import { blobApi, mediaApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
-import { type MediaListPage, type MediaSummary, type PresignedUrl, type MediaDerivativeKind } from '../../api/generated/media'
+import { type MediaListPage, type MediaSummary, type MediaDerivativeKind } from '../../api/generated/media'
+import { type PresignedUrl } from '../../api/generated/blob'
 import { expectMintedId } from '../../core/node/mintedId'
 import { mediaKey, uploaderOriginOf, type UploaderOrigin } from './mediaKey'
 import { MetaConflictError, MetaUnreadableError, writeSealedMeta, type MetaEditContext } from './sealedMetaWrite'
@@ -758,10 +759,10 @@ export async function uploadMediaVia(
   return { blobId: expectMintedId(plans[0].blobId, done.blobId), mediaId: expectMintedId(mediaId, done.mediaId) }
 }
 
-/** Reserve through the authed media control plane (`startBlobUploads`) — the member upload and the cover share it. */
+/** Reserve through core's authed blob control plane (`startBlobUploads`) — the member upload and the cover share it. */
 async function mediaReserve(scopeId: string, declares: BlobDeclare[]): Promise<ReservedUpload[]> {
   const started = await withRefresh(() =>
-    mediaApi().startBlobUploads({ scopeId, blobUploadsBatchRequest: { items: declares } }),
+    blobApi().startBlobUploads({ scopeId, blobUploadsBatchRequest: { items: declares } }),
   )
   if (started.results.length !== declares.length) throw new Error('upload_failed')
   return started.results.map((r) => {
@@ -775,7 +776,7 @@ async function mediaReserve(scopeId: string, declares: BlobDeclare[]): Promise<R
 function mediaWindow(scopeId: string): WindowFn {
   return async (uploadId, fromChunk) => {
     const signed = await withRefresh(() =>
-      mediaApi().presignBlobUploadWindows({ scopeId, blobUploadWindowsRequest: { items: [{ uploadId, fromChunk }] } }),
+      blobApi().presignBlobUploadWindows({ scopeId, blobUploadWindowsRequest: { items: [{ uploadId, fromChunk }] } }),
     )
     return windowPuts(signed.results[0])
   }
@@ -1203,7 +1204,7 @@ export async function openBlobFromUrls(scopeId: string, memoryKey: Uint8Array, r
  */
 async function presignAllChunks(scopeId: string, blobId: string): Promise<string[]> {
   const presigned = await withRefresh(() =>
-    mediaApi().presignBlobDownloads({ scopeId, blobDownloadsBatchRequest: { items: [{ blobId }] } }),
+    blobApi().presignBlobDownloads({ scopeId, blobDownloadsBatchRequest: { items: [{ blobId }] } }),
   )
   const d = presigned.results[0]
   if (!d || d.error || !d.presignedGets) throw new Error(d?.error ?? 'store_unavailable')

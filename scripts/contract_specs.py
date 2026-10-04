@@ -26,11 +26,11 @@ import posixpath
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 API = ROOT / "contracts" / "api"
 COMMON = API / "_common.openapi.yaml"
-APPLICATIONS: tuple[str, ...] = ()  # the directories below contracts/api that hold an application's specs
+APPLICATIONS: tuple[str, ...] = ("memories",)  # the directories below contracts/api that hold an application's specs
 # An opaque property at a location only `memories/` holds — both opaque-name oracles assert they read it, because a
 # check on the NAME alone would stay green if `memories/` vanished (each opaque name a Memories schema carries is
 # carried by a core spec too).
-OPAQUE_LOCATION_CANARY = "media.openapi.yaml#MediaExifResponse.wrappedExif"
+OPAQUE_LOCATION_CANARY = "memories/media.openapi.yaml#MediaExifResponse.wrappedExif"
 
 
 class SpecsMissing(RuntimeError):
@@ -52,6 +52,28 @@ def specs(*, common: bool = True) -> list[pathlib.Path]:
             raise SpecsMissing(f"no spec found under {(API / app).relative_to(ROOT)} — a reader that misses an "
                                "application's specs would stay green on the rest")
     return found if common else [p for p in found if p.resolve() != COMMON.resolve()]
+
+
+def load(spec_key: str) -> dict:
+    """A spec, by key, parsed."""
+    import yaml  # local: a reader that only globs needs no YAML parser
+
+    return yaml.safe_load((API / spec_key).read_text(encoding="utf-8")) or {}
+
+
+def schema(spec_key: str, name: str) -> tuple[str, dict | None]:
+    """`components.schemas.<name>` as `spec_key` uses it — through an alias (`Name: {$ref: …}`, the single-source
+    pattern of ADR 0038) to wherever it is defined. Returns the defining spec's key and the schema (None if absent)."""
+    node = ((load(spec_key).get("components") or {}).get("schemas") or {}).get(name)
+    for _ in range(8):  # an alias chain this long is a cycle
+        if not (isinstance(node, dict) and set(node) == {"$ref"}):
+            return spec_key, node if isinstance(node, dict) else None
+        target, _, pointer = node["$ref"].partition("#")
+        spec_key = ref_key(spec_key, target)
+        node = load(spec_key)
+        for part in pointer.strip("/").split("/"):
+            node = (node or {}).get(part) if isinstance(node, dict) else None
+    raise SpecsMissing(f"{spec_key}: the alias chain of {name} does not end")
 
 
 def ref_key(from_key: str, target: str) -> str:

@@ -1,8 +1,8 @@
 package com.veyq.core.account.identitypins
 
-import com.veyq.app.generated.api.AccountIdentityPinsApi
-import com.veyq.app.generated.model.IdentityPins
-import com.veyq.app.generated.model.IdentityPinsUpdate
+import com.veyq.core.generated.api.AccountIdentityPinsApi
+import com.veyq.core.generated.model.IdentityPins
+import com.veyq.core.generated.model.IdentityPinsUpdate
 import com.veyq.core.http.HttpFailure
 import com.veyq.core.http.httpError
 import com.veyq.core.validation.validated

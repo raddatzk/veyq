@@ -2451,42 +2451,4 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     MasterKeyWrap:
-      type: object
-      description: One wrap of the Master Key, openable by a single unlock method.
-      required: [method, wrappedKey]
-      properties:
-        id:
-          x-veyq-visibility: id
-          type: string
-          description: >
-            Opaque id of this wrap. Present in responses (lets a client pin its own DEVICE wrap and untrust
-            it); ignored on input (setup assigns ids server-side).
-          maxLength: 64
-          example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 64)'
-        method:
-          x-veyq-visibility: enum
-          type: string
-          description: >
-            Which unlock method opens this wrap. DEVICE mixes the password into the KEK
-            (Argon2id(deviceFactor + password)); DEVICE_KEY is the password-less remember-me wrap — a
-            device-held key alone (no password, no KDF), so its kdfParams carries only the AEAD iv.
-          enum: [PASSWORD, PASSKEY, RECOVERY, DEVICE, DEVICE_KEY]
-          example: PASSWORD
-        wrappedKey:
-          type: string
-          description: The Master Key wrapped to this method's KEK (opaque base64 ciphertext).
-          contentEncoding: base64
-          maxLength: 8192
-          example: d3JhcHBlZC1tYXN0ZXIta2V5
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
-        kdfParams:
-          type: string
-          description: >
-            KDF parameters + salt to re-derive this method's unlock KEK (opaque base64; present for
-            password/recovery/device, absent for passkey). For DEVICE_KEY there is no KDF — this carries
-            only the AEAD iv for the device-key wrap.
-          contentEncoding: base64
-          maxLength: 256
-          example: AAAAAwAAgAAAAAABAAAAIHNhbHQtZXhhbXBsZS0xNmJ5dGVz
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+      $ref: '_common.openapi.yaml#/components/schemas/MasterKeyWrap'

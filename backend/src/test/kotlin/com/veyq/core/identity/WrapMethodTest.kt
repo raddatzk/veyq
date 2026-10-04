@@ -1,13 +1,13 @@
 package com.veyq.core.identity
 
-import com.veyq.app.generated.model.AddWrapRequest
-import com.veyq.app.generated.model.MasterKeyWrap
+import com.veyq.core.generated.model.AddWrapRequest
+import com.veyq.core.generated.model.MasterKeyWrap
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
 /**
  * Pins [WrapMethod] to the contract. A Kotlin test and not a script because the compiler already links the
- * generated enums: a method added to `MasterKeyWrap.method` in `account.openapi.yaml` turns this red until
+ * generated enums: a method added to `MasterKeyWrap.method` (in `_common.openapi.yaml`) turns this red until
  * somebody classifies it — which, since [WrapMethod] has no defaults, means deciding whether it survives a
  * credential change.
  */

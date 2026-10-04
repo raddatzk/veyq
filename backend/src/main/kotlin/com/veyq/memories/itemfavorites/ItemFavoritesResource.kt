@@ -1,8 +1,8 @@
 package com.veyq.memories.itemfavorites
 
-import com.veyq.app.generated.api.ItemFavoritesApi
-import com.veyq.app.generated.model.ItemFavoritesEntry
-import com.veyq.app.generated.model.PutItemFavoritesRequest
+import com.veyq.memories.generated.api.ItemFavoritesApi
+import com.veyq.memories.generated.model.ItemFavoritesEntry
+import com.veyq.memories.generated.model.PutItemFavoritesRequest
 import com.veyq.core.http.HttpFailure
 import com.veyq.core.http.httpError
 import io.quarkus.security.Authenticated

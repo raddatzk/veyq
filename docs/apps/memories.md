@@ -6,8 +6,10 @@ nested into **Chapters**. Product language **Memory / Chapter** is unchanged; fo
 
 ## What it owns
 
-- **Node kinds `MEMORY` and `CHAPTER`.** `FOLDER` is the platform's (`enum: [FOLDER, MEMORY, CHAPTER]` in
-  `contracts/api/content.openapi.yaml`).
+- **Node kinds `MEMORY` and `CHAPTER`.** `FOLDER` is the platform's (`enum: [FOLDER, MEMORY, CHAPTER]`, the
+  `NodeKind` of `contracts/api/_common.openapi.yaml`, which core's specs alias).
+- **Contracts:** `contracts/api/memories/` (`media.openapi.yaml`, `favorites.openapi.yaml`), generated into
+  `com.veyq.memories.generated`; the blob transfer an upload runs on is core's `contracts/api/blob.openapi.yaml`.
 - **Keys:** `K_mem` per Memory (the share grain) and `K_blob` per blob under it
   ([ADR 0012](../decisions/0012-content-key-hierarchy.md)). These derive as they always have, the documented
   exemption to the application-id context ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Decision 9).

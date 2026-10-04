@@ -1,46 +1,27 @@
 package com.veyq.memories.media
 
-import com.veyq.core.blob.BlobUploadHandler
-import com.veyq.core.blob.DownloadOutcome
-import com.veyq.core.blob.StartOutcome
-import com.veyq.core.blob.UploadDeclare
-import com.veyq.core.blob.WindowOutcome
 import com.veyq.core.blob.DerivativeDeclare
 import com.veyq.core.blob.CompleteItem
-import com.veyq.core.blob.WindowRequest
-import com.veyq.app.generated.api.MediaApi
-import com.veyq.app.generated.model.BlobRef
-import com.veyq.app.generated.model.CoverBlobCommitRequest
-import com.veyq.app.generated.model.BlobDownloadResultItem
-import com.veyq.app.generated.model.BlobDownloadsBatchRequest
-import com.veyq.app.generated.model.BlobDownloadsBatchResponse
-import com.veyq.app.generated.model.BlobUploadResultItem
-import com.veyq.app.generated.model.BlobUploadWindowResultItem
-import com.veyq.app.generated.model.BlobUploadWindowsRequest
-import com.veyq.app.generated.model.BlobUploadWindowsResponse
-import com.veyq.app.generated.model.BlobUploadsBatchRequest
-import com.veyq.app.generated.model.BlobUploadsBatchResponse
-import com.veyq.app.generated.model.MediaBatchRequest
-import com.veyq.app.generated.model.MediaBatchResponse
-import com.veyq.app.generated.model.MediaDerivativeKind
-import com.veyq.app.generated.model.MediaDerivativeSummary
-import com.veyq.app.generated.model.MediaExifResponse
-import com.veyq.app.generated.model.MediaListPage
-import com.veyq.app.generated.model.MediaMetaResponse
-import com.veyq.app.generated.model.MediaMetaUpdate
-import com.veyq.app.generated.model.MediaResultItem
-import com.veyq.app.generated.model.MediaSummary
-import com.veyq.app.generated.model.PresignedUrl
-import com.veyq.app.generated.model.UploaderKey
-import com.veyq.core.blobstore.PresignedRef
+import com.veyq.memories.generated.api.MediaApi
+import com.veyq.memories.generated.model.BlobRef
+import com.veyq.memories.generated.model.CoverBlobCommitRequest
+import com.veyq.memories.generated.model.MediaBatchRequest
+import com.veyq.memories.generated.model.MediaBatchResponse
+import com.veyq.memories.generated.model.MediaDerivativeKind
+import com.veyq.memories.generated.model.MediaDerivativeSummary
+import com.veyq.memories.generated.model.MediaExifResponse
+import com.veyq.memories.generated.model.MediaListPage
+import com.veyq.memories.generated.model.MediaMetaResponse
+import com.veyq.memories.generated.model.MediaMetaUpdate
+import com.veyq.memories.generated.model.MediaResultItem
+import com.veyq.memories.generated.model.MediaSummary
+import com.veyq.memories.generated.model.UploaderKey
 import com.veyq.core.http.Failures
 import com.veyq.core.http.HttpFailure
 import com.veyq.core.http.httpError
 import com.veyq.core.http.httpStaleSealedMeta
-import com.veyq.core.validation.validated
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
-import com.veyq.core.tenant.RequestTenant
 import jakarta.ws.rs.core.Response
 import java.time.Instant
 import java.time.OffsetDateTime
@@ -49,55 +30,25 @@ import java.util.UUID
 import com.veyq.core.ratelimit.RateLimitExempt
 
 /**
- * HTTP adapter for media blobs (en.memory.media, cr-0028). Implements the generated [MediaApi]; thin
- * (ADR 0001) — delegates to [MediaHandler], and the three generic blob operations still on this tag to core's
- * [BlobUploadHandler]. `@Authenticated`; the caller (from the `SecurityIdentity`
- * principal) must hold a grant for the scope (a non-member gets 404). Operator-blind: only ciphertext wraps +
- * opaque metadata + presigned URLs cross. Batch-shaped: 200 with per-item results (partial success); only
- * access/auth failures are top-level.
+ * HTTP adapter for media (en.memory.media, cr-0028). Implements the generated [MediaApi]; thin (ADR 0001) —
+ * delegates to [MediaHandler]. The generic blob transfer a media upload runs on (start, windows, downloads) is core's
+ * `BlobResource`; this resource completes an upload into media and serves what Memories keeps about it.
+ * `@Authenticated`; the caller (from the `SecurityIdentity` principal) must hold a grant for the scope (a
+ * non-member gets 404). Operator-blind: only ciphertext wraps + opaque metadata cross. Batch-shaped: 200 with
+ * per-item results (partial success); only access/auth failures are top-level.
  */
 @Authenticated
 @RateLimitExempt(
-    reason = "Authenticated + membership-gated media plumbing. Deliberately NOT key = USER yet: presign " +
-        "minting is an amplification axis, bounded per call (a start or a window signs at most 256 items x " +
-        "veyq.blob.presign-window URLs) but not per caller, and a per-user cap on the main upload and browse " +
-        "path has to be verified against real traffic before it ships, or it throttles a legitimate bulk " +
-        "upload. Recorded as the open item in cc.security.rate-limit (\u00a7 Unbounded by decision).",
+    reason = "Authenticated + membership-gated media plumbing on the main upload and browse path (completion, " +
+        "listing, covers; the presign minting it runs on is core's BlobResource, exempt for that reason). " +
+        "Deliberately NOT key = USER yet: a per-user cap on that path has to be verified against real traffic " +
+        "before it ships, or it throttles a legitimate bulk upload. Recorded as the open item in " +
+        "cc.security.rate-limit (\u00a7 Unbounded by decision).",
 )
 class MediaResource(
     private val handler: MediaHandler,
-    /** The three blob operations still on the `media` tag are core's generic upload (ADR 0079). */
-    private val blobs: BlobUploadHandler,
     private val identity: SecurityIdentity,
-    private val tenant: RequestTenant,
 ) : MediaApi {
-
-    /**
-     * The tenant domain this request arrived on, for signing its presigned URLs (ADR 0063). Resolved through the
-     * `tenant` table, **never** the raw `Host`/`X-Forwarded-Host` value — see [RequestTenant]; null (an
-     * unresolvable or spoofed host, or the bootstrap domain) signs against the configured default.
-     */
-    private fun signingDomain(): String? = tenant.resolve()?.domain
-
-    override fun startBlobUploads(scopeId: UUID, blobUploadsBatchRequest: BlobUploadsBatchRequest): Response {
-        val declares = blobUploadsBatchRequest.items.map {
-            UploadDeclare(it.chunkCount, it.byteSize, it.wrappedBlobKey, it.blobId.toString(), it.ownerId.toString(), it.role.value)
-        }
-        return when (val o = blobs.start(identity.principal.name, scopeId.toString(), declares, signingDomain())) {
-            is StartOutcome.Results -> Response.ok(
-                BlobUploadsBatchResponse(
-                    results = o.items.map {
-                        BlobUploadResultItem(
-                            uploadId = it.uploadId?.let(UUID::fromString),
-                            presignedPuts = it.presignedPuts?.map(::toPresigned),
-                            error = it.error,
-                        )
-                    },
-                ),
-            ).build()
-            is HttpFailure -> httpError(o)
-        }
-    }
 
     override fun completeMedia(scopeId: UUID, mediaBatchRequest: MediaBatchRequest): Response {
         val items = mediaBatchRequest.items.map { item ->
@@ -222,36 +173,6 @@ class MediaResource(
             CoverDeleteOutcome.Done -> Response.noContent().build()
             is HttpFailure -> httpError(o)
         }
-
-    override fun presignBlobDownloads(scopeId: UUID, blobDownloadsBatchRequest: BlobDownloadsBatchRequest): Response {
-        val blobIds = blobDownloadsBatchRequest.items.map { it.blobId.toString() }
-        return when (val o = blobs.download(identity.principal.name, scopeId.toString(), blobIds, signingDomain())) {
-            is DownloadOutcome.Results -> Response.ok(
-                BlobDownloadsBatchResponse(
-                    results = o.items.map {
-                        BlobDownloadResultItem(presignedGets = it.presignedGets?.map(::toPresigned), error = it.error)
-                    },
-                ),
-            ).build()
-            is HttpFailure -> httpError(o)
-        }
-    }
-
-    override fun presignBlobUploadWindows(scopeId: UUID, blobUploadWindowsRequest: BlobUploadWindowsRequest): Response {
-        val requests = blobUploadWindowsRequest.items.map { WindowRequest(it.uploadId.toString(), it.fromChunk.validated()) }
-        return when (val o = blobs.window(identity.principal.name, scopeId.toString(), requests, signingDomain())) {
-            is WindowOutcome.Results -> Response.ok(
-                BlobUploadWindowsResponse(
-                    results = o.items.map {
-                        BlobUploadWindowResultItem(presignedPuts = it.presignedPuts?.map(::toPresigned), error = it.error)
-                    },
-                ),
-            ).build()
-            is HttpFailure -> httpError(o)
-        }
-    }
-
-    private fun toPresigned(ref: PresignedRef) = PresignedUrl(index = ref.index, url = ref.url)
 
     private fun toSummary(row: MediaRow) = MediaSummary(
         mediaId = UUID.fromString(row.mediaId),

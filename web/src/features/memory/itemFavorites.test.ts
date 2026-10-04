@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { fromB64std } from '@veyq/crypto/base64'
-import type { ItemFavoritesApi, ItemFavoritesEntry, OwnItemFavoritesApi } from '../../api/generated/content'
+import type { ItemFavoritesApi, ItemFavoritesEntry, OwnItemFavoritesApi } from '../../api/generated/favorites'
 import { fakeApi } from '../../test/apiMock'
 
 // The seal/open path of item marks (ADR 0068 §9) against the REAL crypto: only the wire and the vault are faked.

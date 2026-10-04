@@ -1,10 +1,17 @@
-# Shared OpenAPI components, referenced across contracts/api/*.openapi.yaml via external $ref (ADR 0038).
+# Shared OpenAPI components, referenced across the specs via external $ref (ADR 0038).
+#
+# Layout (ADR 0079 — the contracts name their owner): the specs directly in contracts/api/ are core's (the platform,
+# `blob.openapi.yaml` included — the generic blob upload and download); an application's specs sit in a directory
+# of their own (`memories/`). This file is core's. An application spec may $ref it (`../_common.openapi.yaml#…`);
+# a core spec never references an application's spec. Every schema defined here is ONE generated type, core's:
+# the backend maps each of them into the application's generation (`schemaMappings`, backend/gradle/openapi.gradle.kts),
+# so a schema two owners share lives here and is aliased by name in each spec that uses it.
 #
 # This is NOT a generated spec — it has no paths and is never fed to a generator on its own: the backend
-# fileTree glob excludes it (backend/gradle/openapi.gradle.kts) and the web generate:api script does not list
-# it. It exists only as a single-source $ref target, so a shared component cannot drift across the per-domain
-# specs. openapi-generator (both surfaces) resolves the external $ref in place, emitting the same model per
-# module it emitted from the inline copies — a pure refactor, no wire change.
+# generation sets exclude it and the web generate:api script does not list it. It exists only as a single-source
+# $ref target, so a shared component cannot drift across the per-domain specs. openapi-generator (both surfaces)
+# resolves the external $ref in place, emitting the same model per module it emitted from the inline copies — a
+# pure refactor, no wire change.
 #
 # The two shared `responses` are the scope-access gate's answers (uc.spaces.scope-access). An operation that
 # declares no other 403/409 points at them; one that already has a 403/409 names the code in its own description
@@ -126,3 +133,79 @@ components:
           maxLength: 20000
           example: "## Terms of use\n…"
           x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 20000)'
+
+    PresignedUrl:
+      # Shared by the blob spec (member upload/download) and the sharing spec (a guest's upload/download) — one
+      # presigned-URL shape, one generated type.
+      type: object
+      required: [index, url]
+      properties:
+        index:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          description: Chunk index (0-based, in chunk order).
+          example: 0
+        url:
+          x-veyq-visibility: token
+          type: string
+          description: >
+            A short-TTL, single-object, single-method presigned URL (PUT or GET) against the object store. A `PUT`
+            must carry exactly `Content-Type: application/octet-stream`: the header is signed, so the store refuses
+            any other type. A `GET` is served as `application/octet-stream` with `Content-Disposition: attachment`,
+            whatever the object was stored as ([ADR 0013
+            §6](../../docs/decisions/0013-blob-storage-presigned-direct-to-store.md#6-store-responses-are-inert--enforced-by-the-signer)).
+          maxLength: 4096
+          example: https://store.example.com/veyq/9b1d4a6e/0?X-Amz-Signature=...
+
+    NodeKind:
+      # Shared by the content spec (the tree) and the sharing spec (a share's subtree). Still the closed three-kind
+      # enum: core's hand-written code names FOLDER only, the generated enum names all three (ADR 0079).
+      x-veyq-visibility: enum
+      type: string
+      description: FOLDER organizes only (no content key); MEMORY is the content unit (owns K_mem); CHAPTER is a nested Memory inside a Memory (owns its own K_mem, wrapped under the parent Memory's K_mem).
+      enum: [FOLDER, MEMORY, CHAPTER]
+      example: MEMORY
+
+    MasterKeyWrap:
+      # Shared by the account, setup and tenants specs. The annotated variant — the copies used to differ, and
+      # the generator's file order alone decided that the backend got this one.
+      type: object
+      description: One wrap of the Master Key, openable by a single unlock method.
+      required: [method, wrappedKey]
+      properties:
+        id:
+          x-veyq-visibility: id
+          type: string
+          description: >
+            Opaque id of this wrap. Present in responses (lets a client pin its own DEVICE wrap and untrust
+            it); ignored on input (setup assigns ids server-side).
+          maxLength: 64
+          example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 64)'
+        method:
+          x-veyq-visibility: enum
+          type: string
+          description: >
+            Which unlock method opens this wrap. DEVICE mixes the password into the KEK
+            (Argon2id(deviceFactor + password)); DEVICE_KEY is the password-less remember-me wrap — a
+            device-held key alone (no password, no KDF), so its kdfParams carries only the AEAD iv.
+          enum: [PASSWORD, PASSKEY, RECOVERY, DEVICE, DEVICE_KEY]
+          example: PASSWORD
+        wrappedKey:
+          type: string
+          description: The Master Key wrapped to this method's KEK (opaque base64 ciphertext).
+          contentEncoding: base64
+          maxLength: 8192
+          example: d3JhcHBlZC1tYXN0ZXIta2V5
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        kdfParams:
+          type: string
+          description: >
+            KDF parameters + salt needed to re-derive this method's unlock KEK (opaque base64; present for
+            password/recovery/device methods, absent for passkey which is PRF-derived). For DEVICE_KEY there
+            is no KDF — this field carries only the AEAD iv for the device-key wrap.
+          contentEncoding: base64
+          maxLength: 256
+          example: AAAAAwAAgAAAAAABAAAAIHNhbHQtZXhhbXBsZS0xNmJ5dGVz
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'

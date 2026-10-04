@@ -1,6 +1,6 @@
 package com.veyq.core.admin.tenant
 
-import com.veyq.app.generated.model.DeliveryResult
+import com.veyq.core.generated.model.DeliveryResult
 import com.veyq.core.crypto.ConfigSecretKeyGuard
 import com.veyq.core.crypto.ConfigSecretKeyState
 import com.veyq.core.crypto.ConfigSecretSeal

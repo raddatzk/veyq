@@ -125,7 +125,7 @@ class RecoveryHandler(
         QuarkusTransaction.requiringNew().run { store.mint(user.id, normalized, Tokens.hash(token), expiresAt) }
 
         return when (mailer.sendRecoveryLink(tenant.id, tenant.domain, normalized, token, expiresAt)) {
-            com.veyq.app.generated.model.DeliveryResult.SENT -> RequestOutcome.MAILED
+            com.veyq.core.generated.model.DeliveryResult.SENT -> RequestOutcome.MAILED
             else -> RequestOutcome.SEND_FAILED
         }
     }

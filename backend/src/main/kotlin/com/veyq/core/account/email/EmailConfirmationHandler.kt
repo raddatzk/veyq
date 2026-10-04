@@ -1,6 +1,6 @@
 package com.veyq.core.account.email
 
-import com.veyq.app.generated.model.DeliveryResult
+import com.veyq.core.generated.model.DeliveryResult
 import com.veyq.core.config.VeyqConfig
 import com.veyq.core.crypto.Tokens
 import com.veyq.core.http.FailureStatus.NOT_FOUND

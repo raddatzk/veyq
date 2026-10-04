@@ -8,15 +8,13 @@
 // with, each media under the `mediaId` it was completed for — every K_blob wrap and metadata tier is sealed bound to
 // them, so a fake that invented its own ids would serve seals that (rightly) refuse to open.
 import { vi } from 'vitest'
+import type { BlobApi, BlobDownloadResultItem, BlobUploadResultItem, PresignedUrl } from '../../../api/generated/blob'
 import type {
-  BlobDownloadResultItem,
-  BlobUploadResultItem,
   MediaApi,
   MediaDerivativeSummary,
   MediaDerivativeUpload,
   MediaResultItem,
   MediaSummary,
-  PresignedUrl,
 } from '../../../api/generated/media'
 
 type Session = { wrappedBlobKey: string; chunkCount: number; blobId: string }
@@ -46,8 +44,9 @@ export function galleryFakeStore() {
     return Array.from({ length: sessions.get(uploadId)!.chunkCount }, (_, i) => ({ index: i, url: `mem://${uploadId}/${i}` }))
   }
 
-  const api = {
-    startBlobUploads: vi.fn<MediaApi['startBlobUploads']>(async ({ blobUploadsBatchRequest }) => ({
+  // Core's generic blob transfer (the `blob` tag): start, and presign downloads. A test installs it as `blobApi`.
+  const blob = {
+    startBlobUploads: vi.fn<BlobApi['startBlobUploads']>(async ({ blobUploadsBatchRequest }) => ({
       results: blobUploadsBatchRequest.items.map((item): BlobUploadResultItem => {
         const uploadId = `up-${upCounter++}`
         sessions.set(uploadId, { wrappedBlobKey: item.wrappedBlobKey, chunkCount: item.chunkCount, blobId: item.blobId })
@@ -59,6 +58,13 @@ export function galleryFakeStore() {
         }
       }),
     })),
+    presignBlobDownloads: vi.fn<BlobApi['presignBlobDownloads']>(async ({ blobDownloadsBatchRequest }) => ({
+      results: blobDownloadsBatchRequest.items.map((it): BlobDownloadResultItem => ({ presignedGets: getsFor(it.blobId), error: null })),
+    })),
+  }
+
+  // Memories' media operations (the `media` tag). A test installs it as `mediaApi`.
+  const api = {
     completeMedia: vi.fn<MediaApi['completeMedia']>(async ({ mediaBatchRequest }) => ({
       results: mediaBatchRequest.items.map((item): MediaResultItem => {
         const mediaId = item.mediaId // the client-minted id every tier is sealed bound to
@@ -98,9 +104,6 @@ export function galleryFakeStore() {
       if (rec) rec.wrappedMeta = mediaMetaUpdate.wrappedMeta ?? null
       return { wrappedMeta: mediaMetaUpdate.wrappedMeta ?? null }
     }),
-    presignBlobDownloads: vi.fn<MediaApi['presignBlobDownloads']>(async ({ blobDownloadsBatchRequest }) => ({
-      results: blobDownloadsBatchRequest.items.map((it): BlobDownloadResultItem => ({ presignedGets: getsFor(it.blobId), error: null })),
-    })),
   }
 
   const fetchStub = vi.fn(async (url: string, init?: RequestInit) => {
@@ -117,5 +120,5 @@ export function galleryFakeStore() {
    *  test can still say "media 0's PREVIEW" (`up-2`) without knowing the random id. */
   const blobIdOfUpload = (uploadId: string): string => sessions.get(uploadId)!.blobId
 
-  return { api, fetchStub, objects, media, blobIdOfUpload }
+  return { api, blob, fetchStub, objects, media, blobIdOfUpload }
 }

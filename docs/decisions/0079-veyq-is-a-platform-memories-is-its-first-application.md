@@ -107,7 +107,10 @@ application to be separated from.
   (`share_not_contributable`). Hand-written core code names the node kind `FOLDER` only — the same guard holds it. Core still speaks media in one place: the completion item (`CompleteItem`'s
   `mediaId`, `derivatives`, `wrappedExif`), because core's share contract serves a guest's completion. (`MembershipEraser` is a different seam from the erasers: nothing of the scope is
   erased, one user loses access to one scope, and item favorites drop that user's rows.) Every class is named for its owner: the platform is `com.veyq.core.<feature>`, Memories
-  `com.veyq.memories.<feature>` (the generated API is still one `com.veyq.app.generated` package). Inside core the
+  `com.veyq.memories.<feature>`, and so is the generated API (`com.veyq.core.generated`, `com.veyq.memories.generated`):
+  the contracts name their owner too — core's specs in `contracts/api/` (among them `blob.openapi.yaml`, the three
+  generic blob operations, served by core's `BlobResource`), the Memories specs in `contracts/api/memories/`, every
+  schema two owners share defined once in core's `_common.openapi.yaml`. Inside core the
   kernel/slice layering is a declared list, not a directory: the packages every slice builds on are `KERNEL` in
   `validate_kernel_imports_no_slices.py`, and a kernel package names no slice. Not done: the Gradle module split; the node `kind` is still the contract's
   closed `FOLDER`/`MEMORY`/`CHAPTER` enum, which core's generated API decodes.

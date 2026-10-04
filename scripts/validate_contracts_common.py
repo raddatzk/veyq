@@ -63,7 +63,7 @@ CANONICAL_ENUMS: dict[str, tuple[str, ...]] = {
 # Value sets that overlap a canonical family on purpose (documented, not drift).
 INTENTIONAL_ENUM_VARIANTS: set[tuple[str, ...]] = {
     ("DEVICE", "DEVICE_KEY"),  # account.openapi.yaml — the device-only wrap-rotation subset of credential-method
-    # media.openapi.yaml BlobRole — the role a blob's K_blob wrap is sealed bound to (ADR 0072): the derivative
+    # blob.openapi.yaml BlobRole — the role a blob's K_blob wrap is sealed bound to (ADR 0072): the derivative
     # kinds plus the ORIGINAL and a node's COVER. A superset of derivative-kind, not a copy of it.
     ("COVER", "ORIGINAL", "PREVIEW", "THUMBNAIL"),
     # sharing.openapi.yaml ShareBlobUploadRequestItem.role — the same, minus COVER: a contributor uploads media only.

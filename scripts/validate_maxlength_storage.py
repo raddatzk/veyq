@@ -55,16 +55,16 @@ API = contract_specs.API
 TEXT_MAX_B64 = 65532
 
 # base64 fields whose column a migration declares MEDIUMTEXT (16 MiB) — the ONLY fields allowed a cap
-# above TEXT_MAX_B64. Keyed (spec, schema, property) → the DB column that must be provably MEDIUMTEXT. Adding a
+# above TEXT_MAX_B64. Keyed (spec key below contracts/api, schema, property) → the DB column that must be provably MEDIUMTEXT. Adding a
 # field here is a deliberate "this column is wider than TEXT" claim, verified below against the migrations.
 MEDIUMTEXT_BACKED: dict[tuple[str, str, str], str] = {
     ("account.openapi.yaml", "IdentityPins", "blob"): "sealed_blob",
     ("account.openapi.yaml", "IdentityPinsUpdate", "blob"): "sealed_blob",
-    ("content.openapi.yaml", "Favorites", "ciphertext"): "ciphertext",
-    ("content.openapi.yaml", "PutFavoritesRequest", "ciphertext"): "ciphertext",
-    ("content.openapi.yaml", "ItemFavoritesEntry", "ciphertext"): "ciphertext",
-    ("content.openapi.yaml", "PutItemFavoritesRequest", "ciphertext"): "ciphertext",
-    ("content.openapi.yaml", "OwnItemFavoritesEntry", "ciphertext"): "ciphertext",
+    ("memories/favorites.openapi.yaml", "Favorites", "ciphertext"): "ciphertext",
+    ("memories/favorites.openapi.yaml", "PutFavoritesRequest", "ciphertext"): "ciphertext",
+    ("memories/favorites.openapi.yaml", "ItemFavoritesEntry", "ciphertext"): "ciphertext",
+    ("memories/favorites.openapi.yaml", "PutItemFavoritesRequest", "ciphertext"): "ciphertext",
+    ("memories/favorites.openapi.yaml", "OwnItemFavoritesEntry", "ciphertext"): "ciphertext",
     ("tasks.openapi.yaml", "ClaimedJob", "sealedBody"): "sealed_body",
     ("tasks.openapi.yaml", "EnqueueRequest", "sealedBody"): "sealed_body",
     ("tasks.openapi.yaml", "CompleteRequest", "sealedResult"): "sealed_result",

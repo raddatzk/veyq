@@ -1,8 +1,8 @@
 package com.veyq.core.account.deviceregister
 
-import com.veyq.app.generated.api.AccountDeviceRegisterApi
-import com.veyq.app.generated.model.DeviceRegister
-import com.veyq.app.generated.model.DeviceRegisterUpdate
+import com.veyq.core.generated.api.AccountDeviceRegisterApi
+import com.veyq.core.generated.model.DeviceRegister
+import com.veyq.core.generated.model.DeviceRegisterUpdate
 import com.veyq.core.http.HttpFailure
 import com.veyq.core.http.httpError
 import com.veyq.core.ratelimit.RateLimitExempt

@@ -1,6 +1,6 @@
 package com.veyq.core.adminchannel
 
-import com.veyq.app.generated.AdminChannelOperations
+import com.veyq.core.generated.AdminChannelOperations
 import com.veyq.core.testing.TestFixtures.bearer
 import com.veyq.core.testing.TestFixtures.ensureUser
 import io.quarkus.test.junit.QuarkusTest
@@ -151,9 +151,9 @@ class AdminChannelGateSliceTest {
 
         /** The generated interfaces the marked operations live on — asserted complete by the tripwire above. */
         val GENERATED_APIS = listOf(
-            com.veyq.app.generated.api.TenantsApi::class.java,
-            com.veyq.app.generated.api.InstanceApi::class.java,
-            com.veyq.app.generated.api.SetupApi::class.java,
+            com.veyq.core.generated.api.TenantsApi::class.java,
+            com.veyq.core.generated.api.InstanceApi::class.java,
+            com.veyq.core.generated.api.SetupApi::class.java,
         )
     }
 }

@@ -1,8 +1,8 @@
 package com.veyq.core.account.profile
 
-import com.veyq.app.generated.api.AccountProfileApi
-import com.veyq.app.generated.model.MemberProfile
-import com.veyq.app.generated.model.ProfileUpdateRequest
+import com.veyq.core.generated.api.AccountProfileApi
+import com.veyq.core.generated.model.MemberProfile
+import com.veyq.core.generated.model.ProfileUpdateRequest
 import com.veyq.core.http.HttpFailure
 import com.veyq.core.http.httpError
 import com.veyq.core.tenant.RequestTenant
