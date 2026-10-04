@@ -23,6 +23,7 @@ import com.veyq.core.testing.TestFixtures.seedMemberScope
 import com.veyq.core.testing.TestFixtures.seedNode
 import com.veyq.core.testing.TestFixtures.shareKeysJson
 import com.veyq.core.testing.whileUncommitted
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -73,7 +74,7 @@ class ShareUploaderSliceTest {
     @Test
     fun uploaderResolveServesNoMediaEvenWithExisting() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         seedMedia(scopeId, memory, identityId = null) // a curator's existing photo on the Memory
         val shareId = createShare(userId, memory, role = "UPLOADER")
 
@@ -115,7 +116,7 @@ class ShareUploaderSliceTest {
     @Test
     fun theKeysAShareCarriesFollowItsRole() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val drop = "\"sealedDropPublicKey\":\"$DROP_PUBLIC_KEY\",\"sealedDropPrivateKey\":\"$DROP_PRIVATE_KEY\""
 
         // an UPLOADER share that carries a wrap is refused — the guest would hold K_mem — and nothing is written
@@ -133,7 +134,7 @@ class ShareUploaderSliceTest {
     @Test
     fun theDropKeyIsSetOnceOnTheMemory() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val public = "\"sealedDropPublicKey\":\"$DROP_PUBLIC_KEY\""
 
         // a first UPLOADER share without the private half has nothing to seal to — refused, nothing written
@@ -157,7 +158,7 @@ class ShareUploaderSliceTest {
         // sealed to it could no longer be opened by the Memory's members (inbox #224).
         repeat(RACE_ROUNDS) { round ->
             val (userId, scopeId) = seedMemberScope()
-            val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+            val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
             val renamed = "cmVuYW1lZA==" // "renamed"
             whileUncommitted(
                 change = {
@@ -183,7 +184,7 @@ class ShareUploaderSliceTest {
     @Test
     fun anUploaderIdentityHandsOverItsWrappedKey() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val uploader = createShare(userId, memory, role = "UPLOADER")
         val contributor = createShare(userId, memory, role = "CONTRIBUTOR")
         val keyed = ",\"wrappedIdentityKey\":\"$WRAPPED_UPLOADER_KEY\""
@@ -200,7 +201,7 @@ class ShareUploaderSliceTest {
     @Test
     fun everyReaderOfTheMemoryIsServedWhatOpensAnUpload() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val uploader = createShare(userId, memory, role = "UPLOADER")
         val contributor = createShare(userId, memory, role = "CONTRIBUTOR")
         val uploaderIdentity = createIdentity(uploader)
@@ -243,7 +244,7 @@ class ShareUploaderSliceTest {
     @Test
     fun theGuestsUploadsSurviveTheirLink() {
         val (userId, scopeId, tenantId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val shareId = createShare(userId, memory, role = "UPLOADER")
         val (identityId, token) = createIdentityWithToken(shareId)
         val uploadId = given().contentType(ContentType.JSON)
@@ -273,7 +274,7 @@ class ShareUploaderSliceTest {
     @Test
     fun uploaderShareHasNoBlobDownloadCapability() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val mediaId = seedMedia(scopeId, memory, identityId = null) // a curator photo — its blob IS in the subtree
         val blobId = QuarkusTransaction.requiringNew().call { MediaEntity.findById(mediaId)!!.blobId }
 
@@ -290,7 +291,7 @@ class ShareUploaderSliceTest {
     @Test
     fun uploaderNamesUploadsAttachesStampedAndDeletesOwn() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val shareId = createShare(userId, memory, role = "UPLOADER")
 
         // name yourself — NO bearer (uploader path is open like CONTRIBUTOR); identity + capability token out
@@ -352,7 +353,7 @@ class ShareUploaderSliceTest {
     fun aDeleteOwnOverlappingItselfAnswersAsAReplay() {
         repeat(RACE_ROUNDS) { round ->
             val (userId, scopeId) = seedMemberScope()
-            val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+            val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
             val identity = createIdentity(createShare(userId, memory, role = "UPLOADER"))
             val mediaId = seedMedia(scopeId, memory, identityId = identity)
             val second = whileUncommitted(
@@ -367,7 +368,7 @@ class ShareUploaderSliceTest {
     @Test
     fun foreignIdentityDeleteIs404() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val shareId = createShare(userId, memory, role = "UPLOADER")
 
         // identity A owns a media (seeded), identity B holds a valid token but did not upload it
@@ -385,7 +386,7 @@ class ShareUploaderSliceTest {
     @Test
     fun badTokenDeleteIs403() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val shareId = createShare(userId, memory, role = "UPLOADER")
         val mediaId = seedMedia(scopeId, memory, identityId = createIdentity(shareId))
 
@@ -398,7 +399,7 @@ class ShareUploaderSliceTest {
     @Test
     fun viewerShareRejectsUploadAndDelete() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val shareId = createShare(userId, memory, role = "VIEWER")
         val mediaId = seedMedia(scopeId, memory, identityId = null)
 

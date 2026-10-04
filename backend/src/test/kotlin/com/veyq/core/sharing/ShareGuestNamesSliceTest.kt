@@ -1,7 +1,6 @@
 package com.veyq.core.sharing
 
 import com.veyq.core.blob.BlobEntity
-import com.veyq.core.node.NodeEntity
 import com.veyq.core.sharing.ShareIdentityEntity
 import com.veyq.memories.media.BucketEntity
 import com.veyq.memories.media.MediaEntity
@@ -14,6 +13,7 @@ import com.veyq.core.testing.TestFixtures.identityKeyJson
 import com.veyq.core.testing.TestFixtures.seedMemberScope
 import com.veyq.core.testing.TestFixtures.seedNode
 import com.veyq.core.testing.TestFixtures.shareKeysJson
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -53,7 +53,7 @@ class ShareGuestNamesSliceTest {
     /** One Memory with every kind of guest and every readable link a guest can hold. */
     private fun memory(): Memory {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val contributorLink = createShare(userId, memory, "CONTRIBUTOR")
         val contributor = createIdentity(contributorLink, "CONTRIBUTOR", contributorName)
         createIdentity(contributorLink, "CONTRIBUTOR", contributorName) // a second guest on the same link, no media

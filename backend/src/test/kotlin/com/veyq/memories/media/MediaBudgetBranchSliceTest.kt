@@ -4,7 +4,6 @@ import com.veyq.core.testing.FakePresignProfile
 import com.veyq.core.blob.UploadSessionPurge
 import com.veyq.core.testing.TestBlob
 import com.veyq.core.blob.UploadSessionEntity
-import com.veyq.core.node.NodeEntity
 import com.veyq.core.blobstore.BlobStore.Companion.chunkKey
 import com.veyq.core.blobstore.BlobStore.Companion.chunkKeys
 import com.veyq.core.blobstore.FakePresigningBlobStore
@@ -13,6 +12,7 @@ import com.veyq.core.testing.TestFixtures.CONTENT_KEY
 import com.veyq.core.testing.TestFixtures.bearer
 import com.veyq.core.testing.TestFixtures.seedMemberScope
 import com.veyq.core.testing.TestFixtures.seedNode
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.TestProfile
@@ -60,7 +60,7 @@ class MediaBudgetBranchSliceTest {
     @Test
     fun completeWithOneSessionOverBudgetPurgesTheWholeItemAtomically() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val original = startOne(userId, scopeId, TestBlob.SMALL, wrap = "b3JpZw==")
         val thumb = startOne(userId, scopeId, TestBlob.SMALL, wrap = "dGh1bWI=", ownerId = TestBlob.ownerOf(original), role = "THUMBNAIL")
 
@@ -107,7 +107,7 @@ class MediaBudgetBranchSliceTest {
         // byteSize" lets a short chunk through, and a short frame is one no client sealed. The control is the same
         // shape staged exactly, in the same batch, so the refusal is the one byte and not the endpoint.
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val blob = TestBlob.ofChunks(2)
         val short = startOne(userId, scopeId, blob, wrap = "c2hvcnQ=")
         val exact = startOne(userId, scopeId, blob, wrap = "ZXhhY3Q=")
@@ -139,7 +139,7 @@ class MediaBudgetBranchSliceTest {
     @Test
     fun commitCoverOverBudgetPurgesAndReportsBudgetExceeded() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val uploadId = startOne(userId, scopeId, TestBlob.SMALL, wrap = "Y292ZXI=", ownerId = memory, role = "COVER")
 
         // the store reports more bytes than were declared — exactly the mismatch verifyBlob's Budget case checks

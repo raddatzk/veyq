@@ -1,12 +1,12 @@
 package com.veyq.core.sharing
 
-import com.veyq.core.node.NodeEntity
 import com.veyq.core.testing.TestBlob
 import com.veyq.core.TestIds
 import com.veyq.core.testing.TestFixtures.CONTENT_KEY
 import com.veyq.core.testing.TestFixtures.bearer
 import com.veyq.core.testing.TestFixtures.seedMemberScope
 import com.veyq.core.testing.TestFixtures.seedNode
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
@@ -37,7 +37,7 @@ class ShareContributorSliceTest {
     @Test
     fun contributeFlowAttachesStampsIdentityAndSurfacesInResolve() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val shareId = createShare(userId, memory, role = "CONTRIBUTOR")
 
         // name yourself — NO bearer; the sealed name is stored opaque, and we get an identity + a capability token
@@ -81,7 +81,7 @@ class ShareContributorSliceTest {
     @Test
     fun viewerShareRejectsContribution() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val shareId = createShare(userId, memory, role = "VIEWER")
 
         given().contentType(ContentType.JSON)
@@ -93,7 +93,7 @@ class ShareContributorSliceTest {
     @Test
     fun badTokenRejectedOnUpload() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val shareId = createShare(userId, memory, role = "CONTRIBUTOR")
         // a well-formed but never-issued token
         given().contentType(ContentType.JSON)
@@ -105,7 +105,7 @@ class ShareContributorSliceTest {
     @Test
     fun revokeStopsContribution() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val shareId = createShare(userId, memory, role = "CONTRIBUTOR")
         val contributorToken = given().contentType(ContentType.JSON)
             .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName"}""")
@@ -135,7 +135,7 @@ class ShareContributorSliceTest {
     @Test
     fun shareUploadOverItsItemBoundIs400() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val shareId = createShare(userId, memory, role = "CONTRIBUTOR")
         val contributorToken = given().contentType(ContentType.JSON)
             .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName"}""")

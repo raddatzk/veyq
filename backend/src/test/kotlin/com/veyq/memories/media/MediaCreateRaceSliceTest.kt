@@ -2,7 +2,6 @@ package com.veyq.memories.media
 
 import com.veyq.core.testing.TestBlob
 import com.veyq.core.blob.UploadSessionEntity
-import com.veyq.core.node.NodeEntity
 import com.veyq.core.TestIds
 import com.veyq.core.testing.RACE_ROUNDS
 import com.veyq.core.testing.TestFixtures.CONTENT_KEY
@@ -13,6 +12,7 @@ import com.veyq.core.testing.answer
 import com.veyq.core.testing.assertWinnerAndLoser
 import com.veyq.core.testing.race
 import com.veyq.core.testing.whileUncommitted
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -38,7 +38,7 @@ class MediaCreateRaceSliceTest {
     @Test
     fun concurrentCompletesOfOneUploadAttachItOnce() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         repeat(RACE_ROUNDS) { round ->
             val upload = startOne(userId, scopeId)
             val body = completeBody(memory, upload)
@@ -57,7 +57,7 @@ class MediaCreateRaceSliceTest {
     @Test
     fun aBatchWhoseSecondItemLosesTheRaceStillAnswersItsFirstItem() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         repeat(RACE_ROUNDS) { round ->
             val (a, c, shared) = List(3) { startOne(userId, scopeId) }
             val answers = race(
@@ -83,7 +83,7 @@ class MediaCreateRaceSliceTest {
     @Test
     fun concurrentCoverCommitsOfOneUploadAttachItOnce() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         repeat(RACE_ROUNDS) { round ->
             val uploadId = startCover(userId, scopeId, memory)
             val answers = race({ commitCover(userId, scopeId, memory, uploadId) }, { commitCover(userId, scopeId, memory, uploadId) })
@@ -98,7 +98,7 @@ class MediaCreateRaceSliceTest {
     @Test
     fun concurrentSubBucketCreatesOfOneIdCreateItOnce() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         // The caller's primary bucket exists before the race, so only the sub-bucket insert is raced.
         assertEquals(200 to null, createBucket(userId, scopeId, memory, TestIds.uuid()))
         repeat(RACE_ROUNDS) { round ->
@@ -151,7 +151,7 @@ class MediaCreateRaceSliceTest {
     fun concurrentFirstUploadsOfOneUploaderShareOnePrimary() {
         repeat(RACE_ROUNDS) { round ->
             val (userId, scopeId) = seedMemberScope()
-            val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+            val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
             val (first, second) = startOne(userId, scopeId) to startOne(userId, scopeId)
             val answer = whileUncommitted(
                 change = {

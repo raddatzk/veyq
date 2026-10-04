@@ -12,6 +12,7 @@ import com.veyq.core.testing.TestFixtures.bearer
 import com.veyq.core.testing.TestFixtures.seedMemberScope
 import com.veyq.core.testing.TestFixtures.seedNode
 import com.veyq.core.testing.TestFixtures.seedUser
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -47,8 +48,8 @@ class ShareSliceTest {
     @Test
     fun createThenAnonymousResolveReturnsSealedSubtree() {
         val (userId, scopeId) = seedMemberScope(ScopeEntity.PERSONAL)
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
-        val chapter = seedNode(scopeId, NodeEntity.CHAPTER, parentId = memory, wrappedContentKey = "Y2hhcC1rbWVt")
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val chapter = seedNode(scopeId, MemoriesNodeKinds.CHAPTER, parentId = memory, wrappedContentKey = "Y2hhcC1rbWVt")
         val (mediaId, blobId) = seedMedia(scopeId, memory)
 
         val shareId = createShare(userId, memory)
@@ -70,11 +71,11 @@ class ShareSliceTest {
     @Test
     fun gatedBlobAllowsInSubtreeAnd404sOutOfSubtree() {
         val (userId, scopeId) = seedMemberScope(ScopeEntity.PERSONAL)
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val (_, inBlob) = seedMedia(scopeId, memory)
 
         // a sibling Memory (NOT shared) with its own media — its blob must be unreachable through the share
-        val other = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val other = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val (_, outBlob) = seedMedia(scopeId, other)
 
         val shareId = createShare(userId, memory)
@@ -95,8 +96,8 @@ class ShareSliceTest {
     @Test
     fun resolveLeaksNothingOutsideTheSubtree() {
         val (userId, scopeId) = seedMemberScope(ScopeEntity.PERSONAL)
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
-        val sibling = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val sibling = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         seedMedia(scopeId, sibling)
 
         val shareId = createShare(userId, memory)
@@ -111,7 +112,7 @@ class ShareSliceTest {
     @Test
     fun revokeMakesGuestPaths404() {
         val (userId, scopeId) = seedMemberScope(ScopeEntity.PERSONAL)
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val (_, blobId) = seedMedia(scopeId, memory)
         val shareId = createShare(userId, memory)
 
@@ -132,7 +133,7 @@ class ShareSliceTest {
     @Test
     fun expiredShareResolves404() {
         val (userId, scopeId) = seedMemberScope(ScopeEntity.PERSONAL)
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val past = Instant.now().minusSeconds(3600).toString()
 
         val shareId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
@@ -146,7 +147,7 @@ class ShareSliceTest {
     @Test
     fun listReturnsCallersSharesForTheMemory() {
         val (userId, scopeId) = seedMemberScope(ScopeEntity.PERSONAL)
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val shareId = createShare(userId, memory)
 
         given().header("Authorization", bearer(userId))
@@ -170,7 +171,7 @@ class ShareSliceTest {
     @Test
     fun nonMemberCreateIs404() {
         val (_, scopeId) = seedMemberScope(ScopeEntity.PERSONAL)
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val outsider = seedUser()
 
         given().header("Authorization", bearer(outsider)).contentType(ContentType.JSON)
@@ -209,7 +210,7 @@ class ShareSliceTest {
     fun shareTermsServesOwningTenantTermsAndRecordsNoAcceptance() {
         val (userId, scopeId) = seedMemberScope(ScopeEntity.PERSONAL)
         val tenantId = seedTerms(scopeId, de = "## Nutzungsbedingungen", en = "## Terms of use")
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val shareId = createShare(userId, memory)
 
         // (a) an accountless GET (no bearer) gets the owning tenant's terms — the opaque tenantId is only RETURNED
@@ -232,7 +233,7 @@ class ShareSliceTest {
     fun shareTermsVersionZeroWhenTenantPublishedNoTerms() {
         // A tenant with no published terms → version 0 / null terms; the client then never gates.
         val (userId, scopeId) = seedMemberScope(ScopeEntity.PERSONAL)
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val shareId = createShare(userId, memory)
 
         given().`when`().get("/api/shares/$shareId/terms")
@@ -251,7 +252,7 @@ class ShareSliceTest {
         // disabled (revoked)
         val (userId, scopeId) = seedMemberScope(ScopeEntity.PERSONAL)
         seedTerms(scopeId, de = "## Regeln", en = "## Rules")
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val shareId = createShare(userId, memory)
         given().`when`().get("/api/shares/$shareId/terms").then().statusCode(200) // live first
         given().header("Authorization", bearer(userId)).`when`().post("/api/shares/$shareId/revoke").then().statusCode(204)

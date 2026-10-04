@@ -6,6 +6,7 @@ import com.veyq.core.testing.TestFixtures.CONTENT_KEY
 import com.veyq.core.testing.TestFixtures.bearer
 import com.veyq.core.testing.TestFixtures.seedMemberScope
 import com.veyq.core.testing.TestFixtures.seedNode
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -32,7 +33,7 @@ class ShareKeyRecoveryEpochSliceTest {
     @Test
     fun aCreateAtAnEpochOtherThanTheScopesCurrentIs409StaleEpochAndWritesNothing() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         setScopeEpoch(scopeId, 2)
 
         for (epoch in listOf(1, 3)) {
@@ -46,7 +47,7 @@ class ShareKeyRecoveryEpochSliceTest {
     @Test
     fun aKeyWithoutItsEpochAndAnEpochWithoutItsKeyAreEach400() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
 
         for (fields in listOf(""""sealedShareKey":"$shareKey"""", """"sealedShareKeyEpoch":0""")) {
             val shareId = TestIds.shareId()
@@ -58,7 +59,7 @@ class ShareKeyRecoveryEpochSliceTest {
     @Test
     fun aCreateAtTheCurrentEpochSucceedsAndTheManageListServesThatEpoch() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         setScopeEpoch(scopeId, 2)
         val shareId = TestIds.shareId()
 
@@ -71,7 +72,7 @@ class ShareKeyRecoveryEpochSliceTest {
     @Test
     fun aShareWithoutARecoveryCopyCarriesNoEpoch() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val shareId = TestIds.shareId()
 
         create(userId, memory, shareId, null).statusCode(201)

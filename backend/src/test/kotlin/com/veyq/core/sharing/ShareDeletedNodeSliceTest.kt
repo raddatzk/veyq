@@ -17,6 +17,7 @@ import com.veyq.core.testing.TestFixtures.identityKeyJson
 import com.veyq.core.testing.TestFixtures.seedMemberScope
 import com.veyq.core.testing.TestFixtures.seedNode
 import com.veyq.core.testing.TestFixtures.shareKeysJson
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -71,8 +72,8 @@ class ShareDeletedNodeSliceTest {
     @Test
     fun deletedSubtreeLeavesTheAnonymousResolve() {
         val (userId, scopeId) = seedMemberScope()
-        val deleted = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
-        val survivor = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val deleted = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val survivor = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val (deletedMedia, _) = seedMedia(scopeId, deleted)
         val (survivingMedia, _) = seedMedia(scopeId, survivor)
 
@@ -99,8 +100,8 @@ class ShareDeletedNodeSliceTest {
     @Test
     fun deletedSubtreesBlobsAreNoLongerAuthorizedThroughTheShare() {
         val (userId, scopeId) = seedMemberScope()
-        val deleted = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
-        val survivor = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val deleted = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val survivor = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val (_, deletedBlob) = seedMedia(scopeId, deleted)
         val (_, survivingBlob) = seedMedia(scopeId, survivor)
 
@@ -125,8 +126,8 @@ class ShareDeletedNodeSliceTest {
     @Test
     fun deletedChapterLeavesItsParentsShareWithoutTakingTheParentWithIt() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
-        val chapter = seedNode(scopeId, NodeEntity.CHAPTER, parentId = memory, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val chapter = seedNode(scopeId, MemoriesNodeKinds.CHAPTER, parentId = memory, wrappedContentKey = CONTENT_KEY)
         val (memoryMedia, memoryBlob) = seedMedia(scopeId, memory)
         val (chapterMedia, chapterBlob) = seedMedia(scopeId, chapter)
 
@@ -152,7 +153,7 @@ class ShareDeletedNodeSliceTest {
     @Test
     fun restoredSubtreeComesBackOnBothSharePaths() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val (mediaId, blobId) = seedMedia(scopeId, memory)
 
         val shareId = createShare(userId, memory)
@@ -181,8 +182,8 @@ class ShareDeletedNodeSliceTest {
     @Test
     fun erasingAMemoryEndsItsLink() {
         val (userId, scopeId) = seedMemberScope()
-        val erased = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
-        val sibling = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val erased = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val sibling = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val withCopy = ""","sealedNote":"$sealedNote","sealedShareKey":"$shareKey","sealedShareKeyEpoch":0"""
         val erasedShare = createShare(userId, erased, extra = withCopy)
         val siblingShare = createShare(userId, sibling, extra = withCopy)
@@ -213,7 +214,7 @@ class ShareDeletedNodeSliceTest {
     @Test
     fun aDeadGuestIdentityGoesAndALiveOneStays() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val uploader = createShare(userId, memory, role = "UPLOADER")
         val (g1, _) = createIdentity(uploader) // names themself, never uploads
         val (g2, g2Token) = createIdentity(uploader)
@@ -230,8 +231,8 @@ class ShareDeletedNodeSliceTest {
         // the control for the share condition: a LIVE link whose guest's uploads are all erased keeps the guest —
         // V is live and G4's token is still a session. A guest upload always lands on the share's root, so the
         // chapter's media and bucket are seeded.
-        val other = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
-        val chapter = seedNode(scopeId, NodeEntity.CHAPTER, parentId = other, wrappedContentKey = CONTENT_KEY)
+        val other = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val chapter = seedNode(scopeId, MemoriesNodeKinds.CHAPTER, parentId = other, wrappedContentKey = CONTENT_KEY)
         val live = createShare(userId, other, role = "UPLOADER")
         val (g4, _) = createIdentity(live)
         val (m4, _) = seedMedia(scopeId, chapter, identityId = g4)

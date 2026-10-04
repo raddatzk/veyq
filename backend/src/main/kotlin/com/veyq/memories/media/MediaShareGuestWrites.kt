@@ -9,8 +9,8 @@ import com.veyq.core.blob.UploadItemResult
 import com.veyq.core.blob.UploadOpener
 import com.veyq.core.blob.WindowItemResult
 import com.veyq.core.blob.WindowRequest
-import com.veyq.core.node.NodeEntity
 import com.veyq.core.sharing.ShareGuestWrites
+import com.veyq.memories.node.MemoriesNodeKinds
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional
@@ -29,7 +29,7 @@ class MediaShareGuestWrites(
 
     // MEMORY only, not [MediaUploadCompletion]'s wider "may hold media" set (MEMORY or CHAPTER): a share's root is a Memory,
     // and what a CHAPTER may hold is not what may be shared.
-    override fun supports(nodeKind: String): Boolean = nodeKind == NodeEntity.MEMORY
+    override fun supports(nodeKind: String): Boolean = nodeKind == MemoriesNodeKinds.MEMORY
 
     override fun start(scopeId: String, shareId: String, identityId: String, declares: List<UploadDeclare>, domain: String?): List<UploadItemResult> =
         uploads.startForLink(scopeId, shareId, identityId, declares, domain)

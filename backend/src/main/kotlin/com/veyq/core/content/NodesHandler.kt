@@ -1,6 +1,7 @@
 package com.veyq.core.content
 
-import com.veyq.core.node.NodeEntity
+import com.veyq.core.node.NodeKindRules
+import com.veyq.core.node.ParentSlot
 import com.veyq.core.http.Failures
 import com.veyq.core.http.HttpFailure
 import com.veyq.core.membership.AccessMode.READ
@@ -8,6 +9,7 @@ import com.veyq.core.membership.AccessMode.WRITE
 import com.veyq.core.membership.ScopeAccess
 import com.veyq.core.membership.refusal
 import com.veyq.core.persistence.createOrConflict
+import io.quarkus.arc.All
 import jakarta.enterprise.context.ApplicationScoped
 
 sealed interface CreateNodeOutcome {
@@ -64,19 +66,22 @@ sealed interface ListTrashOutcome {
 }
 
 /**
- * Use-case logic for the Memory tree (en.memory.tree, cr-0027). Scope access is the one gate, [ScopeAccess],
- * asked first by every operation (uc.spaces.scope-access): a non-member sees a 404, not a reveal. Structural rules: FOLDER/MEMORY live
- * at the root or under a FOLDER; CHAPTER lives inside a MEMORY; no cycle on move; slug unique per parent.
+ * Use-case logic for the node tree (en.memory.tree, cr-0027). Scope access is the one gate, [ScopeAccess],
+ * asked first by every operation (uc.spaces.scope-access): a non-member sees a 404, not a reveal. Structural rules:
+ * a parent that is missing, trashed or in another scope refuses every kind; where a kind may live is the one
+ * [NodeKindRules] that handles it (core's `FOLDER`, an application's own kinds — ADR 0079), none or several →
+ * `illegal_structure`; no cycle on move; slug unique per parent.
  */
 @ApplicationScoped
-class NodesHandler(private val store: NodesStore, private val access: ScopeAccess) {
+class NodesHandler(
+    private val store: NodesStore,
+    private val access: ScopeAccess,
+    // `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor).
+    @All private val kindRules: MutableList<NodeKindRules>,
+) {
 
-    private fun parentAllows(kind: String, parent: ParentSlot): Boolean = when (kind) {
-        NodeEntity.FOLDER, NodeEntity.MEMORY ->
-            parent is ParentSlot.Root || (parent is ParentSlot.Node && parent.kind == NodeEntity.FOLDER)
-        NodeEntity.CHAPTER -> parent is ParentSlot.Node && parent.kind == NodeEntity.MEMORY
-        else -> false
-    }
+    private fun parentAllows(kind: String, parent: ParentSlot): Boolean =
+        NodeKindRules.parentAllows(kindRules, kind, parent)
 
     fun create(
         userId: String, scopeId: String, nodeId: String, parentSlotId: String?, kind: String,

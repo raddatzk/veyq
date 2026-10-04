@@ -7,6 +7,7 @@ import com.veyq.core.testing.TestBlob
 import com.veyq.core.testing.TestFixtures.CONTENT_KEY
 import com.veyq.core.testing.TestFixtures.seedMemberScope
 import com.veyq.core.testing.TestFixtures.seedNode
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.arc.All
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
@@ -47,22 +48,22 @@ class UploadAdmissionPartitionSliceTest {
 
     @Test
     fun theRegisteredAdmissionsPartitionTheNodeKinds() {
-        for (kind in listOf(NodeEntity.FOLDER, NodeEntity.MEMORY, NodeEntity.CHAPTER)) {
+        for (kind in listOf(NodeEntity.FOLDER, MemoriesNodeKinds.MEMORY, MemoriesNodeKinds.CHAPTER)) {
             val claiming = admissions.filter { it.supports(kind) }.map { it.javaClass.simpleName }
             assertTrue(claiming.size <= 1, "node kind $kind is measured by more than one UploadAdmission: $claiming")
         }
-        assertEquals(1, admissions.count { it.supports(NodeEntity.MEMORY) }, "a Memory link is measured")
+        assertEquals(1, admissions.count { it.supports(MemoriesNodeKinds.MEMORY) }, "a Memory link is measured")
     }
 
     @Test
     fun aLinkIsAdmittedOnlyThroughExactlyOneAdmission() {
         val (tenantId, shareId) = link()
         assertTrue(fits(admissions, tenantId, shareId), "control: the one registered admission admits a link under its limit")
-        assertFalse(fits((admissions + Forged(NodeEntity.MEMORY)).toMutableList(), tenantId, shareId), "two measures: refused")
+        assertFalse(fits((admissions + Forged(MemoriesNodeKinds.MEMORY)).toMutableList(), tenantId, shareId), "two measures: refused")
         assertFalse(fits(mutableListOf(), tenantId, shareId), "no measure: refused, never admitted")
 
         assertEquals(0L, linkUsage(admissions, shareId), "control: the registered set measures the empty link")
-        assertNull(linkUsage((admissions + Forged(NodeEntity.MEMORY)).toMutableList(), shareId))
+        assertNull(linkUsage((admissions + Forged(MemoriesNodeKinds.MEMORY)).toMutableList(), shareId))
         assertNull(linkUsage(mutableListOf(), shareId))
     }
 
@@ -79,7 +80,7 @@ class UploadAdmissionPartitionSliceTest {
     /** A CONTRIBUTOR link on a fresh Memory, its tenant's default per-link limit far above one small blob. */
     private fun link(): Pair<String, String> {
         val (ownerId, scopeId, tenantId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val shareId = UUID.randomUUID().toString().replace("-", "").padEnd(43, 'x')
         QuarkusTransaction.requiringNew().run {
             ShareEntity().apply {

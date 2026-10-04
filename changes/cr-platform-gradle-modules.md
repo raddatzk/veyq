@@ -792,7 +792,7 @@ MariaDB red (ADR 0078), so the step carries a **[LIVE]** race run.
   re-point at the Memories constants with it. Core's blob code names no kind (`UploadCompletions` dispatches on
   `node.kind` as a string). `core.blob` now imports `core.content.NodesStore` (one method).
 
-### 4 — `NodeKindRules`: the `MEMORY`/`CHAPTER` rules leave core
+### 4 — `NodeKindRules`: the `MEMORY`/`CHAPTER` rules leave core — **done 2026-10-04**
 
 *Why here.* The second seam of the family, independent of step 3 in files, tests and bites; after it hand-written core
 code names `FOLDER` only, so the module cut never has to give `:core` a `MEMORY` constant. Behaviour-preserving.
@@ -831,6 +831,49 @@ code names `FOLDER` only, so the module cut never has to give `:core` a `MEMORY`
   fail-closed default). (5) a forged core file naming `NodeEntity.MEMORY` → the guard red; the same line in a Memories
   file → green.
 - **Done when:** the above.
+- **Outcome (what later steps inherit).** One commit (code, tests, guard, docs together, green), as planned.
+  Deviations, each named: (1) `ParentSlot` moved from `core.content` (`NodesStore.kt`) to `core.node` beside the
+  interface, so `NodeKindRules` and Memories' implementation need nothing of `core.content`; the "one rule decides,
+  none or several → false" lives once, as `NodeKindRules.parentAllows(rules, kind, parent)` in the interface's
+  companion, which `NodesHandler` calls. (2) The constants live in `com.veyq.memories.node.MemoriesNodeKinds` (with
+  `MemoryNodeKindRules` in the same file); `MediaShareGuestWrites.supports`, `MediaUploadAdmission.supports` and
+  `MediaUploadCompletion.attachesMedia` re-point at it. (3) `seedNode` got **no** default kind rather than a `FOLDER`
+  default: a `FOLDER` default would have silently re-based the 43 calls that relied on the `MEMORY` default (R21's
+  weakening); with none they failed to compile and each now says `MemoriesNodeKinds.MEMORY`. No `seedMemory` helper
+  was added — every call spells its kind, which is the edit 8a sorts by. Test ripple: 45 test files, each change a
+  constant swap, the explicit `MEMORY` at a former default call, or the import (a scratch script re-derived every
+  file from `5145d695` under exactly those three rewrites; the one residual is `seedNode`'s signature and KDoc).
+  `TestFixtures` (core's) names no Memories kind. (4) The guard rule reads string literals as well as code (`kind ==
+  "MEMORY"` says what the constant said; comments stay out — `kotlin_lexer.mask(…, literals=False)`), and fails when
+  no Memories main file names a listed kind in code (the list cannot rot). New `validate_guard_gaps` case 49 (a
+  `core/node` file comparing with the generated `NodeKind.MEMORY`, beside a KDoc naming it) pins it. (5) Core's pins
+  are one class, `com.veyq.core.node.NodeKindRulesPartitionSliceTest` (6 tests: the registered partition, core alone
+  places only `FOLDER`, an empty set places nothing — not even a `FOLDER` (R18) —, two rules claiming `MEMORY`
+  refuse it and neither is asked, a forged kind is refused, and over HTTP a `FOLDER` lands in a `FOLDER` and is 422
+  under a missing parent). The matrix is `com.veyq.memories.node.NodeKindMatrixSliceTest` (create and move, 4 kinds
+  × 5 parent slots); its oracle is the pre-step `parentAllows` copied verbatim with the constants spelled as values,
+  and the file ran green **on `5145d695` itself** (the pristine tree plus that one file) before the move. **Proofs
+  run:** `./gradlew --offline check` on the pristine `5145d695` tree plus the matrix file: 1147 testcases, 0 failed,
+  2 skipped (= step 3's 1145 + the two matrix cases); on this step's tree: 1153, the same set plus the 6 core pins,
+  none lost, none renamed (one assertion of the new class compared a class name against an ArC client proxy and was
+  fixed to an `is` check, then re-run green); `race_classes()` 32, identical; the validators and
+  `validate_guard_gaps` green; **[LIVE]** `run_backend_races_on_mariadb.py` in a throwaway container: 32 classes, 383 tests, 0 failed; `git diff 5145d695 -- contracts
+  web admin-web infra charts` empty. No lock, transaction boundary or ordering moved — `create`/`update` changed only
+  in whom `parentAllows` asks, still before the lock — so no ordering bite applies. **Bites** (each restored after):
+  (1) the new guard + lexer on the untouched tree → red on exactly the four core lines (`NodeEntity.kt:99–100`,
+  `NodesHandler.kt:75,77`); (2) `@ApplicationScoped` off `MemoryNodeKindRules` → `NodeKindMatrixSliceTest` (both),
+  7 `NodesSliceTest` methods and 2 partition tests red; (3) `singleOrNull` → `firstOrNull` → the two-rules test red;
+  (3b) the no-rule default `false` → `parent !is Missing` → 4 partition tests red, the empty-set one among them;
+  (4) `FolderNodeRules.handles` = `true` → the forged-kind test, both matrix tests and 3 more partition tests red;
+  (5) a forged `core/node` file comparing with `NodeEntity.MEMORY` → guard red, the same line in `memories/node` →
+  green, a core literal `"CHAPTER"` → red, a core comment naming both → green, Memories ceasing to name `CHAPTER` →
+  red (the rot rule); case 49's forgery passes the pre-step guard (so the case would be red there).
+  **What step 5 must know:** hand-written core main code names `FOLDER` only and the kernel guard holds it; core's
+  resources still decode the generated `NodeKind` enum, which keeps both Memories values until `kind` opens. Core
+  **tests** still name `MEMORY`/`CHAPTER` (through `MemoriesNodeKinds` or as wire literals, e.g. the partition pins and
+  every share test's `seedNode(…, MemoriesNodeKinds.MEMORY, …)`): that is step 8a's sorting input, not a defect — those
+  tests need Memories at runtime (question 8). `MemoriesNodeKinds` is a Memories main class, so a core-alone test
+  module (8a) cannot import it.
 
 ### 5 — Split the contracts and the generated API by owner (one Gradle module still)
 

@@ -8,6 +8,7 @@ import com.veyq.core.testing.TestFixtures.identityKeyJson
 import com.veyq.core.testing.TestFixtures.shareKeysJson
 import com.veyq.core.testing.TestFixtures.seedMemberScope
 import com.veyq.core.testing.TestFixtures.seedNode
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
@@ -52,7 +53,7 @@ class SharePasswordWriteGateTest {
 
     private fun assertWriteGate(role: String) {
         val (userId, scopeId) = seedMemberScope()
-        val shareId = createWithPassword(userId, seedNode(scopeId, wrappedContentKey = CONTENT_KEY), role)
+        val shareId = createWithPassword(userId, seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY), role)
 
         // --- createShareIdentity: no token → 404, wrong token → 403, valid token → 201 (+ the real contributorToken)
         val key = identityKeyJson(role)

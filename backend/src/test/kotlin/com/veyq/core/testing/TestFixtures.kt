@@ -147,12 +147,14 @@ object TestFixtures {
     }
 
     /**
-     * Persist a node and return its id. [wrappedContentKey] has no default on purpose: the tests that seed nodes
-     * disagree on which kinds carry one, so each call site says what its data holds ([CONTENT_KEY] or `null`).
+     * Persist a node and return its id. [kind] and [wrappedContentKey] have no default on purpose: core knows no kind
+     * but `FOLDER`, and a default `MEMORY` here would make core's fixtures name an application's kind (ADR 0079) — so
+     * each call site says which kind it seeds; and the tests that seed nodes disagree on which kinds carry a key, so
+     * each says what its data holds ([CONTENT_KEY] or `null`). Seeded, not created: no `NodeKindRules` is asked.
      */
     fun seedNode(
         scopeId: String,
-        kind: String = NodeEntity.MEMORY,
+        kind: String,
         parentId: String = scopeId,
         wrappedContentKey: String?,
     ): String {

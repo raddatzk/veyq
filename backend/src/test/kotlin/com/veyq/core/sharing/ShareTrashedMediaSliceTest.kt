@@ -1,7 +1,6 @@
 package com.veyq.core.sharing
 
 import com.veyq.core.blob.BlobEntity
-import com.veyq.core.node.NodeEntity
 import com.veyq.memories.media.MediaEntity
 import com.veyq.core.testing.TestBlob
 import com.veyq.core.scope.ScopeEntity
@@ -9,6 +8,7 @@ import com.veyq.core.testing.TestFixtures.CONTENT_KEY
 import com.veyq.core.testing.TestFixtures.bearer
 import com.veyq.core.testing.TestFixtures.seedMemberScope
 import com.veyq.core.testing.TestFixtures.seedNode
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -41,7 +41,7 @@ class ShareTrashedMediaSliceTest {
     @Test
     fun trashedMediaLeavesTheAnonymousResolve() {
         val (userId, scopeId) = seedMemberScope(ScopeEntity.PERSONAL)
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val (liveMedia, _) = seedMedia(scopeId, memory)
         val (trashedMedia, _) = seedMedia(scopeId, memory)
 
@@ -61,7 +61,7 @@ class ShareTrashedMediaSliceTest {
     @Test
     fun trashedMediaBlobIsNoLongerAuthorizedThroughTheShare() {
         val (userId, scopeId) = seedMemberScope(ScopeEntity.PERSONAL)
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val (_, liveBlob) = seedMedia(scopeId, memory)
         val (trashedMedia, trashedBlob) = seedMedia(scopeId, memory)
 
@@ -83,7 +83,7 @@ class ShareTrashedMediaSliceTest {
     @Test
     fun restoredMediaComesBackIntoTheShare() {
         val (userId, scopeId) = seedMemberScope(ScopeEntity.PERSONAL)
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val (mediaId, blobId) = seedMedia(scopeId, memory)
 
         val shareId = createShare(userId, memory)

@@ -14,6 +14,7 @@ import com.veyq.core.TestIds
 import com.veyq.core.testing.TestFixtures.CONTENT_KEY
 import com.veyq.core.testing.TestFixtures.seedMemberScope
 import com.veyq.core.testing.TestFixtures.seedNode
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.arc.All
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
@@ -62,7 +63,7 @@ class NodeSubtreeEraserOrderSliceTest {
     @Test
     fun aDeadLinksGuestIsDroppedWithTheLastMediaAndBucketOfTheSubtree() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val shareId = TestIds.shareId()
         val guestId = TestIds.uuid()
         val mediaId = UUID.randomUUID().toString()

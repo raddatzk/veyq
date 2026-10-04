@@ -2,6 +2,7 @@ package com.veyq.core.sharing
 
 import com.veyq.core.node.NodeEntity
 import com.veyq.core.sharing.ShareGuestWrites
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.arc.All
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject
@@ -24,10 +25,10 @@ class ShareGuestWritesPartitionSliceTest {
     @Test
     fun atMostOneImplementationSupportsEachNodeKind() {
         assertTrue(guestWrites.isNotEmpty(), "the media application registers guest writes")
-        for (kind in listOf(NodeEntity.FOLDER, NodeEntity.MEMORY, NodeEntity.CHAPTER)) {
+        for (kind in listOf(NodeEntity.FOLDER, MemoriesNodeKinds.MEMORY, MemoriesNodeKinds.CHAPTER)) {
             val claiming = guestWrites.filter { it.supports(kind) }.map { it.javaClass.simpleName }
             assertTrue(claiming.size <= 1, "node kind $kind is claimed by more than one ShareGuestWrites: $claiming")
         }
-        assertEquals(1, guestWrites.count { it.supports(NodeEntity.MEMORY) }, "a Memory has exactly one guest writer")
+        assertEquals(1, guestWrites.count { it.supports(MemoriesNodeKinds.MEMORY) }, "a Memory has exactly one guest writer")
     }
 }

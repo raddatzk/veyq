@@ -17,6 +17,7 @@ import com.veyq.core.blobstore.ageReclaimRowsPastThePresignBound
 import com.veyq.core.config.VeyqConfig
 import com.veyq.core.testing.TestFixtures.bearer
 import com.veyq.core.testing.TestFixtures.seedMemberScope
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -225,7 +226,7 @@ class NodeTrashSliceTest {
         // the freed token is the trashed node's own id; creating a sibling that claims it must be REJECTED,
         // cleanly, by validation — not accepted and then thrown out by the unique index.
         val outcome = handler.create(
-            userId, scopeId, UUID.randomUUID().toString(), null, NodeEntity.MEMORY, "bTI=", trashed, 0, 0, "aw==", null,
+            userId, scopeId, UUID.randomUUID().toString(), null, MemoriesNodeKinds.MEMORY, "bTI=", trashed, 0, 0, "aw==", null,
         )
         assertTrue(outcome is CreateNodeOutcome.SlugTaken) {
             "a slug already held by a TRASHED sibling must be a clean rejection; got $outcome"

@@ -6,6 +6,7 @@ import com.veyq.core.testing.TestFixtures.CONTENT_KEY
 import com.veyq.core.testing.TestFixtures.bearer
 import com.veyq.core.testing.TestFixtures.seedMemberScope
 import com.veyq.core.testing.TestFixtures.seedNode
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.QuarkusTestProfile
 import io.quarkus.test.junit.TestProfile
@@ -46,7 +47,7 @@ class ShareIdentityBoundTest {
     @Test
     fun theCreateAfterTheAllowanceIs429() {
         val (userId, scopeId) = seedMemberScope()
-        val shareId = createShare(userId, seedNode(scopeId, wrappedContentKey = CONTENT_KEY))
+        val shareId = createShare(userId, seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY))
 
         repeat(3) { createIdentity(shareId).then().statusCode(201) }
         createIdentity(shareId).then().statusCode(429).body("code", equalTo("rate_limited"))
@@ -55,8 +56,8 @@ class ShareIdentityBoundTest {
     @Test
     fun oneExhaustedShareDoesNotSpendAnothersBudget() {
         val (userId, scopeId) = seedMemberScope()
-        val exhausted = createShare(userId, seedNode(scopeId, wrappedContentKey = CONTENT_KEY))
-        val other = createShare(userId, seedNode(scopeId, wrappedContentKey = CONTENT_KEY))
+        val exhausted = createShare(userId, seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY))
+        val other = createShare(userId, seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY))
 
         repeat(3) { createIdentity(exhausted).then().statusCode(201) }
         createIdentity(exhausted).then().statusCode(429)
@@ -67,7 +68,7 @@ class ShareIdentityBoundTest {
     @Test
     fun theIdentityBudgetIsSeparateFromTheUploadBudget() {
         val (userId, scopeId) = seedMemberScope()
-        val shareId = createShare(userId, seedNode(scopeId, wrappedContentKey = CONTENT_KEY))
+        val shareId = createShare(userId, seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY))
 
         val contributorToken = createIdentity(shareId).then().statusCode(201)
             .extract().path<String>("contributorToken")

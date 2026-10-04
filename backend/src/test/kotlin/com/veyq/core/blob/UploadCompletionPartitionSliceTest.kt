@@ -5,6 +5,7 @@ import com.veyq.core.node.NodeEntity
 import com.veyq.core.testing.TestFixtures.CONTENT_KEY
 import com.veyq.core.testing.TestFixtures.seedMemberScope
 import com.veyq.core.testing.TestFixtures.seedNode
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.arc.All
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
@@ -44,20 +45,20 @@ class UploadCompletionPartitionSliceTest {
     @Test
     fun theRegisteredCompletionsPartitionTheNodeKinds() {
         assertTrue(completions.isNotEmpty(), "the media application registers a completion")
-        for (kind in listOf(NodeEntity.FOLDER, NodeEntity.MEMORY, NodeEntity.CHAPTER)) {
+        for (kind in listOf(NodeEntity.FOLDER, MemoriesNodeKinds.MEMORY, MemoriesNodeKinds.CHAPTER)) {
             val claiming = completions.filter { it.accepts(kind) }.map { it.javaClass.simpleName }
             assertTrue(claiming.size <= 1, "node kind $kind is accepted by more than one UploadCompletion: $claiming")
         }
-        assertEquals(1, completions.count { it.accepts(NodeEntity.MEMORY) }, "a Memory takes uploads")
-        assertEquals(1, completions.count { it.accepts(NodeEntity.CHAPTER) }, "a Chapter takes uploads")
+        assertEquals(1, completions.count { it.accepts(MemoriesNodeKinds.MEMORY) }, "a Memory takes uploads")
+        assertEquals(1, completions.count { it.accepts(MemoriesNodeKinds.CHAPTER) }, "a Chapter takes uploads")
         assertEquals(0, completions.count { it.accepts(NodeEntity.FOLDER) }, "a folder takes none")
     }
 
     @Test
     fun twoAcceptorsOfOneKindRefuseTheItemAndNeitherIsOffered() {
         val (scopeId, memory) = memory()
-        val a = Forged(NodeEntity.MEMORY)
-        val b = Forged(NodeEntity.MEMORY)
+        val a = Forged(MemoriesNodeKinds.MEMORY)
+        val b = Forged(MemoriesNodeKinds.MEMORY)
         assertEquals("illegal_target", completeOne(mutableListOf(a, b), scopeId, memory))
         assertTrue(a.offered.isEmpty() && b.offered.isEmpty(), "an ambiguous kind is offered to nobody")
 
@@ -80,7 +81,7 @@ class UploadCompletionPartitionSliceTest {
     @Test
     fun aTrashedTargetIsNodeNotFoundAndNeverOffered() {
         val (scopeId, memory) = memory()
-        val forged = Forged(NodeEntity.MEMORY)
+        val forged = Forged(MemoriesNodeKinds.MEMORY)
         assertEquals("forged", completeOne(mutableListOf(forged), scopeId, memory)) // control: the live node is offered
 
         QuarkusTransaction.requiringNew().run { NodeEntity.findById(memory)!!.deletedAt = Instant.now() }
@@ -90,7 +91,7 @@ class UploadCompletionPartitionSliceTest {
 
     private fun memory(): Pair<String, String> {
         val scopeId = seedMemberScope().scopeId
-        return scopeId to seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        return scopeId to seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
     }
 
     /** Dispatch one item for an unknown upload to [nodeId] through a dispatcher over [acceptors]; its error code. */

@@ -2,7 +2,6 @@ package com.veyq.memories.media
 
 import com.veyq.core.testing.TestBlob
 import com.veyq.core.blob.BlobEntity
-import com.veyq.core.node.NodeEntity
 import com.veyq.core.blobstore.BlobStore
 import com.veyq.core.blobstore.BlobStore.Companion.chunkKey
 import com.veyq.core.blobstore.RecordingBlobStore
@@ -15,6 +14,7 @@ import com.veyq.core.testing.TestFixtures.bearer
 import com.veyq.core.testing.TestFixtures.seedMemberScope
 import com.veyq.core.testing.TestFixtures.seedNode
 import com.veyq.core.testing.TestFixtures.seedUser
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -59,7 +59,7 @@ class MediaTrashSliceTest {
     @Test
     fun trashHidesFromListBumpsBothCountersAndDropsFromIdSet() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val a = completeOne(userId, scopeId, memory, wrap = "YQ==") // media_revision = 1
         val b = completeOne(userId, scopeId, memory, wrap = "Yg==") // media_revision = 2
 
@@ -90,7 +90,7 @@ class MediaTrashSliceTest {
     @Test
     fun restoreBringsItBackIntoTheGallery() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val a = completeOne(userId, scopeId, memory, wrap = "YQ==")
         val b = completeOne(userId, scopeId, memory, wrap = "Yg==")
 
@@ -109,7 +109,7 @@ class MediaTrashSliceTest {
     @Test
     fun trashedListingCarriesTheAuditAndExcludesFromActive() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val a = completeOne(userId, scopeId, memory, wrap = "YQ==")
         val b = completeOne(userId, scopeId, memory, wrap = "Yg==")
 
@@ -137,7 +137,7 @@ class MediaTrashSliceTest {
     @Test
     fun deleteIsIdempotent() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val a = completeOne(userId, scopeId, memory, wrap = "YQ==")
 
         given().header("Authorization", bearer(userId)).`when`().delete("/api/scopes/$scopeId/media/$a").then().statusCode(204)
@@ -164,7 +164,7 @@ class MediaTrashSliceTest {
     @Test
     fun deleteByNonMemberIs404() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val a = completeOne(userId, scopeId, memory, wrap = "YQ==")
         val outsider = seedUser()
         // a non-member cannot even see the media exists → a non-enumerable 404
@@ -183,7 +183,7 @@ class MediaTrashSliceTest {
     @Test
     fun purgeHardDeletesTrashedPastRetention() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val a = completeOne(userId, scopeId, memory, wrap = "YQ==")
         val b = completeOne(userId, scopeId, memory, wrap = "Yg==")
 
@@ -223,7 +223,7 @@ class MediaTrashSliceTest {
     @Test
     fun retentionPurgeHandsTheTrashedMediasChunkKeysToTheStore() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val b = completeOne(userId, scopeId, memory, wrap = "Yg==")
 
         given().header("Authorization", bearer(userId)).`when`().delete("/api/scopes/$scopeId/media/$b").then().statusCode(204)
@@ -254,7 +254,7 @@ class MediaTrashSliceTest {
     @Test
     fun purgeTrashedMediaHardDeletesNow() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val a = completeOne(userId, scopeId, memory, wrap = "YQ==")
         val b = completeOne(userId, scopeId, memory, wrap = "Yg==")
 
@@ -281,7 +281,7 @@ class MediaTrashSliceTest {
     @Test
     fun purgingALiveMediaIs404() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val a = completeOne(userId, scopeId, memory, wrap = "YQ==")
         // a is LIVE (not trashed) → cannot be purged directly (a live media is deleted only via trash → purge)
         given().header("Authorization", bearer(userId))
@@ -294,7 +294,7 @@ class MediaTrashSliceTest {
     @Test
     fun purgeByNonMemberIs404() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val a = completeOne(userId, scopeId, memory, wrap = "YQ==")
         given().header("Authorization", bearer(userId)).`when`().delete("/api/scopes/$scopeId/media/$a").then().statusCode(204)
         val outsider = seedUser()

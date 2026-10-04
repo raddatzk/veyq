@@ -1,6 +1,5 @@
 package com.veyq.core.spaces.scope
 
-import com.veyq.core.node.NodeEntity
 import com.veyq.core.sharing.ShareEntity
 import com.veyq.memories.itemfavorites.ItemFavoritesEntity
 import com.veyq.core.sharing.ShareWriteProof
@@ -18,6 +17,7 @@ import com.veyq.core.testing.TestFixtures.seedNode
 import com.veyq.core.testing.TestFixtures.seedTenant
 import com.veyq.core.testing.TestFixtures.seedUser
 import com.veyq.core.testing.whileUncommitted
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -56,7 +56,7 @@ class RemovalRaceSliceTest {
             val t = Tenant()
             val member = t.member()
             val group = t.group(member)
-            val memory = seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
+            val memory = seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
             val id = TestIds.shareId()
             val status = whileUncommitted(
                 change = { removeFromGroup(t.owner, group, member, round) },
@@ -75,7 +75,7 @@ class RemovalRaceSliceTest {
             val t = Tenant()
             val member = t.member()
             val group = t.group(member)
-            val memory = seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
+            val memory = seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
             // A disabled link is any member's to re-issue (ADR 0075), so the member being removed may start one.
             val old = TestIds.shareId()
             assertEquals(201, postShare(t.owner, memory, old))

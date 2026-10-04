@@ -8,6 +8,7 @@ import com.veyq.core.testing.TestFixtures.bearer
 import com.veyq.core.testing.TestFixtures.seedMemberScope
 import com.veyq.core.testing.TestFixtures.seedNode
 import com.veyq.core.testing.TestFixtures.seedUser
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -38,7 +39,7 @@ class MediaSliceTest {
     @Test
     fun startCompleteListRoundTrip() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val blob = TestBlob.ofChunks(2)
         val uploadId = startOne(userId, scopeId, blob, wrap = "d3JhcHBlZA==")
 
@@ -75,7 +76,7 @@ class MediaSliceTest {
     @Test
     fun mediaExifWithoutExifIsNull() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val uploadId = startOne(userId, scopeId, TestBlob.SMALL, wrap = "b25seQ==")
 
         // complete with no EXIF sealed (source carried no readable EXIF)
@@ -103,7 +104,7 @@ class MediaSliceTest {
     @Test
     fun updateMetaOverwritesSealedTierAndLists() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val uploadId = startOne(userId, scopeId, TestBlob.SMALL, wrap = "b25seQ==")
 
         // complete with an initial listed-metadata tier (cr-0068)
@@ -140,7 +141,7 @@ class MediaSliceTest {
     @Test
     fun staleMediaMetaWriteIs409AndMovesNoRevision() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val media = completeOne(userId, scopeId, memory, wrap = "YQ==", meta = "djA=") // media_revision = 1
         listedMedia(userId, scopeId, memory).body("media[0].metaVersion", equalTo(0)).body("mediaRevision", equalTo(1))
 
@@ -170,7 +171,7 @@ class MediaSliceTest {
     @Test
     fun mediaMetaWithoutVersionIs400() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val media = completeOne(userId, scopeId, memory, wrap = "YQ==", meta = "djA=")
         putMeta(userId, scopeId, media, """{"wrappedMeta":"YS12MQ=="}""").then().statusCode(400)
         listedMedia(userId, scopeId, memory).body("media[0].wrappedMeta", equalTo("djA="))
@@ -190,7 +191,7 @@ class MediaSliceTest {
     @Test
     fun derivativesRoundTripWithOwnWraps() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         // three independent uploads: original + thumbnail + preview, each its own K_blob wrap
         val original = startOne(userId, scopeId, TestBlob.ofChunks(3), wrap = "b3JpZw==")
         val mediaId = TestBlob.ownerOf(original)
@@ -225,7 +226,7 @@ class MediaSliceTest {
     @Test
     fun mediaWithoutDerivativesListsEmptyTiers() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val original = startOne(userId, scopeId, TestBlob.SMALL, wrap = "b25seQ==")
 
         // a media with no derivable frame attaches the original only
@@ -246,7 +247,7 @@ class MediaSliceTest {
     @Test
     fun derivativeUploadNotFoundFailsWholeItem() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val original = startOne(userId, scopeId, TestBlob.SMALL, wrap = "b3JpZw==")
         val bogus = UUID.randomUUID()
 
@@ -270,7 +271,7 @@ class MediaSliceTest {
     @Test
     fun partialBatchPerItemResult() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val uploadId = startOne(userId, scopeId, TestBlob.SMALL, wrap = "aw==")
         val bogus = UUID.randomUUID()
 
@@ -371,7 +372,7 @@ class MediaSliceTest {
     @Test
     fun unchangedPollIsNotModified() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         completeOne(userId, scopeId, memory, wrap = "YQ==") // one attach → media_revision = 1
 
         // the initial full list caches the revision (the ETag)
@@ -389,7 +390,7 @@ class MediaSliceTest {
     @Test
     fun attachDeltaCarriesOnlyNewMediaAndNoIdSet() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         completeOne(userId, scopeId, memory, wrap = "YQ==") // media_revision = 1
 
         val cursor = newestCursor(userId, scopeId, memory) // cache the newest (updatedAt, mediaId)
@@ -413,7 +414,7 @@ class MediaSliceTest {
     @Test
     fun metaEditSurfacesViaCursorAndNoIdSet() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val a = completeOne(userId, scopeId, memory, wrap = "YQ==", meta = "bWV0YQ==") // media_revision = 1
 
         val cursor = newestCursor(userId, scopeId, memory)
@@ -440,7 +441,7 @@ class MediaSliceTest {
     @Test
     fun deleteBumpsBothCountersAndIdSetOmitsRemoved() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val a = completeOne(userId, scopeId, memory, wrap = "YQ==") // media_revision = 1
         val b = completeOne(userId, scopeId, memory, wrap = "Yg==") // media_revision = 2
 
@@ -463,7 +464,7 @@ class MediaSliceTest {
     @Test
     fun netZeroDeleteAddStillCarriesIdSet() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val a = completeOne(userId, scopeId, memory, wrap = "YQ==") // media_revision = 1
         val b = completeOne(userId, scopeId, memory, wrap = "Yg==") // media_revision = 2
 

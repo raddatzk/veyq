@@ -11,6 +11,7 @@ import com.veyq.core.testing.TestFixtures.CONTENT_KEY
 import com.veyq.core.testing.TestFixtures.seedMemberScope
 import com.veyq.core.testing.TestFixtures.seedNode
 import com.veyq.core.testing.whileUncommitted
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject
@@ -67,7 +68,7 @@ class NodeTreeRaceSliceTest {
         repeat(RACE_ROUNDS) { round ->
             val (userId, scopeId) = seedMemberScope()
             val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = null)
-            val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+            val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
             val outcome = whileUncommitted(
                 change = { store.deleteSubtree(scopeId, folder) },
                 overlapping = { move(userId, scopeId, memory, folder) },
@@ -160,7 +161,7 @@ class NodeTreeRaceSliceTest {
     }
 
     private fun createMemory(userId: String, scopeId: String, nodeId: String, parent: String): CreateNodeOutcome =
-        handler.create(userId, scopeId, nodeId, parent, NodeEntity.MEMORY, "bmV3", slug(), 0, 0, CONTENT_KEY, null)
+        handler.create(userId, scopeId, nodeId, parent, MemoriesNodeKinds.MEMORY, "bmV3", slug(), 0, 0, CONTENT_KEY, null)
 
     private fun move(userId: String, scopeId: String, nodeId: String, parent: String): UpdateNodeOutcome =
         handler.update(userId, scopeId, nodeId, null, null, parent, null, null, null)
@@ -168,8 +169,8 @@ class NodeTreeRaceSliceTest {
     /** A trashed Memory with a Chapter under it, both stamped past the retention as one delete stamps them.
      *  Returns (memory, chapter). */
     private fun expiredSubtree(scopeId: String): Pair<String, String> {
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
-        val chapter = seedNode(scopeId, NodeEntity.CHAPTER, parentId = memory, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val chapter = seedNode(scopeId, MemoriesNodeKinds.CHAPTER, parentId = memory, wrappedContentKey = CONTENT_KEY)
         val stamp = cutoff().minusSeconds(60)
         tx { listOf(memory, chapter).forEach { NodeEntity.findById(it)!!.apply { deletedAt = stamp; slugToken = id } } }
         return memory to chapter

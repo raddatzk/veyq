@@ -37,9 +37,9 @@ every backend class lives in its owner's package — the platform in `com.veyq.c
 `core.content`/`core.node`, sharing in `core.sharing`), Memories in `com.veyq.memories` (`media`, `favorites`,
 `itemfavorites`) — and core imports no Memories code; core reaches media and favorites through interfaces they
 implement. The generic blob upload and the storage quota are core's (`core.blob`, `core.quota`): Memories attaches its media
-through `UploadCompletion` and measures a link's contributed blobs through `UploadAdmission`. But Memories is not its
-own Gradle module yet, the `MEMORY`/`CHAPTER` placement rules are still in core's `NodesHandler`, the node `kind` is still the closed
-`FOLDER`/`MEMORY`/`CHAPTER` set, and on the web `features/memory` is the application (core imports it nowhere but the composition root and asks a
+through `UploadCompletion`, measures a link's contributed blobs through `UploadAdmission`, and places its `MEMORY`
+and `CHAPTER` in the tree through `NodeKindRules` (core places only `FOLDER`). But Memories is not its own Gradle
+module yet, the node `kind` is still the contract's closed `FOLDER`/`MEMORY`/`CHAPTER` enum, and on the web `features/memory` is the application (core imports it nowhere but the composition root and asks a
 registry for what to render), though its directory name and five single-claim slots are still Memories-shaped. The
 rest of the series is not done; [ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)
 Consequences lists it.

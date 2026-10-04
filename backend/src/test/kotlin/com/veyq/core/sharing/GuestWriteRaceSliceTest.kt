@@ -1,6 +1,5 @@
 package com.veyq.core.sharing
 
-import com.veyq.core.node.NodeEntity
 import com.veyq.core.sharing.ShareIdentityEntity
 import com.veyq.memories.media.MediaEntity
 import com.veyq.core.testing.TestBlob
@@ -13,6 +12,7 @@ import com.veyq.core.testing.TestFixtures.seedMemberScope
 import com.veyq.core.testing.TestFixtures.seedNode
 import com.veyq.core.testing.TestFixtures.shareKeysJson
 import com.veyq.core.testing.whileUncommitted
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -46,7 +46,7 @@ class GuestWriteRaceSliceTest {
     fun anUploadCompletedWhileItsLinkIsDeletedIsRefused() {
         repeat(RACE_ROUNDS) { round ->
             val (userId, scopeId) = seedMemberScope()
-            val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+            val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
             val shareId = uploaderShare(userId, memory)
             val (identityId, token) = identity(shareId)
             val uploadId = startUpload(shareId, token)
@@ -71,7 +71,7 @@ class GuestWriteRaceSliceTest {
     fun anIdentityNamedWhileItsLinkIsDeletedIsRefused() {
         repeat(RACE_ROUNDS) { round ->
             val (userId, scopeId) = seedMemberScope()
-            val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+            val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
             val shareId = uploaderShare(userId, memory)
             val identityId = TestIds.uuid()
             val status = whileUncommitted(

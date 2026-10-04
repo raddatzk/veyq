@@ -1,7 +1,7 @@
 package com.veyq.memories.media
 
-import com.veyq.core.node.NodeEntity
 import com.veyq.core.quota.UploadAdmission
+import com.veyq.memories.node.MemoriesNodeKinds
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.EntityManager
 
@@ -14,7 +14,7 @@ import jakarta.persistence.EntityManager
 class MediaUploadAdmission(private val em: EntityManager) : UploadAdmission {
 
     // MEMORY only, the one kind a share's root is here ([MediaShareGuestWrites.supports]).
-    override fun supports(nodeKind: String): Boolean = nodeKind == NodeEntity.MEMORY
+    override fun supports(nodeKind: String): Boolean = nodeKind == MemoriesNodeKinds.MEMORY
 
     override fun linkBlobUsage(shareId: String): Long = sum(
         """

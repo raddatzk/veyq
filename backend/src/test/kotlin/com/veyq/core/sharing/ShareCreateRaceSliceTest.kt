@@ -1,6 +1,5 @@
 package com.veyq.core.sharing
 
-import com.veyq.core.node.NodeEntity
 import com.veyq.core.sharing.ShareEntity
 import com.veyq.core.TestIds
 import com.veyq.core.testing.RACE_ROUNDS
@@ -13,6 +12,7 @@ import com.veyq.core.testing.TestFixtures.seedNode
 import com.veyq.core.testing.answer
 import com.veyq.core.testing.assertWinnerAndLoser
 import com.veyq.core.testing.race
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -34,7 +34,7 @@ class ShareCreateRaceSliceTest {
     @Test
     fun concurrentShareCreatesOfOneIdCreateItOnce() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         repeat(RACE_ROUNDS) { round ->
             val shareId = TestIds.shareId()
             val answers = race({ createShare(userId, memory, shareId) }, { createShare(userId, memory, shareId) })
@@ -55,14 +55,14 @@ class ShareCreateRaceSliceTest {
     fun concurrentUploaderShareCreatesOfOneIdAnswerAsTheirReplay() {
         val (userId, scopeId) = seedMemberScope()
         repeat(RACE_ROUNDS) { round ->
-            val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+            val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
             val shareId = TestIds.shareId()
             val answers = race({ createUploaderShare(userId, memory, shareId) }, { createUploaderShare(userId, memory, shareId) })
             val replay = createUploaderShare(userId, memory, shareId)
             assertEquals(409 to "id_taken", replay, "round $round: the replay's answer")
             assertWinnerAndLoser(201, replay, answers, "round $round")
         }
-        assertEquals(201 to null, createUploaderShare(userId, seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY), TestIds.shareId()))
+        assertEquals(201 to null, createUploaderShare(userId, seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY), TestIds.shareId()))
     }
 
     /**
@@ -74,7 +74,7 @@ class ShareCreateRaceSliceTest {
     fun concurrentUploaderSharesOfTwoIdsKeepOneDropKey() {
         val (userId, scopeId) = seedMemberScope()
         repeat(RACE_ROUNDS) { round ->
-            val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+            val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
             val (first, second) = TestIds.shareId() to TestIds.shareId()
             val answers = race({ createUploaderShare(userId, memory, first) }, { createUploaderShare(userId, memory, second) })
             val loser = if (answers[0].first == 201) second else first
@@ -88,7 +88,7 @@ class ShareCreateRaceSliceTest {
     @Test
     fun concurrentIdentityCreatesOfOneIdCreateItOnce() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         repeat(RACE_ROUNDS) { round ->
             val shareId = TestIds.shareId()
             assertEquals(201 to null, createShare(userId, memory, shareId, role = "CONTRIBUTOR"))

@@ -12,6 +12,7 @@ import com.veyq.core.testing.TestFixtures.bearer
 import com.veyq.core.testing.TestFixtures.seedMemberScope
 import com.veyq.core.testing.TestFixtures.seedNode
 import com.veyq.core.testing.TestFixtures.seedUser
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.TestProfile
@@ -58,7 +59,7 @@ class UploadWindowSliceTest {
     fun aSecondMemberCannotCompleteAnotherMembersSession() {
         val scope = seedScope()
         val other = seedMember(scope)
-        val memory = seedNode(scope.scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scope.scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val uploadId = startStaged(scope.owner, scope.scopeId, TestBlob.SMALL)
 
         complete(other, scope.scopeId, memory, uploadId)
@@ -74,7 +75,7 @@ class UploadWindowSliceTest {
     fun aSecondMemberCannotCommitAnotherMembersSessionAsACover() {
         val scope = seedScope()
         val other = seedMember(scope)
-        val memory = seedNode(scope.scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scope.scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val uploadId = startStaged(scope.owner, scope.scopeId, TestBlob.SMALL, ownerId = memory, role = "COVER")
 
         commitCover(other, scope.scopeId, memory, uploadId).statusCode(404).body("code", equalTo("node_not_found"))
@@ -145,7 +146,7 @@ class UploadWindowSliceTest {
     @Test
     fun aCompletedSessionHasNoWindow() {
         val scope = seedScope()
-        val memory = seedNode(scope.scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scope.scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val uploadId = startStaged(scope.owner, scope.scopeId, TestBlob.SMALL)
         complete(scope.owner, scope.scopeId, memory, uploadId).body("results[0].mediaId", notNullValue())
 
