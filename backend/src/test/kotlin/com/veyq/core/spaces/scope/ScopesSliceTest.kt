@@ -1,13 +1,13 @@
 package com.veyq.core.spaces.scope
 
+import com.veyq.core.blob.BlobUploadStore
 import com.veyq.core.blob.UploadOpener
 import com.veyq.core.blob.BlobEntity
 import com.veyq.core.blob.UploadSessionEntity
 import com.veyq.core.node.NodeEntity
 import com.veyq.core.sharing.ShareEntity
 import com.veyq.core.sharing.ShareIdentityEntity
-import com.veyq.memories.media.MediaStore
-import com.veyq.memories.media.TestBlob
+import com.veyq.core.testing.TestBlob
 import com.veyq.core.sharing.ShareWriteProof
 import com.veyq.core.tasks.CapabilityTags
 import com.veyq.core.tasks.JobDeclineEntity
@@ -69,7 +69,7 @@ class ScopesSliceTest {
     lateinit var reclaimStore: StoreReclaimStore
 
     @Inject
-    lateinit var mediaStore: MediaStore
+    lateinit var blobStore: BlobUploadStore
 
     @Inject
     lateinit var scopes: ScopesStore
@@ -1522,7 +1522,7 @@ class ScopesSliceTest {
      * narrows it to an operator whose scope retention is shorter than the upload one — erasure must not depend on
      * how two independent windows compare.
      *
-     * The session goes through [MediaStore.createSession], the persistence half of the real upload `start`. The
+     * The session goes through [BlobUploadStore.createSession], the persistence half of the real upload `start`. The
      * reclaim row must carry the session's declared `chunkCount`, not only its key: the sweep deletes indices
      * `0 until chunkCount`, so a row recording one chunk reclaims the first and orphans the rest.
      *
@@ -1537,9 +1537,9 @@ class ScopesSliceTest {
         val expiredKey = UUID.randomUUID().toString()
         val freshKey = UUID.randomUUID().toString()
         val blob3 = TestBlob.ofChunks(3)
-        val expiredSession = mediaStore.createSession(expired, UploadOpener.Member(owner), expiredKey, blob3.upload("d3JhcA=="))
+        val expiredSession = blobStore.createSession(expired, UploadOpener.Member(owner), expiredKey, blob3.upload("d3JhcA=="))
         val blob2 = TestBlob.ofChunks(2)
-        val freshSession = mediaStore.createSession(fresh, UploadOpener.Member(owner), freshKey, blob2.upload("d3JhcA=="))
+        val freshSession = blobStore.createSession(fresh, UploadOpener.Member(owner), freshKey, blob2.upload("d3JhcA=="))
 
         listOf(expired, fresh).forEach {
             given().header("Authorization", bearer(owner)).`when`().delete("/api/scopes/$it").then().statusCode(204)

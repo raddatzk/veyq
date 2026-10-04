@@ -1,6 +1,6 @@
 package com.veyq.core.admin.tenant
 
-import com.veyq.memories.media.TestBlob
+import com.veyq.core.testing.TestBlob
 import com.veyq.core.membership.MembershipEntity
 import com.veyq.core.tenant.TenantEntity
 import com.veyq.core.testing.TestFixtures.bearer

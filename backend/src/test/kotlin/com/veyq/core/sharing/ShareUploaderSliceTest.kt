@@ -9,7 +9,7 @@ import com.veyq.core.content.NodesStore
 import com.veyq.memories.media.BucketEntity
 import com.veyq.memories.media.MediaEntity
 import com.veyq.memories.media.MediaShareGuestWrites
-import com.veyq.memories.media.TestBlob
+import com.veyq.core.testing.TestBlob
 import com.veyq.core.TestIds
 import com.veyq.core.blobstore.StoreReclaimEntity
 import com.veyq.core.testing.RACE_ROUNDS

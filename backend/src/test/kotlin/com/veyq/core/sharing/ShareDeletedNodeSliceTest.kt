@@ -7,7 +7,7 @@ import com.veyq.core.sharing.ShareIdentityEntity
 import com.veyq.core.content.NodeSubtreePurge
 import com.veyq.memories.media.BucketEntity
 import com.veyq.memories.media.MediaEntity
-import com.veyq.memories.media.TestBlob
+import com.veyq.core.testing.TestBlob
 import com.veyq.core.TestIds
 import com.veyq.core.config.VeyqConfig
 import com.veyq.core.testing.TestFixtures.CONTENT_KEY

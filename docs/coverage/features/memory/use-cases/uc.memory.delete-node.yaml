@@ -23,7 +23,7 @@ acceptanceCriteria:
     text: "A soft-deleted subtree disappears from the tree listing, from the media and bucket listings, and from cover operations — 11 read call-sites across NodesStore, MediaStore and SharingStore carry the new predicate, and the two bucket handlers that reach a node without passing the node gate (renameBucket, deleteBucket) are closed explicitly."
     coverage:
       # The tree/media/bucket/cover reads all route through one of two gates — NodesStore.list /
-      # MediaStore.findNode — so the listing case covers the read sweep, and the cover case covers the one
+      # MediaStore.findNode (an upload's completion through NodesStore.findInScope, the same predicate) — so the listing case covers the read sweep, and the cover case covers the one
       # media-side read whose behaviour visibly CHANGED (the blob now survives the delete).
       backend:
         integration: [NodeTrashSliceTest.deleteHidesTheWholeSubtreeAndListsTheRootInTheTrash, NodeCoverSliceTest.deleteNodeKeepsTheCoverBlobForTheRestore]

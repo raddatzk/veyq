@@ -1,4 +1,4 @@
-package com.veyq.memories.media
+package com.veyq.core.blob
 
 import com.veyq.core.config.VeyqConfig
 import io.quarkus.scheduler.Scheduled
@@ -33,7 +33,7 @@ import java.time.Instant
  */
 @ApplicationScoped
 class UploadSessionPurge(
-    private val store: MediaStore,
+    private val store: BlobUploadStore,
     config: VeyqConfig,
 ) {
     private val retention: Duration = config.media().upload().retention()

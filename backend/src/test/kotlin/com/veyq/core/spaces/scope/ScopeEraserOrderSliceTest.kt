@@ -9,7 +9,7 @@ import com.veyq.memories.itemfavorites.ItemFavoritesScopeEraser
 import com.veyq.memories.media.MediaDerivativeEntity
 import com.veyq.memories.media.MediaEntity
 import com.veyq.memories.media.MediaScopeEraser
-import com.veyq.memories.media.TestBlob
+import com.veyq.core.testing.TestBlob
 import com.veyq.core.scope.ScopeEntity
 import com.veyq.core.testing.TestFixtures.CONTENT_KEY
 import com.veyq.core.testing.TestFixtures.seedMemberScope

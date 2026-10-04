@@ -6,7 +6,7 @@ import com.veyq.memories.itemfavorites.ItemFavoritesEntity
 import com.veyq.memories.media.BucketEntity
 import com.veyq.memories.media.MediaDerivativeEntity
 import com.veyq.memories.media.MediaEntity
-import com.veyq.memories.media.TestBlob
+import com.veyq.core.testing.TestBlob
 import com.veyq.core.TestIds
 import com.veyq.core.blobstore.BlobStore
 import com.veyq.core.blobstore.BlobStore.Companion.chunkKeys

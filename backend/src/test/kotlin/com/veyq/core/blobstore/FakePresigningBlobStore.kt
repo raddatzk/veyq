@@ -5,10 +5,10 @@ import jakarta.enterprise.inject.Alternative
 import java.util.Collections
 
 /**
- * Test-scope seam that makes `MediaHandler`'s `verifyBlob`/`BlobVerify.Budget` path reachable at hermetic speed
+ * Test-scope seam that makes `BlobUploadHandler`'s `verifyBlob`/`BlobVerify.Budget` path reachable at hermetic speed
  * (cr-media-budget-branch-coverage). `verifyBlob` short-circuits to `Ok` whenever `!blobStore.canPresign`
- * (`MediaHandler.kt:280`), which is always true against [InMemoryBlobStore] — so the real-vs-declared `stat()`
- * comparison that decides `Budget` (`MediaHandler.kt:283`) can never run in the default hermetic suite. This
+ * (`BlobUploadHandler.verifyBlob`), which is always true against [InMemoryBlobStore] — so the real-vs-declared `stat()`
+ * comparison that decides `Budget` (`BlobUploadHandler.verifyBlob`) can never run in the default hermetic suite. This
  * store answers `canPresign = true` and means only that: it never carries real bytes, and its
  * `presignPut`/`presignGet` URLs are never dereferenced by anything that calls them here — the backend never
  * sees bytes either way (ADR 0013), only `stat()` results, which is the one method a test scripts.

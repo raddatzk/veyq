@@ -674,7 +674,7 @@ anything moves; (2) the mechanical rename, the script's output and nothing else;
   its anchor edited (the guard goes red until then — bite (3)), and one that only changes module needs nothing;
   `rename_packages.py` stays until the close and its `--check` is pinned to `735e1e58`.
 
-### 3 — The generic blob upload and quota half moves from `memories.media` to `core.blob` (one Gradle module still)
+### 3 — The generic blob upload and quota half moves from `memories.media` to `core.blob` (one Gradle module still) — **done 2026-10-04**
 
 *Why here.* After the rename — a class moves once, between its two final packages (`com.veyq.memories.media` →
 `com.veyq.core.blob`), not between today's names and then again — and before the contracts split (which has to know
@@ -761,6 +761,36 @@ MariaDB red (ADR 0078), so the step carries a **[LIVE]** race run.
   red.
 - **Done when:** the above; the moved-class citations in docs and coverage re-pointed (`validate_doc_citations`,
   `validate_coverage` green).
+- **Outcome (what later steps inherit).** One commit (code, tests, docs together, green), question 10 built as
+  written (fail closed) and question 9 as recommended. Deviations, each named: (1) the dispatcher is its own core
+  bean, `UploadCompletions` in `UploadCompletion.kt`, not a method of `BlobUploadHandler`: Memories' completion needs
+  `verifyBlob`/`purge`, so a dispatcher inside the handler would be a CDI cycle; its live-node lookup is the existing
+  `NodesStore.findInScope` (the same `deletedAt == null` predicate as `MediaStore.findNode`, which stays Memories'
+  gate for gallery, buckets and covers). (2) `UploadAdmission` lives in `core.quota` (`supports(kind)`,
+  `linkBlobUsage(shareId)`); `StorageQuota.admissionFor(kind)` is the one `singleOrNull`, asked by
+  `SharingHandler.startUploads` (refuses `NotContributable`) and again by `linkUsage` inside the reservation, where
+  `null` fits nothing; the root kind is read by native SQL so `core.quota` imports no `core.sharing`. (3) The link
+  usage is two statements where it was one; under READ COMMITTED each reads its own snapshot, so the sessions are
+  read **first** — a completion committing between them is over-counted, never under-counted. (4) The
+  `MEMORY`/`CHAPTER` allow-list is `MediaUploadCompletion.attachesMedia`, a companion function, because the cover
+  path asks it too and must not depend on the bean (bite (1) would otherwise fail at boot, not as
+  `illegal_target`). (5) Tests: `ChunkFramesTest` and `StoreOriginPresignSliceTest` (whole-generic) changed package to
+  `com.veyq.core.blob` — the only renamed `classname`s (8 cases); `TestBlob` and `FakePresignProfile` are in
+  `com.veyq.core.testing`; `MediaPresignDomainSliceTest` and `SharePresignDomainSliceTest` still carry their own
+  identical nested fake-presign profiles (not this step's; 8a can fold them). The pre-step `linkUsage` value was
+  recorded by running the new case against the untouched tree (300 bytes). (6) Bite (4) is red on **H2** (8 of 8
+  admitted) and only timing-dependent on MariaDB (one live run green, the next red 7/8 and 3/8). **Proofs run:**
+  `./gradlew --offline check` 1145 testcases, 0 failed, 2 skipped, 6m45s (pre-step `da15ddc1`: 1138, 6m22s) —
+  the `classname#name` set is the pre-step one with those 8 renamed and 7 added; the verbatim script (scratchpad)
+  lists 138 post-step lines no pre-step source holds, all signatures, visibility, wiring, imports or KDoc;
+  `race_classes()` 32, identical; **[LIVE]** `run_backend_races_on_mariadb.py` (throwaway container) 32 classes, 383
+  tests, 0 failed; 52 validators green incl. `validate_guard_gaps`; `git diff` of `contracts`, `web`, `admin-web`,
+  `infra`, `charts` empty. Bites (1)–(6) as listed, levers in the commit message. Done `docs/inbox.md` rows naming
+  `MediaStore` session methods were left (flow history, as step 1 left its `Vnn` rows).
+  **What step 4 must know:** three hand-written Memories sites now name the kinds besides `MediaShareGuestWrites`:
+  `MediaUploadCompletion.attachesMedia` (`MEMORY`, `CHAPTER`) and `MediaUploadAdmission.supports` (`MEMORY`) — both
+  re-point at the Memories constants with it. Core's blob code names no kind (`UploadCompletions` dispatches on
+  `node.kind` as a string). `core.blob` now imports `core.content.NodesStore` (one method).
 
 ### 4 — `NodeKindRules`: the `MEMORY`/`CHAPTER` rules leave core
 

@@ -321,7 +321,7 @@ instance instead of re-checking its siblings; one found instance of an unrun cla
 *"mirror X's shape"* and, a clause later, *"reuse Y's expression"* reads as unusually well-grounded — it cites
 working code twice. But two templates are two claims, and the CR has asserted a third one it never checked:
 that they agree. `cr-abandoned-upload-session-reclaim` pointed its sweep at `MediaTrashPurge` for shape and at
-`MediaHandler`'s chunk-key enumeration for the expression; those two sites disagree on exactly the line that
+the budget purge's chunk-key enumeration (then `MediaHandler`'s) for the expression; those two sites disagree on exactly the line that
 decided whether the CR was testable at all — the trash purge calls `blobStore.delete` unconditionally, the
 budget purge gates it behind `if (!blobStore.canPresign) return`, and the hermetic store cannot presign. Copying
 the second would have produced a job whose store half no test could observe, which is the hole that CR's *other*

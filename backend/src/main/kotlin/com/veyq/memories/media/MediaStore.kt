@@ -1,13 +1,10 @@
 package com.veyq.memories.media
 
-import com.veyq.core.blob.UploadOpener
-import com.veyq.core.blob.UploadDeclare
 import com.veyq.core.blob.BlobEntity
+import com.veyq.core.blob.BlobUploadStore
 import com.veyq.core.blob.UploadSessionEntity
 import com.veyq.core.node.NodeEntity
 import com.veyq.core.sharing.ShareIdentityEntity
-import com.veyq.core.blobstore.StoreObjectRef
-import com.veyq.core.blobstore.StoreReclaimStore
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
@@ -81,12 +78,13 @@ data class BucketRow(
 )
 
 /**
- * Persistence for media blobs (cr-0028). Operator-blind: stores ciphertext wraps + opaque metadata only.
+ * Persistence for the Memories media (cr-0028): media, derivative and bucket rows, covers and the gallery
+ * revision counters, on top of core's [BlobUploadStore] (sessions and blob rows). Operator-blind: stores ciphertext wraps + opaque metadata only.
  * Who may act on a scope is decided before this store is reached, by the handler's `ScopeAccess` gate. The
  * manifest (per-chunk ciphertext sizes) is held as a small JSON array of integers — itself only ciphertext-size metadata.
  */
 @ApplicationScoped
-class MediaStore(private val reclaim: StoreReclaimStore) {
+class MediaStore(private val blobs: BlobUploadStore) {
 
     /** The node, if it exists **live** in this scope (its `kind` decides the media-target rule). `deletedAt is
      *  null` (ADR 0061): this is the gate every media/bucket/cover handler routes through, so filtering it once
@@ -95,54 +93,8 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
     fun findNode(scopeId: String, nodeId: String): NodeEntity? =
         NodeEntity.findById(nodeId)?.takeIf { it.scopeId == scopeId && it.deletedAt == null }
 
-    /** Is the client-minted [blobId] already a blob, or promised to another open session — in any scope? */
-    fun blobIdTaken(blobId: String): Boolean =
-        BlobEntity.findById(blobId) != null || UploadSessionEntity.count("blobId", blobId) > 0
-
     /** Is the client-minted [mediaId] already a media, live or trashed, in any scope? */
     fun mediaIdTaken(mediaId: String): Boolean = MediaEntity.findById(mediaId) != null
-
-    @Transactional
-    fun createSession(scopeId: String, opener: UploadOpener, storageKey: String, d: UploadDeclare): String {
-        val id = UUID.randomUUID().toString()
-        val now = Instant.now()
-        UploadSessionEntity().apply {
-            this.id = id
-            this.scopeId = scopeId
-            openerUserId = (opener as? UploadOpener.Member)?.userId
-            openerShareIdentityId = (opener as? UploadOpener.Contributor)?.shareIdentityId
-            this.storageKey = storageKey
-            chunkCount = d.chunkCount
-            byteSize = d.byteSize
-            wrappedBlobKey = d.wrappedBlobKey
-            blobId = d.blobId
-            ownerId = d.ownerId
-            blobRole = d.role
-            createdAt = now
-            lastWindowAt = now
-        }.persist()
-        return id
-    }
-
-    /**
-     * The open session [uploadId] in [scopeId] — **only for the [opener] who started it** (ADR 0013 §2). Every
-     * operation that acts on a session (a window, a complete, a cover commit) resolves it here, so a second member
-     * or a second identity on the same link cannot finish, extend or attach another's upload by knowing its id.
-     * A session from before the opener was recorded carries none and matches nobody.
-     */
-    fun findSession(scopeId: String, uploadId: String, opener: UploadOpener): UploadSessionEntity? =
-        UploadSessionEntity.findById(uploadId)?.takeIf { it.scopeId == scopeId && opener.opened(it) }
-
-    /** Is session [uploadId] gone — spent by a complete that committed since it was read? A count, not [findSession]:
-     *  outside a transaction the request's persistence context still holds the row it read, so a second `findById`
-     *  would answer from that cache and never see the delete. */
-    fun sessionSpent(uploadId: String): Boolean = UploadSessionEntity.count("id", uploadId) == 0L
-
-    /** Mark session [uploadId] live now: a window was issued for it, which is the stale-session purge's clock. */
-    @Transactional
-    fun touchWindow(uploadId: String) {
-        UploadSessionEntity.update("lastWindowAt = ?1 where id = ?2", Instant.now(), uploadId)
-    }
 
     /**
      * Promote a media's verified sessions to blobs + attach to the node, consuming every session. The original
@@ -180,7 +132,7 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
         val scopeId = original.scopeId
         val ownerKey = ownerKeyFor(uploaderUserId, shareIdentityId)
         val bucket = ensurePrimaryBucket(scopeId, nodeId, ownerKey, primarySealedNameFor(ownerKey))
-        val originalBlobId = persistBlob(original, originalManifest)
+        val originalBlobId = blobs.persistBlob(original, originalManifest)
         val now = Instant.now()
         MediaEntity().apply {
             id = mediaId
@@ -196,7 +148,7 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
             updatedAt = now // cr-0107: the keyset cursor starts at creation time
         }.persist()
         for (d in derivatives) {
-            val derivBlobId = persistBlob(d.session, d.manifest)
+            val derivBlobId = blobs.persistBlob(d.session, d.manifest)
             MediaDerivativeEntity().apply {
                 id = UUID.randomUUID().toString()
                 this.mediaId = mediaId
@@ -224,23 +176,6 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
         } else {
             NodeEntity.update("mediaRevision = mediaRevision + 1 where id = ?1", nodeId)
         }
-    }
-
-    /** Persist a blob row from a verified session, under the client-minted id its wrap is bound to (ADR 0072).
-     *  The handler checked [UploadSessionEntity.boundTo] first, so the id is present. */
-    private fun persistBlob(session: UploadSessionEntity, manifest: List<Long>?): String {
-        val blobId = checkNotNull(session.blobId) { "a session without a blob id is refused before it is attached" }
-        BlobEntity().apply {
-            id = blobId
-            scopeId = session.scopeId
-            storageKey = session.storageKey
-            chunkCount = session.chunkCount
-            byteSize = session.byteSize
-            wrappedBlobKey = session.wrappedBlobKey
-            this.manifest = manifest?.let { encodeManifest(it) }
-            createdAt = Instant.now()
-        }.persist()
-        return blobId
     }
 
     /**
@@ -328,7 +263,7 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
         val blobIds = listOf(media.blobId) + derivatives.map { it.blobId }
         derivatives.forEach { MediaDerivativeEntity.deleteById(it.id) } // FK: the referencing rows go first
         MediaEntity.deleteById(media.id)
-        blobIds.forEach { deleteBlobRow(it) }
+        blobIds.forEach { blobs.deleteBlobRow(it) }
     }
 
     /**
@@ -362,39 +297,15 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
         return expired.size
     }
 
-    /**
-     * Hard-delete every OPEN upload session whose last window was issued before [cutoff] (its `start` is its first
-     * window), across all scopes, recording the objects
-     * its client may already have staged in the store (uc.memory.upload E2 / en.memory.media E3). The row is the
-     * **only** pointer to its `storage_key`, so dropping it without recording orphans those objects permanently
-     * — and the record is written **in this transaction**, which is the guarantee the old post-commit delete
-     * could not give. Two sources feed this: an upload cancelled or killed mid-flight, and a session the
-     * `complete` budget gate rejected ([MediaHandler] reclaims that one's objects but leaves the row). The
-     * reclaim row carries the full declared `chunk_count`; an abandoned session has an unknown number of those
-     * actually present, so the store delete must tolerate absent keys — which it does, `deleteObject` being
-     * idempotent. Returns how many sessions were purged.
-     */
-    @Transactional
-    fun purgeSessionsIdleSince(cutoff: Instant): Int {
-        // The selection is the lock, re-checked on what it locked: an upload whose next window committed while this
-        // waited keeps its session. Selected by a plain read, a live upload's session was dropped mid-transfer.
-        val stale = UploadSessionEntity.find("lastWindowAt < ?1", cutoff)
-            .withLock(LockModeType.PESSIMISTIC_WRITE).list()
-            .filter { it.lastWindowAt.isBefore(cutoff) }
-        reclaim.record(stale.map { StoreObjectRef(it.storageKey, it.chunkCount) })
-        stale.forEach { UploadSessionEntity.deleteById(it.id) }
-        return stale.size
-    }
-
     /** Map a media entity to its read-back row, resolving the original + derivative blobs; null when the original blob is missing. */
     private fun toRow(m: MediaEntity): MediaRow? {
         val blob = BlobEntity.findById(m.blobId) ?: return null
         val derivatives = MediaDerivativeEntity.find("mediaId = ?1", m.id).list().mapNotNull { d ->
             val derivBlob = BlobEntity.findById(d.blobId) ?: return@mapNotNull null
-            DerivativeRow(d.kind, derivBlob.id, derivBlob.chunkCount, derivBlob.byteSize, derivBlob.wrappedBlobKey, decodeManifest(derivBlob.manifest))
+            DerivativeRow(d.kind, derivBlob.id, derivBlob.chunkCount, derivBlob.byteSize, derivBlob.wrappedBlobKey, blobs.decodeManifest(derivBlob.manifest))
         }
         return MediaRow(
-            m.id, blob.id, blob.chunkCount, blob.byteSize, blob.wrappedBlobKey, decodeManifest(blob.manifest),
+            m.id, blob.id, blob.chunkCount, blob.byteSize, blob.wrappedBlobKey, blobs.decodeManifest(blob.manifest),
             derivatives, m.wrappedMeta, m.updatedAt ?: m.createdAt, // cr-0107: coalesce for pre-backfill safety
             m.deletedAt, m.deletedBy, // cr-0110: null for live media, populated in the trashed listing
             m.createdBy, m.bucketId, // cr-0113: `attach` stamps both
@@ -441,9 +352,6 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
         return SetMetaResult.Written(media.wrappedMeta)
     }
 
-    fun findBlob(scopeId: String, blobId: String): BlobEntity? =
-        BlobEntity.findById(blobId)?.takeIf { it.scopeId == scopeId }
-
     /**
      * Commit a verified session as the node's **standalone cover** blob (cr-0073): persist one `veyq_blob`
      * (NO `veyq_media` row, so it never lists in the gallery), point the node's `cover_blob_id` at it, and
@@ -466,8 +374,8 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
         // gate before the verify step. This is the transaction's first load of the row, so the lock reads it as
         // committed now (ADR 0078) — a lock on a row already loaded here would hand back that stale copy.
         val node = NodeEntity.findById(nodeId, LockModeType.PESSIMISTIC_WRITE)!!
-        deleteBlobRow(node.coverBlobId)
-        val blobId = persistBlob(session, manifest)
+        blobs.deleteBlobRow(node.coverBlobId)
+        val blobId = blobs.persistBlob(session, manifest)
         node.coverBlobId = blobId
         node.coverByteSize = session.byteSize
         node.persist()
@@ -494,27 +402,12 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
             nodeId, scopeId, expectedBlobId,
         )
         if (cleared == 1) {
-            deleteBlobRow(expectedBlobId)
+            blobs.deleteBlobRow(expectedBlobId)
             return ClearCoverResult.CLEARED
         }
         val slot = NodeEntity.findById(nodeId)?.takeIf { it.scopeId == scopeId && it.deletedAt == null }?.coverBlobId
         return if (slot == null) ClearCoverResult.EMPTY else ClearCoverResult.REPLACED
     }
-
-    /** Delete a blob row by id (if present) and put its store objects on the reclaim list, in the caller's
-     *  transaction (cover + trash purge). The row is the only thing that knows the `storage_key`, so the record
-     *  and the delete are one step, not two. */
-    private fun deleteBlobRow(blobId: String?) {
-        val blob = blobId?.let { BlobEntity.findById(it) } ?: return
-        reclaim.record(blob.storageKey, blob.chunkCount)
-        BlobEntity.deleteById(blob.id)
-    }
-
-    // Manifest = a JSON array of per-chunk ciphertext sizes; tiny and integer-only, so encoded by hand.
-    private fun encodeManifest(sizes: List<Long>): String = sizes.joinToString(",", "[", "]")
-
-    private fun decodeManifest(s: String?): List<Long>? =
-        s?.trim()?.removeSurrounding("[", "]")?.takeIf { it.isNotBlank() }?.split(",")?.map { it.trim().toLong() }
 
     // --- buckets (en.memory.buckets, ADR 0034, cr-0113) ----------------------
 

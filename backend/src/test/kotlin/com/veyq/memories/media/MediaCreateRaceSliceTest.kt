@@ -1,5 +1,6 @@
 package com.veyq.memories.media
 
+import com.veyq.core.testing.TestBlob
 import com.veyq.core.blob.UploadSessionEntity
 import com.veyq.core.node.NodeEntity
 import com.veyq.core.TestIds

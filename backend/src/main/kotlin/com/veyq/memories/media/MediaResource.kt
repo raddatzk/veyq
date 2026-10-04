@@ -1,6 +1,10 @@
 package com.veyq.memories.media
 
+import com.veyq.core.blob.BlobUploadHandler
+import com.veyq.core.blob.DownloadOutcome
+import com.veyq.core.blob.StartOutcome
 import com.veyq.core.blob.UploadDeclare
+import com.veyq.core.blob.WindowOutcome
 import com.veyq.core.blob.DerivativeDeclare
 import com.veyq.core.blob.CompleteItem
 import com.veyq.core.blob.WindowRequest
@@ -46,7 +50,8 @@ import com.veyq.core.ratelimit.RateLimitExempt
 
 /**
  * HTTP adapter for media blobs (en.memory.media, cr-0028). Implements the generated [MediaApi]; thin
- * (ADR 0001) — delegates to [MediaHandler]. `@Authenticated`; the caller (from the `SecurityIdentity`
+ * (ADR 0001) — delegates to [MediaHandler], and the three generic blob operations still on this tag to core's
+ * [BlobUploadHandler]. `@Authenticated`; the caller (from the `SecurityIdentity`
  * principal) must hold a grant for the scope (a non-member gets 404). Operator-blind: only ciphertext wraps +
  * opaque metadata + presigned URLs cross. Batch-shaped: 200 with per-item results (partial success); only
  * access/auth failures are top-level.
@@ -61,6 +66,8 @@ import com.veyq.core.ratelimit.RateLimitExempt
 )
 class MediaResource(
     private val handler: MediaHandler,
+    /** The three blob operations still on the `media` tag are core's generic upload (ADR 0079). */
+    private val blobs: BlobUploadHandler,
     private val identity: SecurityIdentity,
     private val tenant: RequestTenant,
 ) : MediaApi {
@@ -76,7 +83,7 @@ class MediaResource(
         val declares = blobUploadsBatchRequest.items.map {
             UploadDeclare(it.chunkCount, it.byteSize, it.wrappedBlobKey, it.blobId.toString(), it.ownerId.toString(), it.role.value)
         }
-        return when (val o = handler.start(identity.principal.name, scopeId.toString(), declares, signingDomain())) {
+        return when (val o = blobs.start(identity.principal.name, scopeId.toString(), declares, signingDomain())) {
             is StartOutcome.Results -> Response.ok(
                 BlobUploadsBatchResponse(
                     results = o.items.map {
@@ -218,7 +225,7 @@ class MediaResource(
 
     override fun presignBlobDownloads(scopeId: UUID, blobDownloadsBatchRequest: BlobDownloadsBatchRequest): Response {
         val blobIds = blobDownloadsBatchRequest.items.map { it.blobId.toString() }
-        return when (val o = handler.download(identity.principal.name, scopeId.toString(), blobIds, signingDomain())) {
+        return when (val o = blobs.download(identity.principal.name, scopeId.toString(), blobIds, signingDomain())) {
             is DownloadOutcome.Results -> Response.ok(
                 BlobDownloadsBatchResponse(
                     results = o.items.map {
@@ -232,7 +239,7 @@ class MediaResource(
 
     override fun presignBlobUploadWindows(scopeId: UUID, blobUploadWindowsRequest: BlobUploadWindowsRequest): Response {
         val requests = blobUploadWindowsRequest.items.map { WindowRequest(it.uploadId.toString(), it.fromChunk.validated()) }
-        return when (val o = handler.window(identity.principal.name, scopeId.toString(), requests, signingDomain())) {
+        return when (val o = blobs.window(identity.principal.name, scopeId.toString(), requests, signingDomain())) {
             is WindowOutcome.Results -> Response.ok(
                 BlobUploadWindowsResponse(
                     results = o.items.map {

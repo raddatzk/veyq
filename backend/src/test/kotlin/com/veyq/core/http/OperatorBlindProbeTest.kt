@@ -2,7 +2,7 @@ package com.veyq.core.http
 
 import com.veyq.core.sharing.ShareWriteProof
 import com.veyq.core.membership.TestAdmission
-import com.veyq.memories.media.TestBlob
+import com.veyq.core.testing.TestBlob
 import com.veyq.core.crypto.Tokens
 import com.veyq.core.membership.ScopeAccessWorld
 import com.veyq.core.membership.ScopeAccessWorld.Companion.B64

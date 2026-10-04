@@ -1,5 +1,7 @@
 package com.veyq.memories.media
 
+import com.veyq.core.blob.BlobUploadStore
+import com.veyq.core.testing.TestBlob
 import com.veyq.core.blob.BlobEntity
 import com.veyq.core.blob.UploadSessionEntity
 import com.veyq.core.node.NodeEntity
@@ -40,6 +42,7 @@ import org.junit.jupiter.api.Test
 class PurgeRaceSliceTest {
 
     @Inject lateinit var store: MediaStore
+    @Inject lateinit var blobs: BlobUploadStore
     @Inject lateinit var scopes: ScopesStore
     @Inject lateinit var scopeHandler: ScopesHandler
     @Inject lateinit var scopePurge: ScopePurge
@@ -92,13 +95,13 @@ class PurgeRaceSliceTest {
         repeat(RACE_ROUNDS) { round ->
             val sessionId = idleSession()
             whileUncommitted(
-                change = { store.touchWindow(sessionId) },
-                overlapping = { store.purgeSessionsIdleSince(Instant.now().minus(Duration.ofDays(1))) },
+                change = { blobs.touchWindow(sessionId) },
+                overlapping = { blobs.purgeSessionsIdleSince(Instant.now().minus(Duration.ofDays(1))) },
             )
             assertNotNull(tx { UploadSessionEntity.findById(sessionId) }, "round $round: the purge dropped a live upload")
         }
         val idle = idleSession()
-        store.purgeSessionsIdleSince(Instant.now().minus(Duration.ofDays(1)))
+        blobs.purgeSessionsIdleSince(Instant.now().minus(Duration.ofDays(1)))
         assertNull(tx { UploadSessionEntity.findById(idle) }, "control: an idle session is purged")
     }
 

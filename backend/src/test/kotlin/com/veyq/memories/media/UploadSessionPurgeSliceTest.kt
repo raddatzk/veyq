@@ -1,5 +1,8 @@
 package com.veyq.memories.media
 
+import com.veyq.core.blob.BlobUploadStore
+import com.veyq.core.blob.UploadSessionPurge
+import com.veyq.core.testing.TestBlob
 import com.veyq.core.blob.UploadOpener
 import com.veyq.core.blob.UploadSessionEntity
 import com.veyq.core.blobstore.BlobStore
@@ -44,7 +47,7 @@ import org.junit.jupiter.api.Test
 class UploadSessionPurgeSliceTest {
 
     @Inject
-    lateinit var store: MediaStore
+    lateinit var store: BlobUploadStore
 
     @Inject
     lateinit var purge: UploadSessionPurge
