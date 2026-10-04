@@ -100,7 +100,8 @@ application to be separated from.
   nor `shared/` imports Memories code. Not done: the Gradle module split; the web side; the node `kind` is still
   the closed `FOLDER`/`MEMORY`/`CHAPTER` set (contract and `NodeEntity`); `NodesStore`, `NodesHandler`,
   `SharingStore`, `SharingHandler`, `ScopePurge` and `NodeSubtreePurge` still live in `features.*` packages; and
-  `ScopesStore` (`features.spaces`) still imports the item-favorites entity to clear a removed member's favorites.
+  `ScopesStore` (`features.spaces`) still imports the item-favorites entity to clear a removed member's favorites (a membership-removal hook, a different seam from the erasers: nothing is erased, one
+  user loses access to one scope; the follow-up is a `MembershipEraser`-style core interface that item favorites implements).
   Docs describing the target say which of these they rely on.
 - **Guards move with the code.** `validate_shared_imports_no_features.py` encodes feature → shared; the
   application → core, never core → application and never application → application rules need the same form of
