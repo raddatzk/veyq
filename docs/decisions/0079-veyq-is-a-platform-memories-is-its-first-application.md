@@ -95,13 +95,12 @@ application to be separated from.
   object, not its neighbours). Each such application states that gap; it is not a platform property.
 - **The code matches this only in part.** Phase 1 of the change-request series (inbox #324) drew the backend
   boundary inside the one Gradle module: `com.veyq.app.core.{node,blob,sharing,quota,scope}` hold the node, blob,
-  upload-session and share entities, storage usage, and five interfaces through which core reaches Memories code
-  without importing it — `ScopeEraser`, `NodeSubtreeEraser`, `GuestIdentityUsage`, `SharedSubtreeContributor`, `ShareGuestWrites` — and neither `core/`
-  nor `shared/` imports Memories code. Not done: the Gradle module split; the node `kind` is still
+  upload-session and share entities, storage usage, and six interfaces through which core reaches Memories code
+  without importing it — `ScopeEraser`, `NodeSubtreeEraser`, `MembershipEraser`, `GuestIdentityUsage`, `SharedSubtreeContributor`, `ShareGuestWrites` — and no
+  platform file imports Memories code. (`MembershipEraser` is a different seam from the erasers: nothing of the scope is
+  erased, one user loses access to one scope, and item favorites drop that user's rows.) Not done: the Gradle module split; the node `kind` is still
   the closed `FOLDER`/`MEMORY`/`CHAPTER` set (contract and `NodeEntity`); `NodesStore`, `NodesHandler`,
-  `SharingStore`, `SharingHandler`, `ScopePurge` and `NodeSubtreePurge` still live in `features.*` packages; and
-  `ScopesStore` (`features.spaces`) still imports the item-favorites entity to clear a removed member's favorites (a membership-removal hook, a different seam from the erasers: nothing is erased, one
-  user loses access to one scope; the follow-up is a `MembershipEraser`-style core interface that item favorites implements).
+  `SharingStore`, `SharingHandler`, `ScopePurge` and `NodeSubtreePurge` still live in `features.*` packages.
   **The web side is separated by import direction, not by name or by kind:** `web/src/features/memory` is the
   application, and no core file imports it except the composition root `web/src/applications.ts`; the shell asks a
   build-time registry (`web/src/core/applications/registry.ts`) what to render for a node kind, which slot an
@@ -118,7 +117,8 @@ application to be separated from.
   application → core, never core → application and never application → application rules need the same form of
   guard (an import check over the moved packages, bite-tested with a core file importing an application) before
   the first package moves, or the direction is prose. The core → application half now exists in the same guard
-  (`core/` and `shared/` may not import the Memories packages) and on the web as
+  (no main file outside the Memories packages may import them — the platform derived as the inverse of the
+  application, not as a list of directories) and on the web as
   `validate_web_core_imports_no_applications.py` (core may not import `features/memory`, discover code by glob, or
   name the Memories node kinds; no allowlist); application → application exists on neither side yet. The
   test trees stay out of scope of the import check for the reasons that guard's docstring gives.

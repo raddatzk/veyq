@@ -166,9 +166,11 @@ class ItemFavoritesSliceTest {
     fun removingAMemberDropsTheirItemFavorites() {
         val (alice, scopeId) = seedMember()
         val bob = seedAdditionalMember(scopeId)
+        val elsewhere = seedTenant(owner = bob)
         val node = UUID.randomUUID().toString()
         put(alice, scopeId, node, mine)
         put(bob, scopeId, node, theirs)
+        put(bob, elsewhere, node, theirs)
 
         scopes.removeMembership(bob, scopeId)
 
@@ -178,6 +180,10 @@ class ItemFavoritesSliceTest {
             .body("$", hasSize<Any>(1))
             .body("[0].self", equalTo(true))
             .body("[0].ciphertext", equalTo(mine))
+        // Control: the removal is of one scope — bob's row in a scope he keeps survives it.
+        assert(listOwn(bob) == setOf(Triple(elsewhere, node, theirs))) {
+            "bob keeps exactly his row in the scope he was not removed from — got ${listOwn(bob)}"
+        }
     }
 
     @Test
