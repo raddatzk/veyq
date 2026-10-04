@@ -10,7 +10,6 @@ import com.veyq.core.testing.TestFixtures.bearer
 import com.veyq.core.testing.TestFixtures.seedTenant
 import com.veyq.core.testing.TestFixtures.seedUser
 import com.veyq.core.testing.TestFixtures.shareKeysJson
-import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
@@ -38,6 +37,12 @@ import org.hamcrest.Matchers.notNullValue
  * - [stranger]: no row anywhere. [proposal]: an accepted root member of A with an unaccepted proposal on [live].
  *   [proposalOnly]: the same proposal and no other row in A — what the retired `tenantId`-only belonging check
  *   counted as a tenant member.
+ *
+ * **It needs Memories at runtime.** Every space holds a `MEMORY` node with a medium, a bucket and a share, so it is
+ * built only where Memories is part of the application under test — `:apps:memories`' tests and the root's
+ * whole-app `OperatorBlindProbeTest` — never by a `:core` test (core alone refuses the medium and the share). It lives
+ * in `:test-support` because both of those use it; it names the kind as the wire literal, since `:test-support`
+ * compiles against `:core` only (cr-platform-gradle-modules step 8a).
  */
 class ScopeAccessWorld(
     /** The role of each space's seeded share — a profile that switches VIEWER links off seeds UPLOADER ones. */
@@ -110,7 +115,7 @@ class ScopeAccessWorld(
                 id = scopeId; tenantId = tenant.first; kind = ScopeEntity.GROUP; encryptedName = B64; createdAt = Instant.now()
             }.persist()
             NodeEntity().apply {
-                id = nodeId; this.scopeId = scopeId; parentId = scopeId; kind = MemoriesNodeKinds.MEMORY
+                id = nodeId; this.scopeId = scopeId; parentId = scopeId; kind = "MEMORY"
                 encryptedName = B64; slugToken = "c2x1Zw$nodeId".take(120); orderIndex = 0
                 wrappedContentKey = B64; createdAt = Instant.now()
             }.persist()

@@ -8,7 +8,7 @@ made after a later row lock read the state from before it. Every H2 race test wa
 about production too.
 
 **What it runs.** Every test class that races — the files in every backend test root (`backend_tree.test_roots()`)
-that call the race harness (`race(` or `whileUncommitted(` from `testing/Race.kt`) or build their own overlap from a
+that call the race harness (`race(` or `whileUncommitted(` from `testing/Race.kt`, in `:test-support`) or build their own overlap from a
 latch or a barrier. Derived from the code, not listed, so a new race test is in the next run without anyone
 registering it ([race_classes]). Whole classes run, not only their race methods: the non-race methods of a race
 class are cheap and prove the class still boots on MariaDB. Each class runs in the Gradle project that owns its
@@ -60,12 +60,12 @@ def pinned_image() -> str:
 
 
 def race_classes() -> list[str]:
-    """Every test class that calls the race harness, as Gradle `--tests` filters. The harness file itself is no
-    test. Fails loudly on an empty set: a run of nothing would read as a green proof."""
+    """Every test class that calls the race harness, as Gradle `--tests` filters. Only the test roots are read: the
+    harness itself (`testing/Race.kt`) and every other shared helper live in a fixtures root (`:test-support`), which
+    holds no test class, so no file is skipped by name. Fails loudly on an empty set: a run of nothing would read as a
+    green proof."""
     found = []
-    for f in backend_tree.test_kotlin():
-        if f.name == "Race.kt":
-            continue
+    for f in backend_tree.kotlin_files(backend_tree.test_roots()):
         if RACE_CALL.search(f.read_text()):
             found.append(f"*{f.stem}")
     if not found:
