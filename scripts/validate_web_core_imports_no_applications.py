@@ -58,13 +58,7 @@ ALLOWLIST: dict[str, set[str]] = {
     "app/itemFavoritesStore.ts": {RULE_IMPORT},
     "components/app/AppSidebar.vue": {RULE_IMPORT, RULE_KIND},
     "components/app/AppTopbar.vue": {RULE_IMPORT},
-    "features/account/emergencyKit/emergencyKit.ts": {RULE_IMPORT},
     "features/account/rotation/rotateKeys.ts": {RULE_IMPORT},
-    "features/spaces/GroupMembersPanel.vue": {RULE_IMPORT},
-    "features/spaces/SpaceIconDialog.vue": {RULE_IMPORT},
-    "features/spaces/TenantMembersPanel.vue": {RULE_IMPORT},
-    "features/spaces/spaceIconImage.ts": {RULE_IMPORT},
-    "sw/register.ts": {RULE_IMPORT},
     "views/MemoryHomeView.vue": {RULE_IMPORT, RULE_KIND},
     "views/ShareView.vue": {RULE_IMPORT},
 }

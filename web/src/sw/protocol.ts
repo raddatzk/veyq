@@ -28,6 +28,17 @@ export function isVideoMediaType(mediaType: string | undefined): boolean {
   return typeof mediaType === 'string' && VIDEO_ESSENCE.test(mediaType)
 }
 
+/** A per-blob source of decrypted plaintext chunks, addressed by chunk index. Backs the SW range layer; the SW
+ *  never sees a key — it calls {@link ChunkProvider.getPlaintextChunk} over a port and slices the result. */
+export type ChunkProvider = {
+  /** Total chunk count of the whole blob — the AAD `total` every `getPlaintextChunk` binds (never a subset). */
+  readonly chunkCount: number
+  /** Total ciphertext byte size (sum of framed chunk sizes). Use [plaintextSize] for the original's own size. */
+  readonly byteSize: number
+  /** Open exactly chunk `index` to plaintext. Re-presigns the whole blob once on a stale-URL 403, then retries. */
+  getPlaintextChunk(index: number): Promise<Uint8Array>
+}
+
 // --- page → SW (via the SW's own postMessage) --------------------------------
 
 /** Handshake probe: the page asks a controlling SW for its protocol version (reply on the transferred port). */

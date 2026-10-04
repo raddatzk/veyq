@@ -26,7 +26,7 @@ vi.mock('../account/identityPins', () => ({
   },
 }))
 
-import { ensurePersonalScope, openPersonalScope, openScope, openScopeById, openGroupByToken, listMyTenants, createGroup, listMyGroups, rotateGroupForRemoval, commitRotation, renameGroup, deleteGroup, restoreGroup, openMyTenantIcon, openGroupIcon } from './scopes'
+import { ensurePersonalScope, openPersonalScope, openScope, openScopeById, openGroupByToken, listMyTenants, createGroup, listMyGroups, rotateGroupForRemoval, commitRotation, renameGroup, deleteGroup, restoreGroup, openMyTenantIcon, openGroupIcon, revokeScopeShares } from './scopes'
 import { ScopeKind, type MyTenant, type ScopeEpochLink, type ScopeMember, type ScopeSummary, type ScopesApi } from '../../api/generated/scopes'
 import type { ContentApi } from '../../api/generated/content'
 import { scopesApi, contentApi, tenantsApi, accountApi } from '../../api/client'
@@ -721,6 +721,15 @@ describe('listMyTenants', () => {
     const tenants: MyTenant[] = [myTenant({ tenantId: T1 })]
     stubApi(scopesApi, { listMyTenants: tenants })
     expect(await listMyTenants()).toEqual(tenants)
+  })
+})
+
+describe('revokeScopeShares (ADR 0075 point 5)', () => {
+  it('revokeScopeShares turns off every link of the scope and resolves how many it turned off', async () => {
+    const { revokeScopeShares: revoke } = stubApi(scopesApi, { revokeScopeShares: { revoked: 3 } })
+
+    await expect(revokeScopeShares(G1)).resolves.toBe(3)
+    expect(revoke).toHaveBeenCalledWith({ scopeId: G1 })
   })
 })
 

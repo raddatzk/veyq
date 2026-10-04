@@ -1,4 +1,4 @@
-// Run AFTER `vite build`: fail unless the build emitted the media Worker (`src/features/memory/mediaDerive.worker.ts`)
+// Run AFTER `vite build`: fail unless the build emitted the media Worker (`src/shared/image/mediaDerive.worker.ts`)
 // as a chunk of its own and the app references it. The twin of `../packages/crypto/scripts/assert-argon-worker-in-dist.mjs`,
 // and kept a twin rather than a shared helper on purpose: that one belongs to the crypto package, whose workspace
 // exists for crypto alone (root CLAUDE.md), and this Worker is web's.

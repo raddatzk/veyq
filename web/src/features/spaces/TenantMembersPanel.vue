@@ -20,7 +20,7 @@ import {
   type PendingMemberInvite,
   type ScopeMember,
 } from './members'
-import { listMyTenants, setSpaceIcon, clearSpaceIcon, openMyTenantIcon } from './scopes'
+import { listMyTenants, setSpaceIcon, clearSpaceIcon, openMyTenantIcon, revokeScopeShares } from './scopes'
 import { bumpSpaceIcon } from './spaceIconSignal'
 import { activeSpace, activeScopeKey, activeWriteKey } from '../../app/activeSpace'
 import { ScopeKind } from '../../api/generated/scopes'
@@ -30,7 +30,6 @@ import { useMemberDirectory } from './useMemberDirectory'
 import { useObjectUrl } from '../../shared/state/useObjectUrls'
 import { useToast } from '../../shared/state/useToast'
 import { useConfirm } from '../../shared/state/useConfirm'
-import { revokeScopeShares } from '../memory/share'
 import ChangedKeyReviewDialog from './ChangedKeyReviewDialog.vue'
 import TrustResetLink from '../account/trustReset/TrustResetLink.vue'
 import CompromiseRotationNotice from './CompromiseRotationNotice.vue'

@@ -13,8 +13,8 @@ import {
   type ChunkRequest,
   type EndSessionAck,
   type EndSessionMsg,
+  type ChunkProvider,
 } from './protocol'
-import type { ChunkProvider } from '../features/memory/media'
 
 /** Metadata the SW needs to size the resource + set the response Content-Type; carries no key and no id that
  *  leaks what the blob is to the operator (the SW is on-device code — see protocol.ts RegisterMsg). */

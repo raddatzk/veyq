@@ -24,11 +24,12 @@ import {
   type MediaItem,
   type MediaExif,
   type MediaMeta,
-  type ChunkProvider,
   type MediaMetaWrite,
 } from '../media'
 import { MetaConflictError, MetaUnreadableError, staleMetaOf, type SealedMetaState } from '../sealedMetaWrite'
-import { derivedDownloadName, saveBytes, sniffMediaType } from '../download'
+import { derivedDownloadName, sniffMediaType } from '../download'
+import { saveBytes } from '../../../shared/saveBytes'
+import type { ChunkProvider } from '../../../sw/protocol'
 import { resolvePlaceName } from '../placeName'
 import { useMapConfig } from '../../../shared/state/useMapConfig'
 import MemoryMap from './MemoryMap.vue'

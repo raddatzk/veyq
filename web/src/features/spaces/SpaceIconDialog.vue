@@ -11,7 +11,7 @@ import Dialog from 'primevue/dialog'
 import Message from 'primevue/message'
 import ImageCropper from '../../shared/ui/ImageCropper.vue'
 import { useObjectUrl } from '../../shared/state/useObjectUrls'
-import { createBrowserDeriver } from '../memory/mediaDeriver'
+import { createBrowserDeriver } from '../../shared/image/mediaDeriver'
 import { renderSpaceIcon } from './spaceIconImage'
 
 const props = defineProps<{ busy?: boolean }>()

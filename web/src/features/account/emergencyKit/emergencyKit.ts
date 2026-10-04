@@ -9,7 +9,7 @@
 // renderKitPdf so the parse/import path (the common one) stays cheap.
 
 import { kitPayload, parseKit, type KitData } from '@veyq/crypto/emergencyKit'
-import { saveBytes } from '../../memory/download'
+import { saveBytes } from '../../../shared/saveBytes'
 
 /** Decode the QR from an image file (a screenshot/photo of the kit) — draw it to a canvas and run jsQR. */
 async function decodeQrImage(file: File): Promise<string | null> {

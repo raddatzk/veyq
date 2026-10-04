@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, vi, afterEach } from 'vitest'
-import { sniffMediaType, sniffExtension, derivedDownloadName, saveBytes } from './download'
+import { describe, it, expect } from 'vitest'
+import { sniffMediaType, sniffExtension, derivedDownloadName } from './download'
 
 const bytes = (...b: number[]) => new Uint8Array(b)
 const ascii = (s: string) => Uint8Array.from(s, (c) => c.charCodeAt(0))
@@ -94,23 +94,5 @@ describe('derivedDownloadName', () => {
 
   it('falls back to "memory" when the name reduces to nothing', () => {
     expect(derivedDownloadName('   ', 0, bytes(0x00))).toBe('memory 1.bin')
-  })
-})
-
-describe('saveBytes', () => {
-  afterEach(() => vi.restoreAllMocks())
-
-  it('saves via a Blob object URL + a synthetic <a download>, then revokes the URL', () => {
-    const create = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake')
-    const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
-    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
-
-    saveBytes(bytes(1, 2, 3), 'Rom 1.jpg')
-
-    expect(create).toHaveBeenCalledOnce()
-    expect(click).toHaveBeenCalledOnce()
-    expect(revoke).toHaveBeenCalledWith('blob:fake')
-    // the anchor is removed after the click (no lingering element)
-    expect(document.querySelector('a[download]')).toBeNull()
   })
 })

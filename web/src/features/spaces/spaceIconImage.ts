@@ -2,7 +2,7 @@
 // a fixed square, then re-encodes it to a WebP that fits the constant pad budget — stepping quality down until it
 // does. Reuses the Memory cover's `deriveImage` seam (downscale + encode, taught `mimeType`/`background` in
 // cr-space-icon); the crop bake is icon-specific (a Memory cover stores a reference + crop and never bakes pixels).
-import { type MediaDeriver } from '../memory/mediaDeriver'
+import { type MediaDeriver } from '../../shared/image/mediaDeriver'
 import { type CropRect } from '../../shared/ui/ImageCropper.vue'
 import { ICON_ENCODED_BUDGET } from './spaceIcon'
 

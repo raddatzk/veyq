@@ -20,11 +20,12 @@ import { type MediaListPage, type MediaSummary, type PresignedUrl, type MediaDer
 import { expectMintedId } from './mintedId'
 import { mediaKey, uploaderOriginOf, type UploaderOrigin } from './mediaKey'
 import { MetaConflictError, MetaUnreadableError, writeSealedMeta, type MetaEditContext } from './sealedMetaWrite'
-import { createBrowserDeriver, deriveTiers, type MediaDeriver, type AddMediaSource, type Dimensions } from './mediaDeriver'
+import type { ChunkProvider } from '../../sw/protocol'
+import { createBrowserDeriver, deriveTiers, type MediaDeriver, type AddMediaSource, type Dimensions } from '../../shared/image/mediaDeriver'
 
-// The on-device pixel stage lives in `./mediaDeriver` (cr-0143). Re-exported here so existing importers of
+// The on-device pixel stage lives in `shared/image/mediaDeriver` (cr-0143). Re-exported here so existing importers of
 // `./media` (share.ts, useOptimisticTiles.ts, uploadQueue.ts, tests) keep their import path unchanged.
-export { scaleToMaxEdge, TIER_SPECS, createBrowserDeriver, type MediaDeriver, type AddMediaSource, type Dimensions } from './mediaDeriver'
+export { scaleToMaxEdge, TIER_SPECS, createBrowserDeriver, type MediaDeriver, type AddMediaSource, type Dimensions } from '../../shared/image/mediaDeriver'
 
 // The per-uploader "Beiträge" buckets (en.memory.buckets, ADR 0034) live in `./mediaBuckets` (#96) — uploader
 // metadata, not blob data. Re-exported here so existing importers of `./media` (MemoryBuckets.vue, tests) keep
@@ -1233,17 +1234,6 @@ export const openOriginal = (scopeId: string, memoryKey: Uint8Array, item: Media
 // for the decrypted *plaintext* of individual chunks over a MessagePort and assembles the byte ranges the
 // <video> demuxer requests. This is that page-side seam — a per-blob source of plaintext chunks over the same
 // presign→openFrame plumbing the whole-blob read paths use. K_blob and the auth context never leave the page.
-
-/** A per-blob source of decrypted plaintext chunks, addressed by chunk index. Backs the SW range layer; the SW
- *  never sees a key — it calls {@link ChunkProvider.getPlaintextChunk} over a port and slices the result. */
-export type ChunkProvider = {
-  /** Total chunk count of the whole blob — the AAD `total` every `getPlaintextChunk` binds (never a subset). */
-  readonly chunkCount: number
-  /** Total ciphertext byte size (sum of framed chunk sizes). Use [plaintextSize] for the original's own size. */
-  readonly byteSize: number
-  /** Open exactly chunk `index` to plaintext. Re-presigns the whole blob once on a stale-URL 403, then retries. */
-  getPlaintextChunk(index: number): Promise<Uint8Array>
-}
 
 /** Re-presign a little before the backend's 600 s TTL (`application.properties`) so a long playback never races expiry. */
 const PRESIGN_REFRESH_MS = 9 * 60 * 1000

@@ -15,7 +15,7 @@
 import * as v1 from '@veyq/crypto/v1'
 import { sharesPwTokenAsync } from '@veyq/crypto/argonWorker'
 import { b64std, b64url, fromB64std, fromB64url } from '@veyq/crypto/base64'
-import { contentApi, scopesApi, sharesApi, publicSharesApi } from '../../api/client'
+import { contentApi, sharesApi, publicSharesApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import { isCodedError, isHttpStatus, HttpStatus } from '../../shared/httpError'
 import { dropKeysForShare, mediaKey, mintUploaderKey, openDropPublicKey, uploaderOriginOf } from './mediaKey'
@@ -32,13 +32,13 @@ import {
   windowPuts,
   createBrowserDeriver,
   type BlobRef,
-  type ChunkProvider,
   type MediaItem,
   type MediaUploadTransport,
   type AddMediaSource,
   type AddMediaOptions,
   type MediaDeriver,
 } from './media'
+import type { ChunkProvider } from '../../sw/protocol'
 import {
   ShareRole,
   type PublicShare,
@@ -530,15 +530,6 @@ export async function isShareDeleted(e: unknown): Promise<boolean> {
 /** Whether a re-activation was refused because a departed member may hold the link (ADR 0075). */
 export async function isReissueRequired(e: unknown): Promise<boolean> {
   return isCodedError(e, HttpStatus.conflict, 'reissue_required')
-}
-
-/**
- * Turn off every link of a scope (ADR 0075 point 5) — a scope owner's switch-off: every enabled share, whoever made
- * it, goes off and is marked, so each comes back only by {@link reissueShare}. Resolves how many it turned off.
- */
-export async function revokeScopeShares(scopeId: string): Promise<number> {
-  const { revoked } = await withRefresh(() => scopesApi().revokeScopeShares({ scopeId }))
-  return revoked
 }
 
 // --- contributor / uploader (anonymous, no session; cr-0101, cr-0102) --------

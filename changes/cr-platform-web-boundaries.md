@@ -215,7 +215,7 @@ allowlist: run them serially, or accept a mechanical conflict on those two files
       `import.meta.glob(` is red. Run the predicate on the untouched tree first and read it green (`changes/README.md`).
       · Done when: `python3 scripts/validate_web_core_imports_no_applications.py` and `python3 scripts/validate_guard_gaps.py`
       green; the allowlist equals row 1 ∪ row 3 minus `src/test/`.
-- [ ] 2 pure relocations out of the application, no new abstraction (row 9, 10) — `saveBytes` to `shared/`;
+- [x] 2 pure relocations out of the application, no new abstraction (row 9, 10) — `saveBytes` to `shared/`;
       `revokeScopeShares` to `features/spaces/scopes.ts`; the deriver family (`mediaDeriver`, `mediaPixels`,
       `mediaDeriveWorker`, `mediaDerive.worker.ts` with their tests) to `shared/image/`, **keeping the worker's file
       basename** so the dist chunk name and `web/scripts/assert-media-worker-in-dist.mjs` still match (only its
