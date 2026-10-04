@@ -51,6 +51,7 @@ class NodeSubtreePurge(
     private val sharing: SharingStore,
     private val reclaim: StoreReclaimStore,
     config: VeyqConfig,
+    // MutableList, not List: ArC rejects kotlin List with @All (see ScopePurge).
     @All erasers: MutableList<NodeSubtreeEraser>,
 ) {
     // Sorted by the explicit phase, never by bean order; split once at core's own cover-blob erase (NodeSubtreeEraser).

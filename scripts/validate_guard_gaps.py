@@ -252,7 +252,7 @@ TENANT_HANDLER = "backend/src/main/kotlin/com/veyq/app/features/admin/tenant/Ten
 TENANT_REPROJECT_CALL = "        if (outcome is SuspendOutcome.Done) reproject()\n"
 TRASH_PURGE_CTOR_ANCHOR = "    private val store: MediaStore,\n"
 # The derivative arm of the share blob-GET authorization, which lives in the media implementation of
-# `SharedSubtreeContributor` (cr-platform-core-boundaries step 7) — the place the live-twin check must follow it to.
+# `SharedSubtreeContributor` (ADR 0079 phase 1, step 7) — the place the live-twin check must follow it to.
 MEDIA_SHARE_CONTRIBUTOR = "backend/src/main/kotlin/com/veyq/app/features/media/MediaSharedSubtreeContributor.kt"
 DERIVATIVE_ARM_LINE = '            MediaDerivativeEntity.find("mediaId = ?1", m.id).list().forEach { ids.add(it.blobId) }\n'
 
@@ -777,6 +777,8 @@ def forge_wiki_prose_contradicts_doc(root: pathlib.Path) -> str:
     return "a wiki page claiming the password is sent to the server, against the key model it declares"
 
 
+# Ids must stay unique: parallel work that adds cases picks the next free id at merge time, not at branch time
+# (two parallel steps both took the same number once, so renumber on the merge, never in the branch).
 # id, target guard, forgery, expect_pass (True = guard passes the forgery = gap still open; False = must reject)
 CASES = [
     ("1",  "validate_coverage.py",  forge_web_ref_nontest,      False),
