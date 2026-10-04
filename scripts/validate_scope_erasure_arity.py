@@ -12,9 +12,9 @@ unreclaimed — on the operator's own disk, under self-hosting.
 
 The closure is read from three keys that are all cheap and all textual:
 
-  - *edges* — every `REFERENCES <table>` in `backend/src/main/resources/db/migration`, replayed in **numeric**
-    migration order with `DROP TABLE` and `ALTER TABLE … RENAME TO` applied, so the table names are the ones a
-    live database holds rather than the ones a `CREATE TABLE` once spelled.
+  - *edges* — every `REFERENCES <table>` in `backend/src/main/resources/db/migration`, read in **numeric**
+    migration (version) order, each attributed to the table of the `CREATE TABLE` / `ALTER TABLE` statement it
+    sits in.
   - *closure* — a walk from `veyq_scope` down those edges. Transitive, not one-hop: a child of a child blocks the
     scope row just as hard as a direct child does.
   - *erased* — the entities deleted by `ScopePurge.eraseScope` and by every file declaring a class that
@@ -35,11 +35,10 @@ both are silently wrong, so they are recorded here rather than re-derived:
   (a) *One-hop* — "every table that `REFERENCES veyq_scope`". It reports **2** where the truth is 4, because
       `veyq_job_decline` and `veyq_share_identity` reference `veyq_job`/`veyq_share` and never the scope. A fix
       sized by that shape still throws, one table further down. The question has to be transitive.
-  (b) *The table name as written at `CREATE TABLE`*. V9 and V21 rebuild `veyq_membership` through a fresh table
-      plus `RENAME TO` (the portable H2 ∩ MariaDB way to change a column), so this shape invents
-      `veyq_membership_new` and `veyq_membership_v21` as two uncovered tables that do not exist, while the live
-      `veyq_membership` — which `eraseScope` does delete — never appears at all. Replaying drops and renames is
-      what fixes it, and the replay must run in numeric order: sorted as strings, V9 comes after V10.
+  (b) *The table name as written at `CREATE TABLE`* is taken as the live name: a later `DROP TABLE` or
+      `ALTER TABLE … RENAME TO` is not replayed. The baselines create every table under its live name, so none
+      exists today; one added later leaves the old name in the closure, reported uncovered — red, never a false
+      green — and that migration is the moment to teach this guard the replay again.
   (c) It reads **declarations, not a database**. A constraint added outside `db/migration`, or an `ON DELETE`
       clause wrapped onto a line of its own, is invisible — every such clause in this tree sits on its
       `REFERENCES` line today (`grep -rn 'ON DELETE' backend/src/main/resources/db/migration` → 4 hits, all
@@ -78,8 +77,6 @@ VERSION = re.compile(r"V(\d+)__")
 SQL_COMMENT = re.compile(r"\s*--")
 CREATE_TABLE = re.compile(r"CREATE TABLE\s+(?:IF NOT EXISTS\s+)?(\w+)", re.IGNORECASE)
 ALTER_TABLE = re.compile(r"ALTER TABLE\s+(\w+)", re.IGNORECASE)
-DROP_TABLE = re.compile(r"DROP TABLE\s+(?:IF EXISTS\s+)?(\w+)", re.IGNORECASE)
-RENAME_TO = re.compile(r"ALTER TABLE\s+(\w+)\s+RENAME TO\s+(\w+)", re.IGNORECASE)
 REFERENCES = re.compile(r"REFERENCES\s+(\w+)\s*\(", re.IGNORECASE)
 ON_DELETE_CASCADE = re.compile(r"ON DELETE CASCADE", re.IGNORECASE)
 
@@ -92,7 +89,8 @@ ENTITY_TABLE = re.compile(
 
 
 def _version(path: pathlib.Path) -> int:
-    """V9 sorts before V10 — numerically, which a string sort gets wrong and a replay cannot survive."""
+    """Versions compare as numbers, as Flyway compares them — a string sort is right only while every version has
+    the same number of digits."""
     match = VERSION.match(path.name)
     if not match:
         raise ValueError(f"migration outside the V<n>__ convention: {path.name}")
@@ -100,7 +98,7 @@ def _version(path: pathlib.Path) -> int:
 
 
 def fk_edges() -> list[dict]:
-    """Every foreign key in the migrations, replayed onto the LIVE table names (drops + renames applied)."""
+    """Every foreign key in the migrations, attributed to the table whose statement declares it."""
     edges: list[dict] = []
     current = None
     for path in sorted(MIGRATIONS.glob("*.sql"), key=_version):
@@ -118,16 +116,6 @@ def fk_edges() -> list[dict]:
                     "cascade": bool(ON_DELETE_CASCADE.search(line)),
                     "loc": f"{path.name}:{lineno}",
                 })
-            if match := DROP_TABLE.search(line):
-                gone = match.group(1)
-                edges = [e for e in edges if e["child"] != gone]
-            if match := RENAME_TO.search(line):
-                old, new = match.group(1), match.group(2)
-                for edge in edges:
-                    if edge["child"] == old:
-                        edge["child"] = new
-                    if edge["parent"] == old:
-                        edge["parent"] = new
     return edges
 
 

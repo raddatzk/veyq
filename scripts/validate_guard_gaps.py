@@ -261,7 +261,8 @@ CONFIG_SECRET_MOUNT = "      - veyq-config-secret:/var/lib/veyq\n"
 # and it is one of the entities the delete paths already touch.
 SCOPE_ENTITY = "backend/src/main/kotlin/com/veyq/app/shared/scope/ScopeEntity.kt"
 SCOPE_ENTITY_ANCHOR = "class ScopeEntity : PanacheEntityBase {\n"
-BANNER_MIGRATION = "backend/src/main/resources/db/migration/V99__guard_gap_scope_banner.sql"
+# Named the way a real later core migration is (V<yyyymmddHHMM>__core_<slug>.sql), above every pinned version.
+BANNER_MIGRATION = "backend/src/main/resources/db/migration/V209912312359__core_guard_gap_scope_banner.sql"
 # Where a bypass of the single-deleter rule is forged. A scheduled purge is the plausible place: it already
 # reclaims rows, so deleting the objects inline is the one-line shortcut ADR 0062 Decision 3 forbids.
 TRASH_PURGE = "backend/src/main/kotlin/com/veyq/app/features/media/MediaTrashPurge.kt"

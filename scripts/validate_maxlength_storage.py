@@ -19,9 +19,9 @@ exactly why "just lower the cap to 65 535" is the wrong fix). For every `compone
   1. `maxLength` must be a **multiple of 4** — a non-multiple permits lengths no valid base64 value can reach,
      the tell of a cap picked without base64 in mind (the `65535` trap).
   2. `maxLength` must be **≤ 65 532** (fits `TEXT`) — UNLESS the field is on the `MEDIUMTEXT_BACKED` allowlist
-     below, whose columns are widened to MEDIUMTEXT (16 MiB) by a migration.
+     below, whose columns a migration declares MEDIUMTEXT (16 MiB).
   3. Each allowlisted column is **verified MEDIUMTEXT** against the migrations, so the allowlist cannot lie: an
-     entry claiming a wider column that no `V*.sql` actually widened fails here. And each allowlist entry must
+     entry claiming a wider column that no `V*.sql` actually declares MEDIUMTEXT fails here. And each allowlist entry must
      match a real field, so a removed field leaves a loud stale entry, not silent rot.
 
 **Scope — read this before quoting a green run.** This checks the *contract cap* against the repo's storage
@@ -51,7 +51,7 @@ MIGRATIONS = ROOT / "backend" / "src" / "main" / "resources" / "db" / "migration
 # length. A base64 char is one ASCII byte, so chars == bytes for these fields.
 TEXT_MAX_B64 = 65532
 
-# base64 fields whose column is widened to MEDIUMTEXT (16 MiB) by a migration — the ONLY fields allowed a cap
+# base64 fields whose column a migration declares MEDIUMTEXT (16 MiB) — the ONLY fields allowed a cap
 # above TEXT_MAX_B64. Keyed (spec, schema, property) → the DB column that must be provably MEDIUMTEXT. Adding a
 # field here is a deliberate "this column is wider than TEXT" claim, verified below against the migrations.
 MEDIUMTEXT_BACKED: dict[tuple[str, str, str], str] = {

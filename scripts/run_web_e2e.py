@@ -63,7 +63,7 @@ Prerequisite: the fast-jar exists (`cd backend && ./gradlew quarkusBuild`). CI b
 whatever jar is on disk, so backend changes made since the last build are simply absent — a new endpoint 404s, a
 new migration never applies. Both look like a broken suite. The tell is in the boot log: `Successfully applied N
 migrations, now at version vN` names the schema the jar carries, so compare it against the highest
-`V<n>__*.sql` in the tree before believing a failure. Rebuild after ANY backend change; `./gradlew check` does
+`V<yyyymmddHHMM>__*.sql` in the tree before believing a failure. Rebuild after ANY backend change; `./gradlew check` does
 not do it for you (it builds test classes, not the fast-jar). The web mirror of this trap is in `web/CLAUDE.md`
 — `npm run check` not regenerating the API client — and it is the same failure in both directions: a green or
 red that was measured against code the run never saw.
