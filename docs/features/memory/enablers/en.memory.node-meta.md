@@ -67,8 +67,8 @@
   `metaVersion` it was built from (else `400`); the server compare-and-sets it and stores `metaVersion + 1`, or
   writes nothing — a rename in the same request included — and answers `409 stale_version` with the current blob
   and version. Only this write moves the counter.
-- **Migrations** `V17__node_meta.sql` (`veyq_node.wrapped_meta TEXT NULL`) and `V66__meta_version.sql`
-  (`veyq_node.meta_version`, and the same counter on `veyq_media`).
+- **Schema** (core baseline): `veyq_node.wrapped_meta TEXT NULL` and `veyq_node.meta_version`; the same counter
+  on `veyq_media` (Memories baseline).
 
 ## Materialize, don't recompute — the reason it lives on the node
 

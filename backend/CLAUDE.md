@@ -71,12 +71,24 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   something ("no quota") is not a field value at all but an operation of its own (`clearTenantStorageQuota`): once
   bound, absence and null are the same. An object, enum or
   uuid field is refused by deserialization on its own.
-- **Migrations:** Flyway, append-only `V<n>__*.sql`; `schema-management.strategy=none` — Flyway owns the
-  schema. **Append-only means an applied migration is never edited — not even a comment in it.** Flyway
-  validates the checksum of every applied migration at `migrate-at-start`, so a one-word fix to a `--` comment
-  fails startup on every instance that already ran it; `%dev` hides this behind `repair-at-start=true`, so it is
-  green exactly where you would test it and red only on somebody else's server. A migration's comment is a
-  historical artifact: correct the live copy of that rule (the entity KDoc, the ADR) and leave the file alone.
+- **Migrations:** Flyway; `schema-management.strategy=none` — Flyway owns the schema. **One global version
+  scheme across modules:** `V<yyyymmddHHMM>__<module>_<slug>.sql` (the UTC minute you write it; `<module>` is
+  `core` or `memories`), all in the one `src/main/resources/db/migration/`. The schema starts from two baselines,
+  `V202610041200__core_baseline.sql` and `V202610041201__memories_baseline.sql`; a Memories migration references
+  core tables or its own, a core migration never names a Memories table (ADR 0079). A new migration sorts above
+  every existing one — Flyway runs `outOfOrder=false`, so an instance past a version refuses a file below it —
+  and appends its SHA-256 line to `scripts/applied_migrations.sha256` in the same commit;
+  `scripts/validate_migration_versions.py` holds the name shape, unique versions, the pins, their order and the
+  module direction. **An applied migration is never edited — not even a comment in it.** Flyway validates the
+  checksum of every applied migration at `migrate-at-start`, so a one-word fix to a `--` comment fails startup on
+  every instance that already ran it; `%dev` hides this behind `repair-at-start=true`, so it is green exactly where
+  you would test it and red only on somebody else's server. A migration's comment is a historical artifact:
+  correct the live copy of that rule (the entity KDoc, the ADR) and leave the file alone. **Until the first
+  release** (the owner declares it on the pin file's `release:` line; `none` today) a baseline may still change,
+  but only together with its pin line in the same commit, so the change is a visible diff — and every existing
+  database, dev ones included, is then recreated (`docker compose -f infra/docker-compose.yml down -v`; repair does
+  not rescue a changed baseline). From the release on the rule is absolute: a released migration is only followed
+  by a new one, and an upgrade proof against a database of the release becomes possible.
   Column types: `TEXT` for opaque base64 (65 535 bytes on MariaDB, so a base64 cap must be ≤ 65 532 —
   guarded by `scripts/validate_maxlength_storage.py`), `MEDIUMTEXT` where a cap needs more (16 MiB), `VARCHAR`
   for short. The test datasource runs H2 with **`MODE=MariaDB`** (`application-test.properties`) so it parses

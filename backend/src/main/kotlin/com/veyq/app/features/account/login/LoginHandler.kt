@@ -93,7 +93,7 @@ class LoginHandler(
         return verified && challenge != null && user != null && challenge.expiresAt.isAfter(Instant.now())
     }
 
-    // 32 bytes = 44 base64 chars, and the nonce is the key of a VARCHAR(64) column (V50). A longer nonce fails
+    // 32 bytes = 44 base64 chars, and the nonce is the key of a VARCHAR(64) column (`veyq_login_challenge.nonce`). A longer nonce fails
     // the insert, which `challenge` swallows for non-enumerability — so every login would 401, silently.
     private fun randomNonce(): String {
         val bytes = ByteArray(32)

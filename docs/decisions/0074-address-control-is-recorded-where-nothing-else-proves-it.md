@@ -81,7 +81,7 @@ later:** a path that lets someone create an account for an address, other than a
 prove address control *before* the account exists. That covers open self-registration. The reason is that
 creation binds the globally unique address and its auth salt, and a squat cannot be undone by confirming later.
 
-**4. The confirmation token copies the recovery token's lifecycle** (ADR 0054 § Consequences, `V44`):
+**4. The confirmation token copies the recovery token's lifecycle** (ADR 0054 § Consequences, `veyq_account_recovery`):
 
 - **Minting.** A 256-bit `Tokens.random()`. Only its SHA-256 `Tokens.hash()` is stored, on a row that also
   binds the account id and the **address it was mailed to**.

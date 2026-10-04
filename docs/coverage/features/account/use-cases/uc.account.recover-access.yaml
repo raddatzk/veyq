@@ -90,7 +90,7 @@ acceptanceCriteria:
     text: The mail-transport check runs before the per-address rate limiter, so the two answers can never be paired into an oracle for whether an address was recently asked about. A tenant that cannot send also burns no limiter budget.
     coverage:
       backend: { integration: [RecoverySliceTest.transportIsAnsweredBeforeTheRateLimiterSoTheTwoCannotBePaired] }
-# Backend built by cr-account-recovery: V44 token table, the request/release/complete triple, RecoveryMailer on
+# Backend built by cr-account-recovery: the `veyq_account_recovery` token table, the request/release/complete triple, RecoveryMailer on
 # the extracted TenantMailSender seam, RecoveryRateLimiter (per-address + per-instance), RecoveryPurge.
 # Web built by the same CR: /recover route + view, recoveryKekAsync, and the data layer under recovery.test.ts.
 # The live suite is where the flow is proven whole — real backend, real SMTP (Mailpit), a token read out of an

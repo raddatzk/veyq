@@ -54,7 +54,7 @@ class NodeEntity : PanacheEntityBase {
     var wrappedMeta: String? = null
 
     /** How many times [wrappedMeta] was replaced (ADR 0077): 0 at birth, bumped only by the compare-and-set in
-     *  `NodesStore.applyUpdate`, which every meta write goes through. Not [mediaRevision] — see V66. */
+     *  `NodesStore.applyUpdate`, which every meta write goes through. Not [mediaRevision], which every attach and trash also moves. */
     @Column(name = "meta_version", nullable = false)
     var metaVersion: Long = 0
 

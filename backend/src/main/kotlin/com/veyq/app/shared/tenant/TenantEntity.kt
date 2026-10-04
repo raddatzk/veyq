@@ -66,7 +66,7 @@ class TenantEntity : PanacheEntityBase {
 
     companion object : PanacheCompanionBase<TenantEntity, String> {
         /** 10 GiB — enough for an event's photos, too little for a leaked link to eat a disk (ADR 0073 §4). The
-         *  column default in V55 is the same number for the tenants that existed before it. */
+         *  `share_link_limit_bytes` column default is the same number. */
         const val DEFAULT_SHARE_LINK_LIMIT_BYTES: Long = 10L * 1024 * 1024 * 1024
 
         const val PENDING = "PENDING"

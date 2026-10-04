@@ -42,7 +42,7 @@
   sealed_name? + suite_id,   -- AEAD under K_mem; primary's derived name is sealed too; sub-buckets carry their own
   is_primary
   -- One primary per (node_id, owner_key) -- content-blind (owner_key is not ciphertext); held by the node
-  -- row's lock, not an index (V35 carries only a plain ix_bucket_node_owner). See "Lifecycle" below.
+  -- row's lock, not an index (the schema carries only a plain ix_bucket_node_owner). See "Lifecycle" below.
   -- Sub-bucket names are NOT unique either way (ciphertext, the server can't compare them).
   ```
 - **`veyq_media` gains:** **`bucket_id`** (nullable FK, **`ON DELETE SET NULL`**, `null` = the owner's primary) and

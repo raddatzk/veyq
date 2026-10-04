@@ -157,7 +157,9 @@ restating the code. Avoid `// loop over the items` and comments that drift from 
   own primitive; never skip the vector. (The contents of suite `v1` are decided in the first crypto
   change-request — see [Security Model → Cryptographic stance](security-model.md).)
 - **Migrations are portable + Flyway-owned.** Use only column types valid on **both H2 and MariaDB** (the
-  common subset); Flyway is the single schema authority.
+  common subset); Flyway is the single schema authority. Versions are one global timestamp scheme across modules,
+  each file names its owning module, and every file is pinned — the scheme, the two baselines, the pin and the
+  pre-release caveat live in [`backend/CLAUDE.md`](../../backend/CLAUDE.md) § Migrations.
 - **An applied migration is immutable — including its comments.** Fix a mistake with a *new* migration; never
   edit a file that has run anywhere. Flyway checksums the file's whole content, so a one-word comment edit is
   indistinguishable from a schema change: the next `migrate` fails validation and the instance does not start.
@@ -170,7 +172,9 @@ restating the code. Avoid `// loop over the items` and comments that drift from 
   default on both layers — `quarkus.flyway.validate-on-migrate` (Quarkus 3.36.0: `true`) and Flyway's own
   `validateOnMigrate` (12.0.0 `FlywayModel.defaults()`: `true`). Only `%dev` escapes, via
   `quarkus.flyway.repair-at-start=true` — which is exactly why a broken checksum passes a developer's machine
-  unnoticed and stops a production start.
+  unnoticed and stops a production start. `scripts/validate_migration_versions.py` turns such an edit red unless
+  its pin line changes in the same diff, which before the first release is the one sanctioned way to change a
+  baseline.
 
 ## 10. Testing
 

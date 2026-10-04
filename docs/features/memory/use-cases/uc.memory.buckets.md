@@ -53,7 +53,7 @@ Uploaders span **members** (`owner_key = user:{userId}`, display name = the per-
 - **Group / tenant scope** → **member buckets only** (name = username). Anonymous contributor shares are
   **personal-scope-only** ([ADR 0029](../../../decisions/0029-public-viewer-share.md) / ADR 0030), so they do not
   appear in group/tenant memories.
-- **A medium with `bucket_id = null`** (no write produces one since V35; only an older row could be one) → it
+- **A medium with `bucket_id = null`** (no write produces one; the column is merely nullable) → it
   resolves to the **owner's primary bucket** (lazy), so it always groups under its uploader.
 
 ## Quality notes

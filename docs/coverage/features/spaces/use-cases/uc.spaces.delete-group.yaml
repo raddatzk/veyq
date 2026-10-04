@@ -1,7 +1,7 @@
 useCase: uc.spaces.delete-group
 feature: spaces
 title: Delete a group (soft-delete, grace period, restore)
-# cr-0090 delivers the lifecycle end-to-end: backend (V26 deleted_at, delete/restore, the read-only guard, the
+# cr-0090 delivers the lifecycle end-to-end: backend (`veyq_scope.deleted_at`, delete/restore, the read-only guard, the
 # scheduled ScopePurge with blob-object erasure) + the web danger-zone/banner/restore + data layer. The
 # two-account LIVE smoke (owner deletes → members still view but marked → restore → purge) is tracked in the CR.
 acceptanceCriteria:

@@ -588,7 +588,7 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
      * The node's buckets for the "Beiträge" tab (uc.memory.buckets): each bucket (primaries first) with its live media
      * count. Every medium already names its bucket — [attach], the one insert, resolves it, and no write clears it:
      * a bucket delete reparents its media first ([deleteBucketReparent]) or erases them with it (`NodeSubtreePurge`),
-     * and media never change node. The lazy backfill this once ran for media from before buckets (V35) was deleted
+     * and media never change node. The lazy backfill this once ran for media from before buckets was deleted
      * before V1 (inbox #264), which has no such rows to carry.
      */
     @Transactional

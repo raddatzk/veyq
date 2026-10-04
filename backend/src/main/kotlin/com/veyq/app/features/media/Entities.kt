@@ -36,7 +36,7 @@ class MediaEntity : PanacheEntityBase {
     var wrappedMeta: String? = null
 
     /** How many times [wrappedMeta] was replaced (ADR 0077): 0 at attach, bumped only by the compare-and-set in
-     *  `MediaStore.setMeta`. Not the node's `mediaRevision`, which every attach and trash also moves — see V66. */
+     *  `MediaStore.setMeta`. Not the node's `mediaRevision`, which every attach and trash also moves. */
     @Column(name = "meta_version", nullable = false)
     var metaVersion: Long = 0
 
@@ -47,9 +47,7 @@ class MediaEntity : PanacheEntityBase {
      * enumeration in a place that cannot read the thing only goes stale. The listed essentials (geometry,
      * capture time, GPS, the resolved place name) live in `wrappedMeta`; GPS moved there in cr-0068.
      *
-     * This KDoc is the **live** copy of that rule. `V15__media_metadata.sql` and `V18__media_meta.sql` describe
-     * an older split and are deliberately left untouched: an applied Flyway migration is never edited, not even
-     * in a comment, because the checksum check fails startup on every instance that already ran it.
+     * This KDoc is the **live** copy of that rule.
      */
     @Column(name = "wrapped_exif")
     var wrappedExif: String? = null
@@ -68,7 +66,7 @@ class MediaEntity : PanacheEntityBase {
 
     /** When this media last changed — set `= createdAt` at attach, bumped to `now` on a meta edit (cr-0068). The
      *  `(updatedAt, mediaId)` pair is the gallery's keyset cursor for the live-updates delta (cr-0107, ADR 0033):
-     *  a poll pulls only media past its cursor. Nullable in the DB (V33 backfills `= created_at`); always set by
+     *  a poll pulls only media past its cursor. Nullable in the DB; always set by
      *  the write paths, and the read path coalesces `updatedAt ?: createdAt` defensively. */
     @Column(name = "updated_at")
     var updatedAt: Instant? = null

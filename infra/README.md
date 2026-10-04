@@ -600,8 +600,7 @@ single sweep drains that list, so a capture taken between the two legitimately h
 — a reclaim *pending*, not a deletion that failed unnoticed. Orphans are therefore still counted and tolerated,
 but a stuck one is now visible on the instance itself
 (`SELECT count(*) FROM veyq_store_reclaim WHERE abandoned_at IS NOT NULL`). (Abandoned upload sessions
-themselves are reclaimed — `V11__media.sql:9`'s "a later slice" note is a historical artifact of that
-migration.) A **row with no object** is fatal (A4): it
+themselves are reclaimed, by `UploadSessionPurge`.) A **row with no object** is fatal (A4): it
 restores as a Memory whose picture yields a valid presigned URL and a `404`, with no server-side error anywhere
 — so `verify` names every missing object and exits non-zero. It exits `2`, with a different headline, when the
 backup is structurally intact but carries no leg (c). A key kept apart is checked only when `--key-from` names it,

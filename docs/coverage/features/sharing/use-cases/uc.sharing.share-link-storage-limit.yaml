@@ -2,7 +2,7 @@ useCase: uc.sharing.share-link-storage-limit
 feature: sharing
 title: A share link's storage limit — no one link can fill the server
 # Built by cr-share-link-storage-limit (inbox #155, first half; ADR 0073). The per-link limit lives on the tenant row
-# (V55, 10 GiB default); `StorageQuota` in the media feature is the one place a total is summed, and a link start
+# (`share_link_limit_bytes`, 10 GiB default); `StorageQuota` in the media feature is the one place a total is summed, and a link start
 # locks the tenant row, checks, reserves and commits before it presigns. Each term of the link SUM is pinned by a
 # case that pins the usage EXACTLY (refused at usage + S - 1, admitted at usage + S), so a dropped term and an
 # over-reaching scope both go red. The lock is proven on H2 only: MariaDB runs the same `SELECT … FOR UPDATE`, but

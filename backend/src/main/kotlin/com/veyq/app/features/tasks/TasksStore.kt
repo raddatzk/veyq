@@ -322,10 +322,6 @@ class TasksStore {
      * user id, so the decliner's other devices are excluded too — the refusal was a decision about an identity,
      * not about a browser — while a different key-holder still delivers. The blind server never adjudicates the
      * crypto claim, it only removes this worker from the candidate set.
-     *
-     * (The `V30__job_decline.sql` comment still says *per-device*. It is left alone deliberately: Flyway
-     * validates the checksum of an applied migration, so editing even a comment there fails startup on every
-     * instance that already ran it. This KDoc and [JobDeclineEntity] are the live home of the rule.)
      */
     @Transactional
     fun decline(userId: String, jobId: String, reason: String?): DeclineResult {
