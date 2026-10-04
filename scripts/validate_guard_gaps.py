@@ -675,27 +675,25 @@ def forge_web_composition_root_sibling(root: pathlib.Path) -> str:
     return "a sibling of the composition root importing the application (the exemption is the exact path; REJECTED)"
 
 
+def _web_allowlist_with(root: pathlib.Path, entry: str) -> None:
+    g = root / "scripts" / WEB_GUARD
+    text = g.read_text()
+    empty = "ALLOWLIST: dict[str, set[str]] = {}"
+    if empty not in text:
+        raise ForgeError("the guard's ALLOWLIST is no longer an empty literal — re-anchor this forgery on its new shape")
+    g.write_text(text.replace(empty, "ALLOWLIST: dict[str, set[str]] = {\n    " + entry + ",\n}", 1))
+
+
 def forge_web_allowlist_entry_stale(root: pathlib.Path) -> str:
-    f = root / "web" / "src" / "views" / "ShareView.vue"
-    if not f.is_file():
-        raise ForgeError("web/src/views/ShareView.vue is gone — re-anchor this forgery on an allowlisted file")
-    text = f.read_text()
-    # Re-point every specifier that lands in the application at a core feature (robust to multi-line imports, whose
-    # `} from '…'` line does not start with `import`).
-    f.write_text(re.sub(r"""(\bfrom\s*['"][./]*)features/memory""", r"\1features/account", text))
-    if f.read_text() == text:
-        raise ForgeError("web/src/views/ShareView.vue no longer imports the application — re-anchor on an allowlisted file")
-    return "an allowlisted file whose violation was removed but whose entry stays (a stale entry; REJECTED)"
+    # The list only shrinks: an entry for a file that does not violate (here a clean core file) is itself red.
+    _web_allowlist_with(root, '"app/activeSpace.ts": {RULE_IMPORT}')
+    return "an allowlist entry for a core file that does not violate (a stale entry; REJECTED)"
 
 
 def forge_web_allowlist_entry_deleted(root: pathlib.Path) -> str:
-    g = root / "scripts" / WEB_GUARD
-    text = g.read_text()
-    entry = '    "views/ShareView.vue": {RULE_IMPORT},\n'
-    if entry not in text:
-        raise ForgeError("the allowlist entry for views/ShareView.vue is gone — re-anchor on an entry that remains")
-    g.write_text(text.replace(entry, "", 1))
-    return "an allowlist entry deleted while its file still violates (REJECTED)"
+    # The other branch of the same ratchet: an entry naming a file that is gone must be deleted, not carried.
+    _web_allowlist_with(root, '"app/gone.ts": {RULE_IMPORT}')
+    return "an allowlist entry naming a file that no longer exists (REJECTED)"
 
 
 def forge_web_core_names_memory_kind(root: pathlib.Path) -> str:

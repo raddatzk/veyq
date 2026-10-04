@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { defineComponent } from 'vue'
-import { createRegistry, type LifecycleHooks } from './registry'
+import { createRegistry, DROP_SHARE, type LifecycleHooks } from './registry'
 import { NodeKind } from '../../api/generated/content'
 
 const Stub = defineComponent({ template: '<div />' })
@@ -70,6 +70,29 @@ describe('registry: slots', () => {
     a.registerKind({ kind: NodeKind.Memory, icon: 'x', shareable: true })
     expect(b.slot('shareDialog')).toBeNull()
     expect(b.kind(NodeKind.Memory).supported).toBe(false)
+  })
+})
+
+describe('registry: share bodies', () => {
+  it('is empty until claimed: shareBody() is null, not undefined', () => {
+    const r = createRegistry()
+    expect(r.shareBody(NodeKind.Memory)).toBeNull()
+    expect(r.shareBody(DROP_SHARE)).toBeNull()
+  })
+
+  it('is single-claim per key: a second claim throws and the first body stays', () => {
+    const r = createRegistry()
+    r.claimShareBody(NodeKind.Memory, Stub)
+    expect(() => r.claimShareBody(NodeKind.Memory, Other)).toThrow(/already claimed/)
+    expect(r.shareBody(NodeKind.Memory)).toBe(Stub)
+  })
+
+  it('keeps the kind-less drop apart from every root kind: claiming one does not claim the other', () => {
+    const r = createRegistry()
+    r.claimShareBody(DROP_SHARE, Stub)
+    expect(r.shareBody(NodeKind.Memory)).toBeNull()
+    expect(() => r.claimShareBody(NodeKind.Memory, Other)).not.toThrow()
+    expect(() => r.claimShareBody(DROP_SHARE, Other)).toThrow(/drop is already claimed/)
   })
 })
 

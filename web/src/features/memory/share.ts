@@ -17,7 +17,15 @@ import { sharesPwTokenAsync } from '@veyq/crypto/argonWorker'
 import { b64std, b64url, fromB64std, fromB64url } from '@veyq/crypto/base64'
 import { contentApi, sharesApi, publicSharesApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
-import { isCodedError, isHttpStatus, HttpStatus } from '../../shared/httpError'
+import { isCodedError, HttpStatus } from '../../shared/httpError'
+import {
+  SHARE_MEMORY_NAME,
+  SHARE_NOTE,
+  openNoteMap,
+  resolvePublicShare,
+  ShareUnavailableError,
+  type PublicShareHead,
+} from '../../core/sharing/resolvePublicShare'
 import { dropKeysForShare, mediaKey, mintUploaderKey, openDropPublicKey, uploaderOriginOf } from './mediaKey'
 import { keyAt, writeKey, zeroEpochKeys, type EpochKeys } from '../spaces/epochs'
 import { isStaleEpoch, openScopeById } from '../spaces/scopes'
@@ -41,10 +49,8 @@ import {
 import type { ChunkProvider } from '../../sw/protocol'
 import {
   ShareRole,
-  type PublicShare,
   type ShareMedia,
   type ShareNode,
-  type ShareTerms,
   type ShareBlobUploadRequestItemRoleEnum,
 } from '../../api/generated/sharing'
 import type { MediaDerivativeKind } from '../../api/generated/media'
@@ -54,8 +60,6 @@ import type { MediaDerivativeKind } from '../../api/generated/media'
 // `share-memory-name` the Memory name re-sealed for the viewer, `share-note`/`share-name`/`share-password` the
 // curator's editable fields (cr-0115/0116/0118). Sealed by the curator, opened by the viewer or the manage UI.
 const SHARE_KEY = { purpose: 'share-key' } as const
-const SHARE_MEMORY_NAME = { purpose: 'share-memory-name' } as const
-const SHARE_NOTE = { purpose: 'share-note' } as const
 const SHARE_NAME = { purpose: 'share-name' } as const
 const SHARE_PASSWORD = { purpose: 'share-password' } as const
 /** Where a share lives: the Memory it shares and that Memory's scope, plus the share's own id (ADR 0072). */
@@ -90,15 +94,6 @@ export function hasLocaleText(map: LocaleMap): boolean {
 /** Seal a per-locale curator-note map under `K_share` — the plaintext is a JSON `{locale: markdown}` map (cr-0116). */
 function sealNoteMap(kShare: Uint8Array, note: LocaleMap): string {
   return b64std(v1.seal(SHARE_NOTE, kShare, v1.utf8(JSON.stringify(note))))
-}
-/** Open a per-locale note map sealed under `K_share`; `{}` when it can't be opened or isn't a JSON object. */
-function openNoteMap(kShare: Uint8Array, sealed: string): LocaleMap {
-  try {
-    const parsed = JSON.parse(noteDecoder.decode(v1.open(SHARE_NOTE, kShare, fromB64std(sealed))))
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as LocaleMap) : {}
-  } catch {
-    return {}
-  }
 }
 /** Seal a share's optional private name under `K_share` (opaque base64). */
 function sealShareName(kShare: Uint8Array, name: string): string {
@@ -143,12 +138,6 @@ async function buildPasswordFields(kShare: Uint8Array, password: string): Promis
   }
 }
 
-/** The base64 guest token `Argon2id(password, pwSalt)` a viewer presents in `X-Share-Password` (the salt comes from
- *  the locked resolve). Heavy (Argon2id), so it runs in the Argon2 worker; a one-off per unlock. */
-export async function derivePasswordToken(password: string, pwSalt: string): Promise<string> {
-  return b64std(await sharesPwTokenAsync(password, fromB64std(pwSalt)))
-}
-
 /** Reveal a managed share's password (scope members only): recover `K_share` through the epoch keys, open the sealed
  *  copy. '' when none / unreadable — a copy that does not open degrades, it does not refuse (ADR 0036 point 4). */
 export function readSharePassword(
@@ -184,20 +173,6 @@ export function readShareName(
   } catch {
     return ''
   }
-}
-
-/** Pick the best per-locale text for a viewer's locale (exact → base language → en → first present). '' if empty. */
-export function pickLocaleText(map: LocaleMap, locale: string): string {
-  const entries = Object.entries(map).filter(([, t]) => t && t.trim())
-  if (!entries.length) return ''
-  const req = locale.toLowerCase()
-  const base = req.split('-')[0]
-  const hit =
-    entries.find(([l]) => l.toLowerCase() === req) ??
-    entries.find(([l]) => l.toLowerCase() === base) ??
-    entries.find(([l]) => l.toLowerCase() === 'en') ??
-    entries[0]
-  return hit[1]
 }
 
 // --- curator (authenticated) -----------------------------------------------
@@ -693,67 +668,6 @@ export type ResolvedShare = {
   items: ShareItem[]
 }
 
-/** The fragment key is missing/malformed, or the share is unknown/revoked/expired (a non-enumerable 404). */
-export class ShareUnavailableError extends Error {}
-
-/** cr-0118: the share is password-protected and no (valid) token was given — the caller prompts with `pwSalt`. */
-export class SharePasswordRequiredError extends Error {
-  constructor(public pwSalt: string) {
-    super('password_required')
-  }
-}
-/** cr-0118: the presented password token was wrong (403) — the caller re-prompts. */
-export class SharePasswordIncorrectError extends Error {}
-
-// --- accountless terms gate (uc.sharing.share-accept, ADR 0035 §3) ----------
-// The accountless half of the two-tier terms gate. The terms are the operator's PUBLIC policy (never E2EE); a
-// visitor accepts them before viewing/contributing, and acceptance is stored **client-side only** (localStorage
-// keyed per tenant) so the server records NOTHING about the accountless visitor. This is an **operational gate,
-// not enforcement**: a localStorage flag is bypassable by an accountless visitor (devtools / a fresh profile /
-// resolving the share directly), so it records + surfaces consent — it does not *prevent* access. The
-// legally-meaningful protection is the terms' content + the decryptable-on-report path, not this prompt.
-const TERMS_ACCEPTED_KEY_PREFIX = 'veyq:terms-accepted:'
-
-/**
- * The owning tenant's public terms for a share (a guest read keyed on the non-enumerable `shareId`, so unknown/
- * disabled/expired is the same non-enumerable 404 as `resolveShare` — no `tenantId` existence oracle). Returns
- * `{ tenantId, termsVersion, terms }`; `termsVersion` 0 means the operator published no terms (the client never
- * gates). No auth, no password — terms are public.
- */
-export async function fetchShareTerms(shareId: string): Promise<ShareTerms> {
-  return publicSharesApi().getShareTerms({ shareId })
-}
-
-/** Pick the viewer's-locale terms markdown out of a [ShareTerms] (exact → base → en → first), '' when none. */
-export function pickShareTerms(terms: ShareTerms, locale: string): string {
-  const map: LocaleMap = {}
-  if (terms.terms?.de) map.de = terms.terms.de
-  if (terms.terms?.en) map.en = terms.terms.en
-  return pickLocaleText(map, locale)
-}
-
-/** The locally-recorded accepted terms version for a tenant (0 if never accepted or the store is unreadable). */
-export function acceptedTermsVersion(tenantId: string): number {
-  try {
-    const raw = localStorage.getItem(`${TERMS_ACCEPTED_KEY_PREFIX}${tenantId}`)
-    const n = raw ? Number.parseInt(raw, 10) : 0
-    return Number.isFinite(n) ? n : 0
-  } catch {
-    return 0
-  }
-}
-
-/** Record acceptance of [version] for [tenantId] — client-only (localStorage), keyed per tenant so accepting on
- *  one share of a tenant clears the gate on **every** share of that tenant. A storage failure is swallowed: the
- *  gate is operational, not enforcement, so it must never throw and block a visitor from viewing. */
-export function recordTermsAccepted(tenantId: string, version: number): void {
-  try {
-    localStorage.setItem(`${TERMS_ACCEPTED_KEY_PREFIX}${tenantId}`, String(version))
-  } catch {
-    /* private-mode / quota — an unrecordable acceptance still clears the in-memory gate for this session */
-  }
-}
-
 function shareMediaToItem(m: ShareMedia, uploader: MediaItem['uploader']): MediaItem {
   // Each ref is owned by THIS row's media, in the role the row lists it in (ADR 0072), exactly as the authed list.
   return {
@@ -810,44 +724,19 @@ function deriveSubtreeKeys(scopeId: string, nodes: ShareNode[], rootKmem: Uint8A
   return keys
 }
 
+/** The Memories half of a resolved share: what its link lets the guest do with keys, and every media (each with its
+ *  own node's `K_mem` — none for an UPLOADER link, which is served no media). */
+export type OpenedMemory = { access: ShareAccess; items: ShareItem[] }
+
 /**
- * Resolve + decrypt a public share for the anonymous viewer. Fetches the sealed subtree (no auth), unwraps the
- * Memory's `K_mem` with the fragment key, decrypts the Memory name, derives every chapter's `K_mem`, and returns
- * a flat, read-only list of media (each tagged with the exact `K_mem` its blobs open under). Throws
- * [ShareUnavailableError] on a missing/bad fragment key or a 404 (unknown/revoked/expired — indistinguishable).
+ * Open the Memories half of a public share: unwrap the Memory's `K_mem` with the fragment key, derive every chapter's
+ * `K_mem`, and return a flat, read-only list of media (each tagged with the exact `K_mem` its blobs open under). The
+ * platform half (fetch, password, name, note, root kind) is `resolvePublicShare` (core/sharing); the shell calls it and
+ * hands this its head. Throws [ShareUnavailableError] when the response cannot be opened (a server that served a share
+ * without the wrap or drop key the role needs, or one that does not open under the fragment key).
  */
-export async function resolveShare(shareId: string, fragmentKey: string, pwToken?: string): Promise<ResolvedShare> {
-  let kShare: Uint8Array
-  try {
-    kShare = fromB64url(fragmentKey)
-  } catch {
-    throw new ShareUnavailableError('bad_fragment_key')
-  }
-  if (kShare.length !== 32) throw new ShareUnavailableError('bad_fragment_key')
-
-  let share: PublicShare
-  try {
-    share = await publicSharesApi().resolveShare({ shareId, xSharePassword: pwToken }) // cr-0118: the guest token gates it
-  } catch (e) {
-    if (isHttpStatus(e, HttpStatus.forbidden)) throw new SharePasswordIncorrectError() // wrong password
-    throw new ShareUnavailableError('not_found') // 404 (revoked/expired/unknown) or a network error
-  }
-  // cr-0118: a locked share (password required, no/valid-less token) serves only the challenge — prompt the viewer.
-  // Locked is "no sealed name", never "no wrap": an unlocked UPLOADER share carries no wrap either.
-  if (share.passwordRequired && !share.sealedName) throw new SharePasswordRequiredError(share.pwSalt ?? '')
-  if (!share.scopeId || !share.sealedName) throw new ShareUnavailableError('not_found') // unlocked ⇒ scope + name
-  const scopeId = share.scopeId
-
-  let memoryName: string
-  try {
-    memoryName = noteDecoder.decode(v1.open(SHARE_MEMORY_NAME, kShare, fromB64std(share.sealedName)))
-  } catch {
-    throw new ShareUnavailableError('bad_fragment_key') // the id was valid but the fragment key doesn't match
-  }
-  // cr-0116: the optional per-locale curator note, opened with the same fragment key (a bad/absent one leaves `{}`).
-  // The share page picks the viewer's locale via `pickLocaleText`.
-  const noteByLocale = share.sealedNote ? openNoteMap(kShare, share.sealedNote) : {}
-
+export function openSharedMemory(head: PublicShareHead): OpenedMemory {
+  const { share, kShare, scopeId } = head
   // ADR 0031 point 7: an UPLOADER link opens the drop public key and nothing else. It never unwraps `K_mem`, even
   // from a row that still carries a wrap, and it is served no media to key.
   if (share.role === ShareRole.Uploader) {
@@ -858,7 +747,7 @@ export async function resolveShare(shareId: string, fragmentKey: string, pwToken
     } catch {
       throw new ShareUnavailableError('bad_fragment_key')
     }
-    return { memoryName, noteByLocale, role: share.role, scopeId, access: { kind: 'drop', nodeId: share.nodeId, dropPublicKey }, items: [] }
+    return { access: { kind: 'drop', nodeId: share.nodeId, dropPublicKey }, items: [] }
   }
 
   if (!share.wrap) throw new ShareUnavailableError('not_found')
@@ -882,7 +771,18 @@ export async function resolveShare(shareId: string, fragmentKey: string, pwToken
     const uploader = uploaderOriginOf(owner, m.nodeId, dropKeyOf.get(m.nodeId), wrapped)
     items.push({ item: shareMediaToItem(m, uploader), memoryKey, scopeId })
   }
-  return { memoryName, noteByLocale, role: share.role, scopeId, access: { kind: 'read', memoryKey: rootKmem }, items }
+  return { access: { kind: 'read', memoryKey: rootKmem }, items }
+}
+
+/**
+ * Resolve + decrypt a public share in one call: the platform half (`resolvePublicShare`) followed by the Memories half
+ * (`openSharedMemory`). The share page does NOT use this — its shell resolves the head, gates on password and terms,
+ * and only then lets the Memories body open the rest. It is the headless entry the unit and e2e suites drive.
+ */
+export async function resolveShare(shareId: string, fragmentKey: string, pwToken?: string): Promise<ResolvedShare> {
+  const head = await resolvePublicShare(shareId, fragmentKey, pwToken)
+  const { access, items } = openSharedMemory(head)
+  return { memoryName: head.name, noteByLocale: head.noteByLocale, role: head.role, scopeId: head.scopeId, access, items }
 }
 
 /** Open a shared blob via the gated, share-scoped presign endpoint (no auth), then decrypt it under its `K_mem`.

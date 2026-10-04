@@ -18,6 +18,13 @@
 // next application's change request re-cuts the slots it needs to share (per-kind composition); freezing that
 // abstraction from one usage is what the CR's Open question 1 declined to do.
 //
+// **Share bodies (`claimShareBody`).** The public share page (`views/ShareView.vue`) is a shell: it resolves the
+// kind-independent half (core/sharing/resolvePublicShare.ts), runs the password and terms gates, then renders the body
+// the application claimed for the share's ROOT node kind. A key is claimed once (a second claim throws). The root kind
+// of an UPLOADER share is unknown to the client (the unlocked response serves no nodes), so such a share goes to the one
+// application that claimed `DROP_SHARE` — the kind-less drop; a `rootKind` on the contract's `PublicShare` is the
+// follow-up that retires that rule. A root kind nobody claimed renders the shell's explicit unavailable state.
+//
 // **Lifecycle hooks (`registerLifecycle`).** What runs when a scope is entered or reset and when the master key
 // rotates. Registered per application id (a second registration of the same id throws); several applications may
 // each contribute, and the registry runs them all. The master-key hook is REQUIRED: material sealed under the master
@@ -32,6 +39,7 @@ import { NodeKind } from '../../api/generated/content'
 import type { TreeNode } from '../node/tree'
 import type { Level } from '../node/browse'
 import type { EpochKeys } from '../../features/spaces/epochs'
+import type { PublicShareHead } from '../sharing/resolvePublicShare'
 
 /** What core needs to know about a node kind. `detail` is the component the host renders when a node of the kind is
  *  opened. Only the platform's FOLDER has none (a folder browses, it does not open): an application kind that
@@ -98,6 +106,29 @@ export interface SidebarPinsEmits {
   navigate: []
 }
 
+/** The key under which an application claims the body for a share whose root kind the client cannot know: every
+ *  UPLOADER share (see the header). */
+export const DROP_SHARE = 'drop' as const
+export type ShareBodyKey = NodeKind | typeof DROP_SHARE
+
+/** What the shell hands a share body (event: `unavailable` — the body found the share unusable after the shell had
+ *  already shown it). The body renders everything below the password and terms gates: its own name pre-screen, its
+ *  content, and any overlay. */
+export interface ShareBodyProps {
+  shareId: string
+  /** The URL-fragment key (`#k=`), for the application's own key-proof calls. Key material. */
+  fragmentKey: string
+  /** The guest password token, when the share is password-protected and unlocked. */
+  pwToken: string | undefined
+  /** The platform half of the resolve. A new object after `reload()`. */
+  head: PublicShareHead
+  /** Re-resolve the share (after a contribution, so the new media lists); resolves once `head` has been replaced. */
+  reload: () => Promise<void>
+}
+export interface ShareBodyEmits {
+  unavailable: []
+}
+
 /** The single-claim slots. Each is claimed by at most one application (see the header). `topbarTray` takes no
  *  props (the shell's top bar mounts it beside the invitations badge); `sidebarPins` takes `SidebarPinsProps`. */
 export type SlotName = 'levelView' | 'nodeMutationDialog' | 'shareDialog' | 'topbarTray' | 'sidebarPins'
@@ -120,6 +151,11 @@ export interface Registry {
   /** Register an application's lifecycle hooks under its id. Throws if the id is already registered, or if
    *  `onMasterKeyRotated` is not a function. */
   registerLifecycle(applicationId: string, hooks: LifecycleHooks): void
+  /** Claim the public-share body for a root kind (or `DROP_SHARE`). Throws if that key is already claimed. */
+  claimShareBody(key: ShareBodyKey, component: Component): void
+  /** The body claimed for a share's root kind, or null when nobody claimed it (the shell renders its unavailable
+   *  state — never an empty page). */
+  shareBody(key: ShareBodyKey): Component | null
   /** Run every application's `onScopeReset`. */
   scopeReset(): void
   /** Run every application's `onScopeEntered`, in registration order; rejects with the first failure after all ran. */
@@ -147,6 +183,7 @@ export function createRegistry(): Registry {
   ])
   const slots = new Map<SlotName, Component>()
   const lifecycles = new Map<string, LifecycleHooks>()
+  const shareBodies = new Map<ShareBodyKey, Component>()
   /** Run `f` on every application, never stopping at the first failure; rethrow the first one at the end. */
   async function eachApplication(f: (h: LifecycleHooks) => Promise<void> | void): Promise<void> {
     let failure: { error: unknown } | null = null
@@ -160,6 +197,11 @@ export function createRegistry(): Registry {
     if (failure) throw failure.error
   }
   return {
+    claimShareBody(key, component) {
+      if (shareBodies.has(key)) throw new Error(`share body for ${key} is already claimed`)
+      shareBodies.set(key, component)
+    },
+    shareBody: (key) => shareBodies.get(key) ?? null,
     registerLifecycle(applicationId, hooks) {
       if (lifecycles.has(applicationId)) throw new Error(`lifecycle hooks of ${applicationId} are already registered`)
       if (typeof hooks.onMasterKeyRotated !== 'function') {

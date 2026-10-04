@@ -35,13 +35,15 @@ vi.mock('../features/memory/useThumbnailPipeline', () => ({
 vi.mock('../api/client', () => ({ sharesApi: vi.fn(), publicSharesApi: vi.fn(), tokenApi: vi.fn() }))
 vi.mock('vue-router', () => ({ useRoute: () => ({ params: { shareId: SHARE_ID }, hash: '#k=AAAA' }) }))
 
+// The shell resolves the platform half and fetches the terms; the Memories body opens the rest. Only those three
+// reads are stubbed — the shell, the registry, the body and the helpers it uses are real.
+vi.mock('../core/sharing/resolvePublicShare', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../core/sharing/resolvePublicShare')>()
+  return { ...actual, resolvePublicShare: vi.fn(), fetchShareTerms: vi.fn() }
+})
 vi.mock('../features/memory/share', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../features/memory/share')>()
-  return {
-    ...actual,
-    resolveShare: vi.fn(),
-    fetchShareTerms: vi.fn(),
-  }
+  return { ...actual, openSharedMemory: vi.fn() }
 })
 
 vi.mock('../features/memory/uploadQueue', async (importOriginal) => {
@@ -52,7 +54,9 @@ vi.mock('../features/memory/uploadQueue', async (importOriginal) => {
 import { mount, flushPromises } from '@vue/test-utils'
 import ShareView from './ShareView.vue'
 import { enqueueUploads } from '../features/memory/uploadQueue'
-import { resolveShare, fetchShareTerms } from '../features/memory/share'
+import { resolvePublicShare, fetchShareTerms } from '../core/sharing/resolvePublicShare'
+import { openSharedMemory, type ResolvedShare } from '../features/memory/share'
+import { headOf, openedOf } from '../test/shareHead'
 import { ShareRole } from '../api/generated/sharing'
 import { realI18n } from '../test/i18n'
 
@@ -94,6 +98,12 @@ function enqueuedNames(): string[] {
   return vi.mocked(enqueueUploads).mock.calls.flatMap((call) => call[1].map((s) => s.file.name))
 }
 
+/** Serve one resolved share to the shell (head) and the Memories body (the rest), as production splits it. */
+function serve(r: ResolvedShare) {
+  vi.mocked(resolvePublicShare).mockReset().mockResolvedValue(headOf(r))
+  vi.mocked(openSharedMemory).mockReset().mockReturnValue(openedOf(r))
+}
+
 describe('ShareView — the contributor picker inherits E3s re-read window', () => {
   beforeEach(() => {
     localStorage.clear()
@@ -101,7 +111,7 @@ describe('ShareView — the contributor picker inherits E3s re-read window', () 
     vi.mocked(enqueueUploads).mockReset()
     // No terms → no gate in front of the content (ShareView fails open on a terms-fetch error).
     vi.mocked(fetchShareTerms).mockReset().mockRejectedValue(new Error('no terms in this test'))
-    vi.mocked(resolveShare).mockReset().mockResolvedValue({
+    serve({
       memoryName: 'Rom 2026',
       noteByLocale: {},
       role: ShareRole.Contributor,

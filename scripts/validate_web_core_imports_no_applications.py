@@ -51,9 +51,7 @@ RULE_IMPORT, RULE_GLOB, RULE_KIND = "import", "glob", "kind"
 
 # The remaining violations, per file (relative to web/src) and rule. Generated from the untouched tree
 # (cr-platform-web-boundaries § Inventory rows 1 and 3, minus src/test/). Only shrinks: see the docstring.
-ALLOWLIST: dict[str, set[str]] = {
-    "views/ShareView.vue": {RULE_IMPORT},
-}
+ALLOWLIST: dict[str, set[str]] = {}
 
 # `from '…'` covers import/export-from, also across lines; `import('…')` and a bare `import '…'` the others.
 SPECIFIER = re.compile(r"""(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)(['"])([^'"\n]+)\1""")

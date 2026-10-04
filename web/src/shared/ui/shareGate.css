@@ -1,0 +1,63 @@
+/* The centered state/card look shared by the share page's shell (loading, unavailable, password, terms) and the
+   application body's name pre-screen. Pulled into each component with `<style scoped src>` so both keep scoped
+   rules and neither copies them. */
+.share-view-state {
+  flex: 1;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 0.6rem;
+  color: var(--app-muted);
+  text-align: center;
+}
+/* The mandatory contributor name pre-screen — a centered card (design-source login-gate feel). */
+.share-name-gate {
+  flex: 1;
+}
+.share-name-card {
+  display: grid;
+  gap: 0.6rem;
+  width: min(28rem, 100%);
+  padding: 1.75rem;
+  text-align: left;
+}
+.share-name-card h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+.share-name-intro {
+  margin: 0 0 0.4rem;
+  color: var(--app-muted);
+  font-size: 0.9rem;
+}
+.share-name-card label {
+  color: var(--app-muted);
+  font-size: 0.82rem;
+}
+.share-name-card input {
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--app-line);
+  border-radius: 8px;
+  background: var(--app-surface);
+  color: var(--app-text);
+  font: inherit;
+}
+.share-name-submit {
+  margin-top: 0.4rem;
+  padding: 0.6rem 1rem;
+  border: 0;
+  border-radius: 8px;
+  background: var(--app-accent);
+  color: var(--app-on-strong);
+  font-weight: 600;
+  cursor: pointer;
+}
+.share-name-submit:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.share-error {
+  margin: 0.25rem 0 0;
+  color: var(--app-danger);
+  font-size: 0.85rem;
+}
