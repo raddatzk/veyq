@@ -14,11 +14,13 @@
 
 ## Depends on a decision that is open
 
-`veyq_blob` is scope-keyed, but every blob is referenced today by a `veyq_media` row (`media.blob_id`, or a
-derivative or cover slot), and its `K_blob` is wrapped under a Memory's `K_mem` (measured:
-`sed -n 25,50p backend/src/main/resources/db/migration/V11__media.sql`). Files needs a blob that **a file node
-references** without going through media, wrapped under a key that is not `K_mem`: a **blob-role decision** (who
-may reference a blob, what reclaims it, which key wraps it). Until it is made, Files cannot start without
+`veyq_blob` is scope-keyed, but every blob is referenced today through Memories' tables — `veyq_media.blob_id`,
+`veyq_media_derivative.blob_id`, or the cover slot `veyq_node.cover_blob_id` (a node column, no media row) — and its
+`K_blob` is wrapped under a Memory's `K_mem` (measured: `grep -rn 'blob_id' backend/src/main/resources/db/migration`).
+Files needs a blob that **a file node references** without going through media, wrapped under a key that is not
+`K_mem`: a **blob-role decision** (who may reference a blob, what reclaims it, which key wraps it). Two prerequisites
+follow from it and are not built yet: a generic `veyq_node_attachment(node_id, slot, blob_id)` table with real foreign
+keys, and a seal purpose plus key rule for non-Memories blobs. Until it is made, Files cannot start without
 depending on Memories, which the rules forbid.
 
 ## Operator-visible, beyond the platform's `kind`
