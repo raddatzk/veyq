@@ -9,6 +9,9 @@
 // links to veyq's security docs (the client-integrity trust tier, ADR 0026).
 //
 // The order is password -> terms -> name -> content: the first two are here, "name" is the body's first screen.
+// So a share whose application half cannot be opened (a server that served no wrap) is discovered when the body
+// mounts — after the terms gate, not before it as when this page was one component — and the body answers with
+// `unavailable`. The password and unlock flow, and the "no body registered" check, still run before any gate.
 import { ref, shallowRef, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'

@@ -124,8 +124,9 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   41 a dynamic `import('…')` of the application in a core file — rejected: the same edge in its lazy spelling
   42 a sibling of the composition root (`applications2.ts`) importing the application — rejected: the exemption is
      the exact path `web/src/applications.ts`, not a directory or a prefix
-  43 an allowlisted file whose violation is gone — rejected: a stale entry is red, so the ratchet can only shrink
-  44 an allowlist entry deleted while its file still violates — rejected: a violation not on the list is red
+  43 a multi-line import of the application in a core file — rejected: the specifier is read after `from`, and the
+     `} from '…'` line of a multi-line import does not start with `import`
+  44 a bare side-effect `import '…'` of the application in a core file — rejected: the third spelling of the edge
   45 a core file naming the Memories node kind — rejected: the shell asks the registry, it does not know the kinds
   46 `import.meta.glob` in a core file — rejected: discovery by glob would hide an edge from the import rule
 Open gaps — a forgery the guard still passes (a documented limit, not a defect to fix blindly):
@@ -675,25 +676,16 @@ def forge_web_composition_root_sibling(root: pathlib.Path) -> str:
     return "a sibling of the composition root importing the application (the exemption is the exact path; REJECTED)"
 
 
-def _web_allowlist_with(root: pathlib.Path, entry: str) -> None:
-    g = root / "scripts" / WEB_GUARD
-    text = g.read_text()
-    empty = "ALLOWLIST: dict[str, set[str]] = {}"
-    if empty not in text:
-        raise ForgeError("the guard's ALLOWLIST is no longer an empty literal — re-anchor this forgery on its new shape")
-    g.write_text(text.replace(empty, "ALLOWLIST: dict[str, set[str]] = {\n    " + entry + ",\n}", 1))
+def forge_web_core_multiline_import(root: pathlib.Path) -> str:
+    # The `} from '…'` line of a multi-line import does not start with `import`: the specifier regex must still see it.
+    _plant_web(root, "shared/guardGapProbe.ts",
+               "import {\n  loadTree,\n  resetTree,\n} from '../features/memory/memoryNodes'\nvoid [loadTree, resetTree]\n")
+    return "a core file importing the application through a multi-line import (must be REJECTED)"
 
 
-def forge_web_allowlist_entry_stale(root: pathlib.Path) -> str:
-    # The list only shrinks: an entry for a file that does not violate (here a clean core file) is itself red.
-    _web_allowlist_with(root, '"app/activeSpace.ts": {RULE_IMPORT}')
-    return "an allowlist entry for a core file that does not violate (a stale entry; REJECTED)"
-
-
-def forge_web_allowlist_entry_deleted(root: pathlib.Path) -> str:
-    # The other branch of the same ratchet: an entry naming a file that is gone must be deleted, not carried.
-    _web_allowlist_with(root, '"app/gone.ts": {RULE_IMPORT}')
-    return "an allowlist entry naming a file that no longer exists (REJECTED)"
+def forge_web_core_side_effect_import(root: pathlib.Path) -> str:
+    _plant_web(root, "shared/guardGapProbe.ts", "import '../features/memory/memoryNodes'\n")
+    return "a core file importing the application for its side effects, `import '…'` (must be REJECTED)"
 
 
 def forge_web_core_names_memory_kind(root: pathlib.Path) -> str:
@@ -902,8 +894,8 @@ CASES = [
     ("40", WEB_GUARD, forge_web_core_reexports_application, False),
     ("41", WEB_GUARD, forge_web_core_dynamic_imports_application, False),
     ("42", WEB_GUARD, forge_web_composition_root_sibling, False),
-    ("43", WEB_GUARD, forge_web_allowlist_entry_stale, False),
-    ("44", WEB_GUARD, forge_web_allowlist_entry_deleted, False),
+    ("43", WEB_GUARD, forge_web_core_multiline_import, False),
+    ("44", WEB_GUARD, forge_web_core_side_effect_import, False),
     ("45", WEB_GUARD, forge_web_core_names_memory_kind, False),
     ("46", WEB_GUARD, forge_web_core_glob, False),
 ]

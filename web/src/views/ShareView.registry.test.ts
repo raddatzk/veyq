@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// The share page as a SHELL over the application registry (cr-platform-web-boundaries step 8), proven against a
+// The share page as a SHELL over the application registry (ADR 0079), proven against a
 // STUBBED registry (a fresh `createRegistry()` per test behind a delegating Proxy) so each test chooses exactly which
 // share bodies "an application" claimed, with a stub body that renders what the shell handed it. The real registry +
 // the real Memories body are covered in ShareView.test.ts / .order.test.ts / .picker.test.ts. Every negative has its

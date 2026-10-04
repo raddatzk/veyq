@@ -1,4 +1,4 @@
-// The application registry (ADR 0079, cr-platform-web-boundaries Decision 3): what the shell asks instead of
+// The application registry (ADR 0079): what the shell asks instead of
 // importing an application. Core renders by node kind and by slot; an application says, once, what it renders for
 // which kind and which slot it fills.
 //
@@ -16,7 +16,7 @@
 // application today, because exactly one application exists. A second claim throws, which turns "two applications
 // both think they own the folder level" into a boot-time failure instead of a silently shadowed component. The
 // next application's change request re-cuts the slots it needs to share (per-kind composition); freezing that
-// abstraction from one usage is what the CR's Open question 1 declined to do.
+// abstraction from one usage is what `docs/ai/README.md` § Refinement checklist ("Spike when the shape is unclear") rules out.
 //
 // **Share bodies (`claimShareBody`).** The public share page (`views/ShareView.vue`) is a shell: it resolves the
 // kind-independent half (core/sharing/resolvePublicShare.ts), runs the password and terms gates, then renders the body
