@@ -3,7 +3,7 @@ package com.veyq.app.core.scope
 /**
  * One step of a group's hard-erasure (uc.spaces.delete-group, ADR 0014 §6): the package that owns an entity
  * with a `scope_id` deletes that entity's rows here, so `ScopePurge` names no table of the Memories
- * application (cr-platform-core-boundaries step 5).
+ * application (ADR 0079 phase 1, step 5).
  *
  * **Order is [phase], sorted by the caller — never CDI bean order.** `ScopePurge` collects every implementation
  * and runs them `sortedBy { phase }`; a phase is therefore a statement about a foreign key, and each

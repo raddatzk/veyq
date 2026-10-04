@@ -178,7 +178,7 @@ def _fn_body(lines: list[str], fn: str) -> list[str] | None:
 def live_twin_body() -> list[str] | None:
     """The live twin: core's `subtreeBlobIds` body plus every contributor's `authorizedBlobIds` body, or None where
     the core function is gone. The media and derivative arms live in the implementations of `SharedSubtreeContributor`
-    (cr-platform-core-boundaries step 7), so the check follows the arms to where they are."""
+    (ADR 0079 phase 1, step 7), so the check follows the arms to where they are."""
     if not SHARING_STORE.exists():
         return None
     body = _fn_body(SHARING_STORE.read_text(encoding="utf-8").splitlines(), LIVE_TWIN_FN)

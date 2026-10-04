@@ -43,6 +43,8 @@ class ScopePurge(
     private val store: ScopesStore,
     private val reclaim: StoreReclaimStore,
     config: VeyqConfig,
+    // MutableList, not List: ArC rejects an injection point typed kotlin.collections.List with @All (Kotlin's List is
+    // a java.util.List<? extends E> wildcard); the explicit phase, not bean order, decides who runs first.
     @All erasers: MutableList<ScopeEraser>,
 ) {
     // Sorted by the explicit phase, never by bean order; split once at core's own blob delete (ScopeEraser).
