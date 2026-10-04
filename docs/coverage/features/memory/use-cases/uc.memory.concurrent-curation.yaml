@@ -66,5 +66,5 @@ acceptanceCriteria:
     coverage:
       web:
         unit:
-          - src/app/itemFavoritesStore.test.ts
-          - src/app/favoritesStore.test.ts
+          - src/features/memory/itemFavoritesStore.test.ts
+          - src/features/memory/favoritesStore.test.ts

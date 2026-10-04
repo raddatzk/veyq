@@ -20,10 +20,10 @@ vi.mock('../app/activeSpace', async () => {
     activeEpochKeys: () => ({ current: 0, keys: new Map([[0, new Uint8Array(32).fill(1)]]) }),
   }
 })
-vi.mock('../app/favoritesStore', () => ({
+vi.mock('../features/memory/favoritesStore', () => ({
   favoritesStore: { loaded: true, ids: new Set<string>() },
   loadFavoritesFor: vi.fn(),
-  isFavorite: () => false,
+  isFavorite: vi.fn(),
   toggleFavorite: vi.fn(),
 }))
 vi.mock('../features/spaces/scopes', () => ({ listMyTenants: vi.fn() }))
@@ -85,11 +85,13 @@ vi.mock('../core/node/components/SpaceTrashDialog.vue', async () => {
 import MemoryHomeView from './MemoryHomeView.vue'
 import { treeStore } from '../core/node/treeStore'
 import { listMyTenants } from '../features/spaces/scopes'
+import { isFavorite } from '../features/memory/favoritesStore'
 import type { TreeNode } from '../core/node/tree'
 import { NodeKind } from '../api/generated/content'
 import { capabilityState } from '../shared/state/capabilities'
 import { SHARING_PUBLIC_LINKS } from '../features/platform/capabilities'
 import { realI18n } from '../test/i18n'
+import { registry } from '../core/applications/registry'
 
 function node(over: Partial<TreeNode> & Pick<TreeNode, 'id' | 'kind'>): TreeNode {
   return { parentId: null, orderIndex: 0, epoch: 0, name: over.id, wrappedContentKey: null, wrappedMeta: null, metaVersion: 0, ...over }
@@ -113,6 +115,7 @@ async function mountAt(hash: string) {
 
 beforeEach(() => {
   vi.mocked(listMyTenants).mockResolvedValue([])
+  vi.mocked(isFavorite).mockReturnValue(false)
   treeStore.nodes = TREE.map((n) => ({ ...n }))
   capabilityState.ids = [SHARING_PUBLIC_LINKS]
 })
@@ -190,5 +193,17 @@ describe('MemoryHomeView over the real registry', () => {
     level.vm.$emit('openMemory', TREE[1])
     await flushPromises()
     expect(w.find('.detail-stub').text()).toBe('Solo|')
+  })
+})
+
+describe('MemoryHomeView entering a scope', () => {
+  it('asks the registry to let each application load its per-scope state, once the scope is ready', async () => {
+    const entered = vi.spyOn(registry, 'scopeEntered').mockResolvedValue(undefined)
+    try {
+      await mountAt('#~me')
+      expect(entered).toHaveBeenCalledWith('scope-1')
+    } finally {
+      entered.mockRestore()
+    }
   })
 })

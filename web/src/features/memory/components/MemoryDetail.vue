@@ -33,7 +33,7 @@ import {
   loadItemFavoritesFor,
   toggleItemFavorite,
   clearItemFavorites,
-} from '../../../app/itemFavoritesStore'
+} from '../itemFavoritesStore'
 import MediaLightbox from './MediaLightbox.vue'
 import MemoryDateEditor from './MemoryDateEditor.vue'
 import MemoryLocationEditor from './MemoryLocationEditor.vue'

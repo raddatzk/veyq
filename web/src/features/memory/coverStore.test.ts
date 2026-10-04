@@ -1,6 +1,6 @@
 // The shared cover store (this CR) — the two properties that rot first, both bitten by injection because
 // neither defect is live: the store is new, so there is nothing to redden against on the untouched tree.
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest'
 
 // Typed by the real function (inbox #287): an untyped `vi.fn()` took a `{ x, y, w, h }` crop `CoverCrop` does not have.
 const loadNodeCover = vi.hoisted(() => vi.fn<typeof import('./memoryCover').loadNodeCover>())
@@ -23,6 +23,12 @@ vi.mock('../../app/activeSpace', async (orig) => ({
 import { covers, ensureCovers, resetCovers } from './coverStore'
 import { treeStore, patchNodeMeta } from '../../core/node/treeStore'
 import { nodeContentKey } from '../../core/node/tree'
+import { registry } from '../../core/applications/registry'
+import { memoriesLifecycle } from './lifecycle'
+
+// A node-environment file: no application is registered for it, so the REAL Memories hooks go into the REAL registry —
+// `clearActiveSpace` reaches `resetCovers` only through the registry's `onScopeReset`.
+beforeAll(() => registry.registerLifecycle('memories', memoriesLifecycle))
 
 const revoked: string[] = []
 let minted = 0
@@ -105,8 +111,8 @@ describe('coverStore', () => {
   })
 
   // The reset property. Asserted through `clearActiveSpace`, which is the cheapest of the three call sites that
-  // share this line — `enterScope` and `refreshActiveScope` carry the same call, and driving a scope open would
-  // mock far more than it proves. Lever: delete `resetCovers()` from `clearActiveSpace` and this reddens.
+  // share this line — `enterScope` and `refreshActiveScope` carry the same `registry.scopeReset()` call, and driving a scope open would
+  // mock far more than it proves. Lever: drop `resetCovers()` from the Memories `onScopeReset` hook (features/memory/lifecycle.ts) and this reddens.
   it('releases every decrypted URL when the active space is cleared', async () => {
     ensureCovers(['n1'])
     await settle()

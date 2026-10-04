@@ -25,7 +25,7 @@ vi.mock('../features/memory/useThumbnailPipeline', () => ({
   }),
 }))
 
-// The generated client is never hit (resolveShare/fetchShareTerms are overridden below), but share.ts imports it
+// The generated client is never hit (resolvePublicShare/openSharedMemory/fetchShareTerms are overridden below), but share.ts imports it
 // at module load — mock it exactly as share.test.ts does so loading the real module is side-effect-free.
 vi.mock('../api/client', () => ({ sharesApi: vi.fn(), publicSharesApi: vi.fn(), tokenApi: vi.fn() }))
 
@@ -34,17 +34,21 @@ vi.mock('vue-router', () => ({ useRoute: () => ({ params: { shareId: SHARE_ID },
 
 // Keep the REAL terms helpers (acceptedTermsVersion/recordTermsAccepted/pickShareTerms) + error classes; override
 // only the two network reads so no resolve crypto runs.
+// The shell resolves the platform half and fetches the terms; the Memories body opens the rest. Only those three
+// reads are stubbed — the shell, the registry, the body and the helpers it uses are real.
+vi.mock('../core/sharing/resolvePublicShare', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../core/sharing/resolvePublicShare')>()
+  return { ...actual, resolvePublicShare: vi.fn(), fetchShareTerms: vi.fn() }
+})
 vi.mock('../features/memory/share', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../features/memory/share')>()
-  return {
-    ...actual,
-    resolveShare: vi.fn(),
-    fetchShareTerms: vi.fn(),
-  }
+  return { ...actual, openSharedMemory: vi.fn() }
 })
 
 import ShareView from './ShareView.vue'
-import { resolveShare, fetchShareTerms, type ResolvedShare, type ShareAccess } from '../features/memory/share'
+import { resolvePublicShare, fetchShareTerms } from '../core/sharing/resolvePublicShare'
+import { openSharedMemory, type ResolvedShare, type ShareAccess } from '../features/memory/share'
+import { headOf, openedOf } from '../test/shareHead'
 import { ShareRole } from '../api/generated/sharing'
 import { realI18n } from '../test/i18n'
 
@@ -57,6 +61,12 @@ function mountShareView() {
   })
 }
 
+/** Serve one resolved share to the shell (head) and the Memories body (the rest), as production splits it. */
+function serve(r: ResolvedShare) {
+  vi.mocked(resolvePublicShare).mockReset().mockResolvedValue(headOf(r))
+  vi.mocked(openSharedMemory).mockReset().mockReturnValue(openedOf(r))
+}
+
 function viewerShare(): ResolvedShare {
   return {
     memoryName: 'My Memory', noteByLocale: {}, role: ShareRole.Viewer, scopeId: 'scope-1',
@@ -67,7 +77,7 @@ function viewerShare(): ResolvedShare {
 describe('ShareView — accountless terms gate', () => {
   beforeEach(() => {
     localStorage.clear()
-    vi.mocked(resolveShare).mockReset().mockResolvedValue(viewerShare())
+    serve(viewerShare())
     vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({
       tenantId: TENANT,
       termsVersion: 1,
@@ -126,6 +136,27 @@ describe('ShareView — accountless terms gate', () => {
   })
 })
 
+// The gate order password -> terms -> name -> content (the name pre-screen is the Memories body's first screen). This
+// is the only place the terms gate and the name gate meet, so it is where swapping them in the shell goes red.
+describe('ShareView — terms come before the name pre-screen', () => {
+  it('a not-yet-accepted contributor sees the terms first and the name screen only after accepting', async () => {
+    localStorage.clear()
+    serve({ ...viewerShare(), role: ShareRole.Contributor, access: { kind: 'read', memoryKey: new Uint8Array(32) } })
+    vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: TENANT, termsVersion: 1, terms: { en: '## Rules' } })
+    const wrapper = mountShareView()
+    await flushPromises()
+
+    expect(wrapper.find('.share-terms-card').exists()).toBe(true)
+    expect(wrapper.find('.share-name-card:not(.share-terms-card)').exists()).toBe(false) // name screen withheld
+
+    await wrapper.find('.share-terms-card .share-name-submit').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.share-terms-card').exists()).toBe(false)
+    expect(wrapper.find('.share-name-card').exists()).toBe(true) // now the name screen
+  })
+})
+
 // The name pre-screen tells a guest who reads the name it types (ADR 0030 point 8): the Memory's members, and no
 // other link holder — which is what the resolve serves, so the page must not promise "everyone" either.
 describe('ShareView — who sees a guest name', () => {
@@ -138,7 +169,7 @@ describe('ShareView — who sees a guest name', () => {
     [ShareRole.Contributor, { kind: 'read', memoryKey: new Uint8Array(32) }],
     [ShareRole.Uploader, { kind: 'drop', nodeId: 'n1', dropPublicKey: { x: new Uint8Array(), m: new Uint8Array() } }],
   ])('the %s name screen says only the Memory\'s members see the name', async (role, access) => {
-    vi.mocked(resolveShare).mockReset().mockResolvedValue({ ...viewerShare(), role, access })
+    serve({ ...viewerShare(), role, access })
     const wrapper = mountShareView()
     await flushPromises()
 

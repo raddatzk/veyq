@@ -1,4 +1,4 @@
-// The application registry (ADR 0079, cr-platform-web-boundaries Decision 3): what the shell asks instead of
+// The application registry (ADR 0079): what the shell asks instead of
 // importing an application. Core renders by node kind and by slot; an application says, once, what it renders for
 // which kind and which slot it fills.
 //
@@ -16,7 +16,21 @@
 // application today, because exactly one application exists. A second claim throws, which turns "two applications
 // both think they own the folder level" into a boot-time failure instead of a silently shadowed component. The
 // next application's change request re-cuts the slots it needs to share (per-kind composition); freezing that
-// abstraction from one usage is what the CR's Open question 1 declined to do.
+// abstraction from one usage is what `docs/ai/README.md` § Refinement checklist ("Spike when the shape is unclear") rules out.
+//
+// **Share bodies (`claimShareBody`).** The public share page (`views/ShareView.vue`) is a shell: it resolves the
+// kind-independent half (core/sharing/resolvePublicShare.ts), runs the password and terms gates, then renders the body
+// the application claimed for the share's ROOT node kind. A key is claimed once (a second claim throws). The root kind
+// of an UPLOADER share is unknown to the client (the unlocked response serves no nodes), so such a share goes to the one
+// application that claimed `DROP_SHARE` — the kind-less drop; a `rootKind` on the contract's `PublicShare` is the
+// follow-up that retires that rule. A root kind nobody claimed renders the shell's explicit unavailable state.
+//
+// **Lifecycle hooks (`registerLifecycle`).** What runs when a scope is entered or reset and when the master key
+// rotates. Registered per application id (a second registration of the same id throws); several applications may
+// each contribute, and the registry runs them all. The master-key hook is REQUIRED: material sealed under the master
+// key (Memories' pins) is undecryptable after a rotation that skipped it, so `rotateKeys` asks
+// `assertRotationHooks()` before it touches anything and refuses to start when no registered application carries the
+// hook (a composition root that registered nothing is that case too).
 //
 // **Fail closed.** `kind()` never returns `undefined`: a node kind nobody registered resolves to
 // `{ supported: false }`, which the host renders as an explicit unsupported state, never as an empty region.
@@ -25,6 +39,7 @@ import { NodeKind } from '../../api/generated/content'
 import type { TreeNode } from '../node/tree'
 import type { Level } from '../node/browse'
 import type { EpochKeys } from '../../features/spaces/epochs'
+import type { PublicShareHead } from '../sharing/resolvePublicShare'
 
 /** What core needs to know about a node kind. `detail` is the component the host renders when a node of the kind is
  *  opened. Only the platform's FOLDER has none (a folder browses, it does not open): an application kind that
@@ -91,11 +106,65 @@ export interface SidebarPinsEmits {
   navigate: []
 }
 
+/** The key under which an application claims the body for a share whose root kind the client cannot know: every
+ *  UPLOADER share (see the header). */
+export const DROP_SHARE = 'drop' as const
+export type ShareBodyKey = NodeKind | typeof DROP_SHARE
+
+/** What the shell hands a share body (event: `unavailable` — the body found the share unusable after the shell had
+ *  already shown it). The body renders everything below the password and terms gates: its own name pre-screen, its
+ *  content, and any overlay. */
+export interface ShareBodyProps {
+  shareId: string
+  /** The URL-fragment key (`#k=`), for the application's own key-proof calls. Key material. */
+  fragmentKey: string
+  /** The guest password token, when the share is password-protected and unlocked. */
+  pwToken: string | undefined
+  /** The platform half of the resolve. A new object after `reload()`. */
+  head: PublicShareHead
+  /** Re-resolve the share (after a contribution, so the new media lists); resolves once `head` has been replaced. */
+  reload: () => Promise<void>
+}
+export interface ShareBodyEmits {
+  unavailable: []
+}
+
 /** The single-claim slots. Each is claimed by at most one application (see the header). `topbarTray` takes no
  *  props (the shell's top bar mounts it beside the invitations badge); `sidebarPins` takes `SidebarPinsProps`. */
 export type SlotName = 'levelView' | 'nodeMutationDialog' | 'shareDialog' | 'topbarTray' | 'sidebarPins'
 
+/** What an application runs at the platform's lifecycle moments. `onMasterKeyRotated` is mandatory (the type says
+ *  so; the registry additionally refuses a hook set that is not a function at runtime). */
+export interface LifecycleHooks {
+  /** A scope was entered (or re-opened after a rotation) and its tree is loaded: load the application's per-scope
+   *  state. Idempotent: the host may call it again for a scope that is already loaded. */
+  onScopeEntered?(scopeId: string): Promise<void> | void
+  /** The per-scope state is about to be replaced or dropped (scope switch, epoch refresh, sign-out/re-lock):
+   *  clear everything the application holds for the old scope. Synchronous. */
+  onScopeReset?(): void
+  /** The Master Key rotates (uc.account.rotate-keys): re-seal everything the application sealed under `oldMk` so
+   *  `newMk` opens it. `scopeIds` are the scopes the caller can see. Runs after the rotation's publish commit. */
+  onMasterKeyRotated(oldMk: Uint8Array, newMk: Uint8Array, scopeIds: string[]): Promise<void>
+}
+
 export interface Registry {
+  /** Register an application's lifecycle hooks under its id. Throws if the id is already registered, or if
+   *  `onMasterKeyRotated` is not a function. */
+  registerLifecycle(applicationId: string, hooks: LifecycleHooks): void
+  /** Claim the public-share body for a root kind (or `DROP_SHARE`). Throws if that key is already claimed. */
+  claimShareBody(key: ShareBodyKey, component: Component): void
+  /** The body claimed for a share's root kind, or null when nobody claimed it (the shell renders its unavailable
+   *  state — never an empty page). */
+  shareBody(key: ShareBodyKey): Component | null
+  /** Run every application's `onScopeReset`. */
+  scopeReset(): void
+  /** Run every application's `onScopeEntered`, in registration order; rejects with the first failure after all ran. */
+  scopeEntered(scopeId: string): Promise<void>
+  /** Run every application's `onMasterKeyRotated`; rejects with the first failure after all ran. */
+  masterKeyRotated(oldMk: Uint8Array, newMk: Uint8Array, scopeIds: string[]): Promise<void>
+  /** Throws unless at least one registered application carries `onMasterKeyRotated`: `rotateKeys` refuses to start
+   *  without it (fail closed — see the header). */
+  assertRotationHooks(): void
   /** Register a node kind. Throws if the kind is already registered (the platform's own FOLDER included). */
   registerKind(descriptor: KindDescriptor): void
   /** Claim a slot. Throws if the slot is already claimed. */
@@ -113,7 +182,44 @@ export function createRegistry(): Registry {
     [NodeKind.Folder, { kind: NodeKind.Folder, icon: 'pi pi-folder', shareable: false }],
   ])
   const slots = new Map<SlotName, Component>()
+  const lifecycles = new Map<string, LifecycleHooks>()
+  const shareBodies = new Map<ShareBodyKey, Component>()
+  /** Run `f` on every application, never stopping at the first failure; rethrow the first one at the end. */
+  async function eachApplication(f: (h: LifecycleHooks) => Promise<void> | void): Promise<void> {
+    let failure: { error: unknown } | null = null
+    for (const h of lifecycles.values()) {
+      try {
+        await f(h)
+      } catch (error) {
+        failure ??= { error }
+      }
+    }
+    if (failure) throw failure.error
+  }
   return {
+    claimShareBody(key, component) {
+      if (shareBodies.has(key)) throw new Error(`share body for ${key} is already claimed`)
+      shareBodies.set(key, component)
+    },
+    shareBody: (key) => shareBodies.get(key) ?? null,
+    registerLifecycle(applicationId, hooks) {
+      if (lifecycles.has(applicationId)) throw new Error(`lifecycle hooks of ${applicationId} are already registered`)
+      if (typeof hooks.onMasterKeyRotated !== 'function') {
+        throw new Error(`application ${applicationId} registered no onMasterKeyRotated hook (it is required)`)
+      }
+      lifecycles.set(applicationId, { ...hooks })
+    },
+    scopeReset() {
+      // Synchronous on purpose: callers (enterScope, clearActiveSpace) rely on the state being gone on return.
+      for (const h of lifecycles.values()) h.onScopeReset?.()
+    },
+    scopeEntered: (scopeId) => eachApplication((h) => h.onScopeEntered?.(scopeId)),
+    masterKeyRotated: (oldMk, newMk, scopeIds) => eachApplication((h) => h.onMasterKeyRotated(oldMk, newMk, scopeIds)),
+    assertRotationHooks() {
+      if (lifecycles.size === 0) {
+        throw new Error('no application registered an onMasterKeyRotated hook; refusing to rotate keys (fail closed)')
+      }
+    },
     registerKind(descriptor) {
       if (kinds.has(descriptor.kind)) throw new Error(`node kind ${descriptor.kind} is already registered`)
       kinds.set(descriptor.kind, { ...descriptor })

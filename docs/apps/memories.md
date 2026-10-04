@@ -37,6 +37,7 @@ the backend's `core` packages hold the node, blob, upload-session and share enti
 no Memories code; core reaches media and favorites through interfaces they implement. But Memories is not its own
 package: the node tree's handler and store (`features.content`), the share handler and store
 (`features.sharing`), and `media` are still feature packages, the node `kind` is still the closed
-`FOLDER`/`MEMORY`/`CHAPTER` set, and the web's `features/memory` holds both tree and Memory screens. The rest of
-the series is not done; [ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)
+`FOLDER`/`MEMORY`/`CHAPTER` set, and on the web `features/memory` is the application (core imports it nowhere but the composition root and asks a
+registry for what to render), though its directory name and five single-claim slots are still Memories-shaped. The
+rest of the series is not done; [ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)
 Consequences lists it.

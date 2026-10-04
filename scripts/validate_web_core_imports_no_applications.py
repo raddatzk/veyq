@@ -16,16 +16,14 @@ Exempt by exact path: `web/src/applications.ts`, the one composition root that m
 sibling file importing the application is red; an absent root is not an error). Exempt by location: `web/src/test/**` and `*.test.ts` — and the generated API
 client, which is untracked and spells the kinds by definition.
 
-**A ratchet, not a clean slate.** Core imports the application at 14 files today (cr-platform-web-boundaries
-§ Inventory rows 1 and 3), so a plain guard would be red on the day it was born. `ALLOWLIST` names each remaining
-violation per file and per rule; the guard is green with it, a violation not on it is red, and **an entry that no
-longer violates is red too** (stale), so the list can only shrink. Each step of the CR deletes the entries it
-removes; step 9 deletes the list and asserts it is empty.
+**No allowlist.** Any violation is red. (The guard was born as a ratchet — core imported the application at 14
+files on the day it landed, so a plain guard would have been red — and the allowlist shrank to nothing as the
+boundary was drawn; a list that can be added to is a list that is added to, so the mechanism went with the last entry.)
 
-**The defect that bought it.** No incident — the web half of ADR 0079 was prose until this guard. By the CR's
-measurement `app/`, `components/app/`, `sw/`, `views/` and three core features imported `features/memory` directly,
-which also made two import cycles (`app/activeSpace` ↔ `features/memory/memoryNodesStore`, `features/spaces` ↔
-`features/memory`); an application that core cannot import is what makes a second one possible.
+**The defect that bought it.** No incident — the web half of ADR 0079 was prose until this guard. `app/`,
+`components/app/`, `sw/`, `views/` and three core features imported `features/memory` directly, which also made two
+import cycles (`app/activeSpace` ↔ the Memories tree store, `features/spaces` ↔ `features/memory`); an application
+that core cannot import is what makes a second one possible.
 
 **Its limit.** Regex over source, not an AST: a commented-out import is read as an import (conservative), and a
 specifier built at runtime (`import(base + name)`) is not seen — the glob rule and the review of the composition
@@ -48,16 +46,6 @@ COMPOSITION_ROOT = "applications.ts"  # relative to web/src; exact path, never a
 GENERATED = ("api", "generated")  # untracked client; defines the kinds, so it names them
 
 RULE_IMPORT, RULE_GLOB, RULE_KIND = "import", "glob", "kind"
-
-# The remaining violations, per file (relative to web/src) and rule. Generated from the untouched tree
-# (cr-platform-web-boundaries § Inventory rows 1 and 3, minus src/test/). Only shrinks: see the docstring.
-ALLOWLIST: dict[str, set[str]] = {
-    "app/activeSpace.ts": {RULE_IMPORT},
-    "app/favoritesStore.ts": {RULE_IMPORT},
-    "app/itemFavoritesStore.ts": {RULE_IMPORT},
-    "features/account/rotation/rotateKeys.ts": {RULE_IMPORT},
-    "views/ShareView.vue": {RULE_IMPORT},
-}
 
 # `from '…'` covers import/export-from, also across lines; `import('…')` and a bare `import '…'` the others.
 SPECIFIER = re.compile(r"""(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)(['"])([^'"\n]+)\1""")
@@ -102,19 +90,13 @@ def main() -> int:
         return 1
 
     errors: list[str] = []
-    seen: dict[str, set[str]] = {}
     checked = 0
     for path in files:
         rel = pathlib.PurePosixPath(path.relative_to(SRC).as_posix())
         if is_exempt(rel):
             continue
         checked += 1
-        found = violations(rel, path.read_text(encoding="utf-8"))
-        if found:
-            seen[str(rel)] = found
-
-    for rel, found in sorted(seen.items()):
-        for rule in sorted(found - ALLOWLIST.get(rel, set())):
+        for rule in sorted(violations(rel, path.read_text(encoding="utf-8"))):
             errors.append(f"web/src/{rel}: core breaks the `{rule}` rule — " + {
                 RULE_IMPORT: "it imports the Memories application; ask the registry or move the shared piece "
                              "into core (ADR 0079)",
@@ -122,22 +104,12 @@ def main() -> int:
                            "import in web/src/applications.ts",
                 RULE_KIND: "it names a Memories node kind; ask the registry what to render for a kind",
             }[rule])
-    for rel, rules in sorted(ALLOWLIST.items()):
-        if not (SRC / rel).is_file():
-            errors.append(f"ALLOWLIST entry web/src/{rel} names a file that no longer exists — delete the entry")
-            continue
-        for rule in sorted(rules - seen.get(rel, set())):
-            errors.append(f"ALLOWLIST entry web/src/{rel} ({rule}) is stale — the file no longer violates it; "
-                          "delete the entry (the list only shrinks)")
-
     if errors:
         print("WEB-CORE-IMPORTS FAILED:")
         for e in errors:
             print("  -", e)
         return 1
-    remaining = sum(len(r) for r in ALLOWLIST.values())
-    print(f"web core imports OK: {checked} core file(s) read, {remaining} allowlisted violation(s) in "
-          f"{len(ALLOWLIST)} file(s), none new, none stale")
+    print(f"web core imports OK: {checked} core file(s) read, no violation")
     return 0
 
 

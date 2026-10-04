@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-vi.mock('../features/memory/favorites', () => ({ loadFavorites: vi.fn(), saveFavorites: vi.fn() }))
-vi.mock('./vault', () => ({ masterKey: vi.fn() }))
+vi.mock('./favorites', () => ({ loadFavorites: vi.fn(), saveFavorites: vi.fn() }))
+vi.mock('../../app/vault', () => ({ masterKey: vi.fn() }))
 
 import { favoritesStore, isFavorite, toggleFavorite, loadFavoritesFor, clearFavorites } from './favoritesStore'
-import { loadFavorites, saveFavorites } from '../features/memory/favorites'
-import { masterKey } from './vault'
+import { loadFavorites, saveFavorites } from './favorites'
+import { masterKey } from '../../app/vault'
 
 // The pin set seals under the member's MASTER key, not the scope key (ADR 0068) — so this suite holds a master
 // key where it used to hold an epoch key set. What it asserts is unchanged; only the key it is asserted with

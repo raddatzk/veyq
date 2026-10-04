@@ -41,8 +41,8 @@ bites nothing today. Two things are not checked, on purpose:
   is a real runtime back-edge and is masked away with the rest. None exists; reflection by name is not a
   shape this codebase uses. Before the lexer, only `import` lines were read and an inline qualified reference was
   green (2026-10-04 review; pinned rejected by `validate_guard_gaps` case 38).
-The web counterpart of the *core half* is `validate_web_core_imports_no_applications.py` (a ratchet, with an
-allowlist that only shrinks). The *shared half* has none on the web side: `shared/ui/SecretKeyField.vue` imports
+The web counterpart of the *core half* is `validate_web_core_imports_no_applications.py` (no allowlist: any violation is
+red). The *shared half* has none on the web side: `shared/ui/SecretKeyField.vue` imports
 the Emergency Kit's read half from `features/account/`, a known inversion the ui-web styleguide names, so a web
 `shared/` → features guard would be red on the day it was born.
 """

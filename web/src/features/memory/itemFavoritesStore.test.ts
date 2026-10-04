@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-vi.mock('../features/memory/itemFavorites', () => ({
+vi.mock('./itemFavorites', () => ({
   loadItemFavorites: vi.fn(),
   saveItemFavorites: vi.fn(),
 }))
@@ -14,7 +14,7 @@ import {
   toggleItemFavorite,
   clearItemFavorites,
 } from './itemFavoritesStore'
-import { loadItemFavorites, saveItemFavorites } from '../features/memory/itemFavorites'
+import { loadItemFavorites, saveItemFavorites } from './itemFavorites'
 
 const KEY = new Uint8Array(32)
 

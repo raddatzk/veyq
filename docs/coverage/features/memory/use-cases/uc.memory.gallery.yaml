@@ -40,8 +40,8 @@ acceptanceCriteria:
     coverage:
       web:
         unit:
-          - src/app/favoritesStore.test.ts
-          - src/app/favoritesPrivacy.test.ts
+          - src/features/memory/favoritesStore.test.ts
+          - src/features/memory/favoritesPrivacy.test.ts
           - src/features/memory/favorites.test.ts
           - src/features/account/rotation/rotateKeys.test.ts
   - id: operator-blind-fetch
@@ -205,7 +205,7 @@ acceptanceCriteria:
           - ItemFavoritesSliceTest.nonMemberIs404
       web:
         unit:
-          - src/app/itemFavoritesStore.test.ts
+          - src/features/memory/itemFavoritesStore.test.ts
           - src/features/memory/components/MemoryDetail.test.ts
   - id: my-marks-are-proven-mine
     text: >
@@ -228,7 +228,7 @@ acceptanceCriteria:
       Memory never surface in another. cr-favorites-two-objects (ADR 0068 §4).
     coverage:
       backend: { integration: [ItemFavoritesSliceTest.blobsArePerNodeNotPerScope, ItemFavoritesSliceTest.lastWriteWins] }
-      web: { unit: [src/app/itemFavoritesStore.test.ts] }
+      web: { unit: [src/features/memory/itemFavoritesStore.test.ts] }
   - id: gallery-filters-by-marks-and-shows-an-aggregate
     text: >
       The gallery header filters the grid to everyone's marks or only the caller's, and each tile's heart
@@ -239,7 +239,7 @@ acceptanceCriteria:
     coverage:
       web:
         unit:
-          - src/app/itemFavoritesStore.test.ts
+          - src/features/memory/itemFavoritesStore.test.ts
           - src/features/memory/components/MemoryDetail.test.ts
   - id: degenerate-filter-is-hidden-not-disabled
     text: >
@@ -268,6 +268,6 @@ gaps:
     `item-marks-are-shared-and-attributed-to-nobody` that says the marks carry their OWN `item-favorites`
     context: the `seal.sym.item-favorites` vector, and its domain separation from `favorites` (the vector's blob
     does not open as any other purpose — without it a private pin blob opens in the shared slot). Until that
-    job runs, no admitted ref proves that clause: `src/app/itemFavoritesStore.test.ts` mocks the sealing module,
+    job runs, no admitted ref proves that clause: `src/features/memory/itemFavoritesStore.test.ts` mocks the sealing module,
     and the backend relays ciphertext it cannot open. On the first run whose log shows packages/crypto's suites
     executed, the suite goes back under that criterion and this gap goes.

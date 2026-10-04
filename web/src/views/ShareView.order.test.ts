@@ -34,13 +34,15 @@ vi.mock('../features/memory/useThumbnailPipeline', () => ({
   useThumbnailPipeline: () => ({ thumbs: new Map(), reconcile: vi.fn(), decrypt: vi.fn().mockResolvedValue(undefined), revokeAll: vi.fn() }),
 }))
 
+// The shell resolves the platform half and fetches the terms; the Memories body opens the rest. Only those three
+// reads are stubbed — the shell, the registry, the body and the helpers it uses are real.
+vi.mock('../core/sharing/resolvePublicShare', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../core/sharing/resolvePublicShare')>()
+  return { ...actual, resolvePublicShare: vi.fn(), fetchShareTerms: vi.fn() }
+})
 vi.mock('../features/memory/share', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../features/memory/share')>()
-  return {
-    ...actual,
-    resolveShare: vi.fn(),
-    fetchShareTerms: vi.fn(),
-  }
+  return { ...actual, openSharedMemory: vi.fn() }
 })
 
 // The upload queue the viewer subscribes to: a reactive batches array this test drives directly.
@@ -54,7 +56,9 @@ vi.mock('../features/memory/uploadQueue', async (orig) => {
 })
 
 import ShareView from './ShareView.vue'
-import { resolveShare, fetchShareTerms, type ShareItem } from '../features/memory/share'
+import { resolvePublicShare, fetchShareTerms } from '../core/sharing/resolvePublicShare'
+import { openSharedMemory, type ResolvedShare, type ShareItem } from '../features/memory/share'
+import { headOf, openedOf } from '../test/shareHead'
 import { ShareRole } from '../api/generated/sharing'
 import { realI18n } from '../test/i18n'
 
@@ -105,10 +109,17 @@ function gridOrder(wrapper: ReturnType<typeof mount>): string[] {
   )
 }
 
+/** Serve one resolved share to the shell (head) and the Memories body (the rest), as production splits it. */
+function serve(r: ResolvedShare) {
+  vi.mocked(resolvePublicShare).mockReset().mockResolvedValue(headOf(r))
+  vi.mocked(openSharedMemory).mockReset().mockReturnValue(openedOf(r))
+}
+
 beforeEach(() => {
   localStorage.clear()
   hoisted.ref.batches.length = 0
-  vi.mocked(resolveShare).mockReset()
+  vi.mocked(resolvePublicShare).mockReset()
+  vi.mocked(openSharedMemory).mockReset()
   vi.mocked(fetchShareTerms).mockReset().mockRejectedValue(new Error('no terms')) // fails open → no gate, straight to content
   vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ width: 960, height: 0, top: 0, left: 0, right: 960, bottom: 0, x: 0, y: 0, toJSON: () => ({}) })
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
@@ -116,7 +127,7 @@ beforeEach(() => {
 
 describe('ShareView — one order for every grid tile', () => {
   it('a settling upload hands its grid slot to the real tile — the position does not move', async () => {
-    vi.mocked(resolveShare).mockResolvedValue({
+    serve({
       memoryName: 'My Memory', noteByLocale: {}, role: ShareRole.Viewer, scopeId: SCOPE_ID,
       access: { kind: 'read', memoryKey: v1.randomBytes(32) }, items: [sharedItem(MEDIA_0, OLD)],
     })

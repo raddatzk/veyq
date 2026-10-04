@@ -42,7 +42,7 @@ import { activeSpace, clearActiveSpace } from '../../app/activeSpace'
 import { treeStore } from '../../core/node/treeStore'
 import type { TreeNode } from '../../core/node/tree'
 import type { LoadedCover } from '../../features/memory/memoryCover'
-import { favoritesStore } from '../../app/favoritesStore'
+import { favoritesStore } from '../../features/memory/favoritesStore'
 
 import { realI18n, t } from '../../test/i18n'
 import { memberProfile, myTenant } from '../../test/models'

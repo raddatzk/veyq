@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest'
 import { httpError } from '../test/httpError'
 import { setupStatus } from '../test/models'
 
@@ -11,7 +11,7 @@ vi.mock('../features/spaces/scopes', () => ({
 // Stub only the async loaders refreshActiveScope drives (they hit the content/favorites APIs) — keep the rest of
 // the stores real so the other tests still assert on treeStore/favoritesStore.
 vi.mock('../core/node/treeStore', async (orig) => ({ ...(await orig<object>()), loadTree: vi.fn() }))
-vi.mock('./favoritesStore', async (orig) => ({ ...(await orig<object>()), loadFavoritesFor: vi.fn() }))
+vi.mock('../features/memory/favoritesStore', async (orig) => ({ ...(await orig<object>()), loadFavoritesFor: vi.fn() }))
 vi.mock('../features/account/instance/instance', () => ({ getSetupStatus: vi.fn() }))
 
 import { activeSpace, activeScopeKey, activeEpochKeys, enterScope, refreshActiveScope, clearActiveSpace } from './activeSpace'
@@ -22,7 +22,9 @@ import { TrustStateRefused } from '../features/account/trustMarks'
 
 const PERSONAL_SCOPE = '~me'
 import { treeStore, resetTree } from '../core/node/treeStore'
-import { favoritesStore, clearFavorites } from './favoritesStore'
+import { favoritesStore, clearFavorites, loadFavoritesFor } from '../features/memory/favoritesStore'
+import { registry } from '../core/applications/registry'
+import { memoriesLifecycle } from '../features/memory/lifecycle'
 import { getSetupStatus } from '../features/account/instance/instance'
 import { serverState } from '../shared/state/serverState'
 import { suspensionSignals } from './tenantSuspension'
@@ -36,6 +38,10 @@ const PERSONAL_SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 // An unrotated OpenedScope: the write key IS E_0, so `key` is the same buffer the epoch map holds (zeroed together).
 const epochsOf = (key: Uint8Array) => ({ current: 0, keys: new Map([[0, key]]) })
 const opened = (scopeId: string, kind: ScopeKind, key: Uint8Array) => ({ scopeId, tenantId: TENANT_ID, kind, key, epochs: epochsOf(key), nameEpoch: 0, deletedAt: null, purgeAfter: null })
+
+// A node-environment file: src/test/setup.ts registers no application here. The REAL Memories hooks go into the
+// REAL registry, so the scope tests below prove activeSpace resets/loads application state THROUGH the registry.
+beforeAll(() => registry.registerLifecycle('memories', memoriesLifecycle))
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -194,6 +200,21 @@ describe('refreshActiveScope — reactive epoch swap after a rotation (cr-0089)'
     expect(activeSpace.epoch).toBe(2)
     expect(activeEpochKeys()?.current).toBe(2)
     expect(activeScopeKey()).toBe(e2)
+  })
+
+  it('drops the application state of the old epoch and has each application re-load its per-scope state (Memories: the pin set)', async () => {
+    const e0 = new Uint8Array(32).fill(4)
+    vi.mocked(openGroupByToken).mockResolvedValue(opened('g-1', ScopeKind.Group, e0))
+    await enterScope('@g-1')
+    favoritesStore.ids = new Set(['fav-1'])
+    favoritesStore.loaded = true
+    vi.mocked(loadFavoritesFor).mockClear()
+    vi.mocked(openScopeById).mockResolvedValue(opened('g-1', ScopeKind.Group, e0))
+
+    await refreshActiveScope()
+
+    expect(favoritesStore.loaded).toBe(false) // onScopeReset ran (the load itself is the stubbed loader)…
+    expect(loadFavoritesFor).toHaveBeenCalledWith('g-1') // …and onScopeEntered asked for the reload
   })
 })
 

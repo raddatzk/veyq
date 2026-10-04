@@ -31,7 +31,7 @@ export async function loadFavorites(scopeId: string, scopeKey: Uint8Array): Prom
     // TRAP, and it cost a bite test: because this swallows, any assertion phrased over THIS function —
     // "loading with the wrong key yields nothing" — is green before a fix, after it, and after a revert. It
     // can never redden, so it proves nothing about the seal. A test about WHICH key opens the set must assert
-    // on `v1.open` throwing directly (src/app/favoritesPrivacy.test.ts does).
+    // on `v1.open` throwing directly (src/features/memory/favoritesPrivacy.test.ts does).
     return new Set()
   }
 }

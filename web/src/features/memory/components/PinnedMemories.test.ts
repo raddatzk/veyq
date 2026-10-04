@@ -16,7 +16,7 @@ import PinnedMemories from './PinnedMemories.vue'
 import { ensureCovers } from '../coverStore'
 import { treeStore } from '../../../core/node/treeStore'
 import type { TreeNode } from '../../../core/node/tree'
-import { favoritesStore } from '../../../app/favoritesStore'
+import { favoritesStore } from '../favoritesStore'
 import { NodeKind } from '../../../api/generated/content'
 import { realI18n, t } from '../../../test/i18n'
 

@@ -97,17 +97,30 @@ application to be separated from.
   boundary inside the one Gradle module: `com.veyq.app.core.{node,blob,sharing,quota,scope}` hold the node, blob,
   upload-session and share entities, storage usage, and five interfaces through which core reaches Memories code
   without importing it — `ScopeEraser`, `NodeSubtreeEraser`, `GuestIdentityUsage`, `SharedSubtreeContributor`, `ShareGuestWrites` — and neither `core/`
-  nor `shared/` imports Memories code. Not done: the Gradle module split; the web side; the node `kind` is still
+  nor `shared/` imports Memories code. Not done: the Gradle module split; the node `kind` is still
   the closed `FOLDER`/`MEMORY`/`CHAPTER` set (contract and `NodeEntity`); `NodesStore`, `NodesHandler`,
   `SharingStore`, `SharingHandler`, `ScopePurge` and `NodeSubtreePurge` still live in `features.*` packages; and
   `ScopesStore` (`features.spaces`) still imports the item-favorites entity to clear a removed member's favorites (a membership-removal hook, a different seam from the erasers: nothing is erased, one
   user loses access to one scope; the follow-up is a `MembershipEraser`-style core interface that item favorites implements).
+  **The web side is separated by import direction, not by name or by kind:** `web/src/features/memory` is the
+  application, and no core file imports it except the composition root `web/src/applications.ts`; the shell asks a
+  build-time registry (`web/src/core/applications/registry.ts`) what to render for a node kind, which slot an
+  application fills, which body renders a public share, and what runs when a scope is entered or reset and when the
+  Master Key rotates (that hook is required: a rotation refuses to start without it). Not done on the web: the
+  directory is still named `features/memory`; the level view, the create/rename dialog, the share dialog, the
+  top-bar tray and the sidebar pins are single-claim slots shaped for Memories (the second application re-cuts them
+  per kind); the root kind of an UPLOADER share is unknown to the client (the unlocked response serves no nodes), so
+  it renders in the one application that claimed the kind-less drop until `PublicShare` carries a `rootKind`
+  (inbox #329); the i18n catalog is one file and `styles/memory.css` is global; `NodeKind` is the generated closed
+  enum, so the convention that core never names `MEMORY`/`CHAPTER` is guarded, not typed.
   Docs describing the target say which of these they rely on.
 - **Guards move with the code.** `validate_shared_imports_no_features.py` encodes feature → shared; the
   application → core, never core → application and never application → application rules need the same form of
   guard (an import check over the moved packages, bite-tested with a core file importing an application) before
   the first package moves, or the direction is prose. The core → application half now exists in the same guard
-  (`core/` and `shared/` may not import the Memories packages); application → application does not yet. The
+  (`core/` and `shared/` may not import the Memories packages) and on the web as
+  `validate_web_core_imports_no_applications.py` (core may not import `features/memory`, discover code by glob, or
+  name the Memories node kinds; no allowlist); application → application exists on neither side yet. The
   test trees stay out of scope of the import check for the reasons that guard's docstring gives.
 - **Rejected: a generic record store** (core offers "put a sealed record under a key", applications are just
   clients of it). It would make the server a database of blobs with no shape, give up per-kind authorization,

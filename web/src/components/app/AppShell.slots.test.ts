@@ -17,12 +17,11 @@ vi.mock('../../core/applications/registry', async (importOriginal) => {
   const r = () => (holder.reg ??= actual.createRegistry())
   return {
     ...actual,
-    registry: {
-      registerKind: (d: never) => r().registerKind(d),
-      claimSlot: (n: never, c: never) => r().claimSlot(n, c),
-      kind: (k: never) => r().kind(k),
-      slot: (n: never) => r().slot(n),
-    },
+    // A Proxy, not a method list: a method the registry gains later is delegated too, instead of being silently
+    // missing here (a list of four methods once made `registerLifecycle` "not a function" for the whole file).
+    registry: new Proxy({} as import('../../core/applications/registry').Registry, {
+      get: (_t, name: string) => (r() as unknown as Record<string, (...a: unknown[]) => unknown>)[name].bind(r()),
+    }),
   }
 })
 vi.mock('../../features/spaces/scopes', () => ({

@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
 import { fakeApi } from '../../../test/apiMock'
 import type {
@@ -76,11 +76,18 @@ import { readRegisterView } from '../deviceRegister'
 import { resealFavoritesUnderNewMasterKey } from '../../memory/favorites'
 import { retagItemMarksUnderNewMasterKey } from '../../memory/itemFavorites'
 import { httpError } from '../../../test/httpError'
+import { registry } from '../../../core/applications/registry'
+import { memoriesLifecycle } from '../../memory/lifecycle'
 import { listScopeMembers } from '../../spaces/members'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { grantSignatureVerifies, signGrant, tagAdmission } from '../../spaces/grant'
 import { raiseMarks, readMarks } from '../trustMarks'
+
+// This file runs in the node environment (fake-indexeddb), where src/test/setup.ts registers no application. The REAL
+// Memories hooks go into the REAL registry, so the re-seal tests below prove rotateKeys reaches the favorites modules
+// (mocked above, at the module that seals) THROUGH the registry rather than by an import of its own.
+beforeAll(() => registry.registerLifecycle('memories', memoriesLifecycle))
 
 const PASSWORD = 'correct horse battery staple'
 const SECRET_KEY = v1.randomBytes(32)
@@ -209,6 +216,35 @@ beforeEach(() => {
   vi.mocked(listScopeMembers).mockResolvedValue([])
   vi.mocked(resealFavoritesUnderNewMasterKey).mockResolvedValue(undefined)
   vi.mocked(retagItemMarksUnderNewMasterKey).mockResolvedValue(undefined)
+})
+
+describe('the lifecycle gate: a rotation needs an application that carries the master-key hook', () => {
+  // The registry is write-once and filled by the real composition root (src/test/setup.ts), so the "nothing
+  // registered" build is simulated by making ITS gate answer as an empty registry does (proven separately in
+  // registry.test.ts). This test pins the other half: rotateKeys asks BEFORE it proves, mints or posts anything.
+  it('refuses to start when no application registered the hook, and touches nothing', async () => {
+    const srv = fakeServer()
+    const gate = vi.spyOn(registry, 'assertRotationHooks').mockImplementation(() => {
+      throw new Error('no application registered an onMasterKeyRotated hook; refusing to rotate keys (fail closed)')
+    })
+    try {
+      await expect(rotateKeys(PASSWORD, SECRET_KEY_B64)).rejects.toThrow(/refusing to rotate/)
+      expect(srv.getAccountKeyMaterial).not.toHaveBeenCalled()
+      expect(srv.rotateAccountKeys).not.toHaveBeenCalled()
+      expect(setUnlocked).not.toHaveBeenCalled()
+      expect(resealFavoritesUnderNewMasterKey).not.toHaveBeenCalled()
+    } finally {
+      gate.mockRestore()
+    }
+  })
+
+  it('live control: with the real registry and the real Memories hooks the same call rotates and re-seals', async () => {
+    const srv = fakeServer()
+    await expect(rotateKeys(PASSWORD, SECRET_KEY_B64)).resolves.toBeDefined()
+    expect(srv.rotateAccountKeys).toHaveBeenCalled()
+    expect(resealFavoritesUnderNewMasterKey).toHaveBeenCalledTimes(1)
+    expect(retagItemMarksUnderNewMasterKey).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('the cold-credential gate (ADR 0060 Decision 2)', () => {

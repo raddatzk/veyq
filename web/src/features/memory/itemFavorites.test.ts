@@ -23,7 +23,7 @@ const scopes = vi.hoisted(() => ({ unopenable: new Set<string>(), key: null as U
 vi.mock('../spaces/scopes', () => ({ openScopeById: vi.fn() }))
 
 import { loadItemFavorites, saveItemFavorites, retagItemMarksUnderNewMasterKey } from './itemFavorites'
-import { itemFavoritesStore, loadItemFavoritesFor, toggleItemFavorite, clearItemFavorites, markCount } from '../../app/itemFavoritesStore'
+import { itemFavoritesStore, loadItemFavoritesFor, toggleItemFavorite, clearItemFavorites, markCount } from './itemFavoritesStore'
 import { itemFavoritesApi, ownItemFavoritesApi } from '../../api/client'
 import { openScopeById } from '../spaces/scopes'
 import { ScopeKind } from '../../api/generated/scopes'

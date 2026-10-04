@@ -6,7 +6,7 @@ import { computed } from 'vue'
 import type { LevelViewProps, LevelViewEmits } from '../../../core/applications/registry'
 import { NodeKind } from '../../../api/generated/content'
 import { activeSpace } from '../../../app/activeSpace'
-import { toggleFavorite } from '../../../app/favoritesStore'
+import { toggleFavorite } from '../favoritesStore'
 import type { TreeNode } from '../../../core/node/tree'
 import MemoryBrowse from './MemoryBrowse.vue'
 

@@ -7,7 +7,7 @@
 // else, because the wire carries no member id. Aggregate-only is therefore not a discipline the components
 // have to keep; it is the only thing the data supports.
 import { reactive } from 'vue'
-import { loadItemFavorites, saveItemFavorites, type MemberMarks } from '../features/memory/itemFavorites'
+import { loadItemFavorites, saveItemFavorites, type MemberMarks } from './itemFavorites'
 
 export const itemFavoritesStore = reactive({
   nodeId: null as string | null,

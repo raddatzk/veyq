@@ -106,6 +106,33 @@ here; the server is blind.
   (originals backed up to `.stryker-tmp/backup-*`, restored on exit), so mid-run `git status` shows hundreds of
   transient `M` files + stray `stryker-setup-*.js` — never run other `web/` work (git ops, `npm run check`, an
   edit) against the tree while a mutation run is live; wait for it to finish and restore.
+- **Core and application ([ADR 0079](../docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)).**
+  The application is `src/features/memory/` (one constant in the guard); **core is everything else** under `src/` —
+  `app/`, `shared/`, `sw/`, `views/`, `components/app/`, every other `features/*`, and `core/`: `core/node/` (the
+  node tree: `tree`, `treeStore`, `location`, `browse`, the delete/trash dialogs), `core/applications/registry.ts`
+  (the registry) and `core/sharing/` (the kind-independent half of a public share). Dependencies run application →
+  core, never back, and `scripts/validate_web_core_imports_no_applications.py` (no allowlist) is red on a core file
+  that imports the application, uses `import.meta.glob`, or names `NodeKind.Memory|Chapter` / `'MEMORY'` /
+  `'CHAPTER'`. The one exempt file is `src/applications.ts`, the composition root (by exact path, never a
+  directory); `main.ts` calls its `registerApplications()` before `boot()`. Build-time only: no glob, no computed
+  `import()`, no loading after the fact (ADR 0079 Decision 5, ADR 0026) — registered code runs with every unlocked key.
+  **What an application registers** (its `register.ts`; the registry is write-once, a second registration throws):
+  `registerKind` per node kind (detail component, icon, shareable); `claimSlot` for `levelView`,
+  `nodeMutationDialog`, `shareDialog`, `topbarTray`, `sidebarPins`; `claimShareBody(rootKind | DROP_SHARE)` for the
+  public share page; `registerLifecycle(id, hooks)` with `onScopeReset` / `onScopeEntered` and the **required**
+  `onMasterKeyRotated` — `rotateKeys` refuses to start when none is registered, because material sealed under the
+  Master Key (Memories' pins) is otherwise undecryptable after a rotation. A kind or share nobody registered renders
+  an explicit unsupported/unavailable state, never an empty region. **Limits, stated:** the five slots are
+  single-claim and Memories-shaped (the second application re-cuts them per kind); an UPLOADER share's root kind is
+  unknown to the client, so it goes to the one application holding `DROP_SHARE` until `PublicShare` carries a
+  `rootKind`; `NodeKind` stays the generated closed enum; the directory is still `features/memory`, the i18n catalog
+  is one file and `styles/memory.css` is global.
+  **Testing against it:** `src/test/setup.ts` fills the registry in a `beforeAll` *dynamic* import (a static one
+  evaluates the application before the test file's `vi.mock`s and disarms them — 119 files went red). A
+  node-environment suite gets no registry, so one that exercises a hook registers the real `memoriesLifecycle`
+  itself (`activeSpace`, `coverStore`, `rotateKeys` tests). A suite that stubs the registry delegates through a
+  `Proxy` onto a fresh `createRegistry()` (`ShareView.registry.test.ts`, `MemoryHomeView.registry.test.ts`): a
+  hand-listed set of methods silently misses the next one the registry gains.
 - **Wire encoding:** opaque fields are **standard base64** (`b64std`), not base64url — the contract pins
   `[A-Za-z0-9+/]*={0,2}`, so base64url is rejected with 400 at the boundary.
 - **Operator-blind:** seal/derive everything client-side; never send the password, plaintext or raw keys.
