@@ -2,12 +2,12 @@ package com.veyq.memories.media
 
 import com.veyq.core.testing.TestBlob
 import com.veyq.core.blob.BlobEntity
-import com.veyq.core.node.NodeEntity
 import com.veyq.core.testing.RACE_ROUNDS
 import com.veyq.core.testing.TestFixtures.CONTENT_KEY
 import com.veyq.core.testing.TestFixtures.seedMemberScope
 import com.veyq.core.testing.TestFixtures.seedNode
 import com.veyq.core.testing.whileUncommitted
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject
@@ -72,7 +72,7 @@ class MediaRowLockRaceSliceTest {
     /** A guest's photo in a member's Memory, as `MediaStore.attach` lands one: in the guest's primary bucket. */
     private fun guestUpload(): GuestUpload {
         val (userId, scopeId) = seedMemberScope()
-        val nodeId = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val nodeId = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val identityId = UUID.randomUUID().toString()
         val mediaId = UUID.randomUUID().toString()
         tx {

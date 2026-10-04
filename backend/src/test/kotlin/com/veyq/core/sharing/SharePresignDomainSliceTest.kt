@@ -9,6 +9,7 @@ import com.veyq.core.testing.TestFixtures.bearer
 import com.veyq.core.testing.TestFixtures.seedMemberScope
 import com.veyq.core.testing.TestFixtures.seedNode
 import com.veyq.core.testing.TestFixtures.seedTenant
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.QuarkusTestProfile
@@ -44,7 +45,7 @@ class SharePresignDomainSliceTest {
     @Test
     fun aGuestsShareBlobIsSignedForTheDomainTheGuestIsOn() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val (_, blobId) = seedMedia(scopeId, memory)
         val shareId = createShare(userId, memory)
         val a = seedTenantDomain()
@@ -61,7 +62,7 @@ class SharePresignDomainSliceTest {
         // Same security property as on the media paths, restated where the caller is *unauthenticated* and so
         // has the least standing of anyone to name the origin the server signs for.
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val (_, blobId) = seedMedia(scopeId, memory)
         val shareId = createShare(userId, memory)
         val spoofed = "attacker-${UUID.randomUUID()}.example.com"

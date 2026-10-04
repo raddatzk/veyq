@@ -135,6 +135,10 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   48 a kernel (tenant) file importing a slice (the admin tenant feature) — rejected: `validate_kernel_imports_no_slices`
      reads kernel membership from its declared `KERNEL` list, not from a directory (the kernel was `shared/`
      until the package rename folded it into `com.veyq.core.<feature>`); every package off the list is a slice
+  49 a `core/node/` file naming the generated `NodeKind.MEMORY` in code — rejected: `validate_kernel_imports_no_slices`
+     holds core to the node kind `FOLDER`; the kinds Memories owns are answered through `NodeKindRules` and the other
+     seams (ADR 0079). The import rule cannot see this edge — a kind is a value, not a package, and the generated
+     enum is no Memories package. A KDoc naming the kind sits beside it and must not be what is read
 Open gaps — a forgery the guard still passes (a documented limit, not a defect to fix blindly):
   4b a lying `status: planned` on an implemented use-case passes. **Left open on purpose** — the obvious rule
      "planned ⇒ no coverage refs" is *false in general*: a use-case can be legitimately `planned` while carrying
@@ -658,6 +662,20 @@ def forge_platform_feature_imports_media(root: pathlib.Path) -> str:
     return "a core/spaces file importing memories.media (must be REJECTED — the platform is every non-Memories file)"
 
 
+def forge_core_names_memory_kind(root: pathlib.Path) -> str:
+    # A core rule about a Memories kind, spelled through the generated enum (the import is of the contract's
+    # package, which the import rule cannot object to). The KDoc beside it names the kind too; only the code line counts.
+    f = root / CORE_NODE_FORGERY
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text("package com.veyq.core.node\n\n"
+                 "import com.veyq.app.generated.model.NodeKind\n\n"
+                 "/** Whether a MEMORY may hold this. */\n"
+                 "class GuardGapProbe {\n"
+                 "    fun isMemory(kind: String): Boolean = kind == NodeKind.MEMORY.value\n"
+                 "}\n")
+    return "a core/node file naming NodeKind.MEMORY in code (must be REJECTED — core knows FOLDER only)"
+
+
 def forge_kernel_imports_slice(root: pathlib.Path) -> str:
     # A kernel package reaching into a slice: the shape the 2026-09-23 review found (tenant kernel classes on the
     # admin feature's tenant entity). Kernel membership is the declared KERNEL list, not a directory.
@@ -927,6 +945,7 @@ CASES = [
     ("46", WEB_GUARD, forge_web_core_glob, False),
     ("47", "validate_kernel_imports_no_slices.py", forge_platform_feature_imports_media, False),
     ("48", "validate_kernel_imports_no_slices.py", forge_kernel_imports_slice, False),
+    ("49", "validate_kernel_imports_no_slices.py", forge_core_names_memory_kind, False),
 ]
 
 

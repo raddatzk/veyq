@@ -96,20 +96,21 @@ application to be separated from.
 - **The code matches this only in part.** Phase 1 of the change-request series (inbox #324) drew the backend
   boundary inside the one Gradle module: `com.veyq.core.{node,blob,sharing,quota,scope}` hold the node, blob,
   upload-session and share entities, the generic blob upload (start, windows, verify, download, session purge) and
-  the storage quota, and eight interfaces through which core reaches Memories code without importing it —
+  the storage quota, and nine interfaces through which core reaches Memories code without importing it —
   `ScopeEraser`, `NodeSubtreeEraser`, `MembershipEraser`, `GuestIdentityUsage`, `SharedSubtreeContributor`,
   `ShareGuestWrites`, `UploadCompletion` (what a verified upload becomes on a node of the kind, today Memories'
-  media) and `UploadAdmission` (what a share link's guests contributed, for its per-link limit) — and no platform
-  file imports Memories code. The last two fail closed like `ShareGuestWrites`: a kind no application (or two)
-  claims takes no uploads (`illegal_target`), and a link whose usage no single application measures is refused
-  (`share_not_contributable`). Core still speaks media in one place: the completion item (`CompleteItem`'s
+  media), `UploadAdmission` (what a share link's guests contributed, for its per-link limit) and `NodeKindRules`
+  (where a node of the kind may live in the tree; core's own answers for `FOLDER`, Memories' for `MEMORY` and
+  `CHAPTER`) — and no platform file imports Memories code. The last three fail closed like `ShareGuestWrites`: a
+  kind no application (or two) claims takes no uploads (`illegal_target`) and is placed nowhere
+  (`illegal_structure`), and a link whose usage no single application measures is refused
+  (`share_not_contributable`). Hand-written core code names the node kind `FOLDER` only — the same guard holds it. Core still speaks media in one place: the completion item (`CompleteItem`'s
   `mediaId`, `derivatives`, `wrappedExif`), because core's share contract serves a guest's completion. (`MembershipEraser` is a different seam from the erasers: nothing of the scope is
   erased, one user loses access to one scope, and item favorites drop that user's rows.) Every class is named for its owner: the platform is `com.veyq.core.<feature>`, Memories
   `com.veyq.memories.<feature>` (the generated API is still one `com.veyq.app.generated` package). Inside core the
   kernel/slice layering is a declared list, not a directory: the packages every slice builds on are `KERNEL` in
-  `validate_kernel_imports_no_slices.py`, and a kernel package names no slice. Not done: the Gradle module split; the `MEMORY`/`CHAPTER` placement rules
-  are still in core's `NodesHandler`; the node `kind` is still the closed `FOLDER`/`MEMORY`/`CHAPTER` set
-  (contract and `NodeEntity`).
+  `validate_kernel_imports_no_slices.py`, and a kernel package names no slice. Not done: the Gradle module split; the node `kind` is still the contract's
+  closed `FOLDER`/`MEMORY`/`CHAPTER` enum, which core's generated API decodes.
   **The web side is separated by import direction, not by name or by kind:** `web/src/features/memory` is the
   application, and no core file imports it except the composition root `web/src/applications.ts`; the shell asks a
   build-time registry (`web/src/core/applications/registry.ts`) what to render for a node kind, which slot an

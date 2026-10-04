@@ -9,6 +9,7 @@ import com.veyq.core.testing.TestFixtures.seedMemberScope
 import com.veyq.core.testing.TestFixtures.seedNode
 import com.veyq.core.testing.TestFixtures.seedUser
 import com.veyq.core.testing.whileUncommitted
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -43,7 +44,7 @@ class NodesSliceTest {
         // last seen revision was the restored one missed the add (uc.memory.live-updates, inbox #224).
         repeat(RACE_ROUNDS) { round ->
             val (_, scopeId) = seedMemberScope()
-            val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+            val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
             val renamed = "cmVuYW1lZA==" // "renamed"
             whileUncommitted(
                 change = { media.bumpMediaRevision(memory) },

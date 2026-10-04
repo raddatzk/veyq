@@ -1,6 +1,5 @@
 package com.veyq.core.sharing
 
-import com.veyq.core.node.NodeEntity
 import com.veyq.core.sharing.ShareEntity
 import com.veyq.core.sharing.ShareIdentityEntity
 import com.veyq.core.testing.TestBlob
@@ -11,6 +10,7 @@ import com.veyq.core.testing.TestFixtures.identityKeyJson
 import com.veyq.core.testing.TestFixtures.seedMemberScope
 import com.veyq.core.testing.TestFixtures.seedNode
 import com.veyq.core.testing.TestFixtures.shareKeysJson
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -39,7 +39,7 @@ class ShareWriteProofSliceTest {
     @Test
     fun anIdWithoutTheKeyNamesNoGuest() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val shareId = createShare(userId, memory, "CONTRIBUTOR")
         // the row as a database copy reads it: the server stored the hash it was handed, never a token
         val stored = QuarkusTransaction.requiringNew().call { ShareEntity.findById(shareId)!!.writeVerifier }
@@ -67,7 +67,7 @@ class ShareWriteProofSliceTest {
     @Test
     fun aViewerLinkFlippedToContributorIsGatedByTheSameProof() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val shareId = createShare(userId, memory, "VIEWER")
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON).body("""{"role":"CONTRIBUTOR"}""")
             .`when`().patch("/api/shares/$shareId").then().statusCode(204)
@@ -80,7 +80,7 @@ class ShareWriteProofSliceTest {
     @Test
     fun anUploaderLinkNeedsTheProofToo() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val shareId = createShare(userId, memory, "UPLOADER")
 
         nameGuest(shareId, writeToken = null, role = "UPLOADER").then().statusCode(404).body("code", equalTo("share_not_found"))
@@ -98,7 +98,7 @@ class ShareWriteProofSliceTest {
     @Test
     fun aShareWithoutAVerifierTakesNoNewGuestButKeepsItsOld() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val shareId = createShare(userId, memory, "CONTRIBUTOR")
         val earlier = nameGuest(shareId, ShareWriteProof.token(shareId)).then().statusCode(201)
             .extract().path<String>("contributorToken") // also the control: this share took a guest with a verifier
@@ -118,7 +118,7 @@ class ShareWriteProofSliceTest {
     @Test
     fun theManageListMarksAGuestLinkThatHoldsNoVerifier() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val contributor = createShare(userId, memory, "CONTRIBUTOR")
         val uploader = createShare(userId, memory, "UPLOADER")
         val viewer = createShare(userId, memory, "VIEWER")
@@ -143,7 +143,7 @@ class ShareWriteProofSliceTest {
     @Test
     fun theManageListSaysWhichLinksHoldNoVerifierWhateverTheirRole() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val viewer = createShare(userId, memory, "VIEWER")
         val contributor = createShare(userId, memory, "CONTRIBUTOR")
         val intactViewer = createShare(userId, memory, "VIEWER")
@@ -164,7 +164,7 @@ class ShareWriteProofSliceTest {
     @Test
     fun createWithoutAVerifierIs400AndStoresNothing() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val shareId = TestIds.shareId()
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"shareId":"$shareId","nodeId":"$memory","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName"}""")

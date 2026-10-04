@@ -1,11 +1,11 @@
 package com.veyq.memories.media
 
 import com.veyq.core.testing.TestBlob
-import com.veyq.core.node.NodeEntity
 import com.veyq.core.testing.TestFixtures.CONTENT_KEY
 import com.veyq.core.testing.TestFixtures.bearer
 import com.veyq.core.testing.TestFixtures.seedMemberScope
 import com.veyq.core.testing.TestFixtures.seedNode
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.QuarkusTestProfile
 import io.quarkus.test.junit.TestProfile
@@ -65,7 +65,7 @@ class BlobBatchE2ETest {
     @Test
     fun uploadThenDownloadRoundTripsBytes() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
 
         // a two-frame blob at its derived sizes — one full frame, then a short last one (ADR 0013 §3). The bytes are
         // opaque ciphertext as far as the store is concerned; only their lengths are the contract's.
@@ -145,7 +145,7 @@ class BlobBatchE2ETest {
     @Test
     fun aBlobOfSeveralWindowsMovesThroughStartAndWindows() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val blob = TestBlob.ofChunks(2 * WINDOW + 1) // three windows: two full, one of a single chunk
         val chunks = (0 until blob.chunkCount).map { i -> ByteArray(blob.chunkLength(i).toInt()) { b -> (b * 17 + i).toByte() } }
 

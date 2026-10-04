@@ -14,6 +14,7 @@ import com.veyq.core.scope.ScopeEntity
 import com.veyq.core.testing.TestFixtures.CONTENT_KEY
 import com.veyq.core.testing.TestFixtures.seedMemberScope
 import com.veyq.core.testing.TestFixtures.seedNode
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.arc.All
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
@@ -68,7 +69,7 @@ class ScopeEraserOrderSliceTest {
     fun purgeErasesAScopeWhoseMediaAndDerivativeNameBlobs() {
         val seeded = seedMemberScope()
         val scopeId = seeded.scopeId
-        val nodeId = seedNode(scopeId, wrappedContentKey = CONTENT_KEY)
+        val nodeId = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val mediaId = UUID.randomUUID().toString()
         val blobIds = listOf(UUID.randomUUID().toString(), UUID.randomUUID().toString())
         QuarkusTransaction.requiringNew().run {

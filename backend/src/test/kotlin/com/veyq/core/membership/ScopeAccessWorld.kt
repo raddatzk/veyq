@@ -10,6 +10,7 @@ import com.veyq.core.testing.TestFixtures.bearer
 import com.veyq.core.testing.TestFixtures.seedTenant
 import com.veyq.core.testing.TestFixtures.seedUser
 import com.veyq.core.testing.TestFixtures.shareKeysJson
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
@@ -109,7 +110,7 @@ class ScopeAccessWorld(
                 id = scopeId; tenantId = tenant.first; kind = ScopeEntity.GROUP; encryptedName = B64; createdAt = Instant.now()
             }.persist()
             NodeEntity().apply {
-                id = nodeId; this.scopeId = scopeId; parentId = scopeId; kind = NodeEntity.MEMORY
+                id = nodeId; this.scopeId = scopeId; parentId = scopeId; kind = MemoriesNodeKinds.MEMORY
                 encryptedName = B64; slugToken = "c2x1Zw$nodeId".take(120); orderIndex = 0
                 wrappedContentKey = B64; createdAt = Instant.now()
             }.persist()

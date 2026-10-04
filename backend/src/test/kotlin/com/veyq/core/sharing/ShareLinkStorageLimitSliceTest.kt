@@ -15,6 +15,7 @@ import com.veyq.core.testing.TestFixtures.identityKeyJson
 import com.veyq.core.testing.TestFixtures.seedNode
 import com.veyq.core.testing.TestFixtures.seedUser
 import com.veyq.core.testing.TestFixtures.shareKeysJson
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -250,7 +251,7 @@ class ShareLinkStorageLimitSliceTest {
             }.persist()
             TenantRoots.join(ownerId, tenantId, MembershipEntity.OWNER) // the tenant owner, who sets the limit
         }
-        val memory = seedNode(scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val partial = Link(tenantId, scopeId, memory, ownerId, shareId = "", token = "")
         return link(partial, createShare(partial, role), role)
     }

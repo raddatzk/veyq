@@ -13,6 +13,7 @@ import com.veyq.core.testing.TestFixtures.seedMemberScope
 import com.veyq.core.testing.TestFixtures.seedNode
 import com.veyq.core.testing.TestFixtures.seedUser
 import com.veyq.core.testing.whileUncommitted
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -56,7 +57,7 @@ class NodeCoverSliceTest {
     @Test
     fun commitAttachesCoverBlobWithNoMediaRow() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val blob = TestBlob.ofPlaintext(4096)
         val uploadId = startOne(userId, scopeId, blob, wrap = "Y292ZXItd3JhcA==", ownerId = memory, role = "COVER")
 
@@ -94,7 +95,7 @@ class NodeCoverSliceTest {
     @Test
     fun replaceReclaimsPriorCoverBlob() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val first = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.SMALL, "Zmlyc3Q=", memory, "COVER"))
 
         // the key the replace must not lose — read while the row that holds it still exists
@@ -116,7 +117,7 @@ class NodeCoverSliceTest {
     @Test
     fun deleteCoverBlobDetachesAndReclaims() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val blobId = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.SMALL, "ZGVs", memory, "COVER"))
 
         // the key the delete must not lose — read while the row that holds it still exists
@@ -153,7 +154,7 @@ class NodeCoverSliceTest {
     @Test
     fun aDeleteNamingAReplacedCoverIsRefusedAndKeepsThePeersUpload() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val mine = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.SMALL, "bWluZQ==", memory, "COVER"))
         val peers = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.SMALL, "cGVlcg==", memory, "COVER"))
 
@@ -186,7 +187,7 @@ class NodeCoverSliceTest {
     fun aDeleteOverlappingAPeersCommitDoesNotTakeItsUpload() {
         repeat(RACE_ROUNDS) { round ->
             val (userId, scopeId) = seedMemberScope()
-            val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+            val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
             val mine = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.SMALL, "bWluZQ==", memory, "COVER"))
             val upload = startOne(userId, scopeId, TestBlob.SMALL, "cGVlcg==", memory, "COVER")
             var peers: String? = null
@@ -215,7 +216,7 @@ class NodeCoverSliceTest {
     fun aCommitOverlappingAPeersCommitReclaimsThePeersCover() {
         repeat(RACE_ROUNDS) { round ->
             val (userId, scopeId) = seedMemberScope()
-            val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+            val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
             val old = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.SMALL, "b2xk", memory, "COVER"))
             val peerUpload = startOne(userId, scopeId, TestBlob.SMALL, "cGVlcg==", memory, "COVER")
             val mineUpload = startOne(userId, scopeId, TestBlob.SMALL, "bWluZQ==", memory, "COVER")
@@ -246,7 +247,7 @@ class NodeCoverSliceTest {
     fun aCommitOverlappingADeleteFindsTheSlotEmpty() {
         repeat(RACE_ROUNDS) { round ->
             val (userId, scopeId) = seedMemberScope()
-            val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+            val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
             val old = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.SMALL, "b2xk", memory, "COVER"))
             val oldStorageKey = QuarkusTransaction.requiringNew().call { BlobEntity.findById(old)!!.storageKey }
             val mineUpload = startOne(userId, scopeId, TestBlob.SMALL, "bWluZQ==", memory, "COVER")
@@ -273,7 +274,7 @@ class NodeCoverSliceTest {
     @Test
     fun deleteNodeKeepsTheCoverBlobForTheRestore() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val blobId = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.SMALL, "bm9kZQ==", memory, "COVER"))
 
         given().header("Authorization", bearer(userId))
@@ -294,8 +295,8 @@ class NodeCoverSliceTest {
     @Test
     fun anUploadNotStartedAsThisNodesCoverIsRefused() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
-        val other = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val other = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         for (upload in listOf(
             startOne(userId, scopeId, TestBlob.SMALL, "b3JpZw==", ownerId = memory, role = "ORIGINAL"),
             startOne(userId, scopeId, TestBlob.SMALL, "b3RoZXI=", ownerId = other, role = "COVER"),
@@ -338,7 +339,7 @@ class NodeCoverSliceTest {
     @Test
     fun commitUnknownUploadIs404() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"uploadId":"${UUID.randomUUID()}"}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$memory/cover-blob")
@@ -359,7 +360,7 @@ class NodeCoverSliceTest {
     fun crossScopeUploadIs404() {
         val (userId, scopeA) = seedMemberScope()
         val scopeB = seedMemberScope(userId = userId).scopeId // the same user is a member of a second scope
-        val memoryB = seedNode(scopeB, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memoryB = seedNode(scopeB, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val uploadInA = startOne(userId, scopeA, TestBlob.SMALL, "eA==")
 
         // committing scope A's upload against a scope B node — the session isn't in B → 404 (no cross-scope reach)
@@ -372,7 +373,7 @@ class NodeCoverSliceTest {
     @Test
     fun nonMemberIs404() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val uploadId = startOne(userId, scopeId, TestBlob.SMALL, "b3V0")
         val outsider = seedUser()
 

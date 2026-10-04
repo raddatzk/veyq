@@ -11,6 +11,7 @@ import com.veyq.core.scope.ScopeEntity
 import com.veyq.core.tenant.TenantEntity
 import com.veyq.core.testing.TestFixtures.bearer
 import com.veyq.core.testing.TestFixtures.newUser
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -141,7 +142,7 @@ class ObjectKeyCarriesNoStructureSliceTest {
             }.persist()
             TenantRoots.join(seed.userId, seed.tenantId)
             NodeEntity().apply {
-                id = seed.nodeId; scopeId = seed.scopeId; parentId = seed.scopeId; kind = NodeEntity.MEMORY
+                id = seed.nodeId; scopeId = seed.scopeId; parentId = seed.scopeId; kind = MemoriesNodeKinds.MEMORY
                 encryptedName = "bg=="; slugToken = "c2x1Zy0${seed.nodeId}".take(120); orderIndex = 0
                 wrappedContentKey = "a21lbQ=="; createdAt = Instant.now()
             }.persist()

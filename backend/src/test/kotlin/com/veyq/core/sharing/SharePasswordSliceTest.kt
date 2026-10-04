@@ -4,6 +4,7 @@ import com.veyq.core.testing.TestFixtures.CONTENT_KEY
 import com.veyq.core.testing.TestFixtures.bearer
 import com.veyq.core.testing.TestFixtures.seedMemberScope
 import com.veyq.core.testing.TestFixtures.seedNode
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
@@ -36,7 +37,7 @@ class SharePasswordSliceTest {
     @Test
     fun createThenLockedResolveHidesTheContent() {
         val (userId, scopeId) = seedMemberScope()
-        val shareId = createWithPassword(userId, seedNode(scopeId, wrappedContentKey = CONTENT_KEY))
+        val shareId = createWithPassword(userId, seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY))
 
         // no token → LOCKED: only the challenge crosses; wrap/name are omitted (nothing is readable)
         given().`when`().get("/api/shares/$shareId")
@@ -50,7 +51,7 @@ class SharePasswordSliceTest {
     @Test
     fun validTokenUnlocksAndWrongTokenIs403() {
         val (userId, scopeId) = seedMemberScope()
-        val shareId = createWithPassword(userId, seedNode(scopeId, wrappedContentKey = CONTENT_KEY))
+        val shareId = createWithPassword(userId, seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY))
 
         // a valid token → the full share (the same wrap)
         given().header("X-Share-Password", pwToken).`when`().get("/api/shares/$shareId")
@@ -64,7 +65,7 @@ class SharePasswordSliceTest {
     @Test
     fun blobGetRequiresThePasswordToken() {
         val (userId, scopeId) = seedMemberScope()
-        val shareId = createWithPassword(userId, seedNode(scopeId, wrappedContentKey = CONTENT_KEY))
+        val shareId = createWithPassword(userId, seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY))
 
         // the gate runs before the blob lookup: no token → 404 (non-enumerable), wrong token → 403
         given().`when`().get("/api/shares/$shareId/blobs/${UUID.randomUUID()}").then().statusCode(404)
@@ -75,7 +76,7 @@ class SharePasswordSliceTest {
     @Test
     fun setChangeRemoveViaUpdateShareKeepsTheLink() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         // start with a PLAIN share (no password) — the same link will gain / change / lose the password
         val shareId = createPlain(userId, memory)
         given().`when`().get("/api/shares/$shareId").then().statusCode(200).body("passwordRequired", equalTo(false))
@@ -101,7 +102,7 @@ class SharePasswordSliceTest {
     @Test
     fun manageListCarriesSealedPasswordForReveal() {
         val (userId, scopeId) = seedMemberScope()
-        val shareId = createWithPassword(userId, seedNode(scopeId, wrappedContentKey = CONTENT_KEY))
+        val shareId = createWithPassword(userId, seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY))
 
         // the owner's manage list carries the reveal copy + the lock flag (the PublicShare resolve has no such
         // field at all — the reveal is structurally management-only)

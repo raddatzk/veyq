@@ -1,6 +1,7 @@
 package com.veyq.core.content
 
 import com.veyq.core.node.NodeEntity
+import com.veyq.core.node.ParentSlot
 import com.veyq.core.scope.ScopeEntity
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
@@ -34,13 +35,6 @@ data class TrashedNodeRow(
     val epoch: Int,
     val deletedAt: Instant,
 )
-
-/** What a parent slot resolves to: the scope root, an existing node's kind, or nothing (foreign/missing). */
-sealed interface ParentSlot {
-    object Root : ParentSlot
-    data class Node(val kind: String) : ParentSlot
-    object Missing : ParentSlot
-}
 
 /**
  * Persistence for the Memory tree (cr-0027). Operator-blind: stores ciphertext + the blinded slug token only.

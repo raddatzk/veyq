@@ -17,6 +17,7 @@ import com.veyq.core.testing.TestFixtures.seedTenant
 import com.veyq.core.testing.TestFixtures.seedUser
 import com.veyq.core.testing.race
 import com.veyq.core.testing.whileUncommitted
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -66,7 +67,7 @@ class ShareSharedScopeSliceTest {
         val (tenantId, _) = seedActiveTenant("g-share.example.com")
         val member = seedTenantMember(tenantId, "m@g-share.example.com")
         val group = seedGroup(tenantId, member) // the member is (owns) the group scope
-        val memory = seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
 
         val shareId = createShare(member, memory)
 
@@ -85,8 +86,8 @@ class ShareSharedScopeSliceTest {
         val member = seedTenantMember(tenantId, "m@g-rm.example.com")
         val group = seedGroup(tenantId, owner)
         addMember(tenantId, group, member)
-        val ownerShare = createShare(owner, seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY))
-        val memberShare = createShare(member, seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY))
+        val ownerShare = createShare(owner, seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY))
+        val memberShare = createShare(member, seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY))
 
         given().`when`().get("/api/shares/$ownerShare").then().statusCode(200)
         given().`when`().get("/api/shares/$memberShare").then().statusCode(200)
@@ -108,7 +109,7 @@ class ShareSharedScopeSliceTest {
     fun removingTenantMemberDeactivatesTheirTenantScopeShares() {
         val (tenantId, owner) = seedActiveTenant("t-rm.example.com")
         val member = seedTenantMember(tenantId, "m@t-rm.example.com")
-        val memory = seedNode(tenantId, NodeEntity.MEMORY, parentId = tenantId, wrappedContentKey = CONTENT_KEY) // the TENANT scope id == tenantId
+        val memory = seedNode(tenantId, MemoriesNodeKinds.MEMORY, parentId = tenantId, wrappedContentKey = CONTENT_KEY) // the TENANT scope id == tenantId
         val share = createShare(member, memory)
 
         given().`when`().get("/api/shares/$share").then().statusCode(200)
@@ -125,7 +126,7 @@ class ShareSharedScopeSliceTest {
         val member = seedTenantMember(tenantId, "m@g-react.example.com")
         val group = seedGroup(tenantId, owner)
         addMember(tenantId, group, member)
-        val shareId = createShare(member, seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY))
+        val shareId = createShare(member, seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY))
 
         // the creator disables it (revoke); the guest path 404s
         given().header("Authorization", bearer(member)).`when`().post("/api/shares/$shareId/revoke").then().statusCode(204)
@@ -150,7 +151,7 @@ class ShareSharedScopeSliceTest {
         val member = seedTenantMember(tenantId, "m@g-revive.example.com")
         val group = seedGroup(tenantId, owner)
         addMember(tenantId, group, member)
-        val shareId = createShare(member, seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY))
+        val shareId = createShare(member, seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY))
         removeByRotation(owner, group, member).then().statusCode(201)
         given().`when`().get("/api/shares/$shareId").then().statusCode(404)
 
@@ -169,7 +170,7 @@ class ShareSharedScopeSliceTest {
         val group = seedGroup(tenantId, owner)
         addMember(tenantId, group, member)
         addMember(tenantId, group, coMember)
-        val shareId = createShare(coMember, seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY), copyEpoch = 0)
+        val shareId = createShare(coMember, seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY), copyEpoch = 0)
         given().header("Authorization", bearer(coMember)).`when`().post("/api/shares/$shareId/revoke").then().statusCode(204)
         removeByRotation(owner, group, member).then().statusCode(201)
 
@@ -183,7 +184,7 @@ class ShareSharedScopeSliceTest {
     fun reactivatingOwnShareSealedAtTheCurrentEpochResolves() {
         val (tenantId, owner) = seedActiveTenant("g-epoch-ok.example.com")
         val group = seedGroup(tenantId, owner)
-        val shareId = createShare(owner, seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY), copyEpoch = 0)
+        val shareId = createShare(owner, seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY), copyEpoch = 0)
         given().header("Authorization", bearer(owner)).`when`().post("/api/shares/$shareId/revoke").then().statusCode(204)
 
         given().header("Authorization", bearer(owner)).`when`().post("/api/shares/$shareId/reactivate").then().statusCode(204)
@@ -194,7 +195,7 @@ class ShareSharedScopeSliceTest {
     fun reactivateByNonMemberIs404() {
         val (tenantId, owner) = seedActiveTenant("g-react404.example.com")
         val group = seedGroup(tenantId, owner)
-        val shareId = createShare(owner, seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY))
+        val shareId = createShare(owner, seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY))
         val outsider = seedUser(email = "out@g-react404.example.com")
 
         given().header("Authorization", bearer(outsider))
@@ -208,7 +209,7 @@ class ShareSharedScopeSliceTest {
         val member = seedTenantMember(tenantId, "m@g-list.example.com")
         val group = seedGroup(tenantId, owner)
         addMember(tenantId, group, member)
-        val memory = seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
         val ownerShare = createShare(owner, memory)
         val memberShare = createShare(member, memory)
 
@@ -230,7 +231,7 @@ class ShareSharedScopeSliceTest {
     fun reissueReplacesTheLinkInOneRequestAndKeepsTheRoleAndMemory() {
         val (tenantId, owner) = seedActiveTenant("g-reissue.example.com")
         val group = seedGroup(tenantId, owner)
-        val memory = seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
         val old = createShare(owner, memory, copyEpoch = 0, role = "CONTRIBUTOR")
         val newId = TestIds.shareId()
 
@@ -252,7 +253,7 @@ class ShareSharedScopeSliceTest {
     fun aReissuedLinkCannotComeBack() {
         val (tenantId, owner) = seedActiveTenant("g-reissue-dead.example.com")
         val group = seedGroup(tenantId, owner)
-        val old = createShare(owner, seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY), copyEpoch = 0)
+        val old = createShare(owner, seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY), copyEpoch = 0)
 
         reissue(owner, old, epoch = 0).then().statusCode(201)
 
@@ -267,7 +268,7 @@ class ShareSharedScopeSliceTest {
     fun aReissuedShareRefusesASecondReissueWithAConflict() {
         val (tenantId, owner) = seedActiveTenant("g-reissue-twice.example.com")
         val group = seedGroup(tenantId, owner)
-        val old = createShare(owner, seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY), copyEpoch = 0)
+        val old = createShare(owner, seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY), copyEpoch = 0)
         reissue(owner, old, epoch = 0).then().statusCode(201)
         val second = TestIds.shareId()
 
@@ -283,7 +284,7 @@ class ShareSharedScopeSliceTest {
     fun twoConcurrentReissuesOfOneShareMintExactlyOneLink() {
         val (tenantId, owner) = seedActiveTenant("g-reissue-race.example.com")
         val group = seedGroup(tenantId, owner)
-        val memory = seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
         repeat(ROUNDS) { round ->
             val old = createShare(owner, memory, copyEpoch = 0)
             val ids = listOf(TestIds.shareId(), TestIds.shareId())
@@ -304,7 +305,7 @@ class ShareSharedScopeSliceTest {
     fun theOwnerDeletesALinkAndItIsGoneEverywhere() {
         val (tenantId, owner) = seedActiveTenant("g-delete.example.com")
         val group = seedGroup(tenantId, owner)
-        val memory = seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
         val shareId = createShare(owner, memory, copyEpoch = 0)
         given().header("Authorization", bearer(owner)).`when`().get("/api/shares?nodeId=$memory")
             .then().statusCode(200).body("find { it.shareId == '$shareId' }.deletable", equalTo(true))
@@ -335,7 +336,7 @@ class ShareSharedScopeSliceTest {
         val member = seedTenantMember(tenantId, "m@g-delete-co.example.com")
         val group = seedGroup(tenantId, owner)
         addMember(tenantId, group, member)
-        val memory = seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
         val theirs = createShare(member, memory)
 
         given().header("Authorization", bearer(owner)).`when`().get("/api/shares?nodeId=$memory")
@@ -356,7 +357,7 @@ class ShareSharedScopeSliceTest {
         val (tenantId, owner) = seedActiveTenant("g-reissue-stale.example.com")
         val group = seedGroup(tenantId, owner)
         removeByRotation(owner, group, member = null).then().statusCode(201) // the group is at epoch 1 now
-        val old = createShare(owner, seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY), copyEpoch = 1)
+        val old = createShare(owner, seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY), copyEpoch = 1)
         val newId = TestIds.shareId()
 
         reissue(owner, old, epoch = 0, newId = newId).then().statusCode(409).body("code", equalTo("stale_epoch"))
@@ -375,7 +376,7 @@ class ShareSharedScopeSliceTest {
         val member = seedTenantMember(tenantId, "m@g-reissue-adopt.example.com")
         val group = seedGroup(tenantId, owner)
         addMember(tenantId, group, member)
-        val memory = seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
         val old = createShare(member, memory, copyEpoch = 0)
 
         reissue(owner, old, epoch = 0).then().statusCode(404).body("code", equalTo("share_not_found"))
@@ -392,7 +393,7 @@ class ShareSharedScopeSliceTest {
     fun anUploaderReissueSealsTheExistingDropKeyAndNeverAWrap() {
         val (tenantId, owner) = seedActiveTenant("g-reissue-drop.example.com")
         val group = seedGroup(tenantId, owner)
-        val memory = seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
         val old = createShare(
             owner, memory, copyEpoch = 0, role = "UPLOADER",
             keys = """"sealedDropPublicKey":"$dropPublic","sealedDropPrivateKey":"$dropPrivate"""",
@@ -414,7 +415,7 @@ class ShareSharedScopeSliceTest {
     fun aReissueIntoATakenIdIs409AndLeavesTheOldLinkOn() {
         val (tenantId, owner) = seedActiveTenant("g-reissue-taken.example.com")
         val group = seedGroup(tenantId, owner)
-        val memory = seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
         val old = createShare(owner, memory, copyEpoch = 0)
         val taken = createShare(owner, memory, copyEpoch = 0)
 
@@ -433,7 +434,7 @@ class ShareSharedScopeSliceTest {
         val group = seedGroup(tenantId, owner)
         addMember(tenantId, group, member)
         addMember(tenantId, group, coMember)
-        val memory = seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
         val ownerShare = createShare(owner, memory)
         val coMemberShare = createShare(coMember, memory)
         val memberShare = createShare(member, memory)
@@ -449,7 +450,7 @@ class ShareSharedScopeSliceTest {
     fun revokeLinksWithoutARemovalIs400AndStoresNothing() {
         val (tenantId, owner) = seedActiveTenant("g-revoke-links-400.example.com")
         val group = seedGroup(tenantId, owner)
-        val share = createShare(owner, seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY))
+        val share = createShare(owner, seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY))
 
         removeByRotation(owner, group, member = null, revokeLinks = true).then().statusCode(400).body("code", equalTo("invalid_request"))
         assertEquals(0, TestAdmission.epochOf(group))
@@ -463,7 +464,7 @@ class ShareSharedScopeSliceTest {
     fun reactivatingARemovedTenantMembersTenantShareIs409ReissueRequired() {
         val (tenantId, owner) = seedActiveTenant("t-revive.example.com")
         val member = seedTenantMember(tenantId, "m@t-revive.example.com")
-        val share = createShare(member, seedNode(tenantId, NodeEntity.MEMORY, parentId = tenantId, wrappedContentKey = CONTENT_KEY), copyEpoch = 0)
+        val share = createShare(member, seedNode(tenantId, MemoriesNodeKinds.MEMORY, parentId = tenantId, wrappedContentKey = CONTENT_KEY), copyEpoch = 0)
         given().header("Authorization", bearer(owner)).`when`().delete("/api/tenants/$tenantId/members/$member").then().statusCode(204)
 
         given().header("Authorization", bearer(owner)).`when`().post("/api/shares/$share/reactivate")
@@ -482,7 +483,7 @@ class ShareSharedScopeSliceTest {
         val (tenantId, owner) = seedActiveTenant("t-comember.example.com")
         val member = seedTenantMember(tenantId, "m@t-comember.example.com")
         val coMember = seedTenantMember(tenantId, "c@t-comember.example.com")
-        val memory = seedNode(tenantId, NodeEntity.MEMORY, parentId = tenantId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(tenantId, MemoriesNodeKinds.MEMORY, parentId = tenantId, wrappedContentKey = CONTENT_KEY)
         val before = createShare(coMember, memory, copyEpoch = 0)
         removeFromTenant(owner, tenantId, member).then().statusCode(204)
         assertEquals(0, TestAdmission.epochOf(tenantId)) // no epoch signal: the counter carries it alone
@@ -507,7 +508,7 @@ class ShareSharedScopeSliceTest {
         val (tenantId, owner) = seedActiveTenant("t-nocopy.example.com")
         val member = seedTenantMember(tenantId, "m@t-nocopy.example.com")
         val coMember = seedTenantMember(tenantId, "c@t-nocopy.example.com")
-        val memory = seedNode(tenantId, NodeEntity.MEMORY, parentId = tenantId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(tenantId, MemoriesNodeKinds.MEMORY, parentId = tenantId, wrappedContentKey = CONTENT_KEY)
         val noCopy = createShare(coMember, memory)
         removeFromTenant(owner, tenantId, member).then().statusCode(204)
         revoke(coMember, noCopy)
@@ -527,7 +528,7 @@ class ShareSharedScopeSliceTest {
         val coMember = seedTenantMember(tenantId, "c@t-cogroup.example.com")
         val group = seedGroup(tenantId, coMember)
         addMember(tenantId, group, member)
-        val memory = seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
         val before = createShare(coMember, memory, copyEpoch = 0)
         removeFromTenant(owner, tenantId, member).then().statusCode(204)
         assertEquals(0, TestAdmission.epochOf(group)) // the queued rotation has not run: asserted, not assumed
@@ -548,12 +549,12 @@ class ShareSharedScopeSliceTest {
         val (tenantId, owner) = seedActiveTenant("t-revoke-links.example.com")
         val member = seedTenantMember(tenantId, "m@t-revoke-links.example.com")
         val coMember = seedTenantMember(tenantId, "c@t-revoke-links.example.com")
-        val memory = seedNode(tenantId, NodeEntity.MEMORY, parentId = tenantId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(tenantId, MemoriesNodeKinds.MEMORY, parentId = tenantId, wrappedContentKey = CONTENT_KEY)
         val coMemberShare = createShare(coMember, memory, copyEpoch = 0)
         val ownerShare = createShare(owner, memory)
         val group = seedGroup(tenantId, coMember)
         addMember(tenantId, group, member)
-        val groupShare = createShare(coMember, seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY))
+        val groupShare = createShare(coMember, seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY))
 
         // the last owner cannot be removed — and the flag riding on that refusal turns nothing off
         removeFromTenant(owner, tenantId, owner, revokeLinks = true).then().statusCode(409).body("code", equalTo("last_owner"))
@@ -572,11 +573,11 @@ class ShareSharedScopeSliceTest {
         val (tenantId, owner) = seedActiveTenant("t-mark.example.com")
         val member = seedTenantMember(tenantId, "m@t-mark.example.com")
         val coMember = seedTenantMember(tenantId, "c@t-mark.example.com")
-        val tenantNoCopy = createShare(coMember, seedNode(tenantId, NodeEntity.MEMORY, parentId = tenantId, wrappedContentKey = CONTENT_KEY))
+        val tenantNoCopy = createShare(coMember, seedNode(tenantId, MemoriesNodeKinds.MEMORY, parentId = tenantId, wrappedContentKey = CONTENT_KEY))
         val group = seedGroup(tenantId, owner)
         addMember(tenantId, group, member)
         addMember(tenantId, group, coMember)
-        val groupNoCopy = createShare(coMember, seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY))
+        val groupNoCopy = createShare(coMember, seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY))
 
         removeByRotation(owner, group, member, revokeLinks = true).then().statusCode(201)
         reactivate(coMember, groupNoCopy).then().statusCode(409).body("code", equalTo("reissue_required"))
@@ -618,7 +619,7 @@ class ShareSharedScopeSliceTest {
         val coMember = seedTenantMember(tenantId, "c@g-switch-off.example.com")
         val group = seedGroup(tenantId, owner)
         addMember(tenantId, group, coMember)
-        val memory = seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
         val noCopy = createShare(coMember, memory)
         val withCopy = createShare(coMember, memory, copyEpoch = 0)
 
@@ -656,7 +657,7 @@ class ShareSharedScopeSliceTest {
         val coMember = seedTenantMember(tenantId, "c@g-switch-off-parked.example.com")
         val group = seedGroup(tenantId, owner)
         addMember(tenantId, group, coMember)
-        val memory = seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
         val parked = createShare(coMember, memory) // no recovery copy: only the mark can refuse it
         val live = createShare(coMember, memory)
         revoke(coMember, parked)
@@ -674,7 +675,7 @@ class ShareSharedScopeSliceTest {
     fun aTenantOwnerSwitchesOffTheTenantsLinks() {
         val (tenantId, owner) = seedActiveTenant("t-switch-off.example.com")
         val coMember = seedTenantMember(tenantId, "c@t-switch-off.example.com")
-        val share = createShare(coMember, seedNode(tenantId, NodeEntity.MEMORY, parentId = tenantId, wrappedContentKey = CONTENT_KEY))
+        val share = createShare(coMember, seedNode(tenantId, MemoriesNodeKinds.MEMORY, parentId = tenantId, wrappedContentKey = CONTENT_KEY))
 
         revokeScopeShares(coMember, tenantId).then().statusCode(403).body("code", equalTo("not_scope_owner"))
         resolves(share, 200)
@@ -695,7 +696,7 @@ class ShareSharedScopeSliceTest {
             val member = seedTenantMember(tenantId, "m@$domain")
             val group = seedGroup(tenantId, owner)
             addMember(tenantId, group, member)
-            val memory = seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
+            val memory = seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
             val shareId = createShare(member, memory)
             val note = "bm90ZQ==" // "note"
             whileUncommitted(
@@ -725,7 +726,7 @@ class ShareSharedScopeSliceTest {
             val member = seedTenantMember(tenantId, "m@$domain")
             val group = seedGroup(tenantId, owner)
             addMember(tenantId, group, member)
-            val memory = seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
+            val memory = seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
             val shareId = createShare(owner, memory)
             revoke(owner, shareId)
             val outcome = whileUncommitted(

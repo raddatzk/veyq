@@ -10,8 +10,9 @@ import java.time.Instant
 import org.hibernate.annotations.DynamicUpdate
 
 /**
- * A node in a scope's encrypted Memory tree (en.memory.tree, cr-0027). FOLDER organizes only; MEMORY is the
- * content unit (its `wrappedContentKey` = K_mem under K_SC); CHAPTER sits inside a Memory. Operator-blind:
+ * A node in a scope's encrypted tree (en.memory.tree, cr-0027). FOLDER organizes only and is core's; every other
+ * `kind` belongs to an application, which places it through `NodeKindRules` (ADR 0079) — Memories' MEMORY is the
+ * content unit (its `wrappedContentKey` = K_mem under K_SC), its CHAPTER sits inside a Memory. Operator-blind:
  * `encryptedName` / `wrappedContentKey` are opaque ciphertext, `slugToken` a blinded keyed MAC. `parentId`
  * is the **parent slot** — the parent node id, or the scope id for a root-level node (so slug uniqueness per
  * parent works at the root too); it is not a single-table FK.
@@ -95,8 +96,7 @@ class NodeEntity : PanacheEntityBase {
     lateinit var createdAt: Instant
 
     companion object : PanacheCompanionBase<NodeEntity, String> {
+        /** Core's one node kind. Every other kind is an application's, named by that application (ADR 0079). */
         const val FOLDER = "FOLDER"
-        const val MEMORY = "MEMORY"
-        const val CHAPTER = "CHAPTER"
     }
 }

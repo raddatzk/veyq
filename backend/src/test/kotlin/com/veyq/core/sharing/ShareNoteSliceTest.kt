@@ -7,6 +7,7 @@ import com.veyq.core.testing.TestFixtures.seedMemberScope
 import com.veyq.core.testing.TestFixtures.seedNode
 import com.veyq.core.testing.TestFixtures.shareKeysJson
 import com.veyq.core.testing.TestFixtures.seedUser
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
@@ -36,7 +37,7 @@ class ShareNoteSliceTest {
     @Test
     fun createWithNoteThenAnonymousResolveReturnsIt() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val shareId = createWithNote(userId, memory, note1)
 
         given().`when`().get("/api/shares/$shareId")
@@ -46,7 +47,7 @@ class ShareNoteSliceTest {
     @Test
     fun ownerEditsTheNoteInPlaceAtTheSameShareId() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val shareId = createWithNote(userId, memory, note1)
 
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
@@ -65,7 +66,7 @@ class ShareNoteSliceTest {
     @Test
     fun editingWithNullClearsTheNote() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val shareId = createWithNote(userId, memory, note1)
 
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
@@ -79,7 +80,7 @@ class ShareNoteSliceTest {
     @Test
     fun aNonOwnerEditIs404AndLeavesTheNoteUnchanged() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val shareId = createWithNote(userId, memory, note1)
         val outsider = seedUser()
 
@@ -94,7 +95,7 @@ class ShareNoteSliceTest {
     @Test
     fun createWithoutNoteResolvesNullAndTheManageListCarriesTheRecoverableKey() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         // a share with the recoverable key but no note yet
         val shareId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{${ShareWriteProof.newShare()},"nodeId":"$memory","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName","sealedShareKey":"$shareKey","sealedShareKeyEpoch":0}""")
@@ -114,7 +115,7 @@ class ShareNoteSliceTest {
     @Test
     fun createWithANameShowsItInTheManageListButNeverToTheViewer() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val shareId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{${ShareWriteProof.newShare()},"nodeId":"$memory","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName","sealedShareName":"$name1","sealedShareKey":"$shareKey","sealedShareKeyEpoch":0}""")
             .`when`().post("/api/shares")
@@ -131,7 +132,7 @@ class ShareNoteSliceTest {
     @Test
     fun renameViaUpdateShareChangesTheNameKeepsTheNoteAndTheLink() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val shareId = createWithNote(userId, memory, note1)
 
         // full-replace the editable fields: set a name, keep the note (same shareId)
@@ -150,7 +151,7 @@ class ShareNoteSliceTest {
     @Test
     fun promoteViewerToContributorInPlaceKeepsTheLinkAndEnablesContribution() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val shareId = createWithRole(userId, memory, "VIEWER")
 
         // a VIEWER share rejects the anonymous contribute (name) step
@@ -173,7 +174,7 @@ class ShareNoteSliceTest {
     @Test
     fun roleChangeToUploaderIs422() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val shareId = createWithRole(userId, memory, "VIEWER")
 
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
@@ -188,7 +189,7 @@ class ShareNoteSliceTest {
     @Test
     fun changingAnUploaderShareRoleIs422() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val shareId = createWithRole(userId, memory, "UPLOADER")
 
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
@@ -205,7 +206,7 @@ class ShareNoteSliceTest {
     @Test
     fun ownerSetsAnExpiryInPlaceAndAnExpiredShareResolves404() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val shareId = createWithNote(userId, memory, note1)
         given().`when`().get("/api/shares/$shareId").then().statusCode(200) // live
 
@@ -220,7 +221,7 @@ class ShareNoteSliceTest {
     @Test
     fun ownerClearsAnExpiryInPlaceAndTheShareResolvesAgain() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val past = Instant.now().minusSeconds(60).toString()
         val shareId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{${ShareWriteProof.newShare()},"nodeId":"$memory","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName","sealedShareKey":"$shareKey","sealedShareKeyEpoch":0,"expiresAt":"$past"}""")
@@ -237,7 +238,7 @@ class ShareNoteSliceTest {
     @Test
     fun aFullReplaceEditThatOmitsExpiresAtClearsIt() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val future = Instant.now().plusSeconds(3600).toString()
         val shareId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{${ShareWriteProof.newShare()},"nodeId":"$memory","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName","sealedShareKey":"$shareKey","sealedShareKeyEpoch":0,"expiresAt":"$future"}""")

@@ -14,6 +14,7 @@ import com.veyq.core.testing.TestFixtures.CONTENT_KEY
 import com.veyq.core.testing.TestFixtures.bearer
 import com.veyq.core.testing.TestFixtures.seedNode
 import com.veyq.core.testing.TestFixtures.seedUser
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -352,7 +353,7 @@ class TenantStorageQuotaSliceTest {
             }
             TenantRoots.join(userId, tenantId, MembershipEntity.OWNER) // the tenant owner
         }
-        return Tenant(tenantId, userId, scopeA, seedNode(scopeA, wrappedContentKey = CONTENT_KEY), scopeB, seedNode(scopeB, wrappedContentKey = CONTENT_KEY))
+        return Tenant(tenantId, userId, scopeA, seedNode(scopeA, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY), scopeB, seedNode(scopeB, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY))
     }
 
     /** A CONTRIBUTOR link on Memory A, with one identity. */

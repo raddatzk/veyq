@@ -30,6 +30,7 @@ import com.veyq.core.testing.TestFixtures.seedMemberScope
 import com.veyq.core.testing.TestFixtures.seedNode
 import com.veyq.core.testing.TestFixtures.seedUser
 import com.veyq.core.testing.whileUncommitted
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -1506,7 +1507,7 @@ class ScopesSliceTest {
 
         // a member elsewhere, on a Memory of their own, mints a share under the dead link's id
         val (elsewhere, personal) = seedMemberScope()
-        val memory = seedNode(personal, NodeEntity.MEMORY, parentId = personal, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(personal, MemoriesNodeKinds.MEMORY, parentId = personal, wrappedContentKey = CONTENT_KEY)
         given().header("Authorization", bearer(elsewhere)).contentType(ContentType.JSON)
             .body("""{"shareId":"$shareId",${ShareWriteProof.field(shareId)},"nodeId":"$memory","role":"VIEWER","wrap":"c2hhcmUtd3JhcA==","sealedName":"c2VhbGVkLW1lbW9yeQ=="}""")
             .`when`().post("/api/shares")

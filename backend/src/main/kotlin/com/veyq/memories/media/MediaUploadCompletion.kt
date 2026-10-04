@@ -8,6 +8,7 @@ import com.veyq.core.blob.CompleteItemResult
 import com.veyq.core.blob.UploadCompletion
 import com.veyq.core.blob.UploadOpener
 import com.veyq.core.node.NodeEntity
+import com.veyq.memories.node.MemoriesNodeKinds
 import jakarta.enterprise.context.ApplicationScoped
 
 /**
@@ -84,6 +85,6 @@ class MediaUploadCompletion(
          * refuses media until someone opts it in here, instead of silently inheriting it. (Core's dispatcher refuses
          * a kind no application accepts, so the default-deny holds in core too.) The cover path asks it as well.
          */
-        fun attachesMedia(kind: String): Boolean = kind == NodeEntity.MEMORY || kind == NodeEntity.CHAPTER
+        fun attachesMedia(kind: String): Boolean = kind == MemoriesNodeKinds.MEMORY || kind == MemoriesNodeKinds.CHAPTER
     }
 }

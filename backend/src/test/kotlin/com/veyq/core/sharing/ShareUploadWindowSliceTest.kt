@@ -10,6 +10,7 @@ import com.veyq.core.testing.TestFixtures.CONTENT_KEY
 import com.veyq.core.testing.TestFixtures.bearer
 import com.veyq.core.testing.TestFixtures.seedMemberScope
 import com.veyq.core.testing.TestFixtures.seedNode
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.TestProfile
@@ -87,7 +88,7 @@ class ShareUploadWindowSliceTest {
 
     private fun contributorShare(): Share {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val shareId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{${ShareWriteProof.newShare()},"nodeId":"$memory","role":"CONTRIBUTOR","wrap":"d3JhcA==","sealedName":"c2VhbGVk"}""")
             .`when`().post("/api/shares")

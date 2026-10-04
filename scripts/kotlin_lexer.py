@@ -23,7 +23,7 @@ def _block_comment_end(src: str, start: int) -> int:
     return len(src)
 
 
-def mask(src: str) -> str:
+def mask(src: str, literals: bool = True) -> str:
     """`src` with every comment and every string/char literal's contents blanked, at unchanged length.
 
     Newlines and quote characters survive, so offsets and line numbers stay true and a literal still reads as
@@ -32,11 +32,22 @@ def mask(src: str) -> str:
     method with a body, and a comment between a gate and its class could otherwise detach the gate. It knows
     comments (nested), `"…"` with escapes and `${…}` templates, raw triple-quoted strings, char literals and
     backticked names — nothing else.
+
+    `literals=False` blanks the comments only and keeps every literal's contents: for a rule about what code
+    *says*, where a value spelled as a string (`kind == "MEMORY"`) is the same statement as the constant it
+    replaces, while prose in a comment is not.
     """
     out = list(src)
     n = len(src)
 
     def blank(a: int, b: int) -> None:
+        for k in range(a, b):
+            if out[k] != "\n":
+                out[k] = " "
+
+    def blank_literal(a: int, b: int) -> None:
+        if not literals:
+            return
         for k in range(a, b):
             if out[k] != "\n":
                 out[k] = " "
@@ -80,12 +91,12 @@ def mask(src: str) -> str:
                 blank(s, i)
             elif t in ('"""', '"'):
                 contents_end, i = string_end(m.end(), raw=t == '"""')
-                blank(m.end(), contents_end)
+                blank_literal(m.end(), contents_end)
             elif t == "'":
                 e = s + 1
                 while e < n and src[e] not in "'\n":
                     e += 2 if src[e] == "\\" else 1
-                blank(s + 1, min(e, n))
+                blank_literal(s + 1, min(e, n))
                 i = e + 1
             elif t == "`":
                 e = src.find("`", s + 1)

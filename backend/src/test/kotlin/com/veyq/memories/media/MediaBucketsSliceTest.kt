@@ -1,7 +1,6 @@
 package com.veyq.memories.media
 
 import com.veyq.core.testing.TestBlob
-import com.veyq.core.node.NodeEntity
 import com.veyq.core.TestIds
 import com.veyq.core.membership.MembershipEntity
 import com.veyq.core.membership.TenantRoots
@@ -12,6 +11,7 @@ import com.veyq.core.testing.TestFixtures.seedMemberScope
 import com.veyq.core.testing.TestFixtures.seedNode
 import com.veyq.core.testing.TestFixtures.seedUser
 import com.veyq.core.testing.whileUncommitted
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -47,7 +47,7 @@ class MediaBucketsSliceTest {
     @Test
     fun uploadStampsOwnerKeyAndMaterializesPrimary() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         completeOne(userId, scopeId, memory, wrap = "YQ==")
 
         // the media carries the member's owner_key + a concrete bucket (its primary)
@@ -71,7 +71,7 @@ class MediaBucketsSliceTest {
     @Test
     fun createSubBucketMoveThenDeleteReparents() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val a = completeOne(userId, scopeId, memory, wrap = "YQ==")
         val primary = firstPrimaryId(userId, scopeId, memory)
 
@@ -117,7 +117,7 @@ class MediaBucketsSliceTest {
     @Test
     fun renameSubBucketUpdatesSealedName() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         completeOne(userId, scopeId, memory, wrap = "YQ==")
         val sub = createSub(userId, scopeId, memory, "YnVja2V0")
 
@@ -133,7 +133,7 @@ class MediaBucketsSliceTest {
     fun memberMayManageAnotherRootsSubBucket() {
         val (alice, scopeId, tenantId) = seedMemberScope()
         val bob = addMemberToScope(scopeId, tenantId)
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         completeOne(alice, scopeId, memory, wrap = "YQ==") // alice's primary
         val aliceSub = createSub(alice, scopeId, memory, "YWxpY2U=")
 
@@ -150,7 +150,7 @@ class MediaBucketsSliceTest {
     @Test
     fun primaryBucketNotRenameableNorDeletable() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         completeOne(userId, scopeId, memory, wrap = "YQ==")
         val primary = firstPrimaryId(userId, scopeId, memory)
 
@@ -167,7 +167,7 @@ class MediaBucketsSliceTest {
     fun memberCreatesSubUnderAnotherRootInheritingItsOwner() {
         val (alice, scopeId, tenantId) = seedMemberScope()
         val bob = addMemberToScope(scopeId, tenantId)
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         completeOne(alice, scopeId, memory, wrap = "YQ==")
         val alicePrimary = firstPrimaryId(alice, scopeId, memory)
 
@@ -184,7 +184,7 @@ class MediaBucketsSliceTest {
     @Test
     fun createSubRejectsNonPrimaryParent() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         completeOne(userId, scopeId, memory, wrap = "YQ==")
         val sub = createSub(userId, scopeId, memory, "c3Vi")
 
@@ -199,7 +199,7 @@ class MediaBucketsSliceTest {
     fun crossOwnerMoveIsRejected() {
         val (alice, scopeId, tenantId) = seedMemberScope()
         val bob = addMemberToScope(scopeId, tenantId)
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val aliceMedia = completeOne(alice, scopeId, memory, wrap = "YQ==")
         val bobMedia = completeOne(bob, scopeId, memory, wrap = "Yg==")
 
@@ -213,7 +213,7 @@ class MediaBucketsSliceTest {
     @Test
     fun listBucketsByNonMemberIs404() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         completeOne(userId, scopeId, memory, wrap = "YQ==")
         val outsider = seedUser()
         given().header("Authorization", bearer(outsider))
@@ -229,7 +229,7 @@ class MediaBucketsSliceTest {
         // wrote the deleted bucket's id back onto the medium.
         repeat(RACE_ROUNDS) { round ->
             val (userId, scopeId) = seedMemberScope()
-            val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+            val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
             val media = completeOne(userId, scopeId, memory, wrap = "YQ==")
             val primary = firstPrimaryId(userId, scopeId, memory)
             val sub = createSub(userId, scopeId, memory, "c3Vi")
@@ -255,7 +255,7 @@ class MediaBucketsSliceTest {
         // bucket that is gone (Forbidden), leaving the medium where it was.
         repeat(RACE_ROUNDS) { round ->
             val (userId, scopeId) = seedMemberScope()
-            val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+            val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
             val media = completeOne(userId, scopeId, memory, wrap = "YQ==")
             val primary = firstPrimaryId(userId, scopeId, memory)
             val doomed = createSub(userId, scopeId, memory, "ZG9vbWVk")
@@ -281,7 +281,7 @@ class MediaBucketsSliceTest {
         // primary like every other medium of the bucket, not leave it behind for the foreign key to null out.
         repeat(RACE_ROUNDS) { round ->
             val (userId, scopeId) = seedMemberScope()
-            val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+            val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
             val media = completeOne(userId, scopeId, memory, wrap = "YQ==")
             val primary = firstPrimaryId(userId, scopeId, memory)
             val doomed = createSub(userId, scopeId, memory, "ZG9vbWVk")

@@ -4,7 +4,6 @@ import com.veyq.core.blob.BlobUploadStore
 import com.veyq.core.testing.TestBlob
 import com.veyq.core.blob.BlobEntity
 import com.veyq.core.blob.UploadSessionEntity
-import com.veyq.core.node.NodeEntity
 import com.veyq.core.spaces.scope.RestoreGroupOutcome
 import com.veyq.core.spaces.scope.ScopePurge
 import com.veyq.core.spaces.scope.ScopesHandler
@@ -15,6 +14,7 @@ import com.veyq.core.testing.TestFixtures.CONTENT_KEY
 import com.veyq.core.testing.TestFixtures.seedMemberScope
 import com.veyq.core.testing.TestFixtures.seedNode
 import com.veyq.core.testing.whileUncommitted
+import com.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject
@@ -137,7 +137,7 @@ class PurgeRaceSliceTest {
     /** A trashed photo in a fresh personal scope. Returns (scopeId, mediaId). */
     private fun trashedMedia(): Pair<String, String> {
         val (_, scopeId) = seedMemberScope()
-        val nodeId = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val nodeId = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val mediaId = UUID.randomUUID().toString()
         val blobId = UUID.randomUUID().toString()
         tx {
