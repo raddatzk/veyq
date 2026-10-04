@@ -57,9 +57,7 @@ ALLOWLIST: dict[str, set[str]] = {
     "app/itemFavoritesStore.ts": {RULE_IMPORT},
     "components/app/AppSidebar.vue": {RULE_IMPORT, RULE_KIND},
     "components/app/AppTopbar.vue": {RULE_IMPORT},
-    "core/node/browse.ts": {RULE_KIND},  # childrenOf buckets by kind; step 5 makes them generic
     "features/account/rotation/rotateKeys.ts": {RULE_IMPORT},
-    "views/MemoryHomeView.vue": {RULE_IMPORT, RULE_KIND},
     "views/ShareView.vue": {RULE_IMPORT},
 }
 

@@ -3,14 +3,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { httpError } from '../../../test/httpError'
 import { mount } from '@vue/test-utils'
 
-vi.mock('../../../core/node/tree', () => ({
+vi.mock('../tree', () => ({
   listTrash: vi.fn(),
   restoreNode: vi.fn(),
 }))
 
 import SpaceTrashDialog from './SpaceTrashDialog.vue'
-import { listTrash, restoreNode, type TrashedNode } from '../../../core/node/tree'
-import { epochsOf } from '../../spaces/epochsTestUtil'
+import { listTrash, restoreNode, type TrashedNode } from '../tree'
+import { epochsOf } from '../../../features/spaces/epochsTestUtil'
 import { realI18n, t } from '../../../test/i18n'
 
 const stubs = {
@@ -74,6 +74,21 @@ describe('SpaceTrashDialog', () => {
     // both dates are rendered — "you can still get it back, and until when"
     expect(wrapper.text()).toContain(t('memory.spaceTrash.deletedOn', { day: ROW.deletedAt.toLocaleDateString('en') }))
     expect(wrapper.text()).toContain(t('memory.spaceTrash.purgeOn', { day: ROW.purgeAfter.toLocaleDateString('en') }))
+  })
+
+  it('draws each row with its kind\'s own icon from the registry; a kind nobody registered gets a neutral one', async () => {
+    vi.mocked(listTrash).mockResolvedValue([
+      { ...ROW, id: 'a', name: 'AMem', kind: 'MEMORY' },
+      { ...ROW, id: 'b', name: 'BFolder', kind: 'FOLDER' },
+      { ...ROW, id: 'c', name: 'CFuture', kind: 'FUTURE' as TrashedNode['kind'] },
+    ])
+    const wrapper = mountDialog()
+    await settle(wrapper)
+    const iconOf = (name: string) =>
+      wrapper.findAll('.trash-row').find((r) => r.text().includes(name))!.find('strong i').classes().join(' ')
+    expect(iconOf('AMem')).toBe('pi pi-images')
+    expect(iconOf('BFolder')).toBe('pi pi-folder')
+    expect(iconOf('CFuture')).toBe('pi pi-file')
   })
 
   it('shows the empty state when nothing was deleted', async () => {

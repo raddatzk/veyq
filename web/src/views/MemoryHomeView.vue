@@ -2,16 +2,17 @@
 // The personal-space content host (cr-0030/0031, uc.memory.browse). Mounted at `/`; the current tree position
 // lives in the URL **#fragment** (`#~me/reisen-2026/rom`), resolved against the locally-decrypted tree — the
 // operator-blind server computes no navigation and never sees the path. Renders a folder/root level (browse)
-// or a Memory leaf (detail) by the resolved node's kind, and owns the create / rename / delete dialogs.
+// or an opened node (detail) by the resolved node's kind, and owns the create / rename / delete dialogs. It names
+// no application kind (ADR 0079): the detail component comes from the registry's kind descriptor, the folder level
+// and the create/rename + share dialogs from the registry's slots — the application that registered them fills them.
 import { computed, ref, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { activeSpace, activeEpochKeys, enterScope } from '../app/activeSpace'
 import { suspensionSignals } from '../app/tenantSuspension'
-import { keyAt } from '../features/spaces/epochs'
 import { setBreadcrumb } from '../app/breadcrumb'
-import { isFavorite, toggleFavorite, loadFavoritesFor, favoritesStore } from '../app/favoritesStore'
-import { treeStore, loadTree, patchNodeMeta } from '../core/node/treeStore'
+import { loadFavoritesFor, favoritesStore } from '../app/favoritesStore'
+import { treeStore, loadTree } from '../core/node/treeStore'
 import { childrenOf, breadcrumbOf, nodeById } from '../core/node/browse'
 import { nodeContentKey } from '../core/node/tree'
 import { parseHash, resolveSlugPath, hashForNode, TENANT_SCOPE } from '../core/node/location'
@@ -22,12 +23,9 @@ import { useCapabilities } from '../shared/state/useCapabilities'
 import { SHARING_PUBLIC_LINKS } from '../features/platform/capabilities'
 import type { TreeNode } from '../core/node/tree'
 import Message from 'primevue/message'
-import MemoryBrowse from '../features/memory/components/MemoryBrowse.vue'
-import MemoryDetail from '../features/memory/components/MemoryDetail.vue'
-import NodeMutationDialog from '../features/memory/components/NodeMutationDialog.vue'
-import DeleteNodeDialog from '../features/memory/components/DeleteNodeDialog.vue'
-import ShareDialog from '../features/memory/components/ShareDialog.vue'
-import SpaceTrashDialog from '../features/memory/components/SpaceTrashDialog.vue'
+import DeleteNodeDialog from '../core/node/components/DeleteNodeDialog.vue'
+import SpaceTrashDialog from '../core/node/components/SpaceTrashDialog.vue'
+import { registry } from '../core/applications/registry'
 import TrustResetLink from '../features/account/trustReset/TrustResetLink.vue'
 
 const route = useRoute()
@@ -49,10 +47,17 @@ const segments = computed(() => parseHash(route.hash).segments)
 const resolved = computed(() => resolveSlugPath(treeStore.nodes, segments.value))
 const currentNodeId = computed(() => (typeof resolved.value === 'string' ? resolved.value : null))
 const currentNode = computed(() => nodeById(treeStore.nodes, currentNodeId.value))
-// A MEMORY or a CHAPTER opens to the gallery (a chapter is itself a Memory, cr-0060); folders/root browse.
-const isOpenable = computed(
-  () => currentNode.value?.kind === NodeKind.Memory || currentNode.value?.kind === NodeKind.Chapter,
-)
+// Folders and the scope root browse (the `levelView` slot); any other node OPENS, to the detail component its kind
+// registered. A kind with no registered detail is not guessed at: the host shows an explicit unsupported state.
+const isOpenable = computed(() => !!currentNode.value && currentNode.value.kind !== NodeKind.Folder)
+const kindDetail = computed(() => {
+  if (!isOpenable.value || !currentNode.value) return null
+  const info = registry.kind(currentNode.value.kind)
+  return info.supported ? (info.detail ?? null) : null
+})
+const levelView = registry.slot('levelView')
+const mutationDialog = registry.slot('nodeMutationDialog')
+const shareDialog = registry.slot('shareDialog')
 const currentFolder = computed(() =>
   currentNode.value && currentNode.value.kind === NodeKind.Folder ? currentNode.value : null,
 )
@@ -70,19 +75,20 @@ const memoryKey = computed(() =>
     : null,
 )
 
-// Public-share affordance: offered for any **MEMORY** in a scope the caller is a member of — personal, group, or
-// tenant (cr-0104; a chapter or folder is out of scope, the backend rejects a non-MEMORY node). Also gated on the
-// `sharing.public-links` capability (ADR 0032): an operator can turn public sharing off instance-wide, in which
-// case the affordance is hidden entirely (and the server rejects createShare with 422).
-const shareable = computed(
-  () => hasCapability(SHARING_PUBLIC_LINKS) && currentNode.value?.kind === NodeKind.Memory,
-)
+// Public-share affordance: offered for a node whose kind descriptor says it is shareable, in a scope the caller is a
+// member of — personal, group, or tenant (cr-0104; the backend rejects a share root of any other kind). Also gated
+// on the `sharing.public-links` capability (ADR 0032): an operator can turn public sharing off instance-wide, in
+// which case the affordance is hidden entirely (and the server rejects createShare with 422).
+const shareable = computed(() => {
+  if (!hasCapability(SHARING_PUBLIC_LINKS) || !currentNode.value) return false
+  const info = registry.kind(currentNode.value.kind)
+  return info.supported && info.shareable
+})
 const shareVisible = ref(false)
 const uploaderVisible = ref(false) // the uploader (drop-box) share dialog — a separate memory action
 
-type Mode = 'create-folder' | 'create-memory' | 'create-chapter' | 'rename'
 const mutationVisible = ref(false)
-const mutationMode = ref<Mode>('create-folder')
+const mutationMode = ref<string>('create-folder')
 const mutationNode = ref<TreeNode | null>(null)
 const deleteVisible = ref(false)
 const trashVisible = ref(false) // the SPACE's node trash (uc.memory.delete-node) — not the per-Memory media trash
@@ -141,30 +147,10 @@ watch(
   },
 )
 
-// Item marks seal under `K_SC` at the **base epoch `E_0`** (ADR 0068), never under `activeScopeKey()`, which is
-// the *write* key `E_current`: the marked set is re-sealed whole on every toggle, so a rotation would strand it.
-// `activeSpace.epoch` is the reactive signal that a rotation happened — without reading it this would not
-// recompute after `refreshActiveScope`.
-const itemMarkKey = computed<Uint8Array | null>(() => {
-  void activeSpace.epoch
-  const eks = activeEpochKeys()
-  return eks ? keyAt(eks, 0) : null
-})
-
-function onToggleFavorite(node: TreeNode) {
-  if (activeSpace.scopeId) void toggleFavorite(node.id, activeSpace.scopeId)
+function openNode(node: TreeNode) {
+  void router.push({ hash: hashForNode(treeStore.nodes, node.id, currentScope.value) })
 }
-
-function openFolder(folder: TreeNode) {
-  void router.push({ hash: hashForNode(treeStore.nodes, folder.id, currentScope.value) })
-}
-function openMemory(memory: TreeNode) {
-  void router.push({ hash: hashForNode(treeStore.nodes, memory.id, currentScope.value) })
-}
-function openChapter(chapter: TreeNode) {
-  void router.push({ hash: hashForNode(treeStore.nodes, chapter.id, currentScope.value) })
-}
-function startCreate(mode: 'create-folder' | 'create-memory' | 'create-chapter') {
+function startCreate(mode: string) {
   mutationMode.value = mode
   mutationNode.value = null
   mutationVisible.value = true
@@ -211,45 +197,41 @@ async function onDeleteDone() {
       <Message v-if="isPendingDeletion" severity="warn" :closable="false" class="pending-delete-banner">
         {{ t('groups.pendingDeletion', { day: pendingPurgeDay }) }}
       </Message>
-      <MemoryDetail
-        v-if="isOpenable && currentNode && activeSpace.scopeId"
+      <component
+        :is="kindDetail"
+        v-if="kindDetail && currentNode && activeSpace.scopeId"
         :node="currentNode"
         :scope-id="activeSpace.scopeId"
-        :memory-key="memoryKey"
-        :scope-key="itemMarkKey"
-        :personal-scope="activeSpace.kind === 'PERSONAL'"
-        :favorite="isFavorite(currentNode.id)"
-        :chapters="level.chapters"
+        :epochs="epochs"
+        :content-key="memoryKey"
+        :children="level"
         :shareable="shareable"
-        @toggle-favorite="currentNode && onToggleFavorite(currentNode)"
-        @rename="currentNode && startRename(currentNode)"
-        @delete="currentNode && startDelete(currentNode)"
-        @create-chapter="startCreate('create-chapter')"
-        @open-chapter="openChapter"
+        @rename="startRename(currentNode)"
+        @delete="startDelete(currentNode)"
+        @create-child="startCreate"
+        @open-node="openNode"
         @share="shareVisible = true"
         @share-upload="uploaderVisible = true"
-        @meta-updated="patchNodeMeta($event.nodeId, $event.wrappedMeta, $event.metaVersion)"
       />
-      <MemoryBrowse
+      <p v-else-if="isOpenable || !levelView" class="home-state-unsupported">{{ t('home.unsupportedKind') }}</p>
+      <component
+        :is="levelView"
         v-else
         :folder="currentFolder"
-        :folders="level.folders"
-        :memories="level.memories"
+        :level="level"
         :epochs="epochs"
         :readonly="isPendingDeletion"
-        @open-folder="openFolder"
-        @open-memory="openMemory"
-        @toggle-favorite="onToggleFavorite"
-        @create-folder="startCreate('create-folder')"
-        @create-memory="startCreate('create-memory')"
+        @open-node="openNode"
+        @create="startCreate"
         @rename-folder="currentFolder && startRename(currentFolder)"
         @delete-folder="currentFolder && startDelete(currentFolder)"
         @open-trash="trashVisible = true"
       />
     </template>
 
-    <NodeMutationDialog
-      v-if="mutationVisible && epochs && activeSpace.scopeId"
+    <component
+      :is="mutationDialog"
+      v-if="mutationDialog && mutationVisible && epochs && activeSpace.scopeId"
       :mode="mutationMode"
       :scope-id="activeSpace.scopeId"
       :epochs="epochs"
@@ -273,8 +255,9 @@ async function onDeleteDone() {
       @restored="onTrashRestored"
       @close="trashVisible = false"
     />
-    <ShareDialog
-      v-if="shareVisible && currentNode && memoryKey && epochs"
+    <component
+      :is="shareDialog"
+      v-if="shareDialog && shareVisible && currentNode && memoryKey && epochs"
       :scope-id="activeSpace.scopeId!"
       :node-id="currentNode.id"
       :memory-key="memoryKey"
@@ -283,8 +266,9 @@ async function onDeleteDone() {
       @close="shareVisible = false"
     />
     <!-- The SAME dialog component, uploader variant (no role switcher, uploader shares only) — a separate action. -->
-    <ShareDialog
-      v-if="uploaderVisible && currentNode && memoryKey && epochs"
+    <component
+      :is="shareDialog"
+      v-if="shareDialog && uploaderVisible && currentNode && memoryKey && epochs"
       uploader
       :scope-id="activeSpace.scopeId!"
       :node-id="currentNode.id"
@@ -304,6 +288,9 @@ async function onDeleteDone() {
   width: 100%;
 }
 .home-loading {
+  color: var(--app-muted);
+}
+.home-state-unsupported {
   color: var(--app-muted);
 }
 .home-state h2 {

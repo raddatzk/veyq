@@ -246,13 +246,19 @@ allowlist: run them serially, or accept a mechanical conflict on those two files
       · **Bite-test:** register the same kind twice → throws; look up an unregistered kind → the explicit unsupported
       result, never `undefined` reaching a template; the composition root is the only exempt file (step 1 bite b).
       · Done when: `npm run check` green with the suite unchanged; registry unit tests green; the guard green.
-- [ ] 5 kind→detail resolver and generic buckets (Decision 3, 4) — `childrenOf` returns `{ folders, byKind }`;
+- [x] 5 kind→detail resolver and generic buckets (Decision 3, 4) — `childrenOf` returns `{ folders, byKind }`;
       `MemoryHomeView` (a core view, name kept) renders `registry.detailFor(node.kind)` for an openable node, the
       `levelView` slot otherwise, and opens the `nodeMutationDialog` / `shareDialog` slots; `shareable` comes from the
       descriptor plus the existing capability check. `DeleteNodeDialog` and `SpaceTrashDialog` move to
       `core/node/components/` (they name `Folder` only; the trash icon comes from the descriptor). The Memories
       adapters (`MemoryDetailHost`, `MemoryLevelHost`) map the generic context to `MemoryDetail`/`MemoryBrowse`
       props. Deletes the `MemoryHomeView.vue` entries (both rules).
+      · Landed: the guard's `core/node/browse.ts` entry went with `NodeKind.Memory|Chapter` in `childrenOf`; `MemoryHomeView`
+      treats every non-FOLDER node as openable and shows the new `home.unsupportedKind` state (de + en) when its kind
+      has no registered detail or the `levelView` slot is unclaimed. `MemoryHomeView` had no test: `MemoryHomeView.test.ts`
+      (real registry, real adapters) and `MemoryHomeView.registry.test.ts` (stubbed registry) are new. `src/test/setup.ts`
+      registers in a `beforeAll` dynamic import, not a static one (a static import evaluated the application before the
+      test file's `vi.mock`s and disarmed them: 119 of 186 files red); node-environment files get no registry.
       · **Bite-test:** register no detail for `CHAPTER` → opening a chapter shows the unsupported state, and
       `MemoryHomeView`'s test goes red (it opens one); leave `byKind` empty → the gallery test goes red. Order within a
       bucket is pinned by `browse.test.ts` (carried, not weakened).

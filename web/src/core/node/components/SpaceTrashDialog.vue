@@ -14,9 +14,10 @@ import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import ProgressSpinner from 'primevue/progressspinner'
-import { listTrash, restoreNode, type TrashedNode } from '../../../core/node/tree'
-import { NodeKind } from '../../../api/generated/content'
-import type { EpochKeys } from '../../spaces/epochs'
+import { listTrash, restoreNode, type TrashedNode } from '../tree'
+import type { NodeKind } from '../../../api/generated/content'
+import { registry } from '../../applications/registry'
+import type { EpochKeys } from '../../../features/spaces/epochs'
 import { HttpStatus, isCodedError } from '../../../shared/httpError'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
 
@@ -43,8 +44,11 @@ function day(d: Date): string {
   return d.toLocaleDateString(locale.value)
 }
 
+// The icon is the kind's own, from the registry (ADR 0079): core names no application kind. A kind nobody
+// registered (a newer server) gets a neutral icon rather than a blank one.
 function icon(kind: NodeKind): string {
-  return kind === NodeKind.Folder ? 'pi pi-folder' : 'pi pi-images'
+  const info = registry.kind(kind)
+  return info.supported ? info.icon : 'pi pi-file'
 }
 
 function startRetry(row: TrashedNode) {

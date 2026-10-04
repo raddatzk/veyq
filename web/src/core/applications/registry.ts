@@ -22,9 +22,13 @@
 // `{ supported: false }`, which the host renders as an explicit unsupported state, never as an empty region.
 import type { Component } from 'vue'
 import { NodeKind } from '../../api/generated/content'
+import type { TreeNode } from '../node/tree'
+import type { Level } from '../node/browse'
+import type { EpochKeys } from '../../features/spaces/epochs'
 
-/** What core needs to know about a node kind. `detail` is the component the host renders for an OPENABLE node of
- *  the kind; absent means the kind is not openable (a folder browses, it does not open). */
+/** What core needs to know about a node kind. `detail` is the component the host renders when a node of the kind is
+ *  opened. Only the platform's FOLDER has none (a folder browses, it does not open): an application kind that
+ *  registers no `detail` renders the host's explicit unsupported state when opened. */
 export interface KindDescriptor {
   kind: NodeKind
   detail?: Component
@@ -35,6 +39,47 @@ export interface KindDescriptor {
 }
 
 export type KindLookup = ({ supported: true } & KindDescriptor) | { supported: false; kind: NodeKind }
+
+/** The generic context the host hands the `detail` component of an opened node (event names below). The
+ *  application's own host component maps it to whatever its detail view takes. */
+export interface NodeDetailProps {
+  node: TreeNode
+  scopeId: string
+  epochs: EpochKeys | null
+  /** The opened node's content key, resolved by walking the content-key chain (null while the keys are not ready). */
+  contentKey: Uint8Array | null
+  /** The opened node's children, bucketed by kind (`byKind`). */
+  children: Level
+  /** Whether a public share may be offered for this node: the kind's descriptor AND the instance capability. */
+  shareable: boolean
+}
+/** Events a `detail` component emits to the host: `rename`, `delete`, `createChild` (a create mode the
+ *  `nodeMutationDialog` slot understands), `openNode` (a child), `share`, `shareUpload`. */
+export interface NodeDetailEmits {
+  rename: []
+  delete: []
+  createChild: [mode: string]
+  openNode: [node: TreeNode]
+  share: []
+  shareUpload: []
+}
+
+/** The generic context the host hands the `levelView` slot: a folder (or the scope root, `folder` null) and its
+ *  children. Events: `openNode`, `create` (a create mode the `nodeMutationDialog` slot understands),
+ *  `renameFolder`, `deleteFolder`, `openTrash`. */
+export interface LevelViewProps {
+  folder: TreeNode | null
+  level: Level
+  epochs: EpochKeys | null
+  readonly: boolean
+}
+export interface LevelViewEmits {
+  openNode: [node: TreeNode]
+  create: [mode: string]
+  renameFolder: []
+  deleteFolder: []
+  openTrash: []
+}
 
 /** The single-claim slots. Each is claimed by at most one application (see the header). */
 export type SlotName = 'levelView' | 'nodeMutationDialog' | 'shareDialog' | 'topbarTray' | 'sidebarPins'

@@ -747,6 +747,7 @@ const en = {
     noTenant: 'No space found',
     noTenantHint: 'This account isn’t part of a space on this instance yet.',
     error: 'Could not open your space. Please try again.',
+    unsupportedKind: 'This client cannot open this kind of item.',
   },
   memory: {
     memories: 'Memories',
@@ -1811,6 +1812,7 @@ const de: typeof en = {
     noTenant: 'Kein Bereich gefunden',
     noTenantHint: 'Dieses Konto gehört auf dieser Instanz noch zu keinem Bereich.',
     error: 'Dein Bereich konnte nicht geöffnet werden. Bitte versuche es erneut.',
+    unsupportedKind: 'Dieser Client kann diese Art von Eintrag nicht öffnen.',
   },
   memory: {
     memories: 'Erinnerungen',
