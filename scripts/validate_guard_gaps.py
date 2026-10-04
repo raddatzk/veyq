@@ -129,6 +129,9 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   44 a bare side-effect `import '…'` of the application in a core file — rejected: the third spelling of the edge
   45 a core file naming the Memories node kind — rejected: the shell asks the registry, it does not know the kinds
   46 `import.meta.glob` in a core file — rejected: discovery by glob would hide an edge from the import rule
+  47 a `features/spaces/` file importing `features.media` — rejected: `validate_shared_imports_no_features` derives
+     the platform as every main file whose `package` is not a Memories one, not as the `core/` and `shared/`
+     directories. Before, `features.spaces.ScopesStore` imported the item-favorites entity and the guard was green
 Open gaps — a forgery the guard still passes (a documented limit, not a defect to fix blindly):
   4b a lying `status: planned` on an implemented use-case passes. **Left open on purpose** — the obvious rule
      "planned ⇒ no coverage refs" is *false in general*: a use-case can be legitimately `planned` while carrying
@@ -642,6 +645,16 @@ def forge_core_names_media_inline(root: pathlib.Path) -> str:
     return "a core/node file naming features.media fully-qualified inline, no import (must be REJECTED)"
 
 
+def forge_platform_feature_imports_media(root: pathlib.Path) -> str:
+    # A platform file outside core/ and shared/ reaching into the Memories application: the shape ScopesStore had.
+    f = root / "backend/src/main/kotlin/com/veyq/app/features/spaces/GuardGapProbe.kt"
+    if not f.parent.is_dir():
+        raise ForgeError(f"{f.parent.relative_to(root)} is missing — features/spaces moved")
+    f.write_text("package com.veyq.app.features.spaces\n\nimport com.veyq.app.features.media.MediaEntity\n\n"
+                 "class GuardGapProbe\n")
+    return "a features/spaces file importing features.media (must be REJECTED — the platform is every non-Memories file)"
+
+
 WEB_GUARD = "validate_web_core_imports_no_applications.py"
 
 
@@ -898,6 +911,7 @@ CASES = [
     ("44", WEB_GUARD, forge_web_core_side_effect_import, False),
     ("45", WEB_GUARD, forge_web_core_names_memory_kind, False),
     ("46", WEB_GUARD, forge_web_core_glob, False),
+    ("47", "validate_shared_imports_no_features.py", forge_platform_feature_imports_media, False),
 ]
 
 

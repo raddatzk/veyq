@@ -93,6 +93,11 @@ class RemovalRaceSliceTest {
         }
     }
 
+    /**
+     * The member also holds a favorite written before the removal, in the group and in the tenant root: the removal
+     * deletes the group's (the removal-rotation's `MembershipEraser` call — without it the count below is 1) and leaves
+     * the tenant root's, which the member keeps (the positive control on the same `(userId, scopeId)` delete).
+     */
     @Test
     fun anItemFavoriteOfAMemberBeingRemovedIsRefused() {
         repeat(RACE_ROUNDS) { round ->
@@ -100,12 +105,17 @@ class RemovalRaceSliceTest {
             val member = t.member()
             val group = t.group(member)
             val node = UUID.randomUUID().toString()
+            val earlier = UUID.randomUUID().toString()
+            assertEquals(204, putItemFavorite(member, group, earlier), "round $round: the member's earlier favorite")
+            assertEquals(204, putItemFavorite(member, t.id, earlier), "round $round: the member's favorite elsewhere")
             val status = whileUncommitted(
                 change = { removeFromGroup(t.owner, group, member, round) },
                 overlapping = { putItemFavorite(member, group, node) },
             )
             assertEquals(404, status, "round $round: a removed member wrote an item favorite")
             assertEquals(0L, tx { ItemFavoritesEntity.count("userId = ?1 and scopeId = ?2", member, group) }, "round $round")
+            assertEquals(1L, tx { ItemFavoritesEntity.count("userId = ?1 and scopeId = ?2", member, t.id) },
+                "round $round: the removal took the member's favorite in another scope")
             assertEquals(204, putItemFavorite(t.owner, group, node), "round $round: control")
         }
     }

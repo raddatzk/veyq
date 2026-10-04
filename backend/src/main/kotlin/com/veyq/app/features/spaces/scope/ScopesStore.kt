@@ -5,6 +5,7 @@ import com.veyq.app.features.sharing.SharingStore
 import com.veyq.app.features.tasks.CompromiseRotationPolicy
 import com.veyq.app.features.tasks.CompromiseRotationState
 import com.veyq.app.features.tasks.TasksStore
+import com.veyq.app.core.scope.MembershipEraser
 import com.veyq.app.shared.membership.Admission
 import com.veyq.app.shared.membership.SignedGrant
 import com.veyq.app.shared.membership.admission
@@ -12,10 +13,10 @@ import com.veyq.app.shared.membership.admit
 import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.shared.identity.TenantProfileStore
 import com.veyq.app.shared.identity.VeyqUser
-import com.veyq.app.features.content.itemfavorites.ItemFavoritesEntity
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.shared.membership.MembershipStore
 import com.veyq.app.shared.scope.ScopeEntity
+import io.quarkus.arc.All
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 import java.time.Instant
@@ -121,6 +122,9 @@ class ScopesStore(
     private val tenants: TenantStore,
     private val shares: SharingStore,
     private val tasks: TasksStore,
+    // MutableList, not List: ArC rejects kotlin List with @All (see ScopePurge). What goes with one member's access
+    // to one scope, owned by the package whose rows they are (today item favorites, ADR 0068).
+    @All private val membershipErasers: MutableList<MembershipEraser>,
 ) {
 
     /** Whether [userId] belongs to the tenant — an accepted root membership (a group-add candidate's check). */
@@ -331,16 +335,17 @@ class ScopesStore(
      * Delete a member's membership (layer-1 removal — the instant access cut). The tenant-removal cascade's path,
      * which queues the rotation it cannot perform; a group owner's removal goes through [rotate] instead.
      *
-     * Their **item favorites** for this scope go with it (ADR 0068) — as they do in a removal-rotation. Unlike the
-     * private pin set, those blobs feed an aggregate every remaining member sees: left behind, a removed member
-     * keeps voting on which photos are the good ones, forever, with no way for anyone — including them — to take
-     * it back.
+     * Their per-member rows of this scope go with it, through every [MembershipEraser] (today their item favorites,
+     * ADR 0068) — as they do in a removal-rotation.
      */
     @Transactional
     fun removeMembership(userId: String, scopeId: String) {
         MembershipEntity.delete("userId = ?1 and scopeId = ?2", userId, scopeId)
-        ItemFavoritesEntity.delete("userId = ?1 and scopeId = ?2", userId, scopeId)
+        eraseMembership(userId, scopeId)
     }
+
+    private fun eraseMembership(userId: String, scopeId: String) =
+        membershipErasers.forEach { it.eraseMembership(userId, scopeId) }
 
     /**
      * Count one removal of an accepted member (ADR 0075 point 4) — called in the transaction of **every** path that
@@ -416,7 +421,7 @@ class ScopesStore(
         // stale copy, and two concurrent commits would both pass the policy (twoConcurrentRotations… bites that).
         val rows = plan.removes?.let { removed ->
             all.filter { it.userId == removed }.forEach { it.delete() }
-            ItemFavoritesEntity.delete("userId = ?1 and scopeId = ?2", removed, scopeId)
+            eraseMembership(removed, scopeId)
             shares.deactivateSharesByOwnerInScope(removed, scopeId) // cr-0104: their public links 404 from now on
             recordRemoval(scopeId) // ADR 0075: every link minted before now is one the removed member could rebuild
             // ADR 0075: and, opted into, every other link of the group — any of them the removed member could copy
