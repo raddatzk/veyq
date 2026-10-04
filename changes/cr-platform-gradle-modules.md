@@ -46,6 +46,16 @@ returns when `writesFor` finds no writer (`ShareUploadOutcome.NotContributable`,
 change while Memories is present. The alternative — keep `0` and rely on the core-alone test — leaves the one quiet
 failure mode in the series. Your call; say so if you want the open variant back.
 
+**Question 11 (from step 6's first task) — where the `%test` config and the shared test helpers live; before step
+6 commit 2.** Measured (step 6 § State): a `java-test-fixtures` output is not part of a `@QuarkusTest`'s application
+under Quarkus 3.36.0 — its resources are no config source, its classes load outside Quarkus (`LinkageError`, a null
+`Arc.container()`). So the decided layout (`application-test.properties` in `:core`'s fixtures; `TestFixtures` and the
+8a helpers in the fixtures jar) cannot run. Options: (a) `application-test.properties` beside the base in
+`core/src/main/resources` (measured to work for both modules; it ships in the main jar, as it does today) plus a
+test-support project for the helpers (unmeasured); (b) per-module `src/test/resources` copies of the `%test` keys and
+per-module helpers (works, measured for the config; duplicates what step 8a wanted single-homed). Recommendation:
+(a), with the test-support project spiked first — it also decides 8a's R14.
+
 1. **The shape of the baseline scripts — answered 2026-10-04 ("Passt so": option (a), as recommended; built in
    step 1).** The history (67 files) folds to the end state: 35 tables,
    30 core + 5 Memories (measured, § State). Options: (a) **two hand-folded files, one per module**, schema only,
@@ -1120,6 +1130,52 @@ with the config, the Dockerfile and the race runner, which cannot be green apart
   states the path was moved.
 - **Done when:** the above; `backend/CLAUDE.md` § Prove your work lists the `:core:test` / `:test` split and the
   `--tests` filter rule.
+- **State 2026-10-04 — stopped at the first task: one premise of the layout failed in-tree; re-decide before
+  commit 2.** Landed (each commit green): `fix(backend)` — openapi.gradle.kts refused an empty spec set at
+  *configuration* time, so the Dockerfile's warm-up (`gradlew help` before `contracts/` is copied) had failed since
+  step 5 with "the core spec set is empty" while `check` stayed green (measured: the build-base files alone in a temp
+  dir, `./gradlew --offline help` red on `7adde1bd`, green with the refusal moved into the generate task, which still
+  refuses); and **commit 1** — `:core` included and empty, `gradle/module.gradle.kts`, `validate_backend_module_graph.py`
+  with (g) and, because their subjects landed there, (e) and (f) (a missing module directory fails the warm-up,
+  measured, so the Dockerfile `COPY` of `core/build.gradle.kts` could not wait for commit 2). `check` 5m41s, the
+  `classname#name` set equal to `7adde1bd`'s (1153). **The first task, measured on the commit-2 layout (scratch
+  probes, never committed; the commit-2 work-in-progress is a patch outside the repository):**
+  - *Holds:* every `application.properties` on the classpath is a source at 250 — a `:core` `@QuarkusTest` lists
+    core's base plus the test-resources anchor (plus Quarkus' own `startup-override`), a root one the root anchor,
+    `veyq-core.jar!/application.properties` and the test anchor; a profile file is read only beside one (251):
+    deleting the test anchor → `Datasource '<default>' is not configured`, the `%test` keys gone; deleting the root
+    anchor → `quarkusBuild` itself fails the same way (the `%prod` `db-kind` lives in `application-prod.properties`),
+    and with it the fast-jar run with `-Dquarkus.profile=e2e` (every endpoint pointed at a dead local port) applies a
+    scratch key only `application-e2e.properties` set (11 log lines in its format). `beans.xml` is load-bearing:
+    without core's, the root's boot fails "Found 133 deployment problems" (unsatisfied `NodesStore`, `StorageUsage`,
+    …). The library `@QuarkusTest` needs `io.quarkus`: without it `:core`'s boot fails ("A synthetic bean …
+    `VeyqConfig` is already registered"). Quarkus names the module jar `lib/main/com.veyq.veyq-core.jar`.
+  - ***Fails:* nothing in a `java-test-fixtures` output reaches a `@QuarkusTest` as part of the application**
+    (Quarkus 3.36.0's Gradle test bootstrap) — neither `:core`'s own nor the root's. *Resources:* with
+    `application-test.properties` and its anchor in `core/src/testFixtures/resources` both boots fail "Datasource
+    '<default>' is not configured"; the Quarkus class loader lists neither file (`getResources`), though a plain-JUnit
+    probe on the same Gradle classpath sees both, the profile file at 251 — so SmallRye's rule holds and the fixtures
+    jar is simply not in the Quarkus application. *Classes:* `TestFixtures` resolves from `veyq-core-test-fixtures.jar`
+    through the `app` (system) loader, outside Quarkus: `SessionPurgeTest` → `LinkageError: loader constraint
+    violation … com.veyq.core.identity.VeyqUser` (two copies), `TenantIngressProjectorTest` → `Arc.container()` is
+    null; an empty `META-INF/beans.xml` in the fixtures changes nothing. This is R14 in a stronger form than the CR
+    assumed (not "beans undiscovered" but "not in the application at all"), and it reaches step 6, not only 8a:
+    `SessionPurgeTest` and `TenantIngressProjectorTest` must move with their `internal` members and need
+    `TestFixtures` (and `TenantIngressProjectorTest` `givenAdminChannel`), which the root's tests need too.
+  - *Measured alternative for the config, not chosen:* `application-test.properties` beside the base in
+    `core/src/main/resources` (where it ships today, in the main jar) is read by both `:core`'s and the root's
+    `@QuarkusTest`s, one file, the profile at 251 from `veyq-core.jar!/application-test.properties`. Not measured:
+    a test-support **project** (a plain `java-library` module the tests take as `testImplementation(project(…))`,
+    which Quarkus would see as a workspace module like `:core`) as the home of `TestFixtures`, `TenantRoots`,
+    `givenAdminChannel` and the 8a fixtures.
+  - *Also found:* the test enumerations of `RateLimitPostureSweepTest` / `AdminChannelPostureSweepTest` walk the
+    code source of `RateLimitPosture`, which from the root's tests is now `core/build/libs/veyq-core.jar` (a file, not
+    a directory) — both need a walk over every module's output, jar or directory. `TenantIngressNoConfigTest` reads
+    `TenantIngressProjectorTest.CONFIG_PATH`, so it moves to `:core` with it. `:core`'s Quarkus configurations resolve
+    three POMs the single project never did (`commons-lang3` 3.19.0, `commons-parent` 88, `commons-codec` 1.19.0 —
+    candidates evicted by 3.20.0 etc., no new jar). `quarkusBuild` from `backend/` selects the module's task and its
+    disabled task's dependencies still run (`:core:quarkusAppPartsBuild` ran and failed), so the module disables the
+    whole chain.
 
 ### 7 — `:apps:memories`
 
