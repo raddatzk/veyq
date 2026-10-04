@@ -41,11 +41,12 @@ import pathlib
 import re
 import sys
 
+import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-TENANT_DIR = ROOT / "backend/src/main/kotlin/com/veyq/app/features/admin/tenant"
-STORE = TENANT_DIR / "TenantStore.kt"
-HANDLER = TENANT_DIR / "TenantHandler.kt"
-PROJECTOR = ROOT / "backend/src/main/kotlin/com/veyq/app/shared/tenant/TenantIngressProjector.kt"
+STORE = backend_tree.source_file("com.veyq.core.admin.tenant.TenantStore")
+HANDLER = backend_tree.source_file("com.veyq.core.admin.tenant.TenantHandler")
+PROJECTOR = backend_tree.source_file("com.veyq.core.tenant.TenantIngressProjector")
 
 # A function declaration at class-member indentation, in either file.
 FUN = re.compile(r"^\s{4}(?:(?:private|internal|public|override|@Transactional\s+)\s*)*fun\s+(\w+)\s*[(<]")

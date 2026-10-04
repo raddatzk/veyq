@@ -35,8 +35,9 @@ import pathlib
 import re
 import sys
 
+import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-KOTLIN_MAIN = ROOT / "backend" / "src" / "main" / "kotlin"
 
 # An assignment, not a comparison: `granterUserId = x`, `it.granterUserId = x`, JPQL `granterUserId = ?5`, and the
 # native SQL column — never `granterUserId == x` or a read on the right-hand side.
@@ -57,7 +58,7 @@ def writer_sites() -> tuple[dict[str, int], list[str]]:
     """Every function assigning a granter → its site count, plus each such function lacking the snapshot."""
     sites: dict[str, int] = {}
     unpaired: list[str] = []
-    for path in sorted(KOTLIN_MAIN.rglob("*Store.kt")):
+    for path in backend_tree.main_kotlin("*Store.kt"):
         lines = path.read_text(encoding="utf-8").splitlines()
         for start, line in enumerate(lines):
             fun = FUN.match(line)
@@ -82,10 +83,10 @@ def writer_sites() -> tuple[dict[str, int], list[str]]:
 
 
 def main() -> int:
-    if not KOTLIN_MAIN.is_dir():
+    if not backend_tree.main_roots():
         print(
             "GRANT WRITER ARITY VALIDATION FAILED:\n"
-            f"  - missing tree: {KOTLIN_MAIN}. This guard reads backend sources directly; a moved tree must be "
+            f"  - missing tree: no {backend_tree.BACKEND}/**/src/main/kotlin. This guard reads backend sources directly; a moved tree must be "
             f"re-pointed, not silently skipped."
         )
         return 1

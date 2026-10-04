@@ -97,10 +97,10 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   32 a declared doc's every link back to its wiki page removed — rejected: `validate_wiki_sources` requires each
      `docs/` source to link the page, so whoever edits the doc sees the published page that restates it. Before
      it, a page told users the opposite of its doc and was found because a user asked (inbox #120)
-  34 a `core/node/` file importing `features.media` — rejected: `validate_shared_imports_no_features` bars core
+  34 a `core/node/` file importing `memories.media` — rejected: `validate_kernel_imports_no_slices` bars core
      from the Memories application (ADR 0079), so an application cannot grow a back-edge into the platform. The
-     `core/` tree does not exist yet, so the forgery creates it; the guard must stay green without it and go red
-     with the planted file
+     forgery creates its directory if it is missing; the guard must stay green without it and go red with the
+     planted file
   35 a share-subtree contributor whose `authorizedBlobIds` forgets the derivative arm — rejected:
      `validate_blob_reference_arity` follows the arms into every `SharedSubtreeContributor`, not only core's
      `subtreeBlobIds` (the arm is red because of the follow: the file is present and still implements it)
@@ -112,8 +112,8 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      node-keyed entities from their `node_id` column and requires an eraser to reach each. No foreign key points
      at `veyq_node`, so nothing at runtime refuses the purge; before that guard the scope, blob and reclaim
      guards were all green on this exact forgery while the purge orphaned every media, bucket and blob row
-  38 a `core/node/` file naming `features.media` by a fully-qualified reference inline, with no import — rejected:
-     `validate_shared_imports_no_features` reads qualified names on lexer-masked source, not only `import` lines.
+  38 a `core/node/` file naming `memories.media` by a fully-qualified reference inline, with no import — rejected:
+     `validate_kernel_imports_no_slices` reads qualified names on lexer-masked source, not only `import` lines.
      The compiler does not care which form a back-edge takes; before, this exact shape was green
   39 a core `shared/ui/` file importing `features/memory/memoryNodes` — rejected: `validate_web_core_imports_no_applications`
      resolves a relative specifier against the importing file, so the web core cannot grow a back-edge into the
@@ -129,9 +129,12 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   44 a bare side-effect `import '…'` of the application in a core file — rejected: the third spelling of the edge
   45 a core file naming the Memories node kind — rejected: the shell asks the registry, it does not know the kinds
   46 `import.meta.glob` in a core file — rejected: discovery by glob would hide an edge from the import rule
-  47 a `features/spaces/` file importing `features.media` — rejected: `validate_shared_imports_no_features` derives
-     the platform as every main file whose `package` is not a Memories one, not as the `core/` and `shared/`
-     directories. Before, `features.spaces.ScopesStore` imported the item-favorites entity and the guard was green
+  47 a `core/spaces/` file importing `memories.media` — rejected: `validate_kernel_imports_no_slices` derives
+     the platform as every main file whose `package` is not a Memories one, not as a list of directories (phase 1
+     read only the then `core/` and `shared/` trees). Before, `features.spaces.ScopesStore` imported the item-favorites entity and the guard was green
+  48 a kernel (tenant) file importing a slice (the admin tenant feature) — rejected: `validate_kernel_imports_no_slices`
+     reads kernel membership from its declared `KERNEL` list, not from a directory (the kernel was `shared/`
+     until the package rename folded it into `com.veyq.core.<feature>`); every package off the list is a slice
 Open gaps — a forgery the guard still passes (a documented limit, not a defect to fix blindly):
   4b a lying `status: planned` on an implemented use-case passes. **Left open on purpose** — the obvious rule
      "planned ⇒ no coverage refs" is *false in general*: a use-case can be legitimately `planned` while carrying
@@ -259,24 +262,24 @@ PROD_COMPOSE = "infra/docker-compose.prod.yml"
 CONFIG_SECRET_MOUNT = "      - veyq-config-secret:/var/lib/veyq\n"
 # Where a fourth veyq_blob reference arm is forged: a scope is the plausible place for one (a space banner),
 # and it is one of the entities the delete paths already touch.
-SCOPE_ENTITY = "backend/src/main/kotlin/com/veyq/app/shared/scope/ScopeEntity.kt"
+SCOPE_ENTITY = "backend/src/main/kotlin/com/veyq/core/scope/ScopeEntity.kt"
 SCOPE_ENTITY_ANCHOR = "class ScopeEntity : PanacheEntityBase {\n"
 # Named the way a real later core migration is (V<yyyymmddHHMM>__core_<slug>.sql), above every pinned version.
 BANNER_MIGRATION = "backend/src/main/resources/db/migration/V209912312359__core_guard_gap_scope_banner.sql"
 # Where a bypass of the single-deleter rule is forged. A scheduled purge is the plausible place: it already
 # reclaims rows, so deleting the objects inline is the one-line shortcut ADR 0062 Decision 3 forbids.
-TRASH_PURGE = "backend/src/main/kotlin/com/veyq/app/features/media/MediaTrashPurge.kt"
-TENANT_HANDLER = "backend/src/main/kotlin/com/veyq/app/features/admin/tenant/TenantHandler.kt"
+TRASH_PURGE = "backend/src/main/kotlin/com/veyq/memories/media/MediaTrashPurge.kt"
+TENANT_HANDLER = "backend/src/main/kotlin/com/veyq/core/admin/tenant/TenantHandler.kt"
 TENANT_REPROJECT_CALL = "        if (outcome is SuspendOutcome.Done) reproject()\n"
 TRASH_PURGE_CTOR_ANCHOR = "    private val store: MediaStore,\n"
 # The derivative arm of the share blob-GET authorization, which lives in the media implementation of
 # `SharedSubtreeContributor` (ADR 0079 phase 1, step 7) — the place the live-twin check must follow it to.
-MEDIA_SHARE_CONTRIBUTOR = "backend/src/main/kotlin/com/veyq/app/features/media/MediaSharedSubtreeContributor.kt"
+MEDIA_SHARE_CONTRIBUTOR = "backend/src/main/kotlin/com/veyq/memories/media/MediaSharedSubtreeContributor.kt"
 DERIVATIVE_ARM_LINE = '            MediaDerivativeEntity.find("mediaId = ?1", m.id).list().forEach { ids.add(it.blobId) }\n'
 
 # Where a Host read through an alias constant is forged: the recovery resource is where the hand parse that
 # bought validate_lookup_single_home used to live, so it is where a copy of it would plausibly come back.
-RECOVERY_RESOURCE = "backend/src/main/kotlin/com/veyq/app/features/account/recovery/RecoveryResource.kt"
+RECOVERY_RESOURCE = "backend/src/main/kotlin/com/veyq/core/account/recovery/RecoveryResource.kt"
 RECOVERY_RESOURCE_ANCHOR = "class RecoveryResource("
 TRASH_PURGE_BODY_ANCHOR = "        store.purgeTrashedBefore(Instant.now().minus(retention))\n"
 
@@ -503,8 +506,8 @@ def forge_ratelimit_state_under_another_name(root: pathlib.Path) -> str:
     # validate_ratelimit_core matches on the FILENAME (*Limiter*/*Counter*), so a limiter that avoids both name
     # parts holds its own map unseen. This is the whole reach of a buildless grep — pinned, not fixed: enforcing a
     # name nobody has written yet is not decidable, and the alternative (a reflection sweep) leaves the glob.
-    (root / "backend/src/main/kotlin/com/veyq/app/features/sharing/ShareThrottle.kt").write_text(textwrap.dedent("""\
-        package com.veyq.app.features.sharing
+    (root / "backend/src/main/kotlin/com/veyq/core/sharing/ShareThrottle.kt").write_text(textwrap.dedent("""\
+        package com.veyq.core.sharing
 
         import java.util.concurrent.ConcurrentHashMap
 
@@ -523,22 +526,22 @@ def forge_scoped_policy_gains_unlisted_dependency(root: pathlib.Path) -> str:
     # `paths:` filter, so editing the helper alone moves the mutation score without triggering the gate. Not
     # fixable by this guard's mechanism — a path filter cannot follow imports — so it is pinned, not closed. If
     # someone ever teaches the guard to walk dependencies, this case flips red instead of landing silently.
-    helper = root / "backend/src/main/kotlin/com/veyq/app/shared/membership/PolicyHelper.kt"
+    helper = root / "backend/src/main/kotlin/com/veyq/core/membership/PolicyHelper.kt"
     helper.write_text(textwrap.dedent("""\
-        package com.veyq.app.shared.membership
+        package com.veyq.core.membership
 
         /** A guard-gap probe: a dependency of a mutated policy that no `paths:` filter lists. */
         object PolicyHelper {
             fun isLastOwner(owners: Int): Boolean = owners <= 1
         }
         """))
-    policy = root / "backend/src/main/kotlin/com/veyq/app/features/spaces/scope/MembershipPolicy.kt"
+    policy = root / "backend/src/main/kotlin/com/veyq/core/spaces/scope/MembershipPolicy.kt"
     src = policy.read_text()
-    if "import com.veyq.app.shared.membership.MembershipEntity" not in src:
+    if "import com.veyq.core.membership.MembershipEntity" not in src:
         raise ForgeError("MembershipPolicy's MembershipEntity import drifted — re-anchor this forgery")
-    policy.write_text(_sub(src, "import com.veyq.app.shared.membership.MembershipEntity",
-                           "import com.veyq.app.shared.membership.MembershipEntity\n"
-                           "import com.veyq.app.shared.membership.PolicyHelper"))
+    policy.write_text(_sub(src, "import com.veyq.core.membership.MembershipEntity",
+                           "import com.veyq.core.membership.MembershipEntity\n"
+                           "import com.veyq.core.membership.PolicyHelper"))
     return "a mutated policy depending on a file in no `paths:` filter (the transitive-dependency open gap)"
 
 
@@ -590,16 +593,16 @@ def forge_direct_store_delete_bypass(root: pathlib.Path) -> str:
     src = _sub(
         f.read_text(),
         TRASH_PURGE_CTOR_ANCHOR,
-        TRASH_PURGE_CTOR_ANCHOR + "    private val objects: com.veyq.app.shared.blobstore.BlobStore,\n",
+        TRASH_PURGE_CTOR_ANCHOR + "    private val objects: com.veyq.core.blobstore.BlobStore,\n",
     )
     f.write_text(_sub(src, TRASH_PURGE_BODY_ANCHOR, TRASH_PURGE_BODY_ANCHOR + '        objects.delete(listOf("k/0"))\n'))
     return "a purge deleting store objects inline under a renamed, fully-qualified receiver (must be REJECTED)"
 
 
-CORE_NODE_FORGERY = "backend/src/main/kotlin/com/veyq/app/core/node/GuardGapProbe.kt"
+CORE_NODE_FORGERY = "backend/src/main/kotlin/com/veyq/core/node/GuardGapProbe.kt"
 
 
-MEDIA_SCOPE_ERASER = "backend/src/main/kotlin/com/veyq/app/features/media/MediaScopeEraser.kt"
+MEDIA_SCOPE_ERASER = "backend/src/main/kotlin/com/veyq/memories/media/MediaScopeEraser.kt"
 
 
 def forge_media_eraser_drops_a_table(root: pathlib.Path) -> str:
@@ -610,7 +613,7 @@ def forge_media_eraser_drops_a_table(root: pathlib.Path) -> str:
     return "the media ScopeEraser no longer deleting MediaEntity (must be REJECTED — veyq_media would block the scope row)"
 
 
-MEDIA_NODE_ERASER = "backend/src/main/kotlin/com/veyq/app/features/media/MediaNodeSubtreeEraser.kt"
+MEDIA_NODE_ERASER = "backend/src/main/kotlin/com/veyq/memories/media/MediaNodeSubtreeEraser.kt"
 
 
 def forge_media_node_eraser_deleted(root: pathlib.Path) -> str:
@@ -624,13 +627,12 @@ def forge_media_node_eraser_deleted(root: pathlib.Path) -> str:
 
 
 def forge_core_imports_media(root: pathlib.Path) -> str:
-    # A core file reaching into the Memories application. core/ may not exist on the tree yet, so the file is
-    # planted with its directory; the import is the bare line the guard reads.
+    # A core file reaching into the Memories application. The file is planted with its directory; the import is the bare line the guard reads.
     f = root / CORE_NODE_FORGERY
     f.parent.mkdir(parents=True, exist_ok=True)
-    f.write_text("package com.veyq.app.core.node\n\nimport com.veyq.app.features.media.MediaEntity\n\n"
+    f.write_text("package com.veyq.core.node\n\nimport com.veyq.memories.media.MediaEntity\n\n"
                  "class GuardGapProbe\n")
-    return "a core/node file importing features.media (must be REJECTED — core depends on no application)"
+    return "a core/node file importing memories.media (must be REJECTED — core depends on no application)"
 
 
 def forge_core_names_media_inline(root: pathlib.Path) -> str:
@@ -638,22 +640,33 @@ def forge_core_names_media_inline(root: pathlib.Path) -> str:
     # and the guard must read the code line, not the comment (the comment alone stays green — see its docstring).
     f = root / CORE_NODE_FORGERY
     f.parent.mkdir(parents=True, exist_ok=True)
-    f.write_text("package com.veyq.app.core.node\n\n"
-                 "/** Counts [com.veyq.app.features.media.MediaEntity] rows. */\n"
+    f.write_text("package com.veyq.core.node\n\n"
+                 "/** Counts [com.veyq.memories.media.MediaEntity] rows. */\n"
                  "class GuardGapProbe {\n"
-                 "    fun n(): Long = com.veyq.app.features.media.MediaEntity.count()\n"
+                 "    fun n(): Long = com.veyq.memories.media.MediaEntity.count()\n"
                  "}\n")
-    return "a core/node file naming features.media fully-qualified inline, no import (must be REJECTED)"
+    return "a core/node file naming memories.media fully-qualified inline, no import (must be REJECTED)"
 
 
 def forge_platform_feature_imports_media(root: pathlib.Path) -> str:
-    # A platform file outside core/ and shared/ reaching into the Memories application: the shape ScopesStore had.
-    f = root / "backend/src/main/kotlin/com/veyq/app/features/spaces/GuardGapProbe.kt"
+    # A platform file that is no kernel package reaching into the Memories application: the shape ScopesStore had.
+    f = root / "backend/src/main/kotlin/com/veyq/core/spaces/GuardGapProbe.kt"
     if not f.parent.is_dir():
-        raise ForgeError(f"{f.parent.relative_to(root)} is missing — features/spaces moved")
-    f.write_text("package com.veyq.app.features.spaces\n\nimport com.veyq.app.features.media.MediaEntity\n\n"
+        raise ForgeError(f"{f.parent.relative_to(root)} is missing — core/spaces moved")
+    f.write_text("package com.veyq.core.spaces\n\nimport com.veyq.memories.media.MediaEntity\n\n"
                  "class GuardGapProbe\n")
-    return "a features/spaces file importing features.media (must be REJECTED — the platform is every non-Memories file)"
+    return "a core/spaces file importing memories.media (must be REJECTED — the platform is every non-Memories file)"
+
+
+def forge_kernel_imports_slice(root: pathlib.Path) -> str:
+    # A kernel package reaching into a slice: the shape the 2026-09-23 review found (tenant kernel classes on the
+    # admin feature's tenant entity). Kernel membership is the declared KERNEL list, not a directory.
+    f = root / "backend/src/main/kotlin/com/veyq/core/tenant/GuardGapProbe.kt"
+    if not f.parent.is_dir():
+        raise ForgeError(f"{f.parent.relative_to(root)} is missing — the tenant kernel package moved")
+    f.write_text("package com.veyq.core.tenant\n\nimport com.veyq.core.admin.tenant.TenantStore\n\n"
+                 "class GuardGapProbe\n")
+    return "a kernel (tenant) file importing the admin tenant slice (must be REJECTED — the kernel names no slice)"
 
 
 WEB_GUARD = "validate_web_core_imports_no_applications.py"
@@ -899,11 +912,11 @@ CASES = [
     ("31", "validate_wiki_sources.py", forge_wiki_pair_declares_fewer,     False),
     ("32", "validate_wiki_sources.py", forge_wiki_backlink_removed,        False),
     ("33", "validate_wiki_sources.py", forge_wiki_prose_contradicts_doc,   True),
-    ("34", "validate_shared_imports_no_features.py", forge_core_imports_media, False),
+    ("34", "validate_kernel_imports_no_slices.py", forge_core_imports_media, False),
     ("35", "validate_blob_reference_arity.py", forge_contributor_forgets_derivative_arm, False),
     ("36", "validate_scope_erasure_arity.py", forge_media_eraser_drops_a_table, False),
     ("37", "validate_node_subtree_erasure.py", forge_media_node_eraser_deleted, False),
-    ("38", "validate_shared_imports_no_features.py", forge_core_names_media_inline, False),
+    ("38", "validate_kernel_imports_no_slices.py", forge_core_names_media_inline, False),
     ("39", WEB_GUARD, forge_web_core_imports_application, False),
     ("40", WEB_GUARD, forge_web_core_reexports_application, False),
     ("41", WEB_GUARD, forge_web_core_dynamic_imports_application, False),
@@ -912,7 +925,8 @@ CASES = [
     ("44", WEB_GUARD, forge_web_core_side_effect_import, False),
     ("45", WEB_GUARD, forge_web_core_names_memory_kind, False),
     ("46", WEB_GUARD, forge_web_core_glob, False),
-    ("47", "validate_shared_imports_no_features.py", forge_platform_feature_imports_media, False),
+    ("47", "validate_kernel_imports_no_slices.py", forge_platform_feature_imports_media, False),
+    ("48", "validate_kernel_imports_no_slices.py", forge_kernel_imports_slice, False),
 ]
 
 

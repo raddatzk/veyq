@@ -46,6 +46,8 @@ import posixpath
 import re
 import sys
 
+import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
+
 try:
     import yaml
 except ModuleNotFoundError:  # pragma: no cover - same shape as the other guards
@@ -54,7 +56,7 @@ except ModuleNotFoundError:  # pragma: no cover - same shape as the other guards
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 DOCKERFILE = ROOT / "Dockerfile"
-CONFIG_KT = ROOT / "backend/src/main/kotlin/com/veyq/app/shared/config/VeyqConfig.kt"
+CONFIG_KT = backend_tree.source_file("com.veyq.core.config.VeyqConfig")
 INFRA = ROOT / "infra"
 
 ENV_KEY = "VEYQ_SECURITY_CONFIG_SECRET_FILE"

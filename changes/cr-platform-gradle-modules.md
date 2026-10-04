@@ -27,11 +27,10 @@ invariants: [operator-blind E2EE everywhere, self-hostable by default, API-first
 ## Open for the owner
 
 What is still open after your decisions of 2026-10-04 (first round: rows 0–6 of § Decided; second round: rows 7–11;
-third round, questions 1 and 2: rows 12–14);
+third round, questions 1 and 2: rows 12–14; question 3: row 15);
 each carries a recommendation. None blocks step 0; the ones marked **before step N** block that step. Decided since
 the last version of this CR: the artifact shape (one fast-jar), the blob location (now step 3), `NodeKindRules` (now
-step 4). Question 3 had no answer from you; **it must be answered before step 2 starts** — step 2 writes the kernel
-guard in whichever shape you pick, and a rename re-done for a different shape is a second 367-file commit. Question 10
+step 4), and the kernel list (question 3, answered "Liste" before step 2 and built in it). Question 10
 is new from the review and is written into the CR in its conservative default until you say otherwise.
 
 **Question 10 (new, from the independent review) — `UploadAdmission` fails closed like the other seams; before step
@@ -70,14 +69,14 @@ failure mode in the series. Your call; say so if you want the open variant back.
    the same commit, so the change cannot go unnoticed. The guard cannot know when the release happens; you declare
    it (a line in the pin file). Until then a baseline changes only together with its pin line in the same commit
    (`backend/CLAUDE.md` § Migrations carries that paragraph).
-3. **The `shared/` → `features/` layering dies in the flat rename — before step 2.** `shared.X` and `features.X` both become
+3. **The `shared/` → `features/` layering dies in the flat rename — answered 2026-10-04 ("Liste": the declared list, as
+   recommended; built in step 2).** `shared.X` and `features.X` both become
    `com.veyq.core.X`, and the directory name was the guard's only handle on "kernel never imports a feature slice".
    **Recommendation: keep the rule, re-express it as a declared list** — the 15 former `shared/` packages are the
-   *kernel*; `validate_shared_imports_no_features.py` (renamed) reads that list from one constant, a new package
+   *kernel*; `validate_kernel_imports_no_slices.py` (renamed) reads that list from one constant, a new package
    defaults to "slice". Alternative: keep `com.veyq.core.shared.<x>` as a sub-tree (no list, but a name that says
-   nothing the module does not). The list is a layer declaration, not a table that rots; step 2 bites it. **No answer
-   from you yet. This one must be answered before step 2** (see the paragraph above); the recommendation is the
-   default the CR is written in, not a licence to start step 2 without your word.
+   nothing the module does not). The list is a layer declaration, not a table that rots; step 2 bites it. The guard
+   file is renamed `validate_kernel_imports_no_slices.py` (the name the CR's later steps use).
 4. **Contract layout — before step 5.** **Recommendation:** Memories-owned specs go to `contracts/api/memories/`
    (`media.openapi.yaml` moved, `favorites.openapi.yaml` new); core specs and `_common.openapi.yaml` stay where they
    are. A full `core/` + `memories/` tree would move ten files, rewrite two `package.json` scripts and the 14 scripts
@@ -174,6 +173,7 @@ Third round (later the same day):
 | 12 | Question 1 answered "Passt so": two hand-folded baselines, `V<yyyymmddHHMM>__core_baseline.sql` and `V<yyyymmddHHMM>__memories_baseline.sql`, in the shared `db/migration/`, core first by version; Memories tables reference core tables only, never the reverse | open question 1 |
 | 13 | Question 2 accepted: pin now (`scripts/applied_migrations.sha256` + `validate_migration_versions.py`); the first release is the owner's word; until then a baseline changes only with a visible pin-line change in the same commit | open question 2 |
 | 14 | The old 67 migrations are removed; no production environment exists, and every dev database, the owner's included, is recreated and its accounts are lost | — |
+| 15 | Question 3 answered "Liste": the 15 former `shared/` packages are the declared `KERNEL` constant of the renamed guard; a new package defaults to "slice" | open question 3 |
 
 Slicing order (the owner's, re-cut): MembershipEraser edge (0) → Flyway baseline reset (1) → package rename (2) →
 blob upload/quota to core (3) → `NodeKindRules` (4) → contracts split (5) → Gradle skeleton and `:core` (6) →
@@ -252,9 +252,9 @@ application, moving the share contract's two `/media` operations out of core (qu
 | **Every one of the 367 Kotlin files** carries a `com.veyq.app` import or package line: 1728 import lines (re-measured after step 0), none a wildcard; 212 of them `com.veyq.app.generated.{api,model}` (25 api, 187 model) | `grep -rhE '^import com\.veyq\.app\.' backend/src/main/kotlin backend/src/test/kotlin \| wc -l`; `grep -rlE 'com\.veyq\.app' backend/src \| wc -l` |
 | Package map (files, after step 0): `core` 13 (`blob node quota scope sharing`), `shared` 60 (15 packages: `adminchannel appshell auth blobstore config crypto http identity instance membership persistence ratelimit scope tenant validation`), `features/{account 48, admin 22, content 17, media 15, platform 2, sharing 7, spaces 7, tasks 7}`; of `content`, 13 are favorites/item-favorites. Memories = `features.media` (15), `content.favorites` (5), `content.itemfavorites` (8) | a `find … -name '*.kt'` tally keyed on the first two path segments under `com/veyq/app` |
 | **The rename map has no file collision**; exactly three packages merge — `core.scope` ← `core/scope` + `shared/scope`, `core.sharing` ← `core/sharing` + `features/sharing` (main and test) | `/…/scratchpad/map.py`-style script: map each file to its new package, collect `(tree, new package, file name)`; 0 duplicates. Class-level clashes are left to the compiler |
-| **Platform → Memories edge in main: none since step 0** (before it, exactly one import — `features/spaces/scope/ScopesStore.kt` → `ItemFavoritesEntity`, two sites — now `core.scope.MembershipEraser`, which item favorites implements; `validate_shared_imports_no_features` holds every non-Memories main file to it). Memories → platform: wide, as designed. **No non-Memories file, main or test, imports a Memories-owned generated type** (the five Memories APIs and their models) | `grep -rnE 'import com\.veyq\.app\.features\.(media\|content\.(item)?favorites)' backend/src/main/kotlin \| grep -vE '/features/(media\|content/favorites\|content/itemfavorites)/'`; a script over the generated type names of `media.openapi.yaml` + the favorites schemas, 0 hits |
+| **Platform → Memories edge in main: none since step 0** (before it, exactly one import — `features/spaces/scope/ScopesStore.kt` → `ItemFavoritesEntity`, two sites — now `core.scope.MembershipEraser`, which item favorites implements; `validate_kernel_imports_no_slices` holds every non-Memories main file to it). Memories → platform: wide, as designed. **No non-Memories file, main or test, imports a Memories-owned generated type** (the five Memories APIs and their models) | `grep -rnE 'import com\.veyq\.app\.features\.(media\|content\.(item)?favorites)' backend/src/main/kotlin \| grep -vE '/features/(media\|content/favorites\|content/itemfavorites)/'`; a script over the generated type names of `media.openapi.yaml` + the favorites schemas, 0 hits |
 | **Nothing keyed on a package name outside Kotlin imports:** no `quarkus.log.category`/`hibernate-orm.packages`/`index-dependency` in any `application*.properties`; all 24 entities carry an explicit `@Table(name=…)`, so table names do not follow the package; entity names (JPQL) are simple names; one `@ConfigMapping(prefix = "veyq")` and one `@ConfigProperty` (`quarkus.http.host`); no `@NamedQuery`, no `Class.forName`, no `::class.java.name` persisted anywhere; no `META-INF/services`. **One observable change:** 18 classes log through `Logger.getLogger(X::class.java)`, so the logger *category* is the FQN and changes with the rename — nothing in the repo (properties, `infra/`, `charts/`, docs) names one | `grep -nE 'log\|category\|packages\|index-dependency\|flyway' backend/src/main/resources/application*.properties`; `grep -rL '@Table' $(grep -rlE '^@Entity' backend/src/main/kotlin)` (empty); `grep -rnE '@ConfigProperty\|@ConfigMapping' backend/src/main/kotlin`; `grep -rnE 'com\.veyq' infra charts .github/workflows/ci.yml docs` |
-| FQN strings that the rename must also reach: 24 `x-field-extra-annotation` entries in `contracts/api` naming `com.veyq.app.shared.validation.TrimmingStringDeserializer`; `pitest.scope.json` (10 globs); `.github/workflows/mutation-backend.yml` (28 path citations); 11 scripts (`validate_guard_gaps` 22, `validate_shared_imports_no_features` 5, …), which spell the tree **three ways** (measured at the review): dotted FQNs (`mutation_meta_check_selftest`, `validate_guard_gaps`, `validate_mutation_trigger_paths`, `validate_shared_imports_no_features`, `validate_store_reclaim_arity`), slash paths `com/veyq/app/…` (`chart_meta_check` `SINK_KT`/`CONFIG_KT`, `validate_config_secret_persistence` `CONFIG_KT`, `validate_guard_gaps` forgeries, `validate_lookup_single_home` `RESOLVER`/`ACCOUNTS`, `validate_shared_imports_no_features`, `validate_store_reclaim_arity` `ALLOWED_SITE`, `validate_tenant_ingress_triggers` `TENANT_DIR`/`PROJECTOR`, `validate_test_fixture_single_home` `HOME`), and path-segment joins `… / "com" / "veyq" / "app" / …` (`validate_blob_reference_arity`, `validate_http_failure_projection`, `validate_node_subtree_erasure`, `validate_ratelimit_core`, `validate_scope_erasure_arity`, `validate_scope_model_vocabulary`, `validate_test_fixture_single_home`, `validate_wrap_method_vocabulary`) — a rewrite keyed on one spelling misses the other two; `com.veyq.app…` mentions outside import/package lines (11 in main, ~20 in tests; mostly KDoc links, a few inline code); string-form `com.veyq.app.generated.api` in `OperatorBlindProbeTest` | `grep -rhoE 'com\.veyq\.app\.[A-Za-z0-9_.]+' contracts/api \| sort \| uniq -c`; `grep -cE 'com[./]veyq' scripts/*.py \| grep -v ':0'` (dotted and slash separately: `com\.veyq\.app`, `com/veyq/app`); `grep -nE '"com" */ *"veyq"' scripts/*.py`; `grep -rnE 'com\.veyq\.app' backend/src \| grep -vE '^\S+:[0-9]+:(import\|package) '` |
+| FQN strings that the rename must also reach: 24 `x-field-extra-annotation` entries in `contracts/api` naming `com.veyq.app.shared.validation.TrimmingStringDeserializer`; `pitest.scope.json` (10 globs); `.github/workflows/mutation-backend.yml` (28 path citations); 11 scripts (`validate_guard_gaps` 22, `validate_kernel_imports_no_slices` 5, …), which spell the tree **three ways** (measured at the review): dotted FQNs (`mutation_meta_check_selftest`, `validate_guard_gaps`, `validate_mutation_trigger_paths`, `validate_kernel_imports_no_slices`, `validate_store_reclaim_arity`), slash paths `com/veyq/app/…` (`chart_meta_check` `SINK_KT`/`CONFIG_KT`, `validate_config_secret_persistence` `CONFIG_KT`, `validate_guard_gaps` forgeries, `validate_lookup_single_home` `RESOLVER`/`ACCOUNTS`, `validate_kernel_imports_no_slices`, `validate_store_reclaim_arity` `ALLOWED_SITE`, `validate_tenant_ingress_triggers` `TENANT_DIR`/`PROJECTOR`, `validate_test_fixture_single_home` `HOME`), and path-segment joins `… / "com" / "veyq" / "app" / …` (`validate_blob_reference_arity`, `validate_http_failure_projection`, `validate_node_subtree_erasure`, `validate_ratelimit_core`, `validate_scope_erasure_arity`, `validate_scope_model_vocabulary`, `validate_test_fixture_single_home`, `validate_wrap_method_vocabulary`) — a rewrite keyed on one spelling misses the other two; `com.veyq.app…` mentions outside import/package lines (11 in main, ~20 in tests; mostly KDoc links, a few inline code); string-form `com.veyq.app.generated.api` in `OperatorBlindProbeTest` | `grep -rhoE 'com\.veyq\.app\.[A-Za-z0-9_.]+' contracts/api \| sort \| uniq -c`; `grep -cE 'com[./]veyq' scripts/*.py \| grep -v ':0'` (dotted and slash separately: `com\.veyq\.app`, `com/veyq/app`); `grep -nE '"com" */ *"veyq"' scripts/*.py`; `grep -rnE 'com\.veyq\.app' backend/src \| grep -vE '^\S+:[0-9]+:(import\|package) '` |
 | ArC `@All` / `Instance<>` consumers collecting Memories implementations: `ScopePurge`, `NodeSubtreePurge`, `ScopesStore` (since step 0), `SharingStore`, `SharingHandler` | `grep -rnE '@All\|Instance<' backend/src/main/kotlin` |
 | **Only three `internal` members**, all platform code with tests in the same package (`SessionPurge`'s companion with `FAMILY_BATCH`, `SessionPurge.kt:51`; `TraefikFileIngressSink.render`; `TenantIngressProjector.isRoutableHostname`). **Four test files read them, two of them `@QuarkusTest`s** — `SessionPurgeTest` (`FAMILY_BATCH`) and `TenantIngressProjectorTest`; `TenantIngressHostnameTest` and `TenantIngressEmptyProjectionTest` are plain. So `:core` holds `@QuarkusTest`s from step 6 on, not from step 8a | `grep -rnE '^\s*internal ' backend/src/main/kotlin`; `grep -rlE 'isRoutableHostname\|FAMILY_BATCH' backend/src/test/kotlin`, `grep -rl TraefikFileIngressSink backend/src/test/kotlin \| xargs grep -l 'render('`, each `\| xargs grep -c '@QuarkusTest'` |
 | **Config: one base file and four profile files, all in `backend/src/main/resources`.** `application.properties` (249 lines, 57 keys) carries every profile's ground truth: `quarkus.hibernate-orm.schema-management.strategy=none` (l.3), `quarkus.flyway.migrate-at-start=true` (l.4), `quarkus.datasource.jdbc.transaction-isolation-level=read-committed` (l.12, ADR 0078, pinned by `DatasourceIsolationTest`), `quarkus.http.auth.proactive=false` (l.18), `quarkus.security.jaxrs.deny-unannotated-endpoints=true` (l.23), `veyq.admin-channel.port` (l.29) and every `veyq.*` default `VeyqConfig` (`@ConfigMapping(prefix = "veyq")`, `VeyqConfig.kt:24`) binds — a missing mapped key fails startup (remembered: SmallRye mapping semantics). `application-test.properties` ships in the **main** jar today. The profile files override base keys on purpose: `dev` 2 (`veyq.blob-store.type`, `veyq.session.cookie.secure`), `e2e` 6, `test` 3 (`veyq.admin-channel.port`, `veyq.ratelimit.auth.max-requests`, `veyq.session.cookie.secure`), `prod` 0. The chart mounts its own `application.properties` from a ConfigMap at `/etc/veyq/` (a file-system source, not the classpath) | `ls backend/src/main/resources`; `grep -vE '^\s*(#\|$)' …/application.properties \| cut -d= -f1 \| sort -u \| wc -l`; per profile `comm -12` of the two sorted key lists; `grep -n application.properties charts/veyq/templates/*.yaml` |
@@ -441,7 +441,7 @@ the three web `generate:api` trees (`web`, `admin-web`: `find src/api/generated 
   transactions; `ItemFavorites…MembershipEraser` implements it in the item-favorites package. Collected like the other
   seams (`@All MutableList`, not `List` — the ArC trap in `backend/CLAUDE.md`). No phase table: one implementation; the
   doc says implementations must not take locks beyond the caller's scope-row lock.
-- **Guard first (red → fix → green).** Extend `validate_shared_imports_no_features.py`: the Memories ban covers *every
+- **Guard first (red → fix → green).** Extend `validate_kernel_imports_no_slices.py`: the Memories ban covers *every
   main Kotlin file whose package is not a Memories package* (the inverse derivation — no list of platform packages to
   rot, and exactly the cut Gradle will make). Run it on the untouched tree first: red on `ScopesStore` only.
 - **Acceptance.** Angle 1 of the inventory returns nothing; member removal and removal-rotation still delete that
@@ -568,9 +568,9 @@ the per-module baselines are the first artefact that has an owner before the mod
   fast-jar boot itself and `run_web_e2e.py` (both **[LIVE]**, for the owner or CI). Inbox rows that cite `Vnn` in
   their done history were left as they are (flow, not state).
 
-### 2 — Rename the packages (a script, a manifest, a proof)
+### 2 — Rename the packages (a script, a manifest, a proof) — **done 2026-10-04**
 
-*Starts only after open question 3 is answered.* The blob and node-kind seams follow in 3–4 and the module split in 6–7;
+*Starts only after open question 3 is answered* (it was: row 15). The blob and node-kind seams follow in 3–4 and the module split in 6–7;
 here every file keeps its production role and moves to its owner's package. **Three commits, each green on its own**
 (the green unit is the commit, § Steps): (1) `scripts/backend_tree.py` and every guard rewired to it, **on the old
 layout** — a guard that globs is layout-independent, so this commit changes no Kotlin and proves the rewiring before
@@ -602,7 +602,7 @@ anything moves; (2) the mechanical rename, the script's output and nothing else;
   resolving it under whichever root holds it), all resolved by glob over `backend/**/src/{main,test,testFixtures}/…`,
   never listed — and every guard that hard-codes `backend/src/main/kotlin/com/veyq/app` in any of the three spellings
   is rewired to it: the slash-path ones (`chart_meta_check` `SINK_KT`/`CONFIG_KT`, `validate_config_secret_persistence`,
-  `validate_lookup_single_home`, `validate_shared_imports_no_features`, `validate_store_reclaim_arity` `ALLOWED_SITE`,
+  `validate_lookup_single_home`, `validate_kernel_imports_no_slices`, `validate_store_reclaim_arity` `ALLOWED_SITE`,
   `validate_tenant_ingress_triggers`, `validate_test_fixture_single_home`), the segment-join ones
   (`validate_blob_reference_arity`, `validate_http_failure_projection`, `validate_node_subtree_erasure`,
   `validate_ratelimit_core`, `validate_scope_erasure_arity`, `validate_scope_model_vocabulary`,
@@ -611,7 +611,7 @@ anything moves; (2) the mechanical rename, the script's output and nothing else;
   `validate_wire_log_matcher`; it names no backend path — measured: `grep -nE 'com[./]veyq|kotlin'
   scripts/validate_wire_log_matcher.py` finds only two forged log lines with the logger category `[com.veyq]`
   (l.201, l.513), a prefix every renamed category still carries (R15) — so it is not in the list.) Each rewired guard keeps its "a run that finds none is red" line.
-  `validate_shared_imports_no_features` becomes the kernel guard of open question 3 in this commit, still on the old
+  `validate_kernel_imports_no_slices` becomes the kernel guard of open question 3 in this commit, still on the old
   names: the declared kernel list is generated **once** from the 15 `shared/` directory names and committed as a
   constant of `com.veyq.app.shared.*` packages, which commit 2 then maps like every other constant.
   **Commit 1 is green on the untouched tree** (`./gradlew check` is not even affected; the guard glob is the proof).
@@ -642,6 +642,37 @@ anything moves; (2) the mechanical rename, the script's output and nothing else;
   → the compile fails on the clashing package (so the declaration is load-bearing).
 - **Done when:** the above, and `docs` citing backend paths/packages are rewritten (citations mechanically in commit 2,
   prose in commit 3; locator: "Docs and config citing a moved path", both angles) with `validate_doc_citations` and `validate_mutation_trigger_paths` green.
+- **Outcome (what later steps inherit).** Three commits as planned, each green on its own. Baselines before the first
+  edit (worktree at `5a14ef04`): `./gradlew --offline check` 357 s, 1138 testcases, 0 failed, 2 skipped; 32 race
+  classes; 52 validators; 367 Kotlin files; the web + admin-web `generate:api` trees (381 files) hashed — so step 5
+  inherits a recorded generated-client baseline taken on this step's tree, not none. Deviations, each named:
+  (1) the guard is renamed `validate_kernel_imports_no_slices.py` (this CR's later steps now use that name); its
+  `KERNEL` list is the 15 packages, written out in full, and every entry must be declared by some main file. After
+  the merge `com.veyq.core.scope` is a kernel package, so the two former `core/scope` interfaces (`ScopeEraser`,
+  `MembershipEraser`) are kernel too (62 kernel files, was 60) — they import nothing. Its Memories list is the
+  whole namespace `com.veyq.memories` (the prospective `features.memory` mapped there; commit 3 collapsed the list
+  to that one entry). New `validate_guard_gaps` case 48 pins the kernel rule. (2) Bite (5)'s lever is the script,
+  not the compiler: without a merge declaration `rename_packages.py` refuses before moving anything, and a declared
+  merge that does not happen is refused too. (3) P2 needed two normalisations beyond the manifest: JVM descriptors
+  (`Lcom/veyq/app/…;`) and 117 `data object` `hashCode()` constants, which Kotlin compiles as the
+  `String.hashCode` of the qualified name — each checked to equal the hash of the old FQN before and the new FQN
+  after; 1653 class listings, 0 other differences. (4) Bite (3) found a hole in commit 1:
+  `validate_ratelimit_core` kept a hard-coded fallback directory the rename rewrote to the new path, so re-pointing
+  its anchor at the old name stayed green; commit 3 replaced it with `backend_tree.package_dir` (no fallback
+  spelled anywhere). (5) Four prose sites named the old layout as a whole (`features/{…}`, `features.*`) and could
+  not be mapped; the script declared them (`HAND_EDITS`) and commit 3 rewrote them. (6) Not rewired, on purpose:
+  `mutation_meta_check_backend` (reads the PIT report and class globs only), `validate_doc_citations` (resolves
+  `backend/src` citations; it needs widening when module roots exist, step 6). **Proofs run:** P1
+  `--check 735e1e58` byte-equal (367 moved, 398 rewritten; changed lines 367 package, 1513 import, 181 other); P2
+  as above; P3 1138 = 1138 after mapping, 0 lost, 0 added, `check` 357 s; P4 11 specs canonical-equal modulo the 24
+  annotation values, `generate:api` byte-identical, no diff under `infra`, `charts`, `web`, `admin-web`; P5 by
+  construction (no changed line carries `@Table`, `@ConfigMapping`, `@ConfigProperty` or a config prefix);
+  **[LIVE]** `run_backend_races_on_mariadb.py` in a throwaway container: 32 classes, 382 tests, 0 failed. R15: the
+  19 `Logger.getLogger(X::class.java)` classes now log as `com.veyq.core.*`; nothing in the repo names a category.
+  **What step 3 must know:** the blob half moves from `com.veyq.memories.media` to `com.veyq.core.blob` (both exist);
+  every guard anchor is a dotted FQN resolved by `backend_tree.source_file`, so a class that changes package needs
+  its anchor edited (the guard goes red until then — bite (3)), and one that only changes module needs nothing;
+  `rename_packages.py` stays until the close and its `--check` is pinned to `735e1e58`.
 
 ### 3 — The generic blob upload and quota half moves from `memories.media` to `core.blob` (one Gradle module still)
 
@@ -726,7 +757,7 @@ MariaDB red (ADR 0078), so the step carries a **[LIVE]** race run.
   existing case first and adds one only if none exists). (4) *the lock:* remove
   `lockTenant` from `reserveAndOpen` in a scratch copy → `parallelMemberStartsCannotOvershoot` red **[LIVE]** (H2 may
   stay green; the commit says which). (5) *moved, not rewritten:* edit one moved line in a scratch copy → the verbatim
-  check red. (6) *the direction:* a forged `core/blob` file importing a Memories class → `validate_shared_imports_no_features`
+  check red. (6) *the direction:* a forged `core/blob` file importing a Memories class → `validate_kernel_imports_no_slices`
   red.
 - **Done when:** the above; the moved-class citations in docs and coverage re-pointed (`validate_doc_citations`,
   `validate_coverage` green).
@@ -754,7 +785,7 @@ code names `FOLDER` only, so the module cut never has to give `:core` a `MEMORY`
   (`"NOT_A_KIND"`) is refused — `NodesHandler.create` takes `kind: String`, so the contract's closed enum does not
   shield it. The existing `MEMORY`/`CHAPTER` tests (`NodesSliceTest`'s tree, chapter-at-root and move cases) are
   unchanged.
-- **Guard.** A rule in `validate_shared_imports_no_features.py` (renamed at step 2): a hand-written main file of core
+- **Guard.** A rule in `validate_kernel_imports_no_slices.py` (renamed at step 2): a hand-written main file of core
   (outside the generated tree) contains neither `MEMORY` nor `CHAPTER` outside comments. Run it on the untouched tree
   first: red on exactly the four sites of § State. The generated `NodeKind` enum still lists both — that is the
   contract's, closed until the open "node `kind`" row; ADR 0079 says so at step 8b.
@@ -1055,7 +1086,7 @@ before any guard that judges the result changes in 8b.*
   core-alone, so the row is seeded); an unauthenticated core route answers. *Why it is
   worth a test:* the compiler forbids the import; this catches a **runtime** coupling — a core bean injecting an
   interface only Memories implements, or a config key only an application defines.
-- **Hand-over of the old guards.** Delete the Memories half of `validate_shared_imports_no_features.py` (the module
+- **Hand-over of the old guards.** Delete the Memories half of `validate_kernel_imports_no_slices.py` (the module
   boundary does it); keep the kernel half and the step-4 `MEMORY`/`CHAPTER` rule; `validate_guard_gaps` cases 34 and 38
   (core importing media) are rewritten against what now rejects them (the module guard) or removed with the reason
   stated in the case table — never left pinning a guard that no longer checks it; every forgery that plants a test or
@@ -1124,7 +1155,7 @@ before any guard that judges the result changes in 8b.*
 
 - **The enforcement exists and is bitten.** `validate_backend_module_graph.py` and `validate_migration_versions.py`
   are green on the final tree, and every bite listed above was made red once, with its lever named in the commit
-  message. The kernel guard and the wire-diff / schema-equality proofs ran and are recorded. `validate_shared_imports_no_features.py` keeps only the half Gradle cannot see.
+  message. The kernel guard and the wire-diff / schema-equality proofs ran and are recorded. `validate_kernel_imports_no_slices.py` keeps only the half Gradle cannot see.
 - **Behaviour unchanged.** `./gradlew check` green with no test deleted or weakened (the split classes accounted per
   assertion); the pre/post `classname#testname` sets agree (modulo the split classes); `git diff main -- contracts/`
   shows only the owner split (the wire-diff script is the statement); no crypto-vector diff. `race_classes()`
@@ -1140,7 +1171,7 @@ before any guard that judges the result changes in 8b.*
 - **Baseline commands, run before the first edit:** § Steps ("Baselines recorded before the first edit").
 - **Cost recorded.** `time ./gradlew check` before and after steps 6, 7, 8a in the commit messages; the decomposition of
   the ~90 s per-task overhead, or the statement that it was not decomposed.
-- **Trust chain.** The whole glob green on the merged tree. Named: `validate_guard_gaps`, `validate_shared_imports_no_features`,
+- **Trust chain.** The whole glob green on the merged tree. Named: `validate_guard_gaps`, `validate_kernel_imports_no_slices`,
   `validate_scope_erasure_arity`, `validate_node_subtree_erasure`, `validate_blob_reference_arity`,
   `validate_store_reclaim_arity`, `validate_coverage`, `validate_doc_citations`, `validate_mutation_trigger_paths`,
   `validate_build_input_pins`, `validate_contracts_common`, `validate_changes`, plus the two new guards (and the `MEMORY`/`CHAPTER` rule of the kernel guard; rule (g) of the module guard), `validate_test_fixture_single_home` over every test and fixtures root, and `contract_specs.py`'s `memories/` canary.

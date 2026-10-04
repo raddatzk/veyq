@@ -3,7 +3,7 @@
 
 **What it asserts.** Under `backend/src/test`, the account entity — the `@Entity` mapped to the `veyq_user`
 table, found in `backend/src/main` by that table name rather than typed here — is constructed in exactly one
-file, `com/veyq/app/testing/TestFixtures.kt`, and that file does construct it. Every other test seeds an
+file, `com/veyq/core/testing/TestFixtures.kt`, and that file does construct it. Every other test seeds an
 account through the fixture's `seedUser` / `newUser` / `ensureUser`
 (developer-styleguide §10: *test data comes from one fixture per surface, not a local copy*).
 
@@ -34,10 +34,10 @@ import pathlib
 import re
 import sys
 
+import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-MAIN = ROOT / "backend" / "src" / "main" / "kotlin"
-TEST = ROOT / "backend" / "src" / "test" / "kotlin"
-HOME = TEST / "com" / "veyq" / "app" / "testing" / "TestFixtures.kt"
+HOME = backend_tree.test_file("com.veyq.core.testing.TestFixtures")
 TABLE = "veyq_user"
 
 # `@Table(name = "<table>")` followed by the class it annotates.
@@ -53,14 +53,15 @@ def rel(path: pathlib.Path) -> str:
 
 
 def entity_name() -> str | None:
-    names = {m.group(1) for p in MAIN.rglob("*.kt") for m in ENTITY_OF.finditer(p.read_text(encoding="utf-8"))}
+    names = {m.group(1) for p in backend_tree.main_kotlin() for m in ENTITY_OF.finditer(p.read_text(encoding="utf-8"))}
     return names.pop() if len(names) == 1 else None
 
 
 def main() -> int:
-    for tree in (MAIN, TEST):
-        if not tree.is_dir():
-            print(f"TEST FIXTURE HOME VALIDATION FAILED:\n  - missing source tree: {rel(tree)}")
+    for what, roots in (("main", backend_tree.main_roots()), ("test", backend_tree.test_roots())):
+        if not roots:
+            print(f"TEST FIXTURE HOME VALIDATION FAILED:\n  - missing source tree: no "
+                  f"{rel(backend_tree.BACKEND)}/**/src/{what}/kotlin")
             return 1
     name = entity_name()
     if name is None:
@@ -74,7 +75,7 @@ def main() -> int:
     construct = re.compile(r"(?<![\w])(?:[a-z]\w*\.)*%s\s*\(\s*\)" % re.escape(name))
     hits = {
         p: len(construct.findall(p.read_text(encoding="utf-8")))
-        for p in sorted(TEST.rglob("*.kt"))
+        for p in backend_tree.test_kotlin()
     }
     copies = [p for p, n in hits.items() if n and p.resolve() != HOME.resolve()]
 

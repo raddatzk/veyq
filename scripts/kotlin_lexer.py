@@ -2,7 +2,7 @@
 
 Not a guard — a helper the `validate_*.py` guards import (`scripts/` is on their path as the directory of the script
 being run). It lives here so there is exactly one: `validate_coverage` resolves backend refs on masked source, and
-`validate_shared_imports_no_features` reads qualified feature names on it, and two lexers would drift.
+`validate_kernel_imports_no_slices` reads qualified feature names on it, and two lexers would drift.
 """
 from __future__ import annotations
 

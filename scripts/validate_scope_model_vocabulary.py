@@ -56,13 +56,15 @@ import pathlib
 import re
 import sys
 
+import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
+
 import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 DOCS = ROOT / "docs"
 DOCS_SKIP = {DOCS / "inbox.md"}
 
-ENTITY = ROOT / "backend" / "src" / "main" / "kotlin" / "com" / "veyq" / "app" / "shared" / "membership" / "MembershipEntity.kt"
+ENTITY = backend_tree.source_file("com.veyq.core.membership.MembershipEntity")
 CONTRACT = ROOT / "contracts" / "api" / "scopes.openapi.yaml"
 ROLE_SCHEMA = "SetMemberRoleRequest"
 

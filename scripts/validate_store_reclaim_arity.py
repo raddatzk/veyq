@@ -3,7 +3,7 @@
 
 **What it asserts.** Across `backend/src/main/kotlin`, with comments and string literals removed, there is
 **exactly one** call of `delete(...)` on a `BlobStore`, and it sits in
-`shared/blobstore/StoreReclaimSweep.kt`. Every other path that drops a row carrying a `storage_key` writes the
+`core/blobstore/StoreReclaimSweep.kt`. Every other path that drops a row carrying a `storage_key` writes the
 key to `veyq_store_reclaim` inside its own transaction and lets that sweep do the deleting.
 
 The invariant is not tidiness. Nine call sites meant nine places that could fail, none of which could report a
@@ -53,14 +53,15 @@ import pathlib
 import re
 import sys
 
+import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-KOTLIN_MAIN = ROOT / "backend" / "src" / "main" / "kotlin"
 
 # The one call site this decision permits, as a repo-relative path.
-ALLOWED_SITE = "backend/src/main/kotlin/com/veyq/app/shared/blobstore/StoreReclaimSweep.kt"
+ALLOWED_SITE = backend_tree.source_file("com.veyq.core.blobstore.StoreReclaimSweep").relative_to(ROOT).as_posix()
 
 # `foo: BlobStore` — a constructor parameter or property whose declared type is the port. The optional
-# `[\w.]+\.` qualifier is not decoration: without it a fully-qualified `foo: com.veyq.app.shared.blobstore
+# `[\w.]+\.` qualifier is not decoration: without it a fully-qualified `foo: com.veyq.core.blobstore
 # .BlobStore` is legal Kotlin that this key cannot see, and a bite forged in exactly that shape ran GREEN over a
 # tree carrying a live bypass. It does now also match `VeyqConfig.BlobStore`, the config sub-interface of the
 # same simple name — which can never become a false positive, because a hit needs a `.delete(` call too and that
@@ -118,7 +119,7 @@ def call_sites() -> tuple[list[str], list[str]]:
     """(typed-receiver hits, conventional-receiver hits) as `path:line` strings."""
     typed: list[str] = []
     conventional: list[str] = []
-    for path in sorted(KOTLIN_MAIN.rglob("*.kt")):
+    for path in backend_tree.main_kotlin():
         code = strip_noise(path.read_text(encoding="utf-8"))
         rel = path.relative_to(ROOT).as_posix()
         names = set(TYPED_RECEIVER.findall(code))
@@ -133,10 +134,10 @@ def call_sites() -> tuple[list[str], list[str]]:
 
 
 def main() -> int:
-    if not KOTLIN_MAIN.is_dir():
+    if not backend_tree.main_roots():
         print(
             "STORE RECLAIM ARITY VALIDATION FAILED:\n"
-            f"  - missing tree: {KOTLIN_MAIN}. This guard reads backend sources directly; a moved tree must be "
+            f"  - missing tree: no {backend_tree.BACKEND}/**/src/main/kotlin. This guard reads backend sources directly; a moved tree must be "
             f"re-pointed, not silently skipped."
         )
         return 1
@@ -155,7 +156,7 @@ def main() -> int:
             )
     if not sites:
         errors.append(
-            f"no call of `delete(...)` on a BlobStore anywhere in {KOTLIN_MAIN.relative_to(ROOT)}. The sweep is "
+            f"no call of `delete(...)` on a BlobStore anywhere in the backend's main Kotlin. The sweep is "
             f"the only deleter, so zero call sites means nothing reclaims store objects at all — every purge "
             f"now writes reclaim rows that are never drained. If the sweep moved, re-point ALLOWED_SITE."
         )

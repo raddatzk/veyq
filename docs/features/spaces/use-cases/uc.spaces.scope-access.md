@@ -20,7 +20,7 @@
 
 1. The operation resolves the space it acts on — directly from the path or body, or by the node, medium,
    bucket, share or job it names.
-2. It asks the **one** gate, `ScopeAccess.check(caller, scope, READ | WRITE)` in `shared/membership`, **inline,
+2. It asks the **one** gate, `ScopeAccess.check(caller, scope, READ | WRITE)` in `core/membership`, **inline,
    before anything else it does** — before existence, kind, role or capability checks. The one thing that may
    come first is an **instance-wide** policy check that names no space (a capability the operator switched off,
    answered `422` to anyone): it reveals nothing about any scope, and answering it first is what lets it read as

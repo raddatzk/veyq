@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-06-25
 - Implementation: the **opaque two-token rotating scheme** (access + refresh, families, reuse
-  detection ⇒ family revocation) is **built** (`features/account/login/*`, `veyq_session_family` / `veyq_refresh_token` / `veyq_access_token`). The
+  detection ⇒ family revocation) is **built** (`core/account/login/*`, `veyq_session_family` / `veyq_refresh_token` / `veyq_access_token`). The
   **management half** — listing the account's families and revoking one remotely
   ([uc.account.sessions](../features/account/use-cases/uc.account.sessions.md)) — is **built**:
   `SessionService.listActiveFamilies` / `revokeFamilyForUser` / `revokeOtherFamilies` behind `SessionResource`

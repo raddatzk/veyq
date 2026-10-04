@@ -28,7 +28,7 @@ asymmetric *transport* of it, and its plaintext **is** `E_latest` — no key sit
 - **The relation is a *shared* primitive, not a feature's.** `MembershipEntity`, the read-only membership /
   owner guards (`isScopeOwner` · `ownerCount` · `memberRole` · `holdsGrant`) and the one access gate every
   scope-addressed operation calls (`ScopeAccess`, [uc.spaces.scope-access](../features/spaces/use-cases/uc.spaces.scope-access.md))
-  live in **`shared/membership/`** — a query-only module that every feature (content · media · sharing · spaces ·
+  live in **`core/membership/`** (a kernel package) — a query-only module that every feature (content · media · sharing · spaces ·
   admin · tasks) depends on, rather than each feature re-querying the table or importing the entity from another
   feature's slice. Only the last-owner **policy** — the decision to *reject* a remove/demote and raise `LastOwner` —
   stays in the feature handler that owns the action. The gate reads a scope's `deletedAt` and a tenant's `status`,
@@ -70,7 +70,7 @@ asymmetric *transport* of it, and its plaintext **is** `E_latest` — no key sit
 - **cr-0010 introduces the membership table + the owner's grant.** Member/group invites (by username,
   invite-wrap) are a later use-case that extends the same relation.
 - **The entity + guard are shared, not admin-hosted (P3a).** Relocating `MembershipEntity` + the guard queries
-  from `features/admin/tenant/` to `shared/membership/` turns 8 cross-slice imports of the admin slice into a
+  from the admin tenant slice to the membership kernel package (`core/membership/`) turns 8 cross-slice imports of the admin slice into a
   legal `features → shared` dependency, and collapses the 5 verbatim `isMember` copies + the twin owner-count
   guard (spaces + admin) onto one shared primitive; the last-owner *policy* stays per-handler. Realised by a
   follow-up change-request (P3a).

@@ -15,8 +15,8 @@ duplications result (audit finding **P3b**, [inbox #72](../inbox.md)):
    [ADR 0038](0038-contracts-shared-components-bundling.md))
    is built via: an overloaded `private fun error(status, code)` (5 resources), named per-code helpers
    (`forbidden`/`notFound`/`conflict`, 2 resources), fully-inline `Response.status(…).entity(ErrorResponse(code=…))`
-   (8 resources + `tasks`), and the 2 central providers `shared/auth/AuthExceptionMappers` +
-   `shared/ratelimit/AuthRateLimitFilter`.
+   (8 resources + `tasks`), and the 2 central providers `core/auth/AuthExceptionMappers` +
+   `core/ratelimit/AuthRateLimitFilter`.
 2. **The variant → (code, status) projection is re-derived per resource — and it has drifted.** The same
    semantic "**caller is not a member of the scope**" was a **404** (`scope_not_found`) in
    content/media/favorites but a **403** (`not_scope_member`) in `scopes.epochs`, `scopes.listMembers` and
@@ -32,10 +32,10 @@ body schemas.)
 
 ## Decision
 
-Centralize the HTTP failure projection in the existing `shared/http/` leaf, **keeping the sealed `…Outcome` types
+Centralize the HTTP failure projection in the existing `core/http/` leaf, **keeping the sealed `…Outcome` types
 intact**:
 
-- **A semantic status bucket owns the one status table.** `shared/http/` holds the single `bucket → HTTP status`
+- **A semantic status bucket owns the one status table.** `core/http/` holds the single `bucket → HTTP status`
   mapping for the buckets the codebase uses — the Outcome-failure statuses (BAD_REQUEST → 400, FORBIDDEN → 403,
   NOT_FOUND → 404, CONFLICT → 409, UNPROCESSABLE → 422, RATE_LIMITED → 429) plus the tail the central providers +
   the non-Outcome error sites emit (UNAUTHORIZED → 401 auth mapper, GONE → 410 dead invite, SERVER_ERROR → 500
@@ -47,7 +47,7 @@ intact**:
   referenced, so the wire `code` + bucket for a given semantic failure has a single source of truth. **Drift
   becomes structurally impossible**: two sites cannot disagree on the status of "not a member" because the
   (code, bucket) lives on the one catalog entry, not in two `when` arms.
-- **One envelope writer.** `shared/http/` exposes the single function that renders
+- **One envelope writer.** `core/http/` exposes the single function that renders
   `HttpFailure → Response.status(bucket).entity(ErrorResponse(code))`. It is the **only** place `ErrorResponse`
   is constructed — the 4 resource idioms **and** the 2 central providers (auth `ExceptionMapper`s, rate-limit
   filter) all render through it. Each resource `when` collapses to `is <Success> → 2xx …; is HttpFailure →
@@ -65,7 +65,7 @@ bogus id are **indistinguishable**. The rule:
 > **The membership boundary is the first guard on every scope-addressed operation.** Capability checks
 > (grant-holder, owner) run *after* it and may answer 403 — a member legitimately knows the scope exists.
 
-The boundary is **one** call, `ScopeAccess.check(caller, scope, READ | WRITE)` in `shared/membership`, and every
+The boundary is **one** call, `ScopeAccess.check(caller, scope, READ | WRITE)` in `core/membership`, and every
 scope-, tenant-, share- and job-addressed operation makes it inline before anything else
 ([uc.spaces.scope-access](../features/spaces/use-cases/uc.spaces.scope-access.md) owns the full rule). It
 answers the states only a member may learn *after* membership, in a fixed order:
@@ -107,7 +107,7 @@ boundary guard first, the residual 403 means precisely "accepted member, but not
 - **Sealed Outcomes, exhaustiveness, and handler tests are untouched by the projection refactor** — cr-0161 kept
   the status + code of every existing case, including the drifted 403s, which cr-0162 then corrected. The
   regression guard is the existing resource/HTTP-level status + code tests.
-- **Enforcement guard (permanent), envelope:** `ErrorResponse(` is constructed in **exactly one** `shared/http/`
+- **Enforcement guard (permanent), envelope:** `ErrorResponse(` is constructed in **exactly one** `core/http/`
   file; no `…Resource` builds an error envelope directly and no per-resource
   `error`/`forbidden`/`notFound`/`conflict` envelope helper remains. Promoted from cr-0161's one-shot proof grep
   to a CI check (per [changes/README.md](../../changes/README.md)).
@@ -119,12 +119,12 @@ boundary guard first, the residual 403 means precisely "accepted member, but not
   is not greppable, whereas the test fails on any future operation that probes before it gates. Its operation
   set is **derived from the contract** (the generated API interfaces), not listed: every operation is either
   probed or named on a reasoned exclusion list, so an operation nobody classified is red on the day it lands.
-- **Styleguide §13** gains a short pointer ("HTTP failure projection → `shared/http/`; membership-gated absence
+- **Styleguide §13** gains a short pointer ("HTTP failure projection → `core/http/`; membership-gated absence
   → 404").
 - **Rejected — full collapse to `Either<Failure, Success>` (the finding's literal form).** Delete the sealed
   Outcomes; a failure is just `Failure(code, httpStatus)`. Maximal LOC reduction, but discards compile-time
   exhaustiveness and turns typed handler tests stringly-typed (`failure.code == "slug_taken"`) — plausibly
   **negative** net value. Rejected.
-- **Rejected — envelope-only dedup.** Extract just the `error()` helper to `shared/http/`, leave each resource's
+- **Rejected — envelope-only dedup.** Extract just the `error()` helper to `core/http/`, leave each resource's
   variant → status `when`. Smallest change, but leaves the projection re-derived per resource and does nothing
   about the drift. Rejected as half the value.

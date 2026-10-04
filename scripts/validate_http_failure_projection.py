@@ -2,12 +2,12 @@
 """Guard the single-source HTTP failure projection (audit #72 / P3b, ADR 0042).
 
 Every backend operation's `…Outcome` failure variant projects to the wire `ErrorResponse{code}` through the
-**one** `shared/http/` envelope writer (`httpError`), never a per-resource `Response.status(...).entity(
+**one** `core/http/` envelope writer (`httpError`), never a per-resource `Response.status(...).entity(
 ErrorResponse(...))` or a hand-rolled `error()/forbidden()/notFound()` helper. That is what keeps the status +
 code single-sourced (on the variant / the `Failures` catalog) and makes drift structurally impossible.
 
 The enforceable invariant, promoted from cr-0161's one-shot proof grep to a permanent check:
-  `ErrorResponse(` is CONSTRUCTED in exactly one file — the shared writer `shared/http/HttpFailure.kt`.
+  `ErrorResponse(` is CONSTRUCTED in exactly one file — the shared writer `core/http/HttpFailure.kt`.
 
 Any other `backend/src/main` file that constructs an `ErrorResponse` has bypassed the shared writer and can drift
 the status/code for a failure the rest of the codebase routes through `httpError` — so it fails this guard.
@@ -18,9 +18,10 @@ import pathlib
 import re
 import sys
 
+import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-MAIN = ROOT / "backend" / "src" / "main" / "kotlin"
-WRITER = MAIN / "com" / "veyq" / "app" / "shared" / "http" / "HttpFailure.kt"
+WRITER = backend_tree.source_file("com.veyq.core.http.HttpFailure")
 
 # An `ErrorResponse(` not preceded by an identifier char / dot — i.e. a constructor call, not `SomeErrorResponse(`
 # or `x.ErrorResponse(`.
@@ -30,12 +31,12 @@ errors: list[str] = []
 
 
 def main() -> int:
-    if not MAIN.is_dir():
-        print(f"no backend sources found under {MAIN.relative_to(ROOT)}")
+    if not backend_tree.main_roots():
+        print(f"no backend sources found under {backend_tree.BACKEND.relative_to(ROOT)}/**/src/main/kotlin")
         return 1
 
     writer_hits = 0
-    for path in sorted(MAIN.rglob("*.kt")):
+    for path in backend_tree.main_kotlin():
         hits = [
             i + 1
             for i, line in enumerate(path.read_text().splitlines())
@@ -50,7 +51,7 @@ def main() -> int:
         for ln in hits:
             errors.append(
                 f"{rel}:{ln} constructs ErrorResponse directly — route the failure through the shared "
-                f"`httpError(HttpFailure)` writer (shared/http/) instead (ADR 0042)")
+                f"`httpError(HttpFailure)` writer (core/http/) instead (ADR 0042)")
 
     if writer_hits == 0:
         errors.append(
@@ -64,7 +65,7 @@ def main() -> int:
         return 1
     print(
         "http failure projection OK: ErrorResponse is constructed only in "
-        f"shared/http/HttpFailure.kt ({writer_hits} site) — every failure routes through the shared writer")
+        f"{WRITER.relative_to(ROOT)} ({writer_hits} site) — every failure routes through the shared writer")
     return 0
 
 

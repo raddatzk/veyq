@@ -46,7 +46,7 @@ container is pointed at, and 404s on the public port; the Server-Owner role behi
 **Layer 2 — the fine, fachlich guard, inside the `…Handler`.** Everything scope-specific: membership, the scope
 key, the scope role, the share role, the share password. It is **never** in the `…Resource` — resources hold zero
 guard calls — and it does not throw: a refusal is a sealed-outcome variant carrying its own `code` and status
-bucket, rendered by the one writer in `shared/http/` ([ADR 0042](../decisions/0042-http-failure-projection.md)).
+bucket, rendered by the one writer in `core/http/` ([ADR 0042](../decisions/0042-http-failure-projection.md)).
 
 ## The gate dimensions
 
@@ -70,10 +70,10 @@ role a tenant invite confers. **`OWNER` means two** (#5, and the invite's). The 
 other**: a share guest has no account, so no membership, grant or scope role can ever apply to them.
 
 The values themselves are never copied here — read them at their definition sites:
-`shared/identity/ServerRoles.kt` (#2) · `shared/membership/MembershipEntity.kt` (#5) ·
+`core/identity/ServerRoles.kt` (#2) · `core/membership/MembershipEntity.kt` (#5) ·
 `core/sharing/Entities.kt` (#6). Guards #3–#5 all live in the one query-only leaf
-`shared/membership/MembershipStore.kt` ([ADR 0007](../decisions/0007-membership-role-grant-relation.md)); #6/#7
-are private to `features/sharing/SharingHandler.kt`.
+`core/membership/MembershipStore.kt` ([ADR 0007](../decisions/0007-membership-role-grant-relation.md)); #6/#7
+are private to `core/sharing/SharingHandler.kt`.
 
 > This table lists **dimensions**, not operations — deliberately. It changes only when the security model does,
 > which is exactly when someone edits this doc. A table of *operations* would churn with every endpoint; see
@@ -141,7 +141,7 @@ have given — and unlike a table they cannot go stale.
   fused into a store **query predicate** (`takeIf { it.ownerAccount == … }`), where no call-site scan can see it.
   Guard *order* — the actual property in rule 2 — is not greppable at all, and is pinned by a test on purpose
   ([ADR 0042](../decisions/0042-http-failure-projection.md): "*a grep is explicitly not the right guard here*").
-- **The tenant-invite role constants are a second definition site.** `features/admin/tenant/Entities.kt` mirrors
+- **The tenant-invite role constants are a second definition site.** `core/admin/tenant/Entities.kt` mirrors
   `OWNER`/`MEMBER` for the role an invite confers, and nothing holds the two copies equal:
   `scripts/validate_scope_model_vocabulary.py` pins `MembershipEntity` against the contract enum, not this copy.
 - **Authorization is not in the contract, and that is a decision.**

@@ -41,11 +41,12 @@ import pathlib
 import re
 import sys
 
+import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
+
 import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 API = ROOT / "contracts" / "api"
-MIGRATIONS = ROOT / "backend" / "src" / "main" / "resources" / "db" / "migration"
 
 # The largest value a MariaDB TEXT column (65 535 bytes) can hold that is also a valid (multiple-of-4) base64
 # length. A base64 char is one ASCII byte, so chars == bytes for these fields.
@@ -99,7 +100,7 @@ def base64_maxlength(prop: dict) -> int | None:
 def column_is_mediumtext(column: str) -> bool:
     """True if some migration declares `column` MEDIUMTEXT (comments stripped so a mention can't match)."""
     pat = re.compile(rf"\b{re.escape(column)}\b\s+MEDIUMTEXT\b", re.IGNORECASE)
-    for sql in MIGRATIONS.glob("V*.sql"):
+    for sql in (m for m in backend_tree.migrations() if m.name.startswith("V")):
         for line in sql.read_text().splitlines():
             code = line.split("--", 1)[0]  # drop the trailing SQL comment
             if pat.search(code):

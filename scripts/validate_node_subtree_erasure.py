@@ -15,7 +15,7 @@ the purge reaches it. An entity is reached when
 At least one `NodeSubtreeEraser` implementation must exist at all; zero is red on its own.
 
 **The defect that bought it.** A review forgery (2026-10-04, ADR 0079 phase 1, step 6): with
-`features/media/MediaNodeSubtreeEraser.kt` deleted, `validate_scope_erasure_arity`, `validate_blob_reference_arity`
+`MediaNodeSubtreeEraser.kt` (then `features/media`, now `memories/media`) deleted, `validate_scope_erasure_arity`, `validate_blob_reference_arity`
 and `validate_store_reclaim_arity` all stayed green, and `NodeSubtreePurge` would then delete the node rows with
 nothing erasing their media, derivative and bucket rows or reclaiming their blobs. Unlike the scope side there is
 **no foreign key onto `veyq_node`**, so nothing at runtime refuses either: the orphans are silent — inbox #131,
@@ -35,10 +35,10 @@ import pathlib
 import re
 import sys
 
+import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-KOTLIN_MAIN = ROOT / "backend" / "src" / "main" / "kotlin"
-APP = KOTLIN_MAIN / "com" / "veyq" / "app"
-PURGE = APP / "features" / "content" / "NodeSubtreePurge.kt"
+PURGE = backend_tree.source_file("com.veyq.core.content.NodeSubtreePurge")
 
 ERASER_CLASS = re.compile(r"^\s*(?:\w+\s+)*class\s+\w+[^{=]*:\s*(?:[\w.,\s]*,\s*)?NodeSubtreeEraser\b", re.MULTILINE)
 ERASER_FN = "override fun erase("
@@ -47,20 +47,20 @@ NODE_COLUMN = re.compile(r'@Column\([^)]*"node_id"')
 ENTITY_CLASS = re.compile(r"^\s*(?:open\s+)?class\s+(\w+)\s*:")
 
 # Node-keyed entities reached through a named body rather than a literal delete in an eraser. Each entry: where the
-# marker must appear ("eraser" = some eraser's `erase` body, else a path under APP), the marker, and — where the
+# marker must appear ("eraser" = some eraser's `erase` body, else a file by its qualified name), the marker, and — where the
 # marker is a call into a shared body — that body's file, function and the delete it must still contain.
 HANDLED = {
     # Media go one at a time through the FK-ordered body (derivative -> media -> blob, chunk-key reclaim).
     "MediaEntity": ("eraser", "purgeMediaRows(",
-                    ("features/media/MediaStore.kt", "fun purgeMediaRows(", "MediaEntity.deleteById(")),
+                    ("com.veyq.memories.media.MediaStore", "fun purgeMediaRows(", "MediaEntity.deleteById(")),
     # A link on an erased Memory is tombstoned, not deleted (ADR 0029 §7): its id stays held.
-    "ShareEntity": ("features/content/NodeSubtreePurge.kt", "sharing.tombstoneAllOn(nodeIds)", None),
+    "ShareEntity": ("com.veyq.core.content.NodeSubtreePurge", "sharing.tombstoneAllOn(nodeIds)", None),
 }
 
 
 def node_keyed_entities() -> list[str]:
     found: list[str] = []
-    for path in sorted(KOTLIN_MAIN.rglob("*.kt")):
+    for path in backend_tree.main_kotlin():
         enclosing = None
         for line in path.read_text(encoding="utf-8").splitlines():
             if klass := ENTITY_CLASS.match(line):
@@ -91,7 +91,7 @@ def main() -> int:
 
     erasers: list[str] = []
     bodies = ""
-    for path in sorted(KOTLIN_MAIN.rglob("*.kt")):
+    for path in backend_tree.main_kotlin():
         text = path.read_text(encoding="utf-8")
         if ERASER_CLASS.search(text) and ERASER_FN in text:
             erasers.append(path.stem)
@@ -126,7 +126,8 @@ def main() -> int:
             )
             continue
         where, marker, body = HANDLED[entity]
-        text = bodies if where == "eraser" else (APP / where).read_text(encoding="utf-8") if (APP / where).is_file() else ""
+        home = None if where == "eraser" else backend_tree.source_file(where)
+        text = bodies if home is None else home.read_text(encoding="utf-8") if home.is_file() else ""
         if marker not in text:
             site = "any NodeSubtreeEraser's `erase` body" if where == "eraser" else where
             errors.append(
@@ -136,7 +137,8 @@ def main() -> int:
             continue
         if body:
             body_file, body_fn, body_delete = body
-            fn = _fn_text((APP / body_file).read_text(encoding="utf-8"), body_fn) if (APP / body_file).is_file() else None
+            body_path = backend_tree.source_file(body_file)
+            fn = _fn_text(body_path.read_text(encoding="utf-8"), body_fn) if body_path.is_file() else None
             if fn is None or body_delete not in fn:
                 errors.append(
                     f"`{entity}` is reached through `{marker}`, but `{body_fn}` in {body_file} no longer contains "

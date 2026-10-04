@@ -23,22 +23,22 @@
 ## 1. Code organization (binding)
 
 - **Two axes, not one** (see [ADR 0001](../decisions/0001-backend-http-adapter-vs-application-slicing.md)).
-  The **application layer is use-case-sliced** — `features/<area>/<use-case>/…Handler` (a use-case may
+  The **application layer is use-case-sliced** — `<area>/<use-case>/…Handler` under the owner's package,
+  `com.veyq.core` for the platform or `com.veyq.memories` for the Memories application (a use-case may
   have several handlers); this is where cohesion and the trust chain live. The **HTTP adapter layer is
   resource-shaped** — one `…Resource` per generated `…Api` interface (OpenAPI tag), *not* per use-case,
   because one endpoint can serve several use-cases. Use-case slicing is what carries the trust chain; the
   adapter shape is necessarily per-stack.
-- **Cross-cutting code lives in `shared/`** — `backend/src/main/kotlin/com/veyq/app/shared/`. **The directory is
-  the list**; it cannot be out of date about itself, whereas the roll-call that used to stand here named six
-  slices of which two existed and omitted nine. `shared/` must not depend on a feature;
-  [`validate_shared_imports_no_features.py`](../../scripts/validate_shared_imports_no_features.py) holds that for
-  its imports. The same guard holds its **core half**
-  ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)): neither `shared/` nor
-  `core/` (`com.veyq.app.core`, the platform packages) may import the Memories application — `features.media`,
-  `features.memory` or the favorites packages. Core reaches Memories behaviour through an interface Memories
-  implements (`ScopeEraser`, `NodeSubtreeEraser`, …), never through an import.
-- **Dependencies stay directed.** If a feature builds on a `shared/` slice, that slice must not reach back into
-  the feature; share neutral rules through small interfaces.
+- **Cross-cutting code is the platform's kernel** — the packages of `com.veyq.core` that every feature slice
+  builds on (tenant, identity, auth, membership, the blob store, rate limits, …). **The list is declared once**,
+  as `KERNEL` in [`validate_kernel_imports_no_slices.py`](../../scripts/validate_kernel_imports_no_slices.py);
+  every other package is a slice, so a new package is a slice until it is added there on purpose. A kernel
+  package must not depend on a slice, and the guard holds that for its imports. The same guard holds the
+  **platform half** ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)): no
+  file outside `com.veyq.memories` may import the Memories application. Core reaches Memories behaviour through
+  an interface Memories implements (`ScopeEraser`, `NodeSubtreeEraser`, …), never through an import.
+- **Dependencies stay directed.** If a slice builds on a kernel package, that package must not reach back into
+  the slice; share neutral rules through small interfaces.
 
 ## 2. Backend layering
 
@@ -227,8 +227,8 @@ not documented; the code is the source of truth for that.
   expiry/terminal-state so any reuse-detection window (e.g. a superseded refresh token, ADR 0004) is
   preserved until it lapses; delete child rows before parents (FK order). First two: `TenantInvitePurge`
   (cr-0009), `SessionPurge` (cr-0011).
-- **HTTP failure projection → `shared/http/`.** A backend operation's sealed `…Outcome` failure variants project
-  to the wire `ErrorResponse{code}` through the **single** `shared/http/` envelope writer + status-bucket table;
+- **HTTP failure projection → `core/http/`.** A backend operation's sealed `…Outcome` failure variants project
+  to the wire `ErrorResponse{code}` through the **single** `core/http/` envelope writer + status-bucket table;
   no `…Resource` constructs `ErrorResponse` or keeps a per-resource `error`/`forbidden`/`notFound` helper. The
   variant self-describes its `code` + status bucket (recurring failures via a shared `Failures` catalog), so the
   projection is single-sourced and status drift is structurally impossible. **The membership boundary is the first

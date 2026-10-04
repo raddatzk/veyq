@@ -69,10 +69,10 @@ import pathlib
 import re
 import sys
 
+import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-KOTLIN_MAIN = ROOT / "backend" / "src" / "main" / "kotlin"
-MIGRATIONS = ROOT / "backend" / "src" / "main" / "resources" / "db" / "migration"
-SHARING_STORE = KOTLIN_MAIN / "com" / "veyq" / "app" / "features" / "sharing" / "SharingStore.kt"
+SHARING_STORE = backend_tree.source_file("com.veyq.core.sharing.SharingStore")
 
 # `@Column(... "<something>blob_id" ...)` — keyed on the column-name LITERAL, not on the Kotlin property, so a
 # fourth arm cannot hide behind a differently-spelled property name. `[^)]*` keeps it to one annotation.
@@ -129,7 +129,7 @@ EXPECTED_LIVE_TWIN_ARMS = {
 def entity_arms() -> list[str]:
     """Every `*blob_id` @Column in main Kotlin, named as `<EnclosingEntity>.<column>`."""
     found: list[str] = []
-    for path in sorted(KOTLIN_MAIN.rglob("*.kt")):
+    for path in backend_tree.main_kotlin():
         enclosing = "<no enclosing class>"
         for line in path.read_text(encoding="utf-8").splitlines():
             klass = ENTITY_CLASS.match(line)
@@ -143,7 +143,7 @@ def entity_arms() -> list[str]:
 
 def _sql_lines():
     """Every migration line with its `--` comment stripped, paired with the table it belongs to (or None)."""
-    for path in sorted(MIGRATIONS.glob("*.sql")):
+    for path in backend_tree.migrations():
         table = None
         for lineno, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
             line = raw.split("--", 1)[0]
@@ -200,7 +200,7 @@ def live_twin_body() -> list[str] | None:
     body = _fn_body(SHARING_STORE.read_text(encoding="utf-8").splitlines(), LIVE_TWIN_FN)
     if body is None:
         return None
-    for path in sorted(KOTLIN_MAIN.rglob("*.kt")):
+    for path in backend_tree.main_kotlin():
         text = path.read_text(encoding="utf-8")
         if CONTRIBUTOR_IMPL not in text:
             continue
@@ -231,10 +231,10 @@ def compare(key: str, expected: list[str], actual: list[str], errors: list[str])
 def main() -> int:
     errors: list[str] = []
 
-    if not KOTLIN_MAIN.is_dir() or not MIGRATIONS.is_dir():
+    if not backend_tree.main_roots() or not backend_tree.migration_roots():
         print(
             "BLOB REFERENCE ARITY VALIDATION FAILED:\n"
-            f"  - missing tree: {KOTLIN_MAIN} or {MIGRATIONS}. This guard reads backend sources directly; "
+            f"  - missing tree: no {backend_tree.BACKEND}/**/src/main/kotlin or …/resources/db/migration. This guard reads backend sources directly; "
             f"a moved tree must be re-pointed, not silently skipped."
         )
         return 1
