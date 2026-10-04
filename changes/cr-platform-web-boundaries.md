@@ -9,6 +9,8 @@ invariants: [operator-blind E2EE everywhere, self-hostable by default, API-first
 
 ## Open for the owner
 
+**Answered 2026-10-04 ("Go"): all four recommendations are accepted** — single-claim slots, uploader shares to the one kind-less-drop claimant (rootKind follow-up CR later), no rename of `features/memory`, guard in Python.
+
 1. **How far does this CR draw the seam around the folder level and the node dialogs?** Three pieces of the tree
    host are Memories-shaped as written and have one user: the level view (`MemoryBrowse`: date sort, covers, the
    space map, `MemoryCard`), the create/rename dialog (`NodeMutationDialog`: `create-memory` pre-arms a place) and
@@ -36,7 +38,7 @@ invariants: [operator-blind E2EE everywhere, self-hostable by default, API-first
 
 [ADR 0079](../docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) makes Memories the
 first application of a platform and says an application depends on core, never the reverse. The backend half is
-drawn ([`cr-platform-core-boundaries`](cr-platform-core-boundaries.md)); the web half is not: `app/`,
+drawn (ADR 0079 phase 1); the web half is not: `app/`,
 `components/app/`, `sw/`, `views/` and three core features import `features/memory` directly, and the shell
 branches on `NodeKind.Memory`. This CR is that restructuring's **web phase: make the import direction true, with
 no behaviour change.**
