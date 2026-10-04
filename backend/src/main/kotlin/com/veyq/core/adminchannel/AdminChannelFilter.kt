@@ -1,6 +1,6 @@
 package com.veyq.core.adminchannel
 
-import com.veyq.app.generated.AdminChannelOperations
+import com.veyq.core.generated.AdminChannelOperations
 import io.vertx.core.http.HttpServerRequest
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.ws.rs.core.Response

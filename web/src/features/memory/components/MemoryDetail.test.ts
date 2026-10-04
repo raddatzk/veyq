@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest'
 
 vi.mock('../../../api/client', () => ({
-  mediaApi: vi.fn(),
+  blobApi: vi.fn(), mediaApi: vi.fn(),
   contentApi: vi.fn(),
   loginApi: vi.fn(),
   tokenApi: vi.fn(),
@@ -26,7 +26,7 @@ import { sealNodeMeta } from '../nodeMeta'
 import { setMapsConsent, setGeocoderUrl } from '../../../shared/state/useMapConfig'
 import { reverseGeocode } from '../geocode'
 import { epochMsToIsoDate } from '../../../shared/isoDate'
-import { mediaApi, contentApi } from '../../../api/client'
+import { blobApi, mediaApi, contentApi } from '../../../api/client'
 import * as v1 from '@veyq/crypto/v1'
 import { NodeKind, type ContentApi } from '../../../api/generated/content'
 import { fakeApi } from '../../../test/apiMock'
@@ -106,6 +106,7 @@ describe('MemoryDetail (gallery grid + header)', () => {
   it('hides the mark filter in a personal scope — absent, never disabled', async () => {
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const memoryKey = v1.randomBytes(32)
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/png' }, stubDeriver())
@@ -133,6 +134,7 @@ describe('MemoryDetail (gallery grid + header)', () => {
   it('renders the mark toggle without ever naming a member', async () => {
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const memoryKey = v1.randomBytes(32)
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/png' }, stubDeriver())
@@ -152,6 +154,7 @@ describe('MemoryDetail (gallery grid + header)', () => {
   it('lists the Memory media → renders the decrypted title, item count and a thumbnail tile per item', async () => {
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const memoryKey = v1.randomBytes(32)
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/png' }, stubDeriver())
@@ -169,12 +172,13 @@ describe('MemoryDetail (gallery grid + header)', () => {
     expect(imgs[0].attributes('src')).toBeTruthy()
     // operator-blind: each thumbnail came back through a presigned GET + on-device decrypt
     expect(store.api.listNodeMedia).toHaveBeenCalledWith({ scopeId: SCOPE_ID, nodeId: NODE_ID })
-    expect(store.api.presignBlobDownloads).toHaveBeenCalled()
+    expect(store.blob.presignBlobDownloads).toHaveBeenCalled()
   })
 
   it('draws a play badge only on a video tile — from the sealed mediaType (#104/#105)', async () => {
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const memoryKey = v1.randomBytes(32)
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/png' }, stubDeriver())
@@ -193,6 +197,7 @@ describe('MemoryDetail (gallery grid + header)', () => {
   it('sorts the grid by capture time — newest first by default, and toggles to oldest first (cr-0066)', async () => {
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const memoryKey = v1.randomBytes(32)
     // media 0 = 2020, media 1 = 2022, media 2 = 2021 (creation order); the exifr date drives the capturedAt tier
@@ -223,6 +228,7 @@ describe('MemoryDetail (gallery grid + header)', () => {
   it('a lightbox date correction persists on close + reopen — no stale date (cr-0066 regression guard)', async () => {
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const memoryKey = v1.randomBytes(32)
     vi.mocked(exifr.parse).mockResolvedValue({ DateTimeOriginal: new Date(Date.UTC(2021, 4, 1, 10, 0, 0)) })
@@ -257,6 +263,7 @@ describe('MemoryDetail (gallery grid + header)', () => {
   it('shows the empty state for a Memory with no media', async () => {
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
 
     const wrapper = mountDetail(v1.randomBytes(32))
@@ -269,6 +276,7 @@ describe('MemoryDetail (gallery grid + header)', () => {
   it('renders a non-image/video item (E1) as an icon tile, fetching no thumbnail for it', async () => {
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const memoryKey = v1.randomBytes(32)
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array([1, 2, 3]) as BlobPart]), mediaType: 'application/pdf' }, stubDeriver())
@@ -281,7 +289,7 @@ describe('MemoryDetail (gallery grid + header)', () => {
     expect(wrapper.find('.media-tile img').exists()).toBe(false)
     expect(wrapper.find('.media-tile .media-grid-icon').exists()).toBe(true)
     // a non-derivable item is never fetched (no preview/thumbnail tier exists)
-    expect(store.api.presignBlobDownloads).not.toHaveBeenCalled()
+    expect(store.blob.presignBlobDownloads).not.toHaveBeenCalled()
   })
 
   it('shows the unavailable state when K_mem is absent (E2: locked / not openable)', async () => {
@@ -293,6 +301,7 @@ describe('MemoryDetail (gallery grid + header)', () => {
   it('renders the Memory’s chapters and emits open/create (cr-0060)', async () => {
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const chapters: TreeNode[] = [
       { id: 'c1', kind: NodeKind.Chapter, name: 'Day 1', parentId: NODE_ID, orderIndex: 0, epoch: 0, wrappedContentKey: 'd3JhcA==', wrappedMeta: null, metaVersion: 0 },
@@ -324,6 +333,7 @@ describe('MemoryDetail (gallery grid + header)', () => {
   it('opens the lightbox when a tile is clicked', async () => {
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const memoryKey = v1.randomBytes(32)
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/png' }, stubDeriver())
@@ -344,6 +354,7 @@ describe('MemoryDetail (Memory date — header + auto-reconcile, cr-0067)', () =
   async function seedDatedMedia(memoryKey: Uint8Array, epoch: number) {
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     vi.mocked(exifr.parse).mockResolvedValue({ DateTimeOriginal: new Date(epoch) })
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
@@ -352,6 +363,7 @@ describe('MemoryDetail (Memory date — header + auto-reconcile, cr-0067)', () =
   const emptyStore = () => {
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     return store
   }
@@ -434,6 +446,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
   const emptyStore = () => {
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     return store
   }
@@ -518,6 +531,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
 
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     vi.mocked(exifr.parse).mockResolvedValue({ latitude: 48.85, longitude: 2.35 })
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
@@ -547,6 +561,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     const memoryKey = v1.randomBytes(32)
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     vi.mocked(exifr.parse).mockResolvedValue({ DateTimeOriginal: new Date(Date.UTC(2026, 2, 3, 12)) })
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
@@ -572,6 +587,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     const memoryKey = v1.randomBytes(32)
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     vi.mocked(exifr.parse).mockResolvedValue({ latitude: 48.85, longitude: 2.35 })
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
@@ -604,6 +620,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     const pending = sealNodeMeta(memoryKey, THIS_NODE, { v: 1, location: { nameSource: 'geocoded', derivedMode: 'auto' } })
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     vi.mocked(exifr.parse).mockResolvedValue({ latitude: 48.85, longitude: 2.35 })
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
@@ -622,6 +639,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
 
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     vi.mocked(exifr.parse).mockResolvedValue({ latitude: 48.85, longitude: 2.35 })
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())

@@ -1,13 +1,13 @@
 package com.veyq.core.account.pairing
 
-import com.veyq.app.generated.api.PairingApi
-import com.veyq.app.generated.model.PairingAnswerRequest
-import com.veyq.app.generated.model.PairingChannel
-import com.veyq.app.generated.model.PairingCollectRequest
-import com.veyq.app.generated.model.PairingDelegateRequest
-import com.veyq.app.generated.model.PairingDelegateResult
-import com.veyq.app.generated.model.PairingOpenRequest
-import com.veyq.app.generated.model.PairingSealRequest
+import com.veyq.core.generated.api.PairingApi
+import com.veyq.core.generated.model.PairingAnswerRequest
+import com.veyq.core.generated.model.PairingChannel
+import com.veyq.core.generated.model.PairingCollectRequest
+import com.veyq.core.generated.model.PairingDelegateRequest
+import com.veyq.core.generated.model.PairingDelegateResult
+import com.veyq.core.generated.model.PairingOpenRequest
+import com.veyq.core.generated.model.PairingSealRequest
 import com.veyq.core.http.FailureStatus.NOT_FOUND
 import com.veyq.core.http.HttpFailure
 import com.veyq.core.http.httpError

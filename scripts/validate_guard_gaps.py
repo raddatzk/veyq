@@ -490,19 +490,19 @@ def _in_request_property(root: pathlib.Path, spec: str, schema: str, prop: str, 
 
 
 def forge_request_bound_unannotated(root: pathlib.Path) -> str:
-    _in_request_property(root, "media.openapi.yaml", "BlobUploadRequestItem", "wrappedBlobKey",
+    _in_request_property(root, "blob.openapi.yaml", "BlobUploadRequestItem", "wrappedBlobKey",
                          " @field:jakarta.validation.constraints.Size(max = 256)", "")
     return "wrappedBlobKey's @Size removed, its maxLength kept (must be REJECTED — the #153 class)"
 
 
 def forge_request_cascade_dropped(root: pathlib.Path) -> str:
-    _in_request_property(root, "media.openapi.yaml", "BlobUploadsBatchRequest", "items",
+    _in_request_property(root, "blob.openapi.yaml", "BlobUploadsBatchRequest", "items",
                          " @field:jakarta.validation.Valid", "")
     return "the @Valid on BlobUploadsBatchRequest.items removed (must be REJECTED — every item check dead)"
 
 
 def forge_request_annotation_drifts(root: pathlib.Path) -> str:
-    _in_request_property(root, "media.openapi.yaml", "MoveMediaRequest", "mediaIds", "max = 256)", "max = 257)")
+    _in_request_property(root, "memories/media.openapi.yaml", "MoveMediaRequest", "mediaIds", "max = 256)", "max = 257)")
     return "MoveMediaRequest.mediaIds annotated max 257 over maxItems 256 (must be REJECTED)"
 
 
@@ -668,7 +668,7 @@ def forge_core_names_memory_kind(root: pathlib.Path) -> str:
     f = root / CORE_NODE_FORGERY
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text("package com.veyq.core.node\n\n"
-                 "import com.veyq.app.generated.model.NodeKind\n\n"
+                 "import com.veyq.core.generated.model.NodeKind\n\n"
                  "/** Whether a MEMORY may hold this. */\n"
                  "class GuardGapProbe {\n"
                  "    fun isMemory(kind: String): Boolean = kind == NodeKind.MEMORY.value\n"

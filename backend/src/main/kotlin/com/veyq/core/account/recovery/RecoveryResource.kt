@@ -1,10 +1,10 @@
 package com.veyq.core.account.recovery
 
-import com.veyq.app.generated.api.RecoveryApi
-import com.veyq.app.generated.model.RecoveryCompleteRequest
-import com.veyq.app.generated.model.RecoveryMaterial
-import com.veyq.app.generated.model.RecoveryRequest
-import com.veyq.app.generated.model.RecoveryTokenRequest
+import com.veyq.core.generated.api.RecoveryApi
+import com.veyq.core.generated.model.RecoveryCompleteRequest
+import com.veyq.core.generated.model.RecoveryMaterial
+import com.veyq.core.generated.model.RecoveryRequest
+import com.veyq.core.generated.model.RecoveryTokenRequest
 import com.veyq.core.http.FailureStatus.FORBIDDEN
 import com.veyq.core.http.FailureStatus.NOT_FOUND
 import com.veyq.core.http.Failures

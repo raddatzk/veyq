@@ -9,6 +9,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 vi.mock('../../api/client', () => ({
   sharesApi: vi.fn(),
   publicSharesApi: vi.fn(),
+  blobApi: vi.fn(),
   mediaApi: vi.fn(),
   bucketsApi: vi.fn(),
   tokenApi: vi.fn(),
@@ -16,7 +17,7 @@ vi.mock('../../api/client', () => ({
 
 import { resolveShare, createContributorIdentity, sessionSealKey, addSharePhoto, openShareOriginal } from './share'
 import { listMediaPage, openOriginal, unsealMeta, setMediaMeta, listBuckets, openBucketName, type MediaDeriver } from './media'
-import { publicSharesApi, mediaApi, bucketsApi } from '../../api/client'
+import { publicSharesApi, blobApi, mediaApi, bucketsApi } from '../../api/client'
 import {
   NodeKind,
   ShareRole,
@@ -26,7 +27,8 @@ import {
   type ShareMediaBatchResponse,
   type SharingApi,
 } from '../../api/generated/sharing'
-import type { BlobDownloadsBatchResponse, MediaApi, MediaListPage, PresignedUrl } from '../../api/generated/media'
+import type { MediaApi, MediaListPage } from '../../api/generated/media'
+import type { BlobDownloadsBatchResponse, PresignedUrl } from '../../api/generated/blob'
 import { fakeApi, stubApi } from '../../test/apiMock'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url, fromB64std } from '@veyq/crypto/base64'
@@ -181,8 +183,10 @@ describe('an UPLOADER guest never holds K_mem (ADR 0031 point 7)', () => {
         mediaRevision: 1, deleteRevision: 0,
         sealedDropPrivateKey, uploaderKeys: [{ identityId, wrappedIdentityKey: identity.wrappedIdentityKey! }],
       }),
-      presignBlobDownloads: async (): Promise<BlobDownloadsBatchResponse> => ({ results: [{ presignedGets, error: null }] }),
       updateMediaMeta: vi.fn<MediaApi['updateMediaMeta']>().mockResolvedValue({}),
+    })
+    fakeApi(blobApi, {
+      presignBlobDownloads: async (): Promise<BlobDownloadsBatchResponse> => ({ results: [{ presignedGets, error: null }] }),
     })
     const page = await listMediaPage(SCOPE_ID, NODE_ID)
     if (page.notModified) throw new Error('unreachable')

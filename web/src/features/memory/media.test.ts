@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('../../api/client', () => ({
-  mediaApi: vi.fn(),
+  blobApi: vi.fn(), mediaApi: vi.fn(),
   loginApi: vi.fn(),
   tokenApi: vi.fn(),
   sessionApi: vi.fn(),
@@ -45,23 +45,26 @@ import {
   type Dimensions,
 } from './media'
 import exifr from 'exifr'
-import { mediaApi } from '../../api/client'
+import { blobApi, mediaApi } from '../../api/client'
 import {
   ResponseError,
-  type BlobDownloadsBatchResponse,
   type BlobRef,
-  type BlobUploadRequestItem,
-  type BlobUploadResultItem,
-  type BlobUploadWindowResultItem,
-  type BlobUploadWindowsResponse,
-  type BlobUploadsBatchResponse,
   type MediaApi,
   type MediaBatchResponse,
   type MediaListPage,
   type MediaMetaResponse,
   type MediaRequestItem,
-  type PresignedUrl,
 } from '../../api/generated/media'
+import {
+  type BlobApi,
+  type BlobDownloadsBatchResponse,
+  type BlobUploadRequestItem,
+  type BlobUploadResultItem,
+  type BlobUploadWindowResultItem,
+  type BlobUploadWindowsResponse,
+  type BlobUploadsBatchResponse,
+  type PresignedUrl,
+} from '../../api/generated/blob'
 import { fakeApi, stubApi } from '../../test/apiMock'
 import { mediaItem } from '../../test/models'
 import { MetaConflictError, MetaUnreadableError } from './sealedMetaWrite'
@@ -131,8 +134,9 @@ function fakeStore(opts: { window?: number; forbidFirstPut?: number[]; putDelayM
     return { blobId: s.blobId, chunkCount: s.chunkCount, byteSize: 0, wrappedBlobKey: s.wrappedBlobKey }
   }
 
-  const api = {
-    startBlobUploads: vi.fn<MediaApi['startBlobUploads']>(async ({ blobUploadsBatchRequest }): Promise<BlobUploadsBatchResponse> => {
+  // Core's generic blob transfer (the `blob` tag) — installed as `blobApi`; the media operations below as `mediaApi`.
+  const blob = {
+    startBlobUploads: vi.fn<BlobApi['startBlobUploads']>(async ({ blobUploadsBatchRequest }): Promise<BlobUploadsBatchResponse> => {
       const results = blobUploadsBatchRequest.items.map((item): BlobUploadResultItem => {
         const uploadId = `up-${upCounter++}`
         sessions.set(uploadId, { wrappedBlobKey: item.wrappedBlobKey, chunkCount: item.chunkCount, blobId: item.blobId })
@@ -142,12 +146,22 @@ function fakeStore(opts: { window?: number; forbidFirstPut?: number[]; putDelayM
       })
       return { results }
     }),
-    presignBlobUploadWindows: vi.fn<MediaApi['presignBlobUploadWindows']>(async ({ blobUploadWindowsRequest }): Promise<BlobUploadWindowsResponse> => ({
+    presignBlobUploadWindows: vi.fn<BlobApi['presignBlobUploadWindows']>(async ({ blobUploadWindowsRequest }): Promise<BlobUploadWindowsResponse> => ({
       results: blobUploadWindowsRequest.items.map(({ uploadId, fromChunk }): BlobUploadWindowResultItem => {
         events.push(`window:${fromChunk}`)
         return { presignedPuts: putsOf(uploadId, fromChunk!, sessions.get(uploadId)!.chunkCount), error: null }
       }),
     })),
+    presignBlobDownloads: vi.fn<BlobApi['presignBlobDownloads']>(async ({ blobDownloadsBatchRequest }): Promise<BlobDownloadsBatchResponse> => {
+      const uploadId = uploadOfBlob.get(blobDownloadsBatchRequest.items[0].blobId)!
+      const s = sessions.get(uploadId)!
+      return {
+        results: [{ presignedGets: Array.from({ length: s.chunkCount }, (_, i) => ({ index: i, url: `mem://${uploadId}/${i}` })), error: null }],
+      }
+    }),
+  }
+
+  const api = {
     completeMedia: vi.fn<MediaApi['completeMedia']>(async ({ mediaBatchRequest }): Promise<MediaBatchResponse> => {
       const item = mediaBatchRequest.items[0]
       completeItem = item
@@ -175,13 +189,6 @@ function fakeStore(opts: { window?: number; forbidFirstPut?: number[]; putDelayM
     updateMediaMeta: vi.fn<MediaApi['updateMediaMeta']>(async ({ mediaMetaUpdate }): Promise<MediaMetaResponse> => {
       captured.updatedMeta = mediaMetaUpdate.wrappedMeta // opaque ciphertext (or null to clear)
       return { wrappedMeta: mediaMetaUpdate.wrappedMeta ?? null }
-    }),
-    presignBlobDownloads: vi.fn<MediaApi['presignBlobDownloads']>(async ({ blobDownloadsBatchRequest }): Promise<BlobDownloadsBatchResponse> => {
-      const uploadId = uploadOfBlob.get(blobDownloadsBatchRequest.items[0].blobId)!
-      const s = sessions.get(uploadId)!
-      return {
-        results: [{ presignedGets: Array.from({ length: s.chunkCount }, (_, i) => ({ index: i, url: `mem://${uploadId}/${i}` })), error: null }],
-      }
     }),
     // cr-0073: promote one upload session into a standalone cover blob (no media row). The fake returns the
     // committed ref keyed by the uploadId so a caller can round-trip it through presignBlobDownloads.
@@ -215,7 +222,7 @@ function fakeStore(opts: { window?: number; forbidFirstPut?: number[]; putDelayM
     return { ok: true, status: 200, arrayBuffer: async () => body.buffer } as unknown as Response
   })
 
-  return { api, fetchStub, objects, captured, events, inFlight }
+  return { api, blob, fetchStub, objects, captured, events, inFlight }
 }
 
 /**
@@ -270,6 +277,7 @@ describe('addMedia — derivative generation + role/batch assembly', () => {
   it('an image uploads original + thumbnail + preview in one batch, role-tagged', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const deriver = stubDeriver()
 
@@ -321,6 +329,7 @@ describe('addMedia — derivative generation + role/batch assembly', () => {
   it('decodes the original once for both tiers and the sealed geometry', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const deriver = stubDeriver()
     deriver.sourceDims = { w: 4032, h: 3024 } // the real deriver always knows what it just decoded
@@ -345,6 +354,7 @@ describe('addMedia — derivative generation + role/batch assembly', () => {
   it('a video derives a single poster and uses it for both the thumbnail and preview tier', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const deriver = stubDeriver()
 
@@ -366,6 +376,7 @@ describe('addMedia — derivative generation + role/batch assembly', () => {
   it('a non-image/non-video attaches the original only (no derivatives)', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const deriver = stubDeriver()
 
@@ -377,7 +388,7 @@ describe('addMedia — derivative generation + role/batch assembly', () => {
   })
 
   it('throws store_unavailable when the store cannot presign (no transport)', async () => {
-    stubApi(mediaApi, { startBlobUploads: { results: [{ uploadId: 'up-1', presignedPuts: null, error: null }] } })
+    stubApi(blobApi, { startBlobUploads: { results: [{ uploadId: 'up-1', presignedPuts: null, error: null }] } })
 
     await expect(
       addMedia(SCOPE_ID, NODE_ID, v1.randomBytes(32), { blob: new Blob([new Uint8Array([1]) as BlobPart]), mediaType: 'application/pdf' }, stubDeriver()),
@@ -389,6 +400,7 @@ describe('addMedia — progress, abort, best-effort derivation (cr-0058)', () =>
   it('reports progress 0 → 1 (monotonic) over the ciphertext chunks', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const seen: number[] = []
 
@@ -404,6 +416,7 @@ describe('addMedia — progress, abort, best-effort derivation (cr-0058)', () =>
   it('a pre-aborted signal throws AbortError and never attaches the media', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const ac = new AbortController()
     ac.abort()
@@ -419,6 +432,7 @@ describe('addMedia — progress, abort, best-effort derivation (cr-0058)', () =>
   it('uploads original-only (no derivatives) when derivation throws — e.g. an undecodable HEIC', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const deriver = stubDeriver()
     deriver.deriveImage = vi.fn(async () => {
@@ -444,6 +458,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
   it('seals the layout tier {v,w,h} (geometry only) under K_mem and round-trips it through listMedia', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const deriver = stubDeriver()
     deriver.probeDimensions = vi.fn(async () => ({ w: 1920, h: 1080 }))
@@ -467,6 +482,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
   it('seals date + GPS in the listed tier, a date/gps-free EXIF tier lazy alongside', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const deriver = stubDeriver()
     deriver.probeDimensions = vi.fn(async () => ({ w: 800, h: 600 }))
@@ -511,6 +527,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
   it('seals the panel fields and the filename in the LAZY tier, and leaks neither into the listed one nor the wire', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const deriver = stubDeriver()
     deriver.sourceDims = { w: 4032, h: 3024 }
@@ -564,6 +581,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
   it('seals a place name read-modify-write, keeps a name-only tier, and stays inside the 512 cap', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const deriver = stubDeriver()
     deriver.sourceDims = { w: 4032, h: 3024 }
@@ -607,6 +625,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
   it('fits a tier with a 20 000-character description under the contract cap and keeps every number', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     vi.mocked(exifr.parse).mockResolvedValue({
       Make: 'Canon', FNumber: 1.8, ISO: 200, FocalLength: 50, Rating: 4,
@@ -629,6 +648,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
   it('drops free text, never numbers, when clamped fields still overflow the cap', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const escaped = '\u0001'.repeat(5_000)
     vi.mocked(exifr.parse).mockResolvedValue({
@@ -651,6 +671,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
   it('falls back to the file creation date when the source carries no EXIF date', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const deriver = stubDeriver()
     deriver.probeDimensions = vi.fn(async () => ({ w: 640, h: 480 }))
@@ -675,6 +696,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
   it('the picked file’s capture time is the one the tier seals — EXIF date, else the file date', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const deriver = stubDeriver()
     const FILE_MTIME = Date.UTC(2019, 5, 6, 7, 8, 9)
@@ -706,6 +728,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
   it('seals no capture date in the tier when there is neither an EXIF date nor a file date', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const deriver = stubDeriver()
     deriver.probeDimensions = vi.fn(async () => ({ w: 640, h: 480 }))
@@ -722,6 +745,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
   it('seals only the mediaType when the source is undecodable (probe returns null) — no geometry/date/gps', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const deriver = stubDeriver()
     deriver.probeDimensions = vi.fn(async () => null) // e.g. a non-image / undecodable codec
@@ -742,6 +766,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
   it('a deriver with no probeDimensions still seals the mediaType (best-effort — probe optional)', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
 
     const memoryKey = v1.randomBytes(32)
@@ -753,6 +778,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
   it('seals NO metadata tier when there is truly nothing — an empty MIME + no derivable metadata', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
 
     const memoryKey = v1.randomBytes(32)
@@ -775,6 +801,7 @@ describe('setMediaMeta — sealed capturedAt override in the listed-metadata tie
   it('re-seals the tier with the override, keeping the original capturedAt + geometry/GPS (operator-blind)', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     const memoryKey = v1.randomBytes(32)
     // a full listed tier: geometry + date + GPS. Only the date is user-editable; the rest rides along unchanged.
     const captured: MediaMeta = { v: 1, w: 800, h: 600, capturedAt: ORIG, gpsLat: 48.1, gpsLng: 11.5 }
@@ -798,6 +825,7 @@ describe('setMediaMeta — sealed capturedAt override in the listed-metadata tie
   it('clears the override (null) back to the original', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     const memoryKey = v1.randomBytes(32)
     const captured: MediaMeta = { v: 1, capturedAt: ORIG, capturedAtOverride: CORRECTED }
 
@@ -810,6 +838,7 @@ describe('setMediaMeta — sealed capturedAt override in the listed-metadata tie
   it('clearing an override with no other content drops the whole tier to null', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     const memoryKey = v1.randomBytes(32)
     const captured: MediaMeta = { v: 1, capturedAtOverride: CORRECTED } // only ever had a manual date, no geometry/GPS
 
@@ -822,6 +851,7 @@ describe('setMediaMeta — sealed capturedAt override in the listed-metadata tie
   it('sets a date on a media with no metadata tier at all (fresh tier)', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     const memoryKey = v1.randomBytes(32)
 
     const updated = await setMediaMeta(SCOPE_ID, target(MEDIA_ID, memoryKey, null), memoryKey, CORRECTED)
@@ -838,6 +868,7 @@ describe('setMediaMeta — sealed capturedAt override in the listed-metadata tie
   it('W8: a correction keeps the resolved place name and any unknown field; unsealMeta reads the name', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     const memoryKey = v1.randomBytes(32)
     const tier = { v: 1, capturedAt: ORIG, gpsLat: 38.7, gpsLng: -9.1, placeName: 'Lisboa', placeLevel: 'city', future: 'kept' }
     const media = target(MEDIA_ID, memoryKey, tier)
@@ -910,6 +941,7 @@ describe('mediaType — the persisted video signal (cr-inline-video-playback, #1
   it('every chunk PUT carries exactly the pinned Content-Type (ADR 0013 §6)', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
 
     const memoryKey = v1.randomBytes(32)
@@ -925,6 +957,7 @@ describe('mediaType — the persisted video signal (cr-inline-video-playback, #1
   it('seals the video mediaType at upload and round-trips it through unsealMeta', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
 
     const memoryKey = v1.randomBytes(32)
@@ -941,6 +974,7 @@ describe('mediaType — the persisted video signal (cr-inline-video-playback, #1
   it('backfillMediaType merges the sniffed type into the tier, leaving every other field untouched', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     const memoryKey = v1.randomBytes(32)
     // a pre-field media that already carries geometry + a capture date, but no sealed type
     const existing: MediaMeta = { v: 1, w: 1920, h: 1080, capturedAt: Date.UTC(2020, 0, 1) }
@@ -956,6 +990,7 @@ describe('mediaType — the persisted video signal (cr-inline-video-playback, #1
   it('backfillMediaType seals a fresh tier for a media that had no metadata at all', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     const memoryKey = v1.randomBytes(32)
 
     const updated = await backfillMediaType(SCOPE_ID, target(MEDIA_ID, memoryKey, null), memoryKey, 'video/quicktime')
@@ -969,6 +1004,7 @@ describe('mediaType — the persisted video signal (cr-inline-video-playback, #1
   it('W7: a backfill over a tier that does not open makes no PUT, for the type and for the place name', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     const memoryKey = v1.randomBytes(32)
     const elsewhere = target(MEDIA_ID, v1.randomBytes(32), { v: 1, capturedAt: 1, gpsLat: 1, gpsLng: 2 })
 
@@ -1013,6 +1049,7 @@ describe('the upload pump — read, seal and send one frame at a time (ADR 0013 
   }
   const upload = (store: ReturnType<typeof fakeStore>, blob: Blob, mediaType = 'application/pdf') => {
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     return addMedia(SCOPE_ID, NODE_ID, v1.randomBytes(32), { blob, mediaType }, stubDeriver())
   }
@@ -1048,6 +1085,7 @@ describe('the upload pump — read, seal and send one frame at a time (ADR 0013 
     const store = fakeStore({ window: 10, forbidFirstPut: [3] })
     const key = v1.randomBytes(32)
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const data = new Uint8Array(4 * CHUNK_SIZE + 9).map((_, i) => i % 251)
     await addMedia(SCOPE_ID, NODE_ID, key, { blob: new Blob([data]), mediaType: 'application/pdf' }, stubDeriver())
@@ -1061,6 +1099,7 @@ describe('the upload pump — read, seal and send one frame at a time (ADR 0013 
   it('pumps a cover through the same windows — it has no PUT loop of its own', async () => {
     const store = fakeStore({ window: 2 })
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const key = v1.randomBytes(32)
     const data = new Uint8Array(2 * CHUNK_SIZE + 3).fill(9) // not an image: sealed as it is, three frames
@@ -1074,6 +1113,7 @@ describe('uploadCoverBlob / deleteCoverBlob — standalone cover blob (cr-0073)'
   it('downscales an image to one cover-sized JPEG, seals it, commits it, and round-trips via openBlob', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const deriver = stubDeriver()
 
@@ -1098,6 +1138,7 @@ describe('uploadCoverBlob / deleteCoverBlob — standalone cover blob (cr-0073)'
   it('seals the pristine bytes for a non-image source (no downscale)', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const deriver = stubDeriver()
 
@@ -1109,6 +1150,7 @@ describe('uploadCoverBlob / deleteCoverBlob — standalone cover blob (cr-0073)'
   it('deleteCoverBlob detaches via the endpoint, naming the blob it expects in the slot', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     await deleteCoverBlob(SCOPE_ID, NODE_ID, 'blob-old')
     expect(store.api.deleteCoverBlob).toHaveBeenCalledWith({ scopeId: SCOPE_ID, nodeId: NODE_ID, blobId: 'blob-old' })
     expect(store.captured.coverDeletedNode).toBe(NODE_ID)
@@ -1131,6 +1173,7 @@ describe('read-back — operator-blind round-trip + tier selection', () => {
   it('round-trips the original through chunked AEAD under a K_blob wrapped by K_mem', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
 
     const memoryKey = v1.randomBytes(32)
@@ -1154,6 +1197,7 @@ describe('read-back — operator-blind round-trip + tier selection', () => {
   it('picks the right tier: grid=thumbnail, lightbox=preview, download=original', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const memoryKey = v1.randomBytes(32)
 
@@ -1192,6 +1236,7 @@ describe('read-back — operator-blind round-trip + tier selection', () => {
   it('the original wrap opens back to a real 32-byte K_blob under K_mem', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const memoryKey = v1.randomBytes(32)
 

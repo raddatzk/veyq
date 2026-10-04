@@ -1,6 +1,6 @@
 package com.veyq.core.adminchannel
 
-import com.veyq.app.generated.AdminChannelOperations
+import com.veyq.core.generated.AdminChannelOperations
 import com.veyq.core.identity.ServerRoles.SERVER_OWNER
 import com.veyq.core.ratelimit.RateLimitPosture
 import io.quarkus.security.Authenticated

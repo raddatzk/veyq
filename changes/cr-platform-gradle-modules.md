@@ -875,7 +875,7 @@ code names `FOLDER` only, so the module cut never has to give `:core` a `MEMORY`
   tests need Memories at runtime (question 8). `MemoriesNodeKinds` is a Memories main class, so a core-alone test
   module (8a) cannot import it.
 
-### 5 — Split the contracts and the generated API by owner (one Gradle module still)
+### 5 — Split the contracts and the generated API by owner (one Gradle module still) — **done 2026-10-04**
 
 - **First task — the `jaxrs-spec` `schemaMappings` spike, before any spec moves.** The lever is measured for the
   Kotlin *model* generator only (§ What the spikes measured); the `jaxrs-spec` *API* generator imports models by name
@@ -967,6 +967,75 @@ code names `FOLDER` only, so the module cut never has to give `:core` a `MEMORY`
   `BlobResource`'s `@Authenticated` in a scratch copy → `OperatorBlindProbeTest` red.
 - **Done when:** the above; `backend/CLAUDE.md` § Conventions names the two generation task paths; `contracts/` README or
   `_common` header states the layout (including that `blob.openapi.yaml` is core's) and that a Memories spec may reference core's `_common`, never the reverse.
+- **Outcome (what later steps inherit).** Three commits, each green: (1) `scripts/contract_specs.py` and every spec
+  reader rewired to it **on the old layout** (output of the nine spec-reading guards identical before/after except
+  two summary lines), plus `validate_contracts_common` rule 2 derived over every duplicated parameter; (2) the split
+  itself — specs, generation, `BlobResource`, the generated-import rewrite, web clients, docs — which cannot be green
+  in parts (a moved spec without its generation and its resource does not compile); (3) this outcome. **First task,
+  the spike (in-tree, `backend/gradle/spike.gradle.kts` applied for the run and removed):** the real
+  `media.openapi.yaml` copied to `contracts/api/memories/` with `../_common` refs, generated with
+  `addSchemaMapping` for `ErrorResponse`, `StaleSealedMeta`, `MediaMetaUpdate`, `PresignedUrl` → `jaxrs-spec`
+  **honours the mapping**: `MediaApi.updateMediaMeta` takes `com.veyq.core.generated.model.MediaMetaUpdate` (inline
+  FQN, no import), the Kotlin models type `presignedPuts` as `List<com.veyq.core.generated.model.PresignedUrl>`, and
+  no mapped type is generated; control without the mapping generates all four. **The fallback was not needed.**
+  Deviations, each named: (1) **Generated code does carry descriptions** — the Kotlin model generator copies a
+  property's description into KDoc (`backend/CLAUDE.md` said "no backend delta at all" for a description edit;
+  corrected there). So proof (i) is exact **modulo comment lines**: 198 of 210 generated files byte-identical after
+  mapping the package back, 10 differ only in KDoc (the reworded blob description, the `../../../docs` links of the
+  moved Memories specs, `NodeKind`/`PresignedUrl`/`MasterKeyWrap` single-sourced) and the four Memories API
+  interfaces lose an unused `import …ErrorResponse` (the mapped schema); old `MediaApi` (12 methods) = new
+  `MediaApi` (9) + `BlobApi` (3), each method identical. `MasterKeyWrap`: the old backend type was `tenants`' copy
+  (last in sort order) — annotations identical to the single source, only a KDoc sentence differs. (2) Generation
+  is two tasks, `openApiGenerateCore`/`openApiGenerateMemories` (outputs `build/generated/openapi/{core,memories}/`),
+  `openApiGenerateSpecs` runs both; the Memories task fails the build when a Memories model shares a core model's
+  name (bite (2)'s guard lives in the build, not in a script) and the configuration refuses a spec in neither set;
+  `generateAdminChannelOperations` fails on `x-veyq-channel` in a Memories spec. (3) The rewrite script is
+  `scripts/rename_generated_imports.py` (scaffolding, delete at close with `rename_packages.py`), owners derived
+  from the specs (30 Memories types: 25 models, 5 APIs); `--check f8343b8f` byte-compares 39 files, 4 declared hand
+  edits (`MediaResource`, `OperatorBlindProbeTest`, `WrapMethodTest` KDoc, `validate_guard_gaps` forgery paths),
+  residue scan clean. `OperatorBlindProbeTest.API_PACKAGES` holds both packages and asserts an anchor per owner
+  (`ContentApi`, `BlobApi`, `MediaApi`). (4) `MediaResource` keeps its `@RateLimitExempt`, its reason reworded (the
+  presign minting is `BlobResource`'s, which carries the old reason verbatim); `cc.security.rate-limit` names both.
+  (5) **`ciphertext` is now an opaque name only Memories declares** (the favorites schemas moved; § State's "no
+  opaque name is Memories-only" held for `media` alone) — the location canary is still the check that does not
+  depend on that. (6) Six web test files changed, not five: `MemoryDetail.optimistic.test.ts` also installs the
+  gallery fake; each fake store now returns `api` (media) and `blob` (core) and the tests install both
+  (`fakeApi(blobApi, store.blob)`). (7) The web generated diff has two more by-construction categories than the CR
+  listed: every file of a spec whose `info` text changed differs in its `/** … */` header (all of `media/`, the
+  moved favorites and blob files), and the generator's `.openapi-generator/FILES` manifests of `content/` and
+  `media/`; otherwise only the barrels and `MediaApi.ts` differ. **Proofs run:** wire diff (scratchpad
+  `wirediff.py`, base `f8343b8f`): 132 = 132 operations, identical modulo the declared D1 (three blob ops' tag
+  `media` → `blob`) and D2 (`getAccountKeyMaterial`'s `MasterKeyWrap` gains the annotations; the single source
+  equals the old `setup` and `tenants` copies), 184 reachable schema names, same set; `BlobApi` root
+  `@Path("/api/scopes/{scopeId}")` measured on the real spec; `./gradlew --offline check` 1153 testcases, 0 failed,
+  2 skipped, the `classname#name` set **identical** to `f8343b8f`'s (no declared moves needed — no test class
+  moved), 6m03s (base 5m51s); web `npm run check` 1667 passed / 18 skipped (180 files); admin-web `npm run check`
+  148 passed — its generated tree differs from the base only in `tenants/models/MasterKeyWrap.ts`'s JSDoc; all 51
+  validators and `validate_guard_gaps` green. **Bites** (each restored): (1) `required: []` on `Favorites` in a
+  scratch copy → wire diff red on `getFavorites`; (2) mapping disabled → `openApiGenerateMemories` fails naming
+  `ErrorResponse`, `StaleSealedMeta`; (3) `x-veyq-channel: admin` on `getFavorites` → build fails; (4) `memories/`
+  filtered before the helper's canary → every spec reader raises `SpecsMissing`; filtered after it →
+  `validate_opaque_names_disjoint` red and `run_web_e2e.opaque_property_names()` exits on the location canary;
+  (4b) `NodeId` without `format: uuid` in `memories/media` only → rule 2 red (the same edit under the pre-step rule
+  on the old layout: green); (5) the favorites edit → `favorites/models/Favorites.ts` differs beyond JSDoc;
+  (6) `startBlobUploads` tagged `media` in `blob.openapi.yaml` → `BlobResource.startBlobUploads overrides nothing`
+  (the CR's "leave it on `media`" lever, on the new layout); (7) `@Authenticated` off `BlobResource` →
+  `OperatorBlindProbeTest` red, 68 of 69 cases at 403 (deny-unannotated; the world's setup itself uploads through
+  `startBlobUploads`); web: one `presignBlobDownloads` call routed back through `mediaApi()` → 17 tests in 4 files
+  red; the rewrite `--check`: one appended line in a mapped file → red; a forged `core/blob` file importing a
+  `com.veyq.memories.generated` model → `validate_kernel_imports_no_slices` red. **Not run** (`[LIVE]`, by
+  instruction): `run_web_e2e.py` — its two contract readers are proven at unit level only
+  (`opaque_property_names()` returns the 44 names, `contract().match` resolves the blob routes); no live call has
+  hit `BlobResource` through the real stack. **[LIVE]** `run_backend_races_on_mariadb.py` (throwaway container,
+  scratch `DOCKER_CONFIG`): 32 classes, 383 tests, 0 failed (no lock or transaction moved — `BlobResource` calls
+  the same `BlobUploadHandler` methods `MediaResource` did).
+  **What step 6 must know:** the generation is parametrised by `SpecSet(owner, specs, packageRoot, mapsCommon)` in
+  `gradle/openapi.gradle.kts` — step 6 splits it per module (core's set into `:core`, Memories' into the module
+  that gets `beans.xml` at step 7; the clash check needs core's generated model names, i.e. `:core`'s output, at
+  Memories' generation time); `AdminChannelOperations` is `com.veyq.core.generated`; `BlobResource` is
+  `com.veyq.core.blob` (core); the Memories generated packages are `com.veyq.memories.generated.{api,model}` and
+  no core main file imports them (the kernel guard holds it); `contract_specs.APPLICATIONS` names `memories` — a
+  second application's spec directory is one entry there and one `SpecSet`.
 
 ### 6 — Gradle skeleton and `:core`
 

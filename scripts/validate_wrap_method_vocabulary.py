@@ -5,7 +5,8 @@
 `backend/src/main/kotlin` outside `core/identity/WrapMethods.kt`. "String literal" covers both a Kotlin
 double-quoted literal and a single-quoted SQL/JPQL literal inside a query string (Kotlin has no multi-character
 char literal, so a single-quoted method name in a `.kt` file can only be query text). The method set is read
-from `contracts/api/account.openapi.yaml` `MasterKeyWrap.method.enum` and never listed here, so a method added
+from the `MasterKeyWrap.method.enum` that `contracts/api/account.openapi.yaml` uses (single-sourced in
+`_common.openapi.yaml`, read through the alias by `contract_specs.schema`) and never listed here, so a method added
 to the contract is covered the day it lands. Every store therefore reaches a method through `WrapMethod`, whose
 constants declare — with no default — whether a method survives a credential change and whether it is
 device-local, and which `WrapMethodTest` pins to the same contract enum.
@@ -33,17 +34,17 @@ import sys
 
 import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
 
-import yaml
+import contract_specs
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 CLASSIFICATION = backend_tree.source_file("com.veyq.core.identity.WrapMethods")
-CONTRACT = ROOT / "contracts" / "api" / "account.openapi.yaml"
+CONTRACT = contract_specs.API / "account.openapi.yaml"
 SCHEMA = "MasterKeyWrap"
 
 
 def contract_methods() -> list[str] | None:
-    schema = yaml.safe_load(CONTRACT.read_text()).get("components", {}).get("schemas", {}).get(SCHEMA, {})
-    enum = schema.get("properties", {}).get("method", {}).get("enum")
+    _, schema = contract_specs.schema(contract_specs.key(CONTRACT), SCHEMA)
+    enum = (schema or {}).get("properties", {}).get("method", {}).get("enum")
     return [str(m) for m in enum] if enum else None
 
 

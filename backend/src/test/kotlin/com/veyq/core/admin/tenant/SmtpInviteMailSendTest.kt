@@ -3,7 +3,7 @@ package com.veyq.core.admin.tenant
 import com.icegreen.greenmail.util.GreenMail
 import com.icegreen.greenmail.util.GreenMailUtil
 import com.icegreen.greenmail.util.ServerSetup
-import com.veyq.app.generated.model.DeliveryResult
+import com.veyq.core.generated.model.DeliveryResult
 import com.veyq.core.crypto.ConfigSecretKeyGuard
 import com.veyq.core.crypto.ConfigSecretSeal
 import com.veyq.core.instance.InstanceStore

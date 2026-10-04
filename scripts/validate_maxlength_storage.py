@@ -45,24 +45,26 @@ import backend_tree  # where the backend's sources live — resolved by glob, ne
 
 import yaml
 
+import contract_specs
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-API = ROOT / "contracts" / "api"
+API = contract_specs.API
 
 # The largest value a MariaDB TEXT column (65 535 bytes) can hold that is also a valid (multiple-of-4) base64
 # length. A base64 char is one ASCII byte, so chars == bytes for these fields.
 TEXT_MAX_B64 = 65532
 
 # base64 fields whose column a migration declares MEDIUMTEXT (16 MiB) — the ONLY fields allowed a cap
-# above TEXT_MAX_B64. Keyed (spec, schema, property) → the DB column that must be provably MEDIUMTEXT. Adding a
+# above TEXT_MAX_B64. Keyed (spec key below contracts/api, schema, property) → the DB column that must be provably MEDIUMTEXT. Adding a
 # field here is a deliberate "this column is wider than TEXT" claim, verified below against the migrations.
 MEDIUMTEXT_BACKED: dict[tuple[str, str, str], str] = {
     ("account.openapi.yaml", "IdentityPins", "blob"): "sealed_blob",
     ("account.openapi.yaml", "IdentityPinsUpdate", "blob"): "sealed_blob",
-    ("content.openapi.yaml", "Favorites", "ciphertext"): "ciphertext",
-    ("content.openapi.yaml", "PutFavoritesRequest", "ciphertext"): "ciphertext",
-    ("content.openapi.yaml", "ItemFavoritesEntry", "ciphertext"): "ciphertext",
-    ("content.openapi.yaml", "PutItemFavoritesRequest", "ciphertext"): "ciphertext",
-    ("content.openapi.yaml", "OwnItemFavoritesEntry", "ciphertext"): "ciphertext",
+    ("memories/favorites.openapi.yaml", "Favorites", "ciphertext"): "ciphertext",
+    ("memories/favorites.openapi.yaml", "PutFavoritesRequest", "ciphertext"): "ciphertext",
+    ("memories/favorites.openapi.yaml", "ItemFavoritesEntry", "ciphertext"): "ciphertext",
+    ("memories/favorites.openapi.yaml", "PutItemFavoritesRequest", "ciphertext"): "ciphertext",
+    ("memories/favorites.openapi.yaml", "OwnItemFavoritesEntry", "ciphertext"): "ciphertext",
     ("tasks.openapi.yaml", "ClaimedJob", "sealedBody"): "sealed_body",
     ("tasks.openapi.yaml", "EnqueueRequest", "sealedBody"): "sealed_body",
     ("tasks.openapi.yaml", "CompleteRequest", "sealedResult"): "sealed_result",
@@ -109,10 +111,7 @@ def column_is_mediumtext(column: str) -> bool:
 
 
 def main() -> int:
-    specs = sorted(API.glob("*.openapi.yaml"))
-    if not specs:
-        print(f"no specs found under {API.relative_to(ROOT)}")
-        return 1
+    specs = contract_specs.specs()  # recursive, `_common` included; raises on none, or on no application spec
 
     n_b64 = n_capped = 0
     seen_allowlist: set[tuple[str, str, str]] = set()
@@ -131,8 +130,8 @@ def main() -> int:
                     continue
                 n_b64 += 1
                 n_capped += 1
-                key = (path.name, sname, pname)
-                where = f"{path.name}:{sname}.{pname}"
+                key = (contract_specs.key(path), sname, pname)
+                where = f"{key[0]}:{sname}.{pname}"
 
                 if cap % 4 != 0:
                     errors.append(

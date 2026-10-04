@@ -43,8 +43,10 @@ import sys
 
 import yaml
 
+import contract_specs
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-API = ROOT / "contracts" / "api"
+API = contract_specs.API
 
 EDIT_VERB = re.compile(r"^(rename|set|update|change|commit|move|put)[A-Z]")
 VERSION_SHAPED = re.compile(r"^(version|[a-z][A-Za-z0-9]*Version)$")
@@ -54,12 +56,12 @@ METHODS = ("get", "put", "post", "patch", "delete")
 
 
 def load_specs() -> dict[str, dict]:
-    return {p.name: yaml.safe_load(p.read_text(encoding="utf-8")) for p in sorted(API.glob("*.openapi.yaml"))}
+    return {contract_specs.key(p): yaml.safe_load(p.read_text(encoding="utf-8")) for p in contract_specs.specs()}
 
 
 def resolve(specs: dict[str, dict], ref: str, file: str) -> tuple[dict, str]:
     target, _, fragment = ref.partition("#")
-    name = pathlib.Path(target).name if target else file
+    name = contract_specs.ref_key(file, target)
     node = specs[name]
     for part in fragment.strip("/").split("/"):
         node = node[part]

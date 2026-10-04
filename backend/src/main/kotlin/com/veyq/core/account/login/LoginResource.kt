@@ -1,11 +1,11 @@
 package com.veyq.core.account.login
 
-import com.veyq.app.generated.api.LoginApi
-import com.veyq.app.generated.model.LoginChallenge
-import com.veyq.app.generated.model.LoginChallengeRequest
-import com.veyq.app.generated.model.LoginVerifyRequest
-import com.veyq.app.generated.model.SessionFamily
-import com.veyq.app.generated.model.SessionResponse
+import com.veyq.core.generated.api.LoginApi
+import com.veyq.core.generated.model.LoginChallenge
+import com.veyq.core.generated.model.LoginChallengeRequest
+import com.veyq.core.generated.model.LoginVerifyRequest
+import com.veyq.core.generated.model.SessionFamily
+import com.veyq.core.generated.model.SessionResponse
 import com.veyq.core.http.FailureStatus.UNAUTHORIZED
 import com.veyq.core.http.httpError
 import com.veyq.core.http.httpFailure

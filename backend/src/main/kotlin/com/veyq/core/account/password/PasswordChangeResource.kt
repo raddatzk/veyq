@@ -1,7 +1,7 @@
 package com.veyq.core.account.password
 
-import com.veyq.app.generated.api.AccountPasswordApi
-import com.veyq.app.generated.model.ChangePasswordRequest
+import com.veyq.core.generated.api.AccountPasswordApi
+import com.veyq.core.generated.model.ChangePasswordRequest
 import com.veyq.core.http.HttpFailure
 import com.veyq.core.http.httpError
 import com.veyq.core.ratelimit.RateLimitExempt

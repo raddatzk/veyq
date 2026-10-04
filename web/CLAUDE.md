@@ -6,7 +6,8 @@ here; the server is blind.
 ## Prove your work
 - `npm run check` (lint + typecheck + test + build).
 - API client is **generated** and **not tracked** (gitignored, mirrors the backend) — `npm run generate:api`
-  from `../contracts/api/*.openapi.yaml` produces it (and runs automatically on install via `prepare`). Never
+  from the specs under `../contracts/api/` (core's at its top level, the Memories ones in `memories/`, one client
+  directory per spec) produces it (and runs automatically on install via `prepare`). Never
   hand-write the client.
 - **`npm run check` does NOT regenerate the client — so on its own it proves nothing about a contract change.**
   It runs lint/typecheck/test/build over whatever `src/api/generated/` already holds, which is the *previous*

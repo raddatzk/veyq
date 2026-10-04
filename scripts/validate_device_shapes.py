@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Guard that the device register and the Master Key wrap never grow a cleartext device↔wrap correlation.
 
-**What it asserts.** In `contracts/api/account.openapi.yaml`:
+**What it asserts.** In `contracts/api/account.openapi.yaml` (a schema it aliases from `_common.openapi.yaml`, as
+`MasterKeyWrap` is, is read where it is defined — `contract_specs.schema`):
 
   - `components.schemas.DeviceRegister` and `components.schemas.DeviceRegisterUpdate` carry exactly
     `{blob, version}` — one opaque ciphertext and the monotonic optimistic-concurrency counter, nothing else.
@@ -56,10 +57,10 @@ from __future__ import annotations
 import pathlib
 import sys
 
-import yaml
+import contract_specs
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-SPEC = ROOT / "contracts" / "api" / "account.openapi.yaml"
+SPEC = contract_specs.API / "account.openapi.yaml"
 
 # schema name → the exact property set it may carry, and why that set is closed.
 EXPECTED = {
@@ -85,13 +86,10 @@ def main() -> int:
         print(f"DEVICE SHAPES VALIDATION FAILED:\n  - missing spec: {SPEC}")
         return 1
 
-    spec = yaml.safe_load(SPEC.read_text(encoding="utf-8"))
-    schemas = (spec.get("components") or {}).get("schemas") or {}
-
     errors: list[str] = []
 
     for name, allowed in sorted(EXPECTED.items()):
-        schema = schemas.get(name)
+        _, schema = contract_specs.schema(contract_specs.key(SPEC), name)
         if not isinstance(schema, dict):
             errors.append(
                 f"components.schemas.{name} is missing from account.openapi.yaml. If it was renamed, point "

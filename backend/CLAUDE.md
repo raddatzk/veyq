@@ -36,11 +36,18 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   version the three surfaces run.
 
 ## Conventions (see [developer styleguide](../docs/crosscutting/developer-styleguide.md))
-- **API-first.** Edit the spec in `../contracts/api/*.openapi.yaml`; the Gradle build generates Kotlin
-  models + JAX-RS interfaces (`openApiGenerateSpecs`). Never hand-write a DTO that duplicates a generated model.
+- **API-first.** Edit the spec in `../contracts/api/` — core's specs at its top level, the Memories application's in
+  `memories/`, shared schemas in `_common.openapi.yaml` (core's); the Gradle build generates Kotlin models + JAX-RS
+  interfaces per owner (`openApiGenerateCore` → `build/generated/openapi/core/`, package `com.veyq.core.generated`;
+  `openApiGenerateMemories` → `build/generated/openapi/memories/`, package `com.veyq.memories.generated`;
+  `openApiGenerateSpecs` runs both). A schema two owners share lives in `_common` and is ONE generated type, core's:
+  the Memories set maps every `_common` schema to core's class, and a Memories model named like a core one fails the
+  build; so does `x-veyq-channel` on a Memories operation (the admin channel is core's). Never hand-write a DTO that
+  duplicates a generated model.
   **Nothing generated is tracked** (`backend/build/` is gitignored), and the generator emits no descriptions —
   `useSwaggerAnnotations` / `useMicroProfileOpenAPIAnnotations` are both `false` in `gradle/openapi.gradle.kts`.
-  So a spec edit that changes only `description:` / `summary:` text produces **no backend delta at all** and
+  So a spec edit that changes only `description:` / `summary:` text produces no backend delta beyond the models'
+  KDoc (the Kotlin model generator copies a property's description into a comment; nothing else carries it) and
   needs no backend phase: the contracts guards are its whole check. A shape change — a property, a type, a
   `format:`, an enum, a required flag — is the opposite, and always does.
   **One tag is one generated interface with ONE root `@Path`** — the longest prefix its operations share. An

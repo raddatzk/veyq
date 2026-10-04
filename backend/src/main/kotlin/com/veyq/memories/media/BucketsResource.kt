@@ -1,11 +1,11 @@
 package com.veyq.memories.media
 
-import com.veyq.app.generated.api.BucketsApi
-import com.veyq.app.generated.model.BucketListResponse
-import com.veyq.app.generated.model.BucketSummary
-import com.veyq.app.generated.model.CreateBucketRequest
-import com.veyq.app.generated.model.MoveMediaRequest
-import com.veyq.app.generated.model.RenameBucketRequest
+import com.veyq.memories.generated.api.BucketsApi
+import com.veyq.memories.generated.model.BucketListResponse
+import com.veyq.memories.generated.model.BucketSummary
+import com.veyq.memories.generated.model.CreateBucketRequest
+import com.veyq.memories.generated.model.MoveMediaRequest
+import com.veyq.memories.generated.model.RenameBucketRequest
 import com.veyq.core.http.HttpFailure
 import com.veyq.core.http.httpError
 import io.quarkus.security.Authenticated

@@ -815,11 +815,7 @@ components:
       example: VIEWER
 
     NodeKind:
-      x-veyq-visibility: enum
-      type: string
-      description: FOLDER organizes only; MEMORY is the content unit (owns K_mem); CHAPTER is a nested Memory. A share's subtree holds MEMORY (root) + CHAPTER descendants.
-      enum: [FOLDER, MEMORY, CHAPTER]
-      example: MEMORY
+      $ref: '_common.openapi.yaml#/components/schemas/NodeKind'
 
     CreateShareRequest:
       type: object
@@ -1542,26 +1538,7 @@ components:
           items: { $ref: "#/components/schemas/PresignedUrl" }
 
     PresignedUrl:
-      type: object
-      required: [index, url]
-      properties:
-        index:
-          x-veyq-visibility: structure
-          type: integer
-          format: int32
-          description: Chunk index (0-based, in chunk order).
-          example: 0
-        url:
-          x-veyq-visibility: token
-          type: string
-          description: >
-            A short-TTL, single-object, single-method presigned URL (GET for viewer downloads, PUT for contributor
-            uploads) against the object store. A `PUT` must carry exactly `Content-Type: application/octet-stream`:
-            the header is signed, so the store refuses any other type. A `GET` is served as `application/octet-stream`
-            with `Content-Disposition: attachment`, whatever the object was stored as ([ADR 0013
-            §6](../../docs/decisions/0013-blob-storage-presigned-direct-to-store.md#6-store-responses-are-inert--enforced-by-the-signer)).
-          maxLength: 4096
-          example: https://store.example.com/veyq/9b1d4a6e/0?X-Amz-Signature=...
+      $ref: '_common.openapi.yaml#/components/schemas/PresignedUrl'
 
     # --- contributor (cr-0101) ---------------------------------------------------
     ShareIdentity:

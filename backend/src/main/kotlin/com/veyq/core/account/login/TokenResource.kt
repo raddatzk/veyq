@@ -1,11 +1,11 @@
 package com.veyq.core.account.login
 
-import com.veyq.app.generated.api.TokenApi
-import com.veyq.app.generated.model.RefreshRequest
-import com.veyq.app.generated.model.SessionFamily
-import com.veyq.app.generated.model.SessionResponse
-import com.veyq.app.generated.model.TokenAdoptRequest
-import com.veyq.app.generated.model.TokenPair
+import com.veyq.core.generated.api.TokenApi
+import com.veyq.core.generated.model.RefreshRequest
+import com.veyq.core.generated.model.SessionFamily
+import com.veyq.core.generated.model.SessionResponse
+import com.veyq.core.generated.model.TokenAdoptRequest
+import com.veyq.core.generated.model.TokenPair
 import com.veyq.core.http.FailureStatus.BAD_REQUEST
 import com.veyq.core.http.FailureStatus.UNAUTHORIZED
 import com.veyq.core.http.Failures

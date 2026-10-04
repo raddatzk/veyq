@@ -115,7 +115,8 @@ here because the code's `reason` strings point at this section rather than each 
   guessing axis and the non-enumerable 404 on discovery. What stays **open**: raw request volume by someone who
   already holds the link. Closing it needs a per-policy budget layer (a named `policy =` on the annotation), so
   the axis is right *and* the numbers are its own — deliberately out of scope of the posture work itself.
-- **`MediaResource`** — presign minting is an amplification axis, bounded **per call** and not per caller: a
+- **`BlobResource`** (core's generic upload and download; `MediaResource`, the Memories operations an upload
+  completes into, is exempt on the same open item) — presign minting is an amplification axis, bounded **per call** and not per caller: a
   start or a window signs at most 256 items × `veyq.blob.presign-window` URLs (ADR 0013 §2), where a start once
   signed every chunk of each item. `key = USER` exists; a per-user cap on the main upload and browse path is held
   back until it is verified against real traffic, or it throttles a legitimate bulk upload. This is the open item

@@ -4,7 +4,7 @@ import com.veyq.core.quota.StorageUsage
 import com.veyq.core.sharing.SharingStore
 import com.veyq.core.spaces.scope.ScopesStore
 import com.veyq.core.tasks.TasksStore
-import com.veyq.app.generated.model.DeliveryResult
+import com.veyq.core.generated.model.DeliveryResult
 import com.veyq.core.config.VeyqConfig
 import com.veyq.core.crypto.Tokens
 import com.veyq.core.http.FailureStatus

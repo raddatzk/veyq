@@ -1,11 +1,11 @@
 package com.veyq.core.admin.setup
 
-import com.veyq.app.generated.api.SetupApi
-import com.veyq.app.generated.model.Capability
-import com.veyq.app.generated.model.CreateServerOwnerRequest
-import com.veyq.app.generated.model.SetupResult
-import com.veyq.app.generated.model.SetupStatus
-import com.veyq.app.generated.model.Version
+import com.veyq.core.generated.api.SetupApi
+import com.veyq.core.generated.model.Capability
+import com.veyq.core.generated.model.CreateServerOwnerRequest
+import com.veyq.core.generated.model.SetupResult
+import com.veyq.core.generated.model.SetupStatus
+import com.veyq.core.generated.model.Version
 import com.veyq.core.http.FailureStatus.CONFLICT
 import com.veyq.core.http.httpError
 import com.veyq.core.http.httpFailure

@@ -1,8 +1,8 @@
 package com.veyq.core.admin.instance
 
-import com.veyq.app.generated.api.InstanceApi
-import com.veyq.app.generated.model.InstanceRelease
-import com.veyq.app.generated.model.InstanceStoreProvisioning
+import com.veyq.core.generated.api.InstanceApi
+import com.veyq.core.generated.model.InstanceRelease
+import com.veyq.core.generated.model.InstanceStoreProvisioning
 import com.veyq.core.identity.ServerRoles.SERVER_OWNER
 import com.veyq.core.ratelimit.RateLimitExempt
 import jakarta.annotation.security.RolesAllowed

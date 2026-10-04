@@ -1,6 +1,6 @@
 package com.veyq.core.admin.tenant
 
-import com.veyq.app.generated.model.DeliveryResult
+import com.veyq.core.generated.model.DeliveryResult
 import io.quarkus.runtime.LaunchMode
 import jakarta.enterprise.context.ApplicationScoped
 import org.jboss.logging.Logger

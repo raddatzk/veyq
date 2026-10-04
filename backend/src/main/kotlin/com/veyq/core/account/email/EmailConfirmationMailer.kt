@@ -2,7 +2,7 @@ package com.veyq.core.account.email
 
 import com.veyq.core.admin.tenant.MailContext
 import com.veyq.core.admin.tenant.TenantMailSender
-import com.veyq.app.generated.model.DeliveryResult
+import com.veyq.core.generated.model.DeliveryResult
 import jakarta.enterprise.context.ApplicationScoped
 import java.time.Instant
 import java.time.ZoneOffset

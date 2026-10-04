@@ -788,46 +788,10 @@ components:
       description: The opaque access token issued by login / refresh.
 
   schemas:
-    # NOTE: MasterKeyWrap and ErrorResponse are intentionally identical to their definitions in
-    # setup.openapi.yaml / auth.openapi.yaml. Specs are self-contained (no cross-file $ref); the backend
-    # generator writes one model per name, so identical duplicates overwrite harmlessly (see V1 setup).
+    # MasterKeyWrap and ErrorResponse are single-sourced in _common.openapi.yaml (ADR 0038), aliased here by name
+    # so the generator emits them under the names the operations use.
     MasterKeyWrap:
-      type: object
-      description: One wrap of the Master Key, openable by a single unlock method.
-      required: [method, wrappedKey]
-      properties:
-        id:
-          x-veyq-visibility: id
-          type: string
-          description: >
-            Opaque id of this wrap. Present in responses (lets a client pin its own DEVICE wrap and untrust
-            it); ignored on input (setup assigns ids server-side).
-          maxLength: 64
-          example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
-        method:
-          x-veyq-visibility: enum
-          type: string
-          description: >
-            Which unlock method opens this wrap. DEVICE mixes the password into the KEK
-            (Argon2id(deviceFactor + password)); DEVICE_KEY is the password-less remember-me wrap — a
-            device-held key alone (no password, no KDF), so its kdfParams carries only the AEAD iv.
-          enum: [PASSWORD, PASSKEY, RECOVERY, DEVICE, DEVICE_KEY]
-          example: PASSWORD
-        wrappedKey:
-          type: string
-          description: The Master Key wrapped to this method's KEK (opaque base64 ciphertext).
-          contentEncoding: base64
-          maxLength: 8192
-          example: d3JhcHBlZC1tYXN0ZXIta2V5
-        kdfParams:
-          type: string
-          description: >
-            KDF parameters + salt needed to re-derive this method's unlock KEK (opaque base64; present for
-            password/recovery/device methods, absent for passkey which is PRF-derived). For DEVICE_KEY there
-            is no KDF — this field carries only the AEAD iv for the device-key wrap.
-          contentEncoding: base64
-          maxLength: 256
-          example: AAAAAwAAgAAAAAABAAAAIHNhbHQtZXhhbXBsZS0xNmJ5dGVz
+      $ref: '_common.openapi.yaml#/components/schemas/MasterKeyWrap'
 
     AddWrapRequest:
       type: object

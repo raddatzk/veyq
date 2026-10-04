@@ -59,8 +59,10 @@ import sys
 
 import yaml
 
+import contract_specs
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-API = ROOT / "contracts" / "api"
+API = contract_specs.API
 
 # The base64 alphabet check every opaque field carries (`contentEncoding: base64` ⇒ this `@Pattern`).
 BASE64_REGEXP = "[A-Za-z0-9+/]*={0,2}"
@@ -85,13 +87,13 @@ errors: list[str] = []
 
 
 def load_specs() -> dict[str, dict]:
-    return {p.name: (yaml.safe_load(p.read_text()) or {}) for p in sorted(API.glob("*.openapi.yaml"))}
+    return {contract_specs.key(p): (yaml.safe_load(p.read_text()) or {}) for p in contract_specs.specs()}
 
 
 def resolve(specs: dict[str, dict], ref: str, file: str) -> tuple[str, str, dict]:
     """A `$ref` → (file, schema name, schema). Handles same-file `#/…` and cross-file `x.yaml#/…` refs."""
     target, _, pointer = ref.partition("#")
-    rfile = pathlib.PurePosixPath(target).name if target else file
+    rfile = contract_specs.ref_key(file, target)
     node = specs[rfile]
     for part in pointer.strip("/").split("/"):
         node = node[part]

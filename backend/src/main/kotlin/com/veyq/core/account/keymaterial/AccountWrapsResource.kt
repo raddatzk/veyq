@@ -1,8 +1,8 @@
 package com.veyq.core.account.keymaterial
 
-import com.veyq.app.generated.api.AccountWrapsApi
-import com.veyq.app.generated.model.AddWrapRequest
-import com.veyq.app.generated.model.AddWrapResult
+import com.veyq.core.generated.api.AccountWrapsApi
+import com.veyq.core.generated.model.AddWrapRequest
+import com.veyq.core.generated.model.AddWrapResult
 import com.veyq.core.http.HttpFailure
 import com.veyq.core.http.httpError
 import io.quarkus.security.Authenticated

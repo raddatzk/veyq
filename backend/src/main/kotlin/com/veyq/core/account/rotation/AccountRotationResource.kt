@@ -1,11 +1,11 @@
 package com.veyq.core.account.rotation
 
 import com.veyq.core.tasks.CompromiseRotationState
-import com.veyq.app.generated.api.AccountRotationApi
-import com.veyq.app.generated.model.RotateAccountKeysRequest
-import com.veyq.app.generated.model.RotateAccountKeysResult
-import com.veyq.app.generated.model.RotatedWrap
-import com.veyq.app.generated.model.RotationScopeState
+import com.veyq.core.generated.api.AccountRotationApi
+import com.veyq.core.generated.model.RotateAccountKeysRequest
+import com.veyq.core.generated.model.RotateAccountKeysResult
+import com.veyq.core.generated.model.RotatedWrap
+import com.veyq.core.generated.model.RotationScopeState
 import com.veyq.core.http.HttpFailure
 import com.veyq.core.http.httpError
 import com.veyq.core.ratelimit.RateLimitExempt
