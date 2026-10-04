@@ -60,7 +60,8 @@ starts and looks healthy either way.
   compose network as `http://garage:3903`).
 - **Backend e2e** (`BlobBatchE2ETest`): bring the profile up **and start a backend once** so the bucket exists,
   then
-  `VEYQ_S3_E2E=1 ./gradlew :backend:test --tests '*BlobBatchE2ETest'` (defaults match the compose; override via
+  `VEYQ_S3_E2E=1 ./gradlew :apps:memories:test --tests '*BlobBatchE2ETest'` from `backend/` (the test lives in the
+  Memories module; defaults match the compose; override via
   `VEYQ_S3_ENDPOINT`/`VEYQ_S3_ACCESS_KEY`/`VEYQ_S3_SECRET_KEY`/`VEYQ_S3_BUCKET`/`VEYQ_S3_REGION`).
 - **Backend against the store** (`quarkusDev`): point it at the store via env —
   `veyq.blob-store.endpoint=http://localhost:19000`, `…access-key=GK0123456789abcdef01234567`,

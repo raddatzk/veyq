@@ -2,7 +2,9 @@
 // `TestIds`, `TestAdmission`, `ShareWriteProof`, `ReclaimRowAge`, `ScopeAccessWorld`), the upload plumbing (`TestBlob`,
 // `FakePresignProfile`), the race harness (`Race.kt`), `givenAdminChannel` and the three CDI fakes of the blob store
 // (`RecordingBlobStore`, `RefusingStoreReclaimStore`, `FakePresigningBlobStore` — beans, so this project carries a
-// `META-INF/beans.xml`). Test code only: a `testImplementation` dependency of `:core`, `:apps:memories` and the root, on
+// `META-INF/beans.xml` — without it the fakes are not beans at all, the production store answers instead, and the tests
+// that cast an injected `BlobStore` to a fake fail with a `ClassCastException`, not an unsatisfied dependency: measured).
+// Test code only: a `testImplementation` dependency of `:core`, `:apps:memories` and the root, on
 // no runtime classpath, so nothing here reaches the fast-jar.
 //
 // **Why a project and not `java-test-fixtures` on `:core`** (measured, Quarkus 3.36.0, cr-platform-gradle-modules

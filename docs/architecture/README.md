@@ -109,6 +109,9 @@ operator ([ADR 0016](../decisions/0016-geocoding-provider-neutrality.md); the bo
   (`<area>/<use-case>/…Handler` under `com.veyq.core` or an application's package) — that is where cohesion and the trust chain live; the HTTP adapter
   layer is **resource-shaped** (one `…Resource` per generated API interface), because one endpoint can serve
   several use-cases. Cross-cutting code is the platform's declared kernel, which must not depend on a feature slice.
+  The platform and each application are Gradle modules (`:core`, `:apps:memories`) the root composes into one
+  fast-jar; an application depends on core, never the reverse
+  ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)).
   → [ADR 0001](../decisions/0001-backend-http-adapter-vs-application-slicing.md),
   [developer-styleguide](../crosscutting/developer-styleguide.md)
 - **Authentication and coarse authorization are central**, declared at the resource boundary and default-deny;

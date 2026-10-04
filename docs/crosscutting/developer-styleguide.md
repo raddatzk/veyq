@@ -33,10 +33,12 @@
   builds on (tenant, identity, auth, membership, the blob store, rate limits, …). **The list is declared once**,
   as `KERNEL` in [`validate_kernel_imports_no_slices.py`](../../scripts/validate_kernel_imports_no_slices.py);
   every other package is a slice, so a new package is a slice until it is added there on purpose. A kernel
-  package must not depend on a slice, and the guard holds that for its imports. The same guard holds the
-  **platform half** ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)): no
-  file outside `com.veyq.memories` may import the Memories application. Core reaches Memories behaviour through
-  an interface Memories implements (`ScopeEraser`, `NodeSubtreeEraser`, …), never through an import.
+  package must not depend on a slice, and the guard holds that for its imports. The **platform half**
+  ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)) is the build's: core is
+  the Gradle module `:core`, an application is `:apps:<name>` and depends on core, never the reverse and never on
+  another application (`validate_backend_module_graph.py`). Core reaches application behaviour through an interface
+  the application implements (`ScopeEraser`, `NodeSubtreeEraser`, `NodeKindRules`, …), never through an import —
+  which would not compile.
 - **Dependencies stay directed.** If a slice builds on a kernel package, that package must not reach back into
   the slice; share neutral rules through small interfaces.
 
@@ -257,7 +259,7 @@ not documented; the code is the source of truth for that.
     exist at most once — a client-minted id, a slug under its parent, a username in a tenant, the setup singleton —
     has no live row to compare-and-set; its unique index is the compare-and-set. Two creates that both read "free"
     both insert, the loser's insert waits for the winner's row and fails once it commits, and unhandled that failure
-    was a `500` at ten sites (inbox #223). So the create runs through `shared/persistence/createOrConflict`, which
+    was a `500` at ten sites (inbox #223). So the create runs through `core/persistence/createOrConflict`, which
     owns the transaction: on a persistence failure it re-runs the site's own "taken?" checks, in the handler's order,
     in a fresh read, and answers the conflict a replay would get; when those checks say "free", the failure is
     re-thrown and stays a `500` — a violation of some other index is a bug, and must look like one. The site's

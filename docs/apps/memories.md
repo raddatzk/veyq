@@ -2,7 +2,8 @@
 
 The first application, and the product center today: photos and media, a journal, places, in **Memories**
 nested into **Chapters**. Product language **Memory / Chapter** is unchanged; folders organize only
-([CLAUDE.md](../../CLAUDE.md)). The code still lives per feature, not as a separable module (see the end).
+([CLAUDE.md](../../CLAUDE.md)). The backend half is a Gradle module of its own; the web half is separated by import
+direction only (see the end).
 
 ## What it owns
 
@@ -32,17 +33,18 @@ nested into **Chapters**. Product language **Memory / Chapter** is unchanged; fo
 | Seals bound to their object | [ADR 0072](../decisions/0072-a-seal-binds-its-object.md) |
 | Concurrent writes to a sealed blob | [ADR 0077](../decisions/0077-a-write-carries-the-version-it-read.md) |
 
-## Separated only in part
+## How far it is separated
 
-Measured 2026-10-04 (`ls backend/core/src/main/kotlin/com/veyq/core backend/apps/memories/src/main/kotlin/com/veyq/memories`):
-every backend class lives in its owner's package — the platform in `com.veyq.core` (the node tree in
-`core.content`/`core.node`, sharing in `core.sharing`), Memories in `com.veyq.memories` (`media`, `favorites`,
-`itemfavorites`) — and core imports no Memories code; core reaches media and favorites through interfaces they
-implement. The generic blob upload and the storage quota are core's (`core.blob`, `core.quota`): Memories attaches its media
-through `UploadCompletion`, measures a link's contributed blobs through `UploadAdmission`, and places its `MEMORY`
-and `CHAPTER` in the tree through `NodeKindRules` (core places only `FOLDER`). Core and Memories are Gradle modules of their own (`:core` in
-`backend/core`, `:apps:memories` in `backend/apps/memories`, which depends on core and never the reverse), composed
-by the root `backend/` into the one fast-jar; Memories' tests run in `:apps:memories`, beside the core tests that need an application at runtime. The node `kind` is still the contract's closed `FOLDER`/`MEMORY`/`CHAPTER` enum, and on the web `features/memory` is the application (core imports it nowhere but the composition root and asks a
-registry for what to render), though its directory name and five single-claim slots are still Memories-shaped. The
-rest of the series is not done; [ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)
-Consequences lists it.
+Measured 2026-10-05 (`ls backend/core/src/main/kotlin/com/veyq/core backend/apps/memories/src/main/kotlin/com/veyq/memories`):
+**the backend is.** Memories is the Gradle module `:apps:memories` (`backend/apps/memories`), depending on `:core`
+and never the reverse; the root `backend/` composes both into the one fast-jar. Every class lives in its owner's
+package — the platform in `com.veyq.core` (the node tree in `core.content`/`core.node`, sharing in `core.sharing`),
+Memories in `com.veyq.memories` (`media`, `favorites`, `itemfavorites`, `node`) — and core reaches Memories only
+through the interfaces Memories implements: it attaches its media through `UploadCompletion`, measures a link's
+contributed blobs through `UploadAdmission`, places its `MEMORY` and `CHAPTER` through `NodeKindRules` (core places
+only `FOLDER`) and takes guest writes through `ShareGuestWrites`. Memories' tests run in `:apps:memories`, beside the
+core tests that need an application at runtime; `:core`'s own run with no application at all. **The web is separated
+by import direction only**: `features/memory` is the application (core imports it nowhere but the composition root
+and asks a registry for what to render), though its directory name and five single-claim slots are still
+Memories-shaped. What core still knows of Memories, and what is open on both sides,
+[ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Consequences lists.

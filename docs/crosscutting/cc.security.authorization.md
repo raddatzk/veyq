@@ -194,6 +194,6 @@ product judgement, recorded in the ADRs — not something a test asserts.
   [ADR 0029](../decisions/0029-public-viewer-share.md) ·
   [ADR 0030](../decisions/0030-contributor-public-share.md) ·
   [ADR 0031](../decisions/0031-uploader-public-share.md) (the three share roles)
-- Code: `backend/.../shared/membership/MembershipStore.kt` (guards #3–#5),
-  `backend/.../shared/identity/ServerRoles.kt` (#2), `backend/.../shared/auth/` (the authentication front door),
-  `backend/.../features/sharing/SharingHandler.kt` (#6/#7)
+- Code: `backend/core/…/core/membership/MembershipStore.kt` (guards #3–#5),
+  `backend/core/…/core/identity/ServerRoles.kt` (#2), `backend/core/…/core/auth/` (the authentication front door),
+  `backend/core/…/core/sharing/SharingHandler.kt` (#6/#7)

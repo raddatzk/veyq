@@ -23,6 +23,15 @@ follow from it and are not built yet: a generic `veyq_node_attachment(node_id, s
 keys, and a seal purpose plus key rule for non-Memories blobs. Until it is made, Files cannot start without
 depending on Memories, which the rules forbid.
 
+What the decision does **not** have to change is the transfer: the upload itself is core's and neutral. Starting,
+windowing, verifying and downloading a blob, the upload sessions and the quota are `com.veyq.core.blob` and
+`core.quota`, served by core's `contracts/api/blob.openapi.yaml`; a blob's `K_blob` wrap, `owner_id` and `blob_role`
+are opaque strings that code stores and compares and never opens. What a verified upload *becomes* is the
+application's, through core's `UploadCompletion` seam (Memories': a media row), and a node kind no application
+accepts takes no upload (`illegal_target`). So the decision lands in three places, none of them the upload path:
+the reference table, the closed `BlobRole` enum (contract, crypto package, its web re-export), and the `blob-key`
+seal's key.
+
 ## Operator-visible, beyond the platform's `kind`
 
 File sizes (exact, unless padded), upload and change timestamps, the tree's shape.
