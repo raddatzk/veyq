@@ -5,7 +5,8 @@ direction of ADR 0079 held in the schema (backend/CLAUDE.md § Migrations).
 **What it asserts.** Over every `*.sql` in a `src/main/resources/db/migration` directory anywhere under `backend/`
 (build output excluded), and the pin file `scripts/applied_migrations.sha256`:
 
-  1. *Name shape.* `V<yyyymmddHHMM>__<module>_<slug>.sql`, the module one of `MODULES`. Twelve digits, so
+  1. *Name shape.* `V<yyyymmddHHMM>__<module>_<slug>.sql`, the module one of `MODULES` — derived from
+     `settings.gradle.kts` (`core` plus the last segment of every included `:apps:<name>`), never listed. Twelve digits, so
      versions compare as numbers the way Flyway compares them, and the owner is readable without opening the path.
      *The name's module is the file's module:* the Gradle project whose migration root holds the file (`:core` →
      `core`, `:apps:<x>` → `<x>`, `backend_tree.project_of`) must be the module the name says. The composition root
@@ -40,9 +41,10 @@ a file is unchanged *since its line was written*, not that the line was written 
 an edit that re-pins in the same commit is green by design, and before the release that is the rule. After the
 release, an edit to a released migration plus its pin line is still green — the release line documents the
 moment, the review of the pin diff is what holds it. (c) The owning module is read from the directory: a project whose
-`projectDir` is re-pointed in the settings is not modelled (`backend_tree.gradle_projects`). (d) `MODULES` is a constant here until the
-build's included projects are the source (cr-platform-gradle-modules step 8b): a third application is then a
-guard edit, red until made.
+`projectDir` is re-pointed in the settings is not modelled (`backend_tree.gradle_projects`). (d) `MODULES` is the
+settings' word: an application included under a name that is not its migrations' prefix is red on every file, and
+two applications whose last path segments coincide (`:apps:x`, `:apps:y:x`) would share one name — the second is
+refused by `validate_backend_module_graph.py` rule (a), which admits `:apps:<name>` only.
 """
 from __future__ import annotations
 
@@ -56,10 +58,19 @@ import backend_tree  # where the backend's sources live — resolved by glob, ne
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 BACKEND = ROOT / "backend"
 PIN_FILE = ROOT / "scripts" / "applied_migrations.sha256"
-MODULES = ("core", "memories")
 CORE = "core"
 
-NAME = re.compile(r"^V(\d{12})__(" + "|".join(MODULES) + r")_\w+\.sql$")
+
+def modules() -> tuple[str, ...]:
+    """The modules a migration may name, derived from `settings.gradle.kts`: `core` when `:core` is included, plus
+    the last segment of every included `:apps:<name>` — so a third application is a settings line, not a guard edit."""
+    projects = backend_tree.gradle_projects()
+    apps = sorted(p.rsplit(":", 1)[-1] for p in projects if p.startswith(":apps:"))
+    return ((CORE,) if ":core" in projects else ()) + tuple(apps)
+
+
+MODULES = modules()
+NAME = re.compile(r"^V(\d{12})__(" + "|".join(re.escape(m) for m in MODULES) + r")_\w+\.sql$")
 PIN_LINE = re.compile(r"^([0-9a-f]{64})  (\S+)$")
 RELEASE_LINE = re.compile(r"^release: (none|\d{12})$")
 CREATE_TABLE = re.compile(r"\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)", re.IGNORECASE)
@@ -83,6 +94,11 @@ def statements(path: pathlib.Path) -> list[str]:
 
 def main() -> int:
     errors: list[str] = []
+    if CORE not in MODULES:
+        print(f"MIGRATION VERSIONS VALIDATION FAILED:\n  - {BACKEND.relative_to(ROOT)}/settings.gradle.kts includes no "
+              f"`:core` — the module names a migration may carry are derived from the included projects, and the "
+              f"platform's is missing.")
+        return 1
     dirs = migration_dirs()
     files = sorted(f for d in dirs for f in d.glob("*.sql"))
     if not files:
