@@ -38,7 +38,7 @@ acceptanceCriteria:
   - id: slug-collision-rejected
     text: A name whose blinded slug already exists under the parent is rejected (UNIQUE(parentId, slugToken), 409) — deterministic slug.
     coverage:
-      backend: { integration: [NodesSliceTest.slugCollisionPerParentIs409] }
+      backend: { integration: [NodesCoreSliceTest.slugCollisionPerParentIs409] }
       web: { unit: [src/shared/naming.test.ts] }
   - id: illegal-structure-rejected
     text: A CHAPTER cannot live at a folder level (it belongs inside a Memory); the server rejects it (422).
@@ -47,7 +47,7 @@ acceptanceCriteria:
   - id: authz-boundary
     text: A non-member of the scope gets 404; an unauthenticated caller gets a generic 401.
     coverage:
-      backend: { integration: [NodesSliceTest.nonMemberIs404, NodesSliceTest.unauthenticatedIs401] }
+      backend: { integration: [NodesCoreSliceTest.nonMemberIs404, NodesCoreSliceTest.unauthenticatedIs401] }
   - id: delete-scoped-to-node
     text: Deleting a node is bound to the node's own scope — a member of a different scope cannot delete it by addressing it through their own scope; the cross-scope delete is refused (404, non-enumerable) and the foreign node survives.
     coverage:

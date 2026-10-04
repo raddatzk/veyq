@@ -5,11 +5,15 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
 ## Prove your work
 - `./gradlew check` (compile + slice tests) — runs on **in-memory H2** (`%test`, hermetic + fast). Run from
   `backend/`, it checks every project: `:core` (`backend/core`, the platform — its tests run as `:core:test`),
-  `:apps:memories` (`backend/apps/memories`, the Memories application's code; no tests yet), the root (`:test`, the
-  composition — no main code — and every other test until the module split moves them) and `:test-support` (the
-  helpers the tests use; no tests). **A `--tests` filter must name the project that holds the
-  class** — `./gradlew :core:test --tests '*SessionPurgeTest'`, `./gradlew :test --tests '*LoginSliceTest'`: a bare
-  `test --tests X` fails "No tests found" in every project without a match. **Each project with `@QuarkusTest`s holds
+  `:apps:memories` (`backend/apps/memories`, the Memories application; its tests run as `:apps:memories:test`), the
+  root (`:test`, the composition — no main code — and only the whole-app tests: `OperatorBlindProbeTest`, the posture
+  and entity sweeps, `ModuleCompositionTest`) and `:test-support` (the helpers the tests share; no tests). **A test
+  lives where what it exercises runs:** in `:core` if it passes with core alone, in `:apps:memories` if it needs
+  Memories at runtime — every share creation (core refuses a share on a kind no application supports), every
+  `MEMORY`/`CHAPTER` placement, a seam's registered partition — even when its package is core's. **A `--tests`
+  filter must name the project that holds the class** — `./gradlew :core:test --tests '*SessionPurgeTest'`,
+  `./gradlew :apps:memories:test --tests '*ShareSliceTest'`: a bare `test --tests X` fails "No tests found" in every
+  project without a match. **Each project with `@QuarkusTest`s holds
   its own `%test` keys** in `src/test/resources/application-test.properties` beside a comment-only
   `application.properties` anchor (a profile file is read only beside one); the base config is `:core`'s
   `src/main/resources/application.properties`. Shared test helpers live in `:test-support`, never in a

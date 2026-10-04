@@ -114,4 +114,4 @@ acceptanceCriteria:
       mint a share under it (ADR 0029 §7).
     coverage:
       backend:
-        integration: [ShareSharedScopeSliceTest.theOwnerDeletesALinkAndItIsGoneEverywhere, ScopesSliceTest.aPurgedGroupsShareIdsStayDead]
+        integration: [ShareSharedScopeSliceTest.theOwnerDeletesALinkAndItIsGoneEverywhere, ScopesMemoriesSliceTest.aPurgedGroupsShareIdsStayDead]

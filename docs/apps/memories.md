@@ -42,7 +42,7 @@ implement. The generic blob upload and the storage quota are core's (`core.blob`
 through `UploadCompletion`, measures a link's contributed blobs through `UploadAdmission`, and places its `MEMORY`
 and `CHAPTER` in the tree through `NodeKindRules` (core places only `FOLDER`). Core and Memories are Gradle modules of their own (`:core` in
 `backend/core`, `:apps:memories` in `backend/apps/memories`, which depends on core and never the reverse), composed
-by the root `backend/` into the one fast-jar; Memories' tests still run in the root project. The node `kind` is still the contract's closed `FOLDER`/`MEMORY`/`CHAPTER` enum, and on the web `features/memory` is the application (core imports it nowhere but the composition root and asks a
+by the root `backend/` into the one fast-jar; Memories' tests run in `:apps:memories`, beside the core tests that need an application at runtime. The node `kind` is still the contract's closed `FOLDER`/`MEMORY`/`CHAPTER` enum, and on the web `features/memory` is the application (core imports it nowhere but the composition root and asks a
 registry for what to render), though its directory name and five single-claim slots are still Memories-shaped. The
 rest of the series is not done; [ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)
 Consequences lists it.

@@ -3,14 +3,17 @@
 // never the reverse (Gradle refuses the cycle); no application depends on another. The root `backend/` composes it
 // into the one fast-jar, where its jar is `lib/main/com.veyq.veyq-memories.jar` — never deployed on its own.
 //
-// No `io.quarkus` plugin: a module applies it only for `@QuarkusTest`s of its own (`gradle/module.gradle.kts`), and
-// Memories' tests still run in the root until they move here (cr-platform-gradle-modules step 8a) — then this module
-// also takes `testImplementation(project(":test-support"))` and its own `src/test/resources/application-test.properties`
-// beside a comment-only `application.properties` anchor.
+// Its tests (`./gradlew :apps:memories:test`) are the Memories application's own and the core behaviour that needs an
+// application at runtime — every share creation (core refuses a share on a kind no `ShareGuestWrites` supports), every
+// `MEMORY`/`CHAPTER` placement, the seams' registered partitions. They boot core plus Memories: its own `%test` keys sit
+// in `src/test/resources/application-test.properties` beside a comment-only `application.properties` anchor.
 plugins {
     kotlin("jvm")
     kotlin("plugin.allopen")
     `java-library`
+    // Only for this module's own `@QuarkusTest`s: a library `@QuarkusTest` fails without the plugin. Its application
+    // tasks are disabled in gradle/module.gradle.kts — the one fast-jar is the root's.
+    id("io.quarkus")
 }
 
 apply(from = "../../gradle/module.gradle.kts")
@@ -19,4 +22,10 @@ apply(from = "../../gradle/openapi.gradle.kts")
 
 dependencies {
     implementation(project(":core"))
+
+    // The shared test helpers (`test-support/build.gradle.kts` says why a project, not `java-test-fixtures`).
+    testImplementation(project(":test-support"))
+    testImplementation("io.quarkus:quarkus-junit")
+    testImplementation("io.rest-assured:rest-assured")
+    testImplementation(kotlin("test"))
 }

@@ -12,9 +12,16 @@ that call the race harness (`race(` or `whileUncommitted(` from `testing/Race.kt
 latch or a barrier. Derived from the code, not listed, so a new race test is in the next run without anyone
 registering it ([race_classes]). Whole classes run, not only their race methods: the non-race methods of a race
 class are cheap and prove the class still boots on MariaDB. Each class runs in the Gradle project that owns its
-test root (`:core:test --tests A :test --tests B`, [project_filters]): a bare `test --tests X` fails with "No tests
-found" in every project without a match. The class → project map is printed before the run, and a test root no
-project owns or a filter no class matches ends the run before Docker starts.
+test root (`:core:test --tests A`, `:apps:memories:test --tests B`, [project_filters]): a bare `test --tests X` fails
+with "No tests found" in every project without a match. The class → project map is printed before the run, and a test
+root no project owns or a filter no class matches ends the run before Docker starts.
+
+**One database per project, one Gradle run per project.** A project's test JVM migrates with the migrations on ITS
+classpath — `:core`'s holds the core baseline only, `:apps:memories`' the core and the Memories baselines. One shared
+database fails the second project to boot: measured (cr-platform-gradle-modules step 8a), after the Memories run had
+applied both baselines, every `:core` class failed Flyway's validate on the Memories baseline it does not have
+(`FlywayValidateException`, 1 failed, 245 skipped). So the container holds a fresh database per project
+([database_of]) and each project runs in its own Gradle invocation, pointed at its own.
 
 **What it never touches.** The owner's dev database (`veyq-mariadb`, port 3306). The container here has its own
 name, binds a free 127.0.0.1 port, is created fresh per run (`--rm`, a fresh database each time) and is stopped
@@ -27,7 +34,8 @@ until a run's log shows the race classes executed it admits nothing (ADR 0040), 
 Usage:
     python3 scripts/run_backend_races_on_mariadb.py [--tests PATTERN ...]   # from the repo root
 
-With `--tests`, only those Gradle test filters run (e.g. `'*ShareSharedScopeSliceTest'`). Exit code: Gradle's.
+With `--tests`, only those Gradle test filters run (e.g. `'*ShareSharedScopeSliceTest'`). Exit code: the first
+failing project's Gradle exit code, 0 when every project is green.
 `VEYQ_TEST_TIMEOUT_S` caps the Gradle run (default 2400).
 """
 from __future__ import annotations
@@ -113,14 +121,18 @@ def project_filters(filters: list[str]) -> dict[str, list[str]]:
     return by_project
 
 
-def gradle_command(by_project: dict[str, list[str]]) -> list[str]:
-    """One Gradle run: `<project>:test --rerun --tests A …` per project that holds a filter, root as `:test`."""
-    cmd = ["./gradlew"]
-    for project in sorted(by_project):
-        cmd += [f"{project.rstrip(':')}:test", "--rerun"]
-        for f in by_project[project]:
-            cmd += ["--tests", f]
+def gradle_command(project: str, filters: list[str]) -> list[str]:
+    """One project's Gradle run: `<project>:test --rerun --tests A …`, the root as `:test`."""
+    cmd = ["./gradlew", f"{project.rstrip(':')}:test", "--rerun"]
+    for f in filters:
+        cmd += ["--tests", f]
     return cmd
+
+
+def database_of(project: str) -> str:
+    """The project's own database in the throwaway container: `veyq` for the root, `veyq_core`, `veyq_apps_memories`."""
+    slug = project.strip(":").replace(":", "_")
+    return f"veyq_{slug}" if slug else "veyq"
 
 
 def free_port() -> int:
@@ -129,7 +141,7 @@ def free_port() -> int:
         return s.getsockname()[1]
 
 
-def start(image: str, port: int) -> None:
+def start(image: str, port: int, databases: list[str]) -> None:
     subprocess.run(
         ["docker", "run", "--rm", "-d", "--name", NAME, "-p", f"127.0.0.1:{port}:3306",
          "-e", f"MARIADB_ROOT_PASSWORD={PASSWORD}", "-e", "MARIADB_DATABASE=veyq",
@@ -142,6 +154,12 @@ def start(image: str, port: int) -> None:
             capture_output=True, text=True, timeout=30,
         )
         if ready.returncode == 0:
+            for db in databases:
+                subprocess.run(
+                    ["docker", "exec", NAME, "mariadb", "-uroot", f"-p{PASSWORD}", "-e",
+                     f"CREATE DATABASE IF NOT EXISTS `{db}`; GRANT ALL ON `{db}`.* TO 'veyq'@'%';"],
+                    check=True, capture_output=True, text=True, timeout=60,
+                )
             return
         time.sleep(2)
     sys.exit("the throwaway MariaDB did not become ready")
@@ -154,14 +172,20 @@ def main(argv: list[str]) -> int:
         print(f"{project}: {' '.join(by_project[project])}", flush=True)
     image, port = pinned_image(), free_port()
     print(f"race run on {image} at 127.0.0.1:{port}: {len(filters)} filter(s) in {len(by_project)} project(s)", flush=True)
-    start(image, port)
+    start(image, port, [database_of(p) for p in by_project])
     try:
-        env = dict(os.environ)
-        env["VEYQ_TEST_DB_KIND"] = "mariadb"
-        env["VEYQ_TEST_DB_URL"] = f"jdbc:mariadb://127.0.0.1:{port}/veyq?user=veyq&password={PASSWORD}"
-        cmd = gradle_command(by_project)
         timeout = int(os.environ.get("VEYQ_TEST_TIMEOUT_S", "2400"))
-        return subprocess.run(cmd, cwd=BACKEND, env=env, timeout=timeout).returncode
+        failed = 0
+        for project in sorted(by_project):
+            env = dict(os.environ)
+            env["VEYQ_TEST_DB_KIND"] = "mariadb"
+            env["VEYQ_TEST_DB_URL"] = (
+                f"jdbc:mariadb://127.0.0.1:{port}/{database_of(project)}?user=veyq&password={PASSWORD}")
+            print(f"{project}: database {database_of(project)}", flush=True)
+            rc = subprocess.run(gradle_command(project, by_project[project]), cwd=BACKEND, env=env,
+                                timeout=timeout).returncode
+            failed = failed or rc
+        return failed
     finally:
         subprocess.run(["docker", "stop", NAME], capture_output=True, timeout=120)
 

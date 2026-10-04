@@ -75,7 +75,7 @@ acceptanceCriteria:
           - UploadWindowSliceTest.startSignsOnlyTheFirstWindowOfABlobLargerThanOne
           - UploadWindowSliceTest.aWindowSignsTheNextChunksAndMarksTheSessionLive
           - UploadWindowSliceTest.aWindowFromOutsideTheBlobIsRangeInvalid
-          - UploadWindowSliceTest.aCompletedSessionHasNoWindow
+          - UploadWindowMemoriesSliceTest.aCompletedSessionHasNoWindow
       web:
         unit: [src/features/memory/media.test.ts]
     gaps:
@@ -94,8 +94,8 @@ acceptanceCriteria:
     coverage:
       backend:
         integration:
-          - UploadWindowSliceTest.aSecondMemberCannotCompleteAnotherMembersSession
-          - UploadWindowSliceTest.aSecondMemberCannotCommitAnotherMembersSessionAsACover
+          - UploadWindowMemoriesSliceTest.aSecondMemberCannotCompleteAnotherMembersSession
+          - UploadWindowMemoriesSliceTest.aSecondMemberCannotCommitAnotherMembersSessionAsACover
           - UploadWindowSliceTest.aWindowOfAnotherMembersSessionIsUploadNotFound
           - UploadWindowSliceTest.aRemovedMemberIsRefusedAtTheNextWindow
           - ShareUploadWindowSliceTest.aSecondIdentityCannotCompleteAnotherIdentitysSession
@@ -157,7 +157,7 @@ acceptanceCriteria:
           - ChunkFramesTest.aSizeNoFrameSequenceHasIsImpossible
           - S3BlobStorePresigningTest.everyPresignedPutSignsItsChunksExactLength
         integration:
-          - MediaSliceTest.aDeclarationWhoseShapeTheSizeDoesNotFixIsShapeInvalid
+          - MediaCoreSliceTest.aDeclarationWhoseShapeTheSizeDoesNotFixIsShapeInvalid
           - MediaBudgetBranchSliceTest.aChunkShortOfItsDerivedLengthFailsTheItemEvenWithTheTotalUnderTheDeclaration
       web:
         unit: [src/features/memory/media.test.ts, src/sw/range.test.ts]
