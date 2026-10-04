@@ -16,7 +16,7 @@
 
 `veyq_blob` is scope-keyed, but every blob is referenced today through Memories' tables — `veyq_media.blob_id`,
 `veyq_media_derivative.blob_id`, or the cover slot `veyq_node.cover_blob_id` (a node column, no media row) — and its
-`K_blob` is wrapped under a Memory's `K_mem` (measured: `grep -rn 'blob_id' backend/core/src/main/resources/db/migration backend/src/main/resources/db/migration`).
+`K_blob` is wrapped under a Memory's `K_mem` (measured: `grep -rn 'blob_id' backend/core/src/main/resources/db/migration backend/apps/memories/src/main/resources/db/migration`).
 Files needs a blob that **a file node references** without going through media, wrapped under a key that is not
 `K_mem`: a **blob-role decision** (who may reference a blob, what reclaims it, which key wraps it). Two prerequisites
 follow from it and are not built yet: a generic `veyq_node_attachment(node_id, slot, blob_id)` table with real foreign

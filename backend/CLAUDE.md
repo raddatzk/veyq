@@ -4,9 +4,10 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
 
 ## Prove your work
 - `./gradlew check` (compile + slice tests) — runs on **in-memory H2** (`%test`, hermetic + fast). Run from
-  `backend/`, it checks every project: `:core` (`backend/core`, the platform — its tests run as `:core:test`), the
-  root (`:test`, the Memories application's code and every other test until the module split moves them) and
-  `:test-support` (the helpers both use; no tests). **A `--tests` filter must name the project that holds the
+  `backend/`, it checks every project: `:core` (`backend/core`, the platform — its tests run as `:core:test`),
+  `:apps:memories` (`backend/apps/memories`, the Memories application's code; no tests yet), the root (`:test`, the
+  composition — no main code — and every other test until the module split moves them) and `:test-support` (the
+  helpers the tests use; no tests). **A `--tests` filter must name the project that holds the
   class** — `./gradlew :core:test --tests '*SessionPurgeTest'`, `./gradlew :test --tests '*LoginSliceTest'`: a bare
   `test --tests X` fails "No tests found" in every project without a match. **Each project with `@QuarkusTest`s holds
   its own `%test` keys** in `src/test/resources/application-test.properties` beside a comment-only
@@ -47,9 +48,10 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
 ## Conventions (see [developer styleguide](../docs/crosscutting/developer-styleguide.md))
 - **API-first.** Edit the spec in `../contracts/api/` — core's specs at its top level, the Memories application's in
   `memories/`, shared schemas in `_common.openapi.yaml` (core's); the Gradle build generates Kotlin models + JAX-RS
-  interfaces per owner (`openApiGenerateCore` → `build/generated/openapi/core/`, package `com.veyq.core.generated`;
-  `openApiGenerateMemories` → `build/generated/openapi/memories/`, package `com.veyq.memories.generated`;
-  `openApiGenerateSpecs` runs both). A schema two owners share lives in `_common` and is ONE generated type, core's:
+  interfaces per owner, in the module that owns them (`:core:openApiGenerateCore` → `core/build/generated/openapi/core/`,
+  package `com.veyq.core.generated`; `:apps:memories:openApiGenerateMemories` →
+  `apps/memories/build/generated/openapi/memories/`, package `com.veyq.memories.generated`; `openApiGenerateSpecs`
+  from `backend/` runs both). A schema two owners share lives in `_common` and is ONE generated type, core's:
   the Memories set maps every `_common` schema to core's class, and a Memories model named like a core one fails the
   build; so does `x-veyq-channel` on a Memories operation (the admin channel is core's). Never hand-write a DTO that
   duplicates a generated model.
@@ -90,8 +92,8 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   uuid field is refused by deserialization on its own.
 - **Migrations:** Flyway; `schema-management.strategy=none` — Flyway owns the schema. **One global version
   scheme across modules:** `V<yyyymmddHHMM>__<module>_<slug>.sql` (the UTC minute you write it; `<module>` is
-  `core` or `memories`), each in its owner's `src/main/resources/db/migration/` (`backend/core/…` for core, the root
-  project's for Memories until it is a module of its own) — one classpath path, `db/migration`, so Flyway reads them
+  `core` or `memories`), each in its owner's `src/main/resources/db/migration/` (`backend/core/…` for core,
+  `backend/apps/memories/…` for Memories; the guard holds the name to the directory) — one classpath path, `db/migration`, so Flyway reads them
   as one set and two files of one version fail startup. The schema starts from two baselines,
   `V202610041200__core_baseline.sql` and `V202610041201__memories_baseline.sql`; a Memories migration references
   core tables or its own, a core migration never names a Memories table (ADR 0079). A new migration sorts above

@@ -7,6 +7,10 @@ direction of ADR 0079 held in the schema (backend/CLAUDE.md § Migrations).
 
   1. *Name shape.* `V<yyyymmddHHMM>__<module>_<slug>.sql`, the module one of `MODULES`. Twelve digits, so
      versions compare as numbers the way Flyway compares them, and the owner is readable without opening the path.
+     *The name's module is the file's module:* the Gradle project whose migration root holds the file (`:core` →
+     `core`, `:apps:<x>` → `<x>`, `backend_tree.project_of`) must be the module the name says. The composition root
+     `:` owns no migration, and a root no included project owns is red too — Gradle would not build it, so its
+     migrations would silently never ship.
   2. *Unique versions across every directory.* Flyway refuses two files with one version at boot; this says so
      before a boot, and names both paths.
   3. *Pinned.* Every migration has a line in the pin file whose SHA-256 equals the file's bytes, and every line
@@ -35,9 +39,8 @@ dynamic SQL, or a reference split across lines between `REFERENCES` and its tabl
 a file is unchanged *since its line was written*, not that the line was written before anyone applied the file:
 an edit that re-pins in the same commit is green by design, and before the release that is the rule. After the
 release, an edit to a released migration plus its pin line is still green — the release line documents the
-moment, the review of the pin diff is what holds it. (c) The module of a file is read from its name; from step 7
-of cr-platform-gradle-modules on it must also match the module whose source root holds the file, which this guard
-does not check yet (all migrations sit in one directory until then). (d) `MODULES` is a constant here until the
+moment, the review of the pin diff is what holds it. (c) The owning module is read from the directory: a project whose
+`projectDir` is re-pointed in the settings is not modelled (`backend_tree.gradle_projects`). (d) `MODULES` is a constant here until the
 build's included projects are the source (cr-platform-gradle-modules step 8b): a third application is then a
 guard edit, red until made.
 """
@@ -97,6 +100,14 @@ def main() -> int:
                           f"in {MODULES}.")
             continue
         version = int(m.group(1))
+        project = backend_tree.project_of(f)
+        home = project.rsplit(":", 1)[-1] if project not in (None, ":") else None
+        if home != m.group(2):
+            where = ("a directory no included project owns" if project is None
+                     else "the composition root `:`, which owns no migration" if project == ":"
+                     else f"`{project}`'s migration root")
+            errors.append(f"{f.relative_to(ROOT)}: named `{m.group(2)}` but sits in {where}. A migration lives in the "
+                          f"module its name says (ADR 0079): core's in `:core`, an application's in `:apps:<name>`.")
         migrations.append((version, m.group(2), f))
         by_version.setdefault(version, []).append(f)
     for version, paths in sorted(by_version.items()):

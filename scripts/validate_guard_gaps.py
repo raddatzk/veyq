@@ -272,13 +272,13 @@ SCOPE_ENTITY_ANCHOR = "class ScopeEntity : PanacheEntityBase {\n"
 BANNER_MIGRATION = "backend/core/src/main/resources/db/migration/V209912312359__core_guard_gap_scope_banner.sql"
 # Where a bypass of the single-deleter rule is forged. A scheduled purge is the plausible place: it already
 # reclaims rows, so deleting the objects inline is the one-line shortcut ADR 0062 Decision 3 forbids.
-TRASH_PURGE = "backend/src/main/kotlin/com/veyq/memories/media/MediaTrashPurge.kt"
+TRASH_PURGE = "backend/apps/memories/src/main/kotlin/com/veyq/memories/media/MediaTrashPurge.kt"
 TENANT_HANDLER = "backend/core/src/main/kotlin/com/veyq/core/admin/tenant/TenantHandler.kt"
 TENANT_REPROJECT_CALL = "        if (outcome is SuspendOutcome.Done) reproject()\n"
 TRASH_PURGE_CTOR_ANCHOR = "    private val store: MediaStore,\n"
 # The derivative arm of the share blob-GET authorization, which lives in the media implementation of
 # `SharedSubtreeContributor` (ADR 0079 phase 1, step 7) — the place the live-twin check must follow it to.
-MEDIA_SHARE_CONTRIBUTOR = "backend/src/main/kotlin/com/veyq/memories/media/MediaSharedSubtreeContributor.kt"
+MEDIA_SHARE_CONTRIBUTOR = "backend/apps/memories/src/main/kotlin/com/veyq/memories/media/MediaSharedSubtreeContributor.kt"
 DERIVATIVE_ARM_LINE = '            MediaDerivativeEntity.find("mediaId = ?1", m.id).list().forEach { ids.add(it.blobId) }\n'
 
 # Where a Host read through an alias constant is forged: the recovery resource is where the hand parse that
@@ -608,7 +608,7 @@ def forge_direct_store_delete_bypass(root: pathlib.Path) -> str:
 CORE_NODE_FORGERY = "backend/core/src/main/kotlin/com/veyq/core/node/GuardGapProbe.kt"
 
 
-MEDIA_SCOPE_ERASER = "backend/src/main/kotlin/com/veyq/memories/media/MediaScopeEraser.kt"
+MEDIA_SCOPE_ERASER = "backend/apps/memories/src/main/kotlin/com/veyq/memories/media/MediaScopeEraser.kt"
 
 
 def forge_media_eraser_drops_a_table(root: pathlib.Path) -> str:
@@ -619,7 +619,7 @@ def forge_media_eraser_drops_a_table(root: pathlib.Path) -> str:
     return "the media ScopeEraser no longer deleting MediaEntity (must be REJECTED — veyq_media would block the scope row)"
 
 
-MEDIA_NODE_ERASER = "backend/src/main/kotlin/com/veyq/memories/media/MediaNodeSubtreeEraser.kt"
+MEDIA_NODE_ERASER = "backend/apps/memories/src/main/kotlin/com/veyq/memories/media/MediaNodeSubtreeEraser.kt"
 
 
 def forge_media_node_eraser_deleted(root: pathlib.Path) -> str:
