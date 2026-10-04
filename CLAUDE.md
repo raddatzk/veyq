@@ -25,7 +25,7 @@ The server is **operator-blind**: it stores and serves only ciphertext.
   each splits into **core** (the platform) and **applications** (Memories first; compiled in, no runtime
   loading; an application may use core, never the reverse, never another application). **Partly moved** —
   the backend names every package for its owner, `com.veyq.core` (guarded: it imports no Memories code) and
-  `com.veyq.memories`, still inside the one Gradle module; all of `web/` is still organised per feature; ADR 0079's
+  `com.veyq.memories`; core is its own Gradle module (`backend/core`), Memories still lives in the root project; all of `web/` is still organised per feature; ADR 0079's
   Consequences say what is not done, and
   [`docs/apps/`](docs/apps/README.md) maps what belongs where.
 - `admin-web/` — the **Server-Owner administration** surface: its own package, its own container, reachable

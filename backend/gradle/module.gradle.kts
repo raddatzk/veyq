@@ -34,9 +34,16 @@ extensions.getByName("kotlin").withGroovyBuilder {
     ((getProperty("compilerOptions") as Any).withGroovyBuilder { getProperty("javaParameters") } as Property<Boolean>).set(true)
 }
 
+// A module is a library: what it builds on reaches its dependants through `api`, the BOM (the root's version) too,
+// so a dependant and the module's own test fixtures resolve the same versions.
+apply(plugin = "java-library")
 dependencies {
-    "implementation"(enforcedPlatform("io.quarkus.platform:quarkus-bom:3.36.0"))
+    "api"(enforcedPlatform("io.quarkus.platform:quarkus-bom:3.36.0"))
 }
+
+// **Every module is indexed.** A module's jar carries an empty `src/main/resources/META-INF/beans.xml`: without it
+// Quarkus does not index the jar, its injected beans fail the build, and — silently — an `@All` list loses the
+// module's implementations and its `@Path` interfaces answer 404 (validate_backend_module_graph.py rule (c)).
 
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
@@ -51,8 +58,17 @@ tasks.withType<Test>().configureEach {
 // The Quarkus plugin is applied to a module only so its own `@QuarkusTest`s can boot (a library `@QuarkusTest`
 // fails without it). Its application tasks belong to the root alone: `./gradlew quarkusBuild` and `quarkusDev`,
 // run from `backend/` as the Dockerfile, CI and the IntelliJ `Run Backend` configuration do, select the task in
-// every project that has it — so a module's would build a second `quarkus-app` or start a second dev server.
+// every project that has it — so a module's would build a second `quarkus-app` or start a second dev server. A
+// disabled task's dependencies still run, so the chain below `quarkusBuild` is disabled too (measured: the
+// module's `quarkusAppPartsBuild` ran, and failed, under a disabled `quarkusBuild`).
 plugins.withId("io.quarkus") {
-    tasks.matching { it.name in setOf("quarkusBuild", "quarkusDev", "quarkusRun", "quarkusRemoteDev", "imageBuild", "imagePush", "deploy") }
-        .configureEach { enabled = false }
+    val applicationTasks = setOf(
+        "quarkusBuild", "quarkusAppPartsBuild", "quarkusDependenciesBuild", "quarkusDev", "quarkusRun",
+        "quarkusRemoteDev", "quarkusTest", "quarkusIntTest", "imageBuild", "imagePush", "deploy",
+        "buildAotEnhancedImage", "buildNative", "testNative",
+    )
+    tasks.matching { it.name in applicationTasks }.configureEach {
+        enabled = false
+        setDependsOn(emptyList<Any>())
+    }
 }

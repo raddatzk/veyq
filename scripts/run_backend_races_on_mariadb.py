@@ -7,10 +7,14 @@ made after a later row lock read the state from before it. Every H2 race test wa
 (ADR 0078). This runner points the race classes at the real engine, so the suite's race evidence is evidence
 about production too.
 
-**What it runs.** Every test class that races — the files under `backend/src/test` that call the race harness
-(`race(` or `whileUncommitted(` from `testing/Race.kt`) or build their own overlap from a latch or a barrier. Derived from the code, not listed, so a new race test is
-in the next run without anyone registering it ([race_classes]). Whole classes run, not only their race methods:
-the non-race methods of a race class are cheap and prove the class still boots on MariaDB.
+**What it runs.** Every test class that races — the files in every backend test root (`backend_tree.test_roots()`)
+that call the race harness (`race(` or `whileUncommitted(` from `testing/Race.kt`) or build their own overlap from a
+latch or a barrier. Derived from the code, not listed, so a new race test is in the next run without anyone
+registering it ([race_classes]). Whole classes run, not only their race methods: the non-race methods of a race
+class are cheap and prove the class still boots on MariaDB. Each class runs in the Gradle project that owns its
+test root (`:core:test --tests A :test --tests B`, [project_filters]): a bare `test --tests X` fails with "No tests
+found" in every project without a match. The class → project map is printed before the run, and a test root no
+project owns or a filter no class matches ends the run before Docker starts.
 
 **What it never touches.** The owner's dev database (`veyq-mariadb`, port 3306). The container here has its own
 name, binds a free 127.0.0.1 port, is created fresh per run (`--rm`, a fresh database each time) and is stopped
@@ -69,6 +73,56 @@ def race_classes() -> list[str]:
     return found
 
 
+def _test_classes() -> list[tuple[str, str, Path]]:
+    """`(fully-qualified name, simple name, file)` of every Kotlin file in a test root (fixtures hold no tests)."""
+    out = []
+    for f in backend_tree.kotlin_files(backend_tree.test_roots()):
+        m = re.search(r"^package\s+([\w.]+)", f.read_text(), re.MULTILINE)
+        out.append((f"{m.group(1)}.{f.stem}" if m else f.stem, f.stem, f))
+    return out
+
+
+def _matches(pattern: str, fqn: str, simple: str) -> bool:
+    """Gradle's `--tests` semantics, as far as a class is concerned: `*` is a wildcard, a pattern that starts with
+    an upper-case letter names the simple class name, and a trailing `.method` part may follow the class."""
+    name = simple if pattern[:1].isupper() else fqn
+    rx = "^" + re.escape(pattern).replace(r"\*", ".*") + "$"
+    return re.match(rx, name) is not None or any(
+        re.match("^" + re.escape(pattern[:i]).replace(r"\*", ".*") + "$", name)
+        for i, c in enumerate(pattern) if c == "."
+    )
+
+
+def project_filters(filters: list[str]) -> dict[str, list[str]]:
+    """`{Gradle project: [--tests filter]}` — each filter goes to every project whose test root holds a class it
+    matches, because `gradlew test --tests X` fails with "No tests found" in a project with no match (measured).
+    The map is total: a test root no included project owns, or a filter no test class matches, ends the run here,
+    before Docker starts — a filter that cannot be placed is never skipped."""
+    for root in backend_tree.test_roots():
+        if backend_tree.project_of(root) is None:
+            sys.exit(f"{root.relative_to(REPO)} is a test root no project in backend/settings.gradle.kts owns — "
+                     f"its race classes could not be run; include the module or move the tests")
+    classes = _test_classes()
+    by_project: dict[str, list[str]] = {}
+    for flt in filters:
+        owners = sorted({backend_tree.project_of(f) for fqn, simple, f in classes if _matches(flt, fqn, simple)})
+        if not owners:
+            sys.exit(f"--tests {flt!r} matches no test class in any test root")
+        for p in owners:
+            by_project.setdefault(p, []).append(flt)
+    return by_project
+
+
+def gradle_command(by_project: dict[str, list[str]]) -> list[str]:
+    """One Gradle run: `<project>:test --rerun --tests A …` per project that holds a filter, root as `:test`."""
+    cmd = ["./gradlew"]
+    for project in sorted(by_project):
+        cmd += [f"{project.rstrip(':')}:test", "--rerun"]
+        for f in by_project[project]:
+            cmd += ["--tests", f]
+    return cmd
+
+
 def free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
@@ -95,16 +149,17 @@ def start(image: str, port: int) -> None:
 
 def main(argv: list[str]) -> int:
     filters = [argv[i + 1] for i, a in enumerate(argv) if a == "--tests" and i + 1 < len(argv)] or race_classes()
+    by_project = project_filters(filters)
+    for project in sorted(by_project):
+        print(f"{project}: {' '.join(by_project[project])}", flush=True)
     image, port = pinned_image(), free_port()
-    print(f"race run on {image} at 127.0.0.1:{port}: {len(filters)} filter(s)", flush=True)
+    print(f"race run on {image} at 127.0.0.1:{port}: {len(filters)} filter(s) in {len(by_project)} project(s)", flush=True)
     start(image, port)
     try:
         env = dict(os.environ)
         env["VEYQ_TEST_DB_KIND"] = "mariadb"
         env["VEYQ_TEST_DB_URL"] = f"jdbc:mariadb://127.0.0.1:{port}/veyq?user=veyq&password={PASSWORD}"
-        cmd = ["./gradlew", "test", "--rerun"]
-        for f in filters:
-            cmd += ["--tests", f]
+        cmd = gradle_command(by_project)
         timeout = int(os.environ.get("VEYQ_TEST_TIMEOUT_S", "2400"))
         return subprocess.run(cmd, cwd=BACKEND, env=env, timeout=timeout).returncode
     finally:

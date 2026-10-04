@@ -23,7 +23,7 @@ The defects that bought it:
   The guard was called `validate_adr_citations.py` until the second shape joined.
 
 Scope — the surfaces where an id is *always a live citation*, so "must resolve" is unambiguous:
-  `contracts/`, `backend/src`, the `src/` of every npm workspace (read from the root `package.json`, so a new
+  `contracts/`, every `.kt` under `backend/` (all Gradle modules), the `src/` of every npm workspace (read from the root `package.json`, so a new
   package is scanned the day it is added — the hard-coded list this replaced named `web/src` alone and missed
   `admin-web/src` and `packages/crypto/src` for as long as they existed), `docs/features/`,
   `docs/crosscutting/`, and the ADR bodies `docs/decisions/*.md`.
@@ -71,7 +71,9 @@ def workspace_srcs() -> list[pathlib.Path]:
 # Load-bearing surfaces: a directory root + the file suffixes to read under it.
 SCAN = [
     (ROOT / "contracts", {".yaml", ".yml", ".json", ".md"}),
-    (ROOT / "backend" / "src", {".kt"}),
+    # The whole backend, not `backend/src`: every Gradle module keeps its sources in its own `src` (`backend/core/src`,
+    # `backend/test-support/src`, …), and a root that names one project stops seeing the others.
+    (ROOT / "backend", {".kt"}),
     *[(src, CODE_SUFFIXES) for src in workspace_srcs()],
     (FEATURES, {".md"}),
     (CROSSCUTTING, {".md"}),

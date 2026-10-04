@@ -574,7 +574,7 @@ anchors on `SetMemberRoleRequest.role.enum`, and a `$ref` would have broken it. 
 symbol first, then choose the shape — the shape that keeps every anchor green is a constraint, not an afterthought.
 
 **The mutation manifests anchor on FILES, and a green gate does not say you broke one.** `web/stryker.mutate.json`,
-`packages/crypto/stryker.mutate.json` and `backend/pitest.scope.json` admit a file only while it is pure.
+`packages/crypto/stryker.mutate.json` and `backend/core/pitest.scope.json` admit a file only while it is pure.
 `cr-meta-writes-carry-the-version-they-read` put a PATCH into `nodeMeta.ts`, which is in the web scope; the gate
 (break 95) stayed green at 98.7 % while that file fell from 100 % to 96 %. So the inventory greps the three manifests for
 every file a CR edits, and a file in one keeps its I/O next door.

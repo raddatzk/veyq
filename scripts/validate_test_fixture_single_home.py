@@ -66,7 +66,8 @@ def main() -> int:
     name = entity_name()
     if name is None:
         print(
-            f"TEST FIXTURE HOME VALIDATION FAILED:\n  - no single entity in {rel(MAIN)} maps the table "
+            f"TEST FIXTURE HOME VALIDATION FAILED:\n  - no single entity in "
+            f"{rel(backend_tree.BACKEND)}/**/src/main/kotlin maps the table "
             f"{TABLE!r}. If the account table was renamed, point this guard at the new name — do not delete it."
         )
         return 1

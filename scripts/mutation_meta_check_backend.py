@@ -43,7 +43,7 @@ code outside the manifest — the dumb stores and the `@QuarkusTest` slices are 
 
 Deliberately diff-free — a stale glob points at nothing regardless of what a given PR changed, so the
 invariant holds on every run, not only when the diff intersects the scope. It reads the SAME manifest the
-`pitest{}` build block consumes (backend/pitest.scope.json), so the mutator and this guard never disagree on
+`pitest{}` build block consumes (backend/core/pitest.scope.json), so the mutator and this guard never disagree on
 WHAT is in scope.
 
 Not a `validate_*.py`: the trust-chain job runs those on every push with no build, but this needs PIT's
@@ -61,8 +61,8 @@ import xml.etree.ElementTree as ET
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 BACKEND = ROOT / "backend"
-MANIFEST = BACKEND / "pitest.scope.json"
-REPORT = BACKEND / "build" / "reports" / "pitest" / "mutations.xml"
+MANIFEST = BACKEND / "core" / "pitest.scope.json"  # :core owns PIT (it mutates core classes only)
+REPORT = BACKEND / "core" / "build" / "reports" / "pitest" / "mutations.xml"
 
 # One undetected mutant per glob — the per-class expression of the build threshold's own headroom clause. NOT
 # a percentage: see the docstring for why 95 % cannot be applied per class at this scope's sizes.
@@ -97,7 +97,7 @@ def main() -> int:
             failed = True
             print(f"::error::meta-check: scope glob '{glob}' matched 0 mutations — it points at nothing (a renamed "
                   f"class, or a typo) while its siblings carry the run, so failWhenNoMutations stayed green. Fix "
-                  f"backend/pitest.scope.json or the class name (ADR 0045 §4).")
+                  f"backend/core/pitest.scope.json or the class name (ADR 0045 §4).")
             continue
 
         if undetected > SURVIVOR_BUDGET:

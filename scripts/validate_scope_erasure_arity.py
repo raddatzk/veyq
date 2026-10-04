@@ -12,7 +12,7 @@ unreclaimed — on the operator's own disk, under self-hosting.
 
 The closure is read from three keys that are all cheap and all textual:
 
-  - *edges* — every `REFERENCES <table>` in `backend/src/main/resources/db/migration`, read in **numeric**
+  - *edges* — every `REFERENCES <table>` in every migration root (`backend_tree.migrations()`), read in **numeric**
     migration (version) order, each attributed to the table of the `CREATE TABLE` / `ALTER TABLE` statement it
     sits in.
   - *closure* — a walk from `veyq_scope` down those edges. Transitive, not one-hop: a child of a child blocks the
@@ -41,7 +41,7 @@ both are silently wrong, so they are recorded here rather than re-derived:
       green — and that migration is the moment to teach this guard the replay again.
   (c) It reads **declarations, not a database**. A constraint added outside `db/migration`, or an `ON DELETE`
       clause wrapped onto a line of its own, is invisible — every such clause in this tree sits on its
-      `REFERENCES` line today (`grep -rn 'ON DELETE' backend/src/main/resources/db/migration` → 4 hits, all
+      `REFERENCES` line today (`grep -rn 'ON DELETE' backend --include='*.sql'` → 4 hits, all
       inline), which is what makes the one-line assumption safe rather than lucky. `ON DELETE SET NULL` is
       deliberately **not** accepted as coverage: it stops the FK from refusing, and leaves a row pointing at an
       erased scope, which is the leak this use-case exists to close.

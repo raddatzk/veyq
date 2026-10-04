@@ -1,5 +1,6 @@
 package com.veyq.core.ratelimit
 
+import com.veyq.core.testing.MainOutputs
 import io.quarkus.arc.Arc
 import io.quarkus.security.Authenticated
 import io.quarkus.test.junit.QuarkusTest
@@ -13,8 +14,6 @@ import org.junit.jupiter.api.Test
 import java.lang.reflect.Method
 import java.nio.file.Files
 import java.nio.file.Paths
-import kotlin.io.path.extension
-import kotlin.io.path.invariantSeparatorsPathString
 
 /**
  * The mandatory-posture guard of ADR 0051, and the sibling of `DefaultDenyTest`: an endpoint that says nothing
@@ -31,9 +30,9 @@ import kotlin.io.path.invariantSeparatorsPathString
  * `trust-chain` skill, not left as a reassuring word.
  *
  * **Enumeration is asked twice, on different keys**, because a sweep that silently misses an endpoint is worse
- * than no sweep: it reads as coverage. Angle 1 walks the **compiled main classes directory** (complete by
- * construction — it sees every class that was built). Angle 2 asks the **CDI container** which `@Path` beans were
- * actually deployed. A disagreement fails before any posture is checked; agreement is worth something here
+ * than no sweep: it reads as coverage. Angle 1 walks the **compiled main outputs of every backend project**
+ * (`MainOutputs`; complete by construction — it sees every class that was built). Angle 2 asks the **CDI
+ * container** which `@Path` beans were actually deployed. A disagreement fails before any posture is checked; agreement is worth something here
  * because the two answer different questions (what was compiled vs. what is live).
  *
  * **The named blind spot:** test-scope resources are excluded, by code source, not by package. `DefaultDenyTest`'s
@@ -43,25 +42,17 @@ import kotlin.io.path.invariantSeparatorsPathString
 @QuarkusTest
 class RateLimitPostureSweepTest {
 
-    // --- enumeration, angle 1: everything that was compiled into the main classes directory ------------------
+    // --- enumeration, angle 1: everything that was compiled into a main output of a backend project --------
 
-    private val mainClassesDir = Paths.get(
-        // Any production class resolves to the main output dir; a test class would resolve to the test one, which
-        // is exactly the boundary that keeps the DefaultDeny probe out.
-        RateLimitPosture::class.java.protectionDomain.codeSource.location.toURI(),
-    )
-
+    // Every backend project's main output on the classpath, directory or jar (`MainOutputs`): the module split put
+    // core's classes into `veyq-core.jar` and left the rest in the root's classes directory. Test outputs are not
+    // main outputs, which is exactly the boundary that keeps the DefaultDeny probe out.
     private fun compiledResourceClasses(): Set<Class<*>> {
         val loader = Thread.currentThread().contextClassLoader
-        Files.walk(mainClassesDir).use { paths ->
-            return paths.filter { it.extension == "class" }
-                .map { mainClassesDir.relativize(it).invariantSeparatorsPathString.removeSuffix(".class").replace('/', '.') }
-                .map { runCatching { Class.forName(it, false, loader) }.getOrNull() }
-                .filter { it != null && isJaxrsResource(it) }
-                .map { it!! }
-                .toList()
-                .toSet()
-        }
+        return MainOutputs.classNames()
+            .mapNotNull { runCatching { Class.forName(it, false, loader) }.getOrNull() }
+            .filter { isJaxrsResource(it) }
+            .toSet()
     }
 
     // --- enumeration, angle 2: what the CDI container actually deployed --------------------------------------

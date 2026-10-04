@@ -112,7 +112,7 @@ application to be separated from.
   generic blob operations, served by core's `BlobResource`), the Memories specs in `contracts/api/memories/`, every
   schema two owners share defined once in core's `_common.openapi.yaml`. Inside core the
   kernel/slice layering is a declared list, not a directory: the packages every slice builds on are `KERNEL` in
-  `validate_kernel_imports_no_slices.py`, and a kernel package names no slice. Not done: the Gradle module split; the node `kind` is still the contract's
+  `validate_kernel_imports_no_slices.py`, and a kernel package names no slice. Core is its own Gradle module, `:core` (`backend/core`), whose jar the one fast-jar carries; not done: Memories as a module of its own; the node `kind` is still the contract's
   closed `FOLDER`/`MEMORY`/`CHAPTER` enum, which core's generated API decodes.
   **The web side is separated by import direction, not by name or by kind:** `web/src/features/memory` is the
   application, and no core file imports it except the composition root `web/src/applications.ts`; the shell asks a
