@@ -17,9 +17,9 @@ import java.time.Instant
  * exists only inside each member's ciphertext `wrappedGrant` on their membership row. The TENANT root scope
  * is keyed `id = tenant_id` (born at activation, cr-0010); PERSONAL/GROUP get fresh ids.
  *
- * A shared, **query-only** entity (ADR 0007 — the `MembershipEntity` precedent): it lives in `shared/` so the
- * scope-access gate (`shared/membership/ScopeAccess`) can read a scope's tenant and `deletedAt` without a
- * `shared → features` import. Every mutation stays in the spaces feature's stores.
+ * A shared, **query-only** entity (ADR 0007 — the `MembershipEntity` precedent): it lives in the kernel so the
+ * scope-access gate (`core/membership/ScopeAccess`) can read a scope's tenant and `deletedAt` without a
+ * kernel → slice import. Every mutation stays in the spaces feature's stores.
  *
  * `@DynamicUpdate`: an UPDATE writes only the columns its transaction changed. The stores mutate this row by
  * read-modify-write (a rename, an icon, a soft-delete), and a full-row UPDATE would write back the [memberRemovals]

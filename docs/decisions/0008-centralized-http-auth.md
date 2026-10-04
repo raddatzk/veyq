@@ -36,7 +36,7 @@ standard annotations.
   authenticated-read guard. Resolution runs off the IO thread (blocking JPA).
 - **Authorization is an annotation at the resource boundary**, not a hand-written guard: `@PermitAll`
   (public — setup, login, refresh, logout), `@Authenticated` (any valid session — account key-material /
-  wraps), `@RolesAllowed(SERVER_OWNER)` (tenant admin). The role constant lives in code (`shared/identity/
+  wraps), `@RolesAllowed(SERVER_OWNER)` (tenant admin). The role constant lives in code (`core/identity/
   ServerRoles`), shared by the annotation and the IdentityProvider.
 - **Default-deny.** `quarkus.security.jaxrs.deny-unannotated-endpoints=true` — an endpoint with no security
   annotation is denied. The annotation is now the **single mandatory place** the token-or-not decision is

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Guard that rate-limit state lives in exactly one place: `backend/.../shared/ratelimit/` (ADR 0052).
+"""Guard that rate-limit state lives in exactly one place: the kernel package `com.veyq.core.ratelimit` (ADR 0052).
 
-**What it asserts.** No file under `backend/src/main/kotlin` whose name contains `Limiter` or `Counter` holds
+**What it asserts.** No main Kotlin file of the backend whose name contains `Limiter` or `Counter` holds
 rate-limit state — a concurrent map, a hand-rolled map, an atomic counter — unless it sits inside the shared
-`shared/ratelimit/` package. Plus the inverse, so the check cannot pass by pointing at nothing: the shared
+`core/ratelimit/` package. Plus the inverse, so the check cannot pass by pointing at nothing: the shared
 package must itself still hold that state (a renamed or emptied core makes this red instead of vacuously green).
 One core, one shell, one place where a bucket is stored.
 
@@ -40,8 +40,7 @@ import sys
 import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-CORE = (backend_tree.package_dirs("com.veyq.core.ratelimit")
-        or [backend_tree.BACKEND / "src/main/kotlin/com/veyq/core/ratelimit"])[0]
+CORE = backend_tree.package_dir("com.veyq.core.ratelimit")
 
 # A file that *is* a rate limiter by name. Both parts are load-bearing: `Counter` catches the shell shape
 # (`FixedWindowCounter`, `TokenBucketCounter`), `Limiter` the handler-side ones (`ShareRateLimiter`,
@@ -100,7 +99,7 @@ def main() -> int:
         for n, marker, line in state_hits(path):
             errors.append(
                 f"{rel}:{n} holds rate-limit state (`{marker}`) outside the shared core — every bound runs on "
-                f"`shared/ratelimit/TokenBucketCounter` (ADR 0052), which owns the map, the bounded key set and "
+                f"`core/ratelimit/TokenBucketCounter` (ADR 0052), which owns the map, the bounded key set and "
                 f"the arithmetic. Offending line: {line}")
 
     core_state = [p.relative_to(ROOT) for p in limiter_files() if CORE in p.parents and state_hits(p)]

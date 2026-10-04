@@ -51,7 +51,8 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   `sharing` met it from the other side (ADR 0075): only its `/api/scopes/…` route answered 405 while the tag's
   `/api/shares` routes kept working — so a green suite for the tag's other routes proves nothing; test that URL.
 - **Feature-slice + two axes ([ADR 0001](../docs/decisions/0001-backend-http-adapter-vs-application-slicing.md)):**
-  `features/<area>/<usecase>/…`. A `…Resource` implements the generated `…Api` (thin adapter), delegates to
+  `com.veyq.core.<area>/<usecase>/…` (an application's slices under `com.veyq.<application>`, today
+  `com.veyq.memories`). A `…Resource` implements the generated `…Api` (thin adapter), delegates to
   a `…Handler`; persistence in a `…Store` (Panache). Resources are resource-shaped, not per-use-case.
 - **Validation + sanitization belong in the spec** via `x-field-extra-annotation` (bean-validation
   `@NotBlank`/`@Size`/`@Pattern` + a Jackson trim deserializer) → enforced by `@Valid` at the boundary,

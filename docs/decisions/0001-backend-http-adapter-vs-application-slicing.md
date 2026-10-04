@@ -23,18 +23,20 @@ Forcing such an endpoint into one use-case's `Resource` is wrong, and was the tr
 
 Separate the two axes:
 
-1. **Application/business layer = use-case-sliced.** `features/<area>/<use-case>/…Handler`. A use-case
+1. **Application/business layer = use-case-sliced.** `<area>/<use-case>/…Handler` under the owner's package
+   (`com.veyq.core`, or an application's such as `com.veyq.memories`). A use-case
    may have several handlers. This is where cohesion and the trust chain live.
 2. **HTTP adapter layer = resource-shaped.** One `…Resource` per generated `…Api` interface (OpenAPI
    tag / API resource), deliberately thin. Each operation is a **delegate to the relevant use-case
    handler**; an operation serving N use-cases dispatches to N handlers (or a small dispatcher).
 
 ```
-features/content/
+core/content/
   ContentResource.kt        # implements ContentApi (generated); thin; delegates per operation
-  NodesHandler.kt           # the Memory-tree use-cases (create/browse/rename/delete)
-  NodesStore.kt, Entities.kt
-  favorites/  FavoritesResource.kt → FavoritesHandler.kt  # the favorites use-case, same shape
+  NodesHandler.kt           # the node-tree use-cases (create/browse/rename/delete)
+  NodesStore.kt
+memories/favorites/
+  FavoritesResource.kt → FavoritesHandler.kt  # an application's use-case, same shape
 ```
 
 *(Illustrative — the actual content feature is flatter than one folder per use-case; the rule is the

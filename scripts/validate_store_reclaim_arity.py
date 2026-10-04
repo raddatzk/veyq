@@ -3,7 +3,7 @@
 
 **What it asserts.** Across `backend/src/main/kotlin`, with comments and string literals removed, there is
 **exactly one** call of `delete(...)` on a `BlobStore`, and it sits in
-`shared/blobstore/StoreReclaimSweep.kt`. Every other path that drops a row carrying a `storage_key` writes the
+`core/blobstore/StoreReclaimSweep.kt`. Every other path that drops a row carrying a `storage_key` writes the
 key to `veyq_store_reclaim` inside its own transaction and lets that sweep do the deleting.
 
 The invariant is not tidiness. Nine call sites meant nine places that could fail, none of which could report a

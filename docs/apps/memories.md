@@ -32,11 +32,12 @@ nested into **Chapters**. Product language **Memory / Chapter** is unchanged; fo
 
 ## Separated only in part
 
-Measured 2026-10-04 (`ls backend/src/main/kotlin/com/veyq/core backend/src/main/kotlin/com/veyq/app/features`):
-the backend's `core` packages hold the node, blob, upload-session and share entities and storage usage, and import
-no Memories code; core reaches media and favorites through interfaces they implement. But Memories is not its own
-package: the node tree's handler and store (`features.content`), the share handler and store
-(`features.sharing`), and `media` are still feature packages, the node `kind` is still the closed
+Measured 2026-10-04 (`ls backend/src/main/kotlin/com/veyq/core backend/src/main/kotlin/com/veyq/memories`):
+every backend class lives in its owner's package — the platform in `com.veyq.core` (the node tree in
+`core.content`/`core.node`, sharing in `core.sharing`), Memories in `com.veyq.memories` (`media`, `favorites`,
+`itemfavorites`) — and core imports no Memories code; core reaches media and favorites through interfaces they
+implement. But Memories is not its own Gradle module yet, the generic blob upload half still lives in
+`memories.media`, the `MEMORY`/`CHAPTER` placement rules are still in core's `NodesHandler`, the node `kind` is still the closed
 `FOLDER`/`MEMORY`/`CHAPTER` set, and on the web `features/memory` is the application (core imports it nowhere but the composition root and asks a
 registry for what to render), though its directory name and five single-claim slots are still Memories-shaped. The
 rest of the series is not done; [ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)

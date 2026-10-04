@@ -83,6 +83,17 @@ def package_dirs(package: str, roots: list[pathlib.Path] | None = None) -> list[
     return [r / rel for r in (main_roots() if roots is None else roots) if (r / rel).is_dir()]
 
 
+def package_dir(package: str, roots: list[pathlib.Path] | None = None) -> pathlib.Path:
+    """The first directory that holds `package`; if none does, its spot under the first root — a path that does
+    not exist, so the caller's existence check is what reports it (never a fallback spelled elsewhere)."""
+    found = package_dirs(package, roots)
+    if found:
+        return found[0]
+    candidates = main_roots() if roots is None else roots
+    base = candidates[0] if candidates else BACKEND / "src" / "main" / "kotlin"
+    return base / pathlib.Path(*package.replace("/", ".").split("."))
+
+
 def source_file(name: str, roots: list[pathlib.Path] | None = None) -> pathlib.Path:
     """The file a dotted FQN (`com.veyq.x.Name` → `Name.kt`) or a slash path (`com/veyq/x/Name.kt`) names, under
     whichever of `roots` (default: the main roots) holds it. If none does, its spot under the first root — a path

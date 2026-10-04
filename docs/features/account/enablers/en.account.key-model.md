@@ -127,7 +127,7 @@ it is explicitly declared a survivor, and that declaration is a decision about t
 built. The default protects the case a reset exists for — a device- or authenticator-held KEK (`DEVICE`,
 `DEVICE_KEY`, a future `PASSKEY`) would keep opening the account under a credential that was just replaced,
 and "someone else holds my device" is a reason people reset. The backend holds this classification once, in
-`shared/identity`.
+`core/identity`.
 
 ## Rotation after a compromise
 

@@ -19,8 +19,8 @@ security argument. The decision is whether those are built once, as the platform
 or once per product.
 
 Measured 2026-10-03 (substrate: branch `main` of this repo, `grep`/`ls` over the tree): `veyq_media`,
-`veyq_share` and `veyq_bucket` already key on a `node_id`; the backend has one feature package per area
-(`backend/src/main/kotlin/com/veyq/app/features/{account,admin,content,media,sharing,spaces,tasks,platform}`)
+`veyq_share` and `veyq_bucket` already key on a `node_id`; the backend had one feature package per area
+(`features/{account,admin,content,media,sharing,spaces,tasks,platform}` under the then `com.veyq.app` package)
 and `shared/`; the node `kind` is closed to `[FOLDER, MEMORY, CHAPTER]` in `contracts/api/content.openapi.yaml`.
 That was the state when this was decided; what has moved since is under Consequences.
 
@@ -98,9 +98,13 @@ application to be separated from.
   upload-session and share entities, storage usage, and six interfaces through which core reaches Memories code
   without importing it — `ScopeEraser`, `NodeSubtreeEraser`, `MembershipEraser`, `GuestIdentityUsage`, `SharedSubtreeContributor`, `ShareGuestWrites` — and no
   platform file imports Memories code. (`MembershipEraser` is a different seam from the erasers: nothing of the scope is
-  erased, one user loses access to one scope, and item favorites drop that user's rows.) Not done: the Gradle module split; the node `kind` is still
-  the closed `FOLDER`/`MEMORY`/`CHAPTER` set (contract and `NodeEntity`); `NodesStore`, `NodesHandler`,
-  `SharingStore`, `SharingHandler`, `ScopePurge` and `NodeSubtreePurge` still live in `features.*` packages.
+  erased, one user loses access to one scope, and item favorites drop that user's rows.) Every class is named for its owner: the platform is `com.veyq.core.<feature>`, Memories
+  `com.veyq.memories.<feature>` (the generated API is still one `com.veyq.app.generated` package). Inside core the
+  kernel/slice layering is a declared list, not a directory: the packages every slice builds on are `KERNEL` in
+  `validate_kernel_imports_no_slices.py`, and a kernel package names no slice. Not done: the Gradle module split;
+  the generic blob upload and quota half still lives in `memories.media`; the `MEMORY`/`CHAPTER` placement rules
+  are still in core's `NodesHandler`; the node `kind` is still the closed `FOLDER`/`MEMORY`/`CHAPTER` set
+  (contract and `NodeEntity`).
   **The web side is separated by import direction, not by name or by kind:** `web/src/features/memory` is the
   application, and no core file imports it except the composition root `web/src/applications.ts`; the shell asks a
   build-time registry (`web/src/core/applications/registry.ts`) what to render for a node kind, which slot an
@@ -113,7 +117,7 @@ application to be separated from.
   (inbox #329); the i18n catalog is one file and `styles/memory.css` is global; `NodeKind` is the generated closed
   enum, so the convention that core never names `MEMORY`/`CHAPTER` is guarded, not typed.
   Docs describing the target say which of these they rely on.
-- **Guards move with the code.** `validate_kernel_imports_no_slices.py` encodes feature → shared; the
+- **Guards move with the code.** `validate_kernel_imports_no_slices.py` encodes slice → kernel; the
   application → core, never core → application and never application → application rules need the same form of
   guard (an import check over the moved packages, bite-tested with a core file importing an application) before
   the first package moves, or the direction is prose. The core → application half now exists in the same guard

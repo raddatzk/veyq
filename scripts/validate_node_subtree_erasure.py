@@ -15,7 +15,7 @@ the purge reaches it. An entity is reached when
 At least one `NodeSubtreeEraser` implementation must exist at all; zero is red on its own.
 
 **The defect that bought it.** A review forgery (2026-10-04, ADR 0079 phase 1, step 6): with
-`features/media/MediaNodeSubtreeEraser.kt` deleted, `validate_scope_erasure_arity`, `validate_blob_reference_arity`
+`MediaNodeSubtreeEraser.kt` (then `features/media`, now `memories/media`) deleted, `validate_scope_erasure_arity`, `validate_blob_reference_arity`
 and `validate_store_reclaim_arity` all stayed green, and `NodeSubtreePurge` would then delete the node rows with
 nothing erasing their media, derivative and bucket rows or reclaiming their blobs. Unlike the scope side there is
 **no foreign key onto `veyq_node`**, so nothing at runtime refuses either: the orphans are silent — inbox #131,

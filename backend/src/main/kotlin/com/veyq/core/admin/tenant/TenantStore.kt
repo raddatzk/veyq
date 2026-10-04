@@ -184,7 +184,7 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
     fun belongsToTenant(userId: String, tenantId: String): Boolean = membership.belongsToTenant(userId, tenantId)
 
     /** A tenant owner holds an OWNER membership on the tenant **root scope** (cr-0163), not merely any OWNER row
-     *  carrying this `tenantId`. Delegates to the single home in `shared/membership/`. */
+     *  carrying this `tenantId`. Delegates to the single home in `core/membership/`. */
     fun isOwner(userId: String, tenantId: String): Boolean = membership.isTenantOwner(userId, tenantId)
 
     /** Mint a single-use MEMBER invite on an active tenant, superseding any prior ACTIVE invite to that email, carrying

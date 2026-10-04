@@ -151,7 +151,7 @@ class TenantInviteEntity : PanacheEntityBase {
         const val CONSUMED = "CONSUMED"
         const val EXPIRED = "EXPIRED"
 
-        /** Invite roles (mirror `shared/membership` MembershipEntity roles): the role the invite confers on acceptance. */
+        /** Invite roles (mirror `core/membership` MembershipEntity roles): the role the invite confers on acceptance. */
         const val OWNER = "OWNER"
         const val MEMBER = "MEMBER"
 

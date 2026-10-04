@@ -18,7 +18,7 @@ import org.jboss.resteasy.reactive.server.ServerRequestFilter
  * the space switcher reaches every tenant's spaces by id from whichever domain the app is open on, so a filter
  * keyed on it left a suspended tenant's content, shares and jobs reachable through any other domain. What refuses
  * the tenant from everywhere is the scope-access gate every scope-, tenant-, share- and job-addressed operation asks
- * (`shared/membership/ScopeAccess`, uc.spaces.scope-access); this filter keeps what only a `Host` check can do —
+ * (`core/membership/ScopeAccess`, uc.spaces.scope-access); this filter keeps what only a `Host` check can do —
  * refusing sign-in and the Host-resolved operations on the tenant's own domain.
  *
  * **The API, and only the API.** JAX-RS sees every request the static handler did not answer, so without the

@@ -230,7 +230,7 @@ A refined CR nails **decisions, not keystrokes**:
   name the weakest attacker the new layer stops and what that attacker reads anyway, and put the cheap variant
   with its residual beside the expensive one.
 - **Spike when the shape is unclear.** The right abstraction often only emerges from N real usages (that is why
-  `shared/membership/MembershipStore` came out clean — 5 usages, not a guess). If refinement can't settle the
+  `core/membership/MembershipStore` came out clean — 5 usages, not a guess). If refinement can't settle the
   shape from reasoning, run a time-boxed subagent spike over the surface and fold the inventory back in — don't
   guess an abstraction into the CR.
 - **`satisfies:` decides where the acceptance criteria land — so decide it, don't inherit it.** A criterion

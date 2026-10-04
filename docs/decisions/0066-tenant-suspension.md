@@ -65,7 +65,7 @@ sign-in included. Neither needs any session state.**
   `POST /api/tenants/{tenantId}/reactivate`, or one status-transition operation — the CR decides the exact
   shape), guarded the same way every other tenant-admin operation already is.
 - **The enforcement is per operation: `ScopeAccess.check`.** Every scope-, tenant-, share- and job-addressed
-  operation calls the one gate in `shared/membership` inline, and the gate reads the addressed scope's tenant
+  operation calls the one gate in `core/membership` inline, and the gate reads the addressed scope's tenant
   status on every call ([uc.spaces.scope-access](../features/spaces/use-cases/uc.spaces.scope-access.md) owns the
   whole rule). Membership is answered **first** ([ADR 0042](0042-http-failure-projection.md)), so a non-member
   gets the same 404 as for an invented id and never learns that a tenant is suspended; a member gets

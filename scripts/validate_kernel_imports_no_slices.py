@@ -91,11 +91,9 @@ KERNEL = [
     "com.veyq.core.tenant",
     "com.veyq.core.validation",
 ]
-# The Memories application, as the platform may not see it. The last entry is forbidden prospectively.
+# The Memories application, as the platform may not see it: its whole namespace, so a new Memories package is
+# covered the day it appears.
 APPLICATION = [
-    "com.veyq.memories.media",
-    "com.veyq.memories.favorites",
-    "com.veyq.memories.itemfavorites",
     "com.veyq.memories",
 ]
 # A qualified name in code, not preceded by another name part. Its package is resolved against the declared ones.

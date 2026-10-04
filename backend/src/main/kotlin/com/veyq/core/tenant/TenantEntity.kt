@@ -17,8 +17,8 @@ import org.hibernate.annotations.DynamicUpdate
  * content row or session takes part in. The scope-access gate refuses it on every operation acting on the tenant,
  * from any domain (uc.spaces.scope-access); `TenantSuspensionFilter` additionally refuses the tenant's own domain.
  *
- * A shared, **query-only** entity (ADR 0007 — the `MembershipEntity` precedent): it lives in `shared/` so the gate
- * and the `Host` machinery beside it can read a tenant's status and domain without a `shared → features` import.
+ * A shared, **query-only** entity (ADR 0007 — the `MembershipEntity` precedent): it lives in the kernel so the gate
+ * and the `Host` machinery beside it can read a tenant's status and domain without a kernel → slice import.
  * Every mutation stays in the admin feature's `TenantStore`.
  */
 @Entity

@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """Guard that three security-relevant lookups each have exactly one home in the backend.
 
-**What it asserts.** Over every `backend/src/main/kotlin/**/*.kt`, three kinds of lookup occur only in their home:
+**What it asserts.** Over every main Kotlin file of the backend (`backend_tree`), three kinds of lookup occur only in their home:
 
-  A. **A request's Host header is read** only in `shared/tenant/TenantHostResolver.kt`. Spellings: a string
+  A. **A request's Host header is read** only in `core/tenant/TenantHostResolver.kt`. Spellings: a string
      literal naming the forwarded-host header (any case), a `getHeader`/`getHeaderString`/`header` call whose
      literal argument is the plain host header (any case), the `HttpHeaders` host constant, and Vert.x's
      `.host()` / `.authority()` on a request.
   B. **A tenant is looked up by domain** only in `TenantHostResolver.kt`: a Panache `find`/`count`/`list`/`stream`
      whose query string starts with the `domain` column.
-  C. **A user is looked up by email** only in `shared/identity/AccountStore.kt`: `VeyqUser.find`/`count`/`list`/
+  C. **A user is looked up by email** only in `core/identity/AccountStore.kt`: `VeyqUser.find`/`count`/`list`/
      `stream` whose query string starts with the `email` column.
 
 Each home must itself still carry its rule's lookup, so a home that moved or was renamed reads red ("nothing

@@ -11,7 +11,7 @@ import org.hibernate.annotations.DynamicUpdate
 
 /**
  * Membership — the (user, scope, role, grant) relation (ADR 0007). A **shared, query-only primitive** (cr-0160):
- * it lives in `shared/membership/` because half a dozen feature slices read it, so it must not belong to any one
+ * it lives in the kernel package `core/membership/` because half a dozen feature slices read it, so it must not belong to any one
  * of them. It references a `scopeId` (cr-0026); the TENANT root scope is keyed `scopeId == tenantId`, a
  * PERSONAL/GROUP scope gets its own id. `wrappedGrant` is the scope key sealed to the member's identity public
  * key — opaque ciphertext the server stores but never opens. The first row is the owner's, born at tenant
