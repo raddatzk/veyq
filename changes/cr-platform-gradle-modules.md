@@ -46,15 +46,15 @@ returns when `writesFor` finds no writer (`ShareUploadOutcome.NotContributable`,
 change while Memories is present. The alternative — keep `0` and rely on the core-alone test — leaves the one quiet
 failure mode in the series. Your call; say so if you want the open variant back.
 
-**Question 11 (from step 6's first task) — where the `%test` config and the shared test helpers live; before step
-6 commit 2.** Measured (step 6 § State): a `java-test-fixtures` output is not part of a `@QuarkusTest`'s application
-under Quarkus 3.36.0 — its resources are no config source, its classes load outside Quarkus (`LinkageError`, a null
-`Arc.container()`). So the decided layout (`application-test.properties` in `:core`'s fixtures; `TestFixtures` and the
-8a helpers in the fixtures jar) cannot run. Options: (a) `application-test.properties` beside the base in
-`core/src/main/resources` (measured to work for both modules; it ships in the main jar, as it does today) plus a
-test-support project for the helpers (unmeasured); (b) per-module `src/test/resources` copies of the `%test` keys and
-per-module helpers (works, measured for the config; duplicates what step 8a wanted single-homed). Recommendation:
-(a), with the test-support project spiked first — it also decides 8a's R14.
+**Question 11 — answered 2026-10-04 (owner): per-module `%test` config, helpers measured first; built in step 6
+commit 2.** The finding (step 6 § State): a `java-test-fixtures` output is not part of a `@QuarkusTest`'s
+application under Quarkus 3.36.0. The decision: the `%test` config goes neither into main resources nor into test
+fixtures — **each module with `@QuarkusTest`s has its own `src/test/resources/application-test.properties` beside its
+own comment-only `application.properties` anchor**, holding exactly the `%test` keys that module's tests need; nothing
+test-only ships in a main jar. Rule (g) checks the main classpath and each module's test classpath separately. The
+helpers: a separate test-support project was to be spiked, kept if Quarkus loads it inside the application. **It does
+(measured, step 6 § Outcome)**, so the helpers live in `:test-support` (`backend/test-support`), a
+`testImplementation` dependency of `:core` and the root — which also settles R14.
 
 1. **The shape of the baseline scripts — answered 2026-10-04 ("Passt so": option (a), as recommended; built in
    step 1).** The history (67 files) folds to the end state: 35 tables,
@@ -187,7 +187,7 @@ Third round (later the same day):
 
 Slicing order (the owner's, re-cut): MembershipEraser edge (0) → Flyway baseline reset (1) → package rename (2) →
 blob upload/quota to core (3) → `NodeKindRules` (4) → contracts split (5) → Gradle skeleton and `:core` (6) →
-`:apps:memories` (7) → test separation and the fixtures jar (8a) → module-graph guard completed, core-alone boot test,
+`:apps:memories` (7) → test separation and the shared helpers (8a) → module-graph guard completed, core-alone boot test,
 the old guards' hand-over, docs, retrospective (8b). Step 8 was one step in the third refine; the review split it
 because the test homes alone move most of the 169 test files (§ State) and must be green before the guards that read them change. Every step
 leaves `./gradlew check`, the web and admin-web `npm run check` where contracts or clients are touched,
@@ -314,8 +314,9 @@ application, moving the share contract's two `/media` operations out of core (qu
 
 | Module (dir) | Contains | Depends on |
 |---|---|---|
-| `:core` (`backend/core`) | `com.veyq.core.*` (former `app.core.*`, `shared.*`, the platform `features.*`, the node files of `features.content`); **the generic blob upload and quota** (`com.veyq.core.blob`: `ChunkFrames`, `BlobUploadHandler`, `BlobUploadStore`, `UploadSessionPurge`, `BlobResource`; `com.veyq.core.quota.StorageQuota`) and the three seams `UploadAdmission`, `UploadCompletion`, `NodeKindRules` with the `FOLDER` rule; generation of the core specs (including `blob.openapi.yaml`) into `com.veyq.core.generated.{api,model}` plus `AdminChannelOperations`; `TrimmingStringDeserializer` (as `com.veyq.core.validation…`); the core baseline migration; **the base `application.properties`** (every profile's ground truth, step 6); `beans.xml`; `java-test-fixtures` (the helpers both sides use, `TestBlob` and the fake-presign profile among them, and in its resources `application-test.properties` beside a comment-only `application.properties` anchor, step 6); core's tests; PIT plugin + `pitest.scope.json` + the PIT history file `backend/core/build/pitest/history.bin` | the Quarkus BOM and extensions |
-| `:apps:memories` (`backend/apps/memories`) | `com.veyq.memories.{media,favorites,itemfavorites}`: the `MediaStore`/`MediaHandler` rest (media, derivatives, buckets, covers, revision counters, trash, the media attach), the three seam implementations (`UploadAdmission`: per-link blob usage; `UploadCompletion`: media/derivative/bucket attach for `MEMORY`/`CHAPTER`; `NodeKindRules`: `MEMORY`/`CHAPTER` placement) and `MediaShareGuestWrites`; generation of `contracts/api/memories/*` into `com.veyq.memories.generated.{api,model}` with the shared schemas mapped to core's; the Memories baseline migration; `beans.xml`; Memories tests and the mixed tests (step 8a) | `:core` (+ its test fixtures for tests) |
+| `:core` (`backend/core`) | `com.veyq.core.*` (former `app.core.*`, `shared.*`, the platform `features.*`, the node files of `features.content`); **the generic blob upload and quota** (`com.veyq.core.blob`: `ChunkFrames`, `BlobUploadHandler`, `BlobUploadStore`, `UploadSessionPurge`, `BlobResource`; `com.veyq.core.quota.StorageQuota`) and the three seams `UploadAdmission`, `UploadCompletion`, `NodeKindRules` with the `FOLDER` rule; generation of the core specs (including `blob.openapi.yaml`) into `com.veyq.core.generated.{api,model}` plus `AdminChannelOperations`; `TrimmingStringDeserializer` (as `com.veyq.core.validation…`); the core baseline migration; **the base `application.properties`** (every profile's ground truth, step 6); `beans.xml`; core's tests, with their own `src/test/resources/application-test.properties` beside a comment-only anchor (question 11); PIT plugin + `pitest.scope.json` + the PIT history file `backend/core/build/pitest/history.bin` | the Quarkus BOM and extensions; `:test-support` for tests |
+| `:test-support` (`backend/test-support`) | the test helpers more than one module's tests use (`TestFixtures`, `TenantRoots`, `givenAdminChannel` since step 6; `TestBlob`, the fake-presign profile and the three CDI fakes at 8a), in `src/main/kotlin` with a `beans.xml`; a `testImplementation` dependency only, so it ships nothing; `backend_tree` reads its sources as a fixture root (question 11) | `:core` `compileOnly` (the module under test brings it at runtime), `quarkus-junit`, `rest-assured` |
+| `:apps:memories` (`backend/apps/memories`) | `com.veyq.memories.{media,favorites,itemfavorites}`: the `MediaStore`/`MediaHandler` rest (media, derivatives, buckets, covers, revision counters, trash, the media attach), the three seam implementations (`UploadAdmission`: per-link blob usage; `UploadCompletion`: media/derivative/bucket attach for `MEMORY`/`CHAPTER`; `NodeKindRules`: `MEMORY`/`CHAPTER` placement) and `MediaShareGuestWrites`; generation of `contracts/api/memories/*` into `com.veyq.memories.generated.{api,model}` with the shared schemas mapped to core's; the Memories baseline migration; `beans.xml`; Memories tests and the mixed tests (step 8a) | `:core` (+ `:test-support` for tests) |
 | root `backend/` (`com.veyq.app`) | `io.quarkus` composition, `src/main/resources` (the profile files `application-{dev,e2e,prod}.properties` beside a comment-only `application.properties` that anchors them — § Quarkus specifics; the web `dist` target), `quarkusBuild`/`quarkusDev`, the wrapper, `gradle/verification-metadata.xml`, the whole-app tests (`src/test`: `OperatorBlindProbeTest`, one composition test) | `:core`, `:apps:memories` |
 
 **One deliverable, intermediate jars named.** `quarkusBuild` in the root produces the one `quarkus-app/` the Dockerfile
@@ -377,11 +378,14 @@ default `VeyqConfig` needs) it boots a different application or none. So the bas
 
 The decided layout (step 6): `:core/src/main/resources/application.properties` = today's base file, moved whole;
 root `backend/src/main/resources/` = the anchor plus `application-{dev,e2e,prod}.properties`, unchanged;
-`application-test.properties` = `:core/src/testFixtures/resources/`, beside its own comment-only anchor, so `:core`'s
-tests and every dependant's tests read the `%test` keys from **one** file through the fixtures jar (today it ships in
-the main jar; after step 6 it does not). Rule (g) of `validate_backend_module_graph.py`, born in step 6: across all
-modules' `src/{main,testFixtures,test}/resources`, **no `(profile, key)` pair is defined in two files** (base =
-profile `""`; a `%profile.`-prefixed key counts as that profile), and an anchor holds no key. The overrides § State
+`application-test.properties` = **one per module with `@QuarkusTest`s**, in that module's `src/test/resources/` beside
+its own comment-only anchor, holding exactly the keys its tests need (question 11: a test-fixtures output is no config
+source for a `@QuarkusTest`, measured; before step 6 the file shipped in the main jar, after it no `%test` key does).
+Rule (g) of `validate_backend_module_graph.py`, born in step 6, judges **per classpath**: the main classpath (the main
+resources of the root and every module it ships) and each project's test classpath (its reachable main resources plus
+its own `src/test/resources`) — on each, **no `(profile, key)` pair is defined in two files** (base = profile `""`; a
+`%profile.`-prefixed key counts as that profile) and exactly one `application.properties` holds keys; every profile
+file has an anchor beside it; no config file sits in a test-fixtures output. The overrides § State
 measured (`dev` 2, `e2e` 6, `test` 3 keys over base) are different profiles and stay green — which is why the rule is
 keyed on the pair: keyed on the key alone, as the review first phrased it, it would be red on its first run. Library
 modules apply the `io.quarkus` plugin only where a `@QuarkusTest` runs (both, now); the root applies it for
@@ -1047,7 +1051,7 @@ code names `FOLDER` only, so the module cut never has to give `:core` a `MEMORY`
   no core main file imports them (the kernel guard holds it); `contract_specs.APPLICATIONS` names `memories` — a
   second application's spec directory is one entry there and one `SpecSet`.
 
-### 6 — Gradle skeleton and `:core`
+### 6 — Gradle skeleton and `:core` — **done 2026-10-04**
 
 *The big move. Two commits, each green (§ Steps): (1) the skeleton — `settings.gradle.kts` including an empty `:core`,
 `module.gradle.kts`, `validate_backend_module_graph.py` born with rule (g); (2) the moves
@@ -1071,15 +1075,15 @@ with the config, the Dockerfile and the race runner, which cannot be green apart
   baseline migration, the unit tests of that code (**including the four tests of `internal` members**, which stop
   compiling across a module boundary — two of them `@QuarkusTest`s, `SessionPurgeTest` and
   `TenantIngressProjectorTest`, § State — and the PIT scope's policy tests) into `backend/core` — the generic blob upload and quota (steps 3, 5), the three seams and their core halves, `ChunkFramesTest` and the generic tests of § State's table are core's from here (the other `@QuarkusTest`s among them move at step 8a). `:core` gets
-  `beans.xml`, the `io.quarkus` plugin (required for a library `@QuarkusTest`, and now needed at once), `java-test-fixtures`,
-  the PIT plugin, `pitest.scope.json` (still readable by `scripts/`; `build.gradle.kts:83` parses it, so it moves with
+  `beans.xml`, the `io.quarkus` plugin (required for a library `@QuarkusTest`, and now needed at once), a
+  `testImplementation` of `:test-support` (question 11; it was `java-test-fixtures` until measured), the PIT plugin, `pitest.scope.json` (still readable by `scripts/`; `build.gradle.kts:83` parses it, so it moves with
   the PIT block) and the PIT history. The Memories packages, their generation and **every other `@QuarkusTest` stay in
   the root** for now; the root depends on `:core`; the direction is already right.
 - **Config (decided here, § Quarkus specifics; R6).** `git mv backend/src/main/resources/application.properties
   backend/core/src/main/resources/` — whole, no key edited; the root gets a comment-only `application.properties`
-  anchor beside its unchanged `application-{dev,e2e,prod}.properties`; `application-test.properties` moves to
-  `backend/core/src/testFixtures/resources/` beside a comment-only anchor (core's own tests see it through the
-  fixtures, as every dependant's will at step 8a). `validate_backend_module_graph.py` is born in commit 1 with rule
+  anchor beside its unchanged `application-{dev,e2e,prod}.properties`; `application-test.properties` moves to the
+  root's `src/test/resources/` and `:core` gets its own with the keys its tests need, each beside a comment-only anchor
+  (question 11 — the planned home, `core/src/testFixtures/resources`, is no config source for a `@QuarkusTest`). `validate_backend_module_graph.py` is born in commit 1 with rule
   (g); rules (c), (e), (f) join in commit 2, where their subjects (core's `beans.xml`, the Dockerfile `COPY`, the
   `archivesName`) land; (a), (b), (d) at step 8b. Every scripts/
   reader of a properties file goes through `backend_tree` (the review found none that reads the classpath files
@@ -1130,8 +1134,8 @@ with the config, the Dockerfile and the race runner, which cannot be green apart
   states the path was moved.
 - **Done when:** the above; `backend/CLAUDE.md` § Prove your work lists the `:core:test` / `:test` split and the
   `--tests` filter rule.
-- **State 2026-10-04 — stopped at the first task: one premise of the layout failed in-tree; re-decide before
-  commit 2.** Landed (each commit green): `fix(backend)` — openapi.gradle.kts refused an empty spec set at
+- **State 2026-10-04 (first session) — stopped at the first task: one premise of the layout failed in-tree; re-decided
+  as question 11, then finished (Outcome below).** Landed (each commit green): `fix(backend)` — openapi.gradle.kts refused an empty spec set at
   *configuration* time, so the Dockerfile's warm-up (`gradlew help` before `contracts/` is copied) had failed since
   step 5 with "the core spec set is empty" while `check` stayed green (measured: the build-base files alone in a temp
   dir, `./gradlew --offline help` red on `7adde1bd`, green with the refusal moved into the generate task, which still
@@ -1176,6 +1180,79 @@ with the config, the Dockerfile and the race runner, which cannot be green apart
     candidates evicted by 3.20.0 etc., no new jar). `quarkusBuild` from `backend/` selects the module's task and its
     disabled task's dependencies still run (`:core:quarkusAppPartsBuild` ran and failed), so the module disables the
     whole chain.
+- **Outcome 2026-10-04 — step 6 done (commit 2), with question 11 as the owner answered it.** Substrate: worktree
+  branch off `main` `e0091727`. What landed, beyond the plan above:
+  - *Config:* the base `application.properties` moved whole to `:core` (bytes identical; git records it as an add plus
+    the root file becoming the anchor, since the root keeps a file of that name). `%test`: the root's file moved to
+    `backend/src/test/resources/` (all nine keys — its HTTP slice tests need the rate-limit, share-password and cookie
+    keys), `:core` got its own `core/src/test/resources/application-test.properties` with the six its tests need
+    (datasource ×2, both ports, the config-secret file, the halted scheduler), each beside a comment-only anchor.
+    `application-test.properties` no longer ships in any jar (measured: the fast-jar listing below).
+  - *Helpers — the spike, measured in-tree, then kept:* `:test-support` (`backend/test-support`, `kotlin("jvm")` +
+    the module convention, `compileOnly(project(":core"))`, `api` of `quarkus-junit` and `rest-assured`), a
+    `testImplementation` of `:core` and the root. A probe `@QuarkusTest` in **both** `:core` and the root printed
+    `TestFixtures`'s class loader = the test's = `VeyqUser`'s = `QuarkusClassLoader … Quarkus Runtime ClassLoader:
+    TEST`, `Arc.container()` non-null, `TestFixtures.seedUser()` persisted (no `LinkageError`); a scratch
+    `@ApplicationScoped` bean in it was injected (`@Inject`) with its `META-INF/beans.xml` and refused at boot
+    without it (`UnsatisfiedResolutionException: Unsatisfied dependency for type com.veyq.core.testing.SpikeBean`).
+    (Programmatic `Arc.container().instance(…)` alone reports it unavailable either way — ArC removes unused beans;
+    only an injection point is a valid probe.) The probes were deleted; `TestFixtures`, `TenantRoots` and
+    `givenAdminChannel` moved there. **This settles R14 for 8a.** `backend_tree` reads `:test-support`'s
+    `src/main/kotlin` as a fixture root, never a main root (`TEST_SUPPORT`, `is_test_support`), so guards over
+    production code do not read `TestFixtures` and the fixture-home guard does.
+  - *Rule (g), re-cut per classpath* (the owner's instruction): the main classpath (main resources of the root and
+    every module it reaches over `implementation`/`api`/`runtimeOnly` edges, read from the build files) and one test
+    classpath per project with a `src/test` (its reachable main resources + its test edges' closure + its own
+    `src/test/resources`); on each: every `(profile, key)` once, exactly one keyed `application.properties`; plus
+    (g3) every profile file anchored and the new (g4) no config file in a test-fixtures output. Rule (c) (every
+    included project has `META-INF/beans.xml`) joined; rule (e) now requires `src` copies only for modules that ship
+    (`:test-support`'s build file is copied, its sources are not).
+  - *Posture sweeps:* `RateLimitPostureSweepTest` and `AdminChannelPostureSweepTest` walk `MainOutputs` (new, root test
+    tree): every classpath entry under the Gradle root that is not a `test` source-set output, directory or jar.
+  - *PIT/CI/scripts:* plugin, scope file and history in `:core` (`backend/core/build/pitest/history.bin`, the
+    workflow's cache path and trigger paths follow; `mutation_meta_check_backend.py` + selftest read
+    `backend/core/…`); `validate_mutation_trigger_paths` reads the moved manifest; `validate_guard_gaps` forgeries name
+    `backend/core/…` for core files and find `BACKEND_TEST_CLASS` in every module's test tree; `validate_doc_citations`
+    scans every `.kt` under `backend/`; `validate_test_fixture_single_home`'s undefined `MAIN` fixed; the pin file
+    names the moved core baseline (same SHA-256); the race runner dispatches per project. Verification metadata:
+    the three POMs measured before plus **two more the cold-home write found** (`httpclient` 4.5.13 and
+    `httpcomponents-client` 4.5.13 POMs, resolved by `:core:quarkusGenerateAppModel`'s prod deployment
+    configuration; evicted by 4.5.14, no new jar) — the first cold-home run without them was red on exactly those two.
+  - *Measured proofs:* `./gradlew --offline clean check quarkusBuild` green in 5m28s (the `e0091727` baseline,
+    `check quarkusBuild` in the fresh worktree, 7m41s — not a like-for-like timing, both include compile); the
+    `classname#name` set equal to `e0091727`'s (1153, 0 failed, 2 skipped; 32 classes now report from `:core`, 127
+    from the root). Fast-jar: one `quarkus-app`; `lib/main` gains `com.veyq.veyq-core.jar` and no other entry (the
+    third-party jar list is identical; `quarkus-app-dependencies.txt` gains the one line `com.veyq:core::jar` — the
+    artifact id is the project name, the file name carries the `archivesName`); the class set is identical (1370
+    entries before, the same classes after plus `META-INF/beans.xml` and `veyq-core.kotlin_module`; minus
+    `application-test.properties`); `javap -c -p` equal for 1133 of the 1137 classes whose bytes differ, the four
+    others differ only in the `internal` name mangling `$veyq_backend` → `$veyq_core` (`TenantIngressProjector`
+    and its companion, `TenantIngressSinkProducer`, `TraefikFileIngressSink`); the byte differences otherwise are the
+    Kotlin metadata's module name. **[LIVE]-ish, run here:** a fresh-database boot of the fast-jar (`%prod`) against
+    a throwaway MariaDB container of the pinned image (own name, free port, `--rm`, stopped after) —
+    `Successfully applied 2 migrations … now at version v202610041201` (core's baseline from the module jar,
+    Memories' from the app jar), `started in 3.2s`; `GET /api/scopes` 401, `/api/item-favorites` 401,
+    `/api/scopes/x/nodes/y/media` 401, `/api/no-such-route` 404 — the same four answers as the `e0091727` fast-jar
+    booted the same way. The MariaDB race suite through the runner (throwaway container): 32 classes, 383 tests, all
+    in `:`, green in 4m43s. The Dockerfile's build-base warm-up without Docker (exactly the files its `COPY` lines
+    name, `./gradlew --offline help`): green. `for f in scripts/validate_*.py` (53) and `validate_guard_gaps` (49
+    cases): green. PIT (in the cold-home write run): 99 mutants, 99 killed; the per-glob meta-check green on the moved report. The
+    cold-home proof `GRADLE_USER_HOME=<empty> ./gradlew help check quarkusBuild pitest` **without** the write flag,
+    after the write: green (resolution against an empty home; the build outputs were warm).
+  - *Not run here:* `docker build .` (the image) — the warm-up and the fast-jar boot are its two halves measured
+    without it.
+  - **What step 7 inherits.** The Memories code, its generation (`extra["veyq.openapi.owner"] = "memories"` in the root
+    today) and its baseline move to `:apps:memories`; the root then holds no main Kotlin, so `MainOutputs`' root
+    classes directory becomes empty and the module's jar takes its place (no edit expected — the sweep reads every
+    project output). `:apps:memories` needs: `beans.xml` (rule (c)), its `build.gradle.kts` and `src` in the Dockerfile
+    (rule (e) — it ships), `testImplementation(project(":test-support"))`, and — once it holds `@QuarkusTest`s — its
+    own `src/test/resources/application-test.properties` beside an anchor (rule (g) judges its test classpath). A
+    Quarkus-applied module resolves its own `quarkusProdRuntimeClasspathConfigurationDeployment`: expect new POM
+    entries from the cold-home write (two runs here, the second one without the flag, is the recipe). The race
+    runner's project map grows by itself (`backend_tree.gradle_projects()`); its unmapped-root refusal is bitten
+    (above) but the two-root dispatch runs first at 8a. Step 8a also inherits: `validate_test_fixture_single_home`
+    already scans `:test-support` (bite (4) of 8a measured here), and `race_classes()` still scans test + fixture
+    roots (8a narrows it to `test_roots()`).
 
 ### 7 — `:apps:memories`
 
@@ -1200,13 +1277,13 @@ with the config, the Dockerfile and the race runner, which cannot be green apart
   migration with a later timestamp referencing `veyq_media` → green and applied after the core baseline on a fresh H2.
 - **Done when:** the above.
 
-### 8a — Test separation and the fixtures jar
+### 8a — Test separation and the shared test helpers
 
 *Ends green on its own (§ Steps): every test in its home, every script that reads a test tree reading all of them,
 before any guard that judges the result changes in 8b.*
 
 - **Test homes (decision 5).** Each module owns the `@QuarkusTest`s of its code; every module's tests run with core on
-  the classpath; helpers both sides use go to `java-test-fixtures` on `:core`. The proposal is by *measured marker*
+  the classpath; helpers both sides use go to `:test-support` (question 11 — a `java-test-fixtures` output is not part of a `@QuarkusTest`'s application, measured in step 6). The proposal is by *measured marker*
   (scan, § State: 1071 methods), confirmed class by class when the step compiles — a class's home is decided by what it
   imports and calls, not by the table:
 
@@ -1219,16 +1296,17 @@ before any guard that judges the result changes in 8b.*
   | root | `OperatorBlindProbeTest` (probes every contract operation of both modules; it also creates a share and touches media endpoints) and one new composition test (every module's beans present; the `@All` collections hold the union) | genuinely whole-app |
 
   The three CDI fake beans (`RecordingBlobStore`, `RefusingStoreReclaimStore`, `FakePresigningBlobStore`), `TestBlob`
-  and the neutral fake-presign `@TestProfile` move to `:core`'s test fixtures **with a `META-INF/beans.xml`** in the
-  fixtures resources (R14, spiked at the start of the step); the `%test` keys are already where they stay since step 6
-  (`application-test.properties` beside its anchor in `:core`'s fixtures resources, R6) and now reach the Memories and
-  root tests through the fixtures jar; KDoc links that name a moved test class are rewritten (they name classes in both
-  modules). `testing/Race.kt` and `testing/TestFixtures.kt` move to `:core/src/testFixtures/kotlin`.
-- **`backend_tree.fixture_roots()` and its consumers** (the function exists since step 2, empty until step 6):
-  `validate_test_fixture_single_home.py` — its `HOME` is hard-coded under `backend/src/test` (l.40) and it scans
-  `TEST.rglob` only (l.77), so once `TestFixtures.kt` is in the fixtures jar it would report its own home missing, or,
-  worse, a second construction site in a fixtures root would go unseen: `HOME` is resolved through `backend_tree` and
-  the scan covers `test_roots() + fixture_roots()`. `run_backend_races_on_mariadb.race_classes()` scans `test_roots()`
+  and the neutral fake-presign `@TestProfile` move to `:test-support` (`backend/test-support/src/main/kotlin`), which
+  carries a `META-INF/beans.xml` since step 6 (R14 settled there: a bean in it is injected into a `:core` and a root
+  `@QuarkusTest`; without the `beans.xml` the boot fails `UnsatisfiedResolutionException`); `TestFixtures`,
+  `TenantRoots` and `givenAdminChannel` are there since step 6. The `%test` keys are per module (question 11):
+  `:apps:memories` gets its own `src/test/resources/application-test.properties` beside a comment-only anchor, with the
+  keys its tests need (rule (g) judges each test classpath on its own). KDoc links that name a moved test class are
+  rewritten (they name classes in both modules). `testing/Race.kt` moves to `:test-support` too.
+- **`backend_tree.fixture_roots()` and its consumers** (since step 6 it returns `:test-support`'s `src/main/kotlin`,
+  which `main_roots()` excludes): `validate_test_fixture_single_home.py` already resolves `HOME` through
+  `backend_tree.test_file` and scans `test_kotlin()` (= test + fixture roots) — measured green with `TestFixtures.kt` in
+  `:test-support` at step 6; its bite (4) below is 8a's. `run_backend_races_on_mariadb.race_classes()` scans `test_roots()`
   only — the harness `Race.kt` now lives in a fixtures root, so its name skip (l.62) becomes dead and is deleted rather
   than kept as a decoy. The step-8b `validate_guard_gaps` forgeries that plant a test file or a fixture use
   `fixture_roots()` too, never a literal path.
@@ -1250,11 +1328,11 @@ before any guard that judges the result changes in 8b.*
   `classname#testname` (modulo the split classes, accounted per assertion); `race_classes()` equals the pre-step set
   as class names, now spread over the printed project map; `validate_test_fixture_single_home` and `validate_coverage`
   green over every test and fixtures root.
-- **Proof.** `./gradlew check`; the validators; the cold-home verification run (the fixtures jar adds configurations,
+- **Proof.** `./gradlew check`; the validators; the cold-home verification run (`:test-support` and a new module add configurations,
   R10); **[LIVE]** the race suite through the per-project dispatch.
 - **Bite-tests.** (1) move a Memories-needing test (a share-creating one) back into `:core` → it fails at runtime with
   `illegal_scope` (the module cannot see Memories); move one that imports a Memories class → `:core:compileTestKotlin`
-  fails. (2) delete the fixtures' `META-INF/beans.xml` → the Memories tests that need the fake beans go red (R14). (3)
+  fails. (2) delete `:test-support`'s `META-INF/beans.xml` → the tests that inject the fake beans fail at boot (`UnsatisfiedResolutionException`, R14 — the same lever measured on a scratch bean in step 6). (3)
   the race runner's unmapped-root bite (above). (4) plant a second `TestFixtures`-style construction site in a fixtures
   root → `validate_test_fixture_single_home` red (lever: `fixture_roots()` in its scan; with `TEST` alone it stayed
   green).
@@ -1331,7 +1409,7 @@ before any guard that judges the result changes in 8b.*
 | R3 | Guards that read a shrunken tree after a move and stay green — now also **specs** (`contracts/api/memories/` is invisible to a non-recursive glob) and **migrations** (a second root) | steps 2–7 | the two helpers, per-guard "found none" lines, the second-root `validate_guard_gaps` cases |
 | R4 | `./gradlew test --tests X` fails per project with no match (spike); `run_backend_races_on_mariadb.py` is one such caller — one `TEST_ROOT` (l.41), one bare `./gradlew test --rerun --tests …` (l.104-106) | step 6 (the first `:core` test task), 8a (race classes in two roots) | per-project dispatch from `backend_tree.test_roots()` (`:core:test --tests A :apps:memories:test --tests B`), the class → project map printed; step 8a's bite: a race class in a root the map does not cover → red before Docker starts |
 | R5 | Kotlin `internal` stops at a module: 3 members, 4 test files must move with them, 2 of them `@QuarkusTest`s (so `:core` boots Quarkus from step 6) | step 6 | compile errors name them; the config layout decided in step 6 (R6) |
-| R6 | Config split wrong: a `:core` `@QuarkusTest` booting without the base keys (Flyway, `read-committed`, default-deny, `VeyqConfig` defaults); the same key at ordinal 250 in two modules' `application.properties` (every one on the classpath is a source, **(source)**); a profile file with no `application.properties` beside it, **silently never read** (**(source)**, `ConfigSourceClassPathConsumer`) | step 6 | base file to `:core`, comment-only anchors beside the root's profile files and the fixtures' `application-test.properties`; step 6's first task confirms the discovery in-tree; rule (g) keyed on `(profile, key)`; bites (7) and (8) of step 6 |
+| R6 | Config split wrong: a `:core` `@QuarkusTest` booting without the base keys (Flyway, `read-committed`, default-deny, `VeyqConfig` defaults); the same key at ordinal 250 in two modules' `application.properties` (every one on the classpath is a source, **(source)**); a profile file with no `application.properties` beside it, **silently never read** (**(source)**, `ConfigSourceClassPathConsumer`) | step 6 | base file to `:core`, comment-only anchors beside the root's profile files and beside each module's own `src/test/resources/application-test.properties` (question 11); step 6's first task confirmed the discovery in-tree; rule (g) keyed on `(profile, key)` per classpath; bites (7) and (8) of step 6 |
 | R7 | The Dockerfile warm-up copies named files only; a new module without its `COPY` breaks the *release* build and nothing in `./gradlew check` shows it | steps 6–8b | the temp-dir warm-up each step; rule (e); **[LIVE]** `docker build .` |
 | R8 | `quarkusDev` with workspace modules: hot reload of `:core`/`:apps:memories` classes, and the IntelliJ `Run Backend` configuration — **not measured** (running a dev server was out of scope; and a parallel `quarkusDev` in this tree would corrupt the owner's) | step 7 / close | **[LIVE]** the owner starts `Run Backend` once; broken reload across modules is a finding, not a blocker for the image |
 | R9 | PIT across modules: `info.solidsoft.pitest` in `:core`, report path and trigger paths move; `pitest.scope.json` moves with the plugin (parsed by `build.gradle.kts:83`, copied by `Dockerfile:52`); the CI cache of the incremental history (`mutation-backend.yml:107`, `backend/build/pitest/history.bin`) goes stale without an error — PIT then runs cold every time | step 6 | `./gradlew pitest`, `mutation_meta_check_backend.py`, `validate_mutation_trigger_paths.py`; the cache path moved with the plugin and stated in the commit (no guard: a cold run is slow, not wrong) |
@@ -1339,7 +1417,7 @@ before any guard that judges the result changes in 8b.*
 | R11 | Build time. Measured: one `:test` invocation costs ~90 s beyond its test (neither boot nor compile); unknown whether per task or per class discovered; with three test tasks that is the largest unmeasured number in the CR | steps 6–8a | the baseline recorded before step 0; `time ./gradlew check` after steps 6, 7, 8a; if cold `check` regresses by more than a minute, say so before the next step; `org.gradle.parallel` as the lever |
 | R12 | A parallel session edits a file this series moves (the rename touches all 367); the `--no-ff` merge is blocked by a neighbour's uncommitted edit (`memory`) | steps 2–7 | check `git status`/`ls changes/` first; wait, never clear it; the script's `--check` re-derives from a **hash**, not `HEAD~` |
 | R13 | Dependabot's `gradle` entry points at `/backend`; whether it follows `include`d subprojects is **not measured** (no remote, remembered: it does) | close | note in the retro; a `directories:` list if it does not |
-| R14 | Test-fixture beans (three CDI fakes) in a `java-test-fixtures` jar are not discovered by a dependant's `@QuarkusTest` without an index | step 8a | spike first; `beans.xml` in the fixtures resources; the bite: delete it → the Memories tests that need the fakes go red |
+| R14 | Test-helper beans (three CDI fakes) are not discovered by a dependant's `@QuarkusTest` | step 8a | **settled at step 6 (measured):** a `java-test-fixtures` output is not part of the application at all, a `:test-support` project dependency is — its classes load in the Quarkus class loader, a bean in it is injected with its `beans.xml` and refused (`UnsatisfiedResolutionException`) without; the 8a bite repeats that lever on the real fakes |
 | R15 | The rename changes logger categories (`Logger.getLogger(X::class.java)` in 18 classes): an operator filtering by `com.veyq.app.…` stops matching. Nothing in the repo does | step 2 | stated in the commit and in `infra/README.md` if it names log filtering (`grep -rn 'log' infra/README.md` at the step) |
 | R16 | The flat `core` merge hides the kernel/slice layering inside one package name | step 2 | the declared kernel list and its bite (open question 3) |
 | R17 | The blob split touches the hot upload path: `reserveAndOpen`'s tenant lock with `createOrConflict`, `purgeSessionsIdleSince`'s lock-then-recheck, the "spent first" session deletes in `attach`/`commitCover` — all races H2 shows green and MariaDB red (ADR 0078); a moved `@Transactional` that silently stops applying is invisible to the H2 suite | step 3 (and 6–7, where the code lands in a jar) | **[LIVE]** race suite at steps 3, 6 and 7; the "moved, not rewritten" verbatim check; bite (4) |
