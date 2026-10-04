@@ -15,7 +15,7 @@ acceptanceCriteria:
   - id: switch-space-by-fragment
     text: A space's position is encoded in + resolved from the URL #fragment client-side (the blind server resolves no path).
     coverage:
-      web: { unit: [src/features/memory/location.test.ts] }
+      web: { unit: [src/core/node/location.test.ts] }
   - id: create-group
     # cr-0032 (G1): a member creates a named group — operator-blind (name sealed under a fresh K_SC + a self-grant).
     text: A member creates a named GROUP scope — the name sealed under a fresh K_SC and the scope key sealed to their own identity (OWNER self-grant); the server stores only ciphertext and mints the self-membership. A caller who is not a member of the active tenant is rejected.
@@ -37,7 +37,7 @@ acceptanceCriteria:
   - id: token-less-tenant-default
     text: The token-less fragment (empty/#) resolves to the shared TENANT scope — the default home — and a granted member entering it opens the tenant key (ADR 0019).
     coverage:
-      web: { unit: [src/features/memory/location.test.ts, src/app/activeSpace.test.ts, src/components/app/AppSidebar.test.ts] }
+      web: { unit: [src/core/node/location.test.ts, src/app/activeSpace.test.ts, src/components/app/AppSidebar.test.ts] }
   - id: personal-tenant-switch-resets
     text: Flipping the leading fragment token (Personal ↔ Tenant) re-enters the scope — opening its key and resetting the tree + favorites so no stale per-scope state bleeds; the active space is highlighted in the sidebar.
     coverage:

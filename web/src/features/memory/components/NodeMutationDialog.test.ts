@@ -3,20 +3,20 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { httpError } from '../../../test/httpError'
 import { mount } from '@vue/test-utils'
 
-vi.mock('../tree', () => ({
+vi.mock('../../../core/node/tree', () => ({
   createFolder: vi.fn(),
-  createMemory: vi.fn(),
-  createChapter: vi.fn(),
   renameNode: vi.fn(),
 }))
+vi.mock('../memoryNodes', () => ({ createMemory: vi.fn(), createChapter: vi.fn() }))
 vi.mock('../geocode', () => ({ reverseGeocode: vi.fn() }))
 
 import NodeMutationDialog from './NodeMutationDialog.vue'
-import { createFolder, createMemory, createChapter, renameNode } from '../tree'
+import { createFolder, renameNode } from '../../../core/node/tree'
+import { createMemory, createChapter } from '../memoryNodes'
 import { epochsOf } from '../../spaces/epochsTestUtil'
 import { setMapsConsent, setTileUrl, setGeocoderUrl } from '../../../shared/state/useMapConfig'
 import { realI18n, t } from '../../../test/i18n'
-import type { TreeNode } from '../tree'
+import type { TreeNode } from '../../../core/node/tree'
 
 const AUTO_PENDING = { name: '', nameSource: 'geocoded', derivedMode: 'auto' }
 const stubs = {

@@ -11,7 +11,7 @@ import { tenantError } from '../tenant/tenantError'
 import { inviteMember } from '../spaces/members'
 import { openPersonalScope } from '../spaces/scopes'
 import { epochsOf } from '../spaces/epochsTestUtil'
-import { listTree } from '../memory/tree'
+import { listTree } from '../../core/node/tree'
 
 /**
  * Part B of the **leg-3 rehearsal**: what a two-legged backup actually costs. The orchestrator restored legs

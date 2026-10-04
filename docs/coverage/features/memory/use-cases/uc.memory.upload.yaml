@@ -208,7 +208,7 @@ acceptanceCriteria:
       `createBrowserDeriver`, and the whole request crosses — an icon's WebP type and background fill included.
     coverage:
       web:
-        unit: [src/features/memory/mediaDeriveWorker.test.ts]
+        unit: [src/shared/image/mediaDeriveWorker.test.ts]
     gaps:
       - surface: web
         reason: >

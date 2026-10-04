@@ -26,6 +26,7 @@ vi.mock('./scopes', () => ({
   clearSpaceIcon: vi.fn(),
   openGroupIcon: vi.fn(),
   requeueScopeRotation: vi.fn(),
+  revokeScopeShares: vi.fn(),
 }))
 vi.mock('../account/identityPins', () => ({
   acceptKeyChange: vi.fn(),
@@ -34,7 +35,6 @@ vi.mock('../account/identityPins', () => ({
 vi.mock('../account/profile/profile', () => ({ getMyProfile: vi.fn() }))
 vi.mock('../tasks/scopeRotationWorker', () => ({ runScopeRotationWorker: vi.fn() }))
 vi.mock('./spaceIconSignal', () => ({ bumpSpaceIcon: vi.fn() }))
-vi.mock('../memory/share', () => ({ revokeScopeShares: vi.fn() }))
 const { toastSuccess } = vi.hoisted(() => ({ toastSuccess: vi.fn() }))
 vi.mock('../../shared/state/useToast', () => ({ useToast: () => ({ success: toastSuccess, error: vi.fn() }) }))
 // Confirmation is the app's own dialog (cr-web-own-confirm-dialog): the panel awaits `ask()`, so the answer is
@@ -44,12 +44,11 @@ vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: conf
 
 import GroupMembersPanel from './GroupMembersPanel.vue'
 import { listScopeMembers, removeGroupMember, resolveGroupMember, addGroupMember, memberError } from './members'
-import { setSpaceIcon, clearSpaceIcon, openGroupIcon, rotateGroupForRemoval, wrapGroupNameKeyForInvitee, scopeLifecycle, requeueScopeRotation } from './scopes'
+import { setSpaceIcon, clearSpaceIcon, openGroupIcon, rotateGroupForRemoval, wrapGroupNameKeyForInvitee, scopeLifecycle, requeueScopeRotation, revokeScopeShares } from './scopes'
 import { acceptKeyChange, IdentityChangedError } from '../account/identityPins'
 import { runScopeRotationWorker } from '../tasks/scopeRotationWorker'
 import { getMyProfile } from '../account/profile/profile'
 import { bumpSpaceIcon } from './spaceIconSignal'
-import { revokeScopeShares } from '../memory/share'
 import { realI18n, t } from '../../test/i18n'
 import { i18n } from '../../i18n'
 import type { ScopeMember } from '../../api/generated/scopes'

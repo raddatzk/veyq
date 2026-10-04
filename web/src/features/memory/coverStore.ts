@@ -12,8 +12,8 @@
 // into a local, used, and dropped. What is reactive is the URL map and the crops — never a byte of `K_mem`.
 import { computed, reactive, type Ref } from 'vue'
 import { activeSpace, activeEpochKeys } from '../../app/activeSpace'
-import { treeStore } from './treeStore'
-import { nodeContentKey } from './tree'
+import { treeStore } from '../../core/node/treeStore'
+import { nodeContentKey } from '../../core/node/tree'
 import { loadNodeCover, type CoverCrop, type LoadedCover } from './memoryCover'
 import { useObjectUrls } from '../../shared/state/useObjectUrls'
 

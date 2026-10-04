@@ -5,8 +5,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 // Typed by the real function (inbox #287): an untyped `vi.fn()` took a `{ x, y, w, h }` crop `CoverCrop` does not have.
 const loadNodeCover = vi.hoisted(() => vi.fn<typeof import('./memoryCover').loadNodeCover>())
 vi.mock('./memoryCover', async (orig) => ({ ...(await orig<typeof import('./memoryCover')>()), loadNodeCover }))
-vi.mock('./tree', async (orig) => ({
-  ...(await orig<typeof import('./tree')>()),
+vi.mock('../../core/node/tree', async (orig) => ({
+  ...(await orig<typeof import('../../core/node/tree')>()),
   nodeContentKey: vi.fn(),
 }))
 // activeSpace is imported for `scopeId` + `activeEpochKeys` only — keep the real module out of the way of a
@@ -21,8 +21,8 @@ vi.mock('../../app/activeSpace', async (orig) => ({
 }))
 
 import { covers, ensureCovers, resetCovers } from './coverStore'
-import { treeStore, patchNodeMeta } from './treeStore'
-import { nodeContentKey } from './tree'
+import { treeStore, patchNodeMeta } from '../../core/node/treeStore'
+import { nodeContentKey } from '../../core/node/tree'
 
 const revoked: string[] = []
 let minted = 0

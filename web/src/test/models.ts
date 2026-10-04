@@ -11,7 +11,7 @@ import type { MyTenant } from '../api/generated/scopes'
 import type { InvitePreview } from '../api/generated/tenants'
 import { NodeKind } from '../api/generated/content'
 import type { MediaItem } from '../features/memory/media'
-import type { TreeNode } from '../features/memory/tree'
+import type { TreeNode } from '../core/node/tree'
 
 export const setupStatus = (o: Partial<SetupStatus> = {}): SetupStatus => ({
   setupRequired: false,

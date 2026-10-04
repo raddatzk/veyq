@@ -66,7 +66,7 @@ acceptanceCriteria:
       backend:
         integration: [NodeTrashSliceTest.deletingFreesTheNameImmediately, NodeTrashSliceTest.restoreIntoATakenNameIsACleanRejection]
       web:
-        unit: [src/features/memory/tree.test.ts, src/features/memory/components/SpaceTrashDialog.test.ts]
+        unit: [src/core/node/tree.test.ts, src/features/memory/components/SpaceTrashDialog.test.ts]
 
   - id: restore-returns-the-subtree-intact
     text: "Restore clears deleted_at across the subtree and writes the supplied token back, returning every descendant, photo, bucket and cover exactly as it was. Restoring an already-purged subtree is a non-enumerable 404."
@@ -74,7 +74,7 @@ acceptanceCriteria:
       backend:
         integration: [NodeTrashSliceTest.restoreReturnsTheWholeSubtreeIntact, NodeTrashSliceTest.restoreOfAnUnknownSubtreeIs404]
       web:
-        unit: [src/features/memory/tree.test.ts]
+        unit: [src/core/node/tree.test.ts]
 
   - id: space-trash-lists-deleted-subtree-roots
     text: "The space's Trash lists only the ROOT of each soft-deleted subtree (descendants went with it and return with it), each carrying when it was deleted and when it will be purged — purgeAfter derived at the resource boundary from deleted_at plus the configured retention, never stored."

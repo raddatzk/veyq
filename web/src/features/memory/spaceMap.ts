@@ -8,7 +8,7 @@
 // A **pending `auto`** location (armed at creation, no geotagged media yet) has no `derived` → no pin until its
 // first upload materializes it. Folders carry no location and are never pinned.
 import { NodeKind } from '../../api/generated/content'
-import { nodeContentKey, type TreeNode } from './tree'
+import { nodeContentKey, type TreeNode } from '../../core/node/tree'
 import type { EpochKeys } from '../spaces/epochs'
 import { unsealMemoryLocation, type MemoryLocation } from './memoryLocation'
 import { unsealMemoryDate, type MemoryDate } from './memoryDate'

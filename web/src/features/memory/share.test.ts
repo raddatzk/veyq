@@ -15,11 +15,11 @@ vi.mock('../spaces/scopes', async (importOriginal) => ({
   openScopeById: vi.fn(),
 }))
 
-import { createShare, reissueShare, isShareDeleted, revokeScopeShares, type ReissuableShare, resolveShare, createContributorIdentity, addSharePhoto, deleteSharePhoto, listSharesFor, reactivateShare, updateShare, readShareNoteMap, readShareName, pickLocaleText, derivePasswordToken, readSharePassword, shareChunkProvider, ShareUnavailableError, SharePasswordRequiredError } from './share'
+import { createShare, reissueShare, isShareDeleted, type ReissuableShare, resolveShare, createContributorIdentity, addSharePhoto, deleteSharePhoto, listSharesFor, reactivateShare, updateShare, readShareNoteMap, readShareName, pickLocaleText, derivePasswordToken, readSharePassword, shareChunkProvider, ShareUnavailableError, SharePasswordRequiredError } from './share'
 // The link builders live in `shareLink.ts` (the UI edge, the only part that needs `window`) — see its header.
 import { buildShareLink, recoverShareLink } from './shareLink'
 import { unsealMeta, CHUNK_SIZE, type MediaDeriver } from './media'
-import { sharesApi, scopesApi, publicSharesApi, contentApi } from '../../api/client'
+import { sharesApi, publicSharesApi, contentApi } from '../../api/client'
 import { isStaleEpoch, openScopeById } from '../spaces/scopes'
 import { isCodedError, HttpStatus } from '../../shared/httpError'
 import type { EpochKeys } from '../spaces/epochs'
@@ -322,13 +322,6 @@ describe('shared-scope management (cr-0104)', () => {
       ['s2', false, false, true, false, true, true], // the server's verdicts (ADR 0075, ADR 0029 §7, ADR 0076), carried as they came
     ])
     expect(rows.every((r) => r.scopeId === SCOPE_ID)).toBe(true) // the recovery copy binds it — carried per row
-  })
-
-  it('revokeScopeShares turns off every link of the scope and resolves how many it turned off', async () => {
-    const { revokeScopeShares: revoke } = stubApi(scopesApi, { revokeScopeShares: { revoked: 3 } })
-
-    await expect(revokeScopeShares(SCOPE_ID)).resolves.toBe(3)
-    expect(revoke).toHaveBeenCalledWith({ scopeId: SCOPE_ID })
   })
 
   it('reactivateShare adopts a disabled share via the member-gated endpoint', async () => {

@@ -15,12 +15,12 @@ vi.mock('./members', () => ({
   removeTenantMember: vi.fn(),
   memberError: vi.fn(),
 }))
-vi.mock('../memory/share', () => ({ revokeScopeShares: vi.fn() }))
 vi.mock('./scopes', () => ({
   listMyTenants: vi.fn(),
   setSpaceIcon: vi.fn(),
   clearSpaceIcon: vi.fn(),
   openMyTenantIcon: vi.fn(),
+  revokeScopeShares: vi.fn(),
 }))
 // Confirmation is the app's own dialog (cr-web-own-confirm-dialog): the panel awaits `ask()`, so the answer is
 // given here. Stubbing `window.confirm` would now confirm nothing and pass anyway.
@@ -29,8 +29,7 @@ vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: conf
 
 import TenantMembersPanel from './TenantMembersPanel.vue'
 import { listScopeMembers, listMemberInvites, reissueMemberInvite, revokeMemberInvite, removeTenantMember, memberError } from './members'
-import { revokeScopeShares } from '../memory/share'
-import { listMyTenants, openMyTenantIcon } from './scopes'
+import { listMyTenants, openMyTenantIcon, revokeScopeShares } from './scopes'
 import { activeSpace, clearActiveSpace } from '../../app/activeSpace'
 import { ScopeKind, type ScopeMember } from '../../api/generated/scopes'
 import type { PendingMemberInvite } from '../../api/generated/tenants'

@@ -23,6 +23,15 @@ import type { PendingMemberInvite } from '../../api/generated/tenants'
  *  grant-delivery worker (cr-0076) + rotation re-grants (cr-0089). */
 export { grantContext } from './grant'
 
+/**
+ * Turn off every link of a scope (ADR 0075 point 5) — a scope owner's switch-off: every enabled share, whoever made
+ * it, goes off and is marked, so each comes back only by {@link reissueShare}. Resolves how many it turned off.
+ */
+export async function revokeScopeShares(scopeId: string): Promise<number> {
+  const { revoked } = await withRefresh(() => scopesApi().revokeScopeShares({ scopeId }))
+  return revoked
+}
+
 /** The caller's scopes in the active tenant (each with their own grant ciphertext). */
 export async function listMyScopes(): Promise<ScopeSummary[]> {
   return withRefresh(() => scopesApi().listMyScopes())

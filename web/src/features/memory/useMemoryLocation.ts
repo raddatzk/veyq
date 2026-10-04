@@ -22,7 +22,7 @@ import { useMetaWriteFeedback, type NodeMetaUpdate } from './useMetaWriteFeedbac
 import { reverseGeocode, defaultLevel, nameAtLevel } from './geocode'
 import { useMapConfig, setMapsConsent } from '../../shared/state/useMapConfig'
 import type { MediaItem } from './media'
-import type { TreeNode } from './tree'
+import type { TreeNode } from '../../core/node/tree'
 
 /** The reactive context MemoryDetail hands the location slice — getters so props stay reactive, plus the live
  *  media list (the medoid materializes from it) and the host's `metaUpdated` emit. */

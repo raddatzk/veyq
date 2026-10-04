@@ -198,7 +198,7 @@ removes, and the guard is the completeness proof for that step.
 and 8 need 4 and are independent of each other, but all four edit `core/applications/registry.ts` and the guard's
 allowlist: run them serially, or accept a mechanical conflict on those two files. Step 9 last.
 
-- [ ] 1 the guard, as a ratchet — write `scripts/validate_web_core_imports_no_applications.py` (Decision 5). Its
+- [x] 1 the guard, as a ratchet — write `scripts/validate_web_core_imports_no_applications.py` (Decision 5). Its
       allowlist is generated from rows 1 and 3 on the untouched tree, per file and rule. The docstring keeps its
       three fields (asserts / the defect that bought it / its limit); the limit names: tests and `src/test/` are not
       read; `shared/ui/SecretKeyField` → `features/account` is a different edge; regex over source, not an AST, so
@@ -215,7 +215,7 @@ allowlist: run them serially, or accept a mechanical conflict on those two files
       `import.meta.glob(` is red. Run the predicate on the untouched tree first and read it green (`changes/README.md`).
       · Done when: `python3 scripts/validate_web_core_imports_no_applications.py` and `python3 scripts/validate_guard_gaps.py`
       green; the allowlist equals row 1 ∪ row 3 minus `src/test/`.
-- [ ] 2 pure relocations out of the application, no new abstraction (row 9, 10) — `saveBytes` to `shared/`;
+- [x] 2 pure relocations out of the application, no new abstraction (row 9, 10) — `saveBytes` to `shared/`;
       `revokeScopeShares` to `features/spaces/scopes.ts`; the deriver family (`mediaDeriver`, `mediaPixels`,
       `mediaDeriveWorker`, `mediaDerive.worker.ts` with their tests) to `shared/image/`, **keeping the worker's file
       basename** so the dist chunk name and `web/scripts/assert-media-worker-in-dist.mjs` still match (only its
@@ -227,7 +227,7 @@ allowlist: run them serially, or accept a mechanical conflict on those two files
       and the module's own test goes red (`GroupMembersPanel.test`, `TenantMembersPanel.test` mock `revokeScopeShares`).
       · Done when: `npm run check` green (this includes `verify:media-worker`); the guard green with six fewer entries;
       row 13/14 refs repointed (`python3 scripts/validate_coverage.py` green).
-- [ ] 3 the node layer to `core/node/` — `tree.ts` (without `createMemory`/`createChapter`), `treeStore.ts`,
+- [x] 3 the node layer to `core/node/` — `tree.ts` (without `createMemory`/`createChapter`), `treeStore.ts`,
       `location.ts`, `browse.ts`, the `TreeNode` type, with their tests. `createContentNode` is exported from
       `core/node`; the kind wrappers `createMemory`/`createChapter` and their `nodeMeta`/`MemoryLocation` use stay in
       the application (`features/memory/memoryNodes.ts`). `coverStore.ts` stays (a Memories concept). Repoint imports,

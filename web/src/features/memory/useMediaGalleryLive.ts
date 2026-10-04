@@ -6,7 +6,7 @@ import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from '../../shared/state/useToast'
 import { useUndo } from '../../shared/state/useUndo'
-import type { TreeNode } from './tree'
+import type { TreeNode } from '../../core/node/tree'
 import {
   openGrid,
   hasDerivatives,

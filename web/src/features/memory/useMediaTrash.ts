@@ -11,7 +11,7 @@ import type { MenuItem } from 'primevue/menuitem'
 import { openGrid, hasDerivatives, unsealMeta, listTrash, restoreMedia, purgeMedia, type MediaItem } from './media'
 import { galleryDisplayAspectRatio } from './mediaGridLayout'
 import { useObjectUrls } from '../../shared/state/useObjectUrls'
-import type { TreeNode } from './tree'
+import type { TreeNode } from '../../core/node/tree'
 
 /** The reactive context MemoryDetail hands the trash slice — getters so props stay reactive, plus the two host
  *  effects: re-list the gallery after a restore, and lift the gallery's pending-delete tombstone. */

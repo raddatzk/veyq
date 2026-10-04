@@ -6,7 +6,8 @@ import { writeHandoff } from '../../test/restoreHandoff'
 import { getTenantMailSettings, updateTenantMailSettings } from '../tenant/tenantMailSettings'
 import { ensurePersonalScope, listMyScopes, openPersonalScope } from '../spaces/scopes'
 import { epochsOf } from '../spaces/epochsTestUtil'
-import { createMemory, listTree } from '../memory/tree'
+import { listTree } from '../../core/node/tree'
+import { createMemory } from '../memory/memoryNodes'
 import { ScopeKind } from '../../api/generated/scopes'
 
 /**

@@ -115,6 +115,19 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   38 a `core/node/` file naming `features.media` by a fully-qualified reference inline, with no import — rejected:
      `validate_shared_imports_no_features` reads qualified names on lexer-masked source, not only `import` lines.
      The compiler does not care which form a back-edge takes; before, this exact shape was green
+  39 a core `shared/ui/` file importing `features/memory/memoryNodes` — rejected: `validate_web_core_imports_no_applications`
+     resolves a relative specifier against the importing file, so the web core cannot grow a back-edge into the
+     Memories application (ADR 0079). The same file importing `features/account/…` stays green by hand-run control —
+     a different edge, not this guard's subject
+  40 `export * from` the application in a core file — rejected: the specifier is read after `from`, not only after
+     `import`, so a re-export cannot launder the edge
+  41 a dynamic `import('…')` of the application in a core file — rejected: the same edge in its lazy spelling
+  42 a sibling of the composition root (`applications2.ts`) importing the application — rejected: the exemption is
+     the exact path `web/src/applications.ts`, not a directory or a prefix
+  43 an allowlisted file whose violation is gone — rejected: a stale entry is red, so the ratchet can only shrink
+  44 an allowlist entry deleted while its file still violates — rejected: a violation not on the list is red
+  45 a core file naming the Memories node kind — rejected: the shell asks the registry, it does not know the kinds
+  46 `import.meta.glob` in a core file — rejected: discovery by glob would hide an edge from the import rule
 Open gaps — a forgery the guard still passes (a documented limit, not a defect to fix blindly):
   4b a lying `status: planned` on an implemented use-case passes. **Left open on purpose** — the obvious rule
      "planned ⇒ no coverage refs" is *false in general*: a use-case can be legitimately `planned` while carrying
@@ -628,6 +641,72 @@ def forge_core_names_media_inline(root: pathlib.Path) -> str:
     return "a core/node file naming features.media fully-qualified inline, no import (must be REJECTED)"
 
 
+WEB_GUARD = "validate_web_core_imports_no_applications.py"
+
+
+def _plant_web(root: pathlib.Path, rel: str, text: str) -> None:
+    f = root / "web" / "src" / rel
+    if not (root / "web" / "src" / "features" / "memory").is_dir():
+        raise ForgeError("web/src/features/memory is gone — re-anchor this forgery on the application directory")
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(text)
+
+
+def forge_web_core_imports_application(root: pathlib.Path) -> str:
+    _plant_web(root, "shared/ui/GuardGapProbe.vue",
+               "<script setup lang=\"ts\">\nimport { loadTree } from '../../features/memory/memoryNodes'\n"
+               "void loadTree\n</script>\n")
+    return "a shared/ui file importing features/memory/memoryNodes (must be REJECTED — core depends on no application)"
+
+
+def forge_web_core_reexports_application(root: pathlib.Path) -> str:
+    _plant_web(root, "shared/guardGapProbe.ts", "export * from '../features/memory/memoryNodes'\n")
+    return "a core file re-exporting the application with `export * from` (must be REJECTED)"
+
+
+def forge_web_core_dynamic_imports_application(root: pathlib.Path) -> str:
+    _plant_web(root, "shared/guardGapProbe.ts",
+               "export const lazy = () => import('../features/memory/memoryNodes')\n")
+    return "a core file importing the application with `import('…')` (must be REJECTED)"
+
+
+def forge_web_composition_root_sibling(root: pathlib.Path) -> str:
+    _plant_web(root, "applications2.ts", "import './features/memory/memoryNodes'\n")
+    return "a sibling of the composition root importing the application (the exemption is the exact path; REJECTED)"
+
+
+def forge_web_allowlist_entry_stale(root: pathlib.Path) -> str:
+    f = root / "web" / "src" / "app" / "favoritesStore.ts"
+    if not f.is_file():
+        raise ForgeError("web/src/app/favoritesStore.ts is gone — re-anchor this forgery on an allowlisted file")
+    text = f.read_text()
+    f.write_text(re.sub(r"^import[^\n]*features/memory[^\n]*\n", "", text, flags=re.M))
+    if f.read_text() == text:
+        raise ForgeError("web/src/app/favoritesStore.ts no longer imports the application — re-anchor on an allowlisted file")
+    return "an allowlisted file whose violation was removed but whose entry stays (a stale entry; REJECTED)"
+
+
+def forge_web_allowlist_entry_deleted(root: pathlib.Path) -> str:
+    g = root / "scripts" / WEB_GUARD
+    text = g.read_text()
+    entry = '    "app/favoritesStore.ts": {RULE_IMPORT},\n'
+    if entry not in text:
+        raise ForgeError("the allowlist entry for app/favoritesStore.ts is gone — re-anchor on an entry that remains")
+    g.write_text(text.replace(entry, "", 1))
+    return "an allowlist entry deleted while its file still violates (REJECTED)"
+
+
+def forge_web_core_names_memory_kind(root: pathlib.Path) -> str:
+    _plant_web(root, "shared/guardGapProbe.ts",
+               "import { NodeKind } from '../api/generated'\nexport const k = NodeKind.Memory\n")
+    return "a core file naming NodeKind.Memory (must be REJECTED — the shell asks the registry)"
+
+
+def forge_web_core_glob(root: pathlib.Path) -> str:
+    _plant_web(root, "shared/guardGapProbe.ts", "export const all = import.meta.glob('../features/*/index.ts')\n")
+    return "a core file discovering code with import.meta.glob (must be REJECTED)"
+
+
 def forge_unmounted_config_secret(root: pathlib.Path) -> str:
     f = root / PROD_COMPOSE
     if not f.is_file():
@@ -819,6 +898,14 @@ CASES = [
     ("36", "validate_scope_erasure_arity.py", forge_media_eraser_drops_a_table, False),
     ("37", "validate_node_subtree_erasure.py", forge_media_node_eraser_deleted, False),
     ("38", "validate_shared_imports_no_features.py", forge_core_names_media_inline, False),
+    ("39", WEB_GUARD, forge_web_core_imports_application, False),
+    ("40", WEB_GUARD, forge_web_core_reexports_application, False),
+    ("41", WEB_GUARD, forge_web_core_dynamic_imports_application, False),
+    ("42", WEB_GUARD, forge_web_composition_root_sibling, False),
+    ("43", WEB_GUARD, forge_web_allowlist_entry_stale, False),
+    ("44", WEB_GUARD, forge_web_allowlist_entry_deleted, False),
+    ("45", WEB_GUARD, forge_web_core_names_memory_kind, False),
+    ("46", WEB_GUARD, forge_web_core_glob, False),
 ]
 
 
