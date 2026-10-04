@@ -198,7 +198,7 @@ removes, and the guard is the completeness proof for that step.
 and 8 need 4 and are independent of each other, but all four edit `core/applications/registry.ts` and the guard's
 allowlist: run them serially, or accept a mechanical conflict on those two files. Step 9 last.
 
-- [ ] 1 the guard, as a ratchet — write `scripts/validate_web_core_imports_no_applications.py` (Decision 5). Its
+- [x] 1 the guard, as a ratchet — write `scripts/validate_web_core_imports_no_applications.py` (Decision 5). Its
       allowlist is generated from rows 1 and 3 on the untouched tree, per file and rule. The docstring keeps its
       three fields (asserts / the defect that bought it / its limit); the limit names: tests and `src/test/` are not
       read; `shared/ui/SecretKeyField` → `features/account` is a different edge; regex over source, not an AST, so
