@@ -20,7 +20,7 @@ class SessionPurge(private val sessions: SessionService) {
     // READ COMMITTED, ADR 0078) a delete next-key-locked every index record it scanned until commit, so the token
     // and family scans held every login and refresh for the purge's whole
     // duration. Measured on MariaDB 11.4 at ~4 M refresh rows (cr-session-purge-cost-on-mariadb): the sweep took
-    // 19–31 s, a refresh waited it out, and a login deadlocked against it. Split, and with V59's index, the worst
+    // 19–31 s, a refresh waited it out, and a login deadlocked against it. Split, and with `ix_refresh_token_expires`, the worst
     // probe wait was ~22 ms. The family ids come from a plain read (a snapshot, no lock); each batch delete checks
     // "no token" again by primary key, so a family that gained a token in between survives. `QuarkusTransaction`
     // per step, as `ScopePurge.run()` does: each step opens and closes its own session, which on the scheduler

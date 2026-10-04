@@ -35,8 +35,7 @@ but the reason changed with [ADR 0062](0062-store-object-reclaim-is-a-durable-wo
 between those two moments is a reclaim **pending**, not a delete that failed unrecorded. Orphans therefore no
 longer accumulate silently — a refused delete keeps its row and its `attempts`, and a permanently refused one
 is `abandoned_at`, which is countable in SQL. (Abandoned upload *sessions* themselves are reclaimed, by
-`UploadSessionPurge`; `V11__media.sql`'s "a later slice" note is a historical artifact of that migration, and
-`UploadSessionEntity`'s KDoc is the live statement of the rule.) The mirror case is
+`UploadSessionPurge`; `UploadSessionEntity`'s KDoc is the live statement of the rule.) The mirror case is
 handled nowhere: a media read presigns a GET without asking the store whether the object exists, so a row whose
 object is missing becomes a valid URL that 404s, with no server-side signal and a broken picture as the only
 symptom.

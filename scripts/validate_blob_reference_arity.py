@@ -6,10 +6,12 @@ independent keys:
 
   - *entity* — the Kotlin `@Column` declarations: `NodeEntity.cover_blob_id`, `MediaEntity.blob_id`,
     `MediaDerivativeEntity.blob_id`.
-  - *schema* — the SQL declarations of the same three columns, in `V11__media.sql`, `V13__media_derivatives.sql`
-    and `V19__node_cover.sql`.
-  - *backstop* — which of those arms a foreign key refuses to orphan: **two**, `fk_media_blob` and
-    `fk_derivative_blob`. This one is asserted at 2 deliberately. An arm *gaining* a foreign key is a real
+  - *schema* — the SQL declarations of the same three columns, keyed `<table>.<column>` by the statement that
+    declares them (`CREATE TABLE` body or `ALTER TABLE … ADD COLUMN`): `veyq_media.blob_id`,
+    `veyq_media_derivative.blob_id`, `veyq_node.cover_blob_id`. Keyed on the table, not the migration file: one
+    baseline declares several tables, so a file key would fold two arms into one name and stop telling them apart.
+  - *backstop* — which of those arms a foreign key refuses to orphan: **two**, `veyq_media.fk_media_blob` and
+    `veyq_media_derivative.fk_derivative_blob`. This one is asserted at 2 deliberately. An arm *gaining* a foreign key is a real
     change in what the database guarantees, and it should turn this guard red and be recorded, not land
     silently as an improvement nobody notices.
   - *live twin* — that `SharingStore.subtreeBlobIds` (the cover arm) plus every `SharedSubtreeContributor.authorizedBlobIds`
@@ -79,6 +81,8 @@ ENTITY_CLASS = re.compile(r"^\s*(?:open\s+)?class\s+(\w+)\s*:")
 
 # The SQL side of the same three columns: a CREATE TABLE body line, or a later ADD COLUMN.
 SQL_COLUMN = re.compile(r"^\s+([a-z_]*blob_id)\s+VARCHAR|ADD COLUMN\s+([a-z_]*blob_id)\b", re.IGNORECASE)
+# The table a line belongs to: the open CREATE TABLE body, or the ALTER TABLE statement the line starts.
+SQL_TABLE = re.compile(r"\b(?:CREATE|ALTER)\s+TABLE\s+(\w+)", re.IGNORECASE)
 
 # Case-insensitive on purpose: this tree already spells one `references` in lowercase.
 SQL_BLOB_FK = re.compile(r"references\s+veyq_blob\b", re.IGNORECASE)
@@ -90,13 +94,13 @@ EXPECTED_ENTITY_ARMS = [
     "NodeEntity.cover_blob_id",
 ]
 EXPECTED_SCHEMA_ARMS = [
-    "V11__media.sql:blob_id",
-    "V13__media_derivatives.sql:blob_id",
-    "V19__node_cover.sql:cover_blob_id",
+    "veyq_media.blob_id",
+    "veyq_media_derivative.blob_id",
+    "veyq_node.cover_blob_id",
 ]
 EXPECTED_FK_ARMS = [
-    "V11__media.sql:fk_media_blob",
-    "V13__media_derivatives.sql:fk_derivative_blob",
+    "veyq_media.fk_media_blob",
+    "veyq_media_derivative.fk_derivative_blob",
 ]
 
 # Columns named `*blob_id` that are NOT a reference to a veyq_blob row, each with the reason it cannot be one. They
@@ -106,7 +110,7 @@ EXPECTED_FK_ARMS = [
 #     `K_blob` wrap is sealed bound to it). The session row is deleted in the transaction that births the blob row,
 #     and `start` refuses an id a blob already holds, so it never points at an existing veyq_blob row.
 NOT_REFERENCE_ENTITY = ["UploadSessionEntity.blob_id"]
-NOT_REFERENCE_SCHEMA = ["V53__upload_session_binding.sql:blob_id"]
+NOT_REFERENCE_SCHEMA = ["veyq_upload_session.blob_id"]
 
 # The three arms as `subtreeBlobIds` spells them in its own body. Each is the accessor that arm is READ by, so
 # removing the arm removes the marker.
@@ -137,27 +141,39 @@ def entity_arms() -> list[str]:
     return sorted(found)
 
 
-def schema_arms() -> list[str]:
-    """Every `*blob_id` column declared by a migration, named as `<migration>:<column>`."""
-    found: list[str] = []
+def _sql_lines():
+    """Every migration line with its `--` comment stripped, paired with the table it belongs to (or None)."""
     for path in sorted(MIGRATIONS.glob("*.sql")):
-        for line in path.read_text(encoding="utf-8").splitlines():
-            m = SQL_COLUMN.search(line)
-            if m:
-                found.append(f"{path.name}:{m.group(1) or m.group(2)}")
+        table = None
+        for lineno, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            line = raw.split("--", 1)[0]
+            opened = SQL_TABLE.search(line)
+            if opened:
+                table = opened.group(1).lower()
+            yield path, lineno, line, table
+            if ";" in line:
+                table = None
+
+
+def schema_arms() -> list[str]:
+    """Every `*blob_id` column declared by a migration, named as `<table>.<column>`."""
+    found: list[str] = []
+    for _path, _lineno, line, table in _sql_lines():
+        m = SQL_COLUMN.search(line)
+        if m:
+            found.append(f"{table}.{m.group(1) or m.group(2)}")
     return sorted(found)
 
 
 def fk_arms() -> list[str]:
-    """Every foreign key into veyq_blob, named by its constraint (or by its own text where it has no name)."""
+    """Every foreign key into veyq_blob, named `<table>.<constraint>` (or by its own text where it has no name)."""
     found: list[str] = []
-    for path in sorted(MIGRATIONS.glob("*.sql")):
-        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-            if not SQL_BLOB_FK.search(line):
-                continue
-            named = SQL_CONSTRAINT_NAME.search(line)
-            label = named.group(1) if named else f"L{lineno} {line.strip()}"
-            found.append(f"{path.name}:{label}")
+    for path, lineno, line, table in _sql_lines():
+        if not SQL_BLOB_FK.search(line):
+            continue
+        named = SQL_CONSTRAINT_NAME.search(line)
+        label = named.group(1) if named else f"{path.name}:L{lineno} {line.strip()}"
+        found.append(f"{table}.{label}")
     return sorted(found)
 
 

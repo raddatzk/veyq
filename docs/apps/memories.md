@@ -13,7 +13,7 @@ nested into **Chapters**. Product language **Memory / Chapter** is unchanged; fo
   exemption to the application-id context ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Decision 9).
 - **Domain data:** media and its derivatives, uploader buckets, a Memory's sealed `wrappedMeta` (date, place,
   cover), item favorites. The media tables key on `node_id` (measured:
-  `grep -n "node_id" backend/src/main/resources/db/migration/V11__media.sql backend/src/main/resources/db/migration/V35__media_buckets.sql`).
+  `grep -n "node_id" backend/src/main/resources/db/migration/V*__memories_baseline.sql`).
 - **Screens and behaviour:** gallery and lightbox, upload with client-generated derivatives, covers, date and
   place curation, the map, live updates. Their state is the use-cases and enablers under
   [`docs/features/memory/`](../features/memory/_index.md); this page points at them and does not restate them.

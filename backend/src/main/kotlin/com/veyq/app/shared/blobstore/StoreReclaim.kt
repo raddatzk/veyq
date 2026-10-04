@@ -24,7 +24,7 @@ import org.hibernate.annotations.DynamicUpdate
 data class StoreObjectRef(val storageKey: String, val chunkCount: Int)
 
 /**
- * A pending store-object deletion (ADR 0062, `V48__store_reclaim.sql`).
+ * A pending store-object deletion (ADR 0062, `veyq_store_reclaim`).
  *
  * **Deliberately says nothing about where it came from.** No scope, no media, no node: after a group erasure
  * these rows are the only surviving trace, and a per-scope tally of object counts would describe the erased

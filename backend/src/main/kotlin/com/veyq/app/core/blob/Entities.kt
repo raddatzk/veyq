@@ -23,9 +23,7 @@ import org.hibernate.annotations.DynamicUpdate
  *
  * This row is the **only** pointer to its `storage_key`, so nothing else can find the chunks a client staged
  * under it — reclaiming it and reclaiming those objects is one job, and it is [UploadSessionPurge]'s
- * (`veyq.media.upload.retention`). `V11__media.sql`'s "a later slice" note is a historical artifact of the
- * migration that created this table; Flyway checksums applied migrations, so it is left alone and this KDoc is
- * the live statement of the rule.
+ * (`veyq.media.upload.retention`). This KDoc is the live statement of the rule.
  */
 @Entity
 @Table(name = "veyq_upload_session")
@@ -74,7 +72,7 @@ class UploadSessionEntity : PanacheEntityBase {
     @Column(name = "blob_role", length = 16)
     var blobRole: String? = null
 
-    /** Would this session's wrap open where it is about to be attached? Null ids (a pre-V53 session) never match. */
+    /** Would this session's wrap open where it is about to be attached? Null ids never match. */
     fun boundTo(ownerId: String, role: String): Boolean = this.ownerId == ownerId && blobRole == role && blobId != null
 
     companion object : PanacheCompanionBase<UploadSessionEntity, String>

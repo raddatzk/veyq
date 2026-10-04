@@ -74,7 +74,7 @@ class NodesStore {
     /**
      * Slug uniqueness — one of the **three reads that deliberately keep seeing soft-deleted rows** (ADR 0061).
      * `ux_node_parent_slug` is a plain UNIQUE(parent_id, slug_token) spanning trashed rows (MariaDB has no
-     * filtered index, V47), so adding `deletedAt is null` here would let validation pass and the database reject
+     * filtered index), so adding `deletedAt is null` here would let validation pass and the database reject
      * the insert on flush afterwards — a clean 409 turned into a 500. The trashed row holds its own id as its
      * token, which is outside the contract's base64 token alphabet, so nothing a client can send collides with
      * it through the API; a handler-level caller can, and `NodesSlugTrapTest` pins exactly that.
@@ -229,7 +229,7 @@ class NodesStore {
             if (n.id !in doomed) continue
             n.deletedAt = now
             // ADR 0061 Decision 5: free the name immediately, by the WRITE. `ux_node_parent_slug` is a plain
-            // UNIQUE(parent_id, slug_token) spanning trashed rows (MariaDB has no filtered index, V47), so a
+            // UNIQUE(parent_id, slug_token) spanning trashed rows (MariaDB has no filtered index), so a
             // trashed node would otherwise hold its name hostage for the whole retention window. The node's own
             // id is unique by construction, blind (the server may not compute a slug token — it is a MAC under
             // K_SC), and outside the contract's base64 token alphabet, so nothing a client can send collides

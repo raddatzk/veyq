@@ -1281,7 +1281,7 @@ class ScopesSliceTest {
     /**
      * The job arm of uc.spaces.delete-group's total erasure, and the one that was **live**: a group that had ever
      * enqueued a background job could not be erased at all. `veyq_job.scope_id` references `veyq_scope(id)` with
-     * no `ON DELETE` clause (V20__background_jobs.sql:26) and nothing anywhere deleted a job row, so
+     * no `ON DELETE` clause (`fk_job_scope`) and nothing anywhere deleted a job row, so
      * `eraseScope`'s final `ScopeEntity.deleteById` raised `FK_JOB_SCOPE` — on every scheduled tick, forever,
      * with the group's bytes never reclaimed on the operator's own disk. That is what this reddened on before the
      * fix, which is why it is written as a group that *ever ran* a job rather than as a row count.
@@ -1428,7 +1428,7 @@ class ScopesSliceTest {
     /**
      * BITE-TEST for the share arm of the same closure — a **live defect on a seeded arm**, and the seeding is the
      * honest part rather than a shortcut. `veyq_share.scope_id` references `veyq_scope(id)` with no `ON DELETE`
-     * (V31__share.sql:20) and `veyq_share_identity.share_id` references the share (V32__contributor_share.sql:13),
+     * (`fk_share_scope`) and `veyq_share_identity.share_id` references the share (`fk_share_identity_share`),
      * so both refuse the scope row exactly as the job tables did. The rows are seeded rather than made through the
      * API because what this pins is the *schema* requirement: a purge that never learned to delete a share would
      * silently stop erasing every group that ever had a link (ADR 0029 §6). Erasing the share is also what

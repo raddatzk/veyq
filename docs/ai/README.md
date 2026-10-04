@@ -84,7 +84,7 @@ Five rules follow:
      wasn't.
    - **Doc ahead** — a decision nobody built. *That* is the CR.
    - **Doc unbuildable** — it asks for something the stack has no form of, so the code never could follow.
-     V35 was told to add a partial unique index the H2 ∩ MariaDB subset does not have.
+     A migration was once told to add a partial unique index the H2 ∩ MariaDB subset does not have.
 
    **A measurement is only as true as the tree it ran against.** *Measured, not recalled* guards the **claim**;
    nothing guards the **substrate**. The command ran, its output is real, and it still proves nothing if it read

@@ -135,7 +135,7 @@ stateDiagram-v2
   without breaking operator-blindness — content access exists only once the owner has cold-born the
   scope.
 - **Invite lifecycle mirrors the session refresh-token model** ([ADR 0004](../../../decisions/0004-session-tokens.md),
-  `V5`): the server stores only the **SHA-256 hash**, never the token; each invite carries a **`status`**
+  `veyq_refresh_token`): the server stores only the **SHA-256 hash**, never the token; each invite carries a **`status`**
   (`ACTIVE` → `SUPERSEDED` on resend/reassign, → `CONSUMED` on acceptance, → `EXPIRED` past its TTL).
   Transitions are **soft** — nothing is hard-deleted on re-mint or on redemption, so a replayed
   `SUPERSEDED`/`CONSUMED`/`EXPIRED` token is **recognised** (distinct from "unknown") and rejected +

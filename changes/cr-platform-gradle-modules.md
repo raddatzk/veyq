@@ -26,7 +26,8 @@ invariants: [operator-blind E2EE everywhere, self-hostable by default, API-first
 
 ## Open for the owner
 
-What is still open after your decisions of 2026-10-04 (first round: rows 0–6 of § Decided; second round: rows 7–11);
+What is still open after your decisions of 2026-10-04 (first round: rows 0–6 of § Decided; second round: rows 7–11;
+third round, questions 1 and 2: rows 12–14);
 each carries a recommendation. None blocks step 0; the ones marked **before step N** block that step. Decided since
 the last version of this CR: the artifact shape (one fast-jar), the blob location (now step 3), `NodeKindRules` (now
 step 4). Question 3 had no answer from you; **it must be answered before step 2 starts** — step 2 writes the kernel
@@ -46,7 +47,8 @@ returns when `writesFor` finds no writer (`ShareUploadOutcome.NotContributable`,
 change while Memories is present. The alternative — keep `0` and rely on the core-alone test — leaves the one quiet
 failure mode in the series. Your call; say so if you want the open variant back.
 
-1. **The shape of the baseline scripts — before step 1.** The history (67 files) folds to the end state: 35 tables,
+1. **The shape of the baseline scripts — answered 2026-10-04 ("Passt so": option (a), as recommended; built in
+   step 1).** The history (67 files) folds to the end state: 35 tables,
    30 core + 5 Memories (measured, § State). Options: (a) **two hand-folded files, one per module**, schema only,
    same constraint/index names as today; (b) one file per table; (c) a `SHOW CREATE TABLE` dump of a migrated
    MariaDB, normalised. **Recommendation: (a).** (b) is 35 files for no ordering benefit; (c) needs Docker to
@@ -58,14 +60,16 @@ failure mode in the series. Your call; say so if you want the open variant back.
    `V202610041201__memories_baseline.sql` — 12 digits (Flyway compares version parts as numbers; unmeasured on
    MariaDB's `flyway_schema_history.version` VARCHAR, measured in step 1), the module in the name so a human and a
    guard see the owner without opening the path.
-2. **Pin and release — your call; this is what the words mean here.** The *pin* is one file,
+2. **Pin and release — accepted 2026-10-04 as recommended: pinned at once (step 1), the release is the owner's
+   word.** What the words mean here: The *pin* is one file,
    `scripts/applied_migrations.sha256`, holding the SHA-256 of every baseline migration, and a guard
    (`validate_migration_versions.py`) that fails when a migration file differs from its line or has vanished. The
    *release* is the first version that anyone but you has installed; from then on a baseline is never edited, only
    extended by a new migration (the `backend/CLAUDE.md` rule "an applied migration is never edited" becomes absolute
    again). Before that moment a baseline may still change, but only together with a visible edit of its pin line in
    the same commit, so the change cannot go unnoticed. The guard cannot know when the release happens; you declare
-   it (a line in the pin file). **Recommendation:** pin at once, release when you say so.
+   it (a line in the pin file). Until then a baseline changes only together with its pin line in the same commit
+   (`backend/CLAUDE.md` § Migrations carries that paragraph).
 3. **The `shared/` → `features/` layering dies in the flat rename — before step 2.** `shared.X` and `features.X` both become
    `com.veyq.core.X`, and the directory name was the guard's only handle on "kernel never imports a feature slice".
    **Recommendation: keep the rule, re-express it as a declared list** — the 15 former `shared/` packages are the
@@ -162,6 +166,14 @@ Second round (later the same day):
 | 9 | **The generic blob upload/quota half moves to core, as its own step before the module cut** (step 3), with two core seams, `UploadAdmission` and `UploadCompletion` | open question 4, "accept for this CR, next CR" |
 | 10 | **Not in this CR, recorded as open prerequisites** (§ Goal, inbox #325–#327): a generic `veyq_node_attachment(node_id, slot, blob_id)` table with real foreign keys — built with the first application that really needs it (Expenses or Files), cut on that real case; the generalisation of the cover columns and revision counters; a new seal purpose and key rule for non-Memories blobs | — |
 | 11 | Pin/release stays the owner's call (open question 2); open question 3 (kernel list) had no answer — the CR is written in its recommendation, and it must be answered before step 2 | — |
+
+Third round (later the same day):
+
+| # | Decision | What it replaced |
+|---|---|---|
+| 12 | Question 1 answered "Passt so": two hand-folded baselines, `V<yyyymmddHHMM>__core_baseline.sql` and `V<yyyymmddHHMM>__memories_baseline.sql`, in the shared `db/migration/`, core first by version; Memories tables reference core tables only, never the reverse | open question 1 |
+| 13 | Question 2 accepted: pin now (`scripts/applied_migrations.sha256` + `validate_migration_versions.py`); the first release is the owner's word; until then a baseline changes only with a visible pin-line change in the same commit | open question 2 |
+| 14 | The old 67 migrations are removed; no production environment exists, and every dev database, the owner's included, is recreated and its accounts are lost | — |
 
 Slicing order (the owner's, re-cut): MembershipEraser edge (0) → Flyway baseline reset (1) → package rename (2) →
 blob upload/quota to core (3) → `NodeKindRules` (4) → contracts split (5) → Gradle skeleton and `:core` (6) →
@@ -454,7 +466,7 @@ the three web `generate:api` trees (`web`, `admin-web`: `find src/api/generated 
   in a session scratchpad, so step 2 regenerates it from `0286259b`. The web `generate:api` trees were **not**
   recorded; nothing they derive from changes before step 5, so step 5 records them first.
 
-### 1 — Flyway: reset to a baseline per module under one version scheme
+### 1 — Flyway: reset to a baseline per module under one version scheme — **done 2026-10-04**
 
 *Why before the rename and the split:* it changes no Kotlin and no package, only what the database starts from; and
 the per-module baselines are the first artefact that has an owner before the modules exist.
@@ -497,9 +509,11 @@ the per-module baselines are the first artefact that has an owner before the mod
 - **Consequences, stated, not hidden.** Every existing database is incompatible. Without `repair-at-start`, Flyway on
   an old schema refuses the new jar (`Detected applied migration not resolved locally`). Under `%dev`,
   `quarkus.flyway.repair-at-start=true` (`application-dev.properties:12`, measured) lets repair mark the 67 vanished
-  entries deleted and migrate then tries the core baseline on a schema that already has its tables → `CREATE TABLE …
-  already exists` (remembered: Flyway's repair semantics; the step reads the actual message when it recreates) —
-  a different message, the same consequence. That is **every dev database, the owner's included** —
+  entries deleted and migrate then tries the core baseline on a schema that already has its tables → (measured,
+  a throwaway MariaDB holding the old 67-file schema and history) `Successfully repaired schema history table`, then
+  `Migration of schema \`veyq\` to version "202610041200 - core baseline" failed!` with `Table 'veyq_server_setup'
+  already exists` (SQL state 42S01); without repair, `Validate failed` naming every one of the 67 versions as
+  `Detected applied migration not resolved locally` — a different message, the same consequence. That is **every dev database, the owner's included** —
   recreate it (`docker compose -f infra/docker-compose.yml down -v`, which also drops the Garage volume, so the dev
   store's objects go with the rows they belonged to) and **accounts, tenants and everything in them are lost**;
   `Bootstrap User`/`Bootstrap DB + Garage` recreate the seed. An instance backup taken before the reset cannot be
@@ -529,6 +543,30 @@ the per-module baselines are the first artefact that has an owner before the mod
   (name shape).
 - **Done when:** the above; `backend/CLAUDE.md` migration conventions rewritten (the pin rule and open question 2's
   release caveat included).
+
+- **Outcome (what later steps inherit).** Built as above with three deviations, each smaller than the text:
+  (1) `validate_migration_versions.py` is **stricter** than "no new version below the highest pinned one": every
+  migration must have a pin line, and the lines must ascend — a new file is pinned in the commit that adds it, so
+  "unpinned above the highest" does not exist and bite (5) is red both pinned (order) and unpinned (missing pin).
+  (2) It already globs every `backend/**/src/main/resources/db/migration` (build output excluded) instead of the one
+  directory, which is what made bite (3) runnable now; step 2's `backend_tree.migration_roots()` replaces the glob.
+  (3) The pin file carries a `release: none | <version>` line (decision 13); the guard checks its shape, not the
+  event. `validate_scope_erasure_arity` no longer replays `DROP TABLE`/`RENAME TO` — a later one is reported red,
+  never a false green (its limit (b) says so). **Proofs run:** the schema-equality fingerprint (scratchpad script;
+  sorted lines of tables, columns with ordinal/type/length/precision/scale/datetime precision/nullability/default,
+  constraints with key columns and FK target/rules, indexes with uniqueness and ordered columns; H2 auto names
+  normalised, H2's own constraint-backing `*_INDEX_<hex>` indexes left out because which FK gets one depends on
+  H2's ALTER-rebuilds, not on the end state — the raw diff before that exclusion was exactly six such indexes) is
+  empty on H2 (459 lines: 35 tables, 281 columns, 70 constraints, 73 indexes) and on a throwaway MariaDB 11.4 of
+  the pinned image (486 lines: `COLUMN_TYPE` there tells `TEXT` from `MEDIUMTEXT`, which H2 cannot); bite (1)
+  (drop `ix_media_share_identity`) is red on both. `./gradlew --offline check` 1138 tests, 0 failed, 2 skipped
+  (= step 0's baseline), 5m53s; the boot against the old schema confirms MariaDB stores and compares the 12-digit
+  version. **[LIVE]** `run_backend_races_on_mariadb.py` (throwaway container): 32 classes, 382 tests, 0 failed, and
+  its log reads `Successfully applied 2 migrations to schema \`veyq\`, now at version v202610041201` — the
+  boot line the fast-jar proof asks for, from the test JVM. Bites (2)–(6) red/green as listed, plus a deleted pinned file → red; the `table.column` re-key bite of
+  `validate_blob_reference_arity` (rename `veyq_media` in the Memories baseline → red) ran. Not run here: the
+  fast-jar boot itself and `run_web_e2e.py` (both **[LIVE]**, for the owner or CI). Inbox rows that cite `Vnn` in
+  their done history were left as they are (flow, not state).
 
 ### 2 — Rename the packages (a script, a manifest, a proof)
 
