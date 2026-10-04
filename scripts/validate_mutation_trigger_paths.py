@@ -40,6 +40,8 @@ import json
 import pathlib
 import sys
 
+import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
+
 try:
     import yaml
 except ImportError:
@@ -50,19 +52,21 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / "backend" / "pitest.scope.json"
 WORKFLOW = ROOT / ".github" / "workflows" / "mutation-backend.yml"
 
-SOURCE_ROOTS = {"targetClasses": "backend/src/main/kotlin", "targetTests": "backend/src/test/kotlin"}
+SOURCE_ROOTS = {"targetClasses": backend_tree.main_roots,
+                "targetTests": lambda: backend_tree.test_roots() + backend_tree.fixture_roots()}
 
 errors: list[str] = []
 
 
-def derive_path(entry: str, source_root: str) -> str | None:
-    """A PIT class glob → the repo-relative .kt file that declares it. `None` when the entry names no single
-    file (a package sweep), which the manifest forbids anyway."""
+def derive_path(entry: str, source_roots: list[pathlib.Path]) -> str | None:
+    """A PIT class glob → the repo-relative .kt file that declares it, under whichever source root holds it
+    (`backend_tree.source_file`). `None` when the entry names no single file (a package sweep), which the manifest
+    forbids anyway."""
     name = entry.rstrip("*")
     name = name.split("$", 1)[0]  # a nested class lives in its outer class's file
     if not name or name.endswith("."):
         return None
-    return f"{source_root}/{name.replace('.', '/')}.kt"
+    return backend_tree.source_file(name, source_roots).relative_to(ROOT).as_posix()
 
 
 def trigger_blocks() -> dict[str, list[str]]:
@@ -83,9 +87,9 @@ def main() -> int:
                           f"on every push (or not at all). Expected the scope's files to be listed there.")
 
     checked = 0
-    for key, source_root in SOURCE_ROOTS.items():
+    for key, source_roots in SOURCE_ROOTS.items():
         for entry in scope.get(key) or []:
-            rel = derive_path(entry, source_root)
+            rel = derive_path(entry, source_roots())
             if rel is None:
                 errors.append(f"pitest.scope.json: '{entry}' ({key}) names no single class — a package sweep. "
                               f"The manifest's own rule is an EXPLICIT list (ADR 0045 §2); it also leaves this "

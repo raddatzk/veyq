@@ -51,10 +51,11 @@ import pathlib
 import re
 import sys
 
+import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-MAIN = ROOT / "backend/src/main/kotlin"
-RESOLVER = MAIN / "com/veyq/app/shared/tenant/TenantHostResolver.kt"
-ACCOUNTS = MAIN / "com/veyq/app/shared/identity/AccountStore.kt"
+RESOLVER = backend_tree.source_file("com.veyq.app.shared.tenant.TenantHostResolver")
+ACCOUNTS = backend_tree.source_file("com.veyq.app.shared.identity.AccountStore")
 
 # A double-quoted literal's content, at the position a pattern leaves off. Kotlin allows `"…"` only here; a raw
 # `"""…"""` query is out of reach, see limit (b).
@@ -92,9 +93,10 @@ def hits(rule: str, patterns: list[re.Pattern[str]], src: str) -> list[int]:
 
 
 def main() -> int:
-    files = sorted(MAIN.rglob("*.kt"))
+    files = backend_tree.main_kotlin()
     if not files:
-        print(f"FAIL lookup-single-home: no Kotlin under {MAIN.relative_to(ROOT)} — nothing was checked")
+        print(f"FAIL lookup-single-home: no Kotlin under {backend_tree.BACKEND.relative_to(ROOT)}/**/src/main/kotlin "
+              "— nothing was checked")
         return 1
     sources = {f: f.read_text(encoding="utf-8") for f in files}
 

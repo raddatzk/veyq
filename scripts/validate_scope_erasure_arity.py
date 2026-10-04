@@ -64,10 +64,10 @@ import pathlib
 import re
 import sys
 
+import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-MIGRATIONS = ROOT / "backend" / "src" / "main" / "resources" / "db" / "migration"
-KOTLIN_MAIN = ROOT / "backend" / "src" / "main" / "kotlin"
-PURGE = KOTLIN_MAIN / "com" / "veyq" / "app" / "features" / "spaces" / "scope" / "ScopePurge.kt"
+PURGE = backend_tree.source_file("com.veyq.app.features.spaces.scope.ScopePurge")
 ERASE_FN = "private fun eraseScope"
 ERASER_FN = "fun eraseScope"
 ERASER_CLASS = re.compile(r"^\s*(?:\w+\s+)*class\s+\w+[^{=]*:\s*(?:[\w.,\s]*,\s*)?ScopeEraser\b", re.MULTILINE)
@@ -101,7 +101,7 @@ def fk_edges() -> list[dict]:
     """Every foreign key in the migrations, attributed to the table whose statement declares it."""
     edges: list[dict] = []
     current = None
-    for path in sorted(MIGRATIONS.glob("*.sql"), key=_version):
+    for path in sorted(backend_tree.migrations(), key=_version):
         for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
             if SQL_COMMENT.match(line):  # a comment naming a table is not a statement about one
                 continue
@@ -149,7 +149,7 @@ def erased_tables(errors: list[str]) -> set[str]:
 
     entities = set(ERASED_ENTITY.findall(source.split(ERASE_FN, 1)[1]))
     erasers = 0
-    for path in sorted(KOTLIN_MAIN.rglob("*.kt")):
+    for path in backend_tree.main_kotlin():
         text = path.read_text(encoding="utf-8")
         if ERASER_CLASS.search(text) and ERASER_FN in text:
             erasers += 1
@@ -161,7 +161,7 @@ def erased_tables(errors: list[str]) -> set[str]:
             "would report their tables as uncovered for the wrong reason — or the discovery pattern drifted."
         )
     table_of: dict[str, str] = {}
-    for path in sorted(KOTLIN_MAIN.rglob("*.kt")):
+    for path in backend_tree.main_kotlin():
         for match in ENTITY_TABLE.finditer(path.read_text(encoding="utf-8")):
             table_of[match.group(2)] = match.group(1)
 
@@ -181,10 +181,10 @@ def erased_tables(errors: list[str]) -> set[str]:
 def main() -> int:
     errors: list[str] = []
 
-    if not MIGRATIONS.is_dir() or not PURGE.is_file():
+    if not backend_tree.migrations() or not PURGE.is_file():
         print(
             "SCOPE ERASURE ARITY VALIDATION FAILED:\n"
-            f"  - missing tree: {MIGRATIONS} or {PURGE}. This guard reads backend sources directly; a moved "
+            f"  - missing tree: no migration under {backend_tree.BACKEND}, or no {PURGE}. This guard reads backend sources directly; a moved "
             f"tree must be re-pointed, not silently skipped."
         )
         return 1

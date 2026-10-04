@@ -36,9 +36,10 @@ import sys
 import time
 from pathlib import Path
 
+import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
+
 REPO = Path(__file__).resolve().parent.parent
 BACKEND = REPO / "backend"
-TEST_ROOT = BACKEND / "src" / "test" / "kotlin"
 COMPOSE_FILE = REPO / "infra" / "docker-compose.yml"
 NAME = f"veyq-race-mariadb-{os.getpid()}"
 PASSWORD = "race"  # a throwaway container's credential, not a secret
@@ -58,7 +59,7 @@ def race_classes() -> list[str]:
     """Every test class that calls the race harness, as Gradle `--tests` filters. The harness file itself is no
     test. Fails loudly on an empty set: a run of nothing would read as a green proof."""
     found = []
-    for f in sorted(TEST_ROOT.rglob("*.kt")):
+    for f in backend_tree.test_kotlin():
         if f.name == "Race.kt":
             continue
         if RACE_CALL.search(f.read_text()):

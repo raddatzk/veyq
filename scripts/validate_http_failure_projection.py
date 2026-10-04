@@ -18,9 +18,10 @@ import pathlib
 import re
 import sys
 
+import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-MAIN = ROOT / "backend" / "src" / "main" / "kotlin"
-WRITER = MAIN / "com" / "veyq" / "app" / "shared" / "http" / "HttpFailure.kt"
+WRITER = backend_tree.source_file("com.veyq.app.shared.http.HttpFailure")
 
 # An `ErrorResponse(` not preceded by an identifier char / dot — i.e. a constructor call, not `SomeErrorResponse(`
 # or `x.ErrorResponse(`.
@@ -30,12 +31,12 @@ errors: list[str] = []
 
 
 def main() -> int:
-    if not MAIN.is_dir():
-        print(f"no backend sources found under {MAIN.relative_to(ROOT)}")
+    if not backend_tree.main_roots():
+        print(f"no backend sources found under {backend_tree.BACKEND.relative_to(ROOT)}/**/src/main/kotlin")
         return 1
 
     writer_hits = 0
-    for path in sorted(MAIN.rglob("*.kt")):
+    for path in backend_tree.main_kotlin():
         hits = [
             i + 1
             for i, line in enumerate(path.read_text().splitlines())

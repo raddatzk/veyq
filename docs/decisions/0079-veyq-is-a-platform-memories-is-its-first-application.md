@@ -113,7 +113,7 @@ application to be separated from.
   (inbox #329); the i18n catalog is one file and `styles/memory.css` is global; `NodeKind` is the generated closed
   enum, so the convention that core never names `MEMORY`/`CHAPTER` is guarded, not typed.
   Docs describing the target say which of these they rely on.
-- **Guards move with the code.** `validate_shared_imports_no_features.py` encodes feature → shared; the
+- **Guards move with the code.** `validate_kernel_imports_no_slices.py` encodes feature → shared; the
   application → core, never core → application and never application → application rules need the same form of
   guard (an import check over the moved packages, bite-tested with a core file importing an application) before
   the first package moves, or the direction is prose. The core → application half now exists in the same guard

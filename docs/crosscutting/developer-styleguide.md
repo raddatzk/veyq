@@ -31,7 +31,7 @@
 - **Cross-cutting code lives in `shared/`** — `backend/src/main/kotlin/com/veyq/app/shared/`. **The directory is
   the list**; it cannot be out of date about itself, whereas the roll-call that used to stand here named six
   slices of which two existed and omitted nine. `shared/` must not depend on a feature;
-  [`validate_shared_imports_no_features.py`](../../scripts/validate_shared_imports_no_features.py) holds that for
+  [`validate_kernel_imports_no_slices.py`](../../scripts/validate_kernel_imports_no_slices.py) holds that for
   its imports. The same guard holds its **core half**
   ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)): neither `shared/` nor
   `core/` (`com.veyq.app.core`, the platform packages) may import the Memories application — `features.media`,

@@ -97,7 +97,7 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   32 a declared doc's every link back to its wiki page removed — rejected: `validate_wiki_sources` requires each
      `docs/` source to link the page, so whoever edits the doc sees the published page that restates it. Before
      it, a page told users the opposite of its doc and was found because a user asked (inbox #120)
-  34 a `core/node/` file importing `features.media` — rejected: `validate_shared_imports_no_features` bars core
+  34 a `core/node/` file importing `features.media` — rejected: `validate_kernel_imports_no_slices` bars core
      from the Memories application (ADR 0079), so an application cannot grow a back-edge into the platform. The
      `core/` tree does not exist yet, so the forgery creates it; the guard must stay green without it and go red
      with the planted file
@@ -113,7 +113,7 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      at `veyq_node`, so nothing at runtime refuses the purge; before that guard the scope, blob and reclaim
      guards were all green on this exact forgery while the purge orphaned every media, bucket and blob row
   38 a `core/node/` file naming `features.media` by a fully-qualified reference inline, with no import — rejected:
-     `validate_shared_imports_no_features` reads qualified names on lexer-masked source, not only `import` lines.
+     `validate_kernel_imports_no_slices` reads qualified names on lexer-masked source, not only `import` lines.
      The compiler does not care which form a back-edge takes; before, this exact shape was green
   39 a core `shared/ui/` file importing `features/memory/memoryNodes` — rejected: `validate_web_core_imports_no_applications`
      resolves a relative specifier against the importing file, so the web core cannot grow a back-edge into the
@@ -129,9 +129,12 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   44 a bare side-effect `import '…'` of the application in a core file — rejected: the third spelling of the edge
   45 a core file naming the Memories node kind — rejected: the shell asks the registry, it does not know the kinds
   46 `import.meta.glob` in a core file — rejected: discovery by glob would hide an edge from the import rule
-  47 a `features/spaces/` file importing `features.media` — rejected: `validate_shared_imports_no_features` derives
+  47 a `features/spaces/` file importing `features.media` — rejected: `validate_kernel_imports_no_slices` derives
      the platform as every main file whose `package` is not a Memories one, not as the `core/` and `shared/`
      directories. Before, `features.spaces.ScopesStore` imported the item-favorites entity and the guard was green
+  48 a kernel (tenant) file importing a slice (the admin tenant feature) — rejected: `validate_kernel_imports_no_slices`
+     reads kernel membership from its declared `KERNEL` list, not from a `shared/` directory, which the package
+     rename into `com.veyq.core.<feature>` removed; every package off the list is a slice
 Open gaps — a forgery the guard still passes (a documented limit, not a defect to fix blindly):
   4b a lying `status: planned` on an implemented use-case passes. **Left open on purpose** — the obvious rule
      "planned ⇒ no coverage refs" is *false in general*: a use-case can be legitimately `planned` while carrying
@@ -656,6 +659,17 @@ def forge_platform_feature_imports_media(root: pathlib.Path) -> str:
     return "a features/spaces file importing features.media (must be REJECTED — the platform is every non-Memories file)"
 
 
+def forge_kernel_imports_slice(root: pathlib.Path) -> str:
+    # A kernel package reaching into a slice: the shape the 2026-09-23 review found (tenant kernel classes on the
+    # admin feature's tenant entity). Kernel membership is the declared KERNEL list, not a directory.
+    f = root / "backend/src/main/kotlin/com/veyq/app/shared/tenant/GuardGapProbe.kt"
+    if not f.parent.is_dir():
+        raise ForgeError(f"{f.parent.relative_to(root)} is missing — the tenant kernel package moved")
+    f.write_text("package com.veyq.app.shared.tenant\n\nimport com.veyq.app.features.admin.tenant.TenantStore\n\n"
+                 "class GuardGapProbe\n")
+    return "a kernel (tenant) file importing the admin tenant slice (must be REJECTED — the kernel names no slice)"
+
+
 WEB_GUARD = "validate_web_core_imports_no_applications.py"
 
 
@@ -899,11 +913,11 @@ CASES = [
     ("31", "validate_wiki_sources.py", forge_wiki_pair_declares_fewer,     False),
     ("32", "validate_wiki_sources.py", forge_wiki_backlink_removed,        False),
     ("33", "validate_wiki_sources.py", forge_wiki_prose_contradicts_doc,   True),
-    ("34", "validate_shared_imports_no_features.py", forge_core_imports_media, False),
+    ("34", "validate_kernel_imports_no_slices.py", forge_core_imports_media, False),
     ("35", "validate_blob_reference_arity.py", forge_contributor_forgets_derivative_arm, False),
     ("36", "validate_scope_erasure_arity.py", forge_media_eraser_drops_a_table, False),
     ("37", "validate_node_subtree_erasure.py", forge_media_node_eraser_deleted, False),
-    ("38", "validate_shared_imports_no_features.py", forge_core_names_media_inline, False),
+    ("38", "validate_kernel_imports_no_slices.py", forge_core_names_media_inline, False),
     ("39", WEB_GUARD, forge_web_core_imports_application, False),
     ("40", WEB_GUARD, forge_web_core_reexports_application, False),
     ("41", WEB_GUARD, forge_web_core_dynamic_imports_application, False),
@@ -912,7 +926,8 @@ CASES = [
     ("44", WEB_GUARD, forge_web_core_side_effect_import, False),
     ("45", WEB_GUARD, forge_web_core_names_memory_kind, False),
     ("46", WEB_GUARD, forge_web_core_glob, False),
-    ("47", "validate_shared_imports_no_features.py", forge_platform_feature_imports_media, False),
+    ("47", "validate_kernel_imports_no_slices.py", forge_platform_feature_imports_media, False),
+    ("48", "validate_kernel_imports_no_slices.py", forge_kernel_imports_slice, False),
 ]
 
 

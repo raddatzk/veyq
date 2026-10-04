@@ -155,6 +155,8 @@ import shutil
 import subprocess
 import sys
 
+import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
+
 try:
     import yaml
 except ModuleNotFoundError:  # pragma: no cover - same shape as the other guards
@@ -164,8 +166,8 @@ except ModuleNotFoundError:  # pragma: no cover - same shape as the other guards
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 CHART = ROOT / "charts" / "veyq"
 CI_DIR = CHART / "ci"
-SINK_KT = ROOT / "backend/src/main/kotlin/com/veyq/app/shared/tenant/KubernetesIngressSink.kt"
-CONFIG_KT = ROOT / "backend/src/main/kotlin/com/veyq/app/shared/config/VeyqConfig.kt"
+SINK_KT = backend_tree.source_file("com.veyq.app.shared.tenant.KubernetesIngressSink")
+CONFIG_KT = backend_tree.source_file("com.veyq.app.shared.config.VeyqConfig")
 DOCKERFILE = ROOT / "Dockerfile"
 
 ENV_KEY = "VEYQ_SECURITY_CONFIG_SECRET_FILE"

@@ -31,11 +31,12 @@ import pathlib
 import re
 import sys
 
+import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
+
 import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-MAIN = ROOT / "backend" / "src" / "main" / "kotlin"
-CLASSIFICATION = MAIN / "com" / "veyq" / "app" / "shared" / "identity" / "WrapMethods.kt"
+CLASSIFICATION = backend_tree.source_file("com.veyq.app.shared.identity.WrapMethods")
 CONTRACT = ROOT / "contracts" / "api" / "account.openapi.yaml"
 SCHEMA = "MasterKeyWrap"
 
@@ -47,7 +48,7 @@ def contract_methods() -> list[str] | None:
 
 
 def main() -> int:
-    for anchor in (MAIN, CLASSIFICATION, CONTRACT):
+    for anchor in (CLASSIFICATION, CONTRACT):
         if not anchor.exists():
             print(f"WRAP METHOD VOCABULARY VALIDATION FAILED:\n  - missing {anchor.relative_to(ROOT)} — this "
                   f"guard's anchor moved")
@@ -63,7 +64,7 @@ def main() -> int:
     literal = re.compile(rf"""(["'])({names})\1""")
 
     errors: list[str] = []
-    files = sorted(MAIN.rglob("*.kt"))
+    files = backend_tree.main_kotlin()
     for path in files:
         if path == CLASSIFICATION:
             continue

@@ -37,9 +37,11 @@ from __future__ import annotations
 import pathlib
 import sys
 
+import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-MAIN = ROOT / "backend" / "src" / "main" / "kotlin"
-CORE = MAIN / "com" / "veyq" / "app" / "shared" / "ratelimit"
+CORE = (backend_tree.package_dirs("com.veyq.app.shared.ratelimit")
+        or [backend_tree.BACKEND / "src/main/kotlin/com/veyq/app/shared/ratelimit"])[0]
 
 # A file that *is* a rate limiter by name. Both parts are load-bearing: `Counter` catches the shell shape
 # (`FixedWindowCounter`, `TokenBucketCounter`), `Limiter` the handler-side ones (`ShareRateLimiter`,
@@ -62,7 +64,7 @@ STATE_MARKERS = (
 def limiter_files() -> list[pathlib.Path]:
     """Every `*Limiter*.kt` / `*Counter*.kt` in backend main sources, in a stable order."""
     return sorted(
-        p for p in MAIN.rglob("*.kt")
+        p for p in backend_tree.main_kotlin()
         if any(marker in p.name for marker in NAME_MARKERS)
     )
 

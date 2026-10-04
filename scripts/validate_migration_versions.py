@@ -48,6 +48,8 @@ import pathlib
 import re
 import sys
 
+import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 BACKEND = ROOT / "backend"
 PIN_FILE = ROOT / "scripts" / "applied_migrations.sha256"
@@ -66,11 +68,8 @@ LINE_COMMENT = re.compile(r"--[^\n]*")
 
 def migration_dirs() -> list[pathlib.Path]:
     """Every `src/main/resources/db/migration` under backend/, build output excluded — found, never listed, so a
-    second module's directory is read the day it exists."""
-    return sorted(
-        d for d in BACKEND.glob("**/src/main/resources/db/migration")
-        if d.is_dir() and "build" not in d.relative_to(BACKEND).parts
-    )
+    second module's directory is read the day it exists (`backend_tree.migration_roots`)."""
+    return backend_tree.migration_roots()
 
 
 def statements(path: pathlib.Path) -> list[str]:

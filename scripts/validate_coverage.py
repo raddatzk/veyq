@@ -127,6 +127,8 @@ import shlex
 import sys
 from typing import NamedTuple
 
+import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
+
 from kotlin_lexer import mask as _mask
 
 try:
@@ -138,7 +140,6 @@ except ImportError:
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 FEATURES = ROOT / "docs" / "features"
 COVERAGE = ROOT / "docs" / "coverage" / "features"
-BACKEND_TESTS = ROOT / "backend" / "src" / "test"
 WEB = ROOT / "web"
 CRYPTO = ROOT / "packages" / "crypto"
 ADMIN_WEB = ROOT / "admin-web"
@@ -181,7 +182,7 @@ errors: list[str] = []
 
 
 # ---- Kotlin: a lexer (not a parser) that makes comments and literals unable to pose as structure ----
-# It lives in kotlin_lexer.py, shared with validate_shared_imports_no_features.
+# It lives in kotlin_lexer.py, shared with validate_kernel_imports_no_slices.
 
 
 KOTLIN_FUN = r"fun\s+`?([A-Za-z0-9_]+)`?\s*\("
@@ -433,7 +434,7 @@ def _stem_classes(surface: str, files) -> dict[str, TestClass]:
 
 
 def backend_test_classes() -> dict[str, TestClass]:
-    return _stem_classes("backend", sorted(BACKEND_TESTS.rglob("*.kt"))) if BACKEND_TESTS.exists() else {}
+    return _stem_classes("backend", backend_tree.test_kotlin())
 
 
 # ---- CI: every run of the backend's Gradle tests, as the workflow files declare it ----
