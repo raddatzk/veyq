@@ -26,7 +26,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 /**
- * The scope erasure's order is an explicit phase table, not bean order (cr-platform-core-boundaries step 5). The FK
+ * The scope erasure's order is an explicit phase table, not bean order (ADR 0079 phase 1, step 5). The FK
  * order derivative -> media -> blob is a **runtime** failure when broken, so the second test erases a real scope
  * that has a media with an original and a derivative: a media eraser given a phase after core's blob delete makes
  * `veyq_blob` refuse (`fk_media_blob`, `fk_derivative_blob`) and the purge throws.

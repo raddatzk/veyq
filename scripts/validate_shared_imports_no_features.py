@@ -11,7 +11,7 @@ feature's table gets the entity moved into `shared/` (`shared/tenant/TenantEntit
 `shared/membership/MembershipEntity`), with the feature's store still its only writer. The files are found by
 walking the directory, and a run that finds none is red, so a moved or renamed tree cannot pass as clean.
 
-**Core half (cr-platform-core-boundaries step 1).** ADR 0079 makes veyq a platform and Memories its first
+**Core half (ADR 0079 phase 1, step 1).** ADR 0079 makes veyq a platform and Memories its first
 application, and an application depends on core, never the reverse. So no Kotlin source under `shared/` **or**
 `core/` (the `com.veyq.app.core` tree, which gains `core.node`/`core.blob`/`core.sharing`/`core.quota` as the
 restructuring moves code in) names `features.media`, `features.memory` or the favorites packages
@@ -57,7 +57,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 BASE = "com.veyq.app"
 APP = ROOT / "backend" / "src" / "main" / "kotlin" / pathlib.Path(*BASE.split("."))
 SHARED = APP / "shared"
-CORE = APP / "core"  # absent until cr-platform-core-boundaries step 2a creates it; absence is not an error
+CORE = APP / "core"  # absent until ADR 0079 phase 1, step 2a creates it; absence is not an error
 # Built from the package name rather than typed out, so this file never spells what it forbids. A qualified name
 # anywhere in code — an import line or an inline reference — not preceded by another name part, not followed by one.
 FEATURE_REF = re.compile(r"(?<![\w.])" + re.escape(BASE + ".features") + r"(?![\w])")

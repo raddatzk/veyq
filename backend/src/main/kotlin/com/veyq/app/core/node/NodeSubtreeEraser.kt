@@ -3,7 +3,7 @@ package com.veyq.app.core.node
 /**
  * One step of a node subtree's hard-erasure (the trash purge, ADR 0061 Decision 6): the package that owns rows
  * hanging off a node erases them here, so `NodeSubtreePurge` names no table of the Memories application
- * (cr-platform-core-boundaries step 6).
+ * (ADR 0079 phase 1, step 6).
  *
  * **Order is [phase], sorted by the caller — never CDI bean order**, as for `ScopeEraser`. Core's own cover-blob
  * erase sits at [COVER_BLOBS_PHASE]: an eraser below it runs before the covers (media, whose blob rows must go

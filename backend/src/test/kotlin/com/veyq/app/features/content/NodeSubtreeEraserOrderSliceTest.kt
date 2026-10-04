@@ -28,7 +28,7 @@ import org.junit.jupiter.api.Test
 
 /**
  * The node subtree erasure's order is an explicit phase table, not bean order, and `dropDeadIdentities` runs only
- * after the media eraser's guest set is returned and its rows are gone (cr-platform-core-boundaries step 6).
+ * after the media eraser's guest set is returned and its rows are gone (ADR 0079 phase 1, step 6).
  * `dropDeadIdentities` re-counts the guest's media and buckets, so run before they are deleted it keeps the
  * identity, and run without the set the media eraser returns it never sees it: either way the guest outlives the
  * last thing they uploaded — a runtime result, so the second test erases a real subtree whose link was deleted
