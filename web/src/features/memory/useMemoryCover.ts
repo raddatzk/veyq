@@ -12,7 +12,7 @@ import { useToast } from '../../shared/state/useToast'
 import { QUOTA_EXCEEDED } from './uploadQueue'
 import { nodeMetaState } from './nodeMeta'
 import { useMetaWriteFeedback, type NodeMetaUpdate } from './useMetaWriteFeedback'
-import type { TreeNode } from './tree'
+import type { TreeNode } from '../../core/node/tree'
 
 /** The reactive context MemoryDetail hands the cover slice — getters so props stay reactive, plus the live gallery
  *  `thumbs` map (a media-source cover reuses an already-decrypted thumbnail) and the host's `metaUpdated` emit. */

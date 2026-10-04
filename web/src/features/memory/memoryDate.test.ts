@@ -19,7 +19,7 @@ import {
   type MemoryDate,
 } from './memoryDate'
 import type { MediaItem, MediaMeta } from './media'
-import type { TreeNode } from './tree'
+import type { TreeNode } from '../../core/node/tree'
 import { NodeKind, type ContentApi } from '../../api/generated/content'
 import { contentApi } from '../../api/client'
 import { fakeApi, stubApi } from '../../test/apiMock'

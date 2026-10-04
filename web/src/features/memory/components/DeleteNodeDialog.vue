@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import Message from 'primevue/message'
-import { deleteNode, type TreeNode } from '../tree'
+import { deleteNode, type TreeNode } from '../../../core/node/tree'
 import { NodeKind } from '../../../api/generated/content'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
 

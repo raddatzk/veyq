@@ -10,7 +10,7 @@ import { nodeMetaState } from './nodeMeta'
 import { useMetaWriteFeedback, type NodeMetaUpdate } from './useMetaWriteFeedback'
 import { formatClosedRange, formatDay } from './memoryDateRange'
 import type { MediaItem } from './media'
-import type { TreeNode } from './tree'
+import type { TreeNode } from '../../core/node/tree'
 
 /** The reactive context MemoryDetail hands the date slice — getters so props stay reactive, plus the live media
  *  list (`auto` materializes from it) and the host's `metaUpdated` emit. */

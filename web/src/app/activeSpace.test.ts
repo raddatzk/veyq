@@ -10,23 +10,23 @@ vi.mock('../features/spaces/scopes', () => ({
 }))
 // Stub only the async loaders refreshActiveScope drives (they hit the content/favorites APIs) — keep the rest of
 // the stores real so the other tests still assert on treeStore/favoritesStore.
-vi.mock('../features/memory/treeStore', async (orig) => ({ ...(await orig<object>()), loadTree: vi.fn() }))
+vi.mock('../core/node/treeStore', async (orig) => ({ ...(await orig<object>()), loadTree: vi.fn() }))
 vi.mock('./favoritesStore', async (orig) => ({ ...(await orig<object>()), loadFavoritesFor: vi.fn() }))
 vi.mock('../features/account/instance/instance', () => ({ getSetupStatus: vi.fn() }))
 
 import { activeSpace, activeScopeKey, activeEpochKeys, enterScope, refreshActiveScope, clearActiveSpace } from './activeSpace'
 import { ensurePersonalScope, openScope, openScopeById, openGroupByToken } from '../features/spaces/scopes'
 import { ScopeKind } from '../api/generated/scopes'
-import { TENANT_SCOPE } from '../features/memory/location'
+import { TENANT_SCOPE } from '../core/node/location'
 import { TrustStateRefused } from '../features/account/trustMarks'
 
 const PERSONAL_SCOPE = '~me'
-import { treeStore, resetTree } from '../features/memory/treeStore'
+import { treeStore, resetTree } from '../core/node/treeStore'
 import { favoritesStore, clearFavorites } from './favoritesStore'
 import { getSetupStatus } from '../features/account/instance/instance'
 import { serverState } from '../shared/state/serverState'
 import { suspensionSignals } from './tenantSuspension'
-import type { TreeNode } from '../features/memory/tree'
+import type { TreeNode } from '../core/node/tree'
 import { NodeKind } from '../api/generated/content'
 
 const TENANT_ID = '22222222-2222-2222-2222-222222222222'

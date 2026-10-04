@@ -3,13 +3,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { httpError } from '../../../test/httpError'
 import { mount } from '@vue/test-utils'
 
-vi.mock('../tree', () => ({
+vi.mock('../../../core/node/tree', () => ({
   listTrash: vi.fn(),
   restoreNode: vi.fn(),
 }))
 
 import SpaceTrashDialog from './SpaceTrashDialog.vue'
-import { listTrash, restoreNode, type TrashedNode } from '../tree'
+import { listTrash, restoreNode, type TrashedNode } from '../../../core/node/tree'
 import { epochsOf } from '../../spaces/epochsTestUtil'
 import { realI18n, t } from '../../../test/i18n'
 

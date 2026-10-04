@@ -10,7 +10,7 @@
 // (ADR 0077). The shared envelope and the write loop live in `nodeMeta.ts`.
 import { epochMsToIsoDate } from '../../shared/isoDate'
 import { effectiveCapturedAt, unsealMeta, type MediaItem } from './media'
-import { openContentKey, type TreeNode } from './tree'
+import { openContentKey, type TreeNode } from '../../core/node/tree'
 import { editField, sealNodeMeta, unsealNodeMeta, type NodeMetaAddress } from './nodeMeta'
 import { writeNodeMeta } from './nodeMetaWrite'
 import type { SealedMetaState } from './sealedMetaWrite'

@@ -39,7 +39,7 @@ import { birthInstance } from '../../test/e2eBootstrap'
 import { recordCanaries } from '../../test/canaries'
 import { ensurePersonalScope, listMyScopes, openPersonalScope } from '../spaces/scopes'
 import { epochsOf } from '../spaces/epochsTestUtil'
-import { createMemory } from './tree'
+import { createMemory } from './memoryNodes'
 import { deleteMedia, listMedia, unsealMeta } from './media'
 import { listBuckets, openBucketName } from './mediaBuckets'
 import {

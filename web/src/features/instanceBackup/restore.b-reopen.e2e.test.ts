@@ -10,7 +10,7 @@ import { unlockMasterKey } from '../account/unlock/unlock'
 import { getTenantMailSettings } from '../tenant/tenantMailSettings'
 import { openPersonalScope } from '../spaces/scopes'
 import { epochsOf } from '../spaces/epochsTestUtil'
-import { listTree, nodeContentKey } from '../memory/tree'
+import { listTree, nodeContentKey } from '../../core/node/tree'
 import { listMedia, openOriginal, unsealMeta } from '../memory/media'
 
 /**

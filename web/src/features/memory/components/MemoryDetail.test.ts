@@ -30,7 +30,7 @@ import { mediaApi, contentApi } from '../../../api/client'
 import * as v1 from '@veyq/crypto/v1'
 import { NodeKind, type ContentApi } from '../../../api/generated/content'
 import { fakeApi } from '../../../test/apiMock'
-import type { TreeNode } from '../tree'
+import type { TreeNode } from '../../../core/node/tree'
 import { galleryFakeStore } from './galleryFakeStore'
 import { realI18n, t } from '../../../test/i18n'
 

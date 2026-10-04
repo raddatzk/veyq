@@ -227,7 +227,7 @@ allowlist: run them serially, or accept a mechanical conflict on those two files
       and the module's own test goes red (`GroupMembersPanel.test`, `TenantMembersPanel.test` mock `revokeScopeShares`).
       · Done when: `npm run check` green (this includes `verify:media-worker`); the guard green with six fewer entries;
       row 13/14 refs repointed (`python3 scripts/validate_coverage.py` green).
-- [ ] 3 the node layer to `core/node/` — `tree.ts` (without `createMemory`/`createChapter`), `treeStore.ts`,
+- [x] 3 the node layer to `core/node/` — `tree.ts` (without `createMemory`/`createChapter`), `treeStore.ts`,
       `location.ts`, `browse.ts`, the `TreeNode` type, with their tests. `createContentNode` is exported from
       `core/node`; the kind wrappers `createMemory`/`createChapter` and their `nodeMeta`/`MemoryLocation` use stay in
       the application (`features/memory/memoryNodes.ts`). `coverStore.ts` stays (a Memories concept). Repoint imports,

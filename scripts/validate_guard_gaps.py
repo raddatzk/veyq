@@ -115,7 +115,7 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   38 a `core/node/` file naming `features.media` by a fully-qualified reference inline, with no import — rejected:
      `validate_shared_imports_no_features` reads qualified names on lexer-masked source, not only `import` lines.
      The compiler does not care which form a back-edge takes; before, this exact shape was green
-  39 a core `shared/ui/` file importing `features/memory/tree` — rejected: `validate_web_core_imports_no_applications`
+  39 a core `shared/ui/` file importing `features/memory/memoryNodes` — rejected: `validate_web_core_imports_no_applications`
      resolves a relative specifier against the importing file, so the web core cannot grow a back-edge into the
      Memories application (ADR 0079). The same file importing `features/account/…` stays green by hand-run control —
      a different edge, not this guard's subject
@@ -654,44 +654,44 @@ def _plant_web(root: pathlib.Path, rel: str, text: str) -> None:
 
 def forge_web_core_imports_application(root: pathlib.Path) -> str:
     _plant_web(root, "shared/ui/GuardGapProbe.vue",
-               "<script setup lang=\"ts\">\nimport { loadTree } from '../../features/memory/tree'\n"
+               "<script setup lang=\"ts\">\nimport { loadTree } from '../../features/memory/memoryNodes'\n"
                "void loadTree\n</script>\n")
-    return "a shared/ui file importing features/memory/tree (must be REJECTED — core depends on no application)"
+    return "a shared/ui file importing features/memory/memoryNodes (must be REJECTED — core depends on no application)"
 
 
 def forge_web_core_reexports_application(root: pathlib.Path) -> str:
-    _plant_web(root, "shared/guardGapProbe.ts", "export * from '../features/memory/tree'\n")
+    _plant_web(root, "shared/guardGapProbe.ts", "export * from '../features/memory/memoryNodes'\n")
     return "a core file re-exporting the application with `export * from` (must be REJECTED)"
 
 
 def forge_web_core_dynamic_imports_application(root: pathlib.Path) -> str:
     _plant_web(root, "shared/guardGapProbe.ts",
-               "export const lazy = () => import('../features/memory/tree')\n")
+               "export const lazy = () => import('../features/memory/memoryNodes')\n")
     return "a core file importing the application with `import('…')` (must be REJECTED)"
 
 
 def forge_web_composition_root_sibling(root: pathlib.Path) -> str:
-    _plant_web(root, "applications2.ts", "import './features/memory/tree'\n")
+    _plant_web(root, "applications2.ts", "import './features/memory/memoryNodes'\n")
     return "a sibling of the composition root importing the application (the exemption is the exact path; REJECTED)"
 
 
 def forge_web_allowlist_entry_stale(root: pathlib.Path) -> str:
-    f = root / "web" / "src" / "sw" / "register.ts"
+    f = root / "web" / "src" / "app" / "favoritesStore.ts"
     if not f.is_file():
-        raise ForgeError("web/src/sw/register.ts is gone — re-anchor this forgery on an allowlisted file")
+        raise ForgeError("web/src/app/favoritesStore.ts is gone — re-anchor this forgery on an allowlisted file")
     text = f.read_text()
     f.write_text(re.sub(r"^import[^\n]*features/memory[^\n]*\n", "", text, flags=re.M))
     if f.read_text() == text:
-        raise ForgeError("web/src/sw/register.ts no longer imports the application — re-anchor on an allowlisted file")
+        raise ForgeError("web/src/app/favoritesStore.ts no longer imports the application — re-anchor on an allowlisted file")
     return "an allowlisted file whose violation was removed but whose entry stays (a stale entry; REJECTED)"
 
 
 def forge_web_allowlist_entry_deleted(root: pathlib.Path) -> str:
     g = root / "scripts" / WEB_GUARD
     text = g.read_text()
-    entry = '    "sw/register.ts": {RULE_IMPORT},\n'
+    entry = '    "app/favoritesStore.ts": {RULE_IMPORT},\n'
     if entry not in text:
-        raise ForgeError("the allowlist entry for sw/register.ts is gone — re-anchor on an entry that remains")
+        raise ForgeError("the allowlist entry for app/favoritesStore.ts is gone — re-anchor on an entry that remains")
     g.write_text(text.replace(entry, "", 1))
     return "an allowlist entry deleted while its file still violates (REJECTED)"
 

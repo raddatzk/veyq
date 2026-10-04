@@ -11,11 +11,11 @@ acceptanceCriteria:
     text: The whole tree is listed as opaque rows and names are decrypted on device under K_SC; the level is assembled client-side.
     coverage:
       backend: { integration: [NodesSliceTest.createTreeThenList] }
-      web: { unit: [src/features/memory/tree.test.ts, src/features/memory/browse.test.ts] }
+      web: { unit: [src/core/node/tree.test.ts, src/core/node/browse.test.ts] }
   - id: client-side-breadcrumb
     text: The breadcrumb + current level are derived client-side from the local tree (the blind server computes no navigation).
     coverage:
-      web: { unit: [src/features/memory/browse.test.ts, src/features/memory/location.test.ts] }
+      web: { unit: [src/core/node/browse.test.ts, src/core/node/location.test.ts] }
   - id: view-modes
     text: The current level is shown via one app-wide, persisted display toggle — grid (cards, default) / list / map. Grid/list is the card-grid layout (cr-0063); map ("Karte", browse-only, cr-0071) plots the current folder's subtree of located Memories/Chapters as clickable pins from each node's sealed `location` (unsealed on device from listNodes, no locations API, behind the ADR 0018 tiles opt-in), a pin click opening that Memory. The preference persists across surfaces (localStorage).
     coverage:
@@ -29,12 +29,12 @@ acceptanceCriteria:
     text: Creating a folder/Memory seals the name + blinded slug under K_SC and POSTs only ciphertext (a Memory births its random K_mem).
     coverage:
       backend: { integration: [NodesSliceTest.createTreeThenList] }
-      web: { unit: [src/features/memory/tree.test.ts, src/features/memory/components/MemoryBrowse.test.ts, src/features/memory/components/NodeMutationDialog.test.ts] }
+      web: { unit: [src/core/node/tree.test.ts, src/features/memory/components/MemoryBrowse.test.ts, src/features/memory/components/NodeMutationDialog.test.ts] }
   - id: rename-and-delete-subtree
     text: Rename re-seals the name + recomputes the slug; delete removes the node and its whole subtree.
     coverage:
       backend: { integration: [NodesSliceTest.renameThenDeleteSubtree] }
-      web: { unit: [src/features/memory/tree.test.ts] }
+      web: { unit: [src/core/node/tree.test.ts] }
   - id: slug-collision-rejected
     text: A name whose blinded slug already exists under the parent is rejected (UNIQUE(parentId, slugToken), 409) — deterministic slug.
     coverage:

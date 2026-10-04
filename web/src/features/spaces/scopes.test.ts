@@ -30,7 +30,7 @@ import { ensurePersonalScope, openPersonalScope, openScope, openScopeById, openG
 import { ScopeKind, type MyTenant, type ScopeEpochLink, type ScopeMember, type ScopeSummary, type ScopesApi } from '../../api/generated/scopes'
 import type { ContentApi } from '../../api/generated/content'
 import { scopesApi, contentApi, tenantsApi, accountApi } from '../../api/client'
-import { createFolder } from '../memory/tree'
+import { createFolder } from '../../core/node/tree'
 import { checkAndPin } from '../account/identityPins'
 import { identityPrivate, masterKey } from '../../app/vault'
 import { epochLinkContext } from './epochs'

@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import MemoryCard from './MemoryCard.vue'
 import { NodeKind } from '../../../api/generated/content'
-import type { TreeNode } from '../tree'
+import type { TreeNode } from '../../../core/node/tree'
 import type { MemoryDate } from '../memoryDate'
 import { realI18n, t } from '../../../test/i18n'
 

@@ -20,9 +20,7 @@ import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { contentApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import { NodeKind, type NodeSummary, type TrashedNodeSummary } from '../../api/generated/content'
-import { writeKey, keyAt, type EpochKeys } from '../spaces/epochs'
-import { sealNodeMeta } from './nodeMeta'
-import type { MemoryLocation } from './memoryLocation'
+import { writeKey, keyAt, type EpochKeys } from '../../features/spaces/epochs'
 import { slugify } from '../../shared/naming'
 import { expectMintedId } from './mintedId'
 
@@ -105,12 +103,13 @@ export async function createFolder(
 }
 
 /**
- * Create a content-bearing node (MEMORY or CHAPTER) — births a fresh random `K_mem`, wrapped under the
+ * Create a content-bearing node — births a fresh random `K_mem`, wrapped under the
  * **parent's content key** `wrapKey` (recursive `K_mem`, ADR 0012): the write key `E_current` for a top-level
  * Memory, the parent Memory's `K_mem` for a chapter. The name + slug are always sealed under the write key, and
- * the node is tagged with the **current epoch** (ADR 0024).
+ * the node is tagged with the **current epoch** (ADR 0024). The kind is the caller's: an application's own wrappers
+ * (Memories: `createMemory` / `createChapter`) call this; core never names a content kind.
  */
-async function createContentNode(
+export async function createContentNode(
   scopeId: string, epochs: EpochKeys, wrapKey: Uint8Array, kind: NodeKind, name: string, parentId: string | null,
   metaSealer?: (contentKey: Uint8Array, node: NodeAddress) => string,
 ): Promise<{ nodeId: string; contentKey: Uint8Array }> {
@@ -137,33 +136,6 @@ async function createContentNode(
     }),
   )
   return { nodeId: expectMintedId(node.nodeId, res.nodeId), contentKey }
-}
-
-/**
- * Create a MEMORY — births a fresh random `K_mem` wrapped under `K_SC`. Returns the node id + the K_mem. An
- * optional `location` is **sealed at birth** into the node's `wrappedMeta` under that fresh `K_mem` (cr-0069
- * pre-arm) — a `fixed` pin, or an `auto` name with no `derived` yet (it re-medoids on the first geotagged media).
- */
-export async function createMemory(
-  scopeId: string, epochs: EpochKeys, name: string, parentId: string | null = null,
-  location: MemoryLocation | null = null,
-): Promise<{ nodeId: string; memoryKey: Uint8Array }> {
-  const metaSealer = location ? (key: Uint8Array, node: NodeAddress) => sealNodeMeta(key, node, { v: 1, location }) : undefined
-  // A top-level Memory's K_mem wraps under the write key E_current (the scope's current epoch).
-  const { nodeId, contentKey } = await createContentNode(scopeId, epochs, writeKey(epochs), NodeKind.Memory, name, parentId, metaSealer)
-  return { nodeId, memoryKey: contentKey }
-}
-
-/**
- * Create a CHAPTER inside a Memory (or another chapter) — births a fresh random `K_mem` wrapped under the
- * **parent node's `K_mem`** (`parentKey`), so the chapter is a sharing unit of its own (ADR 0012, cr-0060).
- * Returns the node id + the chapter's K_mem.
- */
-export async function createChapter(
-  scopeId: string, epochs: EpochKeys, parentKey: Uint8Array, name: string, parentId: string,
-): Promise<{ nodeId: string; chapterKey: Uint8Array }> {
-  const { nodeId, contentKey } = await createContentNode(scopeId, epochs, parentKey, NodeKind.Chapter, name, parentId)
-  return { nodeId, chapterKey: contentKey }
 }
 
 /**

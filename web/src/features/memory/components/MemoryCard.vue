@@ -7,7 +7,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Card from 'primevue/card'
-import type { TreeNode } from '../tree'
+import type { TreeNode } from '../../../core/node/tree'
 import type { MemoryDate } from '../memoryDate'
 import type { CoverCrop } from '../memoryCover'
 import { formatClosedRange, formatDay } from '../memoryDateRange'

@@ -21,7 +21,7 @@ import { setMemoryCover, unsealMemoryCover, type MemoryCover } from './memoryCov
 import { useMemoryCover } from './useMemoryCover'
 import { MetaConflictError, MetaUnreadableError } from './sealedMetaWrite'
 import { i18n } from '../../i18n'
-import type { TreeNode } from './tree'
+import type { TreeNode } from '../../core/node/tree'
 
 /** The cover the harness's tree copy holds — what the editor opened with, possibly stale. */
 let treeCover: MemoryCover | null = null

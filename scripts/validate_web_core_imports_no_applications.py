@@ -6,7 +6,7 @@ is everything else under `web/src` — by exclusion, so a new directory is guard
 run application → core, never back. Three rules, each read over every non-test `.ts`/`.vue` file of core:
 - **import**: no file names the application by an import specifier — `from '…'` (so also `export … from '…'`),
   `import('…')`, or a bare `import '…'`. A relative specifier is resolved against the importing file and tested
-  for landing inside the application, so `'../../memory/tree'` and `'../features/memory/tree'` are the same edge;
+  for landing inside the application, so `'../../memory/memoryNodes'` and `'../features/memory/memoryNodes'` are the same edge;
   a non-relative specifier that spells `features/memory` is refused too (no alias exists today).
 - **glob**: no file contains `import.meta.glob`. Discovery by glob would hide an edge from the rule above, and
   ADR 0079 Decision 5 says what runs is what was reviewed.
@@ -25,7 +25,7 @@ removes; step 9 deletes the list and asserts it is empty.
 
 **The defect that bought it.** No incident — the web half of ADR 0079 was prose until this guard. By the CR's
 measurement `app/`, `components/app/`, `sw/`, `views/` and three core features imported `features/memory` directly,
-which also made two import cycles (`app/activeSpace` ↔ `features/memory/treeStore`, `features/spaces` ↔
+which also made two import cycles (`app/activeSpace` ↔ `features/memory/memoryNodesStore`, `features/spaces` ↔
 `features/memory`); an application that core cannot import is what makes a second one possible.
 
 **Its limit.** Regex over source, not an AST: a commented-out import is read as an import (conservative), and a
@@ -58,6 +58,7 @@ ALLOWLIST: dict[str, set[str]] = {
     "app/itemFavoritesStore.ts": {RULE_IMPORT},
     "components/app/AppSidebar.vue": {RULE_IMPORT, RULE_KIND},
     "components/app/AppTopbar.vue": {RULE_IMPORT},
+    "core/node/browse.ts": {RULE_KIND},  # childrenOf buckets by kind; step 5 makes them generic
     "features/account/rotation/rotateKeys.ts": {RULE_IMPORT},
     "views/MemoryHomeView.vue": {RULE_IMPORT, RULE_KIND},
     "views/ShareView.vue": {RULE_IMPORT},
