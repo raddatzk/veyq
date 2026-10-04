@@ -13,9 +13,9 @@ names Memories application code (developer-styleguide § 1, ADR 0007's shape, AD
   name's package is the longest package some main file declares that prefixes it, so a class of the generated API
   (declared by no hand-written file) is neither kernel nor slice and stays usable. Dependencies run slice → kernel,
   never back: a kernel package that needs a slice's behaviour gets it through a small interface the slice implements
-  (`com.veyq.app.shared.auth.AccessTokenResolver`, which `SessionService` implements), and one that needs a slice's
-  table gets the entity moved into the kernel (`com.veyq.app.shared.tenant.TenantEntity`,
-  `com.veyq.app.shared.scope.ScopeEntity`, `com.veyq.app.shared.membership.MembershipEntity`) with the slice's
+  (`com.veyq.core.auth.AccessTokenResolver`, which `SessionService` implements), and one that needs a slice's
+  table gets the entity moved into the kernel (`com.veyq.core.tenant.TenantEntity`,
+  `com.veyq.core.scope.ScopeEntity`, `com.veyq.core.membership.MembershipEntity`) with the slice's
   store still its only writer. Every `KERNEL` entry must be declared by some main file, so the list cannot rot into
   names that guard nothing, and a run in which no file is kernel is red.
 - **Platform rule (ADR 0079).** veyq is a platform and Memories its first application; an application depends on
@@ -75,28 +75,28 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 # The kernel, declared. Each entry covers the package and every package below it. Written out in full, one per
 # line, so a package rename reaches each entry like any other qualified name.
 KERNEL = [
-    "com.veyq.app.shared.adminchannel",
-    "com.veyq.app.shared.appshell",
-    "com.veyq.app.shared.auth",
-    "com.veyq.app.shared.blobstore",
-    "com.veyq.app.shared.config",
-    "com.veyq.app.shared.crypto",
-    "com.veyq.app.shared.http",
-    "com.veyq.app.shared.identity",
-    "com.veyq.app.shared.instance",
-    "com.veyq.app.shared.membership",
-    "com.veyq.app.shared.persistence",
-    "com.veyq.app.shared.ratelimit",
-    "com.veyq.app.shared.scope",
-    "com.veyq.app.shared.tenant",
-    "com.veyq.app.shared.validation",
+    "com.veyq.core.adminchannel",
+    "com.veyq.core.appshell",
+    "com.veyq.core.auth",
+    "com.veyq.core.blobstore",
+    "com.veyq.core.config",
+    "com.veyq.core.crypto",
+    "com.veyq.core.http",
+    "com.veyq.core.identity",
+    "com.veyq.core.instance",
+    "com.veyq.core.membership",
+    "com.veyq.core.persistence",
+    "com.veyq.core.ratelimit",
+    "com.veyq.core.scope",
+    "com.veyq.core.tenant",
+    "com.veyq.core.validation",
 ]
 # The Memories application, as the platform may not see it. The last entry is forbidden prospectively.
 APPLICATION = [
-    "com.veyq.app.features.media",
-    "com.veyq.app.features.content.favorites",
-    "com.veyq.app.features.content.itemfavorites",
-    "com.veyq.app.features.memory",
+    "com.veyq.memories.media",
+    "com.veyq.memories.favorites",
+    "com.veyq.memories.itemfavorites",
+    "com.veyq.memories",
 ]
 # A qualified name in code, not preceded by another name part. Its package is resolved against the declared ones.
 QUALIFIED = re.compile(r"(?<![\w.])com\.veyq(?:\.\w+)+")

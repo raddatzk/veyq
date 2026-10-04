@@ -38,7 +38,7 @@ import sys
 import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-PURGE = backend_tree.source_file("com.veyq.app.features.content.NodeSubtreePurge")
+PURGE = backend_tree.source_file("com.veyq.core.content.NodeSubtreePurge")
 
 ERASER_CLASS = re.compile(r"^\s*(?:\w+\s+)*class\s+\w+[^{=]*:\s*(?:[\w.,\s]*,\s*)?NodeSubtreeEraser\b", re.MULTILINE)
 ERASER_FN = "override fun erase("
@@ -52,9 +52,9 @@ ENTITY_CLASS = re.compile(r"^\s*(?:open\s+)?class\s+(\w+)\s*:")
 HANDLED = {
     # Media go one at a time through the FK-ordered body (derivative -> media -> blob, chunk-key reclaim).
     "MediaEntity": ("eraser", "purgeMediaRows(",
-                    ("com.veyq.app.features.media.MediaStore", "fun purgeMediaRows(", "MediaEntity.deleteById(")),
+                    ("com.veyq.memories.media.MediaStore", "fun purgeMediaRows(", "MediaEntity.deleteById(")),
     # A link on an erased Memory is tombstoned, not deleted (ADR 0029 §7): its id stays held.
-    "ShareEntity": ("com.veyq.app.features.content.NodeSubtreePurge", "sharing.tombstoneAllOn(nodeIds)", None),
+    "ShareEntity": ("com.veyq.core.content.NodeSubtreePurge", "sharing.tombstoneAllOn(nodeIds)", None),
 }
 
 

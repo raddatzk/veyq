@@ -1,0 +1,522 @@
+package com.veyq.core.admin.tenant
+
+import com.veyq.core.identity.VeyqUser
+import com.veyq.core.membership.Admission
+import com.veyq.core.membership.MembershipEntity
+import com.veyq.core.membership.SignedGrant
+import com.veyq.core.membership.admit
+import com.veyq.core.membership.MembershipStore
+import com.veyq.core.scope.ScopeEntity
+import com.veyq.core.tenant.TenantEntity
+import com.veyq.core.tenant.TenantHostResolver
+import jakarta.enterprise.context.ApplicationScoped
+import jakarta.transaction.Transactional
+import java.time.Instant
+import java.util.UUID
+
+/** A tenant plus the state of its current (latest) invite, for the Server-Owner list view. */
+data class TenantView(
+    val id: String,
+    val name: String,
+    val domain: String,
+    val ownerEmail: String,
+    val status: String,
+    val inviteStatus: String?,
+    val inviteExpiresAt: Instant?,
+    /** What the tenant holds in the store (ADR 0073 §2), from `StorageUsage` — this store never sums. */
+    val storageUsedBytes: Long,
+    /** The Server Owner's quota for the tenant; null = none (ADR 0073 §1). */
+    val storageQuotaBytes: Long?,
+)
+
+/** The state of a tenant's current invite after a mint/resend/reassign. `bootstrapSecret` is the raw token,
+ *  present only on a freshly-minted invite (so the owner can copy the invite link) — never on a list read. */
+data class InviteView(val ownerEmail: String, val status: String, val expiresAt: Instant, val bootstrapSecret: String? = null)
+
+/** A pending member invite in the owner-facing list (cr-0082) — metadata only, never the secret. */
+data class PendingInviteRow(
+    val inviteId: String, val email: String, val status: String, val expiresAt: Instant,
+    /** The invite's admission (ADR 0020 move 6), served so a rotation of the tenant scope can carry it forward. */
+    val admission: Admission?,
+)
+
+/** An invite's admission, or null when it carries none (an owner invite, or one a rotation dropped). */
+fun TenantInviteEntity.admission(): Admission? {
+    val id = admissionId ?: return null
+    return Admission(id, admissionEpoch ?: return null, admissionTag ?: return null)
+}
+
+/** A tenant's current terms + a specific caller's accepted version (cr-0114). `markdownByLocale` is the raw
+ *  serialized locale→markdown map (null = none set); the handler decodes it into the per-locale DTO. */
+data class TenantTermsRow(val version: Int, val acceptedVersion: Int, val markdownByLocale: String?)
+
+/** A tenant's current terms with **no** caller — version + the raw serialized markdown, no acceptance lookup
+ *  (the accountless share terms read, uc.sharing.share-accept). Distinct from [TenantTermsRow] which carries a
+ *  caller's acceptedVersion; an accountless visitor has no account, so there is nothing to report. */
+data class TenantGuestTermsRow(val version: Int, val markdownByLocale: String?)
+
+/** A tenant's mail configuration (cr-email-smtp-transport). Carries the **sealed** SMTP password (ciphertext +
+ *  nonce, ADR 0050) for internal use; the handler redacts it to `passwordSet` before it leaves the server. */
+data class MailSettingsRow(
+    val host: String?,
+    val port: Int?,
+    val from: String?,
+    val username: String?,
+    val passwordCiphertext: String?,
+    val passwordNonce: String?,
+    val tls: Boolean,
+    val enabled: Boolean,
+    val subjectTemplate: String?,
+    val bodyTemplate: String?,
+) {
+    val passwordSet: Boolean get() = passwordCiphertext != null
+}
+
+/**
+ * Persistence for tenant creation + invite lifecycle (cr-0009). The invite is its own row history; only the
+ * SHA-256 token hash is stored (never the token), and transitions are soft (ACTIVE → SUPERSEDED/CONSUMED/
+ * EXPIRED) — nothing is hard-deleted inline; a scheduled purge removes terminal rows later.
+ */
+@ApplicationScoped
+class TenantStore(private val membership: MembershipStore, private val hosts: TenantHostResolver) {
+
+    /** Whether some tenant already claims [domain] — through the one Host→tenant lookup, so "taken" and "resolves"
+     *  can never disagree about what a domain names. */
+    fun domainExists(domain: String): Boolean = hosts.tenantFor(domain) != null
+
+    fun findTenant(id: String): TenantEntity? = TenantEntity.findById(id)
+
+    /** Find an invite by its token hash (the accept lookup), or null if no invite ever had that token. */
+    fun findInviteByTokenHash(tokenHash: String): TenantInviteEntity? =
+        TenantInviteEntity.find("tokenHash", tokenHash).firstResult()
+
+    /**
+     * Spend a live invite — a **compare-and-set**, and the first write of the accept that calls it: only a row still
+     * `ACTIVE` and unexpired flips to `CONSUMED`, and the caller goes on only if exactly one did. Two accepts that
+     * both read the invite live cannot both win, and the loser has written nothing a constraint would have to undo,
+     * so it answers exactly as a replay of the spent secret does (developer-styleguide §12).
+     *
+     * The `and status = ACTIVE` in the WHERE is the transition's guard, not a re-read: the database decides it, so a
+     * revoke that landed between the caller's read and this write is not overwritten either. The caller's earlier
+     * read only tells a 404 from a 410 and supplies the tenant; it never authorizes the spend.
+     */
+    @Transactional
+    fun consumeLiveInvite(inviteId: String): Boolean =
+        TenantInviteEntity.update(
+            "status = ?1 where id = ?2 and status = ?3 and expiresAt > ?4",
+            TenantInviteEntity.CONSUMED, inviteId, TenantInviteEntity.ACTIVE, Instant.now(),
+        ) == 1
+
+    /**
+     * Take the tenant scope's row lock — the lock a rotation, [mintMemberInvite] and every admission write take — so
+     * a MEMBER accept cannot copy an admission that a concurrent rotation is replacing (ADR 0020 move 6). Taken
+     * before the spend; the admission is then read with [currentAdmission].
+     */
+    @Transactional
+    fun lockTenantScope(tenantId: String) {
+        ScopeEntity.lockRow(tenantId)
+    }
+
+    /**
+     * The invite's admission as committed **now** — after [lockTenantScope], so a rotation that re-tagged it is seen.
+     * A refresh, not a find: a find would hand back the copy this transaction read before the lock.
+     */
+    fun currentAdmission(invite: TenantInviteEntity): Admission? {
+        TenantInviteEntity.getEntityManager().refresh(invite)
+        return invite.admission()
+    }
+
+    /**
+     * Activate a tenant on acceptance — **atomic**: record the owner's `OWNER` membership + grant and flip the
+     * tenant `ACTIVE`. The invite was already spent by [consumeLiveInvite], first in the same transaction. The grant
+     * is opaque ciphertext stored verbatim, with the owner's self-signature over it (ADR 0028 Decision 6) and the
+     * admission the owner self-tagged under `E_0`, so the tenant's first rotation has a tag to carry forward
+     * (ADR 0020 move 6).
+     */
+    @Transactional
+    fun activate(tenantId: String, userId: String, grant: SignedGrant, admission: Admission) {
+        // The TENANT root scope is born with the owner membership; keyed id == tenantId (cr-0026).
+        ScopeEntity().apply {
+            id = tenantId
+            this.tenantId = tenantId
+            kind = ScopeEntity.TENANT
+            createdAt = Instant.now()
+        }.persist()
+        MembershipEntity().apply {
+            id = UUID.randomUUID().toString()
+            this.userId = userId
+            this.tenantId = tenantId
+            scopeId = tenantId
+            role = MembershipEntity.OWNER
+            wrappedGrant = grant.wrappedGrant
+            granterUserId = userId
+            granterIdentityPublicKey = VeyqUser.findById(userId)?.identityPublicKey
+            grantSignature = grant.signature
+            admit(admission)
+            createdAt = Instant.now()
+        }.persist()
+        TenantEntity.update("status = ?1 where id = ?2", TenantEntity.ACTIVE, tenantId)
+    }
+
+    /**
+     * Join an **already-active** tenant as a grant-less MEMBER (cr-0077): record a hollow membership (role, no
+     * grant) on the existing TENANT scope — **no** scope birth, **no** tenant status change. The invite was already
+     * spent by [consumeLiveInvite]. Creating the grant-less membership is what cr-0076 reconciles into a
+     * `grant-delivery` job; a key-holder then wraps `K_SC` to this member — once [admission], read from the invite by
+     * [currentAdmission], verifies (ADR 0020 move 6). Idempotent-friendly: the caller checks membership first.
+     */
+    @Transactional
+    fun joinAsMember(tenantId: String, userId: String, admission: Admission?) {
+        MembershipEntity().apply {
+            id = UUID.randomUUID().toString()
+            this.userId = userId
+            this.tenantId = tenantId
+            scopeId = tenantId // the TENANT root scope is keyed id == tenantId (cr-0026)
+            role = MembershipEntity.MEMBER
+            wrappedGrant = null // grant-less: delivered later by a key-holder (cr-0076)
+            admit(admission)
+            createdAt = Instant.now()
+        }.persist()
+    }
+
+    /** Whether [userId] belongs to the tenant — an accepted root membership. A question about a *target* (an
+     *  invitee, a returning member); whether a *caller* may act on the tenant is the scope-access gate's. */
+    fun belongsToTenant(userId: String, tenantId: String): Boolean = membership.belongsToTenant(userId, tenantId)
+
+    /** A tenant owner holds an OWNER membership on the tenant **root scope** (cr-0163), not merely any OWNER row
+     *  carrying this `tenantId`. Delegates to the single home in `shared/membership/`. */
+    fun isOwner(userId: String, tenantId: String): Boolean = membership.isTenantOwner(userId, tenantId)
+
+    /** Mint a single-use MEMBER invite on an active tenant, superseding any prior ACTIVE invite to that email, carrying
+     *  [admission] (ADR 0020 move 6). A fresh invite ([checkEpoch]) is refused — null, nothing written — when its
+     *  admission was tagged at an epoch that is no longer the tenant scope's current one, read under the lock a
+     *  rotation takes: a rotation that committed in between could not have carried it. A reissue keeps the admission
+     *  it replaces as it is. */
+    @Transactional
+    fun mintMemberInvite(
+        tenantId: String, email: String, tokenHash: String, expiresAt: Instant, admission: Admission?, checkEpoch: Boolean,
+    ): String? {
+        if (checkEpoch && admission != null &&
+            ScopeEntity.lockRow(tenantId)?.currentEpoch != admission.epoch
+        ) return null
+        TenantInviteEntity.update(
+            "status = ?1 where tenantId = ?2 and ownerEmail = ?3 and status = ?4",
+            TenantInviteEntity.SUPERSEDED, tenantId, email, TenantInviteEntity.ACTIVE,
+        )
+        return mintInvite(tenantId, email, tokenHash, expiresAt, Instant.now(), TenantInviteEntity.MEMBER, admission)
+    }
+
+    /** The tenant's pending (ACTIVE + unexpired) MEMBER invites — metadata only, for the owner's tracking list. */
+    fun listPendingMemberInvites(tenantId: String): List<PendingInviteRow> =
+        openMemberInvites(tenantId).map { PendingInviteRow(it.id, it.ownerEmail, it.status, it.expiresAt, it.admission()) }
+
+    /** The tenant's open MEMBER invites (ACTIVE + unexpired) — the one predicate both the owner's list and a tenant
+     *  rotation's completeness check use, so a rotator is required to carry exactly the invites it was shown
+     *  (ADR 0020 move 6). An invite that expires unswept is left behind; reissuing it keeps its old tag, which a
+     *  worker then declines as `admission_unverified` — the owner invites anew. */
+    fun openMemberInvites(tenantId: String): List<TenantInviteEntity> =
+        TenantInviteEntity.find(
+            "tenantId = ?1 and role = ?2 and status = ?3 and expiresAt > ?4",
+            tenantId, TenantInviteEntity.MEMBER, TenantInviteEntity.ACTIVE, Instant.now(),
+        ).list()
+
+    /** A specific pending (ACTIVE) MEMBER invite of this tenant, or null (unknown / consumed / terminal). */
+    fun findPendingMemberInvite(tenantId: String, inviteId: String): TenantInviteEntity? =
+        TenantInviteEntity.find(
+            "id = ?1 and tenantId = ?2 and role = ?3 and status = ?4",
+            inviteId, tenantId, TenantInviteEntity.MEMBER, TenantInviteEntity.ACTIVE,
+        ).firstResult()
+
+    /**
+     * Soft-revoke a live invite (→ SUPERSEDED terminal) so its secret replays as no-longer-valid. A compare-and-set
+     * like [consumeLiveInvite], so a revoke that lost to an accept does not re-tag the spent invite, and an accept
+     * that lost to it cannot join. Returns whether this call revoked it.
+     */
+    @Transactional
+    fun revokeInvite(inviteId: String): Boolean =
+        TenantInviteEntity.update(
+            "status = ?1 where id = ?2 and status = ?3",
+            TenantInviteEntity.SUPERSEDED, inviteId, TenantInviteEntity.ACTIVE,
+        ) == 1
+
+    /**
+     * Carry the open invites a rotation was shown into its new epoch (ADR 0020 move 6): re-tag or drop each one's
+     * admission. A **bulk update of the admission columns only, guarded by `status = ACTIVE`**, never a save of the
+     * entities read: the rotation read [invites] under the scope lock, which neither a revoke nor a member accept's
+     * spend takes, and a managed save would write their stale `status` back — a revoked or spent secret live again.
+     * An invite spent or revoked meanwhile is left as it is: it has nothing left to carry, and the completeness check
+     * already ran on the list the rotator was shown. (Panache's positional parameters are non-null, hence the literal
+     * `null`s of a drop.)
+     */
+    @Transactional
+    fun carryInvites(invites: List<TenantInviteEntity>, newEpoch: Int, retags: Map<String, String>, dropped: Set<String>) {
+        invites.forEach { inv ->
+            val id = inv.admissionId ?: return@forEach
+            if (id in dropped) {
+                TenantInviteEntity.update(
+                    "admissionId = null, admissionEpoch = null, admissionTag = null where id = ?1 and status = ?2",
+                    inv.id, TenantInviteEntity.ACTIVE,
+                )
+            } else {
+                retags[id]?.let {
+                    TenantInviteEntity.update(
+                        "admissionEpoch = ?1, admissionTag = ?2 where id = ?3 and status = ?4",
+                        newEpoch, it, inv.id, TenantInviteEntity.ACTIVE,
+                    )
+                }
+            }
+        }
+    }
+
+    /** Create a PENDING tenant with its first ACTIVE invite. Returns the new tenant id + invite expiry. */
+    @Transactional
+    fun createPendingTenant(
+        name: String,
+        domain: String,
+        ownerEmail: String,
+        tokenHash: String,
+        expiresAt: Instant,
+    ): Pair<String, Instant> {
+        val now = Instant.now()
+        val tenantId = UUID.randomUUID().toString()
+        TenantEntity().apply {
+            id = tenantId
+            this.name = name
+            this.domain = domain
+            this.ownerEmail = ownerEmail
+            status = TenantEntity.PENDING
+            createdAt = now
+        }.persist()
+        mintInvite(tenantId, ownerEmail, tokenHash, expiresAt, now)
+        return tenantId to expiresAt
+    }
+
+    /** Soft-supersede the tenant's current ACTIVE invite(s) and mint a fresh ACTIVE one (resend/reassign). */
+    @Transactional
+    fun supersedeAndMintInvite(
+        tenantId: String,
+        ownerEmail: String,
+        tokenHash: String,
+        expiresAt: Instant,
+    ): InviteView {
+        TenantInviteEntity.update(
+            "status = ?1 where tenantId = ?2 and status = ?3",
+            TenantInviteEntity.SUPERSEDED, tenantId, TenantInviteEntity.ACTIVE,
+        )
+        mintInvite(tenantId, ownerEmail, tokenHash, expiresAt, Instant.now())
+        return InviteView(ownerEmail, TenantInviteEntity.ACTIVE, expiresAt)
+    }
+
+    /** Re-bind the tenant's intended owner email (reassign). */
+    @Transactional
+    fun updateOwnerEmail(tenantId: String, ownerEmail: String) {
+        TenantEntity.update("ownerEmail = ?1 where id = ?2", ownerEmail, tenantId)
+    }
+
+    /**
+     * Take an ACTIVE tenant offline (ADR 0066) — `status` is the only column touched, so no key, grant, content
+     * row or session is in this path. Returns whether the transition happened.
+     *
+     * The `and status = ACTIVE` in the WHERE is the transition's guard, not a re-read: two concurrent suspends
+     * cannot double-apply and a suspend cannot silently overwrite a reactivate that landed between a read and a
+     * write, because there is no such window — the database decides the transition. The caller's separate
+     * existence probe only tells a 404 from a 409; it never authorizes the write.
+     */
+    @Transactional
+    fun suspend(tenantId: String): Boolean =
+        TenantEntity.update(
+            "status = ?1 where id = ?2 and status = ?3",
+            TenantEntity.SUSPENDED, tenantId, TenantEntity.ACTIVE,
+        ) > 0
+
+    /** Set the tenant owner's per-link storage limit (ADR 0073 §4) — the only writer of the column. */
+    @Transactional
+    fun setShareLinkLimit(tenantId: String, shareLinkLimitBytes: Long) {
+        TenantEntity.update("shareLinkLimitBytes = ?1 where id = ?2", shareLinkLimitBytes, tenantId)
+    }
+
+    /**
+     * Set or clear (null) the tenant's storage quota (ADR 0073 §1) — the only writer of the column, reached only by
+     * the Server Owner. The write is an UPDATE of the tenant row at flush, so it waits for, and is waited on by, the row
+     * lock an upload start holds while it reserves. (Through the entity, not a JPQL `update`: Panache's positional
+     * parameters are non-null, and null is the value that clears.) Returns whether the tenant exists.
+     */
+    @Transactional
+    fun setStorageQuota(tenantId: String, quotaBytes: Long?): Boolean {
+        val tenant = TenantEntity.findById(tenantId) ?: return false
+        tenant.storageQuotaBytes = quotaBytes
+        return true
+    }
+
+    /** Bring a SUSPENDED tenant back to ACTIVE — the exact inverse of [suspend], same guarded-UPDATE reasoning. */
+    @Transactional
+    fun reactivate(tenantId: String): Boolean =
+        TenantEntity.update(
+            "status = ?1 where id = ?2 and status = ?3",
+            TenantEntity.ACTIVE, tenantId, TenantEntity.SUSPENDED,
+        ) > 0
+
+    /**
+     * Move a tenant to a different domain (uc.admin.create-tenant), allowed from PENDING **or** ACTIVE — the
+     * same guarded-`UPDATE` shape as [suspend]/[reactivate], and for the same reason: the `and status in (…)`
+     * is the transition's guard, so a concurrent suspend cannot be overwritten by a domain change that read the
+     * old status a moment earlier. Returns whether the move happened.
+     *
+     * Uniqueness is the caller's check plus the column's UNIQUE; this only writes.
+     */
+    @Transactional
+    fun changeDomain(tenantId: String, domain: String): Boolean =
+        TenantEntity.update(
+            "domain = ?1 where id = ?2 and status in (?3, ?4)",
+            domain, tenantId, TenantEntity.PENDING, TenantEntity.ACTIVE,
+        ) > 0
+
+    /** Revoke a pending tenant: delete its invite history then the tenant itself. */
+    @Transactional
+    fun deleteTenant(tenantId: String) {
+        TenantInviteEntity.delete("tenantId", tenantId)
+        TenantEntity.deleteById(tenantId)
+    }
+
+    /** Every tenant, with its usage read from [usageByTenant] (tenant id → bytes; a tenant it lacks holds nothing). */
+    fun listAll(usageByTenant: Map<String, Long>): List<TenantView> =
+        TenantEntity.listAll().map { t ->
+            val invite = currentInvite(t.id)
+            TenantView(
+                id = t.id,
+                name = t.name,
+                domain = t.domain,
+                ownerEmail = t.ownerEmail,
+                status = t.status,
+                inviteStatus = invite?.status,
+                inviteExpiresAt = invite?.expiresAt,
+                storageUsedBytes = usageByTenant[t.id] ?: 0,
+                storageQuotaBytes = t.storageQuotaBytes,
+            )
+        }
+
+    private fun currentInvite(tenantId: String): TenantInviteEntity? =
+        TenantInviteEntity.find("tenantId = ?1 order by createdAt desc", tenantId).firstResult()
+
+    // --- terms of service (cr-0114, ADR 0035) ---
+
+    /** The tenant's current terms + [userId]'s accepted version (0 if never accepted). Null if no such tenant. */
+    fun termsFor(tenantId: String, userId: String): TenantTermsRow? {
+        val tenant = TenantEntity.findById(tenantId) ?: return null
+        val accepted = TenantTermsAcceptanceEntity
+            .find("userId = ?1 and tenantId = ?2", userId, tenantId).firstResult()?.acceptedVersion ?: 0
+        return TenantTermsRow(tenant.termsVersion, accepted, tenant.termsMarkdownByLocale)
+    }
+
+    /** The tenant's current terms **without** a caller — version + serialized markdown, and **no** acceptance
+     *  lookup (uc.sharing.share-accept: the accountless visitor's acceptance is client-only, so the server keeps
+     *  no record and needs no userId). Null if no such tenant. */
+    fun guestTermsFor(tenantId: String): TenantGuestTermsRow? {
+        val tenant = TenantEntity.findById(tenantId) ?: return null
+        return TenantGuestTermsRow(tenant.termsVersion, tenant.termsMarkdownByLocale)
+    }
+
+    /** Store the (already normalized) serialized terms and bump the version **only if the markdown changed** — an
+     *  idempotent re-save returns the same version (the pre-E2EE logic). Returns the resulting current version. */
+    @Transactional
+    fun updateTerms(tenantId: String, normalizedMarkdown: String): Int {
+        val tenant = TenantEntity.findById(tenantId) ?: return 0
+        if (tenant.termsMarkdownByLocale == normalizedMarkdown) return tenant.termsVersion
+        tenant.termsMarkdownByLocale = normalizedMarkdown
+        tenant.termsVersion += 1
+        tenant.persist()
+        return tenant.termsVersion
+    }
+
+    /** Upsert [userId]'s acceptance of [version] for [tenantId] (keyed by the (user, tenant) UNIQUE). */
+    @Transactional
+    fun recordAcceptance(userId: String, tenantId: String, version: Int) {
+        val existing = TenantTermsAcceptanceEntity
+            .find("userId = ?1 and tenantId = ?2", userId, tenantId).firstResult()
+        if (existing != null) {
+            existing.acceptedVersion = version
+            existing.acceptedAt = Instant.now()
+            existing.persist()
+        } else {
+            TenantTermsAcceptanceEntity().apply {
+                id = UUID.randomUUID().toString()
+                this.userId = userId
+                this.tenantId = tenantId
+                acceptedVersion = version
+                acceptedAt = Instant.now()
+            }.persist()
+        }
+    }
+
+    // --- per-tenant mail settings (cr-email-smtp-transport, ADR 0048/0049/0050) ---
+
+    /** The tenant's mail settings (sealed password included), or null if it never configured any. */
+    fun mailSettingsFor(tenantId: String): MailSettingsRow? =
+        TenantMailSettingsEntity.findById(tenantId)?.toRow()
+
+    /** Upsert a tenant's mail settings verbatim. The caller has already sealed (or preserved) the password and
+     *  validated the templates — this only persists the given row. */
+    @Transactional
+    fun saveMailSettings(tenantId: String, row: MailSettingsRow) {
+        val e = TenantMailSettingsEntity.findById(tenantId) ?: TenantMailSettingsEntity().apply { this.tenantId = tenantId }
+        e.host = row.host
+        e.port = row.port
+        e.fromAddress = row.from
+        e.username = row.username
+        e.passwordCiphertext = row.passwordCiphertext
+        e.passwordNonce = row.passwordNonce
+        e.tls = row.tls
+        e.enabled = row.enabled
+        e.subjectTemplate = row.subjectTemplate
+        e.bodyTemplate = row.bodyTemplate
+        e.persist()
+    }
+
+    private fun TenantMailSettingsEntity.toRow() = MailSettingsRow(
+        host = host, port = port, from = fromAddress, username = username,
+        passwordCiphertext = passwordCiphertext, passwordNonce = passwordNonce,
+        tls = tls, enabled = enabled, subjectTemplate = subjectTemplate, bodyTemplate = bodyTemplate,
+    )
+
+    // --- scheduled cleanup (see TenantInvitePurge) ---
+
+    /** Flip ACTIVE invites whose TTL has passed to EXPIRED. Returns how many were expired. */
+    @Transactional
+    fun expireOverdueInvites(now: Instant): Long =
+        TenantInviteEntity.update(
+            "status = ?1 where status = ?2 and expiresAt < ?3",
+            TenantInviteEntity.EXPIRED, TenantInviteEntity.ACTIVE, now,
+        ).toLong()
+
+    /** Physically delete terminal-state invites whose TTL passed before [cutoff]. Returns how many. */
+    @Transactional
+    fun purgeTerminalInvites(cutoff: Instant): Long =
+        TenantInviteEntity.delete(
+            "status in ?1 and expiresAt < ?2",
+            TenantInviteEntity.TERMINAL, cutoff,
+        )
+
+    /** Returns the new invite's id — the member paths need it to revoke the invite again if its mail fails to
+     *  send (ADR 0055 §6); the owner-bootstrap paths ignore it. */
+    private fun mintInvite(
+        tenantId: String, ownerEmail: String, tokenHash: String, expiresAt: Instant, now: Instant,
+        role: String = TenantInviteEntity.OWNER,
+        admission: Admission? = null,
+    ): String {
+        val inviteId = UUID.randomUUID().toString()
+        TenantInviteEntity().apply {
+            id = inviteId
+            this.tenantId = tenantId
+            this.ownerEmail = ownerEmail
+            this.tokenHash = tokenHash
+            status = TenantInviteEntity.ACTIVE
+            this.role = role
+            this.expiresAt = expiresAt
+            createdAt = now
+            admissionId = admission?.id
+            admissionEpoch = admission?.epoch
+            admissionTag = admission?.tag
+        }.persist()
+        return inviteId
+    }
+}

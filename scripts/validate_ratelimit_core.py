@@ -40,8 +40,8 @@ import sys
 import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-CORE = (backend_tree.package_dirs("com.veyq.app.shared.ratelimit")
-        or [backend_tree.BACKEND / "src/main/kotlin/com/veyq/app/shared/ratelimit"])[0]
+CORE = (backend_tree.package_dirs("com.veyq.core.ratelimit")
+        or [backend_tree.BACKEND / "src/main/kotlin/com/veyq/core/ratelimit"])[0]
 
 # A file that *is* a rate limiter by name. Both parts are load-bearing: `Counter` catches the shell shape
 # (`FixedWindowCounter`, `TokenBucketCounter`), `Limiter` the handler-side ones (`ShareRateLimiter`,

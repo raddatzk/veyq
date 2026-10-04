@@ -3,7 +3,7 @@
 
 **What it asserts.** Under `backend/src/test`, the account entity — the `@Entity` mapped to the `veyq_user`
 table, found in `backend/src/main` by that table name rather than typed here — is constructed in exactly one
-file, `com/veyq/app/testing/TestFixtures.kt`, and that file does construct it. Every other test seeds an
+file, `com/veyq/core/testing/TestFixtures.kt`, and that file does construct it. Every other test seeds an
 account through the fixture's `seedUser` / `newUser` / `ensureUser`
 (developer-styleguide §10: *test data comes from one fixture per surface, not a local copy*).
 
@@ -37,7 +37,7 @@ import sys
 import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-HOME = backend_tree.test_file("com.veyq.app.testing.TestFixtures")
+HOME = backend_tree.test_file("com.veyq.core.testing.TestFixtures")
 TABLE = "veyq_user"
 
 # `@Table(name = "<table>")` followed by the class it annotates.

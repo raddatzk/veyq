@@ -64,7 +64,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 DOCS = ROOT / "docs"
 DOCS_SKIP = {DOCS / "inbox.md"}
 
-ENTITY = backend_tree.source_file("com.veyq.app.shared.membership.MembershipEntity")
+ENTITY = backend_tree.source_file("com.veyq.core.membership.MembershipEntity")
 CONTRACT = ROOT / "contracts" / "api" / "scopes.openapi.yaml"
 ROLE_SCHEMA = "SetMemberRoleRequest"
 

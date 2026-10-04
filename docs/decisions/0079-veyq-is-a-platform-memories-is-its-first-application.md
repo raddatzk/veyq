@@ -94,7 +94,7 @@ application to be separated from.
   it holds unless a sequence number or hash chain is bound into each entry's associated data (ADR 0072 binds an
   object, not its neighbours). Each such application states that gap; it is not a platform property.
 - **The code matches this only in part.** Phase 1 of the change-request series (inbox #324) drew the backend
-  boundary inside the one Gradle module: `com.veyq.app.core.{node,blob,sharing,quota,scope}` hold the node, blob,
+  boundary inside the one Gradle module: `com.veyq.core.{node,blob,sharing,quota,scope}` hold the node, blob,
   upload-session and share entities, storage usage, and six interfaces through which core reaches Memories code
   without importing it — `ScopeEraser`, `NodeSubtreeEraser`, `MembershipEraser`, `GuestIdentityUsage`, `SharedSubtreeContributor`, `ShareGuestWrites` — and no
   platform file imports Memories code. (`MembershipEraser` is a different seam from the erasers: nothing of the scope is

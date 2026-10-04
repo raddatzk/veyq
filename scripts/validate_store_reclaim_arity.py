@@ -58,10 +58,10 @@ import backend_tree  # where the backend's sources live — resolved by glob, ne
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 # The one call site this decision permits, as a repo-relative path.
-ALLOWED_SITE = backend_tree.source_file("com.veyq.app.shared.blobstore.StoreReclaimSweep").relative_to(ROOT).as_posix()
+ALLOWED_SITE = backend_tree.source_file("com.veyq.core.blobstore.StoreReclaimSweep").relative_to(ROOT).as_posix()
 
 # `foo: BlobStore` — a constructor parameter or property whose declared type is the port. The optional
-# `[\w.]+\.` qualifier is not decoration: without it a fully-qualified `foo: com.veyq.app.shared.blobstore
+# `[\w.]+\.` qualifier is not decoration: without it a fully-qualified `foo: com.veyq.core.blobstore
 # .BlobStore` is legal Kotlin that this key cannot see, and a bite forged in exactly that shape ran GREEN over a
 # tree carrying a live bypass. It does now also match `VeyqConfig.BlobStore`, the config sub-interface of the
 # same simple name — which can never become a false positive, because a hit needs a `.delete(` call too and that

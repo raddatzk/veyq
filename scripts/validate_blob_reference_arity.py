@@ -72,7 +72,7 @@ import sys
 import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-SHARING_STORE = backend_tree.source_file("com.veyq.app.features.sharing.SharingStore")
+SHARING_STORE = backend_tree.source_file("com.veyq.core.sharing.SharingStore")
 
 # `@Column(... "<something>blob_id" ...)` — keyed on the column-name LITERAL, not on the Kotlin property, so a
 # fourth arm cannot hide behind a differently-spelled property name. `[^)]*` keeps it to one annotation.

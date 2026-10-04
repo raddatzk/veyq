@@ -56,7 +56,7 @@ except ModuleNotFoundError:  # pragma: no cover - same shape as the other guards
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 DOCKERFILE = ROOT / "Dockerfile"
-CONFIG_KT = backend_tree.source_file("com.veyq.app.shared.config.VeyqConfig")
+CONFIG_KT = backend_tree.source_file("com.veyq.core.config.VeyqConfig")
 INFRA = ROOT / "infra"
 
 ENV_KEY = "VEYQ_SECURITY_CONFIG_SECRET_FILE"

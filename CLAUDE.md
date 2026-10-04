@@ -24,7 +24,7 @@ The server is **operator-blind**: it stores and serves only ciphertext.
   **contracts → backend → web**. **Target** ([ADR 0079](docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)):
   each splits into **core** (the platform) and **applications** (Memories first; compiled in, no runtime
   loading; an application may use core, never the reverse, never another application). **Partly moved** —
-  the backend has `com.veyq.app.core` (guarded: it imports no Memories code) inside the one Gradle module, the
+  the backend has `com.veyq.core` (guarded: it imports no Memories code) inside the one Gradle module, the
   rest of the backend, Memories included, and all of `web/` are still organised per feature; ADR 0079's Consequences say what is not done, and
   [`docs/apps/`](docs/apps/README.md) maps what belongs where.
 - `admin-web/` — the **Server-Owner administration** surface: its own package, its own container, reachable

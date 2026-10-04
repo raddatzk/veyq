@@ -67,7 +67,7 @@ import sys
 import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-PURGE = backend_tree.source_file("com.veyq.app.features.spaces.scope.ScopePurge")
+PURGE = backend_tree.source_file("com.veyq.core.spaces.scope.ScopePurge")
 ERASE_FN = "private fun eraseScope"
 ERASER_FN = "fun eraseScope"
 ERASER_CLASS = re.compile(r"^\s*(?:\w+\s+)*class\s+\w+[^{=]*:\s*(?:[\w.,\s]*,\s*)?ScopeEraser\b", re.MULTILINE)

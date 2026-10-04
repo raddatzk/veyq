@@ -32,7 +32,7 @@ nested into **Chapters**. Product language **Memory / Chapter** is unchanged; fo
 
 ## Separated only in part
 
-Measured 2026-10-04 (`ls backend/src/main/kotlin/com/veyq/app/core backend/src/main/kotlin/com/veyq/app/features`):
+Measured 2026-10-04 (`ls backend/src/main/kotlin/com/veyq/core backend/src/main/kotlin/com/veyq/app/features`):
 the backend's `core` packages hold the node, blob, upload-session and share entities and storage usage, and import
 no Memories code; core reaches media and favorites through interfaces they implement. But Memories is not its own
 package: the node tree's handler and store (`features.content`), the share handler and store

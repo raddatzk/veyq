@@ -36,7 +36,7 @@ import backend_tree  # where the backend's sources live — resolved by glob, ne
 import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-CLASSIFICATION = backend_tree.source_file("com.veyq.app.shared.identity.WrapMethods")
+CLASSIFICATION = backend_tree.source_file("com.veyq.core.identity.WrapMethods")
 CONTRACT = ROOT / "contracts" / "api" / "account.openapi.yaml"
 SCHEMA = "MasterKeyWrap"
 
