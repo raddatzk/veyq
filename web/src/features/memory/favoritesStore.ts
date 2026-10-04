@@ -7,13 +7,13 @@
 // merely never showed it. The seal does **not** branch on scope type even though `K_SC` happens to be private
 // in a personal scope: a conditional seal would be defensible on paper and is exactly where a fallback
 // survives in the case nobody tests. One seal, every scope — which is what makes the guarantee assertable
-// (src/app/favoritesPrivacy.test.ts).
+// (src/features/memory/favoritesPrivacy.test.ts).
 //
 // The **item** marks inside a Memory are the other object and live elsewhere: shared on purpose, sealed under
 // `K_SC` (features/memory/itemFavorites.ts).
 import { reactive } from 'vue'
-import { loadFavorites, saveFavorites } from '../features/memory/favorites'
-import { masterKey } from './vault'
+import { loadFavorites, saveFavorites } from './favorites'
+import { masterKey } from '../../app/vault'
 
 export const favoritesStore = reactive({
   ids: new Set<string>(),

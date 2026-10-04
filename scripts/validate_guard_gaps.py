@@ -676,22 +676,24 @@ def forge_web_composition_root_sibling(root: pathlib.Path) -> str:
 
 
 def forge_web_allowlist_entry_stale(root: pathlib.Path) -> str:
-    f = root / "web" / "src" / "app" / "favoritesStore.ts"
+    f = root / "web" / "src" / "views" / "ShareView.vue"
     if not f.is_file():
-        raise ForgeError("web/src/app/favoritesStore.ts is gone — re-anchor this forgery on an allowlisted file")
+        raise ForgeError("web/src/views/ShareView.vue is gone — re-anchor this forgery on an allowlisted file")
     text = f.read_text()
-    f.write_text(re.sub(r"^import[^\n]*features/memory[^\n]*\n", "", text, flags=re.M))
+    # Re-point every specifier that lands in the application at a core feature (robust to multi-line imports, whose
+    # `} from '…'` line does not start with `import`).
+    f.write_text(re.sub(r"""(\bfrom\s*['"][./]*)features/memory""", r"\1features/account", text))
     if f.read_text() == text:
-        raise ForgeError("web/src/app/favoritesStore.ts no longer imports the application — re-anchor on an allowlisted file")
+        raise ForgeError("web/src/views/ShareView.vue no longer imports the application — re-anchor on an allowlisted file")
     return "an allowlisted file whose violation was removed but whose entry stays (a stale entry; REJECTED)"
 
 
 def forge_web_allowlist_entry_deleted(root: pathlib.Path) -> str:
     g = root / "scripts" / WEB_GUARD
     text = g.read_text()
-    entry = '    "app/favoritesStore.ts": {RULE_IMPORT},\n'
+    entry = '    "views/ShareView.vue": {RULE_IMPORT},\n'
     if entry not in text:
-        raise ForgeError("the allowlist entry for app/favoritesStore.ts is gone — re-anchor on an entry that remains")
+        raise ForgeError("the allowlist entry for views/ShareView.vue is gone — re-anchor on an entry that remains")
     g.write_text(text.replace(entry, "", 1))
     return "an allowlist entry deleted while its file still violates (REJECTED)"
 

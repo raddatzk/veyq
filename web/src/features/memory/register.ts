@@ -12,6 +12,7 @@ import NodeMutationDialog from './components/NodeMutationDialog.vue'
 import ShareDialog from './components/ShareDialog.vue'
 import UploadStatusMenu from './components/UploadStatusMenu.vue'
 import PinnedMemories from './components/PinnedMemories.vue'
+import { memoriesLifecycle } from './lifecycle'
 
 export function registerMemories(registry: Registry): void {
   // A Memory is shareable (cr-0104); a chapter is a Memory of its own that opens the same detail but is not
@@ -23,4 +24,5 @@ export function registerMemories(registry: Registry): void {
   registry.claimSlot('shareDialog', ShareDialog)
   registry.claimSlot('topbarTray', UploadStatusMenu)
   registry.claimSlot('sidebarPins', PinnedMemories)
+  registry.registerLifecycle('memories', memoriesLifecycle)
 }

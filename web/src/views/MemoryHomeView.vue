@@ -11,7 +11,6 @@ import { useI18n } from 'vue-i18n'
 import { activeSpace, activeEpochKeys, enterScope } from '../app/activeSpace'
 import { suspensionSignals } from '../app/tenantSuspension'
 import { setBreadcrumb } from '../app/breadcrumb'
-import { loadFavoritesFor, favoritesStore } from '../app/favoritesStore'
 import { treeStore, loadTree } from '../core/node/treeStore'
 import { childrenOf, breadcrumbOf, nodeById } from '../core/node/browse'
 import { nodeContentKey } from '../core/node/tree'
@@ -126,16 +125,13 @@ watch(
 )
 
 // Re-enter the scope when the leading fragment token flips (segment-only moves keep the same token → no
-// re-entry). Entering opens the scope key + resets the tree/favorites (activeSpace.enterScope); we then reload
+// re-entry). Entering opens the scope key + resets the tree and the applications' state (activeSpace.enterScope); we then reload
 // both for the newly active scope.
 async function reenter(scope: string) {
   await enterScope(scope)
   if (activeSpace.status === 'ready' && !treeStore.loaded) await loadTree()
-  if (activeSpace.status === 'ready' && activeSpace.scopeId && !favoritesStore.loaded) {
-    // No epoch key here any more: the pin set seals under the member's MASTER key (ADR 0068), which does not
-    // rotate with the scope, so the whole base-epoch dance left with it. It still applies to item marks below.
-    await loadFavoritesFor(activeSpace.scopeId)
-  }
+  // Each application loads its own per-scope state (Memories: the pin set); the hook is idempotent per reset.
+  if (activeSpace.status === 'ready' && activeSpace.scopeId) await registry.scopeEntered(activeSpace.scopeId)
 }
 watch(currentScope, (scope) => void reenter(scope), { immediate: true })
 // A space in another, suspended tenant (uc.spaces.scope-access A7): leave it for this domain's own home. (The home

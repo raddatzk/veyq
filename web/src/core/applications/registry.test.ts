@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { defineComponent } from 'vue'
-import { createRegistry } from './registry'
+import { createRegistry, type LifecycleHooks } from './registry'
 import { NodeKind } from '../../api/generated/content'
 
 const Stub = defineComponent({ template: '<div />' })
@@ -70,5 +70,61 @@ describe('registry: slots', () => {
     a.registerKind({ kind: NodeKind.Memory, icon: 'x', shareable: true })
     expect(b.slot('shareDialog')).toBeNull()
     expect(b.kind(NodeKind.Memory).supported).toBe(false)
+  })
+})
+
+describe('registry: lifecycle hooks', () => {
+  const hooks = (over: Partial<LifecycleHooks> = {}): LifecycleHooks => ({ onMasterKeyRotated: async () => {}, ...over })
+
+  it('is write-once per application id: a second registration throws and the first hooks stay', () => {
+    const r = createRegistry()
+    const first = vi.fn()
+    r.registerLifecycle('memories', hooks({ onScopeReset: first }))
+    expect(() => r.registerLifecycle('memories', hooks({ onScopeReset: vi.fn() }))).toThrow(/already registered/)
+    r.scopeReset()
+    expect(first).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses a hook set without onMasterKeyRotated (it is required, not optional)', () => {
+    const r = createRegistry()
+    expect(() => r.registerLifecycle('x', {} as LifecycleHooks)).toThrow(/onMasterKeyRotated/)
+    // The refused registration left nothing behind: the rotation gate is still closed.
+    expect(() => r.assertRotationHooks()).toThrow(/refusing to rotate/)
+  })
+
+  it('FAILS CLOSED: assertRotationHooks throws on an empty registry and passes once an application registered', () => {
+    const r = createRegistry()
+    expect(() => r.assertRotationHooks()).toThrow(/refusing to rotate/) // the negative…
+    r.registerLifecycle('memories', hooks())
+    expect(() => r.assertRotationHooks()).not.toThrow() // …and its live control
+  })
+
+  it('passes the arguments to each hook and runs every application', async () => {
+    const r = createRegistry()
+    const a = vi.fn(async () => {})
+    const b = vi.fn(async () => {})
+    r.registerLifecycle('a', hooks({ onMasterKeyRotated: a }))
+    r.registerLifecycle('b', hooks({ onMasterKeyRotated: b }))
+    const o = new Uint8Array([1])
+    const n = new Uint8Array([2])
+    await r.masterKeyRotated(o, n, ['s1'])
+    expect(a).toHaveBeenCalledWith(o, n, ['s1'])
+    expect(b).toHaveBeenCalledWith(o, n, ['s1'])
+  })
+
+  it('a failing hook does not stop the next application, and its error is rethrown afterwards', async () => {
+    const r = createRegistry()
+    const second = vi.fn()
+    r.registerLifecycle('a', hooks({ onScopeEntered: () => Promise.reject(new Error('boom')) }))
+    r.registerLifecycle('b', hooks({ onScopeEntered: second }))
+    await expect(r.scopeEntered('s1')).rejects.toThrow('boom')
+    expect(second).toHaveBeenCalledWith('s1')
+  })
+
+  it('optional hooks may be absent: scopeReset / scopeEntered are no-ops for an application that sets none', async () => {
+    const r = createRegistry()
+    r.registerLifecycle('a', hooks())
+    expect(() => r.scopeReset()).not.toThrow()
+    await expect(r.scopeEntered('s1')).resolves.toBeUndefined()
   })
 })

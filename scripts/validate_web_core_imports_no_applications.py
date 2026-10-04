@@ -52,10 +52,6 @@ RULE_IMPORT, RULE_GLOB, RULE_KIND = "import", "glob", "kind"
 # The remaining violations, per file (relative to web/src) and rule. Generated from the untouched tree
 # (cr-platform-web-boundaries § Inventory rows 1 and 3, minus src/test/). Only shrinks: see the docstring.
 ALLOWLIST: dict[str, set[str]] = {
-    "app/activeSpace.ts": {RULE_IMPORT},
-    "app/favoritesStore.ts": {RULE_IMPORT},
-    "app/itemFavoritesStore.ts": {RULE_IMPORT},
-    "features/account/rotation/rotateKeys.ts": {RULE_IMPORT},
     "views/ShareView.vue": {RULE_IMPORT},
 }
 

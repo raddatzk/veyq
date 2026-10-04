@@ -20,8 +20,7 @@ import { identityPrivate, setUnlocked } from '../../../app/vault'
 import { isCodedError, HttpStatus } from '../../../shared/httpError'
 import { ColdCredentialRefused, proveColdCredential } from '../coldCredential'
 import { pinStoreDocument } from '../identityPins'
-import { resealFavoritesUnderNewMasterKey } from '../../memory/favorites'
-import { retagItemMarksUnderNewMasterKey } from '../../memory/itemFavorites'
+import { registry } from '../../../core/applications/registry'
 import { registerDocument } from '../deviceRegister'
 import { carryMarks, raiseMarks, TrustStateRefused, type AccountDocumentStore } from '../trustMarks'
 import { commitRotation } from '../../spaces/scopes'
@@ -102,6 +101,10 @@ export async function requeueQueuedRotation(scopeId: string): Promise<RotationSc
  * the right one anyway: re-using a salt leaks the rewrite to anyone diffing two dumps.
  */
 export async function rotateKeys(password: string, secretKeyB64: string): Promise<RotationResult> {
+  // Fail closed BEFORE anything is proven, minted or written: material an application sealed under the Master Key
+  // (Memories' pins) is only recoverable through its `onMasterKeyRotated` hook, so a build whose composition root
+  // registered none must not rotate at all. A wiring defect, not a user refusal: it throws, it is not a RotationRefused.
+  registry.assertRotationHooks()
   // The gate is shared with change-password (`../coldCredential`) — one implementation, because two screens
   // minting a cold credential behind two copies of the same proof is how one of them ends up without it. Its
   // three refusals are this file's three by construction; they are re-thrown in this flow's vocabulary so the
@@ -264,14 +267,11 @@ async function resealUnderNewKey<T>(
  */
 async function resealBestEffort(oldMk: Uint8Array, newMk: Uint8Array, scopeIds: string[]): Promise<void> {
   try {
-    await resealFavoritesUnderNewMasterKey(oldMk, newMk, scopeIds)
+    await registry.masterKeyRotated(oldMk, newMk, scopeIds)
   } catch {
-    /* an unreadable pin set is an empty one; the Memories are all still there, just no longer pinned */
-  }
-  try {
-    await retagItemMarksUnderNewMasterKey(oldMk, newMk)
-  } catch {
-    /* an item mark whose tag the new key does not verify counts as someone else's set (ADR 0068 §9) */
+    /* each application's hook is best-effort for its own material (Memories': an unreadable pin set is an empty one,
+       an item mark whose tag the new key does not verify counts as someone else's set — ADR 0068 §9); the rotation
+       itself is already committed and a re-run repairs */
   }
 }
 

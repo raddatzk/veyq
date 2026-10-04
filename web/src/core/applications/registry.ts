@@ -18,6 +18,13 @@
 // next application's change request re-cuts the slots it needs to share (per-kind composition); freezing that
 // abstraction from one usage is what the CR's Open question 1 declined to do.
 //
+// **Lifecycle hooks (`registerLifecycle`).** What runs when a scope is entered or reset and when the master key
+// rotates. Registered per application id (a second registration of the same id throws); several applications may
+// each contribute, and the registry runs them all. The master-key hook is REQUIRED: material sealed under the master
+// key (Memories' pins) is undecryptable after a rotation that skipped it, so `rotateKeys` asks
+// `assertRotationHooks()` before it touches anything and refuses to start when no registered application carries the
+// hook (a composition root that registered nothing is that case too).
+//
 // **Fail closed.** `kind()` never returns `undefined`: a node kind nobody registered resolves to
 // `{ supported: false }`, which the host renders as an explicit unsupported state, never as an empty region.
 import type { Component } from 'vue'
@@ -95,7 +102,33 @@ export interface SidebarPinsEmits {
  *  props (the shell's top bar mounts it beside the invitations badge); `sidebarPins` takes `SidebarPinsProps`. */
 export type SlotName = 'levelView' | 'nodeMutationDialog' | 'shareDialog' | 'topbarTray' | 'sidebarPins'
 
+/** What an application runs at the platform's lifecycle moments. `onMasterKeyRotated` is mandatory (the type says
+ *  so; the registry additionally refuses a hook set that is not a function at runtime). */
+export interface LifecycleHooks {
+  /** A scope was entered (or re-opened after a rotation) and its tree is loaded: load the application's per-scope
+   *  state. Idempotent: the host may call it again for a scope that is already loaded. */
+  onScopeEntered?(scopeId: string): Promise<void> | void
+  /** The per-scope state is about to be replaced or dropped (scope switch, epoch refresh, sign-out/re-lock):
+   *  clear everything the application holds for the old scope. Synchronous. */
+  onScopeReset?(): void
+  /** The Master Key rotates (uc.account.rotate-keys): re-seal everything the application sealed under `oldMk` so
+   *  `newMk` opens it. `scopeIds` are the scopes the caller can see. Runs after the rotation's publish commit. */
+  onMasterKeyRotated(oldMk: Uint8Array, newMk: Uint8Array, scopeIds: string[]): Promise<void>
+}
+
 export interface Registry {
+  /** Register an application's lifecycle hooks under its id. Throws if the id is already registered, or if
+   *  `onMasterKeyRotated` is not a function. */
+  registerLifecycle(applicationId: string, hooks: LifecycleHooks): void
+  /** Run every application's `onScopeReset`. */
+  scopeReset(): void
+  /** Run every application's `onScopeEntered`, in registration order; rejects with the first failure after all ran. */
+  scopeEntered(scopeId: string): Promise<void>
+  /** Run every application's `onMasterKeyRotated`; rejects with the first failure after all ran. */
+  masterKeyRotated(oldMk: Uint8Array, newMk: Uint8Array, scopeIds: string[]): Promise<void>
+  /** Throws unless at least one registered application carries `onMasterKeyRotated`: `rotateKeys` refuses to start
+   *  without it (fail closed — see the header). */
+  assertRotationHooks(): void
   /** Register a node kind. Throws if the kind is already registered (the platform's own FOLDER included). */
   registerKind(descriptor: KindDescriptor): void
   /** Claim a slot. Throws if the slot is already claimed. */
@@ -113,7 +146,38 @@ export function createRegistry(): Registry {
     [NodeKind.Folder, { kind: NodeKind.Folder, icon: 'pi pi-folder', shareable: false }],
   ])
   const slots = new Map<SlotName, Component>()
+  const lifecycles = new Map<string, LifecycleHooks>()
+  /** Run `f` on every application, never stopping at the first failure; rethrow the first one at the end. */
+  async function eachApplication(f: (h: LifecycleHooks) => Promise<void> | void): Promise<void> {
+    let failure: { error: unknown } | null = null
+    for (const h of lifecycles.values()) {
+      try {
+        await f(h)
+      } catch (error) {
+        failure ??= { error }
+      }
+    }
+    if (failure) throw failure.error
+  }
   return {
+    registerLifecycle(applicationId, hooks) {
+      if (lifecycles.has(applicationId)) throw new Error(`lifecycle hooks of ${applicationId} are already registered`)
+      if (typeof hooks.onMasterKeyRotated !== 'function') {
+        throw new Error(`application ${applicationId} registered no onMasterKeyRotated hook (it is required)`)
+      }
+      lifecycles.set(applicationId, { ...hooks })
+    },
+    scopeReset() {
+      // Synchronous on purpose: callers (enterScope, clearActiveSpace) rely on the state being gone on return.
+      for (const h of lifecycles.values()) h.onScopeReset?.()
+    },
+    scopeEntered: (scopeId) => eachApplication((h) => h.onScopeEntered?.(scopeId)),
+    masterKeyRotated: (oldMk, newMk, scopeIds) => eachApplication((h) => h.onMasterKeyRotated(oldMk, newMk, scopeIds)),
+    assertRotationHooks() {
+      if (lifecycles.size === 0) {
+        throw new Error('no application registered an onMasterKeyRotated hook; refusing to rotate keys (fail closed)')
+      }
+    },
     registerKind(descriptor) {
       if (kinds.has(descriptor.kind)) throw new Error(`node kind ${descriptor.kind} is already registered`)
       kinds.set(descriptor.kind, { ...descriptor })

@@ -11,8 +11,7 @@ import { ScopeKind } from '../api/generated/scopes'
 import { TENANT_SCOPE } from '../core/node/location'
 import { isHttpStatus, HttpStatus } from '../shared/httpError'
 import { resetTree, loadTree } from '../core/node/treeStore'
-import { resetCovers } from '../features/memory/coverStore'
-import { clearFavorites, loadFavoritesFor } from './favoritesStore'
+import { registry } from '../core/applications/registry'
 import { startGrantDeliveryPolling, stopGrantDeliveryPolling } from '../features/tasks/grantDeliveryPolling'
 import { startScopeRotationPolling, stopScopeRotationPolling } from '../features/tasks/scopeRotationPolling'
 import { refreshMyInvitations, clearMyInvitations } from '../features/spaces/invitations'
@@ -87,7 +86,7 @@ export function activeEpochKeys(): EpochKeys | null {
 
 /**
  * Enter the scope selected by the URL's leading fragment `token` (`''` = tenant, `~me` = personal, `@<id>` =
- * group). Opens that scope's grant → holds `scopeId` + `K_SC`, then **resets the tree + favorites** so no stale
+ * group). Opens that scope's grant → holds `scopeId` + `K_SC`, then **resets the tree and every application's per-scope state** so no stale
  * per-scope state bleeds across a switch. Sets `status` to `ready` on success, `no-tenant` when the active tenant
  * can't be resolved from the Host (404), or `error` otherwise. Requires an unlocked vault (the identity opens the
  * grant).
@@ -130,9 +129,8 @@ export async function enterScope(token: string): Promise<void> {
     activeSpace.tenantId = opened.tenantId
     activeSpace.kind = opened.kind
     activeSpace.name = opened.name ?? null
-    resetTree() // no stale tree/favorites/covers bleed across scopes — the view reloads for the new scope
-    clearFavorites()
-    resetCovers() // …and every decrypted cover URL is revoked rather than left dangling on the old scope
+    resetTree() // no stale tree bleeds across scopes — the view reloads for the new scope
+    registry.scopeReset() // …and each application drops what it held for the old scope (Memories: pins, covers)
     activeSpace.status = 'ready'
     // cr-0114: refresh the tenant's terms status so the router accept-gate knows if a (re-)accept is due. The
     // tenant is the same regardless of which scope (tenant/personal/group) is open, and terms are member-readable.
@@ -180,12 +178,11 @@ export async function refreshActiveScope(): Promise<void> {
   activeSpace.purgeAfter = opened.purgeAfter
   activeSpace.name = opened.name ?? null
   resetTree()
-  clearFavorites()
-  resetCovers() // a rotation swaps the epoch keys: every held cover was decrypted under the old ones
+  registry.scopeReset() // a rotation swaps the epoch keys: every held cover was decrypted under the old ones
   await loadTree()
-  // The pin set survives a scope rotation untouched: it seals under the member's master key, not under an
-  // epoch key (ADR 0068). It is still re-read here because `clearFavorites()` above dropped the in-memory copy.
-  await loadFavoritesFor(activeSpace.scopeId)
+  // An application's per-scope state that survives a rotation untouched (Memories' pin set seals under the
+  // member's master key, not an epoch key — ADR 0068) is still re-read here, because the reset above dropped it.
+  await registry.scopeEntered(activeSpace.scopeId)
 }
 
 /** Drop the active space + zero the held key (logout / re-lock). */
@@ -208,8 +205,7 @@ export function clearActiveSpace(): void {
   if (epochKeys) zeroEpochKeys(epochKeys)
   epochKeys = null
   scopeKey = null
-  clearFavorites()
-  resetCovers() // sign-out / re-lock: decrypted cover thumbnails must not outlive the keys that opened them
+  registry.scopeReset() // sign-out / re-lock: what an application decrypted (Memories' covers) must not outlive the keys
 }
 
 /** A 404 from the scope endpoints means no tenant claims this Host (`tenant_not_found`). */
