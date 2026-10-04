@@ -55,8 +55,6 @@ ALLOWLIST: dict[str, set[str]] = {
     "app/activeSpace.ts": {RULE_IMPORT},
     "app/favoritesStore.ts": {RULE_IMPORT},
     "app/itemFavoritesStore.ts": {RULE_IMPORT},
-    "components/app/AppSidebar.vue": {RULE_IMPORT, RULE_KIND},
-    "components/app/AppTopbar.vue": {RULE_IMPORT},
     "features/account/rotation/rotateKeys.ts": {RULE_IMPORT},
     "views/ShareView.vue": {RULE_IMPORT},
 }

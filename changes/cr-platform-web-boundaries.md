@@ -264,13 +264,17 @@ allowlist: run them serially, or accept a mechanical conflict on those two files
       bucket is pinned by `browse.test.ts` (carried, not weakened).
       · Done when: `npm run check` green; `MemoryHomeView` and `MemoryBrowse`/`MemoryDetail` tests unchanged apart from
       mount wiring; the guard green with the `MemoryHomeView` entries gone.
-- [ ] 6 shell slots — `AppTopbar` renders `registry.topbarTray` (the upload tray), `AppSidebar` renders
+- [x] 6 shell slots — `AppTopbar` renders `registry.topbarTray` (the upload tray), `AppSidebar` renders
       `registry.sidebarPins` (the pinned Memories with covers: the favorites filter, `coverStore`, `MemoryCoverImage`
       move into a Memories `PinnedMemories` component). Deletes `AppTopbar.vue` and `AppSidebar.vue` entries.
       · **Bite-test:** an application that fills no slot renders the shell without the tray and the rail (no throw,
       no blank gap that shifts layout) — a test for the empty case; leave `sidebarPins` unclaimed in the real
       composition root → the `AppSidebar` test that asserts the pinned rail goes red.
       · Done when: `npm run check` green; `AppSidebar.test`/`AppTopbar.test` repointed, not weakened; guard green.
+      · Landed: `PinnedMemories.vue` renders both the rail section (`variant="rail"`) and the mobile-sheet section
+      (`variant="sheet"`, `navigate` closes the sheet) — the shell mounts the one claimed component twice. The
+      `AppSidebar.test` favorites cases run unchanged against the real registry; the empty-application cases are in
+      `AppShell.slots.test.ts` (stubbed registry), the component's own rules in `PinnedMemories.test.ts`.
 - [ ] 7 lifecycle hooks and the favorites stores — `app/activeSpace.enterScope` calls the registry's
       `onScopeReset`/`onScopeEntered` (Memories: `resetCovers`, load favorites); `rotateKeys` calls `onMasterKeyRotated`
       (Memories: `resealFavoritesUnderNewMasterKey`, `retagItemMarksUnderNewMasterKey`). `app/favoritesStore*` and

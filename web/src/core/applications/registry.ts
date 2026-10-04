@@ -81,7 +81,18 @@ export interface LevelViewEmits {
   openTrash: []
 }
 
-/** The single-claim slots. Each is claimed by at most one application (see the header). */
+/** The shell's `sidebarPins` slot: the component an application fills it with is mounted in the left rail
+ *  (`variant: 'rail'`) and in the mobile navigation sheet (`'sheet'`); it renders nothing when it has nothing to
+ *  pin. It emits `navigate` when the member follows one of its links, so the sheet can close. */
+export interface SidebarPinsProps {
+  variant: 'rail' | 'sheet'
+}
+export interface SidebarPinsEmits {
+  navigate: []
+}
+
+/** The single-claim slots. Each is claimed by at most one application (see the header). `topbarTray` takes no
+ *  props (the shell's top bar mounts it beside the invitations badge); `sidebarPins` takes `SidebarPinsProps`. */
 export type SlotName = 'levelView' | 'nodeMutationDialog' | 'shareDialog' | 'topbarTray' | 'sidebarPins'
 
 export interface Registry {
