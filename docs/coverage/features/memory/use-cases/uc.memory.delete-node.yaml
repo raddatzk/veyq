@@ -66,7 +66,7 @@ acceptanceCriteria:
       backend:
         integration: [NodeTrashSliceTest.deletingFreesTheNameImmediately, NodeTrashSliceTest.restoreIntoATakenNameIsACleanRejection]
       web:
-        unit: [src/core/node/tree.test.ts, src/features/memory/components/SpaceTrashDialog.test.ts]
+        unit: [src/core/node/tree.test.ts, src/core/node/components/SpaceTrashDialog.test.ts]
 
   - id: restore-returns-the-subtree-intact
     text: "Restore clears deleted_at across the subtree and writes the supplied token back, returning every descendant, photo, bucket and cover exactly as it was. Restoring an already-purged subtree is a non-enumerable 404."
@@ -82,7 +82,7 @@ acceptanceCriteria:
       backend:
         integration: [NodeTrashSliceTest.deleteHidesTheWholeSubtreeAndListsTheRootInTheTrash]
       web:
-        unit: [src/features/memory/components/SpaceTrashDialog.test.ts]
+        unit: [src/core/node/components/SpaceTrashDialog.test.ts]
 
   - id: scheduled-purge-erases-the-subtree
     text: "A scheduled job hard-erases each subtree whose deleted_at is older than the retention window — media, derivative, bucket and blob rows in FK order and the store objects behind them, then the node rows — routed through the shared per-media purge body (rows AND their reclaim entries inside one transaction, the objects deleted by the single reclaim sweep once no URL signed for them can still land, ADR 0062) rather than a fourth copy of that logic. The cover-blob reclaim moves out of the delete path into this job, so a restore never returns a Memory whose cover was already reclaimed."

@@ -17,9 +17,11 @@ import Breadcrumb from 'primevue/breadcrumb'
 import type { MenuItem } from 'primevue/menuitem'
 import { breadcrumb } from '../../app/breadcrumb'
 import InvitationsBadge from '../../features/spaces/InvitationsBadge.vue'
-import UploadStatusMenu from '../../features/memory/components/UploadStatusMenu.vue'
+import { registry } from '../../core/applications/registry'
 
 const router = useRouter()
+// What an application put in the tray (the Memories upload status); nothing claimed → nothing rendered.
+const tray = registry.slot('topbarTray')
 
 const home = computed<MenuItem>(() => ({
   label: breadcrumb.trail[0]?.name,
@@ -38,7 +40,7 @@ const items = computed<MenuItem[]>(() =>
     <Breadcrumb :model="items" :home="home" class="app-breadcrumb" />
     <div class="workspace-topbar-actions">
       <InvitationsBadge />
-      <UploadStatusMenu />
+      <component :is="tray" v-if="tray" />
     </div>
   </header>
 </template>

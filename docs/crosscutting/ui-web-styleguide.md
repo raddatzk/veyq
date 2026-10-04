@@ -143,7 +143,7 @@ or a one-off `1rem` label sitting in them.
 
   | Dialog | What it owns beyond asking |
   |---|---|
-  | `memory/components/DeleteNodeDialog.vue` | busy (gates `closable`/`close-on-escape`) + inline error; folder-vs-Memory header variant |
+  | `core/node/components/DeleteNodeDialog.vue` | busy (gates `closable`/`close-on-escape`) + inline error; folder-vs-Memory header variant |
   | `account/trustDevice/DeviceTrustControl.vue` | busy + inline error |
   | `memory/components/MemoryDetail.vue` (trash purge) | a data payload (the ids) + busy + pluralised body; **no** inline error |
   | `account/rotation/KeyRotationPanel.vue` | busy + inline error, both shared with the form it gates |

@@ -7,18 +7,32 @@ import { NodeKind } from '../../api/generated/content'
 
 const byOrder = (a: TreeNode, b: TreeNode): number => a.orderIndex - b.orderIndex || a.name.localeCompare(b.name)
 
-/** The children of `parentId` (null = the scope root), split by kind, each ordered. Chapters live inside a
- *  Memory (or a chapter); folders + Memories live at the root or in a folder. */
-export function childrenOf(
-  tree: TreeNode[],
-  parentId: string | null,
-): { folders: TreeNode[]; memories: TreeNode[]; chapters: TreeNode[] } {
-  const kids = tree.filter((n) => (n.parentId ?? null) === parentId)
-  return {
-    folders: kids.filter((n) => n.kind === NodeKind.Folder).sort(byOrder),
-    memories: kids.filter((n) => n.kind === NodeKind.Memory).sort(byOrder),
-    chapters: kids.filter((n) => n.kind === NodeKind.Chapter).sort(byOrder),
+/** One level of the tree: the platform's folders, and every other kind's nodes bucketed by kind. */
+export interface Level {
+  folders: TreeNode[]
+  /** The non-folder children keyed by kind, each bucket ordered; a kind with no child at this level has no key.
+   *  Core reads no key by name (ADR 0079) — an application reads its own kinds' buckets. */
+  byKind: ReadonlyMap<NodeKind, TreeNode[]>
+}
+
+/** The children of `parentId` (null = the scope root), split by kind, each bucket ordered (`orderIndex`, then
+ *  name). Folders are the platform's and stay a named field; every other kind lands in `byKind`. */
+export function childrenOf(tree: TreeNode[], parentId: string | null): Level {
+  const folders: TreeNode[] = []
+  const byKind = new Map<NodeKind, TreeNode[]>()
+  for (const n of tree) {
+    if ((n.parentId ?? null) !== parentId) continue
+    if (n.kind === NodeKind.Folder) {
+      folders.push(n)
+      continue
+    }
+    const bucket = byKind.get(n.kind)
+    if (bucket) bucket.push(n)
+    else byKind.set(n.kind, [n])
   }
+  folders.sort(byOrder)
+  for (const bucket of byKind.values()) bucket.sort(byOrder)
+  return { folders, byKind }
 }
 
 /** The breadcrumb from the root down to `nodeId` (null = root): `[root, …ancestors, node]`, each crumb

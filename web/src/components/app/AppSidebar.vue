@@ -5,10 +5,9 @@
 // full navigation to that tenant's domain, and the bottom is the ProfileMenu (theme + language + settings +
 // sign-out — the shell's one door into the hub).
 //
-// The rail also carries the **groups** section and the **favorites** section — each pinned Memory with its own
-// chosen cover (uc.memory.cover's fourth surface, after the browse card, the detail header and the map pin).
-// The covers come from the shared `coverStore`: this component asks it WHICH nodes are on screen and reads the
-// result, and imports **no key API at all** — the epoch chain that opens a node's `K_mem` has no business in an
+// The rail also carries the **groups** section and, below the space switcher, whatever an application pins into
+// the `sidebarPins` slot (the Memories favorites, with their covers — ADR 0079: the shell names no application
+// kind). It imports no key API at all — the epoch chain that opens a node's `K_mem` has no business in an
 // always-mounted rail, and keeping it out is a property worth preserving, not an accident of one diff.
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -27,16 +26,10 @@ import { activeSpace } from '../../app/activeSpace'
 import CreateGroupDialog from '../../features/spaces/CreateGroupDialog.vue'
 import { useCapabilities } from '../../shared/state/useCapabilities'
 import { SPACES_GROUPS } from '../../features/platform/capabilities'
-import { favoritesStore } from '../../app/favoritesStore'
 import { useThemeState } from '../../shared/state/useThemeState'
-import { treeStore } from '../../core/node/treeStore'
-import { covers, ensureCovers } from '../../features/memory/coverStore'
-import MemoryCoverImage from '../../features/memory/components/MemoryCoverImage.vue'
-import { nodeById } from '../../core/node/browse'
-import { hashForNode, parseHash, TENANT_SCOPE, isPersonalScope, personalScope } from '../../core/node/location'
+import { registry } from '../../core/applications/registry'
+import { parseHash, TENANT_SCOPE, isPersonalScope, personalScope } from '../../core/node/location'
 import { getMyProfile } from '../../features/account/profile/profile'
-import { NodeKind } from '../../api/generated/content'
-import { type TreeNode } from '../../core/node/tree'
 import { slugify } from '../../shared/naming'
 import { TenantStatus, type MyTenant } from '../../api/generated/scopes'
 import { suspensionSignals } from '../../app/tenantSuspension'
@@ -223,27 +216,8 @@ const activeTenant = computed(
 // member belongs to and switches on select. Shown only when there is more than one tenant to switch between.
 const tenantOverview = ref<InstanceType<typeof Popover> | null>(null)
 
-// The pinned Memories, resolved against the local decrypted tree (a favorite whose node is gone just drops).
-const favoriteMemories = computed(() =>
-  [...favoritesStore.ids]
-    .map((id) => nodeById(treeStore.nodes, id))
-    .filter((n): n is TreeNode => !!n && n.kind === NodeKind.Memory)
-    .map((n) => ({ id: n.id, name: n.name, hash: hashForNode(treeStore.nodes, n.id, activeScope.value) })),
-)
-/** The pinned Memories' covers, resolved by the shared store. A favorite without one keeps the placeholder —
- *  uc.memory.cover E1 stands: there is no auto-cover, and the rail adds no branch to say so. */
-const favoriteCover = (id: string) => covers.value.get(id)
-watch(
-  // Keyed on each favorite's **sealed meta**, not merely on which ids are pinned — the same key the store uses
-  // for staleness, because the store only re-resolves what it is asked about. `patchNodeMeta` mutates
-  // `wrappedMeta` IN PLACE, so a watch over the ids, the node count or the array identity never fires and a
-  // cover set in the detail header leaves the rail showing the old one. The epoch is here for the other half:
-  // a rotation swaps the keys a cover was decrypted under and the store drops them, so the rail must ask again
-  // rather than sit on an empty map.
-  () => favoriteMemories.value.map((m) => `${m.id}:${nodeById(treeStore.nodes, m.id)?.wrappedMeta ?? ''}`).join('|') + `#${activeSpace.epoch}`,
-  () => ensureCovers(favoriteMemories.value.map((m) => m.id)),
-  { immediate: true },
-)
+// What an application pinned into the rail (the Memories favorites); nothing claimed → no section, no gap.
+const sidebarPins = registry.slot('sidebarPins')
 
 onMounted(async () => {
   await loadTenants()
@@ -387,22 +361,7 @@ function closeMobileMenu() {
       </RouterLink>
     </nav>
 
-    <section v-if="favoriteMemories.length" class="sidebar-section sidebar-favorites-section">
-      <div class="sidebar-section-heading">
-        <p class="sidebar-section-label">{{ t('shell.favorites') }}</p>
-      </div>
-      <RouterLink
-        v-for="memory in favoriteMemories"
-        :key="memory.id"
-        :to="{ name: 'home', hash: memory.hash }"
-        class="sidebar-scope-link sidebar-favorite-link"
-      >
-        <span class="sidebar-favorite-cover">
-          <MemoryCoverImage :src="favoriteCover(memory.id)?.url" :crop="favoriteCover(memory.id)?.crop ?? null" :alt="memory.name" />
-        </span>
-        <span><strong>{{ memory.name }}</strong></span>
-      </RouterLink>
-    </section>
+    <component :is="sidebarPins" v-if="sidebarPins" variant="rail" />
 
     <!-- Groups (en.spaces.group-scope, cr-0032). The header + "＋" is always present so the first group is
          creatable; the group links appear as they land. Desktop renders `.desktop-group-link`; the compact rail
@@ -572,22 +531,7 @@ function closeMobileMenu() {
           </div>
         </section>
 
-        <section v-if="favoriteMemories.length" class="mobile-nav-section">
-          <h2>{{ t('shell.favorites') }}</h2>
-          <div class="mobile-nav-list">
-            <RouterLink
-              v-for="memory in favoriteMemories"
-              :key="memory.id"
-              :to="{ name: 'home', hash: memory.hash }"
-              class="mobile-nav-item mobile-nav-favorite"
-              @click="closeMobileMenu"
-            >
-              <span class="sidebar-favorite-cover">
-                <MemoryCoverImage :src="favoriteCover(memory.id)?.url" :crop="favoriteCover(memory.id)?.crop ?? null" :alt="memory.name" />
-              </span><span><strong>{{ memory.name }}</strong></span>
-            </RouterLink>
-          </div>
-        </section>
+        <component :is="sidebarPins" v-if="sidebarPins" variant="sheet" @navigate="closeMobileMenu" />
       </div>
     </Dialog>
 

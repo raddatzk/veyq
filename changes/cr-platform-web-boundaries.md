@@ -239,32 +239,42 @@ allowlist: run them serially, or accept a mechanical conflict on those two files
       `location`, `browse` repointed; `web/stryker.mutate.json` still lists a file that exists
       (`python3 scripts/mutation_meta_check.py` needs a built report — run `validate_coverage` and read the manifest
       by hand instead, and say so in the commit).
-- [ ] 4 the registry and the composition root — `core/applications/registry.ts` (types + register/lookup, write-once,
+- [x] 4 the registry and the composition root — `core/applications/registry.ts` (types + register/lookup, write-once,
       unsupported-kind fallback), `web/src/applications.ts` (`registerApplications()`), `main.ts` and
       `src/test/setup.ts` call it; Memories registers its kinds with **no slot filled yet**. The registry's header
       states the build-time rule (Decision 3) and the single-claim rule.
       · **Bite-test:** register the same kind twice → throws; look up an unregistered kind → the explicit unsupported
       result, never `undefined` reaching a template; the composition root is the only exempt file (step 1 bite b).
       · Done when: `npm run check` green with the suite unchanged; registry unit tests green; the guard green.
-- [ ] 5 kind→detail resolver and generic buckets (Decision 3, 4) — `childrenOf` returns `{ folders, byKind }`;
+- [x] 5 kind→detail resolver and generic buckets (Decision 3, 4) — `childrenOf` returns `{ folders, byKind }`;
       `MemoryHomeView` (a core view, name kept) renders `registry.detailFor(node.kind)` for an openable node, the
       `levelView` slot otherwise, and opens the `nodeMutationDialog` / `shareDialog` slots; `shareable` comes from the
       descriptor plus the existing capability check. `DeleteNodeDialog` and `SpaceTrashDialog` move to
       `core/node/components/` (they name `Folder` only; the trash icon comes from the descriptor). The Memories
       adapters (`MemoryDetailHost`, `MemoryLevelHost`) map the generic context to `MemoryDetail`/`MemoryBrowse`
       props. Deletes the `MemoryHomeView.vue` entries (both rules).
+      · Landed: the guard's `core/node/browse.ts` entry went with `NodeKind.Memory|Chapter` in `childrenOf`; `MemoryHomeView`
+      treats every non-FOLDER node as openable and shows the new `home.unsupportedKind` state (de + en) when its kind
+      has no registered detail or the `levelView` slot is unclaimed. `MemoryHomeView` had no test: `MemoryHomeView.test.ts`
+      (real registry, real adapters) and `MemoryHomeView.registry.test.ts` (stubbed registry) are new. `src/test/setup.ts`
+      registers in a `beforeAll` dynamic import, not a static one (a static import evaluated the application before the
+      test file's `vi.mock`s and disarmed them: 119 of 186 files red); node-environment files get no registry.
       · **Bite-test:** register no detail for `CHAPTER` → opening a chapter shows the unsupported state, and
       `MemoryHomeView`'s test goes red (it opens one); leave `byKind` empty → the gallery test goes red. Order within a
       bucket is pinned by `browse.test.ts` (carried, not weakened).
       · Done when: `npm run check` green; `MemoryHomeView` and `MemoryBrowse`/`MemoryDetail` tests unchanged apart from
       mount wiring; the guard green with the `MemoryHomeView` entries gone.
-- [ ] 6 shell slots — `AppTopbar` renders `registry.topbarTray` (the upload tray), `AppSidebar` renders
+- [x] 6 shell slots — `AppTopbar` renders `registry.topbarTray` (the upload tray), `AppSidebar` renders
       `registry.sidebarPins` (the pinned Memories with covers: the favorites filter, `coverStore`, `MemoryCoverImage`
       move into a Memories `PinnedMemories` component). Deletes `AppTopbar.vue` and `AppSidebar.vue` entries.
       · **Bite-test:** an application that fills no slot renders the shell without the tray and the rail (no throw,
       no blank gap that shifts layout) — a test for the empty case; leave `sidebarPins` unclaimed in the real
       composition root → the `AppSidebar` test that asserts the pinned rail goes red.
       · Done when: `npm run check` green; `AppSidebar.test`/`AppTopbar.test` repointed, not weakened; guard green.
+      · Landed: `PinnedMemories.vue` renders both the rail section (`variant="rail"`) and the mobile-sheet section
+      (`variant="sheet"`, `navigate` closes the sheet) — the shell mounts the one claimed component twice. The
+      `AppSidebar.test` favorites cases run unchanged against the real registry; the empty-application cases are in
+      `AppShell.slots.test.ts` (stubbed registry), the component's own rules in `PinnedMemories.test.ts`.
 - [ ] 7 lifecycle hooks and the favorites stores — `app/activeSpace.enterScope` calls the registry's
       `onScopeReset`/`onScopeEntered` (Memories: `resetCovers`, load favorites); `rotateKeys` calls `onMasterKeyRotated`
       (Memories: `resealFavoritesUnderNewMasterKey`, `retagItemMarksUnderNewMasterKey`). `app/favoritesStore*` and

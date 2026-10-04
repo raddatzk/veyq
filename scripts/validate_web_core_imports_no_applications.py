@@ -12,9 +12,8 @@ run application → core, never back. Three rules, each read over every non-test
   ADR 0079 Decision 5 says what runs is what was reviewed.
 - **kind**: no file names `NodeKind.Memory`, `NodeKind.Chapter`, `'MEMORY'` or `'CHAPTER'`. The shell asks a
   registry what to render for a kind; it does not know which kinds the one application has.
-Exempt by exact path: `web/src/applications.ts`, the one composition root that may import the application (it does
-not exist until step 4 of `cr-platform-web-boundaries`; an absent exemption is not an error, a sibling file
-importing the application is red). Exempt by location: `web/src/test/**` and `*.test.ts` — and the generated API
+Exempt by exact path: `web/src/applications.ts`, the one composition root that may import the application (a
+sibling file importing the application is red; an absent root is not an error). Exempt by location: `web/src/test/**` and `*.test.ts` — and the generated API
 client, which is untracked and spells the kinds by definition.
 
 **A ratchet, not a clean slate.** Core imports the application at 14 files today (cr-platform-web-boundaries
@@ -56,11 +55,7 @@ ALLOWLIST: dict[str, set[str]] = {
     "app/activeSpace.ts": {RULE_IMPORT},
     "app/favoritesStore.ts": {RULE_IMPORT},
     "app/itemFavoritesStore.ts": {RULE_IMPORT},
-    "components/app/AppSidebar.vue": {RULE_IMPORT, RULE_KIND},
-    "components/app/AppTopbar.vue": {RULE_IMPORT},
-    "core/node/browse.ts": {RULE_KIND},  # childrenOf buckets by kind; step 5 makes them generic
     "features/account/rotation/rotateKeys.ts": {RULE_IMPORT},
-    "views/MemoryHomeView.vue": {RULE_IMPORT, RULE_KIND},
     "views/ShareView.vue": {RULE_IMPORT},
 }
 

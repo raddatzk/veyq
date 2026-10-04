@@ -3,11 +3,27 @@
 // mounted component satisfies the `usePrimeToast()` injection without each test having to register it (tests
 // that stub the shared `useToast` composable are unaffected).
 import { config, enableAutoUnmount } from '@vue/test-utils'
-import { beforeEach, afterEach } from 'vitest'
+import { beforeAll, beforeEach, afterEach } from 'vitest'
 import { installWireRecorder } from './wireRecorder'
 import ToastService from 'primevue/toastservice'
 
 config.global.plugins.push(ToastService)
+
+// The shell asks the application registry what to render (ADR 0079); fill it as `main.ts` does, once per test file
+// (the module graph is per file, so the write-once registry starts empty each time).
+//
+// **Why a dynamic import in `beforeAll`, not a static one at the top.** A static import here would evaluate every
+// registered application component (and the whole module tree under it) BEFORE the test file runs, so a
+// `vi.mock('<any module the application imports>')` hoisted in the test file would find that module already
+// loaded for real and stub nothing — measured: 119 of 186 files red the first time this was tried. In `beforeAll`
+// the test file's mocks are registered, so the application's modules load under them, as in the file's own imports.
+// A node-environment file (the pure-logic suites and the e2e suites) renders nothing and has no `window` for the
+// application's map library to load into, so it is not given the registry.
+beforeAll(async () => {
+  if (typeof window === 'undefined') return
+  const { registerApplications } = await import('../applications')
+  registerApplications()
+})
 
 // Unmount every wrapper after each test. A component left mounted keeps its library timers alive past the file's
 // teardown, and one that lands after vitest has deleted the DOM globals throws an unhandled error that fails the
