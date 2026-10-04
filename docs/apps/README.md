@@ -20,7 +20,7 @@ the rejected alternatives). German: *Anwendung*. Never "plugin" or "app".
 
 | Application | State |
 |---|---|
-| [Memories](memories.md) | Built. Backend: its own packages (`com.veyq.memories`), which core (`com.veyq.core`) does not import, but not yet its own Gradle module; web: separated from core by import direction (`web/src/features/memory`, a build-time registry the shell asks) but not by directory name or per-kind slots. What is and is not done: [ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Consequences. |
+| [Memories](memories.md) | Built. Backend: its own packages (`com.veyq.memories`), which core (`com.veyq.core`) does not import, but not yet its own Gradle module (core is: `backend/core`); web: separated from core by import direction (`web/src/features/memory`, a build-time registry the shell asks) but not by directory name or per-kind slots. What is and is not done: [ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Consequences. |
 | [Inventory](inventory.md) | Concept only. |
 | [Expenses](expenses.md) | Concept only. |
 | [Files](files.md) | Concept only. |

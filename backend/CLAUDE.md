@@ -3,7 +3,16 @@
 Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when working here.
 
 ## Prove your work
-- `./gradlew check` (compile + slice tests) — runs on **in-memory H2** (`%test`, hermetic + fast).
+- `./gradlew check` (compile + slice tests) — runs on **in-memory H2** (`%test`, hermetic + fast). Run from
+  `backend/`, it checks every project: `:core` (`backend/core`, the platform — its tests run as `:core:test`), the
+  root (`:test`, the Memories application's code and every other test until the module split moves them) and
+  `:test-support` (the helpers both use; no tests). **A `--tests` filter must name the project that holds the
+  class** — `./gradlew :core:test --tests '*SessionPurgeTest'`, `./gradlew :test --tests '*LoginSliceTest'`: a bare
+  `test --tests X` fails "No tests found" in every project without a match. **Each project with `@QuarkusTest`s holds
+  its own `%test` keys** in `src/test/resources/application-test.properties` beside a comment-only
+  `application.properties` anchor (a profile file is read only beside one); the base config is `:core`'s
+  `src/main/resources/application.properties`. Shared test helpers live in `:test-support`, never in a
+  `java-test-fixtures` output — Quarkus does not load that inside the application under test (measured).
 - **Run the app (`quarkusDev`) on a persistent MariaDB** (`%dev`): `docker compose -f infra/docker-compose.yml
   up -d` starts it; data survives restarts (Flyway migrates once, then "up to date"). `docker compose -f
   infra/docker-compose.yml down -v` wipes it for a fresh instance. The H2 fallback is only the test default now.
@@ -81,7 +90,9 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   uuid field is refused by deserialization on its own.
 - **Migrations:** Flyway; `schema-management.strategy=none` — Flyway owns the schema. **One global version
   scheme across modules:** `V<yyyymmddHHMM>__<module>_<slug>.sql` (the UTC minute you write it; `<module>` is
-  `core` or `memories`), all in the one `src/main/resources/db/migration/`. The schema starts from two baselines,
+  `core` or `memories`), each in its owner's `src/main/resources/db/migration/` (`backend/core/…` for core, the root
+  project's for Memories until it is a module of its own) — one classpath path, `db/migration`, so Flyway reads them
+  as one set and two files of one version fail startup. The schema starts from two baselines,
   `V202610041200__core_baseline.sql` and `V202610041201__memories_baseline.sql`; a Memories migration references
   core tables or its own, a core migration never names a Memories table (ADR 0079). A new migration sorts above
   every existing one — Flyway runs `outOfOrder=false`, so an instance past a version refuses a file below it —

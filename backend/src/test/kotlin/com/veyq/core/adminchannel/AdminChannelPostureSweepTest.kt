@@ -2,7 +2,7 @@ package com.veyq.core.adminchannel
 
 import com.veyq.core.generated.AdminChannelOperations
 import com.veyq.core.identity.ServerRoles.SERVER_OWNER
-import com.veyq.core.ratelimit.RateLimitPosture
+import com.veyq.core.testing.MainOutputs
 import io.quarkus.security.Authenticated
 import jakarta.annotation.security.PermitAll
 import jakarta.annotation.security.RolesAllowed
@@ -12,10 +12,6 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.lang.reflect.Method
-import java.nio.file.Files
-import java.nio.file.Paths
-import kotlin.io.path.extension
-import kotlin.io.path.invariantSeparatorsPathString
 
 /**
  * uc.admin.admin-channel `the-gate-implies-the-marker` (ADR 0065): the channel's operation set is the contract's
@@ -27,8 +23,8 @@ import kotlin.io.path.invariantSeparatorsPathString
  * applies, and the one `TenantsResource` relies on: its class-level `@RolesAllowed(SERVER_OWNER)` is what gates the
  * eight tenant-administration methods that carry no annotation of their own.
  *
- * Enumeration walks the compiled main classes directory, as `RateLimitPostureSweepTest` does (whose second, CDI
- * angle already proves that walk sees every deployed resource). Plain JUnit: nothing here needs the application.
+ * Enumeration walks the compiled main classes of every backend project (`MainOutputs`), as
+ * `RateLimitPostureSweepTest` does (whose second, CDI angle already proves that walk sees every deployed resource). Plain JUnit: nothing here needs the application.
  *
  * **What green does not prove:** that the filter refuses. That is `AdminChannelGateSliceTest`'s — this proves
  * only that the set the filter reads is the set the gate implies. `createServerOwner` is in the set on purpose and
@@ -36,21 +32,12 @@ import kotlin.io.path.invariantSeparatorsPathString
  */
 class AdminChannelPostureSweepTest {
 
-    private val mainClassesDir = Paths.get(
-        RateLimitPosture::class.java.protectionDomain.codeSource.location.toURI(),
-    )
-
     private fun resourceClasses(): List<Class<*>> {
         val loader = Thread.currentThread().contextClassLoader
-        Files.walk(mainClassesDir).use { paths ->
-            return paths.filter { it.extension == "class" }
-                .map { mainClassesDir.relativize(it).invariantSeparatorsPathString.removeSuffix(".class").replace('/', '.') }
-                .map { runCatching { Class.forName(it, false, loader) }.getOrNull() }
-                .filter { it != null && !it.isInterface && it.interfaces.any { i -> i.isAnnotationPresent(Path::class.java) } }
-                .map { it!! }
-                .toList()
-                .sortedBy { it.name }
-        }
+        return MainOutputs.classNames()
+            .mapNotNull { runCatching { Class.forName(it, false, loader) }.getOrNull() }
+            .filter { !it.isInterface && it.interfaces.any { i -> i.isAnnotationPresent(Path::class.java) } }
+            .sortedBy { it.name }
     }
 
     private fun endpointsOf(cls: Class<*>): List<Method> =

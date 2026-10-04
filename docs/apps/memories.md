@@ -34,14 +34,14 @@ nested into **Chapters**. Product language **Memory / Chapter** is unchanged; fo
 
 ## Separated only in part
 
-Measured 2026-10-04 (`ls backend/src/main/kotlin/com/veyq/core backend/src/main/kotlin/com/veyq/memories`):
+Measured 2026-10-04 (`ls backend/core/src/main/kotlin/com/veyq/core backend/src/main/kotlin/com/veyq/memories`):
 every backend class lives in its owner's package — the platform in `com.veyq.core` (the node tree in
 `core.content`/`core.node`, sharing in `core.sharing`), Memories in `com.veyq.memories` (`media`, `favorites`,
 `itemfavorites`) — and core imports no Memories code; core reaches media and favorites through interfaces they
 implement. The generic blob upload and the storage quota are core's (`core.blob`, `core.quota`): Memories attaches its media
 through `UploadCompletion`, measures a link's contributed blobs through `UploadAdmission`, and places its `MEMORY`
-and `CHAPTER` in the tree through `NodeKindRules` (core places only `FOLDER`). But Memories is not its own Gradle
-module yet, the node `kind` is still the contract's closed `FOLDER`/`MEMORY`/`CHAPTER` enum, and on the web `features/memory` is the application (core imports it nowhere but the composition root and asks a
+and `CHAPTER` in the tree through `NodeKindRules` (core places only `FOLDER`). Core is its own Gradle module (`:core`, `backend/core`); Memories is not
+yet — it still lives in the root `backend/` project — the node `kind` is still the contract's closed `FOLDER`/`MEMORY`/`CHAPTER` enum, and on the web `features/memory` is the application (core imports it nowhere but the composition root and asks a
 registry for what to render), though its directory name and five single-claim slots are still Memories-shaped. The
 rest of the series is not done; [ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)
 Consequences lists it.

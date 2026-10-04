@@ -130,7 +130,7 @@ caught inside the refine that wrote 0045, and its corrections are in the doc):
 | per-surface finding (web KAT-pinned, backend no content crypto) | [ADR 0045](0045-mutation-testing-trust-chain-unit-layer.md) § Context table |
 | tool choice (Stryker/PIT, no kotlin-plugin, no arcmutate) + why | [ADR 0045](0045-mutation-testing-trust-chain-unit-layer.md) § Decision 1 |
 | backend three-layer split, what is mutated | [ADR 0045](0045-mutation-testing-trust-chain-unit-layer.md) § Decision 2 |
-| what is in scope + the discriminator | [ADR 0045](0045-mutation-testing-trust-chain-unit-layer.md) § Decision 2–3 + `web/stryker.mutate.json`, `backend/pitest.scope.json` |
+| what is in scope + the discriminator | [ADR 0045](0045-mutation-testing-trust-chain-unit-layer.md) § Decision 2–3 + `web/stryker.mutate.json`, `backend/core/pitest.scope.json` |
 | CI shape: PR, path-gated, report-before-gate | [ADR 0045](0045-mutation-testing-trust-chain-unit-layer.md) § Decision 4 + `mutation.yml`, `mutation-backend.yml` |
 | the total-vs-per-glob meta-check asymmetry | `scripts/mutation_meta_check.py` + `scripts/mutation_meta_check_backend.py` docstrings |
 | KAT-beats-mutation finding; blind spots | [ADR 0045](0045-mutation-testing-trust-chain-unit-layer.md) § Context + Consequences |

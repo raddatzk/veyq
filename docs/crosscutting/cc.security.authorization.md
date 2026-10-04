@@ -33,7 +33,7 @@ Every request passes **layer 1**; scope-addressed requests also pass **layer 2**
 **Layer 1 — the coarse HTTP gate, declared at the resource boundary.** A standard annotation on the `…Resource`:
 `@PermitAll` · `@Authenticated` · `@RolesAllowed(SERVER_OWNER)`. It answers only *is there a valid session, and
 which **server** role does it carry* — never anything scope-specific. It is **provably complete**:
-`quarkus.security.jaxrs.deny-unannotated-endpoints=true` (`backend/src/main/resources/application.properties:15`)
+`quarkus.security.jaxrs.deny-unannotated-endpoints=true` (`backend/core/src/main/resources/application.properties`)
 denies any endpoint without an annotation, so a new endpoint **fails closed**, and `DefaultDenyTest` pins that
 with a deliberately unannotated probe. This layer has never been the site of a defect.
 

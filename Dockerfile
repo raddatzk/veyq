@@ -46,15 +46,17 @@ RUN npm run build && npm run verify:no-backdoor && npm run verify:csp
 # --- backend (JVM) ---------------------------------------------------------------------------------------
 FROM eclipse-temurin:21-jdk-jammy@sha256:c7d5863b5dd8f26b90c64f1d80cc2b0e5a5e4642f8db9955a370d348edd8f438 AS backend-build-base
 WORKDIR /code/backend
-# gradle.properties (build-JVM heap) and pitest.scope.json are NOT optional extras: build.gradle.kts:73 parses
-# the PIT manifest at CONFIGURATION time, so even `gradlew help` dies without it. Both postdate the recovered
-# original (the mutation gate is ADR 0045 / #99), which is why it did not copy them.
-COPY backend/gradlew backend/gradlew.bat backend/build.gradle.kts backend/settings.gradle.kts backend/gradle.properties backend/pitest.scope.json ./
+# gradle.properties (build-JVM heap) is not an optional extra, and neither is :core's pitest.scope.json:
+# core/build.gradle.kts parses the PIT manifest at CONFIGURATION time, so even `gradlew help` dies without it. Both
+# postdate the recovered original (the mutation gate is ADR 0045 / #99), which is why it did not copy them.
+COPY backend/gradlew backend/gradlew.bat backend/build.gradle.kts backend/settings.gradle.kts backend/gradle.properties ./
 COPY backend/gradle ./gradle
 # Every module settings.gradle.kts includes needs its directory and build file here, or the warm-up dies configuring
 # it ("Configuring project ':core' without an existing directory is not allowed"). The modules are project
 # dependencies of the one fast-jar, not images of their own (ADR 0079); validate_backend_module_graph.py rule (e).
-COPY backend/core/build.gradle.kts ./core/
+# `:test-support` is test code: its build file is needed to configure the build, its sources never are.
+COPY backend/core/build.gradle.kts backend/core/pitest.scope.json ./core/
+COPY backend/test-support/build.gradle.kts ./test-support/
 # Cache-friendly warmup: downloads Gradle wrapper/distribution and plugin metadata once
 RUN ./gradlew --no-daemon help
 
@@ -63,6 +65,7 @@ FROM backend-build-base AS backend-build-jvm
 # backend/gradle/openapi.gradle.kts:22 reads `fileTree("../contracts/api")`.
 COPY contracts/api ../contracts/api
 COPY backend/src ./src
+COPY backend/core/src ./core/src
 COPY --from=frontend-build /src/web/dist ./src/main/resources/META-INF/resources
 # Dropped `-Dquarkus.package.type=fast-jar`: removed in Quarkus 3.x (this is 3.36.0, backend/build.gradle.kts:26)
 # and fast-jar is the default anyway — ci.yml builds the same artifact with a bare `quarkusBuild`.

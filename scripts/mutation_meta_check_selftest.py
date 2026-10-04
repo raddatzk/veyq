@@ -65,10 +65,10 @@ def backend_case(alpha: tuple[int, int] = (1, 0), beta: tuple[int, int] = (0, 0)
     with tempfile.TemporaryDirectory() as d:
         tree = pathlib.Path(d)
         _copy_check(tree, "mutation_meta_check_backend.py")
-        (tree / "backend").mkdir()
-        (tree / "backend" / "pitest.scope.json").write_text(
+        (tree / "backend" / "core").mkdir(parents=True)
+        (tree / "backend" / "core" / "pitest.scope.json").write_text(
             json.dumps({"targetClasses": ["com.veyq.app.Alpha", "com.veyq.app.Beta"]}))
-        rep = tree / "backend" / "build" / "reports" / "pitest"
+        rep = tree / "backend" / "core" / "build" / "reports" / "pitest"
         rep.mkdir(parents=True)
         muts: list[tuple[str, bool]] = []
         for cls, (total, undetected) in (("com.veyq.app.Alpha", alpha), ("com.veyq.app.Beta", beta)):
