@@ -1,6 +1,9 @@
-// `:test-support` — the test helpers more than one module's tests use (`TestFixtures`, `TenantRoots`,
-// `givenAdminChannel`). Test code only: a `testImplementation` dependency of `:core` and the root, on no runtime
-// classpath, so nothing here reaches the fast-jar.
+// `:test-support` — the test helpers more than one module's tests use: the seeds (`TestFixtures`, `TenantRoots`,
+// `TestIds`, `TestAdmission`, `ShareWriteProof`, `ReclaimRowAge`, `ScopeAccessWorld`), the upload plumbing (`TestBlob`,
+// `FakePresignProfile`), the race harness (`Race.kt`), `givenAdminChannel` and the three CDI fakes of the blob store
+// (`RecordingBlobStore`, `RefusingStoreReclaimStore`, `FakePresigningBlobStore` — beans, so this project carries a
+// `META-INF/beans.xml`). Test code only: a `testImplementation` dependency of `:core`, `:apps:memories` and the root, on
+// no runtime classpath, so nothing here reaches the fast-jar.
 //
 // **Why a project and not `java-test-fixtures` on `:core`** (measured, Quarkus 3.36.0, cr-platform-gradle-modules
 // step 6): a test-fixtures output is not part of a `@QuarkusTest`'s application — its classes load through the system

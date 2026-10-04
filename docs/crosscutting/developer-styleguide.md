@@ -105,7 +105,7 @@
   `wrappedBlobKey` checks. Parameters are exempt: the `jaxrs-spec` API generator derives their annotations
   itself (`useBeanValidation`). Enforced by `scripts/validate_request_bounds.py`. On a list, Hibernate
   Validator logs `HV000271` (a container-level `@Valid` is deprecated in favour of the type argument) — which
-  the `kotlin` generator cannot place, so the field form stays; `MediaSliceTest.startBlobUploadsValidatesInsideEachItem`
+  the `kotlin` generator cannot place, so the field form stays; `MediaCoreSliceTest.startBlobUploadsValidatesInsideEachItem`
   is what reddens if a later Hibernate Validator stops honouring it.
 - **Stateful / cross-field / domain checks stay imperative** in the handler or a guard, close to the
   invariant, and small/named/fail-closed (e.g. crypto-suite allow-list, scope-grant checks, upload

@@ -14,14 +14,14 @@ acceptanceCriteria:
     coverage:
       backend:
         integration:
-          - TenantStorageQuotaSliceTest.aCompletedUploadCounts
-          - TenantStorageQuotaSliceTest.trashedMediaCounts
-          - TenantStorageQuotaSliceTest.aTrashedNodeCounts
-          - TenantStorageQuotaSliceTest.aScopeInItsDeletionGraceCounts
-          - TenantStorageQuotaSliceTest.aCoverCounts
+          - TenantStorageQuotaMemoriesSliceTest.aCompletedUploadCounts
+          - TenantStorageQuotaMemoriesSliceTest.trashedMediaCounts
+          - TenantStorageQuotaMemoriesSliceTest.aTrashedNodeCounts
+          - TenantStorageQuotaMemoriesSliceTest.aScopeInItsDeletionGraceCounts
+          - TenantStorageQuotaMemoriesSliceTest.aCoverCounts
           - TenantStorageQuotaSliceTest.anOpenSessionCounts
-          - TenantStorageQuotaSliceTest.aPurgeFreesTheUsage
-          - TenantStorageQuotaSliceTest.anotherTenantsObjectsDoNotCount
+          - TenantStorageQuotaMemoriesSliceTest.aPurgeFreesTheUsage
+          - TenantStorageQuotaMemoriesSliceTest.anotherTenantsObjectsDoNotCount
   - id: the-server-owner-sets-the-quota
     text: The Server Owner sets, changes and clears a tenant's quota (none by default; clearing is its own call, so an update without a number is refused, never read as a clear) and sees each tenant's usage and quota, only on the admin channel (the operation carries the admin-channel marker); no tenant-owner operation writes it. Lowering it below usage deletes nothing.
     coverage:
@@ -33,7 +33,7 @@ acceptanceCriteria:
           - TenantStorageQuotaSliceTest.clearingTheQuotaAdmitsTheNextStart
           - TenantStorageQuotaSliceTest.aNegativeQuotaIs400AndAnUnknownTenantIs404
           - TenantStorageQuotaSliceTest.noQuotaIsTheDefaultAndAdmitsAnything
-          - TenantStorageQuotaSliceTest.bothReadersSeeTheQuotaBesideTheUsage
+          - TenantStorageQuotaMemoriesSliceTest.bothReadersSeeTheQuotaBesideTheUsage
   - id: every-start-into-the-tenant-checks-the-quota
     text: Every start into the tenant's scopes — member, cover, link — whose admissible items would take the tenant over its quota is refused whole with `quota_exceeded`; concurrent starts into one tenant cannot overshoot it; a link start checks the quota and the per-link limit independently.
     coverage:
@@ -42,14 +42,14 @@ acceptanceCriteria:
           - TenantStorageQuotaSliceTest.aMemberStartOverTheQuotaIsRefusedWholeAndLeavesNoSession
           - TenantStorageQuotaSliceTest.aCoverStartOverTheQuotaIsRefused
           - TenantStorageQuotaSliceTest.aRequestIsAdmittedWholeOrRefusedWhole
-          - TenantStorageQuotaSliceTest.aLinkStartWithinItsLimitIntoATenantOverItsQuotaIsRefused
-          - TenantStorageQuotaSliceTest.aLinkStartOverItsLimitIntoATenantWithRoomIsRefused
+          - TenantStorageQuotaMemoriesSliceTest.aLinkStartWithinItsLimitIntoATenantOverItsQuotaIsRefused
+          - TenantStorageQuotaMemoriesSliceTest.aLinkStartOverItsLimitIntoATenantWithRoomIsRefused
           - TenantStorageQuotaSliceTest.parallelMemberStartsCannotOvershoot
   - id: the-member-is-told-there-is-no-space
     text: A member's refused upload is marked failed in the uploads tray with a no-space reason and is not retried automatically; the tenant owner sees the quota beside the tenant's usage in the tenant settings.
     coverage:
       backend:
-        integration: [TenantStorageQuotaSliceTest.bothReadersSeeTheQuotaBesideTheUsage]
+        integration: [TenantStorageQuotaMemoriesSliceTest.bothReadersSeeTheQuotaBesideTheUsage]
       web:
         unit:
           - src/features/memory/uploadQueue.test.ts

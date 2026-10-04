@@ -24,7 +24,7 @@ acceptanceCriteria:
       # resolves through the identical resolveShare path — an anonymous, session-less caller recovering the Memory
       # name and the per-locale note from nothing but the shareId and the URL fragment key.
       backend:
-        integration: [ShareSliceTest.createThenAnonymousResolveReturnsSealedSubtree, ShareSliceTest.unknownShareResolves404]
+        integration: [ShareSliceTest.createThenAnonymousResolveReturnsSealedSubtree, ShareCoreSliceTest.unknownShareResolves404]
       web:
         unit: [src/features/memory/share.test.ts]
         e2e: [src/features/memory/shareContributor.e2e.test.ts]

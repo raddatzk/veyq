@@ -72,7 +72,7 @@ acceptanceCriteria:
     text: "Restore clears deleted_at across the subtree and writes the supplied token back, returning every descendant, photo, bucket and cover exactly as it was. Restoring an already-purged subtree is a non-enumerable 404."
     coverage:
       backend:
-        integration: [NodeTrashSliceTest.restoreReturnsTheWholeSubtreeIntact, NodeTrashSliceTest.restoreOfAnUnknownSubtreeIs404]
+        integration: [NodeTrashSliceTest.restoreReturnsTheWholeSubtreeIntact, NodeTrashCoreSliceTest.restoreOfAnUnknownSubtreeIs404]
       web:
         unit: [src/core/node/tree.test.ts]
 

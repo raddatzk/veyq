@@ -41,8 +41,8 @@ guard, on the tree the fix landed on, named 59 such gaps across eight specs.
 
 **Its limit.** It proves an annotation is **present** and agrees with its schema, never that it has an
 **effect**: that the generator emits it verbatim onto the field, that Quarkus validates the body, and that the
-`@Valid` cascade descends are proven by the slice tests `MediaSliceTest.startBlobUploadsOverItsItemBoundIs400`,
-`MediaSliceTest.startBlobUploadsValidatesInsideEachItem` and
+`@Valid` cascade descends are proven by the slice tests `MediaCoreSliceTest.startBlobUploadsOverItsItemBoundIs400`,
+`MediaCoreSliceTest.startBlobUploadsValidatesInsideEachItem` and
 `ShareContributorSliceTest.shareUploadOverItsItemBoundIs400` — one per mechanism, not per field. It does not see
 path/query/header **parameters** (the `jaxrs-spec` generator derives their annotations itself, and no test sends
 an out-of-range one), **response** schemas, **presence** beyond rule 5 (a missing object, enum or uuid field is

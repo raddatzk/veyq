@@ -1392,6 +1392,104 @@ before any guard that judges the result changes in 8b.*
   root → `validate_test_fixture_single_home` red (lever: `fixture_roots()` in its scan; with `TEST` alone it stayed
   green).
 - **Done when:** the above.
+- **Outcome 2026-10-05 — step 8a done (two commits, each green).** Substrate: worktree branch off `main` `ddb059ee`.
+  Commit 1 moved the shared helpers to `:test-support` (`Race.kt`, `TestBlob`, `FakePresignProfile`, the three
+  blob-store fakes, `ReclaimRowAge`, `TestIds`, `TestAdmission`, `ShareWriteProof`, `ScopeAccessWorld`) and narrowed
+  `race_classes()` to `test_roots()` (the `Race.kt` name skip deleted) — `check` green, `classname#name` set identical.
+  Commit 2 moved every test to its home and added the composition test. **Homes, measured** (test cases per project
+  in `build/test-results`): `:core` 768 (was 202), `:apps:memories` 305 (was 0), the root 83 (was 951: the probe's 69,
+  the two posture sweeps, the entity sweep, the composition test's 3). The home was decided per class by what it
+  compiles against and what it needs at runtime, then confirmed by running it: every class moved to `:core` ran green
+  there on the first full run except the auth/cookie slices, which lacked two `%test` keys (below) — no `:core` test
+  failed for want of Memories, so none passes there vacuously by construction of the rule (share creations and
+  `MEMORY`/`CHAPTER` placements all went to `:apps:memories`). Deviations from the plan's table, each named:
+  1. **18 splits, not 20, and 44 methods moved into a new class.** The scan's per-method table did not reproduce in
+     detail; the split set is: `ScopesSliceTest` (1 → `ScopesMemoriesSliceTest`), `NodesSliceTest` (3 →
+     `NodesCoreSliceTest`), `NodeTrashSliceTest` (1 → `NodeTrashCoreSliceTest`), `NodeTreeRaceSliceTest` (2 →
+     `NodeTreeRaceCoreSliceTest`), `RemovalRaceSliceTest` (3 → `RemovalRaceCoreSliceTest`), `ShareContributorSliceTest`,
+     `ShareSliceTest`, `ShareSharedScopeSliceTest`, `ShareUploaderSliceTest` (1 each → `…CoreSliceTest`),
+     `NodeKindRulesPartitionSliceTest` (2 → `…MemoriesSliceTest`: the registered-partition pin and the core-alone case
+     whose control places a Memory), `UploadCompletionPartitionSliceTest` (2 → `…CoreSliceTest`: the forged-acceptor
+     cases), `TenantStorageQuotaSliceTest` (10 → `…MemoriesSliceTest`), `UploadWindowSliceTest` (3 → `…MemoriesSliceTest`),
+     `MediaPresignDomainSliceTest` (1 → `…MemoriesSliceTest`), `MediaSliceTest` (6 → `MediaCoreSliceTest`),
+     `PurgeRaceSliceTest` (3 → `…CoreSliceTest`), `MediaCreateRaceSliceTest` (2 → `…CoreSliceTest`),
+     `ObjectKeyCarriesNoStructureSliceTest` (1 → `…CoreSliceTest`). The half with more methods kept the name (a tie kept
+     it on the Memories side, which then moves unchanged); the new half is named `<stem>Core…`/`<stem>Memories…`.
+     Not split, against the scan: `UploadSessionPurgeSliceTest` is generic in all 5 methods (whole to `:core`);
+     `CapabilityDisabledSliceTest` stays whole in `:core` — its two share POSTs are refused by the capability gate and
+     the node lookup before any writer is asked, so they need no application (measured green core-alone);
+     `ClientMintedIdSliceTest` and `ScopeAccessSliceTest` build `ScopeAccessWorld` (a Memories world) for every method,
+     so they moved whole. **Core halves of `memories.media` tests take the package of the code they test** (step 3's
+     precedent): `TenantStorageQuotaSliceTest` → `com.veyq.core.quota`, `UploadWindowSliceTest`,
+     `MediaPresignDomainSliceTest`, `UploadSessionPurgeSliceTest` and the new `…Core…` halves → `com.veyq.core.blob` —
+     24 methods change only their package. Every other test keeps its package wherever it lives (core-package tests
+     that need Memories sit in `:apps:memories` under `com.veyq.core.*`, question 8).
+  2. **Account per assertion:** every `@Test` body of each split original occurs verbatim in exactly one of its halves
+     (scratch `conserve2.py` over the `ddb059ee` copies: 0 not conserved), modulo `MemoriesNodeKinds.MEMORY` spelled
+     `"MEMORY"` in the four `:core` files that named it (R21's kind-literal edit; `:core` cannot import a Memories
+     class) and one comment re-pointed at the moved `MediaCoreSliceTest` ref. `classname#name`: the `ddb059ee` set
+     (1153) mapped through the 68 declared moves (44 split, 24 package) equals the new set minus the 3 added
+     composition cases — 0 lost, 0 renamed beyond the map, 0 status changes (scratch `compare.py`; the old→new map is
+     `mapping_c2.txt` beside it). Coverage refs to the 44 split methods were rewritten (`docs/coverage` ×7 files, the
+     styleguide, `validate_request_bounds`' docstring); `validate_coverage` green.
+  3. **The root keeps more than the probe:** `RateLimitPostureSweepTest`, `AdminChannelPostureSweepTest` (they walk
+     every module's compiled resources — moved to `:core` they would sweep core's only) and
+     `DynamicUpdateEverywhereTest` (every entity of the persistence unit, Memories' included) are whole-app by what
+     they enumerate; `MainOutputs` stays with them.
+  4. **`ModuleCompositionTest`** (root, `com.veyq.app`): (i) each of the nine seams' deployed implementations equal the
+     concrete implementations in every project's compiled main outputs (derived through `MainOutputs`, anchored on a
+     core and a Memories implementation; ArC's `_Subclass` of an intercepted bean is unwrapped to its bean class),
+     (ii) every generated `@Path` interface of every module has a deployed resource (anchored on both generated
+     packages), (iii) a kind no application claims is placed nowhere, measured by no admission, `illegal_target` on a
+     completion and `illegal_scope` on a share — each beside a `MEMORY` positive control through the same path.
+     **Bite, exactly step 7's lever:** `apps/memories/src/main/resources/META-INF/beans.xml` deleted → all three red
+     **by assertion** (the root boots: the seams lose Memories' implementations, `BucketsApi`/`FavoritesApi`/
+     `ItemFavoritesApi`/`MediaApi`/… have no resource, the `MEMORY` control is refused). Second bite: core's
+     `NodeKindRules.parentAllows` default flipped to `true` → (iii) red ("an unclaimed kind is placed").
+  5. **The race runner runs one Gradle invocation and one database per project.** The step-6 shape (one
+     `./gradlew :apps:memories:test … :core:test …` against one database) was **red** on its first two-project run:
+     `:apps:memories` migrated both baselines, then every `:core` class failed Flyway's validate on the Memories
+     baseline its classpath lacks (`FlywayValidateException`, 1 failed, 245 skipped). Now each project gets
+     `veyq_<project>` in the throwaway container. Run green: `:apps:memories` 15 classes / 122 tests on
+     `veyq_apps_memories` ("Successfully applied 2 migrations … v202610041201"), `:core` 22 / 246 on `veyq_core`
+     ("applied 1 migration … v202610041200"), 0 failed. **37 classes / 368 tests, not 32 / 383, by the declared
+     splits:** five race classes split into two racing halves (`MediaCreateRace`, `NodeTreeRace`, `PurgeRace`,
+     `RemovalRace`, `ShareUploader`), and 15 methods moved into halves that race nothing (`TenantStorageQuota`'s 10,
+     `Nodes`' 3, `Scopes`' 1, `ShareSharedScope`'s 1).
+  6. **`%test` keys per module, measured:** `:apps:memories` holds datasource ×2, both ports, the share-password bound,
+     the config-secret file and the halted scheduler (no auth endpoint or cookie in its tests); `:core` gained the
+     auth rate limit and `cookie.secure=false` (its first full run: 55 auth/cookie slice cases red without them); the
+     root dropped `cookie.secure` (its tests use bearer tokens) and keeps the auth and share bounds for the probe.
+     `ScheduledJobsHaltedInTestTest` now pins `:core`'s file; the Memories and root copies of `start-mode=halted` are
+     unpinned (a cheap follow-up if wanted: rule (g) could require the key on every test classpath).
+  7. `ScopeAccessWorld` lives in `:test-support` although it builds a Memories world (the root's probe and four
+     `:apps:memories` classes use it); it names the kind as `"MEMORY"` and its KDoc says it runs only where Memories is
+     in the application. The three blob-store fakes are globally enabled alternatives (`@Priority(1)`) and are now in
+     every module's test application, as they were in every root test before.
+  8. `:core` took `greenmail` and `quarkus-test-kubernetes-client` as test dependencies (their tests moved there); the
+     root dropped both. The appshell test fixture (`META-INF/resources`) moved to `:core`'s test resources.
+  **Proofs run:** `./gradlew --offline check` green on both commits (commit 2: `clean check` 6m11s, 1156 cases, 0 failed, 2 skipped); `quarkusBuild` green
+  (one `quarkus-app`, as at step 7); the cold-home write (`--write-verification-metadata sha256 help check quarkusBuild pitest`, empty
+  `GRADLE_USER_HOME`): green in 10m12s with **no metadata change** (the Quarkus-applied `:apps:memories` resolved
+  nothing the build did not), then the verify run without the flag in a second empty home: green; PIT 99/99 killed
+  (no test under its scope moved; they are `:core`'s since step 6); `scripts/validate_*.py` and `validate_guard_gaps`
+  green (53 validators; `validate_guard_gaps` 49 cases, 3m38s). **Bites** (each restored): (1) `ShareNoteSliceTest` copied into `:core` with the kind literal → every
+  share-creating case red, `Expected status code <201> but was <422>` (`illegal_scope`); `ShareSliceTest` copied unchanged → `:core:compileTestKotlin`
+  `Unresolved reference 'memories'`/`'MediaEntity'`; (2) `:test-support`'s `beans.xml` deleted → `UploadSessionPurgeSliceTest`
+  4 of 5 red — not `UnsatisfiedResolutionException` but a `ClassCastException` (the tests inject `BlobStore` and cast
+  to `RecordingBlobStore`; unindexed, the production producer answers); (3) a race class in an un-included
+  `backend/apps/x/src/test/kotlin` → the runner exits 1 naming the root before Docker; a `--tests` matching nothing →
+  exits 1; (4) a `VeyqUser()` construction planted in `:test-support` → `validate_test_fixture_single_home` red; rule (g)
+  over the new Memories test classpath: a key in its anchor → red. **Cost (R11):** `./gradlew --offline clean check` 6m11s against 5m28s at `ddb059ee` (+43s, under the one minute R11 sets). `--profile`: `:core:test` 3m25s (suite times summed 150s), `:apps:memories:test` 1m44s (86s), `:test` 38.5s (34s); the summed suite time grew 243s → 270s, the two extra default boots the plan priced at ≈ +20s. **The ~90s per `test` task is not a fixed per-task cost:** the root task's wall time exceeds its suites by 4.5s, Memories' by 18s, core's by 55s — the residue scales with the classes and profiles a task holds, so three tasks did not triple it; `org.gradle.parallel` was not needed and not tried.
+  **What 8b must know:** (a) the root's tests are whole-app by enumeration, not only by the probe — a third module's
+  resources, entities and seam implementations are swept there by derivation, no edit; (b) the race runner's
+  per-project database is the shape any multi-project MariaDB run needs (`run_web_e2e.py` boots the fast-jar, one
+  classpath, unaffected); (c) the core-alone boot test belongs in `:core`, whose test application already *is* core
+  alone — the `:core` partition/fail-closed cases (`NodeKindRulesPartitionSliceTest`'s 4,
+  `UploadCompletionPartitionCoreSliceTest`'s 2) now run there and can be its starting point; (d) `validate_guard_gaps`
+  forgeries still name test paths by glob over every module (`BACKEND_TEST_CLASS` = `ShareNoteSliceTest`, now in
+  `:apps:memories`), not via `fixture_roots()` — that is 8b's; (e) step 8a did not touch the module-graph rules
+  (a)/(b)/(d) nor `validate_migration_versions`' alternation.
 
 ### 8b — The enforcement Gradle cannot do, the core-alone proof, the old guards' hand-over, close
 

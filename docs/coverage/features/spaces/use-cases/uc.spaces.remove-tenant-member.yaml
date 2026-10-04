@@ -60,7 +60,7 @@ acceptanceCriteria:
       whoever made it — not a co-shared group's; a refused removal turns nothing off. The confirmation's opt-in is
       unchecked by default and, unticked, the request carries no parameter (A5).
     coverage:
-      backend: { integration: [ShareSharedScopeSliceTest.everyRemovalPathCountsOnTheScopesItCuts, ShareSharedScopeSliceTest.aTenantRemovalWithRevokeLinksTurnsOffEveryTenantLinkAndNoGroupLink] }
+      backend: { integration: [ShareSharedScopeCoreSliceTest.everyRemovalPathCountsOnTheScopesItCuts, ShareSharedScopeSliceTest.aTenantRemovalWithRevokeLinksTurnsOffEveryTenantLinkAndNoGroupLink] }
       web: { unit: [src/features/spaces/TenantMembersPanel.test.ts, src/features/spaces/members.test.ts] }
   - id: owner-turns-off-every-link
     text: A TenantOwner turns off every enabled public share of the tenant space with no removal (revokeScopeShares), each marked so it comes back only by re-issue; the answer counts them; a member who does not own the space is refused 403 not_scope_owner and nothing moves (A6).

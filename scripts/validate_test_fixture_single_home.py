@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Guard that backend tests create account rows through the one test fixture, never through a local copy.
 
-**What it asserts.** Under `backend/src/test`, the account entity — the `@Entity` mapped to the `veyq_user`
-table, found in `backend/src/main` by that table name rather than typed here — is constructed in exactly one
-file, `com/veyq/core/testing/TestFixtures.kt`, and that file does construct it. Every other test seeds an
+**What it asserts.** In every backend test root and every fixtures root (`backend_tree.test_kotlin()`: each
+module's `src/test/kotlin` and `:test-support`'s sources, where the shared helpers live), the account entity — the
+`@Entity` mapped to the `veyq_user` table, found in the main roots by that table name rather than typed here — is
+constructed in exactly one file, `com/veyq/core/testing/TestFixtures.kt`, and that file does construct it. Every other test seeds an
 account through the fixture's `seedUser` / `newUser` / `ensureUser`
 (developer-styleguide §10: *test data comes from one fixture per surface, not a local copy*).
 
@@ -22,7 +23,7 @@ the entity that maps it, and the construction pattern is built from that name.
   - a copied `seedNode`, `seedTenant` or `seedMemberScope` — a local node or tenant seed is not caught;
   - a local `bearer` / `token` helper minting its own `Authorization` header;
   - an account inserted by SQL string, or built by reflection;
-  - anything outside `backend/src/test` — production code constructs accounts legitimately.
+  - anything outside the test and fixtures roots — production code constructs accounts legitimately.
 Those copies are not guarded on purpose: a schema change to a node, tenant or session costs only the file that
 holds the copy, which the compiler or the first run names. The account row is the one every slice test seeds,
 which is why its copies were the measured cost. Green means exactly: **one test file constructs the account
