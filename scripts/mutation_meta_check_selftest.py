@@ -67,11 +67,11 @@ def backend_case(alpha: tuple[int, int] = (1, 0), beta: tuple[int, int] = (0, 0)
         _copy_check(tree, "mutation_meta_check_backend.py")
         (tree / "backend" / "core").mkdir(parents=True)
         (tree / "backend" / "core" / "pitest.scope.json").write_text(
-            json.dumps({"targetClasses": ["com.veyq.app.Alpha", "com.veyq.app.Beta"]}))
+            json.dumps({"targetClasses": ["me.raddatz.veyq.app.Alpha", "me.raddatz.veyq.app.Beta"]}))
         rep = tree / "backend" / "core" / "build" / "reports" / "pitest"
         rep.mkdir(parents=True)
         muts: list[tuple[str, bool]] = []
-        for cls, (total, undetected) in (("com.veyq.app.Alpha", alpha), ("com.veyq.app.Beta", beta)):
+        for cls, (total, undetected) in (("me.raddatz.veyq.app.Alpha", alpha), ("me.raddatz.veyq.app.Beta", beta)):
             muts += [(cls, i >= undetected) for i in range(total)]
         (rep / "mutations.xml").write_text(_pit_report(muts))
         return _run_check(tree, "mutation_meta_check_backend.py")

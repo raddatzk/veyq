@@ -4,7 +4,7 @@
 **What it asserts.** In every backend test root and every fixtures root (`backend_tree.test_kotlin()`: each
 module's `src/test/kotlin` and each `src/testFixtures/kotlin`, where the shared helpers live), the account entity — the
 `@Entity` mapped to the `veyq_user` table, found in the main roots by that table name rather than typed here — is
-constructed in exactly one file, `com/veyq/core/testing/TestFixtures.kt`, and that file does construct it. Every other test seeds an
+constructed in exactly one file, `me/raddatz/veyq/core/testing/TestFixtures.kt`, and that file does construct it. Every other test seeds an
 account through the fixture's `seedUser` / `newUser` / `ensureUser`
 (developer-styleguide §10: *test data comes from one fixture per surface, not a local copy*).
 
@@ -38,7 +38,7 @@ import sys
 import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-HOME = backend_tree.test_file("com.veyq.core.testing.TestFixtures")
+HOME = backend_tree.test_file("me.raddatz.veyq.core.testing.TestFixtures")
 TABLE = "veyq_user"
 
 # `@Table(name = "<table>")` followed by the class it annotates.
@@ -73,7 +73,7 @@ def main() -> int:
         )
         return 1
 
-    # A constructor call, bare or fully qualified: `Name()` / `com.veyq….Name()`.
+    # A constructor call, bare or fully qualified: `Name()` / `me.raddatz.veyq….Name()`.
     construct = re.compile(r"(?<![\w])(?:[a-z]\w*\.)*%s\s*\(\s*\)" % re.escape(name))
     hits = {
         p: len(construct.findall(p.read_text(encoding="utf-8")))

@@ -21,7 +21,7 @@ import sys
 import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-WRITER = backend_tree.source_file("com.veyq.core.http.HttpFailure")
+WRITER = backend_tree.source_file("me.raddatz.veyq.core.http.HttpFailure")
 
 # An `ErrorResponse(` not preceded by an identifier char / dot — i.e. a constructor call, not `SomeErrorResponse(`
 # or `x.ErrorResponse(`.

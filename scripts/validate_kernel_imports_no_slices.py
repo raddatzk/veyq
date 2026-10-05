@@ -13,9 +13,9 @@ names a node kind an application owns (developer-styleguide § 1, ADR 0007's sha
   name's package is the longest package some main file declares that prefixes it, so a class of the generated API
   (declared by no hand-written file) is neither kernel nor slice and stays usable. Dependencies run slice → kernel,
   never back: a kernel package that needs a slice's behaviour gets it through a small interface the slice implements
-  (`com.veyq.core.auth.AccessTokenResolver`, which `SessionService` implements), and one that needs a slice's
-  table gets the entity moved into the kernel (`com.veyq.core.tenant.TenantEntity`,
-  `com.veyq.core.scope.ScopeEntity`, `com.veyq.core.membership.MembershipEntity`) with the slice's
+  (`me.raddatz.veyq.core.auth.AccessTokenResolver`, which `SessionService` implements), and one that needs a slice's
+  table gets the entity moved into the kernel (`me.raddatz.veyq.core.tenant.TenantEntity`,
+  `me.raddatz.veyq.core.scope.ScopeEntity`, `me.raddatz.veyq.core.membership.MembershipEntity`) with the slice's
   store still its only writer. Every `KERNEL` entry must be declared by some main file, so the list cannot rot into
   names that guard nothing, and a run in which no file is kernel is red.
 - **Node-kind rule (ADR 0079).** Core knows the node kind `FOLDER` only; the kinds an application owns
@@ -31,14 +31,14 @@ names a node kind an application owns (developer-styleguide § 1, ADR 0007's sha
   application main file, so the list cannot rot into names that guard nothing.
 
 **What it no longer asserts: core importing an application.** Until the Gradle module split it also held every
-non-Memories main file away from the `com.veyq.memories` packages. That is the build's now: `:core` has no project
+non-Memories main file away from the `me.raddatz.veyq.memories` packages. That is the build's now: `:core` has no project
 edge to an application (`validate_backend_module_graph.py` rule (b); a `:core` → application edge is also a cycle
 Gradle refuses), so such an import does not compile — measured: `Unresolved reference 'memories'` from
 `:core:compileKotlin`. A text rule beside the compiler would only be a second, weaker copy of it.
 
 **Why a declared list (owner's decision, 2026-10-04, `cr-platform-gradle-modules` open question 3).** The layering
 was once a directory: the kernel lived under `shared/`, the slices under `features/`, and the guard barred
-`shared/` from naming `features`. The package rename of that CR folds both trees into `com.veyq.core.<feature>`,
+`shared/` from naming `features`. The package rename of that CR folds both trees into `me.raddatz.veyq.core.<feature>`,
 which leaves the layering no name to hang on; the 15 former `shared/` packages became this list instead of a
 `core.shared` sub-tree whose name says nothing the module does not.
 
@@ -91,21 +91,21 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 # The kernel, declared. Each entry covers the package and every package below it. Written out in full, one per
 # line, so a package rename reaches each entry like any other qualified name.
 KERNEL = [
-    "com.veyq.core.adminchannel",
-    "com.veyq.core.appshell",
-    "com.veyq.core.auth",
-    "com.veyq.core.blobstore",
-    "com.veyq.core.config",
-    "com.veyq.core.crypto",
-    "com.veyq.core.http",
-    "com.veyq.core.identity",
-    "com.veyq.core.instance",
-    "com.veyq.core.membership",
-    "com.veyq.core.persistence",
-    "com.veyq.core.ratelimit",
-    "com.veyq.core.scope",
-    "com.veyq.core.tenant",
-    "com.veyq.core.validation",
+    "me.raddatz.veyq.core.adminchannel",
+    "me.raddatz.veyq.core.appshell",
+    "me.raddatz.veyq.core.auth",
+    "me.raddatz.veyq.core.blobstore",
+    "me.raddatz.veyq.core.config",
+    "me.raddatz.veyq.core.crypto",
+    "me.raddatz.veyq.core.http",
+    "me.raddatz.veyq.core.identity",
+    "me.raddatz.veyq.core.instance",
+    "me.raddatz.veyq.core.membership",
+    "me.raddatz.veyq.core.persistence",
+    "me.raddatz.veyq.core.ratelimit",
+    "me.raddatz.veyq.core.scope",
+    "me.raddatz.veyq.core.tenant",
+    "me.raddatz.veyq.core.validation",
 ]
 # The node kinds Memories owns (ADR 0079 Decision 3). Core names `FOLDER` only.
 APPLICATION_KINDS = [
@@ -114,7 +114,7 @@ APPLICATION_KINDS = [
 ]
 KIND_REF = re.compile(r"(?<!\w)(" + "|".join(re.escape(k) for k in APPLICATION_KINDS) + r")(?!\w)")
 # A qualified name in code, not preceded by another name part. Its package is resolved against the declared ones.
-QUALIFIED = re.compile(r"(?<![\w.])com\.veyq(?:\.\w+)+")
+QUALIFIED = re.compile(r"(?<![\w.])me\.raddatz\.veyq(?:\.\w+)+")
 PACKAGE = re.compile(r"^\s*package\s+([\w.]+)", re.M)
 
 

@@ -20,7 +20,7 @@ listed here, so adding one always triggers the gate"*): true for the adding comm
 to that class. The manual list broke on the first policy added after it existed, one day later. Inbox #114.
 
 Enforcing the manifest's *"an EXPLICIT list, never a package sweep"* rule falls out for free: a package glob
-(`com.veyq.core.sharing.*`) derives no filename and is rejected here with that reason named.
+(`me.raddatz.veyq.core.sharing.*`) derives no filename and is rejected here with that reason named.
 
 **Its limit — a path filter cannot cover transitive dependencies.** `MembershipPolicy` imports
 `core.membership.MembershipEntity`; `RemovalPolicy` imports that plus `core.scope.ScopeEntity`. A change

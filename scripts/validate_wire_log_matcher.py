@@ -198,7 +198,7 @@ def check_sweep() -> int:
 
     def plant(run: pathlib.Path) -> None:
         with (run / "backend-1.log").open("a", encoding="utf-8") as f:
-            f.write("2026-10-01 08:23:00,000 ERROR [com.veyq] (worker) failed for Reisen%201790576564\n")
+            f.write("2026-10-01 08:23:00,000 ERROR [me.raddatz.veyq] (worker) failed for Reisen%201790576564\n")
 
     def write(name: str, body: bytes):
         def mutate(run: pathlib.Path) -> None:
@@ -510,7 +510,7 @@ def check_tokens() -> int:
 
         run_tokens = orchestrator.run_tokens(run)
         with (run / "backend-1.log").open("a", encoding="utf-8") as f:
-            f.write(f"2026-10-01 08:23:00,000 WARN  [com.veyq] (worker) refused bearer {ACCESS}\n")
+            f.write(f"2026-10-01 08:23:00,000 WARN  [me.raddatz.veyq] (worker) refused bearer {ACCESS}\n")
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             verdict = orchestrator.sweep_logs(run, sorted(run.glob("canaries-*.json")), run_tokens)

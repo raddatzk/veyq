@@ -102,7 +102,7 @@ Four documented gaps sit **outside** that guard, on purpose:
   beside the code.
 - the **rate-limit posture sweep's declaration ≠ enforcement** boundary
   ([ADR 0051](../../../docs/decisions/0051-declarative-rate-limit-posture.md)):
-  `backend/src/test/kotlin/com/veyq/core/ratelimit/RateLimitPostureSweepTest.kt` asserts every JAX-RS
+  `backend/src/test/kotlin/me/raddatz/veyq/core/ratelimit/RateLimitPostureSweepTest.kt` asserts every JAX-RS
   endpoint **declares** `@RateLimit(key)` or `@RateLimitExempt(reason)` — it does **not** assert the
   domain-keyed limiters (`SHARE`/`RECIPIENT`/`OWNER`/`TENANT`) actually **fire**; only the per-endpoint runtime
   `429` tests do (`ShareIdentityBoundTest`, `SharePasswordAttemptBoundTest`, `InviteMailRateLimiterTest`). It is
