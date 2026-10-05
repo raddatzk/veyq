@@ -150,7 +150,7 @@ every header of the admin origin.
 - [`web/scripts/assert-csp-policy-in-dist.mjs`](../../web/scripts/assert-csp-policy-in-dist.mjs)
   (`npm run verify:csp`, run by `npm run check` and by the `Dockerfile`'s frontend stage) fails a `dist` that
   has no emitted policy or whose `index.html` carries a CSP `<meta>`.
-- The backend's app shell (`backend/core/src/main/kotlin/com/veyq/core/appshell/`):
+- The backend's app shell (`backend/core/src/main/kotlin/me/raddatz/veyq/core/appshell/`):
   - `AppShellTest` compares the appended store origin, per signing mode, with the origin of a URL the signer
     produced in that mode, and pins the fail-closed refusals (no policy, a CSP `<meta>`);
   - `AppShellSliceTest` runs over a fixture shell. It covers the fallback, with a positive control for every

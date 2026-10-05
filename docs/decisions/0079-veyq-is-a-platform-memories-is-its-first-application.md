@@ -100,15 +100,17 @@ on their own.
   `backend/apps/memories`); the test helpers they share are `:core`'s `java-test-fixtures` source set, on no
   runtime classpath. The root `backend/`
   holds no main code; it composes the modules into the one fast-jar, where each module's jar is
-  `lib/main/com.veyq.<module>.jar`. The direction is the build's: `:core` has no edge to an application (Gradle
+  `lib/main/me.raddatz.veyq.<module>.jar`. The direction is the build's: `:core` has no edge to an application (Gradle
   refuses it as a cycle, so a core file importing Memories does not compile), and `validate_backend_module_graph.py`
   holds what Gradle allows — no application depends on another, no package is declared in two modules, every module
   is included, indexed (an unindexed module boots green with its routes answering 404 and its seam implementations
   missing — measured on the deliverable), copied by the Dockerfile and named. Every class is named for its owner —
-  the platform `com.veyq.core.<feature>`, an application `com.veyq.<application>.<feature>`, the generated API
-  `com.veyq.core.generated` / `com.veyq.<application>.generated` — and so are the contracts: core's specs in
+  the platform `me.raddatz.veyq.core.<feature>`, an application `me.raddatz.veyq.<application>.<feature>`, the generated API
+  `me.raddatz.veyq.core.generated` / `me.raddatz.veyq.<application>.generated` — and so are the contracts: core's specs in
   `contracts/api/` (`_common.openapi.yaml`, which every shared schema is defined in once, is core's), an
-  application's in `contracts/api/<application>/`. Each module owns its migrations under one global version scheme
+  application's in `contracts/api/<application>/`. The package root `me.raddatz.veyq` — also the Gradle `group`, so
+  the module jars' prefix — is the owner's domain `raddatz.me` reversed; it was `com.veyq` until
+  2026-10-05, and the rename moved no class between packages. Each module owns its migrations under one global version scheme
   (`V<yyyymmddHHMM>__<module>_<slug>.sql`, the module named by the settings; [backend/CLAUDE.md](../../backend/CLAUDE.md)
   § Migrations): a core migration names no application table, an application's references only core's and its own.
   Core reaches application code through nine interfaces — `ScopeEraser`, `NodeSubtreeEraser`, `MembershipEraser`,

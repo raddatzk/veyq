@@ -24,7 +24,7 @@ keys, and a seal purpose plus key rule for non-Memories blobs. Until it is made,
 depending on Memories, which the rules forbid.
 
 What the decision does **not** have to change is the transfer: the upload itself is core's and neutral. Starting,
-windowing, verifying and downloading a blob, the upload sessions and the quota are `com.veyq.core.blob` and
+windowing, verifying and downloading a blob, the upload sessions and the quota are `me.raddatz.veyq.core.blob` and
 `core.quota`, served by core's `contracts/api/blob.openapi.yaml`; a blob's `K_blob` wrap, `owner_id` and `blob_role`
 are opaque strings that code stores and compares and never opens. What a verified upload *becomes* is the
 application's, through core's `UploadCompletion` seam (Memories': a media row), and a node kind no application

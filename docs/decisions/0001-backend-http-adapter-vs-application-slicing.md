@@ -24,7 +24,7 @@ Forcing such an endpoint into one use-case's `Resource` is wrong, and was the tr
 Separate the two axes:
 
 1. **Application/business layer = use-case-sliced.** `<area>/<use-case>/…Handler` under the owner's package
-   (`com.veyq.core`, or an application's such as `com.veyq.memories`). A use-case
+   (`me.raddatz.veyq.core`, or an application's such as `me.raddatz.veyq.memories`). A use-case
    may have several handlers. This is where cohesion and the trust chain live.
 2. **HTTP adapter layer = resource-shaped.** One `…Resource` per generated `…Api` interface (OpenAPI
    tag / API resource), deliberately thin. Each operation is a **delegate to the relevant use-case
