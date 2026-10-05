@@ -1,6 +1,6 @@
-package com.veyq.memories.itemfavorites
+package me.raddatz.veyq.memories.itemfavorites
 
-import com.veyq.core.scope.ScopeEraser
+import me.raddatz.veyq.core.scope.ScopeEraser
 import jakarta.enterprise.context.ApplicationScoped
 
 /** The item-favorites rows of an erased group. Phase 610: references only the scope row (`fk_item_favorites_scope`). */

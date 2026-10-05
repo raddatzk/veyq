@@ -1,14 +1,14 @@
-package com.veyq.core.admin.tenant
+package me.raddatz.veyq.core.admin.tenant
 
-import com.veyq.core.identity.VeyqUser
-import com.veyq.core.membership.Admission
-import com.veyq.core.membership.MembershipEntity
-import com.veyq.core.membership.SignedGrant
-import com.veyq.core.membership.admit
-import com.veyq.core.membership.MembershipStore
-import com.veyq.core.scope.ScopeEntity
-import com.veyq.core.tenant.TenantEntity
-import com.veyq.core.tenant.TenantHostResolver
+import me.raddatz.veyq.core.identity.VeyqUser
+import me.raddatz.veyq.core.membership.Admission
+import me.raddatz.veyq.core.membership.MembershipEntity
+import me.raddatz.veyq.core.membership.SignedGrant
+import me.raddatz.veyq.core.membership.admit
+import me.raddatz.veyq.core.membership.MembershipStore
+import me.raddatz.veyq.core.scope.ScopeEntity
+import me.raddatz.veyq.core.tenant.TenantEntity
+import me.raddatz.veyq.core.tenant.TenantHostResolver
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 import java.time.Instant

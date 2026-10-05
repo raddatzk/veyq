@@ -1,15 +1,15 @@
-package com.veyq.core.account.email
+package me.raddatz.veyq.core.account.email
 
-import com.veyq.core.generated.model.DeliveryResult
-import com.veyq.core.config.VeyqConfig
-import com.veyq.core.crypto.Tokens
-import com.veyq.core.http.FailureStatus.NOT_FOUND
-import com.veyq.core.http.Failures
-import com.veyq.core.http.HttpFailure
-import com.veyq.core.http.httpFailure
-import com.veyq.core.identity.VeyqUser
-import com.veyq.core.membership.MembershipStore
-import com.veyq.core.tenant.ResolvedTenant
+import me.raddatz.veyq.core.generated.model.DeliveryResult
+import me.raddatz.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.crypto.Tokens
+import me.raddatz.veyq.core.http.FailureStatus.NOT_FOUND
+import me.raddatz.veyq.core.http.Failures
+import me.raddatz.veyq.core.http.HttpFailure
+import me.raddatz.veyq.core.http.httpFailure
+import me.raddatz.veyq.core.identity.VeyqUser
+import me.raddatz.veyq.core.membership.MembershipStore
+import me.raddatz.veyq.core.tenant.ResolvedTenant
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional

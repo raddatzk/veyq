@@ -1,7 +1,7 @@
-package com.veyq.core.blobstore
+package me.raddatz.veyq.core.blobstore
 
-import com.veyq.core.config.VeyqConfig
-import com.veyq.core.config.VeyqConfig.SigningMode
+import me.raddatz.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.config.VeyqConfig.SigningMode
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.inject.Produces
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials

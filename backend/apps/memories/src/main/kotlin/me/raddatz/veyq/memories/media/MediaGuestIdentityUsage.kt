@@ -1,6 +1,6 @@
-package com.veyq.memories.media
+package me.raddatz.veyq.memories.media
 
-import com.veyq.core.sharing.GuestIdentityUsage
+import me.raddatz.veyq.core.sharing.GuestIdentityUsage
 import jakarta.enterprise.context.ApplicationScoped
 
 /** A guest identity is still in use while a medium (live or trashed) or a bucket names it. */

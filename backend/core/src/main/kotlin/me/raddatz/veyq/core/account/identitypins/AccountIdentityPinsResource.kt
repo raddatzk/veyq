@@ -1,15 +1,15 @@
-package com.veyq.core.account.identitypins
+package me.raddatz.veyq.core.account.identitypins
 
-import com.veyq.core.generated.api.AccountIdentityPinsApi
-import com.veyq.core.generated.model.IdentityPins
-import com.veyq.core.generated.model.IdentityPinsUpdate
-import com.veyq.core.http.HttpFailure
-import com.veyq.core.http.httpError
-import com.veyq.core.validation.validated
+import me.raddatz.veyq.core.generated.api.AccountIdentityPinsApi
+import me.raddatz.veyq.core.generated.model.IdentityPins
+import me.raddatz.veyq.core.generated.model.IdentityPinsUpdate
+import me.raddatz.veyq.core.http.HttpFailure
+import me.raddatz.veyq.core.http.httpError
+import me.raddatz.veyq.core.validation.validated
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
 import jakarta.ws.rs.core.Response
-import com.veyq.core.ratelimit.RateLimitExempt
+import me.raddatz.veyq.core.ratelimit.RateLimitExempt
 
 /**
  * HTTP adapter for the operator-blind identity-pin store (en.account.identity-pinning, cr-0098, ADR 0028).

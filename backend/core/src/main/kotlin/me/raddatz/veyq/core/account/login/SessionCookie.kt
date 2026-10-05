@@ -1,6 +1,6 @@
-package com.veyq.core.account.login
+package me.raddatz.veyq.core.account.login
 
-import com.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.config.VeyqConfig
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.ws.rs.core.HttpHeaders
 import jakarta.ws.rs.core.NewCookie

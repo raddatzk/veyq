@@ -1,4 +1,4 @@
-package com.veyq.core.tenant
+package me.raddatz.veyq.core.tenant
 
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheCompanionBase
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheEntityBase

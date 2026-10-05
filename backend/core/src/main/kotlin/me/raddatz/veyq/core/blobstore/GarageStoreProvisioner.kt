@@ -1,4 +1,4 @@
-package com.veyq.core.blobstore
+package me.raddatz.veyq.core.blobstore
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper

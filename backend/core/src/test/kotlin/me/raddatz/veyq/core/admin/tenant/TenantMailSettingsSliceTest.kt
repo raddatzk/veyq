@@ -1,11 +1,11 @@
-package com.veyq.core.admin.tenant
+package me.raddatz.veyq.core.admin.tenant
 
-import com.veyq.core.crypto.ConfigSecretSeal
-import com.veyq.core.crypto.SealedSecret
-import com.veyq.core.membership.MembershipEntity
-import com.veyq.core.testing.TestFixtures.bearer
-import com.veyq.core.testing.TestFixtures.seedTenant
-import com.veyq.core.testing.TestFixtures.seedUser
+import me.raddatz.veyq.core.crypto.ConfigSecretSeal
+import me.raddatz.veyq.core.crypto.SealedSecret
+import me.raddatz.veyq.core.membership.MembershipEntity
+import me.raddatz.veyq.core.testing.TestFixtures.bearer
+import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
+import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -83,7 +83,7 @@ class TenantMailSettingsSliceTest {
             .body(settingsBody(password = "s3cr3t-smtp-pw"))
             .`when`().put("/api/tenants/$tenantId/mail-settings").then().statusCode(200)
 
-        val row = QuarkusTransaction.requiringNew().call<com.veyq.core.admin.tenant.MailSettingsRow?> { store.mailSettingsFor(tenantId) }!!
+        val row = QuarkusTransaction.requiringNew().call<me.raddatz.veyq.core.admin.tenant.MailSettingsRow?> { store.mailSettingsFor(tenantId) }!!
         assertNotEquals("s3cr3t-smtp-pw", row.passwordCiphertext, "the stored column must be ciphertext, not the input")
         assertTrue(row.passwordSet)
         assertEquals("s3cr3t-smtp-pw", seal.unseal(SealedSecret(row.passwordCiphertext!!, row.passwordNonce!!)), "unsealing must recover the password")
@@ -101,7 +101,7 @@ class TenantMailSettingsSliceTest {
             .`when`().put("/api/tenants/$tenantId/mail-settings")
             .then().statusCode(200).body("enabled", equalTo(false)).body("passwordSet", equalTo(true))
 
-        val row = QuarkusTransaction.requiringNew().call<com.veyq.core.admin.tenant.MailSettingsRow?> { store.mailSettingsFor(tenantId) }!!
+        val row = QuarkusTransaction.requiringNew().call<me.raddatz.veyq.core.admin.tenant.MailSettingsRow?> { store.mailSettingsFor(tenantId) }!!
         assertEquals("keep-me", seal.unseal(SealedSecret(row.passwordCiphertext!!, row.passwordNonce!!)))
     }
 
@@ -114,7 +114,7 @@ class TenantMailSettingsSliceTest {
             .then().statusCode(400).body("code", equalTo("invalid_mail_template"))
 
         // Nothing was persisted — a rejected template can never reach send time.
-        val row = QuarkusTransaction.requiringNew().call<com.veyq.core.admin.tenant.MailSettingsRow?> { store.mailSettingsFor(tenantId) }
+        val row = QuarkusTransaction.requiringNew().call<me.raddatz.veyq.core.admin.tenant.MailSettingsRow?> { store.mailSettingsFor(tenantId) }
         assertNull(row, "a rejected update must not create a settings row")
     }
 
@@ -128,7 +128,7 @@ class TenantMailSettingsSliceTest {
                 .`when`().put("/api/tenants/$tenantId/mail-settings")
                 .then().statusCode(400)
         }
-        val row = QuarkusTransaction.requiringNew().call<com.veyq.core.admin.tenant.MailSettingsRow?> { store.mailSettingsFor(tenantId) }
+        val row = QuarkusTransaction.requiringNew().call<me.raddatz.veyq.core.admin.tenant.MailSettingsRow?> { store.mailSettingsFor(tenantId) }
         assertNull(row, "a refused update must not create a settings row")
     }
 

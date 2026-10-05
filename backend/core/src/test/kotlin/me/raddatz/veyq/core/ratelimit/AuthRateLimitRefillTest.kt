@@ -1,4 +1,4 @@
-package com.veyq.core.ratelimit
+package me.raddatz.veyq.core.ratelimit
 
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.TestProfile

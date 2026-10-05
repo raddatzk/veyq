@@ -1,6 +1,6 @@
-package com.veyq.core.sharing
+package me.raddatz.veyq.core.sharing
 
-import com.veyq.core.sharing.ShareEntity
+import me.raddatz.veyq.core.sharing.ShareEntity
 
 /**
  * The pure share-access decision (ADR 0045 §2, ADR 0031), lifted out of [SharingHandler] so the write-only

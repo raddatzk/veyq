@@ -1,18 +1,18 @@
-package com.veyq.memories.media
+package me.raddatz.veyq.memories.media
 
-import com.veyq.core.testing.FakePresignProfile
-import com.veyq.core.blob.UploadSessionPurge
-import com.veyq.core.testing.TestBlob
-import com.veyq.core.blob.UploadSessionEntity
-import com.veyq.core.blobstore.BlobStore.Companion.chunkKey
-import com.veyq.core.blobstore.BlobStore.Companion.chunkKeys
-import com.veyq.core.blobstore.FakePresigningBlobStore
-import com.veyq.core.blobstore.StoreReclaimEntity
-import com.veyq.core.testing.TestFixtures.CONTENT_KEY
-import com.veyq.core.testing.TestFixtures.bearer
-import com.veyq.core.testing.TestFixtures.seedMemberScope
-import com.veyq.core.testing.TestFixtures.seedNode
-import com.veyq.memories.node.MemoriesNodeKinds
+import me.raddatz.veyq.core.testing.FakePresignProfile
+import me.raddatz.veyq.core.blob.UploadSessionPurge
+import me.raddatz.veyq.core.testing.TestBlob
+import me.raddatz.veyq.core.blob.UploadSessionEntity
+import me.raddatz.veyq.core.blobstore.BlobStore.Companion.chunkKey
+import me.raddatz.veyq.core.blobstore.BlobStore.Companion.chunkKeys
+import me.raddatz.veyq.core.blobstore.FakePresigningBlobStore
+import me.raddatz.veyq.core.blobstore.StoreReclaimEntity
+import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
+import me.raddatz.veyq.core.testing.TestFixtures.bearer
+import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
+import me.raddatz.veyq.core.testing.TestFixtures.seedNode
+import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.TestProfile
@@ -30,7 +30,7 @@ import org.junit.jupiter.api.Test
  * Reaches `BlobUploadHandler`'s `verifyBlob`/`BlobVerify.Budget`/`purge` path (cr-media-budget-branch-coverage) —
  * entered by zero tests before this class, hermetic or E2E, because `verifyBlob` short-circuits to `Ok`
  * whenever `!blobStore.canPresign` (`BlobUploadHandler.verifyBlob`), true for every other hermetic test's
- * [com.veyq.core.blobstore.InMemoryBlobStore]. [FakePresigningBlobStore] answers `canPresign = true` with
+ * [me.raddatz.veyq.core.blobstore.InMemoryBlobStore]. [FakePresigningBlobStore] answers `canPresign = true` with
  * a scriptable `stat()`, active only in this class via `getEnabledAlternatives()` — every other hermetic test's
  * `BlobStore` wiring (`RecordingBlobStore` → `InMemoryBlobStore`) is unaffected.
  *

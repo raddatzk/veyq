@@ -1,6 +1,6 @@
-package com.veyq.core.sharing
+package me.raddatz.veyq.core.sharing
 
-import com.veyq.core.TestIds
+import me.raddatz.veyq.core.TestIds
 import java.security.MessageDigest
 import java.util.Base64
 

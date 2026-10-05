@@ -1,15 +1,15 @@
-package com.veyq.core.account.profile
+package me.raddatz.veyq.core.account.profile
 
-import com.veyq.core.generated.api.AccountProfileApi
-import com.veyq.core.generated.model.MemberProfile
-import com.veyq.core.generated.model.ProfileUpdateRequest
-import com.veyq.core.http.HttpFailure
-import com.veyq.core.http.httpError
-import com.veyq.core.tenant.RequestTenant
+import me.raddatz.veyq.core.generated.api.AccountProfileApi
+import me.raddatz.veyq.core.generated.model.MemberProfile
+import me.raddatz.veyq.core.generated.model.ProfileUpdateRequest
+import me.raddatz.veyq.core.http.HttpFailure
+import me.raddatz.veyq.core.http.httpError
+import me.raddatz.veyq.core.tenant.RequestTenant
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
 import jakarta.ws.rs.core.Response
-import com.veyq.core.ratelimit.RateLimitExempt
+import me.raddatz.veyq.core.ratelimit.RateLimitExempt
 
 /**
  * HTTP adapter for the caller's per-tenant identity profile (username + sealed real name, ADR 0023). Implements

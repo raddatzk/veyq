@@ -1,4 +1,4 @@
-package com.veyq.core.tenant
+package me.raddatz.veyq.core.tenant
 
 import org.jboss.logging.Logger
 import java.nio.file.Files

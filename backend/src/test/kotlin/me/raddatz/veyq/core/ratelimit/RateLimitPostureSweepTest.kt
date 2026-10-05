@@ -1,6 +1,6 @@
-package com.veyq.core.ratelimit
+package me.raddatz.veyq.core.ratelimit
 
-import com.veyq.core.testing.MainOutputs
+import me.raddatz.veyq.core.testing.MainOutputs
 import io.quarkus.arc.Arc
 import io.quarkus.security.Authenticated
 import io.quarkus.test.junit.QuarkusTest

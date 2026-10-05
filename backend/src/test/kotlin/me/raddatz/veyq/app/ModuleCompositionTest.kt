@@ -1,23 +1,23 @@
-package com.veyq.app
+package me.raddatz.veyq.app
 
-import com.veyq.core.blob.UploadCompletion
-import com.veyq.core.node.NodeEntity
-import com.veyq.core.node.NodeKindRules
-import com.veyq.core.node.NodeSubtreeEraser
-import com.veyq.core.node.ParentSlot
-import com.veyq.core.quota.StorageQuota
-import com.veyq.core.quota.UploadAdmission
-import com.veyq.core.scope.MembershipEraser
-import com.veyq.core.scope.ScopeEntity
-import com.veyq.core.scope.ScopeEraser
-import com.veyq.core.sharing.GuestIdentityUsage
-import com.veyq.core.sharing.ShareGuestWrites
-import com.veyq.core.sharing.ShareWriteProof
-import com.veyq.core.sharing.SharedSubtreeContributor
-import com.veyq.core.testing.MainOutputs
-import com.veyq.core.testing.TestFixtures.bearer
-import com.veyq.core.testing.TestFixtures.seedMemberScope
-import com.veyq.core.testing.TestFixtures.seedNode
+import me.raddatz.veyq.core.blob.UploadCompletion
+import me.raddatz.veyq.core.node.NodeEntity
+import me.raddatz.veyq.core.node.NodeKindRules
+import me.raddatz.veyq.core.node.NodeSubtreeEraser
+import me.raddatz.veyq.core.node.ParentSlot
+import me.raddatz.veyq.core.quota.StorageQuota
+import me.raddatz.veyq.core.quota.UploadAdmission
+import me.raddatz.veyq.core.scope.MembershipEraser
+import me.raddatz.veyq.core.scope.ScopeEntity
+import me.raddatz.veyq.core.scope.ScopeEraser
+import me.raddatz.veyq.core.sharing.GuestIdentityUsage
+import me.raddatz.veyq.core.sharing.ShareGuestWrites
+import me.raddatz.veyq.core.sharing.ShareWriteProof
+import me.raddatz.veyq.core.sharing.SharedSubtreeContributor
+import me.raddatz.veyq.core.testing.MainOutputs
+import me.raddatz.veyq.core.testing.TestFixtures.bearer
+import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
+import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import io.quarkus.arc.All
 import io.quarkus.arc.Arc
 import io.quarkus.arc.ClientProxy
@@ -113,8 +113,8 @@ class ModuleCompositionTest {
             assertEquals(expected, actual, "${seam.simpleName}: the deployed implementations are the compiled ones")
         }
         val union = seams().values.flatten().map(::beanClass)
-        assertTrue(union.any { it.startsWith("com.veyq.core.") }, "core's own implementations are collected: $union")
-        assertTrue(union.any { it.startsWith("com.veyq.memories.") }, "Memories' implementations are collected: $union")
+        assertTrue(union.any { it.startsWith("me.raddatz.veyq.core.") }, "core's own implementations are collected: $union")
+        assertTrue(union.any { it.startsWith("me.raddatz.veyq.memories.") }, "Memories' implementations are collected: $union")
     }
 
     @Test
@@ -125,7 +125,7 @@ class ModuleCompositionTest {
         val routes = compiled.filter { it.isInterface && it.isAnnotationPresent(Path::class.java) }
         val unserved = routes.filter { api -> deployed.none { api.isAssignableFrom(it) } }.map { it.name }
         assertEquals(emptyList<String>(), unserved, "a generated API no deployed resource implements answers 404")
-        for (pkg in listOf("com.veyq.core.generated.api", "com.veyq.memories.generated.api")) {
+        for (pkg in listOf("me.raddatz.veyq.core.generated.api", "me.raddatz.veyq.memories.generated.api")) {
             assertTrue(routes.any { it.packageName == pkg }, "the walk saw $pkg: ${routes.map { it.name }}")
         }
     }

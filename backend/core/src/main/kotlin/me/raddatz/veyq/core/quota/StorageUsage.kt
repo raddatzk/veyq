@@ -1,6 +1,6 @@
-package com.veyq.core.quota
+package me.raddatz.veyq.core.quota
 
-import com.veyq.core.tenant.TenantEntity
+import me.raddatz.veyq.core.tenant.TenantEntity
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.EntityManager
 import jakarta.persistence.LockModeType

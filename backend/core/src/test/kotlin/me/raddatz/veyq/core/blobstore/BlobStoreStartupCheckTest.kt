@@ -1,4 +1,4 @@
-package com.veyq.core.blobstore
+package me.raddatz.veyq.core.blobstore
 
 import io.quarkus.runtime.LaunchMode
 import org.junit.jupiter.api.Assertions.assertFalse

@@ -1,8 +1,8 @@
-package com.veyq.core.admin.tenant
+package me.raddatz.veyq.core.admin.tenant
 
-import com.veyq.core.config.VeyqConfig
-import com.veyq.core.identity.normalizeEmail
-import com.veyq.core.ratelimit.TokenBucketCounter
+import me.raddatz.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.identity.normalizeEmail
+import me.raddatz.veyq.core.ratelimit.TokenBucketCounter
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.inject.Inject
 

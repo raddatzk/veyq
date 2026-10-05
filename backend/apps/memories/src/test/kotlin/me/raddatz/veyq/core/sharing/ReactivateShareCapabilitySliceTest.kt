@@ -1,9 +1,9 @@
-package com.veyq.core.sharing
+package me.raddatz.veyq.core.sharing
 
-import com.veyq.core.sharing.ShareEntity
-import com.veyq.core.membership.ScopeAccessWorld
-import com.veyq.core.membership.ScopeAccessWorld.Companion.B64
-import com.veyq.core.testing.TestFixtures.bearer
+import me.raddatz.veyq.core.sharing.ShareEntity
+import me.raddatz.veyq.core.membership.ScopeAccessWorld
+import me.raddatz.veyq.core.membership.ScopeAccessWorld.Companion.B64
+import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.QuarkusTestProfile

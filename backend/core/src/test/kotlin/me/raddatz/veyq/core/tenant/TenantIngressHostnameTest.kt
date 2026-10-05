@@ -1,4 +1,4 @@
-package com.veyq.core.tenant
+package me.raddatz.veyq.core.tenant
 
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue

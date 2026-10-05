@@ -1,6 +1,6 @@
-package com.veyq.memories.media
+package me.raddatz.veyq.memories.media
 
-import com.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.config.VeyqConfig
 import io.quarkus.scheduler.Scheduled
 import jakarta.enterprise.context.ApplicationScoped
 import java.time.Duration

@@ -1,7 +1,7 @@
-package com.veyq.core.admin.tenant
+package me.raddatz.veyq.core.admin.tenant
 
-import com.veyq.core.membership.MembershipEntity
-import com.veyq.core.scope.ScopeEntity
+import me.raddatz.veyq.core.membership.MembershipEntity
+import me.raddatz.veyq.core.scope.ScopeEntity
 
 /** The membership facts the removal decision needs for one scope the target belongs to, lifted out of the
  *  persistence rows so the decision is testable without a DB. `ownerCount` is pre-resolved by the shell so the

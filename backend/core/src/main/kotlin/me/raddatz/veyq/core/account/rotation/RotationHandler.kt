@@ -1,28 +1,28 @@
-package com.veyq.core.account.rotation
+package me.raddatz.veyq.core.account.rotation
 
-import com.veyq.core.account.deviceregister.DeviceRegisterStore
-import com.veyq.core.account.identitypins.IdentityPinsStore
-import com.veyq.core.account.login.SessionService
-import com.veyq.core.account.deviceregister.PutResult as RegisterPut
-import com.veyq.core.account.identitypins.PutResult as PinsPut
-import com.veyq.core.account.pairing.PairingStore
-import com.veyq.core.tasks.CompromiseRotationRow
-import com.veyq.core.tasks.CompromiseRotationState
-import com.veyq.core.tasks.RequeueResult
-import com.veyq.core.tasks.TasksStore
-import com.veyq.core.config.VeyqConfig
-import com.veyq.core.crypto.SecretKeyProof
-import com.veyq.core.http.FailureStatus.CONFLICT
-import com.veyq.core.http.FailureStatus.FORBIDDEN
-import com.veyq.core.http.FailureStatus.NOT_FOUND
-import com.veyq.core.http.Failures
-import com.veyq.core.http.HttpFailure
-import com.veyq.core.http.httpFailure
-import com.veyq.core.identity.AccountStore
-import com.veyq.core.membership.AccessMode.WRITE
-import com.veyq.core.membership.MembershipStore
-import com.veyq.core.membership.ScopeAccess
-import com.veyq.core.membership.refusal
+import me.raddatz.veyq.core.account.deviceregister.DeviceRegisterStore
+import me.raddatz.veyq.core.account.identitypins.IdentityPinsStore
+import me.raddatz.veyq.core.account.login.SessionService
+import me.raddatz.veyq.core.account.deviceregister.PutResult as RegisterPut
+import me.raddatz.veyq.core.account.identitypins.PutResult as PinsPut
+import me.raddatz.veyq.core.account.pairing.PairingStore
+import me.raddatz.veyq.core.tasks.CompromiseRotationRow
+import me.raddatz.veyq.core.tasks.CompromiseRotationState
+import me.raddatz.veyq.core.tasks.RequeueResult
+import me.raddatz.veyq.core.tasks.TasksStore
+import me.raddatz.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.crypto.SecretKeyProof
+import me.raddatz.veyq.core.http.FailureStatus.CONFLICT
+import me.raddatz.veyq.core.http.FailureStatus.FORBIDDEN
+import me.raddatz.veyq.core.http.FailureStatus.NOT_FOUND
+import me.raddatz.veyq.core.http.Failures
+import me.raddatz.veyq.core.http.HttpFailure
+import me.raddatz.veyq.core.http.httpFailure
+import me.raddatz.veyq.core.identity.AccountStore
+import me.raddatz.veyq.core.membership.AccessMode.WRITE
+import me.raddatz.veyq.core.membership.MembershipStore
+import me.raddatz.veyq.core.membership.ScopeAccess
+import me.raddatz.veyq.core.membership.refusal
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 

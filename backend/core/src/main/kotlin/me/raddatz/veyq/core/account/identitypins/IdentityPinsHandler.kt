@@ -1,4 +1,4 @@
-package com.veyq.core.account.identitypins
+package me.raddatz.veyq.core.account.identitypins
 
 import jakarta.enterprise.context.ApplicationScoped
 

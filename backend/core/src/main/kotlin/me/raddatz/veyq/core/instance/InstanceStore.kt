@@ -1,4 +1,4 @@
-package com.veyq.core.instance
+package me.raddatz.veyq.core.instance
 
 import io.quarkus.runtime.StartupEvent
 import jakarta.enterprise.context.ApplicationScoped

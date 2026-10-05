@@ -1,25 +1,25 @@
-package com.veyq.memories.media
+package me.raddatz.veyq.memories.media
 
-import com.veyq.core.blob.BlobUploadHandler
-import com.veyq.core.blob.BlobUploadHandler.BlobVerify
-import com.veyq.core.blob.BlobUploadStore
-import com.veyq.core.blob.CompleteItem
-import com.veyq.core.blob.CompleteItemResult
-import com.veyq.core.blob.UploadCompletions
-import com.veyq.core.blob.UploadOpener
-import com.veyq.core.http.FailureStatus.BAD_REQUEST
-import com.veyq.core.http.FailureStatus.CONFLICT
-import com.veyq.core.http.FailureStatus.FORBIDDEN
-import com.veyq.core.http.FailureStatus.NOT_FOUND
-import com.veyq.core.http.FailureStatus.UNPROCESSABLE
-import com.veyq.core.http.Failures
-import com.veyq.core.http.HttpFailure
-import com.veyq.core.http.httpFailure
-import com.veyq.core.membership.AccessMode.READ
-import com.veyq.core.membership.AccessMode.WRITE
-import com.veyq.core.membership.ScopeAccess
-import com.veyq.core.membership.refusal
-import com.veyq.core.persistence.createOrConflict
+import me.raddatz.veyq.core.blob.BlobUploadHandler
+import me.raddatz.veyq.core.blob.BlobUploadHandler.BlobVerify
+import me.raddatz.veyq.core.blob.BlobUploadStore
+import me.raddatz.veyq.core.blob.CompleteItem
+import me.raddatz.veyq.core.blob.CompleteItemResult
+import me.raddatz.veyq.core.blob.UploadCompletions
+import me.raddatz.veyq.core.blob.UploadOpener
+import me.raddatz.veyq.core.http.FailureStatus.BAD_REQUEST
+import me.raddatz.veyq.core.http.FailureStatus.CONFLICT
+import me.raddatz.veyq.core.http.FailureStatus.FORBIDDEN
+import me.raddatz.veyq.core.http.FailureStatus.NOT_FOUND
+import me.raddatz.veyq.core.http.FailureStatus.UNPROCESSABLE
+import me.raddatz.veyq.core.http.Failures
+import me.raddatz.veyq.core.http.HttpFailure
+import me.raddatz.veyq.core.http.httpFailure
+import me.raddatz.veyq.core.membership.AccessMode.READ
+import me.raddatz.veyq.core.membership.AccessMode.WRITE
+import me.raddatz.veyq.core.membership.ScopeAccess
+import me.raddatz.veyq.core.membership.refusal
+import me.raddatz.veyq.core.persistence.createOrConflict
 import jakarta.enterprise.context.ApplicationScoped
 
 sealed interface CompleteOutcome {

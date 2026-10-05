@@ -1,15 +1,15 @@
-package com.veyq.core.blob
+package me.raddatz.veyq.core.blob
 
-import com.veyq.core.testing.FakePresignProfile
-import com.veyq.core.testing.TestBlob
-import com.veyq.core.blob.UploadSessionEntity
-import com.veyq.core.blobstore.FakePresigningBlobStore
-import com.veyq.core.membership.MembershipEntity
-import com.veyq.core.membership.TenantRoots
-import com.veyq.core.scope.ScopeEntity
-import com.veyq.core.testing.TestFixtures.bearer
-import com.veyq.core.testing.TestFixtures.seedMemberScope
-import com.veyq.core.testing.TestFixtures.seedUser
+import me.raddatz.veyq.core.testing.FakePresignProfile
+import me.raddatz.veyq.core.testing.TestBlob
+import me.raddatz.veyq.core.blob.UploadSessionEntity
+import me.raddatz.veyq.core.blobstore.FakePresigningBlobStore
+import me.raddatz.veyq.core.membership.MembershipEntity
+import me.raddatz.veyq.core.membership.TenantRoots
+import me.raddatz.veyq.core.scope.ScopeEntity
+import me.raddatz.veyq.core.testing.TestFixtures.bearer
+import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
+import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.TestProfile

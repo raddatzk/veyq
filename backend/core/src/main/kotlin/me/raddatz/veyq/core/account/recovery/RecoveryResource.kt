@@ -1,18 +1,18 @@
-package com.veyq.core.account.recovery
+package me.raddatz.veyq.core.account.recovery
 
-import com.veyq.core.generated.api.RecoveryApi
-import com.veyq.core.generated.model.RecoveryCompleteRequest
-import com.veyq.core.generated.model.RecoveryMaterial
-import com.veyq.core.generated.model.RecoveryRequest
-import com.veyq.core.generated.model.RecoveryTokenRequest
-import com.veyq.core.http.FailureStatus.FORBIDDEN
-import com.veyq.core.http.FailureStatus.NOT_FOUND
-import com.veyq.core.http.Failures
-import com.veyq.core.http.httpError
-import com.veyq.core.http.httpFailure
-import com.veyq.core.ratelimit.RateLimit
-import com.veyq.core.ratelimit.RateLimitKey
-import com.veyq.core.tenant.RequestTenant
+import me.raddatz.veyq.core.generated.api.RecoveryApi
+import me.raddatz.veyq.core.generated.model.RecoveryCompleteRequest
+import me.raddatz.veyq.core.generated.model.RecoveryMaterial
+import me.raddatz.veyq.core.generated.model.RecoveryRequest
+import me.raddatz.veyq.core.generated.model.RecoveryTokenRequest
+import me.raddatz.veyq.core.http.FailureStatus.FORBIDDEN
+import me.raddatz.veyq.core.http.FailureStatus.NOT_FOUND
+import me.raddatz.veyq.core.http.Failures
+import me.raddatz.veyq.core.http.httpError
+import me.raddatz.veyq.core.http.httpFailure
+import me.raddatz.veyq.core.ratelimit.RateLimit
+import me.raddatz.veyq.core.ratelimit.RateLimitKey
+import me.raddatz.veyq.core.tenant.RequestTenant
 import jakarta.annotation.security.PermitAll
 import jakarta.ws.rs.core.Response
 

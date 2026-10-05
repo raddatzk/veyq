@@ -1,10 +1,10 @@
-package com.veyq.core.admin.instance
+package me.raddatz.veyq.core.admin.instance
 
-import com.veyq.core.generated.api.InstanceApi
-import com.veyq.core.generated.model.InstanceRelease
-import com.veyq.core.generated.model.InstanceStoreProvisioning
-import com.veyq.core.identity.ServerRoles.SERVER_OWNER
-import com.veyq.core.ratelimit.RateLimitExempt
+import me.raddatz.veyq.core.generated.api.InstanceApi
+import me.raddatz.veyq.core.generated.model.InstanceRelease
+import me.raddatz.veyq.core.generated.model.InstanceStoreProvisioning
+import me.raddatz.veyq.core.identity.ServerRoles.SERVER_OWNER
+import me.raddatz.veyq.core.ratelimit.RateLimitExempt
 import jakarta.annotation.security.RolesAllowed
 import jakarta.ws.rs.core.Response
 

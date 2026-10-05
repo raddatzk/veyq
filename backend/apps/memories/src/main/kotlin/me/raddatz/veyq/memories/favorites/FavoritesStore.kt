@@ -1,4 +1,4 @@
-package com.veyq.memories.favorites
+package me.raddatz.veyq.memories.favorites
 
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional

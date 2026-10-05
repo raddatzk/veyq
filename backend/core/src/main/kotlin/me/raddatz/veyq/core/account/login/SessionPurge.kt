@@ -1,4 +1,4 @@
-package com.veyq.core.account.login
+package me.raddatz.veyq.core.account.login
 
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.scheduler.Scheduled

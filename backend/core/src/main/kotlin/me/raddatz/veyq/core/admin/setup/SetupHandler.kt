@@ -1,9 +1,9 @@
-package com.veyq.core.admin.setup
+package me.raddatz.veyq.core.admin.setup
 
-import com.veyq.core.platform.capabilities.CapabilityRegistry
-import com.veyq.core.config.VeyqConfig
-import com.veyq.core.instance.InstanceStore
-import com.veyq.core.persistence.createOrConflict
+import me.raddatz.veyq.core.platform.capabilities.CapabilityRegistry
+import me.raddatz.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.instance.InstanceStore
+import me.raddatz.veyq.core.persistence.createOrConflict
 import jakarta.enterprise.context.ApplicationScoped
 
 /** Current setup state for the status endpoint. */

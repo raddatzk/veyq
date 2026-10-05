@@ -1,7 +1,7 @@
-package com.veyq.core.admin.setup
+package me.raddatz.veyq.core.admin.setup
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.veyq.core.generated.model.CreateServerOwnerRequest
+import me.raddatz.veyq.core.generated.model.CreateServerOwnerRequest
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject
 import org.junit.jupiter.api.Assertions.assertEquals

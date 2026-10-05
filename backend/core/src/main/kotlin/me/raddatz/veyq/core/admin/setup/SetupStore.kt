@@ -1,8 +1,8 @@
-package com.veyq.core.admin.setup
+package me.raddatz.veyq.core.admin.setup
 
-import com.veyq.core.identity.AccountStore
-import com.veyq.core.identity.ServerRoles
-import com.veyq.core.identity.WrapData
+import me.raddatz.veyq.core.identity.AccountStore
+import me.raddatz.veyq.core.identity.ServerRoles
+import me.raddatz.veyq.core.identity.WrapData
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 import java.time.Instant

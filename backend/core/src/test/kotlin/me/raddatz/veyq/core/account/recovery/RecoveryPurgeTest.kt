@@ -1,6 +1,6 @@
-package com.veyq.core.account.recovery
+package me.raddatz.veyq.core.account.recovery
 
-import com.veyq.core.testing.TestFixtures.seedUser
+import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject

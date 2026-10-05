@@ -1,4 +1,4 @@
-package com.veyq.core.sharing
+package me.raddatz.veyq.core.sharing
 
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given

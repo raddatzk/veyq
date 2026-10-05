@@ -1,4 +1,4 @@
-package com.veyq.core.adminchannel
+package me.raddatz.veyq.core.adminchannel
 
 import io.vertx.core.Vertx
 import org.junit.jupiter.api.AfterEach

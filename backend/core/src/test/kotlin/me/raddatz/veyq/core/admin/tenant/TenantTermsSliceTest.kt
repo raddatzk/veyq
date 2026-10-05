@@ -1,9 +1,9 @@
-package com.veyq.core.admin.tenant
+package me.raddatz.veyq.core.admin.tenant
 
-import com.veyq.core.membership.MembershipEntity
-import com.veyq.core.testing.TestFixtures.bearer
-import com.veyq.core.testing.TestFixtures.seedTenant
-import com.veyq.core.testing.TestFixtures.seedUser
+import me.raddatz.veyq.core.membership.MembershipEntity
+import me.raddatz.veyq.core.testing.TestFixtures.bearer
+import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
+import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given

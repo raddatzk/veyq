@@ -1,4 +1,4 @@
-package com.veyq.core.crypto
+package me.raddatz.veyq.core.crypto
 
 import java.security.KeyPairGenerator
 import java.security.Signature

@@ -1,12 +1,12 @@
-package com.veyq.core.admin.tenant
+package me.raddatz.veyq.core.admin.tenant
 
-import com.veyq.core.membership.TestAdmission
-import com.veyq.core.tasks.CapabilityTags
-import com.veyq.core.crypto.Tokens
-import com.veyq.core.membership.MembershipEntity
-import com.veyq.core.testing.TestFixtures.bearer
-import com.veyq.core.testing.TestFixtures.seedTenant
-import com.veyq.core.testing.TestFixtures.seedUser
+import me.raddatz.veyq.core.membership.TestAdmission
+import me.raddatz.veyq.core.tasks.CapabilityTags
+import me.raddatz.veyq.core.crypto.Tokens
+import me.raddatz.veyq.core.membership.MembershipEntity
+import me.raddatz.veyq.core.testing.TestFixtures.bearer
+import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
+import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -253,7 +253,7 @@ class MemberAddSliceTest {
         QuarkusTransaction.requiringNew().run {
             store.mintMemberInvite(
                 tenantId, email, Tokens.hash(secret), Instant.now().plus(7, ChronoUnit.DAYS),
-                com.veyq.core.membership.TestAdmission.admission(), checkEpoch = false,
+                me.raddatz.veyq.core.membership.TestAdmission.admission(), checkEpoch = false,
             )
         }
 

@@ -1,13 +1,13 @@
-package com.veyq.core.quota
+package me.raddatz.veyq.core.quota
 
-import com.veyq.core.node.NodeEntity
-import com.veyq.core.sharing.ShareEntity
-import com.veyq.core.tenant.TenantEntity
-import com.veyq.core.testing.TestBlob
-import com.veyq.core.testing.TestFixtures.CONTENT_KEY
-import com.veyq.core.testing.TestFixtures.seedMemberScope
-import com.veyq.core.testing.TestFixtures.seedNode
-import com.veyq.memories.node.MemoriesNodeKinds
+import me.raddatz.veyq.core.node.NodeEntity
+import me.raddatz.veyq.core.sharing.ShareEntity
+import me.raddatz.veyq.core.tenant.TenantEntity
+import me.raddatz.veyq.core.testing.TestBlob
+import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
+import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
+import me.raddatz.veyq.core.testing.TestFixtures.seedNode
+import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.arc.All
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest

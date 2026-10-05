@@ -1,4 +1,4 @@
-package com.veyq.core.admin.tenant
+package me.raddatz.veyq.core.admin.tenant
 
 import jakarta.enterprise.context.ApplicationScoped
 

@@ -1,8 +1,8 @@
-package com.veyq.core.content
+package me.raddatz.veyq.core.content
 
-import com.veyq.core.testing.TestFixtures.bearer
-import com.veyq.core.testing.TestFixtures.seedMemberScope
-import com.veyq.core.testing.TestFixtures.seedUser
+import me.raddatz.veyq.core.testing.TestFixtures.bearer
+import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
+import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType

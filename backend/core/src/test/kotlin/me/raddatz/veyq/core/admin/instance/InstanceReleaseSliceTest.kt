@@ -1,8 +1,8 @@
-package com.veyq.core.admin.instance
+package me.raddatz.veyq.core.admin.instance
 
-import com.veyq.core.adminchannel.givenAdminChannel
-import com.veyq.core.testing.TestFixtures.bearer
-import com.veyq.core.testing.TestFixtures.ensureUser
+import me.raddatz.veyq.core.adminchannel.givenAdminChannel
+import me.raddatz.veyq.core.testing.TestFixtures.bearer
+import me.raddatz.veyq.core.testing.TestFixtures.ensureUser
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.TestProfile
 import io.quarkus.test.junit.QuarkusTestProfile

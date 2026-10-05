@@ -1,6 +1,6 @@
-package com.veyq.core.crypto
+package me.raddatz.veyq.core.crypto
 
-import com.veyq.core.config.testVeyqConfig
+import me.raddatz.veyq.core.config.testVeyqConfig
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals

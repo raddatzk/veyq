@@ -1,4 +1,4 @@
-package com.veyq.core.membership
+package me.raddatz.veyq.core.membership
 
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheCompanionBase
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheEntityBase

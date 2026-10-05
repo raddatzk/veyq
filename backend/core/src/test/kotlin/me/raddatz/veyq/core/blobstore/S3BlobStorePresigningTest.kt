@@ -1,6 +1,6 @@
-package com.veyq.core.blobstore
+package me.raddatz.veyq.core.blobstore
 
-import com.veyq.core.config.VeyqConfig.SigningMode
+import me.raddatz.veyq.core.config.VeyqConfig.SigningMode
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue

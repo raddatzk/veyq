@@ -1,4 +1,4 @@
-package com.veyq.core.tenant
+package me.raddatz.veyq.core.tenant
 
 /**
  * Where [TenantIngressProjector]'s computed set of routable tenant domains actually becomes **routing**

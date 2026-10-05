@@ -1,8 +1,8 @@
-package com.veyq.core.account.login
+package me.raddatz.veyq.core.account.login
 
-import com.veyq.core.auth.AccessTokenResolver
-import com.veyq.core.crypto.Tokens
-import com.veyq.core.identity.AccountStore
+import me.raddatz.veyq.core.auth.AccessTokenResolver
+import me.raddatz.veyq.core.crypto.Tokens
+import me.raddatz.veyq.core.identity.AccountStore
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional

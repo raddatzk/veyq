@@ -1,4 +1,4 @@
-package com.veyq.memories.media
+package me.raddatz.veyq.memories.media
 
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheCompanionBase
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheEntityBase

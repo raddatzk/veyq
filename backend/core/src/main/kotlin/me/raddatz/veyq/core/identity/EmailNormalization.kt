@@ -1,4 +1,4 @@
-package com.veyq.core.identity
+package me.raddatz.veyq.core.identity
 
 /**
  * The one email normalization: trimmed, lower-cased. It is the client's auth-salt rule (`packages/crypto/src/v1.ts`,

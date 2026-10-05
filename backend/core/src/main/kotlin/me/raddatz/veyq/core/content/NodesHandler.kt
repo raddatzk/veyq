@@ -1,14 +1,14 @@
-package com.veyq.core.content
+package me.raddatz.veyq.core.content
 
-import com.veyq.core.node.NodeKindRules
-import com.veyq.core.node.ParentSlot
-import com.veyq.core.http.Failures
-import com.veyq.core.http.HttpFailure
-import com.veyq.core.membership.AccessMode.READ
-import com.veyq.core.membership.AccessMode.WRITE
-import com.veyq.core.membership.ScopeAccess
-import com.veyq.core.membership.refusal
-import com.veyq.core.persistence.createOrConflict
+import me.raddatz.veyq.core.node.NodeKindRules
+import me.raddatz.veyq.core.node.ParentSlot
+import me.raddatz.veyq.core.http.Failures
+import me.raddatz.veyq.core.http.HttpFailure
+import me.raddatz.veyq.core.membership.AccessMode.READ
+import me.raddatz.veyq.core.membership.AccessMode.WRITE
+import me.raddatz.veyq.core.membership.ScopeAccess
+import me.raddatz.veyq.core.membership.refusal
+import me.raddatz.veyq.core.persistence.createOrConflict
 import io.quarkus.arc.All
 import jakarta.enterprise.context.ApplicationScoped
 

@@ -1,15 +1,15 @@
-package com.veyq.core.tasks
+package me.raddatz.veyq.core.tasks
 
-import com.veyq.core.membership.Admission
-import com.veyq.core.membership.MembershipEntity
-import com.veyq.core.membership.admission
-import com.veyq.core.scope.ScopeEntity
-import com.veyq.core.identity.VeyqUser
-import com.veyq.core.http.FailureStatus.CONFLICT
-import com.veyq.core.http.FailureStatus.NOT_FOUND
-import com.veyq.core.http.Failures
-import com.veyq.core.http.HttpFailure
-import com.veyq.core.http.httpFailure
+import me.raddatz.veyq.core.membership.Admission
+import me.raddatz.veyq.core.membership.MembershipEntity
+import me.raddatz.veyq.core.membership.admission
+import me.raddatz.veyq.core.scope.ScopeEntity
+import me.raddatz.veyq.core.identity.VeyqUser
+import me.raddatz.veyq.core.http.FailureStatus.CONFLICT
+import me.raddatz.veyq.core.http.FailureStatus.NOT_FOUND
+import me.raddatz.veyq.core.http.Failures
+import me.raddatz.veyq.core.http.HttpFailure
+import me.raddatz.veyq.core.http.httpFailure
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional

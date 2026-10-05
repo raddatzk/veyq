@@ -1,4 +1,4 @@
-package com.veyq.core.sharing
+package me.raddatz.veyq.core.sharing
 
 /**
  * Whatever of an application still names a guest identity, asked by `SharingStore.dropDeadIdentities` before it

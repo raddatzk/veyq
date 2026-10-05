@@ -1,4 +1,4 @@
-package com.veyq.core.tasks
+package me.raddatz.veyq.core.tasks
 
 /**
  * The opaque capability tokens the backend pins from the public registry (`contracts/tasks/tags/v1.json`,

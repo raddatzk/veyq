@@ -1,4 +1,4 @@
-package com.veyq.core.ratelimit
+package me.raddatz.veyq.core.ratelimit
 
 import java.lang.reflect.Method
 

@@ -1,14 +1,14 @@
-package com.veyq.core.admin.tenant
+package me.raddatz.veyq.core.admin.tenant
 
-import com.veyq.core.membership.TestAdmission
-import com.veyq.core.crypto.Tokens
-import com.veyq.core.identity.TenantProfileEntity
-import com.veyq.core.identity.VeyqUser
-import com.veyq.core.membership.MembershipEntity
-import com.veyq.core.tenant.TenantEntity
-import com.veyq.core.testing.TestFixtures.bearer
-import com.veyq.core.testing.TestFixtures.seedUser
-import com.veyq.core.testing.race
+import me.raddatz.veyq.core.membership.TestAdmission
+import me.raddatz.veyq.core.crypto.Tokens
+import me.raddatz.veyq.core.identity.TenantProfileEntity
+import me.raddatz.veyq.core.identity.VeyqUser
+import me.raddatz.veyq.core.membership.MembershipEntity
+import me.raddatz.veyq.core.tenant.TenantEntity
+import me.raddatz.veyq.core.testing.TestFixtures.bearer
+import me.raddatz.veyq.core.testing.TestFixtures.seedUser
+import me.raddatz.veyq.core.testing.race
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given

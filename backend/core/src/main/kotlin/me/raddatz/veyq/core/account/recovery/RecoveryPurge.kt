@@ -1,6 +1,6 @@
-package com.veyq.core.account.recovery
+package me.raddatz.veyq.core.account.recovery
 
-import com.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.config.VeyqConfig
 import io.quarkus.scheduler.Scheduled
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional

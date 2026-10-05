@@ -1,6 +1,6 @@
-package com.veyq.core.blobstore
+package me.raddatz.veyq.core.blobstore
 
-import com.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.config.VeyqConfig
 import io.quarkus.runtime.LaunchMode
 import io.quarkus.runtime.StartupEvent
 import jakarta.enterprise.context.ApplicationScoped

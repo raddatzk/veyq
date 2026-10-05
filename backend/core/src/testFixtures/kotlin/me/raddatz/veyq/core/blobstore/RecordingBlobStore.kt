@@ -1,6 +1,6 @@
-package com.veyq.core.blobstore
+package me.raddatz.veyq.core.blobstore
 
-import com.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.config.VeyqConfig
 import jakarta.annotation.Priority
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.inject.Alternative
@@ -12,7 +12,7 @@ import java.util.Collections
  * Reclaiming a row that carries a `storage_key` is two halves — delete the rows, then delete the objects those
  * rows pointed at — and until this bean existed only the first half was ever asserted. The hermetic tier runs on
  * [InMemoryBlobStore], whose `delete` is an empty no-op, so code that silently dropped its `blobStore.delete(…)`
- * call passed every test: [com.veyq.memories.media.MediaTrashPurge]'s object delete was proven by nothing at
+ * call passed every test: [me.raddatz.veyq.memories.media.MediaTrashPurge]'s object delete was proven by nothing at
  * all, and the invariant *"a path that deletes a row carrying a `storage_key` also deletes the objects under
  * it"* — where a row-only delete is strictly worse than no GC, because it orphans the bytes permanently — was
  * the one half no test covered.
@@ -24,7 +24,7 @@ import java.util.Collections
  *
  * **It records and delegates; it does not replace.** A `@Priority`-enabled `@Alternative` wins the [BlobStore]
  * injection point globally (the same shape as `SmtpTenantInviteMailer`), which includes
- * [com.veyq.memories.media.BlobBatchE2ETest] — whose `@TestProfile` is pure config overrides, so the
+ * [me.raddatz.veyq.memories.media.BlobBatchE2ETest] — whose `@TestProfile` is pure config overrides, so the
  * delegate built from that config is the real [S3BlobStore] there and the opt-in byte-transport e2e is
  * unaffected. Everywhere else the delegate is the in-memory stub and behaviour is bit-for-bit what it was.
  *

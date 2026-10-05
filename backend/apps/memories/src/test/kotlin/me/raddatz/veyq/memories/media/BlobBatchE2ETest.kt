@@ -1,11 +1,11 @@
-package com.veyq.memories.media
+package me.raddatz.veyq.memories.media
 
-import com.veyq.core.testing.TestBlob
-import com.veyq.core.testing.TestFixtures.CONTENT_KEY
-import com.veyq.core.testing.TestFixtures.bearer
-import com.veyq.core.testing.TestFixtures.seedMemberScope
-import com.veyq.core.testing.TestFixtures.seedNode
-import com.veyq.memories.node.MemoriesNodeKinds
+import me.raddatz.veyq.core.testing.TestBlob
+import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
+import me.raddatz.veyq.core.testing.TestFixtures.bearer
+import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
+import me.raddatz.veyq.core.testing.TestFixtures.seedNode
+import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.QuarkusTestProfile
 import io.quarkus.test.junit.TestProfile
@@ -35,7 +35,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
  *
  * It also reproduces the ADR 0013 §6 matrix — **store responses are inert, enforced by the signer** — against
  * the real store, which is the only place the signed header's VALUE and the override's un-strippability can be
- * seen ([com.veyq.core.blobstore.S3BlobStorePresigningTest] pins the URL shape): a `text/html` PUT → 403,
+ * seen ([me.raddatz.veyq.core.blobstore.S3BlobStorePresigningTest] pins the URL shape): a `text/html` PUT → 403,
  * a GET → `application/octet-stream` + `attachment`, and that GET with its override removed → 403.
  *
  * And it moves a blob of more than one presign window through the real store (ADR 0013 §2): `start` signs the

@@ -1,6 +1,6 @@
-package com.veyq.core.adminchannel
+package me.raddatz.veyq.core.adminchannel
 
-import com.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.config.VeyqConfig
 import io.quarkus.runtime.ShutdownEvent
 import io.quarkus.runtime.StartupEvent
 import io.quarkus.vertx.http.runtime.VertxHttpRecorder

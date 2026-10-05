@@ -1,4 +1,4 @@
-package com.veyq.core
+package me.raddatz.veyq.core
 
 import java.security.SecureRandom
 import java.util.Base64

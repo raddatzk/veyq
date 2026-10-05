@@ -1,4 +1,4 @@
-package com.veyq.core.account.pairing
+package me.raddatz.veyq.core.account.pairing
 
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheCompanionBase
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheEntityBase

@@ -1,9 +1,9 @@
-package com.veyq.memories.media
+package me.raddatz.veyq.memories.media
 
-import com.veyq.core.blob.BlobEntity
-import com.veyq.core.sharing.ShareDerivativeRow
-import com.veyq.core.sharing.ShareMediaRow
-import com.veyq.core.sharing.SharedSubtreeContributor
+import me.raddatz.veyq.core.blob.BlobEntity
+import me.raddatz.veyq.core.sharing.ShareDerivativeRow
+import me.raddatz.veyq.core.sharing.ShareMediaRow
+import me.raddatz.veyq.core.sharing.SharedSubtreeContributor
 import jakarta.enterprise.context.ApplicationScoped
 
 /** The media half of a shared subtree: live media originals + their derivatives (the cover arm is core's). */

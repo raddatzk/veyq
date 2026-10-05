@@ -1,4 +1,4 @@
-package com.veyq.core.ratelimit
+package me.raddatz.veyq.core.ratelimit
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse

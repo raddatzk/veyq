@@ -1,9 +1,9 @@
-package com.veyq.core.auth
+package me.raddatz.veyq.core.auth
 
-import com.veyq.core.http.FailureStatus.FORBIDDEN
-import com.veyq.core.http.FailureStatus.UNAUTHORIZED
-import com.veyq.core.http.httpError
-import com.veyq.core.http.httpFailure
+import me.raddatz.veyq.core.http.FailureStatus.FORBIDDEN
+import me.raddatz.veyq.core.http.FailureStatus.UNAUTHORIZED
+import me.raddatz.veyq.core.http.httpError
+import me.raddatz.veyq.core.http.httpFailure
 import io.quarkus.security.AuthenticationFailedException
 import io.quarkus.security.ForbiddenException
 import io.quarkus.security.UnauthorizedException

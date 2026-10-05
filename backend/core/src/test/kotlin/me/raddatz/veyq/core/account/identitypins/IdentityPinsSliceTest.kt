@@ -1,7 +1,7 @@
-package com.veyq.core.account.identitypins
+package me.raddatz.veyq.core.account.identitypins
 
-import com.veyq.core.account.login.SessionService
-import com.veyq.core.testing.TestFixtures.seedUser
+import me.raddatz.veyq.core.account.login.SessionService
+import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType

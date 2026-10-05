@@ -1,6 +1,6 @@
-package com.veyq.core.spaces.scope
+package me.raddatz.veyq.core.spaces.scope
 
-import com.veyq.core.membership.SignedGrant
+import me.raddatz.veyq.core.membership.SignedGrant
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Test

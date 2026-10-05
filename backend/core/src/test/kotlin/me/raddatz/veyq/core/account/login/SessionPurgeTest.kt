@@ -1,7 +1,7 @@
-package com.veyq.core.account.login
+package me.raddatz.veyq.core.account.login
 
-import com.veyq.core.identity.VeyqUser
-import com.veyq.core.testing.TestFixtures.newUser
+import me.raddatz.veyq.core.identity.VeyqUser
+import me.raddatz.veyq.core.testing.TestFixtures.newUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject

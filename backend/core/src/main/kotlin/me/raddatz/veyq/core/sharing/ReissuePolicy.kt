@@ -1,4 +1,4 @@
-package com.veyq.core.sharing
+package me.raddatz.veyq.core.sharing
 
 /**
  * Whether a share's link may be held by someone who has since left its scope, so it can come back only as a

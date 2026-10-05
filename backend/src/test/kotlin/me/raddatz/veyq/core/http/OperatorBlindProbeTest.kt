@@ -1,13 +1,13 @@
-package com.veyq.core.http
+package me.raddatz.veyq.core.http
 
-import com.veyq.core.sharing.ShareWriteProof
-import com.veyq.core.membership.TestAdmission
-import com.veyq.core.testing.TestBlob
-import com.veyq.core.crypto.Tokens
-import com.veyq.core.membership.ScopeAccessWorld
-import com.veyq.core.membership.ScopeAccessWorld.Companion.B64
-import com.veyq.core.membership.ScopeAccessWorld.Companion.JOB_TAG
-import com.veyq.core.testing.TestFixtures.bearer
+import me.raddatz.veyq.core.sharing.ShareWriteProof
+import me.raddatz.veyq.core.membership.TestAdmission
+import me.raddatz.veyq.core.testing.TestBlob
+import me.raddatz.veyq.core.crypto.Tokens
+import me.raddatz.veyq.core.membership.ScopeAccessWorld
+import me.raddatz.veyq.core.membership.ScopeAccessWorld.Companion.B64
+import me.raddatz.veyq.core.membership.ScopeAccessWorld.Companion.JOB_TAG
+import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
@@ -33,7 +33,7 @@ import java.util.jar.JarFile
  * The **enforcement guard** for the scope-access gate (uc.spaces.scope-access, ADR 0042): every operation in the
  * contract is either **probed** here against each state the gate tells apart, or named on a **reasoned exclusion
  * list**. The operation set is not listed — it is **derived** from the generated API interfaces of every owner
- * (`com.veyq.core.generated.api`, `com.veyq.memories.generated.api`), i.e. from `contracts/api/`, so an operation
+ * (`me.raddatz.veyq.core.generated.api`, `me.raddatz.veyq.memories.generated.api`), i.e. from `contracts/api/`, so an operation
  * nobody classified is red on the day it is added.
  *
  * Each probe runs on its own [ScopeAccessWorld] (a probe the gate lets through may mutate) with five personas:
@@ -414,7 +414,7 @@ class OperatorBlindProbeTest {
      */
     private fun contractOperations(): List<Operation> {
         val names = API_PACKAGES.flatMap(::generatedApiClassNames)
-        for (anchor in listOf("com.veyq.core.generated.api.ContentApi", "com.veyq.core.generated.api.BlobApi", "com.veyq.memories.generated.api.MediaApi")) {
+        for (anchor in listOf("me.raddatz.veyq.core.generated.api.ContentApi", "me.raddatz.veyq.core.generated.api.BlobApi", "me.raddatz.veyq.memories.generated.api.MediaApi")) {
             check(anchor in names) { "found no $anchor among the generated API interfaces on the classpath: $names" }
         }
         return names.flatMap { name ->
@@ -443,7 +443,7 @@ class OperatorBlindProbeTest {
 
     private companion object {
         /** One generated API package per owner (contracts/api/ → core, contracts/api/memories/ → Memories). */
-        val API_PACKAGES = listOf("com.veyq.core.generated.api", "com.veyq.memories.generated.api")
+        val API_PACKAGES = listOf("me.raddatz.veyq.core.generated.api", "me.raddatz.veyq.memories.generated.api")
         val VERBS = linkedMapOf(
             "GET" to GET::class.java, "POST" to POST::class.java, "PUT" to PUT::class.java,
             "PATCH" to PATCH::class.java, "DELETE" to DELETE::class.java,

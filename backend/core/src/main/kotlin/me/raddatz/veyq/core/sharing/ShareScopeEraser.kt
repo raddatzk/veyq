@@ -1,6 +1,6 @@
-package com.veyq.core.sharing
+package me.raddatz.veyq.core.sharing
 
-import com.veyq.core.scope.ScopeEraser
+import me.raddatz.veyq.core.scope.ScopeEraser
 import jakarta.enterprise.context.ApplicationScoped
 
 /**

@@ -1,12 +1,12 @@
-package com.veyq.memories.media
+package me.raddatz.veyq.memories.media
 
-import com.veyq.core.testing.TestBlob
-import com.veyq.core.node.NodeEntity
-import com.veyq.core.testing.TestFixtures.CONTENT_KEY
-import com.veyq.core.testing.TestFixtures.bearer
-import com.veyq.core.testing.TestFixtures.seedMemberScope
-import com.veyq.core.testing.TestFixtures.seedNode
-import com.veyq.memories.node.MemoriesNodeKinds
+import me.raddatz.veyq.core.testing.TestBlob
+import me.raddatz.veyq.core.node.NodeEntity
+import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
+import me.raddatz.veyq.core.testing.TestFixtures.bearer
+import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
+import me.raddatz.veyq.core.testing.TestFixtures.seedNode
+import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given

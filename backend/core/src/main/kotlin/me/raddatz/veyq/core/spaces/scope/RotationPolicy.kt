@@ -1,7 +1,7 @@
-package com.veyq.core.spaces.scope
+package me.raddatz.veyq.core.spaces.scope
 
-import com.veyq.core.membership.MembershipEntity
-import com.veyq.core.membership.SignedGrant
+import me.raddatz.veyq.core.membership.MembershipEntity
+import me.raddatz.veyq.core.membership.SignedGrant
 
 /** The membership facts the rotation decision needs: a member's id, whether their membership is still a soft
  *  `pendingConsent` proposal (cr-0094), their role (the last-owner guard of a removal) and the admission their

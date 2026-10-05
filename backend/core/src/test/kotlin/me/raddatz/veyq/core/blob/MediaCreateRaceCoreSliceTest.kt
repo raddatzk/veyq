@@ -1,11 +1,11 @@
-package com.veyq.core.blob
+package me.raddatz.veyq.core.blob
 
-import com.veyq.core.testing.TestBlob
-import com.veyq.core.testing.RACE_ROUNDS
-import com.veyq.core.testing.TestFixtures.bearer
-import com.veyq.core.testing.TestFixtures.seedMemberScope
-import com.veyq.core.testing.answer
-import com.veyq.core.testing.race
+import me.raddatz.veyq.core.testing.TestBlob
+import me.raddatz.veyq.core.testing.RACE_ROUNDS
+import me.raddatz.veyq.core.testing.TestFixtures.bearer
+import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
+import me.raddatz.veyq.core.testing.answer
+import me.raddatz.veyq.core.testing.race
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType

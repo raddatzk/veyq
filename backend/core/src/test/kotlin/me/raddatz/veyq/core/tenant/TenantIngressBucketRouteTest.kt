@@ -1,6 +1,6 @@
-package com.veyq.core.tenant
+package me.raddatz.veyq.core.tenant
 
-import com.veyq.core.testing.TestFixtures.seedTenant
+import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.QuarkusTestProfile
 import io.quarkus.test.junit.TestProfile

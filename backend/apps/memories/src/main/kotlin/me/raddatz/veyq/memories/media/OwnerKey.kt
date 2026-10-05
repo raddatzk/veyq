@@ -1,4 +1,4 @@
-package com.veyq.memories.media
+package me.raddatz.veyq.memories.media
 
 /**
  * Attribution key for who contributed a media / owns a bucket: a scope member (`user:{userId}`) XOR an

@@ -1,9 +1,9 @@
-package com.veyq.core.tasks
+package me.raddatz.veyq.core.tasks
 
-import com.veyq.core.tasks.CompromiseRotationState.FAILED
-import com.veyq.core.tasks.CompromiseRotationState.SECURED
-import com.veyq.core.tasks.CompromiseRotationState.STALLED
-import com.veyq.core.tasks.CompromiseRotationState.WAITING
+import me.raddatz.veyq.core.tasks.CompromiseRotationState.FAILED
+import me.raddatz.veyq.core.tasks.CompromiseRotationState.SECURED
+import me.raddatz.veyq.core.tasks.CompromiseRotationState.STALLED
+import me.raddatz.veyq.core.tasks.CompromiseRotationState.WAITING
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test

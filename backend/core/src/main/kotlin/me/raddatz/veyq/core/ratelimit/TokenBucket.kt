@@ -1,4 +1,4 @@
-package com.veyq.core.ratelimit
+package me.raddatz.veyq.core.ratelimit
 
 /**
  * The pure token-bucket arithmetic of every rate limit (ADR 0052), lifted out of the shell so the refill,

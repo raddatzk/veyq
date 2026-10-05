@@ -1,6 +1,6 @@
-package com.veyq.memories.media
+package me.raddatz.veyq.memories.media
 
-import com.veyq.core.scope.ScopeEraser
+import me.raddatz.veyq.core.scope.ScopeEraser
 import jakarta.enterprise.context.ApplicationScoped
 
 /**

@@ -1,8 +1,8 @@
-package com.veyq.core.tenant
+package me.raddatz.veyq.core.tenant
 
-import com.veyq.core.config.VeyqConfig
-import com.veyq.core.config.VeyqConfig.IngressSinkType
-import com.veyq.core.config.VeyqConfig.IngressTlsMode
+import me.raddatz.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.config.VeyqConfig.IngressSinkType
+import me.raddatz.veyq.core.config.VeyqConfig.IngressTlsMode
 import io.fabric8.kubernetes.client.KubernetesClient
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.inject.Instance

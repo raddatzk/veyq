@@ -1,9 +1,9 @@
-package com.veyq.core.blob
+package me.raddatz.veyq.core.blob
 
-import com.veyq.core.testing.TestBlob
-import com.veyq.core.testing.TestFixtures.bearer
-import com.veyq.core.testing.TestFixtures.seedMemberScope
-import com.veyq.core.testing.TestFixtures.seedTenant
+import me.raddatz.veyq.core.testing.TestBlob
+import me.raddatz.veyq.core.testing.TestFixtures.bearer
+import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
+import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.QuarkusTestProfile
 import io.quarkus.test.junit.TestProfile
@@ -17,15 +17,15 @@ import java.net.URI
 import java.util.UUID
 
 /**
- * [com.veyq.core.config.VeyqConfig.SigningMode.STORE_ORIGIN] over a **real request** (ADR 0067 Decision 5):
+ * [me.raddatz.veyq.core.config.VeyqConfig.SigningMode.STORE_ORIGIN] over a **real request** (ADR 0067 Decision 5):
  * a store reached at an origin of its own — ADR 0064's Kubernetes Ingress host, a tenant on their own bucket —
  * is signed for that one origin, for every tenant and for every `Host`.
  *
- * **Why this cannot be a unit test, given [com.veyq.core.blobstore.S3BlobStorePresigningTest] already
+ * **Why this cannot be a unit test, given [me.raddatz.veyq.core.blobstore.S3BlobStorePresigningTest] already
  * covers the mode.** That class calls the signer with a domain it chose itself. The property A3 states is about
  * a *request*: what the `Host` header can and cannot make the server do. Reaching that needs the whole chain
  * live — `TenantHostResolver` reading the `tenant` table, `BlobUploadHandler` handing what it found to the store, and
- * a **real** [com.veyq.core.blobstore.S3BlobStore] built by [com.veyq.core.blobstore.BlobStoreProducer]
+ * a **real** [me.raddatz.veyq.core.blobstore.S3BlobStore] built by [me.raddatz.veyq.core.blobstore.BlobStoreProducer]
  * from this profile's config. `MediaPresignDomainSliceTest` deliberately runs against
  * `FakePresigningBlobStore`, which echoes whatever domain it is handed and therefore cannot see a signing mode
  * at all; a store-origin assertion there would pass against an unimplemented mode.

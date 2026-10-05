@@ -1,4 +1,4 @@
-package com.veyq.core.config
+package me.raddatz.veyq.core.config
 
 import io.quarkus.runtime.configuration.DurationConverter
 import io.smallrye.config.SmallRyeConfigBuilder

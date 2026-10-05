@@ -1,8 +1,8 @@
-package com.veyq.core.admin.instance
+package me.raddatz.veyq.core.admin.instance
 
-import com.veyq.core.adminchannel.givenAdminChannel
-import com.veyq.core.testing.TestFixtures.bearer
-import com.veyq.core.testing.TestFixtures.ensureUser
+import me.raddatz.veyq.core.adminchannel.givenAdminChannel
+import me.raddatz.veyq.core.testing.TestFixtures.bearer
+import me.raddatz.veyq.core.testing.TestFixtures.ensureUser
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import org.hamcrest.CoreMatchers.equalTo
@@ -19,7 +19,7 @@ import org.junit.jupiter.api.Test
  * provisions nothing, forever, and that is correct rather than a failure or an `OK`. A vocabulary without this
  * value would have to lie here, which is why phase 1 named every terminal state instead of the success/failure
  * pair the happy path suggests. The other three states are reached by
- * [com.veyq.core.blobstore.StoreProvisioningRunnerTest] on the bounded retry itself; the runner is
+ * [me.raddatz.veyq.core.blobstore.StoreProvisioningRunnerTest] on the bounded retry itself; the runner is
  * deliberately inert under `%test` (no network in the hermetic suite), so this class can only see this one.
  */
 @QuarkusTest

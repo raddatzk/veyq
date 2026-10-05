@@ -1,8 +1,8 @@
-package com.veyq.core.account.recovery
+package me.raddatz.veyq.core.account.recovery
 
-import com.veyq.core.admin.tenant.MailContext
-import com.veyq.core.admin.tenant.TenantMailSender
-import com.veyq.core.generated.model.DeliveryResult
+import me.raddatz.veyq.core.admin.tenant.MailContext
+import me.raddatz.veyq.core.admin.tenant.TenantMailSender
+import me.raddatz.veyq.core.generated.model.DeliveryResult
 import jakarta.enterprise.context.ApplicationScoped
 import java.time.Instant
 import java.time.ZoneOffset

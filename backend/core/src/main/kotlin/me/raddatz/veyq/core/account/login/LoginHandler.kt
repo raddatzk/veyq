@@ -1,10 +1,10 @@
-package com.veyq.core.account.login
+package me.raddatz.veyq.core.account.login
 
-import com.veyq.core.crypto.Ed25519Verifier
-import com.veyq.core.instance.InstanceStore
-import com.veyq.core.identity.AccountStore
-import com.veyq.core.identity.VeyqUser
-import com.veyq.core.identity.normalizeEmail
+import me.raddatz.veyq.core.crypto.Ed25519Verifier
+import me.raddatz.veyq.core.instance.InstanceStore
+import me.raddatz.veyq.core.identity.AccountStore
+import me.raddatz.veyq.core.identity.VeyqUser
+import me.raddatz.veyq.core.identity.normalizeEmail
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional

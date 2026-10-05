@@ -1,4 +1,4 @@
-package com.veyq.core.blobstore
+package me.raddatz.veyq.core.blobstore
 
 import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.s3.model.CORSConfiguration

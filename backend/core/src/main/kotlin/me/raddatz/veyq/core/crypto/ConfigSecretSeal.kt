@@ -1,6 +1,6 @@
-package com.veyq.core.crypto
+package me.raddatz.veyq.core.crypto
 
-import com.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.config.VeyqConfig
 import jakarta.enterprise.context.ApplicationScoped
 import org.jboss.logging.Logger
 import java.nio.file.Files

@@ -1,14 +1,14 @@
-package com.veyq.memories.media
+package me.raddatz.veyq.memories.media
 
-import com.veyq.core.blob.BlobUploadHandler
-import com.veyq.core.blob.BlobUploadHandler.BlobVerify
-import com.veyq.core.blob.BlobUploadStore
-import com.veyq.core.blob.CompleteItem
-import com.veyq.core.blob.CompleteItemResult
-import com.veyq.core.blob.UploadCompletion
-import com.veyq.core.blob.UploadOpener
-import com.veyq.core.node.NodeEntity
-import com.veyq.memories.node.MemoriesNodeKinds
+import me.raddatz.veyq.core.blob.BlobUploadHandler
+import me.raddatz.veyq.core.blob.BlobUploadHandler.BlobVerify
+import me.raddatz.veyq.core.blob.BlobUploadStore
+import me.raddatz.veyq.core.blob.CompleteItem
+import me.raddatz.veyq.core.blob.CompleteItemResult
+import me.raddatz.veyq.core.blob.UploadCompletion
+import me.raddatz.veyq.core.blob.UploadOpener
+import me.raddatz.veyq.core.node.NodeEntity
+import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import jakarta.enterprise.context.ApplicationScoped
 
 /**

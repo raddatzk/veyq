@@ -1,10 +1,10 @@
-package com.veyq.core.tenant
+package me.raddatz.veyq.core.tenant
 
-import com.veyq.core.account.login.SessionService
-import com.veyq.core.adminchannel.givenAdminChannel
-import com.veyq.core.config.VeyqConfig
-import com.veyq.core.testing.TestFixtures.seedTenant
-import com.veyq.core.testing.TestFixtures.seedUser
+import me.raddatz.veyq.core.account.login.SessionService
+import me.raddatz.veyq.core.adminchannel.givenAdminChannel
+import me.raddatz.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
+import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import io.smallrye.config.WithDefault
 import io.quarkus.arc.ClientProxy
 import io.quarkus.narayana.jta.QuarkusTransaction

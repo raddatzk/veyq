@@ -1,21 +1,21 @@
-package com.veyq.core.admin.setup
+package me.raddatz.veyq.core.admin.setup
 
-import com.veyq.core.generated.api.SetupApi
-import com.veyq.core.generated.model.Capability
-import com.veyq.core.generated.model.CreateServerOwnerRequest
-import com.veyq.core.generated.model.SetupResult
-import com.veyq.core.generated.model.SetupStatus
-import com.veyq.core.generated.model.Version
-import com.veyq.core.http.FailureStatus.CONFLICT
-import com.veyq.core.http.httpError
-import com.veyq.core.http.httpFailure
-import com.veyq.core.identity.normalizeEmail
-import com.veyq.core.ratelimit.RateLimit
-import com.veyq.core.ratelimit.RateLimitKey
+import me.raddatz.veyq.core.generated.api.SetupApi
+import me.raddatz.veyq.core.generated.model.Capability
+import me.raddatz.veyq.core.generated.model.CreateServerOwnerRequest
+import me.raddatz.veyq.core.generated.model.SetupResult
+import me.raddatz.veyq.core.generated.model.SetupStatus
+import me.raddatz.veyq.core.generated.model.Version
+import me.raddatz.veyq.core.http.FailureStatus.CONFLICT
+import me.raddatz.veyq.core.http.httpError
+import me.raddatz.veyq.core.http.httpFailure
+import me.raddatz.veyq.core.identity.normalizeEmail
+import me.raddatz.veyq.core.ratelimit.RateLimit
+import me.raddatz.veyq.core.ratelimit.RateLimitKey
 import jakarta.annotation.security.PermitAll
 import jakarta.ws.rs.core.Response
 import java.util.UUID
-import com.veyq.core.ratelimit.RateLimitExempt
+import me.raddatz.veyq.core.ratelimit.RateLimitExempt
 
 /**
  * HTTP adapter for first-run setup. Implements the generated [SetupApi]; thin — it maps to/from the

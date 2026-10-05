@@ -1,10 +1,10 @@
-package com.veyq.core.admin.tenant
+package me.raddatz.veyq.core.admin.tenant
 
-import com.veyq.core.generated.model.DeliveryResult
-import com.veyq.core.crypto.ConfigSecretKeyGuard
-import com.veyq.core.crypto.ConfigSecretKeyState
-import com.veyq.core.crypto.ConfigSecretSeal
-import com.veyq.core.crypto.SealedSecret
+import me.raddatz.veyq.core.generated.model.DeliveryResult
+import me.raddatz.veyq.core.crypto.ConfigSecretKeyGuard
+import me.raddatz.veyq.core.crypto.ConfigSecretKeyState
+import me.raddatz.veyq.core.crypto.ConfigSecretSeal
+import me.raddatz.veyq.core.crypto.SealedSecret
 import io.vertx.core.Vertx
 import io.vertx.ext.mail.LoginOption
 import io.vertx.ext.mail.MailClient

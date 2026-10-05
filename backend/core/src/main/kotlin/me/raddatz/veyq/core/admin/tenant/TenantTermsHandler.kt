@@ -1,14 +1,14 @@
-package com.veyq.core.admin.tenant
+package me.raddatz.veyq.core.admin.tenant
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.veyq.core.http.FailureStatus
-import com.veyq.core.http.Failures
-import com.veyq.core.http.HttpFailure
-import com.veyq.core.http.httpFailure
-import com.veyq.core.membership.AccessMode.READ
-import com.veyq.core.membership.AccessMode.WRITE
-import com.veyq.core.membership.ScopeAccess
-import com.veyq.core.membership.refusal
+import me.raddatz.veyq.core.http.FailureStatus
+import me.raddatz.veyq.core.http.Failures
+import me.raddatz.veyq.core.http.HttpFailure
+import me.raddatz.veyq.core.http.httpFailure
+import me.raddatz.veyq.core.membership.AccessMode.READ
+import me.raddatz.veyq.core.membership.AccessMode.WRITE
+import me.raddatz.veyq.core.membership.ScopeAccess
+import me.raddatz.veyq.core.membership.refusal
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 import java.util.TreeMap

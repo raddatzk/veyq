@@ -1,14 +1,14 @@
-package com.veyq.core.account.password
+package me.raddatz.veyq.core.account.password
 
-import com.veyq.core.account.login.SessionService
-import com.veyq.core.crypto.Ed25519Verifier
-import com.veyq.core.crypto.SecretKeyProof
-import com.veyq.core.http.FailureStatus.CONFLICT
-import com.veyq.core.http.FailureStatus.FORBIDDEN
-import com.veyq.core.http.Failures
-import com.veyq.core.http.HttpFailure
-import com.veyq.core.http.httpFailure
-import com.veyq.core.identity.AccountStore
+import me.raddatz.veyq.core.account.login.SessionService
+import me.raddatz.veyq.core.crypto.Ed25519Verifier
+import me.raddatz.veyq.core.crypto.SecretKeyProof
+import me.raddatz.veyq.core.http.FailureStatus.CONFLICT
+import me.raddatz.veyq.core.http.FailureStatus.FORBIDDEN
+import me.raddatz.veyq.core.http.Failures
+import me.raddatz.veyq.core.http.HttpFailure
+import me.raddatz.veyq.core.http.httpFailure
+import me.raddatz.veyq.core.identity.AccountStore
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import java.util.Base64

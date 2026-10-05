@@ -1,6 +1,6 @@
-package com.veyq.memories.itemfavorites
+package me.raddatz.veyq.memories.itemfavorites
 
-import com.veyq.core.node.NodeSubtreeEraser
+import me.raddatz.veyq.core.node.NodeSubtreeEraser
 import jakarta.enterprise.context.ApplicationScoped
 
 /**

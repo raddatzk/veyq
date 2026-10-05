@@ -1,6 +1,6 @@
-package com.veyq.core.blob
+package me.raddatz.veyq.core.blob
 
-import com.veyq.core.blobstore.PresignedRef
+import me.raddatz.veyq.core.blobstore.PresignedRef
 
 // The upload protocol's request/result shapes, shared by every application that stores blobs (Memories' member and
 // guest paths today): an upload session is a core.blob row ([UploadSessionEntity]) and who may act on it

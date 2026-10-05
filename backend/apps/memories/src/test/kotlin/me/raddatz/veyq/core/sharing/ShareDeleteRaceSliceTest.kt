@@ -1,14 +1,14 @@
-package com.veyq.core.sharing
+package me.raddatz.veyq.core.sharing
 
-import com.veyq.core.sharing.ShareEntity
-import com.veyq.core.TestIds
-import com.veyq.core.testing.RACE_ROUNDS
-import com.veyq.core.testing.TestFixtures.CONTENT_KEY
-import com.veyq.core.testing.TestFixtures.bearer
-import com.veyq.core.testing.TestFixtures.seedMemberScope
-import com.veyq.core.testing.TestFixtures.seedNode
-import com.veyq.core.testing.whileUncommitted
-import com.veyq.memories.node.MemoriesNodeKinds
+import me.raddatz.veyq.core.sharing.ShareEntity
+import me.raddatz.veyq.core.TestIds
+import me.raddatz.veyq.core.testing.RACE_ROUNDS
+import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
+import me.raddatz.veyq.core.testing.TestFixtures.bearer
+import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
+import me.raddatz.veyq.core.testing.TestFixtures.seedNode
+import me.raddatz.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given

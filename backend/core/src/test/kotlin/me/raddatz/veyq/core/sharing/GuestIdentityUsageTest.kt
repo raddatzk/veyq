@@ -1,4 +1,4 @@
-package com.veyq.core.sharing
+package me.raddatz.veyq.core.sharing
 
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue

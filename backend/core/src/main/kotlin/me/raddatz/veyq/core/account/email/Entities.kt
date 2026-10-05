@@ -1,4 +1,4 @@
-package com.veyq.core.account.email
+package me.raddatz.veyq.core.account.email
 
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheCompanionBase
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheEntityBase

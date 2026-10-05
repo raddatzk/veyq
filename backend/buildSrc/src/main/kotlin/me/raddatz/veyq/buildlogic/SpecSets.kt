@@ -1,5 +1,5 @@
-// Not `com.veyq.build`: the repository's `.gitignore` drops every `**/build/` directory, a source package included.
-package com.veyq.buildlogic
+// Not `me.raddatz.veyq.build`: the repository's `.gitignore` drops every `**/build/` directory, a source package included.
+package me.raddatz.veyq.buildlogic
 
 import io.swagger.v3.parser.OpenAPIV3Parser
 import io.swagger.v3.parser.core.models.ParseOptions
@@ -7,8 +7,8 @@ import org.gradle.api.GradleException
 import java.io.File
 
 // Spec-first generation (ADR 0079): core's specs (`contracts/api/*.openapi.yaml`) generate in `:core` into
-// `com.veyq.core.generated.{api,model}`, the Memories application's (`contracts/api/memories/*.openapi.yaml`) in the
-// project that holds Memories into `com.veyq.memories.generated.{api,model}`. Specs $ref shared components from
+// `me.raddatz.veyq.core.generated.{api,model}`, the Memories application's (`contracts/api/memories/*.openapi.yaml`) in the
+// project that holds Memories into `me.raddatz.veyq.memories.generated.{api,model}`. Specs $ref shared components from
 // `_common.openapi.yaml` (ADR 0038), which is core's: openapi-generator resolves the external ref in place, so no
 // bundling or committed artifact is needed. Core generates every `_common` schema a core spec names; the Memories set
 // maps every `_common` schema to core's class (`schemaMappings`), so a shared schema has ONE generated type, core's —
@@ -30,8 +30,8 @@ class SpecSets(val contractsDir: File) {
     private val memoriesSpecs = specsIn(contractsDir.resolve("memories"))
 
     val all = listOf(
-        SpecSet(coreOwner, coreSpecs, "com.veyq.core.generated", mapsCommon = false),
-        SpecSet("memories", memoriesSpecs, "com.veyq.memories.generated", mapsCommon = true),
+        SpecSet(coreOwner, coreSpecs, "me.raddatz.veyq.core.generated", mapsCommon = false),
+        SpecSet("memories", memoriesSpecs, "me.raddatz.veyq.memories.generated", mapsCommon = true),
     )
 
     fun of(owner: String): SpecSet = all.singleOrNull { it.owner == owner }

@@ -1,4 +1,4 @@
-package com.veyq.core.account.recovery
+package me.raddatz.veyq.core.account.recovery
 
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheCompanionBase
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheEntityBase

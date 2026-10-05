@@ -1,4 +1,4 @@
-package com.veyq.core.account.pairing
+package me.raddatz.veyq.core.account.pairing
 
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional

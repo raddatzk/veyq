@@ -1,13 +1,13 @@
-package com.veyq.core.content
+package me.raddatz.veyq.core.content
 
-import com.veyq.core.TestIds
-import com.veyq.core.testing.RACE_ROUNDS
-import com.veyq.core.testing.TestFixtures.CONTENT_KEY
-import com.veyq.core.testing.TestFixtures.bearer
-import com.veyq.core.testing.TestFixtures.seedMemberScope
-import com.veyq.core.testing.answer
-import com.veyq.core.testing.assertWinnerAndLoser
-import com.veyq.core.testing.race
+import me.raddatz.veyq.core.TestIds
+import me.raddatz.veyq.core.testing.RACE_ROUNDS
+import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
+import me.raddatz.veyq.core.testing.TestFixtures.bearer
+import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
+import me.raddatz.veyq.core.testing.answer
+import me.raddatz.veyq.core.testing.assertWinnerAndLoser
+import me.raddatz.veyq.core.testing.race
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType

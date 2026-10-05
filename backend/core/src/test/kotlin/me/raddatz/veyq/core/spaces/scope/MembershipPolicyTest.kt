@@ -1,6 +1,6 @@
-package com.veyq.core.spaces.scope
+package me.raddatz.veyq.core.spaces.scope
 
-import com.veyq.core.membership.MembershipEntity
+import me.raddatz.veyq.core.membership.MembershipEntity
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test

@@ -1,10 +1,10 @@
-package com.veyq.core.account.password
+package me.raddatz.veyq.core.account.password
 
-import com.veyq.core.generated.api.AccountPasswordApi
-import com.veyq.core.generated.model.ChangePasswordRequest
-import com.veyq.core.http.HttpFailure
-import com.veyq.core.http.httpError
-import com.veyq.core.ratelimit.RateLimitExempt
+import me.raddatz.veyq.core.generated.api.AccountPasswordApi
+import me.raddatz.veyq.core.generated.model.ChangePasswordRequest
+import me.raddatz.veyq.core.http.HttpFailure
+import me.raddatz.veyq.core.http.httpError
+import me.raddatz.veyq.core.ratelimit.RateLimitExempt
 import io.quarkus.security.Authenticated
 import io.quarkus.security.credential.TokenCredential
 import io.quarkus.security.identity.SecurityIdentity

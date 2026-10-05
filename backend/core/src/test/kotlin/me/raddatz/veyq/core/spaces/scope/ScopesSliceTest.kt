@@ -1,32 +1,32 @@
-package com.veyq.core.spaces.scope
+package me.raddatz.veyq.core.spaces.scope
 
-import com.veyq.core.blob.BlobUploadStore
-import com.veyq.core.blob.UploadOpener
-import com.veyq.core.blob.BlobEntity
-import com.veyq.core.blob.UploadSessionEntity
-import com.veyq.core.node.NodeEntity
-import com.veyq.core.sharing.ShareEntity
-import com.veyq.core.sharing.ShareIdentityEntity
-import com.veyq.core.testing.TestBlob
-import com.veyq.core.tasks.CapabilityTags
-import com.veyq.core.tasks.JobDeclineEntity
-import com.veyq.core.tasks.JobEntity
-import com.veyq.core.tasks.TasksStore
-import com.veyq.core.TestIds
-import com.veyq.core.blobstore.RefusingStoreReclaimStore
-import com.veyq.core.blobstore.StoreReclaimEntity
-import com.veyq.core.blobstore.StoreReclaimStore
-import com.veyq.core.identity.TenantProfileEntity
-import com.veyq.core.membership.MembershipEntity
-import com.veyq.core.membership.SignedGrant
-import com.veyq.core.membership.TestAdmission
-import com.veyq.core.scope.ScopeEntity
-import com.veyq.core.tenant.TenantEntity
-import com.veyq.core.testing.RACE_ROUNDS
-import com.veyq.core.testing.TestFixtures.bearer
-import com.veyq.core.testing.TestFixtures.seedMemberScope
-import com.veyq.core.testing.TestFixtures.seedUser
-import com.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.blob.BlobUploadStore
+import me.raddatz.veyq.core.blob.UploadOpener
+import me.raddatz.veyq.core.blob.BlobEntity
+import me.raddatz.veyq.core.blob.UploadSessionEntity
+import me.raddatz.veyq.core.node.NodeEntity
+import me.raddatz.veyq.core.sharing.ShareEntity
+import me.raddatz.veyq.core.sharing.ShareIdentityEntity
+import me.raddatz.veyq.core.testing.TestBlob
+import me.raddatz.veyq.core.tasks.CapabilityTags
+import me.raddatz.veyq.core.tasks.JobDeclineEntity
+import me.raddatz.veyq.core.tasks.JobEntity
+import me.raddatz.veyq.core.tasks.TasksStore
+import me.raddatz.veyq.core.TestIds
+import me.raddatz.veyq.core.blobstore.RefusingStoreReclaimStore
+import me.raddatz.veyq.core.blobstore.StoreReclaimEntity
+import me.raddatz.veyq.core.blobstore.StoreReclaimStore
+import me.raddatz.veyq.core.identity.TenantProfileEntity
+import me.raddatz.veyq.core.membership.MembershipEntity
+import me.raddatz.veyq.core.membership.SignedGrant
+import me.raddatz.veyq.core.membership.TestAdmission
+import me.raddatz.veyq.core.scope.ScopeEntity
+import me.raddatz.veyq.core.tenant.TenantEntity
+import me.raddatz.veyq.core.testing.RACE_ROUNDS
+import me.raddatz.veyq.core.testing.TestFixtures.bearer
+import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
+import me.raddatz.veyq.core.testing.TestFixtures.seedUser
+import me.raddatz.veyq.core.testing.whileUncommitted
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -524,7 +524,7 @@ class ScopesSliceTest {
         val tenantId = tenantIdOf(domain)
         val invite = UUID.randomUUID().toString()
         QuarkusTransaction.requiringNew().run {
-            com.veyq.core.admin.tenant.TenantInviteEntity().apply {
+            me.raddatz.veyq.core.admin.tenant.TenantInviteEntity().apply {
                 id = UUID.randomUUID().toString(); this.tenantId = tenantId; ownerEmail = "invitee-$invite@example.com"
                 tokenHash = invite.replace("-", "").padEnd(64, '0'); status = "ACTIVE"; role = "MEMBER"
                 expiresAt = Instant.now().plus(Duration.ofDays(7)); createdAt = Instant.now()
@@ -536,7 +536,7 @@ class ScopesSliceTest {
 
         rotateCarrying(owner, tenantId, retagged = listOf(invite)).then().statusCode(201)
         val carried = QuarkusTransaction.requiringNew().call {
-            com.veyq.core.admin.tenant.TenantInviteEntity.find("admissionId", invite).firstResult()!!
+            me.raddatz.veyq.core.admin.tenant.TenantInviteEntity.find("admissionId", invite).firstResult()!!
                 .let { it.admissionEpoch to it.admissionTag }
         }
         assertEquals(1 to retag, carried, "the open invite is re-tagged under the new epoch")

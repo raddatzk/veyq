@@ -1,8 +1,8 @@
-package com.veyq.memories.node
+package me.raddatz.veyq.memories.node
 
-import com.veyq.core.node.NodeEntity
-import com.veyq.core.node.NodeKindRules
-import com.veyq.core.node.ParentSlot
+import me.raddatz.veyq.core.node.NodeEntity
+import me.raddatz.veyq.core.node.NodeKindRules
+import me.raddatz.veyq.core.node.ParentSlot
 import jakarta.enterprise.context.ApplicationScoped
 
 /** The node kinds Memories owns (ADR 0079 Decision 3) — the values of `veyq_node.kind` core does not interpret. */
@@ -17,7 +17,7 @@ object MemoriesNodeKinds {
 /**
  * Where Memories' kinds live in core's tree: a `MEMORY` at the root or under a `FOLDER` (the place a folder may take);
  * a `CHAPTER` only directly inside a `MEMORY`. `NodeKindMatrixSliceTest` pins the whole matrix, with core's
- * [com.veyq.core.node.FolderNodeRules] beside it.
+ * [me.raddatz.veyq.core.node.FolderNodeRules] beside it.
  */
 @ApplicationScoped
 class MemoryNodeKindRules : NodeKindRules {

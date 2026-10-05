@@ -1,4 +1,4 @@
-package com.veyq.core.admin.tenant
+package me.raddatz.veyq.core.admin.tenant
 
 import io.quarkus.test.junit.QuarkusTest
 import org.junit.jupiter.api.Assertions.assertFalse

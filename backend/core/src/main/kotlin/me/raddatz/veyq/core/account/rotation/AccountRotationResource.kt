@@ -1,15 +1,15 @@
-package com.veyq.core.account.rotation
+package me.raddatz.veyq.core.account.rotation
 
-import com.veyq.core.tasks.CompromiseRotationState
-import com.veyq.core.generated.api.AccountRotationApi
-import com.veyq.core.generated.model.RotateAccountKeysRequest
-import com.veyq.core.generated.model.RotateAccountKeysResult
-import com.veyq.core.generated.model.RotatedWrap
-import com.veyq.core.generated.model.RotationScopeState
-import com.veyq.core.http.HttpFailure
-import com.veyq.core.http.httpError
-import com.veyq.core.ratelimit.RateLimitExempt
-import com.veyq.core.validation.validated
+import me.raddatz.veyq.core.tasks.CompromiseRotationState
+import me.raddatz.veyq.core.generated.api.AccountRotationApi
+import me.raddatz.veyq.core.generated.model.RotateAccountKeysRequest
+import me.raddatz.veyq.core.generated.model.RotateAccountKeysResult
+import me.raddatz.veyq.core.generated.model.RotatedWrap
+import me.raddatz.veyq.core.generated.model.RotationScopeState
+import me.raddatz.veyq.core.http.HttpFailure
+import me.raddatz.veyq.core.http.httpError
+import me.raddatz.veyq.core.ratelimit.RateLimitExempt
+import me.raddatz.veyq.core.validation.validated
 import io.quarkus.security.Authenticated
 import io.quarkus.security.credential.TokenCredential
 import io.quarkus.security.identity.SecurityIdentity

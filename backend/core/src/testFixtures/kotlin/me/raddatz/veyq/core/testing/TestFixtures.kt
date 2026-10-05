@@ -1,12 +1,12 @@
-package com.veyq.core.testing
+package me.raddatz.veyq.core.testing
 
-import com.veyq.core.node.NodeEntity
-import com.veyq.core.account.login.SessionService
-import com.veyq.core.identity.VeyqUser
-import com.veyq.core.membership.MembershipEntity
-import com.veyq.core.membership.TenantRoots
-import com.veyq.core.scope.ScopeEntity
-import com.veyq.core.tenant.TenantEntity
+import me.raddatz.veyq.core.node.NodeEntity
+import me.raddatz.veyq.core.account.login.SessionService
+import me.raddatz.veyq.core.identity.VeyqUser
+import me.raddatz.veyq.core.membership.MembershipEntity
+import me.raddatz.veyq.core.membership.TenantRoots
+import me.raddatz.veyq.core.scope.ScopeEntity
+import me.raddatz.veyq.core.tenant.TenantEntity
 import io.quarkus.arc.Arc
 import io.quarkus.narayana.jta.QuarkusTransaction
 import java.time.Instant

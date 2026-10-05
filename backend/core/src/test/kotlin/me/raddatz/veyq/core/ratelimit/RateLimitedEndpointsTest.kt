@@ -1,7 +1,7 @@
-package com.veyq.core.ratelimit
+package me.raddatz.veyq.core.ratelimit
 
-import com.veyq.core.admin.setup.SetupResource
-import com.veyq.core.admin.tenant.TenantsResource
+import me.raddatz.veyq.core.admin.setup.SetupResource
+import me.raddatz.veyq.core.admin.tenant.TenantsResource
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 

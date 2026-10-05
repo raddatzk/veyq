@@ -1,7 +1,7 @@
-package com.veyq.core.identity
+package me.raddatz.veyq.core.identity
 
-import com.veyq.core.generated.model.AddWrapRequest
-import com.veyq.core.generated.model.MasterKeyWrap
+import me.raddatz.veyq.core.generated.model.AddWrapRequest
+import me.raddatz.veyq.core.generated.model.MasterKeyWrap
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 

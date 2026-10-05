@@ -1,4 +1,4 @@
-package com.veyq.core.blob
+package me.raddatz.veyq.core.blob
 
 /**
  * The shape a blob's size fixes (ADR 0013 §3). A blob is a sequence of `chunk_frame`s, and the frame size is a

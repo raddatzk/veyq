@@ -1,6 +1,6 @@
-package com.veyq.memories.itemfavorites
+package me.raddatz.veyq.memories.itemfavorites
 
-import com.veyq.core.scope.MembershipEraser
+import me.raddatz.veyq.core.scope.MembershipEraser
 import jakarta.enterprise.context.ApplicationScoped
 
 /**

@@ -1,9 +1,9 @@
-package com.veyq.core.blob
+package me.raddatz.veyq.core.blob
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.veyq.core.blob.ChunkFrames.OVERHEAD
-import com.veyq.core.blob.ChunkFrames.PLAINTEXT_BYTES
-import com.veyq.core.blob.ChunkFrames.SEALED_BYTES
+import me.raddatz.veyq.core.blob.ChunkFrames.OVERHEAD
+import me.raddatz.veyq.core.blob.ChunkFrames.PLAINTEXT_BYTES
+import me.raddatz.veyq.core.blob.ChunkFrames.SEALED_BYTES
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue

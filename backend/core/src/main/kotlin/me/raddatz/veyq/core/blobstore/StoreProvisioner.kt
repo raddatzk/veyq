@@ -1,4 +1,4 @@
-package com.veyq.core.blobstore
+package me.raddatz.veyq.core.blobstore
 
 /**
  * Brings a configured object store from **running** to **usable** (ADR 0067).

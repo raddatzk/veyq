@@ -1,8 +1,8 @@
-package com.veyq.core.account.deviceregister
+package me.raddatz.veyq.core.account.deviceregister
 
-import com.veyq.core.http.FailureStatus.CONFLICT
-import com.veyq.core.http.HttpFailure
-import com.veyq.core.http.httpFailure
+import me.raddatz.veyq.core.http.FailureStatus.CONFLICT
+import me.raddatz.veyq.core.http.HttpFailure
+import me.raddatz.veyq.core.http.httpFailure
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 import java.time.Instant

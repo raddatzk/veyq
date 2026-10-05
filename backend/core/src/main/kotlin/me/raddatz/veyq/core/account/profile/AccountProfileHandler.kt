@@ -1,12 +1,12 @@
-package com.veyq.core.account.profile
+package me.raddatz.veyq.core.account.profile
 
-import com.veyq.core.http.FailureStatus.NOT_FOUND
-import com.veyq.core.http.Failures
-import com.veyq.core.http.HttpFailure
-import com.veyq.core.http.httpFailure
-import com.veyq.core.identity.TenantProfileStore
-import com.veyq.core.identity.VeyqUser
-import com.veyq.core.persistence.createOrConflict
+import me.raddatz.veyq.core.http.FailureStatus.NOT_FOUND
+import me.raddatz.veyq.core.http.Failures
+import me.raddatz.veyq.core.http.HttpFailure
+import me.raddatz.veyq.core.http.httpFailure
+import me.raddatz.veyq.core.identity.TenantProfileStore
+import me.raddatz.veyq.core.identity.VeyqUser
+import me.raddatz.veyq.core.persistence.createOrConflict
 import jakarta.enterprise.context.ApplicationScoped
 
 /** Result of a profile read/update (cr-0083). `requireGroupAddConsent` is the account-global consent preference

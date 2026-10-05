@@ -1,13 +1,13 @@
-package com.veyq.core.http
+package me.raddatz.veyq.core.http
 
-import com.veyq.core.http.FailureStatus.BAD_REQUEST
-import com.veyq.core.http.FailureStatus.CONFLICT
-import com.veyq.core.http.FailureStatus.FORBIDDEN
-import com.veyq.core.http.FailureStatus.NOT_FOUND
-import com.veyq.core.http.FailureStatus.RATE_LIMITED
-import com.veyq.core.http.FailureStatus.SERVICE_UNAVAILABLE
-import com.veyq.core.http.FailureStatus.UNAUTHORIZED
-import com.veyq.core.http.FailureStatus.UNPROCESSABLE
+import me.raddatz.veyq.core.http.FailureStatus.BAD_REQUEST
+import me.raddatz.veyq.core.http.FailureStatus.CONFLICT
+import me.raddatz.veyq.core.http.FailureStatus.FORBIDDEN
+import me.raddatz.veyq.core.http.FailureStatus.NOT_FOUND
+import me.raddatz.veyq.core.http.FailureStatus.RATE_LIMITED
+import me.raddatz.veyq.core.http.FailureStatus.SERVICE_UNAVAILABLE
+import me.raddatz.veyq.core.http.FailureStatus.UNAUTHORIZED
+import me.raddatz.veyq.core.http.FailureStatus.UNPROCESSABLE
 
 /**
  * Canonical [HttpFailure]s for semantic failures that recur across **more than one feature slice** — the single

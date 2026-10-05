@@ -1,4 +1,4 @@
-package com.veyq.core.testing
+package me.raddatz.veyq.core.testing
 
 import io.quarkus.arc.Arc
 import io.quarkus.narayana.jta.QuarkusTransaction

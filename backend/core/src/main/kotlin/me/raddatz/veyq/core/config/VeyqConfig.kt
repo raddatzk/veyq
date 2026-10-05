@@ -1,4 +1,4 @@
-package com.veyq.core.config
+package me.raddatz.veyq.core.config
 
 import io.smallrye.config.ConfigMapping
 import io.smallrye.config.WithDefault
@@ -430,7 +430,7 @@ interface VeyqConfig {
          * matches no tenant domain, so the store must be on its own origin"*. That reads the `tenant` table,
          * which is runtime state — creating a tenant would silently change how a running instance signs.
          *
-         * Read once at boot like everything else under `veyq.blob-store.*`: [com.veyq.core.blobstore.S3BlobStore]
+         * Read once at boot like everything else under `veyq.blob-store.*`: [me.raddatz.veyq.core.blobstore.S3BlobStore]
          * caches one presigner per resolved endpoint and never invalidates it, so a runtime-settable mode
          * would leave stale presigners behind with no code path that notices.
          */
@@ -507,7 +507,7 @@ interface VeyqConfig {
     }
 
     /**
-     * Which origin [com.veyq.core.blobstore.S3BlobStore] signs a presigned URL for (ADR 0067 Decision 5),
+     * Which origin [me.raddatz.veyq.core.blobstore.S3BlobStore] signs a presigned URL for (ADR 0067 Decision 5),
      * one constant per deployment shape ADR 0013 §4 already distinguishes. The three are **mutually exclusive and total** — `endpointFor` is a single `when`
      * over them with no fallthrough and no second predicate — which is the whole reason this is an enum and not
      * the boolean the change looks like. A boolean can name two of these; the third then hides in a blank
@@ -553,7 +553,7 @@ interface VeyqConfig {
     }
 
     /**
-     * Which [com.veyq.core.tenant.TenantIngressSink] the tenant→routing projection is written to
+     * Which [me.raddatz.veyq.core.tenant.TenantIngressSink] the tenant→routing projection is written to
      * (ADR 0063's principle, ADR 0064's second target). Property text is hyphenated
      * (`veyq.tenant.ingress.sink=kubernetes`), the same SmallRye mapping [StoreType] and [SigningMode] use;
      * `KubernetesIngressSinkUnreachableTest` pins that binding by selecting this sink from config rather than

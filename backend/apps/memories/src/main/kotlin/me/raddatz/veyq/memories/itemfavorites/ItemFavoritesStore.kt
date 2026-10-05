@@ -1,6 +1,6 @@
-package com.veyq.memories.itemfavorites
+package me.raddatz.veyq.memories.itemfavorites
 
-import com.veyq.core.scope.ScopeEntity
+import me.raddatz.veyq.core.scope.ScopeEntity
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 import java.time.Instant

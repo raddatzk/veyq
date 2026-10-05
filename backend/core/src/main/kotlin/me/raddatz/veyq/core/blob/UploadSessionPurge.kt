@@ -1,6 +1,6 @@
-package com.veyq.core.blob
+package me.raddatz.veyq.core.blob
 
-import com.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.config.VeyqConfig
 import io.quarkus.scheduler.Scheduled
 import jakarta.enterprise.context.ApplicationScoped
 import java.time.Duration

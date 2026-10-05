@@ -1,13 +1,13 @@
-package com.veyq.core.membership
+package me.raddatz.veyq.core.membership
 
-import com.veyq.core.admin.tenant.TenantInviteEntity
-import com.veyq.core.tasks.JobEntity
-import com.veyq.core.crypto.Tokens
-import com.veyq.core.membership.ScopeAccessWorld.Companion.B64
-import com.veyq.core.membership.ScopeAccessWorld.Companion.JOB_TAG
-import com.veyq.core.scope.ScopeEntity
-import com.veyq.core.testing.TestFixtures.bearer
-import com.veyq.core.testing.TestFixtures.seedUser
+import me.raddatz.veyq.core.admin.tenant.TenantInviteEntity
+import me.raddatz.veyq.core.tasks.JobEntity
+import me.raddatz.veyq.core.crypto.Tokens
+import me.raddatz.veyq.core.membership.ScopeAccessWorld.Companion.B64
+import me.raddatz.veyq.core.membership.ScopeAccessWorld.Companion.JOB_TAG
+import me.raddatz.veyq.core.scope.ScopeEntity
+import me.raddatz.veyq.core.testing.TestFixtures.bearer
+import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given

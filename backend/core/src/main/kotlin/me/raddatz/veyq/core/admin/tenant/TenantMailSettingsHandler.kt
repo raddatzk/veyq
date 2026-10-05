@@ -1,16 +1,16 @@
-package com.veyq.core.admin.tenant
+package me.raddatz.veyq.core.admin.tenant
 
-import com.veyq.core.crypto.ConfigSecretKeyGuard
-import com.veyq.core.crypto.ConfigSecretKeyState
-import com.veyq.core.crypto.ConfigSecretSeal
-import com.veyq.core.http.FailureStatus
-import com.veyq.core.http.Failures
-import com.veyq.core.http.HttpFailure
-import com.veyq.core.http.httpFailure
-import com.veyq.core.membership.AccessMode.READ
-import com.veyq.core.membership.AccessMode.WRITE
-import com.veyq.core.membership.ScopeAccess
-import com.veyq.core.membership.refusal
+import me.raddatz.veyq.core.crypto.ConfigSecretKeyGuard
+import me.raddatz.veyq.core.crypto.ConfigSecretKeyState
+import me.raddatz.veyq.core.crypto.ConfigSecretSeal
+import me.raddatz.veyq.core.http.FailureStatus
+import me.raddatz.veyq.core.http.Failures
+import me.raddatz.veyq.core.http.HttpFailure
+import me.raddatz.veyq.core.http.httpFailure
+import me.raddatz.veyq.core.membership.AccessMode.READ
+import me.raddatz.veyq.core.membership.AccessMode.WRITE
+import me.raddatz.veyq.core.membership.ScopeAccess
+import me.raddatz.veyq.core.membership.refusal
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 

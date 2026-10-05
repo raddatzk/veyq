@@ -1,4 +1,4 @@
-package com.veyq.core.blobstore
+package me.raddatz.veyq.core.blobstore
 
 import jakarta.annotation.Priority
 import jakarta.enterprise.context.ApplicationScoped

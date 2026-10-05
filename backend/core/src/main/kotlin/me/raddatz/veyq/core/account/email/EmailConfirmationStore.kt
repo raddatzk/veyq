@@ -1,4 +1,4 @@
-package com.veyq.core.account.email
+package me.raddatz.veyq.core.account.email
 
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional

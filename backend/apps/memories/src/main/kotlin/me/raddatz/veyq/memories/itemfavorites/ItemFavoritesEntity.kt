@@ -1,4 +1,4 @@
-package com.veyq.memories.itemfavorites
+package me.raddatz.veyq.memories.itemfavorites
 
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheCompanionBase
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheEntityBase
@@ -14,7 +14,7 @@ import org.hibernate.annotations.DynamicUpdate
  * that member's marked-media-id set for ONE Memory, AEAD-sealed under `K_SC` — stored verbatim, never
  * interpreted.
  *
- * Unlike [com.veyq.memories.favorites.FavoritesEntity] this blob is deliberately **shared**: the
+ * Unlike [me.raddatz.veyq.memories.favorites.FavoritesEntity] this blob is deliberately **shared**: the
  * read returns every member's row for the node, because the gallery's "everyone's / only mine" filter and its
  * per-item count are computed on device — a blind server cannot aggregate them.
  *

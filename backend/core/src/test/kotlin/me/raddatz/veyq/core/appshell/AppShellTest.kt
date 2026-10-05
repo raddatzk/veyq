@@ -1,8 +1,8 @@
-package com.veyq.core.appshell
+package me.raddatz.veyq.core.appshell
 
-import com.veyq.core.blobstore.InMemoryBlobStore
-import com.veyq.core.blobstore.S3BlobStore
-import com.veyq.core.config.VeyqConfig.SigningMode
+import me.raddatz.veyq.core.blobstore.InMemoryBlobStore
+import me.raddatz.veyq.core.blobstore.S3BlobStore
+import me.raddatz.veyq.core.config.VeyqConfig.SigningMode
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame

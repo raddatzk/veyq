@@ -1,4 +1,4 @@
-package com.veyq.core.identity
+package me.raddatz.veyq.core.identity
 
 /**
  * The one classification of Master Key wrap methods — the values of `veyq_master_key_wrap.method`, pinned to the

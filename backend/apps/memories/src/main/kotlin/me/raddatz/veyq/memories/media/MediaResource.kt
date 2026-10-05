@@ -1,25 +1,25 @@
-package com.veyq.memories.media
+package me.raddatz.veyq.memories.media
 
-import com.veyq.core.blob.DerivativeDeclare
-import com.veyq.core.blob.CompleteItem
-import com.veyq.memories.generated.api.MediaApi
-import com.veyq.memories.generated.model.BlobRef
-import com.veyq.memories.generated.model.CoverBlobCommitRequest
-import com.veyq.memories.generated.model.MediaBatchRequest
-import com.veyq.memories.generated.model.MediaBatchResponse
-import com.veyq.memories.generated.model.MediaDerivativeKind
-import com.veyq.memories.generated.model.MediaDerivativeSummary
-import com.veyq.memories.generated.model.MediaExifResponse
-import com.veyq.memories.generated.model.MediaListPage
-import com.veyq.memories.generated.model.MediaMetaResponse
-import com.veyq.memories.generated.model.MediaMetaUpdate
-import com.veyq.memories.generated.model.MediaResultItem
-import com.veyq.memories.generated.model.MediaSummary
-import com.veyq.memories.generated.model.UploaderKey
-import com.veyq.core.http.Failures
-import com.veyq.core.http.HttpFailure
-import com.veyq.core.http.httpError
-import com.veyq.core.http.httpStaleSealedMeta
+import me.raddatz.veyq.core.blob.DerivativeDeclare
+import me.raddatz.veyq.core.blob.CompleteItem
+import me.raddatz.veyq.memories.generated.api.MediaApi
+import me.raddatz.veyq.memories.generated.model.BlobRef
+import me.raddatz.veyq.memories.generated.model.CoverBlobCommitRequest
+import me.raddatz.veyq.memories.generated.model.MediaBatchRequest
+import me.raddatz.veyq.memories.generated.model.MediaBatchResponse
+import me.raddatz.veyq.memories.generated.model.MediaDerivativeKind
+import me.raddatz.veyq.memories.generated.model.MediaDerivativeSummary
+import me.raddatz.veyq.memories.generated.model.MediaExifResponse
+import me.raddatz.veyq.memories.generated.model.MediaListPage
+import me.raddatz.veyq.memories.generated.model.MediaMetaResponse
+import me.raddatz.veyq.memories.generated.model.MediaMetaUpdate
+import me.raddatz.veyq.memories.generated.model.MediaResultItem
+import me.raddatz.veyq.memories.generated.model.MediaSummary
+import me.raddatz.veyq.memories.generated.model.UploaderKey
+import me.raddatz.veyq.core.http.Failures
+import me.raddatz.veyq.core.http.HttpFailure
+import me.raddatz.veyq.core.http.httpError
+import me.raddatz.veyq.core.http.httpStaleSealedMeta
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
 import jakarta.ws.rs.core.Response
@@ -27,7 +27,7 @@ import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.util.UUID
-import com.veyq.core.ratelimit.RateLimitExempt
+import me.raddatz.veyq.core.ratelimit.RateLimitExempt
 
 /**
  * HTTP adapter for media (en.memory.media, cr-0028). Implements the generated [MediaApi]; thin (ADR 0001) —

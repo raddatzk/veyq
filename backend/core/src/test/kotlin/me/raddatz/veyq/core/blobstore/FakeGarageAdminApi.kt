@@ -1,4 +1,4 @@
-package com.veyq.core.blobstore
+package me.raddatz.veyq.core.blobstore
 
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer

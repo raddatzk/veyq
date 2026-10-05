@@ -1,6 +1,6 @@
-package com.veyq.core.appshell
+package me.raddatz.veyq.core.appshell
 
-import com.veyq.core.appshell.AppShellSliceTest.Companion.HTML
+import me.raddatz.veyq.core.appshell.AppShellSliceTest.Companion.HTML
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.QuarkusTestProfile
 import io.quarkus.test.junit.TestProfile

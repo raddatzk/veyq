@@ -1,10 +1,10 @@
-package com.veyq.memories.media
+package me.raddatz.veyq.memories.media
 
-import com.veyq.core.blob.BlobEntity
-import com.veyq.core.blob.BlobUploadStore
-import com.veyq.core.blob.UploadSessionEntity
-import com.veyq.core.node.NodeEntity
-import com.veyq.core.sharing.ShareIdentityEntity
+import me.raddatz.veyq.core.blob.BlobEntity
+import me.raddatz.veyq.core.blob.BlobUploadStore
+import me.raddatz.veyq.core.blob.UploadSessionEntity
+import me.raddatz.veyq.core.node.NodeEntity
+import me.raddatz.veyq.core.sharing.ShareIdentityEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType

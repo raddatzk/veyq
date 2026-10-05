@@ -1,15 +1,15 @@
-package com.veyq.core.sharing
+package me.raddatz.veyq.core.sharing
 
-import com.veyq.core.blob.BlobEntity
-import com.veyq.memories.media.MediaEntity
-import com.veyq.core.testing.TestBlob
-import com.veyq.core.blobstore.FakePresigningBlobStore
-import com.veyq.core.testing.TestFixtures.CONTENT_KEY
-import com.veyq.core.testing.TestFixtures.bearer
-import com.veyq.core.testing.TestFixtures.seedMemberScope
-import com.veyq.core.testing.TestFixtures.seedNode
-import com.veyq.core.testing.TestFixtures.seedTenant
-import com.veyq.memories.node.MemoriesNodeKinds
+import me.raddatz.veyq.core.blob.BlobEntity
+import me.raddatz.veyq.memories.media.MediaEntity
+import me.raddatz.veyq.core.testing.TestBlob
+import me.raddatz.veyq.core.blobstore.FakePresigningBlobStore
+import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
+import me.raddatz.veyq.core.testing.TestFixtures.bearer
+import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
+import me.raddatz.veyq.core.testing.TestFixtures.seedNode
+import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
+import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.QuarkusTestProfile

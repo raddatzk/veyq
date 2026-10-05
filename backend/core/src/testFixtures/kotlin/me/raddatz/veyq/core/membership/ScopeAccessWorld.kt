@@ -1,15 +1,15 @@
-package com.veyq.core.membership
+package me.raddatz.veyq.core.membership
 
-import com.veyq.core.node.NodeEntity
-import com.veyq.core.testing.TestBlob
-import com.veyq.core.sharing.ShareWriteProof
-import com.veyq.core.TestIds
-import com.veyq.core.scope.ScopeEntity
-import com.veyq.core.tenant.TenantEntity
-import com.veyq.core.testing.TestFixtures.bearer
-import com.veyq.core.testing.TestFixtures.seedTenant
-import com.veyq.core.testing.TestFixtures.seedUser
-import com.veyq.core.testing.TestFixtures.shareKeysJson
+import me.raddatz.veyq.core.node.NodeEntity
+import me.raddatz.veyq.core.testing.TestBlob
+import me.raddatz.veyq.core.sharing.ShareWriteProof
+import me.raddatz.veyq.core.TestIds
+import me.raddatz.veyq.core.scope.ScopeEntity
+import me.raddatz.veyq.core.tenant.TenantEntity
+import me.raddatz.veyq.core.testing.TestFixtures.bearer
+import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
+import me.raddatz.veyq.core.testing.TestFixtures.seedUser
+import me.raddatz.veyq.core.testing.TestFixtures.shareKeysJson
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType

@@ -1,12 +1,12 @@
-package com.veyq.core.spaces.scope
+package me.raddatz.veyq.core.spaces.scope
 
-import com.veyq.core.membership.MembershipEntity
+import me.raddatz.veyq.core.membership.MembershipEntity
 
 /**
  * The pure last-owner guards for scope-membership changes (ADR 0045 §2, ADR 0007), lifted out of [ScopesHandler] so
  * the "a scope may never be left ownerless" boundary is unit-tested and mutation-verified without a Quarkus boot.
  * The shell pre-resolves the caller-supplied facts — the target's `currentRole`, the requested `targetRole`, and the
- * scope's `ownerCount` — exactly as [com.veyq.core.admin.tenant.RemovalPolicy] pre-resolves its counts; the
+ * scope's `ownerCount` — exactly as [me.raddatz.veyq.core.admin.tenant.RemovalPolicy] pre-resolves its counts; the
  * `<= 1` boundary lives here, the queries stay in the shell.
  *
  * This is a *scope-membership* guard and is deliberately **not** folded into `RemovalPolicy` (that one is *tenant*

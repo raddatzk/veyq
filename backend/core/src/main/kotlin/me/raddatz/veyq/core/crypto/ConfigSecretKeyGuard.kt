@@ -1,6 +1,6 @@
-package com.veyq.core.crypto
+package me.raddatz.veyq.core.crypto
 
-import com.veyq.core.instance.InstanceStore
+import me.raddatz.veyq.core.instance.InstanceStore
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 

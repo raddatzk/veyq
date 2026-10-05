@@ -1,12 +1,12 @@
-package com.veyq.core.account.deviceregister
+package me.raddatz.veyq.core.account.deviceregister
 
-import com.veyq.core.generated.api.AccountDeviceRegisterApi
-import com.veyq.core.generated.model.DeviceRegister
-import com.veyq.core.generated.model.DeviceRegisterUpdate
-import com.veyq.core.http.HttpFailure
-import com.veyq.core.http.httpError
-import com.veyq.core.ratelimit.RateLimitExempt
-import com.veyq.core.validation.validated
+import me.raddatz.veyq.core.generated.api.AccountDeviceRegisterApi
+import me.raddatz.veyq.core.generated.model.DeviceRegister
+import me.raddatz.veyq.core.generated.model.DeviceRegisterUpdate
+import me.raddatz.veyq.core.http.HttpFailure
+import me.raddatz.veyq.core.http.httpError
+import me.raddatz.veyq.core.ratelimit.RateLimitExempt
+import me.raddatz.veyq.core.validation.validated
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
 import jakarta.ws.rs.core.Response

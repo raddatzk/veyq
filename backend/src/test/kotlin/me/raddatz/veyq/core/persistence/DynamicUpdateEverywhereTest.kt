@@ -1,4 +1,4 @@
-package com.veyq.core.persistence
+package me.raddatz.veyq.core.persistence
 
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject

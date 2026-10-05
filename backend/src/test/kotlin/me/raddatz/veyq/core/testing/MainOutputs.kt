@@ -1,4 +1,4 @@
-package com.veyq.core.testing
+package me.raddatz.veyq.core.testing
 
 import java.io.File
 import java.nio.file.Files

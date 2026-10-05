@@ -1,6 +1,6 @@
-package com.veyq.core.testing
+package me.raddatz.veyq.core.testing
 
-import com.veyq.core.blobstore.FakePresigningBlobStore
+import me.raddatz.veyq.core.blobstore.FakePresigningBlobStore
 import io.quarkus.test.junit.QuarkusTestProfile
 
 /**

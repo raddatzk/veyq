@@ -1505,7 +1505,7 @@ components:
           description: Human display name of the tenant (operational cleartext; trimmed on input).
           maxLength: 100
           example: Familie Raddatz
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 100)'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 100)'
         domain:
           x-veyq-visibility: public
           type: string
@@ -1515,7 +1515,7 @@ components:
             cleartext, unique across the instance. Lowercase hostname; trimmed on input.
           maxLength: 253
           example: family.example.com
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 253) @field:jakarta.validation.constraints.Pattern(regexp = "^([a-z0-9](-?[a-z0-9])*\\.)+[a-z]{2,}$")'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 253) @field:jakarta.validation.constraints.Pattern(regexp = "^([a-z0-9](-?[a-z0-9])*\\.)+[a-z]{2,}$")'
         ownerEmail:
           x-veyq-visibility: pii
           x-veyq-rationale: >-
@@ -1526,7 +1526,7 @@ components:
           description: Email of the person who will own the tenant; the invite is bound to it. Server-visible.
           maxLength: 254
           example: kevin@example.com
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
 
     ChangeDomainRequest:
       type: object
@@ -1541,7 +1541,7 @@ components:
             across the instance, lowercase hostname, trimmed on input.
           maxLength: 253
           example: moved.example.com
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 253) @field:jakarta.validation.constraints.Pattern(regexp = "^([a-z0-9](-?[a-z0-9])*\\.)+[a-z]{2,}$")'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 253) @field:jakarta.validation.constraints.Pattern(regexp = "^([a-z0-9](-?[a-z0-9])*\\.)+[a-z]{2,}$")'
 
     ReassignOwnerRequest:
       type: object
@@ -1557,7 +1557,7 @@ components:
           description: The new owner email to re-bind the invite to. Server-visible.
           maxLength: 254
           example: partner@example.com
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
 
     TenantCreated:
       type: object
@@ -1716,7 +1716,7 @@ components:
           description: Email of the person to invite as a tenant member; the invite is bound to it. Server-visible.
           maxLength: 254
           example: partner@example.com
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
         admissionId:
           x-veyq-visibility: id
           type: string
@@ -1992,7 +1992,7 @@ components:
           description: SMTP server host (a bare hostname). Null ⇒ clear (unconfigured).
           maxLength: 253
           example: smtp.example.com
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 253) @field:jakarta.validation.constraints.Pattern(regexp = "^([a-z0-9](-?[a-z0-9])*\\.)+[a-z]{2,}$")'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 253) @field:jakarta.validation.constraints.Pattern(regexp = "^([a-z0-9](-?[a-z0-9])*\\.)+[a-z]{2,}$")'
         port:
           x-veyq-visibility: public
           type: [integer, "null"]
@@ -2009,14 +2009,14 @@ components:
           description: The From address (null ⇒ noreply@<tenant.domain>).
           maxLength: 254
           example: noreply@family.example.com
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
         username:
           x-veyq-visibility: public
           type: [string, "null"]
           description: SMTP auth username.
           maxLength: 254
           example: family
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 254)'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 254)'
         password:
           x-veyq-visibility: token
           type: [string, "null"]
@@ -2049,7 +2049,7 @@ components:
             Owner-authored invite subject over the closed set `{{link}}`/`{{domain}}`/`{{expiry}}`. Null ⇒ default.
           maxLength: 200
           example: "You're invited to {{domain}}"
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 200)'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 200)'
         bodyTemplate:
           x-veyq-visibility: public
           type: [string, "null"]
@@ -2137,7 +2137,7 @@ components:
           description: The invite's bootstrap secret (the URL-fragment token). Matched by hash; not a key.
           maxLength: 128
           example: 87olM0gSJLPgnKSjdNkC4pPQyuvMVguyb5kHoJyU9Cc
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128)'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128)'
 
     InvitePreview:
       type: object
@@ -2185,7 +2185,7 @@ components:
           description: The invite's bootstrap secret (the URL-fragment token). Matched by hash; not a key.
           maxLength: 128
           example: 87olM0gSJLPgnKSjdNkC4pPQyuvMVguyb5kHoJyU9Cc
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128)'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128)'
         username:
           x-veyq-visibility: pii
           x-veyq-rationale: >-
@@ -2201,7 +2201,7 @@ components:
           minLength: 2
           maxLength: 32
           example: kevin
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(min = 2, max = 32) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9_.-]+")'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(min = 2, max = 32) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9_.-]+")'
         grant:
           type: [string, "null"]
           description: >
@@ -2311,7 +2311,7 @@ components:
           description: The invite's bootstrap secret (the URL-fragment token). Matched by hash; not a key.
           maxLength: 128
           example: 87olM0gSJLPgnKSjdNkC4pPQyuvMVguyb5kHoJyU9Cc
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128)'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128)'
         username:
           x-veyq-visibility: pii
           x-veyq-rationale: >-
@@ -2327,7 +2327,7 @@ components:
           minLength: 2
           maxLength: 32
           example: kevin
-          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(min = 2, max = 32) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9_.-]+")'
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(min = 2, max = 32) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9_.-]+")'
         account:
           $ref: "#/components/schemas/AccountRegistration"
           # @Valid cascades bean-validation into the cold-birth account material.

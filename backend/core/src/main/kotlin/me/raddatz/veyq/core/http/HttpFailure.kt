@@ -1,7 +1,7 @@
-package com.veyq.core.http
+package me.raddatz.veyq.core.http
 
-import com.veyq.core.generated.model.ErrorResponse
-import com.veyq.core.generated.model.StaleSealedMeta
+import me.raddatz.veyq.core.generated.model.ErrorResponse
+import me.raddatz.veyq.core.generated.model.StaleSealedMeta
 import jakarta.ws.rs.core.Response
 
 /**

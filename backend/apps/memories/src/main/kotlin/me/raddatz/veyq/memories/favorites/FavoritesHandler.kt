@@ -1,11 +1,11 @@
-package com.veyq.memories.favorites
+package me.raddatz.veyq.memories.favorites
 
-import com.veyq.core.http.Failures
-import com.veyq.core.http.HttpFailure
-import com.veyq.core.membership.AccessMode.READ
-import com.veyq.core.membership.AccessMode.WRITE
-import com.veyq.core.membership.ScopeAccess
-import com.veyq.core.membership.refusal
+import me.raddatz.veyq.core.http.Failures
+import me.raddatz.veyq.core.http.HttpFailure
+import me.raddatz.veyq.core.membership.AccessMode.READ
+import me.raddatz.veyq.core.membership.AccessMode.WRITE
+import me.raddatz.veyq.core.membership.ScopeAccess
+import me.raddatz.veyq.core.membership.refusal
 import jakarta.enterprise.context.ApplicationScoped
 
 sealed interface GetFavoritesOutcome {

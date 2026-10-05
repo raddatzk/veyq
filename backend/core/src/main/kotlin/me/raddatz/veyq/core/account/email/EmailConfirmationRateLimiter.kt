@@ -1,7 +1,7 @@
-package com.veyq.core.account.email
+package me.raddatz.veyq.core.account.email
 
-import com.veyq.core.config.VeyqConfig
-import com.veyq.core.ratelimit.TokenBucketCounter
+import me.raddatz.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.ratelimit.TokenBucketCounter
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.inject.Inject
 

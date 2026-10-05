@@ -1,17 +1,17 @@
-package com.veyq.core.account.keymaterial
+package me.raddatz.veyq.core.account.keymaterial
 
-import com.veyq.core.generated.api.AccountApi
-import com.veyq.core.generated.model.AccountKeyMaterial
-import com.veyq.core.generated.model.MasterKeyWrap
-import com.veyq.core.http.FailureStatus.SERVER_ERROR
-import com.veyq.core.http.httpError
-import com.veyq.core.http.httpFailure
+import me.raddatz.veyq.core.generated.api.AccountApi
+import me.raddatz.veyq.core.generated.model.AccountKeyMaterial
+import me.raddatz.veyq.core.generated.model.MasterKeyWrap
+import me.raddatz.veyq.core.http.FailureStatus.SERVER_ERROR
+import me.raddatz.veyq.core.http.httpError
+import me.raddatz.veyq.core.http.httpFailure
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
 import java.util.UUID
 import jakarta.ws.rs.core.Response
 import org.jboss.logging.Logger
-import com.veyq.core.ratelimit.RateLimitExempt
+import me.raddatz.veyq.core.ratelimit.RateLimitExempt
 
 /**
  * HTTP adapter serving the authenticated caller's wrapped key material for client-side unlock

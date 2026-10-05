@@ -1,4 +1,4 @@
-package com.veyq.core.node
+package me.raddatz.veyq.core.node
 
 import jakarta.enterprise.context.ApplicationScoped
 

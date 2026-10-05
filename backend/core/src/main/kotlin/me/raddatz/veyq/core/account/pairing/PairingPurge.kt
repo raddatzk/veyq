@@ -1,7 +1,7 @@
-package com.veyq.core.account.pairing
+package me.raddatz.veyq.core.account.pairing
 
-import com.veyq.core.account.login.SessionService
-import com.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.account.login.SessionService
+import me.raddatz.veyq.core.config.VeyqConfig
 import io.quarkus.scheduler.Scheduled
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional

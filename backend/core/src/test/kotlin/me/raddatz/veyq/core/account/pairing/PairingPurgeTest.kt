@@ -1,9 +1,9 @@
-package com.veyq.core.account.pairing
+package me.raddatz.veyq.core.account.pairing
 
-import com.veyq.core.account.login.SessionFamilyEntity
-import com.veyq.core.account.login.SessionService
-import com.veyq.core.identity.VeyqUser
-import com.veyq.core.testing.TestFixtures.newUser
+import me.raddatz.veyq.core.account.login.SessionFamilyEntity
+import me.raddatz.veyq.core.account.login.SessionService
+import me.raddatz.veyq.core.identity.VeyqUser
+import me.raddatz.veyq.core.testing.TestFixtures.newUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject

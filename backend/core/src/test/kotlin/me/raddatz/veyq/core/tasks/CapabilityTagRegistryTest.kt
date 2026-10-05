@@ -1,4 +1,4 @@
-package com.veyq.core.tasks
+package me.raddatz.veyq.core.tasks
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.junit.jupiter.api.Assertions.assertEquals

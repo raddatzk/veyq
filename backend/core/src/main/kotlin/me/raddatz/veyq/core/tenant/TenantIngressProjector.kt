@@ -1,6 +1,6 @@
-package com.veyq.core.tenant
+package me.raddatz.veyq.core.tenant
 
-import com.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.config.VeyqConfig
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.runtime.StartupEvent
 import jakarta.enterprise.context.ApplicationScoped

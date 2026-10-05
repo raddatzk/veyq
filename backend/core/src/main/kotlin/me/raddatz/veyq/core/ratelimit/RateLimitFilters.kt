@@ -1,8 +1,8 @@
-package com.veyq.core.ratelimit
+package me.raddatz.veyq.core.ratelimit
 
-import com.veyq.core.config.VeyqConfig
-import com.veyq.core.http.Failures
-import com.veyq.core.http.httpError
+import me.raddatz.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.http.Failures
+import me.raddatz.veyq.core.http.httpError
 import io.smallrye.config.SmallRyeConfig
 import io.vertx.core.http.HttpServerRequest
 import jakarta.annotation.Priority

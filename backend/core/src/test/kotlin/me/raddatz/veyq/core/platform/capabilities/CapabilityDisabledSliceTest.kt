@@ -1,10 +1,10 @@
-package com.veyq.core.platform.capabilities
+package me.raddatz.veyq.core.platform.capabilities
 
-import com.veyq.core.sharing.ShareWriteProof
-import com.veyq.core.testing.TestFixtures.DROP_PRIVATE_KEY
-import com.veyq.core.testing.TestFixtures.DROP_PUBLIC_KEY
-import com.veyq.core.testing.TestFixtures.bearer
-import com.veyq.core.testing.TestFixtures.seedUser
+import me.raddatz.veyq.core.sharing.ShareWriteProof
+import me.raddatz.veyq.core.testing.TestFixtures.DROP_PRIVATE_KEY
+import me.raddatz.veyq.core.testing.TestFixtures.DROP_PUBLIC_KEY
+import me.raddatz.veyq.core.testing.TestFixtures.bearer
+import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.QuarkusTestProfile
 import io.quarkus.test.junit.TestProfile

@@ -1,4 +1,4 @@
-package com.veyq.core.tenant
+package me.raddatz.veyq.core.tenant
 
 import io.quarkus.vertx.http.runtime.CurrentVertxRequest
 import jakarta.enterprise.context.ApplicationScoped

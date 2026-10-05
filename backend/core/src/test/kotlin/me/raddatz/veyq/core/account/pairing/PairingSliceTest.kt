@@ -1,12 +1,12 @@
-package com.veyq.core.account.pairing
+package me.raddatz.veyq.core.account.pairing
 
-import com.veyq.core.account.login.AccessTokenEntity
-import com.veyq.core.account.login.RefreshTokenEntity
-import com.veyq.core.account.login.SessionFamilyEntity
-import com.veyq.core.crypto.Tokens
-import com.veyq.core.identity.VeyqUser
-import com.veyq.core.testing.TestFixtures.newUser
-import com.veyq.core.testing.race
+import me.raddatz.veyq.core.account.login.AccessTokenEntity
+import me.raddatz.veyq.core.account.login.RefreshTokenEntity
+import me.raddatz.veyq.core.account.login.SessionFamilyEntity
+import me.raddatz.veyq.core.crypto.Tokens
+import me.raddatz.veyq.core.identity.VeyqUser
+import me.raddatz.veyq.core.testing.TestFixtures.newUser
+import me.raddatz.veyq.core.testing.race
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given

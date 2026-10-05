@@ -1,7 +1,7 @@
-package com.veyq.core.sharing
+package me.raddatz.veyq.core.sharing
 
-import com.veyq.core.config.VeyqConfig
-import com.veyq.core.ratelimit.TokenBucketCounter
+import me.raddatz.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.ratelimit.TokenBucketCounter
 import jakarta.enterprise.context.ApplicationScoped
 
 /**

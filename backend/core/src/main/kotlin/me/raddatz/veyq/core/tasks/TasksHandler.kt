@@ -1,12 +1,12 @@
-package com.veyq.core.tasks
+package me.raddatz.veyq.core.tasks
 
-import com.veyq.core.config.VeyqConfig
-import com.veyq.core.http.Failures
-import com.veyq.core.http.HttpFailure
-import com.veyq.core.membership.AccessMode.READ
-import com.veyq.core.membership.AccessMode.WRITE
-import com.veyq.core.membership.ScopeAccess
-import com.veyq.core.membership.refusal
+import me.raddatz.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.http.Failures
+import me.raddatz.veyq.core.http.HttpFailure
+import me.raddatz.veyq.core.membership.AccessMode.READ
+import me.raddatz.veyq.core.membership.AccessMode.WRITE
+import me.raddatz.veyq.core.membership.ScopeAccess
+import me.raddatz.veyq.core.membership.refusal
 import jakarta.enterprise.context.ApplicationScoped
 import java.time.Duration
 

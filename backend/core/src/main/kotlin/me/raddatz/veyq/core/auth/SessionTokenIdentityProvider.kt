@@ -1,7 +1,7 @@
-package com.veyq.core.auth
+package me.raddatz.veyq.core.auth
 
-import com.veyq.core.identity.ServerRoles.SERVER_OWNER
-import com.veyq.core.identity.VeyqUser
+import me.raddatz.veyq.core.identity.ServerRoles.SERVER_OWNER
+import me.raddatz.veyq.core.identity.VeyqUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.security.AuthenticationFailedException
 import io.quarkus.security.credential.TokenCredential

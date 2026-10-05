@@ -1,11 +1,11 @@
-package com.veyq.core.sharing
+package me.raddatz.veyq.core.sharing
 
-import com.veyq.core.blob.CompleteItem
-import com.veyq.core.blob.CompleteItemResult
-import com.veyq.core.blob.UploadDeclare
-import com.veyq.core.blob.UploadItemResult
-import com.veyq.core.blob.WindowItemResult
-import com.veyq.core.blob.WindowRequest
+import me.raddatz.veyq.core.blob.CompleteItem
+import me.raddatz.veyq.core.blob.CompleteItemResult
+import me.raddatz.veyq.core.blob.UploadDeclare
+import me.raddatz.veyq.core.blob.UploadItemResult
+import me.raddatz.veyq.core.blob.WindowItemResult
+import me.raddatz.veyq.core.blob.WindowRequest
 
 /**
  * What an application does when a guest of a share writes under its root — the action body of the four guest write

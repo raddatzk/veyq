@@ -1,6 +1,6 @@
-package com.veyq.core.admin.instance
+package me.raddatz.veyq.core.admin.instance
 
-import com.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.config.VeyqConfig
 import jakarta.enterprise.context.ApplicationScoped
 
 /**

@@ -1,9 +1,9 @@
-package com.veyq.core.content
+package me.raddatz.veyq.core.content
 
-import com.veyq.core.blobstore.RecordingBlobStore
-import com.veyq.core.blobstore.StoreReclaimSweep
-import com.veyq.core.testing.TestFixtures.bearer
-import com.veyq.core.testing.TestFixtures.seedMemberScope
+import me.raddatz.veyq.core.blobstore.RecordingBlobStore
+import me.raddatz.veyq.core.blobstore.StoreReclaimSweep
+import me.raddatz.veyq.core.testing.TestFixtures.bearer
+import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
@@ -17,7 +17,7 @@ import org.junit.jupiter.api.Test
  * Slice tests for the node trash (uc.memory.delete-node, ADR 0061): a delete soft-deletes the whole subtree, the
  * space's trash lists the deleted ROOTS, restore brings the subtree back intact, and `NodeSubtreePurge`
  * hard-erases it past the retention window. The share half lives in
- * [com.veyq.core.sharing.ShareDeletedNodeSliceTest] — the two guest paths need their own controls.
+ * [me.raddatz.veyq.core.sharing.ShareDeletedNodeSliceTest] — the two guest paths need their own controls.
  *
  * Four of these pin decisions that are load-bearing precisely because they look like details:
  * - the slug is freed by the **write** (`slug_token := the node's own id`), because `ux_node_parent_slug` is a

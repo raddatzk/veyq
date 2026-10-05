@@ -1,4 +1,4 @@
-package com.veyq.core.node
+package me.raddatz.veyq.core.node
 
 /**
  * One step of a node subtree's hard-erasure (the trash purge, ADR 0061 Decision 6): the package that owns rows
@@ -15,7 +15,7 @@ package com.veyq.core.node
  * store objects through `StoreReclaimStore.record` only (never the blob store), and returns the **guest identity
  * ids it may have orphaned** — read while its rows still name them, i.e. before it deletes them. The caller
  * unions the sets and hands them to `SharingStore.dropDeadIdentities` only after every eraser and the link
- * tombstones have run, because that re-counts references ([com.veyq.core.sharing.GuestIdentityUsage]).
+ * tombstones have run, because that re-counts references ([me.raddatz.veyq.core.sharing.GuestIdentityUsage]).
  */
 interface NodeSubtreeEraser {
     val phase: Int

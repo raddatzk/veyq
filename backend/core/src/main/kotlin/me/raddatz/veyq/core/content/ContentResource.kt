@@ -1,17 +1,17 @@
-package com.veyq.core.content
+package me.raddatz.veyq.core.content
 
-import com.veyq.core.generated.api.ContentApi
-import com.veyq.core.generated.model.CreateNodeRequest
-import com.veyq.core.generated.model.NodeCreated
-import com.veyq.core.generated.model.NodeKind
-import com.veyq.core.generated.model.NodeSummary
-import com.veyq.core.generated.model.RestoreNodeRequest
-import com.veyq.core.generated.model.TrashedNodeSummary
-import com.veyq.core.generated.model.UpdateNodeRequest
-import com.veyq.core.config.VeyqConfig
-import com.veyq.core.http.HttpFailure
-import com.veyq.core.http.httpError
-import com.veyq.core.http.httpStaleSealedMeta
+import me.raddatz.veyq.core.generated.api.ContentApi
+import me.raddatz.veyq.core.generated.model.CreateNodeRequest
+import me.raddatz.veyq.core.generated.model.NodeCreated
+import me.raddatz.veyq.core.generated.model.NodeKind
+import me.raddatz.veyq.core.generated.model.NodeSummary
+import me.raddatz.veyq.core.generated.model.RestoreNodeRequest
+import me.raddatz.veyq.core.generated.model.TrashedNodeSummary
+import me.raddatz.veyq.core.generated.model.UpdateNodeRequest
+import me.raddatz.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.http.HttpFailure
+import me.raddatz.veyq.core.http.httpError
+import me.raddatz.veyq.core.http.httpStaleSealedMeta
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
 import jakarta.ws.rs.core.Response
@@ -19,7 +19,7 @@ import java.time.Duration
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.util.UUID
-import com.veyq.core.ratelimit.RateLimitExempt
+import me.raddatz.veyq.core.ratelimit.RateLimitExempt
 
 /**
  * HTTP adapter for the Memory tree (en.memory.tree, cr-0027). Implements the generated [ContentApi]; thin

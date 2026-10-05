@@ -1,4 +1,4 @@
-package com.veyq.core.http
+package me.raddatz.veyq.core.http
 
 import jakarta.ws.rs.core.HttpHeaders
 

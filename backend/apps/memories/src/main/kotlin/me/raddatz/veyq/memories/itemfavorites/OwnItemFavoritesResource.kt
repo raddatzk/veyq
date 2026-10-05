@@ -1,8 +1,8 @@
-package com.veyq.memories.itemfavorites
+package me.raddatz.veyq.memories.itemfavorites
 
-import com.veyq.memories.generated.api.OwnItemFavoritesApi
-import com.veyq.memories.generated.model.OwnItemFavoritesEntry
-import com.veyq.core.ratelimit.RateLimitExempt
+import me.raddatz.veyq.memories.generated.api.OwnItemFavoritesApi
+import me.raddatz.veyq.memories.generated.model.OwnItemFavoritesEntry
+import me.raddatz.veyq.core.ratelimit.RateLimitExempt
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
 import jakarta.ws.rs.core.Response

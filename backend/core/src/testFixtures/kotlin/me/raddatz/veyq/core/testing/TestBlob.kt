@@ -1,10 +1,10 @@
-package com.veyq.core.testing
+package me.raddatz.veyq.core.testing
 
-import com.veyq.core.blob.ChunkFrames
-import com.veyq.core.blob.UploadDeclare
-import com.veyq.core.blob.UploadSessionEntity
-import com.veyq.core.blobstore.BlobStore.Companion.chunkKeys
-import com.veyq.core.blobstore.FakePresigningBlobStore
+import me.raddatz.veyq.core.blob.ChunkFrames
+import me.raddatz.veyq.core.blob.UploadDeclare
+import me.raddatz.veyq.core.blob.UploadSessionEntity
+import me.raddatz.veyq.core.blobstore.BlobStore.Companion.chunkKeys
+import me.raddatz.veyq.core.blobstore.FakePresigningBlobStore
 import io.quarkus.narayana.jta.QuarkusTransaction
 import java.util.UUID
 

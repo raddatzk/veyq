@@ -1,8 +1,8 @@
-package com.veyq.core.admin.instance
+package me.raddatz.veyq.core.admin.instance
 
-import com.veyq.core.generated.model.InstanceStoreProvisioning
-import com.veyq.core.blobstore.StoreProvisioningRunner
-import com.veyq.core.blobstore.StoreProvisioningState
+import me.raddatz.veyq.core.generated.model.InstanceStoreProvisioning
+import me.raddatz.veyq.core.blobstore.StoreProvisioningRunner
+import me.raddatz.veyq.core.blobstore.StoreProvisioningState
 import jakarta.enterprise.context.ApplicationScoped
 
 /**

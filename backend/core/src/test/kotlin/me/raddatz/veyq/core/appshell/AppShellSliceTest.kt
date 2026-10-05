@@ -1,7 +1,7 @@
-package com.veyq.core.appshell
+package me.raddatz.veyq.core.appshell
 
-import com.veyq.core.tenant.TenantEntity
-import com.veyq.core.testing.TestFixtures.seedTenant
+import me.raddatz.veyq.core.tenant.TenantEntity
+import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.response.Response

@@ -1,6 +1,6 @@
-package com.veyq.core.tenant
+package me.raddatz.veyq.core.tenant
 
-import com.veyq.core.config.VeyqConfig.IngressTlsMode
+import me.raddatz.veyq.core.config.VeyqConfig.IngressTlsMode
 import io.fabric8.kubernetes.api.model.networking.v1.Ingress
 import io.fabric8.kubernetes.api.model.networking.v1.IngressBuilder
 import io.fabric8.kubernetes.api.model.networking.v1.IngressTLSBuilder

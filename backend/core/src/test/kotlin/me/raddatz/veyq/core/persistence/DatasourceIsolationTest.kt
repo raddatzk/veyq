@@ -1,4 +1,4 @@
-package com.veyq.core.persistence
+package me.raddatz.veyq.core.persistence
 
 import io.agroal.api.AgroalDataSource
 import io.agroal.api.configuration.AgroalConnectionFactoryConfiguration.TransactionIsolation

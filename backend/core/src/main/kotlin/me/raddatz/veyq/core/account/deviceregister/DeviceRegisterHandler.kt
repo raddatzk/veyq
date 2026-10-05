@@ -1,4 +1,4 @@
-package com.veyq.core.account.deviceregister
+package me.raddatz.veyq.core.account.deviceregister
 
 import jakarta.enterprise.context.ApplicationScoped
 

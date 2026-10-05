@@ -1,4 +1,4 @@
-package com.veyq.core.membership
+package me.raddatz.veyq.core.membership
 
 /**
  * An admission as the server holds it (ADR 0020 move 6): the client-minted id, the scope epoch whose key computed

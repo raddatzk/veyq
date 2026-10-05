@@ -1,4 +1,4 @@
-package com.veyq.core.validation
+package me.raddatz.veyq.core.validation
 
 /**
  * A required request primitive the contract types nullable (`[integer, "null"]`, `[boolean, "null"]`) only so that

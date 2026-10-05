@@ -1,18 +1,18 @@
-package com.veyq.core.quota
+package me.raddatz.veyq.core.quota
 
-import com.veyq.core.testing.TestBlob
-import com.veyq.core.blob.UploadSessionEntity
-import com.veyq.core.sharing.ShareWriteProof
-import com.veyq.core.TestIds
-import com.veyq.core.adminchannel.givenAdminChannel
-import com.veyq.core.membership.MembershipEntity
-import com.veyq.core.membership.TenantRoots
-import com.veyq.core.scope.ScopeEntity
-import com.veyq.core.tenant.TenantEntity
-import com.veyq.core.testing.TestFixtures.CONTENT_KEY
-import com.veyq.core.testing.TestFixtures.bearer
-import com.veyq.core.testing.TestFixtures.seedNode
-import com.veyq.core.testing.TestFixtures.seedUser
+import me.raddatz.veyq.core.testing.TestBlob
+import me.raddatz.veyq.core.blob.UploadSessionEntity
+import me.raddatz.veyq.core.sharing.ShareWriteProof
+import me.raddatz.veyq.core.TestIds
+import me.raddatz.veyq.core.adminchannel.givenAdminChannel
+import me.raddatz.veyq.core.membership.MembershipEntity
+import me.raddatz.veyq.core.membership.TenantRoots
+import me.raddatz.veyq.core.scope.ScopeEntity
+import me.raddatz.veyq.core.tenant.TenantEntity
+import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
+import me.raddatz.veyq.core.testing.TestFixtures.bearer
+import me.raddatz.veyq.core.testing.TestFixtures.seedNode
+import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -41,7 +41,7 @@ import org.junit.jupiter.api.Test
  * is counted across the tenant's scopes, not only in the scope being uploaded into.
  *
  * **Split** (cr-platform-gradle-modules step 8a): the methods that need Memories in the application at runtime are `TenantStorageQuotaMemoriesSliceTest` in `:apps:memories`. This half moved from
- * `com.veyq.memories.media` to the package of the code it tests; `MemoriesNodeKinds.MEMORY` is spelled `"MEMORY"`.
+ * `me.raddatz.veyq.memories.media` to the package of the code it tests; `MemoriesNodeKinds.MEMORY` is spelled `"MEMORY"`.
  */
 @QuarkusTest
 class TenantStorageQuotaSliceTest {

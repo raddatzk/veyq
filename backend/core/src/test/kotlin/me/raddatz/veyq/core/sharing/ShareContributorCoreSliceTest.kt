@@ -1,7 +1,7 @@
-package com.veyq.core.sharing
+package me.raddatz.veyq.core.sharing
 
-import com.veyq.core.TestIds
-import com.veyq.core.testing.TestFixtures.bearer
+import me.raddatz.veyq.core.TestIds
+import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType

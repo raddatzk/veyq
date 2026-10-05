@@ -1,7 +1,7 @@
-package com.veyq.core.platform.capabilities
+package me.raddatz.veyq.core.platform.capabilities
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.veyq.core.config.testVeyqConfig
+import me.raddatz.veyq.core.config.testVeyqConfig
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -11,7 +11,7 @@ import java.io.File
 /**
  * Conformance pin (cr-0103, ADR 0032): every capability id the backend ships as a constant must be a real entry
  * in the append-only catalog (`contracts/platform/capabilities.json`) — the same drift-proofing
- * [com.veyq.core.tasks.CapabilityTags] gets against its registry. Plus the [CapabilityRegistry]
+ * [me.raddatz.veyq.core.tasks.CapabilityTags] gets against its registry. Plus the [CapabilityRegistry]
  * active-set arithmetic (the advertised set minus the operator's disabled list). Pure JVM — no CDI needed.
  */
 class CapabilityRegistryTest {

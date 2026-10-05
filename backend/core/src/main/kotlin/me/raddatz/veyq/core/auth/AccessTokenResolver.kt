@@ -1,4 +1,4 @@
-package com.veyq.core.auth
+package me.raddatz.veyq.core.auth
 
 /**
  * The one thing [SessionTokenIdentityProvider] needs from the session feature: who, if anyone, a bearer access

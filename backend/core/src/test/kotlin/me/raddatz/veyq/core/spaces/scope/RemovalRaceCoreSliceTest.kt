@@ -1,15 +1,15 @@
-package com.veyq.core.spaces.scope
+package me.raddatz.veyq.core.spaces.scope
 
-import com.veyq.core.identity.TenantProfileEntity
-import com.veyq.core.membership.MembershipEntity
-import com.veyq.core.membership.SignedGrant
-import com.veyq.core.membership.TenantRoots
-import com.veyq.core.membership.TestAdmission
-import com.veyq.core.scope.ScopeEntity
-import com.veyq.core.testing.RACE_ROUNDS
-import com.veyq.core.testing.TestFixtures.seedTenant
-import com.veyq.core.testing.TestFixtures.seedUser
-import com.veyq.core.testing.whileUncommitted
+import me.raddatz.veyq.core.identity.TenantProfileEntity
+import me.raddatz.veyq.core.membership.MembershipEntity
+import me.raddatz.veyq.core.membership.SignedGrant
+import me.raddatz.veyq.core.membership.TenantRoots
+import me.raddatz.veyq.core.membership.TestAdmission
+import me.raddatz.veyq.core.scope.ScopeEntity
+import me.raddatz.veyq.core.testing.RACE_ROUNDS
+import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
+import me.raddatz.veyq.core.testing.TestFixtures.seedUser
+import me.raddatz.veyq.core.testing.whileUncommitted
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given

@@ -1,4 +1,4 @@
-package com.veyq.core.scope
+package me.raddatz.veyq.core.scope
 
 /**
  * One step of a group's hard-erasure (uc.spaces.delete-group, ADR 0014 §6): the package that owns an entity

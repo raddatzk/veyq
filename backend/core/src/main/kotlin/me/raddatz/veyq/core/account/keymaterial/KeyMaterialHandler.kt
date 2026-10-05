@@ -1,14 +1,14 @@
-package com.veyq.core.account.keymaterial
+package me.raddatz.veyq.core.account.keymaterial
 
-import com.veyq.core.account.login.SessionService
-import com.veyq.core.platform.capabilities.CapabilityIds
-import com.veyq.core.platform.capabilities.CapabilityRegistry
-import com.veyq.core.http.FailureStatus.CONFLICT
-import com.veyq.core.http.Failures
-import com.veyq.core.http.HttpFailure
-import com.veyq.core.http.httpFailure
-import com.veyq.core.identity.AccountStore
-import com.veyq.core.identity.WrapMethod
+import me.raddatz.veyq.core.account.login.SessionService
+import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
+import me.raddatz.veyq.core.platform.capabilities.CapabilityRegistry
+import me.raddatz.veyq.core.http.FailureStatus.CONFLICT
+import me.raddatz.veyq.core.http.Failures
+import me.raddatz.veyq.core.http.HttpFailure
+import me.raddatz.veyq.core.http.httpFailure
+import me.raddatz.veyq.core.identity.AccountStore
+import me.raddatz.veyq.core.identity.WrapMethod
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 

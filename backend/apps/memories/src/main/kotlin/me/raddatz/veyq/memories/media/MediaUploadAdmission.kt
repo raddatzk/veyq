@@ -1,7 +1,7 @@
-package com.veyq.memories.media
+package me.raddatz.veyq.memories.media
 
-import com.veyq.core.quota.UploadAdmission
-import com.veyq.memories.node.MemoriesNodeKinds
+import me.raddatz.veyq.core.quota.UploadAdmission
+import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.EntityManager
 

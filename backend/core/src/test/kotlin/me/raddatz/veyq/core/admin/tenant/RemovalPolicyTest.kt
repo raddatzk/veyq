@@ -1,7 +1,7 @@
-package com.veyq.core.admin.tenant
+package me.raddatz.veyq.core.admin.tenant
 
-import com.veyq.core.membership.MembershipEntity
-import com.veyq.core.scope.ScopeEntity
+import me.raddatz.veyq.core.membership.MembershipEntity
+import me.raddatz.veyq.core.scope.ScopeEntity
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 

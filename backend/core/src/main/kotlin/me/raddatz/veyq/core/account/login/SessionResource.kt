@@ -1,8 +1,8 @@
-package com.veyq.core.account.login
+package me.raddatz.veyq.core.account.login
 
-import com.veyq.core.generated.api.SessionApi
-import com.veyq.core.generated.model.SessionFamily
-import com.veyq.core.http.bearerToken
+import me.raddatz.veyq.core.generated.api.SessionApi
+import me.raddatz.veyq.core.generated.model.SessionFamily
+import me.raddatz.veyq.core.http.bearerToken
 import io.quarkus.security.Authenticated
 import io.quarkus.security.credential.TokenCredential
 import io.quarkus.security.identity.SecurityIdentity
@@ -12,7 +12,7 @@ import jakarta.ws.rs.core.HttpHeaders
 import jakarta.ws.rs.core.Response
 import java.time.ZoneOffset
 import java.util.UUID
-import com.veyq.core.ratelimit.RateLimitExempt
+import me.raddatz.veyq.core.ratelimit.RateLimitExempt
 
 /**
  * HTTP adapter for session lifecycle. Implements the generated [SessionApi]; thin (ADR 0001) — delegates to

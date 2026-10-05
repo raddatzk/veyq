@@ -1,7 +1,7 @@
-package com.veyq.core.tenant
+package me.raddatz.veyq.core.tenant
 
-import com.veyq.core.http.Failures
-import com.veyq.core.http.httpError
+import me.raddatz.veyq.core.http.Failures
+import me.raddatz.veyq.core.http.httpError
 import io.smallrye.mutiny.Uni
 import io.smallrye.mutiny.infrastructure.Infrastructure
 import jakarta.enterprise.context.ApplicationScoped

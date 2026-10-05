@@ -1,4 +1,4 @@
-package com.veyq.core.appshell
+package me.raddatz.veyq.core.appshell
 
 /**
  * What the backend found of the web client on its classpath, decided **once at boot** (ADR 0069). The release

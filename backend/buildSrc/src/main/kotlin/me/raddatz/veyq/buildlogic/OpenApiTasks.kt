@@ -1,4 +1,4 @@
-package com.veyq.buildlogic
+package me.raddatz.veyq.buildlogic
 
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
@@ -139,7 +139,7 @@ abstract class OpenApiGenerate : DefaultTask() {
         // Measured (cr-platform-gradle-modules step 5): both generators honour a schema mapping — the Kotlin models and
         // the jaxrs-spec interfaces name the core FQN and emit no type of their own for it. `importMappings` alone is
         // the wrong lever: it still generates the model, as a junk file named after the FQN.
-        commonSchemas.forEach { cfg.addSchemaMapping(it, "com.veyq.core.generated.model.$it") }
+        commonSchemas.forEach { cfg.addSchemaMapping(it, "me.raddatz.veyq.core.generated.model.$it") }
         library?.let(cfg::setLibrary)
         DefaultGenerator().opts(cfg.toClientOptInput()).generate()
     }
@@ -174,11 +174,11 @@ abstract class GenerateAdminChannelOperations : DefaultTask() {
     fun generate() {
         val (marked, problems) = SpecSets.channelMarkers(SpecSets.coreOwner, specs.files.sorted(), contractsDir.get().asFile)
         if (problems.isNotEmpty()) throw GradleException(problems.joinToString("\n"))
-        val out = outputDir.get().file("src/main/kotlin/com/veyq/core/generated/AdminChannelOperations.kt").asFile
+        val out = outputDir.get().file("src/main/kotlin/me/raddatz/veyq/core/generated/AdminChannelOperations.kt").asFile
         out.parentFile.mkdirs()
         out.writeText(
             """
-            |package com.veyq.core.generated
+            |package me.raddatz.veyq.core.generated
             |
             |/** Generated from `x-veyq-channel: admin` in contracts/api (ADR 0065) — never edited, never listed by hand. */
             |object AdminChannelOperations {

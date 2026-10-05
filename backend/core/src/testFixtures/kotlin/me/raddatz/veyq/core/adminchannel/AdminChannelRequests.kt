@@ -1,4 +1,4 @@
-package com.veyq.core.adminchannel
+package me.raddatz.veyq.core.adminchannel
 
 import io.quarkus.arc.Arc
 import io.restassured.RestAssured

@@ -1,23 +1,23 @@
-package com.veyq.core.content
+package me.raddatz.veyq.core.content
 
-import com.veyq.core.blob.BlobEntity
-import com.veyq.core.node.NodeEntity
-import com.veyq.memories.itemfavorites.ItemFavoritesEntity
-import com.veyq.memories.media.BucketEntity
-import com.veyq.memories.media.MediaDerivativeEntity
-import com.veyq.memories.media.MediaEntity
-import com.veyq.core.testing.TestBlob
-import com.veyq.core.TestIds
-import com.veyq.core.blobstore.BlobStore
-import com.veyq.core.blobstore.BlobStore.Companion.chunkKeys
-import com.veyq.core.blobstore.RecordingBlobStore
-import com.veyq.core.blobstore.StoreReclaimEntity
-import com.veyq.core.blobstore.StoreReclaimSweep
-import com.veyq.core.blobstore.ageReclaimRowsPastThePresignBound
-import com.veyq.core.config.VeyqConfig
-import com.veyq.core.testing.TestFixtures.bearer
-import com.veyq.core.testing.TestFixtures.seedMemberScope
-import com.veyq.memories.node.MemoriesNodeKinds
+import me.raddatz.veyq.core.blob.BlobEntity
+import me.raddatz.veyq.core.node.NodeEntity
+import me.raddatz.veyq.memories.itemfavorites.ItemFavoritesEntity
+import me.raddatz.veyq.memories.media.BucketEntity
+import me.raddatz.veyq.memories.media.MediaDerivativeEntity
+import me.raddatz.veyq.memories.media.MediaEntity
+import me.raddatz.veyq.core.testing.TestBlob
+import me.raddatz.veyq.core.TestIds
+import me.raddatz.veyq.core.blobstore.BlobStore
+import me.raddatz.veyq.core.blobstore.BlobStore.Companion.chunkKeys
+import me.raddatz.veyq.core.blobstore.RecordingBlobStore
+import me.raddatz.veyq.core.blobstore.StoreReclaimEntity
+import me.raddatz.veyq.core.blobstore.StoreReclaimSweep
+import me.raddatz.veyq.core.blobstore.ageReclaimRowsPastThePresignBound
+import me.raddatz.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.testing.TestFixtures.bearer
+import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
+import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -40,7 +40,7 @@ import org.junit.jupiter.api.Test
  * Slice tests for the node trash (uc.memory.delete-node, ADR 0061): a delete soft-deletes the whole subtree, the
  * space's trash lists the deleted ROOTS, restore brings the subtree back intact, and `NodeSubtreePurge`
  * hard-erases it past the retention window. The share half lives in
- * [com.veyq.core.sharing.ShareDeletedNodeSliceTest] — the two guest paths need their own controls.
+ * [me.raddatz.veyq.core.sharing.ShareDeletedNodeSliceTest] — the two guest paths need their own controls.
  *
  * Four of these pin decisions that are load-bearing precisely because they look like details:
  * - the slug is freed by the **write** (`slug_token := the node's own id`), because `ux_node_parent_slug` is a

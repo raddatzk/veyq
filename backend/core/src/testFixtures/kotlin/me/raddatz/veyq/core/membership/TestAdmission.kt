@@ -1,6 +1,6 @@
-package com.veyq.core.membership
+package me.raddatz.veyq.core.membership
 
-import com.veyq.core.scope.ScopeEntity
+import me.raddatz.veyq.core.scope.ScopeEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
 import java.util.UUID
 

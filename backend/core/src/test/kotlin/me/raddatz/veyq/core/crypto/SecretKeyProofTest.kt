@@ -1,4 +1,4 @@
-package com.veyq.core.crypto
+package me.raddatz.veyq.core.crypto
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper

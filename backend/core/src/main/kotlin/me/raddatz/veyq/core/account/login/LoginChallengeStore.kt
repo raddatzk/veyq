@@ -1,4 +1,4 @@
-package com.veyq.core.account.login
+package me.raddatz.veyq.core.account.login
 
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional

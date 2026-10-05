@@ -1,4 +1,4 @@
-package com.veyq.memories.favorites
+package me.raddatz.veyq.memories.favorites
 
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheCompanionBase
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheEntityBase

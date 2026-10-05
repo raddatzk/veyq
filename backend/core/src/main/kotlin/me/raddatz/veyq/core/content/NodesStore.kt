@@ -1,8 +1,8 @@
-package com.veyq.core.content
+package me.raddatz.veyq.core.content
 
-import com.veyq.core.node.NodeEntity
-import com.veyq.core.node.ParentSlot
-import com.veyq.core.scope.ScopeEntity
+import me.raddatz.veyq.core.node.NodeEntity
+import me.raddatz.veyq.core.node.ParentSlot
+import me.raddatz.veyq.core.scope.ScopeEntity
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 import java.time.Instant

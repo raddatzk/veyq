@@ -1,4 +1,4 @@
-package com.veyq.core.admin.setup
+package me.raddatz.veyq.core.admin.setup
 
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheCompanionBase
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheEntityBase

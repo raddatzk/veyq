@@ -1,8 +1,8 @@
-package com.veyq.core.sharing
+package me.raddatz.veyq.core.sharing
 
-import com.veyq.core.node.NodeEntity
-import com.veyq.core.sharing.ShareGuestWrites
-import com.veyq.memories.node.MemoriesNodeKinds
+import me.raddatz.veyq.core.node.NodeEntity
+import me.raddatz.veyq.core.sharing.ShareGuestWrites
+import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.arc.All
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject

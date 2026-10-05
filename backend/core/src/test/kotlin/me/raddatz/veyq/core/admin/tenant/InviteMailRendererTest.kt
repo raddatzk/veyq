@@ -1,4 +1,4 @@
-package com.veyq.core.admin.tenant
+package me.raddatz.veyq.core.admin.tenant
 
 import kotlin.test.Test
 import kotlin.test.assertEquals

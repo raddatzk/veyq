@@ -1,8 +1,8 @@
-package com.veyq.core.account.keymaterial
+package me.raddatz.veyq.core.account.keymaterial
 
-import com.veyq.core.identity.MasterKeyWrapEntity
-import com.veyq.core.identity.VeyqUser
-import com.veyq.core.identity.WrapMethod
+import me.raddatz.veyq.core.identity.MasterKeyWrapEntity
+import me.raddatz.veyq.core.identity.VeyqUser
+import me.raddatz.veyq.core.identity.WrapMethod
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 import java.util.UUID

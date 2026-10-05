@@ -1,6 +1,6 @@
-package com.veyq.memories.media
+package me.raddatz.veyq.memories.media
 
-import com.veyq.core.node.NodeSubtreeEraser
+import me.raddatz.veyq.core.node.NodeSubtreeEraser
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
 

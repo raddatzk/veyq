@@ -1,8 +1,8 @@
-package com.veyq.core.adminchannel
+package me.raddatz.veyq.core.adminchannel
 
-import com.veyq.core.generated.AdminChannelOperations
-import com.veyq.core.identity.ServerRoles.SERVER_OWNER
-import com.veyq.core.testing.MainOutputs
+import me.raddatz.veyq.core.generated.AdminChannelOperations
+import me.raddatz.veyq.core.identity.ServerRoles.SERVER_OWNER
+import me.raddatz.veyq.core.testing.MainOutputs
 import io.quarkus.security.Authenticated
 import jakarta.annotation.security.PermitAll
 import jakarta.annotation.security.RolesAllowed

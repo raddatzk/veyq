@@ -1,4 +1,4 @@
-package com.veyq.buildlogic
+package me.raddatz.veyq.buildlogic
 
 import org.gradle.api.GradleException
 import org.gradle.api.Project

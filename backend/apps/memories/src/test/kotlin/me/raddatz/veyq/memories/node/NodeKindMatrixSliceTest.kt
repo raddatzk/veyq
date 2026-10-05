@@ -1,10 +1,10 @@
-package com.veyq.memories.node
+package me.raddatz.veyq.memories.node
 
-import com.veyq.core.content.CreateNodeOutcome
-import com.veyq.core.content.NodesHandler
-import com.veyq.core.content.UpdateNodeOutcome
-import com.veyq.core.testing.TestFixtures.seedMemberScope
-import com.veyq.core.testing.TestFixtures.seedNode
+import me.raddatz.veyq.core.content.CreateNodeOutcome
+import me.raddatz.veyq.core.content.NodesHandler
+import me.raddatz.veyq.core.content.UpdateNodeOutcome
+import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
+import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject
 import java.util.UUID

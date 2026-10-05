@@ -1,7 +1,7 @@
-package com.veyq.core.blobstore
+package me.raddatz.veyq.core.blobstore
 
-import com.veyq.core.blobstore.BlobStore.Companion.chunkKeys
-import com.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.blobstore.BlobStore.Companion.chunkKeys
+import me.raddatz.veyq.core.config.VeyqConfig
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.scheduler.Scheduled
 import jakarta.enterprise.context.ApplicationScoped

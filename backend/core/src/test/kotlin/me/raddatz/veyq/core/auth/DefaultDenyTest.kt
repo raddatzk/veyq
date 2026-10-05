@@ -1,4 +1,4 @@
-package com.veyq.core.auth
+package me.raddatz.veyq.core.auth
 
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given

@@ -1,4 +1,4 @@
-package com.veyq.core.validation
+package me.raddatz.veyq.core.validation
 
 import com.fasterxml.jackson.core.JsonParser
 import com.fasterxml.jackson.databind.DeserializationContext
@@ -10,7 +10,7 @@ import com.fasterxml.jackson.databind.JsonDeserializer
  *
  * Wired per field from the OpenAPI spec via `x-field-extra-annotation`:
  *   @field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(
- *       using = com.veyq.core.validation.TrimmingStringDeserializer::class)
+ *       using = me.raddatz.veyq.core.validation.TrimmingStringDeserializer::class)
  *
  * Only for server-visible metadata (display names etc.) — never for content, which is ciphertext the
  * server must not touch.

@@ -1,4 +1,4 @@
-package com.veyq.core.sharing
+package me.raddatz.veyq.core.sharing
 
 /** One media under a shared subtree — the original blob ref + role-tagged derivatives, tagged with its owning node. */
 data class ShareMediaRow(

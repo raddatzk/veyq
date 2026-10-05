@@ -1,7 +1,7 @@
-package com.veyq.core.appshell
+package me.raddatz.veyq.core.appshell
 
-import com.veyq.core.blobstore.BlobStore
-import com.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.blobstore.BlobStore
+import me.raddatz.veyq.core.config.VeyqConfig
 import io.quarkus.vertx.http.runtime.RouteConstants
 import io.vertx.core.buffer.Buffer
 import io.vertx.core.http.HttpHeaders

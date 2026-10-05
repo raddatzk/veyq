@@ -1,7 +1,7 @@
-package com.veyq.core.membership
+package me.raddatz.veyq.core.membership
 
-import com.veyq.core.scope.ScopeEntity
-import com.veyq.core.tenant.TenantEntity
+import me.raddatz.veyq.core.scope.ScopeEntity
+import me.raddatz.veyq.core.tenant.TenantEntity
 import jakarta.enterprise.context.ApplicationScoped
 
 /** What an operation does to the space: READ passes a deleting space, WRITE does not. */

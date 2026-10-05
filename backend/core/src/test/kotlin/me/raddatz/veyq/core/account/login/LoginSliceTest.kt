@@ -1,8 +1,8 @@
-package com.veyq.core.account.login
+package me.raddatz.veyq.core.account.login
 
-import com.veyq.core.identity.VeyqUser
-import com.veyq.core.testing.TestFixtures.newUser
-import com.veyq.core.testing.race
+import me.raddatz.veyq.core.identity.VeyqUser
+import me.raddatz.veyq.core.testing.TestFixtures.newUser
+import me.raddatz.veyq.core.testing.race
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -409,14 +409,14 @@ class LoginSliceTest {
     /** The status of the session family a refresh token belongs to — read straight from the store. */
     private fun familyStatusOf(refreshToken: String): String =
         QuarkusTransaction.requiringNew().call<String> {
-            val row = RefreshTokenEntity.find("tokenHash", com.veyq.core.crypto.Tokens.hash(refreshToken))
+            val row = RefreshTokenEntity.find("tokenHash", me.raddatz.veyq.core.crypto.Tokens.hash(refreshToken))
                 .firstResult()!!
             SessionFamilyEntity.findById(row.familyId)!!.status
         }
 
     private fun familyIdOf(refreshToken: String): String =
         QuarkusTransaction.requiringNew().call<String> {
-            RefreshTokenEntity.find("tokenHash", com.veyq.core.crypto.Tokens.hash(refreshToken)).firstResult()!!.familyId
+            RefreshTokenEntity.find("tokenHash", me.raddatz.veyq.core.crypto.Tokens.hash(refreshToken)).firstResult()!!.familyId
         }
 
     private fun currentRows(familyId: String): Long =

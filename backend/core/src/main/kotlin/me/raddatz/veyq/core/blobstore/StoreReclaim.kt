@@ -1,6 +1,6 @@
-package com.veyq.core.blobstore
+package me.raddatz.veyq.core.blobstore
 
-import com.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.config.VeyqConfig
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheCompanionBase
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheEntityBase
 import jakarta.enterprise.context.ApplicationScoped
@@ -92,7 +92,7 @@ class StoreReclaimEntity : PanacheEntityBase {
  * for is *the keys are written in the same transaction as the row delete* — a caller that records outside a
  * transaction gets the old defect back in a new shape (a committed row delete and a lost key), and it would be
  * invisible. `MANDATORY` turns that into a boot-loud failure at the call site instead. Two paths therefore open
- * their own transaction before calling in ([com.veyq.core.spaces.scope.ScopePurge] per scope, and the
+ * their own transaction before calling in ([me.raddatz.veyq.core.spaces.scope.ScopePurge] per scope, and the
  * over-budget purge in `BlobUploadHandler`, which deliberately leaves its session rows standing); every other caller
  * is already inside a `@Transactional` store method.
  */

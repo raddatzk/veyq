@@ -1,18 +1,18 @@
-package com.veyq.memories.media
+package me.raddatz.veyq.memories.media
 
-import com.veyq.memories.generated.api.BucketsApi
-import com.veyq.memories.generated.model.BucketListResponse
-import com.veyq.memories.generated.model.BucketSummary
-import com.veyq.memories.generated.model.CreateBucketRequest
-import com.veyq.memories.generated.model.MoveMediaRequest
-import com.veyq.memories.generated.model.RenameBucketRequest
-import com.veyq.core.http.HttpFailure
-import com.veyq.core.http.httpError
+import me.raddatz.veyq.memories.generated.api.BucketsApi
+import me.raddatz.veyq.memories.generated.model.BucketListResponse
+import me.raddatz.veyq.memories.generated.model.BucketSummary
+import me.raddatz.veyq.memories.generated.model.CreateBucketRequest
+import me.raddatz.veyq.memories.generated.model.MoveMediaRequest
+import me.raddatz.veyq.memories.generated.model.RenameBucketRequest
+import me.raddatz.veyq.core.http.HttpFailure
+import me.raddatz.veyq.core.http.httpError
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
 import jakarta.ws.rs.core.Response
 import java.util.UUID
-import com.veyq.core.ratelimit.RateLimitExempt
+import me.raddatz.veyq.core.ratelimit.RateLimitExempt
 
 /**
  * HTTP adapter for uploader buckets (en.memory.buckets, ADR 0034, cr-0113). Implements the generated [BucketsApi];

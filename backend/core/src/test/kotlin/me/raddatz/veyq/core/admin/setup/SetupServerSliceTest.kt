@@ -1,11 +1,11 @@
-package com.veyq.core.admin.setup
+package me.raddatz.veyq.core.admin.setup
 
-import com.veyq.core.adminchannel.givenAdminChannel
-import com.veyq.core.identity.VeyqUser
-import com.veyq.core.testing.RACE_ROUNDS
-import com.veyq.core.testing.answer
-import com.veyq.core.testing.assertWinnerAndLoser
-import com.veyq.core.testing.race
+import me.raddatz.veyq.core.adminchannel.givenAdminChannel
+import me.raddatz.veyq.core.identity.VeyqUser
+import me.raddatz.veyq.core.testing.RACE_ROUNDS
+import me.raddatz.veyq.core.testing.answer
+import me.raddatz.veyq.core.testing.assertWinnerAndLoser
+import me.raddatz.veyq.core.testing.race
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given

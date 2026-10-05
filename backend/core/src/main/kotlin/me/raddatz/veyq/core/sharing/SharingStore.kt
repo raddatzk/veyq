@@ -1,15 +1,15 @@
-package com.veyq.core.sharing
+package me.raddatz.veyq.core.sharing
 
-import com.veyq.core.blob.BlobEntity
-import com.veyq.core.node.NodeEntity
-import com.veyq.core.sharing.GuestIdentityUsage
-import com.veyq.core.sharing.ShareEntity
-import com.veyq.core.sharing.ShareMediaRow
-import com.veyq.core.sharing.SharedSubtreeContributor
-import com.veyq.core.sharing.ShareIdentityEntity
-import com.veyq.core.sharing.ShareRetiredIdEntity
-import com.veyq.core.crypto.Tokens
-import com.veyq.core.scope.ScopeEntity
+import me.raddatz.veyq.core.blob.BlobEntity
+import me.raddatz.veyq.core.node.NodeEntity
+import me.raddatz.veyq.core.sharing.GuestIdentityUsage
+import me.raddatz.veyq.core.sharing.ShareEntity
+import me.raddatz.veyq.core.sharing.ShareMediaRow
+import me.raddatz.veyq.core.sharing.SharedSubtreeContributor
+import me.raddatz.veyq.core.sharing.ShareIdentityEntity
+import me.raddatz.veyq.core.sharing.ShareRetiredIdEntity
+import me.raddatz.veyq.core.crypto.Tokens
+import me.raddatz.veyq.core.scope.ScopeEntity
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.inject.Instance
 import jakarta.persistence.LockModeType

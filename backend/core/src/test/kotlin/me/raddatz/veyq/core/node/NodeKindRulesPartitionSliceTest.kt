@@ -1,12 +1,12 @@
-package com.veyq.core.node
+package me.raddatz.veyq.core.node
 
-import com.veyq.core.content.CreateNodeOutcome
-import com.veyq.core.content.NodesHandler
-import com.veyq.core.content.NodesStore
-import com.veyq.core.membership.ScopeAccess
-import com.veyq.core.testing.TestFixtures.bearer
-import com.veyq.core.testing.TestFixtures.seedMemberScope
-import com.veyq.core.testing.TestFixtures.seedNode
+import me.raddatz.veyq.core.content.CreateNodeOutcome
+import me.raddatz.veyq.core.content.NodesHandler
+import me.raddatz.veyq.core.content.NodesStore
+import me.raddatz.veyq.core.membership.ScopeAccess
+import me.raddatz.veyq.core.testing.TestFixtures.bearer
+import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
+import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import io.quarkus.arc.All
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given

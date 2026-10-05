@@ -1,10 +1,10 @@
-package com.veyq.core.tasks
+package me.raddatz.veyq.core.tasks
 
-import com.veyq.core.membership.MembershipEntity
-import com.veyq.core.scope.ScopeEntity
-import com.veyq.core.testing.TestFixtures.GRANT
-import com.veyq.core.testing.TestFixtures.seedTenant
-import com.veyq.core.testing.TestFixtures.seedUser
+import me.raddatz.veyq.core.membership.MembershipEntity
+import me.raddatz.veyq.core.scope.ScopeEntity
+import me.raddatz.veyq.core.testing.TestFixtures.GRANT
+import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
+import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject

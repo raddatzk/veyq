@@ -1,7 +1,7 @@
-package com.veyq.core.blob
+package me.raddatz.veyq.core.blob
 
-import com.veyq.core.blobstore.StoreObjectRef
-import com.veyq.core.blobstore.StoreReclaimStore
+import me.raddatz.veyq.core.blobstore.StoreObjectRef
+import me.raddatz.veyq.core.blobstore.StoreReclaimStore
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional

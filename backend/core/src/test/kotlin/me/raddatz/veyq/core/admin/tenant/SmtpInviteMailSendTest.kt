@@ -1,14 +1,14 @@
-package com.veyq.core.admin.tenant
+package me.raddatz.veyq.core.admin.tenant
 
 import com.icegreen.greenmail.util.GreenMail
 import com.icegreen.greenmail.util.GreenMailUtil
 import com.icegreen.greenmail.util.ServerSetup
-import com.veyq.core.generated.model.DeliveryResult
-import com.veyq.core.crypto.ConfigSecretKeyGuard
-import com.veyq.core.crypto.ConfigSecretSeal
-import com.veyq.core.instance.InstanceStore
-import com.veyq.core.tenant.TenantEntity
-import com.veyq.core.testing.TestFixtures.seedTenant
+import me.raddatz.veyq.core.generated.model.DeliveryResult
+import me.raddatz.veyq.core.crypto.ConfigSecretKeyGuard
+import me.raddatz.veyq.core.crypto.ConfigSecretSeal
+import me.raddatz.veyq.core.instance.InstanceStore
+import me.raddatz.veyq.core.tenant.TenantEntity
+import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject

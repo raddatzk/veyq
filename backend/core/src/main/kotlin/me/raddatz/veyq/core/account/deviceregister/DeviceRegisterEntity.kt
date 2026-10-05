@@ -1,4 +1,4 @@
-package com.veyq.core.account.deviceregister
+package me.raddatz.veyq.core.account.deviceregister
 
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheCompanionBase
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheEntityBase

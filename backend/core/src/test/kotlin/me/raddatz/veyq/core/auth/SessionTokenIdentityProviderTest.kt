@@ -1,10 +1,10 @@
-package com.veyq.core.auth
+package me.raddatz.veyq.core.auth
 
-import com.veyq.core.account.login.AccessTokenEntity
-import com.veyq.core.account.login.SessionFamilyEntity
-import com.veyq.core.account.login.SessionService
-import com.veyq.core.crypto.Tokens
-import com.veyq.core.testing.TestFixtures.ensureUser
+import me.raddatz.veyq.core.account.login.AccessTokenEntity
+import me.raddatz.veyq.core.account.login.SessionFamilyEntity
+import me.raddatz.veyq.core.account.login.SessionService
+import me.raddatz.veyq.core.crypto.Tokens
+import me.raddatz.veyq.core.testing.TestFixtures.ensureUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.security.AuthenticationFailedException
 import io.quarkus.security.credential.TokenCredential

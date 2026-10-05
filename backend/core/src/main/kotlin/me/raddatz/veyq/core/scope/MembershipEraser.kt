@@ -1,4 +1,4 @@
-package com.veyq.core.scope
+package me.raddatz.veyq.core.scope
 
 /**
  * What goes with one user's access to one scope: the package that owns per-member rows of a scope deletes that

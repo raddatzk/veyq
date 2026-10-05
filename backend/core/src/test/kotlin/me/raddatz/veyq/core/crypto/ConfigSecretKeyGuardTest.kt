@@ -1,6 +1,6 @@
-package com.veyq.core.crypto
+package me.raddatz.veyq.core.crypto
 
-import com.veyq.core.instance.InstanceStore
+import me.raddatz.veyq.core.instance.InstanceStore
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject

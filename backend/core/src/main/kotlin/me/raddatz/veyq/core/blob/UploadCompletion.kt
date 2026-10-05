@@ -1,7 +1,7 @@
-package com.veyq.core.blob
+package me.raddatz.veyq.core.blob
 
-import com.veyq.core.content.NodesStore
-import com.veyq.core.node.NodeEntity
+import me.raddatz.veyq.core.content.NodesStore
+import me.raddatz.veyq.core.node.NodeEntity
 import io.quarkus.arc.All
 import jakarta.enterprise.context.ApplicationScoped
 

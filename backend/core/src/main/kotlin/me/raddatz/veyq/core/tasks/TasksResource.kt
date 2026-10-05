@@ -1,27 +1,27 @@
-package com.veyq.core.tasks
+package me.raddatz.veyq.core.tasks
 
-import com.veyq.core.generated.api.TasksApi
-import com.veyq.core.generated.model.ClaimRequest
-import com.veyq.core.generated.model.ClearDeclinesRequest
-import com.veyq.core.generated.model.DeclinesCleared
-import com.veyq.core.generated.model.ClaimedJob
-import com.veyq.core.generated.model.CompleteRequest
-import com.veyq.core.generated.model.DeclineRequest
-import com.veyq.core.generated.model.EnqueueRequest
-import com.veyq.core.generated.model.FailRequest
-import com.veyq.core.generated.model.GrantDeliveryTarget
-import com.veyq.core.generated.model.JobCreated
-import com.veyq.core.generated.model.JobStatus
-import com.veyq.core.generated.model.LeaseState
-import com.veyq.core.http.Failures
-import com.veyq.core.http.HttpFailure
-import com.veyq.core.http.httpError
+import me.raddatz.veyq.core.generated.api.TasksApi
+import me.raddatz.veyq.core.generated.model.ClaimRequest
+import me.raddatz.veyq.core.generated.model.ClearDeclinesRequest
+import me.raddatz.veyq.core.generated.model.DeclinesCleared
+import me.raddatz.veyq.core.generated.model.ClaimedJob
+import me.raddatz.veyq.core.generated.model.CompleteRequest
+import me.raddatz.veyq.core.generated.model.DeclineRequest
+import me.raddatz.veyq.core.generated.model.EnqueueRequest
+import me.raddatz.veyq.core.generated.model.FailRequest
+import me.raddatz.veyq.core.generated.model.GrantDeliveryTarget
+import me.raddatz.veyq.core.generated.model.JobCreated
+import me.raddatz.veyq.core.generated.model.JobStatus
+import me.raddatz.veyq.core.generated.model.LeaseState
+import me.raddatz.veyq.core.http.Failures
+import me.raddatz.veyq.core.http.HttpFailure
+import me.raddatz.veyq.core.http.httpError
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
 import jakarta.ws.rs.core.Response
 import java.time.ZoneOffset
 import java.util.UUID
-import com.veyq.core.ratelimit.RateLimitExempt
+import me.raddatz.veyq.core.ratelimit.RateLimitExempt
 
 /**
  * HTTP adapter for the operator-blind background-task pull queue (ADR 0021, cr-0076). Implements the generated

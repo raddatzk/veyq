@@ -1,7 +1,7 @@
-package com.veyq.core.quota
+package me.raddatz.veyq.core.quota
 
-import com.veyq.core.blob.UploadDeclare
-import com.veyq.core.tenant.TenantEntity
+import me.raddatz.veyq.core.blob.UploadDeclare
+import me.raddatz.veyq.core.tenant.TenantEntity
 import io.quarkus.arc.All
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.EntityManager

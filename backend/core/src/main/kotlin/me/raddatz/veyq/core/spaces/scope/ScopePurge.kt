@@ -1,15 +1,15 @@
-package com.veyq.core.spaces.scope
+package me.raddatz.veyq.core.spaces.scope
 
-import com.veyq.core.blob.BlobEntity
-import com.veyq.core.blob.UploadSessionEntity
-import com.veyq.core.scope.ScopeEraser
-import com.veyq.core.tasks.JobDeclineEntity
-import com.veyq.core.tasks.JobEntity
-import com.veyq.core.blobstore.StoreObjectRef
-import com.veyq.core.blobstore.StoreReclaimStore
-import com.veyq.core.config.VeyqConfig
-import com.veyq.core.membership.MembershipEntity
-import com.veyq.core.scope.ScopeEntity
+import me.raddatz.veyq.core.blob.BlobEntity
+import me.raddatz.veyq.core.blob.UploadSessionEntity
+import me.raddatz.veyq.core.scope.ScopeEraser
+import me.raddatz.veyq.core.tasks.JobDeclineEntity
+import me.raddatz.veyq.core.tasks.JobEntity
+import me.raddatz.veyq.core.blobstore.StoreObjectRef
+import me.raddatz.veyq.core.blobstore.StoreReclaimStore
+import me.raddatz.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.membership.MembershipEntity
+import me.raddatz.veyq.core.scope.ScopeEntity
 import io.quarkus.arc.All
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.scheduler.Scheduled

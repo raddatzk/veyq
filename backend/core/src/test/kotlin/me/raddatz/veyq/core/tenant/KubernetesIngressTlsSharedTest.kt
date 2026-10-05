@@ -1,4 +1,4 @@
-package com.veyq.core.tenant
+package me.raddatz.veyq.core.tenant
 
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.quarkus.test.junit.QuarkusTest

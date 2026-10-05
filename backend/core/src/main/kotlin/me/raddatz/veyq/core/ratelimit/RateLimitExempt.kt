@@ -1,4 +1,4 @@
-package com.veyq.core.ratelimit
+package me.raddatz.veyq.core.ratelimit
 
 /**
  * Declares that an endpoint (or every endpoint of a resource) is deliberately **not** rate-limited, and why.

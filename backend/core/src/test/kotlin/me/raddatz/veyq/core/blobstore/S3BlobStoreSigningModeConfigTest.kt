@@ -1,7 +1,7 @@
-package com.veyq.core.blobstore
+package me.raddatz.veyq.core.blobstore
 
-import com.veyq.core.config.VeyqConfig.SigningMode
-import com.veyq.core.config.testVeyqConfig
+import me.raddatz.veyq.core.config.VeyqConfig.SigningMode
+import me.raddatz.veyq.core.config.testVeyqConfig
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import java.net.URI
@@ -13,7 +13,7 @@ import java.net.URI
  *
  * A constructor default proves none of that. Three separate things could each silently move the default while
  * every presigning unit test stayed green: a `@WithDefault` set to the wrong constant, a method named so that
- * SmallRye derives a *different* property path (the trap [com.veyq.core.config.VeyqConfig.StoreType]'s
+ * SmallRye derives a *different* property path (the trap [me.raddatz.veyq.core.config.VeyqConfig.StoreType]'s
  * member documents), and a producer that reads the member and then forgets to hand it over. The last is the one
  * with no other detector at all — the store would be built in the default mode on every instance, and only a
  * real Kubernetes deployment would notice.

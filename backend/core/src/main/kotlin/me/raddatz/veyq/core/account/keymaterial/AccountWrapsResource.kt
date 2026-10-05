@@ -1,15 +1,15 @@
-package com.veyq.core.account.keymaterial
+package me.raddatz.veyq.core.account.keymaterial
 
-import com.veyq.core.generated.api.AccountWrapsApi
-import com.veyq.core.generated.model.AddWrapRequest
-import com.veyq.core.generated.model.AddWrapResult
-import com.veyq.core.http.HttpFailure
-import com.veyq.core.http.httpError
+import me.raddatz.veyq.core.generated.api.AccountWrapsApi
+import me.raddatz.veyq.core.generated.model.AddWrapRequest
+import me.raddatz.veyq.core.generated.model.AddWrapResult
+import me.raddatz.veyq.core.http.HttpFailure
+import me.raddatz.veyq.core.http.httpError
 import io.quarkus.security.Authenticated
 import io.quarkus.security.credential.TokenCredential
 import io.quarkus.security.identity.SecurityIdentity
 import jakarta.ws.rs.core.Response
-import com.veyq.core.ratelimit.RateLimitExempt
+import me.raddatz.veyq.core.ratelimit.RateLimitExempt
 
 /**
  * HTTP adapter for adding/removing the caller's Master Key wraps (uc.account.trust-device). Implements the

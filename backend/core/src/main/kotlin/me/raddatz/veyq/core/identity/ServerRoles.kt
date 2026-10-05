@@ -1,8 +1,8 @@
-package com.veyq.core.identity
+package me.raddatz.veyq.core.identity
 
 /**
  * Global server-management roles, stored in `veyq_user.server_role` and surfaced as `SecurityIdentity` roles by
- * the [com.veyq.core.auth.SessionTokenIdentityProvider] (cr-0012). A management role gates *management*
+ * the [me.raddatz.veyq.core.auth.SessionTokenIdentityProvider] (cr-0012). A management role gates *management*
  * actions only; it never confers content readability — that stays the client-side scope-key grant.
  */
 object ServerRoles {

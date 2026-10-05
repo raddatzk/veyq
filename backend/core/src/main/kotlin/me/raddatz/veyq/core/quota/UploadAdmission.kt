@@ -1,4 +1,4 @@
-package com.veyq.core.quota
+package me.raddatz.veyq.core.quota
 
 /**
  * What an application tells core's per-link limit (ADR 0073 §4): how many bytes of blobs a link's guests contributed

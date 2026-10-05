@@ -1,4 +1,4 @@
-package com.veyq.core.auth
+package me.raddatz.veyq.core.auth
 
 import io.quarkus.security.identity.IdentityProviderManager
 import io.quarkus.security.identity.SecurityIdentity

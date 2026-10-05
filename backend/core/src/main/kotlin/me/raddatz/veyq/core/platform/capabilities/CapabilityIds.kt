@@ -1,4 +1,4 @@
-package com.veyq.core.platform.capabilities
+package me.raddatz.veyq.core.platform.capabilities
 
 /**
  * The client-facing capability ids the backend pins from the append-only catalog
@@ -6,7 +6,7 @@ package com.veyq.core.platform.capabilities
  * server can do X at all") — not a per-scope/role permission. Each id is advertised on `GET /api/setup` (minus
  * the operator's disabled list) and enforced at its feature's create/enable gate (`422 capability_disabled`).
  * [CapabilityRegistryTest] asserts every id here is a real catalog entry — the same drift-proofing
- * [com.veyq.core.tasks.CapabilityTags] gets against its registry.
+ * [me.raddatz.veyq.core.tasks.CapabilityTags] gets against its registry.
  */
 object CapabilityIds {
     /** Public read/contribute share links (viewer + contributor) of a personal-scope Memory (uc.sharing.*). */

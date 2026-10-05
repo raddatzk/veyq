@@ -1,15 +1,15 @@
-package com.veyq.memories.favorites
+package me.raddatz.veyq.memories.favorites
 
-import com.veyq.memories.generated.api.FavoritesApi
-import com.veyq.memories.generated.model.Favorites
-import com.veyq.memories.generated.model.PutFavoritesRequest
-import com.veyq.core.http.HttpFailure
-import com.veyq.core.http.httpError
+import me.raddatz.veyq.memories.generated.api.FavoritesApi
+import me.raddatz.veyq.memories.generated.model.Favorites
+import me.raddatz.veyq.memories.generated.model.PutFavoritesRequest
+import me.raddatz.veyq.core.http.HttpFailure
+import me.raddatz.veyq.core.http.httpError
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
 import jakarta.ws.rs.core.Response
 import java.util.UUID
-import com.veyq.core.ratelimit.RateLimitExempt
+import me.raddatz.veyq.core.ratelimit.RateLimitExempt
 
 /**
  * HTTP adapter for per-(user, scope) favorites (en.memory.favorites, cr-0031). Implements the generated

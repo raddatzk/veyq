@@ -1,11 +1,11 @@
-package com.veyq.core.account.pairing
+package me.raddatz.veyq.core.account.pairing
 
-import com.veyq.core.account.login.SessionService
-import com.veyq.core.config.VeyqConfig
-import com.veyq.core.crypto.Tokens
-import com.veyq.core.http.Failures
-import com.veyq.core.http.HttpFailure
-import com.veyq.core.identity.AccountStore
+import me.raddatz.veyq.core.account.login.SessionService
+import me.raddatz.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.crypto.Tokens
+import me.raddatz.veyq.core.http.Failures
+import me.raddatz.veyq.core.http.HttpFailure
+import me.raddatz.veyq.core.identity.AccountStore
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import java.time.Instant

@@ -1,6 +1,6 @@
-package com.veyq.core.admin.tenant
+package me.raddatz.veyq.core.admin.tenant
 
-import com.veyq.core.generated.model.DeliveryResult
+import me.raddatz.veyq.core.generated.model.DeliveryResult
 import jakarta.annotation.Priority
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.inject.Alternative

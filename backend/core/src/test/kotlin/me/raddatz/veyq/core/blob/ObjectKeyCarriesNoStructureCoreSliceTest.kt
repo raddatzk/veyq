@@ -1,6 +1,6 @@
-package com.veyq.core.blob
+package me.raddatz.veyq.core.blob
 
-import com.veyq.core.blobstore.BlobStore.Companion.chunkKey
+import me.raddatz.veyq.core.blobstore.BlobStore.Companion.chunkKey
 import io.quarkus.test.junit.QuarkusTest
 import java.util.UUID
 import org.junit.jupiter.api.Assertions.assertEquals

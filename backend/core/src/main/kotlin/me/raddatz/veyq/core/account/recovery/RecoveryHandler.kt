@@ -1,13 +1,13 @@
-package com.veyq.core.account.recovery
+package me.raddatz.veyq.core.account.recovery
 
-import com.veyq.core.account.login.SessionService
-import com.veyq.core.config.VeyqConfig
-import com.veyq.core.crypto.SecretKeyProof
-import com.veyq.core.crypto.Tokens
-import com.veyq.core.identity.AccountStore
-import com.veyq.core.identity.normalizeEmail
-import com.veyq.core.membership.MembershipStore
-import com.veyq.core.tenant.ResolvedTenant
+import me.raddatz.veyq.core.account.login.SessionService
+import me.raddatz.veyq.core.config.VeyqConfig
+import me.raddatz.veyq.core.crypto.SecretKeyProof
+import me.raddatz.veyq.core.crypto.Tokens
+import me.raddatz.veyq.core.identity.AccountStore
+import me.raddatz.veyq.core.identity.normalizeEmail
+import me.raddatz.veyq.core.membership.MembershipStore
+import me.raddatz.veyq.core.tenant.ResolvedTenant
 import io.quarkus.arc.Arc
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.smallrye.mutiny.infrastructure.Infrastructure
@@ -125,7 +125,7 @@ class RecoveryHandler(
         QuarkusTransaction.requiringNew().run { store.mint(user.id, normalized, Tokens.hash(token), expiresAt) }
 
         return when (mailer.sendRecoveryLink(tenant.id, tenant.domain, normalized, token, expiresAt)) {
-            com.veyq.core.generated.model.DeliveryResult.SENT -> RequestOutcome.MAILED
+            me.raddatz.veyq.core.generated.model.DeliveryResult.SENT -> RequestOutcome.MAILED
             else -> RequestOutcome.SEND_FAILED
         }
     }
