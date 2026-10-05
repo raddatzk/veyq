@@ -42,12 +42,12 @@ vi.mock('../core/sharing/resolvePublicShare', async (importOriginal) => {
 })
 vi.mock('../features/memory/share', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../features/memory/share')>()
-  return { ...actual, openSharedMemory: vi.fn() }
+  return { ...actual, openSharedMemory: vi.fn(), listShareMedia: vi.fn() }
 })
 
 import ShareView from './ShareView.vue'
 import { resolvePublicShare, fetchShareTerms } from '../core/sharing/resolvePublicShare'
-import { openSharedMemory, type ResolvedShare, type ShareAccess } from '../features/memory/share'
+import { openSharedMemory, listShareMedia, NO_SHARE_MEDIA, type ResolvedShare, type ShareAccess } from '../features/memory/share'
 import { headOf, openedOf } from '../test/shareHead'
 import { ShareRole } from '../api/generated/sharing'
 import { realI18n } from '../test/i18n'
@@ -65,6 +65,7 @@ function mountShareView() {
 function serve(r: ResolvedShare) {
   vi.mocked(resolvePublicShare).mockReset().mockResolvedValue(headOf(r))
   vi.mocked(openSharedMemory).mockReset().mockReturnValue(openedOf(r))
+  vi.mocked(listShareMedia).mockReset().mockResolvedValue(NO_SHARE_MEDIA) // the items come from openSharedMemory's stub
 }
 
 function viewerShare(): ResolvedShare {

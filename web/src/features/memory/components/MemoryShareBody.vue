@@ -14,6 +14,7 @@
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
+  listShareMedia,
   openSharedMemory,
   openShareGrid,
   openShareLightbox,
@@ -62,6 +63,9 @@ const note = computed(() => pickLocaleText(props.head.noteByLocale, locale.value
 const renderedNote = computed(() => (note.value ? renderMarkdown(note.value) : ''))
 
 const items = ref<ShareItem[]>([])
+// Whether the media listing has landed once: until then the page shows no count and no empty state, only the header
+// (the listing is Memories' own read, after the shell's resolve — an empty Memory and one still loading are not the same).
+const listed = ref(false)
 // mediaId → ShareItem, so the injected lightbox loaders resolve each item's own K_mem (chapters differ).
 const shareById = computed(() => new Map(items.value.map((si) => [si.item.mediaId, si])))
 const listedMediaIds = computed(() => new Set(items.value.map((si) => si.item.mediaId)))
@@ -240,12 +244,16 @@ const videoChunkProvider = (item: MediaItem) =>
   shareChunkProvider(shareId, shareById.value.get(item.mediaId)!, downloadRef(item), props.pwToken)
 
 // --- open the Memory's seals from the shell's head (on mount, and again after every re-resolve) -----------
-// `openSharedMemory` is synchronous, so the first render already has the items (no empty flash); a re-resolve after a
-// contribution replaces `head` and lands here again (an incremental merge: the pipeline drops thumbs of removed media
-// and donates a just-uploaded photo's optimistic preview, then decrypts each derivable item's real thumbnail).
+// The keys open synchronously from the head, so the first render already knows what the link lets this guest hold (a
+// named contributor sees no name-gate flash). The media are Memories' own read (`listShareMedia`), started before the
+// keys are opened and merged when it lands; a re-resolve after a contribution replaces `head` and lands here again (an
+// incremental merge: the pipeline drops thumbs of removed media and donates a just-uploaded photo's optimistic preview,
+// then decrypts each derivable item's real thumbnail). A listing overtaken by a newer head is dropped.
 watch(
   () => props.head,
-  (head) => {
+  async (head) => {
+    const listing = listShareMedia(shareId, head.role, props.pwToken)
+    listing.catch(() => {}) // awaited below, unless the keys fail to open first
     let opened
     try {
       opened = openSharedMemory(head)
@@ -254,9 +262,18 @@ watch(
       return
     }
     access.value = opened.access
-    pipeline.reconcile(opened.items)
-    items.value = opened.items
-    void pipeline.decrypt(opened.items)
+    let withMedia
+    try {
+      withMedia = openSharedMemory(head, await listing)
+    } catch {
+      if (props.head === head) emit('unavailable') // the link went away between its resolve and this read
+      return
+    }
+    if (props.head !== head) return
+    pipeline.reconcile(withMedia.items)
+    items.value = withMedia.items
+    listed.value = true
+    void pipeline.decrypt(withMedia.items)
   },
   { immediate: true },
 )
@@ -305,7 +322,7 @@ onBeforeUnmount(() => {
     <header class="gallery-header share-view-header">
       <div class="gallery-header-copy">
         <h1 class="gallery-title">{{ memoryName }}</h1>
-        <span v-if="!isUploader" class="gallery-count">{{ t('media.itemCount', { count: items.length }, items.length) }}</span>
+        <span v-if="!isUploader && listed" class="gallery-count">{{ t('media.itemCount', { count: items.length }, items.length) }}</span>
         <span
           class="share-view-badge"
           :class="{ 'share-view-badge-uploader': isUploader }"
@@ -343,10 +360,10 @@ onBeforeUnmount(() => {
     <p v-if="deleteError" class="share-error">{{ t('share.deleteFailed') }}</p>
 
     <!-- warning #3 of 4: the reload empty-state — after a reload the session own-view is gone (not a blank grid) -->
-    <p v-if="!hasContent" class="veyq-empty">
+    <p v-if="!hasContent && (listed || isUploader)" class="veyq-empty">
       {{ isUploader ? t('share.uploaderEmpty') : isContributor ? t('share.emptyContribute') : t('share.empty') }}
     </p>
-    <MediaGrid v-else :items="layoutItems" :aria-label="memoryName">
+    <MediaGrid v-else-if="hasContent" :items="layoutItems" :aria-label="memoryName">
       <template #tile="{ tile, item }">
         <!-- optimistic in-grid upload tile (cr-0074): the SAME shared OptimisticTile as the internal gallery.
              For a WRITE_ONLY share the settled tile persists as the session-only own-view + carries a per-tile delete. -->

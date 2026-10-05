@@ -8,7 +8,7 @@ vi.mock('../../api/client', () => ({
   contentApi: vi.fn(),
   tokenApi: vi.fn(),
 }))
-// The guest's media writes are Memories' own client (`share-media`), built in `./api`, not core's.
+// The guest's media read and writes are Memories' own client (`share-media`), built in `./api`, not core's.
 vi.mock('./api', () => ({ publicShareMediaApi: vi.fn() }))
 // Only the scope RE-OPEN a `stale_epoch` retry performs is stubbed; `isStaleEpoch` stays real, because which refusal
 // the create retries on is the thing under test.
@@ -32,6 +32,7 @@ import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url, fromB64std } from '@veyq/crypto/base64'
 import { PRODUCTION_ARGON_TIMEOUT_MS } from '@veyq/crypto/testArgon'
 import { ShareRole, type PublicShare, type SharingApi } from '../../api/generated/sharing'
+import type { ShareMediaListing } from '../../api/generated/share-media'
 import { fakeApi, stubApi } from '../../test/apiMock'
 
 const SCOPE_ID = '7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c'
@@ -67,8 +68,10 @@ function posted(create: Mock<SharingApi['createShare']>, i = 0) {
 function mockCurator(createNode: Mock<SharingApi['createShare']> = vi.fn<SharingApi['createShare']>().mockResolvedValue({ shareId: 'share-1' })) {
   fakeApi(sharesApi, { createShare: createNode })
 }
-function mockGuest(resolve: PublicShare) {
+/** A guest's two reads: core's resolve (the link + nodes) and Memories' media read (the rows + uploader keys). */
+function mockGuest(resolve: PublicShare, listing: ShareMediaListing = { media: [], identities: [] }) {
   stubApi(publicSharesApi, { resolveShare: resolve })
+  return stubApi(publicShareMediaApi, { listShareMedia: listing })
 }
 
 beforeEach(() => vi.clearAllMocks())
@@ -161,7 +164,9 @@ describe('resolveShare (anonymous viewer)', () => {
       wrap,
       sealedName,
       nodes: [{ id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 }],
+    }, {
       media: [{ nodeId: NODE_ID, mediaId: MEDIA_1, blobId: 'b1', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta }],
+      identities: [],
     })
 
     const resolved = await resolveShare(minted.shareId, b64url(minted.kShare))
@@ -200,7 +205,9 @@ describe('resolveShare (anonymous viewer)', () => {
         { id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 },
         { id: CHAPTER_ID, parentId: NODE_ID, kind: 'CHAPTER', epoch: 0, wrappedContentKey },
       ],
+    }, {
       media: [{ nodeId: CHAPTER_ID, mediaId: MEDIA_2, blobId: 'b2', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta: chapterMeta }],
+      identities: [],
     })
 
     const resolved = await resolveShare(minted.shareId, b64url(minted.kShare))
@@ -229,7 +236,9 @@ describe('resolveShare (anonymous viewer)', () => {
         { id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 },
         { id: CHAPTER_ID, parentId: NODE_ID, kind: 'CHAPTER', epoch: 0, wrappedContentKey: movedWrap },
       ],
+    }, {
       media: [{ nodeId: CHAPTER_ID, mediaId: MEDIA_2, blobId: 'b2', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta: null }],
+      identities: [],
     })
     const resolved = await resolveShare(minted.shareId, b64url(minted.kShare))
     expect(resolved.items).toHaveLength(0)
@@ -240,7 +249,7 @@ describe('resolveShare (anonymous viewer)', () => {
     mockCurator(create)
     const minted = await createShare(SCOPE_ID, NODE_ID, v1.randomBytes(32), EPOCHS, 'Rom')
     const { wrap, sealedName } = posted(create)
-    mockGuest({ role: 'READ', passwordRequired: false, wrap, sealedName, nodes: [{ id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 }], media: [] })
+    mockGuest({ role: 'READ', passwordRequired: false, wrap, sealedName, nodes: [{ id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 }] })
     await expect(resolveShare(minted.shareId, b64url(minted.kShare))).rejects.toBeInstanceOf(ShareUnavailableError)
   })
 
@@ -249,7 +258,7 @@ describe('resolveShare (anonymous viewer)', () => {
     mockCurator(create)
     await createShare(SCOPE_ID, NODE_ID, v1.randomBytes(32), EPOCHS, 'Rom')
     const { wrap, sealedName } = posted(create)
-    mockGuest({ role: 'READ', passwordRequired: false, scopeId: SCOPE_ID, wrap, sealedName, nodes: [{ id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 }], media: [] })
+    mockGuest({ role: 'READ', passwordRequired: false, scopeId: SCOPE_ID, wrap, sealedName, nodes: [{ id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 }] })
 
     // a DIFFERENT (well-formed) 32-byte key can't open the wrap
     const wrongKey = 'A'.repeat(43) // 32 zero-ish bytes worth of base64url
@@ -259,6 +268,24 @@ describe('resolveShare (anonymous viewer)', () => {
   it('maps a 404 (revoked/expired/unknown) to ShareUnavailableError', async () => {
     fakeApi(publicSharesApi, { resolveShare: () => Promise.reject(new Error('404')) })
     await expect(resolveShare('nope', 'A'.repeat(43))).rejects.toBeInstanceOf(ShareUnavailableError)
+  })
+
+  it('reads the media from Memories\' own read, not the resolve, and refuses when that read is refused', async () => {
+    const create = echoCreate()
+    mockCurator(create)
+    const kMem = v1.randomBytes(32)
+    const minted = await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Rom')
+    const { wrap, sealedName } = posted(create)
+    const head = { role: 'READ' as const, passwordRequired: false, scopeId: SCOPE_ID, wrap, sealedName, nodes: [{ id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 }] }
+    const row = { nodeId: NODE_ID, mediaId: MEDIA_1, blobId: 'b1', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta: null }
+    const { listShareMedia } = mockGuest(head, { media: [row], identities: [] })
+    const resolved = await resolveShare(minted.shareId, b64url(minted.kShare))
+    expect(resolved.items.map((i) => i.item.mediaId)).toEqual([MEDIA_1])
+    expect(listShareMedia).toHaveBeenCalledWith({ shareId: minted.shareId, xSharePassword: undefined })
+
+    // the link went away between the resolve and the media read: the share is unavailable, not an empty Memory
+    fakeApi(publicShareMediaApi, { listShareMedia: () => Promise.reject(new Error('404')) })
+    await expect(resolveShare(minted.shareId, b64url(minted.kShare))).rejects.toBeInstanceOf(ShareUnavailableError)
   })
 })
 
@@ -418,7 +445,7 @@ describe('share note + name (cr-0115 / cr-0116)', () => {
     // the anonymous viewer opens the note map with the fragment key, then picks its locale
     mockGuest({
       role: 'READ', passwordRequired: false, scopeId: SCOPE_ID, wrap: req.wrap, sealedName: req.sealedName, sealedNote: req.sealedNote,
-      nodes: [{ id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 }], media: [],
+      nodes: [{ id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 }],
     })
     const resolved = await resolveShare(minted.shareId, b64url(minted.kShare))
     expect(pickLocaleText(resolved.noteByLocale, 'de')).toBe('Viel Spaß!')
@@ -542,16 +569,20 @@ describe('password protection (cr-0118)', () => {
     const minted = await createShare(SCOPE_ID, NODE_ID, v1.randomBytes(32), EPOCHS, 'Rom', undefined, null, {}, '', 'hunter2')
     const { wrap, sealedName } = posted(create)
     const resolveMock = vi.fn<SharingApi['resolveShare']>()
-      .mockResolvedValueOnce({ passwordRequired: true, pwSalt: 'c2FsdA==', role: 'READ', nodes: [], media: [] })
+      .mockResolvedValueOnce({ passwordRequired: true, pwSalt: 'c2FsdA==', role: 'READ', nodes: [] })
       .mockResolvedValueOnce({
         passwordRequired: true, pwSalt: 'c2FsdA==', role: 'READ', scopeId: SCOPE_ID, wrap, sealedName,
-        nodes: [{ id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 }], media: [],
+        nodes: [{ id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 }],
       })
     fakeApi(publicSharesApi, { resolveShare: resolveMock })
+    const { listShareMedia } = stubApi(publicShareMediaApi, { listShareMedia: { media: [], identities: [] } })
     const fragment = b64url(minted.kShare)
     await expect(resolveShare('share-p2', fragment)).rejects.toBeInstanceOf(SharePasswordRequiredError)
+    expect(listShareMedia).not.toHaveBeenCalled() // a locked link's media are not asked for
     const resolved = await resolveShare('share-p2', fragment, 'token')
     expect(resolved.memoryName).toBe('Rom')
+    // the media read carries the same guest token as the resolve
+    expect(listShareMedia).toHaveBeenCalledWith({ shareId: 'share-p2', xSharePassword: 'token' })
   })
 }, PRODUCTION_ARGON_TIMEOUT_MS)
 

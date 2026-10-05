@@ -42,7 +42,7 @@ vi.mock('../core/sharing/resolvePublicShare', async (importOriginal) => {
 })
 vi.mock('../features/memory/share', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../features/memory/share')>()
-  return { ...actual, openSharedMemory: vi.fn() }
+  return { ...actual, openSharedMemory: vi.fn(), listShareMedia: vi.fn() }
 })
 
 // The upload queue the viewer subscribes to: a reactive batches array this test drives directly.
@@ -57,7 +57,7 @@ vi.mock('../features/memory/uploadQueue', async (orig) => {
 
 import ShareView from './ShareView.vue'
 import { resolvePublicShare, fetchShareTerms } from '../core/sharing/resolvePublicShare'
-import { openSharedMemory, type ResolvedShare, type ShareItem } from '../features/memory/share'
+import { openSharedMemory, listShareMedia, NO_SHARE_MEDIA, type ResolvedShare, type ShareItem } from '../features/memory/share'
 import { headOf, openedOf } from '../test/shareHead'
 import { ShareRole } from '../api/generated/sharing'
 import { realI18n } from '../test/i18n'
@@ -113,6 +113,7 @@ function gridOrder(wrapper: ReturnType<typeof mount>): string[] {
 function serve(r: ResolvedShare) {
   vi.mocked(resolvePublicShare).mockReset().mockResolvedValue(headOf(r))
   vi.mocked(openSharedMemory).mockReset().mockReturnValue(openedOf(r))
+  vi.mocked(listShareMedia).mockReset().mockResolvedValue(NO_SHARE_MEDIA) // the items come from openSharedMemory's stub
 }
 
 beforeEach(() => {
