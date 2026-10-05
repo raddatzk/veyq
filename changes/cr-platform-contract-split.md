@@ -666,7 +666,7 @@ Every slice:
      - **The race claim does not hold as written [M]:** evaluating `admitted` in the gate (in its own transaction)
        stays green in `GuestWriteRaceSliceTest` on MariaDB — its delete is held uncommitted *during* the write, and an
        early check blocks on the same row lock. The window an early check opens (a delete committing between gate and
-       attach) has no race test; `theWriteGateAdmitsWithTheRootAndAnUnevaluatedRecheck` pins the closure's laziness.
+       attach) had no race test (6.2 adds it); `theWriteGateAdmitsWithTheRootAndAnUnevaluatedRecheck` pins the closure's laziness.
      - Bitten: delete spending the budget, a gone root guessed a kind, a missing password as wrong, a foreign link's
        token accepted, `WriteOnly` skipped, `Locked` as not-found, the live filter widened, `admitted` evaluated early.
 
@@ -694,7 +694,36 @@ Every slice:
        (`admitted()` still runs inside the attach transaction under the share-row lock).
      - **Bite:** a new slice test, a delete after an exhausted upload budget still answers 204. Lever: pass `true`
        on delete → red.
-  2. **the two writes move — the wire bytes do not.**
+  2. **[done] the two writes move — the wire bytes do not.** Done in `0b3b10bb` (race prerequisite), `f2daf3a5`
+     (contracts), `6409390e` (backend + `ShareMediaRouteSliceTest`), `ad69a14c` (web) and the docs commit after them;
+     `./gradlew check`, the MariaDB race run, the guard glob, web and admin-web `generate:api && check` green before
+     and after. Wire identity: a script normalising the old `sharing` spec against `sharing` + `share-media` (refs
+     resolved, prose and tags stripped) finds both operations, the five schemas and `MediaId` identical and the 13
+     other operations and 27 schemas unchanged; the generated models are identical modulo package. **Deviations**
+     (each listed):
+     - **Race prerequisite first:** `GuestCompleteAfterDeleteRaceSliceTest` holds a guest complete at its first chunk
+       stat (`FakePresigningBlobStore.onStat`, past the gate, before the attach transaction), commits the share
+       delete, then releases it — the window 6.1 found untested. Bitten on H2 and MariaDB by evaluating `admitted` in
+       the gate (`GuestWriteRaceSliceTest` stays green there, as 6.1 measured), and on H2 by evaluating it in
+       `ShareMediaHandler` before the dispatch.
+     - **A handler beside the resource:** `ShareMediaHandler` (ADR 0001) holds the gate call and the outcome types
+       (`ShareMediaCompleteOutcome`/`ShareMediaDeleteOutcome`, same codes and statuses as core's), and calls core's
+       `UploadCompletions` directly; `MediaShareGuestWrites` keeps `deleteOwn` as its own method (three tests inject
+       it), no longer an override.
+     - **The root-kind check is `MediaShareGuestWrites.supports`**, not core's "exactly one claims it" partition;
+       `ShareGuestWritesPartitionSliceTest` still pins at most one claimant per kind.
+     - **A trashed root keeps today's behaviour [M, a throwaway probe run on `793e6276` and on 6.2, same answers]:**
+       the gate admits it (kind as stored), complete answers 200 with the item `node_not_found` (the dispatcher takes
+       live nodes only), delete-own still deletes the guest's own medium (204).
+     - **`publicMediaConfiguration()` is gone**, replaced by `publicShareMediaApi()` on the `share-media` client's own
+       configuration: the guest operations live in `share-media`, not `media` (6.3's read joins them there).
+     - The route proof also asserts a route neither owner serves answers no handler's code. Bitten by widening the
+       `share-media` root to `/api` (an extra `/api/route-bite` operation: complete answered 404) and by dropping a
+       row (the table-vs-generated-`@Path` assertion red).
+     - The contracts commit alone does not compile the backend (the generated interfaces move); the backend commit
+       right after it does.
+     - E2E not run from the worktree; to run from the main checkout: `memory/shareContributor`,
+       `memory/shareUploader`, `memory/media`.
      - **contracts:**
        - new `memories/share-media.openapi.yaml` (tag `share-media`); the two operations and five schemas move;
        - `MediaId` moves; `ShareId`/`SharePassword` are **duplicated**, identical by `validate_contracts_common.py`
@@ -814,10 +843,11 @@ Every slice:
 
 ## Risks and what is not proven
 
-- **Route resolution** for `memories/share-media` under `sharing`'s root is inferred from a precedent. Slice 6.2's
-  route test is the proof; a regression would show as 404/405 on guest uploads only.
+- **Route resolution** for `memories/share-media` under `sharing`'s root: proven by 6.2's `ShareMediaRouteSliceTest`
+  over every `/api/shares` route of both specs, its table held to the generated `@Path` set.
 - **Gate extraction** (6.1): the outcome codes are pinned by the guest slice tests. The placement of `admitted()`
-  is pinned only by the MariaDB race run. Delete's budget posture is pinned by the test 6.1 adds.
+  is pinned by `GuestCompleteAfterDeleteRaceSliceTest` (6.2; red on H2 and MariaDB when it is asked early) and the
+  MariaDB race run. Delete's budget posture is pinned by the test 6.1 adds.
 - **A second request when a share opens** (6.3) changes viewer latency and the e2e choreography. The password
   budget is unaffected (a correct token never spends it, `SharingHandler.kt:759`). Not measured.
 - **The lost web exhaustiveness** (slice 4) is carried by the registry's fail-closed behaviour and its tests, not
