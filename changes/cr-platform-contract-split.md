@@ -7,6 +7,55 @@ adrs: ["0079", "0072", "0077", "0029", "0030", "0031", "0012", "0013", "0044"]
 invariants: [operator-blind E2EE, API-first (contracts are the source of truth), self-hostable by default, crypto wire and stored formats unchanged]
 ---
 
+## Summary for the owner
+
+**Goal.** Core's contracts and code describe the platform in the platform's words, and whatever only Memories
+means moves to Memories. After this CR a second application could add its own guest operations, kinds and texts
+without editing a single core spec or core main file.
+
+**What moves.**
+- The share roles get neutral wire names: `VIEWER`/`CONTRIBUTOR`/`UPLOADER` become `READ`/`READ_WRITE`/`WRITE_ONLY`.
+  The screens keep their labels.
+- The node kind becomes an open token. Core knows only `FOLDER`, and Memories brings `MEMORY` and `CHAPTER`.
+  `PublicShare` then also carries `rootKind` (inbox #329).
+- Memories' guest media goes to Memories: uploading and deleting a guest's photos, and the list of photos plus
+  uploader keys a viewer sees. Core's `PublicShare` then carries no application data at all.
+- The core web no longer imports Memories' generated clients.
+- The completion item core hands to an application becomes generic (`ownerId` in place of `mediaId`).
+- Core's specs are re-worded neutrally: tree, tags, examples, roles, drop key, blob roles, and the instance,
+  tenant, scope and task texts.
+
+**What deliberately stays in core.** Link management and consent. The resolve, which returns the link plus the
+shared nodes and their keys. The guest blob transport (start, windows, download). Guest identities. The drop key
+of a `WRITE_ONLY` link. The node's sealed payload slot (`wrappedMeta`/`metaVersion`) and its content key. The
+`UploadCompletion` seam. The closed `BlobRole`. This is an **intermediate state** (D9), not the end state.
+
+**Slice order** (each slice runs contracts → backend → web and is proven on its own; the estimates are honest,
+not optimistic):
+
+| # | Slice | Est. sessions |
+|---|---|---|
+| 0 | Docs first: ADR 0079 paragraphs, platform definition, use-case sentences (Appendix A) | 0.5 |
+| 1 | Roles renamed to `READ`/`READ_WRITE`/`WRITE_ONLY` (mechanical) | 1 |
+| 2 | Text pass over core specs, with a script that proves only prose changed | 0.5–1 |
+| 3 | Core web stops importing Memories clients; the guard learns to see it | 0.5–1 |
+| 4 | Node kind opens to a token | 1–1.5 |
+| 5 | `rootKind` on `PublicShare` (#329) | 0.5 |
+| 6 | Guest media moves to Memories (gate service, write operations, media+identities read) | 3–4 |
+| 7 | `CompleteItem` becomes generic | 0.5 |
+| | **Part 1 total** | **≈ 8–10** |
+
+**Deferred (each its own CR later, only recorded here).** The Memories columns on `veyq_node`, the
+`veyq.media.*` config prefix, the `ScopeAccessWorld` split (#335, after slice 6), attachments as a core spec
+(#327, with the second application), links as a credential, and deriving `SpecSets` owners from directories.
+Application-specific roles stay an extension point (a policy seam) and are not built.
+
+**Two points need your look** (marked CONFLICT below): at D1, your "roles in the transport become opaque"
+against D10's "do not open `BlobRole`", and at D1, "through the normal Memories API" against D6. Nothing is
+implemented before slice 0 has landed and you give an explicit go.
+
+---
+
 > **DRAFT, not implementable yet.** The owner's decisions are taken (2026-10-06, § Owner decisions). Per
 > [`docs/ai/README.md`](../docs/ai/README.md) § *Refined state comes before the CR*, Slice 0 (the ADR 0079
 > paragraphs and use-case sentences of Appendix A) must land first. It is refinement work and may run in a refine
