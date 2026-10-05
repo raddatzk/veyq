@@ -10,7 +10,7 @@ import jakarta.enterprise.context.ApplicationScoped
  * than its UX. In-memory + per-instance, on the shared [TokenBucketCounter] like every other bound (ADR 0052; a
  * gateway bucket is still the production answer). Keyed on `shareId`.
  *
- * **Only a wrong attempt spends a token** (the caller — `SharingHandler.passwordCheck` — invokes this only when
+ * **Only a wrong attempt spends a token** (the caller — `ShareGuestGate.passwordCheck` — invokes this only when
  * the token mismatched): a correct password is admitted before this is ever reached, so a legitimate guest is
  * never locked out, and a tokenless (challenge-fetch) request never spends budget.
  *

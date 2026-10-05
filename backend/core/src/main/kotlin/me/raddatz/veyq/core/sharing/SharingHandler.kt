@@ -11,6 +11,7 @@ import me.raddatz.veyq.core.blob.WindowItemResult
 import me.raddatz.veyq.core.blob.CompleteItemResult
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.sharing.ShareEntity
+import me.raddatz.veyq.core.sharing.ShareGuestGate.PwCheck
 import me.raddatz.veyq.core.sharing.ShareGuestWrites
 import me.raddatz.veyq.core.admin.tenant.TenantTermsHandler
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
@@ -38,9 +39,7 @@ import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.inject.Instance
 import jakarta.transaction.Transactional
-import java.security.MessageDigest
 import java.time.Instant
-import java.util.Base64
 
 /** One contributor upload to complete: the original session + role-tagged derivatives (the shared node is server-set). */
 data class ShareCompleteItem(
@@ -252,8 +251,9 @@ class SharingHandler(
     private val blobStore: BlobStore,
     /** Who writes under a share's root, by the root's node kind (see [ShareGuestWrites]); core only gates and dispatches. */
     private val guestWrites: Instance<ShareGuestWrites>,
+    /** The guest gate every guest call passes first (active link, password, mode, token, budget). */
+    private val gate: ShareGuestGate,
     private val rateLimiter: ShareRateLimiter,
-    private val passwordAttemptLimiter: SharePasswordAttemptLimiter,
     private val capabilities: CapabilityRegistry,
     private val scopes: ScopesStore,
     private val tenantTerms: TenantTermsHandler,
@@ -533,8 +533,8 @@ class SharingHandler(
      * see (no gallery, no other guests). The `canView` gate is the server-side enforcement of "cannot see others".
      */
     fun resolve(shareId: String, pwToken: String?): ResolveShareOutcome {
-        val share = activeShare(shareId) ?: return ResolveShareOutcome.NotFound
-        when (passwordCheck(share, pwToken)) { // cr-0118: nothing is served without a valid password token
+        val share = gate.activeShare(shareId) ?: return ResolveShareOutcome.NotFound
+        when (gate.passwordCheck(share, pwToken)) { // cr-0118: nothing is served without a valid password token
             PwCheck.MISSING -> return ResolveShareOutcome.Locked(share)
             PwCheck.WRONG -> return ResolveShareOutcome.PasswordIncorrect
             PwCheck.TOO_MANY -> return ResolveShareOutcome.RateLimited // cr-0165
@@ -561,8 +561,8 @@ class SharingHandler(
 
     /**
      * The owning tenant's public terms for an **accountless** visitor to accept **client-side** (uc.sharing.share-accept,
-     * ADR 0035 §3 — the accountless half of the two-tier gate). Reuses [activeShare] so an unknown/disabled/expired
-     * share is the **same non-enumerable 404** as [resolve]: the caller passes only the `shareId` they already hold,
+     * ADR 0035 §3 — the accountless half of the two-tier gate). Reuses [ShareGuestGate.activeShare] so an
+     * unknown/disabled/expired share is the **same non-enumerable 404** as [resolve]: the caller passes only the `shareId` they already hold,
      * and the opaque `tenantId` is only *returned* (the client's localStorage key) — **no `tenantId` existence oracle**.
      * The terms are public operational content, so this is independent of the share password. **No acceptance is
      * recorded** — the server keeps nothing about the accountless visitor.
@@ -574,7 +574,7 @@ class SharingHandler(
      * this prompt. A tenant with no published terms yields `termsVersion` 0, and the client then never gates.
      */
     fun shareTerms(shareId: String): ShareTermsOutcome {
-        val share = activeShare(shareId) ?: return ShareTermsOutcome.NotFound
+        val share = gate.activeShare(shareId) ?: return ShareTermsOutcome.NotFound
         // The share→tenant hop: share.scopeId → the scope's tenant (a PERSONAL scope still resolves its tenant;
         // ADR 0029 §6). Defensive null (a share always has a scope+tenant by FK) → the same non-enumerable 404.
         val tenantId = scopes.scopeTenantId(share.scopeId) ?: return ShareTermsOutcome.NotFound
@@ -589,8 +589,8 @@ class SharingHandler(
         shareId: String, pwToken: String?, writeToken: String?, identityId: String, sealedDisplayName: String,
         wrappedIdentityKey: String?,
     ): CreateIdentityOutcome {
-        val share = activeShare(shareId) ?: return CreateIdentityOutcome.NotFound
-        when (passwordCheck(share, pwToken)) { // cr-0164: the password gate fronts the write path, before the role check
+        val share = gate.activeShare(shareId) ?: return CreateIdentityOutcome.NotFound
+        when (gate.passwordCheck(share, pwToken)) { // cr-0164: the password gate fronts the write path, before the role check
             PwCheck.MISSING -> return CreateIdentityOutcome.NotFound // no token → non-enumerable 404 (no role reveal)
             PwCheck.WRONG -> return CreateIdentityOutcome.PasswordIncorrect
             PwCheck.TOO_MANY -> return CreateIdentityOutcome.RateLimited // cr-0165
@@ -620,21 +620,19 @@ class SharingHandler(
 
     /** Start a contributor upload — gated on the share (contributable + enabled) + a valid token, then presign. */
     fun startUploads(shareId: String, pwToken: String?, contributorToken: String, declares: List<UploadDeclare>, domain: String?): ShareUploadOutcome {
-        val share = activeShare(shareId) ?: return ShareUploadOutcome.NotFound
-        when (passwordCheck(share, pwToken)) { // cr-0164: password gate before the role/token check
-            PwCheck.MISSING -> return ShareUploadOutcome.NotFound
-            PwCheck.WRONG -> return ShareUploadOutcome.PasswordIncorrect
-            PwCheck.TOO_MANY -> return ShareUploadOutcome.RateLimited // cr-0165
-            PwCheck.OK -> {}
+        // Starting creates upload sessions, so it spends the per-share upload budget (ADR 0051, `@RateLimit(key = SHARE)`).
+        val gated = when (val g = gate.writeGate(shareId, pwToken, contributorToken, spendUploadBudget = true)) {
+            is ShareWriteGate.Admitted -> g
+            ShareWriteGate.NotFound -> return ShareUploadOutcome.NotFound
+            ShareWriteGate.PasswordIncorrect -> return ShareUploadOutcome.PasswordIncorrect
+            ShareWriteGate.RateLimited -> return ShareUploadOutcome.RateLimited
+            ShareWriteGate.NotContributable -> return ShareUploadOutcome.NotContributable
         }
-        if (!ShareAccessPolicy.canUpload(share.role)) return ShareUploadOutcome.NotContributable
-        val identity = store.findIdentity(shareId, contributorToken) ?: return ShareUploadOutcome.NotContributable
-        if (!rateLimiter.allowUpload(shareId)) return ShareUploadOutcome.RateLimited
-        val writes = writesFor(share) ?: return ShareUploadOutcome.NotContributable
+        val writes = writesFor(gated.rootKind) ?: return ShareUploadOutcome.NotContributable
         // A link whose usage no single application measures is never admitted (fail closed, [UploadAdmission]); the
         // reservation asks again under the tenant lock, and refuses there too.
-        if (admissionFor(share) == null) return ShareUploadOutcome.NotContributable
-        return ShareUploadOutcome.Results(writes.start(share.scopeId, share.id, identity.id, declares, domain))
+        if (quota.admissionFor(gated.rootKind) == null) return ShareUploadOutcome.NotContributable
+        return ShareUploadOutcome.Results(writes.start(gated.scopeId, shareId, gated.identityId, declares, domain))
     }
 
     /**
@@ -644,49 +642,44 @@ class SharingHandler(
      * create sessions and rows, and a window creates neither. Only the identity that opened a session gets its window.
      */
     fun windowUploads(shareId: String, pwToken: String?, contributorToken: String, requests: List<WindowRequest>, domain: String?): ShareWindowOutcome {
-        val share = activeShare(shareId) ?: return ShareWindowOutcome.NotFound
-        when (passwordCheck(share, pwToken)) {
-            PwCheck.MISSING -> return ShareWindowOutcome.NotFound
-            PwCheck.WRONG -> return ShareWindowOutcome.PasswordIncorrect
-            PwCheck.TOO_MANY -> return ShareWindowOutcome.RateLimited
-            PwCheck.OK -> {}
+        val gated = when (val g = gate.writeGate(shareId, pwToken, contributorToken, spendUploadBudget = false)) {
+            is ShareWriteGate.Admitted -> g
+            ShareWriteGate.NotFound -> return ShareWindowOutcome.NotFound
+            ShareWriteGate.PasswordIncorrect -> return ShareWindowOutcome.PasswordIncorrect
+            ShareWriteGate.RateLimited -> return ShareWindowOutcome.RateLimited
+            ShareWriteGate.NotContributable -> return ShareWindowOutcome.NotContributable
         }
-        if (!ShareAccessPolicy.canUpload(share.role)) return ShareWindowOutcome.NotContributable
-        val identity = store.findIdentity(shareId, contributorToken) ?: return ShareWindowOutcome.NotContributable
-        val writes = writesFor(share) ?: return ShareWindowOutcome.NotContributable
-        return ShareWindowOutcome.Results(writes.window(share.scopeId, identity.id, requests, domain))
+        val writes = writesFor(gated.rootKind) ?: return ShareWindowOutcome.NotContributable
+        return ShareWindowOutcome.Results(writes.window(gated.scopeId, gated.identityId, requests, domain))
     }
 
     /** Complete a contributor upload — attach to the share's own Memory node, stamped with the identity. */
     fun completeUploads(shareId: String, pwToken: String?, contributorToken: String, items: List<ShareCompleteItem>): ShareCompleteOutcome {
-        val share = activeShare(shareId) ?: return ShareCompleteOutcome.NotFound
-        when (passwordCheck(share, pwToken)) { // cr-0164: password gate before the role/token check
-            PwCheck.MISSING -> return ShareCompleteOutcome.NotFound
-            PwCheck.WRONG -> return ShareCompleteOutcome.PasswordIncorrect
-            PwCheck.TOO_MANY -> return ShareCompleteOutcome.RateLimited // cr-0165
-            PwCheck.OK -> {}
-        }
-        if (!ShareAccessPolicy.canUpload(share.role)) return ShareCompleteOutcome.NotContributable
-        val identity = store.findIdentity(shareId, contributorToken) ?: return ShareCompleteOutcome.NotContributable
         // Same per-share upload budget as the start call (ADR 0051, `@RateLimit(key = SHARE)`): the two are one
         // contributor write flow, and attaching is what actually creates the media rows.
-        if (!rateLimiter.allowUpload(shareId)) return ShareCompleteOutcome.RateLimited
+        val gated = when (val g = gate.writeGate(shareId, pwToken, contributorToken, spendUploadBudget = true)) {
+            is ShareWriteGate.Admitted -> g
+            ShareWriteGate.NotFound -> return ShareCompleteOutcome.NotFound
+            ShareWriteGate.PasswordIncorrect -> return ShareCompleteOutcome.PasswordIncorrect
+            ShareWriteGate.RateLimited -> return ShareCompleteOutcome.RateLimited
+            ShareWriteGate.NotContributable -> return ShareCompleteOutcome.NotContributable
+        }
         val completeItems = items.map {
             CompleteItem(
                 mediaId = it.mediaId,
-                nodeId = share.nodeId, // contributors attach to the shared Memory root — server-set, not client-chosen
+                nodeId = gated.rootNodeId, // contributors attach to the shared Memory root — server-set, not client-chosen
                 originalUploadId = it.originalUploadId,
                 derivatives = it.derivatives,
                 wrappedMeta = it.wrappedMeta,
                 wrappedExif = it.wrappedExif,
             )
         }
-        // Each item's attach re-checks the link first, under the row lock its delete holds: gated only above, an upload
-        // landed after a delete counted the identity's media and dropped it — a photo nobody could open. Refused, the
-        // item answers `upload_not_found`: a deleted link's upload can no longer complete.
-        val admitted = { store.admitsGuests(shareId) }
-        val writes = writesFor(share) ?: return ShareCompleteOutcome.NotContributable
-        return ShareCompleteOutcome.Results(writes.complete(share.scopeId, completeItems, identity.id, admitted))
+        val writes = writesFor(gated.rootKind) ?: return ShareCompleteOutcome.NotContributable
+        // Each item's attach re-checks the link first ([ShareWriteGate.Admitted.admitted], under the row lock its delete
+        // holds): gated only above, an upload landed after a delete counted the identity's media and dropped it — a
+        // photo nobody could open. Refused, the item answers `upload_not_found`: a deleted link's upload can no longer
+        // complete. Passed on unevaluated; the attach transaction asks it.
+        return ShareCompleteOutcome.Results(writes.complete(gated.scopeId, completeItems, gated.identityId, gated.admitted))
     }
 
     /**
@@ -696,23 +689,22 @@ class SharingHandler(
      * reclaim list (ADR 0062 — `StoreReclaimSweep` deletes them). A foreign/unknown media is a non-enumerable 404.
      */
     fun deleteMedia(shareId: String, pwToken: String?, contributorToken: String, mediaId: String): ShareDeleteOutcome {
-        val share = activeShare(shareId) ?: return ShareDeleteOutcome.NotFound
-        when (passwordCheck(share, pwToken)) { // cr-0164: password gate before the role/token check
-            PwCheck.MISSING -> return ShareDeleteOutcome.NotFound
-            PwCheck.WRONG -> return ShareDeleteOutcome.PasswordIncorrect
-            PwCheck.TOO_MANY -> return ShareDeleteOutcome.RateLimited // cr-0165
-            PwCheck.OK -> {}
+        // A delete spends no upload budget (`@RateLimitExempt` on the route): it is bounded by what the caller added.
+        val gated = when (val g = gate.writeGate(shareId, pwToken, contributorToken, spendUploadBudget = false)) {
+            is ShareWriteGate.Admitted -> g
+            ShareWriteGate.NotFound -> return ShareDeleteOutcome.NotFound
+            ShareWriteGate.PasswordIncorrect -> return ShareDeleteOutcome.PasswordIncorrect
+            ShareWriteGate.RateLimited -> return ShareDeleteOutcome.RateLimited
+            ShareWriteGate.NotContributable -> return ShareDeleteOutcome.NotContributable
         }
-        if (!ShareAccessPolicy.canUpload(share.role)) return ShareDeleteOutcome.NotContributable
-        val identity = store.findIdentity(shareId, contributorToken) ?: return ShareDeleteOutcome.NotContributable
-        val writes = writesFor(share) ?: return ShareDeleteOutcome.NotContributable
-        if (!writes.deleteOwn(share.scopeId, mediaId, identity.id)) return ShareDeleteOutcome.NotFound
+        val writes = writesFor(gated.rootKind) ?: return ShareDeleteOutcome.NotContributable
+        if (!writes.deleteOwn(gated.scopeId, mediaId, gated.identityId)) return ShareDeleteOutcome.NotFound
         return ShareDeleteOutcome.Done
     }
 
     fun resolveBlob(shareId: String, blobId: String, pwToken: String?, domain: String?): ShareBlobOutcome {
-        val share = activeShare(shareId) ?: return ShareBlobOutcome.NotFound
-        when (passwordCheck(share, pwToken)) { // cr-0118: no bytes without the password (missing → 404, wrong → 403)
+        val share = gate.activeShare(shareId) ?: return ShareBlobOutcome.NotFound
+        when (gate.passwordCheck(share, pwToken)) { // cr-0118: no bytes without the password (missing → 404, wrong → 403)
             PwCheck.MISSING -> return ShareBlobOutcome.NotFound
             PwCheck.WRONG -> return ShareBlobOutcome.PasswordIncorrect
             PwCheck.TOO_MANY -> return ShareBlobOutcome.RateLimited // cr-0165
@@ -732,40 +724,14 @@ class SharingHandler(
         if (role == ShareEntity.WRITE_ONLY) CapabilityIds.SHARING_UPLOADER_LINKS else CapabilityIds.SHARING_PUBLIC_LINKS
 
     /**
-     * The application that writes under [share]'s root, picked by the root's node kind — called only after the guest
-     * gate has passed. Null (read as "not contributable") for a root that is gone, of a kind no application
-     * registers — unreachable while [create] refuses such a root — or of a kind **more than one** claims: exactly one
-     * per kind is the contract (`ShareGuestWrites`), and picking the first would rest on CDI bean order. Every case
-     * fails closed rather than guessing a writer; `ShareGuestWritesPartitionSliceTest` pins the partition.
+     * The application that writes under a share root of [rootKind] ([ShareWriteGate.Admitted.rootKind]; a root that
+     * is gone never passes the gate) — called only after the guest gate has passed. Null (read as "not contributable")
+     * for a kind no application registers — unreachable while [create] refuses such a root — or of a kind **more than
+     * one** claims: exactly one per kind is the contract (`ShareGuestWrites`), and picking the first would rest on CDI
+     * bean order. Every case fails closed rather than guessing a writer; `ShareGuestWritesPartitionSliceTest` pins the
+     * partition. The start asks [StorageQuota.admissionFor] by the same kind, so writer and measure cannot disagree.
      */
-    private fun writesFor(share: ShareEntity): ShareGuestWrites? {
-        val kind = store.findNode(share.nodeId)?.kind ?: return null
-        return guestWrites.filter { it.supports(kind) }.singleOrNull()
-    }
-
-    /** The one [UploadAdmission] that measures [share]'s link, by its root's kind exactly as [writesFor] picks the
-     *  writer; null — none or several — refuses the start. */
-    private fun admissionFor(share: ShareEntity): UploadAdmission? =
-        store.findNode(share.nodeId)?.kind?.let(quota::admissionFor)
-
-    private enum class PwCheck { OK, MISSING, WRONG, TOO_MANY }
-
-    /** cr-0118 (ADR 0037): the access-control password gate. A non-password share is always OK; a password share
-     *  needs the guest's `pwToken` (base64) to `SHA-256`-hash to the stored `pw_verifier` (constant-time compare).
-     *  No token → MISSING (locked); a mismatch or a malformed token → WRONG. The server runs **no** Argon2id (the
-     *  KDF is client-side) and never sees the raw password.
-     *
-     *  cr-0165: a **wrong** attempt consumes one per-share slot of the brute-force bound; once the window's cap is
-     *  exceeded it returns TOO_MANY (→ 429) instead of WRONG (→ 403). A **correct** password is admitted *before*
-     *  the counter is touched, so a legitimate guest is never locked out; MISSING (the challenge fetch) never spends
-     *  budget. This is the online bound ADR 0037 relies on, keyed per share (not per IP — a proxy collapses guest IPs). */
-    private fun passwordCheck(share: ShareEntity, pwToken: String?): PwCheck {
-        if (!share.passwordRequired) return PwCheck.OK
-        if (pwToken.isNullOrBlank()) return PwCheck.MISSING
-        val verifier = share.pwVerifier ?: return PwCheck.MISSING
-        if (matchesVerifier(pwToken, verifier)) return PwCheck.OK // a malformed token is a wrong attempt // correct password always passes, even past an exhausted budget
-        return if (passwordAttemptLimiter.allow(share.id)) PwCheck.WRONG else PwCheck.TOO_MANY
-    }
+    private fun writesFor(rootKind: String): ShareGuestWrites? = guestWrites.filter { it.supports(rootKind) }.singleOrNull()
 
     /** ADR 0076 point 5, as the manage list serves it (inbox #270): a link that takes guests but holds no verifier —
      *  minted before the column — refuses every new guest in [createIdentity] until it is re-issued. The same two
@@ -777,31 +743,6 @@ class SharingHandler(
      *  malformed one — all false. No attempt limiter: the token has 256 bits. */
     private fun holdsTheKey(share: ShareEntity, writeToken: String?): Boolean {
         val verifier = share.writeVerifier ?: return false
-        return !writeToken.isNullOrBlank() && matchesVerifier(writeToken, verifier)
-    }
-
-    /** `base64(SHA-256(base64-decoded token)) == verifier`, compared in constant time; a token that is not base64
-     *  matches nothing. The one compare behind both client-derived bearer proofs — the password token and the write
-     *  token. */
-    private fun matchesVerifier(token: String, verifier: String): Boolean = try {
-        val digest = Base64.getEncoder().encodeToString(MessageDigest.getInstance("SHA-256").digest(Base64.getDecoder().decode(token)))
-        MessageDigest.isEqual(digest.toByteArray(), verifier.toByteArray())
-    } catch (e: IllegalArgumentException) {
-        false
-    }
-
-    /**
-     * A share that exists, is enabled, has not expired, and whose space serves guests — else null (the single
-     * non-enumerable 404 gate). A space being deleted or a suspended tenant answers exactly as a revoked link does:
-     * a guest is no member and learns neither state, and nothing is written onto the share, so it serves again
-     * unchanged after a restore or a reactivation (uc.spaces.scope-access A4).
-     */
-    private fun activeShare(shareId: String): ShareEntity? {
-        val share = store.find(shareId) ?: return null
-        if (!share.enabled) return null
-        val expiry = share.expiresAt
-        if (expiry != null && !expiry.isAfter(Instant.now())) return null
-        if (!access.isLive(share.scopeId)) return null
-        return share
+        return !writeToken.isNullOrBlank() && gate.matchesVerifier(writeToken, verifier)
     }
 }
