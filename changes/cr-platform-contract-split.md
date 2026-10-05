@@ -354,7 +354,7 @@ claims more than is built.
 | `BlobRole` is closed in core's `blob` spec | **Unchanged**, re-described (slice 2, D10) | #327 |
 | Upload retention/purge keys are named `veyq.media.*` | **Unchanged** | Part 2 (P2.3) |
 | *(new row)* Share roles named in Memories' terms | **Gone** (slice 1): `READ`/`READ_WRITE`/`WRITE_ONLY` | application roles via a policy seam (D2), not planned |
-| *(new row)* `PublicShare` carries Memories' rows (`media`, `identities`) | **Gone** (slice 6) | — |
+| *(new row)* `PublicShare` carries Memories' rows (`media`, `identities`) | **Gone** (slice 6, done: Memories' `listShareMedia`) | — |
 | *(new row)* Core web imports Memories' generated clients | **Gone** (slice 3), guarded | — |
 | *(new row)* Node payload slot, content key, drop key on `veyq_node`, written in practice by Memories | **Stays**, re-described as platform mechanism (D3, D4); **intermediate state** (D9) | re-examined with the second application; drop-key table option P2.2 |
 
@@ -649,7 +649,12 @@ Every slice:
   Docs: inbox #329 closed; `uc.sharing.share-uploader` step 3's resolve shape names `rootKind` (drafted in A.9).
   **≈ 0.5 session.**
 
-- [ ] **6 — Guest media moves to Memories (D1).** Three steps, each its own green commit. Needs A.6.
+- [x] **6 — Guest media moves to Memories (D1).** Three steps, each its own green commit. Needs A.6.
+  **Slices 0–6 in one line:** core's share contract and code no longer name a Memories row — no media, no identity
+  set, no media-shaped write or read — and core's sharing reaches Memories only through
+  `ShareGuestWrites.supports`/`start`/`window`, `SharedSubtreeContributor.authorizedBlobIds` and
+  `GuestIdentityUsage`, while the rest of core still knows the items ADR 0079's Consequences list (the
+  media-shaped `CompleteItem`, slice 7; `veyq_node`'s columns; `BlobRole`; `veyq.media.*`).
   1. **[done] backend only, no spec change — `ShareGuestGate`.** Done in `e074d071` (refactor) + `5bb6c0c1`
      (`ShareGuestGateSliceTest`, `:apps:memories`) and the docs commit after them; `./gradlew check`, the MariaDB
      race run and the guard glob green before and after. **Deviations** (each listed):
@@ -750,7 +755,47 @@ Every slice:
        - readers: `grep -rln "completeShareMedia\|deleteShareMedia" web/src` (`features/memory/share.ts` :594,
          :638; `share.test.ts`; `shareUploader.test.ts`; `shareContributor.e2e.test.ts`);
        - each `vi.mock('../../api/client', …)` gains the new factory and is bitten by making the real one throw.
-  3. **the media+identities read; `PublicShare` loses `media` and `identities` (wire change).**
+  3. **[done] the media+identities read; `PublicShare` loses `media` and `identities` (wire change).** Done in
+     `f90a4071` (tests re-pointed through one call, green on the old layout), `1b3d7498` + `823f980a` (contracts),
+     `8ae713d1` (backend), `e33bf744` (web) and the docs commit after them; `./gradlew check`, the MariaDB race run,
+     the guard glob, web (client regenerated from scratch) and admin-web `generate:api && check` green before and
+     after. Wire proof (a normalising script, refs resolved, prose stripped, against `115ab6e8`): `ShareMedia` and
+     `ShareMediaDerivative` identical resolved and raw; the `identities` item resolves to exactly the old
+     `ShareIdentity`; the GET's `{media, identities}` is the old two properties except `identities` is no longer
+     nullable; `PublicShare` differs by exactly `media`, `identities` and the `media` required entry; every other
+     `sharing` operation, schema and parameter and share-media's 6.2 half unchanged. **Deviations** (each listed):
+     - **`UploaderKey` is a component alias** in `share-media` (`UploaderKey: $ref ./media.openapi.yaml#/…`), not an
+       inline cross-file `items` ref and not a copy. Measured: the inline ref made the Kotlin generator emit an
+       anonymous `ShareMediaListingIdentitiesInner`; the alias generates the named type (as `sharing`'s `PresignedUrl`
+       aliases `_common`), both Memories specs writing the same file from one definition. A copy would be unguarded:
+       `validate_contracts_common.py` rule 2 holds parameters only. `ShareIdentity` left `sharing` with its one user.
+     - **A missing password token is `404 share_not_found`** on the read, not the resolve's 200 locked shell: the
+       challenge is the link's (core's resolve); the read has none to serve and a 200 with empty lists would read as
+       an empty Memory. It is `resolveShareBlob`'s answer for the same state; wrong → 403, too many → 429.
+     - **`identities` is a non-nullable array** (the old `[array, null]` existed for the locked shell).
+     - **The identities rule** is `ShareMediaHandler.list`: `MediaStore.uploaderKeysOf(ids)` (the member list's
+       `uploaderKeys`, generalised to identity ids) and a null for every `identityId` not in that map; the rows are
+       `MediaStore.listShareMedia` (its own `deletedAt` predicate; the blob twin stays in
+       `MediaSharedSubtreeContributor.authorizedBlobIds`). Core's `subtree()` returns the nodes; `SubtreeData` is gone.
+     - **One reader the grep missed** (`ShareUploaderSliceTest.kt:300`, URL and body assertion on one line) went red
+       in the backend phase and was re-pointed there.
+     - **Also re-pointed:** `SharePasswordSliceTest` (+ the read's gate), `ScopeAccessSliceTest` (a paused space's
+       link answers 404 here too), `ShareMediaRouteSliceTest` (16 routes).
+     - **Web:** the page does not race the resolve: the body that owns the read is mounted past the shell's password
+       and terms gates, and core may not read Memories' data. Inside the body the read starts before the keys open;
+       the keys open synchronously (no name-gate flash), and until the listing lands the page shows no count and no
+       empty state. A WRITE_ONLY link is not asked. A listing overtaken by a newer head is dropped (not pinned by a
+       test).
+     - Bitten: `identityId` served unfiltered (`onlyAnUploadersMediaNamesItsIdentity` red), READ_WRITE identities
+       served (`aContributorLinkIsServedNoneOfItsOwnGuests` red), `media` back on the resolve
+       (`theResolveServesNoMediaAndNoIdentities` red), a locked link served empty lists
+       (`theMediaReadRequiresThePasswordToken` red), WRITE_ONLY refused instead of empty (two `ShareUploaderSliceTest`
+       red), the listing's `deletedAt` dropped (`trashedMediaLeavesTheAnonymousResolve` red, the blob test green),
+       the read's exemption dropped (`RateLimitPostureSweepTest` red, unedited); web: the real `listShareMedia`
+       throwing (its users red, the three mocking `ShareView` suites green), the listing's identities ignored, the
+       media read from the resolve, the empty state before the listing lands.
+     - E2E not run from the worktree; to run from the main checkout: `memory/shareContributor`,
+       `memory/shareUploader`.
      - **contracts:**
        - the GET on the share-media root returns `{ media: ShareMedia[], identities: UploaderKey[] }` (`ShareMedia`
          and `ShareMediaDerivative` move);

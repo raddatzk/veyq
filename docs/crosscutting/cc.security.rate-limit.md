@@ -108,7 +108,9 @@ it cannot be pinned by `scripts/validate_guard_gaps.py` — see the `trust-chain
 Endpoints that carry `@RateLimitExempt` because **no available axis fits**, not because nobody looked. Recorded
 here because the code's `reason` strings point at this section rather than each restating the argument.
 
-- **The three anonymous guest reads** — `resolveShare`, `resolveShareBlob`, `getShareTerms`. Both keys are
+- **The four anonymous guest reads** — core's `resolveShare`, `resolveShareBlob`, `getShareTerms`, and the
+  Memories application's `listShareMedia` (the media a share lists, `ShareMediaResource`; it was part of
+  `resolveShare`'s body until cr-platform-contract-split slice 6.3 and keeps that posture). Both keys are
   wrong here: `key = SHARE` caps a share's whole audience *collectively* (a Memory sent to 200 guests is the
   normal case, not the abuse case), and `key = IP` shares the single per-IP bucket with login, so one gallery
   view — dozens of blob presigns — would trip it. What **does** bind them: `SharePasswordAttemptLimiter` on the

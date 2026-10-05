@@ -4,11 +4,11 @@ title: Share a Memory as an uploader link (a write-only drop-box)
 # Built (web vertical, cr-0102 + ADR 0031, building on ADR 0030): a write-only WRITE_ONLY public share of one
 # personal-scope Memory — add photos but cannot see the Memory's existing content (nor others'). It reuses the
 # READ_WRITE machinery (sealed identity + share-scoped upload) and adds: the WRITE_ONLY role, the canView gate (the
-# resolve serves media=[] + the root node only for an uploader — "cannot see others" is structural, NO server-side
+# resolve serves no node and the media read empty lists for an uploader — "cannot see others" is structural, NO server-side
 # gallery filtering), the session-only client-local own-view (the optimistic tiles rendered from local previews,
 # never a download), the token-gated + ownership-checked delete-own (DELETE /media/{id}, X-Contributor-Token
-# header), and the four-place ephemerality warning. Covered by the backend slice (WRITE_ONLY resolve serves media=[]
-# even with existing media; upload attaches + stamps; delete-own reclaims; foreign-identity 404 / bad-token 403 /
+# header), and the four-place ephemerality warning. Covered by the backend slice (a WRITE_ONLY link's media read
+# serves empty lists even with existing media; upload attaches + stamps; delete-own reclaims; foreign-identity 404 / bad-token 403 /
 # READ 403), the http guest-boundary assertions, and the web unit tests (the delete wrapper + the queue
 # removeFile + the session-persistence of a done tile), plus a live browser smoke. v1 is deliberately narrow: role WRITE_ONLY, direct-append,
 # personal scope; post-reload delete (persisting the id list), the buckets UI, MANAGER/view-all/delete, password
@@ -43,14 +43,7 @@ acceptanceCriteria:
       backend:
         integration: [ShareUploaderSliceTest.uploaderResolveServesNoMediaEvenWithExisting, ShareUploaderSliceTest.uploaderShareHasNoBlobDownloadCapability, ShareUploaderSliceTest.viewerShareRejectsUploadAndDelete, ShareRootKindSliceTest.aWriteOnlyShareNamesItsRootKindThoughItIsServedNoNode]
       web:
-        unit: [src/features/memory/optimisticUpload.test.ts, src/views/ShareView.registry.test.ts]
-    gaps:
-      - surface: backend
-        reason: >-
-          The media read is not its own operation yet: today a WRITE_ONLY resolve serves media=[] and
-          identities=[] in its own body, which is what these refs prove. The empty answer of a separate
-          GET /api/shares/{shareId}/media lands with slice 6 of cr-platform-contract-split, whose refs replace
-          this note.
+        unit: [src/features/memory/optimisticUpload.test.ts, src/views/ShareView.registry.test.ts, src/features/memory/shareUploader.test.ts]
   - id: session-own-gallery-no-download
     text: The uploader names themselves (sealed under its own identity key -> anonymous identity) and adds photos via the share-scoped upload path (as READ_WRITE). The client keeps each returned mediaId + the LOCAL preview in session memory and renders its own uploads with the same gallery mechanic (MediaGrid + optimistic tile) from the local preview — never a download. A reload shows nothing (session-only).
     coverage:

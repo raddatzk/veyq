@@ -26,7 +26,8 @@ slices. The crypto is the per-Memory second-wrap of [ADR 0012](../../../decision
 3. **Open (anonymous).** A visitor opens the link. The client `GET`s `/api/shares/{shareId}` (**no auth**) → the
    record **plus the sealed subtree** (the Memory node + its chapters, sealed under `K_mem`), then `GET`s
    `/api/shares/{shareId}/media` → the Memory's media metadata and the wrapped keys of the uploader identities
-   whose media it holds. Both pass the same password gate.
+   whose media it holds (Memories' `listShareMedia`). Both pass the same password gate; without a token the
+   resolve answers the locked challenge and the media read a `404`.
    The client **unwraps `K_mem` with the fragment key**, decrypts names/layout/metadata **locally**, and renders
    the Memory **read-only**.
 4. **View media.** For each blob the client calls the **share-scoped, gated** blob endpoint; the server authorizes

@@ -121,9 +121,9 @@ on their own.
   description says whose it is and names no application's plaintext, operation or key. An operation whose
   behaviour is an application's lives in that application's directory, even when its path sits under a core
   route (`/api/shares/{shareId}/media` is Memories': `contracts/api/memories/share-media.openapi.yaml`, its own
-  tag and root, the wire unchanged by the move). Not yet the code: `PublicShare`'s `media` and `identities` still sit
-  in core's `sharing` spec (*What core still knows of Memories*, below), their texts saying they are Memories' and
-  leave for its spec. Core's other spec texts and its main comments describe what core does.
+  tag and root — the two guest writes moved there with the wire unchanged, and the media a share lists left
+  `PublicShare` for its own read there, a wire change). Core's spec texts and its main comments describe what core
+  does.
 - **The node's payload slot and content key are core's** (decided 2026-10-06, cr-platform-contract-split). Core
   gives every node one sealed, versioned payload (`wrappedMeta`, `metaVersion`): core stores it, compare-and-sets
   it ([ADR 0077](0077-a-write-carries-the-version-it-read.md)) and lists it with the tree, and never opens it. Its
@@ -157,8 +157,11 @@ on their own.
   [ADR 0030](0030-contributor-public-share.md) point 8). Partly the code: the gate is core's service
   (`ShareGuestGate`), and Memories' two guest writes (complete an upload, delete one's own) are its own operations
   that call it (`ShareMediaHandler`), handing the gate's re-check of the link on unevaluated to the transaction that
-  attaches; the resolve still serves Memories' `media` and `identities` (below). A link may later become
-  a credential core's gate accepts for application operations that declare it; that is a separate decision.
+  attaches. Its guest read is its own operation too (`listShareMedia`): the media under the gate's live nodes with
+  Memories' own live predicate, and the wrapped keys of the `WRITE_ONLY` identities whose media those are — the
+  ADR 0030 point 8 rule nulls every other identity id in the same handler, so the gate carries no identity set and
+  core's resolve serves no application data. A link may later become a credential core's gate accepts for
+  application operations that declare it; that is a separate decision.
 - **An append-only application cannot make the server keep its order.** The server may drop or reorder entries
   it holds unless a sequence number or hash chain is bound into each entry's associated data (ADR 0072 binds an
   object, not its neighbours). Each such application states that gap; it is not a platform property.
@@ -200,8 +203,7 @@ on their own.
   `ShareGuestWrites.supports` gates share *creation*, so core alone refuses every share and share policy is tested
   with an application present; the completion item core's dispatcher carries is media-shaped (`CompleteItem`'s
   `mediaId`, `derivatives`, `wrappedExif`), though since the guest writes moved to Memories' spec only Memories builds
-  it — making it generic is the decided next step; `PublicShare` still carries Memories' rows (`media`,
-  `identities`), which leave with Memories' own guest read; `BlobRole`
+  it — making it generic is the decided next step; `BlobRole`
   (`ORIGINAL`/`THUMBNAIL`/`PREVIEW`/`COVER`) is a closed enum in core's `blob.openapi.yaml`, described there as
   Memories' values and closed because the crypto encoder is (until inbox #327); and the upload retention
   and purge keys keep their `veyq.media.*` names though core reads them.

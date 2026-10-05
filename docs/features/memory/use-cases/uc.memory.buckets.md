@@ -62,7 +62,8 @@ Uploaders span **members** (`owner_key = user:{userId}`, display name = the per-
   relays, and **unseals** the names **client-side** under `K_mem`. The operator learns **no cleartext name and no
   content**; a personal Memory with no share exposes only the account owner's `owner_key`.
 - **A guest's name is for the members.** The member bucket list is the one read that serves a guest's sealed name.
-  No share link's resolve does, and none serves a contributor's identity or stamps a contributor's media with it
+  No guest read of a share link does (the resolve, the media read), and none serves a contributor's identity or
+  stamps a contributor's media with it
   ([ADR 0030](../../../decisions/0030-contributor-public-share.md) point 8, which also states the accepted
   residual: a link plus a database dump opens the names, as it opens the photos).
 - **A real data model.** The bucket table ([en.memory.buckets](../enablers/en.memory.buckets.md)) carries

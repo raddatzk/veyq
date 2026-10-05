@@ -12,9 +12,11 @@ direction only (see the end).
   two values are Memories' own: `MemoriesNodeKinds` in the backend, `features/memory/kinds.ts` in the web, with their
   rules (`MemoryNodeKindRules`, `registerKind`).
 - **Contracts:** `contracts/api/memories/` (`media.openapi.yaml`, `favorites.openapi.yaml`, `share-media.openapi.yaml`
-  — a guest's complete and delete-own under a share link, rooted at `/api/shares/{shareId}/media`), generated into
+  — a guest's media under a share link: the list a guest is served with the uploader keys that open it
+  (`listShareMedia`), complete and delete-own; rooted at `/api/shares/{shareId}/media`), generated into
   `me.raddatz.veyq.memories.generated`; the blob transfer an upload runs on is core's `contracts/api/blob.openapi.yaml`,
-  a guest's is core's `sharing.openapi.yaml`, and a guest write passes core's `ShareGuestGate` first.
+  a guest's is core's `sharing.openapi.yaml`, and every guest operation passes core's `ShareGuestGate` first. Core's
+  resolve serves the link and the shared nodes only.
 - **Keys:** `K_mem` per Memory (the share grain) and `K_blob` per blob under it
   ([ADR 0012](../decisions/0012-content-key-hierarchy.md)). These derive as they always have, the documented
   exemption to the application-id context ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Decision 9).
