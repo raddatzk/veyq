@@ -1,17 +1,17 @@
 useCase: uc.sharing.share-public-viewer
 feature: sharing
 title: Share a Memory as a public viewer link (web)
-# Built (web vertical, cr-0100 + ADR 0029): a public VIEWER share of one Memory (any scope, ADR 0029 §6) —
+# Built (web vertical, cr-0100 + ADR 0029): a public READ share of one Memory (any scope, ADR 0029 §6) —
 # symWrap(K_share, K_mem), the key in the URL fragment, an unguessable 256-bit shareId, an unauthenticated
 # resolve + gated presigned blob reads, soft (L1) revoke/expiry, and the operator-served-viewer trust-tier
 # honesty carried by a footer link. The six criteria are covered by the backend slice (create -> anonymous
 # resolve -> gated blob -> revoke/expiry -> subtree isolation), the http guest-boundary assertions, and the web
 # unit round-trip of the operator-blind decrypt path. v1 scope is deliberately narrow: personal-scope
-# Memories, VIEWER role only; contributor/uploader, password protection, group/tenant sharing, persisted-shares
+# Memories, READ role only; contributor/uploader, password protection, group/tenant sharing, persisted-shares
 # and notices are separate later slices.
 acceptanceCriteria:
   - id: create-public-share
-    text: A curator turns one of their personal-scope Memories into a public share — the client generates a random K_share and a 256-bit unguessable shareId, computes symWrap(K_share, K_mem), re-seals the Memory name under K_share, and POSTs { shareId, nodeId, role VIEWER, wrap, sealedName, expiresAt? }. The server stores the record opaquely under that id; it never sees K_share, K_mem, or the name. The link is /s/{shareId}#k=base64url(K_share) with the key in the fragment.
+    text: A curator turns one of their personal-scope Memories into a public share — the client generates a random K_share and a 256-bit unguessable shareId, computes symWrap(K_share, K_mem), re-seals the Memory name under K_share, and POSTs { shareId, nodeId, role READ, wrap, sealedName, expiresAt? }. The server stores the record opaquely under that id; it never sees K_share, K_mem, or the name. The link is /s/{shareId}#k=base64url(K_share) with the key in the fragment.
     coverage:
       backend:
         integration: [ShareSliceTest.createThenAnonymousResolveReturnsSealedSubtree, ShareSliceTest.listReturnsCallersSharesForTheMemory]
@@ -20,7 +20,7 @@ acceptanceCriteria:
   - id: anonymous-resolve-decrypt
     text: GET /api/shares/{shareId} is unauthenticated and returns the record plus the sealed subtree (Memory node + chapters, under K_mem). The viewer unwraps K_mem with the fragment key and decrypts names/layout/metadata locally, rendering the Memory read-only. The shareId alone is inert — without the fragment key nothing decrypts; both halves are required.
     coverage:
-      # cr-sharing-contributor-e2e: the live proof rides in on the contributor suite, because a CONTRIBUTOR share
+      # cr-sharing-contributor-e2e: the live proof rides in on the contributor suite, because a READ_WRITE share
       # resolves through the identical resolveShare path — an anonymous, session-less caller recovering the Memory
       # name and the per-locale note from nothing but the shareId and the URL fragment key.
       backend:

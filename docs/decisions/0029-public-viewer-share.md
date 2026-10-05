@@ -25,7 +25,8 @@ Adopt a **public viewer share** as a standalone, operator-blind resource address
 
 1. **The share resource (opaque server state).** A share record holds: a **256-bit random `shareId`**
    (base64url, unguessable — the id is half the capability), the wrap **`symWrap(K_share, K_mem)`**, the fixed
-   **`role = VIEWER`**, the shared Memory's **name re-sealed under `K_share`**, the **`nodeId`** of the shared
+   **`role = READ`** (renamed 2026-10-06 from `VIEWER` —
+   [ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md)'s three access modes), the shared Memory's **name re-sealed under `K_share`**, the **`nodeId`** of the shared
    Memory (the subtree root, used only to gate blob reads), `enabled`, and an optional `expiresAt`. The server
    **never** sees `K_share`, `K_mem`, any name, or the viewer — only ciphertext + these opaque fields.
 
@@ -84,7 +85,7 @@ Adopt a **public viewer share** as a standalone, operator-blind resource address
    verifier — and its
    expiry are cleared and `deleted_at` is set. A tombstone `404`s like a revoked link, cannot be re-activated,
    edited or re-issued, and is in no listing. The row stays because the link's guest identities hang off it by
-   foreign key, and an UPLOADER identity's wrapped key is the only way members open that guest's uploads
+   foreign key, and a WRITE_ONLY identity's wrapped key is the only way members open that guest's uploads
    ([ADR 0031](0031-uploader-public-share.md) point 7): a delete never touches the Memory's media, buckets or drop
    key, and reclaims no bytes. Its owner deletes it at any time (an enabled one is turned off in the same
    transaction); another member only once its owner is no longer a member of the scope — deleting a co-member's

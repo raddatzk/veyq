@@ -9,7 +9,7 @@ A curator hands out a public share link `/s/{shareId}#k=<K_share>` ([ADR 0029](0
 Anyone with the link decrypts client-side. We want an **optional password** on a share so that a **leaked link is
 not enough** — the recipient must also know the password. It must stay **operator-blind** (the server never learns
 the password or gains the ability to read content), be **set / changed / removed / revealed** in place without
-minting a new link, and apply to **all roles** (VIEWER / CONTRIBUTOR / UPLOADER).
+minting a new link, and apply to **all roles** (READ / READ_WRITE / WRITE_ONLY).
 
 Two shapes were on the table:
 
@@ -58,11 +58,11 @@ password, nothing is readable" holds at the access-control layer.
   without one, or removing one, is just toggling the server-side gate — **no new link**, unlike the crypto-gate.
 - **Reveal:** the curator — any member of the Memory's scope — recovers `K_share` from `sealed_share_key`, sealed
   under `K_SC` at its epoch ([ADR 0036](0036-editable-share-note-recoverable-share-key.md) point 4), and opens
-  `sealed_password` → a 👁 "show password" in the manage UI. Never under `K_mem`: every VIEWER/CONTRIBUTOR link of
+  `sealed_password` → a 👁 "show password" in the manage UI. Never under `K_mem`: every READ/READ_WRITE link of
   the Memory carries that key, so such a copy would hand this password to another link's holder with a dump.
 
-**All roles.** The gate sits in front of every guest endpoint, so it protects a VIEWER greeting page, a
-CONTRIBUTOR album, and an UPLOADER drop-box alike; the password field lives in the shared `ShareCreateDialog`.
+**All roles.** The gate sits in front of every guest endpoint, so it protects a READ greeting page, a
+READ_WRITE album, and a WRITE_ONLY drop-box alike; the password field lives in the shared `ShareCreateDialog`.
 
 ## Operator-blindness & threat model — stated honestly
 

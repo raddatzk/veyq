@@ -1,28 +1,28 @@
 useCase: uc.sharing.share-uploader
 feature: sharing
 title: Share a Memory as an uploader link (a write-only drop-box)
-# Built (web vertical, cr-0102 + ADR 0031, building on ADR 0030): a write-only UPLOADER public share of one
+# Built (web vertical, cr-0102 + ADR 0031, building on ADR 0030): a write-only WRITE_ONLY public share of one
 # personal-scope Memory — add photos but cannot see the Memory's existing content (nor others'). It reuses the
-# CONTRIBUTOR machinery (sealed identity + share-scoped upload) and adds: the UPLOADER role, the canView gate (the
+# READ_WRITE machinery (sealed identity + share-scoped upload) and adds: the WRITE_ONLY role, the canView gate (the
 # resolve serves media=[] + the root node only for an uploader — "cannot see others" is structural, NO server-side
 # gallery filtering), the session-only client-local own-view (the optimistic tiles rendered from local previews,
 # never a download), the token-gated + ownership-checked delete-own (DELETE /media/{id}, X-Contributor-Token
-# header), and the four-place ephemerality warning. Covered by the backend slice (UPLOADER resolve serves media=[]
+# header), and the four-place ephemerality warning. Covered by the backend slice (WRITE_ONLY resolve serves media=[]
 # even with existing media; upload attaches + stamps; delete-own reclaims; foreign-identity 404 / bad-token 403 /
-# VIEWER 403), the http guest-boundary assertions, and the web unit tests (the delete wrapper + the queue
-# removeFile + the session-persistence of a done tile), plus a live browser smoke. v1 is deliberately narrow: role UPLOADER, direct-append,
+# READ 403), the http guest-boundary assertions, and the web unit tests (the delete wrapper + the queue
+# removeFile + the session-persistence of a done tile), plus a live browser smoke. v1 is deliberately narrow: role WRITE_ONLY, direct-append,
 # personal scope; post-reload delete (persisting the id list), the buckets UI, MANAGER/view-all/delete, password
 # protection and moderation are separate later slices.
 acceptanceCriteria:
   - id: create-uploader-share
-    text: A curator turns one of their personal-scope Memories into an UPLOADER share — picks the Uploader role in the Share dialog; the client mints K_share, re-seals the name, and seals the Memory's drop public key under K_share (the Memory's first UPLOADER share also mints the drop keypair and brings its private half sealed under K_mem, set on the Memory once), and POSTs { nodeId, role UPLOADER, sealedDropPublicKey, sealedName } with no wrap. The server stores it opaquely (role plaintext). The link is /s/{shareId}#k=base64url(K_share).
+    text: A curator turns one of their personal-scope Memories into a WRITE_ONLY share — picks the Uploader role in the Share dialog; the client mints K_share, re-seals the name, and seals the Memory's drop public key under K_share (the Memory's first WRITE_ONLY share also mints the drop keypair and brings its private half sealed under K_mem, set on the Memory once), and POSTs { nodeId, role WRITE_ONLY, sealedDropPublicKey, sealedName } with no wrap. The server stores it opaquely (role plaintext). The link is /s/{shareId}#k=base64url(K_share).
     coverage:
       backend:
         integration: [ShareUploaderSliceTest.uploaderResolveServesNoMediaEvenWithExisting, ShareUploaderSliceTest.theKeysAShareCarriesFollowItsRole, ShareUploaderSliceTest.theDropKeyIsSetOnceOnTheMemory]
       web:
         unit: [src/features/memory/share.test.ts]
   - id: naming-proves-the-link-key
-    text: An uploader naming themself proves they hold the link's key, as a contributor does (ADR 0076) — the UPLOADER share carries writeVerifier like every role, and createShareIdentity without the K_share-derived X-Share-Write, or with another link's, is the non-enumerable 404 with no identity written; the whole link names the uploader, who then uploads.
+    text: An uploader naming themself proves they hold the link's key, as a contributor does (ADR 0076) — the WRITE_ONLY share carries writeVerifier like every role, and createShareIdentity without the K_share-derived X-Share-Write, or with another link's, is the non-enumerable 404 with no identity written; the whole link names the uploader, who then uploads.
     coverage:
       backend:
         integration: [ShareWriteProofSliceTest.anUploaderLinkNeedsTheProofToo]
@@ -30,7 +30,7 @@ acceptanceCriteria:
         unit: [src/features/memory/share.test.ts]
         e2e: [src/features/memory/shareUploader.e2e.test.ts]
   - id: guest-never-holds-the-memory-key
-    text: The guest's client never holds the Memory's key - its uploads are sealed under its own identity key, wrapped to the Memory's drop key. The UPLOADER resolve serves the drop public key sealed under K_share and no wrap, and the client opens no wrap for that role even when one is served; the guest seals its name, blob keys, media meta and EXIF under its own K_up and hands K_up over wrapped to the drop public key. Every reader of the Memory - the curator's gallery and buckets, a viewer link - is served the node's sealed drop private key and the identity's wrapped key, and opens the upload through them; a member's metadata edit re-seals under the same K_up.
+    text: The guest's client never holds the Memory's key - its uploads are sealed under its own identity key, wrapped to the Memory's drop key. The WRITE_ONLY resolve serves the drop public key sealed under K_share and no wrap, and the client opens no wrap for that role even when one is served; the guest seals its name, blob keys, media meta and EXIF under its own K_up and hands K_up over wrapped to the drop public key. Every reader of the Memory - the curator's gallery and buckets, a viewer link - is served the node's sealed drop private key and the identity's wrapped key, and opens the upload through them; a member's metadata edit re-seals under the same K_up.
     coverage:
       backend:
         integration: [ShareUploaderSliceTest.uploaderResolveServesNoMediaEvenWithExisting, ShareUploaderSliceTest.anUploaderIdentityHandsOverItsWrappedKey, ShareUploaderSliceTest.everyReaderOfTheMemoryIsServedWhatOpensAnUpload]
@@ -38,7 +38,7 @@ acceptanceCriteria:
         unit: [src/features/memory/shareUploader.test.ts]
         e2e: [src/features/memory/shareUploader.e2e.test.ts]
   - id: write-only-no-view-of-others
-    text: The canView gate ({VIEWER,CONTRIBUTOR}) is enforced at BOTH guest read paths. The anonymous resolve returns nodes=[] for an UPLOADER share (only role + the sealed drop public key + sealedName — not even the root node, so no K_mem-decryptable node metadata leaks), and its media read answers an empty list with no identities. The blob download (GET /shares/{id}/blobs/{blobId}) is role-gated too - an UPLOADER share 404s before the subtree check, so a leaked in-subtree id yields nothing. Write-only is a real server capability, not just id-secrecy (ids are also unguessable and never handed to the uploader). canUpload={CONTRIBUTOR,UPLOADER}.
+    text: The canView gate ({READ,READ_WRITE}) is enforced at BOTH guest read paths. The anonymous resolve returns nodes=[] for a WRITE_ONLY share (only role + the sealed drop public key + sealedName — not even the root node, so no K_mem-decryptable node metadata leaks), and its media read answers an empty list with no identities. The blob download (GET /shares/{id}/blobs/{blobId}) is role-gated too - a WRITE_ONLY share 404s before the subtree check, so a leaked in-subtree id yields nothing. Write-only is a real server capability, not just id-secrecy (ids are also unguessable and never handed to the uploader). canUpload={READ_WRITE,WRITE_ONLY}.
     coverage:
       backend:
         integration: [ShareUploaderSliceTest.uploaderResolveServesNoMediaEvenWithExisting, ShareUploaderSliceTest.uploaderShareHasNoBlobDownloadCapability, ShareUploaderSliceTest.viewerShareRejectsUploadAndDelete]
@@ -47,12 +47,12 @@ acceptanceCriteria:
     gaps:
       - surface: backend
         reason: >-
-          The media read is not its own operation yet: today an UPLOADER resolve serves media=[] and
+          The media read is not its own operation yet: today a WRITE_ONLY resolve serves media=[] and
           identities=[] in its own body, which is what these refs prove. The empty answer of a separate
           GET /api/shares/{shareId}/media lands with slice 6 of cr-platform-contract-split, whose refs replace
           this note.
   - id: session-own-gallery-no-download
-    text: The uploader names themselves (sealed under its own identity key -> anonymous identity) and adds photos via the share-scoped upload path (as CONTRIBUTOR). The client keeps each returned mediaId + the LOCAL preview in session memory and renders its own uploads with the same gallery mechanic (MediaGrid + optimistic tile) from the local preview — never a download. A reload shows nothing (session-only).
+    text: The uploader names themselves (sealed under its own identity key -> anonymous identity) and adds photos via the share-scoped upload path (as READ_WRITE). The client keeps each returned mediaId + the LOCAL preview in session memory and renders its own uploads with the same gallery mechanic (MediaGrid + optimistic tile) from the local preview — never a download. A reload shows nothing (session-only).
     coverage:
       backend:
         integration: [ShareUploaderSliceTest.uploaderNamesUploadsAttachesStampedAndDeletesOwn]
@@ -69,7 +69,7 @@ acceptanceCriteria:
     text: The write-only, session-only nature is surfaced prominently in four places - (a) the mandatory name pre-screen before the first upload; (b) a persistent header badge ("visible only in this session") in place of the viewer's read-only badge; (c) a dedicated empty-state after a reload (not a blank gallery); (d) a note that delete works only in this session. The plain-language "what this means for you" states it too.
     # The four warning surfaces (name-pre-screen warning, header badge, session note, reload empty-state) are
     # guarded as present + translated (en+de) by the i18n test; the end-to-end render is proven by the live
-    # browser smoke (cr-0102): the UPLOADER /s/ shows all four in place, not the gallery.
+    # browser smoke (cr-0102): the WRITE_ONLY /s/ shows all four in place, not the gallery.
     coverage:
       web:
         unit: [src/i18n/setLocale.test.ts]

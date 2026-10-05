@@ -1,25 +1,25 @@
 useCase: uc.sharing.share-contributor
 feature: sharing
 title: Share a Memory as a contributor link (anyone with the link can add photos)
-# Built (web vertical, cr-0101 + ADR 0030): a CONTRIBUTOR public share of one Memory (any scope, ADR 0029 §6) — the viewer
+# Built (web vertical, cr-0101 + ADR 0030): a READ_WRITE public share of one Memory (any scope, ADR 0029 §6) — the viewer
 # share (symWrap(K_share, K_mem), key in the URL fragment) plus a mandatory display name sealed under K_mem → an
 # anonymous share identity (the buckets forward-compat hook), share-scoped UNAUTHENTICATED upload endpoints
-# (presign mirror + complete, gated by role CONTRIBUTOR + enabled + a contributor token), and direct-append
-# attribution. Covered by the backend slice (create CONTRIBUTOR → identity-create → share-scoped upload attaches
-# + stamps the identity → surfaces in the resolve; VIEWER/bad-token/revoke rejected), the http guest-boundary
-# assertions, and the web unit round-trip of the operator-blind name seal. v1 is deliberately narrow: role CONTRIBUTOR only (view + append),
-# direct-append, personal scope; the buckets UI, the UPLOADER drop-box, MANAGER/edit/delete, password protection
+# (presign mirror + complete, gated by role READ_WRITE + enabled + a contributor token), and direct-append
+# attribution. Covered by the backend slice (create READ_WRITE → identity-create → share-scoped upload attaches
+# + stamps the identity → surfaces in the resolve; READ/bad-token/revoke rejected), the http guest-boundary
+# assertions, and the web unit round-trip of the operator-blind name seal. v1 is deliberately narrow: role READ_WRITE only (view + append),
+# direct-append, personal scope; the buckets UI, the WRITE_ONLY drop-box, MANAGER/edit/delete, password protection
 # and moderation are separate later slices.
 #
 # cr-sharing-contributor-e2e added the first LIVE coverage of this (or any) sharing flow:
-# src/features/memory/shareContributor.e2e.test.ts drives curator -> CONTRIBUTOR share -> anonymous resolve ->
+# src/features/memory/shareContributor.e2e.test.ts drives curator -> READ_WRITE share -> anonymous resolve ->
 # named identity -> two real presigned uploads direct-to-store -> gated blob read-back -> the curator recovering
 # the contributor's name, against a real backend + MariaDB + the bundled store. It is the only layer that can
 # reach the second byte transport at all (startShareBlobUploads -> real PUTs -> completeShareMedia), which the
 # authenticated upload path never exercises.
 acceptanceCriteria:
   - id: create-contributor-share
-    text: A curator turns one of their personal-scope Memories into a CONTRIBUTOR share — the curator picks the Contributor role in the Share dialog; the client mints K_share and a 256-bit shareId, computes symWrap(K_share, K_mem), re-seals the Memory name under K_share, and POSTs { shareId, nodeId, role CONTRIBUTOR, wrap, sealedName, expiresAt? }. The server stores the record opaquely under that id (role plaintext). The link is /s/{shareId}#k=base64url(K_share).
+    text: A curator turns one of their personal-scope Memories into a READ_WRITE share — the curator picks the Contributor role in the Share dialog; the client mints K_share and a 256-bit shareId, computes symWrap(K_share, K_mem), re-seals the Memory name under K_share, and POSTs { shareId, nodeId, role READ_WRITE, wrap, sealedName, expiresAt? }. The server stores the record opaquely under that id (role plaintext). The link is /s/{shareId}#k=base64url(K_share).
     coverage:
       backend:
         integration: [ShareContributorSliceTest.contributeFlowAttachesStampsIdentityAndSurfacesInResolve]
@@ -27,7 +27,7 @@ acceptanceCriteria:
         unit: [src/features/memory/share.test.ts]
         e2e: [src/features/memory/shareContributor.e2e.test.ts]
   - id: naming-proves-the-link-key
-    text: Naming yourself proves the visitor holds the link's key, not only its id (ADR 0076). Every share is created with writeVerifier = SHA-256(writeToken), writeToken = HKDF(K_share, "veyq/v1/share-write:" + shareId), for every role (a VIEWER link can be flipped to CONTRIBUTOR); createShareIdentity presents the token as X-Share-Write. A missing, malformed or wrong token, the stored verifier itself, a token derived for another link, and a share holding no verifier all answer the non-enumerable 404 and write no identity; the whole link names a guest, who then uploads through the contributor token as before. A guest named before a verifier went missing keeps uploading. The manage list marks each CONTRIBUTOR or UPLOADER link holding no verifier (newGuestsRefused) — and no VIEWER link, and no link that holds one — and the panel shows that mark on the row. Every row also says whether it holds no verifier whatever its role (writeVerifierMissing), and a role edit that would make such a link a CONTRIBUTOR one warns and offers the renew, since an edit never adds a verifier.
+    text: Naming yourself proves the visitor holds the link's key, not only its id (ADR 0076). Every share is created with writeVerifier = SHA-256(writeToken), writeToken = HKDF(K_share, "veyq/v1/share-write:" + shareId), for every role (a READ link can be flipped to READ_WRITE); createShareIdentity presents the token as X-Share-Write. A missing, malformed or wrong token, the stored verifier itself, a token derived for another link, and a share holding no verifier all answer the non-enumerable 404 and write no identity; the whole link names a guest, who then uploads through the contributor token as before. A guest named before a verifier went missing keeps uploading. The manage list marks each READ_WRITE or WRITE_ONLY link holding no verifier (newGuestsRefused) — and no READ link, and no link that holds one — and the panel shows that mark on the row. Every row also says whether it holds no verifier whatever its role (writeVerifierMissing), and a role edit that would make such a link a READ_WRITE one warns and offers the renew, since an edit never adds a verifier.
     coverage:
       # The slice holds the server half — each refusal beside its positive control on the same share; the web unit
       # holds the derivation through the real createShare/createContributorIdentity; the e2e names a guest through
@@ -51,7 +51,7 @@ acceptanceCriteria:
         unit: [src/features/memory/share.test.ts]
         e2e: [src/features/memory/shareContributor.e2e.test.ts]
   - id: share-scoped-upload
-    text: Three share-scoped UNAUTHENTICATED endpoints mirror the media control plane, gated only on share state (role CONTRIBUTOR + enabled + a valid contributor token) — POST /api/shares/{shareId}/blob-uploads opens sessions and presigns their first window of PUTs, POST /api/shares/{shareId}/blob-upload-windows presigns each next window, POST /api/shares/{shareId}/media completes + attaches. The contributor seals K_blob + derivatives + metadata under K_mem and PUTs ciphertext direct-to-store; bytes never flow through the backend. A parallel authz path keyed on share state, never a relaxed member filter.
+    text: Three share-scoped UNAUTHENTICATED endpoints mirror the media control plane, gated only on share state (role READ_WRITE + enabled + a valid contributor token) — POST /api/shares/{shareId}/blob-uploads opens sessions and presigns their first window of PUTs, POST /api/shares/{shareId}/blob-upload-windows presigns each next window, POST /api/shares/{shareId}/media completes + attaches. The contributor seals K_blob + derivatives + metadata under K_mem and PUTs ciphertext direct-to-store; bytes never flow through the backend. A parallel authz path keyed on share state, never a relaxed member filter.
     coverage:
       # The slice proves the endpoints' authz; only the e2e proves the TRANSPORT — real presigned PUTs of real
       # sealed chunks into the bundled store, and the bytes coming back out through the gated presign byte-equal.
@@ -93,7 +93,7 @@ acceptanceCriteria:
         unit: [src/features/memory/share.test.ts]
         e2e: [src/features/memory/shareContributor.e2e.test.ts]
   - id: abuse-controls-and-revoke
-    text: The unauthenticated upload path is gated by curator opt-in (role CONTRIBUTOR) + the per-identity contributor token + the share enabled flag; revoke/expiry stops new uploads AND reads (403/404). The per-blob byte budget (ADR 0013) and a per-share rate limit are defense-in-depth. Soft (L1) revocation does not retract already-uploaded media (like already-read content); the curator deletes unwanted photos individually.
+    text: The unauthenticated upload path is gated by curator opt-in (role READ_WRITE) + the per-identity contributor token + the share enabled flag; revoke/expiry stops new uploads AND reads (403/404). The per-blob byte budget (ADR 0013) and a per-share rate limit are defense-in-depth. Soft (L1) revocation does not retract already-uploaded media (like already-read content); the curator deletes unwanted photos individually.
     coverage:
       backend:
         integration: [ShareContributorSliceTest.viewerShareRejectsContribution, ShareContributorSliceTest.revokeStopsContribution]
@@ -109,7 +109,7 @@ acceptanceCriteria:
       web:
         unit: [src/features/memory/share.test.ts]
   - id: role-mutable-in-place
-    text: A curator changes an existing share's role in place (VIEWER <-> CONTRIBUTOR) via PATCH updateShare { role } (cr-0119, ADR 0036) — the same link / wrap / K_share are untouched (role is server-enforced plaintext authz, no re-crypto), so the new grant bites on the next guest request (a promote enables contribution at once; a demote 403s new uploads, already-contributed photos stay). Restricted to VIEWER <-> CONTRIBUTOR - setting role=UPLOADER, or changing an UPLOADER share's role, is 422 invalid_role_change (the write-only drop-box is its own separate action, its promise not flippable on distributed links). Owner-gated (a non-owner is 404, like the note edit); role is optional on the PATCH (omitted for a plain note/name edit). Web - the normal edit dialog shows the VIEWER/CONTRIBUTOR switcher (never the uploader variant).
+    text: A curator changes an existing share's role in place (READ <-> READ_WRITE) via PATCH updateShare { role } (cr-0119, ADR 0036) — the same link / wrap / K_share are untouched (role is server-enforced plaintext authz, no re-crypto), so the new grant bites on the next guest request (a promote enables contribution at once; a demote 403s new uploads, already-contributed photos stay). Restricted to READ <-> READ_WRITE - setting role=WRITE_ONLY, or changing a WRITE_ONLY share's role, is 422 invalid_role_change (the write-only drop-box is its own separate action, its promise not flippable on distributed links). Owner-gated (a non-owner is 404, like the note edit); role is optional on the PATCH (omitted for a plain note/name edit). Web - the normal edit dialog shows the READ/READ_WRITE switcher (never the uploader variant).
     coverage:
       backend:
         integration: [ShareNoteSliceTest.promoteViewerToContributorInPlaceKeepsTheLinkAndEnablesContribution, ShareNoteSliceTest.roleChangeToUploaderIs422, ShareNoteSliceTest.changingAnUploaderShareRoleIs422]

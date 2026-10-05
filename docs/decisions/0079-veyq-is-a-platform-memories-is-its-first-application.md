@@ -106,8 +106,8 @@ on their own.
   - **in the background**: tasks, rate limits, the admin channel and operator-blindness.
 
   An application supplies the **meaning**: which node kinds exist, what the plaintext means, which rules apply to
-  structure, attachments and guests, and the user interface. `READ`/`READ_WRITE`/`WRITE_ONLY` are the target wire
-  names, renamed in slice 1 of cr-platform-contract-split; today the values are `VIEWER`/`CONTRIBUTOR`/`UPLOADER`.
+  structure, attachments and guests, and the user interface. `READ`/`READ_WRITE`/`WRITE_ONLY` are the wire values
+  (`ShareRole`, renamed from `VIEWER`/`CONTRIBUTOR`/`UPLOADER` on 2026-10-06).
   Attachments are the target, not yet the code: today what a verified upload becomes is application work
   (`UploadCompletion`), and Memories' cover and revision columns still sit on `veyq_node`. Generic attachments are
   formalised as a core spec (inbox #327) when the second application needs them; that "every application needs
@@ -130,7 +130,6 @@ on their own.
   table with endpoints — it loses the atomic create and the payload in the tree listing that sorting relies on,
   and the next application would want the same slot back.
 - **The drop key is the `WRITE_ONLY` link's mechanism** (decided 2026-10-06, cr-platform-contract-split).
-  `WRITE_ONLY` is the target wire name of today's `UPLOADER` (renamed in slice 1 of cr-platform-contract-split).
   A `WRITE_ONLY` link's drop key pair belongs to core's link mechanism:
   - the public half is sealed under the link's `K_share` on the share row;
   - the private half is the shared root node's, sealed under the root's content key, set once by core inside the
@@ -139,8 +138,7 @@ on their own.
 
   The seal purposes `drop-public-key`/`drop-private-key` are a stored format and keep their names.
 - **Three access modes** (decided 2026-10-06, cr-platform-contract-split). A link grants one of three access
-  modes: `READ`, `READ_WRITE`, `WRITE_ONLY` — the target wire names, renamed in slice 1 of
-  cr-platform-contract-split; today the values are `VIEWER`/`CONTRIBUTOR`/`UPLOADER`. Core enforces the mode (who
+  modes: `READ`, `READ_WRITE`, `WRITE_ONLY` — `ShareRole`'s wire values. Core enforces the mode (who
   may read the shared subtree, who may add through the guest transport). What "write" means on a node is the
   application's, through `ShareGuestWrites`. The modes are bound in no seal. Application-specific roles, if ever
   needed, come through a policy seam where core asks the application whether an action is allowed for a mode —
@@ -216,7 +214,7 @@ on their own.
   Master Key rotates (that hook is required: a rotation refuses to start without it). Not done on the web: the
   directory is still named `features/memory`; the level view, the create/rename dialog, the share dialog, the
   top-bar tray and the sidebar pins are single-claim slots shaped for Memories (the second application re-cuts them
-  per kind); the root kind of an UPLOADER share is unknown to the client (the unlocked response serves no nodes), so
+  per kind); the root kind of a WRITE_ONLY share is unknown to the client (the unlocked response serves no nodes), so
   it renders in the one application that claimed the kind-less drop until `PublicShare` carries a `rootKind`
   (inbox #329); the i18n catalog is one file and `styles/memory.css` is global; `NodeKind` is the generated closed
   enum, so the convention that core never names `MEMORY`/`CHAPTER` is guarded, not typed.

@@ -3,8 +3,8 @@
 - **ID:** uc.sharing.share-link-storage-limit
 - **Primary actor:** **the tenant owner**, signed in (a session; no unlocked vault needed — a byte count is
   operational, not content).
-- **Secondary actor:** **a link visitor** — the anonymous holder of a CONTRIBUTOR
-  ([uc.sharing.share-contributor](uc.sharing.share-contributor.md)) or UPLOADER
+- **Secondary actor:** **a link visitor** — the anonymous holder of a READ_WRITE
+  ([uc.sharing.share-contributor](uc.sharing.share-contributor.md)) or WRITE_ONLY
   ([uc.sharing.share-uploader](uc.sharing.share-uploader.md)) link.
 - **Goal:** bound how much any one upload link can put into the store, so a link that travels further than intended
   cannot fill the server — while an ordinary event still fits without anyone touching a setting.

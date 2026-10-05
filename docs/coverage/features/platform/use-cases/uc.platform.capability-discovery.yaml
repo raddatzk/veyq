@@ -40,7 +40,7 @@ acceptanceCriteria:
       backend:
         integration: [CapabilityManifestSliceTest.manifestCarriesNoIdentityAndIsIdenticalForEveryCaller, CapabilityDisabledSliceTest.createUploaderShareIsRejectedWhileViewerPassesTheGate]
   - id: sharing-first-consumer
-    text: Sharing gates on sharing.public-links / sharing.uploader-links. The normal share create dialog offers only VIEWER/CONTRIBUTOR (ShareCreateDialog.test.ts); the uploader is a SEPARATE memory action + its own dialog variant, gated on sharing.uploader-links in MemoryDetail. Disabling sharing.uploader-links hides the uploader action AND makes createShare(role=UPLOADER) return 422 capability_disabled. Proves the full loop (manifest -> client gate -> server enforcement) on a real feature.
+    text: Sharing gates on sharing.public-links / sharing.uploader-links. The normal share create dialog offers only READ/READ_WRITE (ShareCreateDialog.test.ts); the uploader is a SEPARATE memory action + its own dialog variant, gated on sharing.uploader-links in MemoryDetail. Disabling sharing.uploader-links hides the uploader action AND makes createShare(role=WRITE_ONLY) return 422 capability_disabled. Proves the full loop (manifest -> client gate -> server enforcement) on a real feature.
     coverage:
       backend:
         integration: [CapabilityDisabledSliceTest.createUploaderShareIsRejectedWhileViewerPassesTheGate]
@@ -55,5 +55,5 @@ acceptanceCriteria:
         unit: [src/features/platform/capabilities.test.ts]
 # scripts/validate_capabilities.py enforces catalog-serves-usecases at the doc-graph level (every serves -> a real,
 # built use-case), run in the CI trust-chain alongside validate_feature_wiring. The Phase-3 live smoke (uploader
-# disabled -> option gone + forced createShare UPLOADER rejected; a major bump -> the incompatibility screen) is a
+# disabled -> option gone + forced createShare WRITE_ONLY rejected; a major bump -> the incompatibility screen) is a
 # manual browser check the ShareCreateDialog + IncompatibleScreen unit tests automate at component level.

@@ -98,7 +98,7 @@ request the **user** turned on, straight to the chosen provider.
   item's **trash state** (a trashed flag + who trashed it + when, until the scheduled purge); a media item's
   **uploader attribution + bucket structure** (an opaque `owner_key` per medium — `user:{id}` / `share:{id}` —
   plus its `bucket_id` and the bucket rows' shape: node, parentage, `is_primary`, per-bucket counts; the
-  bucket/uploader **names stay sealed** under `K_mem` — an UPLOADER guest's under its own key, [ADR 0034](../decisions/0034-media-uploader-buckets.md),
+  bucket/uploader **names stay sealed** under `K_mem` — a WRITE_ONLY guest's under its own key, [ADR 0034](../decisions/0034-media-uploader-buckets.md),
   [ADR 0031](../decisions/0031-uploader-public-share.md) point 7);
   per-parent blinded tokens; to a **public share's guest**, the shared Memory's **scope id** — every `K_mem` seal the
   viewer opens is bound to it ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md)), so it rides with the
@@ -273,8 +273,8 @@ server-blind tokens make this work without the server ever seeing content:
   under the scope key **`K_SC` at the scope's current epoch** (stored with that epoch), openable **only with `K_SC`**,
   which neither the operator nor any share link holds, so `K_share` never enters the operator's reach. The
   conscious consequence: a **scope member** can now **derive** `K_share` for that Memory's shares — harmless (they
-  already read the content, and revoke stays owner-gated). It is deliberately *not* every `K_mem`-holder: a VIEWER or
-  CONTRIBUTOR link holds `K_mem`, and a copy under it would open every sibling share's password, label and note to
+  already read the content, and revoke stays owner-gated). It is deliberately *not* every `K_mem`-holder: a READ or
+  READ_WRITE link holds `K_mem`, and a copy under it would open every sibling share's password, label and note to
   that link plus a dump. Recorded in [ADR 0036](../decisions/0036-editable-share-note-recoverable-share-key.md)
   point 4.
 - **A link a departed member could copy is re-issued, never revived**

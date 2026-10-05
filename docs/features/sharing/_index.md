@@ -21,12 +21,12 @@ least-privilege is crypto-enforced, and the server stays blind.
 
 - [uc.sharing.share-public-viewer](use-cases/uc.sharing.share-public-viewer.md) — **built (web)** (cr-0100: publish
   one of your own Memories as a read-only, anonymous, revocable public link `/s/{shareId}#k=…`; the share key rides
-  the fragment, the server stays blind; v1 = **personal-scope Memories, VIEWER only**)
+  the fragment, the server stays blind; v1 = **personal-scope Memories, READ only**)
 - [uc.sharing.share-contributor](use-cases/uc.sharing.share-contributor.md) — **built (web)** (cr-0101: a
-  **CONTRIBUTOR** link where an anonymous visitor can **view + add photos** after naming themselves — the name
+  **READ_WRITE** link where an anonymous visitor can **view + add photos** after naming themselves — the name
   **sealed under `K_mem`** → an anonymous share identity, the buckets hook; direct-append, personal-scope only;
   [ADR 0030](../../decisions/0030-contributor-public-share.md))
-- [uc.sharing.share-uploader](use-cases/uc.sharing.share-uploader.md) — **built (web)** (cr-0102: an **UPLOADER**
+- [uc.sharing.share-uploader](use-cases/uc.sharing.share-uploader.md) — **built (web)** (cr-0102: a **WRITE_ONLY**
   write-only drop-box — add photos but **cannot see** the Memory or others'; the resolve returns no media (the
   `canView` gate, no server-side gallery filtering), the own-view is **client-local, session-only** from local
   previews (never a download), delete-your-own is **token-gated + ownership-checked**, and the ephemerality is
@@ -59,7 +59,7 @@ least-privilege is crypto-enforced, and the server stays blind.
   stated plainly; [ADR 0037](../../decisions/0037-password-protected-shares.md))
 
 - [uc.sharing.share-link-storage-limit](use-cases/uc.sharing.share-link-storage-limit.md) — **built** (every
-  CONTRIBUTOR and UPLOADER link stores at most the tenant owner's per-link limit, 10 GiB until changed; a `start`
+  READ_WRITE and WRITE_ONLY link stores at most the tenant owner's per-link limit, 10 GiB until changed; a `start`
   that does not fit is refused whole, and the visitor learns only that the link is full;
   [ADR 0073](../../decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md))
 

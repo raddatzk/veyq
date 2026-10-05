@@ -15,11 +15,11 @@ true: the server checked only the id.
 - **Exactly one guest call is opened by the id alone: naming yourself** (`createShareIdentity`). It mints a
   contributor token, and every later guest write needs that token. A password-protected link was already closed —
   its gate checks `SHA-256(token)` against a stored verifier ([ADR 0037](0037-password-protected-shares.md)).
-- So **a database copy plus the live instance** named a guest on every enabled, password-less CONTRIBUTOR or
-  UPLOADER link and uploaded. And the id rides every guest request path (`/s/{id}`, `/api/shares/{id}/…`), so any
+- So **a database copy plus the live instance** named a guest on every enabled, password-less READ_WRITE or
+  WRITE_ONLY link and uploaded. And the id rides every guest request path (`/s/{id}`, `/api/shares/{id}/…`), so any
   reverse-proxy access log an operator turns on holds it too (none is on in the bundled stack or the chart).
 - **What that bought was junk and spent quota, never a read.** Without `K_share` the writer can seal neither under
-  `K_mem` (CONTRIBUTOR) nor to the link's drop key (UPLOADER, [ADR 0031](0031-uploader-public-share.md) point 7),
+  `K_mem` (READ_WRITE) nor to the link's drop key (WRITE_ONLY, [ADR 0031](0031-uploader-public-share.md) point 7),
   so its uploads open for nobody. Bounded per link ([ADR 0073](0073-storage-quota-belongs-to-whoever-pays-for-the-store.md)
   §4) and by the per-share identity rate limit — integrity and availability, not confidentiality.
 
@@ -30,7 +30,7 @@ true: the server checked only the id.
    to the link it was derived for ([ADR 0072](0072-a-seal-binds-its-object.md)). Pinned by the `share_write_token`
    conformance vector.
 2. **The server keeps only its hash.** Every create and every re-issue ([ADR 0075](0075-a-link-a-departed-member-could-copy-is-reissued.md))
-   carries `writeVerifier = SHA-256(writeToken)`, for **every** role — a VIEWER link can be flipped to CONTRIBUTOR
+   carries `writeVerifier = SHA-256(writeToken)`, for **every** role — a READ link can be flipped to READ_WRITE
    later and its key does not change, so an edit never takes a verifier. A deleted link's tombstone clears it with
    the other key-derived columns (ADR 0029 §7).
 3. **Naming yourself presents the token** as `X-Share-Write`. The check runs after the share is found live and
@@ -45,8 +45,8 @@ true: the server checked only the id.
    new guest until a curator re-issues it. An existing guest's token keeps working — only naming oneself is gated.
    The manage list says which links those are: each guest-taking row carries `newGuestsRefused`, derived from the
    missing verifier and the role — the same two facts the refusal decides on — and the panel marks it beside the
-   renew. Every row also carries the missing verifier on its own (`writeVerifierMissing`), because a VIEWER link
-   without one becomes such a link the moment its role edit picks CONTRIBUTOR, and point 2 keeps the edit from
+   renew. Every row also carries the missing verifier on its own (`writeVerifierMissing`), because a READ link
+   without one becomes such a link the moment its role edit picks READ_WRITE, and point 2 keeps the edit from
    fixing it: the role edit warns and offers the renew instead.
 
 ## Consequences

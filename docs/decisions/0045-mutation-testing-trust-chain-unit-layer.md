@@ -65,7 +65,7 @@ layer.**
    discriminator is **redundancy and blast-radius, not line count**: `isScopeOwner` is a one-line `role == OWNER`
    whose mutant is caught loudly and redundantly across many tests — lifting it buys nothing. `canView`/`canUpload`
    are *also* one-liners, but each is a three-role capability matrix whose single flipped `||`-arm silently admits
-   a write-only UPLOADER into the sealed gallery — a **confidentiality-invariant** breach pinned today by exactly
+   a write-only WRITE_ONLY share into the sealed gallery — a **confidentiality-invariant** breach pinned today by exactly
    one slice, and slices are deliberately un-mutated (this §). A one-liner whose decay silently breaks a hard
    invariant under a single un-mutated oracle is **in**; one whose decay is loud and redundantly caught is **out**.
    Feature-by-feature, backed by the green slices as the refactor's safety net.

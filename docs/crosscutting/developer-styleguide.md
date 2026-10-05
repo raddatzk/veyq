@@ -270,7 +270,7 @@ not documented; the code is the source of truth for that.
 - **Every entity carries `@DynamicUpdate`, so a managed write flushes only the columns it changed.**
   `DynamicUpdateEverywhereTest` reads Hibernate's mapping and names any entity without it. Without it a flush wrote
   every column, so a write wrote back every value it had only read and undid what another transaction changed in
-  between. Each was measured: a terms edit lifted a tenant suspension, a Memory rename wiped an UPLOADER link's drop
+  between. Each was measured: a terms edit lifted a tenant suspension, a Memory rename wiped a WRITE_ONLY link's drop
   key, a consent toggle rolled back a password change's new auth key, and a tenant rotation's re-tag revived a
   revoked invite (cr-managed-writes-flush-only-what-they-change). **Two writers of the same column still need the
   compare-and-set rule above, and a check that decides a write is read where the write happens.** A rename's epoch

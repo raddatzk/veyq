@@ -90,8 +90,8 @@ a plausible reason to switch off. Two computation sources feed the same active m
 
 | id | `serves` (use-cases) | source | disabled ⇒ |
 |---|---|---|---|
-| `sharing.public-links` | share-public-viewer, share-contributor | operator policy | Share affordance hidden; `createShare(VIEWER/CONTRIBUTOR)` and re-activating such a share → `422` |
-| `sharing.uploader-links` | share-uploader | operator policy | Uploader option hidden; `createShare(UPLOADER)` and re-activating such a share → `422` |
+| `sharing.public-links` | share-public-viewer, share-contributor | operator policy | Share affordance hidden; `createShare(READ/READ_WRITE)` and re-activating such a share → `422` |
+| `sharing.uploader-links` | share-uploader | operator policy | Uploader option hidden; `createShare(WRITE_ONLY)` and re-activating such a share → `422` |
 | `spaces.groups` | add-group-member, manage-group-members, rename-group, delete-group, consent-group-add | operator policy | group-space UI hidden; the group-create endpoint → `422` |
 | `account.device-trust` | trust-device, remember-this-device, auto-unlock, set-device-security | operator policy | the "remember this device" toggle hidden; enrolling a device wrap → `422` |
 

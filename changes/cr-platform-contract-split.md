@@ -394,7 +394,24 @@ Every slice:
     criterion `gaps` note (the refs prove that content on the resolve's body) for slice 6 to replace.
   - `docs/apps/files.md`'s open question no longer offers a per-application blob table (contradicted D7).
 
-- [ ] **1 — Roles renamed `READ`/`READ_WRITE`/`WRITE_ONLY` (D2).** Mechanical; no behaviour change.
+- [x] **1 — Roles renamed `READ`/`READ_WRITE`/`WRITE_ONLY` (D2).** Mechanical; no behaviour change.
+
+  Done in `d6804c3c` (contracts), `b0acba35` (backend + baseline pin), `5f8c9858` (web + crypto comments) and the
+  docs commit after them; the generator names the members `Read`/`ReadWrite`/`WriteOnly`, as predicted.
+  **Deviation** (each listed):
+  - The bite test is `ShareSliceTest.aPreRenameRoleValueIsRefused`. An enum value outside the spec is refused by
+    deserialization as a bare `400` with an **empty body**, so there is no error code to anchor on: it pins the
+    empty body instead (a handler `400` carries JSON). Measured red against the unrenamed enum (`400` expected,
+    `201` served), green after.
+  - The e2e share suites were **not** run: from a worktree `scripts/run_web_e2e.py` recreates the owner's dev
+    compose services. They run from the main checkout.
+  - `ShareRole`'s description drops "MANAGER is a later slice" (three modes, D2); `createShare`'s description
+    names all three modes (it named two).
+  - `web/CLAUDE.md` named `UPLOADER` outside the locator's paths and is renamed too.
+  - `canView`/`canUpload` keep their names (the second locator lists them; nothing asks for a rename).
+  - ADRs 0029/0030/0031 carry one inline "renamed 2026-10-06 from …" clause each at the role's statement, not an
+    amendment line (`docs/decisions/README.md`). Inbox rows that are done keep the old values as history; the open
+    row #329 names the new one.
 
   Locator, run from the repo root (V34 gives its 2026-10-05 output):
   `grep -rlE "\b(VIEWER|CONTRIBUTOR|UPLOADER)\b|ShareRole\.(Viewer|Contributor|Uploader)" contracts backend web/src admin-web/src packages/crypto/src docs wiki scripts changes | grep -v /generated/`.
@@ -633,7 +650,7 @@ Every slice:
        positive control on the same response. The members' bucket-list control (:120-128) is unchanged.
      - **bite levers:**
        - serve `identityId` unfiltered → `onlyAnUploadersMediaNamesItsIdentity` red;
-       - serve CONTRIBUTOR identities → `aContributorLinkIsServedNoneOfItsOwnGuests` red;
+       - serve READ_WRITE identities → `aContributorLinkIsServedNoneOfItsOwnGuests` red;
        - put `media` back on the resolve → the absence assertion red.
      - **web:**
        - `share.ts:765-767` reads the new call (`publicShareMediaApi()`, no bearer);
@@ -843,8 +860,8 @@ words, which slice 1 renames).
     identities whose media it holds. Both pass the same password gate."*
   - The sequence diagram (:50-51) gains the second request.
 - `uc.sharing.share-uploader.md:31-32` (step 3).
-  - Today: *"`{ role: UPLOADER, sealedDropPublicKey, nodeId, sealedName, media: [] }`"*.
-  - Draft: *"`{ role: UPLOADER, rootKind, sealedDropPublicKey, nodeId, sealedName }`; an UPLOADER link's media
+  - Today: *"`{ role: WRITE_ONLY, sealedDropPublicKey, nodeId, sealedName, media: [] }`"*.
+  - Draft: *"`{ role: WRITE_ONLY, rootKind, sealedDropPublicKey, nodeId, sealedName }`; a WRITE_ONLY link's media
     read answers an empty list"*.
   - Likewise :19, :63 (the diagram), :89-90 and :110-111 (`media: []` → the media read's empty list). Step 5
     (:45-46) keeps its path.

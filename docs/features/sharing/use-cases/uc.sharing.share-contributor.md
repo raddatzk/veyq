@@ -7,7 +7,7 @@
   add photos** — while the server stays operator-blind and the rest of your content stays private.
 - **Preconditions:** an **authenticated, unlocked** curator; the target Memory is in the caller's **personal scope**
   (v1 restriction); the caller can open it (holds `K_mem`).
-- **Postconditions (success):** a share record with **role CONTRIBUTOR** exists (opaque), and a link
+- **Postconditions (success):** a share record with **role READ_WRITE** exists (opaque), and a link
   `/s/{shareId}#k=<K_share>` lets any anonymous visitor open the Memory **and contribute photos** — after naming
   themselves — until the curator revokes it or it expires. Contributed photos appear in the Memory immediately
   (direct-append) and are attributed to the contributor's **sealed** name. Operator-blind throughout: the server
@@ -17,20 +17,20 @@ This is the second sharing slice ([ADR 0030](../../../decisions/0030-contributor
 the public **viewer** share ([uc.sharing.share-public-viewer](uc.sharing.share-public-viewer.md),
 [ADR 0029](../../../decisions/0029-public-viewer-share.md)). The crypto is the same per-Memory second-wrap of
 [ADR 0012](../../../decisions/0012-content-key-hierarchy.md); a contributor unwraps `K_mem` from the fragment key
-exactly as a viewer does, then seals new media under it. **v1 is deliberately narrow: role CONTRIBUTOR only
+exactly as a viewer does, then seals new media under it. **v1 is deliberately narrow: role READ_WRITE only
 (view + add), direct-append, personal-scope Memories.**
 
 ## Main flow
 
 1. **Create.** The curator opens one of their Memories → **Share** → chooses the **Contributor** role (instead of
    Viewer). The client mints `K_share` and a **256-bit `shareId`**, computes `symWrap(K_share, K_mem)`, re-seals
-   the Memory name under `K_share`, and `POST`s the share record `{ shareId, nodeId, role: CONTRIBUTOR, wrap,
+   the Memory name under `K_share`, and `POST`s the share record `{ shareId, nodeId, role: READ_WRITE, wrap,
    sealedName, writeVerifier, expiresAt? }` — `writeVerifier` is the hash of a write token derived from `K_share`
    ([ADR 0076](../../../decisions/0076-a-guest-write-proves-it-holds-the-links-key.md)). The server stores the record opaquely under that id.
 2. **Hand off.** The client shows the link **`/s/{shareId}#k=<base64url(K_share)>`** to copy. `K_share` rides the
    fragment — never sent. The curator passes it out-of-band.
 3. **Open + name yourself (anonymous).** A visitor opens the link. The client `GET`s `/api/shares/{shareId}` (**no
-   auth**) → the record + the sealed subtree; because the `role` is CONTRIBUTOR, the client shows a **mandatory
+   auth**) → the record + the sealed subtree; because the `role` is READ_WRITE, the client shows a **mandatory
    name pre-screen**. The visitor enters a display name; the client **seals it under `K_mem`** and creates an
    **anonymous share identity** under an `identityId` it mints (`POST /api/shares/{shareId}/identities
    { identityId, sealedDisplayName }` → `{ identityId, contributorToken }`, held on device). The request proves the
@@ -62,11 +62,11 @@ sequenceDiagram
   participant O as Object store
   actor V as Anonymous<br>contributor
   C->>C: K_share = random#59; wrap = symWrap(K_share, K_mem)#59; sealName under K_share
-  C->>S: POST share { shareId (client-minted), nodeId, CONTRIBUTOR, wrap, sealedName, writeVerifier }
+  C->>S: POST share { shareId (client-minted), nodeId, READ_WRITE, wrap, sealedName, writeVerifier }
   S-->>C: shareId
   C->>V: hand off link /s/{shareId}#35;k=…   (fragment, never sent)
   V->>S: GET /api/shares/{shareId}   (no auth)
-  S-->>V: record (role CONTRIBUTOR) + sealed subtree — no guest's name
+  S-->>V: record (role READ_WRITE) + sealed subtree — no guest's name
   V->>V: K_mem = unwrap(wrap, K_share)#59; seal display name under K_mem
   V->>S: POST /identities { identityId (client-minted), sealedDisplayName } + X-Share-Write (from K_share)
   S-->>V: identityId + contributorToken
@@ -80,19 +80,19 @@ sequenceDiagram
 ## Alternate / exception flows
 
 - **A1 — viewer on a contributor share:** a visitor who only wants to look still names themselves (the name is
-  mandatory for a CONTRIBUTOR share, ADR 0030); they then view read-only and may add nothing. (A no-name **viewer**
-  experience is the separate VIEWER share.)
+  mandatory for a READ_WRITE share, ADR 0030); they then view read-only and may add nothing. (A no-name **viewer**
+  experience is the separate READ share.)
 - **A2 — revoked / expired:** `enabled = false` or a passed `expiresAt` → the resolve **and** the upload
   endpoints `404`/`403`. An upload in flight stops at its next window or at its complete, whichever comes first
   (every window is authorized again, [ADR 0013 §2](../../../decisions/0013-blob-storage-presigned-direct-to-store.md));
   already-uploaded photos remain (no retraction — see Quality notes).
-- **A3 — change the grant in place (cr-0119):** the curator edits an existing **VIEWER** share and switches it to
-  **CONTRIBUTOR** (or back) from the share-management dialog — the **same link keeps working**, no new `K_share`,
+- **A3 — change the grant in place (cr-0119):** the curator edits an existing **READ** share and switches it to
+  **READ_WRITE** (or back) from the share-management dialog — the **same link keeps working**, no new `K_share`,
   no re-wrap. `role` is plaintext authorization the server enforces per request, so the new grant bites on the next
   resolve/upload (a promote enables contributions at once; a demote 403s new uploads at once, already-contributed
-  photos stay). Restricted to **VIEWER ↔ CONTRIBUTOR** — an **UPLOADER** drop-box is its own separate action and its
-  write-only promise is never flipped in place (a `422 invalid_role_change` rejects setting UPLOADER or editing an
-  UPLOADER share's role). Owner-gated via `updateShare` ([ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md)).
+  photos stay). Restricted to **READ ↔ READ_WRITE** — a **WRITE_ONLY** drop-box is its own separate action and its
+  write-only promise is never flipped in place (a `422 invalid_role_change` rejects setting WRITE_ONLY or editing a
+  WRITE_ONLY share's role). Owner-gated via `updateShare` ([ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md)).
 - **E1 — blank name:** the pre-screen blocks submission until a non-blank name is entered (mandatory).
 - **E2 — over budget / full / rate-limited:** an oversized upload fails the per-blob byte budget; an upload that
   would take the link over its storage limit, or the tenant over its quota, is refused whole with the visitor told
@@ -119,7 +119,7 @@ sequenceDiagram
   contributed media inline; the buckets grouping reads that hook with **no migration** on the contributor half
   ([ADR 0030](../../../decisions/0030-contributor-public-share.md)).
 - **The name is for the Memory's members.** Neither a link's resolve nor its media read serves a contributor
-  identity, not even its own guests' — also after a CONTRIBUTOR→VIEWER change — and no contributed media in the
+  identity, not even its own guests' — also after a READ_WRITE→READ change — and no contributed media in the
   read names one, so a visitor learns
   neither a name nor which uploads came from one person. A link plus a database dump still opens the names, as it
   opens the photos: accepted in [ADR 0030](../../../decisions/0030-contributor-public-share.md) point 8.

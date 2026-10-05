@@ -65,8 +65,8 @@ Who pays for the store differs by deployment. Today there is one store connectio
    decrement correctly is one that drifts.
 
 4. **The per-link limit is the Tenant Owner's first distribution.**
-   - The Tenant Owner sets one value per tenant in the tenant settings. It applies to every CONTRIBUTOR and
-     UPLOADER link separately.
+   - The Tenant Owner sets one value per tenant in the tenant settings. It applies to every READ_WRITE and
+     WRITE_ONLY link separately.
    - **Default: 10 GiB.** That is enough for an event's photos, and too little for a leaked link to eat a disk.
    - There is no "unlimited", so the anonymous path is always bounded. `0` switches link uploads off.
    - A link's usage is:
