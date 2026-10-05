@@ -49,7 +49,7 @@ describe('language preference', () => {
   })
 })
 
-// cr-0102 (ADR 0031 §5): the UPLOADER drop-box must warn about its session-only, write-only nature in four
+// cr-0102 (ADR 0031 §5): the WRITE_ONLY drop-box must warn about its session-only, write-only nature in four
 // places. This guards that each warning string is present + translated (not an empty/placeholder key) in both
 // locales — the copy for the four surfaces (name-pre-screen warning, header badge, session note, reload empty-state).
 // uc.settings.appearance-language / resolution-fallback. These three assertions existed only as apple/android

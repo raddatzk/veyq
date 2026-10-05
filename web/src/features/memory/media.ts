@@ -38,7 +38,7 @@ export { openBucketName, listBuckets, createBucket, renameBucket, deleteBucket, 
  * blob, role) — the owner is the media for its tiers and the node for a cover — so a server that attaches a blob
  * under another media, or serves a thumbnail in another's slot, gets a wrap that does not open there.
  *
- * A media's seals are under `K_mem`, except for one an UPLOADER guest added: that one's are under the guest's own
+ * A media's seals are under `K_mem`, except for one a WRITE_ONLY guest added: that one's are under the guest's own
  * key (ADR 0031 point 7). A function handed the MEDIA resolves the key itself ([mediaKey]); one handed only an id
  * or a blob ref is handed the key, which its caller asks [mediaKey] for.
  */
@@ -188,12 +188,12 @@ export type MediaItem = {
   ownerKey?: string
   /** cr-0113: the bucket this media lives in, or undefined = the uploader's primary. */
   bucketId?: string
-  /** Set when an UPLOADER guest added this media: its seals are under that guest's own key, which [mediaKey]
+  /** Set when a WRITE_ONLY guest added this media: its seals are under that guest's own key, which [mediaKey]
    *  opens from here (ADR 0031 point 7). Undefined for every other media, whose seals are under `K_mem`. */
   uploader?: UploaderOrigin
 }
 
-/** What a per-media write or lazy read needs: the media's id and, for one an UPLOADER guest added, its origin. */
+/** What a per-media write or lazy read needs: the media's id and, for one a WRITE_ONLY guest added, its origin. */
 export type MediaRef = Pick<MediaItem, 'mediaId' | 'uploader'>
 
 /** A media list row as the UI holds it — exported so a test can feed the read path a row the server shaped. */
@@ -223,7 +223,7 @@ export function summaryToItem(s: MediaSummary, uploader?: UploaderOrigin): Media
   }
 }
 
-/** A listing page's rows as items — a row an UPLOADER guest added carries its origin, which the page itself
+/** A listing page's rows as items — a row a WRITE_ONLY guest added carries its origin, which the page itself
  *  serves: the node's sealed drop key and the guest's wrapped key (ADR 0031 point 7). */
 function pageItems(nodeId: string, page: MediaListPage): MediaItem[] {
   const wrapped = new Map((page.uploaderKeys ?? []).map((k) => [k.identityId, k.wrappedIdentityKey]))
@@ -716,7 +716,7 @@ async function reserveAndPump(
 /**
  * Seal the original + its derivatives (each under its own `K_blob`), upload all ciphertext chunks direct-to-store,
  * and complete + attach — via an injected [MediaUploadTransport]. Shared by the authed [addMedia] and the
- * anonymous contributor upload. `memoryKey` is the key the new media is sealed under: `K_mem`, or an UPLOADER
+ * anonymous contributor upload. `memoryKey` is the key the new media is sealed under: `K_mem`, or a WRITE_ONLY
  * guest's own identity key, since that guest never holds `K_mem` (ADR 0031 point 7). `deriver` is injectable for
  * tests; `opts` carries `onProgress` (0..1) + an `AbortSignal`.
  */
@@ -1127,7 +1127,7 @@ function metaHasContent(m: RawMediaMeta): boolean {
  * backfills. `edit` gets the RAW tier (every field verbatim, never [unsealMeta]'s projection) and returns the next
  * one, or null for no write; on a `409 stale_version` it re-runs on the tier the conflict handed back. A present
  * tier that does not open is refused (`MetaUnreadableError`), never rebuilt from empty (#273). The key is the one
- * the media's origin fixes ([mediaKey]): a member editing what an UPLOADER guest added re-seals under that guest's
+ * the media's origin fixes ([mediaKey]): a member editing what a WRITE_ONLY guest added re-seals under that guest's
  * key, never under `K_mem`, so the media never changes path (ADR 0031 point 7). Drops to null when nothing is
  * left worth sealing.
  */

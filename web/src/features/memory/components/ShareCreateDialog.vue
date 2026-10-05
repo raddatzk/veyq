@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // The share create/edit dialog (cr-0116), opened from the list-only ShareDialog. Shared by BOTH share flows via the
-// `uploader` flag so they stay identical by construction: the normal flow shows a VIEWER/CONTRIBUTOR role switcher;
-// the uploader (drop-box) flow fixes the role to UPLOADER and hides the switcher — that is the ONLY difference.
+// `uploader` flag so they stay identical by construction: the normal flow shows a READ/READ_WRITE role switcher;
+// the uploader (drop-box) flow fixes the role to WRITE_ONLY and hides the switcher — that is the ONLY difference.
 // CREATE collects an optional name + per-locale note, mints the share and shows the copyable link. EDIT (editShare
 // set): pre-fills name + note (decrypted via the K_SC-recoverable K_share) and saves them in place with `updateShare` —
 // the link stays valid. Operator-blind: name + note sealed under K_share; the fresh K_share rides only the returned
@@ -39,7 +39,7 @@ const props = defineProps<{
   /** When set, the dialog RE-ISSUES this share (ADR 0075): the create form pre-filled from it, role fixed, and on
    *  submit a new link replaces it — the old one is switched off in the same request. */
   reissueFrom?: ManagedShare | null
-  /** The uploader (drop-box) variant: role fixed to UPLOADER, no switcher. Identical otherwise. */
+  /** The uploader (drop-box) variant: role fixed to WRITE_ONLY, no switcher. Identical otherwise. */
   uploader?: boolean
 }>()
 // `reissue`: the edit asks its parent to renew this share instead (#303) — the renew is the parent's own dialog.
@@ -50,7 +50,7 @@ const isEdit = computed(() => !!props.editShare)
 const isReissue = computed(() => !isEdit.value && !!props.reissueFrom)
 // A share's recovery copy is bound to (scope, Memory, share) (ADR 0072): this dialog's scope + Memory, never the row's.
 const addressOf = (s: ManagedShare) => ({ scopeId: props.scopeId, nodeId: props.nodeId, shareId: s.shareId })
-// The role switcher shows in the normal flow on BOTH create and edit (cr-0119: an existing VIEWER/CONTRIBUTOR share
+// The role switcher shows in the normal flow on BOTH create and edit (cr-0119: an existing READ/READ_WRITE share
 // can be re-graded in place); the uploader variant never shows it (its role is fixed, its promise not flippable).
 // A re-issue keeps the old share's role (the server takes it from the old row), so it shows no switcher either.
 const showRoleSwitcher = computed(() => !props.uploader && !isReissue.value)
@@ -62,7 +62,7 @@ const headerLabel = computed(() =>
       : props.uploader ? t('share.uploaderCreate') : t('share.createNew'),
 )
 const name = ref('')
-const role = ref<ShareRole>(props.uploader ? ShareRole.Uploader : ShareRole.Viewer)
+const role = ref<ShareRole>(props.uploader ? ShareRole.WriteOnly : ShareRole.Read)
 const note = ref<LocaleMap>({})
 // cr-0118: an optional password. On edit it is pre-filled from the recovered reveal copy; comparing against
 // `currentPassword` on save decides untouched / change / remove. `revealPw` toggles the field's visibility.
@@ -107,19 +107,19 @@ onMounted(() => {
   }
 })
 
-// The normal flow's switcher offers VIEWER + CONTRIBUTOR only — the uploader is its own action/dialog (no switcher).
+// The normal flow's switcher offers READ + READ_WRITE only — the uploader is its own action/dialog (no switcher).
 const roleOptions = computed(() => [
-  { label: t('share.roleViewer'), value: ShareRole.Viewer },
-  { label: t('share.roleContributor'), value: ShareRole.Contributor },
+  { label: t('share.roleViewer'), value: ShareRole.Read },
+  { label: t('share.roleContributor'), value: ShareRole.ReadWrite },
 ])
 const roleHint = computed(() =>
-  role.value === ShareRole.Contributor ? t('share.roleContributorHint') : t('share.roleViewerHint'),
+  role.value === ShareRole.ReadWrite ? t('share.roleContributorHint') : t('share.roleViewerHint'),
 )
-// #303 (ADR 0076 point 5): a link minted before the write verifier refuses every new guest as a CONTRIBUTOR, and an
-// edit never adds a verifier (point 2) — only a renew stores one. So such a link, graded CONTRIBUTOR, warns and offers
+// #303 (ADR 0076 point 5): a link minted before the write verifier refuses every new guest as a READ_WRITE, and an
+// edit never adds a verifier (point 2) — only a renew stores one. So such a link, graded READ_WRITE, warns and offers
 // that renew. The server says which links those are; the verifier itself is never on the wire.
 const roleNeedsReissue = computed(
-  () => isEdit.value && !!props.editShare?.writeVerifierMissing && role.value === ShareRole.Contributor,
+  () => isEdit.value && !!props.editShare?.writeVerifierMissing && role.value === ShareRole.ReadWrite,
 )
 
 const { run: runSubmit, pending: busy } = useAsyncAction(
@@ -140,7 +140,7 @@ const { run: runSubmit, pending: busy } = useAsyncAction(
         : password.value === currentPassword.value
           ? undefined
           : ({ set: password.value } as const)
-      // cr-0119: a normal-flow edit may re-grade the role (VIEWER ↔ CONTRIBUTOR); the uploader variant never sends one.
+      // cr-0119: a normal-flow edit may re-grade the role (READ ↔ READ_WRITE); the uploader variant never sends one.
       await updateShare(
         addressOf(props.editShare), props.epochs, props.editShare,
         effectiveNote, name.value, expiry, props.uploader ? undefined : role.value, passwordChange,
@@ -240,7 +240,7 @@ function endOfDay(d: Date): Date {
         <InputText id="share-create-name" v-model="name" :placeholder="t('share.nameOptional')" :disabled="busy" />
       </div>
 
-      <!-- Normal flow: pick VIEWER/CONTRIBUTOR on create AND edit (cr-0119, re-grade in place). Uploader flow: no
+      <!-- Normal flow: pick READ/READ_WRITE on create AND edit (cr-0119, re-grade in place). Uploader flow: no
            switcher — just a short description of what a drop-box link does. -->
       <div v-if="showRoleSwitcher" class="share-field">
         <label>{{ t('share.roleLabel') }}</label>

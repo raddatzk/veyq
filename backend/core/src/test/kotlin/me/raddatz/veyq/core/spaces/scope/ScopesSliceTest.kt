@@ -1451,7 +1451,7 @@ class ScopesSliceTest {
         QuarkusTransaction.requiringNew().run {
             ShareEntity().apply {
                 id = shareId; ownerAccount = owner; this.scopeId = scopeId; this.nodeId = nodeId
-                role = ShareEntity.CONTRIBUTOR; wrap = "c2hhcmUtd3JhcA=="; sealedName = "c2VhbGVkLW1lbW9yeQ=="
+                role = ShareEntity.READ_WRITE; wrap = "c2hhcmUtd3JhcA=="; sealedName = "c2VhbGVkLW1lbW9yeQ=="
                 createdAt = Instant.now()
             }.persist()
             ShareIdentityEntity().apply {

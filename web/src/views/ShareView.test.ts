@@ -29,7 +29,7 @@ vi.mock('../features/memory/useThumbnailPipeline', () => ({
 // at module load — mock it exactly as share.test.ts does so loading the real module is side-effect-free.
 vi.mock('../api/client', () => ({ sharesApi: vi.fn(), publicSharesApi: vi.fn(), tokenApi: vi.fn() }))
 
-// A resolvable, unlocked VIEWER share reached via a valid fragment link.
+// A resolvable, unlocked READ share reached via a valid fragment link.
 vi.mock('vue-router', () => ({ useRoute: () => ({ params: { shareId: SHARE_ID }, hash: '#k=AAAA' }) }))
 
 // Keep the REAL terms helpers (acceptedTermsVersion/recordTermsAccepted/pickShareTerms) + error classes; override
@@ -69,7 +69,7 @@ function serve(r: ResolvedShare) {
 
 function viewerShare(): ResolvedShare {
   return {
-    memoryName: 'My Memory', noteByLocale: {}, role: ShareRole.Viewer, scopeId: 'scope-1',
+    memoryName: 'My Memory', noteByLocale: {}, role: ShareRole.Read, scopeId: 'scope-1',
     access: { kind: 'read', memoryKey: new Uint8Array() }, items: [],
   }
 }
@@ -141,7 +141,7 @@ describe('ShareView — accountless terms gate', () => {
 describe('ShareView — terms come before the name pre-screen', () => {
   it('a not-yet-accepted contributor sees the terms first and the name screen only after accepting', async () => {
     localStorage.clear()
-    serve({ ...viewerShare(), role: ShareRole.Contributor, access: { kind: 'read', memoryKey: new Uint8Array(32) } })
+    serve({ ...viewerShare(), role: ShareRole.ReadWrite, access: { kind: 'read', memoryKey: new Uint8Array(32) } })
     vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: TENANT, termsVersion: 1, terms: { en: '## Rules' } })
     const wrapper = mountShareView()
     await flushPromises()
@@ -166,8 +166,8 @@ describe('ShareView — who sees a guest name', () => {
   })
 
   it.each<[ShareRole, ShareAccess]>([
-    [ShareRole.Contributor, { kind: 'read', memoryKey: new Uint8Array(32) }],
-    [ShareRole.Uploader, { kind: 'drop', nodeId: 'n1', dropPublicKey: { x: new Uint8Array(), m: new Uint8Array() } }],
+    [ShareRole.ReadWrite, { kind: 'read', memoryKey: new Uint8Array(32) }],
+    [ShareRole.WriteOnly, { kind: 'drop', nodeId: 'n1', dropPublicKey: { x: new Uint8Array(), m: new Uint8Array() } }],
   ])('the %s name screen says only the Memory\'s members see the name', async (role, access) => {
     serve({ ...viewerShare(), role, access })
     const wrapper = mountShareView()

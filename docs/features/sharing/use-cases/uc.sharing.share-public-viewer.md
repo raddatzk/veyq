@@ -19,7 +19,7 @@ slices. The crypto is the per-Memory second-wrap of [ADR 0012](../../../decision
 
 1. **Create.** The curator opens one of their Memories → **Share** → *create public link*. The client generates a
    fresh 32-byte `K_share` and a **256-bit `shareId`**, computes `symWrap(K_share, K_mem)`, re-seals the **Memory
-   name under `K_share`**, and `POST`s the share record `{ shareId, nodeId, role: VIEWER, wrap, sealedName,
+   name under `K_share`**, and `POST`s the share record `{ shareId, nodeId, role: READ, wrap, sealedName,
    expiresAt? }`. The server stores the record opaquely under that id (a taken id is `409 id_taken`).
 2. **Hand off.** The client shows the link **`/s/{shareId}#k=<base64url(K_share)>`** to copy. `K_share` lives in
    the **fragment** — never sent to the server. The curator passes it out-of-band (message, QR, wherever).
@@ -45,7 +45,7 @@ sequenceDiagram
   participant O as Object store
   actor V as Anonymous<br>viewer
   C->>C: K_share = random#59; wrap = symWrap(K_share, K_mem)#59; sealName under K_share
-  C->>S: POST share { shareId (client-minted), nodeId, VIEWER, wrap, sealedName }
+  C->>S: POST share { shareId (client-minted), nodeId, READ, wrap, sealedName }
   S-->>C: shareId
   Note over C: link = /s/{shareId}#35;k=base64url(K_share)   (fragment, never sent)
   C->>V: hand off link out-of-band

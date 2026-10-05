@@ -133,7 +133,7 @@ class RemovalRaceSliceTest {
 
     private fun postShare(userId: String, nodeId: String, id: String, epoch: Int = 0): Int =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"shareId":"$id",${ShareWriteProof.field(id)},"nodeId":"$nodeId","role":"VIEWER","wrap":"$WRAP","sealedName":"$NAME","sealedShareKey":"$NAME","sealedShareKeyEpoch":$epoch}""")
+            .body("""{"shareId":"$id",${ShareWriteProof.field(id)},"nodeId":"$nodeId","role":"READ","wrap":"$WRAP","sealedName":"$NAME","sealedShareKey":"$NAME","sealedShareKeyEpoch":$epoch}""")
             .`when`().post("/api/shares").statusCode()
 
     private fun reissue(userId: String, shareId: String, newId: String, epoch: Int = 0): Int =

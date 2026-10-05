@@ -20,10 +20,10 @@ import org.junit.jupiter.api.Test
 /**
  * Slice tests for contributor public shares (uc.sharing.share-contributor, cr-0101, ADR 0030) against the
  * **in-memory store** (metadata only — the byte path is direct-to-store, covered by the store e2e). Covers: a
- * CONTRIBUTOR share's anonymous **identity-create** (name sealed under `K_mem`, opaque) → **share-scoped upload**
+ * READ_WRITE share's anonymous **identity-create** (name sealed under `K_mem`, opaque) → **share-scoped upload**
  * (no bearer, gated by role + token) → the media **attaches to the shared root stamped with the identity** and
  * surfaces in the anonymous resolve (with no identity and no name — those reach the curator's bucket list only,
- * ADR 0030 point 8; the full per-role matrix is `ShareGuestNamesSliceTest`); a **VIEWER** share rejects the identity
+ * ADR 0030 point 8; the full per-role matrix is `ShareGuestNamesSliceTest`); a **READ** share rejects the identity
  * path (`403`); a **bad token** is rejected (`403`); **revoke** stops contributions (`404`); operator-blindness
  * (the sealed name + wrap round-trip, the server stores only ciphertext + opaque ids).
  *
@@ -42,7 +42,7 @@ class ShareContributorSliceTest {
     fun contributeFlowAttachesStampsIdentityAndSurfacesInResolve() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
-        val shareId = createShare(userId, memory, role = "CONTRIBUTOR")
+        val shareId = createShare(userId, memory, role = "READ_WRITE")
 
         // name yourself — NO bearer; the sealed name is stored opaque, and we get an identity + a capability token
         val idResp = given().contentType(ContentType.JSON)
@@ -86,7 +86,7 @@ class ShareContributorSliceTest {
     fun viewerShareRejectsContribution() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
-        val shareId = createShare(userId, memory, role = "VIEWER")
+        val shareId = createShare(userId, memory, role = "READ")
 
         given().contentType(ContentType.JSON)
             .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName"}""")
@@ -98,7 +98,7 @@ class ShareContributorSliceTest {
     fun badTokenRejectedOnUpload() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
-        val shareId = createShare(userId, memory, role = "CONTRIBUTOR")
+        val shareId = createShare(userId, memory, role = "READ_WRITE")
         // a well-formed but never-issued token
         given().contentType(ContentType.JSON)
             .body("""{"contributorToken":"bm90LWEtcmVhbC10b2tlbg","items":[${TestBlob.SMALL.declare("Ymxvyi13cmFw")}]}""")
@@ -110,7 +110,7 @@ class ShareContributorSliceTest {
     fun revokeStopsContribution() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
-        val shareId = createShare(userId, memory, role = "CONTRIBUTOR")
+        val shareId = createShare(userId, memory, role = "READ_WRITE")
         val contributorToken = given().contentType(ContentType.JSON)
             .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName"}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
@@ -133,7 +133,7 @@ class ShareContributorSliceTest {
     fun shareUploadOverItsItemBoundIs400() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
-        val shareId = createShare(userId, memory, role = "CONTRIBUTOR")
+        val shareId = createShare(userId, memory, role = "READ_WRITE")
         val contributorToken = given().contentType(ContentType.JSON)
             .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName"}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")

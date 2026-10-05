@@ -12,7 +12,7 @@ import { mediaKey, uploaderOriginOf, type UploaderOrigin } from './mediaKey'
 // Bucket names sealed under K_mem (cr-0113), each bound to its object (ADR 0072): a user-created sub-bucket's name
 // to (scope, node, bucket); a contributor primary's name IS the identity's sealed display name (cr-0101, copied
 // server-side onto the bucket), bound to (scope, share, identity) — the row carries the share and names the identity.
-// An UPLOADER identity's primary is the exception to "under K_mem": its name is sealed under that guest's own key,
+// A WRITE_ONLY identity's primary is the exception to "under K_mem": its name is sealed under that guest's own key,
 // which the row's [BucketItem.uploader] opens through the Memory's drop key (ADR 0031 point 7).
 const bucketNameContext = (scopeId: string, nodeId: string, bucketId: string) =>
   ({ purpose: 'bucket-name', scopeId, nodeId, bucketId }) as const
@@ -30,7 +30,7 @@ export type BucketItem = {
   mediaCount: number
   /** A contributor primary's share — its name is bound to it (ADR 0072). */
   shareId?: string
-  /** An UPLOADER identity's primary: its name is sealed under that guest's key, opened from here ([mediaKey]). */
+  /** A WRITE_ONLY identity's primary: its name is sealed under that guest's key, opened from here ([mediaKey]). */
   uploader?: UploaderOrigin
 }
 

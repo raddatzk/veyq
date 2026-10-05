@@ -8,31 +8,31 @@
   operator-blind.
 - **Preconditions:** an **authenticated, unlocked** curator; the target Memory is in the caller's **personal scope**
   (v1 restriction); the caller can open it (holds `K_mem`).
-- **Postconditions (success):** a share record with **role UPLOADER** exists (opaque), and a link
+- **Postconditions (success):** a share record with **role WRITE_ONLY** exists (opaque), and a link
   `/s/{shareId}#k=<K_share>` lets any anonymous visitor **add photos** (after naming themselves) that append to the
   Memory — visible to the curator in *their* gallery. The uploader sees **only the photos they add this session**
   (from local previews, never a download) and can delete them **in that session**; a reload shows nothing.
 
 This is the third sharing slice ([ADR 0031](../../../decisions/0031-uploader-public-share.md)), building on the
-CONTRIBUTOR share ([uc.sharing.share-contributor](uc.sharing.share-contributor.md),
+READ_WRITE share ([uc.sharing.share-contributor](uc.sharing.share-contributor.md),
 [ADR 0030](../../../decisions/0030-contributor-public-share.md)). The upload crypto/path is identical; the
-difference is the **`canView` gate** (an UPLOADER link's media read answers an empty list) and the **session-only,
-client-local** own-view. **v1: role UPLOADER, personal scope, direct-append.**
+difference is the **`canView` gate** (a WRITE_ONLY link's media read answers an empty list) and the **session-only,
+client-local** own-view. **v1: role WRITE_ONLY, personal scope, direct-append.**
 
 ## Main flow
 
 1. **Create.** The curator opens one of their Memories → **Share** → chooses the **Uploader** role. The client
    mints `K_share`, re-seals the name, and seals the Memory's **drop public key** under `K_share` — **no wrap of
-   `K_mem`** ([ADR 0031](../../../decisions/0031-uploader-public-share.md) point 7). The Memory's first UPLOADER
+   `K_mem`** ([ADR 0031](../../../decisions/0031-uploader-public-share.md) point 7). The Memory's first WRITE_ONLY
    share mints the drop keypair and brings its private half sealed under `K_mem`, which the server sets on the
-   Memory once. It `POST`s `{ shareId, nodeId, role: UPLOADER, sealedDropPublicKey, sealedDropPrivateKey?, sealedName,
+   Memory once. It `POST`s `{ shareId, nodeId, role: WRITE_ONLY, sealedDropPublicKey, sealedDropPrivateKey?, sealedName,
    writeVerifier }` — the hash of a write token derived from `K_share` ([ADR 0076](../../../decisions/0076-a-guest-write-proves-it-holds-the-links-key.md)).
 2. **Hand off.** The client shows the link `/s/{shareId}#k=<base64url(K_share)>` to copy.
 3. **Open + name yourself (anonymous).** The visitor opens the link; the client `GET`s `/api/shares/{shareId}`
-   (**no auth**) → `{ role: UPLOADER, rootKind, sealedDropPublicKey, nodeId, sealedName }`; an UPLOADER link's media
+   (**no auth**) → `{ role: WRITE_ONLY, rootKind, sealedDropPublicKey, nodeId, sealedName }`; a WRITE_ONLY link's media
    read answers an empty list (**no gallery** and
    **no `K_mem`** — the uploader is never handed others' media, nor the key to read them). Because the role is
-   UPLOADER, the client shows a **mandatory name pre-screen** with a **clear note that uploads are visible only in
+   WRITE_ONLY, the client shows a **mandatory name pre-screen** with a **clear note that uploads are visible only in
    this browser tab**; the visitor names themselves → the client mints the identity's own key `K_up`, seals the
    name under it, and creates an anonymous **share identity** carrying `K_up` wrapped to the drop public key, plus
    a `contributorToken`. The request carries `X-Share-Write`, the token derived from the fragment key, whose hash the
@@ -40,7 +40,7 @@ client-local** own-view. **v1: role UPLOADER, personal scope, direct-append.**
 4. **Add photos.** The uploader picks images — through the **same picker** the curator's own gallery uses, so
    [uc.memory.upload](../../memory/use-cases/uc.memory.upload.md) § E3 (Safari's Photos gallery populates
    `input.files` late) holds here unchanged. Each is sealed under `K_up` and uploaded via the **share-scoped**
-   endpoints (as CONTRIBUTOR). The client keeps the returned `{ mediaId }` + the **local preview** in session
+   endpoints (as READ_WRITE). The client keeps the returned `{ mediaId }` + the **local preview** in session
    memory and renders it with the **same gallery mechanic** (grid + optimistic tile) — **from the local preview,
    never a download**. The photo appends to the Memory (the curator sees it).
 5. **Delete / leave.** The uploader can **delete a photo they added this session** (`DELETE
@@ -57,11 +57,11 @@ sequenceDiagram
   participant S as Server<br>(blind)
   participant O as Object store
   actor V as Anonymous<br>uploader
-  C->>S: POST share { shareId (client-minted), nodeId, UPLOADER, sealedDropPublicKey, sealedName }
+  C->>S: POST share { shareId (client-minted), nodeId, WRITE_ONLY, sealedDropPublicKey, sealedName }
   S-->>C: shareId
   C->>V: hand off link /s/{shareId}#35;k=…
   V->>S: GET /api/shares/{shareId}   (no auth)
-  S-->>V: { role: UPLOADER, rootKind, sealedDropPublicKey, sealedName }   ← no K_mem
+  S-->>V: { role: WRITE_ONLY, rootKind, sealedDropPublicKey, sealedName }   ← no K_mem
   V->>S: GET /api/shares/{shareId}/media   (no auth)
   S-->>V: empty list   ← no gallery
   V->>V: drop public key = open(K_share)#59; mint K_up#59; seal name under K_up#59; keep ids + LOCAL previews
@@ -89,13 +89,13 @@ sequenceDiagram
 
 ## Quality notes
 
-- **Write-only, a real server capability (not just id-secrecy).** The `canView` gate (`{VIEWER,CONTRIBUTOR}`) is
-  enforced at **both** guest read paths: the resolve returns `nodes: []` for an UPLOADER share (only the sealed drop
+- **Write-only, a real server capability (not just id-secrecy).** The `canView` gate (`{READ,READ_WRITE}`) is
+  enforced at **both** guest read paths: the resolve returns `nodes: []` for a WRITE_ONLY share (only the sealed drop
   public key + `sealedName`) and the media read its empty list, **and** the blob endpoint (`GET /shares/{id}/blobs/{blobId}`) `404`s for an uploader —
   so even a *leaked* in-subtree id downloads nothing. On top of that it stays structural (an uploader is never
   handed anyone else's ids; ids are unguessable **identifiers**, not authorizers). The own-view is **client-local**
   (this session's uploads); upload + delete are **token-authorized** (the `contributorToken`).
-- **The guest never holds `K_mem` — write-only is cryptographic, not only a server refusal.** An UPLOADER link
+- **The guest never holds `K_mem` — write-only is cryptographic, not only a server refusal.** A WRITE_ONLY link
   carries the Memory's drop public key instead of a wrap of `K_mem`; each guest identity seals its name and uploads
   under a key of its own, wrapped to that drop key. Every reader of the Memory — its members, a viewer or
   contributor link — opens those uploads through the drop private key the Memory keeps under `K_mem`, and a member

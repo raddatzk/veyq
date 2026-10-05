@@ -37,7 +37,7 @@ every enabled link on every tenant-scope Memory, rebuildable from its recovery c
    new share with a fresh id and a fresh `K_share` and deletes the old one — a tombstone, [ADR 0029](0029-public-viewer-share.md)
    §7 — in the **same transaction**; any refusal writes nothing. A replaced link has nothing left to come back for,
    and a tombstone is never re-activated, whoever left or stayed. The server takes the Memory, the scope and the **role** from the old
-   row, so a re-issue cannot move a link or flip it into or out of UPLOADER. It requires the recovery copy at the
+   row, so a re-issue cannot move a link or flip it into or out of WRITE_ONLY. It requires the recovery copy at the
    scope's current epoch (`409 stale_epoch`, [ADR 0024](0024-scope-key-rotation.md) Decision 6) and the capability
    for the role ([ADR 0032](0032-capability-discovery-version-gating.md)). An **enabled** share is re-issued only
    by its owner (as revoke); a **disabled** one by any member, who becomes the new share's owner (as re-activation
@@ -52,7 +52,7 @@ every enabled link on every tenant-scope Memory, rebuildable from its recovery c
    spend, under the row lock that write holds, so the role the new share takes is the one the tombstone replaced.
 2. **What a re-issue keeps.** The client opens the old share through its recovery copy and re-seals under the new
    `K_share`: the **note, private label, expiry and password** carry over (the password with a fresh salt), and
-   the curator may change any of them except the role. An UPLOADER link keeps the Memory's **existing drop key**
+   the curator may change any of them except the role. A WRITE_ONLY link keeps the Memory's **existing drop key**
    ([ADR 0031](0031-uploader-public-share.md) point 7) — every upload so far is sealed to it. **Guest identities do
    not carry over:** they hang off the share id, so photos and names stay in the Memory, readable by members and
    the new link, while a returning guest names themself again and can no longer delete their earlier uploads. The

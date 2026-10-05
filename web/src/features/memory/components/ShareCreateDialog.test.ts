@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // The share CREATE/EDIT dialog is shared by both flows via the `uploader` flag. The NORMAL flow shows a
-// VIEWER/CONTRIBUTOR role switcher (never the uploader — that is its own action/dialog); the UPLOADER flow hides
-// the switcher entirely (role fixed to UPLOADER). cr-share-link-expiry-ui/-edit adds an optional expiry on both
+// READ/READ_WRITE role switcher (never the uploader — that is its own action/dialog); the WRITE_ONLY flow hides
+// the switcher entirely (role fixed to WRITE_ONLY). cr-share-link-expiry-ui/-edit adds an optional expiry on both
 // create and edit: the picked day is sent at its END (works through that day), and on edit it is a FULL REPLACE
 // (pre-filled from the current share, always re-sent — an edit that drops it clears it).
 import { describe, it, expect, vi } from 'vitest'
@@ -66,7 +66,7 @@ function mountDialog(props: Record<string, unknown>) {
 }
 
 const editShareWith = (over: Record<string, unknown>) => ({
-  shareId: 's1', scopeId: SCOPE_ID, nodeId: 'n1', role: ShareRole.Viewer, enabled: true, mine: true,
+  shareId: 's1', scopeId: SCOPE_ID, nodeId: 'n1', role: ShareRole.Read, enabled: true, mine: true,
   createdAt: new Date(0), expiresAt: null, sealedNote: null, sealedShareName: null, sealedShareKey: 'k',
   sealedShareKeyEpoch: 0, passwordRequired: false, sealedPassword: null, ...over,
 })
@@ -80,7 +80,7 @@ describe('ShareCreateDialog (cr-0116)', () => {
     expect(w.text()).not.toContain(t('share.roleUploader'))
   })
 
-  it('uploader flow: no role switcher at all (role fixed to UPLOADER)', () => {
+  it('uploader flow: no role switcher at all (role fixed to WRITE_ONLY)', () => {
     const w = mountDialog({ uploader: true })
     expect(w.find('.select-button').exists()).toBe(false)
   })
@@ -184,19 +184,19 @@ describe('ShareCreateDialog — a renew that lost (#252)', () => {
   })
 })
 
-// #303 (ADR 0076 point 5): a link minted before the write verifier takes no new guest as a CONTRIBUTOR, and an edit
-// never adds a verifier (ADR 0076 point 2) — so re-grading such a link to CONTRIBUTOR warns, and offers the renew that
+// #303 (ADR 0076 point 5): a link minted before the write verifier takes no new guest as a READ_WRITE, and an edit
+// never adds a verifier (ADR 0076 point 2) — so re-grading such a link to READ_WRITE warns, and offers the renew that
 // stores one. The server's `writeVerifierMissing` is the fact; the verifier itself is never on the wire.
 describe('ShareCreateDialog — a role edit onto a link that holds no verifier (#303)', () => {
   const pick = (w: ReturnType<typeof mountDialog>, label: string) =>
     w.findAll('.select-button button').find((b) => b.text() === label)!.trigger('click')
   const warning = (w: ReturnType<typeof mountDialog>) => w.find('.share-role-needs-reissue')
 
-  it('warns once CONTRIBUTOR is picked on a VIEWER link without a verifier, and its renew asks for that share', async () => {
+  it('warns once READ_WRITE is picked on a READ link without a verifier, and its renew asks for that share', async () => {
     const s = editShareWith({ writeVerifierMissing: true })
     const w = mountDialog({ editShare: s })
     await flushPromises()
-    expect(warning(w).exists()).toBe(false) // as a VIEWER link it takes no guest, so there is nothing to warn about
+    expect(warning(w).exists()).toBe(false) // as a READ link it takes no guest, so there is nothing to warn about
     await pick(w, t('share.roleContributor'))
     expect(warning(w).text()).toContain(t('share.roleNeedsReissue'))
     await warning(w).findAll('button').find((b) => b.text() === t('share.reissue'))!.trigger('click')
@@ -205,13 +205,13 @@ describe('ShareCreateDialog — a role edit onto a link that holds no verifier (
     expect(warning(w).exists()).toBe(false)
   })
 
-  it('warns on a CONTRIBUTOR link without a verifier as soon as it opens', async () => {
-    const w = mountDialog({ editShare: editShareWith({ role: ShareRole.Contributor, writeVerifierMissing: true }) })
+  it('warns on a READ_WRITE link without a verifier as soon as it opens', async () => {
+    const w = mountDialog({ editShare: editShareWith({ role: ShareRole.ReadWrite, writeVerifierMissing: true }) })
     await flushPromises()
     expect(warning(w).text()).toContain(t('share.roleNeedsReissue'))
   })
 
-  it('control: a link that holds its verifier switches to CONTRIBUTOR without a warning', async () => {
+  it('control: a link that holds its verifier switches to READ_WRITE without a warning', async () => {
     const w = mountDialog({ editShare: editShareWith({ writeVerifierMissing: false }) })
     await flushPromises()
     await pick(w, t('share.roleContributor'))

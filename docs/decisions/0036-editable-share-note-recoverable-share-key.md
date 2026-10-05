@@ -14,7 +14,7 @@ for that share and the share-management list cannot even *show* a minted share's
 link does).
 
 We want to add a **curator note** — a short message/instruction the sharer attaches to a share, shown on the
-share page to whoever opens the link (a VIEWER greeting "here are our vacation photos", an UPLOADER instruction
+share page to whoever opens the link (a READ greeting "here are our vacation photos", a WRITE_ONLY instruction
 "please upload your pics here"). It must be **operator-blind** (E2EE), **per-share**, one-way (curator → viewer),
 and — the product requirement — **editable after the share is created without invalidating the link**.
 
@@ -43,8 +43,8 @@ parts.
    It is **optional** (a share with no note shows no banner), set at `createShare`, and returned by the anonymous
    `resolveShare` (the share page unwraps it with the fragment `K_share`). It is **rendered as markdown** on the
    share page — reusing the safe escape-first renderer added for tenant terms (`web/src/shared/markdown.ts`,
-   [ADR 0035](0035-server-terms-of-service.md) follow-up). For an UPLOADER share (no gallery) it is the primary
-   instruction above the name field; for VIEWER/CONTRIBUTOR it is a banner under the title.
+   [ADR 0035](0035-server-terms-of-service.md) follow-up). For a WRITE_ONLY share (no gallery) it is the primary
+   instruction above the name field; for READ/READ_WRITE it is a banner under the title.
 
 3. **In-place edit.** Add an **owner-gated `updateShare`** (`PATCH /api/shares/{shareId}`, `@Authenticated`,
    `owner_account`-checked, and only for an owner who is still a member of the share's scope —
@@ -54,13 +54,13 @@ parts.
    recovers `K_share`, re-seals the new note, and PATCHes it — **the link stays valid**. The op is deliberately
    extensible: cr-0116 added the private **`sealedShareName`** (both sealed fields are a full replace), and
    **cr-0119** added an optional **`role`** — the first *grant-affecting* field, a **pure server-side authorization
-   change** (no re-crypto: VIEWER and CONTRIBUTOR share one `symWrap(K_share, K_mem)`, so the wrap/`K_share`/link
-   are untouched). The role change is restricted to **VIEWER ↔ CONTRIBUTOR** (a `422 invalid_role_change` rejects
-   setting `role = UPLOADER` or changing an UPLOADER share's role — a write-only drop-box's "cannot see" promise
-   can't be honestly flipped on already-distributed links, and an UPLOADER share carries the Memory's drop public
+   change** (no re-crypto: READ and READ_WRITE share one `symWrap(K_share, K_mem)`, so the wrap/`K_share`/link
+   are untouched). The role change is restricted to **READ ↔ READ_WRITE** (a `422 invalid_role_change` rejects
+   setting `role = WRITE_ONLY` or changing a WRITE_ONLY share's role — a write-only drop-box's "cannot see" promise
+   can't be honestly flipped on already-distributed links, and a WRITE_ONLY share carries the Memory's drop public
    key instead of that wrap, [ADR 0031](0031-uploader-public-share.md) point 7). `role` is omitted for a plain note/name edit.
 
-4. **The recovery copy is for the Memory's members only — never for a link.** A VIEWER or CONTRIBUTOR link
+4. **The recovery copy is for the Memory's members only — never for a link.** A READ or READ_WRITE link
    carries `K_mem` (it is what the link exists to hand over), so a recovery copy sealed under `K_mem` would let
    that link's holder, with a database dump, open **every other share of the same Memory**: its `K_share`, and
    through it the share's password in plain text ([ADR 0037](0037-password-protected-shares.md)), its private
@@ -88,7 +88,7 @@ parts.
      Folding the password into the key (the crypto-gate [ADR 0037](0037-password-protected-shares.md) defers)
      answers a different threat and needs a new link format.
 
-**Roles + scope.** All three roles (VIEWER / CONTRIBUTOR / UPLOADER) carry a note, in every scope a share can
+**Roles + scope.** All three roles (READ / READ_WRITE / WRITE_ONLY) carry a note, in every scope a share can
 live in — personal, group or tenant ([ADR 0029](0029-public-viewer-share.md) §6).
 
 ## Operator-blindness
@@ -106,7 +106,7 @@ crosses the boundary.
   had `K_share`; now a **scope member** (who holds `K_SC`) can recover `K_share` for any share of that Memory —
   e.g. reconstruct a co-member's link. This grants **nothing new in practice**: a scope member already decrypts
   the Memory's content, and **revoke stays `owner_account`-gated** (a member can't revoke another's share; an
-  owner who has left the scope can't either). It is **not** "every `K_mem`-holder": a VIEWER or CONTRIBUTOR link
+  owner who has left the scope can't either). It is **not** "every `K_mem`-holder": a READ or READ_WRITE link
   holds `K_mem` too, and it recovers nothing (point 4). Recorded in the
   [security model](../crosscutting/security-model.md).
 - **Fixes a real limitation** (a bonus): the share-management list can now **show and edit every minted share's
@@ -133,8 +133,8 @@ crosses the boundary.
 ## Related
 
 - [ADR 0029](0029-public-viewer-share.md) (the share model + `K_share` in the fragment), [ADR 0030](0030-contributor-public-share.md)
-  (CONTRIBUTOR + the `K_mem`-sealed display name — a *different* sealed field), [ADR 0031](0031-uploader-public-share.md)
-  (UPLOADER write-only), [ADR 0012](0012-content-key-hierarchy.md) (`K_SC`/`K_mem` hierarchy).
+  (READ_WRITE + the `K_mem`-sealed display name — a *different* sealed field), [ADR 0031](0031-uploader-public-share.md)
+  (WRITE_ONLY write-only), [ADR 0012](0012-content-key-hierarchy.md) (`K_SC`/`K_mem` hierarchy).
 - Use-case: [uc.sharing.share-note](../features/sharing/use-cases/uc.sharing.share-note.md).
 - [security-model](../crosscutting/security-model.md) (the new `sealed_share_key` operational-metadata line + the
   `K_share`-derivability note), [ADR 0035](0035-server-terms-of-service.md) (the reused markdown renderer).

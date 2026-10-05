@@ -76,10 +76,10 @@ class SharingResource(
             userId = identity.principal.name,
             shareId = createShareRequest.shareId,
             nodeId = createShareRequest.nodeId.toString(),
-            role = createShareRequest.role.value, // VIEWER | CONTRIBUTOR (cr-0101) | UPLOADER (cr-0102)
+            role = createShareRequest.role.value, // READ | READ_WRITE (cr-0101) | WRITE_ONLY (cr-0102)
             wrap = createShareRequest.wrap,
-            sealedDropPublicKey = createShareRequest.sealedDropPublicKey, // UPLOADER: instead of the wrap (ADR 0031 point 7)
-            sealedDropPrivateKey = createShareRequest.sealedDropPrivateKey, // the Memory's first UPLOADER share only
+            sealedDropPublicKey = createShareRequest.sealedDropPublicKey, // WRITE_ONLY: instead of the wrap (ADR 0031 point 7)
+            sealedDropPrivateKey = createShareRequest.sealedDropPrivateKey, // the Memory's first WRITE_ONLY share only
             sealedName = createShareRequest.sealedName,
             expiresAt = createShareRequest.expiresAt?.toInstant(),
             sealedNote = createShareRequest.sealedNote, // cr-0115: optional curator note under K_share
@@ -180,7 +180,7 @@ class SharingResource(
 
     // Edit a share in place (cr-0115/cr-0116/cr-0119, ADR 0036) — owner-gated in the handler (404 if not the
     // caller's). The K_share-sealed ciphertexts (note + name) are re-sealed client-side; an optional `role` changes
-    // the grant in place (VIEWER ↔ CONTRIBUTOR — UPLOADER is 422). The link/K_share/wrap are untouched either way.
+    // the grant in place (READ ↔ READ_WRITE — WRITE_ONLY is 422). The link/K_share/wrap are untouched either way.
     override fun updateShare(shareId: String, updateShareRequest: UpdateShareRequest): Response =
         when (val o = handler.updateShare(
             identity.principal.name, shareId,
@@ -206,11 +206,11 @@ class SharingResource(
                     scopeId = UUID.fromString(o.share.scopeId), // every K_mem seal the viewer opens is bound to it (ADR 0072)
                     passwordRequired = o.share.passwordRequired, // cr-0118: false, or true once unlocked with a valid token
                     pwSalt = if (o.share.passwordRequired) o.share.pwSalt else null,
-                    // ADR 0031 point 7: an UPLOADER guest is handed the drop public key, never `K_mem`. The role
-                    // decides here too, not only the stored row, so no UPLOADER response can ever carry a wrap.
-                    wrap = if (o.share.role == ShareEntity.UPLOADER) null else o.share.wrap,
-                    sealedDropPublicKey = if (o.share.role == ShareEntity.UPLOADER) o.share.sealedDropPublicKey else null,
-                    nodeId = UUID.fromString(o.share.nodeId), // an UPLOADER guest binds its identity key's wrap to it
+                    // ADR 0031 point 7: a WRITE_ONLY guest is handed the drop public key, never `K_mem`. The role
+                    // decides here too, not only the stored row, so no WRITE_ONLY response can ever carry a wrap.
+                    wrap = if (o.share.role == ShareEntity.WRITE_ONLY) null else o.share.wrap,
+                    sealedDropPublicKey = if (o.share.role == ShareEntity.WRITE_ONLY) o.share.sealedDropPublicKey else null,
+                    nodeId = UUID.fromString(o.share.nodeId), // a WRITE_ONLY guest binds its identity key's wrap to it
                     sealedName = o.share.sealedName,
                     sealedNote = o.share.sealedNote, // cr-0115: the share page renders it (null when none)
                     nodes = o.subtree.nodes.map(::toShareNode),

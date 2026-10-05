@@ -59,8 +59,8 @@ class NodeEntity : PanacheEntityBase {
     @Column(name = "meta_version", nullable = false)
     var metaVersion: Long = 0
 
-    /** A MEMORY's drop private key sealed under its `K_mem` (opaque base64) — set once, by its first UPLOADER share,
-     *  never replaced: the media UPLOADER guests added open through it (ADR 0031 point 7). */
+    /** A MEMORY's drop private key sealed under its `K_mem` (opaque base64) — set once, by its first WRITE_ONLY share,
+     *  never replaced: the media WRITE_ONLY guests added open through it (ADR 0031 point 7). */
     @Column(name = "sealed_drop_private_key")
     var sealedDropPrivateKey: String? = null
 

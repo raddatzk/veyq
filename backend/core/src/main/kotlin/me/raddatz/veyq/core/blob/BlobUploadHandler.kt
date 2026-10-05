@@ -78,7 +78,7 @@ class BlobUploadHandler(
     }
 
     /**
-     * The start of an upload link — CONTRIBUTOR or UPLOADER link [shareId], opened by its identity [identityId]. The
+     * The start of an upload link — READ_WRITE or WRITE_ONLY link [shareId], opened by its identity [identityId]. The
      * caller does its own authorization (the link's gate), which runs first; the reservation is [reserveAndOpen]'s,
      * with the per-link limit checked beside the tenant quota.
      */

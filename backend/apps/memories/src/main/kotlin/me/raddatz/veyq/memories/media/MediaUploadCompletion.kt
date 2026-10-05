@@ -14,7 +14,7 @@ import jakarta.enterprise.context.ApplicationScoped
 /**
  * The Memories half of an upload's completion (en.memory.media, cr-0028): a verified original plus its role-tagged
  * derivatives become one medium of a MEMORY or CHAPTER — media, derivative and bucket rows, attributed to its
- * [UploadOpener]: a member's `owner_key` (cr-0113), or a **contributor `shareIdentityId`** (the CONTRIBUTOR share
+ * [UploadOpener]: a member's `owner_key` (cr-0113), or a **contributor `shareIdentityId`** (the READ_WRITE share
  * upload path, cr-0101). Core resolved the live target node and picked this implementation by its kind
  * (`UploadCompletions`); the member path and the guest path reach it alike.
  */

@@ -21,7 +21,7 @@ acceptanceCriteria:
       backend: { integration: [ShareNoteSliceTest.createWithNoteThenAnonymousResolveReturnsIt, ShareNoteSliceTest.createWithoutNoteResolvesNullAndTheManageListCarriesTheRecoverableKey] }
       web: { unit: [src/features/memory/share.test.ts] }
   - id: note-shown-and-rendered-on-share-page
-    text: The anonymous resolveShare returns sealedNote; the share page unwraps it with the fragment K_share and renders it as markdown (safe subset) — a banner for VIEWER/CONTRIBUTOR, the instruction above the name field for UPLOADER.
+    text: The anonymous resolveShare returns sealedNote; the share page unwraps it with the fragment K_share and renders it as markdown (safe subset) — a banner for READ/READ_WRITE, the instruction above the name field for WRITE_ONLY.
     coverage:
       backend: { integration: [ShareNoteSliceTest.createWithNoteThenAnonymousResolveReturnsIt] }
       web: { unit: [src/features/memory/share.test.ts] }

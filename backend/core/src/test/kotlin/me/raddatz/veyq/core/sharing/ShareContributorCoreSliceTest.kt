@@ -11,10 +11,10 @@ import org.junit.jupiter.api.Test
 /**
  * Slice tests for contributor public shares (uc.sharing.share-contributor, cr-0101, ADR 0030) against the
  * **in-memory store** (metadata only — the byte path is direct-to-store, covered by the store e2e). Covers: a
- * CONTRIBUTOR share's anonymous **identity-create** (name sealed under `K_mem`, opaque) → **share-scoped upload**
+ * READ_WRITE share's anonymous **identity-create** (name sealed under `K_mem`, opaque) → **share-scoped upload**
  * (no bearer, gated by role + token) → the media **attaches to the shared root stamped with the identity** and
  * surfaces in the anonymous resolve (with no identity and no name — those reach the curator's bucket list only,
- * ADR 0030 point 8; the full per-role matrix is `ShareGuestNamesSliceTest`); a **VIEWER** share rejects the identity
+ * ADR 0030 point 8; the full per-role matrix is `ShareGuestNamesSliceTest`); a **READ** share rejects the identity
  * path (`403`); a **bad token** is rejected (`403`); **revoke** stops contributions (`404`); operator-blindness
  * (the sealed name + wrap round-trip, the server stores only ciphertext + opaque ids).
  *

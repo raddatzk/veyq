@@ -124,7 +124,7 @@ here; the server is blind.
   `onMasterKeyRotated` — `rotateKeys` refuses to start when none is registered, because material sealed under the
   Master Key (Memories' pins) is otherwise undecryptable after a rotation. A kind or share nobody registered renders
   an explicit unsupported/unavailable state, never an empty region. **Limits, stated:** the five slots are
-  single-claim and Memories-shaped (the second application re-cuts them per kind); an UPLOADER share's root kind is
+  single-claim and Memories-shaped (the second application re-cuts them per kind); a WRITE_ONLY share's root kind is
   unknown to the client, so it goes to the one application holding `DROP_SHARE` until `PublicShare` carries a
   `rootKind`; `NodeKind` stays the generated closed enum; the directory is still `features/memory`, the i18n catalog
   is one file and `styles/memory.css` is global.

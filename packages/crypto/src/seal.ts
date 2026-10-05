@@ -73,7 +73,7 @@ export const SEAL_PURPOSES = {
   'share-note': [],
   'share-name': [],
   'share-password': [],
-  // The Memory's drop PUBLIC key on an UPLOADER share: the guest seals to it, so the server can neither read nor
+  // The Memory's drop PUBLIC key on a WRITE_ONLY share: the guest seals to it, so the server can neither read nor
   // substitute it.
   'drop-public-key': [],
   // Purpose only: under a KEK with a fresh salt, or under the account's own Master Key.
@@ -85,7 +85,7 @@ export const SEAL_PURPOSES = {
 export const SEAL_TO_PURPOSES = {
   'scope-grant': [['scopeId', 'id'], ['epoch', 'uint']],
   'group-name-key': [['scopeId', 'id'], ['nameEpoch', 'uint']],
-  // An UPLOADER guest's own identity key K_up, wrapped to the Memory's drop public key (ADR 0031 point 7). The
+  // A WRITE_ONLY guest's own identity key K_up, wrapped to the Memory's drop public key (ADR 0031 point 7). The
   // reader addresses it by the Memory it opens and the identity the media names.
   'upload-identity-key': [['scopeId', 'id'], ['nodeId', 'id'], ['identityId', 'id']],
   // Purpose only: a single-use pairing envelope to a fresh ephemeral key (ADR 0072 Decision 2).

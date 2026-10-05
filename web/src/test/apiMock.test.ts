@@ -8,7 +8,7 @@ import { fakeApi, stubApi } from './apiMock'
 vi.mock('../api/client', () => ({ publicSharesApi: vi.fn() }))
 import { publicSharesApi } from '../api/client'
 
-const SHARE: PublicShare = { role: 'VIEWER', passwordRequired: false, nodes: [], media: [] }
+const SHARE: PublicShare = { role: 'READ', passwordRequired: false, nodes: [], media: [] }
 
 describe('stubApi', () => {
   it('serves each payload from the factory', async () => {
@@ -21,7 +21,7 @@ describe('stubApi', () => {
     // @ts-expect-error -- a stale field: `sealedDisplayName` is not on PublicShare (TS2353)
     stubApi(publicSharesApi, { resolveShare: { ...SHARE, sealedDisplayName: 'x' } })
     // @ts-expect-error -- a required field missing: `passwordRequired` (TS2741)
-    stubApi(publicSharesApi, { resolveShare: { role: 'VIEWER', nodes: [], media: [] } })
+    stubApi(publicSharesApi, { resolveShare: { role: 'READ', nodes: [], media: [] } })
     // @ts-expect-error -- a method the API does not have
     stubApi(publicSharesApi, { resolveShares: SHARE })
   })
@@ -30,7 +30,7 @@ describe('stubApi', () => {
     const api = stubApi(publicSharesApi, { resolveShare: SHARE })
     // @ts-expect-error -- a stale field through the returned Mock (TS2353)
     api.resolveShare.mockResolvedValueOnce({ ...SHARE, sealedDisplayName: 'x' })
-    api.resolveShare.mockResolvedValueOnce({ ...SHARE, role: 'CONTRIBUTOR' })
+    api.resolveShare.mockResolvedValueOnce({ ...SHARE, role: 'READ_WRITE' })
   })
 })
 

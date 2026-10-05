@@ -143,7 +143,7 @@ class ClientMintedIdSliceTest {
 
     // ── createShare + createShareIdentity ────────────────────────────────────────────────────────────────────
 
-    private fun shareBody(shareId: String, nodeId: String, role: String = "VIEWER") =
+    private fun shareBody(shareId: String, nodeId: String, role: String = "READ") =
         """{"shareId":"$shareId",${ShareWriteProof.field(shareId)},"nodeId":"$nodeId","role":"$role","wrap":"bmV3","sealedName":"bmV3"}"""
 
     @Test
@@ -167,10 +167,10 @@ class ClientMintedIdSliceTest {
     @Test
     fun createShareIdentityRefusesAnIdTakenInAnotherShare() {
         val controlShare = TestIds.shareId()
-        asOwner().body(shareBody(controlShare, w.control.nodeId, "CONTRIBUTOR")).`when`().post("/api/shares")
+        asOwner().body(shareBody(controlShare, w.control.nodeId, "READ_WRITE")).`when`().post("/api/shares")
             .then().statusCode(201)
         val liveShare = TestIds.shareId()
-        asOwner().body(shareBody(liveShare, w.live.nodeId, "CONTRIBUTOR")).`when`().post("/api/shares")
+        asOwner().body(shareBody(liveShare, w.live.nodeId, "READ_WRITE")).`when`().post("/api/shares")
             .then().statusCode(201)
         val taken = TestIds.uuid()
         given().contentType(ContentType.JSON).body("""{"identityId":"$taken","sealedDisplayName":"$B64"}""")

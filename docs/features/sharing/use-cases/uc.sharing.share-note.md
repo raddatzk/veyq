@@ -23,8 +23,8 @@ sealed under the scope key **`K_SC` at the scope's current epoch** (AAD `share-k
 Memory, share and epoch — [ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)), with the epoch stored
 beside it — so every scope member can recover `K_share` **anytime** to re-seal (edit) the note without minting a
 new link ([ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md)).
-**The recovery copy is for the Memory's members only.** It is deliberately *not* under `K_mem`: every VIEWER or
-CONTRIBUTOR link carries `K_mem`, so such a copy would let one link plus a database dump open every other share of
+**The recovery copy is for the Memory's members only.** It is deliberately *not* under `K_mem`: every READ or
+READ_WRITE link carries `K_mem`, so such a copy would let one link plus a database dump open every other share of
 the Memory — its password, its private label, its note, and (the dump holds every share id) its whole link.
 `K_SC` is a key no share carries (ADR 0036 point 4). A create sealed at a stale epoch is `409 stale_epoch`; the
 client re-opens its scope key and retries once.
@@ -34,12 +34,12 @@ terms ([ADR 0035](../../../decisions/0035-server-terms-of-service.md) follow-up)
 
 ## Main flow
 
-1. The curator opens the Memory's **share dialog** and mints a share (VIEWER / CONTRIBUTOR / UPLOADER), optionally
+1. The curator opens the Memory's **share dialog** and mints a share (READ / READ_WRITE / WRITE_ONLY), optionally
    typing a **note**. The client seals it under `K_share` and stores `sealed_note` + `sealed_share_key` with the
    share.
 2. A visitor opens `/s/{shareId}#k=<K_share>` → the anonymous `resolveShare` returns `sealed_note`; the share page
-   unwraps it with the fragment `K_share` and **renders it** — a banner under the title (VIEWER/CONTRIBUTOR) or the
-   primary instruction above the name field (UPLOADER).
+   unwraps it with the fragment `K_share` and **renders it** — a banner under the title (READ/READ_WRITE) or the
+   primary instruction above the name field (WRITE_ONLY).
 3. Later, the curator **edits** the note: in the Memory's share dialog (which holds the scope's epoch keys) they
    pick the share, the client **recovers `K_share`** from `sealed_share_key` at its epoch, re-seals the new note,
    and calls the owner-gated
@@ -48,7 +48,7 @@ terms ([ADR 0035](../../../decisions/0035-server-terms-of-service.md) follow-up)
 ## Alternate / exception flows
 
 - **No note** → nothing is sealed/stored; the share page shows no banner (the note is optional).
-- **UPLOADER share** → the note is the write-only drop-box's instruction ("please upload your pics here"), shown
+- **WRITE_ONLY share** → the note is the write-only drop-box's instruction ("please upload your pics here"), shown
   above the name field (there is no gallery to banner).
 - **Revoked / expired share** → `resolveShare` is `404` (non-enumerable); the note is gone with the share.
 - **A non-owner tries to edit** → refused (`updateShare` is `owner_account`-gated); only the share's creator edits,
@@ -57,7 +57,7 @@ terms ([ADR 0035](../../../decisions/0035-server-terms-of-service.md) follow-up)
 - **A co-member reconstructs the link** (group/tenant scope) → possible (they hold `K_SC`), but grants nothing
   new — they can already read the Memory, and **revoke stays owner-gated** ([ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md)
   consequences).
-- **A link holder tries the same** → nothing opens: a VIEWER or CONTRIBUTOR link holds `K_mem` and its own
+- **A link holder tries the same** → nothing opens: a READ or READ_WRITE link holds `K_mem` and its own
   `K_share`, neither of which is `K_SC`, so even with a dump it reads no other share's password, label or note and
   rebuilds no other link (ADR 0036 point 4).
 - **A member removed from a group scope** keeps the `K_share` of every share they ever opened — it does not change
@@ -82,7 +82,7 @@ kann sie nicht lesen — nur wer den Link von dir bekommt.
 ## Related
 
 - **Feature:** [sharing](../_index.md)
-- **Use-cases:** [uc.sharing.share-public-viewer](uc.sharing.share-public-viewer.md) (the VIEWER link the note
+- **Use-cases:** [uc.sharing.share-public-viewer](uc.sharing.share-public-viewer.md) (the READ link the note
   greets), [uc.sharing.share-contributor](uc.sharing.share-contributor.md),
   [uc.sharing.share-uploader](uc.sharing.share-uploader.md) (the note is its upload instruction).
 - **Decisions:** [ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md) (the recoverable

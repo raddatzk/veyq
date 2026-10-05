@@ -27,8 +27,8 @@ import org.junit.jupiter.api.Test
 
 /**
  * A guest's name reaches the Memory's members only (uc.memory.buckets `guest-names-for-members-only`, ADR 0030
- * point 8): no public-share resolve serves a guest's sealed name, nor a CONTRIBUTOR guest's identity — also not on
- * a VIEWER link that was once a CONTRIBUTOR link, which keeps its identities — and only an uploader's media keeps
+ * point 8): no public-share resolve serves a guest's sealed name, nor a READ_WRITE guest's identity — also not on
+ * a READ link that was once a READ_WRITE link, which keeps its identities — and only an uploader's media keeps
  * its `identityId`, because a viewer opens that media through the identity's wrapped key (ADR 0031 point 7).
  *
  * Every negative carries a positive on the same predicate: the identity set is asserted to be EXACTLY the
@@ -54,16 +54,16 @@ class ShareGuestNamesSliceTest {
     private fun memory(): Memory {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
-        val contributorLink = createShare(userId, memory, "CONTRIBUTOR")
-        val contributor = createIdentity(contributorLink, "CONTRIBUTOR", contributorName)
-        createIdentity(contributorLink, "CONTRIBUTOR", contributorName) // a second guest on the same link, no media
-        val otherContributorLink = createShare(userId, memory, "CONTRIBUTOR")
-        val otherContributor = createIdentity(otherContributorLink, "CONTRIBUTOR", contributorName)
-        val uploader = createIdentity(createShare(userId, memory, "UPLOADER"), "UPLOADER", uploaderName)
-        val viewerLink = createShare(userId, memory, "VIEWER")
-        val flippedLink = createShare(userId, memory, "CONTRIBUTOR")
-        createIdentity(flippedLink, "CONTRIBUTOR", contributorName)
-        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON).body("""{"role":"VIEWER"}""")
+        val contributorLink = createShare(userId, memory, "READ_WRITE")
+        val contributor = createIdentity(contributorLink, "READ_WRITE", contributorName)
+        createIdentity(contributorLink, "READ_WRITE", contributorName) // a second guest on the same link, no media
+        val otherContributorLink = createShare(userId, memory, "READ_WRITE")
+        val otherContributor = createIdentity(otherContributorLink, "READ_WRITE", contributorName)
+        val uploader = createIdentity(createShare(userId, memory, "WRITE_ONLY"), "WRITE_ONLY", uploaderName)
+        val viewerLink = createShare(userId, memory, "READ")
+        val flippedLink = createShare(userId, memory, "READ_WRITE")
+        createIdentity(flippedLink, "READ_WRITE", contributorName)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON).body("""{"role":"READ"}""")
             .`when`().patch("/api/shares/$flippedLink").then().statusCode(204)
         val contributorMedia = seedMedia(scopeId, memory, contributor)
         seedMedia(scopeId, memory, otherContributor)
@@ -103,7 +103,7 @@ class ShareGuestNamesSliceTest {
     @Test
     fun aViewerLinkThatWasAContributorLinkKeepsNoGuest() {
         val m = memory()
-        given().`when`().get("/api/shares/${m.flippedLink}").then().statusCode(200).body("role", equalTo("VIEWER"))
+        given().`when`().get("/api/shares/${m.flippedLink}").then().statusCode(200).body("role", equalTo("READ"))
         assertServesOnlyTheUploader(m.flippedLink, m)
     }
 

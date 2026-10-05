@@ -20,10 +20,10 @@ import { realI18n } from '../../../test/i18n'
 
 const K_SHARE = v1.randomBytes(32)
 
-function head(share: Partial<PublicShare>, role: ShareRole = ShareRole.Viewer): PublicShareHead {
+function head(share: Partial<PublicShare>, role: ShareRole = ShareRole.Read): PublicShareHead {
   return {
     shareId: 's1', share: { role, scopeId: 'scope-1', nodes: [], media: [], ...share } as PublicShare, kShare: K_SHARE,
-    scopeId: 'scope-1', name: 'Rom 2026', noteByLocale: {}, role, rootKind: role === ShareRole.Uploader ? null : NodeKind.Memory,
+    scopeId: 'scope-1', name: 'Rom 2026', noteByLocale: {}, role, rootKind: role === ShareRole.WriteOnly ? null : NodeKind.Memory,
   }
 }
 
@@ -57,7 +57,7 @@ describe('MemoryShareBody opens the Memory from the shell\'s head', () => {
   })
 
   it('…and an uploader response without the drop key it needs', async () => {
-    const w = mountBody(head({ nodeId: 'drop-node', sealedDropPublicKey: undefined }, ShareRole.Uploader))
+    const w = mountBody(head({ nodeId: 'drop-node', sealedDropPublicKey: undefined }, ShareRole.WriteOnly))
     await flushPromises()
     expect(w.emitted('unavailable')).toHaveLength(1)
   })

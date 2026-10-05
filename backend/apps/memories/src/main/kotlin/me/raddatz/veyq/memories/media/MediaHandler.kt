@@ -37,8 +37,8 @@ sealed interface ListMediaOutcome {
         val mediaRevision: Int,
         val deleteRevision: Int,
         val mediaIds: List<String>?,
-        /** The node's sealed drop private key and the wrapped key of every UPLOADER identity among [rows]' owners:
-         *  what opens a row an UPLOADER guest added, served with the rows (ADR 0031 point 7). */
+        /** The node's sealed drop private key and the wrapped key of every WRITE_ONLY identity among [rows]' owners:
+         *  what opens a row a WRITE_ONLY guest added, served with the rows (ADR 0031 point 7). */
         val sealedDropPrivateKey: String? = null,
         val uploaderKeys: Map<String, String> = emptyMap(),
     ) : ListMediaOutcome
@@ -119,7 +119,7 @@ sealed interface PurgeMediaOutcome {
 }
 
 sealed interface ListBucketsOutcome {
-    /** [sealedDropPrivateKey]: the node's, which opens an UPLOADER primary's name (ADR 0031 point 7). */
+    /** [sealedDropPrivateKey]: the node's, which opens a WRITE_ONLY primary's name (ADR 0031 point 7). */
     data class Ok(val buckets: List<BucketRow>, val sealedDropPrivateKey: String? = null) : ListBucketsOutcome
     object Suspended : ListBucketsOutcome, HttpFailure by Failures.tenantSuspended
     /** No such scope/node, or the caller holds no grant (a 404, no reveal). */

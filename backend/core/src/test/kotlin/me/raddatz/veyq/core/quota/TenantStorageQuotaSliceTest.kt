@@ -248,10 +248,10 @@ class TenantStorageQuotaSliceTest {
         return Tenant(tenantId, userId, scopeA, seedNode(scopeA, "MEMORY", wrappedContentKey = CONTENT_KEY), scopeB, seedNode(scopeB, "MEMORY", wrappedContentKey = CONTENT_KEY))
     }
 
-    /** A CONTRIBUTOR link on Memory A, with one identity. */
+    /** A READ_WRITE link on Memory A, with one identity. */
     private fun link(f: Tenant): Link {
         val shareId = given().header("Authorization", bearer(f.userId)).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"${f.memoryA}","role":"CONTRIBUTOR","wrap":"d3JhcA==","sealedName":"c2VhbGVk"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"${f.memoryA}","role":"READ_WRITE","wrap":"d3JhcA==","sealedName":"c2VhbGVk"}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path<String>("shareId")
         val token = given().contentType(ContentType.JSON)

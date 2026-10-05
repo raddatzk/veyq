@@ -60,7 +60,7 @@ class ShareNoteSliceTest {
             .then().statusCode(200)
             .body("sealedNote", equalTo(note2))
             .body("wrap", equalTo(wrap))
-            .body("role", equalTo("VIEWER"))
+            .body("role", equalTo("READ"))
     }
 
     @Test
@@ -98,7 +98,7 @@ class ShareNoteSliceTest {
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         // a share with the recoverable key but no note yet
         val shareId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"$memory","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName","sealedShareKey":"$shareKey","sealedShareKeyEpoch":0}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$memory","role":"READ","wrap":"$wrap","sealedName":"$sealedName","sealedShareKey":"$shareKey","sealedShareKeyEpoch":0}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path<String>("shareId")
 
@@ -117,7 +117,7 @@ class ShareNoteSliceTest {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val shareId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"$memory","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName","sealedShareName":"$name1","sealedShareKey":"$shareKey","sealedShareKeyEpoch":0}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$memory","role":"READ","wrap":"$wrap","sealedName":"$sealedName","sealedShareName":"$name1","sealedShareKey":"$shareKey","sealedShareKeyEpoch":0}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path<String>("shareId")
 
@@ -152,21 +152,21 @@ class ShareNoteSliceTest {
     fun promoteViewerToContributorInPlaceKeepsTheLinkAndEnablesContribution() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
-        val shareId = createWithRole(userId, memory, "VIEWER")
+        val shareId = createWithRole(userId, memory, "READ")
 
-        // a VIEWER share rejects the anonymous contribute (name) step
+        // a READ share rejects the anonymous contribute (name) step
         given().contentType(ContentType.JSON).body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedDisplayName"}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(403).body("code", equalTo("share_not_contributable"))
 
         // promote the grant in place — same shareId, no re-wrap
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"role":"CONTRIBUTOR"}""")
+            .body("""{"role":"READ_WRITE"}""")
             .`when`().patch("/api/shares/$shareId").then().statusCode(204)
 
         // the link is unchanged (same wrap), the grant flipped, and the contribution now works
         given().`when`().get("/api/shares/$shareId")
-            .then().statusCode(200).body("role", equalTo("CONTRIBUTOR")).body("wrap", equalTo(wrap))
+            .then().statusCode(200).body("role", equalTo("READ_WRITE")).body("wrap", equalTo(wrap))
         given().contentType(ContentType.JSON).body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedDisplayName"}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities").then().statusCode(201)
     }
@@ -175,30 +175,30 @@ class ShareNoteSliceTest {
     fun roleChangeToUploaderIs422() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
-        val shareId = createWithRole(userId, memory, "VIEWER")
+        val shareId = createWithRole(userId, memory, "READ")
 
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"role":"UPLOADER"}""")
+            .body("""{"role":"WRITE_ONLY"}""")
             .`when`().patch("/api/shares/$shareId")
             .then().statusCode(422).body("code", equalTo("invalid_role_change"))
 
         // the grant is unchanged — you can't turn a viewer link into a write-only drop-box in place
-        given().`when`().get("/api/shares/$shareId").then().statusCode(200).body("role", equalTo("VIEWER"))
+        given().`when`().get("/api/shares/$shareId").then().statusCode(200).body("role", equalTo("READ"))
     }
 
     @Test
     fun changingAnUploaderShareRoleIs422() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
-        val shareId = createWithRole(userId, memory, "UPLOADER")
+        val shareId = createWithRole(userId, memory, "WRITE_ONLY")
 
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"role":"CONTRIBUTOR"}""")
+            .body("""{"role":"READ_WRITE"}""")
             .`when`().patch("/api/shares/$shareId")
             .then().statusCode(422).body("code", equalTo("invalid_role_change"))
 
         // still a write-only drop-box — its promise isn't flippable on distributed links
-        given().`when`().get("/api/shares/$shareId").then().statusCode(200).body("role", equalTo("UPLOADER"))
+        given().`when`().get("/api/shares/$shareId").then().statusCode(200).body("role", equalTo("WRITE_ONLY"))
     }
 
     // --- expiry set / clear in place (uc.sharing.share-public-viewer §5 "set an expiry", cr-share-link-expiry-edit) ---
@@ -224,7 +224,7 @@ class ShareNoteSliceTest {
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val past = Instant.now().minusSeconds(60).toString()
         val shareId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"$memory","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName","sealedShareKey":"$shareKey","sealedShareKeyEpoch":0,"expiresAt":"$past"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$memory","role":"READ","wrap":"$wrap","sealedName":"$sealedName","sealedShareKey":"$shareKey","sealedShareKeyEpoch":0,"expiresAt":"$past"}""")
             .`when`().post("/api/shares").then().statusCode(201).extract().path<String>("shareId")
         given().`when`().get("/api/shares/$shareId").then().statusCode(404) // expired at birth
 
@@ -241,7 +241,7 @@ class ShareNoteSliceTest {
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val future = Instant.now().plusSeconds(3600).toString()
         val shareId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"$memory","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName","sealedShareKey":"$shareKey","sealedShareKeyEpoch":0,"expiresAt":"$future"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$memory","role":"READ","wrap":"$wrap","sealedName":"$sealedName","sealedShareKey":"$shareKey","sealedShareKeyEpoch":0,"expiresAt":"$future"}""")
             .`when`().post("/api/shares").then().statusCode(201).extract().path<String>("shareId")
 
         // full replace, like sealedNote/sealedShareName: an edit that omits expiresAt clears it — the manage UI
@@ -265,7 +265,7 @@ class ShareNoteSliceTest {
 
     private fun createWithNote(userId: String, nodeId: String, note: String): String =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName","sealedNote":"$note","sealedShareKey":"$shareKey","sealedShareKeyEpoch":0}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"READ","wrap":"$wrap","sealedName":"$sealedName","sealedNote":"$note","sealedShareKey":"$shareKey","sealedShareKeyEpoch":0}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path("shareId")
 }

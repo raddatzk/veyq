@@ -3,7 +3,7 @@
 // no-session route `/s/:shareId`; the share key `K_share` rides the URL **#fragment** (`#k=<base64url>`) and is read
 // on device — it never reaches the server. The shell resolves the kind-independent half of the share
 // (`resolvePublicShare`), runs the gates every share has — password, then the accountless terms — and renders the body
-// the registry holds for the share's ROOT node kind (an UPLOADER share, whose kind the client cannot know, goes to the
+// the registry holds for the share's ROOT node kind (a WRITE_ONLY share, whose kind the client cannot know, goes to the
 // kind-less drop body; a kind nobody claimed is the explicit unavailable state, never a blank page). What a body is —
 // the name pre-screen, the content, the lightbox — belongs to the application (Memories: `MemoryShareBody`). A footer
 // links to veyq's security docs (the client-integrity trust tier, ADR 0026).
@@ -99,10 +99,10 @@ const securityDocUrl = computed(() =>
     : 'https://github.com/raddatzk/veyq/wiki/is-my-data-safe',
 )
 
-/** The body the registry holds for this share, or null (the explicit unavailable state). An UPLOADER share's root
+/** The body the registry holds for this share, or null (the explicit unavailable state). A WRITE_ONLY share's root
  *  kind is unknown to the client, so it asks for the kind-less drop body; any other share asks for its root kind. */
 function bodyFor(h: PublicShareHead) {
-  const key = h.role === ShareRole.Uploader ? DROP_SHARE : h.rootKind
+  const key = h.role === ShareRole.WriteOnly ? DROP_SHARE : h.rootKind
   return key ? registry.shareBody(key) : null
 }
 const body = computed(() => (head.value ? bodyFor(head.value) : null))

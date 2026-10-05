@@ -24,6 +24,7 @@ import org.hamcrest.CoreMatchers.hasItem
 import org.hamcrest.CoreMatchers.not
 import org.hamcrest.CoreMatchers.notNullValue
 import org.hamcrest.CoreMatchers.nullValue
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
 /**
@@ -60,7 +61,7 @@ class ShareSliceTest {
         // resolve with NO bearer — the record + the sealed subtree, operator-blind (wrap/sealedName round-trip)
         given().`when`().get("/api/shares/$shareId")
             .then().statusCode(200)
-            .body("role", equalTo("VIEWER"))
+            .body("role", equalTo("READ"))
             .body("wrap", equalTo(wrap))
             .body("sealedName", equalTo(sealedName))
             // the root Memory carries a null parentId; the chapter is present (whole-subtree share)
@@ -140,7 +141,7 @@ class ShareSliceTest {
         val past = Instant.now().minusSeconds(3600).toString()
 
         val shareId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"$memory","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName","expiresAt":"$past"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$memory","role":"READ","wrap":"$wrap","sealedName":"$sealedName","expiresAt":"$past"}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path<String>("shareId")
 
@@ -166,7 +167,7 @@ class ShareSliceTest {
         val folder = seedNode(scopeId, NodeEntity.FOLDER, parentId = scopeId, wrappedContentKey = null)
 
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"$folder","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$folder","role":"READ","wrap":"$wrap","sealedName":"$sealedName"}""")
             .`when`().post("/api/shares")
             .then().statusCode(422).body("code", equalTo("illegal_scope"))
     }
@@ -178,7 +179,7 @@ class ShareSliceTest {
         val outsider = seedUser()
 
         given().header("Authorization", bearer(outsider)).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"$memory","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$memory","role":"READ","wrap":"$wrap","sealedName":"$sealedName"}""")
             .`when`().post("/api/shares")
             .then().statusCode(404).body("code", equalTo("node_not_found"))
     }
@@ -187,7 +188,7 @@ class ShareSliceTest {
     fun unknownNodeCreateIs404() {
         val userId = seedUser()
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"${UUID.randomUUID()}","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"${UUID.randomUUID()}","role":"READ","wrap":"$wrap","sealedName":"$sealedName"}""")
             .`when`().post("/api/shares")
             .then().statusCode(404).body("code", equalTo("node_not_found"))
     }
@@ -195,9 +196,31 @@ class ShareSliceTest {
     @Test
     fun createRequiresAuth() {
         given().contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"${UUID.randomUUID()}","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"${UUID.randomUUID()}","role":"READ","wrap":"$wrap","sealedName":"$sealedName"}""")
             .`when`().post("/api/shares")
             .then().statusCode(401).body("code", equalTo("authentication_failed"))
+    }
+
+    /**
+     * The access modes' wire values are `READ`/`READ_WRITE`/`WRITE_ONLY` (cr-platform-contract-split D2): a create
+     * with a pre-rename value is refused at the boundary. The control is the same body with `READ`, from the same
+     * caller on the same Memory. Measured 2026-10-06: an enum value outside the spec is refused by deserialization,
+     * before any handler, as a bare `400` with an empty body — no `ErrorResponse` code to anchor on, so the empty
+     * body is pinned instead; a handler-side `400 invalid_request` would carry a JSON body.
+     */
+    @Test
+    fun aPreRenameRoleValueIsRefused() {
+        val (userId, scopeId) = seedMemberScope(ScopeEntity.PERSONAL)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        fun create(role: String) = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$memory","role":"$role","wrap":"$wrap","sealedName":"$sealedName"}""")
+            .`when`().post("/api/shares")
+
+        for (old in listOf("VIEWER", "CONTRIBUTOR", "UPLOADER")) {
+            val refused = create(old).then().statusCode(400).extract()
+            assertEquals("", refused.asString(), "$old is refused by deserialization, before the handler")
+        }
+        create("READ").then().statusCode(201)
     }
 
     // --- accountless terms gate (uc.sharing.share-accept, ADR 0035 §3) ---
@@ -258,7 +281,7 @@ class ShareSliceTest {
         // expired
         val past = Instant.now().minusSeconds(3600).toString()
         val expiredId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"$memory","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName","expiresAt":"$past"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$memory","role":"READ","wrap":"$wrap","sealedName":"$sealedName","expiresAt":"$past"}""")
             .`when`().post("/api/shares").then().statusCode(201).extract().path<String>("shareId")
         given().`when`().get("/api/shares/$expiredId/terms")
             .then().statusCode(404).body("code", equalTo("share_not_found"))
@@ -279,7 +302,7 @@ class ShareSliceTest {
 
     private fun createShare(userId: String, nodeId: String): String =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"READ","wrap":"$wrap","sealedName":"$sealedName"}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).body("shareId", notNullValue())
             .extract().path("shareId")

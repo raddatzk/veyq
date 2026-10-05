@@ -90,7 +90,7 @@ class ShareIdentityBoundTest {
 
     private fun createShare(userId: String, nodeId: String): String =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"CONTRIBUTOR","wrap":"$wrap","sealedName":"$sealedName"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"READ_WRITE","wrap":"$wrap","sealedName":"$sealedName"}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path("shareId")
 }

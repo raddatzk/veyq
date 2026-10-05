@@ -25,7 +25,7 @@ export function registerMemories(registry: Registry): void {
   registry.claimSlot('shareDialog', ShareDialog)
   registry.claimSlot('topbarTray', UploadStatusMenu)
   registry.claimSlot('sidebarPins', PinnedMemories)
-  // The public share page: a Memory share (viewer / contributor) is rooted at a MEMORY node; an UPLOADER share's root
+  // The public share page: a Memory share (viewer / contributor) is rooted at a MEMORY node; a WRITE_ONLY share's root
   // kind is unknown to the client (the unlocked response serves no nodes), so the one application that claims the
   // kind-less drop gets it — until `PublicShare` carries a `rootKind` (the registry's header).
   registry.claimShareBody(NodeKind.Memory, MemoryShareBody)

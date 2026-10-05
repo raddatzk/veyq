@@ -40,7 +40,7 @@ class ShareWriteProofSliceTest {
     fun anIdWithoutTheKeyNamesNoGuest() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
-        val shareId = createShare(userId, memory, "CONTRIBUTOR")
+        val shareId = createShare(userId, memory, "READ_WRITE")
         // the row as a database copy reads it: the server stored the hash it was handed, never a token
         val stored = QuarkusTransaction.requiringNew().call { ShareEntity.findById(shareId)!!.writeVerifier }
         assertEquals(ShareWriteProof.verifier(shareId), stored)
@@ -63,30 +63,30 @@ class ShareWriteProofSliceTest {
         uploadAs(shareId, token)
     }
 
-    /** B2 — the gate survives a role flip: a VIEWER link stored its verifier too, since its key never changes. */
+    /** B2 — the gate survives a role flip: a READ link stored its verifier too, since its key never changes. */
     @Test
     fun aViewerLinkFlippedToContributorIsGatedByTheSameProof() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
-        val shareId = createShare(userId, memory, "VIEWER")
-        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON).body("""{"role":"CONTRIBUTOR"}""")
+        val shareId = createShare(userId, memory, "READ")
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON).body("""{"role":"READ_WRITE"}""")
             .`when`().patch("/api/shares/$shareId").then().statusCode(204)
 
         nameGuest(shareId, writeToken = null).then().statusCode(404).body("code", equalTo("share_not_found"))
         nameGuest(shareId, ShareWriteProof.token(shareId)).then().statusCode(201)
     }
 
-    /** B2 — an UPLOADER link behaves as a CONTRIBUTOR one. */
+    /** B2 — a WRITE_ONLY link behaves as a READ_WRITE one. */
     @Test
     fun anUploaderLinkNeedsTheProofToo() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
-        val shareId = createShare(userId, memory, "UPLOADER")
+        val shareId = createShare(userId, memory, "WRITE_ONLY")
 
-        nameGuest(shareId, writeToken = null, role = "UPLOADER").then().statusCode(404).body("code", equalTo("share_not_found"))
-        nameGuest(shareId, ShareWriteProof.token(TestIds.shareId()), role = "UPLOADER").then().statusCode(404)
+        nameGuest(shareId, writeToken = null, role = "WRITE_ONLY").then().statusCode(404).body("code", equalTo("share_not_found"))
+        nameGuest(shareId, ShareWriteProof.token(TestIds.shareId()), role = "WRITE_ONLY").then().statusCode(404)
         assertEquals(0L, identitiesOf(shareId))
-        val token = nameGuest(shareId, ShareWriteProof.token(shareId), role = "UPLOADER").then().statusCode(201)
+        val token = nameGuest(shareId, ShareWriteProof.token(shareId), role = "WRITE_ONLY").then().statusCode(201)
             .extract().path<String>("contributorToken")
         uploadAs(shareId, token)
     }
@@ -99,7 +99,7 @@ class ShareWriteProofSliceTest {
     fun aShareWithoutAVerifierTakesNoNewGuestButKeepsItsOld() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
-        val shareId = createShare(userId, memory, "CONTRIBUTOR")
+        val shareId = createShare(userId, memory, "READ_WRITE")
         val earlier = nameGuest(shareId, ShareWriteProof.token(shareId)).then().statusCode(201)
             .extract().path<String>("contributorToken") // also the control: this share took a guest with a verifier
         QuarkusTransaction.requiringNew().run { ShareEntity.update("writeVerifier = null where id = ?1", shareId) }
@@ -112,17 +112,17 @@ class ShareWriteProofSliceTest {
 
     /**
      * B5 (#270) — the manage list marks each guest-taking link that holds no verifier, so its curator knows which
-     * links to renew: a CONTRIBUTOR and an UPLOADER link without one are marked; a VIEWER link without one is not (it
+     * links to renew: a READ_WRITE and a WRITE_ONLY link without one are marked; a READ link without one is not (it
      * takes no guest), and neither is a link that has its verifier — the control that the mark is not on every row.
      */
     @Test
     fun theManageListMarksAGuestLinkThatHoldsNoVerifier() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
-        val contributor = createShare(userId, memory, "CONTRIBUTOR")
-        val uploader = createShare(userId, memory, "UPLOADER")
-        val viewer = createShare(userId, memory, "VIEWER")
-        val intact = createShare(userId, memory, "CONTRIBUTOR")
+        val contributor = createShare(userId, memory, "READ_WRITE")
+        val uploader = createShare(userId, memory, "WRITE_ONLY")
+        val viewer = createShare(userId, memory, "READ")
+        val intact = createShare(userId, memory, "READ_WRITE")
         QuarkusTransaction.requiringNew().run {
             ShareEntity.update("writeVerifier = null where id in ?1", listOf(contributor, uploader, viewer))
         }
@@ -136,18 +136,18 @@ class ShareWriteProofSliceTest {
     }
 
     /**
-     * #303 — the role edit needs the verifier fact whatever the role: a VIEWER link without one turns into a
-     * CONTRIBUTOR link that refuses every guest, so the row says so before the switch. A link with its verifier is
+     * #303 — the role edit needs the verifier fact whatever the role: a READ link without one turns into a
+     * READ_WRITE link that refuses every guest, so the row says so before the switch. A link with its verifier is
      * the control, in both roles.
      */
     @Test
     fun theManageListSaysWhichLinksHoldNoVerifierWhateverTheirRole() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
-        val viewer = createShare(userId, memory, "VIEWER")
-        val contributor = createShare(userId, memory, "CONTRIBUTOR")
-        val intactViewer = createShare(userId, memory, "VIEWER")
-        val intactContributor = createShare(userId, memory, "CONTRIBUTOR")
+        val viewer = createShare(userId, memory, "READ")
+        val contributor = createShare(userId, memory, "READ_WRITE")
+        val intactViewer = createShare(userId, memory, "READ")
+        val intactContributor = createShare(userId, memory, "READ_WRITE")
         QuarkusTransaction.requiringNew().run {
             ShareEntity.update("writeVerifier = null where id in ?1", listOf(viewer, contributor))
         }
@@ -167,11 +167,11 @@ class ShareWriteProofSliceTest {
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val shareId = TestIds.shareId()
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"shareId":"$shareId","nodeId":"$memory","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName"}""")
+            .body("""{"shareId":"$shareId","nodeId":"$memory","role":"READ","wrap":"$wrap","sealedName":"$sealedName"}""")
             .`when`().post("/api/shares").then().statusCode(400)
         assertNull(QuarkusTransaction.requiringNew().call { ShareEntity.findById(shareId) })
         // control: the same body with the field is created
-        assertNotNull(createShare(userId, memory, "VIEWER"))
+        assertNotNull(createShare(userId, memory, "READ"))
     }
 
     // --- helpers ---
@@ -184,7 +184,7 @@ class ShareWriteProofSliceTest {
         return shareId
     }
 
-    private fun nameGuest(shareId: String, writeToken: String?, role: String = "CONTRIBUTOR") =
+    private fun nameGuest(shareId: String, writeToken: String?, role: String = "READ_WRITE") =
         given().contentType(ContentType.JSON)
             .apply { if (writeToken != null) header(ShareWriteProof.HEADER, writeToken) }
             .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedGuestName"${identityKeyJson(role)}}""")

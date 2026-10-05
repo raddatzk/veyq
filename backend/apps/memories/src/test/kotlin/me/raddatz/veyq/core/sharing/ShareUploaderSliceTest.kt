@@ -39,17 +39,17 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 
 /**
- * Slice tests for the **UPLOADER** write-only drop-box share (uc.sharing.share-uploader, cr-0102, ADR 0031)
+ * Slice tests for the **WRITE_ONLY** write-only drop-box share (uc.sharing.share-uploader, cr-0102, ADR 0031)
  * against the in-memory store. Covers the drop-box's two structural guarantees + the delete-own:
- *  - **write-only:** the anonymous resolve of an UPLOADER share serves `media: []` **even with existing media**
+ *  - **write-only:** the anonymous resolve of a WRITE_ONLY share serves `media: []` **even with existing media**
  *    (and no identities) — "cannot see others" is enforced by the `canView` gate, never gallery filtering;
  *  - **never `K_mem` (ADR 0031 point 7):** it serves the Memory's drop public key instead of the wrap, the drop
- *    private key is set on the Memory once, an UPLOADER identity must hand over its wrapped key, and every reader
+ *    private key is set on the Memory once, a WRITE_ONLY identity must hand over its wrapped key, and every reader
  *    of the Memory — a viewer link, a member's media page and buckets — is served what opens an upload;
  *  - **contribute:** an uploader names itself + uploads, and the media **attaches to the shared root stamped
- *    with its identity** (same path as CONTRIBUTOR);
+ *    with its identity** (same path as READ_WRITE);
  *  - **delete-own:** the token-gated `DELETE /media/{id}` removes + reclaims the caller's own media (a single-row
- *    ownership check) — a **foreign identity's** media is a `404`, a **bad token** is a `403`, and a **VIEWER**
+ *    ownership check) — a **foreign identity's** media is a `404`, a **bad token** is a `403`, and a **READ**
  *    share rejects the delete (`403`).
  *
  * **Split** (cr-platform-gradle-modules step 8a): the methods that run with core alone are `ShareUploaderCoreSliceTest` in `:core`.
@@ -80,14 +80,14 @@ class ShareUploaderSliceTest {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         seedMedia(scopeId, memory, identityId = null) // a curator's existing photo on the Memory
-        val shareId = createShare(userId, memory, role = "UPLOADER")
+        val shareId = createShare(userId, memory, role = "WRITE_ONLY")
 
-        // the anonymous resolve of an UPLOADER share is write-only: NO media, NO identities, NO nodes, and NO wrap —
+        // the anonymous resolve of a WRITE_ONLY share is write-only: NO media, NO identities, NO nodes, and NO wrap —
         // only the drop public key (the guest seals its own identity key to it, ADR 0031 point 7), the node it binds
         // that wrap to, and the sealed title. The guest is never handed K_mem.
         given().`when`().get("/api/shares/$shareId")
             .then().statusCode(200)
-            .body("role", equalTo("UPLOADER"))
+            .body("role", equalTo("WRITE_ONLY"))
             .body("wrap", nullValue())
             .body("sealedDropPublicKey", equalTo(DROP_PUBLIC_KEY))
             .body("nodeId", equalTo(memory))
@@ -96,25 +96,25 @@ class ShareUploaderSliceTest {
             .body("identities.size()", equalTo(0))
             .body("nodes.size()", equalTo(0)) // not even the root node — no K_mem-decryptable node metadata leaks
 
-        // control, same Memory: a VIEWER resolve still carries the wrap, and no drop public key
-        val viewerShare = createShare(userId, memory, role = "VIEWER")
+        // control, same Memory: a READ resolve still carries the wrap, and no drop public key
+        val viewerShare = createShare(userId, memory, role = "READ")
         given().`when`().get("/api/shares/$viewerShare")
             .then().statusCode(200)
             .body("wrap", equalTo(wrap))
             .body("sealedDropPublicKey", nullValue())
 
-        // an UPLOADER row stored with a wrap (the shape before the drop key) still resolves without it: the role
+        // a WRITE_ONLY row stored with a wrap (the shape before the drop key) still resolves without it: the role
         // decides what the resolve hands out, not only what was stored
         val legacy = TestIds.shareId()
         QuarkusTransaction.requiringNew().run {
             ShareEntity().apply {
                 // `this@ShareUploaderSliceTest.` is load-bearing: inside `apply` a bare `wrap` is the entity's own
                 // (still null) field, which seeded a row with no wrap and made this control pass vacuously.
-                id = legacy; ownerAccount = userId; this.scopeId = scopeId; nodeId = memory; role = ShareEntity.UPLOADER
+                id = legacy; ownerAccount = userId; this.scopeId = scopeId; nodeId = memory; role = ShareEntity.WRITE_ONLY
                 this.wrap = this@ShareUploaderSliceTest.wrap; sealedName = this@ShareUploaderSliceTest.sealedName; enabled = true; createdAt = Instant.now()
             }.persist()
         }
-        given().`when`().get("/api/shares/$legacy").then().statusCode(200).body("role", equalTo("UPLOADER")).body("wrap", nullValue())
+        given().`when`().get("/api/shares/$legacy").then().statusCode(200).body("role", equalTo("WRITE_ONLY")).body("wrap", nullValue())
     }
 
     @Test
@@ -123,16 +123,16 @@ class ShareUploaderSliceTest {
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val drop = "\"sealedDropPublicKey\":\"$DROP_PUBLIC_KEY\",\"sealedDropPrivateKey\":\"$DROP_PRIVATE_KEY\""
 
-        // an UPLOADER share that carries a wrap is refused — the guest would hold K_mem — and nothing is written
-        postShare(userId, memory, "UPLOADER", "\"wrap\":\"$wrap\",$drop").then().statusCode(400).body("code", equalTo("invalid_request"))
-        postShare(userId, memory, "UPLOADER", "\"wrap\":\"$wrap\"").then().statusCode(400).body("code", equalTo("invalid_request"))
+        // a WRITE_ONLY share that carries a wrap is refused — the guest would hold K_mem — and nothing is written
+        postShare(userId, memory, "WRITE_ONLY", "\"wrap\":\"$wrap\",$drop").then().statusCode(400).body("code", equalTo("invalid_request"))
+        postShare(userId, memory, "WRITE_ONLY", "\"wrap\":\"$wrap\"").then().statusCode(400).body("code", equalTo("invalid_request"))
         QuarkusTransaction.requiringNew().run { assertNull(NodeEntity.findById(memory)!!.sealedDropPrivateKey) }
-        // a VIEWER share that carries a drop key is refused, as is one with no wrap
-        postShare(userId, memory, "VIEWER", "\"wrap\":\"$wrap\",$drop").then().statusCode(400).body("code", equalTo("invalid_request"))
-        postShare(userId, memory, "VIEWER", "\"sealedDropPublicKey\":\"$DROP_PUBLIC_KEY\"").then().statusCode(400)
+        // a READ share that carries a drop key is refused, as is one with no wrap
+        postShare(userId, memory, "READ", "\"wrap\":\"$wrap\",$drop").then().statusCode(400).body("code", equalTo("invalid_request"))
+        postShare(userId, memory, "READ", "\"sealedDropPublicKey\":\"$DROP_PUBLIC_KEY\"").then().statusCode(400)
         // controls: each role's own keys are accepted
-        postShare(userId, memory, "UPLOADER", drop).then().statusCode(201)
-        postShare(userId, memory, "VIEWER", "\"wrap\":\"$wrap\"").then().statusCode(201)
+        postShare(userId, memory, "WRITE_ONLY", drop).then().statusCode(201)
+        postShare(userId, memory, "READ", "\"wrap\":\"$wrap\"").then().statusCode(201)
     }
 
     @Test
@@ -141,33 +141,33 @@ class ShareUploaderSliceTest {
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val public = "\"sealedDropPublicKey\":\"$DROP_PUBLIC_KEY\""
 
-        // a first UPLOADER share without the private half has nothing to seal to — refused, nothing written
-        postShare(userId, memory, "UPLOADER", public).then().statusCode(409).body("code", equalTo("drop_key_missing"))
+        // a first WRITE_ONLY share without the private half has nothing to seal to — refused, nothing written
+        postShare(userId, memory, "WRITE_ONLY", public).then().statusCode(409).body("code", equalTo("drop_key_missing"))
         // the first one with it stores it on the Memory
-        postShare(userId, memory, "UPLOADER", "$public,\"sealedDropPrivateKey\":\"$DROP_PRIVATE_KEY\"").then().statusCode(201)
+        postShare(userId, memory, "WRITE_ONLY", "$public,\"sealedDropPrivateKey\":\"$DROP_PRIVATE_KEY\"").then().statusCode(201)
         QuarkusTransaction.requiringNew().run { assertEquals(DROP_PRIVATE_KEY, NodeEntity.findById(memory)!!.sealedDropPrivateKey) }
         // a second private half would orphan every upload sealed to the first — refused, and the first stays
         val second = "c2Vjb25kLWRyb3AtcHJpdmF0ZQ=="
-        postShare(userId, memory, "UPLOADER", "$public,\"sealedDropPrivateKey\":\"$second\"")
+        postShare(userId, memory, "WRITE_ONLY", "$public,\"sealedDropPrivateKey\":\"$second\"")
             .then().statusCode(409).body("code", equalTo("drop_key_exists"))
         QuarkusTransaction.requiringNew().run { assertEquals(DROP_PRIVATE_KEY, NodeEntity.findById(memory)!!.sealedDropPrivateKey) }
-        // control: a later UPLOADER share seals to the Memory's existing key and brings none
-        postShare(userId, memory, "UPLOADER", public).then().statusCode(201)
+        // control: a later WRITE_ONLY share seals to the Memory's existing key and brings none
+        postShare(userId, memory, "WRITE_ONLY", public).then().statusCode(201)
     }
 
     @Test
     fun anUploaderIdentityHandsOverItsWrappedKey() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
-        val uploader = createShare(userId, memory, role = "UPLOADER")
-        val contributor = createShare(userId, memory, role = "CONTRIBUTOR")
+        val uploader = createShare(userId, memory, role = "WRITE_ONLY")
+        val contributor = createShare(userId, memory, role = "READ_WRITE")
         val keyed = ",\"wrappedIdentityKey\":\"$WRAPPED_UPLOADER_KEY\""
 
-        // an UPLOADER identity without its key could never be read by anyone — refused
+        // a WRITE_ONLY identity without its key could never be read by anyone — refused
         postIdentity(uploader, "").then().statusCode(400).body("code", equalTo("invalid_request"))
         val id = postIdentity(uploader, keyed).then().statusCode(201).extract().path<String>("identityId")
         QuarkusTransaction.requiringNew().run { assertEquals(WRAPPED_UPLOADER_KEY, ShareIdentityEntity.findById(id)!!.wrappedIdentityKey) }
-        // a CONTRIBUTOR seals under K_mem and has no key to hand over — refused with one; control: without, accepted
+        // a READ_WRITE identity seals under K_mem and has no key to hand over — refused with one; control: without, accepted
         postIdentity(contributor, keyed).then().statusCode(400).body("code", equalTo("invalid_request"))
         postIdentity(contributor, "").then().statusCode(201)
     }
@@ -176,13 +176,13 @@ class ShareUploaderSliceTest {
     fun everyReaderOfTheMemoryIsServedWhatOpensAnUpload() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
-        val uploader = createShare(userId, memory, role = "UPLOADER")
-        val contributor = createShare(userId, memory, role = "CONTRIBUTOR")
+        val uploader = createShare(userId, memory, role = "WRITE_ONLY")
+        val contributor = createShare(userId, memory, role = "READ_WRITE")
         val uploaderIdentity = createIdentity(uploader)
         val contributorIdentity = postIdentity(contributor, "").then().statusCode(201).extract().path<String>("identityId")
         seedMedia(scopeId, memory, identityId = uploaderIdentity)
         seedMedia(scopeId, memory, identityId = contributorIdentity)
-        val viewer = createShare(userId, memory, role = "VIEWER")
+        val viewer = createShare(userId, memory, role = "READ")
 
         // a viewer link: the Memory's sealed drop private key on its node, and the uploader identity's wrapped key
         // (served although it belongs to another share); the contributor's own share lists none for it
@@ -219,7 +219,7 @@ class ShareUploaderSliceTest {
     fun theGuestsUploadsSurviveTheirLink() {
         val (userId, scopeId, tenantId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
-        val shareId = createShare(userId, memory, role = "UPLOADER")
+        val shareId = createShare(userId, memory, role = "WRITE_ONLY")
         val (identityId, token) = createIdentityWithToken(shareId)
         val uploadId = given().contentType(ContentType.JSON)
             .body("""{"contributorToken":"$token","items":[${TestBlob.SMALL.declare("Ymxvyi13cmFw")}]}""")
@@ -252,13 +252,13 @@ class ShareUploaderSliceTest {
         val mediaId = seedMedia(scopeId, memory, identityId = null) // a curator photo — its blob IS in the subtree
         val blobId = QuarkusTransaction.requiringNew().call { MediaEntity.findById(mediaId)!!.blobId }
 
-        // an UPLOADER share is role-gated at the blob endpoint too — even an in-subtree blob id is a 404 (write-only
-        // is a real capability, not just id-secrecy). Contrast: a VIEWER share of the same memory passes the role
-        // gate and only fails downstream at the (in-memory) store — a 503, proving the gate is what blocks UPLOADER.
-        val uploaderShare = createShare(userId, memory, role = "UPLOADER")
+        // a WRITE_ONLY share is role-gated at the blob endpoint too — even an in-subtree blob id is a 404 (write-only
+        // is a real capability, not just id-secrecy). Contrast: a READ share of the same memory passes the role
+        // gate and only fails downstream at the (in-memory) store — a 503, proving the gate is what blocks WRITE_ONLY.
+        val uploaderShare = createShare(userId, memory, role = "WRITE_ONLY")
         given().`when`().get("/api/shares/$uploaderShare/blobs/$blobId").then().statusCode(404)
 
-        val viewerShare = createShare(userId, memory, role = "VIEWER")
+        val viewerShare = createShare(userId, memory, role = "READ")
         given().`when`().get("/api/shares/$viewerShare/blobs/$blobId").then().statusCode(503)
     }
 
@@ -266,10 +266,10 @@ class ShareUploaderSliceTest {
     fun uploaderNamesUploadsAttachesStampedAndDeletesOwn() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
-        val shareId = createShare(userId, memory, role = "UPLOADER")
+        val shareId = createShare(userId, memory, role = "WRITE_ONLY")
 
-        // name yourself — NO bearer (uploader path is open like CONTRIBUTOR); identity + capability token out
-        val idResp = postIdentity(shareId, identityKeyJson("UPLOADER"))
+        // name yourself — NO bearer (uploader path is open like READ_WRITE); identity + capability token out
+        val idResp = postIdentity(shareId, identityKeyJson("WRITE_ONLY"))
             .then().statusCode(201)
             .body("identityId", notNullValue()).body("contributorToken", notNullValue())
             .extract()
@@ -328,7 +328,7 @@ class ShareUploaderSliceTest {
         repeat(RACE_ROUNDS) { round ->
             val (userId, scopeId) = seedMemberScope()
             val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
-            val identity = createIdentity(createShare(userId, memory, role = "UPLOADER"))
+            val identity = createIdentity(createShare(userId, memory, role = "WRITE_ONLY"))
             val mediaId = seedMedia(scopeId, memory, identityId = identity)
             val second = whileUncommitted(
                 change = { assertEquals(true, guestWrites.deleteOwn(scopeId, mediaId, identity), "round $round") },
@@ -343,7 +343,7 @@ class ShareUploaderSliceTest {
     fun foreignIdentityDeleteIs404() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
-        val shareId = createShare(userId, memory, role = "UPLOADER")
+        val shareId = createShare(userId, memory, role = "WRITE_ONLY")
 
         // identity A owns a media (seeded), identity B holds a valid token but did not upload it
         val identityA = createIdentity(shareId)
@@ -361,7 +361,7 @@ class ShareUploaderSliceTest {
     fun badTokenDeleteIs403() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
-        val shareId = createShare(userId, memory, role = "UPLOADER")
+        val shareId = createShare(userId, memory, role = "WRITE_ONLY")
         val mediaId = seedMedia(scopeId, memory, identityId = createIdentity(shareId))
 
         // a well-formed but never-issued token — rejected before any ownership check
@@ -374,10 +374,10 @@ class ShareUploaderSliceTest {
     fun viewerShareRejectsUploadAndDelete() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
-        val shareId = createShare(userId, memory, role = "VIEWER")
+        val shareId = createShare(userId, memory, role = "READ")
         val mediaId = seedMedia(scopeId, memory, identityId = null)
 
-        // a VIEWER share accepts neither an identity (upload) nor a delete
+        // a READ share accepts neither an identity (upload) nor a delete
         given().contentType(ContentType.JSON).body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedUploaderName"}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(403).body("code", equalTo("share_not_contributable"))
@@ -400,11 +400,11 @@ class ShareUploaderSliceTest {
         given().contentType(ContentType.JSON).body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedUploaderName"$key}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
 
-    /** An identity on an UPLOADER share — with the wrapped key such an identity must hand over. */
+    /** An identity on a WRITE_ONLY share — with the wrapped key such an identity must hand over. */
     private fun createIdentity(shareId: String): String = createIdentityWithToken(shareId).first
 
     private fun createIdentityWithToken(shareId: String): Pair<String, String> {
-        val r = postIdentity(shareId, identityKeyJson("UPLOADER")).then().statusCode(201).extract()
+        val r = postIdentity(shareId, identityKeyJson("WRITE_ONLY")).then().statusCode(201).extract()
         return r.path<String>("identityId") to r.path<String>("contributorToken")
     }
 

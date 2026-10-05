@@ -1,8 +1,8 @@
 <script setup lang="ts">
 // The curator's share MANAGEMENT dialog (cr-0116, redesigned toward the legacy shape): a **list-only** view of a
 // Memory's share links + a "New" button that opens the separate create dialog. Shared by BOTH share flows via the
-// `uploader` flag so they stay identical by construction: the NORMAL variant lists VIEWER/CONTRIBUTOR shares and
-// creates them with a role switcher; the UPLOADER (drop-box) variant lists uploader shares and creates them with no
+// `uploader` flag so they stay identical by construction: the NORMAL variant lists READ/READ_WRITE shares and
+// creates them with a role switcher; the WRITE_ONLY (drop-box) variant lists uploader shares and creates them with no
 // switcher (a separate memory action, capability-gated at that action). Each row shows the share's private name (or
 // the role), badges (note present / disabled / by another member), and per-row actions: **copy link** (copy-only —
 // reconstructed via the member-recoverable K_share), edit name+note, switch off / re-activate, and **renew** (re-issue,
@@ -65,10 +65,10 @@ const editShare = ref<ManagedShare | null>(null)
 // The share being re-issued (ADR 0075) — the create dialog pre-filled from it.
 const reissueFrom = ref<ManagedShare | null>(null)
 
-// The two flows differ only in which shares they list + their labels — the uploader variant filters to UPLOADER, the
+// The two flows differ only in which shares they list + their labels — the uploader variant filters to WRITE_ONLY, the
 // normal variant to everything else. Guaranteed identical look because it is the SAME component.
 const visibleShares = computed(() =>
-  shares.value.filter((s) => (props.uploader ? s.role === ShareRole.Uploader : s.role !== ShareRole.Uploader)),
+  shares.value.filter((s) => (props.uploader ? s.role === ShareRole.WriteOnly : s.role !== ShareRole.WriteOnly)),
 )
 // Live links first; switched-off ones in a folded section of their own.
 const sections = computed(() => [
@@ -81,8 +81,8 @@ const createLabel = computed(() => (props.uploader ? t('share.uploaderCreate') :
 const emptyLabel = computed(() => (props.uploader ? t('share.uploaderNone') : t('share.none')))
 
 function roleLabel(r: ShareRole | string): string {
-  if (r === ShareRole.Uploader) return t('share.roleUploader')
-  if (r === ShareRole.Contributor) return t('share.roleContributor')
+  if (r === ShareRole.WriteOnly) return t('share.roleUploader')
+  if (r === ShareRole.ReadWrite) return t('share.roleContributor')
   return t('share.roleViewer')
 }
 

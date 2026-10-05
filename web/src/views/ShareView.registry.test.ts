@@ -44,7 +44,7 @@ import { realI18n } from '../test/i18n'
 function head(over: Partial<PublicShareHead> = {}): PublicShareHead {
   return {
     shareId: 's1', share: {} as PublicShareHead['share'], kShare: new Uint8Array(32), scopeId: 'scope-1',
-    name: 'Rom 2026', noteByLocale: {}, role: ShareRole.Viewer, rootKind: NodeKind.Memory, ...over,
+    name: 'Rom 2026', noteByLocale: {}, role: ShareRole.Read, rootKind: NodeKind.Memory, ...over,
   }
 }
 
@@ -93,15 +93,15 @@ describe('ShareView dispatches on the share root kind', () => {
   })
 
   it('a share with no root node at all is unavailable too, never sent to the kind-less drop body', async () => {
-    vi.mocked(resolvePublicShare).mockResolvedValue(head({ rootKind: null })) // a VIEWER share that served no root
+    vi.mocked(resolvePublicShare).mockResolvedValue(head({ rootKind: null })) // a READ share that served no root
     const w = mountShare()
     await flushPromises()
     expect(w.find('.body-stub').exists()).toBe(false)
     expect(w.find('.share-view-unavailable').exists()).toBe(true)
   })
 
-  it('an UPLOADER share (root kind unknown) goes to the kind-less drop body', async () => {
-    vi.mocked(resolvePublicShare).mockResolvedValue(head({ role: ShareRole.Uploader, rootKind: null }))
+  it('a WRITE_ONLY share (root kind unknown) goes to the kind-less drop body', async () => {
+    vi.mocked(resolvePublicShare).mockResolvedValue(head({ role: ShareRole.WriteOnly, rootKind: null }))
     const w = mountShare()
     await flushPromises()
     expect(w.find('.body-stub').exists()).toBe(true)
@@ -109,7 +109,7 @@ describe('ShareView dispatches on the share root kind', () => {
 
   it('…and is unavailable when no application claimed the drop (an unrelated Memory claim does not stand in)', async () => {
     holder.reg = registryWith([NodeKind.Memory])
-    vi.mocked(resolvePublicShare).mockResolvedValue(head({ role: ShareRole.Uploader, rootKind: null }))
+    vi.mocked(resolvePublicShare).mockResolvedValue(head({ role: ShareRole.WriteOnly, rootKind: null }))
     const w = mountShare()
     await flushPromises()
     expect(w.find('.body-stub').exists()).toBe(false)

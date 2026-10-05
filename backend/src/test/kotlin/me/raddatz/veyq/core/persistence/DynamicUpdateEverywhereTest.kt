@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test
  * Every entity flushes only the columns its transaction changed (developer-styleguide §12). Without
  * `@DynamicUpdate`, Hibernate writes every column of a managed entity it flushes, so a write writes back every value
  * it only read, and a column another transaction changed in between is silently reverted. Measured before this was
- * the default, 5 of 5 each: a terms edit lifted a tenant suspension, a Memory rename wiped an UPLOADER link's drop
+ * the default, 5 of 5 each: a terms edit lifted a tenant suspension, a Memory rename wiped a WRITE_ONLY link's drop
  * private key, a consent toggle rolled back a password change's new auth key (inbox #224).
  *
  * The trap is the default, not any one site: each of those entities got its second writer somewhere else, and nobody

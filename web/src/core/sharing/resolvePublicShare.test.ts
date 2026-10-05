@@ -35,7 +35,7 @@ const seal = (purpose: typeof SHARE_MEMORY_NAME | typeof SHARE_NOTE, text: strin
 
 function serve(over: Partial<PublicShare>) {
   const share = {
-    role: ShareRole.Viewer, passwordRequired: false, scopeId: 'scope-1', sealedName: seal(SHARE_MEMORY_NAME, 'Rom 2026'),
+    role: ShareRole.Read, passwordRequired: false, scopeId: 'scope-1', sealedName: seal(SHARE_MEMORY_NAME, 'Rom 2026'),
     nodes: [], media: [], ...over,
   } as PublicShare
   fakeApi(publicSharesApi, { resolveShare: async () => share })
@@ -56,7 +56,7 @@ describe('resolvePublicShare: the head', () => {
 
     const head = await resolvePublicShare('s1', FRAGMENT)
 
-    expect(head).toMatchObject({ shareId: 's1', scopeId: 'scope-1', name: 'Rom 2026', role: ShareRole.Viewer, rootKind: NodeKind.Memory })
+    expect(head).toMatchObject({ shareId: 's1', scopeId: 'scope-1', name: 'Rom 2026', role: ShareRole.Read, rootKind: NodeKind.Memory })
     expect(pickLocaleText(head.noteByLocale, 'de')).toBe('Hallo')
     expect(head.share).toBe(share) // the application opens its own seals from the unlocked response
     expect(head.kShare).toEqual(K_SHARE)
@@ -72,8 +72,8 @@ describe('resolvePublicShare: the head', () => {
     await expect(resolvePublicShare('s1', FRAGMENT)).resolves.toMatchObject({ rootKind: NodeKind.Memory })
   })
 
-  it('has no root kind for an UPLOADER share (the unlocked response serves no nodes)', async () => {
-    serve({ role: ShareRole.Uploader, nodeId: 'drop-node', nodes: [] })
+  it('has no root kind for a WRITE_ONLY share (the unlocked response serves no nodes)', async () => {
+    serve({ role: ShareRole.WriteOnly, nodeId: 'drop-node', nodes: [] })
     expect((await resolvePublicShare('s1', FRAGMENT)).rootKind).toBeNull()
   })
 

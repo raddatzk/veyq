@@ -22,9 +22,9 @@ import java.util.Base64
  * path. Before this CR, `createShareIdentity` / `startShareBlobUploads` / `completeShareMedia` / `deleteShareMedia`
  * never called `passwordCheck`, and `createShareIdentity` mints the `contributorToken` for anyone holding the
  * shareId — so a link-holder who did not know the password could contribute to a password-protected share (and
- * for an UPLOADER drop-box, whose only capability is writing, the password was entirely functionless).
+ * for a WRITE_ONLY drop-box, whose only capability is writing, the password was entirely functionless).
  *
- * This walks the full 4-op × 3-case table on **both** contributable roles (CONTRIBUTOR, UPLOADER):
+ * This walks the full 4-op × 3-case table on **both** contributable roles (READ_WRITE, WRITE_ONLY):
  *   - **no token → 404** (non-enumerable — identical to an unknown share; the write path follows `resolveBlob`, not
  *     `resolve`, which serves a challenge shell),
  *   - **wrong token → 403 `share_password_incorrect`**,
@@ -46,10 +46,10 @@ class SharePasswordWriteGateTest {
     private val sealedName2 = "c2VhbGVkLWNvbnRyaWI=" // an anonymous contributor display name (opaque)
 
     @Test
-    fun contributorWritePathIsPasswordGated() = assertWriteGate("CONTRIBUTOR")
+    fun contributorWritePathIsPasswordGated() = assertWriteGate("READ_WRITE")
 
     @Test
-    fun uploaderWritePathIsPasswordGated() = assertWriteGate("UPLOADER")
+    fun uploaderWritePathIsPasswordGated() = assertWriteGate("WRITE_ONLY")
 
     private fun assertWriteGate(role: String) {
         val (userId, scopeId) = seedMemberScope()

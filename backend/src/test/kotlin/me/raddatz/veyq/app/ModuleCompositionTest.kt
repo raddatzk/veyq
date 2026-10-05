@@ -166,7 +166,7 @@ class ModuleCompositionTest {
 
     private fun share(userId: String, nodeId: String) =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"VIEWER","wrap":"d3JhcA==","sealedName":"c2VhbGVk"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"READ","wrap":"d3JhcA==","sealedName":"c2VhbGVk"}""")
             .`when`().post("/api/shares")
             .then()
 }

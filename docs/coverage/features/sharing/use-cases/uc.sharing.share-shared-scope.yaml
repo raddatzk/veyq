@@ -58,7 +58,7 @@ acceptanceCriteria:
       web:
         unit: [src/features/memory/components/ShareDialog.test.ts, src/features/memory/share.test.ts]
   - id: reissue-replaces-a-link-in-one-request
-    text: Re-issue creates a new share (fresh id, fresh K_share, the old one's settings re-sealed, recovery copy at the current epoch, role and Memory from the old row, an UPLOADER keeping the Memory's drop key) and deletes the old one (a tombstone it can never come back from) in one transaction; a stale epoch, a taken id or keys that do not match the role write nothing; an enabled share is its owner's to re-issue, a disabled one any member's (who owns the new share). The old K_share opens nothing the new share carries (ADR 0075).
+    text: Re-issue creates a new share (fresh id, fresh K_share, the old one's settings re-sealed, recovery copy at the current epoch, role and Memory from the old row, a WRITE_ONLY keeping the Memory's drop key) and deletes the old one (a tombstone it can never come back from) in one transaction; a stale epoch, a taken id or keys that do not match the role write nothing; an enabled share is its owner's to re-issue, a disabled one any member's (who owns the new share). The old K_share opens nothing the new share carries (ADR 0075).
     coverage:
       backend:
         integration: [ShareSharedScopeSliceTest.reissueReplacesTheLinkInOneRequestAndKeepsTheRoleAndMemory, ShareSharedScopeSliceTest.aReissuedLinkCannotComeBack, ShareSharedScopeSliceTest.reissueAtAStaleEpochIs409AndWritesNothing, ShareSharedScopeSliceTest.aCoMembersEnabledShareIsNotReissuableButADisabledOneIsAdopted, ShareSharedScopeSliceTest.anUploaderReissueSealsTheExistingDropKeyAndNeverAWrap, ShareSharedScopeSliceTest.aReissueIntoATakenIdIs409AndLeavesTheOldLinkOn]

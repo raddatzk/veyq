@@ -26,7 +26,7 @@
 ## Key & blob model (ADR 0012 + ADR 0013)
 
 - **`K_blob`** — a fresh **random 32-byte key per blob**, wrapped under the Memory's **`K_mem`**
-  (`symWrap(K_mem, K_blob)`) — or, for a media an UPLOADER guest added, under that guest's own identity key, which
+  (`symWrap(K_mem, K_blob)`) — or, for a media a WRITE_ONLY guest added, under that guest's own identity key, which
   every reader opens through the Memory's drop key; its metadata tiers follow the same key, including after a
   member edits them ([ADR 0031](../../../decisions/0031-uploader-public-share.md) point 7). It encrypts that blob's chunk frames and nothing else. **No dedup** — identical
   content yields a different `K_blob` and a different ciphertext ([ADR 0013 §5](../../../decisions/0013-blob-storage-presigned-direct-to-store.md#5-no-content-dedup);

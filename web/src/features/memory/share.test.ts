@@ -85,7 +85,7 @@ describe('createShare (curator)', () => {
     // the link the UI assembles carries the share id in the path and K_share ONLY in the #fragment
     expect(buildShareLink(minted.shareId, minted.kShare)).toContain(`/s/${req.shareId}#k=`)
     expect(req.nodeId).toBe(NODE_ID)
-    expect(req.role).toBe('VIEWER')
+    expect(req.role).toBe('READ')
     // the request carries opaque ciphertext only — no plaintext name, no key
     expect(req.wrap).toMatch(/^[A-Za-z0-9+/]*={0,2}$/)
     expect(req.sealedName).toMatch(/^[A-Za-z0-9+/]*={0,2}$/)
@@ -152,7 +152,7 @@ describe('resolveShare (anonymous viewer)', () => {
     // the media's listed metadata is sealed under the Memory's K_mem
     const wrappedMeta = sealMeta(kMem, MEDIA_1, { v: 1, w: 1600, h: 1200 })
     mockGuest({
-      role: 'VIEWER',
+      role: 'READ',
       passwordRequired: false,
       scopeId: SCOPE_ID,
       wrap,
@@ -188,7 +188,7 @@ describe('resolveShare (anonymous viewer)', () => {
     )
     const chapterMeta = sealMeta(chapterKey, MEDIA_2, { v: 1, w: 800, h: 600 })
     mockGuest({
-      role: 'VIEWER',
+      role: 'READ',
       passwordRequired: false,
       scopeId: SCOPE_ID,
       wrap,
@@ -217,7 +217,7 @@ describe('resolveShare (anonymous viewer)', () => {
     // sealed for OTHER_CHAPTER, served on CHAPTER_ID's row
     const movedWrap = b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: OTHER_CHAPTER, epoch: 0 }, kMem, chapterKey))
     mockGuest({
-      role: 'VIEWER',
+      role: 'READ',
       passwordRequired: false,
       scopeId: SCOPE_ID,
       wrap,
@@ -237,7 +237,7 @@ describe('resolveShare (anonymous viewer)', () => {
     mockCurator(create)
     const minted = await createShare(SCOPE_ID, NODE_ID, v1.randomBytes(32), EPOCHS, 'Rom')
     const { wrap, sealedName } = posted(create)
-    mockGuest({ role: 'VIEWER', passwordRequired: false, wrap, sealedName, nodes: [{ id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 }], media: [] })
+    mockGuest({ role: 'READ', passwordRequired: false, wrap, sealedName, nodes: [{ id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 }], media: [] })
     await expect(resolveShare(minted.shareId, b64url(minted.kShare))).rejects.toBeInstanceOf(ShareUnavailableError)
   })
 
@@ -246,7 +246,7 @@ describe('resolveShare (anonymous viewer)', () => {
     mockCurator(create)
     await createShare(SCOPE_ID, NODE_ID, v1.randomBytes(32), EPOCHS, 'Rom')
     const { wrap, sealedName } = posted(create)
-    mockGuest({ role: 'VIEWER', passwordRequired: false, scopeId: SCOPE_ID, wrap, sealedName, nodes: [{ id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 }], media: [] })
+    mockGuest({ role: 'READ', passwordRequired: false, scopeId: SCOPE_ID, wrap, sealedName, nodes: [{ id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 }], media: [] })
 
     // a DIFFERENT (well-formed) 32-byte key can't open the wrap
     const wrongKey = 'A'.repeat(43) // 32 zero-ish bytes worth of base64url
@@ -309,8 +309,8 @@ describe('shared-scope management (cr-0104)', () => {
   it('listSharesFor scopes by nodeId server-side and threads each row’s `mine`, `reissueRequired`, `deletable`, `newGuestsRefused` and `writeVerifierMissing` flags', async () => {
     const { listShares: list } = stubApi(sharesApi, {
       listShares: [
-        { shareId: 's1', scopeId: SCOPE_ID, nodeId: NODE_ID, role: 'VIEWER', sealedName: 'x', enabled: true, mine: true, reissueRequired: false, deletable: true, newGuestsRefused: false, writeVerifierMissing: false, createdAt: new Date('2026-07-07T12:00:00Z'), expiresAt: null },
-        { shareId: 's2', scopeId: SCOPE_ID, nodeId: NODE_ID, role: 'VIEWER', sealedName: 'x', enabled: false, mine: false, reissueRequired: true, deletable: false, newGuestsRefused: true, writeVerifierMissing: true, createdAt: new Date('2026-07-06T12:00:00Z'), expiresAt: null },
+        { shareId: 's1', scopeId: SCOPE_ID, nodeId: NODE_ID, role: 'READ', sealedName: 'x', enabled: true, mine: true, reissueRequired: false, deletable: true, newGuestsRefused: false, writeVerifierMissing: false, createdAt: new Date('2026-07-07T12:00:00Z'), expiresAt: null },
+        { shareId: 's2', scopeId: SCOPE_ID, nodeId: NODE_ID, role: 'READ', sealedName: 'x', enabled: false, mine: false, reissueRequired: true, deletable: false, newGuestsRefused: true, writeVerifierMissing: true, createdAt: new Date('2026-07-06T12:00:00Z'), expiresAt: null },
       ],
     })
 
@@ -412,7 +412,7 @@ describe('share note + name (cr-0115 / cr-0116)', () => {
 
     // the anonymous viewer opens the note map with the fragment key, then picks its locale
     mockGuest({
-      role: 'VIEWER', passwordRequired: false, scopeId: SCOPE_ID, wrap: req.wrap, sealedName: req.sealedName, sealedNote: req.sealedNote,
+      role: 'READ', passwordRequired: false, scopeId: SCOPE_ID, wrap: req.wrap, sealedName: req.sealedName, sealedNote: req.sealedNote,
       nodes: [{ id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 }], media: [],
     })
     const resolved = await resolveShare(minted.shareId, b64url(minted.kShare))
@@ -537,9 +537,9 @@ describe('password protection (cr-0118)', () => {
     const minted = await createShare(SCOPE_ID, NODE_ID, v1.randomBytes(32), EPOCHS, 'Rom', undefined, null, {}, '', 'hunter2')
     const { wrap, sealedName } = posted(create)
     const resolveMock = vi.fn<SharingApi['resolveShare']>()
-      .mockResolvedValueOnce({ passwordRequired: true, pwSalt: 'c2FsdA==', role: 'VIEWER', nodes: [], media: [] })
+      .mockResolvedValueOnce({ passwordRequired: true, pwSalt: 'c2FsdA==', role: 'READ', nodes: [], media: [] })
       .mockResolvedValueOnce({
-        passwordRequired: true, pwSalt: 'c2FsdA==', role: 'VIEWER', scopeId: SCOPE_ID, wrap, sealedName,
+        passwordRequired: true, pwSalt: 'c2FsdA==', role: 'READ', scopeId: SCOPE_ID, wrap, sealedName,
         nodes: [{ id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 }], media: [],
       })
     fakeApi(publicSharesApi, { resolveShare: resolveMock })
@@ -550,7 +550,7 @@ describe('password protection (cr-0118)', () => {
   })
 }, PRODUCTION_ARGON_TIMEOUT_MS)
 
-// W1 (ADR 0036 point 4): a VIEWER or CONTRIBUTOR link hands its holder K_mem — and, with a database dump, every
+// W1 (ADR 0036 point 4): a READ or READ_WRITE link hands its holder K_mem — and, with a database dump, every
 // other share's row of the same Memory, share id included. The recovery copy of each sibling's K_share must open
 // under none of the keys that link yields, or the dump reads that share's password, label and note, and rebuilds
 // its link. Runs the REAL create path, so a regression that seals the copy under the Memory key again reddens here.
@@ -562,7 +562,7 @@ describe('a link opens nothing of a sibling share (W1)', () => {
     // B — the sibling with a password, a private label and a note; A — the viewer link the attacker holds.
     await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Rom', undefined, null, { en: 'note for B' }, 'For Grandma', 'correct horse battery')
     const b = posted(create)
-    const a = await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Rom', ShareRole.Viewer)
+    const a = await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Rom', ShareRole.Read)
     const aReq = posted(create, 1)
     const linkKmem = v1.open({ purpose: 'share-key' }, a.kShare, fromB64std(aReq.wrap!)) // what link A hands over
     const bContext = { purpose: 'share-key-recovery', scopeId: SCOPE_ID, nodeId: NODE_ID, shareId: b.shareId, epoch: b.sealedShareKeyEpoch } as const
@@ -582,7 +582,7 @@ describe('a link opens nothing of a sibling share (W1)', () => {
 // the request it posts.
 describe('reissueShare (ADR 0075, W1)', () => {
   /** A share minted through the real create path, returned the way the manage list serves it, plus its K_share. */
-  async function oldShare(kMem: Uint8Array, role: ShareRole = ShareRole.Viewer, password = 'correct horse battery') {
+  async function oldShare(kMem: Uint8Array, role: ShareRole = ShareRole.Read, password = 'correct horse battery') {
     const create = echoCreate()
     const reissue = vi.fn<SharingApi['reissueShare']>(async ({ reissueShareRequest }) => ({ shareId: reissueShareRequest.shareId }))
     fakeApi(sharesApi, { createShare: create, reissueShare: reissue })
@@ -633,14 +633,14 @@ describe('reissueShare (ADR 0075, W1)', () => {
     expect(readSharePassword(EPOCHS, addressOf(r), r, r.sealedPassword!)).toBe('correct horse battery')
   })
 
-  it('an UPLOADER re-issue seals the Memory’s existing drop public key and carries no wrap and no private key', async () => {
+  it('a WRITE_ONLY re-issue seals the Memory’s existing drop public key and carries no wrap and no private key', async () => {
     const kMem = v1.randomBytes(32)
     const drop = v1.generateDropKey()
     const sealedDropPrivateKey = b64std(v1.seal({ purpose: 'drop-private-key', scopeId: SCOPE_ID, nodeId: NODE_ID }, kMem, v1.serializeDropKey(drop)))
     stubApi(contentApi, {
       listNodes: [{ id: NODE_ID, epoch: 0, parentId: null, kind: 'MEMORY', encryptedName: 'AQ==', slugToken: 'AQ==', orderIndex: 0, sealedDropPrivateKey, metaVersion: 0 }],
     })
-    const { old, reissue } = await oldShare(kMem, ShareRole.Uploader, '')
+    const { old, reissue } = await oldShare(kMem, ShareRole.WriteOnly, '')
 
     const minted = await reissueShare(old, kMem, EPOCHS, 'Rom')
 

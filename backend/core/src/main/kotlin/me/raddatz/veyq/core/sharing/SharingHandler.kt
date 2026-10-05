@@ -62,13 +62,13 @@ sealed interface CreateShareOutcome {
     /** The node is not a MEMORY (only a Memory can be public-shared, ADR 0029 §6) — a 422. */
     object IllegalScope : CreateShareOutcome, HttpFailure by httpFailure("illegal_scope", UNPROCESSABLE)
     object IdTaken : CreateShareOutcome, HttpFailure by Failures.idTaken
-    /** The keys do not match the role: a wrap on an UPLOADER share, a drop key on any other — a 400. */
+    /** The keys do not match the role: a wrap on a WRITE_ONLY share, a drop key on any other — a 400. */
     object InvalidRequest : CreateShareOutcome, HttpFailure by Failures.invalidRequest
     /** The recovery copy's epoch is not the scope's current one (ADR 0024 Decision 6) — a 409, nothing written. */
     object StaleEpoch : CreateShareOutcome, HttpFailure by Failures.staleEpoch
-    /** An UPLOADER share brought a drop private key, but the Memory already has one — a 409, nothing written. */
+    /** A WRITE_ONLY share brought a drop private key, but the Memory already has one — a 409, nothing written. */
     object DropKeyExists : CreateShareOutcome, HttpFailure by httpFailure("drop_key_exists", CONFLICT)
-    /** An UPLOADER share brought no drop private key, and the Memory has none — a 409, nothing written. */
+    /** A WRITE_ONLY share brought no drop private key, and the Memory has none — a 409, nothing written. */
     object DropKeyMissing : CreateShareOutcome, HttpFailure by httpFailure("drop_key_missing", CONFLICT)
 }
 
@@ -90,9 +90,9 @@ sealed interface CreateIdentityOutcome {
     /** Unknown/disabled/expired share, or password-protected with no token given (cr-0164) — a 404. */
     object NotFound : CreateIdentityOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
     object IdTaken : CreateIdentityOutcome, HttpFailure by Failures.idTaken
-    /** A wrapped identity key that does not match the role: missing on UPLOADER, present on CONTRIBUTOR — a 400. */
+    /** A wrapped identity key that does not match the role: missing on WRITE_ONLY, present on READ_WRITE — a 400. */
     object InvalidRequest : CreateIdentityOutcome, HttpFailure by Failures.invalidRequest
-    /** The share does not accept contributions (not CONTRIBUTOR/UPLOADER) — a 403. */
+    /** The share does not accept contributions (not READ_WRITE/WRITE_ONLY) — a 403. */
     object NotContributable : CreateIdentityOutcome, HttpFailure by httpFailure("share_not_contributable", FORBIDDEN)
     /** Password-protected + a wrong token (cr-0164) — a 403. */
     object PasswordIncorrect : CreateIdentityOutcome, HttpFailure by httpFailure("share_password_incorrect", FORBIDDEN)
@@ -116,7 +116,7 @@ sealed interface ShareDeleteOutcome {
 sealed interface ShareUploadOutcome {
     data class Results(val items: List<UploadItemResult>) : ShareUploadOutcome
     object NotFound : ShareUploadOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
-    /** Not a CONTRIBUTOR share, or the contributor token is invalid — a 403. */
+    /** Not a READ_WRITE share, or the contributor token is invalid — a 403. */
     object NotContributable : ShareUploadOutcome, HttpFailure by httpFailure("share_not_contributable", FORBIDDEN)
     /** Password-protected + a wrong token (cr-0164) — a 403. */
     object PasswordIncorrect : ShareUploadOutcome, HttpFailure by httpFailure("share_password_incorrect", FORBIDDEN)
@@ -127,7 +127,7 @@ sealed interface ShareUploadOutcome {
 sealed interface ShareWindowOutcome {
     data class Results(val items: List<WindowItemResult>) : ShareWindowOutcome
     object NotFound : ShareWindowOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
-    /** Not a CONTRIBUTOR share, or the contributor token is invalid — a 403. */
+    /** Not a READ_WRITE share, or the contributor token is invalid — a 403. */
     object NotContributable : ShareWindowOutcome, HttpFailure by httpFailure("share_not_contributable", FORBIDDEN)
     /** Password-protected + a wrong token (cr-0164) — a 403. */
     object PasswordIncorrect : ShareWindowOutcome, HttpFailure by httpFailure("share_password_incorrect", FORBIDDEN)
@@ -179,7 +179,7 @@ sealed interface UpdateShareOutcome {
     object Deleting : UpdateShareOutcome, HttpFailure by Failures.scopeDeleting
     /** No such share owned by the caller — a non-enumerable 404 (owner-gated, like revoke). */
     object NotFound : UpdateShareOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
-    /** An illegal role change (cr-0119) — `role = UPLOADER`, or a change on an UPLOADER share → 422. */
+    /** An illegal role change (cr-0119) — `role = WRITE_ONLY`, or a change on a WRITE_ONLY share → 422. */
     object InvalidRole : UpdateShareOutcome, HttpFailure by httpFailure("invalid_role_change", UNPROCESSABLE)
 }
 
@@ -307,7 +307,7 @@ class SharingHandler(
             }
         }
         refused?.let { return it }
-        // A double-submitted Memory's FIRST UPLOADER link loses at the guarded drop-key update, not at the commit: both
+        // A double-submitted Memory's FIRST WRITE_ONLY link loses at the guarded drop-key update, not at the commit: both
         // carry the private key, and the loser's update waits for the winner's and finds the key set. Its replay meets
         // the id check first and answers `id_taken` — `drop_key_exists` would send the client to re-seal and retry the
         // id the winner holds. So that refusal re-asks the replay question, in a fresh transaction once the loser's
@@ -328,12 +328,12 @@ class SharingHandler(
     }
 
     /**
-     * The keys a share of [role] carries, or null when the request's do not match it (ADR 0031 point 7). An
-     * UPLOADER share never carries `symWrap(K_share, K_mem)` — the one party it exists to keep out would hold the
+     * The keys a share of [role] carries, or null when the request's do not match it (ADR 0031 point 7). A
+     * WRITE_ONLY share never carries `symWrap(K_share, K_mem)` — the one party it exists to keep out would hold the
      * Memory's read key — and every other role never carries a drop key. Sent-but-empty counts as sent: refused.
      */
     private fun shareKeys(role: String, wrap: String?, dropPublic: String?, dropPrivate: String?): ShareKeys? =
-        if (role == ShareEntity.UPLOADER) {
+        if (role == ShareEntity.WRITE_ONLY) {
             if (wrap != null || dropPublic.isNullOrEmpty() || dropPrivate?.isEmpty() == true) null
             else ShareKeys.Drop(dropPublic, dropPrivate)
         } else {
@@ -394,7 +394,7 @@ class SharingHandler(
 
     /** Edit a share in place (cr-0115/cr-0116/cr-0119, ADR 0036) — owner-gated. A share not owned by the caller is a
      *  non-enumerable 404. The `K_share`-sealed ciphertexts (re-sealed client-side) full-replace the note + name;
-     *  a non-null `role` changes the grant in place (VIEWER ↔ CONTRIBUTOR only — UPLOADER, either as the target or
+     *  a non-null `role` changes the grant in place (READ ↔ READ_WRITE only — WRITE_ONLY, either as the target or
      *  as the share's current role, is `InvalidRole` → 422). Role change is a plaintext authz change: no re-crypto,
      *  the wrap/`K_share`/link are untouched. */
     fun updateShare(
@@ -468,7 +468,7 @@ class SharingHandler(
     /**
      * Re-issue a share (ADR 0075): a new share under the client-minted [newShareId] with a fresh `K_share`, and the
      * old one deleted (ADR 0029 §7), in one transaction ([SharingStore.reissue]). The Memory, the scope and the role come from
-     * the old row, so a re-issue can neither move a link nor flip it into or out of UPLOADER. An enabled share is
+     * the old row, so a re-issue can neither move a link nor flip it into or out of WRITE_ONLY. An enabled share is
      * the owner's to re-issue (as revoke); a disabled one any member's, who owns the new share (as re-activation
      * adopts). A share is re-issued at most once: a deleted one — tombstoned by an earlier or a concurrent re-issue,
      * or by a delete — is [ReissueShareOutcome.ShareDeleted] for a member of its scope and the 404 for anyone else;
@@ -483,7 +483,7 @@ class SharingHandler(
         val old = store.findIncludingDeleted(shareId) ?: return ReissueShareOutcome.NotFound
         reissueRefusal(userId, old.scopeId, old.deletedAt != null, old.enabled, old.ownerAccount)?.let { return it }
         if (!capabilities.isActive(capabilityFor(old.role))) return ReissueShareOutcome.CapabilityDisabled
-        // No drop private key: the old UPLOADER share proves the Memory already holds one (it is set once and
+        // No drop private key: the old WRITE_ONLY share proves the Memory already holds one (it is set once and
         // never cleared), and every upload so far is sealed to it (ADR 0031 point 7).
         val keys = shareKeys(old.role, wrap, sealedDropPublicKey, null) ?: return ReissueShareOutcome.InvalidRequest
         if (sealedShareKeyEpoch != scopes.currentEpoch(old.scopeId)) return ReissueShareOutcome.StaleEpoch
@@ -523,9 +523,9 @@ class SharingHandler(
     }
 
     /**
-     * Resolve a share for a guest. For a **viewable** role (VIEWER/CONTRIBUTOR) the full sealed subtree + the
-     * wrapped keys of the UPLOADER identities whose media it holds cross — no guest's name, no contributor
-     * identity (ADR 0030 point 8); for an **UPLOADER** (write-only drop-box, ADR 0031) the resolve is gated to
+     * Resolve a share for a guest. For a **viewable** role (READ/READ_WRITE) the full sealed subtree + the
+     * wrapped keys of the WRITE_ONLY identities whose media it holds cross — no guest's name, no contributor
+     * identity (ADR 0030 point 8); for a **WRITE_ONLY** (write-only drop-box, ADR 0031) the resolve is gated to
      * `media: []` + the **root node only** and **no identities** — the uploader is structurally handed nothing to
      * see (no gallery, no other guests). The `canView` gate is the server-side enforcement of "cannot see others".
      */
@@ -546,7 +546,7 @@ class SharingHandler(
             val media = subtree.media.map { if (it.identityId in uploaderKeys) it else it.copy(identityId = null) }
             return ResolveShareOutcome.Found(share, SubtreeData(subtree.nodes, media), uploaderKeys)
         }
-        // UPLOADER: the minimal capability — no nodes, no media, no identities. The client seals its uploads under
+        // WRITE_ONLY: the minimal capability — no nodes, no media, no identities. The client seals its uploads under
         // its own identity key, wrapped to the Memory's drop public key (served sealed under `K_share` in place of
         // the wrap, ADR 0031 point 7), and shows the title (from `sealedName`); it needs nothing from the subtree.
         return ResolveShareOutcome.Found(share, SubtreeData(emptyList(), emptyList()), emptyMap())
@@ -577,7 +577,7 @@ class SharingHandler(
 
     // --- contributor / uploader (cr-0101, cr-0102) -----------------------------
 
-    /** Name yourself on a contributable share (CONTRIBUTOR/UPLOADER): seal-name in, an anonymous identity + token out. */
+    /** Name yourself on a contributable share (READ_WRITE/WRITE_ONLY): seal-name in, an anonymous identity + token out. */
     fun createIdentity(
         shareId: String, pwToken: String?, writeToken: String?, identityId: String, sealedDisplayName: String,
         wrappedIdentityKey: String?,
@@ -594,9 +594,9 @@ class SharingHandler(
         // proof learns nothing of the role). A share holding no verifier fails closed.
         if (!holdsTheKey(share, writeToken)) return CreateIdentityOutcome.NotFound
         if (!ShareAccessPolicy.canUpload(share.role)) return CreateIdentityOutcome.NotContributable
-        // ADR 0031 point 7: an UPLOADER identity seals under its own key and must hand it over wrapped to the drop
-        // key, or nobody could ever open what it uploads; a CONTRIBUTOR seals under `K_mem` and has none to hand.
-        val uploader = share.role == ShareEntity.UPLOADER
+        // ADR 0031 point 7: a WRITE_ONLY identity seals under its own key and must hand it over wrapped to the drop
+        // key, or nobody could ever open what it uploads; a READ_WRITE identity seals under `K_mem` and has none to hand.
+        val uploader = share.role == ShareEntity.WRITE_ONLY
         if (uploader == wrappedIdentityKey.isNullOrEmpty()) return CreateIdentityOutcome.InvalidRequest
         // The only guest call that writes a row before any upload exists — bounded per share (ADR 0051,
         // `@RateLimit(key = SHARE)`), after the authorization gates so an unauthorized caller spends nothing.
@@ -711,7 +711,7 @@ class SharingHandler(
             PwCheck.TOO_MANY -> return ShareBlobOutcome.RateLimited // cr-0165
             PwCheck.OK -> {}
         }
-        // A write-only role has NO download capability (ADR 0031) — an UPLOADER share serves no blob, even for an
+        // A write-only role has NO download capability (ADR 0031) — a WRITE_ONLY share serves no blob, even for an
         // in-subtree id. This makes "cannot see" a real server gate, not just id-secrecy (the resolve returns none).
         if (!ShareAccessPolicy.canView(share.role)) return ShareBlobOutcome.NotFound
         val blob = store.authorizedBlob(share.scopeId, share.nodeId, blobId) ?: return ShareBlobOutcome.NotFound
@@ -719,10 +719,10 @@ class SharingHandler(
         return ShareBlobOutcome.Found(gets)
     }
 
-    /** The instance capability a role's public share needs (ADR 0032): UPLOADER → the uploader-links toggle,
-     *  VIEWER/CONTRIBUTOR → the public-links toggle. Kept coarser than the role (2 capabilities, 3 roles). */
+    /** The instance capability a role's public share needs (ADR 0032): WRITE_ONLY → the uploader-links toggle,
+     *  READ/READ_WRITE → the public-links toggle. Kept coarser than the role (2 capabilities, 3 roles). */
     private fun capabilityFor(role: String): String =
-        if (role == ShareEntity.UPLOADER) CapabilityIds.SHARING_UPLOADER_LINKS else CapabilityIds.SHARING_PUBLIC_LINKS
+        if (role == ShareEntity.WRITE_ONLY) CapabilityIds.SHARING_UPLOADER_LINKS else CapabilityIds.SHARING_PUBLIC_LINKS
 
     /**
      * The application that writes under [share]'s root, picked by the root's node kind — called only after the guest

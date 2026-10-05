@@ -81,7 +81,7 @@ sequenceDiagram
   It **is** an access-control gate — a malicious operator could bypass the check, so this
   defends a leaked link against an **honest** operator (the realistic self-hosted / trusted case), not an active
   one. The crypto-gate upgrade (fold `Argon2id` into the key) is a documented future option, not built here.
-- **All roles.** The gate fronts every guest endpoint, so a VIEWER, CONTRIBUTOR or UPLOADER share is protected
+- **All roles.** The gate fronts every guest endpoint, so a READ, READ_WRITE or WRITE_ONLY share is protected
   alike; the password field is in the one shared create/edit dialog.
 - **In place, same link.** `K_share` (the fragment) is never touched, so set / change / remove / add-later all
   keep the link valid — the password is a separable server-side gate plus a sealed copy.

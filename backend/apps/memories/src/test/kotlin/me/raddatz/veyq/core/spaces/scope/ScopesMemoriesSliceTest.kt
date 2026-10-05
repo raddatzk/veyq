@@ -63,7 +63,7 @@ class ScopesMemoriesSliceTest {
         QuarkusTransaction.requiringNew().run {
             ShareEntity().apply {
                 id = shareId; ownerAccount = owner; this.scopeId = scopeId; this.nodeId = nodeId
-                role = ShareEntity.VIEWER; wrap = "c2hhcmUtd3JhcA=="; sealedName = "c2VhbGVkLW1lbW9yeQ=="
+                role = ShareEntity.READ; wrap = "c2hhcmUtd3JhcA=="; sealedName = "c2VhbGVkLW1lbW9yeQ=="
                 createdAt = Instant.now()
             }.persist()
         }
@@ -78,7 +78,7 @@ class ScopesMemoriesSliceTest {
         val (elsewhere, personal) = seedMemberScope()
         val memory = seedNode(personal, MemoriesNodeKinds.MEMORY, parentId = personal, wrappedContentKey = CONTENT_KEY)
         given().header("Authorization", bearer(elsewhere)).contentType(ContentType.JSON)
-            .body("""{"shareId":"$shareId",${ShareWriteProof.field(shareId)},"nodeId":"$memory","role":"VIEWER","wrap":"c2hhcmUtd3JhcA==","sealedName":"c2VhbGVkLW1lbW9yeQ=="}""")
+            .body("""{"shareId":"$shareId",${ShareWriteProof.field(shareId)},"nodeId":"$memory","role":"READ","wrap":"c2hhcmUtd3JhcA==","sealedName":"c2VhbGVkLW1lbW9yeQ=="}""")
             .`when`().post("/api/shares")
             .then().statusCode(409).body("code", equalTo("id_taken"))
     }

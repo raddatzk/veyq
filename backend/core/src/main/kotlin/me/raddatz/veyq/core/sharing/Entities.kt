@@ -44,11 +44,11 @@ class ShareEntity : PanacheEntityBase {
     lateinit var role: String
 
     /** `symWrap(K_share, K_mem)` — the Memory's content key sealed under the fresh per-share key (opaque base64).
-     *  Null for an UPLOADER share: its guest never holds `K_mem` (ADR 0031 point 7). */
+     *  Null for a WRITE_ONLY share: its guest never holds `K_mem` (ADR 0031 point 7). */
     @Column(name = "wrap")
     var wrap: String? = null
 
-    /** UPLOADER only: the Memory's drop public key sealed under `K_share` (opaque base64) — served instead of [wrap]. */
+    /** WRITE_ONLY only: the Memory's drop public key sealed under `K_share` (opaque base64) — served instead of [wrap]. */
     @Column(name = "sealed_drop_public_key")
     var sealedDropPublicKey: String? = null
 
@@ -77,7 +77,7 @@ class ShareEntity : PanacheEntityBase {
 
     /** ADR 0036: the recoverable per-share key — `K_share` sealed under the scope key `K_SC` at
      *  [sealedShareKeyEpoch] (opaque base64), or null. Lets every scope member recover `K_share` to reveal, edit and
-     *  re-copy the share. Never under `K_mem`: every VIEWER/CONTRIBUTOR link carries that key, and a copy under it
+     *  re-copy the share. Never under `K_mem`: every READ/READ_WRITE link carries that key, and a copy under it
      *  would open this share to a sibling link plus a dump (ADR 0036 point 4). */
     @Column(name = "sealed_share_key")
     var sealedShareKey: String? = null
@@ -135,16 +135,16 @@ class ShareEntity : PanacheEntityBase {
     var deletedAt: Instant? = null
 
     companion object : PanacheCompanionBase<ShareEntity, String> {
-        const val VIEWER = "VIEWER"
-        const val CONTRIBUTOR = "CONTRIBUTOR"
+        const val READ = "READ"
+        const val READ_WRITE = "READ_WRITE"
 
         /** A write-only drop-box (cr-0102, ADR 0031): add photos but the resolve serves no media (`canView` = false). */
-        const val UPLOADER = "UPLOADER"
+        const val WRITE_ONLY = "WRITE_ONLY"
     }
 }
 
 /**
- * An anonymous **contributor identity** on a CONTRIBUTOR share (cr-0101, ADR 0030): the display name a visitor
+ * An anonymous **contributor identity** on a READ_WRITE share (cr-0101, ADR 0030): the display name a visitor
  * gave before contributing, **sealed under `K_mem`** (opaque), plus the hash of an unguessable capability token
  * that authorizes their uploads. Operator-blind: the server never sees the name or the person — only that an
  * opaque identity contributed. The sealed name → identity is the forward-compat hook for buckets.
@@ -160,12 +160,12 @@ class ShareIdentityEntity : PanacheEntityBase {
     @Column(name = "share_id", nullable = false, length = 64)
     lateinit var shareId: String
 
-    /** The display name AEAD-sealed (opaque base64) — under `K_mem` for a CONTRIBUTOR identity, under the identity's
-     *  own key for an UPLOADER one. */
+    /** The display name AEAD-sealed (opaque base64) — under `K_mem` for a READ_WRITE identity, under the identity's
+     *  own key for a WRITE_ONLY one. */
     @Column(name = "sealed_display_name", nullable = false)
     lateinit var sealedDisplayName: String
 
-    /** UPLOADER identities only: the identity's own key wrapped to the Memory's drop public key (opaque base64). */
+    /** WRITE_ONLY identities only: the identity's own key wrapped to the Memory's drop public key (opaque base64). */
     @Column(name = "wrapped_identity_key")
     var wrappedIdentityKey: String? = null
 

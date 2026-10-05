@@ -35,7 +35,7 @@ const SCOPE_ID = '5c09e000-0000-4000-8000-0000000000cd'
 const EPOCHS = { current: 1, keys: new Map([[0, new Uint8Array(32)], [1, new Uint8Array(32)]]) }
 
 const share = (over: Record<string, unknown>) => ({
-  shareId: 's', scopeId: SCOPE_ID, nodeId: 'n1', role: ShareRole.Viewer, enabled: true, mine: true,
+  shareId: 's', scopeId: SCOPE_ID, nodeId: 'n1', role: ShareRole.Read, enabled: true, mine: true,
   createdAt: new Date('2026-01-01T00:00:00Z'), expiresAt: null,
   sealedNote: null, sealedShareName: null, sealedShareKey: 'k', sealedShareKeyEpoch: 1, passwordRequired: false, sealedPassword: null,
   reissueRequired: false,
@@ -93,7 +93,7 @@ async function openOff(w: ReturnType<typeof mountList>) {
 // follows the server's `newGuestsRefused` and marks the row, beside the renew its owner already has.
 describe('ShareDialog — a link that takes no new guest until renewed (#270)', () => {
   it('marks a live link the server says refuses new guests, and its owner can renew it', async () => {
-    listSharesFor.mockResolvedValue([share({ shareId: 'old', role: ShareRole.Contributor, newGuestsRefused: true })])
+    listSharesFor.mockResolvedValue([share({ shareId: 'old', role: ShareRole.ReadWrite, newGuestsRefused: true })])
     const w = mountList()
     await flushPromises()
 
@@ -103,7 +103,7 @@ describe('ShareDialog — a link that takes no new guest until renewed (#270)', 
   })
 
   it('control: a link the server does not mark carries no such badge', async () => {
-    listSharesFor.mockResolvedValue([share({ shareId: 'new', role: ShareRole.Contributor, newGuestsRefused: false })])
+    listSharesFor.mockResolvedValue([share({ shareId: 'new', role: ShareRole.ReadWrite, newGuestsRefused: false })])
     const w = mountList()
     await flushPromises()
 

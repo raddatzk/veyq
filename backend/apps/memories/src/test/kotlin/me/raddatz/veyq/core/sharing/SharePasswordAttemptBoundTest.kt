@@ -50,7 +50,7 @@ class SharePasswordAttemptBoundTest {
     @Test
     fun nWrongAttemptsThen429_perShare() {
         val (userId, scopeId) = seedMemberScope()
-        val shareId = createWithPassword(userId, seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY), "VIEWER")
+        val shareId = createWithPassword(userId, seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY), "READ")
 
         // budget = 3: the first three wrong tokens are 403, the fourth is 429
         repeat(3) {
@@ -68,7 +68,7 @@ class SharePasswordAttemptBoundTest {
     @Test
     fun missingTokenNeverConsumesBudget() {
         val (userId, scopeId) = seedMemberScope()
-        val shareId = createWithPassword(userId, seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY), "VIEWER")
+        val shareId = createWithPassword(userId, seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY), "READ")
 
         // a tokenless resolve is the honest guest's challenge fetch — fire it far more than the budget
         repeat(10) { given().`when`().get("/api/shares/$shareId").then().statusCode(200).body("passwordRequired", equalTo(true)) }
@@ -80,8 +80,8 @@ class SharePasswordAttemptBoundTest {
     @Test
     fun perShareAxis_oneExhaustedShareDoesNotBlockAnother() {
         val (userId, scopeId) = seedMemberScope()
-        val exhausted = createWithPassword(userId, seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY), "VIEWER")
-        val other = createWithPassword(userId, seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY), "VIEWER")
+        val exhausted = createWithPassword(userId, seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY), "READ")
+        val other = createWithPassword(userId, seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY), "READ")
 
         repeat(4) { given().header("X-Share-Password", wrongToken).`when`().get("/api/shares/$exhausted") }
         given().header("X-Share-Password", wrongToken).`when`().get("/api/shares/$exhausted").then().statusCode(429)
@@ -95,7 +95,7 @@ class SharePasswordAttemptBoundTest {
     @Test
     fun writePathInheritsTheBound() {
         val (userId, scopeId) = seedMemberScope()
-        val shareId = createWithPassword(userId, seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY), "CONTRIBUTOR")
+        val shareId = createWithPassword(userId, seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY), "READ_WRITE")
 
         // exhaust the budget via the WRITE endpoint (create-identity) — the bound rides all six passwordCheck sites
         repeat(3) {

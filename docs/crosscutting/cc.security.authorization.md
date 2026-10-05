@@ -60,7 +60,7 @@ different dimensions** — the single most common source of confusion here, and 
 | 3 | **Membership** | do they belong to this scope / tenant? | — (an *accepted* row exists, or not; a tenant = its root scope) | `ScopeAccess` |
 | 4 | **Grant** | do they hold this scope's key? | — (`wrappedGrant is not null`) | `holdsGrant` |
 | 5 | **Scope role** | may they *manage* this scope? | `OWNER` · `MEMBER` | `isScopeOwner` · `isTenantOwner` · `ownerCount` · `memberRole` |
-| 6 | **Share role** | what may a link-holder do? | `VIEWER` · `CONTRIBUTOR` · `UPLOADER` | `canView` · `canUpload` |
+| 6 | **Share role** | what may a link-holder do? | `READ` · `READ_WRITE` · `WRITE_ONLY` | `canView` · `canUpload` |
 | 7 | **Share password** | do they know the share's password? | — | `passwordCheck` |
 | 8 | **Space state** | is the tenant suspended, is the scope being deleted? | `ACTIVE` · `SUSPENDED` · `deletedAt` | `ScopeAccess` (after #3) |
 

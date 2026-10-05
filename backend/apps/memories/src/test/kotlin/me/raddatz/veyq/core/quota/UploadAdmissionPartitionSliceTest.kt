@@ -77,14 +77,14 @@ class UploadAdmissionPartitionSliceTest {
     private fun linkUsage(list: MutableList<UploadAdmission>, shareId: String): Long? =
         QuarkusTransaction.requiringNew().call { quota(list).linkUsage(shareId) }
 
-    /** A CONTRIBUTOR link on a fresh Memory, its tenant's default per-link limit far above one small blob. */
+    /** A READ_WRITE link on a fresh Memory, its tenant's default per-link limit far above one small blob. */
     private fun link(): Pair<String, String> {
         val (ownerId, scopeId, tenantId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val shareId = UUID.randomUUID().toString().replace("-", "").padEnd(43, 'x')
         QuarkusTransaction.requiringNew().run {
             ShareEntity().apply {
-                id = shareId; ownerAccount = ownerId; this.scopeId = scopeId; nodeId = memory; role = "CONTRIBUTOR"
+                id = shareId; ownerAccount = ownerId; this.scopeId = scopeId; nodeId = memory; role = "READ_WRITE"
                 wrap = "d3JhcA=="; sealedName = "c2VhbGVk"; createdAt = Instant.now()
             }.persist()
         }
