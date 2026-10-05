@@ -11,9 +11,11 @@ import org.hibernate.annotations.DynamicUpdate
 
 /**
  * A node in a scope's encrypted tree (en.memory.tree, cr-0027). FOLDER organizes only and is core's; every other
- * `kind` belongs to an application, which places it through `NodeKindRules` (ADR 0079) — Memories' MEMORY is the
- * content unit (its `wrappedContentKey` = K_mem under K_SC), its CHAPTER sits inside a Memory. Operator-blind:
- * `encryptedName` / `wrappedContentKey` are opaque ciphertext, `slugToken` a blinded keyed MAC. `parentId`
+ * `kind` belongs to an application, which places it through `NodeKindRules` (ADR 0079). A node of a shareable kind
+ * carries its own content key (`wrappedContentKey`, wrapped under its parent's content key or `K_SC`), and every node
+ * may carry one versioned sealed payload (`wrappedMeta`/`metaVersion`) whose format is its kind's application's.
+ * Operator-blind: `encryptedName` / `wrappedContentKey` / `wrappedMeta` are opaque ciphertext, `slugToken` a blinded
+ * keyed MAC. `parentId`
  * is the **parent slot** — the parent node id, or the scope id for a root-level node (so slug uniqueness per
  * parent works at the root too); it is not a single-table FK.
  */
@@ -43,7 +45,7 @@ class NodeEntity : PanacheEntityBase {
     @Column(name = "order_index", nullable = false)
     var orderIndex: Int = 0
 
-    /** The scope content-key **epoch** this node's name/slug/`K_mem`-wrap are sealed under (ADR 0024, cr-0088);
+    /** The scope content-key **epoch** this node's name/slug/content-key wrap are sealed under (ADR 0024, cr-0088);
      *  0 = the pre-rotation baseline. A member reads it iff they hold an epoch ≥ this. */
     @Column(name = "epoch", nullable = false)
     var epoch: Int = 0
@@ -59,8 +61,9 @@ class NodeEntity : PanacheEntityBase {
     @Column(name = "meta_version", nullable = false)
     var metaVersion: Long = 0
 
-    /** A MEMORY's drop private key sealed under its `K_mem` (opaque base64) — set once, by its first WRITE_ONLY share,
-     *  never replaced: the media WRITE_ONLY guests added open through it (ADR 0031 point 7). */
+    /** The drop private key of the shared root node of a WRITE_ONLY link, sealed under the node's content key (opaque
+     *  base64) — set once, by core inside the node's first WRITE_ONLY share, never replaced: what WRITE_ONLY guests
+     *  added opens through it (ADR 0031 point 7). A field of its own, never part of [wrappedMeta]. */
     @Column(name = "sealed_drop_private_key")
     var sealedDropPrivateKey: String? = null
 

@@ -20,25 +20,26 @@ import java.util.UUID
 /** One node of a shared subtree (the name stays sealed under `K_SC`, so it is not returned — the root's comes from `sealedName`). */
 data class ShareNodeRow(
     val id: String,
-    /** The parent within the subtree, or null at the shared root (its `K_mem` comes from the share `wrap`). */
+    /** The parent within the subtree, or null at the shared root (its content key comes from the share `wrap`). */
     val parentId: String?,
     val kind: String,
     val orderIndex: Int,
-    /** The content-key epoch the node was sealed at — a chapter's `K_mem` wrap is bound to it (ADR 0072). */
+    /** The content-key epoch the node was sealed at — a descendant's content-key wrap is bound to it (ADR 0072). */
     val epoch: Int,
     val wrappedContentKey: String?,
     val wrappedMeta: String?,
-    /** The Memory's drop private key sealed under its `K_mem` — every reader of the subtree opens uploads through it. */
+    /** The shared root's drop private key sealed under its content key — every reader of the subtree opens uploads through it. */
     val sealedDropPrivateKey: String?,
 )
 
-/** The sealed subtree of a share: its nodes (for the `K_mem` chain) + every media attached under it. */
+/** The sealed subtree of a share: its nodes (for the content-key chain) + every media attached under it. */
 data class SubtreeData(val nodes: List<ShareNodeRow>, val media: List<ShareMediaRow>)
 
 /**
- * What a share hands its guest, fixed by its role (ADR 0031 point 7): a READ or READ_WRITE share wraps `K_mem`
- * under `K_share`; a WRITE_ONLY share carries the Memory's drop public key under `K_share` instead, and the Memory's
- * first WRITE_ONLY share also brings the drop private key sealed under `K_mem`, which the Memory keeps.
+ * What a share hands its guest, fixed by its role (ADR 0031 point 7): a READ or READ_WRITE share wraps the shared
+ * node's content key under `K_share`; a WRITE_ONLY share carries the node's drop public key under `K_share` instead,
+ * and the node's first WRITE_ONLY share also brings the drop private key sealed under its content key, which the node
+ * keeps.
  */
 sealed interface ShareKeys {
     data class MemoryWrap(val wrap: String) : ShareKeys
@@ -401,7 +402,7 @@ class SharingStore(
             .associate { it.id to it.wrappedIdentityKey!! }
     }
 
-    /** The sealed subtree rooted at [rootNodeId] within [scopeId]: nodes (for the `K_mem` chain) + its live media. */
+    /** The sealed subtree rooted at [rootNodeId] within [scopeId]: nodes (for the content-key chain) + its live media. */
     fun subtree(scopeId: String, rootNodeId: String): SubtreeData {
         val subtreeIds = collectSubtreeIds(scopeId, rootNodeId)
         // `deletedAt is null` — a soft-deleted node (uc.memory.delete-node, ADR 0061) keeps its ROW, unlike the

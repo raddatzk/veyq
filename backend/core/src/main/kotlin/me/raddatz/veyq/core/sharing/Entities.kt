@@ -10,10 +10,10 @@ import java.time.Instant
 import org.hibernate.annotations.DynamicUpdate
 
 /**
- * A public share (uc.sharing.share-public-viewer, ADR 0029): one Memory of a personal, group or tenant scope
+ * A public share (uc.sharing.share-public-viewer, ADR 0029): one node of a personal, group or tenant scope
  * (ADR 0029 §6) turned into an anonymous, revocable link `/s/{id}#k=<K_share>`. Operator-blind: the row holds only the
- * opaque 256-bit `id`, the wrap `symWrap(K_share, K_mem)`, the plaintext `role`, the `K_share`-sealed name,
- * and the shared `nodeId` — never `K_share`, `K_mem`, a name, or the viewer. `K_share` rides the URL fragment
+ * opaque 256-bit `id`, the wrap `symWrap(K_share, content key)`, the plaintext `role`, the `K_share`-sealed name,
+ * and the shared `nodeId` — never `K_share`, a content key, a name, or the viewer. `K_share` rides the URL fragment
  * (ADR 0015) and never reaches the server. Soft (L1) revoke: `enabled = false` / a passed `expiresAt` makes the
  * guest resolve + blob GET `404` (ADR 0029 §7 — already-downloaded ciphertext is not retractable). A deleted share is
  * a tombstone ([deletedAt], `SharingStore.tombstone`): its ciphertext columns are null, and every reader goes through
@@ -43,8 +43,8 @@ class ShareEntity : PanacheEntityBase {
     @Column(name = "role", nullable = false, length = 16)
     lateinit var role: String
 
-    /** `symWrap(K_share, K_mem)` — the Memory's content key sealed under the fresh per-share key (opaque base64).
-     *  Null for a WRITE_ONLY share: its guest never holds `K_mem` (ADR 0031 point 7). */
+    /** `symWrap(K_share, content key)` — the shared node's content key sealed under the fresh per-share key (opaque
+     *  base64). Null for a WRITE_ONLY share: its guest never holds that key (ADR 0031 point 7). */
     @Column(name = "wrap")
     var wrap: String? = null
 
@@ -77,7 +77,7 @@ class ShareEntity : PanacheEntityBase {
 
     /** ADR 0036: the recoverable per-share key — `K_share` sealed under the scope key `K_SC` at
      *  [sealedShareKeyEpoch] (opaque base64), or null. Lets every scope member recover `K_share` to reveal, edit and
-     *  re-copy the share. Never under `K_mem`: every READ/READ_WRITE link carries that key, and a copy under it
+     *  re-copy the share. Never under the shared node's content key: every READ/READ_WRITE link carries that key, and a copy under it
      *  would open this share to a sibling link plus a dump (ADR 0036 point 4). */
     @Column(name = "sealed_share_key")
     var sealedShareKey: String? = null
@@ -145,7 +145,7 @@ class ShareEntity : PanacheEntityBase {
 
 /**
  * An anonymous **contributor identity** on a READ_WRITE share (cr-0101, ADR 0030): the display name a visitor
- * gave before contributing, **sealed under `K_mem`** (opaque), plus the hash of an unguessable capability token
+ * gave before contributing, **sealed under the shared node's content key** (opaque), plus the hash of an unguessable capability token
  * that authorizes their uploads. Operator-blind: the server never sees the name or the person — only that an
  * opaque identity contributed. The sealed name → identity is the forward-compat hook for buckets.
  */
@@ -160,7 +160,7 @@ class ShareIdentityEntity : PanacheEntityBase {
     @Column(name = "share_id", nullable = false, length = 64)
     lateinit var shareId: String
 
-    /** The display name AEAD-sealed (opaque base64) — under `K_mem` for a READ_WRITE identity, under the identity's
+    /** The display name AEAD-sealed (opaque base64) — under the shared node's content key for a READ_WRITE identity, under the identity's
      *  own key for a WRITE_ONLY one. */
     @Column(name = "sealed_display_name", nullable = false)
     lateinit var sealedDisplayName: String

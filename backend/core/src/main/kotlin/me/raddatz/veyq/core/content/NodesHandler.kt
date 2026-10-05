@@ -99,7 +99,7 @@ class NodesHandler(
         if (parent is ParentSlot.Missing) return CreateNodeOutcome.IllegalStructure
         if (!parentAllows(kind, parent)) return CreateNodeOutcome.IllegalStructure
         if (store.slugTaken(slot, slugToken)) return CreateNodeOutcome.SlugTaken
-        // The client-minted id (ADR 0072): the name, K_mem wrap and meta are sealed bound to it, so it is stored
+        // The client-minted id (ADR 0072): the name, content-key wrap and payload are sealed bound to it, so it is stored
         // verbatim or not at all.
         // A node is unique twice — its id, and its slug under the parent (`ux_node_parent_slug`) — so a concurrent
         // create's loser re-asks both, in the order above: what its replay answers. That holds too when it loses at

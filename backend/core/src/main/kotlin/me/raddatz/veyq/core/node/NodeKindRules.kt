@@ -11,8 +11,8 @@ sealed interface ParentSlot {
 
 /**
  * Where a node of a kind may live in the tree (ADR 0079): the placement rule of the kinds one owner answers for. Core
- * owns the tree and knows `FOLDER` only ([FolderNodeRules]); an application answers for its own kinds (Memories:
- * `MEMORY`, `CHAPTER`). `NodesHandler` asks it on a create and on a move, after a missing or trashed parent has
+ * owns the tree and knows `FOLDER` only ([FolderNodeRules]); an application answers for its own kinds.
+ * `NodesHandler` asks it on a create and on a move, after a missing or trashed parent has
  * already been refused — [parentAllows] never sees [ParentSlot.Missing] from there, and answers false if it does.
  *
  * **Exactly one implementation per kind, and none is the default.** A kind that no implementation [handles] is
