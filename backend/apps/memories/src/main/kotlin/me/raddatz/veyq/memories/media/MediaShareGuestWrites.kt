@@ -1,9 +1,6 @@
 package me.raddatz.veyq.memories.media
 
 import me.raddatz.veyq.core.blob.BlobUploadHandler
-import me.raddatz.veyq.core.blob.CompleteItem
-import me.raddatz.veyq.core.blob.CompleteItemResult
-import me.raddatz.veyq.core.blob.UploadCompletions
 import me.raddatz.veyq.core.blob.UploadDeclare
 import me.raddatz.veyq.core.blob.UploadItemResult
 import me.raddatz.veyq.core.blob.UploadOpener
@@ -17,13 +14,13 @@ import jakarta.transaction.Transactional
 
 /**
  * The Memories half of a guest's write on a share: a share is rooted at a MEMORY (ADR 0029 §6, ADR 0030), so this is
- * the implementation for that kind. It only forwards to core's generic upload (its link paths and the completion dispatcher, which reaches
- * [MediaUploadCompletion]) and owns the delete-own.
+ * the implementation for that kind. Its seam half only forwards core's guest transport (start, window) to core's
+ * generic upload. [deleteOwn] is Memories' own: [ShareMediaHandler] calls it past core's guest gate, and completes a
+ * guest's uploads itself through core's completion dispatcher (which reaches [MediaUploadCompletion]).
  */
 @ApplicationScoped
 class MediaShareGuestWrites(
     private val uploads: BlobUploadHandler,
-    private val completions: UploadCompletions,
     private val store: MediaStore,
 ) : ShareGuestWrites {
 
@@ -37,16 +34,13 @@ class MediaShareGuestWrites(
     override fun window(scopeId: String, identityId: String, requests: List<WindowRequest>, domain: String?): List<WindowItemResult> =
         uploads.windowForScope(scopeId, UploadOpener.Contributor(identityId), requests, domain)
 
-    override fun complete(scopeId: String, items: List<CompleteItem>, identityId: String, admitted: () -> Boolean): List<CompleteItemResult> =
-        completions.complete(scopeId, items, UploadOpener.Contributor(identityId), admitted)
-
     /**
      * Authorized **iff** the media is in [scopeId] and its `share_identity_id` equals [identityId] — a single-row
      * **ownership** check, never gallery filtering. Deletes the media row + its derivative rows + all blob rows,
      * and puts their store objects (original + every derivative) on the reclaim list in the same transaction.
      */
     @Transactional
-    override fun deleteOwn(scopeId: String, mediaId: String, identityId: String): Boolean {
+    fun deleteOwn(scopeId: String, mediaId: String, identityId: String): Boolean {
         // The read is the row's lock (as `MediaStore.purgeMedia`): a second delete of the same upload, or a purge,
         // that holds it finishes first, and this then finds nothing — the 404 a replay gets. Read plainly, it deleted
         // rows already gone and answered 500.

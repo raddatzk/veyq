@@ -102,7 +102,7 @@ class MediaStore(private val blobs: BlobUploadStore) {
      * row. One transaction — all blobs, the media, and the derivative rows commit together. Returns
      * (originalBlobId, mediaId), or null — nothing written — when a session was already spent, or [admitted] refuses.
      * [admitted] is the caller's gate asked again, before anything else in this transaction — a guest's link under
-     * the row lock its delete holds (`SharingHandler.completeUploads`); a member's complete passes none.
+     * the row lock its delete holds (`ShareMediaHandler.complete`); a member's complete passes none.
      *
      * The sessions are single-use, so they are **spent first** (developer-styleguide §12): each delete is the
      * transaction's first write and its row count decides. Two completes of one upload both found the session live;
