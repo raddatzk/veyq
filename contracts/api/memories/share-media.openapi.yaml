@@ -200,7 +200,13 @@ components:
             which that identity's rows cannot be opened (ADR 0031 point 7). No guest's name, and no READ_WRITE identity —
             not even this share's own, whatever its access mode is now: a guest's name is for the Memory's members, who
             read it through the bucket list (ADR 0030 point 8). The member list's `uploaderKeys` items, the same shape.
-          items: { $ref: "./media.openapi.yaml#/components/schemas/UploaderKey" }
+          items: { $ref: "#/components/schemas/UploaderKey" }
+
+    UploaderKey:
+      # The member list's schema (memories/media.openapi.yaml), aliased, not copied: one definition, so the two Memories
+      # reads cannot drift, and an alias generates the named type (an inline cross-file `items` ref would generate an
+      # anonymous `ShareMediaListingIdentitiesInner` instead — measured, slice 6.3).
+      $ref: "./media.openapi.yaml#/components/schemas/UploaderKey"
 
     ShareMedia:
       type: object
