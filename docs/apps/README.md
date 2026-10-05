@@ -4,6 +4,20 @@ veyq is a platform; an **application** is a set of node kinds with its own domai
 on it ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) owns the decision and
 the rejected alternatives). German: *Anwendung*. Never "plugin" or "app".
 
+**What the platform is.** veyq is a platform for sealed, shareable objects. The core provides:
+- **who**: tenants, central users, groups and personal scopes, memberships, invitations, keys, devices;
+- **what**: nodes as a tree inside a scope, with parents, order, trash and a content key per node; and
+  *attachments*, sealed files on a node that can be uploaded and downloaded, with size and storage quota;
+- **with whom**: links with `READ`, `READ_WRITE` or `WRITE_ONLY` access, with password, expiry and consent;
+- **in the background**: tasks, rate limits, the admin channel and operator-blindness.
+
+An application supplies the **meaning**: which node kinds exist, what the plaintext means, which rules apply to
+structure, attachments and guests, and the user interface. This is the decided target, not all of it the code:
+`READ`/`READ_WRITE`/`WRITE_ONLY` are the target wire names of today's `VIEWER`/`CONTRIBUTOR`/`UPLOADER`, and
+attachments are not yet a core spec (inbox #327) — what a verified upload becomes is application work today
+(`UploadCompletion`). A Files or Storage product is an application on core's attachments, never a dependency of
+another application. What is built and what is open: the ADR's Consequences.
+
 **Rules** (each is argued in the ADR, not here):
 
 - **First-party, compiled in.** No runtime loading of application code, server or client.
