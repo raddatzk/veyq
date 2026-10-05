@@ -1,5 +1,5 @@
 // The Memories application's API clients — the factories over the clients generated from its own specs
-// (`contracts/api/memories/`: `generated/media`, `generated/favorites`). They live here, not in core's
+// (`contracts/api/memories/`: `generated/media`, `generated/favorites`, `generated/share-media`). They live here, not in core's
 // `api/client.ts`, because core imports no application client (ADR 0079;
 // `validate_web_core_imports_no_applications.py` derives these directories from `generate:api`). The credential
 // is core's: [bearerParams] for a member's call, [publicParams] for a guest's, so the token source stays one.
@@ -10,6 +10,7 @@ import {
   ItemFavoritesApi,
   OwnItemFavoritesApi,
 } from '../../api/generated/favorites'
+import { Configuration as ShareMediaConfiguration, ShareMediaApi } from '../../api/generated/share-media'
 import { bearerParams, publicParams } from '../../api/client'
 
 // ── Bearer: a member's calls, authenticated by the session's access token ──────────────────────────────────
@@ -44,11 +45,11 @@ export function ownItemFavoritesApi(): OwnItemFavoritesApi {
 // ── Token-less: a guest's calls from the anonymous /s/ page ────────────────────────────────────────────────
 
 /**
- * The media configuration with **no** credential, as core's `publicSharesApi()` sits beside `sharesApi()`: the
- * anonymous /s/ page has no session, so no Authorization header is ever sent from it. No Memories guest operation
- * exists in the media spec yet — cr-platform-contract-split slice 6 moves the guest media read here and adds
- * `publicShareMediaApi()` on this configuration; until then nothing calls it.
+ * A guest's media on a share link (the `share-media` tag: complete an upload, delete one's own) with **no**
+ * credential, as core's `publicSharesApi()` sits beside `sharesApi()`: the anonymous /s/ page has no session, so no
+ * Authorization header is ever sent from it. The link's password and the guest's token travel as the operations'
+ * own headers and body fields.
  */
-export function publicMediaConfiguration(): MediaConfiguration {
-  return new MediaConfiguration(publicParams())
+export function publicShareMediaApi(): ShareMediaApi {
+  return new ShareMediaApi(new ShareMediaConfiguration(publicParams()))
 }

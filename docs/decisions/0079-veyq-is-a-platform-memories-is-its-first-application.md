@@ -120,10 +120,10 @@ on their own.
   Where a value's meaning belongs to an application — a node's sealed payload, a blob role, a kind — its
   description says whose it is and names no application's plaintext, operation or key. An operation whose
   behaviour is an application's lives in that application's directory, even when its path sits under a core
-  route (`/api/shares/{shareId}/media` is Memories'). Not yet the code: that pair of operations still sits in
-  core's `sharing` spec (*What core still knows of Memories*, below), its texts — and those of `PublicShare`'s
-  `media` and `identities` — saying they are Memories' and leave for its spec. Core's other spec texts and its main
-  comments describe what core does.
+  route (`/api/shares/{shareId}/media` is Memories': `contracts/api/memories/share-media.openapi.yaml`, its own
+  tag and root, the wire unchanged by the move). Not yet the code: `PublicShare`'s `media` and `identities` still sit
+  in core's `sharing` spec (*What core still knows of Memories*, below), their texts saying they are Memories' and
+  leave for its spec. Core's other spec texts and its main comments describe what core does.
 - **The node's payload slot and content key are core's** (decided 2026-10-06, cr-platform-contract-split). Core
   gives every node one sealed, versioned payload (`wrappedMeta`, `metaVersion`): core stores it, compare-and-sets
   it ([ADR 0077](0077-a-write-carries-the-version-it-read.md)) and lists it with the tree, and never opens it. Its
@@ -154,9 +154,10 @@ on their own.
   the shared nodes and their keys, no application data), terms, blob transport and download, guest identity. An
   application serves its rows and its writes on its own route under the share, checks that the share's root kind
   is its own, and carries the privacy rules of its rows with them (for Memories:
-  [ADR 0030](0030-contributor-public-share.md) point 8). Not yet the code: the gate is core's service
-  (`ShareGuestGate`), but no application calls it yet — core's sharing handler still runs the guest media writes
-  through it — and the resolve still serves Memories' `media` and `identities` (below). A link may later become
+  [ADR 0030](0030-contributor-public-share.md) point 8). Partly the code: the gate is core's service
+  (`ShareGuestGate`), and Memories' two guest writes (complete an upload, delete one's own) are its own operations
+  that call it (`ShareMediaHandler`), handing the gate's re-check of the link on unevaluated to the transaction that
+  attaches; the resolve still serves Memories' `media` and `identities` (below). A link may later become
   a credential core's gate accepts for application operations that declare it; that is a separate decision.
 - **An append-only application cannot make the server keep its order.** The server may drop or reorder entries
   it holds unless a sequence number or hash chain is bound into each entry's associated data (ADR 0072 binds an
@@ -197,9 +198,10 @@ on their own.
   targets are the bullets above): `veyq_node` carries Memories-flavoured columns in core's baseline (`cover_blob_id`,
   `cover_byte_size`, `media_revision`, `delete_revision` — moving a column is a schema change, not a rename);
   `ShareGuestWrites.supports` gates share *creation*, so core alone refuses every share and share policy is tested
-  with an application present; the guest completion item is media-shaped (`CompleteItem`'s `mediaId`,
-  `derivatives`, `wrappedExif`) because core's share contract serves the two `/api/shares/{shareId}/media`
-  operations (moving them out needs a core guest-write gate service first); `BlobRole`
+  with an application present; the completion item core's dispatcher carries is media-shaped (`CompleteItem`'s
+  `mediaId`, `derivatives`, `wrappedExif`), though since the guest writes moved to Memories' spec only Memories builds
+  it — making it generic is the decided next step; `PublicShare` still carries Memories' rows (`media`,
+  `identities`), which leave with Memories' own guest read; `BlobRole`
   (`ORIGINAL`/`THUMBNAIL`/`PREVIEW`/`COVER`) is a closed enum in core's `blob.openapi.yaml`, described there as
   Memories' values and closed because the crypto encoder is (until inbox #327); and the upload retention
   and purge keys keep their `veyq.media.*` names though core reads them.

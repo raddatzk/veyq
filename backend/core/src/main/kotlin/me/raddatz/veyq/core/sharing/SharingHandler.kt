@@ -3,12 +3,9 @@ package me.raddatz.veyq.core.sharing
 import me.raddatz.veyq.core.quota.StorageQuota
 import me.raddatz.veyq.core.quota.UploadAdmission
 import me.raddatz.veyq.core.blob.UploadDeclare
-import me.raddatz.veyq.core.blob.DerivativeDeclare
-import me.raddatz.veyq.core.blob.CompleteItem
 import me.raddatz.veyq.core.blob.UploadItemResult
 import me.raddatz.veyq.core.blob.WindowRequest
 import me.raddatz.veyq.core.blob.WindowItemResult
-import me.raddatz.veyq.core.blob.CompleteItemResult
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.sharing.ShareEntity
 import me.raddatz.veyq.core.sharing.ShareGuestGate.PwCheck
@@ -40,15 +37,6 @@ import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.inject.Instance
 import jakarta.transaction.Transactional
 import java.time.Instant
-
-/** One contributor upload to complete: the original session + role-tagged derivatives (the shared node is server-set). */
-data class ShareCompleteItem(
-    val mediaId: String,
-    val originalUploadId: String,
-    val derivatives: List<DerivativeDeclare>,
-    val wrappedMeta: String?,
-    val wrappedExif: String?,
-)
 
 sealed interface CreateShareOutcome {
     data class Created(val shareId: String) : CreateShareOutcome
@@ -102,19 +90,6 @@ sealed interface CreateIdentityOutcome {
     object RateLimited : CreateIdentityOutcome, HttpFailure by Failures.rateLimited
 }
 
-sealed interface ShareDeleteOutcome {
-    object Done : ShareDeleteOutcome
-    /** No such share/media, the media is not owned by this identity, or password-protected with no token
-     *  (cr-0164) — a non-enumerable 404. */
-    object NotFound : ShareDeleteOutcome, HttpFailure by httpFailure("share_media_not_found", NOT_FOUND)
-    /** The share does not accept contributions, or the contributor token is invalid — a 403. */
-    object NotContributable : ShareDeleteOutcome, HttpFailure by httpFailure("share_not_contributable", FORBIDDEN)
-    /** Password-protected + a wrong token (cr-0164) — a 403. */
-    object PasswordIncorrect : ShareDeleteOutcome, HttpFailure by httpFailure("share_password_incorrect", FORBIDDEN)
-    /** Too many wrong password attempts on this share (cr-0165) — a 429. */
-    object RateLimited : ShareDeleteOutcome, HttpFailure by Failures.rateLimited
-}
-
 sealed interface ShareUploadOutcome {
     data class Results(val items: List<UploadItemResult>) : ShareUploadOutcome
     object NotFound : ShareUploadOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
@@ -135,16 +110,6 @@ sealed interface ShareWindowOutcome {
     object PasswordIncorrect : ShareWindowOutcome, HttpFailure by httpFailure("share_password_incorrect", FORBIDDEN)
     /** Too many wrong password tokens on this share (cr-0165) — a 429. */
     object RateLimited : ShareWindowOutcome, HttpFailure by Failures.rateLimited
-}
-
-sealed interface ShareCompleteOutcome {
-    data class Results(val items: List<CompleteItemResult>) : ShareCompleteOutcome
-    object NotFound : ShareCompleteOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
-    object NotContributable : ShareCompleteOutcome, HttpFailure by httpFailure("share_not_contributable", FORBIDDEN)
-    /** Password-protected + a wrong token (cr-0164) — a 403. */
-    object PasswordIncorrect : ShareCompleteOutcome, HttpFailure by httpFailure("share_password_incorrect", FORBIDDEN)
-    /** Too many wrong password attempts on this share (cr-0165) — a 429. */
-    object RateLimited : ShareCompleteOutcome, HttpFailure by Failures.rateLimited
 }
 
 sealed interface ShareBlobOutcome {
@@ -651,55 +616,6 @@ class SharingHandler(
         }
         val writes = writesFor(gated.rootKind) ?: return ShareWindowOutcome.NotContributable
         return ShareWindowOutcome.Results(writes.window(gated.scopeId, gated.identityId, requests, domain))
-    }
-
-    /** Complete a contributor upload — attach to the share's own Memory node, stamped with the identity. */
-    fun completeUploads(shareId: String, pwToken: String?, contributorToken: String, items: List<ShareCompleteItem>): ShareCompleteOutcome {
-        // Same per-share upload budget as the start call (ADR 0051, `@RateLimit(key = SHARE)`): the two are one
-        // contributor write flow, and attaching is what actually creates the media rows.
-        val gated = when (val g = gate.writeGate(shareId, pwToken, contributorToken, spendUploadBudget = true)) {
-            is ShareWriteGate.Admitted -> g
-            ShareWriteGate.NotFound -> return ShareCompleteOutcome.NotFound
-            ShareWriteGate.PasswordIncorrect -> return ShareCompleteOutcome.PasswordIncorrect
-            ShareWriteGate.RateLimited -> return ShareCompleteOutcome.RateLimited
-            ShareWriteGate.NotContributable -> return ShareCompleteOutcome.NotContributable
-        }
-        val completeItems = items.map {
-            CompleteItem(
-                mediaId = it.mediaId,
-                nodeId = gated.rootNodeId, // contributors attach to the shared Memory root — server-set, not client-chosen
-                originalUploadId = it.originalUploadId,
-                derivatives = it.derivatives,
-                wrappedMeta = it.wrappedMeta,
-                wrappedExif = it.wrappedExif,
-            )
-        }
-        val writes = writesFor(gated.rootKind) ?: return ShareCompleteOutcome.NotContributable
-        // Each item's attach re-checks the link first ([ShareWriteGate.Admitted.admitted], under the row lock its delete
-        // holds): gated only above, an upload landed after a delete counted the identity's media and dropped it — a
-        // photo nobody could open. Refused, the item answers `upload_not_found`: a deleted link's upload can no longer
-        // complete. Passed on unevaluated; the attach transaction asks it.
-        return ShareCompleteOutcome.Results(writes.complete(gated.scopeId, completeItems, gated.identityId, gated.admitted))
-    }
-
-    /**
-     * Delete one of your own contributions (cr-0102 delete-own). Gated on the share (contributable + enabled) +
-     * a valid token; the store authorizes the delete by a **single-row ownership** check (the media's
-     * `share_identity_id` equals the token's identity), never gallery filtering, and puts its blob objects on the
-     * reclaim list (ADR 0062 — `StoreReclaimSweep` deletes them). A foreign/unknown media is a non-enumerable 404.
-     */
-    fun deleteMedia(shareId: String, pwToken: String?, contributorToken: String, mediaId: String): ShareDeleteOutcome {
-        // A delete spends no upload budget (`@RateLimitExempt` on the route): it is bounded by what the caller added.
-        val gated = when (val g = gate.writeGate(shareId, pwToken, contributorToken, spendUploadBudget = false)) {
-            is ShareWriteGate.Admitted -> g
-            ShareWriteGate.NotFound -> return ShareDeleteOutcome.NotFound
-            ShareWriteGate.PasswordIncorrect -> return ShareDeleteOutcome.PasswordIncorrect
-            ShareWriteGate.RateLimited -> return ShareDeleteOutcome.RateLimited
-            ShareWriteGate.NotContributable -> return ShareDeleteOutcome.NotContributable
-        }
-        val writes = writesFor(gated.rootKind) ?: return ShareDeleteOutcome.NotContributable
-        if (!writes.deleteOwn(gated.scopeId, mediaId, gated.identityId)) return ShareDeleteOutcome.NotFound
-        return ShareDeleteOutcome.Done
     }
 
     fun resolveBlob(shareId: String, blobId: String, pwToken: String?, domain: String?): ShareBlobOutcome {

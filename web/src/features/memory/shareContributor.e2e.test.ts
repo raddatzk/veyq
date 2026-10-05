@@ -3,8 +3,9 @@
 //
 // Two actors on one instance, serialized (the `scopeRotation.e2e` shape):
 //   A          = curator: server owner + tenant owner (from `birthInstance`), mints the share, reads it back.
-//   anonymous  = a contributor with NO session — every call goes through `publicSharesApi()`, which carries no
-//                bearer token by construction (`api/client.ts`), so the anonymous path stays anonymous even
+//   anonymous  = a contributor with NO session — every call goes through `publicSharesApi()` (core's link) or
+//                `publicShareMediaApi()` (Memories' guest media, `features/memory/api.ts`), which carry no bearer
+//                token by construction (both built on `publicParams()`), so the anonymous path stays anonymous even
 //                while A's `session.accessToken` is still set process-wide.
 //
 // Why the contributor role and not the plain viewer: it is the share role with the most machinery an e2e is the

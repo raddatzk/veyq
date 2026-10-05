@@ -11,10 +11,10 @@ data class DerivativeDeclare(val kind: String, val uploadId: String)
 /**
  * One logical item to complete: the original upload + role-tagged derivative uploads, attached to a node.
  *
- * The field names are Memories' words (`mediaId`, `derivatives`, `wrappedExif`) and stay core's on purpose: core's
- * own share contract serves a guest's completion (`SharingHandler.completeUploads`, `ShareGuestWrites.complete`)
- * and builds these, so moving them to the application would make core import it — and renaming `mediaId` is a wire
- * change. ADR 0079 Consequences names it among what core still knows.
+ * The field names are Memories' words (`mediaId`, `derivatives`, `wrappedExif`) and still core's: this is the item
+ * core's dispatcher ([UploadCompletions]) carries, though only Memories builds it now — its member completion
+ * (`MediaResource`) and its guest one on a share link (`ShareMediaHandler`). Making it generic is the next step
+ * ADR 0079 Consequences names among what core still knows; renaming `mediaId` on a wire is not part of it.
  */
 data class CompleteItem(
     /** The client-minted media id (ADR 0072) — the `ownerId` every upload of the item was started with. */

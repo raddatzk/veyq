@@ -16,6 +16,7 @@ import * as v1 from '@veyq/crypto/v1'
 import { sharesPwTokenAsync } from '@veyq/crypto/argonWorker'
 import { b64std, b64url, fromB64std, fromB64url } from '@veyq/crypto/base64'
 import { contentApi, sharesApi, publicSharesApi } from '../../api/client'
+import { publicShareMediaApi } from './api'
 import { withRefresh } from '../../app/sessionRefresh'
 import { isCodedError, HttpStatus } from '../../shared/httpError'
 import {
@@ -591,7 +592,7 @@ function shareUploadTransport(shareId: string, contributorToken: string, pwToken
       return windowPuts(signed.results[0])
     },
     async complete(media) {
-      const done = await publicSharesApi().completeShareMedia({
+      const done = await publicShareMediaApi().completeShareMedia({
         shareId,
         shareMediaBatchRequest: {
           contributorToken,
@@ -635,7 +636,7 @@ export async function addSharePhoto(
  * reclaims its blobs — a foreign/unknown media is a 404. Used by the uploader drop-box's session-only delete-own.
  */
 export async function deleteSharePhoto(shareId: string, contributorToken: string, mediaId: string, pwToken?: string): Promise<void> {
-  await publicSharesApi().deleteShareMedia({ shareId, mediaId, xContributorToken: contributorToken, xSharePassword: pwToken }) // cr-0164
+  await publicShareMediaApi().deleteShareMedia({ shareId, mediaId, xContributorToken: contributorToken, xSharePassword: pwToken }) // cr-0164
 }
 
 // --- viewer (anonymous, no session) ----------------------------------------

@@ -53,7 +53,19 @@ class FakePresigningBlobStore : BlobStore {
     // real S3 presigner; a null (the request resolved to no tenant) keeps the fixed bootstrap host.
     override fun presignPut(key: String, contentLength: Long, domain: String?): String = "https://${domain ?: "fake-presign.invalid"}/put/$key"
     override fun presignGet(key: String, domain: String?): String = "https://${domain ?: "fake-presign.invalid"}/get/$key"
-    override fun stat(key: String): Long? = stats[key]
+    /**
+     * Called with the key before [stat] answers; null (the default) does nothing. A completion stats its chunks after
+     * its guest gate and before its attach transaction, so this is where a race test holds a guest complete between
+     * the two (`GuestCompleteAfterDeleteRaceSliceTest`). The test that sets it clears it: one boot serves every class
+     * of [me.raddatz.veyq.core.testing.FakePresignProfile].
+     */
+    @Volatile
+    var onStat: ((String) -> Unit)? = null
+
+    override fun stat(key: String): Long? {
+        onStat?.invoke(key)
+        return stats[key]
+    }
 
     /** Unused on the budget path (`StoreReclaimSweep` is the only real deleter, ADR 0062 Decision 3). */
     override fun delete(keys: List<String>): List<String> = emptyList()
