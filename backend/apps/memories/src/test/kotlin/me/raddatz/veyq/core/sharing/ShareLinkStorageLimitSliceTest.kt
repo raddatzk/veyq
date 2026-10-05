@@ -16,6 +16,7 @@ import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import me.raddatz.veyq.core.testing.TestFixtures.shareKeysJson
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
+import me.raddatz.veyq.memories.media.ShareMediaRead
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -197,7 +198,7 @@ class ShareLinkStorageLimitSliceTest {
         putLimit(f, s.byteSize).then().statusCode(200).body("shareLinkLimitBytes", equalTo(s.byteSize.toInt()))
 
         start(f, s).then().statusCode(200).body("results[0].error", equalTo("quota_exceeded"))
-        given().`when`().get("/api/shares/${f.shareId}").then().statusCode(200)
+        ShareMediaRead.of(f.shareId).then().statusCode(200)
             .body("media.find { it.mediaId == '$mediaId' }", notNullValue()) // nothing was deleted
         putLimit(f, s.byteSize + d.byteSize + s.byteSize).then().statusCode(200)
         startOk(f, s) // control: raising it again admits

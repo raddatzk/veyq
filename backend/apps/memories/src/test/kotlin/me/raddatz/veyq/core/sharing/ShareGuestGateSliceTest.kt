@@ -10,6 +10,7 @@ import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.TestFixtures.shareKeysJson
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
+import me.raddatz.veyq.memories.media.ShareMediaRead
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.QuarkusTestProfile
@@ -205,8 +206,9 @@ class ShareGuestGateSliceTest {
         val shareId = createShare(userId, memory(scopeId), "WRITE_ONLY")
 
         assertEquals(ShareViewGate.WriteOnly, viewGate(shareId, null))
-        // today: the resolve serves nothing of the subtree, the blob GET nothing at all
-        resolve(shareId).then().statusCode(200).body("nodes.size()", equalTo(0)).body("media.size()", equalTo(0))
+        // the resolve serves nothing of the subtree, the media read no row and no identity, the blob GET nothing at all
+        resolve(shareId).then().statusCode(200).body("nodes.size()", equalTo(0))
+        ShareMediaRead.of(shareId).then().statusCode(200).body("media.size()", equalTo(0)).body("identities.size()", equalTo(0))
         blob(shareId).then().statusCode(404).body("code", equalTo("share_not_found"))
     }
 

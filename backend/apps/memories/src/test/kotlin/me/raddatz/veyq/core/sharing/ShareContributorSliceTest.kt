@@ -7,6 +7,7 @@ import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
+import me.raddatz.veyq.memories.media.ShareMediaRead
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
@@ -71,7 +72,7 @@ class ShareContributorSliceTest {
 
         // the anonymous resolve now shows the contributed media — but names no identity and serves no guest, not
         // even this link's own: a guest's name is for the Memory's members (ADR 0030 point 8)
-        given().`when`().get("/api/shares/$shareId")
+        ShareMediaRead.of(shareId)
             .then().statusCode(200)
             .body("media.find { it.mediaId == '$mediaId' }.nodeId", equalTo(memory)) // attached to the shared root
             .body("media.find { it.mediaId == '$mediaId' }.identityId", nullValue())

@@ -4,6 +4,7 @@ import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.sharing.ShareIdentityEntity
 import me.raddatz.veyq.memories.media.BucketEntity
 import me.raddatz.veyq.memories.media.MediaEntity
+import me.raddatz.veyq.memories.media.ShareMediaRead
 import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.TestIds
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
@@ -76,7 +77,7 @@ class ShareGuestNamesSliceTest {
 
     /** The identity set is exactly the uploader's, with its key and without a name. */
     private fun assertServesOnlyTheUploader(shareId: String, m: Memory) {
-        given().`when`().get("/api/shares/$shareId").then().statusCode(200)
+        ShareMediaRead.of(shareId).then().statusCode(200)
             .body("identities.size()", equalTo(1))
             .body("identities[0].identityId", equalTo(m.uploader))
             .body("identities[0].wrappedIdentityKey", equalTo(WRAPPED_UPLOADER_KEY))
@@ -87,7 +88,7 @@ class ShareGuestNamesSliceTest {
     fun aViewerLinkIsServedTheUploadersKeyButNoName() {
         val m = memory()
         // the name first: on this link the identity set is already exactly the uploader's
-        given().`when`().get("/api/shares/${m.viewerLink}").then().statusCode(200)
+        ShareMediaRead.of(m.viewerLink).then().statusCode(200)
             .body("identities.find { it.identityId == '${m.uploader}' }.wrappedIdentityKey", equalTo(WRAPPED_UPLOADER_KEY))
             .body("identities.find { it.identityId == '${m.uploader}' }.containsKey('sealedDisplayName')", equalTo(false))
         assertServesOnlyTheUploader(m.viewerLink, m)
@@ -111,7 +112,7 @@ class ShareGuestNamesSliceTest {
     fun onlyAnUploadersMediaNamesItsIdentity() {
         val m = memory()
         for (link in listOf(m.viewerLink, m.contributorLink)) {
-            given().`when`().get("/api/shares/$link").then().statusCode(200)
+            ShareMediaRead.of(link).then().statusCode(200)
                 .body("media.find { it.mediaId == '${m.contributorMedia}' }.nodeId", equalTo(m.memory))
                 .body("media.find { it.mediaId == '${m.contributorMedia}' }.identityId", nullValue())
                 .body("media.find { it.mediaId == '${m.uploaderMedia}' }.identityId", equalTo(m.uploader))

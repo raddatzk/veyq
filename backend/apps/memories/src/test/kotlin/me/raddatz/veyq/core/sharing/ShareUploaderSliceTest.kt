@@ -24,6 +24,7 @@ import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.TestFixtures.shareKeysJson
 import me.raddatz.veyq.core.testing.whileUncommitted
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
+import me.raddatz.veyq.memories.media.ShareMediaRead
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -92,9 +93,10 @@ class ShareUploaderSliceTest {
             .body("sealedDropPublicKey", equalTo(DROP_PUBLIC_KEY))
             .body("nodeId", equalTo(memory))
             .body("sealedName", equalTo(sealedName))
+            .body("nodes.size()", equalTo(0)) // not even the root node — no K_mem-decryptable node metadata leaks
+        ShareMediaRead.of(shareId).then().statusCode(200)
             .body("media.size()", equalTo(0)) // the existing photo is NOT served
             .body("identities.size()", equalTo(0))
-            .body("nodes.size()", equalTo(0)) // not even the root node — no K_mem-decryptable node metadata leaks
 
         // control, same Memory: a READ resolve still carries the wrap, and no drop public key
         val viewerShare = createShare(userId, memory, role = "READ")
@@ -188,6 +190,7 @@ class ShareUploaderSliceTest {
         // (served although it belongs to another share); the contributor's own share lists none for it
         given().`when`().get("/api/shares/$viewer").then().statusCode(200)
             .body("nodes[0].sealedDropPrivateKey", equalTo(DROP_PRIVATE_KEY))
+        ShareMediaRead.of(viewer).then().statusCode(200)
             .body("identities.size()", equalTo(1))
             .body("identities[0].identityId", equalTo(uploaderIdentity))
             .body("identities[0].wrappedIdentityKey", equalTo(WRAPPED_UPLOADER_KEY))

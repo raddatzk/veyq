@@ -13,6 +13,7 @@ import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
+import me.raddatz.veyq.memories.media.ShareMediaRead
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -67,7 +68,8 @@ class ShareSliceTest {
             // the root Memory carries a null parentId; the chapter is present (whole-subtree share)
             .body("nodes.find { it.id == '$memory' }.parentId", equalTo(null))
             .body("nodes.id", hasItem(chapter))
-            // the media is listed with its owning nodeId + the original blob's wrap
+        // the media is listed with its owning nodeId + the original blob's wrap
+        ShareMediaRead.of(shareId).then().statusCode(200)
             .body("media.find { it.mediaId == '$mediaId' }.nodeId", equalTo(memory))
             .body("media.find { it.mediaId == '$mediaId' }.blobId", equalTo(blobId))
     }
@@ -110,6 +112,7 @@ class ShareSliceTest {
         given().`when`().get("/api/shares/$shareId")
             .then().statusCode(200)
             .body("nodes.id", not(hasItem(sibling)))
+        ShareMediaRead.of(shareId).then().statusCode(200)
             .body("media.nodeId", not(hasItem(sibling)))
     }
 
