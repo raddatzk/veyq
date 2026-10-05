@@ -45,7 +45,7 @@ export function ownItemFavoritesApi(): OwnItemFavoritesApi {
 // ── Token-less: a guest's calls from the anonymous /s/ page ────────────────────────────────────────────────
 
 /**
- * A guest's media on a share link (the `share-media` tag: complete an upload, delete one's own) with **no**
+ * A guest's media on a share link (the `share-media` tag: list them, complete an upload, delete one's own) with **no**
  * credential, as core's `publicSharesApi()` sits beside `sharesApi()`: the anonymous /s/ page has no session, so no
  * Authorization header is ever sent from it. The link's password and the guest's token travel as the operations'
  * own headers and body fields.

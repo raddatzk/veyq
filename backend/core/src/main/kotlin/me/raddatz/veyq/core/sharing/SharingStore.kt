@@ -4,7 +4,6 @@ import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.sharing.GuestIdentityUsage
 import me.raddatz.veyq.core.sharing.ShareEntity
-import me.raddatz.veyq.core.sharing.ShareMediaRow
 import me.raddatz.veyq.core.sharing.SharedSubtreeContributor
 import me.raddatz.veyq.core.sharing.ShareIdentityEntity
 import me.raddatz.veyq.core.sharing.ShareRetiredIdEntity
@@ -32,9 +31,6 @@ data class ShareNodeRow(
     val sealedDropPrivateKey: String?,
 )
 
-/** The sealed subtree of a share: its nodes (for the content-key chain) + every media attached under it. */
-data class SubtreeData(val nodes: List<ShareNodeRow>, val media: List<ShareMediaRow>)
-
 /**
  * What a share hands its guest, fixed by its role (ADR 0031 point 7): a READ or READ_WRITE share wraps the shared
  * node's content key under `K_share`; a WRITE_ONLY share carries the node's drop public key under `K_share` instead,
@@ -51,13 +47,14 @@ data class ShareBlobRef(val storageKey: String, val chunkCount: Int)
 
 /**
  * Persistence for public viewer shares (cr-0100). Operator-blind: stores the opaque share row + reads the
- * already-opaque node/media/blob rows to assemble the sealed subtree. The **subtree** is the authorization
- * grain — the guest resolve returns only nodes/media under the shared node, and a blob GET is authorized iff
- * the blob is attached under that subtree (a structural id check, never a name or content).
+ * already-opaque node/blob rows to assemble the sealed subtree. The **subtree** is the authorization grain — the
+ * guest resolve returns only the nodes under the shared node, an application's guest read only its rows under the
+ * live nodes the view gate hands it ([liveSubtreeIds]), and a blob GET is authorized iff the blob is attached under
+ * that subtree (a structural id check, never a name or content).
  */
 @ApplicationScoped
 class SharingStore(
-    /** What the application hangs under a shared node (today: media + derivatives). Merged without order. */
+    /** The blobs the application hangs under a shared node (today: media + derivatives). Merged without order. */
     private val contributors: Instance<SharedSubtreeContributor>,
     /** What of the application still names a guest identity (today: media + buckets). Combined with "any". */
     private val identityUsages: Instance<GuestIdentityUsage>,
@@ -388,26 +385,10 @@ class SharingStore(
         return ShareIdentityEntity.find("shareId = ?1 and tokenHash = ?2", shareId, hash).firstResult()
     }
 
-    /**
-     * The wrapped identity key of every WRITE_ONLY identity — of any share — that added a media served in [subtree]
-     * (identity id → wrap): that media is sealed under the identity's own key and opens only through this wrap
-     * (ADR 0031 point 7). This is ALL a guest reader is told about any identity. Never a READ_WRITE identity, not
-     * even the reading share's own — a flipped READ link still has its contributor identities — and never a name:
-     * a guest's name is for the Memory's members, who read it through the bucket list (ADR 0030 point 8).
-     */
-    fun uploaderKeys(subtree: SubtreeData): Map<String, String> {
-        val ids = subtree.media.mapNotNull { it.identityId }.toSet()
-        if (ids.isEmpty()) return emptyMap()
-        return ShareIdentityEntity.find("id in ?1 and wrappedIdentityKey is not null", ids).list()
-            .associate { it.id to it.wrappedIdentityKey!! }
-    }
-
-    /** The sealed subtree rooted at [rootNodeId] within [scopeId]: nodes (for the content-key chain) + its live media. */
-    fun subtree(scopeId: String, rootNodeId: String): SubtreeData {
-        val live = liveSubtree(scopeId, rootNodeId)
-        if (live.isEmpty()) return SubtreeData(emptyList(), emptyList()) // the shared root itself is trashed
-        val liveIds = live.map { it.id }
-        val nodes = live.map { n ->
+    /** The sealed subtree rooted at [rootNodeId] within [scopeId]: its live nodes, for the content-key chain. Empty
+     *  when the shared root itself is trashed. */
+    fun subtree(scopeId: String, rootNodeId: String): List<ShareNodeRow> =
+        liveSubtree(scopeId, rootNodeId).map { n ->
             ShareNodeRow(
                 id = n.id,
                 parentId = if (n.id == rootNodeId) null else n.parentId,
@@ -419,10 +400,6 @@ class SharingStore(
                 sealedDropPrivateKey = n.sealedDropPrivateKey,
             )
         }
-        // The media rows are the contributors' own read, with their own live predicate (see SharedSubtreeContributor).
-        val media = contributors.flatMap { it.rows(scopeId, liveIds) }
-        return SubtreeData(nodes, media)
-    }
 
     /** The ids of [subtree]'s live nodes, by the same predicate — what the view gate hands an application
      *  (`ShareGuestGate.viewGate`). Empty when the shared root itself is trashed. */

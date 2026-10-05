@@ -50,10 +50,10 @@ import {
 import type { ChunkProvider } from '../../sw/protocol'
 import {
   ShareRole,
-  type ShareMedia,
   type ShareNode,
   type ShareBlobUploadRequestItemRoleEnum,
 } from '../../api/generated/sharing'
+import type { ShareMedia, ShareMediaListing } from '../../api/generated/share-media'
 import type { MediaDerivativeKind } from '../../api/generated/media'
 
 // The seals under `K_share` name their purpose only (ADR 0072 Decision 2): `K_share` is unique to one share, so the
@@ -729,14 +729,34 @@ function deriveSubtreeKeys(scopeId: string, nodes: ShareNode[], rootKmem: Uint8A
  *  own node's `K_mem` — none for a WRITE_ONLY link, which is served no media). */
 export type OpenedMemory = { access: ShareAccess; items: ShareItem[] }
 
+/** No media and no uploader key: what a WRITE_ONLY link is served, and the listing before it is read. */
+export const NO_SHARE_MEDIA: ShareMediaListing = { media: [], identities: [] }
+
+/**
+ * Read what a share serves of the Memory's media — Memories' own guest read (`listShareMedia`, no bearer; the guest's
+ * password token as for the resolve): the sealed rows under the shared subtree and the wrapped keys of the WRITE_ONLY
+ * identities whose rows those are. A WRITE_ONLY link is served nothing (ADR 0031), so it is not asked. Throws
+ * [ShareUnavailableError] when the read is refused (a link revoked since its resolve answers 404 here too).
+ */
+export async function listShareMedia(shareId: string, role: ShareRole, pwToken?: string): Promise<ShareMediaListing> {
+  if (role === ShareRole.WriteOnly) return NO_SHARE_MEDIA
+  try {
+    return await publicShareMediaApi().listShareMedia({ shareId, xSharePassword: pwToken })
+  } catch {
+    throw new ShareUnavailableError('not_found')
+  }
+}
+
 /**
  * Open the Memories half of a public share: unwrap the Memory's `K_mem` with the fragment key, derive every chapter's
- * `K_mem`, and return a flat, read-only list of media (each tagged with the exact `K_mem` its blobs open under). The
- * platform half (fetch, password, name, note, root kind) is `resolvePublicShare` (core/sharing); the shell calls it and
- * hands this its head. Throws [ShareUnavailableError] when the response cannot be opened (a server that served a share
- * without the wrap or drop key the role needs, or one that does not open under the fragment key).
+ * `K_mem`, and return a flat, read-only list of the [listing]'s media (each tagged with the exact `K_mem` its blobs open
+ * under). The platform half (fetch, password, name, note, root kind) is `resolvePublicShare` (core/sharing); the shell
+ * calls it and hands this its head, and the media are Memories' own read ([listShareMedia]). Without a listing it opens
+ * the keys alone — what the body needs before the listing lands (a contributor's name gate reads the access). Throws
+ * [ShareUnavailableError] when the response cannot be opened (a server that served a share without the wrap or drop key
+ * the role needs, or one that does not open under the fragment key).
  */
-export function openSharedMemory(head: PublicShareHead): OpenedMemory {
+export function openSharedMemory(head: PublicShareHead, listing: ShareMediaListing = NO_SHARE_MEDIA): OpenedMemory {
   const { share, kShare, scopeId } = head
   // ADR 0031 point 7: a WRITE_ONLY link opens the drop public key and nothing else. It never unwraps `K_mem`, even
   // from a row that still carries a wrap, and it is served no media to key.
@@ -759,13 +779,13 @@ export function openSharedMemory(head: PublicShareHead): OpenedMemory {
     throw new ShareUnavailableError('bad_fragment_key')
   }
   const keys = deriveSubtreeKeys(scopeId, share.nodes, rootKmem)
-  // A media a WRITE_ONLY guest added opens through its node's drop key and its identity's wrapped key, both served
-  // here: the node carries the one, the identities list the other (ADR 0031 point 7). That list is all a guest is
-  // told about any identity — never a name, which is for the Memory's members (ADR 0030 point 8).
+  // A media a WRITE_ONLY guest added opens through its node's drop key and its identity's wrapped key: the resolve's
+  // node carries the one, the listing's identities the other (ADR 0031 point 7). That list is all a guest is told
+  // about any identity — never a name, which is for the Memory's members (ADR 0030 point 8).
   const dropKeyOf = new Map(share.nodes.map((n) => [n.id, n.sealedDropPrivateKey]))
-  const wrapped = new Map((share.identities ?? []).map((i) => [i.identityId, i.wrappedIdentityKey]))
+  const wrapped = new Map(listing.identities.map((i) => [i.identityId, i.wrappedIdentityKey]))
   const items: ShareItem[] = []
-  for (const m of share.media) {
+  for (const m of listing.media) {
     const memoryKey = keys.get(m.nodeId)
     if (!memoryKey) continue // a media under a chapter whose K_mem didn't open — skip
     const owner = m.identityId ? `share:${m.identityId}` : undefined
@@ -776,13 +796,15 @@ export function openSharedMemory(head: PublicShareHead): OpenedMemory {
 }
 
 /**
- * Resolve + decrypt a public share in one call: the platform half (`resolvePublicShare`) followed by the Memories half
- * (`openSharedMemory`). The share page does NOT use this — its shell resolves the head, gates on password and terms,
- * and only then lets the Memories body open the rest. It is the headless entry the unit and e2e suites drive.
+ * Resolve + decrypt a public share in one call: the platform half (`resolvePublicShare`), then the Memories half — its
+ * media read ([listShareMedia]) and `openSharedMemory`. The share page does NOT use this — its shell resolves the head,
+ * gates on password and terms, and only then lets the Memories body open the rest. It is the headless entry the unit
+ * and e2e suites drive. The media read follows the resolve rather than racing it: it needs the role (a WRITE_ONLY link
+ * is not asked) and a locked link would refuse it.
  */
 export async function resolveShare(shareId: string, fragmentKey: string, pwToken?: string): Promise<ResolvedShare> {
   const head = await resolvePublicShare(shareId, fragmentKey, pwToken)
-  const { access, items } = openSharedMemory(head)
+  const { access, items } = openSharedMemory(head, await listShareMedia(shareId, head.role, pwToken))
   return { memoryName: head.name, noteByLocale: head.noteByLocale, role: head.role, scopeId: head.scopeId, access, items }
 }
 

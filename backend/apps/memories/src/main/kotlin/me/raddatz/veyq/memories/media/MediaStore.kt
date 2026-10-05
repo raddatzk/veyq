@@ -36,6 +36,13 @@ data class MediaRow(
     val metaVersion: Long = 0,
 )
 
+/**
+ * One medium a share link's guest is served (`listShareMedia`): the read-back [row], the subtree node it hangs under
+ * (its content key opens it) and the guest identity that added it — null for a member's. Whether the identity is
+ * SERVED is the share read's rule, not this row's (ADR 0030 point 8).
+ */
+data class ShareMediaRow(val nodeId: String, val identityId: String?, val row: MediaRow)
+
 /** The gallery's keyset cursor (cr-0107, ADR 0033): the newest `(updatedAt, mediaId)` the client has already seen. */
 data class MediaCursor(val updatedAt: Instant, val mediaId: String)
 
@@ -431,11 +438,33 @@ class MediaStore(private val blobs: BlobUploadStore) {
      * guest added is sealed under the guest's own key, which only this wrap — opened through the Memory's drop key —
      * yields (ADR 0031 point 7). A READ_WRITE identity has none: its rows are under `K_mem`.
      */
-    fun uploaderKeys(rows: List<MediaRow>): Map<String, String> {
-        val ids = rows.mapNotNull { r -> r.ownerKey?.let { (OwnerKey.parse(it) as? OwnerKey.Share)?.shareIdentityId } }.toSet()
-        if (ids.isEmpty()) return emptyMap()
-        return ShareIdentityEntity.find("id in ?1 and wrappedIdentityKey is not null", ids).list()
+    fun uploaderKeys(rows: List<MediaRow>): Map<String, String> =
+        uploaderKeysOf(rows.mapNotNull { r -> r.ownerKey?.let { (OwnerKey.parse(it) as? OwnerKey.Share)?.shareIdentityId } }.toSet())
+
+    /**
+     * The same, by guest identity id: every identity of [identityIds] — of ANY link of the Memory — that holds a
+     * wrapped identity key, i.e. a WRITE_ONLY one (identity id → wrap). Never a READ_WRITE identity, whatever link it
+     * came through, and never a name.
+     */
+    fun uploaderKeysOf(identityIds: Set<String>): Map<String, String> {
+        if (identityIds.isEmpty()) return emptyMap()
+        return ShareIdentityEntity.find("id in ?1 and wrappedIdentityKey is not null", identityIds).list()
             .associate { it.id to it.wrappedIdentityKey!! }
+    }
+
+    /**
+     * The live media under a share's live subtree ([liveNodeIds], core's view gate already filtered them by its
+     * own `deletedAt is null`) — what `listShareMedia` serves a guest.
+     */
+    fun listShareMedia(scopeId: String, liveNodeIds: List<String>): List<ShareMediaRow> {
+        if (liveNodeIds.isEmpty()) return emptyList() // the shared root itself is trashed: nothing to list
+        // `deletedAt is null` — a trashed medium (uc.memory.delete-media, cr-0110) is a soft delete, so without this
+        // predicate the guest listing keeps serving it for the whole retention window. Its sibling,
+        // `MediaSharedSubtreeContributor.authorizedBlobIds`, authorizes the blob GET and carries the predicate
+        // SEPARATELY on purpose: one covering for the other is how a later change reopens the hole silently
+        // (`ShareTrashedMediaSliceTest` bites each on its own).
+        return MediaEntity.find("scopeId = ?1 and nodeId in ?2 and deletedAt is null", scopeId, liveNodeIds).list()
+            .mapNotNull { m -> toRow(m)?.let { ShareMediaRow(m.nodeId, m.shareIdentityId, it) } }
     }
 
     /** A primary's sealed name: for a contributor (`share:{id}`) copy the identity's sealed name; else null (member → username). */

@@ -3,33 +3,67 @@ info:
   title: veyq Share Media API
   version: 0.1.0
   description: >
-    The Memories application's guest writes on a public share link
-    ([ADR 0030](../../../docs/decisions/0030-contributor-public-share.md),
-    [ADR 0031](../../../docs/decisions/0031-uploader-public-share.md)): a guest of a `READ_WRITE` or `WRITE_ONLY`
-    link completes the uploads it started through core's guest transport (`sharing.openapi.yaml`
-    `startShareBlobUploads` / `presignShareBlobUploadWindows`) into media on the shared Memory, and deletes its own.
+    The Memories application's guest operations on a public share link
+    ([ADR 0029](../../../docs/decisions/0029-public-viewer-share.md),
+    [ADR 0030](../../../docs/decisions/0030-contributor-public-share.md),
+    [ADR 0031](../../../docs/decisions/0031-uploader-public-share.md)): a guest of a `READ` or `READ_WRITE` link
+    lists the media under the shared subtree; a guest of a `READ_WRITE` or `WRITE_ONLY` link completes the uploads it
+    started through core's guest transport (`sharing.openapi.yaml` `startShareBlobUploads` /
+    `presignShareBlobUploadWindows`) into media on the shared Memory, and deletes its own.
     The link itself — its id, password, access mode and guest identities — is core's (`sharing.openapi.yaml`); these
     operations sit under its `/api/shares/{shareId}` path and pass core's guest gate first (`ShareGuestGate`: an
     active share → the password → the mode → the guest's token → the per-share upload budget where the operation
     spends it), then do the application's work ([ADR 0079](../../../docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)
     § Application guest operations).
 
-    **No auth, operator-blind.** Both operations are anonymous: a guest holds no account, only the link and the
-    `contributorToken` its identity was issued. The server sees what core's guest transport already shows it — the
-    share id, the guest's identity id, opaque upload and media ids, sizes — and attaches each medium to the shared
-    root node itself (the guest names no node). Authorization is enforced by code (ADR 0008); field validation via
-    `x-field-extra-annotation`.
+    **No auth, operator-blind.** Every operation is anonymous: a guest holds no account, only the link (and, to
+    write, the `contributorToken` its identity was issued). The server sees what core's resolve and guest transport
+    already show it — the share id, the guest's identity id, opaque upload and media ids, sizes — serves only
+    ciphertext, and attaches each medium to the shared root node itself (the guest names no node). Authorization is
+    enforced by code (ADR 0008); field validation via `x-field-extra-annotation`.
 
 tags:
   - name: share-media
     description: >
-      A guest's media on a public share link — complete an upload into a medium on the shared Memory, delete one's
-      own (unauthenticated). One tag = one resource interface owning the `/api/shares/{shareId}/media` subtree:
+      A guest's media on a public share link — list the media under the shared subtree, complete an upload into a
+      medium on the shared Memory, delete one's own (unauthenticated). One tag = one resource interface owning the `/api/shares/{shareId}/media` subtree:
       longer than core's `sharing` root `/api/shares`, so these routes reach this resource and every other
       `/api/shares` route stays core's.
 
 paths:
   /api/shares/{shareId}/media:
+    get:
+      tags: [share-media]
+      operationId: listShareMedia
+      summary: List the media under a share (unauthenticated) → the sealed rows and the uploader keys that open them.
+      description: >
+        **No auth.** The Memories half of a guest's read of a link: core's `resolveShare` serves the link and the
+        shared nodes with their keys, this serves what Memories attached under those nodes. Core's guest gate runs
+        first (`ShareGuestGate`, ADR 0079): an active share → the password → the access mode. Returns every live
+        medium under the live shared subtree (each tagged with its owning `nodeId`, so the viewer picks that node's
+        content key) and the wrapped keys of the `WRITE_ONLY` identities whose rows those are — all still sealed;
+        the viewer opens them **locally**. A `WRITE_ONLY` link is served **empty lists**: its guest sees nothing of
+        the Memory (ADR 0031). A disabled, expired, or unknown share is a non-enumerable `404`.
+        **Password-protected shares (cr-0118, ADR 0037):** the valid `X-Share-Password` token is required — a
+        missing token is `404` (the password challenge is `resolveShare`'s locked response; this read has none to
+        serve), a wrong one `403 share_password_incorrect`.
+      parameters:
+        - $ref: "#/components/parameters/ShareId"
+        - $ref: "#/components/parameters/SharePassword"
+      responses:
+        "200":
+          description: The sealed media under the shared subtree and the uploader keys that open them (both empty for a `WRITE_ONLY` link).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ShareMediaListing" }
+        "403":
+          description: The share is password-protected and the presented `X-Share-Password` token is wrong (cr-0118).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_password_incorrect } }
+        "404":
+          description: No such share (disabled/expired/unknown, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4)), or a required password token is absent — non-enumerable, identical in every case.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
     post:
       tags: [share-media]
       operationId: completeShareMedia
@@ -147,6 +181,120 @@ components:
       schema: { type: string, maxLength: 64, pattern: "^[A-Za-z0-9+/]*={0,2}$" }
 
   schemas:
+    ShareMediaListing:
+      type: object
+      description: >
+        What a guest is served of the Memory's media under a shared subtree. `identities` is everything a guest is
+        told about any identity: never a name, never a `READ_WRITE` identity (ADR 0030 point 8).
+      required: [media, identities]
+      properties:
+        media:
+          type: array
+          description: The live media attached under the live shared subtree, each tagged with its owning `nodeId`.
+          items: { $ref: "#/components/schemas/ShareMedia" }
+        identities:
+          type: array
+          description: >
+            The anonymous identities a reader needs to open what it is served: every WRITE_ONLY identity — of any link
+            of the Memory — with a row in `media`, each an opaque `identityId` and its wrapped identity key, without
+            which that identity's rows cannot be opened (ADR 0031 point 7). No guest's name, and no READ_WRITE identity —
+            not even this share's own, whatever its access mode is now: a guest's name is for the Memory's members, who
+            read it through the bucket list (ADR 0030 point 8). The member list's `uploaderKeys` items, the same shape.
+          items: { $ref: "#/components/schemas/UploaderKey" }
+
+    UploaderKey:
+      # The member list's schema (memories/media.openapi.yaml), aliased, not copied: one definition, so the two Memories
+      # reads cannot drift, and an alias generates the named type (an inline cross-file `items` ref would generate an
+      # anonymous `ShareMediaListingIdentitiesInner` instead — measured, slice 6.3).
+      $ref: "./media.openapi.yaml#/components/schemas/UploaderKey"
+
+    ShareMedia:
+      type: object
+      description: >
+        One medium under the shared subtree — the original blob ref + role-tagged derivatives, tagged with its owning
+        `nodeId` so the viewer picks the right content key.
+      required: [nodeId, mediaId, blobId, chunkCount, byteSize, wrappedBlobKey]
+      properties:
+        nodeId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The subtree node this medium is attached to (selects its content key).
+          example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
+        mediaId: { type: string, format: uuid, example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e, x-veyq-visibility: id }
+        blobId: { type: string, format: uuid, example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a, x-veyq-visibility: id }
+        chunkCount:
+          x-veyq-visibility: measure
+          type: integer
+          format: int32
+          example: 2
+        byteSize:
+          x-veyq-visibility: measure
+          type: integer
+          format: int64
+          example: 131072
+        manifest:
+          x-veyq-visibility: measure
+          type: [array, "null"]
+          description: Per-chunk ciphertext byte sizes in chunk order (ciphertext sizes only).
+          items: { type: integer, format: int64, example: 65536 }
+        wrappedBlobKey:
+          type: string
+          description: The original blob's `K_blob` wrapped under the node's content key (opaque base64).
+          contentEncoding: base64
+          maxLength: 256
+          example: d3JhcHBlZC1rLWJsb2I=
+        derivatives:
+          type: [array, "null"]
+          description: Role-tagged derivative tiers (THUMBNAIL, PREVIEW), each its own blob ref with its own wrap.
+          items: { $ref: "#/components/schemas/ShareMediaDerivative" }
+        wrappedMeta:
+          type: [string, "null"]
+          description: The medium's sealed listed metadata, under the node's content key (opaque base64); null when unset.
+          contentEncoding: base64
+          maxLength: 512
+          example: bWV0YS1jaXBoZXJ0ZXh0
+        identityId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: >
+            The WRITE_ONLY identity that added this medium, whose wrapped key in `identities[]` opens it (ADR 0031
+            point 7). Null for a member's medium and for a READ_WRITE guest's, which open under the node's content key —
+            a guest is not told which uploads came from one person (ADR 0030 point 8).
+          example: null
+
+    ShareMediaDerivative:
+      type: object
+      description: A derivative tier's blob ref — same opaque metadata as the original, plus its role `kind`.
+      required: [kind, blobId, chunkCount, byteSize, wrappedBlobKey]
+      properties:
+        kind:
+          x-veyq-visibility: enum
+          type: string
+          enum: [THUMBNAIL, PREVIEW]
+          example: THUMBNAIL
+        blobId: { type: string, format: uuid, example: 8b2c1f2d-3e4a-5b6c-7c3f-0e2a9b1d4a6e, x-veyq-visibility: id }
+        chunkCount:
+          x-veyq-visibility: measure
+          type: integer
+          format: int32
+          example: 1
+        byteSize:
+          x-veyq-visibility: measure
+          type: integer
+          format: int64
+          example: 65536
+        manifest:
+          x-veyq-visibility: measure
+          type: [array, "null"]
+          items: { type: integer, format: int64, example: 65536 }
+        wrappedBlobKey:
+          type: string
+          contentEncoding: base64
+          maxLength: 256
+          example: d3JhcHBlZC1rLWJsb2I=
+
     ShareMediaBatchRequest:
       type: object
       required: [contributorToken, items]

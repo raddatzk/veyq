@@ -8,8 +8,12 @@ import me.raddatz.veyq.core.ratelimit.RateLimitExempt
 import me.raddatz.veyq.core.ratelimit.RateLimitKey
 import me.raddatz.veyq.memories.generated.api.ShareMediaApi
 import me.raddatz.veyq.memories.generated.model.ShareMediaBatchRequest
+import me.raddatz.veyq.memories.generated.model.ShareMedia
 import me.raddatz.veyq.memories.generated.model.ShareMediaBatchResponse
+import me.raddatz.veyq.memories.generated.model.ShareMediaDerivative
+import me.raddatz.veyq.memories.generated.model.ShareMediaListing
 import me.raddatz.veyq.memories.generated.model.ShareMediaResultItem
+import me.raddatz.veyq.memories.generated.model.UploaderKey
 import jakarta.annotation.security.PermitAll
 import jakarta.ws.rs.core.Response
 import java.util.UUID
@@ -17,7 +21,7 @@ import java.util.UUID
 /**
  * HTTP adapter for a guest's media on a share link (`memories/share-media.openapi.yaml`). Implements the generated
  * [ShareMediaApi], whose root `/api/shares/{shareId}/media` is longer than core's `sharing` root `/api/shares`, so
- * RESTEasy routes these two paths here and every other share route to core (`ShareMediaRouteSliceTest`). Thin
+ * RESTEasy routes these paths here and every other share route to core (`ShareMediaRouteSliceTest`). Thin
  * (ADR 0001) — delegates to [ShareMediaHandler]. Every operation is `@PermitAll`: an account-less guest reaches it,
  * gated only by the link's state and the guest's token (core's `ShareGuestGate`), never by auth. Each declares its
  * own rate-limit posture; there is no class-level default to silently cover them.
@@ -25,6 +29,45 @@ import java.util.UUID
 class ShareMediaResource(
     private val handler: ShareMediaHandler,
 ) : ShareMediaApi {
+
+    @PermitAll
+    @RateLimitExempt(
+        reason = "Guest read of the sealed media under a share — the Memories half of resolveShare's read. Volume is " +
+            "unbounded BY DECISION, not by omission: neither available axis fits, and the residual gap is recorded in " +
+            "cc.security.rate-limit (§ Unbounded by decision) rather than left silent.",
+    )
+    override fun listShareMedia(shareId: String, xSharePassword: String?): Response =
+        when (val o = handler.list(shareId, xSharePassword)) {
+            is ShareMediaListOutcome.Listed -> Response.ok(
+                ShareMediaListing(
+                    media = o.media.map(::toShareMedia),
+                    identities = o.uploaderKeys.map { (id, wrap) -> UploaderKey(identityId = UUID.fromString(id), wrappedIdentityKey = wrap) },
+                ),
+            ).build()
+            is HttpFailure -> httpError(o)
+        }
+
+    private fun toShareMedia(s: ShareMediaRow) = ShareMedia(
+        nodeId = UUID.fromString(s.nodeId),
+        mediaId = UUID.fromString(s.row.mediaId),
+        blobId = UUID.fromString(s.row.blobId),
+        chunkCount = s.row.chunkCount,
+        byteSize = s.row.byteSize,
+        wrappedBlobKey = s.row.wrappedBlobKey,
+        manifest = s.row.manifest,
+        derivatives = s.row.derivatives.map { d ->
+            ShareMediaDerivative(
+                kind = ShareMediaDerivative.Kind.valueOf(d.kind),
+                blobId = UUID.fromString(d.blobId),
+                chunkCount = d.chunkCount,
+                byteSize = d.byteSize,
+                wrappedBlobKey = d.wrappedBlobKey,
+                manifest = d.manifest,
+            )
+        },
+        wrappedMeta = s.row.wrappedMeta,
+        identityId = s.identityId?.let(UUID::fromString),
+    )
 
     @PermitAll
     // The attach half of the contributor upload flow — it creates the media rows, so it rides the same per-share

@@ -11,8 +11,22 @@ import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpFailure
 import me.raddatz.veyq.core.sharing.ShareGuestGate
+import me.raddatz.veyq.core.sharing.ShareViewGate
 import me.raddatz.veyq.core.sharing.ShareWriteGate
 import jakarta.enterprise.context.ApplicationScoped
+
+sealed interface ShareMediaListOutcome {
+    /** [uploaderKeys]: identity id → wrapped identity key, the only thing a guest is served about any identity. Every
+     *  [media] row's `identityId` is one of its keys or null. */
+    data class Listed(val media: List<ShareMediaRow>, val uploaderKeys: Map<String, String>) : ShareMediaListOutcome
+    /** Unknown, disabled, expired or deleted share, a space that serves no guests, or password-protected with no token
+     *  — the non-enumerable 404 (the password challenge is the resolve's locked shell; this read serves none). */
+    object NotFound : ShareMediaListOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
+    /** Password-protected + a wrong token (cr-0118) — a 403. */
+    object PasswordIncorrect : ShareMediaListOutcome, HttpFailure by httpFailure("share_password_incorrect", FORBIDDEN)
+    /** Too many wrong password attempts on this share (cr-0165) — a 429. */
+    object RateLimited : ShareMediaListOutcome, HttpFailure by Failures.rateLimited
+}
 
 sealed interface ShareMediaCompleteOutcome {
     data class Results(val items: List<CompleteItemResult>) : ShareMediaCompleteOutcome
@@ -50,17 +64,40 @@ data class ShareMediaItem(
 )
 
 /**
- * Memories' guest writes on a share link (uc.sharing.share-contributor, uc.sharing.share-uploader; ADR 0030/0031):
- * complete a guest's uploads into media on the shared Memory, and delete one's own. Each passes core's guest gate
- * first ([ShareGuestGate.writeGate], ADR 0079 § Application guest operations) and maps its refusal onto this
- * operation's own answer — the statuses and codes the two calls answered while core served them.
+ * Memories' guest operations on a share link (uc.sharing.share-public-viewer, uc.sharing.share-contributor,
+ * uc.sharing.share-uploader; ADR 0029/0030/0031): list the media under the shared subtree, complete a guest's uploads
+ * into media on the shared Memory, and delete one's own. Each passes core's guest gate first
+ * ([ShareGuestGate.viewGate] / [ShareGuestGate.writeGate], ADR 0079 § Application guest operations) and maps its
+ * refusal onto this operation's own answer — for the writes, the statuses and codes they answered while core served
+ * them; for the list, those of the resolve it was part of and of the blob GET for a missing password.
  */
 @ApplicationScoped
 class ShareMediaHandler(
     private val gate: ShareGuestGate,
     private val completions: UploadCompletions,
     private val guestWrites: MediaShareGuestWrites,
+    private val store: MediaStore,
 ) {
+
+    /**
+     * The media under a share's live subtree and the wrapped keys of the WRITE_ONLY identities whose media those are.
+     * **The privacy rule travels with the rows (ADR 0030 point 8):** a medium names its identity only where the guest
+     * needs it to find that key (ADR 0031 point 7) — a READ_WRITE guest's opens under the node's content key, and its
+     * id would only tell a guest which uploads came from one person. Both come from the one [keys] map, so the served
+     * identities and the served ids can never disagree. A WRITE_ONLY link is served nothing (ADR 0031).
+     */
+    fun list(shareId: String, pwToken: String?): ShareMediaListOutcome {
+        val viewable = when (val g = gate.viewGate(shareId, pwToken)) {
+            is ShareViewGate.Viewable -> g
+            ShareViewGate.WriteOnly -> return ShareMediaListOutcome.Listed(emptyList(), emptyMap())
+            ShareViewGate.NotFound, ShareViewGate.Locked -> return ShareMediaListOutcome.NotFound
+            ShareViewGate.PasswordIncorrect -> return ShareMediaListOutcome.PasswordIncorrect
+            ShareViewGate.RateLimited -> return ShareMediaListOutcome.RateLimited
+        }
+        val rows = store.listShareMedia(viewable.scopeId, viewable.liveNodeIds)
+        val keys = store.uploaderKeysOf(rows.mapNotNull { it.identityId }.toSet())
+        return ShareMediaListOutcome.Listed(rows.map { if (it.identityId in keys) it else it.copy(identityId = null) }, keys)
+    }
 
     /** Complete a guest upload — attach each item to the share's own Memory root, stamped with the guest identity. */
     fun complete(shareId: String, pwToken: String?, contributorToken: String, items: List<ShareMediaItem>): ShareMediaCompleteOutcome {

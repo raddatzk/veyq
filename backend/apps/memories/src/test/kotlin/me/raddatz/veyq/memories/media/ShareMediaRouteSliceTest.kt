@@ -36,8 +36,8 @@ import java.util.jar.JarFile
  * nothing about the other's routes, so every route is called here.
  *
  * Each row's anchor is an answer only its handler gives: core's sharing handlers name an unknown link
- * `share_not_found` (or, for the curator's create and list, the node and the caller's own links); Memories' complete
- * answers a real link's bogus upload per item (`upload_not_found` in a 200), and its delete names an unknown
+ * `share_not_found` (or, for the curator's create and list, the node and the caller's own links); Memories' list
+ * answers a real link with its two lists, its complete answers a real link's bogus upload per item (`upload_not_found` in a 200), and its delete names an unknown
  * contribution `share_media_not_found`. A route that misses its class answers RESTEasy's bare 404/405, none of these.
  * The table is held to the generated interfaces: its operations are exactly every `/api/shares` operation of both
  * generated API packages, so a route added to either spec without a row here is red.
@@ -105,6 +105,10 @@ class ShareMediaRouteSliceTest {
                 .`when`().post("/api/shares/${w.unknown}/blob-upload-windows").then().statusCode(404).body("code", equalTo("share_not_found"))
         },
         // --- Memories `share-media` (root /api/shares/{shareId}/media) ---
+        "listShareMedia" to Probe("GET", "/api/shares/{shareId}/media") { w ->
+            given().`when`().get("/api/shares/${w.shareId}/media").then().statusCode(200)
+                .body("media.size()", equalTo(0)).body("identities.size()", equalTo(0))
+        },
         "completeShareMedia" to Probe("POST", "/api/shares/{shareId}/media") { w ->
             given().contentType(ContentType.JSON)
                 .body("""{"contributorToken":"${w.token}","items":[{"mediaId":"${TestIds.uuid()}","originalUploadId":"${TestIds.uuid()}"}]}""")
@@ -119,7 +123,7 @@ class ShareMediaRouteSliceTest {
     @Test
     fun theTableIsEveryShareRouteOfBothGeneratedApis() {
         val generated = shareOperations()
-        assertEquals(15, generated.size, "the /api/shares operations of both specs: $generated")
+        assertEquals(16, generated.size, "the /api/shares operations of both specs: $generated")
         assertEquals(generated, probes.mapValues { (_, p) -> "${p.method} ${p.path}" }, "a route without a row, or a row without a route")
     }
 

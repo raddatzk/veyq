@@ -24,7 +24,7 @@ acceptanceCriteria:
       # resolves through the identical resolveShare path — an anonymous, session-less caller recovering the Memory
       # name and the per-locale note from nothing but the shareId and the URL fragment key.
       backend:
-        integration: [ShareSliceTest.createThenAnonymousResolveReturnsSealedSubtree, ShareCoreSliceTest.unknownShareResolves404]
+        integration: [ShareSliceTest.createThenAnonymousResolveReturnsSealedSubtree, ShareCoreSliceTest.unknownShareResolves404, ShareGuestNamesSliceTest.theResolveServesNoMediaAndNoIdentities]
       web:
         unit: [src/features/memory/share.test.ts]
         e2e: [src/features/memory/shareContributor.e2e.test.ts]
@@ -32,21 +32,10 @@ acceptanceCriteria:
     text: GET /api/shares/{shareId}/media is unauthenticated, passes the same password gate as the resolve, and returns the Memory's media metadata (sealed under K_mem) plus the wrapped keys of the uploader identities whose media it holds — never a name. The viewer decrypts it locally with the K_mem the resolve's wrap yields.
     coverage:
       backend:
-        integration: [ShareSliceTest.createThenAnonymousResolveReturnsSealedSubtree, ShareGuestNamesSliceTest.aViewerLinkIsServedTheUploadersKeyButNoName]
+        integration: [ShareSliceTest.createThenAnonymousResolveReturnsSealedSubtree, ShareGuestNamesSliceTest.aViewerLinkIsServedTheUploadersKeyButNoName, SharePasswordSliceTest.theMediaReadRequiresThePasswordToken]
       web:
-        unit: [src/features/memory/share.test.ts]
+        unit: [src/features/memory/share.test.ts, src/features/memory/components/MemoryShareBody.test.ts]
         e2e: [src/features/memory/shareContributor.e2e.test.ts]
-    gaps:
-      - surface: backend
-        reason: >-
-          The media read is not its own operation yet. Today the media rows and the uploader keys ride on the
-          resolve's body (`PublicShare.media`/`identities`), and these refs prove that content there, not on a
-          separate GET /api/shares/{shareId}/media behind the same gate. Memories' own guest read lands with
-          slice 6 of cr-platform-contract-split, whose refs replace this note.
-      - surface: web
-        reason: >-
-          As for backend: the client reads media and uploader keys from the resolve's body today, so these refs
-          do not exercise a separate media read. Replaced by slice 6 of cr-platform-contract-split.
   - id: gated-blob-read
     text: A share-scoped blob endpoint authorizes a read iff the blob is attached under the shared subtree (a structural check on opaque ids), returns a presigned store URL, and the viewer fetches bytes directly from the object store. The operator never learns which media a viewer opens. A cross-share/out-of-subtree blob id is 404.
     coverage:

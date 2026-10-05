@@ -27,7 +27,7 @@ import {
 } from '../../api/generated/sharing'
 import { MEMORY_KIND } from './kinds'
 import type { MediaApi, MediaListPage } from '../../api/generated/media'
-import type { ShareMediaBatchResponse } from '../../api/generated/share-media'
+import type { ShareMediaApi, ShareMediaBatchResponse, ShareMediaListing } from '../../api/generated/share-media'
 import type { BlobDownloadsBatchResponse, PresignedUrl } from '../../api/generated/blob'
 import { fakeApi, stubApi } from '../../test/apiMock'
 import * as v1 from '@veyq/crypto/v1'
@@ -68,8 +68,6 @@ function uploaderShare() {
     // A row stored before the drop key still carries the K_mem wrap. The guest must not open it.
     wrap: b64std(v1.seal({ purpose: 'share-key' }, kShare, kMem)),
     nodes: [],
-    media: [],
-    identities: [],
   }
   return { kMem, kShare, sealedDropPrivateKey, resolve }
 }
@@ -84,13 +82,15 @@ function guestApi(resolve: PublicShare) {
       uploadId: `up-${i}`, presignedPuts: [{ index: 0, url: `mem://up-${i}/0` }], error: null,
     })),
   }))
-  // Core's guest transport and identity (`sharing`), then Memories' guest completion (`share-media`).
+  // Core's guest transport and identity (`sharing`), then Memories' guest completion (`share-media`). Its media read
+  // is never asked for a WRITE_ONLY link (it serves the guest nothing), so it refuses here.
   const transport = fakeApi(publicSharesApi, {
     resolveShare: async () => resolve,
     createShareIdentity: vi.fn<SharingApi['createShareIdentity']>().mockResolvedValue({ identityId: 'ignored', contributorToken: 'tok-1' }),
     startShareBlobUploads,
   })
   const media = fakeApi(publicShareMediaApi, {
+    listShareMedia: vi.fn<ShareMediaApi['listShareMedia']>().mockRejectedValue(new Error('a WRITE_ONLY link is not asked')),
     completeShareMedia: async ({ shareMediaBatchRequest }): Promise<ShareMediaBatchResponse> => ({
       results: [{
         blobId: startShareBlobUploads.mock.calls[0][0].shareBlobUploadsRequest.items[0].blobId,
@@ -107,6 +107,7 @@ const noTiers = { deriveImage: vi.fn(), deriveVideoPoster: vi.fn() } as unknown 
 /** The guest names itself and uploads [PHOTO]; returns what crossed the wire. */
 async function guestUploads(kShare: Uint8Array, api: ReturnType<typeof guestApi>) {
   const resolved = await resolveShare(UPLOADER_SHARE, b64url(kShare))
+  expect(api.listShareMedia).not.toHaveBeenCalled()
   const session = await createContributorIdentity(UPLOADER_SHARE, resolved.scopeId, resolved.access, 'Gast', b64url(kShare))
   const sealKey = sessionSealKey(session, resolved.access)!
   await addSharePhoto(
@@ -218,18 +219,22 @@ describe('a WRITE_ONLY guest never holds K_mem (ADR 0031 point 7)', () => {
     const [primary] = await listBuckets(SCOPE_ID, NODE_ID)
     expect(openBucketName(SCOPE_ID, NODE_ID, kMem, primary)).toBe('Gast')
 
-    // a viewer link of the same Memory: its node carries the drop key, its identities the guest's wrapped key — and
-    // no name, which the contract no longer has a field for (ADR 0030 point 8). Typed, so a shape change is loud here.
+    // a viewer link of the same Memory: the resolve's node carries the drop key, Memories' media read the row and the
+    // guest's wrapped key — and no name, which the contract has no field for (ADR 0030 point 8). Typed, so a shape
+    // change is loud here.
     const kViewer = v1.randomBytes(32)
     const viewerResolve = {
       role: ShareRole.Read, passwordRequired: false, scopeId: SCOPE_ID, nodeId: NODE_ID,
       wrap: b64std(v1.seal({ purpose: 'share-key' }, kViewer, kMem)),
       sealedName: b64std(v1.seal({ purpose: 'share-memory-name' }, kViewer, v1.utf8('Hochzeit'))),
       nodes: [{ id: NODE_ID, kind: MEMORY_KIND, epoch: 0, sealedDropPrivateKey }],
+    } satisfies PublicShare
+    const viewerMedia = {
       media: [{ ...row, nodeId: NODE_ID, identityId }],
       identities: [{ identityId, wrappedIdentityKey: identity.wrappedIdentityKey! }],
-    } satisfies PublicShare
+    } satisfies ShareMediaListing
     stubApi(publicSharesApi, { resolveShare: viewerResolve, resolveShareBlob: { presignedGets } })
+    stubApi(publicShareMediaApi, { listShareMedia: viewerMedia })
     const viewer = await resolveShare(VIEWER_SHARE, b64url(kViewer))
     expect(viewer.items).toHaveLength(1)
     expect(await openShareOriginal(VIEWER_SHARE, viewer.items[0])).toEqual(PHOTO)

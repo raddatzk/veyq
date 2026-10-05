@@ -8,7 +8,7 @@ import { fakeApi, stubApi } from './apiMock'
 vi.mock('../api/client', () => ({ publicSharesApi: vi.fn() }))
 import { publicSharesApi } from '../api/client'
 
-const SHARE: PublicShare = { role: 'READ', passwordRequired: false, nodes: [], media: [] }
+const SHARE: PublicShare = { role: 'READ', passwordRequired: false, nodes: [] }
 
 describe('stubApi', () => {
   it('serves each payload from the factory', async () => {

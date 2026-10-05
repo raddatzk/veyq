@@ -18,6 +18,7 @@ import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.TestFixtures.shareKeysJson
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
+import me.raddatz.veyq.memories.media.ShareMediaRead
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -84,16 +85,18 @@ class ShareDeletedNodeSliceTest {
             .`when`().delete("/api/scopes/$scopeId/nodes/$deleted")
             .then().statusCode(204)
 
-        // the share on the deleted Memory resolves to NOTHING — no node of the subtree, no media under it
+        // the share on the deleted Memory serves NOTHING — no node of the subtree, no media under it
         given().`when`().get("/api/shares/$deletedShare")
             .then().statusCode(200)
             .body("nodes.id", not(hasItem(deleted)))
+        ShareMediaRead.of(deletedShare).then().statusCode(200)
             .body("media.mediaId", not(hasItem(deletedMedia)))
 
         // control: the untouched share still serves its subtree — the filter must not over-reach
         given().`when`().get("/api/shares/$survivingShare")
             .then().statusCode(200)
             .body("nodes.id", hasItem(survivor))
+        ShareMediaRead.of(survivingShare).then().statusCode(200)
             .body("media.mediaId", hasItem(survivingMedia))
     }
 
@@ -141,6 +144,7 @@ class ShareDeletedNodeSliceTest {
             .then().statusCode(200)
             .body("nodes.id", hasItem(memory))
             .body("nodes.id", not(hasItem(chapter)))
+        ShareMediaRead.of(shareId).then().statusCode(200)
             .body("media.mediaId", hasItem(memoryMedia))
             .body("media.mediaId", not(hasItem(chapterMedia)))
 
@@ -167,6 +171,7 @@ class ShareDeletedNodeSliceTest {
         given().`when`().get("/api/shares/$shareId")
             .then().statusCode(200)
             .body("nodes.id", hasItem(memory))
+        ShareMediaRead.of(shareId).then().statusCode(200)
             .body("media.mediaId", hasItem(mediaId))
         given().`when`().get("/api/shares/$shareId/blobs/$blobId")
             .then().statusCode(503).body("code", equalTo("store_unavailable"))

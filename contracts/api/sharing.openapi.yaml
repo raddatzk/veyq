@@ -306,12 +306,11 @@ paths:
       summary: Resolve a share (unauthenticated) → the sealed shared subtree.
       description: >
         **No auth.** Returns the `role`, the `wrap` (`symWrap(K_share, content key)`), the `sealedName`, and the
-        **sealed subtree** rooted at the shared node — every node (for the content-key chain), plus what the
-        application attached under it (`media`, served here until it moves to the application's own operation),
-        all still sealed under the nodes' content keys. The viewer unwraps the root's content key with the
-        fragment key, derives each descendant's from `wrappedContentKey`, and decrypts names / payloads / blob
-        keys **locally**. A disabled, expired, or unknown share is a non-enumerable `404` (same shape in every
-        case). Without the fragment key the response is inert — the wrap cannot be opened.
+        **sealed subtree** rooted at the shared node — every node (for the content-key chain), all still sealed
+        under the nodes' content keys. What an application attached under those nodes is that application's own
+        guest read (ADR 0079). The viewer unwraps the root's content key with the fragment key, derives each
+        descendant's from `wrappedContentKey`, and decrypts names / payloads **locally**. A disabled, expired, or
+        unknown share is a non-enumerable `404` (same shape in every case). Without the fragment key the response is inert — the wrap cannot be opened.
         **Password-protected shares (cr-0118, ADR 0037):** with **no** `X-Share-Password` the response is
         **locked** — only `passwordRequired` + `pwSalt` (no `wrap`/`sealedName`/subtree); the client prompts,
         derives the token, and re-resolves with the header. A **wrong** token → `403 share_password_incorrect`.
@@ -1220,15 +1219,15 @@ components:
 
     PublicShare:
       type: object
-      required: [role, passwordRequired, nodes, media]
+      required: [role, passwordRequired, nodes]
       description: >
         A resolved share. When `passwordRequired` is true and the guest presented **no** (or a wrong) password
         token, the response is **locked**: only `role` + `passwordRequired` + `pwSalt` are set and `wrap` /
-        `sealedDropPublicKey` / `nodeId` / `rootKind` / `sealedName` / `sealedNote` / `nodes` / `media` / `identities` are
+        `sealedDropPublicKey` / `nodeId` / `rootKind` / `sealedName` / `sealedNote` / `nodes` are
         omitted/empty — the client prompts for the password and re-resolves with the token (cr-0118, ADR 0037).
         An unlocked WRITE_ONLY response carries `sealedDropPublicKey` **instead of** `wrap` (ADR 0031 point 7).
-        `media` and `identities` are the Memories application's rows, served here until they move to its own
-        operation (ADR 0079); everything else is core's link and the shared nodes with their keys.
+        It carries no application data: the link and the shared nodes with their keys, nothing an application
+        attached under them (ADR 0079).
       properties:
         role:
           $ref: "#/components/schemas/ShareRole"
@@ -1304,22 +1303,6 @@ components:
           type: array
           description: The live subtree rooted at the shared node — the root plus its descendants, for the content-key chain.
           items: { $ref: "#/components/schemas/ShareNode" }
-        media:
-          type: array
-          description: >
-            The Memories application's rows attached under the shared subtree (each tagged with its owning
-            `nodeId`) — served here until they move to its own operation (ADR 0079).
-          items: { $ref: "#/components/schemas/ShareMedia" }
-        identities:
-          type: [array, "null"]
-          description: >
-            The anonymous identities a reader needs to open what it is served: every WRITE_ONLY identity with a row
-            in `media` under the served subtree, each an opaque `identityId` and its wrapped identity key, without
-            which that identity's rows cannot be opened (ADR 0031 point 7). No guest's name, and no READ_WRITE identity —
-            not even this share's own, whatever its role is now: a guest's name is for the scope's members, who
-            read it through the application's member operations (ADR 0030 point 8). Empty for a WRITE_ONLY share (it
-            is served nothing). Derived from the Memories application's rows, and moves with them (ADR 0079).
-          items: { $ref: "#/components/schemas/ShareIdentity" }
 
     ShareNode:
       type: object
@@ -1372,94 +1355,6 @@ components:
           maxLength: 256
           example: null
 
-    ShareMedia:
-      type: object
-      description: >
-        One of the Memories application's rows under the shared subtree, served here until it moves to that
-        application's own spec (ADR 0079) — the original blob ref + role-tagged derivatives, tagged with its owning
-        `nodeId` so the viewer picks the right content key.
-      required: [nodeId, mediaId, blobId, chunkCount, byteSize, wrappedBlobKey]
-      properties:
-        nodeId:
-          x-veyq-visibility: id
-          type: string
-          format: uuid
-          description: The subtree node this row is attached to (selects its content key).
-          example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
-        mediaId: { type: string, format: uuid, example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e, x-veyq-visibility: id }
-        blobId: { type: string, format: uuid, example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a, x-veyq-visibility: id }
-        chunkCount:
-          x-veyq-visibility: measure
-          type: integer
-          format: int32
-          example: 2
-        byteSize:
-          x-veyq-visibility: measure
-          type: integer
-          format: int64
-          example: 131072
-        manifest:
-          x-veyq-visibility: measure
-          type: [array, "null"]
-          description: Per-chunk ciphertext byte sizes in chunk order (ciphertext sizes only).
-          items: { type: integer, format: int64, example: 65536 }
-        wrappedBlobKey:
-          type: string
-          description: The original blob's `K_blob` wrapped under the node's content key (opaque base64).
-          contentEncoding: base64
-          maxLength: 256
-          example: d3JhcHBlZC1rLWJsb2I=
-        derivatives:
-          type: [array, "null"]
-          description: Role-tagged derivative tiers (THUMBNAIL, PREVIEW), each its own blob ref with its own wrap.
-          items: { $ref: "#/components/schemas/ShareMediaDerivative" }
-        wrappedMeta:
-          type: [string, "null"]
-          description: The application's sealed metadata of the row, under the node's content key (opaque base64; its format is the application's); null when unset.
-          contentEncoding: base64
-          maxLength: 512
-          example: bWV0YS1jaXBoZXJ0ZXh0
-        identityId:
-          x-veyq-visibility: id
-          type: [string, "null"]
-          format: uuid
-          description: >
-            The WRITE_ONLY identity that added this row, whose wrapped key in `identities[]` opens it (ADR 0031
-            point 7). Null for a member's row and for a READ_WRITE guest's, which open under the node's content key —
-            a guest is not told which uploads came from one person (ADR 0030 point 8).
-          example: null
-
-    ShareMediaDerivative:
-      type: object
-      description: A derivative tier's blob ref — same opaque metadata as the original, plus its role `kind`.
-      required: [kind, blobId, chunkCount, byteSize, wrappedBlobKey]
-      properties:
-        kind:
-          x-veyq-visibility: enum
-          type: string
-          enum: [THUMBNAIL, PREVIEW]
-          example: THUMBNAIL
-        blobId: { type: string, format: uuid, example: 8b2c1f2d-3e4a-5b6c-7c3f-0e2a9b1d4a6e, x-veyq-visibility: id }
-        chunkCount:
-          x-veyq-visibility: measure
-          type: integer
-          format: int32
-          example: 1
-        byteSize:
-          x-veyq-visibility: measure
-          type: integer
-          format: int64
-          example: 65536
-        manifest:
-          x-veyq-visibility: measure
-          type: [array, "null"]
-          items: { type: integer, format: int64, example: 65536 }
-        wrappedBlobKey:
-          type: string
-          contentEncoding: base64
-          maxLength: 256
-          example: d3JhcHBlZC1rLWJsb2I=
-
     ShareBlobDownload:
       type: object
       required: [presignedGets]
@@ -1473,24 +1368,6 @@ components:
       $ref: '_common.openapi.yaml#/components/schemas/PresignedUrl'
 
     # --- contributor (cr-0101) ---------------------------------------------------
-    ShareIdentity:
-      type: object
-      description: >
-        A WRITE_ONLY identity as a guest reader is served it: the opaque id and the key what it added opens under.
-        Deliberately **no name** — the display name is for the scope's members (ADR 0030 point 8), and a field
-        that is absent cannot be read by any guest-side code.
-      required: [identityId, wrappedIdentityKey]
-      properties:
-        identityId: { type: string, format: uuid, example: 6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c, x-veyq-visibility: id }
-        wrappedIdentityKey:
-          type: string
-          description: >
-            The identity's own key `K_up` wrapped to the shared root node's drop public key (AAD `upload-identity-key`, bound
-            to scope + node + identity; opaque base64). Everything the identity sealed opens under `K_up` (ADR 0031
-            point 7).
-          contentEncoding: base64
-          maxLength: 2048
-          example: d3JhcHBlZC11cGxvYWRlci1rZXk=
 
     CreateShareIdentityRequest:
       type: object

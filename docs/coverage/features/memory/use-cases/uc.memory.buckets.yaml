@@ -41,8 +41,8 @@ acceptanceCriteria:
         unit: [src/features/memory/media.buckets.test.ts]
   - id: guest-names-for-members-only
     text: >-
-      A guest's name reaches the Memory's members only, through their bucket list. No public share's resolve serves
-      a guest's sealed name, or any READ_WRITE identity — not even the reading link's own, including on a READ
+      A guest's name reaches the Memory's members only, through their bucket list. No guest read of a public share
+      (its resolve, its media read) serves a guest's sealed name, or any READ_WRITE identity — not even the reading link's own, including on a READ
       link that was once a READ_WRITE link. It serves a WRITE_ONLY identity as its wrapped key alone, which a reader
       needs to open that identity's media, and only that media names its identity. The name pre-screen tells the
       guest who sees the name. A link plus a database dump still opens the names — the residual ADR 0030 point 8
@@ -50,10 +50,10 @@ acceptanceCriteria:
     coverage:
       # Each negative carries a positive on the same predicate: the served identity set is EXACTLY the uploader's
       # (so an empty list cannot pass), the name's absence is asserted on that present identity, and the member
-      # bucket list still serves both guests' names. Live, both sharing e2e suites read the raw resolve past the
-      # generated client, which would drop an unknown field.
+      # bucket list still serves both guests' names. Live, both sharing e2e suites read the raw media read and the
+      # raw resolve past the generated client, which would drop an unknown field.
       backend:
-        integration: [ShareGuestNamesSliceTest.aViewerLinkIsServedTheUploadersKeyButNoName, ShareGuestNamesSliceTest.aContributorLinkIsServedNoneOfItsOwnGuests, ShareGuestNamesSliceTest.aViewerLinkThatWasAContributorLinkKeepsNoGuest, ShareGuestNamesSliceTest.onlyAnUploadersMediaNamesItsIdentity, ShareGuestNamesSliceTest.theMembersStillReadBothNames]
+        integration: [ShareGuestNamesSliceTest.aViewerLinkIsServedTheUploadersKeyButNoName, ShareGuestNamesSliceTest.aContributorLinkIsServedNoneOfItsOwnGuests, ShareGuestNamesSliceTest.aViewerLinkThatWasAContributorLinkKeepsNoGuest, ShareGuestNamesSliceTest.onlyAnUploadersMediaNamesItsIdentity, ShareGuestNamesSliceTest.theResolveServesNoMediaAndNoIdentities, ShareGuestNamesSliceTest.theMembersStillReadBothNames]
       web:
         unit: [src/views/ShareView.test.ts]
         e2e: [src/features/memory/shareContributor.e2e.test.ts, src/features/memory/shareUploader.e2e.test.ts]

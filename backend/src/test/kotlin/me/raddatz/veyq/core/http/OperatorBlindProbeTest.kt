@@ -222,7 +222,7 @@ class OperatorBlindProbeTest {
             "openPairingChannel", "answerPairingChannel", "collectPairingChannel",
             "getSetupStatus", "createServerOwner",
             "resolveShare", "getShareTerms", "resolveShareBlob", "createShareIdentity", "startShareBlobUploads",
-            "presignShareBlobUploadWindows", "completeShareMedia", "deleteShareMedia",
+            "presignShareBlobUploadWindows", "listShareMedia", "completeShareMedia", "deleteShareMedia",
             "previewTenantInvite", "acceptTenantInvite", "registerAndAcceptTenantInvite",
         )
         reason(

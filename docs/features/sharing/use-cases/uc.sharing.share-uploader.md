@@ -30,7 +30,7 @@ client-local** own-view. **v1: role WRITE_ONLY, personal scope, direct-append.**
 2. **Hand off.** The client shows the link `/s/{shareId}#k=<base64url(K_share)>` to copy.
 3. **Open + name yourself (anonymous).** The visitor opens the link; the client `GET`s `/api/shares/{shareId}`
    (**no auth**) → `{ role: WRITE_ONLY, rootKind, sealedDropPublicKey, nodeId, sealedName }`; a WRITE_ONLY link's media
-   read answers an empty list (**no gallery** and
+   read answers empty lists, so the client does not ask it (**no gallery** and
    **no `K_mem`** — the uploader is never handed others' media, nor the key to read them). Because the role is
    WRITE_ONLY, the client shows a **mandatory name pre-screen** with a **clear note that uploads are visible only in
    this browser tab**; the visitor names themselves → the client mints the identity's own key `K_up`, seals the
@@ -62,8 +62,7 @@ sequenceDiagram
   C->>V: hand off link /s/{shareId}#35;k=…
   V->>S: GET /api/shares/{shareId}   (no auth)
   S-->>V: { role: WRITE_ONLY, rootKind, sealedDropPublicKey, sealedName }   ← no K_mem
-  V->>S: GET /api/shares/{shareId}/media   (no auth)
-  S-->>V: empty list   ← no gallery
+  Note right of V: no media read — for WRITE_ONLY it answers empty lists (no gallery)
   V->>V: drop public key = open(K_share)#59; mint K_up#59; seal name under K_up#59; keep ids + LOCAL previews
   V->>S: POST /identities { K_up wrapped to the drop key } + X-Share-Write → identityId + contributorToken
   V->>S: POST /blob-uploads (token) → presigned PUTs

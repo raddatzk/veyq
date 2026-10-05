@@ -4,6 +4,7 @@ import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
+import me.raddatz.veyq.memories.media.ShareMediaRead
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -71,6 +72,18 @@ class SharePasswordSliceTest {
         given().`when`().get("/api/shares/$shareId/blobs/${UUID.randomUUID()}").then().statusCode(404)
         given().header("X-Share-Password", wrongToken).`when`().get("/api/shares/$shareId/blobs/${UUID.randomUUID()}")
             .then().statusCode(403).body("code", equalTo("share_password_incorrect"))
+    }
+
+    @Test
+    fun theMediaReadRequiresThePasswordToken() {
+        val (userId, scopeId) = seedMemberScope()
+        val shareId = createWithPassword(userId, seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY))
+
+        // Memories' listShareMedia passes the same gate: no token → 404 (it serves no locked shell — the challenge is
+        // the resolve's), a wrong token → 403, a valid one → the (empty) listing
+        ShareMediaRead.of(shareId).then().statusCode(404).body("code", equalTo("share_not_found"))
+        ShareMediaRead.of(shareId, wrongToken).then().statusCode(403).body("code", equalTo("share_password_incorrect"))
+        ShareMediaRead.of(shareId, pwToken).then().statusCode(200).body("media.size()", equalTo(0)).body("identities.size()", equalTo(0))
     }
 
     @Test

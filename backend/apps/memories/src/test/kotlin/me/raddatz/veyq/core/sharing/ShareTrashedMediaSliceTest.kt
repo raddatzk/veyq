@@ -9,6 +9,7 @@ import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
+import me.raddatz.veyq.memories.media.ShareMediaRead
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -52,7 +53,7 @@ class ShareTrashedMediaSliceTest {
             .`when`().delete("/api/scopes/$scopeId/media/$trashedMedia")
             .then().statusCode(204)
 
-        given().`when`().get("/api/shares/$shareId")
+        ShareMediaRead.of(shareId)
             .then().statusCode(200)
             .body("media.mediaId", hasItem(liveMedia))
             .body("media.mediaId", not(hasItem(trashedMedia)))
@@ -93,7 +94,7 @@ class ShareTrashedMediaSliceTest {
         given().header("Authorization", bearer(userId))
             .`when`().post("/api/scopes/$scopeId/media/$mediaId/restore").then().statusCode(204)
 
-        given().`when`().get("/api/shares/$shareId")
+        ShareMediaRead.of(shareId)
             .then().statusCode(200)
             .body("media.mediaId", hasItem(mediaId))
         given().`when`().get("/api/shares/$shareId/blobs/$blobId")

@@ -4,6 +4,7 @@ import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.sharing.ShareIdentityEntity
 import me.raddatz.veyq.memories.media.BucketEntity
 import me.raddatz.veyq.memories.media.MediaEntity
+import me.raddatz.veyq.memories.media.ShareMediaRead
 import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.TestIds
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
@@ -21,15 +22,18 @@ import io.restassured.http.ContentType
 import java.time.Instant
 import java.util.UUID
 import org.hamcrest.CoreMatchers.equalTo
+import org.hamcrest.CoreMatchers.hasItem
 import org.hamcrest.CoreMatchers.notNullValue
 import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.Test
 
 /**
  * A guest's name reaches the Memory's members only (uc.memory.buckets `guest-names-for-members-only`, ADR 0030
- * point 8): no public-share resolve serves a guest's sealed name, nor a READ_WRITE guest's identity — also not on
+ * point 8): no guest read of a share serves a guest's sealed name, nor a READ_WRITE guest's identity — also not on
  * a READ link that was once a READ_WRITE link, which keeps its identities — and only an uploader's media keeps
- * its `identityId`, because a viewer opens that media through the identity's wrapped key (ADR 0031 point 7).
+ * its `identityId`, because a viewer opens that media through the identity's wrapped key (ADR 0031 point 7). The
+ * rule lives with the rows: Memories' `listShareMedia` serves the media and the identities ([ShareMediaRead]), and
+ * core's resolve serves neither (slice 6.3 of cr-platform-contract-split).
  *
  * Every negative carries a positive on the same predicate: the identity set is asserted to be EXACTLY the
  * uploader's (an empty list would satisfy "no name" vacuously), the name's absence is asserted on that present
@@ -76,7 +80,7 @@ class ShareGuestNamesSliceTest {
 
     /** The identity set is exactly the uploader's, with its key and without a name. */
     private fun assertServesOnlyTheUploader(shareId: String, m: Memory) {
-        given().`when`().get("/api/shares/$shareId").then().statusCode(200)
+        ShareMediaRead.of(shareId).then().statusCode(200)
             .body("identities.size()", equalTo(1))
             .body("identities[0].identityId", equalTo(m.uploader))
             .body("identities[0].wrappedIdentityKey", equalTo(WRAPPED_UPLOADER_KEY))
@@ -87,7 +91,7 @@ class ShareGuestNamesSliceTest {
     fun aViewerLinkIsServedTheUploadersKeyButNoName() {
         val m = memory()
         // the name first: on this link the identity set is already exactly the uploader's
-        given().`when`().get("/api/shares/${m.viewerLink}").then().statusCode(200)
+        ShareMediaRead.of(m.viewerLink).then().statusCode(200)
             .body("identities.find { it.identityId == '${m.uploader}' }.wrappedIdentityKey", equalTo(WRAPPED_UPLOADER_KEY))
             .body("identities.find { it.identityId == '${m.uploader}' }.containsKey('sealedDisplayName')", equalTo(false))
         assertServesOnlyTheUploader(m.viewerLink, m)
@@ -111,10 +115,21 @@ class ShareGuestNamesSliceTest {
     fun onlyAnUploadersMediaNamesItsIdentity() {
         val m = memory()
         for (link in listOf(m.viewerLink, m.contributorLink)) {
-            given().`when`().get("/api/shares/$link").then().statusCode(200)
+            ShareMediaRead.of(link).then().statusCode(200)
                 .body("media.find { it.mediaId == '${m.contributorMedia}' }.nodeId", equalTo(m.memory))
                 .body("media.find { it.mediaId == '${m.contributorMedia}' }.identityId", nullValue())
                 .body("media.find { it.mediaId == '${m.uploaderMedia}' }.identityId", equalTo(m.uploader))
+        }
+    }
+
+    @Test
+    fun theResolveServesNoMediaAndNoIdentities() {
+        val m = memory()
+        for (link in listOf(m.viewerLink, m.contributorLink, m.flippedLink)) {
+            given().`when`().get("/api/shares/$link").then().statusCode(200)
+                .body("nodes.id", hasItem(m.memory)) // control: the same body carries the shared subtree
+                .body("containsKey('media')", equalTo(false))
+                .body("containsKey('identities')", equalTo(false))
         }
     }
 
