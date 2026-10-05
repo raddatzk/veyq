@@ -24,8 +24,8 @@ The server is **operator-blind**: it stores and serves only ciphertext.
   **contracts → backend → web**. **Target** ([ADR 0079](docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)):
   each splits into **core** (the platform) and **applications** (Memories first; compiled in, no runtime
   loading; an application may use core, never the reverse, never another application). **The backend is split** —
-  Gradle modules `:core` (`backend/core`, `com.veyq.core`) and `:apps:memories` (`backend/apps/memories`,
-  `com.veyq.memories`), composed by the root `backend/` into one fast-jar; the direction is the build's and
+  Gradle modules `:core` (`backend/core`, `me.raddatz.veyq.core`) and `:apps:memories` (`backend/apps/memories`,
+  `me.raddatz.veyq.memories`), composed by the root `backend/` into one fast-jar; the direction is the build's and
   `validate_backend_module_graph.py`'s. **The web is split by import direction only** — `web/src/features/memory` is
   the application, reached through a build-time registry, its directory and slots still Memories-shaped. ADR 0079's
   Consequences say what is still open, and [`docs/apps/`](docs/apps/README.md) maps what belongs where.

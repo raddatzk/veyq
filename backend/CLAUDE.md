@@ -66,8 +66,8 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
 - **API-first.** Edit the spec in `../contracts/api/` — core's specs at its top level, the Memories application's in
   `memories/`, shared schemas in `_common.openapi.yaml` (core's); the Gradle build generates Kotlin models + JAX-RS
   interfaces per owner, in the module that owns them (`:core:openApiGenerateCore` → `core/build/generated/openapi/core/`,
-  package `com.veyq.core.generated`; `:apps:memories:openApiGenerateMemories` →
-  `apps/memories/build/generated/openapi/memories/`, package `com.veyq.memories.generated`; `openApiGenerateSpecs`
+  package `me.raddatz.veyq.core.generated`; `:apps:memories:openApiGenerateMemories` →
+  `apps/memories/build/generated/openapi/memories/`, package `me.raddatz.veyq.memories.generated`; `openApiGenerateSpecs`
   from `backend/` runs both). A schema two owners share lives in `_common` and is ONE generated type, core's:
   the Memories set maps every `_common` schema to core's class, and a Memories model named like a core one fails the
   build; so does `x-veyq-channel` on a Memories operation (the admin channel is core's). Never hand-write a DTO that
@@ -86,8 +86,8 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   `sharing` met it from the other side (ADR 0075): only its `/api/scopes/…` route answered 405 while the tag's
   `/api/shares` routes kept working — so a green suite for the tag's other routes proves nothing; test that URL.
 - **Feature-slice + two axes ([ADR 0001](../docs/decisions/0001-backend-http-adapter-vs-application-slicing.md)):**
-  `com.veyq.core.<area>/<usecase>/…` (an application's slices under `com.veyq.<application>`, today
-  `com.veyq.memories`). A `…Resource` implements the generated `…Api` (thin adapter), delegates to
+  `me.raddatz.veyq.core.<area>/<usecase>/…` (an application's slices under `me.raddatz.veyq.<application>`, today
+  `me.raddatz.veyq.memories`). A `…Resource` implements the generated `…Api` (thin adapter), delegates to
   a `…Handler`; persistence in a `…Store` (Panache). Resources are resource-shaped, not per-use-case.
 - **Validation + sanitization belong in the spec** via `x-field-extra-annotation` (bean-validation
   `@NotBlank`/`@Size`/`@Pattern` + a Jackson trim deserializer) → enforced by `@Valid` at the boundary,

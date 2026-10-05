@@ -24,12 +24,12 @@
 
 - **Two axes, not one** (see [ADR 0001](../decisions/0001-backend-http-adapter-vs-application-slicing.md)).
   The **application layer is use-case-sliced** — `<area>/<use-case>/…Handler` under the owner's package,
-  `com.veyq.core` for the platform or `com.veyq.memories` for the Memories application (a use-case may
+  `me.raddatz.veyq.core` for the platform or `me.raddatz.veyq.memories` for the Memories application (a use-case may
   have several handlers); this is where cohesion and the trust chain live. The **HTTP adapter layer is
   resource-shaped** — one `…Resource` per generated `…Api` interface (OpenAPI tag), *not* per use-case,
   because one endpoint can serve several use-cases. Use-case slicing is what carries the trust chain; the
   adapter shape is necessarily per-stack.
-- **Cross-cutting code is the platform's kernel** — the packages of `com.veyq.core` that every feature slice
+- **Cross-cutting code is the platform's kernel** — the packages of `me.raddatz.veyq.core` that every feature slice
   builds on (tenant, identity, auth, membership, the blob store, rate limits, …). **The list is declared once**,
   as `KERNEL` in [`validate_kernel_imports_no_slices.py`](../../scripts/validate_kernel_imports_no_slices.py);
   every other package is a slice, so a new package is a slice until it is added there on purpose. A kernel

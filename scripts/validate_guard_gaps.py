@@ -128,7 +128,7 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   46 `import.meta.glob` in a core file — rejected: discovery by glob would hide an edge from the import rule
   48 a kernel (tenant) file importing a slice (the admin tenant feature) — rejected: `validate_kernel_imports_no_slices`
      reads kernel membership from its declared `KERNEL` list, not from a directory (the kernel was `shared/`
-     until the package rename folded it into `com.veyq.core.<feature>`); every package off the list is a slice
+     until the package rename folded it into `me.raddatz.veyq.core.<feature>`); every package off the list is a slice
   49 a `core/node/` file naming the generated `NodeKind.MEMORY` in code — rejected: `validate_kernel_imports_no_slices`
      holds core to the node kind `FOLDER`; the kinds Memories owns are answered through `NodeKindRules` and the other
      seams (ADR 0079). The import rule cannot see this edge — a kind is a value, not a package, and the generated
@@ -137,7 +137,7 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      `:apps:memories` — rejected: `validate_backend_module_graph` rule (b) — an application never depends on another
      (ADR 0079 Decision 4). Gradle accepts that edge without complaint, and no real second application exists yet,
      so a forged one is the only lever; everything else about it is made valid so (b) is what rejects it
-  51 a `:core` main file declaring a `com.veyq.memories` package — rejected: `validate_backend_module_graph` rule
+  51 a `:core` main file declaring a `me.raddatz.veyq.memories` package — rejected: `validate_backend_module_graph` rule
      (d), no package in two modules. Kotlin compiles the split and Quarkus indexes both halves; the package name
      would then claim an owner the file's module is not
   52 `:apps:memories`' build file renaming its jar (`base { archivesName.set(…) }`) — rejected:
@@ -145,7 +145,7 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      `testFixtures(project(…))` dependency silently leaves the `@QuarkusTest` application model — the build is
      green and the fixtures are not there (measured 2026-10-05, Quarkus 3.36.0, when the convention still set one)
   53 `:apps:memories`' build file no longer applying `id("veyq.module")` — rejected: `validate_backend_module_graph`
-     rule (f). Without the convention plugin the module has no group (its jar loses its `com.veyq.` name), no
+     rule (f). Without the convention plugin the module has no group (its jar loses its `me.raddatz.veyq.` name), no
      toolchain, no test JVM settings, and — for a module with the Quarkus plugin — a second `quarkusBuild`. (It
      forged the retired `:test-support` project's build file until the helpers became `:core`'s test fixtures.)
   54 the Dockerfile's `backend-build-base` stage no longer copying `backend/buildSrc` — rejected:
@@ -153,7 +153,7 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      image does not build, while `./gradlew check` in a checkout stays green
   55 the root declaring `implementation(testFixtures(project(":core")))` — rejected: `validate_backend_module_graph`
      rule (b). Gradle accepts it and the build stays green, but the fixtures then ship: measured, `quarkusBuild` put
-     `com.veyq.core-test-fixtures.jar` (with the `@Priority` fake `RecordingBlobStore`), JUnit and RestAssured into
+     `me.raddatz.veyq.core-test-fixtures.jar` (with the `@Priority` fake `RecordingBlobStore`), JUnit and RestAssured into
      `quarkus-app/lib/main`
   56 `:core`'s `src/testFixtures/resources/META-INF/beans.xml` deleted — rejected: `validate_backend_module_graph`
      rule (c). Without it the fixtures' CDI fakes are no beans and the production bean answers in their place: only
@@ -295,24 +295,24 @@ PROD_COMPOSE = "infra/docker-compose.prod.yml"
 CONFIG_SECRET_MOUNT = "      - veyq-config-secret:/var/lib/veyq\n"
 # Where a fourth veyq_blob reference arm is forged: a scope is the plausible place for one (a space banner),
 # and it is one of the entities the delete paths already touch.
-SCOPE_ENTITY = "backend/core/src/main/kotlin/com/veyq/core/scope/ScopeEntity.kt"
+SCOPE_ENTITY = "backend/core/src/main/kotlin/me/raddatz/veyq/core/scope/ScopeEntity.kt"
 SCOPE_ENTITY_ANCHOR = "class ScopeEntity : PanacheEntityBase {\n"
 # Named the way a real later core migration is (V<yyyymmddHHMM>__core_<slug>.sql), above every pinned version.
 BANNER_MIGRATION = "backend/core/src/main/resources/db/migration/V209912312359__core_guard_gap_scope_banner.sql"
 # Where a bypass of the single-deleter rule is forged. A scheduled purge is the plausible place: it already
 # reclaims rows, so deleting the objects inline is the one-line shortcut ADR 0062 Decision 3 forbids.
-TRASH_PURGE = "backend/apps/memories/src/main/kotlin/com/veyq/memories/media/MediaTrashPurge.kt"
-TENANT_HANDLER = "backend/core/src/main/kotlin/com/veyq/core/admin/tenant/TenantHandler.kt"
+TRASH_PURGE = "backend/apps/memories/src/main/kotlin/me/raddatz/veyq/memories/media/MediaTrashPurge.kt"
+TENANT_HANDLER = "backend/core/src/main/kotlin/me/raddatz/veyq/core/admin/tenant/TenantHandler.kt"
 TENANT_REPROJECT_CALL = "        if (outcome is SuspendOutcome.Done) reproject()\n"
 TRASH_PURGE_CTOR_ANCHOR = "    private val store: MediaStore,\n"
 # The derivative arm of the share blob-GET authorization, which lives in the media implementation of
 # `SharedSubtreeContributor` (ADR 0079 phase 1, step 7) — the place the live-twin check must follow it to.
-MEDIA_SHARE_CONTRIBUTOR = "backend/apps/memories/src/main/kotlin/com/veyq/memories/media/MediaSharedSubtreeContributor.kt"
+MEDIA_SHARE_CONTRIBUTOR = "backend/apps/memories/src/main/kotlin/me/raddatz/veyq/memories/media/MediaSharedSubtreeContributor.kt"
 DERIVATIVE_ARM_LINE = '            MediaDerivativeEntity.find("mediaId = ?1", m.id).list().forEach { ids.add(it.blobId) }\n'
 
 # Where a Host read through an alias constant is forged: the recovery resource is where the hand parse that
 # bought validate_lookup_single_home used to live, so it is where a copy of it would plausibly come back.
-RECOVERY_RESOURCE = "backend/core/src/main/kotlin/com/veyq/core/account/recovery/RecoveryResource.kt"
+RECOVERY_RESOURCE = "backend/core/src/main/kotlin/me/raddatz/veyq/core/account/recovery/RecoveryResource.kt"
 RECOVERY_RESOURCE_ANCHOR = "class RecoveryResource("
 TRASH_PURGE_BODY_ANCHOR = "        store.purgeTrashedBefore(Instant.now().minus(retention))\n"
 
@@ -541,8 +541,8 @@ def forge_ratelimit_state_under_another_name(root: pathlib.Path) -> str:
     # validate_ratelimit_core matches on the FILENAME (*Limiter*/*Counter*), so a limiter that avoids both name
     # parts holds its own map unseen. This is the whole reach of a buildless grep — pinned, not fixed: enforcing a
     # name nobody has written yet is not decidable, and the alternative (a reflection sweep) leaves the glob.
-    (root / "backend/core/src/main/kotlin/com/veyq/core/sharing/ShareThrottle.kt").write_text(textwrap.dedent("""\
-        package com.veyq.core.sharing
+    (root / "backend/core/src/main/kotlin/me/raddatz/veyq/core/sharing/ShareThrottle.kt").write_text(textwrap.dedent("""\
+        package me.raddatz.veyq.core.sharing
 
         import java.util.concurrent.ConcurrentHashMap
 
@@ -561,22 +561,22 @@ def forge_scoped_policy_gains_unlisted_dependency(root: pathlib.Path) -> str:
     # `paths:` filter, so editing the helper alone moves the mutation score without triggering the gate. Not
     # fixable by this guard's mechanism — a path filter cannot follow imports — so it is pinned, not closed. If
     # someone ever teaches the guard to walk dependencies, this case flips red instead of landing silently.
-    helper = root / "backend/core/src/main/kotlin/com/veyq/core/membership/PolicyHelper.kt"
+    helper = root / "backend/core/src/main/kotlin/me/raddatz/veyq/core/membership/PolicyHelper.kt"
     helper.write_text(textwrap.dedent("""\
-        package com.veyq.core.membership
+        package me.raddatz.veyq.core.membership
 
         /** A guard-gap probe: a dependency of a mutated policy that no `paths:` filter lists. */
         object PolicyHelper {
             fun isLastOwner(owners: Int): Boolean = owners <= 1
         }
         """))
-    policy = root / "backend/core/src/main/kotlin/com/veyq/core/spaces/scope/MembershipPolicy.kt"
+    policy = root / "backend/core/src/main/kotlin/me/raddatz/veyq/core/spaces/scope/MembershipPolicy.kt"
     src = policy.read_text()
-    if "import com.veyq.core.membership.MembershipEntity" not in src:
+    if "import me.raddatz.veyq.core.membership.MembershipEntity" not in src:
         raise ForgeError("MembershipPolicy's MembershipEntity import drifted — re-anchor this forgery")
-    policy.write_text(_sub(src, "import com.veyq.core.membership.MembershipEntity",
-                           "import com.veyq.core.membership.MembershipEntity\n"
-                           "import com.veyq.core.membership.PolicyHelper"))
+    policy.write_text(_sub(src, "import me.raddatz.veyq.core.membership.MembershipEntity",
+                           "import me.raddatz.veyq.core.membership.MembershipEntity\n"
+                           "import me.raddatz.veyq.core.membership.PolicyHelper"))
     return "a mutated policy depending on a file in no `paths:` filter (the transitive-dependency open gap)"
 
 
@@ -628,16 +628,16 @@ def forge_direct_store_delete_bypass(root: pathlib.Path) -> str:
     src = _sub(
         f.read_text(),
         TRASH_PURGE_CTOR_ANCHOR,
-        TRASH_PURGE_CTOR_ANCHOR + "    private val objects: com.veyq.core.blobstore.BlobStore,\n",
+        TRASH_PURGE_CTOR_ANCHOR + "    private val objects: me.raddatz.veyq.core.blobstore.BlobStore,\n",
     )
     f.write_text(_sub(src, TRASH_PURGE_BODY_ANCHOR, TRASH_PURGE_BODY_ANCHOR + '        objects.delete(listOf("k/0"))\n'))
     return "a purge deleting store objects inline under a renamed, fully-qualified receiver (must be REJECTED)"
 
 
-CORE_NODE_FORGERY = "backend/core/src/main/kotlin/com/veyq/core/node/GuardGapProbe.kt"
+CORE_NODE_FORGERY = "backend/core/src/main/kotlin/me/raddatz/veyq/core/node/GuardGapProbe.kt"
 
 
-MEDIA_SCOPE_ERASER = "backend/apps/memories/src/main/kotlin/com/veyq/memories/media/MediaScopeEraser.kt"
+MEDIA_SCOPE_ERASER = "backend/apps/memories/src/main/kotlin/me/raddatz/veyq/memories/media/MediaScopeEraser.kt"
 
 
 def forge_media_eraser_drops_a_table(root: pathlib.Path) -> str:
@@ -648,7 +648,7 @@ def forge_media_eraser_drops_a_table(root: pathlib.Path) -> str:
     return "the media ScopeEraser no longer deleting MediaEntity (must be REJECTED — veyq_media would block the scope row)"
 
 
-MEDIA_NODE_ERASER = "backend/apps/memories/src/main/kotlin/com/veyq/memories/media/MediaNodeSubtreeEraser.kt"
+MEDIA_NODE_ERASER = "backend/apps/memories/src/main/kotlin/me/raddatz/veyq/memories/media/MediaNodeSubtreeEraser.kt"
 
 
 def forge_media_node_eraser_deleted(root: pathlib.Path) -> str:
@@ -769,8 +769,8 @@ def forge_core_declares_application_package(root: pathlib.Path) -> str:
     f = root / CORE_NODE_FORGERY
     if not f.parent.is_dir():
         raise ForgeError(f"{f.parent.relative_to(root)} is missing — core/node moved")
-    f.write_text("package com.veyq.memories.media\n\nclass GuardGapProbe\n")
-    return "a :core main file declaring the Memories package com.veyq.memories.media (must be REJECTED — one module per package)"
+    f.write_text("package me.raddatz.veyq.memories.media\n\nclass GuardGapProbe\n")
+    return "a :core main file declaring the Memories package me.raddatz.veyq.memories.media (must be REJECTED — one module per package)"
 
 
 def forge_core_names_memory_kind(root: pathlib.Path) -> str:
@@ -778,8 +778,8 @@ def forge_core_names_memory_kind(root: pathlib.Path) -> str:
     # package, which the import rule cannot object to). The KDoc beside it names the kind too; only the code line counts.
     f = root / CORE_NODE_FORGERY
     f.parent.mkdir(parents=True, exist_ok=True)
-    f.write_text("package com.veyq.core.node\n\n"
-                 "import com.veyq.core.generated.model.NodeKind\n\n"
+    f.write_text("package me.raddatz.veyq.core.node\n\n"
+                 "import me.raddatz.veyq.core.generated.model.NodeKind\n\n"
                  "/** Whether a MEMORY may hold this. */\n"
                  "class GuardGapProbe {\n"
                  "    fun isMemory(kind: String): Boolean = kind == NodeKind.MEMORY.value\n"
@@ -790,10 +790,10 @@ def forge_core_names_memory_kind(root: pathlib.Path) -> str:
 def forge_kernel_imports_slice(root: pathlib.Path) -> str:
     # A kernel package reaching into a slice: the shape the 2026-09-23 review found (tenant kernel classes on the
     # admin feature's tenant entity). Kernel membership is the declared KERNEL list, not a directory.
-    f = root / "backend/core/src/main/kotlin/com/veyq/core/tenant/GuardGapProbe.kt"
+    f = root / "backend/core/src/main/kotlin/me/raddatz/veyq/core/tenant/GuardGapProbe.kt"
     if not f.parent.is_dir():
         raise ForgeError(f"{f.parent.relative_to(root)} is missing — the tenant kernel package moved")
-    f.write_text("package com.veyq.core.tenant\n\nimport com.veyq.core.admin.tenant.TenantStore\n\n"
+    f.write_text("package me.raddatz.veyq.core.tenant\n\nimport me.raddatz.veyq.core.admin.tenant.TenantStore\n\n"
                  "class GuardGapProbe\n")
     return "a kernel (tenant) file importing the admin tenant slice (must be REJECTED — the kernel names no slice)"
 

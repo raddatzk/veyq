@@ -1,7 +1,7 @@
 """Where the backend's sources live — the one place a script learns it (cr-platform-gradle-modules, step 2).
 
 Every guard that reads Kotlin, a test or a migration asks this module instead of spelling
-`backend/src/main/kotlin/com/veyq/…` itself. The roots are **found by glob** over
+`backend/src/main/kotlin/me/raddatz/veyq/…` itself. The roots are **found by glob** over
 `backend/**/src/{main,test,testFixtures}/…`, never listed: the root's `backend/src`, `backend/core/src` and, when
 the module split adds it, `backend/apps/memories/src` — every guard sees a new module without an edit. Build output,
 Gradle caches, `node_modules` and `buildSrc` (the build's convention plugins) are not sources and are skipped by path
@@ -12,8 +12,8 @@ test code, consumed as `testImplementation(testFixtures(project(":core")))` and 
 root**, never a main root — a guard over production code must not read `TestFixtures`, and a guard over test code
 must — and their resources are test-side.
 
-A file inside the tree is named by **its package path**, dotted (`com.veyq.x.y.Name`, the file `Name.kt`) or slashed
-(`com/veyq/x/y/Name.kt`), and `source_file` resolves it under whichever root holds it — so a guard anchored on a
+A file inside the tree is named by **its package path**, dotted (`me.raddatz.veyq.x.y.Name`, the file `Name.kt`) or slashed
+(`me/raddatz/veyq/x/y/Name.kt`), and `source_file` resolves it under whichever root holds it — so a guard anchored on a
 class keeps working when the class changes module, and goes red (the path does not exist) when it changes package.
 A name no root holds resolves to its spot under the first root, a path that does not exist: the guard's own
 "missing" line then fires, as it did when the path was hard-coded.
@@ -140,7 +140,7 @@ def package_dir(package: str, roots: list[pathlib.Path] | None = None) -> pathli
 
 
 def source_file(name: str, roots: list[pathlib.Path] | None = None) -> pathlib.Path:
-    """The file a dotted FQN (`com.veyq.x.Name` → `Name.kt`) or a slash path (`com/veyq/x/Name.kt`) names, under
+    """The file a dotted FQN (`me.raddatz.veyq.x.Name` → `Name.kt`) or a slash path (`me/raddatz/veyq/x/Name.kt`) names, under
     whichever of `roots` (default: the main roots) holds it. If none does, its spot under the first root — a path
     that does not exist, so the caller's existence check is what reports it."""
     rel = _relative(name)

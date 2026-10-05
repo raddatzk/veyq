@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guard that rate-limit state lives in exactly one place: the kernel package `com.veyq.core.ratelimit` (ADR 0052).
+"""Guard that rate-limit state lives in exactly one place: the kernel package `me.raddatz.veyq.core.ratelimit` (ADR 0052).
 
 **What it asserts.** No main Kotlin file of the backend whose name contains `Limiter` or `Counter` holds
 rate-limit state — a concurrent map, a hand-rolled map, an atomic counter — unless it sits inside the shared
@@ -40,7 +40,7 @@ import sys
 import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-CORE = backend_tree.package_dir("com.veyq.core.ratelimit")
+CORE = backend_tree.package_dir("me.raddatz.veyq.core.ratelimit")
 
 # A file that *is* a rate limiter by name. Both parts are load-bearing: `Counter` catches the shell shape
 # (`FixedWindowCounter`, `TokenBucketCounter`), `Limiter` the handler-side ones (`ShareRateLimiter`,

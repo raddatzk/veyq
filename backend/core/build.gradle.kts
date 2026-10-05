@@ -1,4 +1,4 @@
-// `:core` — the platform (ADR 0079): every `com.veyq.core.*` class, core's generated API (`openApiGenerateCore`),
+// `:core` — the platform (ADR 0079): every `me.raddatz.veyq.core.*` class, core's generated API (`openApiGenerateCore`),
 // core's migrations and the base `application.properties`. The root `backend/` composes it into the one fast-jar.
 plugins {
     id("veyq.module") // buildSrc: the Kotlin, all-open and java-library plugins and what every module repeats

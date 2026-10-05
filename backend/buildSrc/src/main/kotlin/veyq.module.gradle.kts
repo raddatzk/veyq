@@ -6,7 +6,7 @@
 // every version is declared once, in `gradle/libs.versions.toml`.
 //
 // **The jar is named by the group, never renamed.** Quarkus names a `quarkus-app/lib/main` entry
-// `<group>.<project name>.jar` — `com.veyq.core.jar`, `com.veyq.memories.jar` — so the group is set here and nowhere
+// `<group>.<project name>.jar` — `me.raddatz.veyq.core.jar`, `me.raddatz.veyq.memories.jar` — so the group is set here and nowhere
 // else. Never set an `archivesName`: Quarkus cannot map a renamed project's test-fixtures jar, and a
 // `testFixtures(project(…))` dependency then silently drops out of a `@QuarkusTest`'s application (measured
 // 2026-10-05, Quarkus 3.36.0). `scripts/validate_backend_module_graph.py` rule (f) holds both.
@@ -16,7 +16,7 @@ plugins {
     `java-library`
 }
 
-group = "com.veyq"
+group = "me.raddatz.veyq"
 
 repositories {
     mavenCentral()

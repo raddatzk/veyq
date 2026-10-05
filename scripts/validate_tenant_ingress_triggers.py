@@ -44,9 +44,9 @@ import sys
 import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-STORE = backend_tree.source_file("com.veyq.core.admin.tenant.TenantStore")
-HANDLER = backend_tree.source_file("com.veyq.core.admin.tenant.TenantHandler")
-PROJECTOR = backend_tree.source_file("com.veyq.core.tenant.TenantIngressProjector")
+STORE = backend_tree.source_file("me.raddatz.veyq.core.admin.tenant.TenantStore")
+HANDLER = backend_tree.source_file("me.raddatz.veyq.core.admin.tenant.TenantHandler")
+PROJECTOR = backend_tree.source_file("me.raddatz.veyq.core.tenant.TenantIngressProjector")
 
 # A function declaration at class-member indentation, in either file.
 FUN = re.compile(r"^\s{4}(?:(?:private|internal|public|override|@Transactional\s+)\s*)*fun\s+(\w+)\s*[(<]")

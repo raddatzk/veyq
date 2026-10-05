@@ -54,8 +54,8 @@ import sys
 import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-RESOLVER = backend_tree.source_file("com.veyq.core.tenant.TenantHostResolver")
-ACCOUNTS = backend_tree.source_file("com.veyq.core.identity.AccountStore")
+RESOLVER = backend_tree.source_file("me.raddatz.veyq.core.tenant.TenantHostResolver")
+ACCOUNTS = backend_tree.source_file("me.raddatz.veyq.core.identity.AccountStore")
 
 # A double-quoted literal's content, at the position a pattern leaves off. Kotlin allows `"…"` only here; a raw
 # `"""…"""` query is out of reach, see limit (b).

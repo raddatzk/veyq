@@ -22,7 +22,7 @@ module's `java-test-fixtures` source set (`src/testFixtures`, today `:core`'s), 
   on `:core` only — **never on another application** and never on the root. The root composes any module. A
   `testFixtures(project(…))` is reached over a test configuration only (`test*`, `testFixtures*`): over a runtime one
   they ship — measured 2026-10-05 with `implementation(testFixtures(project(":core")))` on the root: `quarkusBuild`
-  put `com.veyq.core-test-fixtures.jar` (with the `@Priority` fake `RecordingBlobStore`), JUnit and RestAssured into
+  put `me.raddatz.veyq.core-test-fixtures.jar` (with the `@Priority` fake `RecordingBlobStore`), JUnit and RestAssured into
   `quarkus-app/lib/main`, green. Gradle refuses `:core` → application as a cycle, but nothing in Gradle refuses `:apps:a` → `:apps:b`
   or `implementation(testFixtures(…))`.
 - **(c) Every module is indexed.** Each included project has `src/main/resources/META-INF/beans.xml`. Without it
@@ -36,10 +36,10 @@ module's `java-test-fixtures` source set (`src/testFixtures`, today `:core`'s), 
   (the `package` lines) and its generated API (the `SpecSet` packages of `buildSrc`'s `SpecSets.kt`, attributed to
   the project whose build file names that owner in `veyqOpenApi { owner("…") }`) — is declared by that project
   alone. Kotlin compiles a split package and Quarkus indexes both halves, so nothing fails; but the package no
-  longer says its owner, and the platform/application boundary the names carry (`com.veyq.core.*`,
-  `com.veyq.<application>.*`) is a lie for the half that sits elsewhere. Test code (`src/test`, `src/testFixtures`)
+  longer says its owner, and the platform/application boundary the names carry (`me.raddatz.veyq.core.*`,
+  `me.raddatz.veyq.<application>.*`) is a lie for the half that sits elsewhere. Test code (`src/test`, `src/testFixtures`)
   is not judged: core's fixtures declare their helpers inside core's packages on purpose
-  (`com.veyq.core.blobstore.RecordingBlobStore`).
+  (`me.raddatz.veyq.core.blobstore.RecordingBlobStore`).
 - **(e) The image builds every module.** The Dockerfile's `backend-build-base` stage copies each included project's
   `build.gradle.kts` — its warm-up `gradlew help` configures every included project and dies on one with no
   directory (measured: "Configuring project ':core' without an existing directory is not allowed") — and some stage
@@ -47,10 +47,10 @@ module's `java-test-fixtures` source set (`src/testFixtures`, today `:core`'s), 
   configures any project, and without it every module's `id("veyq.module")` is a plugin no repository has. Nothing in
   `./gradlew check` would show any of these gaps; only the release build would.
 - **(f) Every module jar is named by its group, and never renamed.** The convention plugin `veyq.module`
-  (`buildSrc/src/main/kotlin/veyq.module.gradle.kts`) sets `group = "com.veyq"`, every module applies it in its
+  (`buildSrc/src/main/kotlin/veyq.module.gradle.kts`) sets `group = "me.raddatz.veyq"`, every module applies it in its
   `plugins {}` block, no module's build file sets a group of its own, and no backend build file (`buildSrc`'s sources,
   the root's, a module's) sets an `archivesName`. Quarkus names a `quarkus-app/lib/main` entry
-  `<group>.<project name>.jar` (`com.veyq.core.jar`, `com.veyq.memories.jar`); without the group a module's jar there
+  `<group>.<project name>.jar` (`me.raddatz.veyq.core.jar`, `me.raddatz.veyq.memories.jar`); without the group a module's jar there
   would carry no namespace a third-party `core` artifact cannot share. An `archivesName` is red because it is silent:
   Quarkus cannot map a renamed project's `java-test-fixtures` jar, so `testImplementation(testFixtures(project(…)))`
   drops out of a `@QuarkusTest`'s application model with no error (measured 2026-10-05, Quarkus 3.36.0).
@@ -121,7 +121,7 @@ BACKEND = backend_tree.BACKEND
 SETTINGS = BACKEND / "settings.gradle.kts"
 BUILD_SRC = BACKEND / "buildSrc"
 MODULE_PLUGIN = BUILD_SRC / "src" / "main" / "kotlin" / "veyq.module.gradle.kts"
-SPEC_SETS = BUILD_SRC / "src" / "main" / "kotlin" / "com" / "veyq" / "buildlogic" / "SpecSets.kt"
+SPEC_SETS = BUILD_SRC / "src" / "main" / "kotlin" / "me" / "raddatz" / "veyq" / "buildlogic" / "SpecSets.kt"
 # `id("veyq.module")` in a build file's `plugins {}` block.
 APPLIES_MODULE_PLUGIN = re.compile(r'\bid\s*\(\s*"veyq\.module"\s*\)')
 CORE = ":core"
@@ -135,7 +135,7 @@ TEST_EDGE_CONFIGS = {"testImplementation", "testRuntimeOnly", "testCompileOnly",
                      "testFixturesApi", "testFixturesImplementation", "testFixturesRuntimeOnly",
                      "testFixturesCompileOnly"}
 FIXTURES_WRAPPER = "testFixtures"
-# `SpecSet(coreOwner, coreSpecs, "com.veyq.core.generated", …)` — the owner (a literal or a `val`) and the package root.
+# `SpecSet(coreOwner, coreSpecs, "me.raddatz.veyq.core.generated", …)` — the owner (a literal or a `val`) and the package root.
 SPEC_SET = re.compile(r'\bSpecSet\(\s*("?)(\w+)\1\s*,\s*\w+\s*,\s*"([\w.]+)"')
 OWNER_VAL = re.compile(r'\bval\s+(\w+)\s*=\s*"(\w+)"')
 OPENAPI_OWNER = re.compile(r'\bveyqOpenApi\s*\{\s*owner\s*\(\s*"(\w+)"\s*\)')
@@ -408,8 +408,8 @@ def rule_d() -> list[str]:
     for pkg, projects in sorted(homes.items()):
         if len(projects) > 1:
             errors.append(f"(d) package {pkg} is declared by {len(projects)} modules ({', '.join(sorted(projects))}) — "
-                          f"a package belongs to one module, the one its name says (core's `com.veyq.core.*`, an "
-                          f"application's `com.veyq.<application>.*`).")
+                          f"a package belongs to one module, the one its name says (core's `me.raddatz.veyq.core.*`, an "
+                          f"application's `me.raddatz.veyq.<application>.*`).")
     return errors
 
 
@@ -464,8 +464,8 @@ def rule_f(mods: list[str]) -> list[str]:
     """The module jars are named once, in the convention plugin, and nothing renames them."""
     errors = []
     convention = MODULE_PLUGIN.read_text(encoding="utf-8") if MODULE_PLUGIN.is_file() else ""
-    if not re.search(r'^group\s*=\s*"com\.veyq"', convention, re.MULTILINE):
-        errors.append(f"(f) {rel(MODULE_PLUGIN)} sets no `group = \"com.veyq\"` — a module jar would carry no group.")
+    if not re.search(r'^group\s*=\s*"me\.raddatz\.veyq"', convention, re.MULTILINE):
+        errors.append(f"(f) {rel(MODULE_PLUGIN)} sets no `group = \"me.raddatz.veyq\"` — a module jar would carry no group.")
     build_logic = sorted(p for p in BUILD_SRC.rglob("*.kt*") if not ({"build", ".gradle"} & set(p.relative_to(BUILD_SRC).parts)))
     for f in [*build_logic, BACKEND / "build.gradle.kts"]:
         if f.is_file() and ARCHIVES_NAME.search(mask(f.read_text(encoding="utf-8"))):

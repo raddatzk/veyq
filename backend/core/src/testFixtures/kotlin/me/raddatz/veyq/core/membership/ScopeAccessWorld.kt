@@ -1,0 +1,186 @@
+package me.raddatz.veyq.core.membership
+
+import me.raddatz.veyq.core.node.NodeEntity
+import me.raddatz.veyq.core.testing.TestBlob
+import me.raddatz.veyq.core.sharing.ShareWriteProof
+import me.raddatz.veyq.core.TestIds
+import me.raddatz.veyq.core.scope.ScopeEntity
+import me.raddatz.veyq.core.tenant.TenantEntity
+import me.raddatz.veyq.core.testing.TestFixtures.bearer
+import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
+import me.raddatz.veyq.core.testing.TestFixtures.seedUser
+import me.raddatz.veyq.core.testing.TestFixtures.shareKeysJson
+import io.quarkus.narayana.jta.QuarkusTransaction
+import io.restassured.RestAssured.given
+import io.restassured.http.ContentType
+import java.time.Instant
+import java.util.UUID
+import org.hamcrest.Matchers.notNullValue
+
+/**
+ * One seeded instance holding a space in every state the scope-access gate tells apart
+ * (uc.spaces.scope-access), each with real content in it — a node, a medium and its blob, a sub-bucket, a spare
+ * upload session, a share and a job leased to the space's owner. The content is what lets a probe's **control**
+ * mean something: a call by a member that is refused by a missing node answers 404 exactly like the gate's own
+ * refusal would, so a space without content would make every control indistinguishable from a refusal.
+ *
+ * The content is written through the API while every space is still live, and only then are the states flipped
+ * (the tenant suspended, the group put into its deletion grace) — so every row is one the product itself could
+ * have produced, and nothing here depends on the gate letting a seeding write through.
+ *
+ * - [live]: a GROUP in tenant A (ACTIVE), owned by [Space.ownerId], who is also tenant A's root OWNER.
+ * - [control]: a second GROUP exactly like [live], same owner — where a probe fires its control. A separate space,
+ *   so a negative the gate wrongly lets through (and that mutates, e.g. purges the medium) cannot take the
+ *   control's state with it: the control then still answers about the gate, not about a neighbour's side effect.
+ * - [deleting]: a GROUP in tenant A being deleted, owned by a root MEMBER of A.
+ * - [suspended]: a GROUP in tenant B, which is SUSPENDED, owned by B's root OWNER.
+ * - [stranger]: no row anywhere. [proposal]: an accepted root member of A with an unaccepted proposal on [live].
+ *   [proposalOnly]: the same proposal and no other row in A — what the retired `tenantId`-only belonging check
+ *   counted as a tenant member.
+ *
+ * **It needs Memories at runtime.** Every space holds a `MEMORY` node with a medium, a bucket and a share, so it is
+ * built only where Memories is part of the application under test — `:apps:memories`' tests and the root's
+ * whole-app `OperatorBlindProbeTest` — never by a `:core` test (core alone refuses the medium and the share). It lives
+ * in `:core`'s test fixtures because both of those use them; it names the kind as the wire literal, since those
+ * compile against `:core` only (cr-platform-gradle-modules step 8a).
+ */
+class ScopeAccessWorld(
+    /** The role of each space's seeded share — a profile that switches VIEWER links off seeds UPLOADER ones. */
+    private val shareRole: String = "VIEWER",
+) {
+
+    data class Space(
+        val tenantId: String,
+        val domain: String,
+        val scopeId: String,
+        val ownerId: String,
+        val nodeId: String,
+        val mediaId: String,
+        val blobId: String,
+        val bucketId: String,
+        val uploadId: String,
+        val shareId: String,
+        val jobId: String,
+    )
+
+    lateinit var live: Space
+    lateinit var control: Space
+    lateinit var deleting: Space
+    lateinit var suspended: Space
+    lateinit var stranger: String
+    lateinit var proposal: String
+    lateinit var proposalOnly: String
+
+    /** A `Host` no tenant claims — so a refusal on it can only come from the gate, never from `TenantSuspensionFilter`. */
+    val unclaimedHost = "unclaimed-${UUID.randomUUID()}.invalid"
+
+    fun build(): ScopeAccessWorld {
+        val tenantA = seedHostTenant()
+        val tenantB = seedHostTenant()
+        val ownerA = seedUser().also { member(it, tenantA.first, tenantA.first, MembershipEntity.OWNER) }
+        val deleter = seedUser().also { member(it, tenantA.first, tenantA.first, MembershipEntity.MEMBER) }
+        val ownerB = seedUser().also { member(it, tenantB.first, tenantB.first, MembershipEntity.OWNER) }
+
+        live = seedSpace(tenantA, ownerA)
+        control = seedSpace(tenantA, ownerA)
+        deleting = seedSpace(tenantA, deleter)
+        suspended = seedSpace(tenantB, ownerB)
+
+        stranger = seedUser()
+        proposal = seedUser().also {
+            member(it, tenantA.first, tenantA.first, MembershipEntity.MEMBER)
+            proposal(it, tenantA.first, live.scopeId)
+        }
+        proposalOnly = seedUser().also { proposal(it, tenantA.first, live.scopeId) }
+
+        QuarkusTransaction.requiringNew().run {
+            TenantEntity.update("status = ?1 where id = ?2", TenantEntity.SUSPENDED, tenantB.first)
+            ScopeEntity.update("deletedAt = ?1 where id = ?2", Instant.now(), deleting.scopeId)
+        }
+        return this
+    }
+
+    /** A tenant with its root scope; returns (tenantId, domain). */
+    private fun seedHostTenant(): Pair<String, String> {
+        val domain = "t-${UUID.randomUUID()}.example.com"
+        return seedTenant(domain = domain) to domain
+    }
+
+    /** A GROUP owned by [ownerId], with content written through the API as its owner. */
+    private fun seedSpace(tenant: Pair<String, String>, ownerId: String): Space {
+        val scopeId = UUID.randomUUID().toString()
+        val nodeId = UUID.randomUUID().toString()
+        QuarkusTransaction.requiringNew().run {
+            ScopeEntity().apply {
+                id = scopeId; tenantId = tenant.first; kind = ScopeEntity.GROUP; encryptedName = B64; createdAt = Instant.now()
+            }.persist()
+            NodeEntity().apply {
+                id = nodeId; this.scopeId = scopeId; parentId = scopeId; kind = "MEMORY"
+                encryptedName = B64; slugToken = "c2x1Zw$nodeId".take(120); orderIndex = 0
+                wrappedContentKey = B64; createdAt = Instant.now()
+            }.persist()
+        }
+        member(ownerId, tenant.first, scopeId, MembershipEntity.OWNER)
+        val auth = bearer(ownerId)
+
+        val mediaId = TestIds.uuid()
+        val completed = start(auth, scopeId, mediaId)
+        val done = given().header("Authorization", auth).contentType(ContentType.JSON)
+            .body("""{"items":[{"mediaId":"$mediaId","originalUploadId":"$completed","nodeId":"$nodeId"}]}""")
+            .`when`().post("/api/scopes/$scopeId/media-batch")
+            .then().statusCode(200).body("results[0].mediaId", notNullValue()).extract()
+        val bucketId = given().header("Authorization", auth).contentType(ContentType.JSON)
+            .body("""{"bucketId":"${TestIds.uuid()}","sealedName":"$B64"}""")
+            .`when`().post("/api/scopes/$scopeId/nodes/$nodeId/buckets")
+            .then().statusCode(200).extract().path<String>("bucketId")
+        val shareId = given().header("Authorization", auth).contentType(ContentType.JSON)
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"$shareRole",${shareKeysJson(shareRole, nodeId, B64)},"sealedName":"$B64"}""")
+            .`when`().post("/api/shares")
+            .then().statusCode(201).extract().path<String>("shareId")
+        given().header("Authorization", auth).contentType(ContentType.JSON)
+            .body("""{"scopeId":"$scopeId","capabilityTag":"$JOB_TAG","sealedBody":"$B64"}""")
+            .`when`().post("/api/tasks/enqueue").then().statusCode(201)
+        val jobId = given().header("Authorization", auth).contentType(ContentType.JSON)
+            .body("""{"capabilityTags":["$JOB_TAG"],"scopeId":"$scopeId"}""")
+            .`when`().post("/api/tasks/claim")
+            .then().statusCode(200).extract().path<String>("jobId")
+
+        return Space(
+            tenantId = tenant.first, domain = tenant.second, scopeId = scopeId, ownerId = ownerId, nodeId = nodeId,
+            mediaId = done.path("results[0].mediaId"), blobId = done.path("results[0].blobId"), bucketId = bucketId,
+            uploadId = start(auth, scopeId, TestIds.uuid()), shareId = shareId, jobId = jobId,
+        )
+    }
+
+    private fun start(auth: String, scopeId: String, mediaId: String): String =
+        given().header("Authorization", auth).contentType(ContentType.JSON)
+            .body("""{"items":[${TestBlob.SMALL.declare(B64, ownerId = mediaId)}]}""")
+            .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
+            .then().statusCode(200).extract().path("results[0].uploadId")
+
+    /** An accepted, granted membership. */
+    private fun member(userId: String, tenantId: String, scopeId: String, role: String) =
+        QuarkusTransaction.requiringNew().run {
+            MembershipEntity().apply {
+                id = UUID.randomUUID().toString(); this.userId = userId; this.tenantId = tenantId
+                this.scopeId = scopeId; this.role = role; wrappedGrant = B64; createdAt = Instant.now()
+            }.persist()
+        }
+
+    /** An unaccepted consent proposal (ADR 0014 §5): grant-less, carrying only the sealed name-key. */
+    private fun proposal(userId: String, tenantId: String, scopeId: String) =
+        QuarkusTransaction.requiringNew().run {
+            MembershipEntity().apply {
+                id = UUID.randomUUID().toString(); this.userId = userId; this.tenantId = tenantId
+                this.scopeId = scopeId; role = MembershipEntity.MEMBER; pendingConsent = true
+                sealedNameKey = B64; createdAt = Instant.now()
+            }.persist()
+        }
+
+    companion object {
+        const val B64 = "AQ=="
+
+        /** A client-originated (non-structural) capability tag — any value but grant-delivery's may be enqueued. */
+        const val JOB_TAG = "9f3a1c04"
+    }
+}

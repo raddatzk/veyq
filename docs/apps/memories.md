@@ -10,7 +10,7 @@ direction only (see the end).
 - **Node kinds `MEMORY` and `CHAPTER`.** `FOLDER` is the platform's (`enum: [FOLDER, MEMORY, CHAPTER]`, the
   `NodeKind` of `contracts/api/_common.openapi.yaml`, which core's specs alias).
 - **Contracts:** `contracts/api/memories/` (`media.openapi.yaml`, `favorites.openapi.yaml`), generated into
-  `com.veyq.memories.generated`; the blob transfer an upload runs on is core's `contracts/api/blob.openapi.yaml`.
+  `me.raddatz.veyq.memories.generated`; the blob transfer an upload runs on is core's `contracts/api/blob.openapi.yaml`.
 - **Keys:** `K_mem` per Memory (the share grain) and `K_blob` per blob under it
   ([ADR 0012](../decisions/0012-content-key-hierarchy.md)). These derive as they always have, the documented
   exemption to the application-id context ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Decision 9).
@@ -35,11 +35,11 @@ direction only (see the end).
 
 ## How far it is separated
 
-Measured 2026-10-05 (`ls backend/core/src/main/kotlin/com/veyq/core backend/apps/memories/src/main/kotlin/com/veyq/memories`):
+Measured 2026-10-05 (`ls backend/core/src/main/kotlin/me/raddatz/veyq/core backend/apps/memories/src/main/kotlin/me/raddatz/veyq/memories`):
 **the backend is.** Memories is the Gradle module `:apps:memories` (`backend/apps/memories`), depending on `:core`
 and never the reverse; the root `backend/` composes both into the one fast-jar. Every class lives in its owner's
-package — the platform in `com.veyq.core` (the node tree in `core.content`/`core.node`, sharing in `core.sharing`),
-Memories in `com.veyq.memories` (`media`, `favorites`, `itemfavorites`, `node`) — and core reaches Memories only
+package — the platform in `me.raddatz.veyq.core` (the node tree in `core.content`/`core.node`, sharing in `core.sharing`),
+Memories in `me.raddatz.veyq.memories` (`media`, `favorites`, `itemfavorites`, `node`) — and core reaches Memories only
 through the interfaces Memories implements: it attaches its media through `UploadCompletion`, measures a link's
 contributed blobs through `UploadAdmission`, places its `MEMORY` and `CHAPTER` through `NodeKindRules` (core places
 only `FOLDER`) and takes guest writes through `ShareGuestWrites`. Memories' tests run in `:apps:memories`, beside the
