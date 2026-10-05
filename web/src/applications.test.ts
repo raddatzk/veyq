@@ -2,14 +2,14 @@
 import { describe, it, expect } from 'vitest'
 import { registerApplications } from './applications'
 import { registry } from './core/applications/registry'
-import { NodeKind } from './api/generated/content'
+import { MEMORY_KIND, CHAPTER_KIND } from './features/memory/kinds'
 import { favoritesStore } from './features/memory/favoritesStore'
 
 // `src/test/setup.ts` has already called registerApplications() once for this file, exactly as main.ts does.
 describe('composition root', () => {
   it('registers the Memories kinds into the real registry', () => {
-    expect(registry.kind(NodeKind.Memory)).toMatchObject({ supported: true, shareable: true })
-    expect(registry.kind(NodeKind.Chapter)).toMatchObject({ supported: true, shareable: false })
+    expect(registry.kind(MEMORY_KIND)).toMatchObject({ supported: true, shareable: true })
+    expect(registry.kind(CHAPTER_KIND)).toMatchObject({ supported: true, shareable: false })
   })
 
   // The rotation hook is REQUIRED (the registry's header): this is the test that goes red when the composition root

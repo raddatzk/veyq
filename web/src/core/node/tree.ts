@@ -19,7 +19,8 @@ import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { contentApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
-import { NodeKind, type NodeSummary, type TrashedNodeSummary } from '../../api/generated/content'
+import type { NodeSummary, TrashedNodeSummary } from '../../api/generated/content'
+import { FOLDER_KIND, type NodeKind } from './kind'
 import { writeKey, keyAt, type EpochKeys } from '../../features/spaces/epochs'
 import { slugify } from '../../shared/naming'
 import { expectMintedId } from './mintedId'
@@ -91,7 +92,7 @@ export async function createFolder(
       createNodeRequest: {
         nodeId: node.nodeId,
         parentId: parentId ?? undefined,
-        kind: NodeKind.Folder,
+        kind: FOLDER_KIND,
         encryptedName: sealName(scopeKey, node, name),
         slugToken: slugTokenFor(scopeKey, parentSlot, name),
         orderIndex: 0,

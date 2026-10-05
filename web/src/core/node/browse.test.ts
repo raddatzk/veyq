@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { childrenOf, breadcrumbOf, nodeById } from './browse'
 import { TENANT_SCOPE } from './location'
-import { NodeKind } from '../../api/generated/content'
+import { FOLDER_KIND, type NodeKind } from './kind'
+import { MEMORY_KIND, CHAPTER_KIND } from '../../features/memory/kinds'
 import type { TreeNode } from './tree'
 
 const PERSONAL_SCOPE = '~me'
@@ -12,42 +13,42 @@ function node(over: Partial<TreeNode> & Pick<TreeNode, 'id' | 'kind'>): TreeNode
 
 // A small tree: root has folder "Trips" + memory "Solo"; "Trips" holds memory "Italy" + folder "2025".
 const tree: TreeNode[] = [
-  node({ id: 'trips', kind: NodeKind.Folder, name: 'Trips', orderIndex: 1 }),
-  node({ id: 'solo', kind: NodeKind.Memory, name: 'Solo', orderIndex: 0 }),
-  node({ id: 'italy', kind: NodeKind.Memory, name: 'Italy', parentId: 'trips' }),
-  node({ id: '2025', kind: NodeKind.Folder, name: '2025', parentId: 'trips' }),
-  node({ id: 'day1', kind: NodeKind.Chapter, name: 'Day 1', parentId: 'italy', orderIndex: 0 }),
-  node({ id: 'day2', kind: NodeKind.Chapter, name: 'Day 2', parentId: 'italy', orderIndex: 1 }),
+  node({ id: 'trips', kind: FOLDER_KIND, name: 'Trips', orderIndex: 1 }),
+  node({ id: 'solo', kind: MEMORY_KIND, name: 'Solo', orderIndex: 0 }),
+  node({ id: 'italy', kind: MEMORY_KIND, name: 'Italy', parentId: 'trips' }),
+  node({ id: '2025', kind: FOLDER_KIND, name: '2025', parentId: 'trips' }),
+  node({ id: 'day1', kind: CHAPTER_KIND, name: 'Day 1', parentId: 'italy', orderIndex: 0 }),
+  node({ id: 'day2', kind: CHAPTER_KIND, name: 'Day 2', parentId: 'italy', orderIndex: 1 }),
 ]
 
 describe('childrenOf', () => {
   it('splits a level into folders + per-kind buckets, ordered', () => {
     const root = childrenOf(tree, null)
     expect(root.folders.map((n) => n.name)).toEqual(['Trips'])
-    expect(root.byKind.get(NodeKind.Memory)?.map((n) => n.name)).toEqual(['Solo'])
+    expect(root.byKind.get(MEMORY_KIND)?.map((n) => n.name)).toEqual(['Solo'])
 
     const inTrips = childrenOf(tree, 'trips')
     expect(inTrips.folders.map((n) => n.name)).toEqual(['2025'])
-    expect(inTrips.byKind.get(NodeKind.Memory)?.map((n) => n.name)).toEqual(['Italy'])
+    expect(inTrips.byKind.get(MEMORY_KIND)?.map((n) => n.name)).toEqual(['Italy'])
   })
 
   it('lists a Memory’s chapters, ordered (cr-0060)', () => {
     const inItaly = childrenOf(tree, 'italy')
-    expect(inItaly.byKind.get(NodeKind.Chapter)?.map((n) => n.name)).toEqual(['Day 1', 'Day 2'])
+    expect(inItaly.byKind.get(CHAPTER_KIND)?.map((n) => n.name)).toEqual(['Day 1', 'Day 2'])
     expect(inItaly.folders).toEqual([]) // no folders inside a Memory
   })
 
   it('orders every bucket by orderIndex, then name — whatever the tree order', () => {
     const shuffled: TreeNode[] = [
-      node({ id: 'b', kind: NodeKind.Memory, name: 'B', orderIndex: 1 }),
-      node({ id: 'z', kind: NodeKind.Memory, name: 'Z', orderIndex: 0 }),
-      node({ id: 'a', kind: NodeKind.Memory, name: 'A', orderIndex: 1 }),
-      node({ id: 'f2', kind: NodeKind.Folder, name: 'F2', orderIndex: 2 }),
-      node({ id: 'f1', kind: NodeKind.Folder, name: 'F1', orderIndex: 2 }),
-      node({ id: 'f0', kind: NodeKind.Folder, name: 'F0', orderIndex: 0 }),
+      node({ id: 'b', kind: MEMORY_KIND, name: 'B', orderIndex: 1 }),
+      node({ id: 'z', kind: MEMORY_KIND, name: 'Z', orderIndex: 0 }),
+      node({ id: 'a', kind: MEMORY_KIND, name: 'A', orderIndex: 1 }),
+      node({ id: 'f2', kind: FOLDER_KIND, name: 'F2', orderIndex: 2 }),
+      node({ id: 'f1', kind: FOLDER_KIND, name: 'F1', orderIndex: 2 }),
+      node({ id: 'f0', kind: FOLDER_KIND, name: 'F0', orderIndex: 0 }),
     ]
     const root = childrenOf(shuffled, null)
-    expect(root.byKind.get(NodeKind.Memory)?.map((n) => n.name)).toEqual(['Z', 'A', 'B'])
+    expect(root.byKind.get(MEMORY_KIND)?.map((n) => n.name)).toEqual(['Z', 'A', 'B'])
     expect(root.folders.map((n) => n.name)).toEqual(['F0', 'F1', 'F2'])
   })
 
@@ -55,7 +56,7 @@ describe('childrenOf', () => {
     const odd = [...tree, node({ id: 'x', kind: 'FUTURE' as NodeKind, name: 'X' })]
     const root = childrenOf(odd, null)
     expect(root.byKind.get('FUTURE' as NodeKind)?.map((n) => n.name)).toEqual(['X'])
-    expect(root.byKind.get(NodeKind.Memory)?.map((n) => n.name)).toEqual(['Solo'])
+    expect(root.byKind.get(MEMORY_KIND)?.map((n) => n.name)).toEqual(['Solo'])
   })
 
   it('returns empty for a leaf: no folders, no kind keys at all', () => {

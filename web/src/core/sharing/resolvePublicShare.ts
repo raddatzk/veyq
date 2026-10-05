@@ -19,7 +19,7 @@ import { b64std, fromB64std, fromB64url } from '@veyq/crypto/base64'
 import { publicSharesApi } from '../../api/client'
 import { isHttpStatus, HttpStatus } from '../../shared/httpError'
 import type { LocaleMap } from '../../shared/ui/localeMap'
-import type { NodeKind } from '../../api/generated/content'
+import type { NodeKind } from '../node/kind'
 import type { ShareRole, PublicShare, ShareTerms } from '../../api/generated/sharing'
 
 // The seals under `K_share` name their purpose only (ADR 0072 Decision 2): `K_share` is unique to one share, so the

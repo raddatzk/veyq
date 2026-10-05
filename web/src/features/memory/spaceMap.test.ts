@@ -12,7 +12,8 @@ import { collectLocatedPins, clusterPins, sortPinsByStartDate, type LocatedPin }
 import type { MemoryDate } from './memoryDate'
 import { sealNodeMeta } from './nodeMeta'
 import type { MemoryLocation } from './memoryLocation'
-import { NodeKind } from '../../api/generated/content'
+import { FOLDER_KIND, type NodeKind } from '../../core/node/kind'
+import { MEMORY_KIND, CHAPTER_KIND } from './kinds'
 import type { TreeNode } from '../../core/node/tree'
 import { epochsOf } from '../spaces/epochsTestUtil'
 import * as v1 from '@veyq/crypto/v1'
@@ -58,7 +59,7 @@ function content(
 }
 
 const folder = (label: string, parentLabel: string | null = null): TreeNode => ({
-  id: uid(label), kind: NodeKind.Folder, parentId: parentLabel === null ? null : uid(parentLabel), orderIndex: 0,
+  id: uid(label), kind: FOLDER_KIND, parentId: parentLabel === null ? null : uid(parentLabel), orderIndex: 0,
   epoch: 0, name: label, wrappedContentKey: null, wrappedMeta: null, metaVersion: 0,
 })
 
@@ -71,16 +72,16 @@ describe('collectLocatedPins', () => {
   // memMoved (its located meta was sealed for another node — refused, never shown at that node's place)
   const fA = folder('fA')
   const fB = folder('fB')
-  const memA = content('memA', NodeKind.Memory, 'fA', scopeKey, { location: located(1, 1) })
-  const chapA = content('chapA', NodeKind.Chapter, 'memA', memA.key, { location: located(2, 2) })
-  const memB = content('memB', NodeKind.Memory, 'fB', scopeKey, { location: located(3, 3) })
-  const memRoot = content('memRoot', NodeKind.Memory, null, scopeKey, { location: located(4, 4) })
-  const memPending = content('memPending', NodeKind.Memory, null, scopeKey, { location: pendingAuto })
-  const memLocked = content('memLocked', NodeKind.Memory, null, scopeKey, {
+  const memA = content('memA', MEMORY_KIND, 'fA', scopeKey, { location: located(1, 1) })
+  const chapA = content('chapA', CHAPTER_KIND, 'memA', memA.key, { location: located(2, 2) })
+  const memB = content('memB', MEMORY_KIND, 'fB', scopeKey, { location: located(3, 3) })
+  const memRoot = content('memRoot', MEMORY_KIND, null, scopeKey, { location: located(4, 4) })
+  const memPending = content('memPending', MEMORY_KIND, null, scopeKey, { location: pendingAuto })
+  const memLocked = content('memLocked', MEMORY_KIND, null, scopeKey, {
     location: located(9, 9),
     wrapUnder: v1.randomBytes(32), // K_mem sealed under a key we don't have → nodeContentKey can't chain it
   })
-  const memMoved = content('memMoved', NodeKind.Memory, null, scopeKey, { location: located(7, 7), metaFor: 'memRoot' })
+  const memMoved = content('memMoved', MEMORY_KIND, null, scopeKey, { location: located(7, 7), metaFor: 'memRoot' })
   const tree: TreeNode[] = [
     fA, fB, memA.node, chapA.node, memB.node, memRoot.node, memPending.node, memLocked.node, memMoved.node,
   ]
@@ -119,7 +120,7 @@ describe('clusterPins', () => {
   // A trivial linear projection: 1 degree = 1 pixel, so pixel distance == degree distance (Leaflet-free).
   const project = (lat: number, lng: number) => ({ x: lng, y: lat })
   const pin = (id: string, lat: number, lng: number): LocatedPin => ({
-    node: { id, kind: NodeKind.Memory, name: id, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: null, wrappedMeta: null, metaVersion: 0 },
+    node: { id, kind: MEMORY_KIND, name: id, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: null, wrappedMeta: null, metaVersion: 0 },
     location: { name: id, nameSource: 'manual', derivedMode: 'fixed', derived: { lat, lng } },
     date: null,
   })
@@ -151,7 +152,7 @@ describe('clusterPins', () => {
 
 describe('sortPinsByStartDate', () => {
   const dated = (id: string, from?: string): LocatedPin => ({
-    node: { id, kind: NodeKind.Memory, name: id, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: null, wrappedMeta: null, metaVersion: 0 },
+    node: { id, kind: MEMORY_KIND, name: id, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: null, wrappedMeta: null, metaVersion: 0 },
     location: { name: id, nameSource: 'manual', derivedMode: 'fixed', derived: { lat: 0, lng: 0 } },
     date: from ? ({ mode: 'single', from, to: from } as MemoryDate) : null,
   })

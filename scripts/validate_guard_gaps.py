@@ -132,7 +132,9 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   49 a `core/node/` file naming the generated `NodeKind.MEMORY` in code — rejected: `validate_kernel_imports_no_slices`
      holds core to the node kind `FOLDER`; the kinds Memories owns are answered through `NodeKindRules` and the other
      seams (ADR 0079). The import rule cannot see this edge — a kind is a value, not a package, and the generated
-     enum is no Memories package. A KDoc naming the kind sits beside it and must not be what is read
+     enum it is spelled through was no Memories package. A KDoc naming the kind sits beside it and must not be what
+     is read. The contract's `NodeKind` is an open token since cr-platform-contract-split slice 4 and generates no
+     enum; the forgery is text, so it still pins that spelling, and a literal `"MEMORY"` is read by the same rule
   50 a forged second application (`backend/apps/other`, included, copied by the Dockerfile, indexed) depending on
      `:apps:memories` — rejected: `validate_backend_module_graph` rule (b) — an application never depends on another
      (ADR 0079 Decision 4). Gradle accepts that edge without complaint, and no real second application exists yet,
@@ -161,6 +163,10 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   57 `:core` declaring `testFixturesImplementation(project(":apps:memories"))` — rejected:
      `validate_backend_module_graph` rule (b). Gradle sees no cycle (the fixtures are not core's main code), so it
      builds, and Memories would boot inside every `:core` test — which must boot core alone (`CoreAloneSliceTest`)
+  58 `EnqueueRequest.capabilityTag` loses its annotation, its `$ref` to the bounded scalar `CapabilityTag` left
+     standing — rejected: `validate_request_bounds` reads a `$ref`'d scalar's bounds as the property's, because the
+     generator inlines it as a String and emits none of them. Before that, this property took any tag (measured:
+     `9F3A1C04` was enqueued, 201) while its schema said lowercase hex of at most 64
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
 (a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
 which the Gradle module split retired: `:core` has no edge to an application, so either shape fails
@@ -537,6 +543,12 @@ def forge_request_annotation_drifts(root: pathlib.Path) -> str:
     return "MoveMediaRequest.mediaIds annotated max 257 over maxItems 256 (must be REJECTED)"
 
 
+def forge_request_scalar_ref_unannotated(root: pathlib.Path) -> str:
+    _in_request_property(root, "tasks.openapi.yaml", "EnqueueRequest", "capabilityTag",
+                         " @field:jakarta.validation.constraints.Pattern(regexp = \"[0-9a-f]+\")", "")
+    return "EnqueueRequest.capabilityTag's @Pattern removed, its $ref'd scalar's pattern kept (must be REJECTED)"
+
+
 def forge_ratelimit_state_under_another_name(root: pathlib.Path) -> str:
     # validate_ratelimit_core matches on the FILENAME (*Limiter*/*Counter*), so a limiter that avoids both name
     # parts holds its own map unseen. This is the whole reach of a buildless grep — pinned, not fixed: enforcing a
@@ -774,8 +786,8 @@ def forge_core_declares_application_package(root: pathlib.Path) -> str:
 
 
 def forge_core_names_memory_kind(root: pathlib.Path) -> str:
-    # A core rule about a Memories kind, spelled through the generated enum (the import is of the contract's
-    # package, which the import rule cannot object to). The KDoc beside it names the kind too; only the code line counts.
+    # A core rule about a Memories kind, spelled through a generated enum (the import is of the contract's
+    # package, which the import rule cannot object to; the contract generates no such enum since `NodeKind` opened). The KDoc beside it names the kind too; only the code line counts.
     f = root / CORE_NODE_FORGERY
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text("package me.raddatz.veyq.core.node\n\n"
@@ -1063,6 +1075,7 @@ CASES = [
     ("55", "validate_backend_module_graph.py", forge_fixtures_on_runtime_classpath, False),
     ("56", "validate_backend_module_graph.py", forge_fixtures_not_indexed, False),
     ("57", "validate_backend_module_graph.py", forge_core_fixtures_depend_on_application, False),
+    ("58", "validate_request_bounds.py", forge_request_scalar_ref_unannotated, False),
 ]
 
 

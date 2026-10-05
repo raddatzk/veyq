@@ -19,7 +19,6 @@ import { listMediaPage, openOriginal, unsealMeta, setMediaMeta, listBuckets, ope
 import { publicSharesApi, blobApi } from '../../api/client'
 import { mediaApi, bucketsApi } from './api'
 import {
-  NodeKind,
   ShareRole,
   type PublicShare,
   type ShareBlobUploadResultItem,
@@ -27,6 +26,7 @@ import {
   type ShareMediaBatchResponse,
   type SharingApi,
 } from '../../api/generated/sharing'
+import { MEMORY_KIND } from './kinds'
 import type { MediaApi, MediaListPage } from '../../api/generated/media'
 import type { BlobDownloadsBatchResponse, PresignedUrl } from '../../api/generated/blob'
 import { fakeApi, stubApi } from '../../test/apiMock'
@@ -221,7 +221,7 @@ describe('a WRITE_ONLY guest never holds K_mem (ADR 0031 point 7)', () => {
       role: ShareRole.Read, passwordRequired: false, scopeId: SCOPE_ID, nodeId: NODE_ID,
       wrap: b64std(v1.seal({ purpose: 'share-key' }, kViewer, kMem)),
       sealedName: b64std(v1.seal({ purpose: 'share-memory-name' }, kViewer, v1.utf8('Hochzeit'))),
-      nodes: [{ id: NODE_ID, kind: NodeKind.Memory, epoch: 0, sealedDropPrivateKey }],
+      nodes: [{ id: NODE_ID, kind: MEMORY_KIND, epoch: 0, sealedDropPrivateKey }],
       media: [{ ...row, nodeId: NODE_ID, identityId }],
       identities: [{ identityId, wrappedIdentityKey: identity.wrappedIdentityKey! }],
     } satisfies PublicShare

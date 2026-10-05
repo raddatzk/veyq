@@ -20,8 +20,9 @@ What it asserts:
      `ScopeId`/`TenantId` once, which left the `NodeId` and `MediaId` copies free to drift unseen — and the
      contracts split by owner puts each such pair into two owners' specs, where a drift is a wire change between a
      core and an application route. A parameter defined once is no copy and is not checked.
-  3. Every copy of a shared enum (node-kind, derivative-kind, membership-role, credential-method, suite-version)
-     carries the SAME values. An enum that shares **≥1** value with a canonical family but is not exactly it —
+  3. Every copy of a shared enum (derivative-kind, membership-role, credential-method, suite-version) carries the
+     SAME values. (The node kind left the list when it opened to a bounded token, cr-platform-contract-split
+     slice 4: a token is no value set, and its one definition is `_common`'s `NodeKind`.) An enum that shares **≥1** value with a canonical family but is not exactly it —
      nor a declared intentional variant — is drift. **Principled limit:** a *full rename* (0 shared values) is
      undetectable by value — it is indistinguishable from an unrelated domain enum, so no value-based check can
      see it. This ≥1-overlap rule is the hardening over the original ≥2 heuristic, which silently missed a drop
@@ -54,7 +55,6 @@ API = contract_specs.API
 # Shared enum families: canonical (sorted) value set. An enum that shares >=1 value with a family but is not
 # exactly it — nor a declared intentional variant — is drift. (A 0-overlap full rename is a principled blind spot.)
 CANONICAL_ENUMS: dict[str, tuple[str, ...]] = {
-    "node-kind": ("CHAPTER", "FOLDER", "MEMORY"),
     "derivative-kind": ("PREVIEW", "THUMBNAIL"),
     "membership-role": ("MEMBER", "OWNER"),
     "credential-method": ("DEVICE", "DEVICE_KEY", "PASSKEY", "PASSWORD", "RECOVERY"),

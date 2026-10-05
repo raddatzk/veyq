@@ -104,7 +104,10 @@
   object, or a list of objects, whose schema carries any constraint also carries
   `@field:jakarta.validation.Valid`** — validation does not descend without it, so every annotation below it is
   dead. That is how `BlobUploadsBatchRequest.items` enforced neither its `maxItems: 256` nor any item's
-  `wrappedBlobKey` checks. Parameters are exempt: the `jaxrs-spec` API generator derives their annotations
+  `wrappedBlobKey` checks. **A property that `$ref`s a scalar component schema** (`NodeKind`, `CapabilityTag`) gets
+  the scalar inlined as a `String` with none of its bounds, so an annotation carries the target's bounds: beside the
+  `$ref` for one request field, or on the target, which the generator copies onto every field `$ref`ing it that has
+  none of its own (a sibling annotation replaces the target's, it does not add to it). Parameters are exempt: the `jaxrs-spec` API generator derives their annotations
   itself (`useBeanValidation`). Enforced by `scripts/validate_request_bounds.py`. On a list, Hibernate
   Validator logs `HV000271` (a container-level `@Valid` is deprecated in favour of the type argument) — which
   the `kotlin` generator cannot place, so the field form stays; `MediaCoreSliceTest.startBlobUploadsValidatesInsideEachItem`

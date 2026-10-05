@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
 import { defineComponent } from 'vue'
 import { createRegistry, DROP_SHARE, type LifecycleHooks } from './registry'
-import { NodeKind } from '../../api/generated/content'
+import { FOLDER_KIND, type NodeKind } from '../node/kind'
+import { MEMORY_KIND, CHAPTER_KIND } from '../../features/memory/kinds'
 
 const Stub = defineComponent({ template: '<div />' })
 const Other = defineComponent({ template: '<span />' })
@@ -9,38 +10,60 @@ const Other = defineComponent({ template: '<span />' })
 describe('registry: kinds', () => {
   it('holds only the platform kind (FOLDER) until an application registers its own', () => {
     const r = createRegistry()
-    expect(r.kind(NodeKind.Folder)).toMatchObject({ supported: true, icon: 'pi pi-folder', shareable: false })
-    expect(r.kind(NodeKind.Memory)).toEqual({ supported: false, kind: NodeKind.Memory })
+    expect(r.kind(FOLDER_KIND)).toMatchObject({ supported: true, icon: 'pi pi-folder', shareable: false })
+    expect(r.kind(MEMORY_KIND)).toEqual({ supported: false, kind: MEMORY_KIND })
   })
 
   it('is write-once: registering the same kind twice throws and keeps the first descriptor', () => {
     const r = createRegistry()
-    r.registerKind({ kind: NodeKind.Memory, icon: 'pi pi-a', shareable: true })
-    expect(() => r.registerKind({ kind: NodeKind.Memory, icon: 'pi pi-b', shareable: false })).toThrow(/already registered/)
-    expect(r.kind(NodeKind.Memory)).toMatchObject({ supported: true, icon: 'pi pi-a', shareable: true })
+    r.registerKind({ kind: MEMORY_KIND, icon: 'pi pi-a', shareable: true })
+    expect(() => r.registerKind({ kind: MEMORY_KIND, icon: 'pi pi-b', shareable: false })).toThrow(/already registered/)
+    expect(r.kind(MEMORY_KIND)).toMatchObject({ supported: true, icon: 'pi pi-a', shareable: true })
   })
 
   it('refuses an application re-registering the platform FOLDER', () => {
     const r = createRegistry()
-    expect(() => r.registerKind({ kind: NodeKind.Folder, icon: 'x', shareable: true })).toThrow(/already registered/)
-    expect(r.kind(NodeKind.Folder)).toMatchObject({ icon: 'pi pi-folder', shareable: false })
+    expect(() => r.registerKind({ kind: FOLDER_KIND, icon: 'x', shareable: true })).toThrow(/already registered/)
+    expect(r.kind(FOLDER_KIND)).toMatchObject({ icon: 'pi pi-folder', shareable: false })
   })
 
   it('resolves an unregistered kind to the explicit unsupported result, never undefined', () => {
     const r = createRegistry()
-    const got = r.kind(NodeKind.Chapter)
+    const got = r.kind(CHAPTER_KIND)
     expect(got).toBeDefined()
     expect(got.supported).toBe(false)
-    // A kind outside the closed enum (a newer server) is just as explicit.
+    // A kind of an application this build does not carry is just as explicit.
     expect(createRegistry().kind('FUTURE' as NodeKind)).toEqual({ supported: false, kind: 'FUTURE' })
+  })
+
+  // The kind is an open token, so no compiler lists the kinds any more: this answer is what keeps a kind nobody
+  // registered from rendering as anything but the explicit unsupported state (cr-platform-contract-split slice 4).
+  it('answers by the registered token only: an unregistered kind is unsupported, whatever its spelling', () => {
+    const r = createRegistry()
+    r.registerKind({ kind: 'EXPENSE', icon: 'pi pi-wallet', shareable: false })
+    expect(r.kind('EXPENSE')).toMatchObject({ supported: true, kind: 'EXPENSE', icon: 'pi pi-wallet' })
+    for (const unknown of ['INVOICE', 'expense', 'EXPENSES', '']) {
+      expect(r.kind(unknown)).toEqual({ supported: false, kind: unknown })
+    }
+    // Control: the platform's own kind is there without any registration.
+    expect(r.kind(FOLDER_KIND)).toMatchObject({ supported: true, kind: 'FOLDER' })
+  })
+
+  it('keeps the drop key outside the kind token space: no kind can claim its share body', () => {
+    // A kind token is upper-case (`_common` NodeKind); the drop key is lower-case, so the two never meet.
+    expect(/^[A-Z][A-Z0-9_]{0,15}$/.test(DROP_SHARE)).toBe(false)
+    expect(/^[A-Z][A-Z0-9_]{0,15}$/.test(FOLDER_KIND)).toBe(true)
+    const r = createRegistry()
+    r.claimShareBody(DROP_SHARE, Stub)
+    expect(r.shareBody(DROP_SHARE.toUpperCase())).toBeNull()
   })
 
   it('copies the descriptor: mutating the caller object afterwards does not change the registration', () => {
     const r = createRegistry()
-    const d = { kind: NodeKind.Memory, icon: 'pi pi-a', shareable: true }
+    const d = { kind: MEMORY_KIND, icon: 'pi pi-a', shareable: true }
     r.registerKind(d)
     d.shareable = false
-    expect(r.kind(NodeKind.Memory)).toMatchObject({ shareable: true })
+    expect(r.kind(MEMORY_KIND)).toMatchObject({ shareable: true })
   })
 })
 
@@ -67,31 +90,31 @@ describe('registry: slots', () => {
     const a = createRegistry()
     const b = createRegistry()
     a.claimSlot('shareDialog', Stub)
-    a.registerKind({ kind: NodeKind.Memory, icon: 'x', shareable: true })
+    a.registerKind({ kind: MEMORY_KIND, icon: 'x', shareable: true })
     expect(b.slot('shareDialog')).toBeNull()
-    expect(b.kind(NodeKind.Memory).supported).toBe(false)
+    expect(b.kind(MEMORY_KIND).supported).toBe(false)
   })
 })
 
 describe('registry: share bodies', () => {
   it('is empty until claimed: shareBody() is null, not undefined', () => {
     const r = createRegistry()
-    expect(r.shareBody(NodeKind.Memory)).toBeNull()
+    expect(r.shareBody(MEMORY_KIND)).toBeNull()
     expect(r.shareBody(DROP_SHARE)).toBeNull()
   })
 
   it('is single-claim per key: a second claim throws and the first body stays', () => {
     const r = createRegistry()
-    r.claimShareBody(NodeKind.Memory, Stub)
-    expect(() => r.claimShareBody(NodeKind.Memory, Other)).toThrow(/already claimed/)
-    expect(r.shareBody(NodeKind.Memory)).toBe(Stub)
+    r.claimShareBody(MEMORY_KIND, Stub)
+    expect(() => r.claimShareBody(MEMORY_KIND, Other)).toThrow(/already claimed/)
+    expect(r.shareBody(MEMORY_KIND)).toBe(Stub)
   })
 
   it('keeps the kind-less drop apart from every root kind: claiming one does not claim the other', () => {
     const r = createRegistry()
     r.claimShareBody(DROP_SHARE, Stub)
-    expect(r.shareBody(NodeKind.Memory)).toBeNull()
-    expect(() => r.claimShareBody(NodeKind.Memory, Other)).not.toThrow()
+    expect(r.shareBody(MEMORY_KIND)).toBeNull()
+    expect(() => r.claimShareBody(MEMORY_KIND, Other)).not.toThrow()
     expect(() => r.claimShareBody(DROP_SHARE, Other)).toThrow(/drop is already claimed/)
   })
 })

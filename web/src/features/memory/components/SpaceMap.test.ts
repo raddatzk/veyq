@@ -47,7 +47,7 @@ vi.mock('leaflet', () => ({ default: leaflet.L }))
 import { mount, flushPromises } from '@vue/test-utils'
 import SpaceMap from './SpaceMap.vue'
 import { setMapsConsent } from '../../../shared/state/useMapConfig'
-import { NodeKind } from '../../../api/generated/content'
+import { MEMORY_KIND } from '../kinds'
 import type { LocatedPin } from '../spaceMap'
 import { realI18n, t } from '../../../test/i18n'
 
@@ -56,7 +56,7 @@ const stubs = {
 }
 
 const pin = (id: string, name: string, lat: number, lng: number): LocatedPin => ({
-  node: { id, name, kind: NodeKind.Memory, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: null, wrappedMeta: null, metaVersion: 0 },
+  node: { id, name, kind: MEMORY_KIND, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: null, wrappedMeta: null, metaVersion: 0 },
   location: { name: `${name} place`, nameSource: 'manual', derivedMode: 'fixed', derived: { lat, lng } },
   date: null,
 })

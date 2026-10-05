@@ -9,7 +9,6 @@ import me.raddatz.veyq.core.generated.api.SharingApi
 import me.raddatz.veyq.core.generated.model.CreateShareIdentityRequest
 import me.raddatz.veyq.core.generated.model.CreateShareRequest
 import me.raddatz.veyq.core.generated.model.LocalizedMarkdown
-import me.raddatz.veyq.core.generated.model.NodeKind
 import me.raddatz.veyq.core.generated.model.PresignedUrl
 import me.raddatz.veyq.core.generated.model.PublicShare
 import me.raddatz.veyq.core.generated.model.ReissueShareRequest
@@ -269,7 +268,7 @@ class SharingResource(
 
     private fun toShareNode(n: ShareNodeRow) = ShareNode(
         id = UUID.fromString(n.id),
-        kind = NodeKind.decode(n.kind),
+        kind = n.kind,
         parentId = n.parentId?.let(UUID::fromString),
         orderIndex = n.orderIndex,
         epoch = n.epoch,

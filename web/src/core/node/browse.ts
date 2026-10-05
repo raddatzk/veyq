@@ -3,7 +3,7 @@
 import type { TreeNode } from './tree'
 import type { Crumb } from '../../app/breadcrumb'
 import { hashForNode } from './location'
-import { NodeKind } from '../../api/generated/content'
+import { FOLDER_KIND, type NodeKind } from './kind'
 
 const byOrder = (a: TreeNode, b: TreeNode): number => a.orderIndex - b.orderIndex || a.name.localeCompare(b.name)
 
@@ -22,7 +22,7 @@ export function childrenOf(tree: TreeNode[], parentId: string | null): Level {
   const byKind = new Map<NodeKind, TreeNode[]>()
   for (const n of tree) {
     if ((n.parentId ?? null) !== parentId) continue
-    if (n.kind === NodeKind.Folder) {
+    if (n.kind === FOLDER_KIND) {
       folders.push(n)
       continue
     }

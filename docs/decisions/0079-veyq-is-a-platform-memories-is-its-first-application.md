@@ -92,8 +92,9 @@ on their own.
   `kind` is an open, bounded token on the wire (`^[A-Z][A-Z0-9_]{0,15}$`). Core names `FOLDER` only; each
   application brings its kinds and their rules (`NodeKindRules`, the web registry). A kind no application claims
   is refused by the fail-closed seams, never by decoding. `PublicShare` carries the root's kind (inbox #329).
-  That is the target, not yet the code: today `NodeKind` is still the contract's closed enum and `PublicShare`
-  has no `rootKind` (*What core still knows of Memories*, below).
+  The token is the code: the backend carries the kind as a string and a request's shape is checked at the
+  boundary (400), the web types it as a string with core's one `FOLDER` constant. Not yet the code:
+  `PublicShare` has no `rootKind` (*What core still knows of Memories*, below).
 - **What the server learns grows by one fact.** The node `kind` is already a server-visible column; once
   further kinds exist it also tells the operator which applications a scope uses, and the rows, timestamps and
   sizes each kind produces. [security-model](../crosscutting/security-model.md) lists it.
@@ -190,8 +191,7 @@ on their own.
   means — every seam holds exactly core's own implementations, every refusal above holds, and the generic blob
   upload starts, windows and downloads — while the root's `ModuleCompositionTest` pins the composed sets.
   **What core still knows of Memories**, each a decision a later change takes, not an oversight (the decided
-  targets are the bullets above): the node `kind` is still the contract's closed `FOLDER`/`MEMORY`/`CHAPTER` enum,
-  which core's generated API decodes (so the convention is guarded, not typed; decided open, above); `veyq_node` carries Memories-flavoured columns in core's baseline (`cover_blob_id`,
+  targets are the bullets above): `veyq_node` carries Memories-flavoured columns in core's baseline (`cover_blob_id`,
   `cover_byte_size`, `media_revision`, `delete_revision` — moving a column is a schema change, not a rename);
   `ShareGuestWrites.supports` gates share *creation*, so core alone refuses every share and share policy is tested
   with an application present; the guest completion item is media-shaped (`CompleteItem`'s `mediaId`,
@@ -218,8 +218,10 @@ on their own.
   top-bar tray and the sidebar pins are single-claim slots shaped for Memories (the second application re-cuts them
   per kind); the root kind of a WRITE_ONLY share is unknown to the client (the unlocked response serves no nodes), so
   it renders in the one application that claimed the kind-less drop until `PublicShare` carries a `rootKind`
-  (inbox #329); the i18n catalog is one file and `styles/memory.css` is global; `NodeKind` is the generated closed
-  enum, so the convention that core never names `MEMORY`/`CHAPTER` is guarded, not typed.
+  (inbox #329); the i18n catalog is one file and `styles/memory.css` is global. The kind is a string token on both
+  sides, so that core never names `MEMORY`/`CHAPTER` is guarded (both kind rules read literals), not typed, and no
+  compiler lists the kinds: the registry's fail-closed answer and its tests carry what a closed enum's exhaustiveness
+  did.
   Docs describing the target say which of these they rely on.
 - **Guards move with the code, and the build is one of them.** On the backend, core → application is the
   compiler's (no edge, so no import) and every other direction is `validate_backend_module_graph.py`'s — including

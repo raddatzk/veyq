@@ -4,7 +4,7 @@
 //
 // The slots filled here (the level view, the create/rename dialog, the share dialog, the upload tray in the top bar,
 // the pinned rail in the sidebar, the public share body) are single-claim and Memories-shaped today: the next application's change request re-cuts them per kind (the registry's header).
-import { NodeKind } from '../../api/generated/content'
+import { MEMORY_KIND, CHAPTER_KIND } from './kinds'
 import { DROP_SHARE, type Registry } from '../../core/applications/registry'
 import MemoryDetailHost from './components/MemoryDetailHost.vue'
 import MemoryLevelHost from './components/MemoryLevelHost.vue'
@@ -18,8 +18,8 @@ import { memoriesLifecycle } from './lifecycle'
 export function registerMemories(registry: Registry): void {
   // A Memory is shareable (cr-0104); a chapter is a Memory of its own that opens the same detail but is not
   // shareable (the backend rejects a non-MEMORY share root). Both open to the gallery (cr-0060).
-  registry.registerKind({ kind: NodeKind.Memory, detail: MemoryDetailHost, icon: 'pi pi-images', shareable: true })
-  registry.registerKind({ kind: NodeKind.Chapter, detail: MemoryDetailHost, icon: 'pi pi-images', shareable: false })
+  registry.registerKind({ kind: MEMORY_KIND, detail: MemoryDetailHost, icon: 'pi pi-images', shareable: true })
+  registry.registerKind({ kind: CHAPTER_KIND, detail: MemoryDetailHost, icon: 'pi pi-images', shareable: false })
   registry.claimSlot('levelView', MemoryLevelHost)
   registry.claimSlot('nodeMutationDialog', NodeMutationDialog)
   registry.claimSlot('shareDialog', ShareDialog)
@@ -28,7 +28,7 @@ export function registerMemories(registry: Registry): void {
   // The public share page: a Memory share (viewer / contributor) is rooted at a MEMORY node; a WRITE_ONLY share's root
   // kind is unknown to the client (the unlocked response serves no nodes), so the one application that claims the
   // kind-less drop gets it — until `PublicShare` carries a `rootKind` (the registry's header).
-  registry.claimShareBody(NodeKind.Memory, MemoryShareBody)
+  registry.claimShareBody(MEMORY_KIND, MemoryShareBody)
   registry.claimShareBody(DROP_SHARE, MemoryShareBody)
   registry.registerLifecycle('memories', memoriesLifecycle)
 }

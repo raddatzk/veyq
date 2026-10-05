@@ -87,7 +87,8 @@ import { treeStore } from '../core/node/treeStore'
 import { listMyTenants } from '../features/spaces/scopes'
 import { isFavorite } from '../features/memory/favoritesStore'
 import type { TreeNode } from '../core/node/tree'
-import { NodeKind } from '../api/generated/content'
+import { FOLDER_KIND } from '../core/node/kind'
+import { MEMORY_KIND, CHAPTER_KIND } from '../features/memory/kinds'
 import { capabilityState } from '../shared/state/capabilities'
 import { SHARING_PUBLIC_LINKS } from '../features/platform/capabilities'
 import { realI18n } from '../test/i18n'
@@ -97,11 +98,11 @@ function node(over: Partial<TreeNode> & Pick<TreeNode, 'id' | 'kind'>): TreeNode
   return { parentId: null, orderIndex: 0, epoch: 0, name: over.id, wrappedContentKey: null, wrappedMeta: null, metaVersion: 0, ...over }
 }
 const TREE: TreeNode[] = [
-  node({ id: 'trips', kind: NodeKind.Folder, name: 'Trips' }),
-  node({ id: 'solo', kind: NodeKind.Memory, name: 'Solo' }),
-  node({ id: 'italy', kind: NodeKind.Memory, name: 'Italy', parentId: 'trips' }),
-  node({ id: 'day2', kind: NodeKind.Chapter, name: 'Day2', parentId: 'italy', orderIndex: 1 }),
-  node({ id: 'day1', kind: NodeKind.Chapter, name: 'Day1', parentId: 'italy', orderIndex: 0 }),
+  node({ id: 'trips', kind: FOLDER_KIND, name: 'Trips' }),
+  node({ id: 'solo', kind: MEMORY_KIND, name: 'Solo' }),
+  node({ id: 'italy', kind: MEMORY_KIND, name: 'Italy', parentId: 'trips' }),
+  node({ id: 'day2', kind: CHAPTER_KIND, name: 'Day2', parentId: 'italy', orderIndex: 1 }),
+  node({ id: 'day1', kind: CHAPTER_KIND, name: 'Day1', parentId: 'italy', orderIndex: 0 }),
 ]
 
 async function mountAt(hash: string) {

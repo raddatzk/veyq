@@ -13,7 +13,7 @@ import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, useRoute } from 'vue-router'
 import type { SidebarPinsProps, SidebarPinsEmits } from '../../../core/applications/registry'
-import { NodeKind } from '../../../api/generated/content'
+import { MEMORY_KIND } from '../kinds'
 import { activeSpace } from '../../../app/activeSpace'
 import { favoritesStore } from '../favoritesStore'
 import { treeStore } from '../../../core/node/treeStore'
@@ -35,7 +35,7 @@ const activeScope = computed(() => parseHash(route.hash).scope)
 const favoriteMemories = computed(() =>
   [...favoritesStore.ids]
     .map((id) => nodeById(treeStore.nodes, id))
-    .filter((n): n is TreeNode => !!n && n.kind === NodeKind.Memory)
+    .filter((n): n is TreeNode => !!n && n.kind === MEMORY_KIND)
     .map((n) => ({ id: n.id, name: n.name, hash: hashForNode(treeStore.nodes, n.id, activeScope.value) })),
 )
 /** The pinned Memories' covers, resolved by the shared store. A favorite without one keeps the placeholder —

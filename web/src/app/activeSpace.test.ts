@@ -29,7 +29,7 @@ import { getSetupStatus } from '../features/account/instance/instance'
 import { serverState } from '../shared/state/serverState'
 import { suspensionSignals } from './tenantSuspension'
 import type { TreeNode } from '../core/node/tree'
-import { NodeKind } from '../api/generated/content'
+import { FOLDER_KIND } from '../core/node/kind'
 
 const TENANT_ID = '22222222-2222-2222-2222-222222222222'
 const TENANT_SCOPE_ID = 'tn-1'
@@ -161,7 +161,7 @@ describe('enterScope — re-entry resets per-scope state', () => {
   it('clears the tree + favorites so nothing bleeds across a scope switch', async () => {
     // Seed stale per-scope state as if a previous scope was loaded.
     const stale: TreeNode = {
-      id: 'stale', name: 'Stale', parentId: null, kind: NodeKind.Folder, orderIndex: 0, epoch: 0,
+      id: 'stale', name: 'Stale', parentId: null, kind: FOLDER_KIND, orderIndex: 0, epoch: 0,
       wrappedContentKey: null, wrappedMeta: null, metaVersion: 0,
     }
     treeStore.nodes = [stale]

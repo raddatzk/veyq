@@ -83,7 +83,8 @@ class NodeKindRulesPartitionSliceTest {
 
     @Test
     fun aForgedKindIsRefusedByTheRegisteredSet() {
-        // `create` takes the kind as a string; the contract's closed enum does not shield the handler.
+        // `create` takes the kind as a string, and the contract's open token lets any well-formed one through: the
+        // registered set is the only gate (the HTTP door is `NodeKindTokenCoreSliceTest`).
         val (userId, scopeId) = seedMemberScope()
         val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = null)
         assertEquals(CreateNodeOutcome.IllegalStructure, create(handler, userId, scopeId, null, "NOT_A_KIND"))

@@ -14,7 +14,7 @@ vi.mock('../useThumbnailPipeline', () => ({
 
 import MemoryShareBody from './MemoryShareBody.vue'
 import type { PublicShareHead } from '../../../core/sharing/resolvePublicShare'
-import { NodeKind } from '../../../api/generated/content'
+import { MEMORY_KIND } from '../kinds'
 import { ShareRole, type PublicShare } from '../../../api/generated/sharing'
 import { realI18n } from '../../../test/i18n'
 
@@ -23,7 +23,7 @@ const K_SHARE = v1.randomBytes(32)
 function head(share: Partial<PublicShare>, role: ShareRole = ShareRole.Read): PublicShareHead {
   return {
     shareId: 's1', share: { role, scopeId: 'scope-1', nodes: [], media: [], ...share } as PublicShare, kShare: K_SHARE,
-    scopeId: 'scope-1', name: 'Rom 2026', noteByLocale: {}, role, rootKind: role === ShareRole.WriteOnly ? null : NodeKind.Memory,
+    scopeId: 'scope-1', name: 'Rom 2026', noteByLocale: {}, role, rootKind: role === ShareRole.WriteOnly ? null : MEMORY_KIND,
   }
 }
 
@@ -37,7 +37,7 @@ function mountBody(h: PublicShareHead) {
 describe('MemoryShareBody opens the Memory from the shell\'s head', () => {
   it('renders the read-only Memory when the wrap opens under the fragment key', async () => {
     const wrap = b64std(v1.seal({ purpose: 'share-key' }, K_SHARE, v1.randomBytes(32)))
-    const w = mountBody(head({ wrap, nodes: [{ id: 'root', parentId: null, kind: NodeKind.Memory, epoch: 0 }] as PublicShare['nodes'] }))
+    const w = mountBody(head({ wrap, nodes: [{ id: 'root', parentId: null, kind: MEMORY_KIND, epoch: 0 }] as PublicShare['nodes'] }))
     await flushPromises()
     expect(w.emitted('unavailable')).toBeUndefined()
     expect(w.find('.gallery-title').text()).toBe('Rom 2026')

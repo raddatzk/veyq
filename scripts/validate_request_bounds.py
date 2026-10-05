@@ -6,7 +6,11 @@ bound in a request schema is enforced only by the `x-field-extra-annotation` som
 (`developer-styleguide.md`, the request-body bullet). This guard holds the two together. Its subject is every
 property of every schema reachable from any operation's `requestBody` in `contracts/api/*.openapi.yaml` —
 transitively through `$ref` (across spec files), inline objects, `items`, `allOf`, and the OpenAPI 3.1 nullable
-`oneOf`/`anyOf` spellings — derived from the specs on every run, never listed. For each such property:
+`oneOf`/`anyOf` spellings — derived from the specs on every run, never listed. A property that `$ref`s a **scalar**
+component schema (`NodeKind`, `CapabilityTag`) is read as that scalar: the generator inlines it as a String on the
+field and emits none of its bounds, so the target's `pattern`/`maxLength` hold only through an annotation: the one
+beside the `$ref`, or else the target's own `x-field-extra-annotation`, which the generator puts on every field that
+`$ref`s it with none of its own (measured). For each such property:
 
   1. **bound → annotation, same value.** `maxLength`/`maxItems` → `@Size(max = N)`; `minLength`/`minItems` →
      `@Size(min = N)` (a `@NotBlank`/`@NotEmpty` also satisfies N = 1); `minimum` → `@Min(N)`; `maximum` →
@@ -37,7 +41,9 @@ The failure names the list — spec, schema, property, rule — never a count.
 **The defect that bought it.** `BlobUploadsBatchRequest.items` declared `maxItems: 256` with no `@Size` and no
 `@Valid`, so one request could open any number of upload sessions, and every `wrappedBlobKey` check below it
 (`@NotBlank @Size @Pattern`) was dead — the anonymous share-contributor path included. The first run of this
-guard, on the tree the fix landed on, named 59 such gaps across eight specs.
+guard, on the tree the fix landed on, named 59 such gaps across eight specs. The `$ref`'d scalar was a blind
+spot until cr-platform-contract-split slice 4 opened `NodeKind` to a patterned token: its first run named
+`EnqueueRequest.capabilityTag`, whose `CapabilityTag` bounds no annotation carried (an upper-case tag was enqueued).
 
 **Its limit.** It proves an annotation is **present** and agrees with its schema, never that it has an
 **effect**: that the generator emits it verbatim onto the field, that Quarkus validates the body, and that the
@@ -141,6 +147,29 @@ class Walker:
             return file, label, s
         return None
 
+    def scalar_ref(self, prop: dict, file: str) -> dict:
+        """A property that `$ref`s a scalar component schema, seen as the scalar it generates: the target's keys under
+        the property's own. The generator inlines such a target (`NodeKind` is a `kotlin.String` on the field, no class
+        of its own) and emits none of its bounds; the field gets the target's `x-field-extra-annotation`, unless the
+        property carries one beside the `$ref`, which replaces it (measured on `CapabilityTag`, cr-platform-contract-
+        split slice 4) — the same precedence as this merge. Any other property is returned as it is."""
+        s = unwrap_nullable(prop)
+        if "$ref" not in s:
+            return prop
+        tfile, _, target = resolve(self.specs, s["$ref"], file)
+        for _ in range(16):  # a spec's local alias of a `_common` schema is a `$ref` to a `$ref`
+            if "$ref" not in target:
+                break
+            tfile, _, target = resolve(self.specs, target["$ref"], tfile)
+        target = unwrap_nullable(target)
+        if "properties" in target or "allOf" in target or "items" in target or "object" in types_of(target):
+            return prop
+        merged = dict(target)
+        merged.update({k: v for k, v in s.items() if k != "$ref"})
+        if s is not prop:  # the nullable `oneOf`/`anyOf` spelling: the property stays nullable once inlined
+            merged["type"] = sorted(types_of(target) | {"null"})
+        return merged
+
     def constrained(self, file: str, label: str, schema: dict) -> bool:
         """Whether an object schema carries any constraint at any depth (so `@Valid` into it is load-bearing)."""
         key = (file, label)
@@ -181,9 +210,10 @@ class Walker:
         for pname, prop, required in self.properties(schema, file):
             self.n_props += 1
             where = f"{file}:{label}.{pname}"
-            check_property(where, prop)
+            effective = self.scalar_ref(prop, file)
+            check_property(where, effective)
             if required:
-                check_presence(where, prop)
+                check_presence(where, effective)
             target = self.object_target(prop, file, f"{label}.{pname}")
             if target is None:
                 continue

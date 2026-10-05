@@ -33,9 +33,11 @@
 // hook (a composition root that registered nothing is that case too).
 //
 // **Fail closed.** `kind()` never returns `undefined`: a node kind nobody registered resolves to
-// `{ supported: false }`, which the host renders as an explicit unsupported state, never as an empty region.
+// `{ supported: false }`, which the host renders as an explicit unsupported state, never as an empty region. The kind
+// is an open string token (`core/node/kind.ts`), so no compiler checks that every kind is handled: this answer and its
+// tests (`registry.test.ts`) are what does.
 import type { Component } from 'vue'
-import { NodeKind } from '../../api/generated/content'
+import { FOLDER_KIND, type NodeKind } from '../node/kind'
 import type { TreeNode } from '../node/tree'
 import type { Level } from '../node/browse'
 import type { EpochKeys } from '../../features/spaces/epochs'
@@ -107,7 +109,9 @@ export interface SidebarPinsEmits {
 }
 
 /** The key under which an application claims the body for a share whose root kind the client cannot know: every
- *  WRITE_ONLY share (see the header). */
+ *  WRITE_ONLY share (see the header). Lower-case on purpose: a kind token is upper-case
+ *  (`^[A-Z][A-Z0-9_]{0,15}$`, `_common` `NodeKind`), so no kind can ever collide with it — keep the two separate
+ *  symbols even though both are strings now. */
 export const DROP_SHARE = 'drop' as const
 export type ShareBodyKey = NodeKind | typeof DROP_SHARE
 
@@ -179,7 +183,7 @@ export interface Registry {
  *  The app uses the single `registry` below; tests build their own to prove the rules on an untouched instance. */
 export function createRegistry(): Registry {
   const kinds = new Map<NodeKind, KindDescriptor>([
-    [NodeKind.Folder, { kind: NodeKind.Folder, icon: 'pi pi-folder', shareable: false }],
+    [FOLDER_KIND, { kind: FOLDER_KIND, icon: 'pi pi-folder', shareable: false }],
   ])
   const slots = new Map<SlotName, Component>()
   const lifecycles = new Map<string, LifecycleHooks>()

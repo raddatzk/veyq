@@ -159,15 +159,18 @@ components:
           example: https://store.example.com/veyq/9b1d4a6e/0?X-Amz-Signature=...
 
     NodeKind:
-      # Shared by the content spec (the tree) and the sharing spec (a share's subtree). Still the closed three-kind
-      # enum: core's hand-written code names FOLDER only, the generated enum names all three (ADR 0079).
-      x-veyq-visibility: enum
+      # Shared by the content spec (the tree) and the sharing spec (a share's subtree). An open, bounded token
+      # (ADR 0079): it generates a String, so a request property carries the pattern's annotation beside its `$ref`.
+      x-veyq-visibility: structure
       type: string
+      pattern: '^[A-Z][A-Z0-9_]{0,15}$'
       description: >
-        A node's kind. FOLDER is core's: it organizes only and carries no content key. Every other kind is an
-        application's, which places it in the tree (`NodeKindRules`) and gives its sealed payload a meaning — today
-        MEMORY and CHAPTER, both Memories'. A kind may carry a content key of its own (`wrappedContentKey`).
-      enum: [FOLDER, MEMORY, CHAPTER]
+        A node's kind: an open token, upper-case, at most 16 characters. Core names FOLDER only: it organizes and
+        carries no content key. Every other kind belongs to an application, which brings its rules — where it lives
+        in the tree (`NodeKindRules`) and what its sealed payload means; today MEMORY and CHAPTER, both Memories'. A
+        kind no application claims is refused where a rule is asked (`illegal_structure` on create, `illegal_scope`
+        on a share), never by decoding: a stored node of such a kind is served as it is. A kind may carry a content
+        key of its own (`wrappedContentKey`).
       example: FOLDER
 
     MasterKeyWrap:

@@ -393,6 +393,26 @@ class TasksSliceTest {
     }
 
     @Test
+    fun enqueueOutsideTheTagShapeIs400() {
+        // `CapabilityTag` is lowercase hex of at most 64; the bound reaches the server only through the request
+        // property's annotation (the generator inlines the `$ref`'d scalar and emits none of its bounds).
+        val scopeId = seedTenant()
+        val member = seedUser()
+        seedGrantedMembership(member, scopeId, "member-grant")
+        for (tag in listOf("9F3A1C04", "a".repeat(65))) {
+            given().header("Authorization", bearer(member)).contentType(ContentType.JSON)
+                .body("""{"scopeId":"$scopeId","capabilityTag":"$tag","sealedBody":"AQ=="}""")
+                .`when`().post("/api/tasks/enqueue")
+                .then().statusCode(400)
+        }
+        // Control: a tag of the shape, 64 characters long, is enqueued.
+        given().header("Authorization", bearer(member)).contentType(ContentType.JSON)
+            .body("""{"scopeId":"$scopeId","capabilityTag":"${"a".repeat(64)}","sealedBody":"AQ=="}""")
+            .`when`().post("/api/tasks/enqueue")
+            .then().statusCode(201)
+    }
+
+    @Test
     fun authedButNoGrantClaimIs204() {
         // A user with no granted membership anywhere holds no scope key → nothing is ever claimable for them.
         val nobody = seedUser()

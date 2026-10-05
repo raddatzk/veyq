@@ -7,7 +7,7 @@
 // Best-effort: a node whose key won't resolve or whose meta won't open is silently skipped (never a broken map).
 // A **pending `auto`** location (armed at creation, no geotagged media yet) has no `derived` → no pin until its
 // first upload materializes it. Folders carry no location and are never pinned.
-import { NodeKind } from '../../api/generated/content'
+import { MEMORY_KIND, CHAPTER_KIND } from './kinds'
 import { nodeContentKey, type TreeNode } from '../../core/node/tree'
 import type { EpochKeys } from '../spaces/epochs'
 import { unsealMemoryLocation, type MemoryLocation } from './memoryLocation'
@@ -83,7 +83,7 @@ export function collectLocatedPins(
   const byId = new Map(tree.map((n) => [n.id, n]))
   const pins: LocatedPin[] = []
   for (const node of tree) {
-    if (node.kind !== NodeKind.Memory && node.kind !== NodeKind.Chapter) continue
+    if (node.kind !== MEMORY_KIND && node.kind !== CHAPTER_KIND) continue
     if (!node.wrappedMeta) continue
     if (!inSubtree(byId, node.id, rootFolderId)) continue
     // Best-effort: a wrong/absent key throws on the AEAD tag — treat any failure as "can't open" and skip.

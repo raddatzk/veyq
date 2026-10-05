@@ -30,7 +30,8 @@ import { epochMsToIsoDate } from '../../../shared/isoDate'
 import { blobApi, contentApi } from '../../../api/client'
 import { mediaApi } from '../api'
 import * as v1 from '@veyq/crypto/v1'
-import { NodeKind, type ContentApi } from '../../../api/generated/content'
+import type { ContentApi } from '../../../api/generated/content'
+import { MEMORY_KIND, CHAPTER_KIND } from '../kinds'
 import { fakeApi } from '../../../test/apiMock'
 import type { TreeNode } from '../../../core/node/tree'
 import { galleryFakeStore } from './galleryFakeStore'
@@ -42,7 +43,7 @@ const NODE_ID = '22222222-2222-2222-2222-222222222222'
 const THIS_NODE = { scopeId: SCOPE_ID, nodeId: NODE_ID }
 
 const node = (name: string, wrappedMeta: string | null = null): TreeNode => ({
-  id: NODE_ID, kind: NodeKind.Memory, name, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: null, wrappedMeta, metaVersion: 0,
+  id: NODE_ID, kind: MEMORY_KIND, name, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: null, wrappedMeta, metaVersion: 0,
 })
 
 /** A stub deriver: a tiny "JPEG" tagged by the requested maxEdge so each tier's bytes are distinct. */
@@ -306,7 +307,7 @@ describe('MemoryDetail (gallery grid + header)', () => {
     fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const chapters: TreeNode[] = [
-      { id: 'c1', kind: NodeKind.Chapter, name: 'Day 1', parentId: NODE_ID, orderIndex: 0, epoch: 0, wrappedContentKey: 'd3JhcA==', wrappedMeta: null, metaVersion: 0 },
+      { id: 'c1', kind: CHAPTER_KIND, name: 'Day 1', parentId: NODE_ID, orderIndex: 0, epoch: 0, wrappedContentKey: 'd3JhcA==', wrappedMeta: null, metaVersion: 0 },
     ]
 
     const wrapper = mountDetail(v1.randomBytes(32), { chapters })
