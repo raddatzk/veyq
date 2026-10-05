@@ -4,13 +4,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { stubApi } from '../../test/apiMock'
 
-vi.mock('../../api/client', () => ({
-  mediaApi: vi.fn(),
-  bucketsApi: vi.fn(),
-}))
+vi.mock('./api', () => ({ mediaApi: vi.fn(), bucketsApi: vi.fn() }))
 
 import { listBuckets, createBucket, moveBucketMedia, openBucketName } from './media'
-import { bucketsApi } from '../../api/client'
+import { bucketsApi } from './api'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 

@@ -2,12 +2,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest'
 
 vi.mock('../../../api/client', () => ({
-  blobApi: vi.fn(), mediaApi: vi.fn(),
+  blobApi: vi.fn(),
   contentApi: vi.fn(),
   loginApi: vi.fn(),
   tokenApi: vi.fn(),
   sessionApi: vi.fn(),
 }))
+vi.mock('../api', () => ({ mediaApi: vi.fn() }))
 
 // exifr drives the sealed capture-time tier; default = no date, tests override per media (cr-0066).
 vi.mock('exifr', () => ({ default: { parse: vi.fn(async () => undefined) } }))
@@ -26,7 +27,8 @@ import { sealNodeMeta } from '../nodeMeta'
 import { setMapsConsent, setGeocoderUrl } from '../../../shared/state/useMapConfig'
 import { reverseGeocode } from '../geocode'
 import { epochMsToIsoDate } from '../../../shared/isoDate'
-import { blobApi, mediaApi, contentApi } from '../../../api/client'
+import { blobApi, contentApi } from '../../../api/client'
+import { mediaApi } from '../api'
 import * as v1 from '@veyq/crypto/v1'
 import { NodeKind, type ContentApi } from '../../../api/generated/content'
 import { fakeApi } from '../../../test/apiMock'

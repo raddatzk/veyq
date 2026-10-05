@@ -9,7 +9,7 @@
 // **master key** — never `K_SC`, which is shared in a group and would make the set readable by co-members.
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
-import { favoritesApi } from '../../api/client'
+import { favoritesApi } from './api'
 import { withRefresh } from '../../app/sessionRefresh'
 
 /** The pin set of one scope — a set served under another scope's address does not open (ADR 0072). */

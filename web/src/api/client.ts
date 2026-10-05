@@ -44,8 +44,14 @@ export function setupApi(): SetupApi {
 
 // The one bearer-credential contract every authed client shares: same-origin basePath + the access token
 // from the in-memory session. Each generated package has its own Configuration class but the same parameter
-// shape, so this single source feeds them all — change the token source once, here.
-const bearerParams = () => ({ basePath: session.apiBase, accessToken: () => session.accessToken ?? '' })
+// shape, so this single source feeds them all — change the token source once, here. Exported for an
+// application's own clients (`features/memory/api.ts`), which core does not import (ADR 0079).
+export const bearerParams = () => ({ basePath: session.apiBase, accessToken: () => session.accessToken ?? '' })
+
+// The token-less counterpart: same-origin basePath and no credential at all, so no Authorization header is sent.
+// For the calls a caller makes without a session by design ([publicPairingApi], [publicSharesApi], and an
+// application's guest operations).
+export const publicParams = () => ({ basePath: session.apiBase })
 
 export function loginApi(): LoginApi {
   return new LoginApi(new AuthConfiguration(bearerParams()))
@@ -79,7 +85,7 @@ export function pairingApi(): PairingApi {
  *  [publicSharesApi]: the same generated class, constructed without the bearer credential, so no Authorization
  *  header is ever sent from a device that has no business identifying itself. */
 export function publicPairingApi(): PairingApi {
-  return new PairingApi(new AuthConfiguration({ basePath: session.apiBase }))
+  return new PairingApi(new AuthConfiguration(publicParams()))
 }
 
 export function accountApi(): AccountApi {
@@ -171,5 +177,5 @@ export function sharesApi(): SharingApi {
 }
 
 export function publicSharesApi(): SharingApi {
-  return new SharingApi(new SharingConfiguration({ basePath: session.apiBase }))
+  return new SharingApi(new SharingConfiguration(publicParams()))
 }

@@ -10,14 +10,14 @@ vi.mock('../../api/client', () => ({
   sharesApi: vi.fn(),
   publicSharesApi: vi.fn(),
   blobApi: vi.fn(),
-  mediaApi: vi.fn(),
-  bucketsApi: vi.fn(),
   tokenApi: vi.fn(),
 }))
+vi.mock('./api', () => ({ mediaApi: vi.fn(), bucketsApi: vi.fn() }))
 
 import { resolveShare, createContributorIdentity, sessionSealKey, addSharePhoto, openShareOriginal } from './share'
 import { listMediaPage, openOriginal, unsealMeta, setMediaMeta, listBuckets, openBucketName, type MediaDeriver } from './media'
-import { publicSharesApi, blobApi, mediaApi, bucketsApi } from '../../api/client'
+import { publicSharesApi, blobApi } from '../../api/client'
+import { mediaApi, bucketsApi } from './api'
 import {
   NodeKind,
   ShareRole,
