@@ -16,23 +16,23 @@ class ShareAccessPolicyTest {
 
     private val unknownRole = "GARBAGE"
 
-    // --- canView: serves the sealed gallery (VIEWER/CONTRIBUTOR); UPLOADER is write-only → false ----------------
+    // --- canView: serves the sealed gallery (READ/READ_WRITE); WRITE_ONLY is write-only → false ----------------
 
     @Test
     fun viewerCanView() {
-        assertTrue(ShareAccessPolicy.canView(ShareEntity.VIEWER), "a VIEWER share resolves the sealed gallery")
+        assertTrue(ShareAccessPolicy.canView(ShareEntity.READ), "a READ share resolves the sealed gallery")
     }
 
     @Test
     fun contributorCanView() {
-        assertTrue(ShareAccessPolicy.canView(ShareEntity.CONTRIBUTOR), "a CONTRIBUTOR both views and contributes")
+        assertTrue(ShareAccessPolicy.canView(ShareEntity.READ_WRITE), "a READ_WRITE share both reads and contributes")
     }
 
     @Test
     fun uploaderCannotView() {
         assertFalse(
-            ShareAccessPolicy.canView(ShareEntity.UPLOADER),
-            "an UPLOADER is a write-only drop-box — it must never read the gallery (ADR 0031)",
+            ShareAccessPolicy.canView(ShareEntity.WRITE_ONLY),
+            "a WRITE_ONLY share is a write-only drop-box — it must never read the gallery (ADR 0031)",
         )
     }
 
@@ -41,21 +41,21 @@ class ShareAccessPolicyTest {
         assertFalse(ShareAccessPolicy.canView(unknownRole), "an unrecognised role is denied the gallery (deny-by-default)")
     }
 
-    // --- canUpload: accepts anonymous contributions (CONTRIBUTOR/UPLOADER); a VIEWER is read-only → false -------
+    // --- canUpload: accepts anonymous contributions (READ_WRITE/WRITE_ONLY); a READ share is read-only → false -------
 
     @Test
     fun viewerCannotUpload() {
-        assertFalse(ShareAccessPolicy.canUpload(ShareEntity.VIEWER), "a VIEWER share is read-only — no contributions")
+        assertFalse(ShareAccessPolicy.canUpload(ShareEntity.READ), "a READ share is read-only — no contributions")
     }
 
     @Test
     fun contributorCanUpload() {
-        assertTrue(ShareAccessPolicy.canUpload(ShareEntity.CONTRIBUTOR), "a CONTRIBUTOR both views and contributes")
+        assertTrue(ShareAccessPolicy.canUpload(ShareEntity.READ_WRITE), "a READ_WRITE share both reads and contributes")
     }
 
     @Test
     fun uploaderCanUpload() {
-        assertTrue(ShareAccessPolicy.canUpload(ShareEntity.UPLOADER), "an UPLOADER's whole capability is contributing")
+        assertTrue(ShareAccessPolicy.canUpload(ShareEntity.WRITE_ONLY), "a WRITE_ONLY share's whole capability is contributing")
     }
 
     @Test

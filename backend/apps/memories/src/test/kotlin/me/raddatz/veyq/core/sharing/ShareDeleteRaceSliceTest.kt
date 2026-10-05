@@ -89,7 +89,7 @@ class ShareDeleteRaceSliceTest {
     private fun createShare(userId: String, nodeId: String): String {
         val shareId = TestIds.shareId()
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"shareId":"$shareId",${ShareWriteProof.field(shareId)},"nodeId":"$nodeId","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName"}""")
+            .body("""{"shareId":"$shareId",${ShareWriteProof.field(shareId)},"nodeId":"$nodeId","role":"READ","wrap":"$wrap","sealedName":"$sealedName"}""")
             .`when`().post("/api/shares").then().statusCode(201)
         return shareId
     }

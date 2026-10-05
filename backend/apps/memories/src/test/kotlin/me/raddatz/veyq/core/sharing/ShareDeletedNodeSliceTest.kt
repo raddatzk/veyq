@@ -215,7 +215,7 @@ class ShareDeletedNodeSliceTest {
     fun aDeadGuestIdentityGoesAndALiveOneStays() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
-        val uploader = createShare(userId, memory, role = "UPLOADER")
+        val uploader = createShare(userId, memory, role = "WRITE_ONLY")
         val (g1, _) = createIdentity(uploader) // names themself, never uploads
         val (g2, g2Token) = createIdentity(uploader)
         val m = upload(uploader, g2Token)
@@ -233,7 +233,7 @@ class ShareDeletedNodeSliceTest {
         // chapter's media and bucket are seeded.
         val other = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val chapter = seedNode(scopeId, MemoriesNodeKinds.CHAPTER, parentId = other, wrappedContentKey = CONTENT_KEY)
-        val live = createShare(userId, other, role = "UPLOADER")
+        val live = createShare(userId, other, role = "WRITE_ONLY")
         val (g4, _) = createIdentity(live)
         val (m4, _) = seedMedia(scopeId, chapter, identityId = g4)
         seedBucket(scopeId, chapter, "share:$g4")
@@ -269,7 +269,7 @@ class ShareDeletedNodeSliceTest {
 
     // --- helpers (mirror ShareTrashedMediaSliceTest) ---
 
-    private fun createShare(userId: String, nodeId: String, role: String = "VIEWER", extra: String = ""): String =
+    private fun createShare(userId: String, nodeId: String, role: String = "READ", extra: String = ""): String =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"$role",${shareKeysJson(role, nodeId, wrap)},"sealedName":"$sealedName"$extra}""")
             .`when`().post("/api/shares")
@@ -287,10 +287,10 @@ class ShareDeletedNodeSliceTest {
         purge.run()
     }
 
-    /** A guest identity on an UPLOADER share → (identityId, contributorToken). */
+    /** A guest identity on a WRITE_ONLY share → (identityId, contributorToken). */
     private fun createIdentity(shareId: String): Pair<String, String> {
         val r = given().contentType(ContentType.JSON)
-            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$guestName"${identityKeyJson("UPLOADER")}}""")
+            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$guestName"${identityKeyJson("WRITE_ONLY")}}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(201).extract()
         return r.path<String>("identityId") to r.path<String>("contributorToken")

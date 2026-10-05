@@ -54,7 +54,7 @@ class TenantEntity : PanacheEntityBase {
     @Column(name = "terms_version", nullable = false)
     var termsVersion: Int = 0
 
-    /** The most any one CONTRIBUTOR or UPLOADER link of this tenant stores (ADR 0073 §4), set by the tenant owner.
+    /** The most any one READ_WRITE or WRITE_ONLY link of this tenant stores (ADR 0073 §4), set by the tenant owner.
      *  Read under the tenant-row lock a link start takes, so a start and a change of the limit serialize. */
     @Column(name = "share_link_limit_bytes", nullable = false)
     var shareLinkLimitBytes: Long = DEFAULT_SHARE_LINK_LIMIT_BYTES

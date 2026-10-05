@@ -35,7 +35,7 @@ import org.junit.jupiter.api.Test
 
 /**
  * The per-link storage limit (uc.sharing.share-link-storage-limit, ADR 0073 §2–§6) through the anonymous
- * CONTRIBUTOR start. A link's usage is its contributions' blobs (the medium's own and each derivative's, trash
+ * READ_WRITE start. A link's usage is its contributions' blobs (the medium's own and each derivative's, trash
  * included) plus the sessions its identities opened; a start whose admissible items do not fit is refused whole,
  * `quota_exceeded`, with no session left behind; concurrent starts serialize on the tenant row.
  *
@@ -124,7 +124,7 @@ class ShareLinkStorageLimitSliceTest {
     @Test
     fun aSecondLinkOfTheTenantHasItsOwnRoom() {
         val f = fixture()
-        val other = link(f, createShare(f, "CONTRIBUTOR"), "CONTRIBUTOR")
+        val other = link(f, createShare(f, "READ_WRITE"), "READ_WRITE")
         contribute(f, s)
         setLimit(f.tenantId, s.byteSize)
         startOk(other, s) // the other link holds nothing of the first's
@@ -140,7 +140,7 @@ class ShareLinkStorageLimitSliceTest {
 
     @Test
     fun anUploaderLinkIsBoundedToo() {
-        val f = fixture(role = "UPLOADER")
+        val f = fixture(role = "WRITE_ONLY")
         contribute(f, s)
         assertLinkHolds(f, s.byteSize)
     }
@@ -206,7 +206,7 @@ class ShareLinkStorageLimitSliceTest {
     @Test
     fun aZeroLimitRefusesEveryLinkStart() {
         val f = fixture()
-        val other = link(f, createShare(f, "UPLOADER"), "UPLOADER")
+        val other = link(f, createShare(f, "WRITE_ONLY"), "WRITE_ONLY")
         putLimit(f, 0).then().statusCode(200)
         start(f, s).then().statusCode(200).body("results[0].error", equalTo("quota_exceeded"))
         start(other, s).then().statusCode(200).body("results[0].error", equalTo("quota_exceeded"))
@@ -233,7 +233,7 @@ class ShareLinkStorageLimitSliceTest {
 
     data class Link(val tenantId: String, val scopeId: String, val memory: String, val ownerId: String, val shareId: String, val token: String)
 
-    private fun fixture(role: String = "CONTRIBUTOR"): Link {
+    private fun fixture(role: String = "READ_WRITE"): Link {
         val ownerId = seedUser()
         val tenantId = UUID.randomUUID().toString()
         val scopeId = UUID.randomUUID().toString()

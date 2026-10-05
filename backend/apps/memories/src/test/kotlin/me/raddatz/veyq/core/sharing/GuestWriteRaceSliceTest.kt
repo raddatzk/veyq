@@ -27,7 +27,7 @@ import org.junit.jupiter.api.Test
  * A guest write is refused once a delete of its link has committed — also when the write's own gate read the link
  * live before that (developer-styleguide §12). A delete drops each guest identity nothing references any more, and it
  * counts the references when it runs; a guest's upload that passed its gate before the delete and landed after the
- * count kept an UPLOADER photo whose identity — and with it the only wrap of the key that opens it — was gone. A
+ * count kept a WRITE_ONLY photo whose identity — and with it the only wrap of the key that opens it — was gone. A
  * guest naming itself in that window left an identity on a dead link that nothing would ever drop. Neither order of
  * the two writes produces either. Each guest write now takes the share row a delete holds, first, and re-checks it.
  *
@@ -90,14 +90,14 @@ class GuestWriteRaceSliceTest {
     private fun uploaderShare(userId: String, nodeId: String): String {
         val shareId = TestIds.shareId()
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"shareId":"$shareId",${ShareWriteProof.field(shareId)},"nodeId":"$nodeId","role":"UPLOADER",${shareKeysJson("UPLOADER", nodeId)},"sealedName":"$sealedName"}""")
+            .body("""{"shareId":"$shareId",${ShareWriteProof.field(shareId)},"nodeId":"$nodeId","role":"WRITE_ONLY",${shareKeysJson("WRITE_ONLY", nodeId)},"sealedName":"$sealedName"}""")
             .`when`().post("/api/shares").then().statusCode(201)
         return shareId
     }
 
     private fun postIdentity(shareId: String, identityId: String) =
         given().contentType(ContentType.JSON)
-            .body("""{"identityId":"$identityId","sealedDisplayName":"$sealedUploaderName"${identityKeyJson("UPLOADER")}}""")
+            .body("""{"identityId":"$identityId","sealedDisplayName":"$sealedUploaderName"${identityKeyJson("WRITE_ONLY")}}""")
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().extract()
 

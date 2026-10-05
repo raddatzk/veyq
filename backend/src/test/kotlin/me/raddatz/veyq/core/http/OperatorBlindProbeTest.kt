@@ -161,7 +161,7 @@ class OperatorBlindProbeTest {
         },
         // --- sharing (curation) ---
         "createShare" to Probe(Address.NODE) { s ->
-            Call("POST", "/api/shares", """{${ShareWriteProof.newShare()},"nodeId":"${s.nodeId}","role":"VIEWER","wrap":"$B64","sealedName":"$B64"}""")
+            Call("POST", "/api/shares", """{${ShareWriteProof.newShare()},"nodeId":"${s.nodeId}","role":"READ","wrap":"$B64","sealedName":"$B64"}""")
         },
         // With `nodeId` only; without it the listing is account-addressed and filters instead of refusing
         // (ScopeAccessSliceTest). A non-member gets `[]`, so every answer is told apart by its rows.

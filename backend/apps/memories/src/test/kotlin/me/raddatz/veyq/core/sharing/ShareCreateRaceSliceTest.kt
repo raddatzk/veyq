@@ -45,7 +45,7 @@ class ShareCreateRaceSliceTest {
     }
 
     /**
-     * The first UPLOADER link of a Memory, double-submitted: both requests carry the drop private key, so both reach
+     * The first WRITE_ONLY link of a Memory, double-submitted: both requests carry the drop private key, so both reach
      * the guarded drop-key update, and the loser's update waits for the winner's and then finds the key set. Its
      * answer is named by running its replay — the same body again, after both committed — which meets the share id
      * check first and answers `id_taken`. `drop_key_exists` would send the web client to re-read the node and retry
@@ -66,7 +66,7 @@ class ShareCreateRaceSliceTest {
     }
 
     /**
-     * The control for the test above: two DIFFERENT UPLOADER links racing for one Memory's first drop key. Their ids
+     * The control for the test above: two DIFFERENT WRITE_ONLY links racing for one Memory's first drop key. Their ids
      * are both free, so the loser's replay is refused by the drop-key check, and `drop_key_exists` stays its answer —
      * the one the web client answers by sealing to the winner's key.
      */
@@ -84,24 +84,24 @@ class ShareCreateRaceSliceTest {
         }
     }
 
-    /** A fresh CONTRIBUTOR link each round: identity creation is rate-limited per link. */
+    /** A fresh READ_WRITE link each round: identity creation is rate-limited per link. */
     @Test
     fun concurrentIdentityCreatesOfOneIdCreateItOnce() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         repeat(RACE_ROUNDS) { round ->
             val shareId = TestIds.shareId()
-            assertEquals(201 to null, createShare(userId, memory, shareId, role = "CONTRIBUTOR"))
+            assertEquals(201 to null, createShare(userId, memory, shareId, role = "READ_WRITE"))
             val identityId = TestIds.uuid()
             val answers = race({ createIdentity(shareId, identityId) }, { createIdentity(shareId, identityId) })
             assertWinnerAndLoser(201, 409 to "id_taken", answers, "round $round")
         }
         val shareId = TestIds.shareId()
-        assertEquals(201 to null, createShare(userId, memory, shareId, role = "CONTRIBUTOR"))
+        assertEquals(201 to null, createShare(userId, memory, shareId, role = "READ_WRITE"))
         assertEquals(201 to null, createIdentity(shareId, TestIds.uuid()))
     }
 
-    private fun createShare(userId: String, nodeId: String, shareId: String, role: String = "VIEWER"): Pair<Int, String?> =
+    private fun createShare(userId: String, nodeId: String, shareId: String, role: String = "READ"): Pair<Int, String?> =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"shareId":"$shareId",${ShareWriteProof.field(shareId)},"nodeId":"$nodeId","role":"$role","wrap":"$wrap","sealedName":"$sealedName"}""")
             .`when`().post("/api/shares").then().extract().answer()
@@ -109,7 +109,7 @@ class ShareCreateRaceSliceTest {
     private fun createUploaderShare(userId: String, nodeId: String, shareId: String): Pair<Int, String?> =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body(
-                """{"shareId":"$shareId",${ShareWriteProof.field(shareId)},"nodeId":"$nodeId","role":"UPLOADER",""" +
+                """{"shareId":"$shareId",${ShareWriteProof.field(shareId)},"nodeId":"$nodeId","role":"WRITE_ONLY",""" +
                     """"sealedDropPublicKey":"$DROP_PUBLIC_KEY","sealedDropPrivateKey":"$DROP_PRIVATE_KEY","sealedName":"$sealedName"}""",
             )
             .`when`().post("/api/shares").then().extract().answer()

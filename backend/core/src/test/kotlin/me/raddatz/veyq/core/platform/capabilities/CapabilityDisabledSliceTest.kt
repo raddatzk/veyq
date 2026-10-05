@@ -19,10 +19,10 @@ import java.util.UUID
 /**
  * Proves an operator-disabled capability is enforced BOTH ways (uc.platform.capability-discovery
  * operator-disable-enforced + sharing-first-consumer, cr-0103, ADR 0032): with `sharing.uploader-links`
- * disabled instance-wide, it vanishes from the manifest AND createShare(role=UPLOADER) is rejected
+ * disabled instance-wide, it vanishes from the manifest AND createShare(role=WRITE_ONLY) is rejected
  * `422 capability_disabled` — while the still-active `sharing.public-links` is advertised and its create path
  * passes the gate. The capability check runs before any node lookup, so a disabled role reads as instance
- * policy (a VIEWER share reaches the node lookup and 404s on the unknown node — it got past the gate).
+ * policy (a READ share reaches the node lookup and 404s on the unknown node — it got past the gate).
  */
 @QuarkusTest
 @TestProfile(CapabilityDisabledSliceTest.UploaderDisabled::class)
@@ -48,17 +48,17 @@ class CapabilityDisabledSliceTest {
         val bearer = bearer(seedUser())
         val someNode = UUID.randomUUID()
 
-        // UPLOADER needs the disabled `sharing.uploader-links` → 422 capability_disabled, checked before any node
+        // WRITE_ONLY needs the disabled `sharing.uploader-links` → 422 capability_disabled, checked before any node
         // lookup so it reads as instance policy (not a node/scope error).
         given().header("Authorization", bearer).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"$someNode","role":"UPLOADER","sealedDropPublicKey":"$DROP_PUBLIC_KEY","sealedDropPrivateKey":"$DROP_PRIVATE_KEY","sealedName":"$sealedName"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$someNode","role":"WRITE_ONLY","sealedDropPublicKey":"$DROP_PUBLIC_KEY","sealedDropPrivateKey":"$DROP_PRIVATE_KEY","sealedName":"$sealedName"}""")
             .`when`().post("/api/shares")
             .then().statusCode(422).body("code", equalTo("capability_disabled"))
 
-        // VIEWER needs `sharing.public-links` (still active) → the gate passes and the handler proceeds to the
+        // READ needs `sharing.public-links` (still active) → the gate passes and the handler proceeds to the
         // node lookup, 404ing on the unknown node. Proves public-links was NOT collaterally disabled.
         given().header("Authorization", bearer).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"$someNode","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$someNode","role":"READ","wrap":"$wrap","sealedName":"$sealedName"}""")
             .`when`().post("/api/shares")
             .then().statusCode(404).body("code", equalTo("node_not_found"))
     }

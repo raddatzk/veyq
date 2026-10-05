@@ -72,7 +72,7 @@ data class BucketRow(
     /** A contributor primary's share: its name is the identity's `share-identity-name` seal, bound to (scope,
      *  share, identity) (ADR 0072). Null for every other bucket. */
     val shareId: String? = null,
-    /** An UPLOADER identity's primary: the identity's key wrapped to the Memory's drop key — its name is sealed
+    /** A WRITE_ONLY identity's primary: the identity's key wrapped to the Memory's drop key — its name is sealed
      *  under that key, not `K_mem` (ADR 0031 point 7). Null for every other bucket. */
     val wrappedIdentityKey: String? = null,
 )
@@ -119,7 +119,7 @@ class MediaStore(private val blobs: BlobUploadStore) {
         derivatives: List<DerivativeAttach>,
         wrappedMeta: String?,
         wrappedExif: String?,
-        shareIdentityId: String? = null, // cr-0101: the contributor identity, when attached via a CONTRIBUTOR share
+        shareIdentityId: String? = null, // cr-0101: the contributor identity, when attached via a READ_WRITE share
         uploaderUserId: String? = null,  // cr-0113: the member uploader (member path); null on the contributor path
         admitted: () -> Boolean = { true },
     ): Pair<String, String>? {
@@ -427,9 +427,9 @@ class MediaStore(private val blobs: BlobUploadStore) {
     }
 
     /**
-     * The wrapped identity key of every UPLOADER identity that owns one of [rows] (identity id → wrap): a row such a
+     * The wrapped identity key of every WRITE_ONLY identity that owns one of [rows] (identity id → wrap): a row such a
      * guest added is sealed under the guest's own key, which only this wrap — opened through the Memory's drop key —
-     * yields (ADR 0031 point 7). A CONTRIBUTOR identity has none: its rows are under `K_mem`.
+     * yields (ADR 0031 point 7). A READ_WRITE identity has none: its rows are under `K_mem`.
      */
     fun uploaderKeys(rows: List<MediaRow>): Map<String, String> {
         val ids = rows.mapNotNull { r -> r.ownerKey?.let { (OwnerKey.parse(it) as? OwnerKey.Share)?.shareIdentityId } }.toSet()

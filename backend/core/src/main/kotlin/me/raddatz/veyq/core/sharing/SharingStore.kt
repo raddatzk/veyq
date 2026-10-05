@@ -36,9 +36,9 @@ data class ShareNodeRow(
 data class SubtreeData(val nodes: List<ShareNodeRow>, val media: List<ShareMediaRow>)
 
 /**
- * What a share hands its guest, fixed by its role (ADR 0031 point 7): a VIEWER or CONTRIBUTOR share wraps `K_mem`
- * under `K_share`; an UPLOADER share carries the Memory's drop public key under `K_share` instead, and the Memory's
- * first UPLOADER share also brings the drop private key sealed under `K_mem`, which the Memory keeps.
+ * What a share hands its guest, fixed by its role (ADR 0031 point 7): a READ or READ_WRITE share wraps `K_mem`
+ * under `K_share`; a WRITE_ONLY share carries the Memory's drop public key under `K_share` instead, and the Memory's
+ * first WRITE_ONLY share also brings the drop private key sealed under `K_mem`, which the Memory keeps.
  */
 sealed interface ShareKeys {
     data class MemoryWrap(val wrap: String) : ShareKeys
@@ -67,7 +67,7 @@ class SharingStore(
     enum class CreateResult { CREATED, ID_TAKEN, DROP_KEY_EXISTS, DROP_KEY_MISSING }
 
     /** Persist a share under the client-minted [id] — 256 random bits, base64url, the unguessable half of the
-     *  capability (ADR 0072 keeps its form). `ID_TAKEN`, nothing written, if the id was ever used ([idTaken]). An UPLOADER
+     *  capability (ADR 0072 keeps its form). `ID_TAKEN`, nothing written, if the id was ever used ([idTaken]). A WRITE_ONLY
      *  share's drop private key is set on the Memory **once**, by a conditional update in this transaction: a
      *  second one would orphan every upload sealed to the first, so a Memory that already has one is
      *  `DROP_KEY_EXISTS` (the client re-reads the node), and a request with none for a Memory with none is
@@ -114,7 +114,7 @@ class SharingStore(
      *  row lock that update holds, so a concurrent edit cannot slip a role change between the read and the
      *  tombstone. `ID_TAKEN`, nothing written, when [newId] was ever used — checked before the spend on purpose: a
      *  re-issue that deleted the old link and then failed would leave the curator with no link at all, believing
-     *  they had a new one. Never touches the Memory's drop key — an UPLOADER re-issue seals to the one it already
+     *  they had a new one. Never touches the Memory's drop key — a WRITE_ONLY re-issue seals to the one it already
      *  has. */
     @Transactional
     fun reissue(
@@ -159,7 +159,7 @@ class SharingStore(
             this.pwSalt = pwSalt
             this.pwVerifier = pwVerifier
             this.sealedPassword = sealedPassword
-            this.writeVerifier = writeVerifier // ADR 0076: for every role — a VIEWER link can become a CONTRIBUTOR one
+            this.writeVerifier = writeVerifier // ADR 0076: for every role — a READ link can become a READ_WRITE one
             // ADR 0075 point 4: the removals this scope has seen so far — a later removal leaves the share below it.
             // Read in this transaction: a removal that commits concurrently is either counted here or makes the
             // share look older than it is, never younger.
@@ -173,7 +173,7 @@ class SharingStore(
 
     /** Edit a share the caller owns in place (cr-0115/cr-0116/cr-0119/cr-0118; idempotent). Full-replaces the two
      *  editable, `K_share`-sealed fields (note + name — a null value clears that field); a non-null `role` changes
-     *  the grant **in place** (VIEWER ↔ CONTRIBUTOR only — a role of, or a share currently in, UPLOADER is
+     *  the grant **in place** (READ ↔ READ_WRITE only — a role of, or a share currently in, WRITE_ONLY is
      *  `INVALID_ROLE`); a non-null `passwordRequired` is the tri-state password patch (true sets/changes it with the
      *  fields, false removes + clears them; null leaves it untouched). Ownership is checked first, so a share not
      *  owned by the caller is `NOT_FOUND` regardless of the role (non-enumerable, mirroring `revoke`). */
@@ -184,7 +184,7 @@ class SharingStore(
     ): UpdateResult {
         val share = liveForUpdate(shareId)?.takeIf { it.ownerAccount == ownerAccount } ?: return UpdateResult.NOT_FOUND
         if (role != null) {
-            if (role == ShareEntity.UPLOADER || share.role == ShareEntity.UPLOADER) return UpdateResult.INVALID_ROLE
+            if (role == ShareEntity.WRITE_ONLY || share.role == ShareEntity.WRITE_ONLY) return UpdateResult.INVALID_ROLE
             share.role = role
         }
         if (passwordRequired != null) { // cr-0118: tri-state — set/change (true) or remove (false); absent = untouched
@@ -363,7 +363,7 @@ class SharingStore(
     /** Does any guest identity already hold the client-minted [id]? */
     fun identityIdTaken(id: String): Boolean = ShareIdentityEntity.findById(id) != null
 
-    /** Create an anonymous share identity under the client-minted [id]: store the sealed name (+ an UPLOADER
+    /** Create an anonymous share identity under the client-minted [id]: store the sealed name (+ a WRITE_ONLY
      *  identity's wrapped key) + the token hash, return the token — or null, nothing written, if any identity
      *  already holds [id]. */
     @Transactional
@@ -388,10 +388,10 @@ class SharingStore(
     }
 
     /**
-     * The wrapped identity key of every UPLOADER identity — of any share — that added a media served in [subtree]
+     * The wrapped identity key of every WRITE_ONLY identity — of any share — that added a media served in [subtree]
      * (identity id → wrap): that media is sealed under the identity's own key and opens only through this wrap
-     * (ADR 0031 point 7). This is ALL a guest reader is told about any identity. Never a CONTRIBUTOR identity, not
-     * even the reading share's own — a flipped VIEWER link still has its contributor identities — and never a name:
+     * (ADR 0031 point 7). This is ALL a guest reader is told about any identity. Never a READ_WRITE identity, not
+     * even the reading share's own — a flipped READ link still has its contributor identities — and never a name:
      * a guest's name is for the Memory's members, who read it through the bucket list (ADR 0030 point 8).
      */
     fun uploaderKeys(subtree: SubtreeData): Map<String, String> {

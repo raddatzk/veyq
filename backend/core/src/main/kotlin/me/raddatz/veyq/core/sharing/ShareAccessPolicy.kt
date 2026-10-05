@@ -8,16 +8,16 @@ import me.raddatz.veyq.core.sharing.ShareEntity
  * role string it decides whether a guest may **read** the sealed gallery ([canView]) or **contribute** an upload
  * ([canUpload]). It holds nothing and fetches nothing — the handler stays the shell that loaded `share.role`.
  *
- * The load-bearing rule — the confidentiality boundary nothing else measures: an `UPLOADER` is **write-only**, so
+ * The load-bearing rule — the confidentiality boundary nothing else measures: a `WRITE_ONLY` share is **write-only**, so
  * [canView] is `false` (ADR 0031). This is the server-side enforcement of "an uploader cannot see the gallery or
  * other guests". An unknown/garbage role is denied by both predicates (deny-by-default). The roles are `String`
  * constants on [ShareEntity], not a Kotlin enum, so a mutant that drops a `||`-arm or flips to always-true is only
  * caught by pinning the full 3-role × 2-predicate matrix plus the unknown-role case ([ShareAccessPolicyTest]).
  */
 object ShareAccessPolicy {
-    /** Roles whose guest resolve serves the sealed gallery (VIEWER/CONTRIBUTOR). UPLOADER is write-only → false. */
-    fun canView(role: String) = role == ShareEntity.VIEWER || role == ShareEntity.CONTRIBUTOR
+    /** Roles whose guest resolve serves the sealed gallery (READ/READ_WRITE). WRITE_ONLY is write-only → false. */
+    fun canView(role: String) = role == ShareEntity.READ || role == ShareEntity.READ_WRITE
 
-    /** Roles that accept anonymous contributions (identity + upload + delete-own): CONTRIBUTOR/UPLOADER. */
-    fun canUpload(role: String) = role == ShareEntity.CONTRIBUTOR || role == ShareEntity.UPLOADER
+    /** Roles that accept anonymous contributions (identity + upload + delete-own): READ_WRITE/WRITE_ONLY. */
+    fun canUpload(role: String) = role == ShareEntity.READ_WRITE || role == ShareEntity.WRITE_ONLY
 }

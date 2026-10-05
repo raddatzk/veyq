@@ -136,7 +136,7 @@ class CoreAloneSliceTest {
         for (kind in kinds) {
             val node = seedNode(scopeId, kind, wrappedContentKey = CONTENT_KEY)
             given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-                .body("""{${ShareWriteProof.newShare()},"nodeId":"$node","role":"VIEWER","wrap":"d3JhcA==","sealedName":"c2VhbGVk"}""")
+                .body("""{${ShareWriteProof.newShare()},"nodeId":"$node","role":"READ","wrap":"d3JhcA==","sealedName":"c2VhbGVk"}""")
                 .`when`().post("/api/shares")
                 .then().statusCode(422).body("code", equalTo("illegal_scope"))
         }
@@ -170,7 +170,7 @@ class CoreAloneSliceTest {
         val token = Tokens.random()
         QuarkusTransaction.requiringNew().run {
             ShareEntity().apply {
-                id = shareId; ownerAccount = ownerId; this.scopeId = scopeId; nodeId = folder; role = "CONTRIBUTOR"
+                id = shareId; ownerAccount = ownerId; this.scopeId = scopeId; nodeId = folder; role = "READ_WRITE"
                 wrap = "d3JhcA=="; sealedName = "c2VhbGVk"; createdAt = Instant.now()
             }.persist()
             ShareIdentityEntity().apply {

@@ -89,7 +89,7 @@ class ShareKeyRecoveryEpochSliceTest {
 
     private fun create(userId: String, nodeId: String, shareId: String, recovery: String?) =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"shareId":"$shareId",${ShareWriteProof.field(shareId)},"nodeId":"$nodeId","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName"${recovery?.let { ",$it" } ?: ""}}""")
+            .body("""{"shareId":"$shareId",${ShareWriteProof.field(shareId)},"nodeId":"$nodeId","role":"READ","wrap":"$wrap","sealedName":"$sealedName"${recovery?.let { ",$it" } ?: ""}}""")
             .`when`().post("/api/shares")
             .then()
 

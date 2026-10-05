@@ -24,7 +24,7 @@ sealed interface TenantStorageOutcome {
 
 /**
  * The tenant owner's storage settings (uc.sharing.share-link-storage-limit, ADR 0073 §4): read the tenant's usage,
- * set the one per-link limit every CONTRIBUTOR and UPLOADER link stores at most. The mail-settings shape
+ * set the one per-link limit every READ_WRITE and WRITE_ONLY link stores at most. The mail-settings shape
  * ([TenantMailSettingsHandler]): membership gate → tenant → owner → store; a non-owner member is 403, a non-member
  * 404. Usage comes from [StorageUsage], the one place a total is summed — this handler never sums on its own.
  *

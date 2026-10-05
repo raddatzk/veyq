@@ -311,7 +311,7 @@ CREATE TABLE veyq_job_decline (
 CREATE UNIQUE INDEX ux_job_decline ON veyq_job_decline (job_id, worker_id);
 
 -- A public share (ADR 0029). A deleted link is a tombstone: the row keeps its ids and dates, every ciphertext
--- column goes and deleted_at marks it. wrap is null on an UPLOADER share, which carries the drop public key
+-- column goes and deleted_at marks it. wrap is null on a WRITE_ONLY share, which carries the drop public key
 -- instead (ADR 0031). write_verifier = SHA-256 of the link's write token (ADR 0076); null takes no new guest.
 CREATE TABLE veyq_share (
     id                      VARCHAR(64)  NOT NULL PRIMARY KEY,

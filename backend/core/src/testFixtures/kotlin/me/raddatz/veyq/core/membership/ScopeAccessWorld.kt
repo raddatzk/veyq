@@ -45,8 +45,8 @@ import org.hamcrest.Matchers.notNullValue
  * compile against `:core` only (cr-platform-gradle-modules step 8a).
  */
 class ScopeAccessWorld(
-    /** The role of each space's seeded share — a profile that switches VIEWER links off seeds UPLOADER ones. */
-    private val shareRole: String = "VIEWER",
+    /** The role of each space's seeded share — a profile that switches READ links off seeds WRITE_ONLY ones. */
+    private val shareRole: String = "READ",
 ) {
 
     data class Space(

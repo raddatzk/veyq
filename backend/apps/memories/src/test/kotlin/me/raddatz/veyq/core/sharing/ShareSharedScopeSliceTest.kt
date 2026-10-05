@@ -81,7 +81,7 @@ class ShareSharedScopeSliceTest {
         // A group Memory now shares (no more illegal_scope) and the anonymous resolve round-trips operator-blind.
         given().`when`().get("/api/shares/$shareId")
             .then().statusCode(200)
-            .body("role", equalTo("VIEWER"))
+            .body("role", equalTo("READ"))
             .body("wrap", equalTo(wrap))
             .body("sealedName", equalTo(sealedName))
             .body("nodes.find { it.id == '$memory' }.parentId", equalTo(null))
@@ -239,12 +239,12 @@ class ShareSharedScopeSliceTest {
         val (tenantId, owner) = seedActiveTenant("g-reissue.example.com")
         val group = seedGroup(tenantId, owner)
         val memory = seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
-        val old = createShare(owner, memory, copyEpoch = 0, role = "CONTRIBUTOR")
+        val old = createShare(owner, memory, copyEpoch = 0, role = "READ_WRITE")
         val newId = TestIds.shareId()
 
         reissue(owner, old, epoch = 0, newId = newId).then().statusCode(201).body("shareId", equalTo(newId))
 
-        resolves(newId, 200).body("role", equalTo("CONTRIBUTOR")).body("wrap", equalTo(newWrap))
+        resolves(newId, 200).body("role", equalTo("READ_WRITE")).body("wrap", equalTo(newWrap))
         resolves(old, 404).body("code", equalTo("share_not_found"))
         given().header("Authorization", bearer(owner)).`when`().get("/api/shares?nodeId=$memory")
             .then().statusCode(200)
@@ -402,7 +402,7 @@ class ShareSharedScopeSliceTest {
         val group = seedGroup(tenantId, owner)
         val memory = seedNode(group, MemoriesNodeKinds.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
         val old = createShare(
-            owner, memory, copyEpoch = 0, role = "UPLOADER",
+            owner, memory, copyEpoch = 0, role = "WRITE_ONLY",
             keys = """"sealedDropPublicKey":"$dropPublic","sealedDropPrivateKey":"$dropPrivate"""",
         )
 
@@ -413,7 +413,7 @@ class ShareSharedScopeSliceTest {
 
         val newId = TestIds.shareId()
         reissue(owner, old, epoch = 0, newId = newId, keys = """"sealedDropPublicKey":"$dropPublic"""").then().statusCode(201)
-        resolves(newId, 200).body("role", equalTo("UPLOADER"))
+        resolves(newId, 200).body("role", equalTo("WRITE_ONLY"))
         QuarkusTransaction.requiringNew().run { assertEquals(dropPrivate, NodeEntity.findById(memory)!!.sealedDropPrivateKey) }
     }
 
@@ -744,13 +744,13 @@ class ShareSharedScopeSliceTest {
     /** A share of [role] carrying [keys]; with [copyEpoch], also a recovery copy sealed at that epoch (ADR 0036
      *  point 4). */
     private fun createShare(
-        userId: String, nodeId: String, copyEpoch: Int? = null, role: String = "VIEWER", keys: String = """"wrap":"$wrap"""",
+        userId: String, nodeId: String, copyEpoch: Int? = null, role: String = "READ", keys: String = """"wrap":"$wrap"""",
     ): String = postShare(userId, nodeId, TestIds.shareId(), copyEpoch, role, keys)
         .then().statusCode(201).body("shareId", notNullValue())
         .extract().path("shareId")
 
     private fun postShare(
-        userId: String, nodeId: String, id: String, copyEpoch: Int? = null, role: String = "VIEWER", keys: String = """"wrap":"$wrap"""",
+        userId: String, nodeId: String, id: String, copyEpoch: Int? = null, role: String = "READ", keys: String = """"wrap":"$wrap"""",
     ) = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
         .body(
             """{"shareId":"$id",${ShareWriteProof.field(id)},"nodeId":"$nodeId","role":"$role",$keys,"sealedName":"$sealedName"""" +

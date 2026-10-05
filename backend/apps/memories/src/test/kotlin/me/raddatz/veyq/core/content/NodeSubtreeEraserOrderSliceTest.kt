@@ -69,7 +69,7 @@ class NodeSubtreeEraserOrderSliceTest {
         val mediaId = UUID.randomUUID().toString()
         QuarkusTransaction.requiringNew().run {
             ShareEntity().apply {
-                id = shareId; ownerAccount = userId; this.scopeId = scopeId; nodeId = memory; role = ShareEntity.UPLOADER
+                id = shareId; ownerAccount = userId; this.scopeId = scopeId; nodeId = memory; role = ShareEntity.WRITE_ONLY
                 enabled = false; createdAt = Instant.now(); deletedAt = Instant.now().minusSeconds(7200)
             }.persist()
             ShareIdentityEntity().apply {
