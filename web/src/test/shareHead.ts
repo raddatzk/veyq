@@ -7,7 +7,7 @@ import { ShareRole, type PublicShare } from '../api/generated/sharing'
 import type { PublicShareHead } from '../core/sharing/resolvePublicShare'
 import type { OpenedMemory, ResolvedShare } from '../features/memory/share'
 
-/** The platform half of a resolved share. An UPLOADER share has no root kind (an unlocked response serves no nodes). */
+/** The platform half of a resolved share. A WRITE_ONLY share has no root kind (an unlocked response serves no nodes). */
 export function headOf(r: ResolvedShare, shareId = 's1'): PublicShareHead {
   return {
     shareId,
@@ -17,7 +17,7 @@ export function headOf(r: ResolvedShare, shareId = 's1'): PublicShareHead {
     name: r.memoryName,
     noteByLocale: r.noteByLocale,
     role: r.role,
-    rootKind: r.role === ShareRole.Uploader ? null : NodeKind.Memory,
+    rootKind: r.role === ShareRole.WriteOnly ? null : NodeKind.Memory,
   }
 }
 

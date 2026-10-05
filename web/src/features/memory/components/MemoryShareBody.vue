@@ -9,7 +9,7 @@
 // contributor/uploader name pre-screen, the photo picker and the upload tiles. Operator-blind: media bytes are fetched
 // direct-from-store via gated presigned GETs, so the operator never learns which media a viewer opens.
 //
-// Claimed by `register.ts` for the Memory root kind and for the kind-less drop (an UPLOADER share), the order the shell
+// Claimed by `register.ts` for the Memory root kind and for the kind-less drop (a WRITE_ONLY share), the order the shell
 // runs the gates in is password -> terms -> name -> content, and this body starts at "name".
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -109,17 +109,17 @@ const layoutItems = computed<ShareTileItem[]>(() =>
 // Show the grid when there's anything to render — listed media OR an in-flight optimistic upload.
 const hasContent = computed(() => items.value.length > 0 || optimisticTiles.value.length > 0)
 
-// --- contributor / uploader (CONTRIBUTOR + UPLOADER shares, cr-0101 / cr-0102) ----------------------------
+// --- contributor / uploader (READ_WRITE + WRITE_ONLY shares, cr-0101 / cr-0102) ----------------------------
 // The share role + what its link lets this guest hold (ADR 0031 point 7): the root Memory's K_mem for a viewer or
 // contributor, only the Memory's drop public key for an uploader — which never holds K_mem.
 const role = computed<ShareRole>(() => props.head.role)
 const access = ref<ShareAccess | null>(null)
 // The shared Memory's scope — a contributor's name and uploads are sealed bound to it (ADR 0072).
 const shareScopeId = computed(() => props.head.scopeId)
-const isContributor = computed(() => role.value === ShareRole.Contributor)
-// UPLOADER (cr-0102, ADR 0031): a write-only drop-box — add photos but the resolve serves no media. The own-view
+const isContributor = computed(() => role.value === ShareRole.ReadWrite)
+// WRITE_ONLY (cr-0102, ADR 0031): a write-only drop-box — add photos but the resolve serves no media. The own-view
 // is the optimistic tiles themselves (local previews), session-only: on reload the in-memory queue is empty.
-const isUploader = computed(() => role.value === ShareRole.Uploader)
+const isUploader = computed(() => role.value === ShareRole.WriteOnly)
 // Either contributing role names itself once, then may add photos (the backend accepts both on the upload path).
 const canContribute = computed(() => isContributor.value || isUploader.value)
 // The named contributor session, persisted per-share so a reload keeps the name (never leaves the device).
@@ -136,7 +136,7 @@ function loadSession() {
 loadSession() // before the first render: the shell mounts this body once the share is ready, so no name-gate flash
 // The key this session's uploads seal under — K_mem for a contributor, the uploader's own key for an uploader.
 const sealKey = computed(() => (session.value && access.value ? sessionSealKey(session.value, access.value) : null))
-// A CONTRIBUTOR or UPLOADER share shows a mandatory name pre-screen until the visitor has named themselves — and
+// A READ_WRITE or WRITE_ONLY share shows a mandatory name pre-screen until the visitor has named themselves — and
 // again for an uploader session saved without its own key, which has nothing to seal with.
 const needsName = computed(() => canContribute.value && !sealKey.value)
 const displayName = ref('')
@@ -182,13 +182,13 @@ function enqueueBatch(picked: File[]) {
   enqueueUploads(
     { key: shareId, upload: (source, opts) => addSharePhoto({ shareId, scopeId, sealKey: key, ...s, pwToken: props.pwToken }, source, undefined, opts) },
     picked.map((file) => ({ file, mediaType: inferMediaType(file) })),
-    // CONTRIBUTOR: re-resolve so the contributed photo lists. UPLOADER: never re-resolve (the resolve serves the
+    // READ_WRITE: re-resolve so the contributed photo lists. WRITE_ONLY: never re-resolve (the resolve serves the
     // uploader no media) — the done optimistic tile stays as the session-only own-view from its local preview.
     { label: memoryName.value, onComplete: isUploader.value ? undefined : () => void props.reload() },
   )
 }
 
-// Delete-your-own (UPLOADER, cr-0102): the settled tile carries the returned mediaId — call the token-gated
+// Delete-your-own (WRITE_ONLY, cr-0102): the settled tile carries the returned mediaId — call the token-gated
 // delete endpoint, then drop the file from the queue (its optimistic tile + local preview go). Session-only: after
 // a reload the client no longer holds the id, so delete is reachable only this session.
 const deletingIds = ref<Set<string>>(new Set())
@@ -268,7 +268,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <!-- CONTRIBUTOR / UPLOADER share: a mandatory display-name pre-screen before contributing (ADR 0030 / 0031) -->
+  <!-- READ_WRITE / WRITE_ONLY share: a mandatory display-name pre-screen before contributing (ADR 0030 / 0031) -->
   <div v-if="needsName" class="share-view-state share-name-gate">
     <form class="veyq-surface share-name-card" @submit.prevent="submitName">
       <h1>{{ memoryName }}</h1>
@@ -330,7 +330,7 @@ onBeforeUnmount(() => {
       </div>
     </header>
 
-    <!-- cr-0115: the curator's note, a banner under the header for a VIEWER/CONTRIBUTOR share. Safe markdown
+    <!-- cr-0115: the curator's note, a banner under the header for a READ/READ_WRITE share. Safe markdown
          (escape-first), so v-html is safe. -->
     <!-- eslint-disable-next-line vue/no-v-html -->
     <div v-if="renderedNote" class="share-note markdown-body" v-html="renderedNote"></div>
@@ -349,7 +349,7 @@ onBeforeUnmount(() => {
     <MediaGrid v-else :items="layoutItems" :aria-label="memoryName">
       <template #tile="{ tile, item }">
         <!-- optimistic in-grid upload tile (cr-0074): the SAME shared OptimisticTile as the internal gallery.
-             For an UPLOADER the settled tile persists as the session-only own-view + carries a per-tile delete. -->
+             For a WRITE_ONLY share the settled tile persists as the session-only own-view + carries a per-tile delete. -->
         <OptimisticTile
           v-if="item.kind === 'optimistic'"
           :tile="item.optimistic"

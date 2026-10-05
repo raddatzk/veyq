@@ -67,7 +67,7 @@ describe('selectOptimisticUploads', () => {
   })
 
   it('keeps a done upload as the uploader’s session-only own-view — the resolve lists nothing (cr-0102)', () => {
-    // an UPLOADER share resolve always returns media=[], so a settled tile is never reconciled away: it stays as
+    // a WRITE_ONLY share resolve always returns media=[], so a settled tile is never reconciled away: it stays as
     // the local-preview own-view for the whole session (keyed by the shareId, not a node id).
     const shareBatch: UploadBatch = { ...batch(0, 'n', [file('a', 'done', 'media-1')]), target: { key: 'share-1' } }
     expect(selectOptimisticUploads([shareBatch], 'share-1', new Set()).map((f) => f.id)).toEqual(['a'])

@@ -922,7 +922,7 @@ describe('mediaType — the persisted video signal (cr-inline-video-playback, #1
     expect(isVideoMediaType('')).toBe(false)
   })
 
-  // The sealed mediaType is written by the UPLOADER's client, and the playback shim serves it back as the
+  // The sealed mediaType is written by the WRITE_ONLY guest's client, and the playback shim serves it back as the
   // response's Content-Type on the app origin. A browser opening a listed type as a page resolves it to its last
   // valid entry, so `video/mp4, text/html` would pass a prefix check and render as a document (ADR 0047 § The
   // shim serves inert responses). Only ONE well-formed `video/<subtype>` essence counts as a video.

@@ -9,7 +9,7 @@
 // drag object URLs and real previews into a test about a gate. Here the composable is REAL and the terms fetch
 // is made to fail (which fails open by design), so what is under test is the grid and nothing else.
 //
-// The share is resolved as a VIEWER, although in-flight uploads belong to a contributor: joining as one needs
+// The share is resolved as a READ share, although in-flight uploads belong to a contributor: joining as one needs
 // a network round-trip (the display-name gate seals a name under the root K_mem and posts it) that this bite
 // has no interest in, and the grid does not branch on role — `layoutItems` and `sortedItems` read neither
 // `role` nor `isUploader`/`isContributor`; only OptimisticTile's `:deletable` does. The optimistic tiles come
@@ -128,7 +128,7 @@ beforeEach(() => {
 describe('ShareView — one order for every grid tile', () => {
   it('a settling upload hands its grid slot to the real tile — the position does not move', async () => {
     serve({
-      memoryName: 'My Memory', noteByLocale: {}, role: ShareRole.Viewer, scopeId: SCOPE_ID,
+      memoryName: 'My Memory', noteByLocale: {}, role: ShareRole.Read, scopeId: SCOPE_ID,
       access: { kind: 'read', memoryKey: v1.randomBytes(32) }, items: [sharedItem(MEDIA_0, OLD)],
     })
     const wrapper = mount(ShareView, { global: { plugins: [realI18n()], stubs: { MediaLightbox: true } } })

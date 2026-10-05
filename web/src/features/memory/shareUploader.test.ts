@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// uc.sharing.share-uploader — the guest of an UPLOADER link never holds K_mem (ADR 0031 point 7). The two negatives
+// uc.sharing.share-uploader — the guest of a WRITE_ONLY link never holds K_mem (ADR 0031 point 7). The two negatives
 // were seen red on the tree before the drop key (the resolve handed the guest K_mem, and its blob keys opened under
 // it); each is anchored on the refusal the fixed tree answers with and carries a positive control. The last case is
 // the positive that proves the key path reaches every reader: the curator's gallery and a viewer link both open
@@ -48,7 +48,7 @@ function heldBytes(value: unknown, seen = new Set<unknown>()): Uint8Array[] {
 }
 const sameBytes = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every((x, i) => x === b[i])
 
-/** The Memory as its owner set it up: K_mem, a drop keypair (private half on the node), one UPLOADER share. */
+/** The Memory as its owner set it up: K_mem, a drop keypair (private half on the node), one WRITE_ONLY share. */
 function uploaderShare() {
   const kMem = v1.randomBytes(32)
   const kShare = v1.randomBytes(32)
@@ -57,7 +57,7 @@ function uploaderShare() {
     v1.seal({ purpose: 'drop-private-key', scopeId: SCOPE_ID, nodeId: NODE_ID }, kMem, v1.serializeDropKey(drop)),
   )
   const resolve: PublicShare = {
-    role: ShareRole.Uploader,
+    role: ShareRole.WriteOnly,
     passwordRequired: false,
     scopeId: SCOPE_ID,
     nodeId: NODE_ID,
@@ -127,14 +127,14 @@ beforeEach(() => {
 })
 afterEach(() => vi.unstubAllGlobals())
 
-describe('an UPLOADER guest never holds K_mem (ADR 0031 point 7)', () => {
+describe('a WRITE_ONLY guest never holds K_mem (ADR 0031 point 7)', () => {
   it('the resolved session holds no Memory key — even when the server still serves the wrap', async () => {
     const { kMem, kShare, resolve } = uploaderShare()
     guestApi(resolve)
 
     const resolved = await resolveShare(UPLOADER_SHARE, b64url(kShare))
 
-    expect(resolved.role).toBe(ShareRole.Uploader)
+    expect(resolved.role).toBe(ShareRole.WriteOnly)
     expect(heldBytes(resolved).some((b) => sameBytes(b, kMem))).toBe(false)
     // control, same predicate: what the guest does hold is the drop public key, to wrap its own key to
     expect(resolved.access.kind).toBe('drop')
@@ -218,7 +218,7 @@ describe('an UPLOADER guest never holds K_mem (ADR 0031 point 7)', () => {
     // no name, which the contract no longer has a field for (ADR 0030 point 8). Typed, so a shape change is loud here.
     const kViewer = v1.randomBytes(32)
     const viewerResolve = {
-      role: ShareRole.Viewer, passwordRequired: false, scopeId: SCOPE_ID, nodeId: NODE_ID,
+      role: ShareRole.Read, passwordRequired: false, scopeId: SCOPE_ID, nodeId: NODE_ID,
       wrap: b64std(v1.seal({ purpose: 'share-key' }, kViewer, kMem)),
       sealedName: b64std(v1.seal({ purpose: 'share-memory-name' }, kViewer, v1.utf8('Hochzeit'))),
       nodes: [{ id: NODE_ID, kind: NodeKind.Memory, epoch: 0, sealedDropPrivateKey }],

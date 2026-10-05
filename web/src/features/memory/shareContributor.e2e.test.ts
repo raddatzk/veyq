@@ -1,5 +1,5 @@
 // cr-sharing-contributor-e2e live e2e (VEYQ_E2E=1): the FIRST live coverage of any sharing flow — the
-// CONTRIBUTOR share, end-to-end against a REAL backend + MariaDB + the bundled Garage store, with REAL crypto.
+// READ_WRITE share, end-to-end against a REAL backend + MariaDB + the bundled Garage store, with REAL crypto.
 //
 // Two actors on one instance, serialized (the `scopeRotation.e2e` shape):
 //   A          = curator: server owner + tenant owner (from `birthInstance`), mints the share, reads it back.
@@ -86,7 +86,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('contributor share e2e (live, real crypto
   let controlBytes: Uint8Array
 
   it('an anonymous contributor names themselves, uploads through the share transport, and the curator recovers the name', async () => {
-    // --- A: cold-birth the instance, personal scope, one Memory, one CONTRIBUTOR share -----------------------
+    // --- A: cold-birth the instance, personal scope, one Memory, one READ_WRITE share -----------------------
     await birthInstance(TENANT_NAME)
     await ensurePersonalScope()
     const personal = (await listMyScopes()).find((s) => s.kind === ScopeKind.Personal)
@@ -99,7 +99,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('contributor share e2e (live, real crypto
     nodeId = memory.nodeId
     const kMem = memory.memoryKey
 
-    const minted = await createShare(scopeId, nodeId, kMem, epochsOf(scopeKey), MEMORY_NAME, ShareRole.Contributor, null, NOTE, SHARE_NAME)
+    const minted = await createShare(scopeId, nodeId, kMem, epochsOf(scopeKey), MEMORY_NAME, ShareRole.ReadWrite, null, NOTE, SHARE_NAME)
     shareId = minted.shareId
     expect(shareId, 'the client minted an opaque shareId (ADR 0072)').toMatch(/^[A-Za-z0-9_-]{43}$/)
 
@@ -107,7 +107,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('contributor share e2e (live, real crypto
     // `minted.kShare` is what a real visitor carries in `/s/{shareId}#k=…`; the server never saw it.
     fragmentKey = b64url(minted.kShare)
     const resolved = await resolveShare(shareId, fragmentKey)
-    expect(resolved.role, 'the share resolves as CONTRIBUTOR').toBe(ShareRole.Contributor)
+    expect(resolved.role, 'the share resolves as READ_WRITE').toBe(ShareRole.ReadWrite)
     expect(resolved.memoryName, 'the anonymous visitor recovered the Memory name under K_share').toBe(MEMORY_NAME)
     expect(resolved.noteByLocale, 'the per-locale curator note opened with the same fragment key').toEqual(NOTE)
     expect(resolved.items, 'a fresh share carries no media yet').toHaveLength(0)
@@ -178,7 +178,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('contributor share e2e (live, real crypto
     // The wire assertion's derivation (ADR 0053) — every value below was recovered by UNSEALING what the server
     // returned, so nothing has to be remembered and none can be forgotten out of the set. Note what is NOT here:
     // `session` (a server-minted capability token), `minted` (an opaque id), the raw `PublicShare` — and
-    // `resolved` itself, which looks like the ideal argument and is not: it carries `role`, and 'CONTRIBUTOR' is
+    // `resolved` itself, which looks like the ideal argument and is not: it carries `role`, and 'READ_WRITE' is
     // stored as PLAINTEXT in `veyq_share` because the server enforces the grant. Project the fields, never hand
     // over the envelope.
     //

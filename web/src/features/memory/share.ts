@@ -9,7 +9,7 @@
 //  - **viewer** (anonymous, no session): resolve a share, unwrap `K_mem` from the fragment key, derive each
 //    chapter's `K_mem` down the subtree, and open blobs via the gated share-scoped presign endpoint.
 //
-// An UPLOADER share is the exception to the second wrap (ADR 0031 point 7): its guest is the one party the link
+// A WRITE_ONLY share is the exception to the second wrap (ADR 0031 point 7): its guest is the one party the link
 // exists to keep out, so it gets no `K_mem` at all — only the Memory's drop PUBLIC key under `K_share`. The guest
 // seals under an identity key of its own, wrapped to that drop key; `./mediaKey.ts` owns that chain.
 import * as v1 from '@veyq/crypto/v1'
@@ -105,7 +105,7 @@ function openShareName(kShare: Uint8Array, sealed: string): string {
 }
 /**
  * Recover `K_share` from its recovery copy, sealed under the scope key `K_SC` at the copy's epoch — a key every scope
- * member holds and **no share link does** (ADR 0036 point 4): a VIEWER or CONTRIBUTOR link carries `K_mem`, so a copy
+ * member holds and **no share link does** (ADR 0036 point 4): a READ or READ_WRITE link carries `K_mem`, so a copy
  * under `K_mem` would open every sibling share to that link plus a dump. Bound to the share it is listed as and to
  * its epoch (ADR 0072), so a copy the server moved onto another share's row, or relabelled, does not open. Throws
  * `OpenRefused`, or a plain error when the share carries no copy.
@@ -187,7 +187,7 @@ export type MintedShare = { shareId: string; kShare: Uint8Array }
  * `shareId` + `K_share`; the caller turns that pair into a link with [buildShareLink]. The server never sees
  * `K_share` — it leaves this function only towards the UI, and reaches a visitor only in the link's fragment.
  *
- * An UPLOADER share carries no wrap (ADR 0031 point 7): it carries the Memory's drop public key under `K_share`
+ * A WRITE_ONLY share carries no wrap (ADR 0031 point 7): it carries the Memory's drop public key under `K_share`
  * instead — the node's existing drop key, read fresh from the server because every upload so far is sealed to it,
  * or a new one whose private half the server then sets on the Memory. Two owners minting the Memory's first one at
  * once: the server keeps one and refuses the other `drop_key_exists`, which re-reads the node and retries once.
@@ -202,7 +202,7 @@ export async function createShare(
   memoryKey: Uint8Array,
   epochs: EpochKeys,
   memoryName: string,
-  role: ShareRole = ShareRole.Viewer,
+  role: ShareRole = ShareRole.Read,
   expiresAt: Date | null = null,
   note: LocaleMap = {},
   name = '',
@@ -210,8 +210,8 @@ export async function createShare(
 ): Promise<MintedShare> {
   const kShare = v1.randomBytes(32)
   const shareId = newShareId() // client-minted: the recovery copy below is sealed bound to it (ADR 0072)
-  const uploader = role === ShareRole.Uploader
-  // Only a VIEWER or CONTRIBUTOR link holds K_mem; an UPLOADER link's guest never does.
+  const uploader = role === ShareRole.WriteOnly
+  // Only a READ or READ_WRITE link holds K_mem; a WRITE_ONLY link's guest never does.
   const wrap = uploader ? undefined : b64std(v1.seal(SHARE_KEY, kShare, memoryKey))
   const sealedName = b64std(v1.seal(SHARE_MEMORY_NAME, kShare, v1.utf8(memoryName))) // the Memory name re-sealed under K_share
   // ADR 0036: a recoverable copy of K_share under K_SC(epoch) (so every scope member can reveal, edit and re-copy it
@@ -263,7 +263,7 @@ export async function createShare(
 }
 
 /** What the share stores of its write proof (ADR 0076): the hash of the token a guest derives from the link's key and
- *  presents when naming themself. Every role carries it — a VIEWER link can become a CONTRIBUTOR one, and its key
+ *  presents when naming themself. Every role carries it — a READ link can become a READ_WRITE one, and its key
  *  never changes. */
 function writeVerifierOf(kShare: Uint8Array, shareId: string): string {
   return b64std(v1.sha256Digest(v1.shareWriteToken(kShare, shareId)))
@@ -306,8 +306,8 @@ export function carriedSettings(epochs: EpochKeys, old: ReissuableShare): Reissu
  * — one request, one server transaction. This is what cuts a departed member off a link they could copy: the old id
  * 404s and nothing of the new one is derivable from the old `K_share`. The note, label and password are re-sealed
  * under the new key (the password with a fresh salt), the recovery copy is sealed at the scope's current epoch, and
- * the role is the old share's (the server takes it from the old row). A VIEWER/CONTRIBUTOR link wraps `K_mem`; an
- * UPLOADER link seals the Memory's **existing** drop public key — every upload so far is sealed to it (ADR 0031
+ * the role is the old share's (the server takes it from the old row). A READ/READ_WRITE link wraps `K_mem`; a
+ * WRITE_ONLY link seals the Memory's **existing** drop public key — every upload so far is sealed to it (ADR 0031
  * point 7) — and is refused here rather than minting a new one. `stale_epoch` re-opens the scope key and retries
  * once, as {@link createShare} does. A share is re-issued at most once: `409 share_deleted` ({@link isShareDeleted})
  * means another renew — a concurrent one or an earlier one — or a delete got there first; it is never retried, and
@@ -323,7 +323,7 @@ export async function reissueShare(
   const { scopeId, nodeId } = old
   const kShare = v1.randomBytes(32) // never the old one: the old K_share is what the departed member may hold
   const shareId = newShareId()
-  const uploader = old.role === ShareRole.Uploader
+  const uploader = old.role === ShareRole.WriteOnly
   const wrap = uploader ? undefined : b64std(v1.seal(SHARE_KEY, kShare, memoryKey))
   const sealedName = b64std(v1.seal(SHARE_MEMORY_NAME, kShare, v1.utf8(memoryName)))
   const sealedNote = hasLocaleText(settings.note) ? sealNoteMap(kShare, settings.note) : undefined
@@ -334,7 +334,7 @@ export async function reissueShare(
   let sealedDropPublicKey: string | undefined
   if (uploader) {
     const existing = await currentSealedDropKey(scopeId, nodeId)
-    if (!existing) throw new Error('drop_key_missing') // an UPLOADER share proves the Memory has one
+    if (!existing) throw new Error('drop_key_missing') // a WRITE_ONLY share proves the Memory has one
     sealedDropPublicKey = dropKeysForShare(scopeId, nodeId, memoryKey, kShare, existing).sealedDropPublicKey
   }
   const post = () =>
@@ -370,7 +370,7 @@ async function freshRecoveryCopy<T>(scopeId: string, seal: (ek: EpochKeys) => T)
   }
 }
 
-/** The Memory's sealed drop private key as the server holds it now — null until its first UPLOADER share. */
+/** The Memory's sealed drop private key as the server holds it now — null until its first WRITE_ONLY share. */
 async function currentSealedDropKey(scopeId: string, nodeId: string): Promise<string | null> {
   const nodes = await withRefresh(() => contentApi().listNodes({ scopeId }))
   return nodes.find((n) => n.id === nodeId)?.sealedDropPrivateKey ?? null
@@ -380,7 +380,7 @@ async function currentSealedDropKey(scopeId: string, nodeId: string): Promise<st
  * Edit a share in place (cr-0115/cr-0116/cr-0119/cr-0118, ADR 0036/0037): recover `K_share` from its recovery copy
  * (under `K_SC` at the copy's epoch), re-seal note + name (or clear a blank one) and PATCH the full pair — the same
  * link keeps working. The copy itself is never re-sealed here, so an edit needs no current epoch. An
- * optional `role` changes the grant in place (VIEWER ↔ CONTRIBUTOR; the server 422s UPLOADER). `passwordChange` is
+ * optional `role` changes the grant in place (READ ↔ READ_WRITE; the server 422s WRITE_ONLY). `passwordChange` is
  * the tri-state gate: `{ set }` sets/changes it, `{ remove: true }` removes it, `undefined` leaves it untouched.
  * Owner-gated server-side; the link/`K_share` are untouched throughout.
  */
@@ -443,7 +443,7 @@ export type ManagedShare = {
   /** True when this guest link holds no write verifier (minted before ADR 0076), so it takes no new guest until it is
    *  re-issued ({@link reissueShare}). The server's answer: the verifier is never on the wire. */
   newGuestsRefused: boolean
-  /** True when the link holds no write verifier, whatever its role — so as a CONTRIBUTOR it would refuse every new
+  /** True when the link holds no write verifier, whatever its role — so as a READ_WRITE it would refuse every new
    *  guest, and an edit cannot fix that (ADR 0076 point 2): the role edit warns and offers the renew (#303). */
   writeVerifierMissing: boolean
 }
@@ -510,15 +510,15 @@ export async function isReissueRequired(e: unknown): Promise<boolean> {
 // --- contributor / uploader (anonymous, no session; cr-0101, cr-0102) --------
 
 /**
- * A named session on a CONTRIBUTOR or UPLOADER share: the anonymous identity id + its capability token and — an
- * UPLOADER identity only — its own key `K_up` (standard base64), which everything it uploads is sealed under
+ * A named session on a READ_WRITE or WRITE_ONLY share: the anonymous identity id + its capability token and — a
+ * WRITE_ONLY identity only — its own key `K_up` (standard base64), which everything it uploads is sealed under
  * (ADR 0031 point 7). Persisted on the guest's device only; it opens nothing but what this identity sealed.
  */
 export type ContributorSession = { identityId: string; contributorToken: string; uploaderKey?: string }
 
 /**
- * Name yourself on a CONTRIBUTOR or UPLOADER share (operator-blind) and create an anonymous share identity.
- * A CONTRIBUTOR seals the display name under `K_mem`. An UPLOADER, which never holds `K_mem`, mints its own key
+ * Name yourself on a READ_WRITE or WRITE_ONLY share (operator-blind) and create an anonymous share identity.
+ * A READ_WRITE guest seals the display name under `K_mem`. A WRITE_ONLY guest, which never holds `K_mem`, mints its own key
  * `K_up`, seals the name under it and hands `K_up` over wrapped to the Memory's drop public key. Returns the
  * identity id + a capability token that authorizes this session's uploads (+ `K_up`). The server never sees the
  * name (only the ciphertext), the key, or the person.
@@ -551,8 +551,8 @@ export async function createContributorIdentity(
 }
 
 /**
- * The key a named session's uploads are sealed under: an UPLOADER identity's own `K_up`, a CONTRIBUTOR's `K_mem`.
- * Null when the session cannot seal for this share — an UPLOADER session saved without its key, which must name
+ * The key a named session's uploads are sealed under: a WRITE_ONLY identity's own `K_up`, a READ_WRITE identity's `K_mem`.
+ * Null when the session cannot seal for this share — a WRITE_ONLY session saved without its key, which must name
  * itself again rather than fall back to a key it does not hold.
  */
 export function sessionSealKey(session: ContributorSession, access: ShareAccess): Uint8Array | null {
@@ -613,7 +613,7 @@ function shareUploadTransport(shareId: string, contributorToken: string, pwToken
 }
 
 /**
- * Add one photo to a CONTRIBUTOR or UPLOADER share (anonymous): seal it under the session's key ([sessionSealKey]:
+ * Add one photo to a READ_WRITE or WRITE_ONLY share (anonymous): seal it under the session's key ([sessionSealKey]:
  * `K_mem` for a contributor, the guest's own `K_up` for an uploader) with its derivatives + metadata and upload it
  * via the share-scoped endpoints — the exact same operator-blind pipeline as the curator's `addMedia`, only the
  * transport is share-gated. Returns the new blob + media ids.
@@ -630,7 +630,7 @@ export async function addSharePhoto(
 }
 
 /**
- * Delete one of your own contributions on a CONTRIBUTOR/UPLOADER share (anonymous, token-authorized). The server
+ * Delete one of your own contributions on a READ_WRITE/WRITE_ONLY share (anonymous, token-authorized). The server
  * authorizes it by a single-row ownership check (the media's `share_identity_id` equals the token's identity) and
  * reclaims its blobs — a foreign/unknown media is a 404. Used by the uploader drop-box's session-only delete-own.
  */
@@ -641,15 +641,15 @@ export async function deleteSharePhoto(shareId: string, contributorToken: string
 // --- viewer (anonymous, no session) ----------------------------------------
 
 /** One shared media resolved for the read-only viewer: the media + the `K_mem` of the node it sits on + the shared
- *  Memory's scope, which every one of its seals is bound to (ADR 0072). A media an UPLOADER guest added carries its
+ *  Memory's scope, which every one of its seals is bound to (ADR 0072). A media a WRITE_ONLY guest added carries its
  *  origin, so [mediaKey] opens it through that node's drop key instead (ADR 0031 point 7). */
 export type ShareItem = { item: MediaItem; memoryKey: Uint8Array; scopeId: string }
 
 /**
  * What a resolved link lets its guest do with keys (ADR 0031 point 7):
- *  - `read` (VIEWER, CONTRIBUTOR): the shared Memory's root `K_mem` — to open its media, and for a contributor to
+ *  - `read` (READ, READ_WRITE): the shared Memory's root `K_mem` — to open its media, and for a contributor to
  *    seal their name + uploads under;
- *  - `drop` (UPLOADER): the Memory's drop PUBLIC key and the node it belongs to — enough to wrap an identity key
+ *  - `drop` (WRITE_ONLY): the Memory's drop PUBLIC key and the node it belongs to — enough to wrap an identity key
  *    of its own to, nothing to open anything with.
  */
 export type ShareAccess =
@@ -657,7 +657,7 @@ export type ShareAccess =
   | { kind: 'drop'; nodeId: string; dropPublicKey: v1.HybridPublic }
 
 /** The decrypted shared Memory, ready to render: its name, the grant `role`, what its [access] holds, and every
- *  media (each with its own node's `K_mem` — none for an UPLOADER link, which is served no media). */
+ *  media (each with its own node's `K_mem` — none for a WRITE_ONLY link, which is served no media). */
 export type ResolvedShare = {
   memoryName: string
   noteByLocale: LocaleMap
@@ -725,7 +725,7 @@ function deriveSubtreeKeys(scopeId: string, nodes: ShareNode[], rootKmem: Uint8A
 }
 
 /** The Memories half of a resolved share: what its link lets the guest do with keys, and every media (each with its
- *  own node's `K_mem` — none for an UPLOADER link, which is served no media). */
+ *  own node's `K_mem` — none for a WRITE_ONLY link, which is served no media). */
 export type OpenedMemory = { access: ShareAccess; items: ShareItem[] }
 
 /**
@@ -737,9 +737,9 @@ export type OpenedMemory = { access: ShareAccess; items: ShareItem[] }
  */
 export function openSharedMemory(head: PublicShareHead): OpenedMemory {
   const { share, kShare, scopeId } = head
-  // ADR 0031 point 7: an UPLOADER link opens the drop public key and nothing else. It never unwraps `K_mem`, even
+  // ADR 0031 point 7: a WRITE_ONLY link opens the drop public key and nothing else. It never unwraps `K_mem`, even
   // from a row that still carries a wrap, and it is served no media to key.
-  if (share.role === ShareRole.Uploader) {
+  if (share.role === ShareRole.WriteOnly) {
     if (!share.sealedDropPublicKey || !share.nodeId) throw new ShareUnavailableError('not_found')
     let dropPublicKey: v1.HybridPublic
     try {
@@ -753,12 +753,12 @@ export function openSharedMemory(head: PublicShareHead): OpenedMemory {
   if (!share.wrap) throw new ShareUnavailableError('not_found')
   let rootKmem: Uint8Array
   try {
-    rootKmem = v1.open(SHARE_KEY, kShare, fromB64std(share.wrap)) // VIEWER / CONTRIBUTOR only (guarded above)
+    rootKmem = v1.open(SHARE_KEY, kShare, fromB64std(share.wrap)) // READ / READ_WRITE only (guarded above)
   } catch {
     throw new ShareUnavailableError('bad_fragment_key')
   }
   const keys = deriveSubtreeKeys(scopeId, share.nodes, rootKmem)
-  // A media an UPLOADER guest added opens through its node's drop key and its identity's wrapped key, both served
+  // A media a WRITE_ONLY guest added opens through its node's drop key and its identity's wrapped key, both served
   // here: the node carries the one, the identities list the other (ADR 0031 point 7). That list is all a guest is
   // told about any identity — never a name, which is for the Memory's members (ADR 0030 point 8).
   const dropKeyOf = new Map(share.nodes.map((n) => [n.id, n.sealedDropPrivateKey]))

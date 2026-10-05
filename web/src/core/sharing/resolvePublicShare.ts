@@ -9,7 +9,7 @@
 // chapters' keys, the media rows and an uploader's drop key are the application's (`openSharedMemory` in
 // features/memory/share.ts). The head hands them the unlocked response and `K_share`, nothing else.
 //
-// **The root kind of an UPLOADER share is unknown to the client.** An unlocked uploader response serves no nodes
+// **The root kind of a WRITE_ONLY share is unknown to the client.** An unlocked uploader response serves no nodes
 // (`PublicShare.nodeId` only), so `rootKind` is null for it and the shell dispatches such a share to the one
 // application that claimed the kind-less drop body (registry.claimShareBody(DROP_SHARE, …)). A `rootKind` on
 // `PublicShare` is the follow-up contract change that retires that rule before a second shareable kind exists.
@@ -85,7 +85,7 @@ export type PublicShareHead = {
   noteByLocale: LocaleMap
   role: ShareRole
   /** The kind of the share's root node (`ShareNode.kind` of the node with `parentId: null`); null when none is served,
-   *  which is every UPLOADER share (see the header). */
+   *  which is every WRITE_ONLY share (see the header). */
   rootKind: NodeKind | null
 }
 
@@ -111,7 +111,7 @@ export async function resolvePublicShare(shareId: string, fragmentKey: string, p
     throw new ShareUnavailableError('not_found') // 404 (revoked/expired/unknown) or a network error
   }
   // cr-0118: a locked share (password required, no/valid-less token) serves only the challenge — prompt the viewer.
-  // Locked is "no sealed name", never "no wrap": an unlocked UPLOADER share carries no wrap either.
+  // Locked is "no sealed name", never "no wrap": an unlocked WRITE_ONLY share carries no wrap either.
   if (share.passwordRequired && !share.sealedName) throw new SharePasswordRequiredError(share.pwSalt ?? '')
   if (!share.scopeId || !share.sealedName) throw new ShareUnavailableError('not_found') // unlocked ⇒ scope + name
 

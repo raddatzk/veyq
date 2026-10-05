@@ -532,8 +532,8 @@ export function deserializeIdentityPrivate(bytes: Uint8Array): Identity['priv'] 
 
 /**
  * A Memory's **drop keypair** (ADR 0031 point 7): a hybrid X25519 + ML-KEM-768 KEM keypair with no signing half.
- * Its private half is sealed under the Memory's `K_mem` (`drop-private-key`), its public half under each UPLOADER
- * share's `K_share` (`drop-public-key`). An UPLOADER guest wraps its own identity key to the public half
+ * Its private half is sealed under the Memory's `K_mem` (`drop-private-key`), its public half under each WRITE_ONLY
+ * share's `K_share` (`drop-public-key`). A WRITE_ONLY guest wraps its own identity key to the public half
  * (`upload-identity-key`), so the guest never holds `K_mem` and every reader of the Memory opens what it uploaded.
  */
 export type DropKey = { kemX: Uint8Array; mlkemSeed: Uint8Array }

@@ -21,7 +21,7 @@
 // **Share bodies (`claimShareBody`).** The public share page (`views/ShareView.vue`) is a shell: it resolves the
 // kind-independent half (core/sharing/resolvePublicShare.ts), runs the password and terms gates, then renders the body
 // the application claimed for the share's ROOT node kind. A key is claimed once (a second claim throws). The root kind
-// of an UPLOADER share is unknown to the client (the unlocked response serves no nodes), so such a share goes to the one
+// of a WRITE_ONLY share is unknown to the client (the unlocked response serves no nodes), so such a share goes to the one
 // application that claimed `DROP_SHARE` — the kind-less drop; a `rootKind` on the contract's `PublicShare` is the
 // follow-up that retires that rule. A root kind nobody claimed renders the shell's explicit unavailable state.
 //
@@ -107,7 +107,7 @@ export interface SidebarPinsEmits {
 }
 
 /** The key under which an application claims the body for a share whose root kind the client cannot know: every
- *  UPLOADER share (see the header). */
+ *  WRITE_ONLY share (see the header). */
 export const DROP_SHARE = 'drop' as const
 export type ShareBodyKey = NodeKind | typeof DROP_SHARE
 

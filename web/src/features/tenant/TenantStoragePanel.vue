@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // uc.sharing.share-link-storage-limit (web, ADR 0073 §4, §6) — the "Storage" rubric of the tenant settings. The
 // tenant OWNER sees what the tenant occupies in the store and sets the one per-link limit every upload link
-// (CONTRIBUTOR / UPLOADER) stores at most. The mail-settings panel's shape: the read is owner-gated, so a non-owner
+// (READ_WRITE / WRITE_ONLY) stores at most. The mail-settings panel's shape: the read is owner-gated, so a non-owner
 // member's 403 renders a read-only notice and a non-member's 404 the generic load error (ADR 0042). Operator-blind:
 // only byte counts the server already sees, and only the tenant's total — never a figure per member or link.
 // The limit is entered in GiB and sent in bytes; `0` switches link uploads off, and there is no "unlimited".

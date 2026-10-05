@@ -77,7 +77,7 @@ const { t } = useI18n()
 const { viewMode } = useViewMode()
 const { hasCapability } = useCapabilities()
 // The uploader (drop-box) link is its OWN memory action (a separate dialog), offered only when the instance keeps
-// the uploader-links capability (ADR 0032) — the server also 422-rejects createShare(UPLOADER) when it is off.
+// the uploader-links capability (ADR 0032) — the server also 422-rejects createShare(WRITE_ONLY) when it is off.
 const canUploadShare = computed(() => !!props.shareable && hasCapability(SHARING_UPLOADER_LINKS))
 
 // --- item favorites (ADR 0068) ---

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// uc.memory.upload E3 at the CONTRIBUTOR's picker (uc.sharing.share-contributor / uc.sharing.share-uploader,
+// uc.memory.upload E3 at the READ_WRITE guest's picker (uc.sharing.share-contributor / uc.sharing.share-uploader,
 // step 4 of each). E3 is a property of **the picker**, not of one screen: a visitor adding photos from Safari's
 // Photos gallery hits the same late/repeated `input.files` population the curator does, and a picker that reads
 // the input once loses whatever the browser had not populated yet — silently, which is the worst way to lose a
@@ -114,7 +114,7 @@ describe('ShareView — the contributor picker inherits E3s re-read window', () 
     serve({
       memoryName: 'Rom 2026',
       noteByLocale: {},
-      role: ShareRole.Contributor,
+      role: ShareRole.ReadWrite,
       // the shared Memory's scope: a contributor's uploads are sealed bound to it, so without one nothing enqueues
       scopeId: '5c09e000-0000-4000-8000-0000000000df',
       access: { kind: 'read', memoryKey: new Uint8Array(32) },
@@ -123,7 +123,7 @@ describe('ShareView — the contributor picker inherits E3s re-read window', () 
   })
   afterEach(() => { vi.useRealTimers() })
 
-  /** Mount a named-in CONTRIBUTOR share and return its wrapper + a Safari-shaped driver for its file input. */
+  /** Mount a named-in READ_WRITE share and return its wrapper + a Safari-shaped driver for its file input. */
   async function mountWithPicker() {
     const wrapper = mountShareView()
     await flushPromises()
