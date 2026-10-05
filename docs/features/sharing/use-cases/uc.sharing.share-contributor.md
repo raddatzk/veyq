@@ -118,8 +118,9 @@ sequenceDiagram
   ([ADR 0034](../../../decisions/0034-media-uploader-buckets.md)). This share stores the identity + shows
   contributed media inline; the buckets grouping reads that hook with **no migration** on the contributor half
   ([ADR 0030](../../../decisions/0030-contributor-public-share.md)).
-- **The name is for the Memory's members.** A link's resolve serves no contributor identity, not even its own
-  guests' — also after a CONTRIBUTOR→VIEWER change — and no contributed media names one, so a visitor learns
+- **The name is for the Memory's members.** Neither a link's resolve nor its media read serves a contributor
+  identity, not even its own guests' — also after a CONTRIBUTOR→VIEWER change — and no contributed media in the
+  read names one, so a visitor learns
   neither a name nor which uploads came from one person. A link plus a database dump still opens the names, as it
   opens the photos: accepted in [ADR 0030](../../../decisions/0030-contributor-public-share.md) point 8.
 - **Direct-append; moderation is later.** A contributed photo is live immediately — good for a shared album, but

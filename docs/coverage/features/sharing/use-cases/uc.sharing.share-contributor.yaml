@@ -60,7 +60,7 @@ acceptanceCriteria:
       web:
         e2e: [src/features/memory/shareContributor.e2e.test.ts]
   - id: direct-append-attribution
-    text: Contributed media attaches to the shared Memory root node (share.nodeId), stamped with the contributor's share_identity_id, and appears immediately (direct-append, no review gate). The anonymous resolve serves it with no identityId and serves no contributor identity or name; the stamp and the sealed name reach the Memory's members through their bucket list, which groups by it (ADR 0030 point 8). A guest's page renders all contributed media inline.
+    text: Contributed media attaches to the shared Memory root node (share.nodeId), stamped with the contributor's share_identity_id, and appears immediately (direct-append, no review gate). The anonymous media read serves it with no identityId, and neither the resolve nor the media read serves a contributor identity or name; the stamp and the sealed name reach the Memory's members through their bucket list, which groups by it (ADR 0030 point 8). A guest's page renders all contributed media inline.
     coverage:
       # The web e2e proves it on the live wire: the contribution attaches to the share's root node, surfaces
       # immediately in BOTH the anonymous resolve and the curator's own listMedia, the raw resolve carries no
@@ -69,6 +69,17 @@ acceptanceCriteria:
         integration: [ShareContributorSliceTest.contributeFlowAttachesStampsIdentityAndSurfacesInResolve]
       web:
         e2e: [src/features/memory/shareContributor.e2e.test.ts]
+    gaps:
+      - surface: backend
+        reason: >-
+          The media read is not its own operation yet: today the contributed media and the (absent) identities
+          ride on the resolve's body, which is where these refs observe them. A separate
+          GET /api/shares/{shareId}/media lands with slice 6 of cr-platform-contract-split, whose refs replace
+          this note.
+      - surface: web
+        reason: >-
+          As for backend: the e2e reads the media off the raw resolve, not a separate media read, until slice 6
+          of cr-platform-contract-split.
   - id: operator-blind
     text: The server stores only the share record (shareId + wrap + plaintext role + sealed name + nodeId), an opaque share_identity (K_mem-sealed contributor name + token hash + shareId), a share_identity_id stamp on media, and ciphertext blobs. It never sees K_share, K_mem, the Memory name, the contributor's name, the photo bytes, or who the person is. The no-install contributor page carries the same trust-tier honesty (footer link, ADR 0026); a reported share is decryptable (T&S corollary), intended.
     coverage:

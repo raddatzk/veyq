@@ -38,12 +38,19 @@ acceptanceCriteria:
         unit: [src/features/memory/shareUploader.test.ts]
         e2e: [src/features/memory/shareUploader.e2e.test.ts]
   - id: write-only-no-view-of-others
-    text: The canView gate ({VIEWER,CONTRIBUTOR}) is enforced at BOTH guest read paths. The anonymous resolve returns media=[], nodes=[], identities=[] for an UPLOADER share (only role + the sealed drop public key + sealedName — not even the root node, so no K_mem-decryptable node metadata leaks). The blob download (GET /shares/{id}/blobs/{blobId}) is role-gated too - an UPLOADER share 404s before the subtree check, so a leaked in-subtree id yields nothing. Write-only is a real server capability, not just id-secrecy (ids are also unguessable and never handed to the uploader). canUpload={CONTRIBUTOR,UPLOADER}.
+    text: The canView gate ({VIEWER,CONTRIBUTOR}) is enforced at BOTH guest read paths. The anonymous resolve returns nodes=[] for an UPLOADER share (only role + the sealed drop public key + sealedName — not even the root node, so no K_mem-decryptable node metadata leaks), and its media read answers an empty list with no identities. The blob download (GET /shares/{id}/blobs/{blobId}) is role-gated too - an UPLOADER share 404s before the subtree check, so a leaked in-subtree id yields nothing. Write-only is a real server capability, not just id-secrecy (ids are also unguessable and never handed to the uploader). canUpload={CONTRIBUTOR,UPLOADER}.
     coverage:
       backend:
         integration: [ShareUploaderSliceTest.uploaderResolveServesNoMediaEvenWithExisting, ShareUploaderSliceTest.uploaderShareHasNoBlobDownloadCapability, ShareUploaderSliceTest.viewerShareRejectsUploadAndDelete]
       web:
         unit: [src/features/memory/optimisticUpload.test.ts]
+    gaps:
+      - surface: backend
+        reason: >-
+          The media read is not its own operation yet: today an UPLOADER resolve serves media=[] and
+          identities=[] in its own body, which is what these refs prove. The empty answer of a separate
+          GET /api/shares/{shareId}/media lands with slice 6 of cr-platform-contract-split, whose refs replace
+          this note.
   - id: session-own-gallery-no-download
     text: The uploader names themselves (sealed under its own identity key -> anonymous identity) and adds photos via the share-scoped upload path (as CONTRIBUTOR). The client keeps each returned mediaId + the LOCAL preview in session memory and renders its own uploads with the same gallery mechanic (MediaGrid + optimistic tile) from the local preview — never a download. A reload shows nothing (session-only).
     coverage:
@@ -67,12 +74,17 @@ acceptanceCriteria:
       web:
         unit: [src/i18n/setLocale.test.ts]
   - id: operator-blind
-    text: The server serves the uploader NO gallery and NO bytes (resolve media=[]/nodes=[]; the blob endpoint is role-gated to 404 for an uploader). It holds only the opaque share record + the sealed anonymous identity + the share_identity_id stamp (for the curator's own view + the delete ownership check) + ciphertext blobs — never K_share/K_mem/any name/the photo bytes/a per-guest content listing. The no-install page carries the same trust-tier honesty (footer link, ADR 0026).
+    text: The server serves the uploader NO gallery and NO bytes (resolve nodes=[], the media read an empty list; the blob endpoint is role-gated to 404 for an uploader). It holds only the opaque share record + the sealed anonymous identity + the share_identity_id stamp (for the curator's own view + the delete ownership check) + ciphertext blobs — never K_share/K_mem/any name/the photo bytes/a per-guest content listing. The no-install page carries the same trust-tier honesty (footer link, ADR 0026).
     coverage:
       backend:
         integration: [ShareUploaderSliceTest.uploaderResolveServesNoMediaEvenWithExisting, ShareUploaderSliceTest.uploaderShareHasNoBlobDownloadCapability, ShareUploaderSliceTest.uploaderNamesUploadsAttachesStampedAndDeletesOwn]
       web:
         unit: [src/features/memory/share.test.ts]
+    gaps:
+      - surface: backend
+        reason: >-
+          As for write-only-no-view-of-others: the refs prove the resolve's media=[], not a separate media read,
+          until slice 6 of cr-platform-contract-split.
   - id: picked-photo-is-never-silently-dropped
     text: >-
       A photo the visitor picked is uploaded — losing one silently is worse than failing loudly, and a visitor
