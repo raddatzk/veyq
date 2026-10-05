@@ -6,13 +6,13 @@
 // Quarkus plugins without a version: the versions are declared once, in the root's `plugins {}`. A script plugin
 // cannot see the Kotlin Gradle plugin's types, so the Kotlin extensions are configured through their names.
 //
-// **The jar is named, not left to Gradle.** Without a group and an archivesName the module's jar would be
-// `core-unspecified.jar` in `quarkus-app/lib/main`, a name a third-party `core` artifact can collide with. So the
-// group is `com.veyq` and the archivesName `veyq-<module>`, set here and nowhere else —
-// `scripts/validate_backend_module_graph.py` rule (f) holds both.
+// **The jar is named by the group, never renamed.** Quarkus names a `quarkus-app/lib/main` entry
+// `<group>.<project name>.jar` — `com.veyq.core.jar`, `com.veyq.memories.jar` — so the group is set here and nowhere
+// else. Never set an `archivesName`: Quarkus cannot map a renamed project's test-fixtures jar, and a
+// `testFixtures(project(…))` dependency then silently drops out of a `@QuarkusTest`'s application (measured
+// 2026-10-05, Quarkus 3.36.0). `scripts/validate_backend_module_graph.py` rule (f) holds both.
 
 group = "com.veyq"
-extensions.configure<org.gradle.api.plugins.BasePluginExtension> { archivesName.set("veyq-${project.name}") }
 
 repositories {
     mavenCentral()

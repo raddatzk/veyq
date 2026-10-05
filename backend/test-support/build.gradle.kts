@@ -7,10 +7,13 @@
 // Test code only: a `testImplementation` dependency of `:core`, `:apps:memories` and the root, on
 // no runtime classpath, so nothing here reaches the fast-jar.
 //
-// **Why a project and not `java-test-fixtures` on `:core`** (measured, Quarkus 3.36.0, cr-platform-gradle-modules
-// step 6): a test-fixtures output is not part of a `@QuarkusTest`'s application — its classes load through the system
-// class loader, outside Quarkus (`LinkageError` on a second copy of a core entity, `Arc.container()` null), and its
-// resources are no config source. A project dependency is a workspace module Quarkus loads like `:core` itself.
+// **Why a project and not `java-test-fixtures` on `:core`**: a project dependency is a workspace module Quarkus loads
+// like `:core` itself. A test-fixtures output was measured (Quarkus 3.36.0, cr-platform-gradle-modules step 6) to stay
+// outside the `@QuarkusTest` application — its classes on the system class loader (`LinkageError` on a second copy of a
+// core entity, `Arc.container()` null), its resources no config source — but that measurement ran while the module
+// convention renamed every jar (`archivesName`), and the rename alone drops a fixtures jar out of the application model
+// (measured 2026-10-05). Without it a plain fixture class is in the model; whether these helpers, which touch entities
+// and Arc, would work from there is unmeasured (inbox #333).
 //
 // `:core` is `compileOnly`: at test time the module under test (or the root) already brings it, and a runtime edge
 // back to `:core` would put a second copy of core's classes on `:core`'s own test classpath.

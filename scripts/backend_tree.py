@@ -8,7 +8,8 @@ Gradle caches and `node_modules` are not sources and are skipped by path segment
 
 **One project is test code although its sources sit in `src/main`:** `:test-support` (`TEST_SUPPORT`), the helpers
 more than one module's tests share. It is a project of its own because Quarkus loads a project dependency inside the
-application under test and a `java-test-fixtures` output outside it (measured, cr-platform-gradle-modules step 6).
+application under test; a `java-test-fixtures` output was measured outside it while the module jars were renamed, and
+is unmeasured for entity- and Arc-touching helpers since (`backend/test-support/build.gradle.kts`, inbox #333).
 Its `src/main/kotlin` is therefore a **fixture root**, never a main root — a guard over production code must not
 read `TestFixtures`, and a guard over test code must — and its resources are test-side, never shipped.
 
@@ -62,7 +63,7 @@ def test_roots() -> list[pathlib.Path]:
 
 def fixture_roots() -> list[pathlib.Path]:
     """Every root of shared test helpers: `:test-support`'s `src/main/kotlin`, and any `src/testFixtures/kotlin`
-    (none: a test-fixtures output is not part of a `@QuarkusTest`'s application, module docstring)."""
+    (none today: the helpers are a project, module docstring)."""
     return sorted([r for r in _roots("main", "kotlin") if is_test_support(r)] + _roots("testFixtures", "kotlin"))
 
 

@@ -45,7 +45,7 @@ class RateLimitPostureSweepTest {
     // --- enumeration, angle 1: everything that was compiled into a main output of a backend project --------
 
     // Every backend project's main output on the classpath, directory or jar (`MainOutputs`): the module split put
-    // core's classes into `veyq-core.jar` and left the rest in the root's classes directory. Test outputs are not
+    // core's classes into `core.jar` and left the rest in the root's classes directory. Test outputs are not
     // main outputs, which is exactly the boundary that keeps the DefaultDeny probe out.
     private fun compiledResourceClasses(): Set<Class<*>> {
         val loader = Thread.currentThread().contextClassLoader

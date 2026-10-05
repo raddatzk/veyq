@@ -37,10 +37,13 @@ module the root reaches over runtime edges **ships** (its jar is in the fast-jar
   directory (measured: "Configuring project ':core' without an existing directory is not allowed") — and some stage
   copies the `src` of every module that ships. Nothing in `./gradlew check` would show either gap; only the release
   build would.
-- **(f) Every module jar is named.** `gradle/module.gradle.kts` sets `group = "com.veyq"` and `archivesName`
-  `veyq-<module>`, every module applies it, and no module's build file sets a group or an archivesName of its own.
-  Unnamed, the jar the root's fast-jar carries in `quarkus-app/lib/main` is `<module>-unspecified.jar`, a name a
-  third-party `core` artifact can share.
+- **(f) Every module jar is named by its group, and never renamed.** `gradle/module.gradle.kts` sets
+  `group = "com.veyq"`, every module applies it, no module's build file sets a group of its own, and no backend build
+  file (the convention, the root's, a module's) sets an `archivesName`. Quarkus names a `quarkus-app/lib/main` entry
+  `<group>.<project name>.jar` (`com.veyq.core.jar`, `com.veyq.memories.jar`); without the group a module's jar there
+  would carry no namespace a third-party `core` artifact cannot share. An `archivesName` is red because it is silent:
+  Quarkus cannot map a renamed project's `java-test-fixtures` jar, so `testImplementation(testFixtures(project(…)))`
+  drops out of a `@QuarkusTest`'s application model with no error (measured 2026-10-05, Quarkus 3.36.0).
 - **(g) One home per config key, per classpath.** The config files are every `application*.properties` in a
   `src/{main,testFixtures,test}/resources` under `backend/` (found by `backend_tree`, build output excluded). They
   are judged per **classpath**, the way SmallRye Config meets them: the *main* classpath is the main resources of the
@@ -61,9 +64,10 @@ module the root reaches over runtime edges **ships** (its jar is in the fast-jar
   (g3) Every `application-<p>.properties` has an `application.properties` in the same directory. SmallRye finds a
   profile file only as the sibling of a discovered `application.properties`; one without that sibling is **silently
   never read** — the `%dev`/`%e2e`/`%prod` (or `%test`) keys would vanish with no error anywhere.
-  (g4) No config file sits in a `src/testFixtures/resources`: a `java-test-fixtures` output is not part of a
-  `@QuarkusTest`'s application (measured under Quarkus 3.36.0), so a file there is silently never read by the tests
-  it was written for.
+  (g4) No config file sits in a `src/testFixtures/resources`: one there was measured never read by the
+  `@QuarkusTest`s it was written for (Quarkus 3.36.0) — while the module jars were renamed, which alone drops a
+  fixtures jar out of the application (rule (f)). Whether Quarkus reads one without the rename is unmeasured (inbox
+  #333), so the rule stays until it is.
 
 **The defect that bought it.** None: built with cr-platform-gradle-modules (steps 6 and 8b), which split the
 backend into `:core`, `:apps:memories` and `:test-support`. Every failure mode it names is silent — an ambiguous key
@@ -117,6 +121,12 @@ SPEC_SET = re.compile(r'\bSpecSet\(\s*("?)(\w+)\1\s*,\s*\w+\s*,\s*"([\w.]+)"')
 OWNER_VAL = re.compile(r'\bval\s+(\w+)\s*=\s*"(\w+)"')
 OPENAPI_OWNER = re.compile(r'extra\["veyq\.openapi\.owner"\]\s*=\s*"(\w+)"')
 PACKAGE_LINE = re.compile(r"^\s*package\s+([\w.]+)", re.M)
+# Any spelling of a renamed archive (`archivesName.set(…)`, `archivesName = …`, `base { archivesName… }`), read on
+# comment-masked text so the convention's own warning against it is not what is found.
+ARCHIVES_NAME = re.compile(r"\barchivesName\b|\barchivesBaseName\b")
+ARCHIVES_NAME_WHY = ("Quarkus cannot map a renamed project's test-fixtures jar, so a `testFixtures(project(…))` "
+                     "dependency silently drops out of a @QuarkusTest's application (measured 2026-10-05). The jar is "
+                     "named by the group: `<group>.<project name>.jar` in quarkus-app/lib/main.")
 DOCKERFILE = ROOT / "Dockerfile"
 BUILD_BASE_STAGE = "backend-build-base"
 BASE_NAME = "application.properties"
@@ -226,8 +236,8 @@ def rule_g(files: list[pathlib.Path]) -> list[str]:
             errors.append(f"(g3) {rel(f)} has no {BASE_NAME} beside it: SmallRye finds a profile file only next to a "
                           f"discovered {BASE_NAME}, so its keys are silently never read. Add a comment-only anchor.")
         if source_set_of(f) == "testFixtures":
-            errors.append(f"(g4) {rel(f)} is in a test-fixtures output, which is not part of a @QuarkusTest's "
-                          f"application: it is never read. A module's %test keys go beside its tests, in src/test/resources.")
+            errors.append(f"(g4) {rel(f)} is in a test-fixtures output, which a @QuarkusTest is not known to read "
+                          f"as a config source. A module's %test keys go beside its tests, in src/test/resources.")
     for name, cp in classpaths(files).items():
         homes: dict[tuple[str, str], list[pathlib.Path]] = defaultdict(list)
         keyed_bases = []
@@ -428,9 +438,9 @@ def rule_f(mods: list[str]) -> list[str]:
     convention = MODULE_SCRIPT.read_text(encoding="utf-8") if MODULE_SCRIPT.is_file() else ""
     if not re.search(r'^group\s*=\s*"com\.veyq"', convention, re.MULTILINE):
         errors.append(f"(f) {rel(MODULE_SCRIPT)} sets no `group = \"com.veyq\"` — a module jar would carry no group.")
-    if not re.search(r'archivesName\.set\("veyq-\$\{project\.name\}"\)', convention):
-        errors.append(f"(f) {rel(MODULE_SCRIPT)} sets no `archivesName` `veyq-<module>` — the jar in "
-                      f"quarkus-app/lib/main would be `<module>-unspecified.jar`, a name a third-party artifact can share.")
+    for f in [MODULE_SCRIPT, BACKEND / "build.gradle.kts"]:
+        if f.is_file() and ARCHIVES_NAME.search(mask(f.read_text(encoding="utf-8"))):
+            errors.append(f"(f) {rel(f)} sets an `archivesName` — {ARCHIVES_NAME_WHY}")
     for mod in mods:
         build = BACKEND / mod / "build.gradle.kts"
         text = build.read_text(encoding="utf-8") if build.is_file() else ""
@@ -439,8 +449,10 @@ def rule_f(mods: list[str]) -> list[str]:
             continue
         if not re.search(r'apply\s*\(\s*from\s*=\s*"[./]*gradle/module\.gradle\.kts"\s*\)', text):
             errors.append(f"(f) backend/{mod}/build.gradle.kts does not apply gradle/module.gradle.kts — its jar is unnamed")
-        if re.search(r"archivesName|^\s*group\s*=", text, re.MULTILINE):
-            errors.append(f"(f) backend/{mod}/build.gradle.kts overrides the group or archivesName the convention sets")
+        if re.search(r"^\s*group\s*=", text, re.MULTILINE):
+            errors.append(f"(f) backend/{mod}/build.gradle.kts overrides the group the convention sets")
+        if ARCHIVES_NAME.search(mask(text)):
+            errors.append(f"(f) backend/{mod}/build.gradle.kts sets an `archivesName` — {ARCHIVES_NAME_WHY}")
     return errors
 
 

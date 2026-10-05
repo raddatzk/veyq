@@ -20,8 +20,11 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   project without a match. **Each project with `@QuarkusTest`s holds
   its own `%test` keys** in `src/test/resources/application-test.properties` beside a comment-only
   `application.properties` anchor (a profile file is read only beside one); the base config is `:core`'s
-  `src/main/resources/application.properties`. Shared test helpers live in `:test-support`, never in a
-  `java-test-fixtures` output — Quarkus does not load that inside the application under test (measured).
+  `src/main/resources/application.properties`. Shared test helpers live in `:test-support`. A
+  `java-test-fixtures` output is not blocked by Quarkus per se: what dropped it out of a `@QuarkusTest`'s application
+  was the jar rename the module convention once set (`archivesName` — never set one again, `gradle/module.gradle.kts`
+  says why), and without it a plain fixture class reaches the application model (measured 2026-10-05). Whether a
+  helper that touches entities or Arc works from there is **unmeasured** (inbox #333), so the helpers stay a project.
 - **Run the app (`quarkusDev`) on a persistent MariaDB** (`%dev`): `docker compose -f infra/docker-compose.yml
   up -d` starts it; data survives restarts (Flyway migrates once, then "up to date"). `docker compose -f
   infra/docker-compose.yml down -v` wipes it for a fresh instance. The H2 fallback is only the test default now.

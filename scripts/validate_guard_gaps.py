@@ -140,6 +140,10 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   51 a `:core` main file declaring a `com.veyq.memories` package — rejected: `validate_backend_module_graph` rule
      (d), no package in two modules. Kotlin compiles the split and Quarkus indexes both halves; the package name
      would then claim an owner the file's module is not
+  52 `:apps:memories`' build file renaming its jar (`base { archivesName.set(…) }`) — rejected:
+     `validate_backend_module_graph` rule (f). Quarkus cannot map a renamed project's test-fixtures jar, so a
+     `testFixtures(project(…))` dependency silently leaves the `@QuarkusTest` application model — the build is
+     green and the fixtures are not there (measured 2026-10-05, Quarkus 3.36.0, when the convention still set one)
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
 (a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
 which the Gradle module split retired: `:core` has no edge to an application, so either shape fails
@@ -679,6 +683,17 @@ def forge_application_depends_on_application(root: pathlib.Path) -> str:
     return "a forged second application depending on :apps:memories (must be REJECTED — no application → application)"
 
 
+MEMORIES_BUILD = "backend/apps/memories/build.gradle.kts"
+
+
+def forge_module_renames_its_jar(root: pathlib.Path) -> str:
+    f = root / MEMORIES_BUILD
+    if not f.is_file():
+        raise ForgeError(f"{MEMORIES_BUILD} is missing — re-anchor this forgery")
+    f.write_text(f.read_text() + '\nbase { archivesName.set("veyq-memories") }\n')
+    return ":apps:memories renaming its jar with an archivesName (must be REJECTED — Quarkus loses its test fixtures)"
+
+
 def forge_core_declares_application_package(root: pathlib.Path) -> str:
     f = root / CORE_NODE_FORGERY
     if not f.parent.is_dir():
@@ -971,6 +986,7 @@ CASES = [
     ("49", "validate_kernel_imports_no_slices.py", forge_core_names_memory_kind, False),
     ("50", "validate_backend_module_graph.py", forge_application_depends_on_application, False),
     ("51", "validate_backend_module_graph.py", forge_core_declares_application_package, False),
+    ("52", "validate_backend_module_graph.py", forge_module_renames_its_jar, False),
 ]
 
 

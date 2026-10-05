@@ -99,7 +99,7 @@ on their own.
   Gradle modules below `backend/`: `:core` (`backend/core`) and `:apps:<name>` (`:apps:memories` in
   `backend/apps/memories`), plus `:test-support`, the test helpers, on no runtime classpath. The root `backend/`
   holds no main code; it composes the modules into the one fast-jar, where each module's jar is
-  `lib/main/com.veyq.veyq-<module>.jar`. The direction is the build's: `:core` has no edge to an application (Gradle
+  `lib/main/com.veyq.<module>.jar`. The direction is the build's: `:core` has no edge to an application (Gradle
   refuses it as a cycle, so a core file importing Memories does not compile), and `validate_backend_module_graph.py`
   holds what Gradle allows — no application depends on another, no package is declared in two modules, every module
   is included, indexed (an unindexed module boots green with its routes answering 404 and its seam implementations
