@@ -19,9 +19,9 @@ import org.junit.jupiter.api.Test
  * them, string literals, so this file compiles and was green on the tree before the move and is green after it. With
  * Memories' rules present the runtime must answer exactly what the single core function answered.
  *
- * Handler level, not HTTP: the contract's closed `NodeKind` enum would refuse an unknown kind at the boundary (400),
- * and `NodesHandler.create` takes the kind as a string — the fail-closed answer for a kind no rule handles is the
- * handler's own.
+ * Handler level, not HTTP: `NodesHandler.create` takes the kind as a string, and the fail-closed answer for a kind no
+ * rule handles is the handler's own. (The contract's `NodeKind` is an open token now, so a well-formed unknown kind
+ * reaches the handler over HTTP too — `NodeKindTokenCoreSliceTest` pins that door.)
  */
 @QuarkusTest
 class NodeKindMatrixSliceTest {

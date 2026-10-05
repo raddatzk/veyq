@@ -3,7 +3,6 @@ package me.raddatz.veyq.core.content
 import me.raddatz.veyq.core.generated.api.ContentApi
 import me.raddatz.veyq.core.generated.model.CreateNodeRequest
 import me.raddatz.veyq.core.generated.model.NodeCreated
-import me.raddatz.veyq.core.generated.model.NodeKind
 import me.raddatz.veyq.core.generated.model.NodeSummary
 import me.raddatz.veyq.core.generated.model.RestoreNodeRequest
 import me.raddatz.veyq.core.generated.model.TrashedNodeSummary
@@ -47,7 +46,7 @@ class ContentResource(
     override fun createNode(scopeId: UUID, createNodeRequest: CreateNodeRequest): Response {
         val outcome = handler.create(
             identity.principal.name, scopeId.toString(), createNodeRequest.nodeId.toString(), createNodeRequest.parentId?.toString(),
-            createNodeRequest.kind.value, createNodeRequest.encryptedName, createNodeRequest.slugToken,
+            createNodeRequest.kind, createNodeRequest.encryptedName, createNodeRequest.slugToken,
             createNodeRequest.orderIndex ?: 0, createNodeRequest.epoch ?: 0,
             createNodeRequest.wrappedContentKey, createNodeRequest.wrappedMeta,
         )
@@ -103,7 +102,7 @@ class ContentResource(
 
     private fun TrashedNodeRow.toTrashSummary(scopeId: String) = TrashedNodeSummary(
         id = UUID.fromString(id),
-        kind = NodeKind.decode(kind),
+        kind = kind,
         encryptedName = encryptedName,
         epoch = epoch,
         deletedAt = OffsetDateTime.ofInstant(deletedAt, ZoneOffset.UTC),
@@ -111,10 +110,14 @@ class ContentResource(
         parentId = if (parentId == scopeId) null else UUID.fromString(parentId),
     )
 
-    /** Map a stored row to the API shape: the root's parent slot (= scope id) surfaces as `parentId = null`. */
+    /**
+     * Map a stored row to the API shape: the root's parent slot (= scope id) surfaces as `parentId = null`. The `kind`
+     * is served as stored — an open token (ADR 0079): a kind no application claims is the client registry's to render
+     * as unsupported, never a decode failure here.
+     */
     private fun NodeRow.toSummary(scopeId: String) = NodeSummary(
         id = UUID.fromString(id),
-        kind = NodeKind.decode(kind),
+        kind = kind,
         encryptedName = encryptedName,
         slugToken = slugToken,
         orderIndex = orderIndex,
