@@ -9,7 +9,7 @@ import type { SetupStatus } from '../api/generated'
 import type { AccountKeyMaterial, MemberProfile } from '../api/generated/account'
 import type { MyTenant } from '../api/generated/scopes'
 import type { InvitePreview } from '../api/generated/tenants'
-import { NodeKind } from '../api/generated/content'
+import { MEMORY_KIND } from '../features/memory/kinds'
 import type { MediaItem } from '../features/memory/media'
 import type { TreeNode } from '../core/node/tree'
 
@@ -69,7 +69,7 @@ export const mediaItem = (o: Partial<MediaItem> & Pick<MediaItem, 'mediaId'>): M
 export const treeNode = (o: Partial<TreeNode> = {}): TreeNode => ({
   id: 'node-1',
   parentId: null,
-  kind: NodeKind.Memory,
+  kind: MEMORY_KIND,
   orderIndex: 0,
   epoch: 0,
   name: 'n',

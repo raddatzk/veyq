@@ -4,7 +4,7 @@
 // edited: the Memories bucket, the pin toggle and the two create modes are resolved here.
 import { computed } from 'vue'
 import type { LevelViewProps, LevelViewEmits } from '../../../core/applications/registry'
-import { NodeKind } from '../../../api/generated/content'
+import { MEMORY_KIND } from '../kinds'
 import { activeSpace } from '../../../app/activeSpace'
 import { toggleFavorite } from '../favoritesStore'
 import type { TreeNode } from '../../../core/node/tree'
@@ -13,7 +13,7 @@ import MemoryBrowse from './MemoryBrowse.vue'
 const props = defineProps<LevelViewProps>()
 const emit = defineEmits<LevelViewEmits>()
 
-const memories = computed(() => props.level.byKind.get(NodeKind.Memory) ?? [])
+const memories = computed(() => props.level.byKind.get(MEMORY_KIND) ?? [])
 
 function onToggleFavorite(node: TreeNode) {
   if (activeSpace.scopeId) void toggleFavorite(node.id, activeSpace.scopeId)

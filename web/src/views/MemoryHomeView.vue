@@ -16,7 +16,7 @@ import { childrenOf, breadcrumbOf, nodeById } from '../core/node/browse'
 import { nodeContentKey } from '../core/node/tree'
 import { parseHash, resolveSlugPath, hashForNode, TENANT_SCOPE } from '../core/node/location'
 import { listMyTenants } from '../features/spaces/scopes'
-import { NodeKind } from '../api/generated/content'
+import { FOLDER_KIND } from '../core/node/kind'
 import { ScopeKind, type MyTenant } from '../api/generated/scopes'
 import { useCapabilities } from '../shared/state/useCapabilities'
 import { SHARING_PUBLIC_LINKS } from '../features/platform/capabilities'
@@ -48,7 +48,7 @@ const currentNodeId = computed(() => (typeof resolved.value === 'string' ? resol
 const currentNode = computed(() => nodeById(treeStore.nodes, currentNodeId.value))
 // Folders and the scope root browse (the `levelView` slot); any other node OPENS, to the detail component its kind
 // registered. A kind with no registered detail is not guessed at: the host shows an explicit unsupported state.
-const isOpenable = computed(() => !!currentNode.value && currentNode.value.kind !== NodeKind.Folder)
+const isOpenable = computed(() => !!currentNode.value && currentNode.value.kind !== FOLDER_KIND)
 const kindDetail = computed(() => {
   if (!isOpenable.value || !currentNode.value) return null
   const info = registry.kind(currentNode.value.kind)
@@ -58,7 +58,7 @@ const levelView = registry.slot('levelView')
 const mutationDialog = registry.slot('nodeMutationDialog')
 const shareDialog = registry.slot('shareDialog')
 const currentFolder = computed(() =>
-  currentNode.value && currentNode.value.kind === NodeKind.Folder ? currentNode.value : null,
+  currentNode.value && currentNode.value.kind === FOLDER_KIND ? currentNode.value : null,
 )
 const level = computed(() => childrenOf(treeStore.nodes, currentNodeId.value))
 // The full **epoch key set** (ADR 0024) — a read opens each node under its own epoch, new content seals under the

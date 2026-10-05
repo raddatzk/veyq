@@ -40,7 +40,7 @@ import { retryFile, enqueueUploads } from '../uploadQueue'
 import { blobApi, contentApi } from '../../../api/client'
 import { mediaApi } from '../api'
 import * as v1 from '@veyq/crypto/v1'
-import { NodeKind } from '../../../api/generated/content'
+import { MEMORY_KIND } from '../kinds'
 import type { TreeNode } from '../../../core/node/tree'
 import { galleryFakeStore } from './galleryFakeStore'
 import { fakeApi, stubApi } from '../../../test/apiMock'
@@ -53,7 +53,7 @@ const OLD = Date.UTC(2019, 2, 3)
 const NEW = Date.UTC(2024, 8, 9)
 
 const node = (name: string): TreeNode => ({
-  id: NODE_ID, kind: NodeKind.Memory, name, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: null, wrappedMeta: null, metaVersion: 0,
+  id: NODE_ID, kind: MEMORY_KIND, name, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: null, wrappedMeta: null, metaVersion: 0,
 })
 
 function stubDeriver(): MediaDeriver {

@@ -7,7 +7,8 @@ vi.mock('leaflet', () => ({ default: {} }))
 
 import { mount } from '@vue/test-utils'
 import MemoryBrowse from './MemoryBrowse.vue'
-import { NodeKind } from '../../../api/generated/content'
+import { FOLDER_KIND, type NodeKind } from '../../../core/node/kind'
+import { MEMORY_KIND } from '../kinds'
 import { treeStore } from '../../../core/node/treeStore'
 import { setViewMode } from '../../../shared/state/useViewMode'
 import { sealNodeMeta } from '../nodeMeta'
@@ -46,14 +47,14 @@ function locatedMemory(label: string, parentLabel: string | null, loc: MemoryLoc
   const key = v1.randomBytes(32)
   const id = uid(label)
   return {
-    id, kind: NodeKind.Memory, name: label, parentId: parentLabel === null ? null : uid(parentLabel), orderIndex: 0, epoch: 0,
+    id, kind: MEMORY_KIND, name: label, parentId: parentLabel === null ? null : uid(parentLabel), orderIndex: 0, epoch: 0,
     wrappedContentKey: b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: 0 }, scopeKey, key)),
     wrappedMeta: sealNodeMeta(key, { scopeId: SCOPE_ID, nodeId: id }, { v: 1, location: loc }),
     metaVersion: 0,
   }
 }
 /** A folder whose id is the UUID of `label` (so a located Memory's parent label resolves to it). */
-const folderOf = (label: string, name: string): TreeNode => ({ ...node(label, NodeKind.Folder, name), id: uid(label) })
+const folderOf = (label: string, name: string): TreeNode => ({ ...node(label, FOLDER_KIND, name), id: uid(label) })
 const pinNames = (map: { props: (k: string) => unknown }) => (map.props('pins') as { node: TreeNode }[]).map((p) => p.node.name)
 
 const mountBrowse = (props: Partial<InstanceType<typeof MemoryBrowse>['$props']> & { folders: TreeNode[]; memories: TreeNode[] }) =>
@@ -67,8 +68,8 @@ beforeEach(() => {
 
 describe('MemoryBrowse', () => {
   it('renders the level (decrypted folder + Memory names) and emits drill/open on click', async () => {
-    const folders = [node('f1', NodeKind.Folder, 'Trips')]
-    const memories = [node('m1', NodeKind.Memory, 'Solo')]
+    const folders = [node('f1', FOLDER_KIND, 'Trips')]
+    const memories = [node('m1', MEMORY_KIND, 'Solo')]
     const wrapper = mountBrowse({ folders, memories })
 
     expect(wrapper.text()).toContain('Solo')
@@ -129,7 +130,7 @@ describe('MemoryBrowse', () => {
 
   it('grid mode still renders the card grids (map absent)', () => {
     setViewMode('grid')
-    const wrapper = mountBrowse({ folders: [], memories: [node('m1', NodeKind.Memory, 'Solo')] })
+    const wrapper = mountBrowse({ folders: [], memories: [node('m1', MEMORY_KIND, 'Solo')] })
     expect(wrapper.find('.memory-card-grid').exists()).toBe(true)
     expect(wrapper.findComponent(SpaceMapStub).exists()).toBe(false)
   })

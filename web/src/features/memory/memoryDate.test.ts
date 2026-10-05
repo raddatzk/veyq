@@ -20,7 +20,8 @@ import {
 } from './memoryDate'
 import type { MediaItem, MediaMeta } from './media'
 import type { TreeNode } from '../../core/node/tree'
-import { NodeKind, type ContentApi } from '../../api/generated/content'
+import type { ContentApi } from '../../api/generated/content'
+import { MEMORY_KIND } from './kinds'
 import { contentApi } from '../../api/client'
 import { fakeApi, stubApi } from '../../test/apiMock'
 import * as v1 from '@veyq/crypto/v1'
@@ -271,7 +272,7 @@ describe('unsealNodeDate / sortNodesByDate (browse card grid, cr-0067)', () => {
     return {
       id,
       parentId: null,
-      kind: NodeKind.Memory,
+      kind: MEMORY_KIND,
       orderIndex: 0,
       epoch: 0,
       name: label,

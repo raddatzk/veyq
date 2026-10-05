@@ -6,7 +6,7 @@ import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import Message from 'primevue/message'
 import { deleteNode, type TreeNode } from '../tree'
-import { NodeKind } from '../../../api/generated/content'
+import { FOLDER_KIND } from '../kind'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
 
 // Mounted via v-if while open; closing = the parent unmounting it on `close`.
@@ -15,7 +15,7 @@ const emit = defineEmits<{ done: []; close: [] }>()
 const { t } = useI18n()
 
 const error = ref('')
-const isFolder = computed(() => props.node.kind === NodeKind.Folder)
+const isFolder = computed(() => props.node.kind === FOLDER_KIND)
 const header = computed(() => (isFolder.value ? t('memory.deleteFolderTitle') : t('memory.deleteMemoryTitle')))
 const copy = computed(() =>
   isFolder.value

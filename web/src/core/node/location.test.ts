@@ -7,20 +7,21 @@ import {
   hashForNode,
   TENANT_SCOPE,
 } from './location'
-import { NodeKind } from '../../api/generated/content'
+import { FOLDER_KIND, type NodeKind } from './kind'
+import { MEMORY_KIND } from '../../features/memory/kinds'
 import type { TreeNode } from './tree'
 
 // A concrete personal token — any `~<username>` parses as personal (ADR 0023); `~me` is the fallback.
 const PERSONAL_SCOPE = '~me'
 
-const node = (id: string, name: string, parentId: string | null, kind: NodeKind = NodeKind.Folder): TreeNode => ({
+const node = (id: string, name: string, parentId: string | null, kind: NodeKind = FOLDER_KIND): TreeNode => ({
   id, name, parentId, kind, orderIndex: 0, epoch: 0, wrappedContentKey: null, wrappedMeta: null, metaVersion: 0,
 })
 
 // Reisen 2026 / Rom (a tree that lives in whichever scope is active)
 const tree: TreeNode[] = [
   node('f1', 'Reisen 2026', null),
-  node('m1', 'Rom', 'f1', NodeKind.Memory),
+  node('m1', 'Rom', 'f1', MEMORY_KIND),
   node('f2', 'Sommer', 'f1'),
 ]
 

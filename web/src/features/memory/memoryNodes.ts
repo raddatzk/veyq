@@ -1,6 +1,6 @@
 // The Memories application's two content-node births — a Memory (top-level, wrapped under the write key) and a
 // Chapter (wrapped under its parent's K_mem) — over core's kind-agnostic `createContentNode` (ADR 0079).
-import { NodeKind } from '../../api/generated/content'
+import { MEMORY_KIND, CHAPTER_KIND } from './kinds'
 import { writeKey, type EpochKeys } from '../spaces/epochs'
 import { createContentNode, type NodeAddress } from '../../core/node/tree'
 import { sealNodeMeta } from './nodeMeta'
@@ -17,7 +17,7 @@ export async function createMemory(
 ): Promise<{ nodeId: string; memoryKey: Uint8Array }> {
   const metaSealer = location ? (key: Uint8Array, node: NodeAddress) => sealNodeMeta(key, node, { v: 1, location }) : undefined
   // A top-level Memory's K_mem wraps under the write key E_current (the scope's current epoch).
-  const { nodeId, contentKey } = await createContentNode(scopeId, epochs, writeKey(epochs), NodeKind.Memory, name, parentId, metaSealer)
+  const { nodeId, contentKey } = await createContentNode(scopeId, epochs, writeKey(epochs), MEMORY_KIND, name, parentId, metaSealer)
   return { nodeId, memoryKey: contentKey }
 }
 
@@ -29,6 +29,6 @@ export async function createMemory(
 export async function createChapter(
   scopeId: string, epochs: EpochKeys, parentKey: Uint8Array, name: string, parentId: string,
 ): Promise<{ nodeId: string; chapterKey: Uint8Array }> {
-  const { nodeId, contentKey } = await createContentNode(scopeId, epochs, parentKey, NodeKind.Chapter, name, parentId)
+  const { nodeId, contentKey } = await createContentNode(scopeId, epochs, parentKey, CHAPTER_KIND, name, parentId)
   return { nodeId, chapterKey: contentKey }
 }

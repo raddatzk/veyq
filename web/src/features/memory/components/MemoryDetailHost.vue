@@ -5,7 +5,7 @@
 // personal-scope flag, the chapters bucket, the meta patch — is resolved here, inside the application.
 import { computed } from 'vue'
 import type { NodeDetailProps, NodeDetailEmits } from '../../../core/applications/registry'
-import { NodeKind } from '../../../api/generated/content'
+import { CHAPTER_KIND } from '../kinds'
 import { activeSpace, activeEpochKeys } from '../../../app/activeSpace'
 import { isFavorite, toggleFavorite } from '../favoritesStore'
 import { patchNodeMeta } from '../../../core/node/treeStore'
@@ -15,7 +15,7 @@ import MemoryDetail from './MemoryDetail.vue'
 const props = defineProps<NodeDetailProps>()
 const emit = defineEmits<NodeDetailEmits>()
 
-const chapters = computed(() => props.children.byKind.get(NodeKind.Chapter) ?? [])
+const chapters = computed(() => props.children.byKind.get(CHAPTER_KIND) ?? [])
 
 // Item marks seal under `K_SC` at the **base epoch `E_0`** (ADR 0068), never under `activeScopeKey()`, which is
 // the *write* key `E_current`: the marked set is re-sealed whole on every toggle, so a rotation would strand it.

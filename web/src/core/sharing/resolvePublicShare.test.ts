@@ -27,7 +27,7 @@ import { publicSharesApi } from '../../api/client'
 import { fakeApi } from '../../test/apiMock'
 import { httpError } from '../../test/httpError'
 import { ShareRole, type PublicShare, type SharingApi } from '../../api/generated/sharing'
-import { NodeKind } from '../../api/generated/content'
+import { MEMORY_KIND, CHAPTER_KIND } from '../../features/memory/kinds'
 
 const K_SHARE = v1.randomBytes(32)
 const FRAGMENT = b64url(K_SHARE)
@@ -49,27 +49,27 @@ describe('resolvePublicShare: the head', () => {
     const share = serve({
       sealedNote: seal(SHARE_NOTE, JSON.stringify({ de: 'Hallo', en: 'Hello' })),
       nodes: [
-        { id: 'chapter', parentId: 'root', kind: NodeKind.Chapter, epoch: 0 },
-        { id: 'root', parentId: null, kind: NodeKind.Memory, epoch: 0 },
+        { id: 'chapter', parentId: 'root', kind: CHAPTER_KIND, epoch: 0 },
+        { id: 'root', parentId: null, kind: MEMORY_KIND, epoch: 0 },
       ] as PublicShare['nodes'],
     })
 
     const head = await resolvePublicShare('s1', FRAGMENT)
 
-    expect(head).toMatchObject({ shareId: 's1', scopeId: 'scope-1', name: 'Rom 2026', role: ShareRole.Read, rootKind: NodeKind.Memory })
+    expect(head).toMatchObject({ shareId: 's1', scopeId: 'scope-1', name: 'Rom 2026', role: ShareRole.Read, rootKind: MEMORY_KIND })
     expect(pickLocaleText(head.noteByLocale, 'de')).toBe('Hallo')
     expect(head.share).toBe(share) // the application opens its own seals from the unlocked response
     expect(head.kShare).toEqual(K_SHARE)
   })
 
   it('reports whatever kind the root node has — it assumes none (live control for the Memory case above)', async () => {
-    serve({ nodes: [{ id: 'r', parentId: null, kind: NodeKind.Chapter, epoch: 0 }] as PublicShare['nodes'] })
-    expect((await resolvePublicShare('s1', FRAGMENT)).rootKind).toBe(NodeKind.Chapter)
+    serve({ nodes: [{ id: 'r', parentId: null, kind: CHAPTER_KIND, epoch: 0 }] as PublicShare['nodes'] })
+    expect((await resolvePublicShare('s1', FRAGMENT)).rootKind).toBe(CHAPTER_KIND)
   })
 
   it('needs no wrap and no key material of the application: a response without them still yields a head', async () => {
-    serve({ wrap: undefined, nodes: [{ id: 'r', parentId: null, kind: NodeKind.Memory, epoch: 0, wrappedContentKey: 'not even base64!' }] as PublicShare['nodes'] })
-    await expect(resolvePublicShare('s1', FRAGMENT)).resolves.toMatchObject({ rootKind: NodeKind.Memory })
+    serve({ wrap: undefined, nodes: [{ id: 'r', parentId: null, kind: MEMORY_KIND, epoch: 0, wrappedContentKey: 'not even base64!' }] as PublicShare['nodes'] })
+    await expect(resolvePublicShare('s1', FRAGMENT)).resolves.toMatchObject({ rootKind: MEMORY_KIND })
   })
 
   it('has no root kind for a WRITE_ONLY share (the unlocked response serves no nodes)', async () => {

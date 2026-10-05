@@ -2,7 +2,7 @@
 // resolves the kind-independent head (core/sharing/resolvePublicShare), the Memories body opens the rest
 // (features/memory/share `openSharedMemory`). A share test that stubs both writes the ONE resolved shape it cares about
 // and lets these two helpers split it the way the production code does.
-import { NodeKind } from '../api/generated/content'
+import { MEMORY_KIND } from '../features/memory/kinds'
 import { ShareRole, type PublicShare } from '../api/generated/sharing'
 import type { PublicShareHead } from '../core/sharing/resolvePublicShare'
 import type { OpenedMemory, ResolvedShare } from '../features/memory/share'
@@ -17,7 +17,7 @@ export function headOf(r: ResolvedShare, shareId = 's1'): PublicShareHead {
     name: r.memoryName,
     noteByLocale: r.noteByLocale,
     role: r.role,
-    rootKind: r.role === ShareRole.WriteOnly ? null : NodeKind.Memory,
+    rootKind: r.role === ShareRole.WriteOnly ? null : MEMORY_KIND,
   }
 }
 

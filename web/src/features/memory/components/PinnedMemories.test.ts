@@ -17,7 +17,8 @@ import { ensureCovers } from '../coverStore'
 import { treeStore } from '../../../core/node/treeStore'
 import type { TreeNode } from '../../../core/node/tree'
 import { favoritesStore } from '../favoritesStore'
-import { NodeKind } from '../../../api/generated/content'
+import { FOLDER_KIND } from '../../../core/node/kind'
+import { MEMORY_KIND, CHAPTER_KIND } from '../kinds'
 import { realI18n, t } from '../../../test/i18n'
 
 function node(over: Partial<TreeNode> & Pick<TreeNode, 'id' | 'kind'>): TreeNode {
@@ -34,9 +35,9 @@ async function mountPins(variant: 'rail' | 'sheet') {
 beforeEach(() => {
   vi.mocked(ensureCovers).mockClear()
   treeStore.nodes = [
-    node({ id: 'm1', kind: NodeKind.Memory, name: 'Rom' }),
-    node({ id: 'c1', kind: NodeKind.Chapter, name: 'Tag 1', parentId: 'm1' }),
-    node({ id: 'f1', kind: NodeKind.Folder, name: 'Reisen' }),
+    node({ id: 'm1', kind: MEMORY_KIND, name: 'Rom' }),
+    node({ id: 'c1', kind: CHAPTER_KIND, name: 'Tag 1', parentId: 'm1' }),
+    node({ id: 'f1', kind: FOLDER_KIND, name: 'Reisen' }),
   ]
   favoritesStore.ids = new Set(['m1', 'c1', 'f1', 'gone'])
 })

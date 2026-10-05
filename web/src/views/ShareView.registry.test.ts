@@ -37,14 +37,15 @@ import {
   type PublicShareHead,
 } from '../core/sharing/resolvePublicShare'
 import { createRegistry, DROP_SHARE, type Registry } from '../core/applications/registry'
-import { NodeKind } from '../api/generated/content'
+import type { NodeKind } from '../core/node/kind'
+import { MEMORY_KIND, CHAPTER_KIND } from '../features/memory/kinds'
 import { ShareRole } from '../api/generated/sharing'
 import { realI18n } from '../test/i18n'
 
 function head(over: Partial<PublicShareHead> = {}): PublicShareHead {
   return {
     shareId: 's1', share: {} as PublicShareHead['share'], kShare: new Uint8Array(32), scopeId: 'scope-1',
-    name: 'Rom 2026', noteByLocale: {}, role: ShareRole.Read, rootKind: NodeKind.Memory, ...over,
+    name: 'Rom 2026', noteByLocale: {}, role: ShareRole.Read, rootKind: MEMORY_KIND, ...over,
   }
 }
 
@@ -70,7 +71,7 @@ function mountShare() {
 
 beforeEach(() => {
   localStorage.clear()
-  holder.reg = registryWith([NodeKind.Memory, DROP_SHARE])
+  holder.reg = registryWith([MEMORY_KIND, DROP_SHARE])
   vi.mocked(resolvePublicShare).mockReset().mockResolvedValue(head())
   vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: 't-1', termsVersion: 0, terms: {} })
   vi.mocked(derivePasswordToken).mockReset().mockResolvedValue('tok')
@@ -84,8 +85,8 @@ describe('ShareView dispatches on the share root kind', () => {
   })
 
   it('a root kind nobody claimed is the explicit unavailable state, not a blank page (live control above)', async () => {
-    holder.reg = registryWith([NodeKind.Memory, DROP_SHARE])
-    vi.mocked(resolvePublicShare).mockResolvedValue(head({ rootKind: NodeKind.Chapter }))
+    holder.reg = registryWith([MEMORY_KIND, DROP_SHARE])
+    vi.mocked(resolvePublicShare).mockResolvedValue(head({ rootKind: CHAPTER_KIND }))
     const w = mountShare()
     await flushPromises()
     expect(w.find('.body-stub').exists()).toBe(false)
@@ -108,7 +109,7 @@ describe('ShareView dispatches on the share root kind', () => {
   })
 
   it('…and is unavailable when no application claimed the drop (an unrelated Memory claim does not stand in)', async () => {
-    holder.reg = registryWith([NodeKind.Memory])
+    holder.reg = registryWith([MEMORY_KIND])
     vi.mocked(resolvePublicShare).mockResolvedValue(head({ role: ShareRole.WriteOnly, rootKind: null }))
     const w = mountShare()
     await flushPromises()

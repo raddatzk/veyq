@@ -53,13 +53,13 @@ import { createRegistry, type Registry } from '../core/applications/registry'
 import { treeStore } from '../core/node/treeStore'
 import { listMyTenants } from '../features/spaces/scopes'
 import type { TreeNode } from '../core/node/tree'
-import { NodeKind } from '../api/generated/content'
+import { MEMORY_KIND, CHAPTER_KIND } from '../features/memory/kinds'
 import { capabilityState } from '../shared/state/capabilities'
 import { SHARING_PUBLIC_LINKS } from '../features/platform/capabilities'
 import { realI18n, t } from '../test/i18n'
 
 const Detail = defineComponent({ props: ['node', 'shareable'], setup: (p) => () => h('div', { class: 'detail' }, `${p.node.name}|${p.shareable}`) })
-const Level = defineComponent({ props: ['level'], setup: (p) => () => h('div', { class: 'level' }, `memories=${(p.level.byKind.get(NodeKind.Memory) ?? []).length}`) })
+const Level = defineComponent({ props: ['level'], setup: (p) => () => h('div', { class: 'level' }, `memories=${(p.level.byKind.get(MEMORY_KIND) ?? []).length}`) })
 
 function node(over: Partial<TreeNode> & Pick<TreeNode, 'id' | 'kind'>): TreeNode {
   return { parentId: null, orderIndex: 0, epoch: 0, name: over.id, wrappedContentKey: null, wrappedMeta: null, metaVersion: 0, ...over }
@@ -68,8 +68,8 @@ function node(over: Partial<TreeNode> & Pick<TreeNode, 'id' | 'kind'>): TreeNode
 /** The registry a well-formed application would leave: both kinds with a detail, the level view claimed. */
 function fullRegistry(): Registry {
   const r = createRegistry()
-  r.registerKind({ kind: NodeKind.Memory, detail: Detail, icon: 'pi pi-images', shareable: true })
-  r.registerKind({ kind: NodeKind.Chapter, detail: Detail, icon: 'pi pi-images', shareable: false })
+  r.registerKind({ kind: MEMORY_KIND, detail: Detail, icon: 'pi pi-images', shareable: true })
+  r.registerKind({ kind: CHAPTER_KIND, detail: Detail, icon: 'pi pi-images', shareable: false })
   r.claimSlot('levelView', Level)
   return r
 }
@@ -88,8 +88,8 @@ beforeEach(() => {
   holder.reg = fullRegistry()
   capabilityState.ids = [SHARING_PUBLIC_LINKS]
   treeStore.nodes = [
-    node({ id: 'mem', kind: NodeKind.Memory, name: 'Mem' }),
-    node({ id: 'chap', kind: NodeKind.Chapter, name: 'Chap', parentId: 'mem' }),
+    node({ id: 'mem', kind: MEMORY_KIND, name: 'Mem' }),
+    node({ id: 'chap', kind: CHAPTER_KIND, name: 'Chap', parentId: 'mem' }),
   ]
 })
 
@@ -101,8 +101,8 @@ describe('MemoryHomeView fail-closed rules', () => {
 
   it('a kind registered WITHOUT a detail shows the explicit unsupported state, not the level view', async () => {
     const r = createRegistry()
-    r.registerKind({ kind: NodeKind.Memory, detail: Detail, icon: 'x', shareable: true })
-    r.registerKind({ kind: NodeKind.Chapter, icon: 'x', shareable: false }) // no detail
+    r.registerKind({ kind: MEMORY_KIND, detail: Detail, icon: 'x', shareable: true })
+    r.registerKind({ kind: CHAPTER_KIND, icon: 'x', shareable: false }) // no detail
     r.claimSlot('levelView', Level)
     holder.reg = r
     const w = await mountAt('#~me/mem/chap')
@@ -121,14 +121,14 @@ describe('MemoryHomeView fail-closed rules', () => {
 
   it('an unclaimed levelView never leaves a blank scope root: the unsupported state shows', async () => {
     const r = createRegistry()
-    r.registerKind({ kind: NodeKind.Memory, detail: Detail, icon: 'x', shareable: true })
+    r.registerKind({ kind: MEMORY_KIND, detail: Detail, icon: 'x', shareable: true })
     holder.reg = r
     expect((await mountAt('#~me')).text()).toContain(t('home.unsupportedKind'))
   })
 
   it('shareable comes from the descriptor AND the capability: a descriptor that says no wins over the capability', async () => {
     const r = createRegistry()
-    r.registerKind({ kind: NodeKind.Memory, detail: Detail, icon: 'x', shareable: false })
+    r.registerKind({ kind: MEMORY_KIND, detail: Detail, icon: 'x', shareable: false })
     r.claimSlot('levelView', Level)
     holder.reg = r
     expect((await mountAt('#~me/mem')).find('.detail').text()).toBe('Mem|false')
