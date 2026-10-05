@@ -87,11 +87,74 @@ on their own.
 
 - **The node tree is the platform's, not Memories'.** Rejected: the tree owned by Memories. Every other
   application would then need a tree of its own and, with it, its own sharing, trash and move rules — the
-  duplication this decision exists to avoid. The price is that the tree's `kind` is a column the platform must
-  keep open to values it does not interpret.
+  duplication this decision exists to avoid. The price is that the tree's `kind` holds values core does not
+  interpret, and how is decided (2026-10-06, cr-platform-contract-split): **node kinds are open.** The node
+  `kind` is an open, bounded token on the wire (`^[A-Z][A-Z0-9_]{0,15}$`). Core names `FOLDER` only; each
+  application brings its kinds and their rules (`NodeKindRules`, the web registry). A kind no application claims
+  is refused by the fail-closed seams, never by decoding. `PublicShare` carries the root's kind (inbox #329).
+  That is the target, not yet the code: today `NodeKind` is still the contract's closed enum and `PublicShare`
+  has no `rootKind` (*What core still knows of Memories*, below).
 - **What the server learns grows by one fact.** The node `kind` is already a server-visible column; once
   further kinds exist it also tells the operator which applications a scope uses, and the rows, timestamps and
   sizes each kind produces. [security-model](../crosscutting/security-model.md) lists it.
+- **What the platform is** (decided 2026-10-06, cr-platform-contract-split). veyq is a platform for sealed,
+  shareable objects. The core provides:
+  - **who**: tenants, central users, groups and personal scopes, memberships, invitations, keys, devices;
+  - **what**: nodes as a tree inside a scope, with parents, order, trash and a content key per node; and
+    *attachments*, sealed files on a node that can be uploaded and downloaded, with size and storage quota;
+  - **with whom**: links with `READ`, `READ_WRITE` or `WRITE_ONLY` access, with password, expiry and consent;
+  - **in the background**: tasks, rate limits, the admin channel and operator-blindness.
+
+  An application supplies the **meaning**: which node kinds exist, what the plaintext means, which rules apply to
+  structure, attachments and guests, and the user interface. `READ`/`READ_WRITE`/`WRITE_ONLY` are the target wire
+  names, renamed in slice 1 of cr-platform-contract-split; today the values are `VIEWER`/`CONTRIBUTOR`/`UPLOADER`.
+  Attachments are the target, not yet the code: today what a verified upload becomes is application work
+  (`UploadCompletion`), and Memories' cover and revision columns still sit on `veyq_node`. Generic attachments are
+  formalised as a core spec (inbox #327) when the second application needs them; that "every application needs
+  attachments" is an assumption the second application tests. A Files or Storage product is an application on
+  core's attachments, never a dependency of another application (Decision 4: an application depends on core only).
+- **Contracts by owner** (decided 2026-10-06, cr-platform-contract-split). A core spec describes what core does.
+  Where a value's meaning belongs to an application — a node's sealed payload, a blob role, a kind — its
+  description says whose it is and names no application's plaintext, operation or key. An operation whose
+  behaviour is an application's lives in that application's directory, even when its path sits under a core
+  route (`/api/shares/{shareId}/media` is Memories'). Not yet the code: that pair of operations still sits in
+  core's `sharing` spec (*What core still knows of Memories*, below), and core's spec texts still use Memories'
+  words.
+- **The node's payload slot and content key are core's** (decided 2026-10-06, cr-platform-contract-split). Core
+  gives every node one sealed, versioned payload (`wrappedMeta`, `metaVersion`): core stores it, compare-and-sets
+  it ([ADR 0077](0077-a-write-carries-the-version-it-read.md)) and lists it with the tree, and never opens it. Its
+  plaintext format is the node kind's application's, versioned per Decision 7. `wrappedContentKey` is the content
+  key of a shareable node, chained so a share's viewer derives every descendant's key. These are platform columns,
+  not an application widening `veyq_node` (Decision 6). That only one application fills them today makes this an
+  intermediate state, re-examined when a second application does. Rejected: moving the payload into a Memories
+  table with endpoints — it loses the atomic create and the payload in the tree listing that sorting relies on,
+  and the next application would want the same slot back.
+- **The drop key is the `WRITE_ONLY` link's mechanism** (decided 2026-10-06, cr-platform-contract-split).
+  `WRITE_ONLY` is the target wire name of today's `UPLOADER` (renamed in slice 1 of cr-platform-contract-split).
+  A `WRITE_ONLY` link's drop key pair belongs to core's link mechanism:
+  - the public half is sealed under the link's `K_share` on the share row;
+  - the private half is the shared root node's, sealed under the root's content key, set once by core inside the
+    share creation (409 `drop_key_exists`/`drop_key_missing`);
+  - it stays a field of its own and never joins the node payload.
+
+  The seal purposes `drop-public-key`/`drop-private-key` are a stored format and keep their names.
+- **Three access modes** (decided 2026-10-06, cr-platform-contract-split). A link grants one of three access
+  modes: `READ`, `READ_WRITE`, `WRITE_ONLY` — the target wire names, renamed in slice 1 of
+  cr-platform-contract-split; today the values are `VIEWER`/`CONTRIBUTOR`/`UPLOADER`. Core enforces the mode (who
+  may read the shared subtree, who may add through the guest transport). What "write" means on a node is the
+  application's, through `ShareGuestWrites`. The modes are bound in no seal. Application-specific roles, if ever
+  needed, come through a policy seam where core asks the application whether an action is allowed for a mode —
+  never through a registry of roles.
+- **Application guest operations** (decided 2026-10-06, cr-platform-contract-split). Core owns the public link and
+  its guest gate: active link, password, the mode's capability, the guest identity's token, and the per-link
+  upload budget where the operation spends one. Core exposes the gate as a service an application calls before its
+  own guest read or write. Core's share contract keeps only kind-neutral guest operations: resolve (the link plus
+  the shared nodes and their keys, no application data), terms, blob transport and download, guest identity. An
+  application serves its rows and its writes on its own route under the share, checks that the share's root kind
+  is its own, and carries the privacy rules of its rows with them (for Memories:
+  [ADR 0030](0030-contributor-public-share.md) point 8). Not yet the code: the gate is still private to core's
+  sharing handler, and the resolve still serves Memories' `media` and `identities` (below). A link may later become
+  a credential core's gate accepts for application operations that declare it; that is a separate decision.
 - **An append-only application cannot make the server keep its order.** The server may drop or reorder entries
   it holds unless a sequence number or hash chain is bound into each entry's associated data (ADR 0072 binds an
   object, not its neighbours). Each such application states that gap; it is not a platform property.
@@ -115,7 +178,9 @@ on their own.
   § Migrations): a core migration names no application table, an application's references only core's and its own.
   Core reaches application code through nine interfaces — `ScopeEraser`, `NodeSubtreeEraser`, `MembershipEraser`,
   `GuestIdentityUsage`, `SharedSubtreeContributor`, `ShareGuestWrites`, `UploadCompletion` (what a verified upload
-  becomes on a node of the kind, today Memories' media), `UploadAdmission` (what a share link's guests contributed,
+  becomes on a node of the kind, today Memories' media; the seam stays core's, and its item is decided generic —
+  an `ownerId`, derivatives and the application's sealed payloads (2026-10-06, cr-platform-contract-split) — while
+  today's is still media-shaped, below), `UploadAdmission` (what a share link's guests contributed,
   for its per-link limit) and `NodeKindRules` (where a node of the kind may live; core answers for `FOLDER`, Memories
   for `MEMORY` and `CHAPTER`) — and the last four fail closed: a kind no application (or two) claims takes no
   uploads (`illegal_target`), is placed nowhere (`illegal_structure`), is shared by no one (`illegal_scope`), and a
@@ -125,9 +190,9 @@ on their own.
   tests; `:core`'s test application is core with no application at all, and `CoreAloneSliceTest` pins what that
   means — every seam holds exactly core's own implementations, every refusal above holds, and the generic blob
   upload starts, windows and downloads — while the root's `ModuleCompositionTest` pins the composed sets.
-  **What core still knows of Memories**, each a decision a later change takes, not an oversight: the node `kind` is
-  the contract's closed `FOLDER`/`MEMORY`/`CHAPTER` enum, which core's generated API decodes (so the convention is
-  guarded, not typed); `veyq_node` carries Memories-flavoured columns in core's baseline (`cover_blob_id`,
+  **What core still knows of Memories**, each a decision a later change takes, not an oversight (the decided
+  targets are the bullets above): the node `kind` is still the contract's closed `FOLDER`/`MEMORY`/`CHAPTER` enum,
+  which core's generated API decodes (so the convention is guarded, not typed; decided open, above); `veyq_node` carries Memories-flavoured columns in core's baseline (`cover_blob_id`,
   `cover_byte_size`, `media_revision`, `delete_revision` — moving a column is a schema change, not a rename);
   `ShareGuestWrites.supports` gates share *creation*, so core alone refuses every share and share policy is tested
   with an application present; the guest completion item is media-shaped (`CompleteItem`'s `mediaId`,
@@ -143,7 +208,7 @@ on their own.
   is neutral (a blob's `K_blob` wrap, `owner_id` and `blob_role` are opaque strings core stores and compares), but the
   `blob-key` seal derives under a Memory's `K_mem` and `BlobRole` is closed in three places (the contract, the crypto
   package, its web re-export), so a new role or key is an [ADR 0072](0072-a-seal-binds-its-object.md) stored-format
-  decision, not a rename. The node `kind` open to values core does not interpret is not decided yet.
+  decision, not a rename.
   **The web side is separated by import direction, not by name or by kind:** `web/src/features/memory` is the
   application, and no core file imports it except the composition root `web/src/applications.ts`; the shell asks a
   build-time registry (`web/src/core/applications/registry.ts`) what to render for a node kind, which slot an

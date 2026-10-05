@@ -16,7 +16,7 @@
 This is the third sharing slice ([ADR 0031](../../../decisions/0031-uploader-public-share.md)), building on the
 CONTRIBUTOR share ([uc.sharing.share-contributor](uc.sharing.share-contributor.md),
 [ADR 0030](../../../decisions/0030-contributor-public-share.md)). The upload crypto/path is identical; the
-difference is the **`canView` gate** (the resolve returns no media to an uploader) and the **session-only,
+difference is the **`canView` gate** (an UPLOADER link's media read answers an empty list) and the **session-only,
 client-local** own-view. **v1: role UPLOADER, personal scope, direct-append.**
 
 ## Main flow
@@ -29,7 +29,8 @@ client-local** own-view. **v1: role UPLOADER, personal scope, direct-append.**
    writeVerifier }` — the hash of a write token derived from `K_share` ([ADR 0076](../../../decisions/0076-a-guest-write-proves-it-holds-the-links-key.md)).
 2. **Hand off.** The client shows the link `/s/{shareId}#k=<base64url(K_share)>` to copy.
 3. **Open + name yourself (anonymous).** The visitor opens the link; the client `GET`s `/api/shares/{shareId}`
-   (**no auth**) → `{ role: UPLOADER, sealedDropPublicKey, nodeId, sealedName, media: [] }` (**no gallery** and
+   (**no auth**) → `{ role: UPLOADER, rootKind, sealedDropPublicKey, nodeId, sealedName }`; an UPLOADER link's media
+   read answers an empty list (**no gallery** and
    **no `K_mem`** — the uploader is never handed others' media, nor the key to read them). Because the role is
    UPLOADER, the client shows a **mandatory name pre-screen** with a **clear note that uploads are visible only in
    this browser tab**; the visitor names themselves → the client mints the identity's own key `K_up`, seals the
@@ -60,14 +61,16 @@ sequenceDiagram
   S-->>C: shareId
   C->>V: hand off link /s/{shareId}#35;k=…
   V->>S: GET /api/shares/{shareId}   (no auth)
-  S-->>V: { role: UPLOADER, sealedDropPublicKey, sealedName, media: [] }   ← no gallery, no K_mem
+  S-->>V: { role: UPLOADER, rootKind, sealedDropPublicKey, sealedName }   ← no K_mem
+  V->>S: GET /api/shares/{shareId}/media   (no auth)
+  S-->>V: empty list   ← no gallery
   V->>V: drop public key = open(K_share)#59; mint K_up#59; seal name under K_up#59; keep ids + LOCAL previews
   V->>S: POST /identities { K_up wrapped to the drop key } + X-Share-Write → identityId + contributorToken
   V->>S: POST /blob-uploads (token) → presigned PUTs
   V->>O: PUT ciphertext chunks (direct)   [never a download]
   V->>S: POST /media (token) → attach to nodeId, stamp identityId
   V->>S: DELETE /media/{mediaId} (token)   [own only#59; in-session]
-  Note right of S: never serves the uploader a gallery (resolve media=[])#59;<br>holds only opaque ids + ciphertext + the sealed name.<br>The own-view is client-local#59; upload+delete are token-authorized.
+  Note right of S: never serves the uploader a gallery (the media read's empty list)#59;<br>holds only opaque ids + ciphertext + the sealed name.<br>The own-view is client-local#59; upload+delete are token-authorized.
 ```
 
 ## Alternate / exception flows
@@ -87,8 +90,8 @@ sequenceDiagram
 ## Quality notes
 
 - **Write-only, a real server capability (not just id-secrecy).** The `canView` gate (`{VIEWER,CONTRIBUTOR}`) is
-  enforced at **both** guest read paths: the resolve returns `media: []` / `nodes: []` for an UPLOADER share (only
-  the sealed drop public key + `sealedName`), **and** the blob endpoint (`GET /shares/{id}/blobs/{blobId}`) `404`s for an uploader —
+  enforced at **both** guest read paths: the resolve returns `nodes: []` for an UPLOADER share (only the sealed drop
+  public key + `sealedName`) and the media read its empty list, **and** the blob endpoint (`GET /shares/{id}/blobs/{blobId}`) `404`s for an uploader —
   so even a *leaked* in-subtree id downloads nothing. On top of that it stays structural (an uploader is never
   handed anyone else's ids; ids are unguessable **identifiers**, not authorizers). The own-view is **client-local**
   (this session's uploads); upload + delete are **token-authorized** (the `contributorToken`).
@@ -108,7 +111,7 @@ sequenceDiagram
 - **Delete-your-own.** In-session, token-gated, ownership-checked (`share_identity_id == the token’s identity`) —
   the correct authorization for a destructive op, not gallery filtering.
 - **Most operator-blind surface yet.** The server serves the uploader no gallery and no bytes at all (resolve
-  `media: []` / `nodes: []`; the blob endpoint role-gated to `404`); it holds only the opaque identity +
+  `nodes: []`, the media read's empty list; the blob endpoint role-gated to `404`); it holds only the opaque identity +
   `share_identity_id` stamp (for the curator’s view + the delete check) + ciphertext.
 - **Inherited from the contributor share.** Mandatory sealed name → anonymous identity; the share-scoped upload
   path; direct-append (the curator sees the contributions); byte budget + rate limit; the footer-link trust tier;

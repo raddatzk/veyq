@@ -24,7 +24,9 @@ slices. The crypto is the per-Memory second-wrap of [ADR 0012](../../../decision
 2. **Hand off.** The client shows the link **`/s/{shareId}#k=<base64url(K_share)>`** to copy. `K_share` lives in
    the **fragment** — never sent to the server. The curator passes it out-of-band (message, QR, wherever).
 3. **Open (anonymous).** A visitor opens the link. The client `GET`s `/api/shares/{shareId}` (**no auth**) → the
-   record **plus the sealed subtree** (the Memory node + its chapters + media metadata, all sealed under `K_mem`).
+   record **plus the sealed subtree** (the Memory node + its chapters, sealed under `K_mem`), then `GET`s
+   `/api/shares/{shareId}/media` → the Memory's media metadata and the wrapped keys of the uploader identities
+   whose media it holds. Both pass the same password gate.
    The client **unwraps `K_mem` with the fragment key**, decrypts names/layout/metadata **locally**, and renders
    the Memory **read-only**.
 4. **View media.** For each blob the client calls the **share-scoped, gated** blob endpoint; the server authorizes
@@ -48,7 +50,9 @@ sequenceDiagram
   Note over C: link = /s/{shareId}#35;k=base64url(K_share)   (fragment, never sent)
   C->>V: hand off link out-of-band
   V->>S: GET /api/shares/{shareId}   (no auth)
-  S-->>V: record + sealed subtree (all under K_mem)
+  S-->>V: record + sealed subtree (under K_mem)
+  V->>S: GET /api/shares/{shareId}/media   (no auth, same gate)
+  S-->>V: media metadata (under K_mem) + uploader identities' wrapped keys
   V->>V: K_mem = unwrap(wrap, K_share from fragment) → decrypt locally
   V->>S: GET share blob (gated: attached under nodeId?)
   S-->>V: presigned store URL

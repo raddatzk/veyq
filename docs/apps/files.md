@@ -38,7 +38,9 @@ File sizes (exact, unless padded), upload and change timestamps, the tree's shap
 
 ## Open questions
 
-- Blob role: a generic owner reference on `veyq_blob`, or each application owning its own blob table?
+- Blob role: the shape of core's generic attachments (inbox #327) — not each application owning its own blob
+  table, which [ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Consequences
+  (*What the platform is*) rules out.
 - Which key seals a file: `K_SC` directly, or a per-file key so one file can be shared alone?
 - Preview or thumbnail for images: a Files feature, or out of scope?
 - Is the upper size limit the quota only, or is there a per-file cap?
