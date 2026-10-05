@@ -1083,7 +1083,7 @@ paths:
         the tenant (`quotaBytes`, null when none — read-only here: only `setTenantStorageQuota` and
         `clearTenantStorageQuota` write it, so the owner cannot raise their own ceiling, ADR 0073 §1) and the
         **per-link limit** every
-        CONTRIBUTOR and UPLOADER link of the tenant stores at most (`shareLinkLimitBytes`, 10 GiB until changed)
+        READ_WRITE and WRITE_ONLY link of the tenant stores at most (`shareLinkLimitBytes`, 10 GiB until changed)
         ([ADR 0073](../../docs/decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md) §4).
         `usedBytes` is derived when read, never counted: the declared size of every blob in the tenant's scopes
         (originals, derivatives, covers, trash included until it is purged) plus every open upload session. It is
@@ -1130,7 +1130,7 @@ paths:
           One writer: the tenant owner; the write carries only the value typed.
       summary: Set the tenant's per-link storage limit (owner-gated).
       description: >
-        The tenant **owner** sets the one per-link limit that applies to every CONTRIBUTOR and UPLOADER link of the
+        The tenant **owner** sets the one per-link limit that applies to every READ_WRITE and WRITE_ONLY link of the
         tenant separately ([ADR 0073](../../docs/decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md)
         §4). It binds from each link's next upload start on: a limit lowered below what a link holds deletes
         nothing and refuses that link's next start (`quota_exceeded`). There is no "unlimited"; `0` switches link
@@ -2087,7 +2087,7 @@ components:
           x-veyq-visibility: measure
           type: integer
           format: int64
-          description: The most any one CONTRIBUTOR or UPLOADER link of the tenant stores. `0` = link uploads off.
+          description: The most any one READ_WRITE or WRITE_ONLY link of the tenant stores. `0` = link uploads off.
           example: 10737418240
 
     TenantStorageUpdate:
@@ -2101,7 +2101,7 @@ components:
           type: [integer, "null"]
           format: int64
           minimum: 0
-          description: The most any one CONTRIBUTOR or UPLOADER link of the tenant stores, in bytes.
+          description: The most any one READ_WRITE or WRITE_ONLY link of the tenant stores, in bytes.
           example: 5368709120
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
 

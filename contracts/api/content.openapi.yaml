@@ -483,8 +483,8 @@ components:
           maxLength: 256
           description: >
             A MEMORY's drop private key sealed under its `K_mem` (AAD `drop-private-key`, bound to scope + node;
-            opaque base64) — set once, by the Memory's first UPLOADER share (`createShare`), and never replaced:
-            the media UPLOADER guests added open through it (ADR 0031 point 7). Null until then.
+            opaque base64) — set once, by the Memory's first WRITE_ONLY share (`createShare`), and never replaced:
+            the media WRITE_ONLY guests added open through it (ADR 0031 point 7). Null until then.
           example: null
 
     RestoreNodeRequest:
