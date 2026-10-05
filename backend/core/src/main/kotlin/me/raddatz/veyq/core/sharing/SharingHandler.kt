@@ -59,7 +59,7 @@ sealed interface CreateShareOutcome {
     object CapabilityDisabled : CreateShareOutcome, HttpFailure by Failures.capabilityDisabled
     /** No such node, or the caller holds no grant for its scope (a 404, no reveal). */
     object NoNode : CreateShareOutcome, HttpFailure by Failures.nodeNotFound
-    /** The node is not a MEMORY (only a Memory can be public-shared, ADR 0029 §6) — a 422. */
+    /** The node's kind is one no application accepts shares of ([ShareGuestWrites], ADR 0029 §6) — a 422. */
     object IllegalScope : CreateShareOutcome, HttpFailure by httpFailure("illegal_scope", UNPROCESSABLE)
     object IdTaken : CreateShareOutcome, HttpFailure by Failures.idTaken
     /** The keys do not match the role: a wrap on a WRITE_ONLY share, a drop key on any other — a 400. */
@@ -236,8 +236,8 @@ sealed interface ShareTermsOutcome {
 /**
  * Use-case logic for public viewer shares (cr-0100, ADR 0029). Two authorization surfaces:
  *  - **Curator** (create/list/revoke/reactivate/update): authenticated, and gated first by [ScopeAccess] on the
- *    share's (or node's) space — a **MEMORY in a scope the caller is a member of** (personal, group, or tenant —
- *    cr-0104), writable only outside its deletion grace and a suspension (uc.spaces.scope-access).
+ *    share's (or node's) space — a **node of a kind an application accepts shares of, in a scope the caller is a
+ *    member of** (personal, group, or tenant — cr-0104), writable only outside its deletion grace and a suspension (uc.spaces.scope-access).
  *  - **Guest** (resolve/blob): unauthenticated, keyed only on share state (`enabled` + `expiresAt` + a live space) — a
  *    parallel authz path, never a relaxed scope filter. The blob GET is authorized structurally (the blob is
  *    attached under the shared subtree), and bytes go **direct-from-store** so the operator never learns which
@@ -274,8 +274,8 @@ class SharingHandler(
         val node = store.findNode(nodeId) ?: return CreateShareOutcome.NoNode
         access.check(userId, node.scopeId, WRITE)
             .refusal(CreateShareOutcome.NoNode, CreateShareOutcome.Suspended, CreateShareOutcome.Deleting)?.let { return it }
-        // Any member of the node's scope may share (cr-0104) — personal, group, or tenant; only a MEMORY node can
-        // be public-shared (ADR 0029 §6, ADR 0030) — i.e. a kind some application registers guest writes for.
+        // Any member of the node's scope may share (cr-0104) — personal, group, or tenant; only a node of a kind some
+        // application registers guest writes for can be public-shared (ADR 0029 §6, ADR 0030).
         if (guestWrites.none { it.supports(node.kind) }) return CreateShareOutcome.IllegalScope
         // ADR 0024 Decision 6, as NodesHandler checks it: a recovery copy sealed under an epoch other than the scope's
         // current one is refused — an older one is an epoch a member removed since still holds.
@@ -329,8 +329,8 @@ class SharingHandler(
 
     /**
      * The keys a share of [role] carries, or null when the request's do not match it (ADR 0031 point 7). A
-     * WRITE_ONLY share never carries `symWrap(K_share, K_mem)` — the one party it exists to keep out would hold the
-     * Memory's read key — and every other role never carries a drop key. Sent-but-empty counts as sent: refused.
+     * WRITE_ONLY share never carries `symWrap(K_share, content key)` — the one party it exists to keep out would hold
+     * the shared node's read key — and every other role never carries a drop key. Sent-but-empty counts as sent: refused.
      */
     private fun shareKeys(role: String, wrap: String?, dropPublic: String?, dropPrivate: String?): ShareKeys? =
         if (role == ShareEntity.WRITE_ONLY) {
@@ -541,7 +541,7 @@ class SharingHandler(
             val subtree = store.subtree(share.scopeId, share.nodeId)
             val uploaderKeys = store.uploaderKeys(subtree)
             // A media names its identity only where the guest needs it to find the key (ADR 0031 point 7); a
-            // contributor's opens under K_mem, and its id would only tell a guest which uploads came from one
+            // contributor's opens under the node's content key, and its id would only tell a guest which uploads came from one
             // person (ADR 0030 point 8). Derived from the same map, so the two can never disagree.
             val media = subtree.media.map { if (it.identityId in uploaderKeys) it else it.copy(identityId = null) }
             return ResolveShareOutcome.Found(share, SubtreeData(subtree.nodes, media), uploaderKeys)
@@ -595,7 +595,7 @@ class SharingHandler(
         if (!holdsTheKey(share, writeToken)) return CreateIdentityOutcome.NotFound
         if (!ShareAccessPolicy.canUpload(share.role)) return CreateIdentityOutcome.NotContributable
         // ADR 0031 point 7: a WRITE_ONLY identity seals under its own key and must hand it over wrapped to the drop
-        // key, or nobody could ever open what it uploads; a READ_WRITE identity seals under `K_mem` and has none to hand.
+        // key, or nobody could ever open what it uploads; a READ_WRITE identity seals under the shared node's content key and has none to hand.
         val uploader = share.role == ShareEntity.WRITE_ONLY
         if (uploader == wrappedIdentityKey.isNullOrEmpty()) return CreateIdentityOutcome.InvalidRequest
         // The only guest call that writes a row before any upload exists — bounded per share (ADR 0051,

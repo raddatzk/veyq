@@ -203,10 +203,10 @@ class SharingResource(
             is ResolveShareOutcome.Found -> Response.ok(
                 PublicShare(
                     role = ShareRole.decode(o.share.role),
-                    scopeId = UUID.fromString(o.share.scopeId), // every K_mem seal the viewer opens is bound to it (ADR 0072)
+                    scopeId = UUID.fromString(o.share.scopeId), // every seal under a node's content key the viewer opens is bound to it (ADR 0072)
                     passwordRequired = o.share.passwordRequired, // cr-0118: false, or true once unlocked with a valid token
                     pwSalt = if (o.share.passwordRequired) o.share.pwSalt else null,
-                    // ADR 0031 point 7: a WRITE_ONLY guest is handed the drop public key, never `K_mem`. The role
+                    // ADR 0031 point 7: a WRITE_ONLY guest is handed the drop public key, never the node's content key. The role
                     // decides here too, not only the stored row, so no WRITE_ONLY response can ever carry a wrap.
                     wrap = if (o.share.role == ShareEntity.WRITE_ONLY) null else o.share.wrap,
                     sealedDropPublicKey = if (o.share.role == ShareEntity.WRITE_ONLY) o.share.sealedDropPublicKey else null,

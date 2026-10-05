@@ -551,7 +551,7 @@ paths:
         is what lets that job complete.
 
         **A removal-rotation** names the member it removes (`removesUserId`, ADR 0024 Decision 4): the server
-        deletes that membership — with its item favorites and the public shares it created in the group — and
+        deletes that membership — with the per-member rows the applications keep for it and the public shares it created in the group — and
         commits the epoch in **one transaction**, so a removal never ends without its rotation and a failed one
         leaves the member in place. The request's grants must not name that member (`422
         removed_member_granted`, nothing stored); the last-owner guard applies (`409 last_owner`). The removed
@@ -779,7 +779,7 @@ paths:
         epoch chain down to `iconEpoch` to derive `K_icon`. Membership-gated first (a
         non-member gets `404 scope_not_found`, ADR 0042), then owner-gated (`403 not_scope_owner`; ADR 0007 — the
         owner gate keys on the root scope; a GROUP co-owner is an OWNER too). Because every `sealedIcon` is padded to an identical length, the
-        server cannot tell a logo from a photo. Operator-blind — the server never sees a key or the image
+        server cannot tell one icon image from another. Operator-blind — the server never sees a key or the image
         (ADR 0008).
       security:
         - bearerAuth: []
@@ -851,7 +851,7 @@ paths:
               example:
                 - tenantId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
                   name: Familie Raddatz
-                  domain: memories.raddatz.me
+                  domain: family.example.com
                   role: OWNER
                   status: ACTIVE
                   wrappedGrant: AQ==
@@ -1128,7 +1128,7 @@ components:
             `symWrap(K_icon, paddedIcon, "space-icon")` (`0x02 || nonce(12) || aead`, base64). Opaque base64 the
             server stores verbatim and never interprets. Its length is a **constant** — the exact base64 length of
             the sealed padded plaintext (a 16 KiB pad → 21884 chars) — so every stored icon is byte-identical in
-            length (a logo is indistinguishable from a photo) and the value is provably inside the `TEXT` column
+            length (one icon image is indistinguishable from another) and the value is provably inside the `TEXT` column
             (65 535). Sealing under the current epoch makes a replace forward-secret.
           contentEncoding: base64
           maxLength: 21884
@@ -1422,7 +1422,7 @@ components:
           type: string
           description: The web address the tenant is reached at (tenant identity, ADR 0002).
           maxLength: 253
-          example: memories.raddatz.me
+          example: family.example.com
         role:
           x-veyq-visibility: structure
           type: string

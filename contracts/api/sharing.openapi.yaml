@@ -3,21 +3,22 @@ info:
   title: veyq Sharing API
   version: 0.1.0
   description: >
-    Public **viewer** shares of a single Memory (uc.sharing.share-public-viewer, cr-0100,
-    [ADR 0029](../../docs/decisions/0029-public-viewer-share.md)). A member of a scope turns **one Memory
-    of it** (personal, group or tenant — ADR 0029 §6) into an **anonymous, revocable** link `/s/{shareId}#k=<K_share>`. The
-    share adds an **independent second wrap** of that Memory's content key — `symWrap(K_share, K_mem)`
-    ([ADR 0012](../../docs/decisions/0012-content-key-hierarchy.md)) — whose secret `K_share` rides the **URL
-    fragment** ([ADR 0015](../../docs/decisions/0015-operator-blind-readable-urls.md)) and **never reaches the
-    server**.
+    Public links to a single shared node and its subtree (uc.sharing.share-public-viewer, cr-0100,
+    [ADR 0029](../../docs/decisions/0029-public-viewer-share.md)). A member of a scope turns **one node of
+    it** (personal, group or tenant — ADR 0029 §6) into an **anonymous, revocable** link `/s/{shareId}#k=<K_share>`
+    granting one access mode (`ShareRole`). The share adds an **independent second wrap** of that node's content
+    key — `symWrap(K_share, content key)` ([ADR 0012](../../docs/decisions/0012-content-key-hierarchy.md)) —
+    whose secret `K_share` rides the **URL fragment** ([ADR 0015](../../docs/decisions/0015-operator-blind-readable-urls.md))
+    and **never reaches the server**. Which node kinds can be shared, and what a guest's write adds, is the
+    kind's application's (`ShareGuestWrites`).
 
     **Operator-blind.** The server stores only the opaque `shareId` (256-bit unguessable), the wrap, the
-    plaintext `role`, the Memory name **re-sealed under `K_share`**, and the shared `nodeId`. It never sees
-    `K_share`, `K_mem`, any name, the viewer, or — because blobs are fetched direct-from-store via presigned
-    GETs — which media a viewer opens.
+    plaintext `role`, the node's name **re-sealed under `K_share`**, and the shared `nodeId`. It never sees
+    `K_share`, a content key, any name, the viewer, or — because blobs are fetched direct-from-store via
+    presigned GETs — which blob a viewer opens.
 
     **Two authorization surfaces.** Curator management (`create` / `list` / `revoke` / `reissue` …) is
-    **authenticated** (`bearerAuth`) and gated to a member of the Memory's scope. The guest **resolve** + **gated
+    **authenticated** (`bearerAuth`) and gated to a member of the shared node's scope. The guest **resolve** + **gated
     blob GET** are **unauthenticated** — a parallel authz path keyed on share state (`enabled` + `expiresAt`),
     never a relaxed scope filter. Both `shareId` **and** the fragment key are required: the id alone is inert
     (the wrap can't be opened without `K_share`), an unknown/disabled/expired id is a non-enumerable `404`.
@@ -27,8 +28,8 @@ info:
 tags:
   - name: sharing
     description: >
-      Public viewer shares — the curator's create/list/revoke/delete (authenticated) plus the anonymous guest
-      resolve + gated presigned blob GET (unauthenticated). One tag = one resource interface owning the
+      Public share links — the curator's create/list/revoke/delete (authenticated) plus the anonymous guest
+      resolve, identity, blob transport and gated presigned blob GET (unauthenticated). One tag = one resource interface owning the
       `/api/shares` subtree.
 
 paths:
@@ -36,16 +37,16 @@ paths:
     post:
       tags: [sharing]
       operationId: createShare
-      summary: Create a public share of a Memory the caller is a member of (any scope).
+      summary: Create a public share of a node the caller is a member of (any scope).
       description: >
-        The client generates a fresh 32-byte `K_share`, computes `wrap = symWrap(K_share, K_mem)`, re-seals the
-        Memory name under `K_share`, and POSTs `{ nodeId, role, wrap, sealedName, expiresAt? }` — `role` is
+        The client generates a fresh 32-byte `K_share`, computes `wrap = symWrap(K_share, content key)` over the
+        node's content key, re-seals the node's name under `K_share`, and POSTs `{ nodeId, role, wrap, sealedName, expiresAt? }` — `role` is
         the access mode (`ShareRole`: **READ**, **READ_WRITE** or **WRITE_ONLY**). The server verifies the caller
-        is a **member** of the node's scope — personal, group, or tenant (cr-0104, ADR 0029 §6); a non-MEMORY node
-        is rejected `422`, a non-member is a non-enumerable `404`. The **client** mints the 256-bit unguessable
+        is a **member** of the node's scope — personal, group, or tenant (cr-0104, ADR 0029 §6); a node of a kind
+        no application accepts shares of (`ShareGuestWrites`) is rejected `422`, a non-member is a non-enumerable `404`. The **client** mints the 256-bit unguessable
         `shareId` ([ADR 0072](../../docs/decisions/0072-a-seal-binds-its-object.md) Decision 3 — the recovery wrap is sealed bound to it) and the server stores the record
         opaquely under it. The link is `/s/{shareId}#k=base64url(K_share)` — the fragment (`K_share`) is built
-        client-side and never sent; only `writeVerifier`, the hash of a token derived from it, is (ADR 0076). An id that already exists — in this scope or any other — is refused `id_taken` and nothing is overwritten; the answer is the same wherever the taken id lives, so it says nothing about another scope. An id is never minted twice: a deleted link's id (`deleteShare`) and the id of a link its space's erasure removed are refused `id_taken` as well — whoever holds a dead link's id and key could otherwise serve every other holder of that link their own Memory ([ADR 0029](../../docs/decisions/0029-public-viewer-share.md) §7). Not idempotent: a retry of a create whose response was lost answers `id_taken` too, and the client re-reads.
+        client-side and never sent; only `writeVerifier`, the hash of a token derived from it, is (ADR 0076). An id that already exists — in this scope or any other — is refused `id_taken` and nothing is overwritten; the answer is the same wherever the taken id lives, so it says nothing about another scope. An id is never minted twice: a deleted link's id (`deleteShare`) and the id of a link its space's erasure removed are refused `id_taken` as well — whoever holds a dead link's id and key could otherwise serve every other holder of that link a subtree of their own ([ADR 0029](../../docs/decisions/0029-public-viewer-share.md) §7). Not idempotent: a retry of a create whose response was lost answers `id_taken` too, and the client re-reads.
       security:
         - bearerAuth: []
       requestBody:
@@ -88,9 +89,9 @@ paths:
             (`stale_epoch` — the caller's scope key lags a rotation; re-open it and re-seal, ADR 0024 Decision 6), or
             the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4). For WRITE_ONLY: the
             request carries a drop private key the
-            Memory already has one of (`drop_key_exists`), or carries none while the Memory has none
+            shared node already has one of (`drop_key_exists`), or carries none while the node has none
             (`drop_key_missing`) — nothing is written in either case. A taken `shareId` answers `id_taken` before
-            either: so does the loser of a double-submitted create, even one that lost at the Memory's first drop key,
+            either: so does the loser of a double-submitted create, even one that lost at the node's first drop key,
             because that is what its replay answers.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: id_taken } }
@@ -99,20 +100,21 @@ paths:
             Unprocessable. Two codes: `capability_disabled` — the sharing capability this role needs
             (`sharing.public-links` for READ/READ_WRITE, `sharing.uploader-links` for WRITE_ONLY) is disabled
             instance-wide, so the operator has turned public sharing off (ADR 0032; checked first, before any
-            scope check, so it reads as instance policy not a scope error); `illegal_scope` — the node is not a
-            **MEMORY** (only a Memory can be shared; a non-member scope is a non-enumerable `404`, not `422`).
+            scope check, so it reads as instance policy not a scope error); `illegal_scope` — the node's kind is one
+            no application accepts shares of (`ShareGuestWrites`), so it cannot be shared; a
+            non-member scope is a non-enumerable `404`, not `422`.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: capability_disabled } }
     get:
       tags: [sharing]
       operationId: listShares
-      summary: List shares — the caller's own, or (with nodeId) every member's on one Memory.
+      summary: List shares — the caller's own, or (with nodeId) every member's on one node.
       description: >
         Without `nodeId`: every share the authenticated caller created **in a space they may still read** — a
         share whose space they left, or whose tenant is suspended, drops out of the list (uc.spaces.scope-access;
         the list is account-addressed and carries sealed names of those spaces). With `nodeId`: **every** share on
-        that Memory node visible to a **member of its scope** — not only the caller's (cr-0104), so a member can
-        see and adopt an orphaned (disabled) share on a shared Memory; a non-member or an unknown node gets `[]`,
+        that node visible to a **member of its scope** — not only the caller's (cr-0104), so a member can
+        see and adopt an orphaned (disabled) share on a node of a shared scope; a non-member or an unknown node gets `[]`,
         an accepted member of a suspended tenant `403 tenant_suspended`. Each row carries `mine` (owned by the
         caller). A deleted link (`deleteShare`) is in neither listing. Operator-blind: the row carries no plaintext
         name or content.
@@ -123,7 +125,7 @@ paths:
           in: query
           required: false
           schema: { type: string, format: uuid }
-          description: Scope the listing to one Memory node — returns all its shares visible to a scope member.
+          description: Scope the listing to one shared node — returns all its shares visible to a scope member.
       responses:
         "200":
           description: The caller's shares.
@@ -228,11 +230,11 @@ paths:
         ([ADR 0075](../../docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)). The client
         opens the old share through its recovery copy, re-seals its note, label and password under the new
         `K_share` (the password with a fresh salt) and seals the new recovery copy at the scope's current epoch.
-        The server takes the Memory, the scope and the **role** from the old share, so a re-issue cannot move a
+        The server takes the shared node, the scope and the **role** from the old share, so a re-issue cannot move a
         link or change its role; the keys must match that role (`400`, as `createShare`). A WRITE_ONLY re-issue
-        seals the Memory's **existing** drop public key and carries no drop private key — every upload so far is
-        sealed to that key (ADR 0031 point 7). Guest identities stay with the old share: their photos stay in the
-        Memory, and a returning guest names themself again on the new link.
+        seals the shared node's **existing** drop public key and carries no drop private key — every upload so far is
+        sealed to that key (ADR 0031 point 7). Guest identities stay with the old share: what their guests added
+        stays under the shared node, and a returning guest names themself again on the new link.
 
         An **enabled** share is re-issued only by its owner (as `revokeShare`); a **disabled** one by any current
         member of its scope, who owns the new share (as `reactivateShare` adopts). The old link then `404`s exactly
@@ -301,12 +303,13 @@ paths:
     get:
       tags: [sharing]
       operationId: resolveShare
-      summary: Resolve a share (unauthenticated) → the sealed Memory subtree.
+      summary: Resolve a share (unauthenticated) → the sealed shared subtree.
       description: >
-        **No auth.** Returns the `role`, the `wrap` (`symWrap(K_share, K_mem)`), the `sealedName`, and the
-        **sealed subtree** rooted at the shared node — every node (for the `K_mem` chain) and every media
-        (metadata + blob refs), all still sealed under `K_mem`. The viewer unwraps `K_mem` with the fragment
-        key, derives each descendant's `K_mem` from `wrappedContentKey`, and decrypts names / metadata / blob
+        **No auth.** Returns the `role`, the `wrap` (`symWrap(K_share, content key)`), the `sealedName`, and the
+        **sealed subtree** rooted at the shared node — every node (for the content-key chain), plus what the
+        application attached under it (`media`, served here until it moves to the application's own operation),
+        all still sealed under the nodes' content keys. The viewer unwraps the root's content key with the
+        fragment key, derives each descendant's from `wrappedContentKey`, and decrypts names / payloads / blob
         keys **locally**. A disabled, expired, or unknown share is a non-enumerable `404` (same shape in every
         case). Without the fragment key the response is inert — the wrap cannot be opened.
         **Password-protected shares (cr-0118, ADR 0037):** with **no** `X-Share-Password` the response is
@@ -317,7 +320,7 @@ paths:
         - $ref: "#/components/parameters/SharePassword"
       responses:
         "200":
-          description: The share record + its sealed Memory subtree (opaque; still under `K_mem`) — or a locked shell when a password is required and none/valid-token was given.
+          description: The share record + its sealed subtree (opaque; still under the nodes' content keys) — or a locked shell when a password is required and none/valid-token was given.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/PublicShare" }
@@ -388,14 +391,14 @@ paths:
       summary: Delete a share link — its ciphertext goes, its id and its guests' uploads stay.
       description: >
         Deletes the link for good ([ADR 0029](../../docs/decisions/0029-public-viewer-share.md) §7). The row becomes
-        a **tombstone**: it keeps its id, scope, Memory, role and dates, and every ciphertext it held — the wrap or
+        a **tombstone**: it keeps its id, scope, shared node, role and dates, and every ciphertext it held — the wrap or
         drop public key, the sealed name, note, label, recovery copy and password fields — and its expiry are
         cleared. The link then `404`s exactly as a revoked one, and the share is gone from both listings and from
         `revokeShare`, `updateShare`, `reactivateShare` and `reissueShare` (each a `404`). Its id is never minted
-        again (`createShare` answers `id_taken`). The photos its guests added stay in the Memory, readable by its
+        again (`createShare` answers `id_taken`). What its guests added stays under the shared node, readable by its
         members and its other links as before: a guest's identity row — the only way to open a WRITE_ONLY guest's
-        uploads ([ADR 0031](../../docs/decisions/0031-uploader-public-share.md) point 7) — goes only once no media
-        and no bucket of theirs remains. Nothing is reclaimed from the store.
+        uploads ([ADR 0031](../../docs/decisions/0031-uploader-public-share.md) point 7) — goes only once the
+        applications hold nothing of theirs any more (`GuestIdentityUsage`). Nothing is reclaimed from the store.
 
         The share's **owner** deletes it at any time — an enabled share is turned off in the same transaction.
         **Another member** of its scope deletes it only once its owner is no longer a member of the scope (the
@@ -459,10 +462,10 @@ paths:
       summary: Gated presigned GET for a blob under the share (unauthenticated).
       description: >
         **No auth.** Authorizes the read **iff the blob is attached under the shared subtree** — a structural
-        check on opaque ids (the original/derivative blob of a media on the shared node or a descendant, or a
-        node's standalone cover blob). On success returns one short-TTL presigned **GET** URL per chunk; the
+        check on opaque ids (a blob an application attached to the shared node or a descendant, in whatever
+        role). On success returns one short-TTL presigned **GET** URL per chunk; the
         viewer fetches the ciphertext **directly from the object store** and opens it with `openFrame`, so the
-        operator never learns which media a viewer opens. A disabled/expired share, an unknown blob, or a blob
+        operator never learns which blob a viewer opens. A disabled/expired share, an unknown blob, or a blob
         outside the shared subtree is a non-enumerable `404`. The in-memory dev store cannot presign (`503`).
         For a **password-protected** share the valid `X-Share-Password` token is required too (cr-0118, ADR 0037) —
         a missing token is `404` (non-enumerable, like an out-of-subtree blob), a wrong token is `403`.
@@ -498,15 +501,15 @@ paths:
         **No auth.** For a **READ_WRITE** or **WRITE_ONLY** share (cr-0101, ADR 0030, ADR 0031), before uploading
         the visitor must name themselves. The client mints the identity's id (`identityId`, ADR 0072 Decision 3),
         **seals the display name** bound to scope, share and that id, and POSTs the ciphertext. A READ_WRITE
-        guest seals under `K_mem` (which it unwrapped from the fragment key). A WRITE_ONLY guest never holds
-        `K_mem` (ADR 0031 point 7): it mints its own identity key `K_up`, seals the name and every later upload
-        under it, and posts `K_up` wrapped to the Memory's drop public key (`wrappedIdentityKey`) — required for
+        guest seals under the shared node's content key (which it unwrapped from the fragment key). A WRITE_ONLY
+        guest never holds that key (ADR 0031 point 7): it mints its own identity key `K_up`, seals the name and every later upload
+        under it, and posts `K_up` wrapped to the shared node's drop public key (`wrappedIdentityKey`) — required for
         WRITE_ONLY, absent for READ_WRITE, else `400 invalid_request`. The server stores an anonymous **share identity** under that id and mints an
         unguessable **`contributorToken`** (held on device) that authorizes subsequent uploads. A taken
         `identityId`, in any share, is `409 id_taken` (never overwritten, not idempotent). The server stores
         only the sealed name and wrapped key (opaque) + the token hash + the `shareId`; it never sees the name,
-        the key or the person. The sealed name is served back only to the Memory's members, through their bucket
-        list — never on a public resolve (ADR 0030 point 8). A disabled/expired/unknown share is a `404`; a READ share is a `403`.
+        the key or the person. The sealed name is served back only to the scope's members, through the
+        application's own member operations — never on a public resolve (ADR 0030 point 8). A disabled/expired/unknown share is a `404`; a READ share is a `403`.
         **Password-protected shares (cr-0164, ADR 0037):** the password gate fronts this write endpoint too —
         with **no** `X-Share-Password` the share is a non-enumerable `404`; a **wrong** token → `403
         share_password_incorrect`. A guest names themselves only after presenting the password.
@@ -536,7 +539,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "403":
-          description: The share does not allow contributions (not a READ_WRITE share — `share_not_contributable`), or it is password-protected and the presented `X-Share-Password` token is wrong (`share_password_incorrect`, cr-0164).
+          description: The share does not allow contributions (a READ share — `share_not_contributable`), or it is password-protected and the presented `X-Share-Password` token is wrong (`share_password_incorrect`, cr-0164).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_contributable } }
         "404":
@@ -554,12 +557,13 @@ paths:
       operationId: startShareBlobUploads
       summary: Start contributor blob uploads (unauthenticated) — reserve sessions + presign the first window of PUTs.
       description: >
-        **No auth.** The share-scoped mirror of `startBlobUploads` (media API) for a **READ_WRITE** share: gated on
-        the share (exists + `enabled` + role READ_WRITE) + a valid `contributorToken`. For each declared blob
-        (`chunkCount`, `byteSize`, the `K_blob` wrap under `K_mem`) the server opens an upload session **bound to
-        the token's identity** and returns short-TTL presigned **PUT** URLs for the blob's **first window** of
-        chunks; the contributor PUTs ciphertext **direct-to-store**, asks `presignShareBlobUploadWindows` for each
-        next window, and then calls `completeShareMedia`. The in-memory dev store cannot presign (`503`).
+        **No auth.** The share-scoped mirror of `startBlobUploads` (blob API) for a share whose access mode lets a
+        guest add (READ_WRITE or WRITE_ONLY): gated on the share (exists + `enabled` + that mode) + a valid
+        `contributorToken`. For each declared blob (`chunkCount`, `byteSize`, the `K_blob` wrap) the server opens
+        an upload session **bound to the token's identity** and returns short-TTL presigned **PUT** URLs for the
+        blob's **first window** of chunks; the guest PUTs ciphertext **direct-to-store**, asks
+        `presignShareBlobUploadWindows` for each next window, and then completes through the application's guest
+        completion. What an upload becomes is the application's (`ShareGuestWrites`). The in-memory dev store cannot presign (`503`).
         Per-share rate-limited.
         **Storage limit ([ADR 0073](../../docs/decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md)):**
         the link stores at most its tenant's per-link limit. The request's admissible items are reserved together
@@ -619,7 +623,7 @@ paths:
       operationId: presignShareBlobUploadWindows
       summary: Presign the next window of contributor PUTs (unauthenticated).
       description: >
-        **No auth.** The share-scoped mirror of `presignBlobUploadWindows` (media API). Gated **again**, per
+        **No auth.** The share-scoped mirror of `presignBlobUploadWindows` (blob API). Gated **again**, per
         request, exactly like `startShareBlobUploads` — the share exists + `enabled` + allows uploads, the password
         token when the share has one, and a valid `contributorToken` — so revoking, expiring or disabling the link
         stops an in-flight upload at its next window. A session resolves only for **the identity that opened it**.
@@ -666,14 +670,16 @@ paths:
     post:
       tags: [sharing]
       operationId: completeShareMedia
-      summary: Complete a contributor upload (unauthenticated) — attach to the shared Memory.
+      summary: Complete a guest upload (unauthenticated) — the application attaches it to the shared root node.
       description: >
-        **No auth.** The share-scoped mirror of `completeMedia` for a **READ_WRITE** share: gated on the share
-        (exists + `enabled` + role READ_WRITE) + a valid `contributorToken`. Each item is one logical media (the
-        original upload + up to two role-tagged derivatives); the server verifies the stored objects
-        (declare-then-verify + byte budget), records the blob(s), and attaches **one media to the shared Memory
-        root node** (`nodeId` of the share) **stamped with the contributor's `identityId`** (direct-append). The
-        contributor is not told which node — the server uses the share's own node. Returns `{ blobId, mediaId }` or
+        **No auth.** The guest completion of the application that owns the shared root's kind: its behaviour is
+        that application's (today Memories', whose own spec this operation and its schemas move to, ADR 0079);
+        core only gates and dispatches (`ShareGuestWrites`). Gated on the share (exists + `enabled` + an access
+        mode that lets a guest add) + a valid `contributorToken`. Each item is one of the application's objects
+        (`mediaId`): the original upload + up to two role-tagged derivatives; the server verifies the stored objects
+        (declare-then-verify + byte budget), records the blob(s), and attaches **one object to the shared root
+        node** (`nodeId` of the share) **stamped with the guest's `identityId`** (direct-append). The
+        guest is not told which node — the server uses the share's own node. Returns `{ blobId, mediaId }` or
         a per-item error.
         **Password-protected shares (cr-0164, ADR 0037):** the password gate fronts this endpoint — no
         `X-Share-Password` → non-enumerable `404`; a wrong token → `403 share_password_incorrect`.
@@ -697,7 +703,7 @@ paths:
                       uploadId: 3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f
       responses:
         "200":
-          description: Per-item completion results (success carries blob+media ids; failure carries a code).
+          description: Per-item completion results (success carries the blob id and the object's `mediaId`; failure carries a code).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ShareMediaBatchResponse" }
@@ -718,15 +724,17 @@ paths:
     delete:
       tags: [sharing]
       operationId: deleteShareMedia
-      summary: Delete your own contributed media (unauthenticated) — the uploader/contributor removes one of their uploads.
+      summary: Delete your own contribution (unauthenticated) — a guest removes one of their uploads.
       description: >
-        **No auth.** Lets an anonymous contributor/uploader remove **one of their own** contributions this session
+        **No auth.** Lets an anonymous guest remove **one of their own** contributions this session
         (the `WRITE_ONLY` drop-box, cr-0102, [ADR 0031](../../docs/decisions/0031-uploader-public-share.md); also a
-        `READ_WRITE`). The `contributorToken` rides the **`X-Contributor-Token`** header (no body on DELETE). Gated
+        `READ_WRITE`). Its behaviour is the application's that owns the shared root's kind (today Memories', whose
+        own spec this operation moves to, ADR 0079); core only gates and dispatches (`ShareGuestWrites`). The
+        `contributorToken` rides the **`X-Contributor-Token`** header (no body on DELETE). Gated
         on the share (exists + `enabled` + role ∈ {READ_WRITE, WRITE_ONLY}) + a valid token; the server deletes the
-        media (and its derivatives, and puts all their blob objects on the reclaim list) **iff** the media's `share_identity_id`
-        equals the token's identity — a single-row **ownership** check, never gallery filtering. `404` for any other
-        media id (a foreign or unknown media is indistinguishable from a missing one). Idempotent-safe: a second
+        object (and its derivatives, and puts all their blob objects on the reclaim list) **iff** its `share_identity_id`
+        equals the token's identity — a single-row **ownership** check, never a filtered listing. `404` for any other
+        id (a foreign or unknown one is indistinguishable from a missing one). Idempotent-safe: a second
         delete of the same id is `404`.
         **Password-protected shares (cr-0164, ADR 0037):** the password gate fronts this endpoint — no
         `X-Share-Password` → non-enumerable `404`; a wrong token → `403 share_password_incorrect`.
@@ -738,17 +746,17 @@ paths:
           x-veyq-visibility: token
           in: header
           required: true
-          description: The opaque `contributorToken` from `createShareIdentity` — proves this caller owns the media being deleted.
+          description: The opaque `contributorToken` from `createShareIdentity` — proves this caller owns the contribution being deleted.
           schema: { type: string, minLength: 43, maxLength: 43, pattern: "^[A-Za-z0-9_-]{43}$", example: Y29udHJpYnV0b3ItdG9rZW4tb3BhcXVl }
       responses:
         "204":
-          description: Deleted (the media, its derivatives, and its blobs are gone).
+          description: Deleted (the contribution, its derivatives, and its blobs are gone).
         "403":
           description: The share does not allow contributions or the contributor token is invalid (`share_not_contributable`), or it is password-protected and the `X-Share-Password` token is wrong (`share_password_incorrect`, cr-0164).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_contributable } }
         "404":
-          description: No such media under this share owned by this identity, or a password-protected share with no `X-Share-Password` token given (cr-0164) — also covers a disabled/expired/unknown share and one whose space is being deleted or its tenant suspended (uc.spaces.scope-access A4), non-enumerable.
+          description: No such contribution under this share owned by this identity, or a password-protected share with no `X-Share-Password` token given (cr-0164) — also covers a disabled/expired/unknown share and one whose space is being deleted or its tenant suspended (uc.spaces.scope-access A4), non-enumerable.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_media_not_found } }
 
@@ -776,7 +784,7 @@ components:
       name: mediaId
       in: path
       required: true
-      description: Opaque id of a media the caller contributed (deletable only if its `share_identity_id` matches the token's identity).
+      description: Opaque id of a contribution the caller made (deletable only if its `share_identity_id` matches the token's identity).
       schema: { type: string, format: uuid, example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c }
     SharePassword:
       name: X-Share-Password
@@ -825,10 +833,10 @@ components:
       required: [shareId, nodeId, role, sealedName, writeVerifier]
       description: >
         The share's keys follow its role (ADR 0031 point 7). A READ or READ_WRITE share carries `wrap` and no
-        drop key. A WRITE_ONLY share carries **no** `wrap` — its guest never holds `K_mem` — and instead the
-        Memory's drop public key sealed under `K_share` (`sealedDropPublicKey`); the Memory's first WRITE_ONLY share
-        also carries the drop private key sealed under `K_mem` (`sealedDropPrivateKey`), which the server stores
-        on the Memory. Any other combination is `400 invalid_request`.
+        drop key. A WRITE_ONLY share carries **no** `wrap` — its guest never holds the shared node's content key —
+        and instead the drop public key of the shared root node sealed under `K_share` (`sealedDropPublicKey`); the
+        node's first WRITE_ONLY share also carries the drop private key sealed under the node's content key
+        (`sealedDropPrivateKey`), which the server stores on the node. Any other combination is `400 invalid_request`.
       properties:
         shareId:
           x-veyq-visibility: id
@@ -847,15 +855,15 @@ components:
           x-veyq-visibility: id
           type: string
           format: uuid
-          description: The Memory to share — must be a MEMORY in a scope the caller is a member of (personal, group, or tenant).
+          description: The node to share — of a kind an application accepts shares of (`ShareGuestWrites`), in a scope the caller is a member of (personal, group, or tenant).
           example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
         role:
           $ref: "#/components/schemas/ShareRole"
         wrap:
           type: [string, "null"]
           description: >
-            The Memory's `K_mem` wrapped under the fresh per-share key — `symWrap(K_share, K_mem)` (opaque base64).
-            Required for READ and READ_WRITE; absent for WRITE_ONLY.
+            The shared node's content key wrapped under the fresh per-share key — `symWrap(K_share, content key)`
+            (opaque base64). Required for READ and READ_WRITE; absent for WRITE_ONLY.
           contentEncoding: base64
           maxLength: 256
           example: d3JhcHBlZC1rLW1lbS11bmRlci1rLXNoYXJl
@@ -863,9 +871,9 @@ components:
         sealedDropPublicKey:
           type: [string, "null"]
           description: >
-            WRITE_ONLY only: the Memory's drop public key sealed under `K_share` (AAD `drop-public-key`, opaque base64)
-            — the key the guest wraps its own identity key to (ADR 0031 point 7). Required for WRITE_ONLY, absent
-            otherwise.
+            WRITE_ONLY only: the drop public key of the shared root node of this WRITE_ONLY link, sealed under
+            `K_share` (AAD `drop-public-key`, opaque base64) — the key the guest wraps its own identity key to
+            (ADR 0031 point 7). Required for WRITE_ONLY, absent otherwise.
           contentEncoding: base64
           maxLength: 2048
           example: c2VhbGVkLWRyb3AtcHVibGljLWtleQ==
@@ -873,17 +881,18 @@ components:
         sealedDropPrivateKey:
           type: [string, "null"]
           description: >
-            WRITE_ONLY only, and only while the Memory has no drop key yet: the drop private key sealed under `K_mem`
-            (AAD `drop-private-key`, bound to scope + node; opaque base64), stored on the Memory in the same
-            transaction as the share. Present when the Memory already has one ⇒ `409 drop_key_exists` (the client
-            re-reads the node and seals to that key); absent when it has none ⇒ `409 drop_key_missing`.
+            WRITE_ONLY only, and only while the shared root node has no drop key yet: the drop private key of the
+            shared root node of a WRITE_ONLY link, sealed under the node's content key (AAD `drop-private-key`, bound
+            to scope + node; opaque base64), stored on the node by core in the same transaction as the share. Present
+            when the node already has one ⇒ `409 drop_key_exists` (the client re-reads the node and seals to that
+            key); absent when it has none ⇒ `409 drop_key_missing`.
           contentEncoding: base64
           maxLength: 256
           example: null
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         sealedName:
           type: string
-          description: The Memory name re-sealed under `K_share` (seal purpose `share-memory-name`, opaque base64) — so a viewer with only the fragment key can show the title without `K_SC`.
+          description: The shared node's name re-sealed under `K_share` (seal purpose `share-memory-name`, a stored seal id that keeps its name; opaque base64) — so a viewer with only the fragment key can show the title without `K_SC`.
           contentEncoding: base64
           maxLength: 4096
           example: c2VhbGVkLW5hbWUtdW5kZXItay1zaGFyZQ==
@@ -909,7 +918,7 @@ components:
           description: >
             OPTIONAL private label for this share, sealed under `K_share` (AAD `share-name`, opaque base64) — a
             **management-only** name (e.g. "For Grandma") shown in the curator's share list, distinct from the
-            Memory name; **never served to the viewer** (cr-0116).
+            shared node's name; **never served to the viewer** (cr-0116).
           contentEncoding: base64
           maxLength: 512
           example: c2VhbGVkLXNoYXJlLW5hbWU=
@@ -918,9 +927,9 @@ components:
           type: [string, "null"]
           description: >
             OPTIONAL recoverable copy of the per-share key — `K_share` sealed under the scope key `K_SC` at
-            `sealedShareKeyEpoch` (AAD `share-key-recovery`, bound to scope + Memory + share + epoch; opaque base64).
+            `sealedShareKeyEpoch` (AAD `share-key-recovery`, bound to scope + node + share + epoch; opaque base64).
             Lets every scope member recover `K_share` later to reveal, edit and re-copy the share. `K_SC` is the key
-            no share link carries, so a viewer or contributor link — which holds `K_mem` — opens nothing of another
+            no share link carries, so a READ or READ_WRITE link — which holds the shared node's content key — opens nothing of another
             share; the operator never sees `K_share` (ADR 0036 point 4). Sent together with `sealedShareKeyEpoch`.
           contentEncoding: base64
           maxLength: 256
@@ -1049,8 +1058,8 @@ components:
       required: [shareId, sealedName, sealedShareKey, sealedShareKeyEpoch, writeVerifier]
       description: >
         The new share of a re-issue (ADR 0075): `createShare`'s body without `nodeId` and `role` — both come from
-        the old share — and without `sealedDropPrivateKey`, since a WRITE_ONLY re-issue keeps the Memory's existing
-        drop key. The keys follow the old share's role as in `CreateShareRequest`: `wrap` for READ/READ_WRITE,
+        the old share — and without `sealedDropPrivateKey`, since a WRITE_ONLY re-issue keeps the shared node's
+        existing drop key. The keys follow the old share's role as in `CreateShareRequest`: `wrap` for READ/READ_WRITE,
         `sealedDropPublicKey` for WRITE_ONLY, any other combination `400 invalid_request`. The recovery copy is
         **required**: a re-issue is made by a member who opened the old one, and its link must stay recoverable.
       properties:
@@ -1068,7 +1077,7 @@ components:
         wrap:
           type: [string, "null"]
           description: >
-            `symWrap(K_share', K_mem)` under the **new** per-share key (opaque base64). Required when the old share
+            `symWrap(K_share', content key)` — the shared node's content key under the **new** per-share key (opaque base64). Required when the old share
             is READ or READ_WRITE; absent for WRITE_ONLY.
           contentEncoding: base64
           maxLength: 256
@@ -1077,7 +1086,7 @@ components:
         sealedDropPublicKey:
           type: [string, "null"]
           description: >
-            WRITE_ONLY only: the Memory's **existing** drop public key sealed under the new `K_share` (AAD
+            WRITE_ONLY only: the shared root node's **existing** drop public key sealed under the new `K_share` (AAD
             `drop-public-key`, opaque base64). Required when the old share is WRITE_ONLY, absent otherwise.
           contentEncoding: base64
           maxLength: 2048
@@ -1085,7 +1094,7 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 2048) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         sealedName:
           type: string
-          description: The Memory name sealed under the new `K_share` (seal purpose `share-memory-name`, opaque base64).
+          description: The shared node's name sealed under the new `K_share` (seal purpose `share-memory-name`, opaque base64).
           contentEncoding: base64
           maxLength: 4096
           example: c2VhbGVkLW5hbWUtdW5kZXItay1zaGFyZQ==
@@ -1114,7 +1123,7 @@ components:
           type: string
           description: >
             The new `K_share` sealed under the scope key `K_SC` at `sealedShareKeyEpoch` (AAD `share-key-recovery`,
-            bound to scope + Memory + the **new** share id + epoch; opaque base64) — the members' recovery copy
+            bound to scope + node + the **new** share id + epoch; opaque base64) — the members' recovery copy
             (ADR 0036 point 4).
           contentEncoding: base64
           maxLength: 256
@@ -1191,19 +1200,19 @@ components:
           x-veyq-visibility: id
           type: string
           format: uuid
-          description: The shared Memory node (lets the curator UI group shares by Memory).
+          description: The shared node (lets the curator UI group shares by node).
           example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
         scopeId:
           x-veyq-visibility: id
           type: string
           format: uuid
-          description: The shared Memory's scope — its `sealedShareKey` is sealed bound to (scope, node, share) (ADR 0072).
+          description: The shared node's scope — its `sealedShareKey` is sealed bound to (scope, node, share) (ADR 0072).
           example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
         role:
           $ref: "#/components/schemas/ShareRole"
         sealedName:
           type: string
-          description: The Memory name re-sealed under `K_share` (opaque base64) — the curator UI unwraps it to label the row.
+          description: The shared node's name re-sealed under `K_share` (opaque base64) — the curator UI unwraps it to label the row.
           contentEncoding: base64
           maxLength: 4096
           example: c2VhbGVkLW5hbWUtdW5kZXItay1zaGFyZQ==
@@ -1257,7 +1266,7 @@ components:
           x-veyq-visibility: flag
           type: boolean
           description: >
-            True when the authenticated caller owns this share (so may revoke it). On a shared-scope Memory the
+            True when the authenticated caller owns this share (so may revoke it). On a node of a shared scope the
             list also includes other members' shares (cr-0104); a disabled share by anyone can be re-activated by
             a member, which transfers ownership.
           example: true
@@ -1318,6 +1327,8 @@ components:
         `sealedDropPublicKey` / `nodeId` / `sealedName` / `sealedNote` / `nodes` / `media` / `identities` are
         omitted/empty — the client prompts for the password and re-resolves with the token (cr-0118, ADR 0037).
         An unlocked WRITE_ONLY response carries `sealedDropPublicKey` **instead of** `wrap` (ADR 0031 point 7).
+        `media` and `identities` are the Memories application's rows, served here until they move to its own
+        operation (ADR 0079); everything else is core's link and the shared nodes with their keys.
       properties:
         role:
           $ref: "#/components/schemas/ShareRole"
@@ -1332,8 +1343,9 @@ components:
           type: [string, "null"]
           format: uuid
           description: >
-            The shared Memory's scope. Every `K_mem` seal the viewer opens — node meta, media meta, blob keys
-            — is bound to it (ADR 0072), so it rides with the subtree. Null in a locked response.
+            The shared node's scope. Every seal under a node's content key the viewer opens — node payloads, the
+            application's sealed rows, blob keys — is bound to it (ADR 0072), so it rides with the subtree. Null in
+            a locked response.
           example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
         pwSalt:
           type: [string, "null"]
@@ -1344,16 +1356,17 @@ components:
         wrap:
           type: [string, "null"]
           description: >
-            The wrap `symWrap(K_share, K_mem)` (opaque base64) — the viewer unwraps `K_mem` with the fragment key.
-            Null for a WRITE_ONLY share (its guest never holds `K_mem`) and in a locked (password-gated) response.
+            The wrap `symWrap(K_share, content key)` (opaque base64) — the viewer unwraps the shared node's content
+            key with the fragment key. Null for a WRITE_ONLY share (its guest never holds that key) and in a locked
+            (password-gated) response.
           contentEncoding: base64
           maxLength: 256
           example: d3JhcHBlZC1rLW1lbS11bmRlci1rLXNoYXJl
         sealedDropPublicKey:
           type: [string, "null"]
           description: >
-            WRITE_ONLY only: the Memory's drop public key sealed under `K_share` (AAD `drop-public-key`, opaque
-            base64). The guest wraps its own identity key to it. Null for every other role and in a locked response.
+            WRITE_ONLY only: the drop public key of the shared root node of this WRITE_ONLY link, sealed under
+            `K_share` (AAD `drop-public-key`, opaque base64). The guest wraps its own identity key to it. Null for every other role and in a locked response.
           contentEncoding: base64
           maxLength: 2048
           example: null
@@ -1362,12 +1375,12 @@ components:
           type: [string, "null"]
           format: uuid
           description: >
-            The shared Memory. A WRITE_ONLY guest binds its identity key's wrap to it (`upload-identity-key`, ADR
+            The shared root node. A WRITE_ONLY guest binds its identity key's wrap to it (`upload-identity-key`, ADR
             0072), since it is served no node. Null in a locked response.
           example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
         sealedName:
           type: [string, "null"]
-          description: The Memory name re-sealed under `K_share` (opaque base64). Null in a locked response.
+          description: The shared node's name re-sealed under `K_share` (opaque base64). Null in a locked response.
           contentEncoding: base64
           maxLength: 4096
           example: c2VhbGVkLW5hbWUtdW5kZXItay1zaGFyZQ==
@@ -1379,28 +1392,31 @@ components:
           example: null
         nodes:
           type: array
-          description: The subtree rooted at the shared Memory — the root plus its chapters, for the `K_mem` chain.
+          description: The live subtree rooted at the shared node — the root plus its descendants, for the content-key chain.
           items: { $ref: "#/components/schemas/ShareNode" }
         media:
           type: array
-          description: Every media attached under the shared subtree (each tagged with its owning `nodeId`).
+          description: >
+            The Memories application's rows attached under the shared subtree (each tagged with its owning
+            `nodeId`) — served here until they move to its own operation (ADR 0079).
           items: { $ref: "#/components/schemas/ShareMedia" }
         identities:
           type: [array, "null"]
           description: >
-            The anonymous identities a reader needs to open what it is served: every WRITE_ONLY identity with media
-            in the served subtree, each an opaque `identityId` and its wrapped identity key, without which that
-            identity's media cannot be opened (ADR 0031 point 7). No guest's name, and no READ_WRITE identity —
-            not even this share's own, whatever its role is now: a guest's name is for the Memory's members, who
-            read it through the bucket list (ADR 0030 point 8). Empty for a WRITE_ONLY share (it is served nothing).
+            The anonymous identities a reader needs to open what it is served: every WRITE_ONLY identity with a row
+            in `media` under the served subtree, each an opaque `identityId` and its wrapped identity key, without
+            which that identity's rows cannot be opened (ADR 0031 point 7). No guest's name, and no READ_WRITE identity —
+            not even this share's own, whatever its role is now: a guest's name is for the scope's members, who
+            read it through the application's member operations (ADR 0030 point 8). Empty for a WRITE_ONLY share (it
+            is served nothing). Derived from the Memories application's rows, and moves with them (ADR 0079).
           items: { $ref: "#/components/schemas/ShareIdentity" }
 
     ShareNode:
       type: object
       description: >
-        One node of the shared subtree. The **root** carries `parentId: null` (the viewer keys its `K_mem` off
-        the share `wrap`); a descendant chapter carries its parent's id and its `K_mem` wrapped under the
-        parent's `K_mem` in `wrappedContentKey`. The name is **not** returned here (it is sealed under `K_SC`,
+        One node of the shared subtree. The **root** carries `parentId: null` (the viewer takes its content key
+        from the share `wrap`); a descendant carries its parent's id and its content key wrapped under the
+        parent's in `wrappedContentKey`. The name is **not** returned here (it is sealed under `K_SC`,
         which a public viewer never holds — the root's name comes from `sealedName`).
       required: [id, kind, epoch]
       properties:
@@ -1426,36 +1442,39 @@ components:
           example: 0
         wrappedContentKey:
           type: [string, "null"]
-          description: A descendant's `K_mem` wrapped under its parent's `K_mem` (opaque base64); null/ignored at the root (its `K_mem` comes from the share `wrap`).
+          description: The content key of a shareable node — a descendant's content key wrapped under its parent's (opaque base64); null/ignored at the root (its content key comes from the share `wrap`).
           contentEncoding: base64
           maxLength: 256
           example: d3JhcHBlZC1rLW1lbQ==
         wrappedMeta:
           type: [string, "null"]
-          description: The node's curated metadata (date/place/cover) sealed under its `K_mem` (AAD `node-meta`; opaque base64); null when unset.
+          description: The node's versioned sealed payload, sealed under its content key (AAD `node-meta`; opaque base64); its format is the kind's application's. Null when unset.
           contentEncoding: base64
           maxLength: 8192
           example: d3JhcHBlZC1tZXRh
         sealedDropPrivateKey:
           type: [string, "null"]
           description: >
-            The Memory's drop private key sealed under its `K_mem` (AAD `drop-private-key`, bound to scope + node;
-            opaque base64) — what opens the media a WRITE_ONLY guest added (ADR 0031 point 7). Null until the
-            Memory's first WRITE_ONLY share.
+            The drop private key of the shared root node of a WRITE_ONLY link, sealed under the node's content key
+            (AAD `drop-private-key`, bound to scope + node; opaque base64) — what opens what a WRITE_ONLY guest added
+            (ADR 0031 point 7). Null until the node's first WRITE_ONLY share.
           contentEncoding: base64
           maxLength: 256
           example: null
 
     ShareMedia:
       type: object
-      description: A media under the shared subtree — the original blob ref + role-tagged derivatives, tagged with its owning `nodeId` so the viewer picks the right `K_mem`.
+      description: >
+        One of the Memories application's rows under the shared subtree, served here until it moves to that
+        application's own spec (ADR 0079) — the original blob ref + role-tagged derivatives, tagged with its owning
+        `nodeId` so the viewer picks the right content key.
       required: [nodeId, mediaId, blobId, chunkCount, byteSize, wrappedBlobKey]
       properties:
         nodeId:
           x-veyq-visibility: id
           type: string
           format: uuid
-          description: The subtree node this media is attached to (selects its `K_mem`).
+          description: The subtree node this row is attached to (selects its content key).
           example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
         mediaId: { type: string, format: uuid, example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e, x-veyq-visibility: id }
         blobId: { type: string, format: uuid, example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a, x-veyq-visibility: id }
@@ -1476,7 +1495,7 @@ components:
           items: { type: integer, format: int64, example: 65536 }
         wrappedBlobKey:
           type: string
-          description: The original blob's `K_blob` wrapped under `K_mem` (opaque base64).
+          description: The original blob's `K_blob` wrapped under the node's content key (opaque base64).
           contentEncoding: base64
           maxLength: 256
           example: d3JhcHBlZC1rLWJsb2I=
@@ -1486,7 +1505,7 @@ components:
           items: { $ref: "#/components/schemas/ShareMediaDerivative" }
         wrappedMeta:
           type: [string, "null"]
-          description: The original's listed-metadata tier `{v,w,h,capturedAt,...}` sealed under `K_mem` (opaque base64); null when unset.
+          description: The application's sealed metadata of the row, under the node's content key (opaque base64; its format is the application's); null when unset.
           contentEncoding: base64
           maxLength: 512
           example: bWV0YS1jaXBoZXJ0ZXh0
@@ -1495,9 +1514,9 @@ components:
           type: [string, "null"]
           format: uuid
           description: >
-            The WRITE_ONLY identity that added this media, whose wrapped key in `identities[]` opens it (ADR 0031
-            point 7). Null for a member's media and for a READ_WRITE guest's, which open under `K_mem` — a guest is
-            not told which uploads came from one person (ADR 0030 point 8).
+            The WRITE_ONLY identity that added this row, whose wrapped key in `identities[]` opens it (ADR 0031
+            point 7). Null for a member's row and for a READ_WRITE guest's, which open under the node's content key —
+            a guest is not told which uploads came from one person (ADR 0030 point 8).
           example: null
 
     ShareMediaDerivative:
@@ -1547,8 +1566,8 @@ components:
     ShareIdentity:
       type: object
       description: >
-        A WRITE_ONLY identity as a guest reader is served it: the opaque id and the key its media opens under.
-        Deliberately **no name** — the display name is for the Memory's members (ADR 0030 point 8), and a field
+        A WRITE_ONLY identity as a guest reader is served it: the opaque id and the key what it added opens under.
+        Deliberately **no name** — the display name is for the scope's members (ADR 0030 point 8), and a field
         that is absent cannot be read by any guest-side code.
       required: [identityId, wrappedIdentityKey]
       properties:
@@ -1556,7 +1575,7 @@ components:
         wrappedIdentityKey:
           type: string
           description: >
-            The identity's own key `K_up` wrapped to the Memory's drop public key (AAD `upload-identity-key`, bound
+            The identity's own key `K_up` wrapped to the shared root node's drop public key (AAD `upload-identity-key`, bound
             to scope + node + identity; opaque base64). Everything the identity sealed opens under `K_up` (ADR 0031
             point 7).
           contentEncoding: base64
@@ -1577,7 +1596,7 @@ components:
         sealedDisplayName:
           type: string
           description: >
-            The display name sealed (opaque base64) — under `K_mem` for READ_WRITE, under `K_up` for WRITE_ONLY;
+            The display name sealed (opaque base64) — under the shared node's content key for READ_WRITE, under `K_up` for WRITE_ONLY;
             mandatory, never in clear.
           contentEncoding: base64
           maxLength: 512
@@ -1587,7 +1606,7 @@ components:
           type: [string, "null"]
           description: >
             WRITE_ONLY only (required there, absent for READ_WRITE): the guest's own identity key `K_up` wrapped to
-            the Memory's drop public key (AAD `upload-identity-key`, bound to scope + node + this `identityId`;
+            the shared root node's drop public key (AAD `upload-identity-key`, bound to scope + node + this `identityId`;
             opaque base64).
           contentEncoding: base64
           maxLength: 2048
@@ -1640,12 +1659,15 @@ components:
           type: string
           format: uuid
           description: >
-            The client-minted media id `completeShareMedia` will carry — the `wrappedBlobKey` is sealed bound to it.
+            The client-minted id of the application's object the guest completion will attach the blob to — the `wrappedBlobKey` is sealed bound to it.
           example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e
         role:
           x-veyq-visibility: enum
           type: string
-          description: The blob's role for its media (a contributor uploads media only, never a cover).
+          description: >
+            The blob's role, closed with the blob API's `BlobRole` (the crypto suite's seal encoder admits only its
+            values, so a new role is a crypto change; it opens with generic attachments, inbox #327). A guest
+            upload takes every role but COVER.
           enum: [ORIGINAL, THUMBNAIL, PREVIEW]
           example: ORIGINAL
         chunkCount:
@@ -1676,7 +1698,7 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(28)'
         wrappedBlobKey:
           type: string
-          description: The blob's random `K_blob` wrapped under the Memory's `K_mem` (opaque base64).
+          description: The blob's random `K_blob` wrapped under the shared node's content key, or under `K_up` for a WRITE_ONLY guest (opaque base64).
           contentEncoding: base64
           maxLength: 256
           example: d3JhcHBlZC1rLWJsb2I=
@@ -1799,7 +1821,7 @@ components:
 
     ShareMediaRequestItem:
       type: object
-      description: One logical media — the original upload + up to two role-tagged derivative uploads. Attaches to the share's own Memory node (no `nodeId` — the server uses the shared node).
+      description: One of the application's objects — the original upload + up to two role-tagged derivative uploads. Attaches to the share's own root node (no `nodeId` — the server uses the shared node). The Memories application's item, served here until it moves to its own spec (ADR 0079).
       required: [mediaId, originalUploadId]
       properties:
         mediaId:
@@ -1807,7 +1829,7 @@ components:
           type: string
           format: uuid
           description: >
-            The client-minted UUIDv4 id of the media (ADR 0072 Decision 3) — the `ownerId` each of its uploads was started with. Taken ⇒ `id_taken`.
+            The client-minted UUIDv4 id of the object (ADR 0072 Decision 3) — the `ownerId` each of its uploads was started with. Taken ⇒ `id_taken`.
           example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e
         originalUploadId:
           x-veyq-visibility: id
@@ -1823,14 +1845,14 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 2)'
         wrappedMeta:
           type: [string, "null"]
-          description: The original's listed-metadata tier sealed under `K_mem` (opaque base64).
+          description: The application's sealed metadata of the object, under the shared node's content key (opaque base64; its format is the application's).
           contentEncoding: base64
           maxLength: 512
           example: bWV0YS1jaXBoZXJ0ZXh0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 512) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         wrappedExif:
           type: [string, "null"]
-          description: The original's heavy EXIF bundle sealed under `K_mem` (opaque base64).
+          description: A second, larger sealed payload of the application's, under the shared node's content key (opaque base64; its format is the application's).
           contentEncoding: base64
           maxLength: 16384
           example: ZXhpZi1jaXBoZXJ0ZXh0
@@ -1861,7 +1883,7 @@ components:
 
     ShareMediaResultItem:
       type: object
-      description: One per request item, in order. Success carries the original `blobId` + `mediaId`; failure carries `error`.
+      description: One per request item, in order. Success carries the original `blobId` + the object's `mediaId`; failure carries `error`.
       properties:
         blobId:
           x-veyq-visibility: id

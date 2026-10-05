@@ -19,7 +19,7 @@ data class NodeRow(
     val epoch: Int,
     val wrappedContentKey: String?,
     val wrappedMeta: String?,
-    /** A MEMORY's drop private key sealed under its `K_mem` (ADR 0031 point 7), or null until its first WRITE_ONLY share. */
+    /** The drop private key of a WRITE_ONLY link's shared root, sealed under its content key (ADR 0031 point 7), or null until its first WRITE_ONLY share. */
     val sealedDropPrivateKey: String? = null,
     /** How many times [wrappedMeta] was replaced — the version a meta write states (ADR 0077). */
     val metaVersion: Long = 0,

@@ -88,7 +88,7 @@ paths:
         [ADR 0063](../../docs/decisions/0063-database-driven-tenant-ingress.md) restart-looped a production
         stack into serving nothing. So an instance whose store is not yet usable starts anyway, answers
         `GET /api/setup`, and looks healthy — and without this read the failure would first reach the operator
-        as a photo that will not upload.
+        as a file that will not upload.
 
         The value is server self-description and holds no user content. It says what the operator can **do**,
         never what the code did; the reason a bring-up failed stays in the log, because the four answers below
@@ -109,7 +109,7 @@ paths:
                   summary: An `s3` store — the operator owns its bring-up, and veyq never pokes it
                   value: { state: NOT_ATTEMPTED }
                 failed:
-                  summary: The bounded retries ran out; media will not work until the store is fixed
+                  summary: The bounded retries ran out; blob uploads and downloads will not work until the store is fixed
                   value: { state: FAILED }
         "401":
           description: Generic authentication failure (missing, invalid, expired, or revoked access token).
@@ -169,7 +169,7 @@ components:
             `IN_PROGRESS` = a bring-up is running or waiting to retry. Uploads may fail until it finishes;
             wait, and read again. `PROVISIONED` = the store is usable — layout, bucket, key, grant and CORS
             policy are all in place. `FAILED` = the bounded retries are exhausted and veyq has given up
-            (ADR 0067 Decision 3). Media stays broken until the store is repaired and the app restarted; the
+            (ADR 0067 Decision 3). Blob transfer stays broken until the store is repaired and the server restarted; the
             log carries which call failed.
           enum: [NOT_ATTEMPTED, IN_PROGRESS, PROVISIONED, FAILED]
           example: PROVISIONED

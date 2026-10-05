@@ -575,7 +575,7 @@ paths:
         the **orphan rule** to groups they solely owned: transfer OWNER to the **oldest** remaining member, else the
         solo group is grace-tombstoned. The target's **own** scopes (personal + any solo group) are grace-tombstoned
         with their **membership kept** (read-only grace, then `ScopePurge` — cr-0090), so they can read/export their
-        own memories before erasure. Membership-gated first (a non-member gets `404 tenant_not_found`, ADR 0042),
+        own content before erasure. Membership-gated first (a non-member gets `404 tenant_not_found`, ADR 0042),
         then owner-gated (`403 not_tenant_owner`); the **last-owner guard** rejects removing
         the last tenant OWNER (`409 last_owner`, ADR 0007). Operator-blind: only membership deletions + a lifecycle
         timestamp — never a key. Enforced by code, not this spec (ADR 0008).
@@ -1086,7 +1086,7 @@ paths:
         READ_WRITE and WRITE_ONLY link of the tenant stores at most (`shareLinkLimitBytes`, 10 GiB until changed)
         ([ADR 0073](../../docs/decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md) §4).
         `usedBytes` is derived when read, never counted: the declared size of every blob in the tenant's scopes
-        (originals, derivatives, covers, trash included until it is purged) plus every open upload session. It is
+        (whatever role it plays for its owner, trash included until it is purged) plus every open upload session. It is
         an aggregate of sizes the server already sees; no figure per member, scope or link is exposed. Owner-gated
         like the mail settings: a member who is not the owner gets `403 not_tenant_owner`, a non-member `404`
         (indistinguishable, ADR 0042).
@@ -1196,7 +1196,7 @@ paths:
         `quotaBytes` is required and never null: no quota — the default — is only ever set by
         `clearTenantStorageQuota`, so a request that lost its field is refused rather than read as "unlimited".
         Every upload start into the tenant's scopes (a
-        member's upload, a cover, a link upload) is then reserved against it under a lock on the tenant, and a
+        member's upload or a link guest's) is then reserved against it under a lock on the tenant, and a
         request that does not fit is refused `quota_exceeded` (ADR 0073 §5). A quota lowered below the current usage
         deletes nothing; it refuses the next start. Any tenant status. No tenant-owner operation writes the quota.
         Server-Owner only.
