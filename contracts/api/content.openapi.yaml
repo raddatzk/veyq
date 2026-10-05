@@ -62,7 +62,7 @@ paths:
               schema: { $ref: "#/components/schemas/NodeCreated" }
               example: { nodeId: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d }
         "400":
-          description: Malformed request (missing/invalid fields).
+          description: Malformed request (missing/invalid fields, or a `kind` outside the `NodeKind` token's shape).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401":
@@ -324,6 +324,9 @@ components:
           example: null
         kind:
           $ref: "#/components/schemas/NodeKind"
+          # The generator inlines the scalar `NodeKind` as a String and emits no pattern: the token's shape holds
+          # here, 400 before the handler; whether any application claims the kind is the handler's question.
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Pattern(regexp = "[A-Z][A-Z0-9_]{0,15}")'
         encryptedName:
           type: string
           description: The node name, AEAD-sealed under the scope content key `K_SC` (opaque base64).
