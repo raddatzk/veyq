@@ -38,12 +38,12 @@ acceptanceCriteria:
         unit: [src/features/memory/shareUploader.test.ts]
         e2e: [src/features/memory/shareUploader.e2e.test.ts]
   - id: write-only-no-view-of-others
-    text: The canView gate ({READ,READ_WRITE}) is enforced at BOTH guest read paths. The anonymous resolve returns nodes=[] for a WRITE_ONLY share (only role + the sealed drop public key + sealedName — not even the root node, so no K_mem-decryptable node metadata leaks), and its media read answers an empty list with no identities. The blob download (GET /shares/{id}/blobs/{blobId}) is role-gated too - a WRITE_ONLY share 404s before the subtree check, so a leaked in-subtree id yields nothing. Write-only is a real server capability, not just id-secrecy (ids are also unguessable and never handed to the uploader). canUpload={READ_WRITE,WRITE_ONLY}.
+    text: The canView gate ({READ,READ_WRITE}) is enforced at BOTH guest read paths. The anonymous resolve returns nodes=[] for a WRITE_ONLY share (only role + the sealed drop public key + sealedName + the root's kind, rootKind, which tells the client which application renders the drop — not even the root node, so no K_mem-decryptable node metadata leaks), and its media read answers an empty list with no identities. The blob download (GET /shares/{id}/blobs/{blobId}) is role-gated too - a WRITE_ONLY share 404s before the subtree check, so a leaked in-subtree id yields nothing. Write-only is a real server capability, not just id-secrecy (ids are also unguessable and never handed to the uploader). canUpload={READ_WRITE,WRITE_ONLY}.
     coverage:
       backend:
-        integration: [ShareUploaderSliceTest.uploaderResolveServesNoMediaEvenWithExisting, ShareUploaderSliceTest.uploaderShareHasNoBlobDownloadCapability, ShareUploaderSliceTest.viewerShareRejectsUploadAndDelete]
+        integration: [ShareUploaderSliceTest.uploaderResolveServesNoMediaEvenWithExisting, ShareUploaderSliceTest.uploaderShareHasNoBlobDownloadCapability, ShareUploaderSliceTest.viewerShareRejectsUploadAndDelete, ShareRootKindSliceTest.aWriteOnlyShareNamesItsRootKindThoughItIsServedNoNode]
       web:
-        unit: [src/features/memory/optimisticUpload.test.ts]
+        unit: [src/features/memory/optimisticUpload.test.ts, src/views/ShareView.registry.test.ts]
     gaps:
       - surface: backend
         reason: >-
