@@ -621,6 +621,9 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
         capabilityTag:
           $ref: "#/components/schemas/CapabilityTag"
+          # The generator inlines the scalar `CapabilityTag` as a String and emits none of its bounds: they hold only
+          # through this annotation (`validate_request_bounds.py`, a `$ref`'d scalar).
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[0-9a-f]+")'
         resourceRef:
           x-veyq-visibility: id
           type: [string, "null"]
