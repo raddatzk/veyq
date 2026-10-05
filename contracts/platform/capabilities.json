@@ -5,12 +5,12 @@
     "sharing.public-links": {
       "serves": ["uc.sharing.share-public-viewer", "uc.sharing.share-contributor"],
       "source": "operator-policy",
-      "description": "Public share links of a personal-scope Memory in the READ and READ_WRITE access modes. Disabled => the Share affordance is hidden client-side and createShare(READ|READ_WRITE) and reactivateShare of such a link are rejected server-side with 422 capability_disabled."
+      "description": "Public share links of a node in the READ and READ_WRITE access modes; what a READ_WRITE guest's write adds is the application's. Disabled => the Share affordance is hidden client-side and createShare(READ|READ_WRITE), reactivateShare and reissueShare of such a link are rejected server-side with 422 capability_disabled."
     },
     "sharing.uploader-links": {
       "serves": ["uc.sharing.share-uploader"],
       "source": "operator-policy",
-      "description": "Public share links in the WRITE_ONLY access mode (a drop-box: a guest adds and cannot read what others added). Disabled => the write-only link option is hidden client-side and createShare(WRITE_ONLY) and reactivateShare of such a link are rejected server-side with 422 capability_disabled."
+      "description": "Public share links of a node in the WRITE_ONLY access mode (a drop-box: a guest adds and cannot read what others added; what it adds is the application's). Disabled => the write-only link option is hidden client-side and createShare(WRITE_ONLY), reactivateShare and reissueShare of such a link are rejected server-side with 422 capability_disabled."
     },
     "spaces.groups": {
       "serves": ["uc.spaces.add-group-member", "uc.spaces.manage-group-members", "uc.spaces.rename-group", "uc.spaces.delete-group", "uc.spaces.consent-group-add"],

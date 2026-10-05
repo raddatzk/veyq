@@ -42,9 +42,9 @@ components:
           example: { code: scope_deleting }
   schemas:
     StaleSealedMeta:
-      # The 409 body of the two version-checked sealed-meta writes, updateNode and updateMediaMeta (ADR 0077).
-      # Shared because both blobs answer the same way, and neither entity has a single-item read the loser could
-      # re-GET: the conflict body IS the re-read.
+      # The 409 body of every version-checked sealed-meta write (ADR 0077): core's node payload and any
+      # application's own sealed blob. Shared because every such blob answers the same way, and a loser may have
+      # no single-item read to re-GET: the conflict body IS the re-read.
       type: object
       description: >
         A refused write. With `code: stale_version` the blob moved since the caller read it: nothing was written,
@@ -163,9 +163,12 @@ components:
       # enum: core's hand-written code names FOLDER only, the generated enum names all three (ADR 0079).
       x-veyq-visibility: enum
       type: string
-      description: FOLDER organizes only (no content key); MEMORY is the content unit (owns K_mem); CHAPTER is a nested Memory inside a Memory (owns its own K_mem, wrapped under the parent Memory's K_mem).
+      description: >
+        A node's kind. FOLDER is core's: it organizes only and carries no content key. Every other kind is an
+        application's, which places it in the tree (`NodeKindRules`) and gives its sealed payload a meaning — today
+        MEMORY and CHAPTER, both Memories'. A kind may carry a content key of its own (`wrappedContentKey`).
       enum: [FOLDER, MEMORY, CHAPTER]
-      example: MEMORY
+      example: FOLDER
 
     MasterKeyWrap:
       # Shared by the account, setup and tenants specs. The annotated variant — the copies used to differ, and

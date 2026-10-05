@@ -5,13 +5,13 @@ info:
   description: >
     The platform's generic **blob upload and download** under a scope (ADR 0079: blobs and their quota are core's;
     an application decides what a verified blob becomes). A blob is a fixed-size sequence of **chunked-AEAD**
-    ciphertext objects, sealed client-side under a fresh random **`K_blob`** (wrapped under the owner object's key
-    — today Memories' `K_mem`, [ADR 0012](../../docs/decisions/0012-content-key-hierarchy.md)), transferred
+    ciphertext objects, sealed client-side under a fresh random **`K_blob`** (wrapped under the content key of
+    the node its owner sits on, [ADR 0012](../../docs/decisions/0012-content-key-hierarchy.md)), transferred
     **direct-to-store** via short-TTL presigned URLs
     ([ADR 0013](../../docs/decisions/0013-blob-storage-presigned-direct-to-store.md)) — bytes never flow through
     the backend. Start reserves an upload session and presigns the first window of PUTs, `blob-upload-windows` signs
     each next one, and `blob-downloads-batch` presigns GETs; **completing** an upload — attaching the verified blob
-    to what owns it — is the application's operation (Memories' `completeMedia`, `commitCoverBlob`).
+    to what owns it — is the owning application's own operation, not this spec's.
 
     **Operator-blind:** the server + object store hold only ciphertext chunks + opaque metadata (`chunkCount`,
     `byteSize`, the per-chunk size `manifest`) and the `K_blob` wrap; never a plaintext byte, a content key, or a
@@ -32,14 +32,14 @@ paths:
       summary: Start N blob uploads — reserve sessions + presign the first window of PUTs.
       description: >
         For each requested blob the client declares its `chunkCount`, total `byteSize`, and the `wrappedBlobKey`
-        (`K_blob` under the owner object's key — today Memories' `K_mem`, ADR 0012), plus the ids that wrap is sealed bound to ([ADR 0072](../../docs/decisions/0072-a-seal-binds-its-object.md)): the client-minted
-        `blobId`, the `ownerId` it belongs to (the media id `completeMedia` will carry, or the node for a cover) and
-        its `role`. A `blobId` already taken — by a blob or an open upload session, in any scope — fails that item
+        (`K_blob` under the content key of the node its owner sits on, ADR 0012), plus the ids that wrap is sealed bound to ([ADR 0072](../../docs/decisions/0072-a-seal-binds-its-object.md)): the client-minted
+        `blobId`, the `ownerId` it belongs to (the client-minted id of the application's object the completion will
+        attach it to) and its `role`. A `blobId` already taken — by a blob or an open upload session, in any scope — fails that item
         `id_taken`. The server opens an upload session **bound to the caller** and returns, per
         item, an `uploadId` plus short-TTL presigned **PUT** URLs for the blob's **first window** of chunks (the
         server's `veyq.blob.presign-window`, default 64 chunks) — or a per-item error. The caller PUTs each
         ciphertext chunk **directly to the object store**, asks `blob-upload-windows` for each next window (and to
-        re-sign one whose URLs expired), and completes through the owning application (Memories' `media-batch`). The in-memory store cannot
+        re-sign one whose URLs expired), and completes through the owning application's own operation. The in-memory store cannot
         presign and answers `store_unavailable`.
         **Tenant quota ([ADR 0073](../../docs/decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md)):**
         when the Server Owner has set one, the request's admissible items are reserved together against what the
@@ -224,7 +224,7 @@ components:
           type: string
           format: uuid
           description: >
-            What the blob belongs to — the client-minted media id `completeMedia` will carry, or the node id for a cover. The `wrappedBlobKey` is sealed bound to it; completion checks it.
+            What the blob belongs to — the client-minted id of the application's object the completion attaches it to (an object of its own, or the node itself). The `wrappedBlobKey` is sealed bound to it; completion checks it.
           example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e
         role:
           $ref: "#/components/schemas/BlobRole"
@@ -256,7 +256,7 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(28)'
         wrappedBlobKey:
           type: string
-          description: The blob's random `K_blob` wrapped under the owner object's key — today Memories' `K_mem`, ADR 0012 (opaque base64).
+          description: The blob's random `K_blob` wrapped under the content key of the node its owner sits on, ADR 0012 (opaque base64).
           contentEncoding: base64
           maxLength: 256
           example: d3JhcHBlZC1rLWJsb2I=
@@ -359,8 +359,11 @@ components:
       x-veyq-visibility: enum
       type: string
       description: >
-        The role a blob plays for its owner — a media's ORIGINAL and its THUMBNAIL/PREVIEW derivatives, or a node's
-        COVER. Its `K_blob` wrap is sealed bound to it (ADR 0072), so a blob attached in another role does not open.
+        The role a blob plays for its owner. Its `K_blob` wrap is sealed bound to it (ADR 0072), so a blob attached
+        in another role does not open. The values are today Memories' (an attachment's ORIGINAL and its
+        THUMBNAIL/PREVIEW derivatives, a node's COVER), and the set is closed on purpose: the crypto suite's seal
+        encoder admits exactly these four roles (`packages/crypto`), so a new role is a crypto change, not a contract
+        edit. It opens together with generic attachments (inbox #327).
       enum: [ORIGINAL, THUMBNAIL, PREVIEW, COVER]
       example: ORIGINAL
 

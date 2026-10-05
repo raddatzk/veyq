@@ -133,7 +133,7 @@ paths:
             schema: { $ref: "#/components/schemas/EnqueueRequest" }
             example:
               scopeId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
-              capabilityTag: "9f3a1c04"
+              capabilityTag: "02f271ff"
               resourceRef: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
               sealedBody: AQ==
       responses:
@@ -624,7 +624,7 @@ components:
         resourceRef:
           x-veyq-visibility: id
           type: [string, "null"]
-          description: Opaque id of the resource the job acts on (e.g. a mediaId).
+          description: Opaque id of the resource the job acts on — what it names is the capability tag's (e.g. the scope id for `scope-rotation`).
           maxLength: 64
           example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 64)'

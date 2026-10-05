@@ -3,37 +3,39 @@ info:
   title: veyq Content API
   version: 0.1.0
   description: >
-    The encrypted Memory tree inside a scope (en.memory.tree, cr-0027). Nodes — FOLDER (organization only),
-    MEMORY (the content unit), CHAPTER (inside a Memory) — addressed by opaque ids, under the scope resolved
-    from the path `scopeId`. **Operator-blind:** the server stores only ciphertext (`encryptedName`,
-    `wrappedContentKey`) + opaque `parentId`/`kind`/`orderIndex` + the **blinded `slugToken`**; it never sees
-    a name or a content key, and learns only the *shape* of the tree.
+    The encrypted node tree inside a scope (en.memory.tree, cr-0027). Nodes of a `kind` — core's FOLDER
+    (organization only) or an application's kind — addressed by opaque ids, under the scope resolved from the
+    path `scopeId`. **Operator-blind:** the server stores only ciphertext (`encryptedName`, `wrappedContentKey`,
+    `wrappedMeta`) + opaque `parentId`/`kind`/`orderIndex` + the **blinded `slugToken`**; it never sees a name, a
+    content key or a payload, and learns only the *shape* of the tree.
 
     The client encrypts the name under the scope content key `K_SC` and computes the blinded slug token (a
-    keyed MAC under `K_SC`); a MEMORY **or CHAPTER** additionally carries a fresh random per-node key `K_mem`
-    wrapped under its **parent's content key** — `K_SC` for a top-level Memory, the parent Memory's `K_mem` for
-    a chapter (recursive `K_mem`; `wrappedContentKey`) — the share grain ([ADR 0012](../../docs/decisions/0012-content-key-hierarchy.md)).
-    The server enforces structure only: a caller must hold a grant for the scope, slug uniqueness per parent
-    (`UNIQUE(parentId, slugToken)`), no folder inside a Memory, no cycle, no cross-scope move. Authorization is
-    enforced by code, not this spec (ADR 0008); field validation via `x-field-extra-annotation`.
+    keyed MAC under `K_SC`); a node of a kind that carries a content key additionally carries a fresh random
+    per-node content key wrapped under its **parent's content key** — `K_SC` at the top of such a chain, the
+    parent node's content key below it (`wrappedContentKey`) — the share grain ([ADR 0012](../../docs/decisions/0012-content-key-hierarchy.md)).
+    Each node may hold one sealed, versioned payload (`wrappedMeta`, `metaVersion`) whose format is its kind's
+    application's. The server enforces structure only: a caller must hold a grant for the scope, slug
+    uniqueness per parent (`UNIQUE(parentId, slugToken)`), the placement rule of the node's kind (core's for
+    FOLDER, the kind's application's otherwise), no cycle, no cross-scope move. Authorization is enforced by
+    code, not this spec (ADR 0008); field validation via `x-field-extra-annotation`.
 tags:
   - name: content
     description: >
-      The Memory tree under a scope (create / list / update / soft-delete / restore nodes) **and** the space's
+      The node tree under a scope (create / list / update / soft-delete / restore nodes) **and** the space's
       node trash. One tag = one resource interface owning the `/api/scopes/{scopeId}/nodes` subtree plus
       `/api/scopes/{scopeId}/trash/nodes` — the trash hangs off the *space*, not the node, because a trashed
-      Memory has no Memory to hang a tab from ([ADR 0061](../../docs/decisions/0061-node-deletion-reversible-node-trash.md)).
+      node has no live node to hang a tab from ([ADR 0061](../../docs/decisions/0061-node-deletion-reversible-node-trash.md)).
       Distinct from the `/api/scopes` scopes resource.
 paths:
   /api/scopes/{scopeId}/nodes:
     post:
       tags: [content]
       operationId: createNode
-      summary: Create a node (folder / Memory / chapter) in the scope's tree.
+      summary: Create a node of any kind in the scope's tree.
       description: >
         Adds a node under `parentId` (or the scope root if omitted). The client mints the node's id (`nodeId`,
-        [ADR 0072](../../docs/decisions/0072-a-seal-binds-its-object.md) Decision 3) and supplies the ciphertext name, the blinded slug token, and — for a MEMORY or
-        CHAPTER — the `wrappedContentKey` (`K_mem` under the parent's content key), each sealed bound to that id.
+        [ADR 0072](../../docs/decisions/0072-a-seal-binds-its-object.md) Decision 3) and supplies the ciphertext name, the blinded slug token, and — for a kind
+        that carries a content key — the `wrappedContentKey` (the node's content key under its parent's), each sealed bound to that id.
         The server stores it opaquely under exactly that id and enforces slug uniqueness per parent + the
         structural rules. An id that already exists — in this scope or any other — is refused `id_taken` and nothing is overwritten; the answer is the same wherever the taken id lives, so it says nothing about another scope. Not idempotent: a retry of a create whose response was lost answers `id_taken` too, and the client re-reads.
       security:
@@ -48,11 +50,10 @@ paths:
             example:
               nodeId: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
               parentId: null
-              kind: MEMORY
+              kind: FOLDER
               encryptedName: ZW5jcnlwdGVkLW5hbWU=
               slugToken: c2x1Zy10b2tlbi1iYXNlNjQ=
               orderIndex: 0
-              wrappedContentKey: d3JhcHBlZC1rLW1lbQ==
       responses:
         "201":
           description: The node was created.
@@ -78,7 +79,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: slug_taken } }
         "422":
-          description: Illegal structure (folder inside a Memory, unknown/foreign parent, or a cycle).
+          description: Illegal structure (the kind's placement rule refuses the parent, the kind is one no application claims, an unknown/foreign parent, or a cycle).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_structure } }
     get:
@@ -87,7 +88,7 @@ paths:
       summary: List the scope's tree (opaque rows).
       description: >
         Returns every node in the scope with its opaque id, parent, kind, ordering, ciphertext name, slug
-        token, and (for Memories and chapters) the `wrappedContentKey`. The client decrypts names with `K_SC` and assembles
+        token, sealed payload (`wrappedMeta` + `metaVersion`), and (for a kind that carries one) the `wrappedContentKey`. The client decrypts names with `K_SC` and assembles
         the tree; the operator sees only the shape.
       security:
         - bearerAuth: []
@@ -162,7 +163,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/StaleSealedMeta" }, example: { code: stale_version, wrappedMeta: d3JhcHBlZC1tZXRh, metaVersion: 4 } }
         "422":
-          description: Illegal structure (folder into a Memory, or a move that would create a cycle).
+          description: Illegal structure (the moved node's kind may not live under the new parent, or a move that would create a cycle).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_structure } }
     delete:
@@ -171,10 +172,11 @@ paths:
       summary: Delete a node — soft-delete the whole subtree into the space's trash (uc.memory.delete-node).
       description: >
         **Soft-delete** the node and every descendant in one transaction (`deleted_at = now`, ADR 0061). The
-        subtree leaves every read at once — the tree listing, the media/bucket listings, and **both** public-share
-        paths: the anonymous resolve stops listing it *and* its blobs stop being authorized for a presign.
-        **Nothing is destroyed** — its media, derivative, bucket and blob rows and every store object survive
-        untouched, which is what makes `restoreNode` complete rather than partial. The deleted node's `slugToken`
+        subtree leaves every read at once — the tree listing, every listing an application serves of what it
+        attached to the subtree, and **both** public-share paths: the anonymous resolve stops listing it *and* its
+        blobs stop being authorized for a presign. **Nothing is destroyed** — every row an application attached to
+        it, every blob row and every store object survive untouched, which is what makes `restoreNode` complete
+        rather than partial. The deleted node's `slugToken`
         is replaced by its own id, so the **name is immediately reusable**; restore carries a freshly
         client-computed token. A scheduled job hard-erases the subtree once its `deleted_at` is older than the
         retention window. Idempotent — re-deleting an already-trashed subtree is still `204`. **Any member** may
@@ -208,7 +210,7 @@ paths:
       summary: Restore a soft-deleted subtree out of the space's trash (uc.memory.delete-node).
       description: >
         Clears `deleted_at` across the subtree and writes the supplied `slugToken` back onto its root, returning
-        every descendant, photo, bucket and cover exactly as it was — none of it was ever removed. The client
+        every descendant and everything an application attached to the subtree exactly as it was — none of it was ever removed. The client
         **must** supply the token: the delete freed the name by overwriting `slug_token` with the node's own id,
         and the server cannot recompute a blinded MAC under `K_SC` (ADR 0012). A node created in the meantime
         that already holds the name is a `409 slug_taken` — the same disambiguation a create takes, never a
@@ -255,7 +257,7 @@ paths:
         Lists only the **root** of each soft-deleted subtree: its descendants went with it and come back with it,
         so listing them too would offer a restore that cannot be honoured on its own. Each row carries when it was
         deleted and when it will be purged. The trash hangs off the *space* rather than the node — a trashed
-        Memory has no Memory to hang a tab from (ADR 0061 Decision 3). Newest-deleted first.
+        node has no live node to hang a tab from (ADR 0061 Decision 3). Newest-deleted first.
       security:
         - bearerAuth: []
       parameters:
@@ -312,7 +314,7 @@ components:
           type: string
           format: uuid
           description: >
-            The client-minted UUIDv4 id of the node to create (ADR 0072 Decision 3). Its name, `K_mem` wrap and meta are sealed bound to this id, so the server stores it verbatim; a taken id is `409 id_taken`.
+            The client-minted UUIDv4 id of the node to create (ADR 0072 Decision 3). Its name, content-key wrap and payload are sealed bound to this id, so the server stores it verbatim; a taken id is `409 id_taken`.
           example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
         parentId:
           x-veyq-visibility: id
@@ -346,7 +348,7 @@ components:
           x-veyq-visibility: structure
           type: integer
           description: >
-            The scope **content-key epoch** this node's name / slug / `K_mem`-wrap are sealed under (ADR 0024).
+            The scope **content-key epoch** this node's name / slug / content-key wrap are sealed under (ADR 0024).
             Must be the scope's **current** epoch (else `409 stale_epoch`, nothing stored — ADR 0024 Decision 6: a
             write under an older epoch would be readable by a member removed since); omitted/absent = 0 (the
             pre-rotation baseline). A member reads a node of epoch `k` iff they hold an epoch ≥ `k`.
@@ -356,14 +358,14 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
         wrappedContentKey:
           type: [string, "null"]
-          description: For a MEMORY or CHAPTER — its random `K_mem` wrapped under the parent's content key (`K_SC` for a top-level Memory, the parent Memory's `K_mem` for a chapter; opaque base64). Absent for folders.
+          description: The content key of a shareable node — a fresh random key wrapped under its parent's content key (`K_SC` at the top of the chain, the parent node's content key below it; opaque base64). Whether a kind carries one is its application's; absent for a FOLDER.
           contentEncoding: base64
           maxLength: 256
           example: d3JhcHBlZC1rLW1lbQ==
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         wrappedMeta:
           type: [string, "null"]
-          description: A MEMORY's or CHAPTER's curated metadata (date now, place later) — a client-versioned JSON blob AEAD-sealed under this node's `K_mem` (seal purpose `node-meta`, bound to scope + node; opaque base64). Absent = the implicit `auto`-with-no-dated-media state. The server never inspects it.
+          description: The node's versioned sealed payload — AEAD-sealed under this node's content key (seal purpose `node-meta`, bound to scope + node; opaque base64). Its plaintext format is the kind's application's, versioned by that application; absent = the node has none yet. The server never inspects it.
           contentEncoding: base64
           maxLength: 8192
           example: d3JhcHBlZC1tZXRh
@@ -398,7 +400,7 @@ components:
           example: 1
         wrappedMeta:
           type: [string, "null"]
-          description: Curated metadata sealed under the node's `K_mem` (see NodeSummary.wrappedMeta). Partial semantics — a non-null value replaces it; an omitted/null one leaves it unchanged. Opaque base64.
+          description: The node's sealed payload, re-sealed under its content key (see NodeSummary.wrappedMeta). Partial semantics — a non-null value replaces it; an omitted/null one leaves it unchanged. Opaque base64.
           contentEncoding: base64
           maxLength: 8192
           example: d3JhcHBlZC1tZXRh
@@ -460,13 +462,13 @@ components:
           type: [string, "null"]
           contentEncoding: base64
           maxLength: 256
-          description: A MEMORY's or CHAPTER's `K_mem` wrapped under its parent's content key; null for folders.
+          description: The node's content key wrapped under its parent's content key (see CreateNodeRequest.wrappedContentKey); null for a kind that carries none, FOLDER included.
           example: d3JhcHBlZC1rLW1lbQ==
         wrappedMeta:
           type: [string, "null"]
           contentEncoding: base64
           maxLength: 8192
-          description: A MEMORY's or CHAPTER's curated metadata (date/place) — a client-versioned JSON blob sealed under this node's `K_mem` (AAD context `node-meta`); null when unset. Lets a browse card show + sort by the date without loading the Memory's media. Opaque to the server.
+          description: The node's versioned sealed payload, sealed under this node's content key (AAD context `node-meta`); null when unset. Its plaintext format is the kind's application's. Listed with the tree so a client can show and sort nodes by it without a second read. Opaque to the server.
           example: d3JhcHBlZC1tZXRh
         metaVersion:
           x-veyq-visibility: structure
@@ -482,9 +484,10 @@ components:
           contentEncoding: base64
           maxLength: 256
           description: >
-            A MEMORY's drop private key sealed under its `K_mem` (AAD `drop-private-key`, bound to scope + node;
-            opaque base64) — set once, by the Memory's first WRITE_ONLY share (`createShare`), and never replaced:
-            the media WRITE_ONLY guests added open through it (ADR 0031 point 7). Null until then.
+            The drop private key of the shared root node of a WRITE_ONLY link, sealed under the node's content key
+            (AAD `drop-private-key`, bound to scope + node; opaque base64) — set once, by core inside the node's
+            first WRITE_ONLY share (`createShare`), and never replaced: what WRITE_ONLY guests added opens through
+            it (ADR 0031 point 7). A field of its own, never part of the node's payload. Null until then.
           example: null
 
     RestoreNodeRequest:
@@ -548,7 +551,7 @@ components:
           x-veyq-visibility: time
           type: string
           format: date-time
-          description: When the subtree was soft-deleted, to the second. Operational metadata of the same kind the media trash already discloses.
+          description: When the subtree was soft-deleted, to the second. Operational metadata of the same kind an application's own trash already discloses.
           example: "2026-08-17T10:15:30Z"
         purgeAfter:
           x-veyq-visibility: time
