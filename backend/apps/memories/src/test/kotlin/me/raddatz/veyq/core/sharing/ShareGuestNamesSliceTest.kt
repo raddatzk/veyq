@@ -22,15 +22,18 @@ import io.restassured.http.ContentType
 import java.time.Instant
 import java.util.UUID
 import org.hamcrest.CoreMatchers.equalTo
+import org.hamcrest.CoreMatchers.hasItem
 import org.hamcrest.CoreMatchers.notNullValue
 import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.Test
 
 /**
  * A guest's name reaches the Memory's members only (uc.memory.buckets `guest-names-for-members-only`, ADR 0030
- * point 8): no public-share resolve serves a guest's sealed name, nor a READ_WRITE guest's identity — also not on
+ * point 8): no guest read of a share serves a guest's sealed name, nor a READ_WRITE guest's identity — also not on
  * a READ link that was once a READ_WRITE link, which keeps its identities — and only an uploader's media keeps
- * its `identityId`, because a viewer opens that media through the identity's wrapped key (ADR 0031 point 7).
+ * its `identityId`, because a viewer opens that media through the identity's wrapped key (ADR 0031 point 7). The
+ * rule lives with the rows: Memories' `listShareMedia` serves the media and the identities ([ShareMediaRead]), and
+ * core's resolve serves neither (slice 6.3 of cr-platform-contract-split).
  *
  * Every negative carries a positive on the same predicate: the identity set is asserted to be EXACTLY the
  * uploader's (an empty list would satisfy "no name" vacuously), the name's absence is asserted on that present
@@ -116,6 +119,17 @@ class ShareGuestNamesSliceTest {
                 .body("media.find { it.mediaId == '${m.contributorMedia}' }.nodeId", equalTo(m.memory))
                 .body("media.find { it.mediaId == '${m.contributorMedia}' }.identityId", nullValue())
                 .body("media.find { it.mediaId == '${m.uploaderMedia}' }.identityId", equalTo(m.uploader))
+        }
+    }
+
+    @Test
+    fun theResolveServesNoMediaAndNoIdentities() {
+        val m = memory()
+        for (link in listOf(m.viewerLink, m.contributorLink, m.flippedLink)) {
+            given().`when`().get("/api/shares/$link").then().statusCode(200)
+                .body("nodes.id", hasItem(m.memory)) // control: the same body carries the shared subtree
+                .body("containsKey('media')", equalTo(false))
+                .body("containsKey('identities')", equalTo(false))
         }
     }
 

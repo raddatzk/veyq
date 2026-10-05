@@ -42,7 +42,7 @@ import org.junit.jupiter.api.Test
 /**
  * Slice tests for the **WRITE_ONLY** write-only drop-box share (uc.sharing.share-uploader, cr-0102, ADR 0031)
  * against the in-memory store. Covers the drop-box's two structural guarantees + the delete-own:
- *  - **write-only:** the anonymous resolve of a WRITE_ONLY share serves `media: []` **even with existing media**
+ *  - **write-only:** the anonymous reads of a WRITE_ONLY share serve no media **even with existing media**
  *    (and no identities) — "cannot see others" is enforced by the `canView` gate, never gallery filtering;
  *  - **never `K_mem` (ADR 0031 point 7):** it serves the Memory's drop public key instead of the wrap, the drop
  *    private key is set on the Memory once, a WRITE_ONLY identity must hand over its wrapped key, and every reader
@@ -83,7 +83,7 @@ class ShareUploaderSliceTest {
         seedMedia(scopeId, memory, identityId = null) // a curator's existing photo on the Memory
         val shareId = createShare(userId, memory, role = "WRITE_ONLY")
 
-        // the anonymous resolve of a WRITE_ONLY share is write-only: NO media, NO identities, NO nodes, and NO wrap —
+        // the anonymous reads of a WRITE_ONLY share are write-only: NO nodes, NO wrap, NO media, NO identities —
         // only the drop public key (the guest seals its own identity key to it, ADR 0031 point 7), the node it binds
         // that wrap to, and the sealed title. The guest is never handed K_mem.
         given().`when`().get("/api/shares/$shareId")
@@ -290,14 +290,14 @@ class ShareUploaderSliceTest {
             .then().statusCode(200).extract().path<String>("results[0].mediaId")
 
         // the media attached to the shared root, stamped with the uploader's identity (verified in the DB — the
-        // resolve deliberately serves the uploader nothing)
+        // guest reads deliberately serve the uploader nothing)
         QuarkusTransaction.requiringNew().run {
             val m = MediaEntity.findById(mediaId)!!
             assertEquals(memory, m.nodeId)
             assertEquals(identityId, m.shareIdentityId)
         }
-        // and it is STILL invisible to the uploader's own resolve
-        given().`when`().get("/api/shares/$shareId").then().statusCode(200).body("media.size()", equalTo(0))
+        // and it is STILL invisible to the uploader's own media read
+        ShareMediaRead.of(shareId).then().statusCode(200).body("media.size()", equalTo(0)).body("identities.size()", equalTo(0))
 
         // the key the delete-own must not lose — read while the rows that hold it still exist
         val storageKey = QuarkusTransaction.requiringNew().call {

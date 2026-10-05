@@ -60,11 +60,9 @@ sealed interface CreateShareOutcome {
 }
 
 sealed interface ResolveShareOutcome {
-    /** [uploaderKeys]: identity id → wrapped identity key, the only thing a guest is served about any identity.
-     *  [rootKind]: the shared root node's kind as stored (core interprets none), null while the root is in the trash. */
-    data class Found(
-        val share: ShareEntity, val subtree: SubtreeData, val uploaderKeys: Map<String, String>, val rootKind: String?,
-    ) : ResolveShareOutcome
+    /** [nodes]: the live shared subtree (none for a WRITE_ONLY link). [rootKind]: the shared root node's kind as
+     *  stored (core interprets none), null while the root is in the trash. */
+    data class Found(val share: ShareEntity, val nodes: List<ShareNodeRow>, val rootKind: String?) : ResolveShareOutcome
     /** Unknown, disabled, or expired — a non-enumerable 404 (identical in every case). */
     object NotFound : ResolveShareOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
     /** Password-protected + no token given (cr-0118) — a LOCKED shell (only `passwordRequired` + `pwSalt`). */
@@ -491,11 +489,11 @@ class SharingHandler(
     }
 
     /**
-     * Resolve a share for a guest. For a **viewable** role (READ/READ_WRITE) the full sealed subtree + the
-     * wrapped keys of the WRITE_ONLY identities whose media it holds cross — no guest's name, no contributor
-     * identity (ADR 0030 point 8); for a **WRITE_ONLY** (write-only drop-box, ADR 0031) the resolve is gated to
-     * `media: []` + the **root node only** and **no identities** — the uploader is structurally handed nothing to
-     * see (no gallery, no other guests). The `canView` gate is the server-side enforcement of "cannot see others".
+     * Resolve a share for a guest: the link and, for a **viewable** role (READ/READ_WRITE), the sealed subtree's live
+     * nodes with their keys; for a **WRITE_ONLY** link (write-only drop-box, ADR 0031) **no node** — the uploader is
+     * structurally handed nothing to see. The `canView` gate is the server-side enforcement of "cannot see others".
+     * No application data crosses here: what an application attached under the nodes is its own guest read behind
+     * [ShareGuestGate.viewGate], with its own privacy rule (Memories' `listShareMedia`, ADR 0030 point 8, ADR 0079).
      */
     fun resolve(shareId: String, pwToken: String?): ResolveShareOutcome {
         val share = gate.activeShare(shareId) ?: return ResolveShareOutcome.NotFound
@@ -510,18 +508,12 @@ class SharingHandler(
         // the subtree. A trashed root names none, as it serves no node (`ShareDeletedNodeSliceTest`).
         val rootKind = store.findNode(share.nodeId)?.takeIf { it.deletedAt == null }?.kind
         if (ShareAccessPolicy.canView(share.role)) {
-            val subtree = store.subtree(share.scopeId, share.nodeId)
-            val uploaderKeys = store.uploaderKeys(subtree)
-            // A media names its identity only where the guest needs it to find the key (ADR 0031 point 7); a
-            // contributor's opens under the node's content key, and its id would only tell a guest which uploads came from one
-            // person (ADR 0030 point 8). Derived from the same map, so the two can never disagree.
-            val media = subtree.media.map { if (it.identityId in uploaderKeys) it else it.copy(identityId = null) }
-            return ResolveShareOutcome.Found(share, SubtreeData(subtree.nodes, media), uploaderKeys, rootKind)
+            return ResolveShareOutcome.Found(share, store.subtree(share.scopeId, share.nodeId), rootKind)
         }
-        // WRITE_ONLY: the minimal capability — no nodes, no media, no identities; only the root's kind. The client seals
-        // its uploads under its own identity key, wrapped to the Memory's drop public key (served sealed under `K_share`
-        // in place of the wrap, ADR 0031 point 7), and shows the title (from `sealedName`); it needs nothing from the subtree.
-        return ResolveShareOutcome.Found(share, SubtreeData(emptyList(), emptyList()), emptyMap(), rootKind)
+        // WRITE_ONLY: the minimal capability — no nodes; only the root's kind. The client seals its uploads under its own
+        // identity key, wrapped to the Memory's drop public key (served sealed under `K_share` in place of the wrap, ADR
+        // 0031 point 7), and shows the title (from `sealedName`); it needs nothing from the subtree.
+        return ResolveShareOutcome.Found(share, emptyList(), rootKind)
     }
 
     /**

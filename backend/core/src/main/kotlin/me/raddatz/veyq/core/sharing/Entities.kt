@@ -138,7 +138,7 @@ class ShareEntity : PanacheEntityBase {
         const val READ = "READ"
         const val READ_WRITE = "READ_WRITE"
 
-        /** A write-only drop-box (cr-0102, ADR 0031): add photos but the resolve serves no media (`canView` = false). */
+        /** A write-only drop-box (cr-0102, ADR 0031): add photos but the guest reads serve nothing of the subtree (`canView` = false). */
         const val WRITE_ONLY = "WRITE_ONLY"
     }
 }

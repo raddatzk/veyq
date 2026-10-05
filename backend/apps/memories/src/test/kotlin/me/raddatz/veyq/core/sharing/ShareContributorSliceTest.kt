@@ -70,7 +70,7 @@ class ShareContributorSliceTest {
             .then().statusCode(200).body("results[0].mediaId", notNullValue())
             .extract().path<String>("results[0].mediaId")
 
-        // the anonymous resolve now shows the contributed media — but names no identity and serves no guest, not
+        // the anonymous media read now lists the contributed media — but names no identity and serves no guest, not
         // even this link's own: a guest's name is for the Memory's members (ADR 0030 point 8)
         ShareMediaRead.of(shareId)
             .then().statusCode(200)

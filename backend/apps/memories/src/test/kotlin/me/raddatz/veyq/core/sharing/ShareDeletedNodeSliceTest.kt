@@ -85,7 +85,7 @@ class ShareDeletedNodeSliceTest {
             .`when`().delete("/api/scopes/$scopeId/nodes/$deleted")
             .then().statusCode(204)
 
-        // the share on the deleted Memory resolves to NOTHING — no node of the subtree, no media under it
+        // the share on the deleted Memory serves NOTHING — no node of the subtree, no media under it
         given().`when`().get("/api/shares/$deletedShare")
             .then().statusCode(200)
             .body("nodes.id", not(hasItem(deleted)))

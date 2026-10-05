@@ -3,7 +3,6 @@ package me.raddatz.veyq.core.sharing
 import me.raddatz.veyq.core.blob.UploadDeclare
 import me.raddatz.veyq.core.blob.WindowRequest
 import me.raddatz.veyq.core.sharing.ShareEntity
-import me.raddatz.veyq.core.sharing.ShareMediaRow
 import me.raddatz.veyq.core.generated.api.SharingApi
 import me.raddatz.veyq.core.generated.model.CreateShareIdentityRequest
 import me.raddatz.veyq.core.generated.model.CreateShareRequest
@@ -19,10 +18,7 @@ import me.raddatz.veyq.core.generated.model.ShareBlobUploadWindowsResponse
 import me.raddatz.veyq.core.generated.model.ShareBlobUploadsRequest
 import me.raddatz.veyq.core.generated.model.ShareBlobUploadsResponse
 import me.raddatz.veyq.core.generated.model.ShareCreated
-import me.raddatz.veyq.core.generated.model.ShareIdentity
 import me.raddatz.veyq.core.generated.model.ShareIdentityCreated
-import me.raddatz.veyq.core.generated.model.ShareMedia
-import me.raddatz.veyq.core.generated.model.ShareMediaDerivative
 import me.raddatz.veyq.core.generated.model.ShareNode
 import me.raddatz.veyq.core.generated.model.ShareRole
 import me.raddatz.veyq.core.generated.model.ShareSummary
@@ -209,9 +205,7 @@ class SharingResource(
                     rootKind = o.rootKind, // every unlocked role, WRITE_ONLY included (inbox #329); the Locked arm sets none
                     sealedName = o.share.sealedName,
                     sealedNote = o.share.sealedNote, // cr-0115: the share page renders it (null when none)
-                    nodes = o.subtree.nodes.map(::toShareNode),
-                    media = o.subtree.media.map(::toShareMedia),
-                    identities = o.uploaderKeys.map { (id, wrap) -> ShareIdentity(identityId = UUID.fromString(id), wrappedIdentityKey = wrap) },
+                    nodes = o.nodes.map(::toShareNode),
                 ),
             ).build()
             // cr-0118: password required + no token → a LOCKED shell (only the challenge; no wrap/name/note/subtree).
@@ -221,7 +215,7 @@ class SharingResource(
                     passwordRequired = true,
                     pwSalt = o.share.pwSalt,
                     wrap = null, sealedDropPublicKey = null, nodeId = null, sealedName = null, sealedNote = null,
-                    nodes = emptyList(), media = emptyList(), identities = null,
+                    nodes = emptyList(),
                 ),
             ).build()
             is HttpFailure -> httpError(o)
@@ -229,7 +223,7 @@ class SharingResource(
 
     @PermitAll
     @RateLimitExempt(
-        reason = "Guest presign of one share blob — the costliest of the three guest reads, since it mints a " +
+        reason = "Guest presign of one share blob — the costliest of the four anonymous guest reads, since it mints a " +
             "presigned URL. Unbounded by the same decision as resolveShare; cc.security.rate-limit " +
             "(§ Unbounded by decision) names it as the open item rather than waving it away.",
     )
@@ -272,28 +266,6 @@ class SharingResource(
         wrappedContentKey = n.wrappedContentKey,
         wrappedMeta = n.wrappedMeta,
         sealedDropPrivateKey = n.sealedDropPrivateKey,
-    )
-
-    private fun toShareMedia(m: ShareMediaRow) = ShareMedia(
-        nodeId = UUID.fromString(m.nodeId),
-        mediaId = UUID.fromString(m.mediaId),
-        blobId = UUID.fromString(m.blobId),
-        chunkCount = m.chunkCount,
-        byteSize = m.byteSize,
-        wrappedBlobKey = m.wrappedBlobKey,
-        manifest = m.manifest,
-        derivatives = m.derivatives.map { d ->
-            ShareMediaDerivative(
-                kind = ShareMediaDerivative.Kind.valueOf(d.kind),
-                blobId = UUID.fromString(d.blobId),
-                chunkCount = d.chunkCount,
-                byteSize = d.byteSize,
-                wrappedBlobKey = d.wrappedBlobKey,
-                manifest = d.manifest,
-            )
-        },
-        wrappedMeta = m.wrappedMeta,
-        identityId = m.identityId?.let(UUID::fromString),
     )
 
     // --- contributor guest ops (cr-0101; @PermitAll — account-less, gated only by share state + token) ---

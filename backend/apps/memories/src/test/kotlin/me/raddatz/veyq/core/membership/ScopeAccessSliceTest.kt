@@ -73,10 +73,12 @@ class ScopeAccessSliceTest {
             given().`when`().get("/api/shares/${paused.shareId}").then().statusCode(404).body("code", equalTo("share_not_found"))
             given().`when`().get("/api/shares/${paused.shareId}/terms").then().statusCode(404).body("code", equalTo("share_not_found"))
             given().`when`().get("/api/shares/${paused.shareId}/blobs/${paused.blobId}").then().statusCode(404).body("code", equalTo("share_not_found"))
+            given().`when`().get("/api/shares/${paused.shareId}/media").then().statusCode(404).body("code", equalTo("share_not_found"))
         }
         // control: the live group's link serves, so the 404s above are the space's state and not a broken link
         given().`when`().get("/api/shares/${w.live.shareId}").then().statusCode(200)
         given().`when`().get("/api/shares/${w.live.shareId}/terms").then().statusCode(200)
+        given().`when`().get("/api/shares/${w.live.shareId}/media").then().statusCode(200)
         // and nothing was written onto the share: restoring the group brings its link back unchanged
         given().header("Authorization", bearer(w.deleting.ownerId)).`when`().post("/api/scopes/${w.deleting.scopeId}/restore").then().statusCode(204)
         given().`when`().get("/api/shares/${w.deleting.shareId}").then().statusCode(200)
