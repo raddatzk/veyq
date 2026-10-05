@@ -452,7 +452,7 @@ Every slice:
   suites (`scripts/run_web_e2e.py`; from a worktree pinned as the machine notes say) and the guard glob are green.
   **≈ 1 session.**
 
-- [ ] **2 — Text pass over core specs and core comments (D3, D4, D10, A.1).**
+- [x] **2 — Text pass over core specs and core comments (D3, D4, D10, A.1).**
   - **Sites:**
     - the "Text" cells of the target table;
     - the role prose (the access modes; "write" is the application's, via `ShareGuestWrites`);
@@ -490,6 +490,21 @@ Every slice:
   A one-shot proof is enough: a permanent "only prose changed" guard has no meaning. No backend and no web phase.
   Done when: the script prints `none` and the guard glob is green (incl. `validate_field_visibility.py`,
   `validate_write_concurrency.py`). **≈ 0.5–1 session.**
+
+  Done in `245688f2` (contracts), `05ece2a0` (core comments) and the docs commit after them; the script printed
+  `shape changed: none`, a second check (non-prose leaves + every example against its enum, bitten on a broken copy)
+  was green, and the generated Kotlin and web clients differ in comments only (the Kotlin generator's `docs/*.md`
+  tables carry the descriptions too).
+  **Deviation** (each listed):
+  - `K_mem` reads "the node's content key" (`symWrap(K_share, content key)`); no new key symbol was minted.
+  - The `media` operations, `ShareMedia*` and `PublicShare.media`/`identities` say they are Memories' and leave for
+    its spec (ADR 0079), since their field names (`mediaId`) cannot be neutral before slice 6.
+  - `ShareBlobUploadRequestItem.role` is re-described as closed with `BlobRole`; the `startShareBlobUploads` text now
+    names both guest modes (READ_WRITE, WRITE_ONLY), as `canUpload` decides, and `createShareIdentity`'s 403 names
+    the READ share.
+  - The `scopes` example tenant name stays `Familie Raddatz` (the `tenants` spec's convention beside
+    `family.example.com`); only the domain changed.
+  - ADR 0079's "Contracts by owner" and *What core still knows* lines are updated to the new text state.
 
 - [ ] **3 — Core web stops importing Memories' generated clients; the guard learns it.** The defect is live (V12),
   so the order is guard → red → fix → green.

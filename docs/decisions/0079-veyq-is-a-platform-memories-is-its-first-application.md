@@ -118,8 +118,9 @@ on their own.
   description says whose it is and names no application's plaintext, operation or key. An operation whose
   behaviour is an application's lives in that application's directory, even when its path sits under a core
   route (`/api/shares/{shareId}/media` is Memories'). Not yet the code: that pair of operations still sits in
-  core's `sharing` spec (*What core still knows of Memories*, below), and core's spec texts still use Memories'
-  words.
+  core's `sharing` spec (*What core still knows of Memories*, below), its texts — and those of `PublicShare`'s
+  `media` and `identities` — saying they are Memories' and leave for its spec. Core's other spec texts and its main
+  comments describe what core does.
 - **The node's payload slot and content key are core's** (decided 2026-10-06, cr-platform-contract-split). Core
   gives every node one sealed, versioned payload (`wrappedMeta`, `metaVersion`): core stores it, compare-and-sets
   it ([ADR 0077](0077-a-write-carries-the-version-it-read.md)) and lists it with the tree, and never opens it. Its
@@ -196,7 +197,8 @@ on their own.
   with an application present; the guest completion item is media-shaped (`CompleteItem`'s `mediaId`,
   `derivatives`, `wrappedExif`) because core's share contract serves the two `/api/shares/{shareId}/media`
   operations (moving them out needs a core guest-write gate service first); `BlobRole`
-  (`ORIGINAL`/`THUMBNAIL`/`PREVIEW`/`COVER`) is a closed enum in core's `blob.openapi.yaml`; and the upload retention
+  (`ORIGINAL`/`THUMBNAIL`/`PREVIEW`/`COVER`) is a closed enum in core's `blob.openapi.yaml`, described there as
+  Memories' values and closed because the crypto encoder is (until inbox #327); and the upload retention
   and purge keys keep their `veyq.media.*` names though core reads them.
   **Open prerequisites for the next application** (on inbox #325–#327, where it will be refined): a generic
   `veyq_node_attachment(node_id, slot, blob_id)` table with real foreign keys, built with the first application that
