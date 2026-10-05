@@ -1380,6 +1380,9 @@ components:
           example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
         rootKind:
           $ref: "#/components/schemas/NodeKind"
+          # The backend's Jackson writes a null property as `null` (measured: `"rootKind": null` on the locked
+          # response); the token is not nullable, so the property is left out instead.
+          x-field-extra-annotation: '@get:com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
           description: >
             The kind of the shared root node; a structural fact the server already holds. Served for every unlocked
             role, WRITE_ONLY included (it is served no node, so this is how its client learns which application
