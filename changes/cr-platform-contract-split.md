@@ -369,7 +369,7 @@ Every slice:
 - runs contracts → backend → web;
 - ends green on its own, as its own commit(s).
 
-- [ ] **0 — Docs first (refinement; no code).** Writes the target into the durable state:
+- [x] **0 — Docs first (refinement; no code).** Writes the target into the durable state:
   - Appendix A.1–A.8 into ADR 0079 Consequences;
   - A.2 into `docs/apps/README.md`;
   - A.9's use-case and coverage sentences.
@@ -378,6 +378,21 @@ Every slice:
   names a wire value before it exists. Both `kind` sentences of ADR 0079 are rewritten to A.7 (the "not decided
   yet" sentence goes). Done when: `python3 scripts/validate_changes.py`, `validate_doc_links.py`,
   `validate_doc_citations.py`, `validate_coverage.py` and the whole guard glob are green. **≈ 0.5 session.**
+
+  Done in `749e5d7a` (ADR 0079, `docs/apps/`) and `70a2c900` (use-cases, coverage); A.9's quoted "today" text
+  matched at every cited line.
+  **Deviation** (closest faithful version, each listed):
+  - Provenance is the plain label "(decided 2026-10-06, cr-platform-contract-split)" per new ADR bullet, not a link:
+    `docs/decisions/README.md` forbids amendment lines and a CR id is a label, not a pointer (this file is deleted).
+  - Every target not yet in the code (A.1, A.2, A.6, A.7, A.8) carries a "not yet the code" clause; A.2 carries
+    the target-wire-name qualifier too, as A.4/A.5 do. A.5's closing parenthetical is an instruction, not ADR text.
+  - A.3 gained D4's rejected alternative and "(Decision 6)"; A.2's "(Decision: …)" names Decision 4.
+  - A.7 replaces the first Consequence's "price" sentence and the "not decided yet" sentence; the two present-tense
+    code facts (`NodeKind` is still the closed enum, backend and web) stay until slice 4, marked "decided open".
+  - A.8 reads "decided generic … today still media-shaped".
+  - Coverage: the split adds criterion `anonymous-media-read`; all four rows that now name the media read carry a
+    criterion `gaps` note (the refs prove that content on the resolve's body) for slice 6 to replace.
+  - `docs/apps/files.md`'s open question no longer offers a per-application blob table (contradicted D7).
 
 - [ ] **1 — Roles renamed `READ`/`READ_WRITE`/`WRITE_ONLY` (D2).** Mechanical; no behaviour change.
 
