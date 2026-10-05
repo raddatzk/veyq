@@ -93,8 +93,10 @@ on their own.
   application brings its kinds and their rules (`NodeKindRules`, the web registry). A kind no application claims
   is refused by the fail-closed seams, never by decoding. `PublicShare` carries the root's kind (inbox #329).
   The token is the code: the backend carries the kind as a string and a request's shape is checked at the
-  boundary (400), the web types it as a string with core's one `FOLDER` constant. Not yet the code:
-  `PublicShare` has no `rootKind` (*What core still knows of Memories*, below).
+  boundary (400), the web types it as a string with core's one `FOLDER` constant. `PublicShare.rootKind` is the
+  root row's kind as stored, served for every unlocked role (a `WRITE_ONLY` guest, served no node, learns this one
+  structural fact) and omitted on a locked response and while the root is in the trash; the public share page renders the body the kind's application
+  claimed, whatever the role.
 - **What the server learns grows by one fact.** The node `kind` is already a server-visible column; once
   further kinds exist it also tells the operator which applications a scope uses, and the rows, timestamps and
   sizes each kind produces. [security-model](../crosscutting/security-model.md) lists it.
@@ -216,9 +218,7 @@ on their own.
   Master Key rotates (that hook is required: a rotation refuses to start without it). Not done on the web: the
   directory is still named `features/memory`; the level view, the create/rename dialog, the share dialog, the
   top-bar tray and the sidebar pins are single-claim slots shaped for Memories (the second application re-cuts them
-  per kind); the root kind of a WRITE_ONLY share is unknown to the client (the unlocked response serves no nodes), so
-  it renders in the one application that claimed the kind-less drop until `PublicShare` carries a `rootKind`
-  (inbox #329); the i18n catalog is one file and `styles/memory.css` is global. The kind is a string token on both
+  per kind); the i18n catalog is one file and `styles/memory.css` is global. The kind is a string token on both
   sides, so that core never names `MEMORY`/`CHAPTER` is guarded (both kind rules read literals), not typed, and no
   compiler lists the kinds: the registry's fail-closed answer and its tests carry what a closed enum's exhaustiveness
   did.

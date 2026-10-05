@@ -3,21 +3,22 @@
 // (features/memory/share `openSharedMemory`). A share test that stubs both writes the ONE resolved shape it cares about
 // and lets these two helpers split it the way the production code does.
 import { MEMORY_KIND } from '../features/memory/kinds'
-import { ShareRole, type PublicShare } from '../api/generated/sharing'
+import type { PublicShare } from '../api/generated/sharing'
 import type { PublicShareHead } from '../core/sharing/resolvePublicShare'
 import type { OpenedMemory, ResolvedShare } from '../features/memory/share'
 
-/** The platform half of a resolved share. A WRITE_ONLY share has no root kind (an unlocked response serves no nodes). */
+/** The platform half of a resolved share. Every Memory share is rooted at a MEMORY node, a WRITE_ONLY one too (the
+ *  server names the root kind for every unlocked role). */
 export function headOf(r: ResolvedShare, shareId = 's1'): PublicShareHead {
   return {
     shareId,
-    share: { role: r.role, scopeId: r.scopeId, nodes: [], media: [] } as unknown as PublicShare,
+    share: { role: r.role, scopeId: r.scopeId, rootKind: MEMORY_KIND, nodes: [], media: [] } as unknown as PublicShare,
     kShare: new Uint8Array(32),
     scopeId: r.scopeId,
     name: r.memoryName,
     noteByLocale: r.noteByLocale,
     role: r.role,
-    rootKind: r.role === ShareRole.WriteOnly ? null : MEMORY_KIND,
+    rootKind: MEMORY_KIND,
   }
 }
 

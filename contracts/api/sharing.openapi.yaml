@@ -1324,7 +1324,7 @@ components:
       description: >
         A resolved share. When `passwordRequired` is true and the guest presented **no** (or a wrong) password
         token, the response is **locked**: only `role` + `passwordRequired` + `pwSalt` are set and `wrap` /
-        `sealedDropPublicKey` / `nodeId` / `sealedName` / `sealedNote` / `nodes` / `media` / `identities` are
+        `sealedDropPublicKey` / `nodeId` / `rootKind` / `sealedName` / `sealedNote` / `nodes` / `media` / `identities` are
         omitted/empty — the client prompts for the password and re-resolves with the token (cr-0118, ADR 0037).
         An unlocked WRITE_ONLY response carries `sealedDropPublicKey` **instead of** `wrap` (ADR 0031 point 7).
         `media` and `identities` are the Memories application's rows, served here until they move to its own
@@ -1378,6 +1378,16 @@ components:
             The shared root node. A WRITE_ONLY guest binds its identity key's wrap to it (`upload-identity-key`, ADR
             0072), since it is served no node. Null in a locked response.
           example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
+        rootKind:
+          $ref: "#/components/schemas/NodeKind"
+          # The backend's Jackson writes a null property as `null` (measured: `"rootKind": null` on the locked
+          # response); the token is not nullable, so the property is left out instead.
+          x-field-extra-annotation: '@get:com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
+          description: >
+            The kind of the shared root node; a structural fact the server already holds. Served for every unlocked
+            role, WRITE_ONLY included (it is served no node, so this is how its client learns which application
+            renders the link); omitted in a locked response and while the root node is in the trash (then nothing
+            of the subtree is served either). Core interprets no kind: it is the stored value.
         sealedName:
           type: [string, "null"]
           description: The shared node's name re-sealed under `K_share` (opaque base64). Null in a locked response.

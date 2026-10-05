@@ -613,7 +613,27 @@ Every slice:
   Done when: `./gradlew check`, `npm run generate:api && npm run check`, the e2e suites and the guard glob are green.
   **≈ 1–1.5 sessions.**
 
-- [ ] **5 — `PublicShare.rootKind` (#329).**
+- [x] **5 — `PublicShare.rootKind` (#329).**
+
+  Done in `158e3e37` + `cc9d3565` (contracts), `6b693cd1` (backend), `5116d114` (web) and the docs commit after
+  them. The OpenAPI shape diff is `PublicShare.rootKind` alone (+ its prose in `PublicShare`'s description); no
+  migration, no crypto change. `DROP_SHARE`/`ShareBodyKey` are gone; share bodies are keyed by the kind token.
+  **Deviation** (each listed):
+  - **Jackson writes a null property as `null` [M].** The first raw-JSON run showed `"rootKind": null` on the
+    locked response, which a non-nullable `NodeKind` does not allow. The property carries
+    `x-field-extra-annotation: @get:JsonInclude(NON_NULL)` (`cc9d3565`), so it is omitted.
+  - **A trashed root names no kind.** The kind comes from the root row past the password gate, for every role,
+    and only while `deleted_at` is null — the READ/READ_WRITE behaviour the web had by deriving it from the served
+    root (a trashed root serves no node → unavailable) is kept. For a WRITE_ONLY link on a trashed Memory the page
+    now shows unavailable where it used to show the drop form (`ShareRootKindSliceTest.aTrashedRootNamesNoKind`).
+  - Tests: `ShareRootKindSliceTest` (`:apps:memories`, raw JSON): READ and WRITE_ONLY present, locked absent with
+    `role` as control (and the unlocked control), an unclaimed `EXPENSE` served as stored, trashed absent and back on
+    restore. Bitten each: rootKind unset for WRITE_ONLY, leaked on the locked arm, `MEMORY` special-cased, trash
+    unfiltered, and (before `cc9d3565`) the null written. Web: the head reads `rootKind`, never `nodes` (bitten by
+    restoring the derivation); the shell dispatches a WRITE_ONLY share on its kind (bitten by role-dispatch and by a
+    kind-ignoring dispatch).
+  - The e2e suites were not run (from a worktree `scripts/run_web_e2e.py` recreates the owner's dev services); the two
+    that resolve a share are `memory/shareUploader.e2e.test.ts` and `memory/shareContributor.e2e.test.ts`.
   1. **contracts:** `rootKind` (`$ref NodeKind`), omitted on a locked response, served for every unlocked role,
      `WRITE_ONLY` included. That hands a `WRITE_ONLY` guest one structural fact, the root's kind; the server
      already holds it, and the owner accepted it in #329.

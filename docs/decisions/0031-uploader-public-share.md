@@ -28,7 +28,9 @@ uploads and a token-gated **delete-own**. **v1: role WRITE_ONLY, personal scope,
    - The anonymous resolve (`GET /api/shares/{shareId}`, [ADR 0029](0029-public-viewer-share.md)) returns, for a
      WRITE_ONLY share, only `role`, `sealedName` and the sealed drop public key (point 7) — **`media: []`,
      `nodes: []`, `identities: []`**. The client seals its uploads to the drop key and shows the title (from
-     `sealedName`); it needs nothing from the subtree, so not even the root node is served.
+     `sealedName`); it needs nothing from the subtree, so not even the root node is served. Since 2026-10-05 it also
+     names the root node's kind (`rootKind`, inbox #329) — a structural fact the server holds anyway, so the client
+     knows which application renders the drop.
    - The blob download (`GET /api/shares/{shareId}/blobs/{blobId}`) is **role-gated too** — a WRITE_ONLY share
      `404`s **before** the subtree check, so even a leaked in-subtree blob id yields nothing. Write-only is thus a
      **real server capability**, not merely id-secrecy — and point 7 makes it a cryptographic one.

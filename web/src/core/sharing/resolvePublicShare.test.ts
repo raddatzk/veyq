@@ -48,6 +48,7 @@ describe('resolvePublicShare: the head', () => {
   it('opens the name and the per-locale note under the fragment key and reports the root node\'s kind', async () => {
     const share = serve({
       sealedNote: seal(SHARE_NOTE, JSON.stringify({ de: 'Hallo', en: 'Hello' })),
+      rootKind: MEMORY_KIND,
       nodes: [
         { id: 'chapter', parentId: 'root', kind: CHAPTER_KIND, epoch: 0 },
         { id: 'root', parentId: null, kind: MEMORY_KIND, epoch: 0 },
@@ -62,19 +63,28 @@ describe('resolvePublicShare: the head', () => {
     expect(head.kShare).toEqual(K_SHARE)
   })
 
-  it('reports whatever kind the root node has — it assumes none (live control for the Memory case above)', async () => {
-    serve({ nodes: [{ id: 'r', parentId: null, kind: CHAPTER_KIND, epoch: 0 }] as PublicShare['nodes'] })
-    expect((await resolvePublicShare('s1', FRAGMENT)).rootKind).toBe(CHAPTER_KIND)
+  it('reports whatever kind the server names — it assumes none (live control for the Memory case above)', async () => {
+    serve({ rootKind: 'EXPENSE', nodes: [{ id: 'r', parentId: null, kind: 'EXPENSE', epoch: 0 }] as PublicShare['nodes'] })
+    expect((await resolvePublicShare('s1', FRAGMENT)).rootKind).toBe('EXPENSE')
+  })
+
+  it('takes the kind from rootKind, never from the served nodes', async () => {
+    // The two disagree on purpose: the head reads the server's named fact, not a derivation over `nodes`.
+    serve({ rootKind: MEMORY_KIND, nodes: [{ id: 'r', parentId: null, kind: CHAPTER_KIND, epoch: 0 }] as PublicShare['nodes'] })
+    expect((await resolvePublicShare('s1', FRAGMENT)).rootKind).toBe(MEMORY_KIND)
+    // …and a response that names no kind has none, whatever root it serves (a trashed root serves neither).
+    serve({ nodes: [{ id: 'r', parentId: null, kind: MEMORY_KIND, epoch: 0 }] as PublicShare['nodes'] })
+    expect((await resolvePublicShare('s1', FRAGMENT)).rootKind).toBeNull()
   })
 
   it('needs no wrap and no key material of the application: a response without them still yields a head', async () => {
-    serve({ wrap: undefined, nodes: [{ id: 'r', parentId: null, kind: MEMORY_KIND, epoch: 0, wrappedContentKey: 'not even base64!' }] as PublicShare['nodes'] })
+    serve({ wrap: undefined, rootKind: MEMORY_KIND, nodes: [{ id: 'r', parentId: null, kind: MEMORY_KIND, epoch: 0, wrappedContentKey: 'not even base64!' }] as PublicShare['nodes'] })
     await expect(resolvePublicShare('s1', FRAGMENT)).resolves.toMatchObject({ rootKind: MEMORY_KIND })
   })
 
-  it('has no root kind for a WRITE_ONLY share (the unlocked response serves no nodes)', async () => {
-    serve({ role: ShareRole.WriteOnly, nodeId: 'drop-node', nodes: [] })
-    expect((await resolvePublicShare('s1', FRAGMENT)).rootKind).toBeNull()
+  it('reports the root kind of a WRITE_ONLY share, though it is served no node', async () => {
+    serve({ role: ShareRole.WriteOnly, nodeId: 'drop-node', rootKind: MEMORY_KIND, nodes: [] })
+    expect((await resolvePublicShare('s1', FRAGMENT)).rootKind).toBe(MEMORY_KIND)
   })
 
   it('refuses a malformed or short fragment key before asking the server anything', async () => {

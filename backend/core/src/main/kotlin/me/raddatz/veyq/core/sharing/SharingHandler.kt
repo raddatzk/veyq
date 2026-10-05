@@ -73,8 +73,11 @@ sealed interface CreateShareOutcome {
 }
 
 sealed interface ResolveShareOutcome {
-    /** [uploaderKeys]: identity id → wrapped identity key, the only thing a guest is served about any identity. */
-    data class Found(val share: ShareEntity, val subtree: SubtreeData, val uploaderKeys: Map<String, String>) : ResolveShareOutcome
+    /** [uploaderKeys]: identity id → wrapped identity key, the only thing a guest is served about any identity.
+     *  [rootKind]: the shared root node's kind as stored (core interprets none), null while the root is in the trash. */
+    data class Found(
+        val share: ShareEntity, val subtree: SubtreeData, val uploaderKeys: Map<String, String>, val rootKind: String?,
+    ) : ResolveShareOutcome
     /** Unknown, disabled, or expired — a non-enumerable 404 (identical in every case). */
     object NotFound : ResolveShareOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
     /** Password-protected + no token given (cr-0118) — a LOCKED shell (only `passwordRequired` + `pwSalt`). */
@@ -537,6 +540,10 @@ class SharingHandler(
             PwCheck.TOO_MANY -> return ResolveShareOutcome.RateLimited // cr-0165
             PwCheck.OK -> {}
         }
+        // Only past the password gate: a locked response names no kind (inbox #329). Read for every role from the one
+        // row, so a WRITE_ONLY guest — served no node — learns which application renders the link, and nothing else of
+        // the subtree. A trashed root names none, as it serves no node (`ShareDeletedNodeSliceTest`).
+        val rootKind = store.findNode(share.nodeId)?.takeIf { it.deletedAt == null }?.kind
         if (ShareAccessPolicy.canView(share.role)) {
             val subtree = store.subtree(share.scopeId, share.nodeId)
             val uploaderKeys = store.uploaderKeys(subtree)
@@ -544,12 +551,12 @@ class SharingHandler(
             // contributor's opens under the node's content key, and its id would only tell a guest which uploads came from one
             // person (ADR 0030 point 8). Derived from the same map, so the two can never disagree.
             val media = subtree.media.map { if (it.identityId in uploaderKeys) it else it.copy(identityId = null) }
-            return ResolveShareOutcome.Found(share, SubtreeData(subtree.nodes, media), uploaderKeys)
+            return ResolveShareOutcome.Found(share, SubtreeData(subtree.nodes, media), uploaderKeys, rootKind)
         }
-        // WRITE_ONLY: the minimal capability — no nodes, no media, no identities. The client seals its uploads under
-        // its own identity key, wrapped to the Memory's drop public key (served sealed under `K_share` in place of
-        // the wrap, ADR 0031 point 7), and shows the title (from `sealedName`); it needs nothing from the subtree.
-        return ResolveShareOutcome.Found(share, SubtreeData(emptyList(), emptyList()), emptyMap())
+        // WRITE_ONLY: the minimal capability — no nodes, no media, no identities; only the root's kind. The client seals
+        // its uploads under its own identity key, wrapped to the Memory's drop public key (served sealed under `K_share`
+        // in place of the wrap, ADR 0031 point 7), and shows the title (from `sealedName`); it needs nothing from the subtree.
+        return ResolveShareOutcome.Found(share, SubtreeData(emptyList(), emptyList()), emptyMap(), rootKind)
     }
 
     /**

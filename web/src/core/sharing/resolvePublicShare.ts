@@ -2,17 +2,13 @@
 // boundaries). Everything here is the platform's: parsing the fragment key, the unauthenticated fetch, the password
 // challenge and its guest token, `K_share`, the sealed name and note, the accountless terms gate, and the three error
 // classes the shell maps to its states. None of it reads what a node IS: the one thing this half learns about the
-// shared object's kind is the root node's `kind`, returned as `rootKind` so the shell can ask the registry which
-// application's body renders the share.
+// shared object's kind is the root node's kind, which the server names as `PublicShare.rootKind` for every unlocked
+// role — a WRITE_ONLY share too, though it is served no node (inbox #329) — and which the head passes on so the shell
+// can ask the registry which application's body renders the share.
 //
 // What this half does NOT do is open anything the application owns: the root `K_mem` (the share's `wrap`), the
 // chapters' keys, the media rows and an uploader's drop key are the application's (`openSharedMemory` in
 // features/memory/share.ts). The head hands them the unlocked response and `K_share`, nothing else.
-//
-// **The root kind of a WRITE_ONLY share is unknown to the client.** An unlocked uploader response serves no nodes
-// (`PublicShare.nodeId` only), so `rootKind` is null for it and the shell dispatches such a share to the one
-// application that claimed the kind-less drop body (registry.claimShareBody(DROP_SHARE, …)). A `rootKind` on
-// `PublicShare` is the follow-up contract change that retires that rule before a second shareable kind exists.
 import * as v1 from '@veyq/crypto/v1'
 import { sharesPwTokenAsync } from '@veyq/crypto/argonWorker'
 import { b64std, fromB64std, fromB64url } from '@veyq/crypto/base64'
@@ -84,8 +80,8 @@ export type PublicShareHead = {
   /** The optional curator note per locale (`pickLocaleText` picks the viewer's). */
   noteByLocale: LocaleMap
   role: ShareRole
-  /** The kind of the share's root node (`ShareNode.kind` of the node with `parentId: null`); null when none is served,
-   *  which is every WRITE_ONLY share (see the header). */
+  /** The kind of the share's root node (`PublicShare.rootKind`); null when the server names none — a root in the
+   *  trash, which serves nothing (the shell then shows its unavailable state). */
   rootKind: NodeKind | null
 }
 
@@ -123,8 +119,7 @@ export async function resolvePublicShare(shareId: string, fragmentKey: string, p
   }
   // cr-0116: the optional per-locale curator note, opened with the same fragment key (a bad/absent one leaves `{}`).
   const noteByLocale = share.sealedNote ? openNoteMap(kShare, share.sealedNote) : {}
-  const rootKind = (share.nodes ?? []).find((n) => n.parentId == null)?.kind ?? null
-  return { shareId, share, kShare, scopeId: share.scopeId, name, noteByLocale, role: share.role, rootKind }
+  return { shareId, share, kShare, scopeId: share.scopeId, name, noteByLocale, role: share.role, rootKind: share.rootKind ?? null }
 }
 
 // --- accountless terms gate (uc.sharing.share-accept, ADR 0035 §3) ----------

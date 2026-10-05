@@ -210,6 +210,7 @@ class SharingResource(
                     wrap = if (o.share.role == ShareEntity.WRITE_ONLY) null else o.share.wrap,
                     sealedDropPublicKey = if (o.share.role == ShareEntity.WRITE_ONLY) o.share.sealedDropPublicKey else null,
                     nodeId = UUID.fromString(o.share.nodeId), // a WRITE_ONLY guest binds its identity key's wrap to it
+                    rootKind = o.rootKind, // every unlocked role, WRITE_ONLY included (inbox #329); the Locked arm sets none
                     sealedName = o.share.sealedName,
                     sealedNote = o.share.sealedNote, // cr-0115: the share page renders it (null when none)
                     nodes = o.subtree.nodes.map(::toShareNode),

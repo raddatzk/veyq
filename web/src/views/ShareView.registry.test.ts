@@ -36,7 +36,7 @@ import {
   SharePasswordRequiredError,
   type PublicShareHead,
 } from '../core/sharing/resolvePublicShare'
-import { createRegistry, DROP_SHARE, type Registry } from '../core/applications/registry'
+import { createRegistry, type Registry } from '../core/applications/registry'
 import type { NodeKind } from '../core/node/kind'
 import { MEMORY_KIND, CHAPTER_KIND } from '../features/memory/kinds'
 import { ShareRole } from '../api/generated/sharing'
@@ -59,7 +59,7 @@ const StubBody = defineComponent({
       `${p.head.name}|${p.shareId}|${p.fragmentKey}|${p.pwToken ?? '-'}`),
 })
 
-function registryWith(claims: Array<NodeKind | typeof DROP_SHARE>): Registry {
+function registryWith(claims: NodeKind[]): Registry {
   const r = createRegistry()
   for (const key of claims) r.claimShareBody(key, StubBody)
   return r
@@ -71,7 +71,7 @@ function mountShare() {
 
 beforeEach(() => {
   localStorage.clear()
-  holder.reg = registryWith([MEMORY_KIND, DROP_SHARE])
+  holder.reg = registryWith([MEMORY_KIND])
   vi.mocked(resolvePublicShare).mockReset().mockResolvedValue(head())
   vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: 't-1', termsVersion: 0, terms: {} })
   vi.mocked(derivePasswordToken).mockReset().mockResolvedValue('tok')
@@ -85,7 +85,7 @@ describe('ShareView dispatches on the share root kind', () => {
   })
 
   it('a root kind nobody claimed is the explicit unavailable state, not a blank page (live control above)', async () => {
-    holder.reg = registryWith([MEMORY_KIND, DROP_SHARE])
+    holder.reg = registryWith([MEMORY_KIND])
     vi.mocked(resolvePublicShare).mockResolvedValue(head({ rootKind: CHAPTER_KIND }))
     const w = mountShare()
     await flushPromises()
@@ -93,24 +93,24 @@ describe('ShareView dispatches on the share root kind', () => {
     expect(w.find('.share-view-unavailable').exists()).toBe(true)
   })
 
-  it('a share with no root node at all is unavailable too, never sent to the kind-less drop body', async () => {
-    vi.mocked(resolvePublicShare).mockResolvedValue(head({ rootKind: null })) // a READ share that served no root
+  it('a share whose root kind the server did not name is unavailable too', async () => {
+    vi.mocked(resolvePublicShare).mockResolvedValue(head({ rootKind: null })) // a trashed root: no kind, no nodes
     const w = mountShare()
     await flushPromises()
     expect(w.find('.body-stub').exists()).toBe(false)
     expect(w.find('.share-view-unavailable').exists()).toBe(true)
   })
 
-  it('a WRITE_ONLY share (root kind unknown) goes to the kind-less drop body', async () => {
-    vi.mocked(resolvePublicShare).mockResolvedValue(head({ role: ShareRole.WriteOnly, rootKind: null }))
+  it('a WRITE_ONLY share goes to the body claimed for its root kind, like any other role', async () => {
+    vi.mocked(resolvePublicShare).mockResolvedValue(head({ role: ShareRole.WriteOnly, rootKind: MEMORY_KIND }))
     const w = mountShare()
     await flushPromises()
     expect(w.find('.body-stub').exists()).toBe(true)
   })
 
-  it('…and is unavailable when no application claimed the drop (an unrelated Memory claim does not stand in)', async () => {
+  it('…and is unavailable when nobody claimed its root kind (the role picks no body of its own)', async () => {
     holder.reg = registryWith([MEMORY_KIND])
-    vi.mocked(resolvePublicShare).mockResolvedValue(head({ role: ShareRole.WriteOnly, rootKind: null }))
+    vi.mocked(resolvePublicShare).mockResolvedValue(head({ role: ShareRole.WriteOnly, rootKind: 'EXPENSE' }))
     const w = mountShare()
     await flushPromises()
     expect(w.find('.body-stub').exists()).toBe(false)
