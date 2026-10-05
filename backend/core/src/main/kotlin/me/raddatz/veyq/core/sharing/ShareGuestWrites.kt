@@ -12,8 +12,9 @@ import me.raddatz.veyq.core.blob.WindowRequest
  * calls (start, window, complete, delete-own). Core owns the gate and dispatches by the share root's node kind
  * ([supports]); the application owns what is written (today: Memories' media rows, upload sessions and quota).
  *
- * **Core's gate runs first and stays in core, in this order:** active share, password, the role's upload capability,
- * the guest identity's token, the per-share rate limit (start and complete only), and only then the call here. Every
+ * **Core's gate ([ShareGuestGate.writeGate]) runs first and stays in core, in this order:** active share, password,
+ * the role's upload capability, the guest identity's token, the per-share rate limit (start and complete only), and
+ * only then the call here. Every
  * method is therefore reached by an already-authorized guest; the share is named by [scopeId] and the guest by
  * [identityId], the same two values the gate resolved.
  *

@@ -189,7 +189,7 @@ visitors) while an IP-rotating attacker evades it. The attack targets one `share
 
 - **Mechanism:** `backend/core/…/core/sharing/SharePasswordAttemptLimiter.kt` — a per-`shareId` bucket on the
   shared core, in-memory and per-instance like every other bound. It is consumed **only on a wrong attempt**,
-  inside `SharingHandler.passwordCheck`: a correct password is admitted *before* the bucket is touched (a
+  inside `ShareGuestGate.passwordCheck`: a correct password is admitted *before* the bucket is touched (a
   legitimate guest is never locked out), and a tokenless challenge-fetch never spends budget. Over the cap the
   guest gets `429 rate_limited` instead of the `403 share_password_incorrect` oracle. Config
   `veyq.share.password.rate.max-per-window` (default **10**) / `.window-seconds` (default **60**).

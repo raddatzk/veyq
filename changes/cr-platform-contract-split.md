@@ -650,7 +650,27 @@ Every slice:
   **≈ 0.5 session.**
 
 - [ ] **6 — Guest media moves to Memories (D1).** Three steps, each its own green commit. Needs A.6.
-  1. **backend only, no spec change — `ShareGuestGate`.** Extract the gate from `SharingHandler` into a public
+  1. **[done] backend only, no spec change — `ShareGuestGate`.** Done in `e074d071` (refactor) + `5bb6c0c1`
+     (`ShareGuestGateSliceTest`, `:apps:memories`) and the docs commit after them; `./gradlew check`, the MariaDB
+     race run and the guard glob green before and after. **Deviations** (each listed):
+     - **Outcome names:** `ShareWriteGate` / `ShareViewGate` sealed interfaces; `Admitted` is a plain class (it holds
+       a closure). The gate's refusals carry no HTTP code: each caller maps them onto its own outcome, so delete keeps
+       `share_media_not_found` and the statuses do not move.
+     - **All four guest writes use `writeGate`**, not only complete/delete: start (`true`) and window (`false`) ran
+       the same preamble. The budget is spent before the root kind is read, as before.
+     - **`resolve` is not on `viewGate`**: it needs the share row (link data, the locked shell) and the subtree's
+       rows, which `Viewable` does not carry — wiring it would read twice. `resolve`, `shareTerms`, `createIdentity`
+       and `resolveBlob` call the gate's `internal` preamble (`activeShare`, `passwordCheck`, `matchesVerifier`).
+     - **`liveNodeIds`** come from a new `SharingStore.liveSubtreeIds`, the one live predicate `subtree()` now reads
+       too, so the view gate reads no media rows.
+     - **The race claim does not hold as written [M]:** evaluating `admitted` in the gate (in its own transaction)
+       stays green in `GuestWriteRaceSliceTest` on MariaDB — its delete is held uncommitted *during* the write, and an
+       early check blocks on the same row lock. The window an early check opens (a delete committing between gate and
+       attach) has no race test; `theWriteGateAdmitsWithTheRootAndAnUnevaluatedRecheck` pins the closure's laziness.
+     - Bitten: delete spending the budget, a gone root guessed a kind, a missing password as wrong, a foreign link's
+       token accepted, `WriteOnly` skipped, `Locked` as not-found, the live filter widened, `admitted` evaluated early.
+
+     Extract the gate from `SharingHandler` into a public
      core service. The steps keep today's order: active share → password → the mode's capability → identity
      token → the per-share upload budget **only where the caller asks** (V18). Each refusal is today's outcome, so
      the status mapping does not move.

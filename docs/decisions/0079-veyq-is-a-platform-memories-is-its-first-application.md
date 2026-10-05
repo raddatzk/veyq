@@ -154,8 +154,9 @@ on their own.
   the shared nodes and their keys, no application data), terms, blob transport and download, guest identity. An
   application serves its rows and its writes on its own route under the share, checks that the share's root kind
   is its own, and carries the privacy rules of its rows with them (for Memories:
-  [ADR 0030](0030-contributor-public-share.md) point 8). Not yet the code: the gate is still private to core's
-  sharing handler, and the resolve still serves Memories' `media` and `identities` (below). A link may later become
+  [ADR 0030](0030-contributor-public-share.md) point 8). Not yet the code: the gate is core's service
+  (`ShareGuestGate`), but no application calls it yet — core's sharing handler still runs the guest media writes
+  through it — and the resolve still serves Memories' `media` and `identities` (below). A link may later become
   a credential core's gate accepts for application operations that declare it; that is a separate decision.
 - **An append-only application cannot make the server keep its order.** The server may drop or reorder entries
   it holds unless a sequence number or hash chain is bound into each entry's associated data (ADR 0072 binds an

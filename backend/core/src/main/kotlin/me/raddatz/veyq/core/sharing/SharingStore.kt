@@ -404,16 +404,10 @@ class SharingStore(
 
     /** The sealed subtree rooted at [rootNodeId] within [scopeId]: nodes (for the content-key chain) + its live media. */
     fun subtree(scopeId: String, rootNodeId: String): SubtreeData {
-        val subtreeIds = collectSubtreeIds(scopeId, rootNodeId)
-        // `deletedAt is null` — a soft-deleted node (uc.memory.delete-node, ADR 0061) keeps its ROW, unlike the
-        // hard delete this replaced, so without this predicate the guest resolve serves the full sealed subtree
-        // of a Memory the user deleted. Its sibling in [subtreeBlobIds] authorizes the blob GET and carries the
-        // predicate SEPARATELY on purpose: either one covering for the other is how a later change to the other
-        // reopens the hole silently. `ShareDeletedNodeSliceTest` bites each on its own.
-        val nodeById = NodeEntity.find("scopeId = ?1 and deletedAt is null", scopeId).list().associateBy { it.id }
-        val liveIds = subtreeIds.filter { it in nodeById }
-        if (liveIds.isEmpty()) return SubtreeData(emptyList(), emptyList()) // the shared root itself is trashed
-        val nodes = liveIds.map { nodeById.getValue(it) }.map { n ->
+        val live = liveSubtree(scopeId, rootNodeId)
+        if (live.isEmpty()) return SubtreeData(emptyList(), emptyList()) // the shared root itself is trashed
+        val liveIds = live.map { it.id }
+        val nodes = live.map { n ->
             ShareNodeRow(
                 id = n.id,
                 parentId = if (n.id == rootNodeId) null else n.parentId,
@@ -428,6 +422,22 @@ class SharingStore(
         // The media rows are the contributors' own read, with their own live predicate (see SharedSubtreeContributor).
         val media = contributors.flatMap { it.rows(scopeId, liveIds) }
         return SubtreeData(nodes, media)
+    }
+
+    /** The ids of [subtree]'s live nodes, by the same predicate — what the view gate hands an application
+     *  (`ShareGuestGate.viewGate`). Empty when the shared root itself is trashed. */
+    fun liveSubtreeIds(scopeId: String, rootNodeId: String): List<String> = liveSubtree(scopeId, rootNodeId).map { it.id }
+
+    /** The subtree rooted at [rootNodeId], live nodes only, in [collectSubtreeIds]' order. */
+    private fun liveSubtree(scopeId: String, rootNodeId: String): List<NodeEntity> {
+        val subtreeIds = collectSubtreeIds(scopeId, rootNodeId)
+        // `deletedAt is null` — a soft-deleted node (uc.memory.delete-node, ADR 0061) keeps its ROW, unlike the
+        // hard delete this replaced, so without this predicate the guest resolve serves the full sealed subtree
+        // of a Memory the user deleted. Its sibling in [subtreeBlobIds] authorizes the blob GET and carries the
+        // predicate SEPARATELY on purpose: either one covering for the other is how a later change to the other
+        // reopens the hole silently. `ShareDeletedNodeSliceTest` bites each on its own.
+        val nodeById = NodeEntity.find("scopeId = ?1 and deletedAt is null", scopeId).list().associateBy { it.id }
+        return subtreeIds.mapNotNull { nodeById[it] }
     }
 
     /**
