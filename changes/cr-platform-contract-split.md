@@ -555,7 +555,32 @@ Every slice:
   Done when: the guard is green, `npm run generate:api && npm run check` is green, and a `validate_guard_gaps.py`
   case exists only if the new limit is documented as a gap. **≈ 0.5–1 session.**
 
-- [ ] **4 — `NodeKind` opens to a token (D5).**
+- [x] **4 — `NodeKind` opens to a token (D5).**
+
+  Done in `785bdecf` + `08b577b5` (guards, green on the closed enum), `ccc290f5` (contracts), `142c7d5f` (backend),
+  `288b429c` (web) and the docs commit after them. The OpenAPI shape diff against `08b577b5` changes only `NodeKind`
+  and `CreateNodeRequest.kind`'s annotation; no migration, no crypto change.
+  **Deviation** (each listed):
+  - **The generators emit no pattern [M].** Kotlin `kotlin.String` with no `@Pattern`, jaxrs-spec nothing,
+    typescript-fetch `kind: string` and no `NodeKind` object. So `CreateNodeRequest.kind` carries
+    `x-field-extra-annotation` beside its `$ref` (a sibling replaces the target's own annotation, measured), and the
+    400 is that annotation's: `NodeKindTokenCoreSliceTest` (`memory`, 17 characters, a leading digit → 400; 16 → 422).
+    Bitten: red without the annotation.
+  - **`validate_request_bounds.py` learned the `$ref`'d scalar**, or it would have been red on that annotation (no
+    pattern on the property itself). Its first run named a live defect outside this slice:
+    `EnqueueRequest.capabilityTag` enforced none of `CapabilityTag`'s bounds (`9F3A1C04` was enqueued, 201). Fixed in
+    the same commit (annotation + `TasksSliceTest.enqueueOutsideTheTagShapeIs400`, bitten) and pinned as
+    `validate_guard_gaps.py` case 58.
+  - `validate_field_visibility.py` needed no edit: the marker is the contract's (`enum` → `structure`). The
+    kernel/web kind rules and the guard-gap forgeries 45/49 stayed rejected without a rule edit; only their prose
+    stopped calling the enum closed.
+  - Beyond the planned tests: a stored node of an unclaimed kind is served as stored by `listNodes`, the trash and
+    the share resolve (before, the enum's `decode` threw: 500 when bitten). The share half is
+    `NodeKindTokenShareSliceTest` in `:apps:memories` (core alone refuses every share).
+  - Web: the core type is `NodeKind = string` beside `FOLDER_KIND` in `core/node/kind.ts`; Memories' constants are
+    `MEMORY_KIND`/`CHAPTER_KIND` in `features/memory/kinds.ts`. Tests (exempt from the kind rule) import those too.
+    `stryker.mutate.json` does not list `registry.ts`, so no mutation score moves.
+  - The e2e suites were not run (from a worktree `scripts/run_web_e2e.py` recreates the owner's dev services).
   - **Readers and guards re-pointed first, green on the closed enum:**
     - `validate_contracts_common.py:57` drops the `node-kind` family (an open token is no family);
     - `validate_field_visibility.py` (`enum` → `structure`);
@@ -757,7 +782,8 @@ Every slice:
   budget is unaffected (a correct token never spends it, `SharingHandler.kt:759`). Not measured.
 - **The lost web exhaustiveness** (slice 4) is carried by the registry's fail-closed behaviour and its tests, not
   by the compiler.
-- **The pattern as a 400** (slice 4) depends on the generator emitting bean validation [I].
+- **The pattern as a 400** (slice 4): the generators emit none [M]; it is the request property's annotation,
+  held to the schema by `validate_request_bounds.py` and pinned by `NodeKindTokenCoreSliceTest`.
 - **The role rename** (slice 1) breaks every stored share on an existing database. That is accepted (no release;
   dev DBs are recreated), and it is the reason the slice must land before any release.
 - **Duplicated share parameters** (6.2): drift between the copies is caught by rule 2. Not seen: a copy's

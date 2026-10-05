@@ -7,8 +7,10 @@ direction only (see the end).
 
 ## What it owns
 
-- **Node kinds `MEMORY` and `CHAPTER`.** `FOLDER` is the platform's (`enum: [FOLDER, MEMORY, CHAPTER]`, the
-  `NodeKind` of `contracts/api/_common.openapi.yaml`, which core's specs alias).
+- **Node kinds `MEMORY` and `CHAPTER`.** `FOLDER` is the platform's. On the wire a kind is an open token (the
+  `NodeKind` of `contracts/api/_common.openapi.yaml`, `^[A-Z][A-Z0-9_]{0,15}$`, which core's specs alias), so the
+  two values are Memories' own: `MemoriesNodeKinds` in the backend, `features/memory/kinds.ts` in the web, with their
+  rules (`MemoryNodeKindRules`, `registerKind`).
 - **Contracts:** `contracts/api/memories/` (`media.openapi.yaml`, `favorites.openapi.yaml`), generated into
   `me.raddatz.veyq.memories.generated`; the blob transfer an upload runs on is core's `contracts/api/blob.openapi.yaml`.
 - **Keys:** `K_mem` per Memory (the share grain) and `K_blob` per blob under it

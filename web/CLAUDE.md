@@ -129,7 +129,9 @@ here; the server is blind.
   an explicit unsupported/unavailable state, never an empty region. **Limits, stated:** the five slots are
   single-claim and Memories-shaped (the second application re-cuts them per kind); a WRITE_ONLY share's root kind is
   unknown to the client, so it goes to the one application holding `DROP_SHARE` until `PublicShare` carries a
-  `rootKind`; `NodeKind` stays the generated closed enum; the directory is still `features/memory`, the i18n catalog
+  `rootKind`; the kind is an open string token (the generated client has no `NodeKind` enum), so core names its one
+  `FOLDER_KIND` (`core/node/kind.ts`), Memories its own two (`features/memory/kinds.ts`), and no compiler lists the
+  kinds — the registry's `{ supported: false }` answer and its tests do; the directory is still `features/memory`, the i18n catalog
   is one file and `styles/memory.css` is global.
   **Testing against it:** `src/test/setup.ts` fills the registry in a `beforeAll` *dynamic* import (a static one
   evaluates the application before the test file's `vi.mock`s and disarms them — 119 files went red). A

@@ -66,8 +66,10 @@ request or response body defines inline properties — every named field lives u
 
    **Two classes will often both fit. Classify by what the field means, not how it is spelled.** `role` is a
    closed set *and* it is membership — it is `structure`, because that is what it tells the server. `enum` is
-   for the fields whose closed set **is** the whole meaning (`kind`, `method`, `sessionScope`, `suiteId`). Read
-   the other way, `enum` would swallow half the table and say nothing.
+   for the fields whose closed set **is** the whole meaning (`method`, `sessionScope`, `suiteId`). Read
+   the other way, `enum` would swallow half the table and say nothing. A node's `kind` is no closed set: it is an
+   open token that says what an object in the tree is ([ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md)),
+   so it is `structure`.
 
 4. **`pii` requires `x-veyq-rationale`**, naming the mechanism that forces the plaintext.
    [ADR 0023](0023-per-tenant-member-identity.md)'s rule — *"only the plaintext the mechanism requires stays
