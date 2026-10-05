@@ -5,16 +5,23 @@
 // browser offers one (`mediaDeriveWorker.ts`), on the page thread otherwise; the video poster always runs here.
 // The stage sits behind an injectable `MediaDeriver` so `media.ts`'s add-media wiring is
 // unit-testable against a stub; the real Canvas/`<video>` path is exercised by a live browser round-trip.
-import { type MediaDerivativeKind } from '../../api/generated/media'
+import { type BlobRole } from '../../api/generated/blob'
 import { drawEncoded, type CanvasPort } from './mediaPixels'
 import { deriveImageWorkerFirst } from './mediaDeriveWorker'
+
+/**
+ * The derivative tiers this stage produces, typed from core's own `BlobRole` (the role a derivative blob carries),
+ * never from Memories' generated `MediaDerivativeKind`: this file is core (`features/spaces` uses it too), and core
+ * imports no application client (`validate_web_core_imports_no_applications.py`). The two are the same two values.
+ */
+export type DerivativeTier = Extract<BlobRole, 'THUMBNAIL' | 'PREVIEW'>
 
 /**
  * Derivative tier specs (en.memory.derivatives → *The three tiers*). `preview` is pinned from the legacy E2EE
  * client; `thumbnail` was raised 400→512 px (cr-0070) so hi-DPI grid tiles aren't upscaled into mush. Parity is
  * by-property (a valid JPEG at the target edge), so apple/android carry the same 512.
  */
-export const TIER_SPECS: Record<MediaDerivativeKind, { maxEdge: number; quality: number }> = {
+export const TIER_SPECS: Record<DerivativeTier, { maxEdge: number; quality: number }> = {
   THUMBNAIL: { maxEdge: 512, quality: 0.8 }, // gallery grid (512 for retina headroom, cr-0070)
   PREVIEW: { maxEdge: 2048, quality: 0.85 }, // lightbox
 }
@@ -223,7 +230,7 @@ export function firstPresentedFrame(video: HTMLVideoElement, timeoutMs = VIDEO_E
 export async function deriveTiers(
   source: AddMediaSource,
   deriver: MediaDeriver,
-): Promise<{ derivatives: { kind: MediaDerivativeKind; bytes: Uint8Array }[]; dimensions: Dimensions | null }> {
+): Promise<{ derivatives: { kind: DerivativeTier; bytes: Uint8Array }[]; dimensions: Dimensions | null }> {
   // The derivers decode by the MIME type, so the source is re-typed without copying it (a slice shares its bytes).
   const blob = source.blob.type === source.mediaType ? source.blob : source.blob.slice(0, source.blob.size, source.mediaType)
   // Best-effort: a codec the browser can't decode (e.g. HEIC off Safari), an empty MIME type, or corrupt bytes
