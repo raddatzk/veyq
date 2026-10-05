@@ -1,8 +1,10 @@
 // Thin factory over the contracts-generated clients. The whole app is same-origin, so the basePath is the
 // in-memory `session.apiBase` ('' → relative `/api/...`). Keeping construction here means views/features
 // depend on our typed surface, never on the generator's runtime details. Every spec generates into a client package
-// of its own (`./generated` for setup, `./generated/<spec>` for the rest) — core's specs and the Memories
-// application's (`contracts/api/memories/`: `./generated/media`, `./generated/favorites`) alike.
+// of its own (`./generated` for setup, `./generated/<spec>` for the rest). This file builds **core's** clients
+// only: the Memories application's (`contracts/api/memories/` → `./generated/media`, `./generated/favorites`) are
+// built in `features/memory/api.ts` on the params exported below, because core imports no application client
+// (ADR 0079; `validate_web_core_imports_no_applications.py`).
 import { Configuration, SetupApi } from './generated'
 import {
   Configuration as AuthConfiguration,
@@ -26,14 +28,7 @@ import {
 import { Configuration as TenantsConfiguration, TenantsApi } from './generated/tenants'
 import { Configuration as ScopesConfiguration, ScopesApi } from './generated/scopes'
 import { ContentApi, Configuration as ContentConfiguration } from './generated/content'
-import {
-  FavoritesApi,
-  ItemFavoritesApi,
-  OwnItemFavoritesApi,
-  Configuration as FavoritesConfiguration,
-} from './generated/favorites'
 import { BlobApi, Configuration as BlobConfiguration } from './generated/blob'
-import { MediaApi, BucketsApi, Configuration as MediaConfiguration } from './generated/media'
 import { TasksApi, Configuration as TasksConfiguration } from './generated/tasks'
 import { SharingApi, Configuration as SharingConfiguration } from './generated/sharing'
 import { session } from '../app/session'
@@ -44,8 +39,14 @@ export function setupApi(): SetupApi {
 
 // The one bearer-credential contract every authed client shares: same-origin basePath + the access token
 // from the in-memory session. Each generated package has its own Configuration class but the same parameter
-// shape, so this single source feeds them all — change the token source once, here.
-const bearerParams = () => ({ basePath: session.apiBase, accessToken: () => session.accessToken ?? '' })
+// shape, so this single source feeds them all — change the token source once, here. Exported for an
+// application's own clients (`features/memory/api.ts`), which core does not import (ADR 0079).
+export const bearerParams = () => ({ basePath: session.apiBase, accessToken: () => session.accessToken ?? '' })
+
+// The token-less counterpart: same-origin basePath and no credential at all, so no Authorization header is sent.
+// For the calls a caller makes without a session by design ([publicPairingApi], [publicSharesApi], and an
+// application's guest operations).
+export const publicParams = () => ({ basePath: session.apiBase })
 
 export function loginApi(): LoginApi {
   return new LoginApi(new AuthConfiguration(bearerParams()))
@@ -79,7 +80,7 @@ export function pairingApi(): PairingApi {
  *  [publicSharesApi]: the same generated class, constructed without the bearer credential, so no Authorization
  *  header is ever sent from a device that has no business identifying itself. */
 export function publicPairingApi(): PairingApi {
-  return new PairingApi(new AuthConfiguration({ basePath: session.apiBase }))
+  return new PairingApi(new AuthConfiguration(publicParams()))
 }
 
 export function accountApi(): AccountApi {
@@ -127,36 +128,11 @@ export function contentApi(): ContentApi {
   return new ContentApi(new ContentConfiguration(bearerParams()))
 }
 
-export function favoritesApi(): FavoritesApi {
-  return new FavoritesApi(new FavoritesConfiguration(bearerParams()))
-}
-
-// The item marks inside one Memory (ADR 0068) — the `item-favorites` tag on the favorites spec → its own
-// ItemFavoritesApi, same config/auth. A separate resource from `favoritesApi` because the two objects have
-// different audiences, not because the paths differ.
-export function itemFavoritesApi(): ItemFavoritesApi {
-  return new ItemFavoritesApi(new FavoritesConfiguration(bearerParams()))
-}
-
-// The caller's own item marks across every scope (ADR 0068 §9) — the `own-item-favorites` tag, read only by an
-// account-key rotation's re-tag.
-export function ownItemFavoritesApi(): OwnItemFavoritesApi {
-  return new OwnItemFavoritesApi(new FavoritesConfiguration(bearerParams()))
-}
-
 // The platform's generic blob transfer (core's `blob` tag, ADR 0079): start an upload, sign each next window,
-// presign downloads. Completing an upload is the application's (`mediaApi().completeMedia`, `commitCoverBlob`).
+// presign downloads. Completing an upload is the application's (Memories' `mediaApi().completeMedia`,
+// `commitCoverBlob`, built in `features/memory/api.ts`).
 export function blobApi(): BlobApi {
   return new BlobApi(new BlobConfiguration(bearerParams()))
-}
-
-export function mediaApi(): MediaApi {
-  return new MediaApi(new MediaConfiguration(bearerParams()))
-}
-
-// Uploader buckets (cr-0113) — the `buckets` tag on the media spec → its own BucketsApi, same media config/auth.
-export function bucketsApi(): BucketsApi {
-  return new BucketsApi(new MediaConfiguration(bearerParams()))
 }
 
 export function tasksApi(): TasksApi {
@@ -171,5 +147,5 @@ export function sharesApi(): SharingApi {
 }
 
 export function publicSharesApi(): SharingApi {
-  return new SharingApi(new SharingConfiguration({ basePath: session.apiBase }))
+  return new SharingApi(new SharingConfiguration(publicParams()))
 }

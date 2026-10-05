@@ -2,11 +2,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('../../../api/client', () => ({
-  blobApi: vi.fn(), mediaApi: vi.fn(),
+  blobApi: vi.fn(),
   loginApi: vi.fn(),
   tokenApi: vi.fn(),
   sessionApi: vi.fn(),
 }))
+vi.mock('../api', () => ({ mediaApi: vi.fn() }))
 
 // exifr does the real parse in the browser; here we drive it so the sealed EXIF tier is deterministic.
 vi.mock('exifr', () => ({ default: { parse: vi.fn(async () => undefined) } }))
@@ -40,7 +41,8 @@ import { mount, flushPromises } from '@vue/test-utils'
 import MediaLightbox from './MediaLightbox.vue'
 import { addMedia, listMedia, unsealMeta, type MediaDeriver, type MediaItem } from '../media'
 import exifr from 'exifr'
-import { blobApi, mediaApi } from '../../../api/client'
+import { blobApi } from '../../../api/client'
+import { mediaApi } from '../api'
 import { registerPlayback, revokePlayback } from '../../../sw/register'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'

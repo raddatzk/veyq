@@ -20,7 +20,7 @@
 // set into my own row. Everything not provably mine counts as someone else's: a degradation, never a refusal.
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
-import { itemFavoritesApi, ownItemFavoritesApi } from '../../api/client'
+import { itemFavoritesApi, ownItemFavoritesApi } from './api'
 import { withRefresh } from '../../app/sessionRefresh'
 import { masterKey } from '../../app/vault'
 import { openScopeById } from '../spaces/scopes'

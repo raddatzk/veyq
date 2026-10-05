@@ -226,8 +226,9 @@ on their own.
   application → application, bitten with a forged second application because no real one exists; inside core,
   `validate_kernel_imports_no_slices.py` keeps the kernel → slice rule (a declared kernel list) and the node-kind
   rule, which no import check can see. On the web there is no module boundary, so the direction is a text guard:
-  `validate_web_core_imports_no_applications.py` (core may not import `features/memory`, discover code by glob, or
-  name the Memories node kinds; no allowlist). Application → application has no web guard yet — there is one
+  `validate_web_core_imports_no_applications.py` (core may not import `features/memory` or a client generated from
+  the application's specs — derived from `generate:api`, so the Memories factories live in `features/memory/api.ts`
+  — discover code by glob, or name the Memories node kinds; no allowlist). Application → application has no web guard yet — there is one
   application. The test trees stay out of the import checks, for the reasons the kernel guard's docstring gives.
 - **Rejected: a generic record store** (core offers "put a sealed record under a key", applications are just
   clients of it). It would make the server a database of blobs with no shape, give up per-kind authorization,

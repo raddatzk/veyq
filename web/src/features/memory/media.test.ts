@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('../../api/client', () => ({
-  blobApi: vi.fn(), mediaApi: vi.fn(),
+  blobApi: vi.fn(),
   loginApi: vi.fn(),
   tokenApi: vi.fn(),
   sessionApi: vi.fn(),
 }))
+vi.mock('./api', () => ({ mediaApi: vi.fn() }))
 
 // exifr does the real image parse in the browser; here we drive it so the seal/round-trip is deterministic.
 // Default: no EXIF (parse → undefined), so the non-EXIF paths behave exactly as a source without metadata.
@@ -45,7 +46,8 @@ import {
   type Dimensions,
 } from './media'
 import exifr from 'exifr'
-import { blobApi, mediaApi } from '../../api/client'
+import { blobApi } from '../../api/client'
+import { mediaApi } from './api'
 import {
   ResponseError,
   type BlobRef,

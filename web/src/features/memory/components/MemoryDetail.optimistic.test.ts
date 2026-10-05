@@ -9,8 +9,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('../../../api/client', () => ({
-  blobApi: vi.fn(), mediaApi: vi.fn(), contentApi: vi.fn(), loginApi: vi.fn(), tokenApi: vi.fn(), sessionApi: vi.fn(),
+  blobApi: vi.fn(), contentApi: vi.fn(), loginApi: vi.fn(), tokenApi: vi.fn(), sessionApi: vi.fn(),
 }))
+vi.mock('../api', () => ({ mediaApi: vi.fn() }))
 vi.mock('exifr', () => ({ default: { parse: vi.fn(async () => undefined) } }))
 
 // Control the upload queue the component subscribes to: a reactive batches array the test drives directly, so
@@ -36,7 +37,8 @@ import PrimeVue from 'primevue/config'
 import MemoryDetail from './MemoryDetail.vue'
 import { addMedia, type MediaDeriver } from '../media'
 import { retryFile, enqueueUploads } from '../uploadQueue'
-import { blobApi, mediaApi, contentApi } from '../../../api/client'
+import { blobApi, contentApi } from '../../../api/client'
+import { mediaApi } from '../api'
 import * as v1 from '@veyq/crypto/v1'
 import { NodeKind } from '../../../api/generated/content'
 import type { TreeNode } from '../../../core/node/tree'

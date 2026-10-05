@@ -506,8 +506,29 @@ Every slice:
     `family.example.com`); only the domain changed.
   - ADR 0079's "Contracts by owner" and *What core still knows* lines are updated to the new text state.
 
-- [ ] **3 — Core web stops importing Memories' generated clients; the guard learns it.** The defect is live (V12),
+- [x] **3 — Core web stops importing Memories' generated clients; the guard learns it.** The defect is live (V12),
   so the order is guard → red → fix → green.
+
+  Done in `3f429d01` (guard, red on exactly `api/client.ts` + `shared/image/mediaDeriver.ts`), `5731baf0`
+  (`mediaDeriver` → `DerivativeTier = Extract<BlobRole, …>`), `bd1ee0be` (`features/memory/api.ts`, readers and 9
+  Memories mocks re-pointed), `79996d7a` (old factories deleted, guard green) and the docs commit after them.
+  Bitten on throwaway copies: a core import of `generated/media` (and a deep `generated/favorites/models` one) red,
+  `generated/blob` green; a core import of `generated/share-media` green until a fake `-i ../contracts/api/memories/…
+  -o src/api/generated/share-media` step is added, then red; no Memories step / a step without `-o` / no script red.
+  The mocks: every suite green with the real factories throwing, and one per pattern red with its mock left on
+  `api/client`. `stryker.mutate.json` holds neither file [M].
+  **Deviation** (each listed):
+  - The helper is not one `configuration()`: each generated package has its own `Configuration` class, so core exports
+    the two **parameter** shapes, `bearerParams()` and a new `publicParams()` (now also behind `publicPairingApi` and
+    `publicSharesApi`, same object as before).
+  - The token-less shape is `publicMediaConfiguration()` (no operation exists yet to build a factory for).
+  - No `validate_guard_gaps.py` case: the new limit (a client generated outside `generate:api`) is in the guard's
+    docstring only, as its other limits are; the trust-chain gap map does not list this guard.
+  - The e2e suites were not run (from a worktree `scripts/run_web_e2e.py` recreates the owner's dev services); none
+    imports a moved factory; the ones that reach them through `media.ts`/`share.ts`/`memoryCover.ts` are the four
+    `features/memory/*.e2e.test.ts` and `instanceBackup/restore.{a-capture,b-reopen}.e2e.test.ts`, and
+    `tasks/scopeRotation.e2e.test.ts` may through `rotateKeys` → the Memories lifecycle's item-favorites re-tag.
+  - `web/CLAUDE.md` and ADR 0079's guard sentence name the generated-client half.
   1. **The guard.** Extend `scripts/validate_web_core_imports_no_applications.py`: an application also owns every
      generated client whose `generate:api` run reads a spec under `contracts/api/<application>/`.
      - The pairs are **derived from `web/package.json`'s `-i`/`-o` pairs**, never listed, so `share-media`

@@ -14,7 +14,7 @@ const api = {
   listOwn: vi.fn<OwnItemFavoritesApi['listOwnItemFavorites']>(),
 }
 const vault = vi.hoisted(() => ({ mk: null as Uint8Array | null }))
-vi.mock('../../api/client', () => ({ itemFavoritesApi: vi.fn(), ownItemFavoritesApi: vi.fn() }))
+vi.mock('./api', () => ({ itemFavoritesApi: vi.fn(), ownItemFavoritesApi: vi.fn() }))
 vi.mock('../../app/sessionRefresh', () => ({ withRefresh: (f: () => unknown) => f() }))
 vi.mock('../../app/vault', () => ({ masterKey: () => (vault.mk ? vault.mk.slice() : null) }))
 // The rider opens each scope's E_0 through the caller's own grant; here every scope opens to a COPY of K_SC (the
@@ -24,7 +24,7 @@ vi.mock('../spaces/scopes', () => ({ openScopeById: vi.fn() }))
 
 import { loadItemFavorites, saveItemFavorites, retagItemMarksUnderNewMasterKey } from './itemFavorites'
 import { itemFavoritesStore, loadItemFavoritesFor, toggleItemFavorite, clearItemFavorites, markCount } from './itemFavoritesStore'
-import { itemFavoritesApi, ownItemFavoritesApi } from '../../api/client'
+import { itemFavoritesApi, ownItemFavoritesApi } from './api'
 import { openScopeById } from '../spaces/scopes'
 import { ScopeKind } from '../../api/generated/scopes'
 

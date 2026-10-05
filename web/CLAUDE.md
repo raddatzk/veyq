@@ -113,7 +113,10 @@ here; the server is blind.
   node tree: `tree`, `treeStore`, `location`, `browse`, the delete/trash dialogs), `core/applications/registry.ts`
   (the registry) and `core/sharing/` (the kind-independent half of a public share). Dependencies run application →
   core, never back, and `scripts/validate_web_core_imports_no_applications.py` (no allowlist) is red on a core file
-  that imports the application, uses `import.meta.glob`, or names `NodeKind.Memory|Chapter` / `'MEMORY'` /
+  that imports the application or one of its generated clients (every `generate:api` output whose `-i` lies under
+  `contracts/api/memories/`, read from `package.json` — today `generated/media`, `generated/favorites`; so their
+  factories are `features/memory/api.ts`'s, not `api/client.ts`'s, and a core helper types from core's own client,
+  e.g. `mediaDeriver`'s tiers from `BlobRole`), uses `import.meta.glob`, or names `NodeKind.Memory|Chapter` / `'MEMORY'` /
   `'CHAPTER'`. The one exempt file is `src/applications.ts`, the composition root (by exact path, never a
   directory); `main.ts` calls its `registerApplications()` before `boot()`. Build-time only: no glob, no computed
   `import()`, no loading after the fact (ADR 0079 Decision 5, ADR 0026) — registered code runs with every unlocked key.
