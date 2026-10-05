@@ -7,10 +7,10 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   `backend/`, it checks every project: `:core` (`backend/core`, the platform — its tests run as `:core:test`),
   `:apps:memories` (`backend/apps/memories`, the Memories application; its tests run as `:apps:memories:test`), the
   root (`:test`, the composition — no main code — and only the whole-app tests: `OperatorBlindProbeTest`, the posture
-  and entity sweeps, `ModuleCompositionTest`) and `:test-support` (the helpers the tests share; no tests). A new
+  and entity sweeps, `ModuleCompositionTest`). A new
   application is one more `:apps:<name>`; what a module must have (an `include`, a `beans.xml`, the `veyq.module` plugin,
-  its Dockerfile `COPY`s) and which edges it may declare (`:core`, and `:test-support` for tests — never another
-  application) is `scripts/validate_backend_module_graph.py`'s, its docstring the list. `:core`'s tests boot core
+  its Dockerfile `COPY`s) and which edges it may declare (`:core`, and `testFixtures(project(":core"))` over a test
+  configuration — never another application) is `scripts/validate_backend_module_graph.py`'s, its docstring the list. `:core`'s tests boot core
   with **no** application (`CoreAloneSliceTest`). **A test
   lives where what it exercises runs:** in `:core` if it passes with core alone, in `:apps:memories` if it needs
   Memories at runtime — every share creation (core refuses a share on a kind no application supports), every
@@ -20,11 +20,13 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   project without a match. **Each project with `@QuarkusTest`s holds
   its own `%test` keys** in `src/test/resources/application-test.properties` beside a comment-only
   `application.properties` anchor (a profile file is read only beside one); the base config is `:core`'s
-  `src/main/resources/application.properties`. Shared test helpers live in `:test-support`. A
-  `java-test-fixtures` output is not blocked by Quarkus per se: what dropped it out of a `@QuarkusTest`'s application
-  was the jar rename the module convention once set (`archivesName` — never set one again, `buildSrc`'s `veyq.module`
-  says why), and without it a plain fixture class reaches the application model (measured 2026-10-05). Whether a
-  helper that touches entities or Arc works from there is **unmeasured** (inbox #333), so the helpers stay a project.
+  `src/main/resources/application.properties`. Shared test helpers live in **`:core`'s test fixtures**
+  (`core/src/testFixtures`, `java-test-fixtures`), consumed as `testImplementation(testFixtures(project(":core")))`:
+  Quarkus loads them as a workspace module of the application under test, so a seed that persists entities, a
+  helper on `Arc.container()` and the CDI fakes all work from there in `:core`'s, `:apps:memories`' and the root's
+  tests (measured 2026-10-05, inbox #333) — as long as no jar is renamed (`archivesName`, `buildSrc`'s `veyq.module`
+  says why). The fixtures need their own `META-INF/beans.xml`, carry no config file (`%test` keys go in a module's
+  `src/test/resources`), and never depend on an application.
 - **Run the app (`quarkusDev`) on a persistent MariaDB** (`%dev`): `docker compose -f infra/docker-compose.yml
   up -d` starts it; data survives restarts (Flyway migrates once, then "up to date"). `docker compose -f
   infra/docker-compose.yml down -v` wipes it for a fresh instance. The H2 fallback is only the test default now.
