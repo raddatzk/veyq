@@ -2,7 +2,7 @@
 """Guard that backend tests create account rows through the one test fixture, never through a local copy.
 
 **What it asserts.** In every backend test root and every fixtures root (`backend_tree.test_kotlin()`: each
-module's `src/test/kotlin` and `:test-support`'s sources, where the shared helpers live), the account entity — the
+module's `src/test/kotlin` and each `src/testFixtures/kotlin`, where the shared helpers live), the account entity — the
 `@Entity` mapped to the `veyq_user` table, found in the main roots by that table name rather than typed here — is
 constructed in exactly one file, `com/veyq/core/testing/TestFixtures.kt`, and that file does construct it. Every other test seeds an
 account through the fixture's `seedUser` / `newUser` / `ensureUser`

@@ -1,5 +1,5 @@
 // `veyq.module` — what every backend module repeats (ADR 0079). A module is a subproject below `backend/` (`:core`,
-// `:apps:memories`, `:test-support`) whose jar the root's `quarkusBuild` puts into `quarkus-app/lib/main` — it is never
+// `:apps:memories`) whose jar the root's `quarkusBuild` puts into `quarkus-app/lib/main` — it is never
 // built, published or deployed on its own: the one deliverable is the root's fast-jar.
 //
 // The Kotlin, all-open and Quarkus plugins come from `buildSrc`'s classpath, so no build file names their version:

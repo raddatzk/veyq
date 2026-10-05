@@ -72,7 +72,7 @@ def workspace_srcs() -> list[pathlib.Path]:
 SCAN = [
     (ROOT / "contracts", {".yaml", ".yml", ".json", ".md"}),
     # The whole backend, not `backend/src`: every Gradle module keeps its sources in its own `src` (`backend/core/src`,
-    # `backend/test-support/src`, …), and a root that names one project stops seeing the others.
+    # `backend/apps/memories/src`, …), and a root that names one project stops seeing the others.
     (ROOT / "backend", {".kt"}),
     *[(src, CODE_SUFFIXES) for src in workspace_srcs()],
     (FEATURES, {".md"}),

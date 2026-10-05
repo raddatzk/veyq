@@ -5,5 +5,3 @@ rootProject.name = "veyq-backend"
 include(":core")
 // The Memories application, the first of them (ADR 0079): depends on `:core`, never the reverse, never on another application.
 include(":apps:memories")
-// Test helpers only: a `testImplementation` dependency of the modules and the root, never on a runtime classpath.
-include(":test-support")

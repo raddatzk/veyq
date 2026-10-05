@@ -20,8 +20,8 @@ veyqOpenApi { owner("memories") }
 dependencies {
     implementation(project(":core"))
 
-    // The shared test helpers (`test-support/build.gradle.kts` says why a project, not `java-test-fixtures`).
-    testImplementation(project(":test-support"))
+    // The shared test helpers: `:core`'s test fixtures (`core/build.gradle.kts` says why they work from there).
+    testImplementation(testFixtures(project(":core")))
     testImplementation("io.quarkus:quarkus-junit")
     testImplementation("io.rest-assured:rest-assured")
     testImplementation(kotlin("test"))

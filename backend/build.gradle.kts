@@ -30,8 +30,8 @@ dependencies {
     // The Memories application (`apps/memories/build.gradle.kts`): its code, generated API and migrations.
     implementation(project(":apps:memories"))
 
-    // The test helpers every module's tests use (`test-support/build.gradle.kts`).
-    testImplementation(project(":test-support"))
+    // The test helpers every module's tests use: `:core`'s test fixtures (`core/build.gradle.kts`).
+    testImplementation(testFixtures(project(":core")))
     testImplementation("io.quarkus:quarkus-junit")
     testImplementation("io.rest-assured:rest-assured")
     testImplementation(kotlin("test"))

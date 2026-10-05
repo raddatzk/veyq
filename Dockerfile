@@ -58,10 +58,8 @@ COPY backend/buildSrc ./buildSrc
 # Every module settings.gradle.kts includes needs its directory and build file here, or the warm-up dies configuring
 # it ("Configuring project ':core' without an existing directory is not allowed"). The modules are project
 # dependencies of the one fast-jar, not images of their own (ADR 0079); validate_backend_module_graph.py rule (e).
-# `:test-support` is test code: its build file is needed to configure the build, its sources never are.
 COPY backend/core/build.gradle.kts backend/core/pitest.scope.json ./core/
 COPY backend/apps/memories/build.gradle.kts ./apps/memories/
-COPY backend/test-support/build.gradle.kts ./test-support/
 # Cache-friendly warmup: downloads Gradle wrapper/distribution and plugin metadata once
 RUN ./gradlew --no-daemon help
 

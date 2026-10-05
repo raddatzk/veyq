@@ -144,12 +144,23 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      `validate_backend_module_graph` rule (f). Quarkus cannot map a renamed project's test-fixtures jar, so a
      `testFixtures(project(…))` dependency silently leaves the `@QuarkusTest` application model — the build is
      green and the fixtures are not there (measured 2026-10-05, Quarkus 3.36.0, when the convention still set one)
-  53 `:test-support`'s build file no longer applying `id("veyq.module")` — rejected: `validate_backend_module_graph`
+  53 `:apps:memories`' build file no longer applying `id("veyq.module")` — rejected: `validate_backend_module_graph`
      rule (f). Without the convention plugin the module has no group (its jar loses its `com.veyq.` name), no
-     toolchain, no test JVM settings, and — for a module with the Quarkus plugin — a second `quarkusBuild`
+     toolchain, no test JVM settings, and — for a module with the Quarkus plugin — a second `quarkusBuild`. (It
+     forged the retired `:test-support` project's build file until the helpers became `:core`'s test fixtures.)
   54 the Dockerfile's `backend-build-base` stage no longer copying `backend/buildSrc` — rejected:
      `validate_backend_module_graph` rule (e). The warm-up `gradlew help` would find no `veyq.module` plugin, so the
      image does not build, while `./gradlew check` in a checkout stays green
+  55 the root declaring `implementation(testFixtures(project(":core")))` — rejected: `validate_backend_module_graph`
+     rule (b). Gradle accepts it and the build stays green, but the fixtures then ship: measured, `quarkusBuild` put
+     `com.veyq.core-test-fixtures.jar` (with the `@Priority` fake `RecordingBlobStore`), JUnit and RestAssured into
+     `quarkus-app/lib/main`
+  56 `:core`'s `src/testFixtures/resources/META-INF/beans.xml` deleted — rejected: `validate_backend_module_graph`
+     rule (c). Without it the fixtures' CDI fakes are no beans and the production bean answers in their place: only
+     a test that casts an injected bean to its fake notices; every other one silently runs against production
+  57 `:core` declaring `testFixturesImplementation(project(":apps:memories"))` — rejected:
+     `validate_backend_module_graph` rule (b). Gradle sees no cycle (the fixtures are not core's main code), so it
+     builds, and Memories would boot inside every `:core` test — which must boot core alone (`CoreAloneSliceTest`)
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
 (a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
 which the Gradle module split retired: `:core` has no edge to an application, so either shape fails
@@ -700,18 +711,49 @@ def forge_module_renames_its_jar(root: pathlib.Path) -> str:
     return ":apps:memories renaming its jar with an archivesName (must be REJECTED — Quarkus loses its test fixtures)"
 
 
-TEST_SUPPORT_BUILD = "backend/test-support/build.gradle.kts"
 MODULE_PLUGIN_REQUEST = 'id("veyq.module")'
 BUILD_SRC_COPY = "COPY backend/buildSrc ./buildSrc\n"
 
 
 def forge_module_without_convention_plugin(root: pathlib.Path) -> str:
-    f = root / TEST_SUPPORT_BUILD
+    f = root / MEMORIES_BUILD
     text = f.read_text() if f.is_file() else ""
     if MODULE_PLUGIN_REQUEST not in text:
-        raise ForgeError(f"{TEST_SUPPORT_BUILD} does not apply {MODULE_PLUGIN_REQUEST} — re-anchor this forgery")
+        raise ForgeError(f"{MEMORIES_BUILD} does not apply {MODULE_PLUGIN_REQUEST} — re-anchor this forgery")
     f.write_text(text.replace(MODULE_PLUGIN_REQUEST, 'kotlin("jvm")'))
-    return ":test-support applying the Kotlin plugin instead of veyq.module (must be REJECTED — an unconventional module)"
+    return ":apps:memories applying the Kotlin plugin instead of veyq.module (must be REJECTED — an unconventional module)"
+
+
+ROOT_BUILD = "backend/build.gradle.kts"
+CORE_FIXTURES_BEANS = "backend/core/src/testFixtures/resources/META-INF/beans.xml"
+
+
+def forge_fixtures_on_runtime_classpath(root: pathlib.Path) -> str:
+    f = root / ROOT_BUILD
+    text = f.read_text() if f.is_file() else ""
+    if CORE_BUILD_DEPS_ANCHOR not in text:
+        raise ForgeError(f"{ROOT_BUILD} has no `dependencies {{` block — re-anchor this forgery")
+    f.write_text(text.replace(CORE_BUILD_DEPS_ANCHOR,
+                              CORE_BUILD_DEPS_ANCHOR + '    implementation(testFixtures(project(":core")))\n', 1))
+    return "the root shipping :core's test fixtures over `implementation` (must be REJECTED — fakes in the fast-jar)"
+
+
+def forge_fixtures_not_indexed(root: pathlib.Path) -> str:
+    f = root / CORE_FIXTURES_BEANS
+    if not f.is_file():
+        raise ForgeError(f"{CORE_FIXTURES_BEANS} is missing — re-anchor this forgery")
+    f.unlink()
+    return ":core's test fixtures without a beans.xml (must be REJECTED — the fakes would be no beans)"
+
+
+def forge_core_fixtures_depend_on_application(root: pathlib.Path) -> str:
+    f = root / CORE_BUILD
+    text = f.read_text() if f.is_file() else ""
+    if CORE_BUILD_DEPS_ANCHOR not in text:
+        raise ForgeError(f"{CORE_BUILD} has no `dependencies {{` block — re-anchor this forgery")
+    f.write_text(text.replace(CORE_BUILD_DEPS_ANCHOR,
+                              CORE_BUILD_DEPS_ANCHOR + '    testFixturesImplementation(project(":apps:memories"))\n', 1))
+    return ":core's test fixtures depending on :apps:memories (must be REJECTED — core's tests boot core alone)"
 
 
 def forge_image_without_build_src(root: pathlib.Path) -> str:
@@ -1018,6 +1060,9 @@ CASES = [
     ("52", "validate_backend_module_graph.py", forge_module_renames_its_jar, False),
     ("53", "validate_backend_module_graph.py", forge_module_without_convention_plugin, False),
     ("54", "validate_backend_module_graph.py", forge_image_without_build_src, False),
+    ("55", "validate_backend_module_graph.py", forge_fixtures_on_runtime_classpath, False),
+    ("56", "validate_backend_module_graph.py", forge_fixtures_not_indexed, False),
+    ("57", "validate_backend_module_graph.py", forge_core_fixtures_depend_on_application, False),
 ]
 
 

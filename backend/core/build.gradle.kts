@@ -13,6 +13,14 @@ plugins {
     // opt-in `./gradlew pitest` — mirrors web's `npm run mutation` staying out of `npm run check`. Every class it
     // mutates is core's, so the plugin, its scope file and its history live in this module.
     id("info.solidsoft.pitest")
+    // The test helpers this module's tests, every application's and the root's share live in `src/testFixtures`
+    // (`TestFixtures`, `ScopeAccessWorld`, the race harness, the blob-store fakes): consumed as
+    // `testImplementation(testFixtures(project(":core")))`, a workspace module in the `@QuarkusTest` application
+    // model like `:core` itself, so its classes load in the application's class loader beside the entities, its CDI
+    // fakes are beans (its own `META-INF/beans.xml`) and `Arc.container()` answers (measured 2026-10-05, Quarkus 3.36.0,
+    // inbox #333). It holds only core's helpers: core's fixtures never depend on an application
+    // (validate_backend_module_graph.py rule (b)). It works only while no jar is renamed (`buildSrc`'s `veyq.module`).
+    `java-test-fixtures`
 }
 
 veyqOpenApi { owner("core") }
@@ -38,10 +46,10 @@ dependencies {
     // one, so a fake control plane inside the test JVM is the only proof KubernetesIngressSink can ever offer.
     api("io.quarkus:quarkus-kubernetes-client")
 
-    // The test helpers both this module's tests and the root's use (`TestFixtures`, `givenAdminChannel`): a project of
-    // their own, so Quarkus loads them inside the application under test (`test-support/build.gradle.kts` says why
-    // not `java-test-fixtures`).
-    testImplementation(project(":test-support"))
+    // What the fixtures build on reaches their consumers too (`FakePresignProfile` is a `QuarkusTestProfile`,
+    // `givenAdminChannel` a RestAssured spec). `:core`'s main classes need no line: the plugin gives the fixtures them.
+    testFixturesApi("io.quarkus:quarkus-junit")
+    testFixturesApi("io.rest-assured:rest-assured")
     testImplementation("io.quarkus:quarkus-junit")
     testImplementation("io.rest-assured:rest-assured")
     testImplementation(kotlin("test"))
