@@ -5,42 +5,55 @@ cr-platform-gradle-modules). Buildless: it reads the build files, the config fil
 **What it asserts.** The rules carry the letters they were built under (a–g). The modules are the projects
 `settings.gradle.kts` includes (`:apps:x` is `backend/apps/x`). The project edges are read from the build files
 (`<configuration>(project(":x"))`): `implementation`/`api`/`runtimeOnly` are runtime edges,
-`testImplementation`/`testRuntimeOnly` test edges, `compileOnly` neither (it is still an edge for rule (b)). A
-module the root reaches over runtime edges **ships** (its jar is in the fast-jar's `quarkus-app/lib/main`);
-`:test-support` is reached over test edges only and ships nothing.
+`testImplementation`/`testRuntimeOnly` test edges, `compileOnly` neither (it is still an edge for rule (b)); a
+`testFixtures(project(":x"))` inside any of them is an edge to `:x` as well. A module the root reaches over runtime
+edges **ships** (its jar is in the fast-jar's `quarkus-app/lib/main`). The test helpers the modules share are a
+module's `java-test-fixtures` source set (`src/testFixtures`, today `:core`'s), test code that ships nothing.
 
-- **(a) The settings name every module, and only the three kinds there are.** The included projects equal the
+- **(a) The settings name every module, and only the two kinds there are.** The included projects equal the
   directories below `backend/` holding a `build.gradle.kts` (build output excluded). A module directory the settings
   do not include is compiled by nothing — its classes, migrations and tests silently never run — and an include
-  without a build file configures an empty project. Every included project is `:core` (the platform),
-  `:test-support` (the test helpers) or `:apps:<name>` (an application, ADR 0079 Decision 1): rule (b)'s direction
-  is defined for exactly those, so a fourth kind is red until the direction is decided for it.
-- **(b) The dependency direction (ADR 0079 Decision 4).** Every project edge, any configuration: `:core` depends on
-  no project except `:test-support` over a test configuration; an application depends on `:core` and, over a test
-  configuration, on `:test-support` — **never on another application** and never on the root; `:test-support`
-  depends on `:core` only (an edge to an application would put that application into `:core`'s tests, which must
-  boot core alone); `:test-support` is reached over test configurations only, from anywhere. The root composes any
-  module. Gradle refuses `:core` → application as a cycle, but nothing in Gradle refuses `:apps:a` → `:apps:b`.
+  without a build file configures an empty project. Every included project is `:core` (the platform) or
+  `:apps:<name>` (an application, ADR 0079 Decision 1): rule (b)'s direction is defined for exactly those, so a third
+  kind is red until the direction is decided for it.
+- **(b) The dependency direction (ADR 0079 Decision 4).** Every project edge, any configuration — a module's
+  `testFixtures*` configurations included: `:core` depends on no project (its fixtures neither: an edge to an
+  application would put that application into `:core`'s tests, which must boot core alone); an application depends
+  on `:core` only — **never on another application** and never on the root. The root composes any module. A
+  `testFixtures(project(…))` is reached over a test configuration only (`test*`, `testFixtures*`): over a runtime one
+  they ship — measured 2026-10-05 with `implementation(testFixtures(project(":core")))` on the root: `quarkusBuild`
+  put `com.veyq.core-test-fixtures.jar` (with the `@Priority` fake `RecordingBlobStore`), JUnit and RestAssured into
+  `quarkus-app/lib/main`, green. Gradle refuses `:core` → application as a cycle, but nothing in Gradle refuses `:apps:a` → `:apps:b`
+  or `implementation(testFixtures(…))`.
 - **(c) Every module is indexed.** Each included project has `src/main/resources/META-INF/beans.xml`. Without it
   Quarkus does not index the jar: injected beans fail the build, but an `@All` list silently loses the module's
   implementations and its generated `@Path` interfaces answer 404 (measured on the deliverable: the fast-jar boots
-  and the Memories routes 404).
+  and the Memories routes 404). The same holds for a module's test fixtures: a `src/testFixtures/kotlin` needs
+  `src/testFixtures/resources/META-INF/beans.xml`, or its CDI fakes (`RecordingBlobStore`) are no beans and the
+  production bean answers in their place (measured 2026-10-05: with the file removed, `:apps:memories`' and the
+  root's `@QuarkusTest`s injected `BlobStoreProducer`'s store, not `RecordingBlobStore`).
 - **(d) No package spans two modules.** Every package a shipped project declares — its hand-written main Kotlin
-  (the `package` lines) and its generated API (the `SpecSet` packages of `gradle/openapi.gradle.kts`, attributed to
-  the project whose build file names that owner in `extra["veyq.openapi.owner"]`) — is declared by that project
+  (the `package` lines) and its generated API (the `SpecSet` packages of `buildSrc`'s `SpecSets.kt`, attributed to
+  the project whose build file names that owner in `veyqOpenApi { owner("…") }`) — is declared by that project
   alone. Kotlin compiles a split package and Quarkus indexes both halves, so nothing fails; but the package no
   longer says its owner, and the platform/application boundary the names carry (`com.veyq.core.*`,
-  `com.veyq.<application>.*`) is a lie for the half that sits elsewhere. `:test-support` is test code and declares
-  its helpers inside core's packages on purpose (`com.veyq.core.blobstore.RecordingBlobStore`); it is not judged.
+  `com.veyq.<application>.*`) is a lie for the half that sits elsewhere. Test code (`src/test`, `src/testFixtures`)
+  is not judged: core's fixtures declare their helpers inside core's packages on purpose
+  (`com.veyq.core.blobstore.RecordingBlobStore`).
 - **(e) The image builds every module.** The Dockerfile's `backend-build-base` stage copies each included project's
   `build.gradle.kts` — its warm-up `gradlew help` configures every included project and dies on one with no
   directory (measured: "Configuring project ':core' without an existing directory is not allowed") — and some stage
-  copies the `src` of every module that ships. Nothing in `./gradlew check` would show either gap; only the release
-  build would.
-- **(f) Every module jar is named.** `gradle/module.gradle.kts` sets `group = "com.veyq"` and `archivesName`
-  `veyq-<module>`, every module applies it, and no module's build file sets a group or an archivesName of its own.
-  Unnamed, the jar the root's fast-jar carries in `quarkus-app/lib/main` is `<module>-unspecified.jar`, a name a
-  third-party `core` artifact can share.
+  copies the `src` of every module that ships. The same stage copies `backend/buildSrc`: Gradle builds it before it
+  configures any project, and without it every module's `id("veyq.module")` is a plugin no repository has. Nothing in
+  `./gradlew check` would show any of these gaps; only the release build would.
+- **(f) Every module jar is named by its group, and never renamed.** The convention plugin `veyq.module`
+  (`buildSrc/src/main/kotlin/veyq.module.gradle.kts`) sets `group = "com.veyq"`, every module applies it in its
+  `plugins {}` block, no module's build file sets a group of its own, and no backend build file (`buildSrc`'s sources,
+  the root's, a module's) sets an `archivesName`. Quarkus names a `quarkus-app/lib/main` entry
+  `<group>.<project name>.jar` (`com.veyq.core.jar`, `com.veyq.memories.jar`); without the group a module's jar there
+  would carry no namespace a third-party `core` artifact cannot share. An `archivesName` is red because it is silent:
+  Quarkus cannot map a renamed project's `java-test-fixtures` jar, so `testImplementation(testFixtures(project(…)))`
+  drops out of a `@QuarkusTest`'s application model with no error (measured 2026-10-05, Quarkus 3.36.0).
 - **(g) One home per config key, per classpath.** The config files are every `application*.properties` in a
   `src/{main,testFixtures,test}/resources` under `backend/` (found by `backend_tree`, build output excluded). They
   are judged per **classpath**, the way SmallRye Config meets them: the *main* classpath is the main resources of the
@@ -61,13 +74,17 @@ module the root reaches over runtime edges **ships** (its jar is in the fast-jar
   (g3) Every `application-<p>.properties` has an `application.properties` in the same directory. SmallRye finds a
   profile file only as the sibling of a discovered `application.properties`; one without that sibling is **silently
   never read** — the `%dev`/`%e2e`/`%prod` (or `%test`) keys would vanish with no error anywhere.
-  (g4) No config file sits in a `src/testFixtures/resources`: a `java-test-fixtures` output is not part of a
-  `@QuarkusTest`'s application (measured under Quarkus 3.36.0), so a file there is silently never read by the tests
-  it was written for.
+  (g4) No config file sits in a `src/testFixtures/resources`. One there **is** read (measured 2026-10-05, Quarkus
+  3.36.0: an `application.properties` in `:core`'s fixtures was a `PropertiesConfigSource` of the fixtures jar in
+  `:core`'s, `:apps:memories`' and the root's `@QuarkusTest`s) — a second source on every consumer's test classpath,
+  beside the base at its ordinal, which the classpaths above do not model. A module's `%test` keys go beside its
+  tests, in `src/test/resources`.
 
 **The defect that bought it.** None: built with cr-platform-gradle-modules (steps 6 and 8b), which split the
-backend into `:core`, `:apps:memories` and `:test-support`. Every failure mode it names is silent — an ambiguous key
-is resolved by classpath order, a profile file with no anchor or in a test-fixtures output is skipped, an unindexed
+backend into `:core`, `:apps:memories` and a `:test-support` project that `:core`'s test fixtures later replaced.
+Every failure mode it names is silent — an ambiguous key is resolved by classpath order, a profile file with no anchor
+is skipped, a config file in a test-fixtures output is one more source no classpath here models, a fixtures set
+without its index leaves its fakes no beans, a fixtures edge over a runtime configuration ships them, an unindexed
 module shrinks an `@All` list and 404s its routes, an un-included module directory is compiled by nobody, an
 application → application edge and a split package compile — and the runtime ones were measured in this tree
 before the layout relied on them. Rule (b) is the only place the "never another application" half of ADR 0079
@@ -102,28 +119,38 @@ from kotlin_lexer import mask  # the one Kotlin lexer in scripts/: comments + li
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 BACKEND = backend_tree.BACKEND
 SETTINGS = BACKEND / "settings.gradle.kts"
-MODULE_SCRIPT = BACKEND / "gradle" / "module.gradle.kts"
-OPENAPI_SCRIPT = BACKEND / "gradle" / "openapi.gradle.kts"
+BUILD_SRC = BACKEND / "buildSrc"
+MODULE_PLUGIN = BUILD_SRC / "src" / "main" / "kotlin" / "veyq.module.gradle.kts"
+SPEC_SETS = BUILD_SRC / "src" / "main" / "kotlin" / "com" / "veyq" / "buildlogic" / "SpecSets.kt"
+# `id("veyq.module")` in a build file's `plugins {}` block.
+APPLIES_MODULE_PLUGIN = re.compile(r'\bid\s*\(\s*"veyq\.module"\s*\)')
 CORE = ":core"
-TEST_SUPPORT = ":test-support"
 APPLICATION = re.compile(r"^:apps:[\w-]+$")
-# Any project reference in a dependencies block, with the configuration around it — `testImplementation(
-# testFixtures(project(":core")))` is a `testImplementation` edge, and `"api"(project(…))` (a script plugin's
-# string-named configuration) is an `api` one.
-ANY_EDGE = re.compile(r'"?\b(\w+)"?\s*\(\s*(?:\w+\s*\(\s*)?project\s*\(\s*"(:[^"]*)"\s*\)')
-TEST_EDGE_CONFIGS = {"testImplementation", "testRuntimeOnly", "testCompileOnly"}
+# Any project reference in a dependencies block, with the configuration around it and the wrapper, if any —
+# `testImplementation(testFixtures(project(":core")))` is a `testImplementation` edge to `:core`'s fixtures, and
+# `"api"(project(…))` (a string-named configuration) is an `api` one.
+ANY_EDGE = re.compile(r'"?\b(\w+)"?\s*\(\s*(?:(\w+)\s*\(\s*)?project\s*\(\s*"(:[^"]*)"\s*\)')
+# The configurations of test code: a module's tests and its `java-test-fixtures` source set.
+TEST_EDGE_CONFIGS = {"testImplementation", "testRuntimeOnly", "testCompileOnly",
+                     "testFixturesApi", "testFixturesImplementation", "testFixturesRuntimeOnly",
+                     "testFixturesCompileOnly"}
+FIXTURES_WRAPPER = "testFixtures"
 # `SpecSet(coreOwner, coreSpecs, "com.veyq.core.generated", …)` — the owner (a literal or a `val`) and the package root.
 SPEC_SET = re.compile(r'\bSpecSet\(\s*("?)(\w+)\1\s*,\s*\w+\s*,\s*"([\w.]+)"')
 OWNER_VAL = re.compile(r'\bval\s+(\w+)\s*=\s*"(\w+)"')
-OPENAPI_OWNER = re.compile(r'extra\["veyq\.openapi\.owner"\]\s*=\s*"(\w+)"')
+OPENAPI_OWNER = re.compile(r'\bveyqOpenApi\s*\{\s*owner\s*\(\s*"(\w+)"\s*\)')
 PACKAGE_LINE = re.compile(r"^\s*package\s+([\w.]+)", re.M)
+# Any spelling of a renamed archive (`archivesName.set(…)`, `archivesName = …`, `base { archivesName… }`), read on
+# comment-masked text so the convention's own warning against it is not what is found.
+ARCHIVES_NAME = re.compile(r"\barchivesName\b|\barchivesBaseName\b")
+ARCHIVES_NAME_WHY = ("Quarkus cannot map a renamed project's test-fixtures jar, so a `testFixtures(project(…))` "
+                     "dependency silently drops out of a @QuarkusTest's application (measured 2026-10-05). The jar is "
+                     "named by the group: `<group>.<project name>.jar` in quarkus-app/lib/main.")
 DOCKERFILE = ROOT / "Dockerfile"
 BUILD_BASE_STAGE = "backend-build-base"
 BASE_NAME = "application.properties"
 PROFILE_FILE = re.compile(r"^application-([\w.-]+)\.properties$")
 PROFILED_KEY = re.compile(r"^%([^.]+)\.(.+)$")
-# `implementation(project(":core"))` — the configuration and the project path; `testFixtures(project(…))` is none.
-PROJECT_EDGE = re.compile(r'\b(\w+)\s*\(\s*project\s*\(\s*"(:[^"]*)"\s*\)\s*\)')
 RUNTIME_CONFIGS = {"implementation", "api", "runtimeOnly"}
 TEST_CONFIGS = {"testImplementation", "testRuntimeOnly"}
 
@@ -162,12 +189,10 @@ def build_file(project: str) -> pathlib.Path:
 
 
 def edges(project: str) -> tuple[set[str], set[str]]:
-    """(runtime edges, test edges) of `project`, read from its build file (comments stripped)."""
-    f = build_file(project)
-    text = re.sub(r"//[^\n]*", "", f.read_text(encoding="utf-8")) if f.is_file() else ""
+    """(runtime edges, test edges) of `project`, read from its build file (comments stripped); a
+    `testImplementation(testFixtures(project(":x")))` is a test edge to `:x`."""
     runtime, test = set(), set()
-    for config, target in PROJECT_EDGE.findall(text):
-        target = ":" + target.strip(":")
+    for config, _wrapper, target in all_edges(project):
         if config in RUNTIME_CONFIGS:
             runtime.add(target)
         elif config in TEST_CONFIGS:
@@ -226,8 +251,9 @@ def rule_g(files: list[pathlib.Path]) -> list[str]:
             errors.append(f"(g3) {rel(f)} has no {BASE_NAME} beside it: SmallRye finds a profile file only next to a "
                           f"discovered {BASE_NAME}, so its keys are silently never read. Add a comment-only anchor.")
         if source_set_of(f) == "testFixtures":
-            errors.append(f"(g4) {rel(f)} is in a test-fixtures output, which is not part of a @QuarkusTest's "
-                          f"application: it is never read. A module's %test keys go beside its tests, in src/test/resources.")
+            errors.append(f"(g4) {rel(f)} is in a test-fixtures output: every consumer's @QuarkusTest reads it as a "
+                          f"config source beside the base. A module's %test keys go beside its tests, in "
+                          f"src/test/resources.")
     for name, cp in classpaths(files).items():
         homes: dict[tuple[str, str], list[pathlib.Path]] = defaultdict(list)
         keyed_bases = []
@@ -286,36 +312,36 @@ def rule_a() -> list[str]:
     for p in sorted(included - on_disk):
         errors.append(f"(a) {rel(SETTINGS)} includes {p}, which has no build.gradle.kts — an empty project.")
     for p in sorted(included):
-        if p not in (CORE, TEST_SUPPORT) and not APPLICATION.match(p):
-            errors.append(f"(a) {p} is neither {CORE} (the platform), {TEST_SUPPORT} (the test helpers) nor "
-                          f":apps:<name> (an application, ADR 0079) — rule (b) has no direction for it.")
+        if p != CORE and not APPLICATION.match(p):
+            errors.append(f"(a) {p} is neither {CORE} (the platform) nor :apps:<name> (an application, ADR 0079) — "
+                          f"rule (b) has no direction for it. Shared test helpers are a module's `src/testFixtures`, "
+                          f"not a project.")
     return errors
 
 
-def all_edges(project: str) -> list[tuple[str, str]]:
-    """Every `(configuration, target project)` edge `project`'s build file declares, comments stripped."""
+def all_edges(project: str) -> list[tuple[str, str, str]]:
+    """Every `(configuration, wrapper, target project)` edge `project`'s build file declares, comments stripped —
+    the wrapper is `testFixtures` for an edge to a module's test fixtures, `""` for a plain `project(…)`."""
     f = build_file(project)
     text = re.sub(r"//[^\n]*", "", f.read_text(encoding="utf-8")) if f.is_file() else ""
-    return [(config, ":" + target.strip(":")) for config, target in ANY_EDGE.findall(text)]
+    return [(config, wrapper, ":" + target.strip(":")) for config, wrapper, target in ANY_EDGE.findall(text)]
 
 
-def edge_refusal(src: str, config: str, dst: str, included: set[str]) -> str | None:
+def edge_refusal(src: str, config: str, wrapper: str, dst: str, included: set[str]) -> str | None:
     """Why the edge `src` → `dst` over `config` breaks the direction, or None when it is allowed."""
     if dst not in included:
         return f"{dst} is no project {rel(SETTINGS)} includes"
+    if wrapper == FIXTURES_WRAPPER and config not in TEST_EDGE_CONFIGS:
+        return (f"test fixtures are test code and are reached over a test configuration only "
+                f"({', '.join(sorted(TEST_EDGE_CONFIGS))}), never over `{config}` — they would ship in the fast-jar's lib/main, their "
+                f"@Priority fakes and JUnit with them")
     if dst == src:
         return "a project depending on itself"
-    if dst == TEST_SUPPORT:
-        return None if config in TEST_EDGE_CONFIGS else (
-            f"{TEST_SUPPORT} is test code and reaches a project over a test configuration only "
-            f"({', '.join(sorted(TEST_EDGE_CONFIGS))}), never over `{config}` — it would ship")
     if src == ":":
         return None  # the composition root composes every module
     if src == CORE:
-        return f"{CORE} depends on no application and on nothing else (ADR 0079 Decision 4)"
-    if src == TEST_SUPPORT:
-        return None if dst == CORE else (
-            f"{TEST_SUPPORT} reaches {CORE} only: an edge to {dst} puts it into {CORE}'s tests, which boot core alone")
+        return (f"{CORE} depends on no application and on nothing else (ADR 0079 Decision 4) — its test fixtures "
+                f"neither: an application there would be in {CORE}'s tests, which boot core alone")
     if APPLICATION.match(src):
         if dst == CORE:
             return None
@@ -331,11 +357,12 @@ def rule_b() -> list[str]:
     included = set(projects)
     errors = []
     for src in sorted(projects):
-        for config, dst in all_edges(src):
-            why = edge_refusal(src, config, dst, included)
+        for config, wrapper, dst in all_edges(src):
+            why = edge_refusal(src, config, wrapper, dst, included)
             if why:
                 where = rel(build_file(src))
-                errors.append(f"(b) {where}: `{config}(project(\"{dst}\"))` — {why}.")
+                spelled = f"{wrapper}(project(\"{dst}\"))" if wrapper else f"project(\"{dst}\")"
+                errors.append(f"(b) {where}: `{config}({spelled})` — {why}.")
     if not any(all_edges(p) for p in projects if p != ":"):
         errors.append(f"(b) no module's build file declares a project edge — the direction rule read nothing. "
                       f"If the edges are written another way now, teach ANY_EDGE that spelling.")
@@ -343,15 +370,15 @@ def rule_b() -> list[str]:
 
 
 def generated_packages() -> tuple[dict[str, set[str]], list[str]]:
-    """`{project: generated packages}` from `gradle/openapi.gradle.kts`'s spec sets and each build file's owner."""
-    text = re.sub(r"//[^\n]*", "", OPENAPI_SCRIPT.read_text(encoding="utf-8")) if OPENAPI_SCRIPT.is_file() else ""
+    """`{project: generated packages}` from `buildSrc`'s spec sets and each build file's owner."""
+    text = re.sub(r"//[^\n]*", "", SPEC_SETS.read_text(encoding="utf-8")) if SPEC_SETS.is_file() else ""
     vals = dict(OWNER_VAL.findall(text))
     roots = {}
     for quoted, owner, root in SPEC_SET.findall(text):
         roots[owner if quoted else vals.get(owner, owner)] = root
     errors = []
     if not roots:
-        errors.append(f"(d) {rel(OPENAPI_SCRIPT)} declares no `SpecSet(owner, specs, \"<package root>\", …)` — the "
+        errors.append(f"(d) {rel(SPEC_SETS)} declares no `SpecSet(owner, specs, \"<package root>\", …)` — the "
                       f"generated packages are no longer read. If the generation moved, re-point this rule.")
     out: dict[str, set[str]] = defaultdict(set)
     for p in backend_tree.gradle_projects():
@@ -359,7 +386,7 @@ def generated_packages() -> tuple[dict[str, set[str]], list[str]]:
         text = re.sub(r"//[^\n]*", "", f.read_text(encoding="utf-8")) if f.is_file() else ""
         for owner in OPENAPI_OWNER.findall(text):
             if owner not in roots:
-                errors.append(f"(d) {rel(f)} generates the `{owner}` spec set, which {rel(OPENAPI_SCRIPT)} does "
+                errors.append(f"(d) {rel(f)} generates the `{owner}` spec set, which {rel(SPEC_SETS)} does "
                               f"not declare (it knows {sorted(roots)}).")
                 continue
             out[p] |= {roots[owner], roots[owner] + ".api", roots[owner] + ".model"}
@@ -387,10 +414,18 @@ def rule_d() -> list[str]:
 
 
 def rule_c(mods: list[str]) -> list[str]:
-    return [f"(c) backend/{mod}/src/main/resources/META-INF/beans.xml is missing: Quarkus does not index the module, so "
-            f"its injected beans fail the build and — silently — an @All list loses its implementations and its "
-            f"@Path interfaces answer 404."
-            for mod in mods if not (BACKEND / mod / "src" / "main" / "resources" / "META-INF" / "beans.xml").is_file()]
+    errors = [f"(c) backend/{mod}/src/main/resources/META-INF/beans.xml is missing: Quarkus does not index the module, "
+              f"so its injected beans fail the build and — silently — an @All list loses its implementations and its "
+              f"@Path interfaces answer 404."
+              for mod in mods if not (BACKEND / mod / "src" / "main" / "resources" / "META-INF" / "beans.xml").is_file()]
+    for root in backend_tree.fixture_roots():
+        fixtures = root.parent  # src/testFixtures
+        if not (fixtures / "resources" / "META-INF" / "beans.xml").is_file():
+            errors.append(f"(c) {rel(fixtures)}/resources/META-INF/beans.xml is missing: Quarkus does not index the "
+                          f"test fixtures, so their CDI fakes are no beans and — silently — the production bean "
+                          f"answers in their place (a test casting an injected bean to its fake fails, every other "
+                          f"one runs against production).")
+    return errors
 
 
 def rule_e(mods: list[str]) -> list[str]:
@@ -412,6 +447,9 @@ def rule_e(mods: list[str]) -> list[str]:
     shipped = shipped_modules()
     if not base:
         errors.append(f"(e) the Dockerfile has no `{BUILD_BASE_STAGE}` stage copying a file — the module check reads nothing")
+    if BUILD_SRC.is_dir() and "backend/buildSrc" not in base:
+        errors.append(f"(e) the Dockerfile's `{BUILD_BASE_STAGE}` stage does not copy backend/buildSrc: its warm-up "
+                      f"`gradlew help` finds no `veyq.module` plugin for any module.")
     for mod in mods:
         if f"backend/{mod}/build.gradle.kts" not in base:
             errors.append(f"(e) the Dockerfile's `{BUILD_BASE_STAGE}` stage does not copy backend/{mod}/build.gradle.kts: "
@@ -423,24 +461,29 @@ def rule_e(mods: list[str]) -> list[str]:
 
 
 def rule_f(mods: list[str]) -> list[str]:
-    """The module jars are named once, in the convention script, and no module overrides the name."""
+    """The module jars are named once, in the convention plugin, and nothing renames them."""
     errors = []
-    convention = MODULE_SCRIPT.read_text(encoding="utf-8") if MODULE_SCRIPT.is_file() else ""
+    convention = MODULE_PLUGIN.read_text(encoding="utf-8") if MODULE_PLUGIN.is_file() else ""
     if not re.search(r'^group\s*=\s*"com\.veyq"', convention, re.MULTILINE):
-        errors.append(f"(f) {rel(MODULE_SCRIPT)} sets no `group = \"com.veyq\"` — a module jar would carry no group.")
-    if not re.search(r'archivesName\.set\("veyq-\$\{project\.name\}"\)', convention):
-        errors.append(f"(f) {rel(MODULE_SCRIPT)} sets no `archivesName` `veyq-<module>` — the jar in "
-                      f"quarkus-app/lib/main would be `<module>-unspecified.jar`, a name a third-party artifact can share.")
+        errors.append(f"(f) {rel(MODULE_PLUGIN)} sets no `group = \"com.veyq\"` — a module jar would carry no group.")
+    build_logic = sorted(p for p in BUILD_SRC.rglob("*.kt*") if not ({"build", ".gradle"} & set(p.relative_to(BUILD_SRC).parts)))
+    for f in [*build_logic, BACKEND / "build.gradle.kts"]:
+        if f.is_file() and ARCHIVES_NAME.search(mask(f.read_text(encoding="utf-8"))):
+            errors.append(f"(f) {rel(f)} sets an `archivesName` — {ARCHIVES_NAME_WHY}")
     for mod in mods:
         build = BACKEND / mod / "build.gradle.kts"
         text = build.read_text(encoding="utf-8") if build.is_file() else ""
         if not text:
             errors.append(f"(f) backend/{mod}/build.gradle.kts is missing for an included project")
             continue
-        if not re.search(r'apply\s*\(\s*from\s*=\s*"[./]*gradle/module\.gradle\.kts"\s*\)', text):
-            errors.append(f"(f) backend/{mod}/build.gradle.kts does not apply gradle/module.gradle.kts — its jar is unnamed")
-        if re.search(r"archivesName|^\s*group\s*=", text, re.MULTILINE):
-            errors.append(f"(f) backend/{mod}/build.gradle.kts overrides the group or archivesName the convention sets")
+        if not APPLIES_MODULE_PLUGIN.search(re.sub(r"//[^\n]*", "", text)):
+            errors.append(f"(f) backend/{mod}/build.gradle.kts does not apply `id(\"veyq.module\")` — its jar is "
+                          f"unnamed, and none of the module convention (toolchain, BOM, test JVM, disabled application "
+                          f"tasks) holds for it")
+        if re.search(r"^\s*group\s*=", text, re.MULTILINE):
+            errors.append(f"(f) backend/{mod}/build.gradle.kts overrides the group the convention sets")
+        if ARCHIVES_NAME.search(mask(text)):
+            errors.append(f"(f) backend/{mod}/build.gradle.kts sets an `archivesName` — {ARCHIVES_NAME_WHY}")
     return errors
 
 

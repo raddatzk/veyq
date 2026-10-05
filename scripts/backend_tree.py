@@ -4,13 +4,13 @@ Every guard that reads Kotlin, a test or a migration asks this module instead of
 `backend/src/main/kotlin/com/veyq/…` itself. The roots are **found by glob** over
 `backend/**/src/{main,test,testFixtures}/…`, never listed: the root's `backend/src`, `backend/core/src` and, when
 the module split adds it, `backend/apps/memories/src` — every guard sees a new module without an edit. Build output,
-Gradle caches and `node_modules` are not sources and are skipped by path segment.
+Gradle caches, `node_modules` and `buildSrc` (the build's convention plugins) are not sources and are skipped by path
+segment.
 
-**One project is test code although its sources sit in `src/main`:** `:test-support` (`TEST_SUPPORT`), the helpers
-more than one module's tests share. It is a project of its own because Quarkus loads a project dependency inside the
-application under test and a `java-test-fixtures` output outside it (measured, cr-platform-gradle-modules step 6).
-Its `src/main/kotlin` is therefore a **fixture root**, never a main root — a guard over production code must not
-read `TestFixtures`, and a guard over test code must — and its resources are test-side, never shipped.
+**The shared test helpers are a `java-test-fixtures` source set** (`src/testFixtures/kotlin`, today only `:core`'s):
+test code, consumed as `testImplementation(testFixtures(project(":core")))` and never shipped. They are a **fixture
+root**, never a main root — a guard over production code must not read `TestFixtures`, and a guard over test code
+must — and their resources are test-side.
 
 A file inside the tree is named by **its package path**, dotted (`com.veyq.x.y.Name`, the file `Name.kt`) or slashed
 (`com/veyq/x/y/Name.kt`), and `source_file` resolves it under whichever root holds it — so a guard anchored on a
@@ -27,19 +27,9 @@ import re
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 BACKEND = ROOT / "backend"
-# The test-helper project: its `src/main` is test code (module docstring).
-TEST_SUPPORT = BACKEND / "test-support"
-# Path segments that mark generated or cached trees, never sources.
-_SKIP = {"build", ".gradle", "node_modules", "out", "bin"}
-
-
-def is_test_support(path: pathlib.Path) -> bool:
-    """True for a path inside the `:test-support` project."""
-    try:
-        path.resolve().relative_to(TEST_SUPPORT.resolve())
-        return True
-    except ValueError:
-        return False
+# Path segments that mark generated or cached trees, never sources — and `buildSrc`, the build's own convention
+# plugins: Kotlin, but build logic, never a project's main or test code.
+_SKIP = {"build", ".gradle", "node_modules", "out", "bin", "buildSrc"}
 
 
 def _roots(source_set: str, tail: str) -> list[pathlib.Path]:
@@ -51,8 +41,8 @@ def _roots(source_set: str, tail: str) -> list[pathlib.Path]:
 
 
 def main_roots() -> list[pathlib.Path]:
-    """Every `src/main/kotlin` under `backend/` that is production code (`:test-support`'s is not)."""
-    return [r for r in _roots("main", "kotlin") if not is_test_support(r)]
+    """Every `src/main/kotlin` under `backend/` — production code."""
+    return _roots("main", "kotlin")
 
 
 def test_roots() -> list[pathlib.Path]:
@@ -61,9 +51,8 @@ def test_roots() -> list[pathlib.Path]:
 
 
 def fixture_roots() -> list[pathlib.Path]:
-    """Every root of shared test helpers: `:test-support`'s `src/main/kotlin`, and any `src/testFixtures/kotlin`
-    (none: a test-fixtures output is not part of a `@QuarkusTest`'s application, module docstring)."""
-    return sorted([r for r in _roots("main", "kotlin") if is_test_support(r)] + _roots("testFixtures", "kotlin"))
+    """Every root of shared test helpers: each `src/testFixtures/kotlin` (module docstring)."""
+    return _roots("testFixtures", "kotlin")
 
 
 def resource_roots() -> list[pathlib.Path]:
@@ -72,8 +61,8 @@ def resource_roots() -> list[pathlib.Path]:
 
 
 def migration_roots() -> list[pathlib.Path]:
-    """Every `src/main/resources/db/migration` under `backend/` (`:test-support` ships none)."""
-    return [r for r in _roots("main", "resources/db/migration") if not is_test_support(r)]
+    """Every `src/main/resources/db/migration` under `backend/`."""
+    return _roots("main", "resources/db/migration")
 
 
 def gradle_projects() -> dict[str, pathlib.Path]:

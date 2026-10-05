@@ -41,8 +41,8 @@ import org.hamcrest.Matchers.notNullValue
  * **It needs Memories at runtime.** Every space holds a `MEMORY` node with a medium, a bucket and a share, so it is
  * built only where Memories is part of the application under test — `:apps:memories`' tests and the root's
  * whole-app `OperatorBlindProbeTest` — never by a `:core` test (core alone refuses the medium and the share). It lives
- * in `:test-support` because both of those use it; it names the kind as the wire literal, since `:test-support`
- * compiles against `:core` only (cr-platform-gradle-modules step 8a).
+ * in `:core`'s test fixtures because both of those use them; it names the kind as the wire literal, since those
+ * compile against `:core` only (cr-platform-gradle-modules step 8a).
  */
 class ScopeAccessWorld(
     /** The role of each space's seeded share — a profile that switches VIEWER links off seeds UPLOADER ones. */

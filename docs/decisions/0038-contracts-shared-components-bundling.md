@@ -55,7 +55,7 @@ guard.** The revisit trigger below fired (F6, 2026-07-21); the components split 
    `components.schemas.ErrorResponse: {$ref: '_common…'}`, so every response still references the local name.
    Backend output is then byte-identical; web (typescript-fetch) additionally emits one *unreferenced,
    unexported* inline clone per module — harmless dead code in the gitignored generated tree, not worth fighting.
-   `_common` is excluded from the backend spec glob (`openapi.gradle.kts` — it is a `$ref` target, not a spec) and
+   `_common` is excluded from the backend spec glob (`buildSrc`'s `SpecSets` — it is a `$ref` target, not a spec) and
    unlisted in web's `generate:api`.
 2. **`bearerAuth` (×8), `ScopeId`/`TenantId`, and the shared enums stay inline** — extraction there is *not* free:
    `bearerAuth`'s five `description`s carry real per-domain authorization nuance, and the enums are mostly *inline*

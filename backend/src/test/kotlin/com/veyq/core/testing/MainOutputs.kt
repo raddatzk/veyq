@@ -16,9 +16,9 @@ import kotlin.io.path.isRegularFile
  *
  * Since the module split the code under test is no longer one directory: the project the test runs in contributes
  * its classes directories (`build/classes/{kotlin,java}/main`), every project it depends on a jar
- * (`core/build/libs/veyq-core.jar`). Walking one class's code source — the sweeps' old anchor — saw one module and
+ * (`core/build/libs/core.jar`). Walking one class's code source — the sweeps' old anchor — saw one module and
  * missed the rest. So the sweep reads **every classpath entry under the Gradle root** (`backend/`, every backend
- * test's working directory, `gradle/module.gradle.kts`), directory or jar, except the outputs of a `test` source set.
+ * test's working directory, `buildSrc`'s `veyq.module`), directory or jar, except the outputs of a `test` source set.
  * Library jars live in the Gradle cache, outside the root, and are never read. The sweeps' own cross-checks keep
  * this honest: the rate-limit sweep compares the walk with what the CDI container deployed, so an output this
  * misses (or a stray one it reads) fails there before any posture is judged.

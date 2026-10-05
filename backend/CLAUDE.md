@@ -7,10 +7,10 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   `backend/`, it checks every project: `:core` (`backend/core`, the platform — its tests run as `:core:test`),
   `:apps:memories` (`backend/apps/memories`, the Memories application; its tests run as `:apps:memories:test`), the
   root (`:test`, the composition — no main code — and only the whole-app tests: `OperatorBlindProbeTest`, the posture
-  and entity sweeps, `ModuleCompositionTest`) and `:test-support` (the helpers the tests share; no tests). A new
-  application is one more `:apps:<name>`; what a module must have (an `include`, a `beans.xml`, the convention script,
-  its Dockerfile `COPY`s) and which edges it may declare (`:core`, and `:test-support` for tests — never another
-  application) is `scripts/validate_backend_module_graph.py`'s, its docstring the list. `:core`'s tests boot core
+  and entity sweeps, `ModuleCompositionTest`). A new
+  application is one more `:apps:<name>`; what a module must have (an `include`, a `beans.xml`, the `veyq.module` plugin,
+  its Dockerfile `COPY`s) and which edges it may declare (`:core`, and `testFixtures(project(":core"))` over a test
+  configuration — never another application) is `scripts/validate_backend_module_graph.py`'s, its docstring the list. `:core`'s tests boot core
   with **no** application (`CoreAloneSliceTest`). **A test
   lives where what it exercises runs:** in `:core` if it passes with core alone, in `:apps:memories` if it needs
   Memories at runtime — every share creation (core refuses a share on a kind no application supports), every
@@ -20,8 +20,13 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   project without a match. **Each project with `@QuarkusTest`s holds
   its own `%test` keys** in `src/test/resources/application-test.properties` beside a comment-only
   `application.properties` anchor (a profile file is read only beside one); the base config is `:core`'s
-  `src/main/resources/application.properties`. Shared test helpers live in `:test-support`, never in a
-  `java-test-fixtures` output — Quarkus does not load that inside the application under test (measured).
+  `src/main/resources/application.properties`. Shared test helpers live in **`:core`'s test fixtures**
+  (`core/src/testFixtures`, `java-test-fixtures`), consumed as `testImplementation(testFixtures(project(":core")))`:
+  Quarkus loads them as a workspace module of the application under test, so a seed that persists entities, a
+  helper on `Arc.container()` and the CDI fakes all work from there in `:core`'s, `:apps:memories`' and the root's
+  tests (measured 2026-10-05, inbox #333) — as long as no jar is renamed (`archivesName`, `buildSrc`'s `veyq.module`
+  says why). The fixtures need their own `META-INF/beans.xml`, carry no config file (`%test` keys go in a module's
+  `src/test/resources`), and never depend on an application.
 - **Run the app (`quarkusDev`) on a persistent MariaDB** (`%dev`): `docker compose -f infra/docker-compose.yml
   up -d` starts it; data survives restarts (Flyway migrates once, then "up to date"). `docker compose -f
   infra/docker-compose.yml down -v` wipes it for a fresh instance. The H2 fallback is only the test default now.
@@ -53,7 +58,9 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   enough here. The only trust rules are
   for what an IntelliJ sync fetches and nothing runs: the `-sources`/`-javadoc` jars and the Gradle
   distribution's `-src` zip. `scripts/validate_build_input_pins.py` holds all of this, plus the one generator
-  version the three surfaces run.
+  version the three surfaces run. **The build logic is `buildSrc`** (the convention plugins `veyq.module` and
+  `veyq.openapi`): it is verified against the same metadata file, and every version it and the build choose — Kotlin,
+  Quarkus (plugin and BOM), the OpenAPI generator — is declared once, in `gradle/libs.versions.toml`.
 
 ## Conventions (see [developer styleguide](../docs/crosscutting/developer-styleguide.md))
 - **API-first.** Edit the spec in `../contracts/api/` — core's specs at its top level, the Memories application's in
@@ -66,7 +73,7 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   build; so does `x-veyq-channel` on a Memories operation (the admin channel is core's). Never hand-write a DTO that
   duplicates a generated model.
   **Nothing generated is tracked** (`backend/build/` is gitignored), and the generator emits no descriptions —
-  `useSwaggerAnnotations` / `useMicroProfileOpenAPIAnnotations` are both `false` in `gradle/openapi.gradle.kts`.
+  `useSwaggerAnnotations` / `useMicroProfileOpenAPIAnnotations` are both `false` in `buildSrc`'s `OpenApiGenerate`.
   So a spec edit that changes only `description:` / `summary:` text produces no backend delta beyond the models'
   KDoc (the Kotlin model generator copies a property's description into a comment; nothing else carries it) and
   needs no backend phase: the contracts guards are its whole check. A shape change — a property, a type, a

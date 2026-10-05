@@ -1,11 +1,10 @@
 // `:core` — the platform (ADR 0079): every `com.veyq.core.*` class, core's generated API (`openApiGenerateCore`),
 // core's migrations and the base `application.properties`. The root `backend/` composes it into the one fast-jar.
 plugins {
-    kotlin("jvm")
-    kotlin("plugin.allopen")
-    `java-library`
+    id("veyq.module") // buildSrc: the Kotlin, all-open and java-library plugins and what every module repeats
+    id("veyq.openapi")
     // Only for this module's own `@QuarkusTest`s: a library `@QuarkusTest` fails without the plugin. Its
-    // application tasks are disabled in gradle/module.gradle.kts — the one fast-jar is the root's.
+    // application tasks are disabled by `veyq.module` — the one fast-jar is the root's.
     id("io.quarkus")
     // Mutation testing — the trust chain's assertion-strength gate on the pure policy tier (ADR 0045 §2). Deliberately
     // WITHOUT the archived `pitest/pitest-kotlin` mutators (read-only since 2023, successor is the commercial arcmutate
@@ -14,11 +13,17 @@ plugins {
     // opt-in `./gradlew pitest` — mirrors web's `npm run mutation` staying out of `npm run check`. Every class it
     // mutates is core's, so the plugin, its scope file and its history live in this module.
     id("info.solidsoft.pitest")
+    // The test helpers this module's tests, every application's and the root's share live in `src/testFixtures`
+    // (`TestFixtures`, `ScopeAccessWorld`, the race harness, the blob-store fakes): consumed as
+    // `testImplementation(testFixtures(project(":core")))`, a workspace module in the `@QuarkusTest` application
+    // model like `:core` itself, so its classes load in the application's class loader beside the entities, its CDI
+    // fakes are beans (its own `META-INF/beans.xml`) and `Arc.container()` answers (measured 2026-10-05, Quarkus 3.36.0,
+    // inbox #333). It holds only core's helpers: core's fixtures never depend on an application
+    // (validate_backend_module_graph.py rule (b)). It works only while no jar is renamed (`buildSrc`'s `veyq.module`).
+    `java-test-fixtures`
 }
 
-apply(from = "../gradle/module.gradle.kts")
-extra["veyq.openapi.owner"] = "core"
-apply(from = "../gradle/openapi.gradle.kts")
+veyqOpenApi { owner("core") }
 
 dependencies {
     // `api`: the root and every application build on these extensions through core.
@@ -41,10 +46,10 @@ dependencies {
     // one, so a fake control plane inside the test JVM is the only proof KubernetesIngressSink can ever offer.
     api("io.quarkus:quarkus-kubernetes-client")
 
-    // The test helpers both this module's tests and the root's use (`TestFixtures`, `givenAdminChannel`): a project of
-    // their own, so Quarkus loads them inside the application under test (`test-support/build.gradle.kts` says why
-    // not `java-test-fixtures`).
-    testImplementation(project(":test-support"))
+    // What the fixtures build on reaches their consumers too (`FakePresignProfile` is a `QuarkusTestProfile`,
+    // `givenAdminChannel` a RestAssured spec). `:core`'s main classes need no line: the plugin gives the fixtures them.
+    testFixturesApi("io.quarkus:quarkus-junit")
+    testFixturesApi("io.rest-assured:rest-assured")
     testImplementation("io.quarkus:quarkus-junit")
     testImplementation("io.rest-assured:rest-assured")
     testImplementation(kotlin("test"))

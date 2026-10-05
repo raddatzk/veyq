@@ -51,19 +51,21 @@ WORKDIR /code/backend
 # postdate the recovered original (the mutation gate is ADR 0045 / #99), which is why it did not copy them.
 COPY backend/gradlew backend/gradlew.bat backend/build.gradle.kts backend/settings.gradle.kts backend/gradle.properties ./
 COPY backend/gradle ./gradle
+# The convention plugins every module applies (`veyq.module`, `veyq.openapi`): Gradle builds buildSrc before it
+# configures any project, so the warm-up below compiles it (and fetches its plugins) into this cached layer.
+# .dockerignore keeps a host's buildSrc/build and .gradle out.
+COPY backend/buildSrc ./buildSrc
 # Every module settings.gradle.kts includes needs its directory and build file here, or the warm-up dies configuring
 # it ("Configuring project ':core' without an existing directory is not allowed"). The modules are project
 # dependencies of the one fast-jar, not images of their own (ADR 0079); validate_backend_module_graph.py rule (e).
-# `:test-support` is test code: its build file is needed to configure the build, its sources never are.
 COPY backend/core/build.gradle.kts backend/core/pitest.scope.json ./core/
 COPY backend/apps/memories/build.gradle.kts ./apps/memories/
-COPY backend/test-support/build.gradle.kts ./test-support/
 # Cache-friendly warmup: downloads Gradle wrapper/distribution and plugin metadata once
 RUN ./gradlew --no-daemon help
 
 FROM backend-build-base AS backend-build-jvm
-# Was `COPY docs/api ../docs/api`. The specs live in contracts/ (API-first, CLAUDE.md), and
-# backend/gradle/openapi.gradle.kts:22 reads `fileTree("../contracts/api")`.
+# Was `COPY docs/api ../docs/api`. The specs live in contracts/ (API-first, CLAUDE.md), and buildSrc's `veyq.openapi`
+# reads them from `../contracts/api` (`VeyqOpenApiExtension`) — absent during the warm-up above, which it tolerates.
 COPY contracts/api ../contracts/api
 COPY backend/src ./src
 COPY backend/core/src ./core/src
