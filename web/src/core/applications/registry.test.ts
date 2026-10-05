@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { defineComponent } from 'vue'
-import { createRegistry, DROP_SHARE, type LifecycleHooks } from './registry'
+import { createRegistry, type LifecycleHooks } from './registry'
 import { FOLDER_KIND, type NodeKind } from '../node/kind'
 import { MEMORY_KIND, CHAPTER_KIND } from '../../features/memory/kinds'
 
@@ -49,15 +49,6 @@ describe('registry: kinds', () => {
     expect(r.kind(FOLDER_KIND)).toMatchObject({ supported: true, kind: 'FOLDER' })
   })
 
-  it('keeps the drop key outside the kind token space: no kind can claim its share body', () => {
-    // A kind token is upper-case (`_common` NodeKind); the drop key is lower-case, so the two never meet.
-    expect(/^[A-Z][A-Z0-9_]{0,15}$/.test(DROP_SHARE)).toBe(false)
-    expect(/^[A-Z][A-Z0-9_]{0,15}$/.test(FOLDER_KIND)).toBe(true)
-    const r = createRegistry()
-    r.claimShareBody(DROP_SHARE, Stub)
-    expect(r.shareBody(DROP_SHARE.toUpperCase())).toBeNull()
-  })
-
   it('copies the descriptor: mutating the caller object afterwards does not change the registration', () => {
     const r = createRegistry()
     const d = { kind: MEMORY_KIND, icon: 'pi pi-a', shareable: true }
@@ -100,7 +91,6 @@ describe('registry: share bodies', () => {
   it('is empty until claimed: shareBody() is null, not undefined', () => {
     const r = createRegistry()
     expect(r.shareBody(MEMORY_KIND)).toBeNull()
-    expect(r.shareBody(DROP_SHARE)).toBeNull()
   })
 
   it('is single-claim per key: a second claim throws and the first body stays', () => {
@@ -110,12 +100,14 @@ describe('registry: share bodies', () => {
     expect(r.shareBody(MEMORY_KIND)).toBe(Stub)
   })
 
-  it('keeps the kind-less drop apart from every root kind: claiming one does not claim the other', () => {
+  it('answers by the claimed kind token only: a root kind nobody claimed has no body', () => {
     const r = createRegistry()
-    r.claimShareBody(DROP_SHARE, Stub)
-    expect(r.shareBody(MEMORY_KIND)).toBeNull()
+    r.claimShareBody('EXPENSE', Stub)
+    expect(r.shareBody('EXPENSE')).toBe(Stub)
+    for (const unclaimed of [MEMORY_KIND, 'expense', 'EXPENSES', 'drop', '']) expect(r.shareBody(unclaimed)).toBeNull()
+    // Control: claiming one kind leaves another free to claim.
     expect(() => r.claimShareBody(MEMORY_KIND, Other)).not.toThrow()
-    expect(() => r.claimShareBody(DROP_SHARE, Other)).toThrow(/drop is already claimed/)
+    expect(r.shareBody(MEMORY_KIND)).toBe(Other)
   })
 })
 

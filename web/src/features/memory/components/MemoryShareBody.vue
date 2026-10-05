@@ -9,7 +9,7 @@
 // contributor/uploader name pre-screen, the photo picker and the upload tiles. Operator-blind: media bytes are fetched
 // direct-from-store via gated presigned GETs, so the operator never learns which media a viewer opens.
 //
-// Claimed by `register.ts` for the Memory root kind and for the kind-less drop (a WRITE_ONLY share), the order the shell
+// Claimed by `register.ts` for the Memory root kind, for every role (a WRITE_ONLY share is the drop), the order the shell
 // runs the gates in is password -> terms -> name -> content, and this body starts at "name".
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'

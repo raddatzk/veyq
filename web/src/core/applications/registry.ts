@@ -20,10 +20,9 @@
 //
 // **Share bodies (`claimShareBody`).** The public share page (`views/ShareView.vue`) is a shell: it resolves the
 // kind-independent half (core/sharing/resolvePublicShare.ts), runs the password and terms gates, then renders the body
-// the application claimed for the share's ROOT node kind. A key is claimed once (a second claim throws). The root kind
-// of a WRITE_ONLY share is unknown to the client (the unlocked response serves no nodes), so such a share goes to the one
-// application that claimed `DROP_SHARE` — the kind-less drop; a `rootKind` on the contract's `PublicShare` is the
-// follow-up that retires that rule. A root kind nobody claimed renders the shell's explicit unavailable state.
+// the application claimed for the share's ROOT node kind (`PublicShare.rootKind`, served for every role — a WRITE_ONLY
+// share too, so its drop page is the body of its kind's application). A kind is claimed once (a second claim throws). A
+// root kind nobody claimed, or none at all, renders the shell's explicit unavailable state.
 //
 // **Lifecycle hooks (`registerLifecycle`).** What runs when a scope is entered or reset and when the master key
 // rotates. Registered per application id (a second registration of the same id throws); several applications may
@@ -108,13 +107,6 @@ export interface SidebarPinsEmits {
   navigate: []
 }
 
-/** The key under which an application claims the body for a share whose root kind the client cannot know: every
- *  WRITE_ONLY share (see the header). Lower-case on purpose: a kind token is upper-case
- *  (`^[A-Z][A-Z0-9_]{0,15}$`, `_common` `NodeKind`), so no kind can ever collide with it — keep the two separate
- *  symbols even though both are strings now. */
-export const DROP_SHARE = 'drop' as const
-export type ShareBodyKey = NodeKind | typeof DROP_SHARE
-
 /** What the shell hands a share body (event: `unavailable` — the body found the share unusable after the shell had
  *  already shown it). The body renders everything below the password and terms gates: its own name pre-screen, its
  *  content, and any overlay. */
@@ -155,11 +147,11 @@ export interface Registry {
   /** Register an application's lifecycle hooks under its id. Throws if the id is already registered, or if
    *  `onMasterKeyRotated` is not a function. */
   registerLifecycle(applicationId: string, hooks: LifecycleHooks): void
-  /** Claim the public-share body for a root kind (or `DROP_SHARE`). Throws if that key is already claimed. */
-  claimShareBody(key: ShareBodyKey, component: Component): void
+  /** Claim the public-share body for a root kind, whatever the share's role. Throws if that kind is already claimed. */
+  claimShareBody(kind: NodeKind, component: Component): void
   /** The body claimed for a share's root kind, or null when nobody claimed it (the shell renders its unavailable
    *  state — never an empty page). */
-  shareBody(key: ShareBodyKey): Component | null
+  shareBody(kind: NodeKind): Component | null
   /** Run every application's `onScopeReset`. */
   scopeReset(): void
   /** Run every application's `onScopeEntered`, in registration order; rejects with the first failure after all ran. */
@@ -187,7 +179,7 @@ export function createRegistry(): Registry {
   ])
   const slots = new Map<SlotName, Component>()
   const lifecycles = new Map<string, LifecycleHooks>()
-  const shareBodies = new Map<ShareBodyKey, Component>()
+  const shareBodies = new Map<NodeKind, Component>()
   /** Run `f` on every application, never stopping at the first failure; rethrow the first one at the end. */
   async function eachApplication(f: (h: LifecycleHooks) => Promise<void> | void): Promise<void> {
     let failure: { error: unknown } | null = null
@@ -201,11 +193,11 @@ export function createRegistry(): Registry {
     if (failure) throw failure.error
   }
   return {
-    claimShareBody(key, component) {
-      if (shareBodies.has(key)) throw new Error(`share body for ${key} is already claimed`)
-      shareBodies.set(key, component)
+    claimShareBody(kind, component) {
+      if (shareBodies.has(kind)) throw new Error(`share body for ${kind} is already claimed`)
+      shareBodies.set(kind, component)
     },
-    shareBody: (key) => shareBodies.get(key) ?? null,
+    shareBody: (kind) => shareBodies.get(kind) ?? null,
     registerLifecycle(applicationId, hooks) {
       if (lifecycles.has(applicationId)) throw new Error(`lifecycle hooks of ${applicationId} are already registered`)
       if (typeof hooks.onMasterKeyRotated !== 'function') {

@@ -3,8 +3,8 @@
 // no-session route `/s/:shareId`; the share key `K_share` rides the URL **#fragment** (`#k=<base64url>`) and is read
 // on device — it never reaches the server. The shell resolves the kind-independent half of the share
 // (`resolvePublicShare`), runs the gates every share has — password, then the accountless terms — and renders the body
-// the registry holds for the share's ROOT node kind (a WRITE_ONLY share, whose kind the client cannot know, goes to the
-// kind-less drop body; a kind nobody claimed is the explicit unavailable state, never a blank page). What a body is —
+// the registry holds for the share's ROOT node kind, which the server names for every role (a kind nobody claimed, or
+// none, is the explicit unavailable state, never a blank page). What a body is —
 // the name pre-screen, the content, the lightbox — belongs to the application (Memories: `MemoryShareBody`). A footer
 // links to veyq's security docs (the client-integrity trust tier, ADR 0026).
 //
@@ -26,9 +26,8 @@ import {
   SharePasswordIncorrectError,
   type PublicShareHead,
 } from '../core/sharing/resolvePublicShare'
-import { registry, DROP_SHARE } from '../core/applications/registry'
+import { registry } from '../core/applications/registry'
 import { renderMarkdown } from '../shared/markdown'
-import { ShareRole } from '../api/generated/sharing'
 
 const route = useRoute()
 const { t, locale } = useI18n()
@@ -99,11 +98,10 @@ const securityDocUrl = computed(() =>
     : 'https://github.com/raddatzk/veyq/wiki/is-my-data-safe',
 )
 
-/** The body the registry holds for this share, or null (the explicit unavailable state). A WRITE_ONLY share's root
- *  kind is unknown to the client, so it asks for the kind-less drop body; any other share asks for its root kind. */
+/** The body the registry holds for this share's root kind, whatever its role, or null (the explicit unavailable
+ *  state) when nobody claimed the kind or the server named none. */
 function bodyFor(h: PublicShareHead) {
-  const key = h.role === ShareRole.WriteOnly ? DROP_SHARE : h.rootKind
-  return key ? registry.shareBody(key) : null
+  return h.rootKind ? registry.shareBody(h.rootKind) : null
 }
 const body = computed(() => (head.value ? bodyFor(head.value) : null))
 

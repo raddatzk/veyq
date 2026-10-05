@@ -5,7 +5,7 @@
 // The slots filled here (the level view, the create/rename dialog, the share dialog, the upload tray in the top bar,
 // the pinned rail in the sidebar, the public share body) are single-claim and Memories-shaped today: the next application's change request re-cuts them per kind (the registry's header).
 import { MEMORY_KIND, CHAPTER_KIND } from './kinds'
-import { DROP_SHARE, type Registry } from '../../core/applications/registry'
+import type { Registry } from '../../core/applications/registry'
 import MemoryDetailHost from './components/MemoryDetailHost.vue'
 import MemoryLevelHost from './components/MemoryLevelHost.vue'
 import NodeMutationDialog from './components/NodeMutationDialog.vue'
@@ -25,10 +25,8 @@ export function registerMemories(registry: Registry): void {
   registry.claimSlot('shareDialog', ShareDialog)
   registry.claimSlot('topbarTray', UploadStatusMenu)
   registry.claimSlot('sidebarPins', PinnedMemories)
-  // The public share page: a Memory share (viewer / contributor) is rooted at a MEMORY node; a WRITE_ONLY share's root
-  // kind is unknown to the client (the unlocked response serves no nodes), so the one application that claims the
-  // kind-less drop gets it — until `PublicShare` carries a `rootKind` (the registry's header).
+  // The public share page: every Memory share — viewer, contributor and the WRITE_ONLY drop — is rooted at a MEMORY
+  // node (`PublicShare.rootKind`); the one body picks its screens by the share's role.
   registry.claimShareBody(MEMORY_KIND, MemoryShareBody)
-  registry.claimShareBody(DROP_SHARE, MemoryShareBody)
   registry.registerLifecycle('memories', memoriesLifecycle)
 }

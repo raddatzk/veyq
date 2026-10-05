@@ -22,8 +22,8 @@ const K_SHARE = v1.randomBytes(32)
 
 function head(share: Partial<PublicShare>, role: ShareRole = ShareRole.Read): PublicShareHead {
   return {
-    shareId: 's1', share: { role, scopeId: 'scope-1', nodes: [], media: [], ...share } as PublicShare, kShare: K_SHARE,
-    scopeId: 'scope-1', name: 'Rom 2026', noteByLocale: {}, role, rootKind: role === ShareRole.WriteOnly ? null : MEMORY_KIND,
+    shareId: 's1', share: { role, scopeId: 'scope-1', rootKind: MEMORY_KIND, nodes: [], media: [], ...share } as PublicShare, kShare: K_SHARE,
+    scopeId: 'scope-1', name: 'Rom 2026', noteByLocale: {}, role, rootKind: MEMORY_KIND,
   }
 }
 
