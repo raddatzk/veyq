@@ -144,6 +144,12 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      `validate_backend_module_graph` rule (f). Quarkus cannot map a renamed project's test-fixtures jar, so a
      `testFixtures(project(…))` dependency silently leaves the `@QuarkusTest` application model — the build is
      green and the fixtures are not there (measured 2026-10-05, Quarkus 3.36.0, when the convention still set one)
+  53 `:test-support`'s build file no longer applying `id("veyq.module")` — rejected: `validate_backend_module_graph`
+     rule (f). Without the convention plugin the module has no group (its jar loses its `com.veyq.` name), no
+     toolchain, no test JVM settings, and — for a module with the Quarkus plugin — a second `quarkusBuild`
+  54 the Dockerfile's `backend-build-base` stage no longer copying `backend/buildSrc` — rejected:
+     `validate_backend_module_graph` rule (e). The warm-up `gradlew help` would find no `veyq.module` plugin, so the
+     image does not build, while `./gradlew check` in a checkout stays green
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
 (a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
 which the Gradle module split retired: `:core` has no edge to an application, so either shape fails
@@ -670,7 +676,7 @@ def forge_application_depends_on_application(root: pathlib.Path) -> str:
     (app / "src/main/resources/META-INF").mkdir(parents=True)
     (app / "src/main/resources/META-INF/beans.xml").write_text("")
     (app / "build.gradle.kts").write_text(
-        'plugins {\n    kotlin("jvm")\n}\n\napply(from = "../../gradle/module.gradle.kts")\n\n'
+        'plugins {\n    id("veyq.module")\n}\n\n'
         'dependencies {\n    implementation(project(":core"))\n    implementation(project(":apps:memories"))\n}\n')
     s = root / SETTINGS
     s.write_text(s.read_text() + '\ninclude(":apps:other")\n')
@@ -692,6 +698,29 @@ def forge_module_renames_its_jar(root: pathlib.Path) -> str:
         raise ForgeError(f"{MEMORIES_BUILD} is missing — re-anchor this forgery")
     f.write_text(f.read_text() + '\nbase { archivesName.set("veyq-memories") }\n')
     return ":apps:memories renaming its jar with an archivesName (must be REJECTED — Quarkus loses its test fixtures)"
+
+
+TEST_SUPPORT_BUILD = "backend/test-support/build.gradle.kts"
+MODULE_PLUGIN_REQUEST = 'id("veyq.module")'
+BUILD_SRC_COPY = "COPY backend/buildSrc ./buildSrc\n"
+
+
+def forge_module_without_convention_plugin(root: pathlib.Path) -> str:
+    f = root / TEST_SUPPORT_BUILD
+    text = f.read_text() if f.is_file() else ""
+    if MODULE_PLUGIN_REQUEST not in text:
+        raise ForgeError(f"{TEST_SUPPORT_BUILD} does not apply {MODULE_PLUGIN_REQUEST} — re-anchor this forgery")
+    f.write_text(text.replace(MODULE_PLUGIN_REQUEST, 'kotlin("jvm")'))
+    return ":test-support applying the Kotlin plugin instead of veyq.module (must be REJECTED — an unconventional module)"
+
+
+def forge_image_without_build_src(root: pathlib.Path) -> str:
+    d = root / DOCKERFILE
+    text = d.read_text()
+    if BUILD_SRC_COPY not in text:
+        raise ForgeError("the Dockerfile has no `COPY backend/buildSrc ./buildSrc` line — re-anchor this forgery")
+    d.write_text(text.replace(BUILD_SRC_COPY, ""))
+    return "the Dockerfile's build-base stage without backend/buildSrc (must be REJECTED — the warm-up finds no plugin)"
 
 
 def forge_core_declares_application_package(root: pathlib.Path) -> str:
@@ -987,6 +1016,8 @@ CASES = [
     ("50", "validate_backend_module_graph.py", forge_application_depends_on_application, False),
     ("51", "validate_backend_module_graph.py", forge_core_declares_application_package, False),
     ("52", "validate_backend_module_graph.py", forge_module_renames_its_jar, False),
+    ("53", "validate_backend_module_graph.py", forge_module_without_convention_plugin, False),
+    ("54", "validate_backend_module_graph.py", forge_image_without_build_src, False),
 ]
 
 

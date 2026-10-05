@@ -26,8 +26,8 @@ module the root reaches over runtime edges **ships** (its jar is in the fast-jar
   implementations and its generated `@Path` interfaces answer 404 (measured on the deliverable: the fast-jar boots
   and the Memories routes 404).
 - **(d) No package spans two modules.** Every package a shipped project declares — its hand-written main Kotlin
-  (the `package` lines) and its generated API (the `SpecSet` packages of `gradle/openapi.gradle.kts`, attributed to
-  the project whose build file names that owner in `extra["veyq.openapi.owner"]`) — is declared by that project
+  (the `package` lines) and its generated API (the `SpecSet` packages of `buildSrc`'s `SpecSets.kt`, attributed to
+  the project whose build file names that owner in `veyqOpenApi { owner("…") }`) — is declared by that project
   alone. Kotlin compiles a split package and Quarkus indexes both halves, so nothing fails; but the package no
   longer says its owner, and the platform/application boundary the names carry (`com.veyq.core.*`,
   `com.veyq.<application>.*`) is a lie for the half that sits elsewhere. `:test-support` is test code and declares
@@ -35,11 +35,13 @@ module the root reaches over runtime edges **ships** (its jar is in the fast-jar
 - **(e) The image builds every module.** The Dockerfile's `backend-build-base` stage copies each included project's
   `build.gradle.kts` — its warm-up `gradlew help` configures every included project and dies on one with no
   directory (measured: "Configuring project ':core' without an existing directory is not allowed") — and some stage
-  copies the `src` of every module that ships. Nothing in `./gradlew check` would show either gap; only the release
-  build would.
-- **(f) Every module jar is named by its group, and never renamed.** `gradle/module.gradle.kts` sets
-  `group = "com.veyq"`, every module applies it, no module's build file sets a group of its own, and no backend build
-  file (the convention, the root's, a module's) sets an `archivesName`. Quarkus names a `quarkus-app/lib/main` entry
+  copies the `src` of every module that ships. The same stage copies `backend/buildSrc`: Gradle builds it before it
+  configures any project, and without it every module's `id("veyq.module")` is a plugin no repository has. Nothing in
+  `./gradlew check` would show any of these gaps; only the release build would.
+- **(f) Every module jar is named by its group, and never renamed.** The convention plugin `veyq.module`
+  (`buildSrc/src/main/kotlin/veyq.module.gradle.kts`) sets `group = "com.veyq"`, every module applies it in its
+  `plugins {}` block, no module's build file sets a group of its own, and no backend build file (`buildSrc`'s sources,
+  the root's, a module's) sets an `archivesName`. Quarkus names a `quarkus-app/lib/main` entry
   `<group>.<project name>.jar` (`com.veyq.core.jar`, `com.veyq.memories.jar`); without the group a module's jar there
   would carry no namespace a third-party `core` artifact cannot share. An `archivesName` is red because it is silent:
   Quarkus cannot map a renamed project's `java-test-fixtures` jar, so `testImplementation(testFixtures(project(…)))`
@@ -106,20 +108,23 @@ from kotlin_lexer import mask  # the one Kotlin lexer in scripts/: comments + li
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 BACKEND = backend_tree.BACKEND
 SETTINGS = BACKEND / "settings.gradle.kts"
-MODULE_SCRIPT = BACKEND / "gradle" / "module.gradle.kts"
-OPENAPI_SCRIPT = BACKEND / "gradle" / "openapi.gradle.kts"
+BUILD_SRC = BACKEND / "buildSrc"
+MODULE_PLUGIN = BUILD_SRC / "src" / "main" / "kotlin" / "veyq.module.gradle.kts"
+SPEC_SETS = BUILD_SRC / "src" / "main" / "kotlin" / "com" / "veyq" / "buildlogic" / "SpecSets.kt"
+# `id("veyq.module")` in a build file's `plugins {}` block.
+APPLIES_MODULE_PLUGIN = re.compile(r'\bid\s*\(\s*"veyq\.module"\s*\)')
 CORE = ":core"
 TEST_SUPPORT = ":test-support"
 APPLICATION = re.compile(r"^:apps:[\w-]+$")
 # Any project reference in a dependencies block, with the configuration around it — `testImplementation(
-# testFixtures(project(":core")))` is a `testImplementation` edge, and `"api"(project(…))` (a script plugin's
-# string-named configuration) is an `api` one.
+# testFixtures(project(":core")))` is a `testImplementation` edge, and `"api"(project(…))` (a string-named
+# configuration) is an `api` one.
 ANY_EDGE = re.compile(r'"?\b(\w+)"?\s*\(\s*(?:\w+\s*\(\s*)?project\s*\(\s*"(:[^"]*)"\s*\)')
 TEST_EDGE_CONFIGS = {"testImplementation", "testRuntimeOnly", "testCompileOnly"}
 # `SpecSet(coreOwner, coreSpecs, "com.veyq.core.generated", …)` — the owner (a literal or a `val`) and the package root.
 SPEC_SET = re.compile(r'\bSpecSet\(\s*("?)(\w+)\1\s*,\s*\w+\s*,\s*"([\w.]+)"')
 OWNER_VAL = re.compile(r'\bval\s+(\w+)\s*=\s*"(\w+)"')
-OPENAPI_OWNER = re.compile(r'extra\["veyq\.openapi\.owner"\]\s*=\s*"(\w+)"')
+OPENAPI_OWNER = re.compile(r'\bveyqOpenApi\s*\{\s*owner\s*\(\s*"(\w+)"\s*\)')
 PACKAGE_LINE = re.compile(r"^\s*package\s+([\w.]+)", re.M)
 # Any spelling of a renamed archive (`archivesName.set(…)`, `archivesName = …`, `base { archivesName… }`), read on
 # comment-masked text so the convention's own warning against it is not what is found.
@@ -353,15 +358,15 @@ def rule_b() -> list[str]:
 
 
 def generated_packages() -> tuple[dict[str, set[str]], list[str]]:
-    """`{project: generated packages}` from `gradle/openapi.gradle.kts`'s spec sets and each build file's owner."""
-    text = re.sub(r"//[^\n]*", "", OPENAPI_SCRIPT.read_text(encoding="utf-8")) if OPENAPI_SCRIPT.is_file() else ""
+    """`{project: generated packages}` from `buildSrc`'s spec sets and each build file's owner."""
+    text = re.sub(r"//[^\n]*", "", SPEC_SETS.read_text(encoding="utf-8")) if SPEC_SETS.is_file() else ""
     vals = dict(OWNER_VAL.findall(text))
     roots = {}
     for quoted, owner, root in SPEC_SET.findall(text):
         roots[owner if quoted else vals.get(owner, owner)] = root
     errors = []
     if not roots:
-        errors.append(f"(d) {rel(OPENAPI_SCRIPT)} declares no `SpecSet(owner, specs, \"<package root>\", …)` — the "
+        errors.append(f"(d) {rel(SPEC_SETS)} declares no `SpecSet(owner, specs, \"<package root>\", …)` — the "
                       f"generated packages are no longer read. If the generation moved, re-point this rule.")
     out: dict[str, set[str]] = defaultdict(set)
     for p in backend_tree.gradle_projects():
@@ -369,7 +374,7 @@ def generated_packages() -> tuple[dict[str, set[str]], list[str]]:
         text = re.sub(r"//[^\n]*", "", f.read_text(encoding="utf-8")) if f.is_file() else ""
         for owner in OPENAPI_OWNER.findall(text):
             if owner not in roots:
-                errors.append(f"(d) {rel(f)} generates the `{owner}` spec set, which {rel(OPENAPI_SCRIPT)} does "
+                errors.append(f"(d) {rel(f)} generates the `{owner}` spec set, which {rel(SPEC_SETS)} does "
                               f"not declare (it knows {sorted(roots)}).")
                 continue
             out[p] |= {roots[owner], roots[owner] + ".api", roots[owner] + ".model"}
@@ -422,6 +427,9 @@ def rule_e(mods: list[str]) -> list[str]:
     shipped = shipped_modules()
     if not base:
         errors.append(f"(e) the Dockerfile has no `{BUILD_BASE_STAGE}` stage copying a file — the module check reads nothing")
+    if BUILD_SRC.is_dir() and "backend/buildSrc" not in base:
+        errors.append(f"(e) the Dockerfile's `{BUILD_BASE_STAGE}` stage does not copy backend/buildSrc: its warm-up "
+                      f"`gradlew help` finds no `veyq.module` plugin for any module.")
     for mod in mods:
         if f"backend/{mod}/build.gradle.kts" not in base:
             errors.append(f"(e) the Dockerfile's `{BUILD_BASE_STAGE}` stage does not copy backend/{mod}/build.gradle.kts: "
@@ -433,12 +441,13 @@ def rule_e(mods: list[str]) -> list[str]:
 
 
 def rule_f(mods: list[str]) -> list[str]:
-    """The module jars are named once, in the convention script, and no module overrides the name."""
+    """The module jars are named once, in the convention plugin, and nothing renames them."""
     errors = []
-    convention = MODULE_SCRIPT.read_text(encoding="utf-8") if MODULE_SCRIPT.is_file() else ""
+    convention = MODULE_PLUGIN.read_text(encoding="utf-8") if MODULE_PLUGIN.is_file() else ""
     if not re.search(r'^group\s*=\s*"com\.veyq"', convention, re.MULTILINE):
-        errors.append(f"(f) {rel(MODULE_SCRIPT)} sets no `group = \"com.veyq\"` — a module jar would carry no group.")
-    for f in [MODULE_SCRIPT, BACKEND / "build.gradle.kts"]:
+        errors.append(f"(f) {rel(MODULE_PLUGIN)} sets no `group = \"com.veyq\"` — a module jar would carry no group.")
+    build_logic = sorted(p for p in BUILD_SRC.rglob("*.kt*") if not ({"build", ".gradle"} & set(p.relative_to(BUILD_SRC).parts)))
+    for f in [*build_logic, BACKEND / "build.gradle.kts"]:
         if f.is_file() and ARCHIVES_NAME.search(mask(f.read_text(encoding="utf-8"))):
             errors.append(f"(f) {rel(f)} sets an `archivesName` — {ARCHIVES_NAME_WHY}")
     for mod in mods:
@@ -447,8 +456,10 @@ def rule_f(mods: list[str]) -> list[str]:
         if not text:
             errors.append(f"(f) backend/{mod}/build.gradle.kts is missing for an included project")
             continue
-        if not re.search(r'apply\s*\(\s*from\s*=\s*"[./]*gradle/module\.gradle\.kts"\s*\)', text):
-            errors.append(f"(f) backend/{mod}/build.gradle.kts does not apply gradle/module.gradle.kts — its jar is unnamed")
+        if not APPLIES_MODULE_PLUGIN.search(re.sub(r"//[^\n]*", "", text)):
+            errors.append(f"(f) backend/{mod}/build.gradle.kts does not apply `id(\"veyq.module\")` — its jar is "
+                          f"unnamed, and none of the module convention (toolchain, BOM, test JVM, disabled application "
+                          f"tasks) holds for it")
         if re.search(r"^\s*group\s*=", text, re.MULTILINE):
             errors.append(f"(f) backend/{mod}/build.gradle.kts overrides the group the convention sets")
         if ARCHIVES_NAME.search(mask(text)):

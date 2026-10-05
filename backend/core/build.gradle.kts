@@ -1,11 +1,10 @@
 // `:core` — the platform (ADR 0079): every `com.veyq.core.*` class, core's generated API (`openApiGenerateCore`),
 // core's migrations and the base `application.properties`. The root `backend/` composes it into the one fast-jar.
 plugins {
-    kotlin("jvm")
-    kotlin("plugin.allopen")
-    `java-library`
+    id("veyq.module") // buildSrc: the Kotlin, all-open and java-library plugins and what every module repeats
+    id("veyq.openapi")
     // Only for this module's own `@QuarkusTest`s: a library `@QuarkusTest` fails without the plugin. Its
-    // application tasks are disabled in gradle/module.gradle.kts — the one fast-jar is the root's.
+    // application tasks are disabled by `veyq.module` — the one fast-jar is the root's.
     id("io.quarkus")
     // Mutation testing — the trust chain's assertion-strength gate on the pure policy tier (ADR 0045 §2). Deliberately
     // WITHOUT the archived `pitest/pitest-kotlin` mutators (read-only since 2023, successor is the commercial arcmutate
@@ -16,9 +15,7 @@ plugins {
     id("info.solidsoft.pitest")
 }
 
-apply(from = "../gradle/module.gradle.kts")
-extra["veyq.openapi.owner"] = "core"
-apply(from = "../gradle/openapi.gradle.kts")
+veyqOpenApi { owner("core") }
 
 dependencies {
     // `api`: the root and every application build on these extensions through core.

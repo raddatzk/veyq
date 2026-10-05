@@ -62,7 +62,7 @@ A backend ref must name a test some CI run EXECUTES (ADR 0040: a test no CI run 
   body or a `@BeforeAll` skips at runtime and still passes (pinned open in `validate_guard_gaps.py`); so do a
   custom `ExecutionCondition` behind `@ExtendWith`, a gate inherited from a superclass declared in another
   file, and a test-task `exclude`/`filter`/`excludeTags` in a backend build file (`backend/build.gradle.kts`, a
-  module's, `gradle/module.gradle.kts`; none exists today). A
+  module's, `buildSrc`'s `veyq.module`; none exists today). A
   variable a script exports, or one written to `$GITHUB_ENV`, is invisible — fail-closed, so such a ref is
   rejected until the variable moves into a workflow `env:`. Green means the workflows DECLARE a run that
   executes the test, never that one happened. It does not prove the step's `gradlew` is the backend's (only

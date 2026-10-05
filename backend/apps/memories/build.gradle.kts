@@ -8,17 +8,14 @@
 // `MEMORY`/`CHAPTER` placement, the seams' registered partitions. They boot core plus Memories: its own `%test` keys sit
 // in `src/test/resources/application-test.properties` beside a comment-only `application.properties` anchor.
 plugins {
-    kotlin("jvm")
-    kotlin("plugin.allopen")
-    `java-library`
+    id("veyq.module") // buildSrc: the Kotlin, all-open and java-library plugins and what every module repeats
+    id("veyq.openapi")
     // Only for this module's own `@QuarkusTest`s: a library `@QuarkusTest` fails without the plugin. Its application
-    // tasks are disabled in gradle/module.gradle.kts — the one fast-jar is the root's.
+    // tasks are disabled by `veyq.module` — the one fast-jar is the root's.
     id("io.quarkus")
 }
 
-apply(from = "../../gradle/module.gradle.kts")
-extra["veyq.openapi.owner"] = "memories"
-apply(from = "../../gradle/openapi.gradle.kts")
+veyqOpenApi { owner("memories") }
 
 dependencies {
     implementation(project(":core"))

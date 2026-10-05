@@ -5,10 +5,11 @@
 // they sweep or probe every module at once (`OperatorBlindProbeTest`, the posture sweeps, the entity sweep, the module
 // composition); every other test lives in the module whose code it exercises.
 plugins {
-    // Every plugin version of the backend is declared here, once; a module applies the plugin without one.
-    kotlin("jvm") version "2.3.21"
-    kotlin("plugin.allopen") version "2.3.21"
-    id("io.quarkus") version "3.36.0"
+    // No version: `buildSrc` puts the Kotlin, all-open and Quarkus plugins on every build script's classpath, their
+    // versions declared once in `gradle/libs.versions.toml`.
+    kotlin("jvm")
+    kotlin("plugin.allopen")
+    id("io.quarkus")
     id("info.solidsoft.pitest") version "1.19.0" apply false // applied by :core, whose classes it mutates
 }
 
@@ -23,7 +24,7 @@ java {
 }
 
 dependencies {
-    implementation(enforcedPlatform("io.quarkus.platform:quarkus-bom:3.36.0"))
+    implementation(enforcedPlatform(libs.quarkus.bom))
     // Every Quarkus extension, the S3 client and the mailer reach the application through `:core`'s `api`.
     implementation(project(":core"))
     // The Memories application (`apps/memories/build.gradle.kts`): its code, generated API and migrations.

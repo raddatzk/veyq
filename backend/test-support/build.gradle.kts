@@ -18,11 +18,8 @@
 // `:core` is `compileOnly`: at test time the module under test (or the root) already brings it, and a runtime edge
 // back to `:core` would put a second copy of core's classes on `:core`'s own test classpath.
 plugins {
-    kotlin("jvm")
-    kotlin("plugin.allopen")
+    id("veyq.module") // buildSrc: the Kotlin, all-open and java-library plugins and what every module repeats
 }
-
-apply(from = "../gradle/module.gradle.kts")
 
 dependencies {
     compileOnly(project(":core"))

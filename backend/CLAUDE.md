@@ -8,7 +8,7 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   `:apps:memories` (`backend/apps/memories`, the Memories application; its tests run as `:apps:memories:test`), the
   root (`:test`, the composition — no main code — and only the whole-app tests: `OperatorBlindProbeTest`, the posture
   and entity sweeps, `ModuleCompositionTest`) and `:test-support` (the helpers the tests share; no tests). A new
-  application is one more `:apps:<name>`; what a module must have (an `include`, a `beans.xml`, the convention script,
+  application is one more `:apps:<name>`; what a module must have (an `include`, a `beans.xml`, the `veyq.module` plugin,
   its Dockerfile `COPY`s) and which edges it may declare (`:core`, and `:test-support` for tests — never another
   application) is `scripts/validate_backend_module_graph.py`'s, its docstring the list. `:core`'s tests boot core
   with **no** application (`CoreAloneSliceTest`). **A test
@@ -22,7 +22,7 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   `application.properties` anchor (a profile file is read only beside one); the base config is `:core`'s
   `src/main/resources/application.properties`. Shared test helpers live in `:test-support`. A
   `java-test-fixtures` output is not blocked by Quarkus per se: what dropped it out of a `@QuarkusTest`'s application
-  was the jar rename the module convention once set (`archivesName` — never set one again, `gradle/module.gradle.kts`
+  was the jar rename the module convention once set (`archivesName` — never set one again, `buildSrc`'s `veyq.module`
   says why), and without it a plain fixture class reaches the application model (measured 2026-10-05). Whether a
   helper that touches entities or Arc works from there is **unmeasured** (inbox #333), so the helpers stay a project.
 - **Run the app (`quarkusDev`) on a persistent MariaDB** (`%dev`): `docker compose -f infra/docker-compose.yml
@@ -56,7 +56,9 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   enough here. The only trust rules are
   for what an IntelliJ sync fetches and nothing runs: the `-sources`/`-javadoc` jars and the Gradle
   distribution's `-src` zip. `scripts/validate_build_input_pins.py` holds all of this, plus the one generator
-  version the three surfaces run.
+  version the three surfaces run. **The build logic is `buildSrc`** (the convention plugins `veyq.module` and
+  `veyq.openapi`): it is verified against the same metadata file, and every version it and the build choose — Kotlin,
+  Quarkus (plugin and BOM), the OpenAPI generator — is declared once, in `gradle/libs.versions.toml`.
 
 ## Conventions (see [developer styleguide](../docs/crosscutting/developer-styleguide.md))
 - **API-first.** Edit the spec in `../contracts/api/` — core's specs at its top level, the Memories application's in
@@ -69,7 +71,7 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   build; so does `x-veyq-channel` on a Memories operation (the admin channel is core's). Never hand-write a DTO that
   duplicates a generated model.
   **Nothing generated is tracked** (`backend/build/` is gitignored), and the generator emits no descriptions —
-  `useSwaggerAnnotations` / `useMicroProfileOpenAPIAnnotations` are both `false` in `gradle/openapi.gradle.kts`.
+  `useSwaggerAnnotations` / `useMicroProfileOpenAPIAnnotations` are both `false` in `buildSrc`'s `OpenApiGenerate`.
   So a spec edit that changes only `description:` / `summary:` text produces no backend delta beyond the models'
   KDoc (the Kotlin model generator copies a property's description into a comment; nothing else carries it) and
   needs no backend phase: the contracts guards are its whole check. A shape change — a property, a type, a

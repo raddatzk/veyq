@@ -4,7 +4,8 @@ Every guard that reads Kotlin, a test or a migration asks this module instead of
 `backend/src/main/kotlin/com/veyq/…` itself. The roots are **found by glob** over
 `backend/**/src/{main,test,testFixtures}/…`, never listed: the root's `backend/src`, `backend/core/src` and, when
 the module split adds it, `backend/apps/memories/src` — every guard sees a new module without an edit. Build output,
-Gradle caches and `node_modules` are not sources and are skipped by path segment.
+Gradle caches, `node_modules` and `buildSrc` (the build's convention plugins) are not sources and are skipped by path
+segment.
 
 **One project is test code although its sources sit in `src/main`:** `:test-support` (`TEST_SUPPORT`), the helpers
 more than one module's tests share. It is a project of its own because Quarkus loads a project dependency inside the
@@ -30,8 +31,9 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 BACKEND = ROOT / "backend"
 # The test-helper project: its `src/main` is test code (module docstring).
 TEST_SUPPORT = BACKEND / "test-support"
-# Path segments that mark generated or cached trees, never sources.
-_SKIP = {"build", ".gradle", "node_modules", "out", "bin"}
+# Path segments that mark generated or cached trees, never sources — and `buildSrc`, the build's own convention
+# plugins: Kotlin, but build logic, never a project's main or test code.
+_SKIP = {"build", ".gradle", "node_modules", "out", "bin", "buildSrc"}
 
 
 def is_test_support(path: pathlib.Path) -> bool:
