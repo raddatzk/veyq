@@ -8,6 +8,8 @@ vi.mock('../../api/client', () => ({
   contentApi: vi.fn(),
   tokenApi: vi.fn(),
 }))
+// The guest's media writes are Memories' own client (`share-media`), built in `./api`, not core's.
+vi.mock('./api', () => ({ publicShareMediaApi: vi.fn() }))
 // Only the scope RE-OPEN a `stale_epoch` retry performs is stubbed; `isStaleEpoch` stays real, because which refusal
 // the create retries on is the thing under test.
 vi.mock('../spaces/scopes', async (importOriginal) => ({
@@ -21,6 +23,7 @@ import { pickLocaleText, derivePasswordToken, ShareUnavailableError, SharePasswo
 import { buildShareLink, recoverShareLink } from './shareLink'
 import { unsealMeta, CHUNK_SIZE, type MediaDeriver } from './media'
 import { sharesApi, publicSharesApi, contentApi } from '../../api/client'
+import { publicShareMediaApi } from './api'
 import { isStaleEpoch, openScopeById } from '../spaces/scopes'
 import { isCodedError, HttpStatus } from '../../shared/httpError'
 import type { EpochKeys } from '../spaces/epochs'
@@ -350,6 +353,8 @@ describe('addSharePhoto — the contributor transport signs each next window (AD
       presignShareBlobUploadWindows: async ({ shareBlobUploadWindowsRequest }) => ({
         results: shareBlobUploadWindowsRequest.items.map(({ uploadId, fromChunk }) => ({ presignedPuts: puts(uploadId, fromChunk!, 3), error: null })),
       }),
+    })
+    const media = fakeApi(publicShareMediaApi, {
       // An honest server stores the media and its original under the ids the client minted, and echoes them.
       completeShareMedia: async ({ shareMediaBatchRequest }) => ({
         results: [{
@@ -381,14 +386,14 @@ describe('addSharePhoto — the contributor transport signs each next window (AD
     // the blob is declared with the ids its wrap is bound to, and completed for the same client-minted media
     const [declared] = api.startShareBlobUploads.mock.calls[0][0].shareBlobUploadsRequest.items
     expect(declared).toMatchObject({ blobId: expect.stringMatching(UUID), ownerId: expect.stringMatching(UUID), role: 'ORIGINAL' })
-    expect(api.completeShareMedia.mock.calls[0][0].shareMediaBatchRequest.items[0].mediaId).toBe(declared.ownerId)
+    expect(media.completeShareMedia.mock.calls[0][0].shareMediaBatchRequest.items[0].mediaId).toBe(declared.ownerId)
     vi.unstubAllGlobals()
   })
 })
 
 describe('deleteSharePhoto (cr-0102 uploader delete-own)', () => {
   it('calls the token-gated delete endpoint with the contributor token in the header', async () => {
-    const { deleteShareMedia: del } = stubApi(publicSharesApi, { deleteShareMedia: undefined })
+    const { deleteShareMedia: del } = stubApi(publicShareMediaApi, { deleteShareMedia: undefined })
 
     await deleteSharePhoto('share-1', 'tok-1', 'media-9')
 

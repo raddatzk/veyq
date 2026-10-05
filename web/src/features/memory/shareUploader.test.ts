@@ -12,22 +12,22 @@ vi.mock('../../api/client', () => ({
   blobApi: vi.fn(),
   tokenApi: vi.fn(),
 }))
-vi.mock('./api', () => ({ mediaApi: vi.fn(), bucketsApi: vi.fn() }))
+vi.mock('./api', () => ({ mediaApi: vi.fn(), bucketsApi: vi.fn(), publicShareMediaApi: vi.fn() }))
 
 import { resolveShare, createContributorIdentity, sessionSealKey, addSharePhoto, openShareOriginal } from './share'
 import { listMediaPage, openOriginal, unsealMeta, setMediaMeta, listBuckets, openBucketName, type MediaDeriver } from './media'
 import { publicSharesApi, blobApi } from '../../api/client'
-import { mediaApi, bucketsApi } from './api'
+import { mediaApi, bucketsApi, publicShareMediaApi } from './api'
 import {
   ShareRole,
   type PublicShare,
   type ShareBlobUploadResultItem,
   type ShareBlobUploadsResponse,
-  type ShareMediaBatchResponse,
   type SharingApi,
 } from '../../api/generated/sharing'
 import { MEMORY_KIND } from './kinds'
 import type { MediaApi, MediaListPage } from '../../api/generated/media'
+import type { ShareMediaBatchResponse } from '../../api/generated/share-media'
 import type { BlobDownloadsBatchResponse, PresignedUrl } from '../../api/generated/blob'
 import { fakeApi, stubApi } from '../../test/apiMock'
 import * as v1 from '@veyq/crypto/v1'
@@ -84,10 +84,13 @@ function guestApi(resolve: PublicShare) {
       uploadId: `up-${i}`, presignedPuts: [{ index: 0, url: `mem://up-${i}/0` }], error: null,
     })),
   }))
-  return fakeApi(publicSharesApi, {
+  // Core's guest transport and identity (`sharing`), then Memories' guest completion (`share-media`).
+  const transport = fakeApi(publicSharesApi, {
     resolveShare: async () => resolve,
     createShareIdentity: vi.fn<SharingApi['createShareIdentity']>().mockResolvedValue({ identityId: 'ignored', contributorToken: 'tok-1' }),
     startShareBlobUploads,
+  })
+  const media = fakeApi(publicShareMediaApi, {
     completeShareMedia: async ({ shareMediaBatchRequest }): Promise<ShareMediaBatchResponse> => ({
       results: [{
         blobId: startShareBlobUploads.mock.calls[0][0].shareBlobUploadsRequest.items[0].blobId,
@@ -96,6 +99,7 @@ function guestApi(resolve: PublicShare) {
       }],
     }),
   })
+  return { ...transport, ...media }
 }
 
 const noTiers = { deriveImage: vi.fn(), deriveVideoPoster: vi.fn() } as unknown as MediaDeriver
