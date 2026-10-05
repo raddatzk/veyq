@@ -25,10 +25,11 @@ names a node kind an application owns (developer-styleguide § 1, ADR 0007's sha
   `backend_tree.project_of`), an **application** file one inside. So no platform main file names one of them as a
   whole word **in code**
   — a constant, an enum entry (`NodeKind.MEMORY`) or a string literal (`kind == "MEMORY"` says what the constant
-  said, so literals are read here, unlike the two rules above; comments are not). The generated `NodeKind` enum
-  lists both: it is the contract's, closed until `kind` is opened, and lives in build output, which this guard does
-  not read; core's resources decode into it without naming an entry. Each kind must still be named in code by some
-  application main file, so the list cannot rot into names that guard nothing.
+  said, so literals are read here, unlike the two rules above; comments are not). The contract's `NodeKind` is an
+  open, bounded token (cr-platform-contract-split slice 4): the generated models carry it as a `String` and no
+  generated type lists a kind, so a literal or an application's constant is the only way core could name one — and
+  both are what this rule reads. Each kind must still be named in code by some application main file, so the list
+  cannot rot into names that guard nothing.
 
 **What it no longer asserts: core importing an application.** Until the Gradle module split it also held every
 non-Memories main file away from the `me.raddatz.veyq.memories` packages. That is the build's now: `:core` has no project

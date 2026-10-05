@@ -18,7 +18,11 @@ never back. Three rules, each read over every non-test `.ts`/`.vue` file of core
 - **glob**: no file contains `import.meta.glob`. Discovery by glob would hide an edge from the rule above, and
   ADR 0079 Decision 5 says what runs is what was reviewed.
 - **kind**: no file names `NodeKind.Memory`, `NodeKind.Chapter`, `'MEMORY'` or `'CHAPTER'`. The shell asks a
-  registry what to render for a kind; it does not know which kinds the one application has.
+  registry what to render for a kind; it does not know which kinds the one application has. Since the contract's
+  `NodeKind` opened to a bounded token (cr-platform-contract-split slice 4) the generated client has no `NodeKind`
+  enum and core types a kind as a string with a `FOLDER_KIND` constant (`core/node/kind.ts`), so a literal is the
+  spelling left; the enum spelling stays matched for a client generated from an older contract. Memories' own
+  constants live in the application (`features/memory/kinds.ts`), which the import rule already keeps from core.
 Exempt by exact path: `web/src/applications.ts`, the one composition root that may import the application (a
 sibling file importing the application is red; an absent root is not an error). Exempt by location: `web/src/test/**` and `*.test.ts` — and the generated API
 client, which is untracked and spells the kinds by definition. `api/client.ts` is **not** exempt: core's factory
