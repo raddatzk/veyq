@@ -14,7 +14,8 @@ sealed interface ShareWriteGate {
      * the trash still names its kind (the application decides what a trashed root takes). [admitted] is the link's
      * re-check under the share-row lock its delete holds ([SharingStore.admitsGuests]), handed out **unevaluated**:
      * the application calls it first inside the transaction that writes. Asked here, before that transaction, a
-     * delete committing in between would be missed (`GuestWriteRaceSliceTest`).
+     * delete committing in between would be missed (`GuestCompleteAfterDeleteRaceSliceTest`; `GuestWriteRaceSliceTest`
+     * holds its delete uncommitted, so an early check waits on the same lock and stays green there).
      */
     class Admitted(
         val scopeId: String,
