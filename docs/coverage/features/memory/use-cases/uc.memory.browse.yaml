@@ -26,7 +26,7 @@ acceptanceCriteria:
           - src/features/memory/components/MemoryBrowse.test.ts
           - src/features/memory/components/SpaceMap.test.ts
   - id: create-folder-and-memory
-    text: Creating a folder/Memory seals the name + blinded slug under K_SC and POSTs only ciphertext (a Memory births its random K_mem).
+    text: Creating a folder/Memory seals the name + blinded slug under the parent's key (K_SC at the scope root) and POSTs only ciphertext (every node births its random key, wrapped under the same parent key).
     coverage:
       backend: { integration: [NodesSliceTest.createTreeThenList] }
       web: { unit: [src/core/node/tree.test.ts, src/features/memory/components/MemoryBrowse.test.ts, src/features/memory/components/NodeMutationDialog.test.ts] }

@@ -95,9 +95,11 @@ describe('createChapter — recursive K_mem (cr-0060)', () => {
     expect(req.parentId).toBe(MEM)
     expect(req.nodeId).toMatch(UUID)
     expect(nodeId).toBe(req.nodeId)
-    // the name is still sealed under K_SC (whole-tree navigation), the slug too
-    expect(new TextDecoder().decode(v1.open(nameCtx(nodeId), scopeKey, fromB64(req.encryptedName)))).toBe('Tag 1')
-    expect(req.slugToken).toBe(b64std(v1.slugToken(scopeKey, MEM, 'tag-1')))
+    // the chapter's entry is its parent's (ADR 0080 Decision 2): name and slug under the Memory's K_mem, not K_SC —
+    // so a guest of the Memory's share reads the chapter titles
+    expect(new TextDecoder().decode(v1.open(nameCtx(nodeId), parentKey, fromB64(req.encryptedName)))).toBe('Tag 1')
+    expect(() => v1.open(nameCtx(nodeId), scopeKey, fromB64(req.encryptedName))).toThrow(v1.OpenRefused)
+    expect(req.slugToken).toBe(b64std(v1.slugToken(parentKey, MEM, 'tag-1')))
     const row = { id: nodeId, epoch: 0, wrappedContentKey: req.wrappedContentKey }
     // the K_mem opens under the PARENT key…
     expect(Array.from(openContentKey(SCOPE_ID, parentKey, row)!)).toEqual(Array.from(chapterKey))

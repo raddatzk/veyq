@@ -29,7 +29,7 @@ const SpaceMapStub = {
 }
 
 const node = (id: string, kind: NodeKind, name: string): TreeNode => ({
-  id, kind, name, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: null, wrappedMeta: null, metaVersion: 0,
+  id, kind, name, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0,
 })
 
 const SCOPE_ID = '5c09e000-0000-4000-8000-0000000000bb'

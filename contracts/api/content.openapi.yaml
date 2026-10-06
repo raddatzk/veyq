@@ -9,11 +9,13 @@ info:
     `wrappedMeta`) + opaque `parentId`/`kind`/`orderIndex` + the **blinded `slugToken`**; it never sees a name, a
     content key or a payload, and learns only the *shape* of the tree.
 
-    The client encrypts the name under the scope content key `K_SC` and computes the blinded slug token (a
-    keyed MAC under `K_SC`); every node, FOLDER included, additionally carries a fresh random per-node content key
-    wrapped under its **parent's content key** — `K_SC` at the node's epoch for a scope-root node, the parent
-    node's content key below it (`wrappedContentKey`) — the share grain ([ADR 0012](../../docs/decisions/0012-content-key-hierarchy.md),
+    Every node, FOLDER included, carries a fresh random per-node content key wrapped under its **parent's
+    content key** — `K_SC` at the node's epoch for a scope-root node, the parent node's content key below it
+    (`wrappedContentKey`) — the share grain ([ADR 0012](../../docs/decisions/0012-content-key-hierarchy.md),
     [ADR 0080](../../docs/decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) Decision 1).
+    A node's directory entry lives under that same parent key (ADR 0080 Decision 2): the client encrypts the name
+    under it and computes the blinded slug token (a keyed MAC under it), so whoever holds a node's key reads every
+    name below it.
     Each node may hold one sealed, versioned payload (`wrappedMeta`, `metaVersion`) whose format is its kind's
     application's. The server enforces structure only: a caller must hold a grant for the scope, slug
     uniqueness per parent (`UNIQUE(parentId, slugToken)`), the placement rule of the node's kind (core's for
@@ -90,8 +92,8 @@ paths:
       summary: List the scope's tree (opaque rows).
       description: >
         Returns every node in the scope with its opaque id, parent, kind, ordering, ciphertext name, slug
-        token, sealed payload (`wrappedMeta` + `metaVersion`), and the `wrappedContentKey`. The client decrypts names with `K_SC` and assembles
-        the tree; the operator sees only the shape.
+        token, sealed payload (`wrappedMeta` + `metaVersion`), and the `wrappedContentKey`. The client assembles the tree top-down, opening each
+        name under its parent's content key (`K_SC` at the node's epoch for a scope-root node, ADR 0080 Decision 2); the operator sees only the shape.
       security:
         - bearerAuth: []
       parameters:
@@ -214,7 +216,7 @@ paths:
         Clears `deleted_at` across the subtree and writes the supplied `slugToken` back onto its root, returning
         every descendant and everything an application attached to the subtree exactly as it was — none of it was ever removed. The client
         **must** supply the token: the delete freed the name by overwriting `slug_token` with the node's own id,
-        and the server cannot recompute a blinded MAC under `K_SC` (ADR 0012). A node created in the meantime
+        and the server cannot recompute a blinded MAC under the parent's key (ADR 0012, ADR 0080 Decision 2). A node created in the meantime
         that already holds the name is a `409 slug_taken` — the same disambiguation a create takes, never a
         silent rename. **Any member** of the scope may restore. A subtree the scheduled job already purged is
         gone (`404`).
@@ -331,14 +333,14 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Pattern(regexp = "[A-Z][A-Z0-9_]{0,15}")'
         encryptedName:
           type: string
-          description: The node name, AEAD-sealed under the scope content key `K_SC` (opaque base64).
+          description: The node name, AEAD-sealed under its parent's content key — `K_SC` at the node's epoch for a scope-root node (ADR 0080 Decision 2; opaque base64).
           contentEncoding: base64
           maxLength: 4096
           example: ZW5jcnlwdGVkLW5hbWU=
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 4096) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         slugToken:
           type: string
-          description: Blinded slug token — a keyed MAC under `K_SC` over (parent ‖ slug); the server enforces uniqueness per parent without seeing the name (opaque base64).
+          description: Blinded slug token — a keyed MAC under the parent's content key (`K_SC` at the node's epoch for a scope-root node, ADR 0080 Decision 2) over (parent ‖ slug); the server enforces uniqueness per parent without seeing the name (opaque base64).
           contentEncoding: base64
           maxLength: 128
           example: c2x1Zy10b2tlbi1iYXNlNjQ=
@@ -353,7 +355,9 @@ components:
           x-veyq-visibility: structure
           type: integer
           description: >
-            The scope **content-key epoch** this node's name / slug / content-key wrap are sealed under (ADR 0024).
+            The scope **content-key epoch** this node is tagged with (ADR 0024): a scope-root node's name / slug /
+            content-key wrap are sealed under `K_SC` at it (below the root they are under the parent's key, and every
+            seal still binds the epoch, ADR 0072).
             Must be the scope's **current** epoch (else `409 stale_epoch`, nothing stored — ADR 0024 Decision 6: a
             write under an older epoch would be readable by a member removed since); omitted/absent = 0 (the
             pre-rotation baseline). A member reads a node of epoch `k` iff they hold an epoch ≥ `k`.
@@ -431,7 +435,7 @@ components:
 
     NodeSummary:
       type: object
-      required: [id, kind, encryptedName, slugToken, orderIndex, epoch, metaVersion]
+      required: [id, kind, encryptedName, slugToken, orderIndex, epoch, wrappedContentKey, metaVersion]
       properties:
         id: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d, x-veyq-visibility: id }
         epoch:
@@ -464,10 +468,10 @@ components:
           format: int32
           example: 0
         wrappedContentKey:
-          type: [string, "null"]
+          type: string
           contentEncoding: base64
           maxLength: 256
-          description: The node's content key wrapped under its parent's content key (see CreateNodeRequest.wrappedContentKey). Every node carries one since ADR 0080 (the column is NOT NULL); the read schema still admits null, its tightening is a contract change of its own.
+          description: The node's content key wrapped under its parent's content key (see CreateNodeRequest.wrappedContentKey). Every node carries one (ADR 0080 Decision 1; the column is NOT NULL).
           example: d3JhcHBlZC1rLW1lbQ==
         wrappedMeta:
           type: [string, "null"]
@@ -500,12 +504,12 @@ components:
       required: [slugToken]
       description: >
         The freshly computed slug token the restored root takes under its parent. The server cannot recompute one
-        (it is a blinded MAC under `K_SC`, ADR 0012) and the original was consumed when the delete freed the name,
+        (it is a blinded MAC under the parent's key, ADR 0012 / ADR 0080) and the original was consumed when the delete freed the name,
         so the client supplies it (ADR 0061 Decision 5).
       properties:
         slugToken:
           type: string
-          description: Blinded slug token — a keyed MAC under `K_SC` over (parent ‖ slug), recomputed by the client for the restore. A collision with a node created while this one sat in the trash is the ordinary `slug_taken` rejection (opaque base64).
+          description: Blinded slug token — a keyed MAC under the parent's content key (`K_SC` at the node's epoch at the scope root) over (parent ‖ slug), recomputed by the client for the restore. A collision with a node created while this one sat in the trash is the ordinary `slug_taken` rejection (opaque base64).
           contentEncoding: base64
           maxLength: 128
           example: c2x1Zy10b2tlbi1iYXNlNjQ=
@@ -542,7 +546,7 @@ components:
           $ref: "#/components/schemas/NodeKind"
         encryptedName:
           type: string
-          description: The node name, AEAD-sealed under `K_SC` (opaque base64) — the trash renders it by decrypting client-side, exactly as the tree does.
+          description: The node name, AEAD-sealed under its parent's content key (`K_SC` at the node's epoch at the scope root; opaque base64) — the trash renders it by decrypting client-side with the live tree's key chain, exactly as the tree does.
           contentEncoding: base64
           maxLength: 4096
           example: ZW5jcnlwdGVkLW5hbWU=

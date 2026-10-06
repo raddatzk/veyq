@@ -17,6 +17,7 @@ import { epochsOf } from '../../spaces/epochsTestUtil'
 import { setMapsConsent, setTileUrl, setGeocoderUrl } from '../../../shared/state/useMapConfig'
 import { realI18n, t } from '../../../test/i18n'
 import type { TreeNode } from '../../../core/node/tree'
+import { treeStore } from '../../../core/node/treeStore'
 
 const AUTO_PENDING = { name: '', nameSource: 'geocoded', derivedMode: 'auto' }
 const stubs = {
@@ -101,13 +102,14 @@ describe('NodeMutationDialog', () => {
   })
 
   it('rename calls renameNode with the node id + parent', async () => {
-    const node: TreeNode = { id: 'n9', parentId: 'p1', kind: 'FOLDER', name: 'Old', orderIndex: 0, epoch: 0, wrappedContentKey: null, wrappedMeta: null, metaVersion: 0 }
+    const node: TreeNode = { id: 'n9', parentId: 'p1', kind: 'FOLDER', name: 'Old', orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0 }
     const wrapper = mountDialog({ mode: 'rename', node })
     expect((wrapper.find('input').element as HTMLInputElement).value).toBe('Old') // prefilled
     await wrapper.find('input').setValue('New')
     await wrapper.find('form').trigger('submit')
     await Promise.resolve()
-    expect(renameNode).toHaveBeenCalledWith(SCOPE, EPOCHS, { id: 'n9', parentId: 'p1', epoch: 0 }, 'New')
+    // the loaded tree travels with it: the name re-seals under the PARENT's key, resolved from it (ADR 0080)
+    expect(renameNode).toHaveBeenCalledWith(SCOPE, EPOCHS, treeStore.nodes, { id: 'n9', parentId: 'p1', epoch: 0 }, 'New')
   })
 
   it('the maps opt-in arms a PENDING auto location (position + name land with the first media)', async () => {

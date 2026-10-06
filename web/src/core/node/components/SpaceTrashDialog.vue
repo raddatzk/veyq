@@ -14,14 +14,15 @@ import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import ProgressSpinner from 'primevue/progressspinner'
-import { listTrash, restoreNode, type TrashedNode } from '../tree'
+import { listTrash, restoreNode, type TrashedNode, type TreeNode } from '../tree'
 import type { NodeKind } from '../kind'
 import { registry } from '../../applications/registry'
 import type { EpochKeys } from '../../../features/spaces/epochs'
 import { HttpStatus, isCodedError } from '../../../shared/httpError'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
 
-const props = defineProps<{ scopeId: string; epochs: EpochKeys }>()
+// `tree` is the live tree: a trashed root's name and its restore's slug token live under its live parent's key (ADR 0080).
+const props = defineProps<{ scopeId: string; epochs: EpochKeys; tree: TreeNode[] }>()
 const emit = defineEmits<{ restored: []; close: [] }>()
 const { t, locale } = useI18n()
 
@@ -35,7 +36,7 @@ const busy = ref<string | null>(null)
 
 const { run: load, pending: loading } = useAsyncAction(
   async () => {
-    rows.value = await listTrash(props.scopeId, props.epochs)
+    rows.value = await listTrash(props.scopeId, props.epochs, props.tree)
   },
   { onError: () => { loadFailed.value = true } },
 )
@@ -60,7 +61,7 @@ async function restore(row: TrashedNode, newName?: string) {
   rowError.value = null
   busy.value = row.id
   try {
-    await restoreNode(props.scopeId, props.epochs, row, newName)
+    await restoreNode(props.scopeId, props.epochs, props.tree, row, newName)
     rows.value = rows.value.filter((r) => r.id !== row.id)
     renaming.value = null
     emit('restored')

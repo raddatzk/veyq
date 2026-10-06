@@ -30,9 +30,9 @@
    render as clickable pins (folders are navigated from grid/list).
 4. **Navigate:** clicking a folder drills into it (new level + breadcrumb); clicking a Memory opens it (its
    detail view is a later slice). The breadcrumb walks back up the local tree.
-5. **Organize:** *create folder* / *create Memory* seal the name + blinded slug under `K_SC` and POST only
-   ciphertext (every node, a folder too, births its random key wrapped under its parent's key, `K_SC` at the root — ADR 0080); *rename* re-seals the name +
-   recomputes the slug; *delete* takes the node and its whole subtree into the space's recoverable trash
+5. **Organize:** *create folder* / *create Memory* seal the name + blinded slug under the parent's key (`K_SC` at
+   the scope root, the folder's key inside one) and POST only ciphertext (every node, a folder too, births its random
+   key wrapped under the same parent key — ADR 0080); *rename* re-seals the name + recomputes the slug under it; *delete* takes the node and its whole subtree into the space's recoverable trash
    ([uc.memory.delete-node](uc.memory.delete-node.md)). All via [en.memory.tree](../enablers/en.memory.tree.md).
 
 ## Alternate / exception flows

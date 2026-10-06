@@ -70,6 +70,7 @@ function sharedItem(mediaId: string, capturedAt: number): ShareItem {
   return {
     memoryKey,
     scopeId: SCOPE_ID,
+    chapterName: null,
     item: {
       mediaId,
       original: { blobId: `b-${mediaId}`, chunkCount: 1, byteSize: 1, wrappedBlobKey: 'x', ownerId: mediaId, role: 'ORIGINAL' as const },

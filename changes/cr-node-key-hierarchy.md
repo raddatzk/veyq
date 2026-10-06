@@ -54,12 +54,20 @@ to a second application ([docs/apps/files.md](../docs/apps/files.md), inbox #349
       transparent; web fixtures · Done when: `npm run generate:api && npm run check` green.
 
 ### Slice 2 — names and slugs under the parent's key
-- [ ] 2.1 contracts — `ShareNode.encryptedName`; regenerate vectors `node-name`, `content-key`, `slug` ·
+- [x] 2.1 contracts — `ShareNode.encryptedName`; regenerate vectors `node-name`, `content-key`, `slug` ·
       Done when: conformance tests green; `validate_field_visibility`, `validate_opaque_names_disjoint` green.
-- [ ] 2.2 backend — share resolve serves `encryptedName` for the subtree only, no parent id of the root ·
-      Done when: bite tests 2, 9, 12 green.
-- [ ] 2.3 web — `sealName`/`slugTokenFor` take the parent key (`K_SC@epoch` at the root); the share view renders
+      *Measured:* the `node-name`, `content-key` and `slug_token` vectors stay byte-identical (only the key's
+      identity moved: no purpose, field or derivation changed); a `directory_entry` case was added instead, consumed
+      by `web/src/core/node/tree.test.ts`. `NodeSummary.wrappedContentKey` is required on the read schema too.
+- [x] 2.2 backend — share resolve serves `encryptedName` for the subtree only, no parent id of the root ·
+      Done when: bite tests 2, 9, 12 green. *Measured:* `ShareDirectoryEntrySliceTest` — bite 9, and bite 12's
+      "nothing above the root" on a Memory share under a folder (the root's name, wrap and parent id are not
+      served). Bite 2 (a folder share) and the chapter-share half of 12 need a folder or chapter share root: slice 5.
+- [x] 2.3 web — `sealName`/`slugTokenFor` take the parent key (`K_SC@epoch` at the root); the share view renders
       chapter titles · Done when: `npm run check`; e2e `shareContributor`, `shareUploader`, `media`, `memoryCover`.
+      *Measured:* `npm run check` green. *Open:* the four e2e suites run only from the main checkout
+      (`scripts/run_web_e2e.py`) — not run in the slice's worktree. The share view labels a chapter's media by its
+      title (tile tooltip + image alt); it has no chapter grouping, which would be new UI.
 
 ### Slice 3 — move and rename with `placement_version` (the hard slice)
 - [ ] 3.0 guard first — `x-veyq-concurrency` becomes a list of declarations with a conflict code each; bite-test the

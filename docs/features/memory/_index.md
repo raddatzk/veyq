@@ -16,9 +16,10 @@ tokens; it never sees a name or a content key.
 
 ## Key model (ADR 0012, in one line)
 
-`scope key (grant) → K_SC` (per scope: names + slug + dedup) `→ K_mem` (per Memory, random: chapter/journal/
-media + sensitive metadata; **the share grain**) `→ K_blob` (per media blob). A folder carries a random key of its own
-too, and a Memory inside it wraps under the folder's key instead of `K_SC` ([ADR 0080](../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)).
+`scope key (grant) → K_SC` (per scope: the scope-root entries' names + slugs, dedup) `→ K_mem` (per Memory, random:
+chapter/journal/media + sensitive metadata + the names and slugs of the nodes directly below it; **the share grain**)
+`→ K_blob` (per media blob). A folder carries a random key of its own too, and a Memory inside it wraps its key and
+seals its name under the folder's key instead of `K_SC` ([ADR 0080](../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)).
 
 ## Enablers
 
