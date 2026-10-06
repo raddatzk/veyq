@@ -59,9 +59,12 @@ confidentiality regression on an unauthenticated path, introduced by the very co
 
 **5. The slug is freed at soft-delete, and restore re-supplies it.** `UNIQUE(parent_id, slug_token)` is a plain
 unique index, and prod is MariaDB, so a partial index filtered on `deleted_at IS NULL` is not available. A
-soft-deleted node would otherwise hold its name hostage for the whole window. So the soft-delete sets
-`slug_token` to the node's own id — unique by construction, and blind, since the server may not compute a slug
-token at all (it is `HMAC(K_SC, parentId ‖ slug)`, [ADR 0012](0012-content-key-hierarchy.md)). **Restore carries a
+soft-deleted node would otherwise hold its name hostage for the whole window. So the soft-delete sets the
+deleted **root's** `slug_token` to its own id — unique by construction, and blind, since the server may not compute
+a slug token at all (it is `HMAC(K_SC, parentId ‖ slug)`, [ADR 0012](0012-content-key-hierarchy.md)). Only the root:
+its descendants' names live under a parent that is trashed too, where nothing can claim them while it stays so, so
+they keep their tokens and come back valid (corrected 2026-10-06, inbox #357 — freeing every node returned each
+descendant holding no name, beside which a same-named sibling could be created). **Restore carries a
 freshly computed `slugToken` from the client**, and a collision with a node created in the meantime is an
 ordinary disambiguation, the same one a create already handles — which means the restore must also be able to
 carry a **re-sealed `encryptedName`**, in the *same* request. The retry is "put it back under a different name",
