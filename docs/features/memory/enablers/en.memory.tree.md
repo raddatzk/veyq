@@ -116,7 +116,9 @@ exception to it.
   are all refused, so it keeps its token and returns valid (inbox #357). `UNIQUE(parentId, slugToken)` is a plain unique index and the schema is held to the H2 ∩ MariaDB
   subset, so a partial index over live rows is not available. The server **cannot** recompute a slug token (it is
   a blinded MAC under the parent's key), so the original is not kept — **restore carries a freshly client-computed token**,
-  and a collision is the ordinary disambiguation a create already handles.
+  and a collision is the ordinary disambiguation a create already handles. A descendant holding a freed token — the
+  root of an earlier, narrower delete — therefore does not come back with its ancestor's restore: it stays in the
+  trash with its subtree, on the one marker, as a trash root of its own (inbox #357).
 - **Hidden, not marked.** Every user- and guest-facing read carries `deletedAt is null`. Four reads deliberately
   do **not**: slug uniqueness (it must keep seeing the row, or validation passes and the database rejects the
   insert afterwards), the delete's own subtree traversal (or re-deleting a partially deleted subtree stops early),

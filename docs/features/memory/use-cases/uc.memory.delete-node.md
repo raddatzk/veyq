@@ -54,7 +54,10 @@ design impossible ([ADR 0061](../../../decisions/0061-node-deletion-reversible-n
    a trashed parent comes back with that parent, never on its own. The client recomputes the node's `slugToken`
    for its parent and sends it with the restore; the server clears `deleted_at` across the subtree and writes the
    token back. Everything inside — photos, chapters, buckets, cover — returns intact, because none of it was ever
-   removed.
+   removed. One exception: a descendant an earlier, narrower delete trashed had its own name freed then (step 3),
+   and a sibling may hold it now; the server cannot re-derive its token, so it and its subtree **stay in the trash**,
+   listed as a root again under the now-live parent, and restore on their own through this same step (A1 if the
+   name is taken) (inbox #357).
 7. After the **retention window** (operator-configurable, the same shape as the media trash), a **scheduled purge
    job** hard-erases each expired subtree: its media, derivative, bucket and blob rows in FK order and the store
    objects behind them, then the node rows. This step is **irreversible** and is **not** a member action.

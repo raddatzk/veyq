@@ -278,7 +278,8 @@ class NodesStore {
         // name there — create, move and restore all refuse a trashed parent (ADR 0080 Decision 8). So a descendant
         // keeps its token and comes back with a valid one; freeing it too would restore it holding no name at all,
         // beside which a same-named sibling could then be created (inbox #357). A descendant an EARLIER, narrower
-        // delete trashed holds that delete's freed token, re-stamped or not — the server cannot re-derive it.
+        // delete trashed holds that delete's freed token, re-stamped or not — the server cannot re-derive it, so
+        // [restoreSubtree] leaves it in the trash.
         root.slugToken = root.id
         // cr-0107 (ADR 0033): still no media_revision/delete_revision bump here, but the reason changed with
         // ADR 0061 — the node rows and their counters now SURVIVE the delete, so "no open gallery can poll a
@@ -293,12 +294,13 @@ class NodesStore {
     enum class RestoreResult { DONE, NOT_FOUND, SLUG_TAKEN }
 
     /**
-     * Restore the trashed subtree rooted at [nodeId]: clear `deletedAt` across the **whole** subtree and write the
-     * client's freshly computed [slugToken] back onto the root. A subtree is on ONE marker — [deleteSubtree] re-stamps
-     * every descendant, one an earlier, narrower delete had trashed included — so a restore brings that node back
-     * too (ADR 0080 Decision 8: a child row never outlives, and is never live under, the parent whose key wraps its
-     * own). Only the root's token was freed, so every descendant returns with the token it had — except one an earlier,
-     * narrower delete trashed: it returns holding that delete's freed token (inbox #357, open). [RestoreResult.NOT_FOUND]
+     * Restore the trashed subtree rooted at [nodeId]: clear `deletedAt` across the subtree and write the client's
+     * freshly computed [slugToken] back onto the root. A subtree is on ONE marker — [deleteSubtree] re-stamps every
+     * descendant, one an earlier, narrower delete had trashed included — and every descendant comes back with the token
+     * it had, since only a delete's root has its token freed. **Except** such an earlier delete's root: it holds a freed
+     * token, so it and its subtree stay in the trash on that one marker and it becomes a trash root of its own (inbox
+     * #357; ADR 0080 Decision 8: nothing is live under a trashed parent, and nothing outlives the parent whose key
+     * wraps its own — the purge of the marker erases it whole). [RestoreResult.NOT_FOUND]
      * when there is no such trash root in the scope (unknown, already purged, still live, or under a trashed parent)
      * ⇒ a non-enumerable 404.
      */
@@ -316,7 +318,12 @@ class NodesStore {
         // the handler would leave the window between the two reads open, and letting the database decide turns
         // an ordinary disambiguation (A1) into a 500.
         if (slugTaken(root.parentId, slugToken, exceptNodeId = nodeId)) return RestoreResult.SLUG_TAKEN
-        val subtree = collectSubtree(all, nodeId)
+        // A descendant holding a FREED token (its own id) was the root of an earlier, narrower delete: its name was
+        // released under a parent that was live then, and a sibling may hold it now. The server cannot re-derive a
+        // slug, so that descendant does not come back here — it stays in the trash on the marker it has, with its
+        // whole subtree (nothing is live under a trashed parent), and with this root live it is a trash root again,
+        // restorable on its own with a token the client derives under the live parent (inbox #357).
+        val subtree = collectSubtree(all, nodeId) { it.slugToken == it.id }
         for (n in all) {
             if (n.id in subtree) n.deletedAt = null
         }
@@ -338,15 +345,16 @@ class NodesStore {
     }
 
     /** BFS the scope's rows from [rootId], collecting the root + every descendant id (state-blind by design —
-     *  both callers above are the delete/restore pair, which must reach trashed rows). */
-    private fun collectSubtree(all: List<NodeEntity>, rootId: String): Set<String> {
+     *  both callers above are the delete/restore pair, which must reach trashed rows), except a node [prune] matches
+     *  and everything below it. */
+    private fun collectSubtree(all: List<NodeEntity>, rootId: String, prune: (NodeEntity) -> Boolean = { false }): Set<String> {
         val byParent = all.groupBy { it.parentId }
         val out = LinkedHashSet<String>()
         val stack = ArrayDeque(listOf(rootId))
         while (stack.isNotEmpty()) {
             val cur = stack.removeLast()
             if (!out.add(cur)) continue
-            byParent[cur]?.forEach { stack.addLast(it.id) }
+            byParent[cur]?.forEach { if (!prune(it)) stack.addLast(it.id) }
         }
         return out
     }

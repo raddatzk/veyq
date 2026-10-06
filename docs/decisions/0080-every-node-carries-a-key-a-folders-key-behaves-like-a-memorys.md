@@ -69,7 +69,8 @@ Memory, an expense and a file side by side).
 8. **Trash.** Delete, restore and purge are subtree-wide on one marker (`NodesStore.deleteSubtree` re-stamps
    descendants; create, move and restore refuse a trashed parent; `NodeSubtreePurge` erases what the marker
    selects). So a child row never outlives the parent whose key wraps its own. A restore's slug token is derived
-   under the live parent's key.
+   under the live parent's key; a descendant whose token an earlier delete freed stays in the trash with its
+   subtree and is restored on its own ([ADR 0061](0061-node-deletion-reversible-node-trash.md), inbox #357).
 9. **A share covers exactly the subtree under its root, and nothing above it.** A guest of a chapter reads the chapter
    and below: its key opens nothing of the parent (the parent's key is not derivable from the child's), the root's
    own name arrives as `sealedName` under `K_share` (it is sealed under the parent's key and a guest holds neither),

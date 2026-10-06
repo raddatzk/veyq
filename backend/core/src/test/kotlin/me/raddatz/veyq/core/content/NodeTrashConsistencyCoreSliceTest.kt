@@ -26,11 +26,13 @@ import org.junit.jupiter.api.Test
  * ADR 0080 Decision 8: with keyed folders a child's wrap lives under its parent's key, so a child row must never outlive
  * the parent whose key wraps its own, and never be live under a trashed one. Delete, restore and purge are subtree-wide
  * on ONE marker (`NodesStore.deleteSubtree` re-stamps every descendant, a narrower earlier delete's included; a restore
- * clears the whole subtree; `NodeSubtreePurge` erases every row the marker selects), and create, move and restore
- * refuse a trashed parent. `veyq_node.parent_id` has no foreign key, so these tests are the guarantee.
+ * clears the subtree but a narrower earlier delete's root and what is under it; `NodeSubtreePurge` erases every row
+ * the marker selects), and create, move and restore refuse a trashed parent. `veyq_node.parent_id` has no foreign key,
+ * so these tests are the guarantee.
  *
  * Bite tests 6 (the create half; the move half is `NodePlacementCoreSliceTest.aMoveIntoATrashedParentIs422`), 7 and 8,
- * and inbox #357's two: a delete frees only its root's slug, so a restored descendant comes back with its own.
+ * and inbox #357's: a delete frees only its root's slug, so a restored descendant comes back with its own, and one
+ * whose slug an earlier delete freed stays in the trash; no live node ever holds a freed token.
  * The races (a trash overlapping a create, a move or a restore under it) are `NodeTreeRaceCoreSliceTest` and
  * `NodeTreeRaceSliceTest`. Core alone: every node is a `FOLDER`.
  */
@@ -106,28 +108,52 @@ class NodeTrashConsistencyCoreSliceTest {
     }
 
     /**
-     * A restore of the parent brings back its whole subtree on its one marker — a child an earlier, narrower delete
-     * trashed included, because the parent's delete re-stamped it — and leaves no live node under a trashed one. Only
-     * the restored root's slug token is the client's new one.
+     * The folder's delete puts its subtree on ONE marker — a child an earlier, narrower delete trashed included,
+     * because the folder's delete re-stamped it. A restore of a plain subtree brings it back whole. A child an earlier
+     * delete trashed holds that delete's freed token, so it does not come back (inbox #357): it and its own subtree
+     * stay on the one marker, and with the folder live it is a trash root again. Either way no node is live under a
+     * trashed one, and only the restored root's slug token is the client's new one.
      */
     @Test
     fun restoringTheParentBringsBackTheWholeSubtreeOnItsOneMarker() {
-        val t = tree()
-        delete(t, t.sub)
-        delete(t, t.folder)
-        val marker = markers(t).toSet()
-        assertEquals(1, marker.size, "the folder's delete re-stamped the earlier-trashed child: one marker")
+        for (earlier in listOf(false, true)) {
+            val t = tree()
+            if (earlier) delete(t, t.sub)
+            delete(t, t.folder)
+            val marker = markers(t).toSet()
+            assertEquals(1, marker.size, "sub trashed earlier=$earlier: the folder's delete stamped the subtree on one marker")
 
-        val token = slug()
-        restore(t, t.folder, token).statusCode(204)
+            val token = slug()
+            restore(t, t.folder, token).statusCode(204)
 
-        assertEquals(listOf(null, null, null), markers(t), "the whole subtree is live again")
-        given().header("Authorization", bearer(t.userId)).`when`().get("/api/scopes/${t.scopeId}/nodes").then().statusCode(200)
-            .body("id", hasItem(t.folder)).body("id", hasItem(t.sub)).body("id", hasItem(t.leaf))
-        given().header("Authorization", bearer(t.userId)).`when`().get("/api/scopes/${t.scopeId}/trash/nodes").then().statusCode(200)
-            .body("id", not(hasItem(t.folder))).body("id", not(hasItem(t.sub)))
-        assertEquals(token, tx { NodeEntity.findById(t.folder)!!.slugToken })
-        assertNoOrphan(t.scopeId)
+            if (!earlier) {
+                assertEquals(listOf(null, null, null), markers(t), "a plain subtree is live again, whole")
+                given().header("Authorization", bearer(t.userId)).`when`().get("/api/scopes/${t.scopeId}/nodes").then().statusCode(200)
+                    .body("id", hasItem(t.folder)).body("id", hasItem(t.sub)).body("id", hasItem(t.leaf))
+            } else {
+                assertEquals(listOf(null) + marker + marker, markers(t), "the earlier-trashed sub stays on the one marker, with its leaf")
+                given().header("Authorization", bearer(t.userId)).`when`().get("/api/scopes/${t.scopeId}/nodes").then().statusCode(200)
+                    .body("id", hasItem(t.folder)).body("id", not(hasItem(t.sub))).body("id", not(hasItem(t.leaf)))
+            }
+            given().header("Authorization", bearer(t.userId)).`when`().get("/api/scopes/${t.scopeId}/trash/nodes").then().statusCode(200)
+                .body("id", not(hasItem(t.folder))).body("id", if (earlier) hasItem(t.sub) else not(hasItem(t.sub)))
+                .body("id", not(hasItem(t.leaf)))
+            assertEquals(token, tx { NodeEntity.findById(t.folder)!!.slugToken })
+            assertNoLiveFreedToken(t)
+            assertNoOrphan(t.scopeId)
+
+            if (earlier) {
+                // the sub left behind ages out on its marker, whole, under the live folder
+                ageEveryMarker(t.scopeId)
+                purge.run()
+                tx {
+                    assertNotNull(NodeEntity.findById(t.folder), "the restored folder survives the purge")
+                    assertNull(NodeEntity.findById(t.sub), "the sub left in the trash is purged")
+                    assertNull(NodeEntity.findById(t.leaf), "and its leaf with it")
+                }
+                assertNoOrphan(t.scopeId)
+            }
+        }
     }
 
     /**
@@ -147,27 +173,50 @@ class NodeTrashConsistencyCoreSliceTest {
         assertEquals(listOf(t.subToken, t.leafToken), tokens(t).drop(1), "the descendants came back with their own tokens")
         create(t, UUID.randomUUID().toString(), parent = t.folder, token = t.subToken).statusCode(409).body("code", equalTo("slug_taken"))
         create(t, UUID.randomUUID().toString(), parent = t.sub, token = t.leafToken).statusCode(409).body("code", equalTo("slug_taken"))
+        assertNoLiveFreedToken(t)
         assertNoOrphan(t.scopeId)
     }
 
     /**
      * inbox #357, the earlier-trashed descendant: `sub` trashed on its own frees its name under the then-live folder, a
-     * new sibling takes it, then the folder goes and comes back. `leaf` — a descendant of BOTH deletes — keeps its
-     * token through both and the restore. `sub` itself returns holding its own delete's freed token (its id): the
-     * server cannot re-derive a slug, and whether that node should stay in the trash or be re-named by the client is
-     * the part of #357 still open, so this test pins neither.
+     * new sibling takes it, then the folder goes and comes back. `sub` holds its own delete's freed token (its id) and
+     * the server cannot re-derive a slug, so it does not come back with the folder — back, it would be a second node
+     * of the sibling's name. It stays in the trash with `leaf`, listed as a root now that its parent is live, and
+     * restores on its own like any trash root: `slug_taken` while the sibling holds the name, then with a fresh token.
+     * `leaf` — a descendant of BOTH deletes — keeps its token through all of it.
      */
     @Test
-    fun aDescendantOfTwoDeletesKeepsItsTokenThroughBoth() {
+    fun aDescendantWhoseNameWasFreedStaysInTheTrashWhenItsParentIsRestored() {
         val t = tree()
         delete(t, t.sub)
-        create(t, UUID.randomUUID().toString(), parent = t.folder, token = t.subToken).statusCode(201)
+        val sibling = UUID.randomUUID().toString()
+        create(t, sibling, parent = t.folder, token = t.subToken).statusCode(201)
         delete(t, t.folder)
 
         restore(t, t.folder).statusCode(204)
 
-        assertEquals(t.leafToken, tokens(t)[2], "the leaf under the earlier-trashed sub kept its token")
+        assertNoLiveFreedToken(t)
+        val marker = markers(t)
+        assertNull(marker[0], "the folder is live")
+        assertNotNull(marker[1], "the sub whose name was freed stays in the trash")
+        assertEquals(marker[1], marker[2], "its leaf stays with it, on the one marker")
+        assertNull(tx { NodeEntity.findById(sibling)!!.deletedAt }, "the sibling holding the name came back with the folder")
+        given().header("Authorization", bearer(t.userId)).`when`().get("/api/scopes/${t.scopeId}/trash/nodes").then().statusCode(200)
+            .body("id", hasItem(t.sub)).body("id", not(hasItem(t.leaf))).body("id", not(hasItem(t.folder)))
+        assertNoLiveFreedToken(t)
+        assertNoOrphan(t.scopeId)
+
+        restore(t, t.sub, t.subToken).statusCode(409).body("code", equalTo("slug_taken"))
+        assertNotNull(markers(t)[1], "a refused restore changed nothing")
+
+        delete(t, sibling)
+        val fresh = slug()
+        restore(t, t.sub, fresh).statusCode(204)
+
+        assertEquals(listOf(null, null, null), markers(t), "the sub restored on its own, with its leaf")
+        assertEquals(listOf(fresh, t.leafToken), tokens(t).drop(1), "the sub took the fresh token, the leaf kept its own")
         create(t, UUID.randomUUID().toString(), parent = t.sub, token = t.leafToken).statusCode(409).body("code", equalTo("slug_taken"))
+        assertNoLiveFreedToken(t)
         assertNoOrphan(t.scopeId)
     }
 
@@ -212,6 +261,19 @@ class NodeTrashConsistencyCoreSliceTest {
     private fun ageEveryMarker(scopeId: String) {
         val span = config.node().trash().retention().plusSeconds(60)
         tx { NodeEntity.find("scopeId = ?1 and deletedAt is not null", scopeId).list().forEach { it.deletedAt = it.deletedAt!!.minus(span) } }
+    }
+
+    /** inbox #357: no live node holds a freed slug token (its own id) — neither in the listing a client reads, nor in
+     *  the database. A freed token is no name: a sibling of that name could stand beside it. */
+    private fun assertNoLiveFreedToken(t: Tree) {
+        val listed: List<Map<String, Any?>> = given().header("Authorization", bearer(t.userId))
+            .`when`().get("/api/scopes/${t.scopeId}/nodes").then().statusCode(200).extract().path("")
+        listed.forEach { assertTrue(it["slugToken"] != it["id"], "the listing serves ${it["id"]} live with a freed token") }
+        tx {
+            NodeEntity.find("scopeId = ?1 and deletedAt is null", t.scopeId).list().forEach {
+                assertTrue(it.slugToken != it.id, "node ${it.id} is live with a freed token")
+            }
+        }
     }
 
     /** No row of the scope hangs under a parent that is gone, and none is live under a trashed one. */

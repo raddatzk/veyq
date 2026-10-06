@@ -135,13 +135,17 @@ class NodeTreeRaceSliceTest {
     private fun move(userId: String, scopeId: String, nodeId: String, parent: String): UpdateNodeOutcome =
         handler.update(userId, scopeId, nodeId, placementTo(parent), null, null, null)
 
-    /** A trashed Memory with a Chapter under it, both stamped past the retention as one delete stamps them.
+    /** A trashed Memory with a Chapter under it, both stamped past the retention as one delete stamps them — and,
+     *  as it does, only the root's slug token freed (a freed descendant would stay in the trash on a restore, #357).
      *  Returns (memory, chapter). */
     private fun expiredSubtree(scopeId: String): Pair<String, String> {
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val chapter = seedNode(scopeId, MemoriesNodeKinds.CHAPTER, parentId = memory, wrappedContentKey = CONTENT_KEY)
         val stamp = cutoff().minusSeconds(60)
-        tx { listOf(memory, chapter).forEach { NodeEntity.findById(it)!!.apply { deletedAt = stamp; slugToken = id } } }
+        tx {
+            listOf(memory, chapter).forEach { NodeEntity.findById(it)!!.deletedAt = stamp }
+            NodeEntity.findById(memory)!!.slugToken = memory
+        }
         return memory to chapter
     }
 
