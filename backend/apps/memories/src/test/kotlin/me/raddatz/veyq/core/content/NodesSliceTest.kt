@@ -63,7 +63,7 @@ class NodesSliceTest {
     @Test
     fun createTreeThenList() {
         val (userId, scopeId) = seedMemberScope()
-        val folder = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"Zm9sZGVy","slugToken":"Zm9sZGVyLXNsdWc=","orderIndex":0}""")
+        val folder = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"Zm9sZGVy","slugToken":"Zm9sZGVyLXNsdWc=","orderIndex":0,"wrappedContentKey":"a21lbQ=="}""")
         val memory = createNode(userId, scopeId, """{"parentId":"$folder","nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bWVtb3J5","slugToken":"bWVtLXNsdWc=","orderIndex":0,"wrappedContentKey":"a21lbS13cmFw"}""")
         // a chapter carries its OWN K_mem, wrapped under the parent Memory's K_mem (recursive K_mem, cr-0060 / ADR 0012)
         val chapter = createNode(userId, scopeId, """{"parentId":"$memory","nodeId":"${UUID.randomUUID()}","kind":"CHAPTER","encryptedName":"Y2hhcHRlcg==","slugToken":"Y2hhcC1zbHVn","orderIndex":0,"wrappedContentKey":"a2NoYXAtd3JhcA=="}""")
@@ -78,11 +78,24 @@ class NodesSliceTest {
             .body("find { it.id == '$folder' }.parentId", equalTo(null))
     }
 
+    /** ADR 0080 Decision 1, an application's kind: a Memory without its wrap is a 400 like a folder's
+     *  (`NodesCoreSliceTest`); the control with a wrap is a 201. */
+    @Test
+    fun aMemoryWithoutAWrapIs400() {
+        val (userId, scopeId) = seedMemberScope()
+        val bare = "\"kind\":\"MEMORY\",\"encryptedName\":\"bQ==\",\"slugToken\":\"bm8td3JhcC1t\",\"orderIndex\":0"
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+            .body("{\"nodeId\":\"${UUID.randomUUID()}\",$bare}")
+            .`when`().post("/api/scopes/$scopeId/nodes")
+            .then().statusCode(400)
+        createNode(userId, scopeId, "{\"nodeId\":\"${UUID.randomUUID()}\",$bare,\"wrappedContentKey\":\"a21lbQ==\"}")
+    }
+
     @Test
     fun chapterAtRootIs422() {
         val (userId, scopeId) = seedMemberScope()
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"nodeId":"${UUID.randomUUID()}","kind":"CHAPTER","encryptedName":"Yw==","slugToken":"Y2hhcA==","orderIndex":0}""")
+            .body("""{"nodeId":"${UUID.randomUUID()}","kind":"CHAPTER","encryptedName":"Yw==","slugToken":"Y2hhcA==","orderIndex":0,"wrappedContentKey":"a21lbQ=="}""")
             .`when`().post("/api/scopes/$scopeId/nodes")
             .then().statusCode(422).body("code", equalTo("illegal_structure"))
     }
@@ -90,7 +103,7 @@ class NodesSliceTest {
     @Test
     fun renameThenDeleteSubtree() {
         val (userId, scopeId) = seedMemberScope()
-        val folder = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"b2xk","slugToken":"b2xkLXM=","orderIndex":0}""")
+        val folder = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"b2xk","slugToken":"b2xkLXM=","orderIndex":0,"wrappedContentKey":"a21lbQ=="}""")
         val memory = createNode(userId, scopeId, """{"parentId":"$folder","nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bQ==","slugToken":"bS1z","orderIndex":0,"wrappedContentKey":"aw=="}""")
 
         // rename the folder (new ciphertext name + recomputed slug)

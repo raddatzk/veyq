@@ -11,9 +11,9 @@ import org.hibernate.annotations.DynamicUpdate
 
 /**
  * A node in a scope's encrypted tree (en.memory.tree, cr-0027). FOLDER organizes only and is core's; every other
- * `kind` belongs to an application, which places it through `NodeKindRules` (ADR 0079). A node of a shareable kind
- * carries its own content key (`wrappedContentKey`, wrapped under its parent's content key or `K_SC`), and every node
- * may carry one versioned sealed payload (`wrappedMeta`/`metaVersion`) whose format is its kind's application's.
+ * `kind` belongs to an application, which places it through `NodeKindRules` (ADR 0079). Every node, FOLDER included,
+ * carries its own content key (`wrappedContentKey`, wrapped under its parent's content key, or under `K_SC` at the
+ * node's epoch at the scope root — ADR 0080 Decision 1), and every node may carry one versioned sealed payload (`wrappedMeta`/`metaVersion`) whose format is its kind's application's.
  * Operator-blind: `encryptedName` / `wrappedContentKey` / `wrappedMeta` are opaque ciphertext, `slugToken` a blinded
  * keyed MAC. `parentId`
  * is the **parent slot** — the parent node id, or the scope id for a root-level node (so slug uniqueness per
@@ -50,8 +50,9 @@ class NodeEntity : PanacheEntityBase {
     @Column(name = "epoch", nullable = false)
     var epoch: Int = 0
 
-    @Column(name = "wrapped_content_key")
-    var wrappedContentKey: String? = null
+    /** The node's content key wrapped under its parent's (ADR 0080 Decision 1): every node has one, `NOT NULL`. */
+    @Column(name = "wrapped_content_key", nullable = false)
+    lateinit var wrappedContentKey: String
 
     @Column(name = "wrapped_meta")
     var wrappedMeta: String? = null

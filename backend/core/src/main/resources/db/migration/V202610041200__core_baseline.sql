@@ -192,7 +192,7 @@ CREATE TABLE veyq_node (
     encrypted_name          TEXT NOT NULL,
     slug_token              VARCHAR(128) NOT NULL,
     order_index             INT NOT NULL,
-    wrapped_content_key     TEXT,
+    wrapped_content_key     TEXT NOT NULL,
     created_at              TIMESTAMP NOT NULL,
     wrapped_meta            TEXT NULL,
     cover_blob_id           VARCHAR(36) NULL,

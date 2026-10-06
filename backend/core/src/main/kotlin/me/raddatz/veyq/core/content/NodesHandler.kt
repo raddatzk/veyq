@@ -85,7 +85,7 @@ class NodesHandler(
 
     fun create(
         userId: String, scopeId: String, nodeId: String, parentSlotId: String?, kind: String,
-        encryptedName: String, slugToken: String, orderIndex: Int, epoch: Int, wrappedContentKey: String?, wrappedMeta: String?,
+        encryptedName: String, slugToken: String, orderIndex: Int, epoch: Int, wrappedContentKey: String, wrappedMeta: String?,
     ): CreateNodeOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(CreateNodeOutcome.NoScope, CreateNodeOutcome.Suspended, CreateNodeOutcome.ScopeDeleting)?.let { return it }

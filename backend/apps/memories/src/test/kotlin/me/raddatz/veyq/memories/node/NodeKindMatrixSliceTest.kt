@@ -10,6 +10,7 @@ import jakarta.inject.Inject
 import java.util.UUID
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 
 /**
  * The whole placement matrix of the node tree — every child kind under every parent slot, for a create and for a
@@ -60,7 +61,7 @@ class NodeKindMatrixSliceTest {
         val (userId, scopeId) = seedMemberScope()
         val slots = mapOf(
             "ROOT" to scopeId,
-            "FOLDER" to seedNode(scopeId, "FOLDER", wrappedContentKey = null),
+            "FOLDER" to seedNode(scopeId, "FOLDER", wrappedContentKey = CONTENT_KEY),
             "MEMORY" to seedNode(scopeId, "MEMORY", wrappedContentKey = "aw=="),
             "CHAPTER" to seedNode(scopeId, "CHAPTER", wrappedContentKey = "aw=="),
             "MISSING" to UUID.randomUUID().toString(),
@@ -75,7 +76,7 @@ class NodeKindMatrixSliceTest {
         for (kind in kinds) for (parent in parents) {
             val outcome = handler.create(
                 t.userId, t.scopeId, UUID.randomUUID().toString(), t.slots.getValue(parent), kind,
-                "bg==", "c2x1Zy0${UUID.randomUUID()}".take(60), 0, 0, null, null,
+                "bg==", "c2x1Zy0${UUID.randomUUID()}".take(60), 0, 0, CONTENT_KEY, null,
             )
             val landed = when (outcome) {
                 is CreateNodeOutcome.Created -> true
@@ -92,7 +93,7 @@ class NodeKindMatrixSliceTest {
         val seen = mutableListOf<String>()
         for (kind in kinds) for (parent in parents) {
             val t = tree() // a fresh tree per move, so no earlier move changes a later cell's parent or slug
-            val node = seedNode(t.scopeId, kind, wrappedContentKey = null)
+            val node = seedNode(t.scopeId, kind, wrappedContentKey = CONTENT_KEY)
             val outcome = handler.update(t.userId, t.scopeId, node, null, null, t.slots.getValue(parent), null, null, null)
             val moved = when (outcome) {
                 UpdateNodeOutcome.Updated -> true

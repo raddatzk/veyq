@@ -167,7 +167,7 @@ class ShareSliceTest {
     @Test
     fun folderNodeIsRejected() {
         val (userId, scopeId) = seedMemberScope(ScopeEntity.PERSONAL)
-        val folder = seedNode(scopeId, NodeEntity.FOLDER, parentId = scopeId, wrappedContentKey = null)
+        val folder = seedNode(scopeId, NodeEntity.FOLDER, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
 
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{${ShareWriteProof.newShare()},"nodeId":"$folder","role":"READ","wrap":"$wrap","sealedName":"$sealedName"}""")

@@ -223,7 +223,7 @@ class CoreAloneSliceTest {
 
     private fun createNode(userId: String, scopeId: String, kind: String) =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"nodeId":"${UUID.randomUUID()}","kind":"$kind","encryptedName":"bg==","slugToken":"${java.util.Base64.getEncoder().encodeToString(kind.toByteArray())}","orderIndex":0}""")
+            .body("""{"nodeId":"${UUID.randomUUID()}","kind":"$kind","encryptedName":"bg==","slugToken":"${java.util.Base64.getEncoder().encodeToString(kind.toByteArray())}","orderIndex":0,"wrappedContentKey":"a21lbQ=="}""")
             .`when`().post("/api/scopes/$scopeId/nodes")
             .then()
 

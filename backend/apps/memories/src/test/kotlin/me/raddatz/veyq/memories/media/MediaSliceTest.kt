@@ -286,7 +286,7 @@ class MediaSliceTest {
     @Test
     fun mediaOnFolderIsIllegalTarget() {
         val (userId, scopeId) = seedMemberScope()
-        val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = null)
+        val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
         val uploadId = startOne(userId, scopeId, TestBlob.SMALL, wrap = "aw==")
 
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)

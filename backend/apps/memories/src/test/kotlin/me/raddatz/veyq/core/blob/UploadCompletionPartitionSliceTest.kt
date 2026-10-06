@@ -59,7 +59,7 @@ class UploadCompletionPartitionSliceTest {
     @Test
     fun aKindNoApplicationAcceptsIsRefused() {
         val (scopeId, memory) = memory()
-        val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = null)
+        val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
         assertEquals("illegal_target", completeOne(completions, scopeId, folder), "the registered set accepts no folder")
         assertEquals("illegal_target", completeOne(mutableListOf(), scopeId, memory), "no acceptor at all")
 
