@@ -1,7 +1,7 @@
 ---
 id: cr-platform-contract-split
 title: "DRAFT — the contracts say whose they are: neutral core specs, three access modes, open node kinds, Memories' guest media out of core"
-status: planned
+status: in-progress     # Part 1 (slices 0–7) landed 2026-10-06; Part 2 is its own CRs; closing is the owner's
 satisfies: [uc.sharing.share-contributor, uc.sharing.share-uploader, uc.sharing.share-public-viewer]
 adrs: ["0079", "0072", "0077", "0029", "0030", "0031", "0012", "0013", "0044"]
 invariants: [operator-blind E2EE, API-first (contracts are the source of truth), self-hostable by default, crypto wire and stored formats unchanged]
@@ -56,10 +56,10 @@ implemented before slice 0 has landed and you give an explicit go.
 
 ---
 
-> **DRAFT, not implementable yet.** The owner's decisions are taken (2026-10-06, § Owner decisions). Per
-> [`docs/ai/README.md`](../docs/ai/README.md) § *Refined state comes before the CR*, Slice 0 (the ADR 0079
-> paragraphs and use-case sentences of Appendix A) must land first. It is refinement work and may run in a refine
-> session. Implementation then waits for an explicit go.
+> **Part 1 status (2026-10-06): slices 0–7 have landed** (§ Part 1, each slice's note names its commits). Open
+> before the CR closes: the § Definition of done items no slice ran from a worktree (the e2e share suites from the
+> main checkout; the second-application paper test stated against the merged tree). Part 2 is not this CR's work:
+> each item in § Part 2 is its own CR. Harvesting and deleting this file is the owner's decision.
 
 ## Goal
 
@@ -350,13 +350,23 @@ claims more than is built.
 | `kind` is the closed `FOLDER`/`MEMORY`/`CHAPTER` enum core's generated API decodes | **Gone** (slice 4): an open token; core names `FOLDER` only; `rootKind` on `PublicShare` (slice 5) | — |
 | `veyq_node` carries `cover_blob_id`, `cover_byte_size`, `media_revision`, `delete_revision` | **Unchanged** | Part 2 (P2.1); `cover_blob_id` with #327 |
 | `ShareGuestWrites.supports` gates share *creation*; core alone refuses every share | **Unchanged in kind, smaller**: the seam loses `complete`/`deleteOwn` (slice 6) and keeps `supports`/`start`/`window` | not planned; it is the fail-closed rule ADR 0079 wants |
-| The guest completion item is media-shaped because core's share contract serves `/media` | **Gone**: the operations are Memories' (slice 6); the item is generic (slice 7) | — |
+| The guest completion item is media-shaped because core's share contract serves `/media` | **Gone**: the operations are Memories' (slice 6); the item is generic — `ownerId`, derivatives, opaque `payloads` (slice 7, done) | — |
 | `BlobRole` is closed in core's `blob` spec | **Unchanged**, re-described (slice 2, D10) | #327 |
 | Upload retention/purge keys are named `veyq.media.*` | **Unchanged** | Part 2 (P2.3) |
 | *(new row)* Share roles named in Memories' terms | **Gone** (slice 1): `READ`/`READ_WRITE`/`WRITE_ONLY` | application roles via a policy seam (D2), not planned |
 | *(new row)* `PublicShare` carries Memories' rows (`media`, `identities`) | **Gone** (slice 6, done: Memories' `listShareMedia`) | — |
 | *(new row)* Core web imports Memories' generated clients | **Gone** (slice 3), guarded | — |
 | *(new row)* Node payload slot, content key, drop key on `veyq_node`, written in practice by Memories | **Stays**, re-described as platform mechanism (D3, D4); **intermediate state** (D9) | re-examined with the second application; drop-key table option P2.2 |
+
+**The real state after slice 7** (2026-10-06, measured by `grep -rn "mediaId\|wrappedExif" backend/core/src/main`,
+which names no field — one KDoc word remains, in `NodeEntity`'s revision-column text, a P2.1 column): of the
+rows above, every **Gone** is done, and what core still knows of Memories is exactly the rest —
+- the node's sealed payload slot (`wrappedMeta`/`metaVersion`), content key and drop key on `veyq_node`, whose
+  semantics are platform mechanism but which in practice only Memories writes (D3, D4, D9; P2.2);
+- `veyq_node`'s `cover_blob_id`, `cover_byte_size`, `media_revision`, `delete_revision` (P2.1; `cover_blob_id` with #327);
+- the `veyq.media.*` config prefix core reads (P2.3);
+- `BlobRole` closed in the contract, the crypto encoder and its web re-export (D10, P2.5/#327);
+- `ShareGuestWrites.supports` gating share creation — the fail-closed rule, not planned to change.
 
 ## Part 1 — slices
 
@@ -844,7 +854,25 @@ Every slice:
 
   **≈ 3–4 sessions** (6.1 ≈ 1 with the race run, 6.2 ≈ 1, 6.3 ≈ 1.5).
 
-- [ ] **7 — `CompleteItem` becomes generic (D8).**
+- [x] **7 — `CompleteItem` becomes generic (D8).** Done in `ef68c6e2` (refactor), `d3d04349`
+  (`UploadCompletionGenericItemCoreSliceTest`) and the docs commit after them; backend only, no spec, wire or
+  migration change. `./gradlew check` and the guard glob green before and after, the MariaDB race run green after.
+  - **Re-verified first [M]:** `grep -n mediaId contracts/api/*.openapi.yaml` → none (only `contracts/api/memories/`
+    names it); `grep -rn "CompleteItem(" backend` → main: `MediaResource.kt:55` and `ShareMediaHandler.kt:118` only
+    (both Memories), tests: the three pins.
+  - **The item:** `CompleteItem(ownerId, nodeId, originalUploadId, derivatives: List<DerivativeDeclare>,
+    payloads: Map<String, String>)`, `CompleteItemResult(blobId, ownerId, error)` (codes unchanged).
+    `DerivativeDeclare(kind, uploadId)` kept its name and shape; only its KDoc says the kind is the application's token.
+  - **Memories maps** through one builder, `MediaUploadCompletion.item(mediaId, …, wrappedMeta, wrappedExif)`, used by
+    `MediaResource.completeMedia` and `ShareMediaHandler.complete`; a null value is left out of `payloads` and read
+    back as null (`payloads[META]`/`payloads[EXIF]`), so `MediaStore.attach` receives what it did. Both resources map
+    `ownerId` back to `mediaId`.
+  - **Deviations:** the new test's double goes into a dispatcher built over it (as the partition tests' forged
+    acceptors do), not a CDI bean — a registered one would break `CoreAloneSliceTest`'s empty seam. The CR's frontmatter
+    and banner now say Part 1 has landed (status `in-progress`, not deleted: Part 2 and the close are the owner's).
+  - **Bitten:** the dispatcher dropping `payloads` → the new test red; Memories' builder swapping the two payload keys
+    → `MediaSliceTest` red (2 of 18). `validate_kernel_imports_no_slices.py` green unedited; `docs/apps/files.md:30`
+    and `memories.md:49` still true, unedited.
   - **Re-verify first:** after slice 6, is `mediaId` absent from every core wire and is `MediaResource.kt:55`
     (plus Memories' share resource) the only constructor (V33 locators)? Only then does the KDoc premise at
     `UploadCompletion.kt:14-17` lapse.

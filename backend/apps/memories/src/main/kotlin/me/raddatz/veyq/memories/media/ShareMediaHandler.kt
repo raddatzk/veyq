@@ -1,6 +1,5 @@
 package me.raddatz.veyq.memories.media
 
-import me.raddatz.veyq.core.blob.CompleteItem
 import me.raddatz.veyq.core.blob.CompleteItemResult
 import me.raddatz.veyq.core.blob.DerivativeDeclare
 import me.raddatz.veyq.core.blob.UploadCompletions
@@ -115,7 +114,7 @@ class ShareMediaHandler(
         // nodes only).
         if (!guestWrites.supports(gated.rootKind)) return ShareMediaCompleteOutcome.NotContributable
         val completeItems = items.map {
-            CompleteItem(
+            MediaUploadCompletion.item(
                 mediaId = it.mediaId,
                 nodeId = gated.rootNodeId, // a guest attaches to the shared Memory root — server-set, not client-chosen
                 originalUploadId = it.originalUploadId,

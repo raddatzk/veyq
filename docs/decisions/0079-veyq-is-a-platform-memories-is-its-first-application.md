@@ -185,10 +185,12 @@ on their own.
   § Migrations): a core migration names no application table, an application's references only core's and its own.
   Core reaches application code through nine interfaces — `ScopeEraser`, `NodeSubtreeEraser`, `MembershipEraser`,
   `GuestIdentityUsage`, `SharedSubtreeContributor`, `ShareGuestWrites`, `UploadCompletion` (what a verified upload
-  becomes on a node of the kind, today Memories' media; the seam stays core's, and its item is decided generic —
-  an `ownerId`, derivatives and the application's sealed payloads (2026-10-06, cr-platform-contract-split) — while
-  today's is still media-shaped, below), `UploadAdmission` (what a share link's guests contributed,
-  for its per-link limit) and `NodeKindRules` (where a node of the kind may live; core answers for `FOLDER`, Memories
+  becomes on a node of the kind, today Memories' media; the seam stays core's, and its item is generic — an
+  `ownerId`, role-tagged derivatives and the application's sealed payloads as opaque values, which core carries to
+  the one implementation that accepts the kind and never reads (2026-10-06, cr-platform-contract-split;
+  `UploadCompletionGenericItemCoreSliceTest`); Memories, the only implementation, maps its request items onto it and
+  `ownerId` back to its `mediaId`), `UploadAdmission` (what a share link's guests contributed, for its per-link
+  limit) and `NodeKindRules` (where a node of the kind may live; core answers for `FOLDER`, Memories
   for `MEMORY` and `CHAPTER`) — and the last four fail closed: a kind no application (or two) claims takes no
   uploads (`illegal_target`), is placed nowhere (`illegal_structure`), is shared by no one (`illegal_scope`), and a
   link whose usage no single application measures is refused (`share_not_contributable`). (`MembershipEraser` is a
@@ -201,9 +203,7 @@ on their own.
   targets are the bullets above): `veyq_node` carries Memories-flavoured columns in core's baseline (`cover_blob_id`,
   `cover_byte_size`, `media_revision`, `delete_revision` — moving a column is a schema change, not a rename);
   `ShareGuestWrites.supports` gates share *creation*, so core alone refuses every share and share policy is tested
-  with an application present; the completion item core's dispatcher carries is media-shaped (`CompleteItem`'s
-  `mediaId`, `derivatives`, `wrappedExif`), though since the guest writes moved to Memories' spec only Memories builds
-  it — making it generic is the decided next step; `BlobRole`
+  with an application present; `BlobRole`
   (`ORIGINAL`/`THUMBNAIL`/`PREVIEW`/`COVER`) is a closed enum in core's `blob.openapi.yaml`, described there as
   Memories' values and closed because the crypto encoder is (until inbox #327); and the upload retention
   and purge keys keep their `veyq.media.*` names though core reads them.

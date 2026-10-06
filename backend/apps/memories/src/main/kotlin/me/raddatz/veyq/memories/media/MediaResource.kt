@@ -1,7 +1,6 @@
 package me.raddatz.veyq.memories.media
 
 import me.raddatz.veyq.core.blob.DerivativeDeclare
-import me.raddatz.veyq.core.blob.CompleteItem
 import me.raddatz.veyq.memories.generated.api.MediaApi
 import me.raddatz.veyq.memories.generated.model.BlobRef
 import me.raddatz.veyq.memories.generated.model.CoverBlobCommitRequest
@@ -52,7 +51,7 @@ class MediaResource(
 
     override fun completeMedia(scopeId: UUID, mediaBatchRequest: MediaBatchRequest): Response {
         val items = mediaBatchRequest.items.map { item ->
-            CompleteItem(
+            MediaUploadCompletion.item(
                 mediaId = item.mediaId.toString(),
                 nodeId = item.nodeId.toString(),
                 originalUploadId = item.originalUploadId.toString(),
@@ -67,7 +66,7 @@ class MediaResource(
                     results = o.items.map {
                         MediaResultItem(
                             blobId = it.blobId?.let(UUID::fromString),
-                            mediaId = it.mediaId?.let(UUID::fromString),
+                            mediaId = it.ownerId?.let(UUID::fromString), // core's generic ownerId is the media id
                             error = it.error,
                         )
                     },

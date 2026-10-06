@@ -5,29 +5,35 @@ import me.raddatz.veyq.core.node.NodeEntity
 import io.quarkus.arc.All
 import jakarta.enterprise.context.ApplicationScoped
 
-/** One derivative upload of a media to complete: its role + the upload session id. */
+/**
+ * One derivative upload of an item to complete: its role + the upload session id. [kind] is the application's role
+ * token (Memories': its derivative kinds), opaque to core — core carries it to the implementation and never reads it.
+ */
 data class DerivativeDeclare(val kind: String, val uploadId: String)
 
 /**
- * One logical item to complete: the original upload + role-tagged derivative uploads, attached to a node.
- *
- * The field names are Memories' words (`mediaId`, `derivatives`, `wrappedExif`) and still core's: this is the item
- * core's dispatcher ([UploadCompletions]) carries, though only Memories builds it now — its member completion
- * (`MediaResource`) and its guest one on a share link (`ShareMediaHandler`). Making it generic is the next step
- * ADR 0079 Consequences names among what core still knows; renaming `mediaId` on a wire is not part of it.
+ * One logical item to complete: the original upload + role-tagged derivative uploads, attached to a node — generic
+ * (ADR 0079, cr-platform-contract-split D8). Core's dispatcher ([UploadCompletions]) reads [nodeId] only, to resolve
+ * the live target and pick the one implementation that accepts its kind; it hands the item on unchanged. Everything
+ * else is the application's to interpret: what [ownerId] names, which [derivatives] kinds exist, and what each of
+ * [payloads] holds. Memories is the only implementation today — its member completion (`MediaResource`) and its guest
+ * one on a share link (`ShareMediaHandler`) map their own request items onto this one and its result back onto
+ * theirs, so no wire names a field of it.
  */
 data class CompleteItem(
-    /** The client-minted media id (ADR 0072) — the `ownerId` every upload of the item was started with. */
-    val mediaId: String,
+    /** The client-minted id of the object the item becomes — the `ownerId` every upload of the item was started with
+     *  (ADR 0072). Memories: the media id. */
+    val ownerId: String,
     val nodeId: String,
     val originalUploadId: String,
     val derivatives: List<DerivativeDeclare>,
-    val wrappedMeta: String?,
-    val wrappedExif: String?,
+    /** The application's sealed values for the object, keyed by its own field names, opaque to core: no seal, no
+     *  validation (their bounds are the application's request schema's). An absent key is an absent value. */
+    val payloads: Map<String, String>,
 )
 
-/** Per-item result of `complete`. */
-data class CompleteItemResult(val blobId: String?, val mediaId: String?, val error: String?)
+/** Per-item result of `complete`: the original's blob id and the object's [ownerId] on success, else an [error] code. */
+data class CompleteItemResult(val blobId: String?, val ownerId: String?, val error: String?)
 
 /**
  * What an application does when a verified upload is attached to one of its nodes (ADR 0079): the second half of an

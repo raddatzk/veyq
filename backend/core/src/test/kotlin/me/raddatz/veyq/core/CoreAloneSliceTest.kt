@@ -235,7 +235,7 @@ class CoreAloneSliceTest {
 
     /** One item for an unknown upload to [nodeId] through [through]; its result. */
     private fun completeOne(through: UploadCompletions, scopeId: String, nodeId: String): CompleteItemResult {
-        val item = CompleteItem(UUID.randomUUID().toString(), nodeId, UUID.randomUUID().toString(), emptyList(), null, null)
+        val item = CompleteItem(UUID.randomUUID().toString(), nodeId, UUID.randomUUID().toString(), emptyList(), emptyMap())
         return QuarkusTransaction.requiringNew().call {
             through.complete(scopeId, listOf(item), UploadOpener.Member(UUID.randomUUID().toString()))
         }.single()
