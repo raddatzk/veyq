@@ -5,12 +5,10 @@
 
 ## Idea
 
-- A **file** is a node kind that holds **one blob**, with its name and metadata sealed. Directories are **Files'
-  own node kind**, not the platform's `FOLDER`: a `FOLDER` only organizes — it carries no content key, so it can be
-  neither a share root nor hold a sealed name of its own, and its placement rule admits only a root or another
-  `FOLDER` ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)). A Files
-  directory has a content key, so it can be shared (read, read-write, or a drop box). One file tree per scope,
-  created on demand.
+- A **file** is a node kind that holds **one blob**, with its name and metadata sealed. Directories are the platform's `FOLDER`: once every node carries a key and a `FOLDER` can be a share root
+  ([ADR 0080](../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md), proposed), Files needs no
+  directory kind of its own, and a directory can be shared whole (read, read-write, or a drop box). One file tree per
+  scope, created on demand.
 - **Web only.** No sync client, no versioning: replacing a file replaces its blob.
 - An **uploader share is a drop box** (write-only, [ADR 0031](../decisions/0031-uploader-public-share.md));
   viewer and contributor shares carry over from the platform.
