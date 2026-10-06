@@ -114,8 +114,11 @@ Guests of a Memory read its chapter titles (the consequence of decision 2). The 
   path segment, and the token freezes it. For Files that is too coarse for **files** (`Day1.md` = `Day1 md`).
   Proposed: a hook per node kind in the registry. **Containers (folders, Memories) keep today's slug**: it is the URL
   segment and the uniqueness at once (`Müller` and `Mueller` collide, accepted: rare, and the message names the
-  colliding sibling). **Leaves (files)** are not in the URL and use a stricter uniqueness: NFC plus Unicode case
-  folding with punctuation kept (`Day1.md` ≠ `Day1 md`, `README` = `readme` as on macOS and Windows). Display names
+  colliding sibling). **Leaves (files)** are not in the URL and use a stricter uniqueness: NFC only, otherwise
+  exact (`Day1.md` ≠ `Day1 md`, `README` ≠ `readme`: case is distinguished, as some filesystems expect). A ZIP export
+  detects names that differ only by case and renames the later one (`foto (1).jpg`) with a notice, because macOS (APFS
+  default) and Windows would merge them; that is an export property, not a database invariant. Folders still collide
+  case-insensitively through their slug, because the slug is their URL segment. Display names
   are always the original. The client checks the decrypted siblings before sending and explains the conflict by
   naming the colliding sibling; the server's `slug_taken` is only the race backstop. Non-Latin names keep the hash
   fallback until someone needs a frozen, versioned transliteration table. **No slug library**: the slug is frozen
