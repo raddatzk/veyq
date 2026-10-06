@@ -19,8 +19,8 @@ import org.junit.jupiter.api.Test
  * B1 (uc.sharing.share-note, ADR 0036 point 4): the server holds the recovery copy's epoch honestly. A share's
  * recovery copy of `K_share` is sealed under `K_SC` at the scope's **current** epoch, and the epoch is stored beside
  * it — so a create tagged with any other epoch is `409 stale_epoch` with nothing written (ADR 0024 Decision 6: a copy
- * under an epoch a removed member holds would be theirs to open), and a key without its epoch, or the reverse, is a
- * `400`. This proves nothing against an operator — the epoch check is a server check; the operator-facing guarantee
+ * under an epoch a removed member holds would be theirs to open). The copy is mandatory (ADR 0080 decision 12, bite
+ * test 14): a create without it, a key without its epoch, or the reverse, is a `400` before the handler. This proves nothing against an operator — the epoch check is a server check; the operator-facing guarantee
  * is the web `share.test.ts` W1, which a client runs with a key no link carries.
  */
 @QuarkusTest
@@ -51,7 +51,8 @@ class ShareKeyRecoveryEpochSliceTest {
 
         for (fields in listOf(""""sealedShareKey":"$shareKey"""", """"sealedShareKeyEpoch":0""")) {
             val shareId = TestIds.shareId()
-            create(userId, memory, shareId, fields).statusCode(400).body("code", equalTo("invalid_request"))
+            // refused by the request bound before the handler (both fields are required), so no handler code
+            create(userId, memory, shareId, fields).statusCode(400)
             listed(userId, memory).body("find { it.shareId == '$shareId' }", nullValue())
         }
     }
@@ -69,16 +70,18 @@ class ShareKeyRecoveryEpochSliceTest {
             .body("find { it.shareId == '$shareId' }.sealedShareKeyEpoch", equalTo(2))
     }
 
+    /** ADR 0080 bite test 14: every member can always re-show and edit a link, so a create without the copy is
+     *  refused and writes nothing; the control is the same body with the copy, from the same caller on the same Memory. */
     @Test
-    fun aShareWithoutARecoveryCopyCarriesNoEpoch() {
+    fun aCreateWithoutARecoveryCopyIs400AndWritesNothing() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val shareId = TestIds.shareId()
 
-        create(userId, memory, shareId, null).statusCode(201)
-        listed(userId, memory)
-            .body("find { it.shareId == '$shareId' }.sealedShareKey", nullValue())
-            .body("find { it.shareId == '$shareId' }.sealedShareKeyEpoch", nullValue())
+        create(userId, memory, shareId, null).statusCode(400)
+        listed(userId, memory).body("find { it.shareId == '$shareId' }", nullValue())
+
+        create(userId, memory, shareId, """"sealedShareKey":"$shareKey","sealedShareKeyEpoch":0""").statusCode(201)
     }
 
     // --- helpers ---

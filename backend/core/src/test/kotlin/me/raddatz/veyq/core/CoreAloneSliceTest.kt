@@ -21,7 +21,9 @@ import me.raddatz.veyq.core.scope.ScopeEraser
 import me.raddatz.veyq.core.sharing.GuestIdentityUsage
 import me.raddatz.veyq.core.sharing.ShareEntity
 import me.raddatz.veyq.core.sharing.ShareGuestWrites
+import me.raddatz.veyq.core.sharing.FolderShareRoots
 import me.raddatz.veyq.core.sharing.ShareIdentityEntity
+import me.raddatz.veyq.core.sharing.ShareRoots
 import me.raddatz.veyq.core.sharing.ShareScopeEraser
 import me.raddatz.veyq.core.sharing.ShareUploadOutcome
 import me.raddatz.veyq.core.sharing.ShareWriteProof
@@ -34,6 +36,7 @@ import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
+import me.raddatz.veyq.core.testing.TestFixtures.shareKeysJson
 import io.quarkus.arc.All
 import io.quarkus.arc.ClientProxy
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -62,14 +65,16 @@ import org.junit.jupiter.api.Test
  * link, places a kind, completes an upload — instead of refusing. So:
  *
  * 1. **Every seam holds exactly core's own implementations**: `ScopeEraser` core's two (nodes, shares),
- *    `NodeKindRules` core's `FOLDER` rule, and every other seam — `NodeSubtreeEraser`, `MembershipEraser`,
+ *    `NodeKindRules` and `ShareRoots` core's `FOLDER` answers, and every other seam — `NodeSubtreeEraser`, `MembershipEraser`,
  *    `GuestIdentityUsage`, `SharedSubtreeContributor`, `ShareGuestWrites`, `UploadCompletion`, `UploadAdmission` —
  *    none. The composed application's sets are the root's `ModuleCompositionTest`.
  * 2. **Every seam fails closed with nobody behind it**: a `FOLDER` is created and a `MEMORY` is `illegal_structure`;
- *    a share is `illegal_scope`; a completion is `illegal_target` for every kind; a link start against a seeded share
- *    row (one cannot be *created* core-alone) is refused (`share_not_contributable`) and no kind has an admission.
+ *    a share of any other kind, or a `WRITE_ONLY` one on a `FOLDER`, is `illegal_scope`; a completion is
+ *    `illegal_target` for every kind; a link start on a `READ_WRITE` folder share is refused
+ *    (`share_not_contributable`: no application writes under a folder) and no kind has an admission.
  * 3. **What core owns works alone**: a blob upload starts and windows, and a seeded blob downloads, through core's
- *    `BlobResource`; an unauthenticated core route answers.
+ *    `BlobResource`; a `FOLDER` is shared with `READ` or `READ_WRITE` and its guest resolves the subtree under it
+ *    (ADR 0080); an unauthenticated core route answers.
  *
  * Each refusal sits beside a positive control through the same path; where core alone has nothing to accept, the
  * control is the composition's (`ModuleCompositionTest` shares a `MEMORY` and completes one through the same bodies).
@@ -89,6 +94,7 @@ class CoreAloneSliceTest {
     @Inject @All lateinit var completions: MutableList<UploadCompletion>
     @Inject @All lateinit var admissions: MutableList<UploadAdmission>
     @Inject @All lateinit var kindRules: MutableList<NodeKindRules>
+    @Inject @All lateinit var shareRoots: MutableList<ShareRoots>
 
     @Inject lateinit var nodes: NodesStore
     @Inject lateinit var dispatcher: UploadCompletions
@@ -113,6 +119,7 @@ class CoreAloneSliceTest {
         assertEquals(setOf(NodeScopeEraser::class.java, ShareScopeEraser::class.java), classes(scopeErasers),
             "ScopeEraser: core's own two, and no application's")
         assertEquals(setOf(FolderNodeRules::class.java), classes(kindRules), "NodeKindRules: core's FOLDER rule only")
+        assertEquals(setOf(FolderShareRoots::class.java), classes(shareRoots), "ShareRoots: core's FOLDER answer only")
         for ((seam, beans) in mapOf(
             "NodeSubtreeEraser" to subtreeErasers, "MembershipEraser" to membershipErasers,
             "GuestIdentityUsage" to identityUsages, "SharedSubtreeContributor" to contributors,
@@ -131,15 +138,59 @@ class CoreAloneSliceTest {
     }
 
     @Test
-    fun aShareIsRefusedForEveryKind() {
+    fun aFolderIsSharedToReadOrContributeAndNothingElseIs() {
         val (userId, scopeId) = seedMemberScope(ScopeEntity.PERSONAL)
-        for (kind in kinds) {
-            val node = seedNode(scopeId, kind, wrappedContentKey = CONTENT_KEY)
-            given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-                .body("""{${ShareWriteProof.newShare()},"nodeId":"$node","role":"READ","wrap":"d3JhcA==","sealedName":"c2VhbGVk"}""")
-                .`when`().post("/api/shares")
-                .then().statusCode(422).body("code", equalTo("illegal_scope"))
+        // ADR 0080 decision 6 / bite test 20: a FOLDER is a share root although no application writes under it
+        for (role in listOf("READ", "READ_WRITE")) {
+            val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
+            postShare(userId, folder, role).statusCode(201)
         }
+        // decision 11: a drop box is a node of its own, never an existing folder
+        val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
+        postShare(userId, folder, "WRITE_ONLY").statusCode(422).body("code", equalTo("illegal_scope"))
+        // every kind core does not own: nobody here declares it, so nobody shares it
+        for (kind in kinds - NodeEntity.FOLDER) {
+            val node = seedNode(scopeId, kind, wrappedContentKey = CONTENT_KEY)
+            postShare(userId, node, "READ").statusCode(422).body("code", equalTo("illegal_scope"))
+        }
+    }
+
+    /**
+     * ADR 0080 decisions 2, 6 and 9 (bite test 2): a guest of a `FOLDER` share resolves the live subtree under it —
+     * `rootKind` FOLDER, every descendant's name and wrap as stored (the guest opens them down the chain from the
+     * root's key), the root's own entry not at all, and nothing beside or above it. A blob attached under the
+     * subtree is presigned for the guest; one beside it is not. All of it with core alone.
+     */
+    @Test
+    fun aGuestOfAFolderShareResolvesTheSubtreeUnderIt() {
+        val (userId, scopeId) = seedMemberScope(ScopeEntity.PERSONAL)
+        val outer = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = "b3V0ZXItd3JhcA==", encryptedName = "b3V0ZXItbmFtZQ==")
+        val root = seedNode(scopeId, NodeEntity.FOLDER, parentId = outer, wrappedContentKey = "cm9vdC13cmFw", encryptedName = "cm9vdC1uYW1l")
+        val child = seedNode(scopeId, NodeEntity.FOLDER, parentId = root, wrappedContentKey = "Y2hpbGQtd3JhcA==", encryptedName = "Y2hpbGQtbmFtZQ==")
+        val grandchild = seedNode(scopeId, NodeEntity.FOLDER, parentId = child, wrappedContentKey = "Z3JhbmQtd3JhcA==", encryptedName = "Z3JhbmQtbmFtZQ==")
+        val sibling = seedNode(scopeId, NodeEntity.FOLDER, parentId = outer, wrappedContentKey = "c2liLXdyYXA=", encryptedName = "c2liLW5hbWU=")
+        val inside = seedCover(scopeId, grandchild)
+        val beside = seedCover(scopeId, sibling)
+        val shareId: String = postShare(userId, root, "READ").statusCode(201).extract().path("shareId")
+
+        val body = given().`when`().get("/api/shares/$shareId")
+            .then().statusCode(200)
+            .body("rootKind", equalTo(NodeEntity.FOLDER))
+            .body("nodes.size()", equalTo(3))
+            .body("nodes.find { it.id == '$child' }.encryptedName", equalTo("Y2hpbGQtbmFtZQ=="))
+            .body("nodes.find { it.id == '$child' }.wrappedContentKey", equalTo("Y2hpbGQtd3JhcA=="))
+            .body("nodes.find { it.id == '$grandchild' }.encryptedName", equalTo("Z3JhbmQtbmFtZQ=="))
+            .body("nodes.find { it.id == '$grandchild' }.wrappedContentKey", equalTo("Z3JhbmQtd3JhcA=="))
+            .body("nodes.find { it.id == '$grandchild' }.parentId", equalTo(child))
+            .body("nodes.find { it.id == '$root' }", notNullValue())
+            .body("nodes.find { it.id == '$root' }.parentId", nullValue())
+            .extract().asString()
+        for (absent in listOf("cm9vdC1uYW1l", "cm9vdC13cmFw", outer, "b3V0ZXItbmFtZQ==", sibling, "c2liLW5hbWU=")) {
+            assertEquals(false, body.contains(absent), "the root's own entry and nothing beside or above it: $absent")
+        }
+
+        given().`when`().get("/api/shares/$shareId/blobs/$inside").then().statusCode(200)
+        given().`when`().get("/api/shares/$shareId/blobs/$beside").then().statusCode(404).body("code", equalTo("share_not_found"))
     }
 
     @Test
@@ -226,6 +277,25 @@ class CoreAloneSliceTest {
             .body("""{"nodeId":"${UUID.randomUUID()}","kind":"$kind","encryptedName":"bg==","slugToken":"${java.util.Base64.getEncoder().encodeToString(kind.toByteArray())}","orderIndex":0,"wrappedContentKey":"a21lbQ=="}""")
             .`when`().post("/api/scopes/$scopeId/nodes")
             .then()
+
+    private fun postShare(userId: String, nodeId: String, role: String) =
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"$role",${shareKeysJson(role, nodeId)},"sealedName":"c2VhbGVk",${ShareWriteProof.recovery()}}""")
+            .`when`().post("/api/shares")
+            .then()
+
+    /** A blob in [scopeId] attached to [nodeId] as its cover — the arm of a share's blob gate that core owns. */
+    private fun seedCover(scopeId: String, nodeId: String): String {
+        val blobId = UUID.randomUUID().toString()
+        QuarkusTransaction.requiringNew().run {
+            BlobEntity().apply {
+                id = blobId; this.scopeId = scopeId; storageKey = UUID.randomUUID().toString().replace("-", "")
+                chunkCount = 1; byteSize = TestBlob.SMALL.byteSize; wrappedBlobKey = "d3JhcA=="; createdAt = Instant.now()
+            }.persist()
+            NodeEntity.findById(nodeId)!!.coverBlobId = blobId
+        }
+        return blobId
+    }
 
     private fun download(userId: String, scopeId: String, blobId: String) =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)

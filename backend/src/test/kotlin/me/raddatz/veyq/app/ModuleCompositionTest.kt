@@ -12,6 +12,7 @@ import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.scope.ScopeEraser
 import me.raddatz.veyq.core.sharing.GuestIdentityUsage
 import me.raddatz.veyq.core.sharing.ShareGuestWrites
+import me.raddatz.veyq.core.sharing.ShareRoots
 import me.raddatz.veyq.core.sharing.ShareWriteProof
 import me.raddatz.veyq.core.sharing.SharedSubtreeContributor
 import me.raddatz.veyq.core.testing.MainOutputs
@@ -73,6 +74,7 @@ class ModuleCompositionTest {
     @Inject @All lateinit var completions: MutableList<UploadCompletion>
     @Inject @All lateinit var admissions: MutableList<UploadAdmission>
     @Inject @All lateinit var kindRules: MutableList<NodeKindRules>
+    @Inject @All lateinit var shareRoots: MutableList<ShareRoots>
 
     @Inject lateinit var quota: StorageQuota
 
@@ -87,6 +89,7 @@ class ModuleCompositionTest {
         UploadCompletion::class.java to completions,
         UploadAdmission::class.java to admissions,
         NodeKindRules::class.java to kindRules,
+        ShareRoots::class.java to shareRoots,
     )
 
     private val compiled: List<Class<*>> by lazy {
@@ -166,7 +169,7 @@ class ModuleCompositionTest {
 
     private fun share(userId: String, nodeId: String) =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"READ","wrap":"d3JhcA==","sealedName":"c2VhbGVk"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"READ","wrap":"d3JhcA==","sealedName":"c2VhbGVk",${ShareWriteProof.recovery()}}""")
             .`when`().post("/api/shares")
             .then()
 }

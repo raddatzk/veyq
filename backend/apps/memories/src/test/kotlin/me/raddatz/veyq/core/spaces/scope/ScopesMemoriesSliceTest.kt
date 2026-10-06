@@ -78,7 +78,7 @@ class ScopesMemoriesSliceTest {
         val (elsewhere, personal) = seedMemberScope()
         val memory = seedNode(personal, MemoriesNodeKinds.MEMORY, parentId = personal, wrappedContentKey = CONTENT_KEY)
         given().header("Authorization", bearer(elsewhere)).contentType(ContentType.JSON)
-            .body("""{"shareId":"$shareId",${ShareWriteProof.field(shareId)},"nodeId":"$memory","role":"READ","wrap":"c2hhcmUtd3JhcA==","sealedName":"c2VhbGVkLW1lbW9yeQ=="}""")
+            .body("""{"shareId":"$shareId",${ShareWriteProof.field(shareId)},"nodeId":"$memory","role":"READ","wrap":"c2hhcmUtd3JhcA==","sealedName":"c2VhbGVkLW1lbW9yeQ==",${ShareWriteProof.recovery()}}""")
             .`when`().post("/api/shares")
             .then().statusCode(409).body("code", equalTo("id_taken"))
     }

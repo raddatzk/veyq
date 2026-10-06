@@ -111,7 +111,7 @@ class SharePasswordWriteGateTest {
 
     private fun createWithPassword(userId: String, nodeId: String, role: String): String =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"$role",${shareKeysJson(role, nodeId, wrap)},"sealedName":"$sealedName","passwordRequired":true,"pwSalt":"$pwSalt","pwVerifier":"$pwVerifier"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"$role",${shareKeysJson(role, nodeId, wrap)},"sealedName":"$sealedName",${ShareWriteProof.recovery()},"passwordRequired":true,"pwSalt":"$pwSalt","pwVerifier":"$pwVerifier"}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path("shareId")
 }

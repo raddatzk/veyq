@@ -74,8 +74,8 @@ class SharingResource(
             sealedName = createShareRequest.sealedName,
             expiresAt = createShareRequest.expiresAt?.toInstant(),
             sealedNote = createShareRequest.sealedNote, // cr-0115: optional curator note under K_share
-            sealedShareKey = createShareRequest.sealedShareKey, // K_share under K_SC(epoch): members recover it (ADR 0036)
-            sealedShareKeyEpoch = createShareRequest.sealedShareKeyEpoch, // the scope epoch it is sealed at
+            sealedShareKey = createShareRequest.sealedShareKey, // K_share under K_SC(epoch): members recover it (ADR 0036, mandatory per ADR 0080)
+            sealedShareKeyEpoch = createShareRequest.sealedShareKeyEpoch.validated(), // the scope epoch it is sealed at
             sealedShareName = createShareRequest.sealedShareName, // cr-0116: optional private label under K_share
             passwordRequired = createShareRequest.passwordRequired ?: false, // cr-0118: optional access-control gate
             pwSalt = createShareRequest.pwSalt,

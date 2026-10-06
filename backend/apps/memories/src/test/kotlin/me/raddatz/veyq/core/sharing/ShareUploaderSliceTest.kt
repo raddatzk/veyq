@@ -396,7 +396,7 @@ class ShareUploaderSliceTest {
 
     private fun postShare(userId: String, nodeId: String, role: String, keys: String) =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"$role",$keys,"sealedName":"$sealedName"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"$role",$keys,"sealedName":"$sealedName",${ShareWriteProof.recovery()}}""")
             .`when`().post("/api/shares")
 
     private fun postIdentity(shareId: String, key: String) =

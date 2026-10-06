@@ -51,14 +51,14 @@ class CapabilityDisabledSliceTest {
         // WRITE_ONLY needs the disabled `sharing.uploader-links` → 422 capability_disabled, checked before any node
         // lookup so it reads as instance policy (not a node/scope error).
         given().header("Authorization", bearer).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"$someNode","role":"WRITE_ONLY","sealedDropPublicKey":"$DROP_PUBLIC_KEY","sealedDropPrivateKey":"$DROP_PRIVATE_KEY","sealedName":"$sealedName"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$someNode","role":"WRITE_ONLY","sealedDropPublicKey":"$DROP_PUBLIC_KEY","sealedDropPrivateKey":"$DROP_PRIVATE_KEY","sealedName":"$sealedName",${ShareWriteProof.recovery()}}""")
             .`when`().post("/api/shares")
             .then().statusCode(422).body("code", equalTo("capability_disabled"))
 
         // READ needs `sharing.public-links` (still active) → the gate passes and the handler proceeds to the
         // node lookup, 404ing on the unknown node. Proves public-links was NOT collaterally disabled.
         given().header("Authorization", bearer).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"$someNode","role":"READ","wrap":"$wrap","sealedName":"$sealedName"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$someNode","role":"READ","wrap":"$wrap","sealedName":"$sealedName",${ShareWriteProof.recovery()}}""")
             .`when`().post("/api/shares")
             .then().statusCode(404).body("code", equalTo("node_not_found"))
     }

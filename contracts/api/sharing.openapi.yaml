@@ -9,8 +9,9 @@ info:
     granting one access mode (`ShareRole`). The share adds an **independent second wrap** of that node's content
     key — `symWrap(K_share, content key)` ([ADR 0012](../../docs/decisions/0012-content-key-hierarchy.md)) —
     whose secret `K_share` rides the **URL fragment** ([ADR 0015](../../docs/decisions/0015-operator-blind-readable-urls.md))
-    and **never reaches the server**. Which node kinds can be shared, and what a guest's write adds, is the
-    kind's application's (`ShareGuestWrites`).
+    and **never reaches the server**. Which node kinds can be a share's root, and with which roles, is the kind's
+    owner's (`ShareRoots`: core's for a `FOLDER`, an application's for its own kinds); what a guest's write adds is
+    the kind's application's (`ShareGuestWrites`).
 
     **Operator-blind.** The server stores only the opaque `shareId` (256-bit unguessable), the wrap, the
     plaintext `role`, the node's name **re-sealed under `K_share`**, and the shared `nodeId`. It never sees
@@ -40,10 +41,11 @@ paths:
       summary: Create a public share of a node the caller is a member of (any scope).
       description: >
         The client generates a fresh 32-byte `K_share`, computes `wrap = symWrap(K_share, content key)` over the
-        node's content key, re-seals the node's name under `K_share`, and POSTs `{ nodeId, role, wrap, sealedName, expiresAt? }` — `role` is
+        node's content key, re-seals the node's name under `K_share`, seals `K_share` under the scope key as the
+        members' recovery copy, and POSTs `{ nodeId, role, wrap, sealedName, sealedShareKey, sealedShareKeyEpoch, expiresAt? }` — `role` is
         the access mode (`ShareRole`: **READ**, **READ_WRITE** or **WRITE_ONLY**). The server verifies the caller
-        is a **member** of the node's scope — personal, group, or tenant (cr-0104, ADR 0029 §6); a node of a kind
-        no application accepts shares of (`ShareGuestWrites`) is rejected `422`, a non-member is a non-enumerable `404`. The **client** mints the 256-bit unguessable
+        is a **member** of the node's scope — personal, group, or tenant (cr-0104, ADR 0029 §6); a node whose kind
+        may not be a share root with that role (`ShareRoots`) is rejected `422`, a non-member is a non-enumerable `404`. The **client** mints the 256-bit unguessable
         `shareId` ([ADR 0072](../../docs/decisions/0072-a-seal-binds-its-object.md) Decision 3 — the recovery wrap is sealed bound to it) and the server stores the record
         opaquely under it. The link is `/s/{shareId}#k=base64url(K_share)` — the fragment (`K_share`) is built
         client-side and never sent; only `writeVerifier`, the hash of a token derived from it, is (ADR 0076). An id that already exists — in this scope or any other — is refused `id_taken` and nothing is overwritten; the answer is the same wherever the taken id lives, so it says nothing about another scope. An id is never minted twice: a deleted link's id (`deleteShare`) and the id of a link its space's erasure removed are refused `id_taken` as well — whoever holds a dead link's id and key could otherwise serve every other holder of that link a subtree of their own ([ADR 0029](../../docs/decisions/0029-public-viewer-share.md) §7). Not idempotent: a retry of a create whose response was lost answers `id_taken` too, and the client re-reads.
@@ -60,6 +62,8 @@ paths:
               role: READ
               wrap: d3JhcHBlZC1rLW1lbS11bmRlci1rLXNoYXJl
               sealedName: c2VhbGVkLW5hbWUtdW5kZXItay1zaGFyZQ==
+              sealedShareKey: cmVjb3ZlcmFibGUtc2hhcmUta2V5LXVuZGVyLWtzYw==
+              sealedShareKeyEpoch: 0
               expiresAt: null
               writeVerifier: FsNwNHCyCakLiKYUidaFcVAETZT9pNhFigWt85nrvSQ=
       responses:
@@ -70,7 +74,7 @@ paths:
               schema: { $ref: "#/components/schemas/ShareCreated" }
               example: { shareId: 3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i }
         "400":
-          description: Malformed request (missing/invalid fields, keys that do not match the role, or a `sealedShareKey` without its `sealedShareKeyEpoch` or the reverse).
+          description: Malformed request (missing/invalid fields — the recovery copy `sealedShareKey` and its `sealedShareKeyEpoch` included — or keys that do not match the role).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401":
@@ -100,8 +104,9 @@ paths:
             Unprocessable. Two codes: `capability_disabled` — the sharing capability this role needs
             (`sharing.public-links` for READ/READ_WRITE, `sharing.uploader-links` for WRITE_ONLY) is disabled
             instance-wide, so the operator has turned public sharing off (ADR 0032; checked first, before any
-            scope check, so it reads as instance policy not a scope error); `illegal_scope` — the node's kind is one
-            no application accepts shares of (`ShareGuestWrites`), so it cannot be shared; a
+            scope check, so it reads as instance policy not a scope error); `illegal_scope` — the node's kind may not
+            be a share root with this role (`ShareRoots`, ADR 0080: a `FOLDER` with READ or READ_WRITE, a kind of an
+            application as that application declares; a kind nobody declares, or two do, is never shared); a
             non-member scope is a non-enumerable `404`, not `422`.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: capability_disabled } }
@@ -380,8 +385,9 @@ paths:
         "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
         "422":
           description: >
-            An illegal role change (cr-0119) — `role = WRITE_ONLY`, or a role change on a share whose current role is
-            WRITE_ONLY. The write-only drop-box is a separate action and its role is not editable in place.
+            An illegal role change (cr-0119) — `role = WRITE_ONLY`, a role change on a share whose current role is
+            WRITE_ONLY, or a role the shared node's kind may not be a share root with (`ShareRoots`, ADR 0080). The
+            write-only drop-box is a separate action and its role is not editable in place.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_role_change } }
     delete:
@@ -729,7 +735,7 @@ components:
 
     CreateShareRequest:
       type: object
-      required: [shareId, nodeId, role, sealedName, writeVerifier]
+      required: [shareId, nodeId, role, sealedName, sealedShareKey, sealedShareKeyEpoch, writeVerifier]
       description: >
         The share's keys follow its role (ADR 0031 point 7). A READ or READ_WRITE share carries `wrap` and no
         drop key. A WRITE_ONLY share carries **no** `wrap` — its guest never holds the shared node's content key —
@@ -754,7 +760,7 @@ components:
           x-veyq-visibility: id
           type: string
           format: uuid
-          description: The node to share — of a kind an application accepts shares of (`ShareGuestWrites`), in a scope the caller is a member of (personal, group, or tenant).
+          description: The node to share — of a kind that may be a share root with `role` (`ShareRoots`), in a scope the caller is a member of (personal, group, or tenant).
           example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
         role:
           $ref: "#/components/schemas/ShareRole"
@@ -823,9 +829,9 @@ components:
           example: c2VhbGVkLXNoYXJlLW5hbWU=
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 512) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         sealedShareKey:
-          type: [string, "null"]
+          type: string
           description: >
-            OPTIONAL recoverable copy of the per-share key — `K_share` sealed under the scope key `K_SC` at
+            REQUIRED recoverable copy of the per-share key (ADR 0080 decision 12) — `K_share` sealed under the scope key `K_SC` at
             `sealedShareKeyEpoch` (AAD `share-key-recovery`, bound to scope + node + share + epoch; opaque base64).
             Lets every scope member recover `K_share` later to reveal, edit and re-copy the share. `K_SC` is the key
             no share link carries, so a READ or READ_WRITE link — which holds the shared node's content key — opens nothing of another
@@ -833,17 +839,17 @@ components:
           contentEncoding: base64
           maxLength: 256
           example: cmVjb3ZlcmFibGUtc2hhcmUta2V5LXVuZGVyLWtzYw==
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         sealedShareKeyEpoch:
           x-veyq-visibility: structure
+          # nullable type + @NotNull: a required primitive binds a missing field to 0/false (backend/CLAUDE.md)
           type: [integer, "null"]
           description: >
-            The scope content-key epoch `sealedShareKey` is sealed under (ADR 0024). Present iff `sealedShareKey` is
-            (else `400 invalid_request`), and must be the scope's **current** epoch (else `409 stale_epoch`, nothing
-            stored).
+            The scope content-key epoch `sealedShareKey` is sealed under (ADR 0024). Required (else `400`), and must
+            be the scope's **current** epoch (else `409 stale_epoch`, nothing stored).
           minimum: 0
           example: 0
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
         passwordRequired:
           x-veyq-visibility: flag
           type: boolean
@@ -895,7 +901,8 @@ components:
         the curator holds both current values (decrypted in the manage list) and sends them together. `role` is an
         **optional grant change** (cr-0119): when present it changes the share's role **in place** (a plaintext
         authz change, no re-crypto — the link/wrap stay valid), restricted to **READ ↔ READ_WRITE** (setting
-        `WRITE_ONLY`, or editing a WRITE_ONLY share's role, is `422 invalid_role_change`); when omitted the grant is
+        `WRITE_ONLY`, editing a WRITE_ONLY share's role, or a role the shared node's kind may not be a share root with,
+        is `422 invalid_role_change`); when omitted the grant is
         unchanged. `passwordRequired` is an **optional tri-state** (cr-0118): `true` sets/changes the password (send
         `pwSalt` + `pwVerifier` + `sealedPassword` with it), `false` removes it (the pw fields are cleared),
         **omitted** leaves the password untouched — all in place, the link/`K_share` untouched.

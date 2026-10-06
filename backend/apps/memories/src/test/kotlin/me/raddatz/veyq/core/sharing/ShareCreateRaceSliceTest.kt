@@ -103,14 +103,14 @@ class ShareCreateRaceSliceTest {
 
     private fun createShare(userId: String, nodeId: String, shareId: String, role: String = "READ"): Pair<Int, String?> =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"shareId":"$shareId",${ShareWriteProof.field(shareId)},"nodeId":"$nodeId","role":"$role","wrap":"$wrap","sealedName":"$sealedName"}""")
+            .body("""{"shareId":"$shareId",${ShareWriteProof.field(shareId)},"nodeId":"$nodeId","role":"$role","wrap":"$wrap","sealedName":"$sealedName",${ShareWriteProof.recovery()}}""")
             .`when`().post("/api/shares").then().extract().answer()
 
     private fun createUploaderShare(userId: String, nodeId: String, shareId: String): Pair<Int, String?> =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body(
                 """{"shareId":"$shareId",${ShareWriteProof.field(shareId)},"nodeId":"$nodeId","role":"WRITE_ONLY",""" +
-                    """"sealedDropPublicKey":"$DROP_PUBLIC_KEY","sealedDropPrivateKey":"$DROP_PRIVATE_KEY","sealedName":"$sealedName"}""",
+                    """"sealedDropPublicKey":"$DROP_PUBLIC_KEY","sealedDropPrivateKey":"$DROP_PRIVATE_KEY","sealedName":"$sealedName",${ShareWriteProof.recovery()}}""",
             )
             .`when`().post("/api/shares").then().extract().answer()
 

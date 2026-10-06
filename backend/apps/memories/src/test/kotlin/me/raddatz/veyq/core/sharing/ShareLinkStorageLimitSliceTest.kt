@@ -268,7 +268,7 @@ class ShareLinkStorageLimitSliceTest {
 
     private fun createShare(f: Link, role: String): String =
         given().header("Authorization", bearer(f.ownerId)).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"${f.memory}","role":"$role",${shareKeysJson(role, f.memory)},"sealedName":"c2VhbGVk"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"${f.memory}","role":"$role",${shareKeysJson(role, f.memory)},"sealedName":"c2VhbGVk",${ShareWriteProof.recovery()}}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path("shareId")
 

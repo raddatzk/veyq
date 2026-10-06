@@ -48,7 +48,8 @@ package — the platform in `me.raddatz.veyq.core` (the node tree in `core.conte
 Memories in `me.raddatz.veyq.memories` (`media`, `favorites`, `itemfavorites`, `node`) — and core reaches Memories only
 through the interfaces Memories implements: it attaches its media through `UploadCompletion`, measures a link's
 contributed blobs through `UploadAdmission`, places its `MEMORY` and `CHAPTER` through `NodeKindRules` (core places
-only `FOLDER`) and takes guest writes through `ShareGuestWrites`. Memories' tests run in `:apps:memories`, beside the
+only `FOLDER`), declares that a `MEMORY` may be the root of a share of every role through `ShareRoots` (a `CHAPTER`
+of none yet) and takes guest writes through `ShareGuestWrites`. Memories' tests run in `:apps:memories`, beside the
 core tests that need an application at runtime; `:core`'s own run with no application at all. **The web is separated
 by import direction only**: `features/memory` is the application (core imports it nowhere but the composition root
 and asks a registry for what to render), though its directory name and five single-claim slots are still

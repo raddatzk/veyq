@@ -90,7 +90,7 @@ class ShareUploadWindowSliceTest {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val shareId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"$memory","role":"READ_WRITE","wrap":"d3JhcA==","sealedName":"c2VhbGVk"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$memory","role":"READ_WRITE","wrap":"d3JhcA==","sealedName":"c2VhbGVk",${ShareWriteProof.recovery()}}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path<String>("shareId")
         return Share(userId, shareId)
