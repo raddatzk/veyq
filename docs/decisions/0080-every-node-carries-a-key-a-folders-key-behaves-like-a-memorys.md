@@ -62,7 +62,12 @@ Memory, an expense and a file side by side).
    through the drop mechanism ([ADR 0031](0031-uploader-public-share.md) point 7), never into an existing Memory
    below. **Shareability is separate from guest writes:** a `FOLDER` can be shared with `READ` whether or not any
    application implements guest writes for it (`SharingHandler.kt:245` stops tying creation to
-   `ShareGuestWrites.supports` for the read role). Finer rights ("not the cover", "not the date") come later through
+   `ShareGuestWrites.supports` for the read role). A move or rename is decided by the owners of the containers on **both** sides: between folders core decides
+   (a `READ_WRITE` guest may), into or out of the inside of an application's container (a chapter out of a Memory)
+   that application decides, and Memories declares nothing, so it is refused. **A guest may not delete a node
+   in the first cut:** nodes store no authorship, so "delete the own" cannot be checked and a contributor could remove
+   anything in the folder; it comes with stored authorship. A guest's create is stored at the scope's current epoch
+   chosen by the server (a guest never targets the scope root). Finer rights ("not the cover", "not the date") come later through
    a policy seam that asks the application per node and operation, never a role registry in core.
 7. **One key, many wraps.** A Memory inside a shared folder may also be shared alone; its share is another wrap
    of the same key.
@@ -94,7 +99,9 @@ Memory, an expense and a file side by side).
     keeps the drop box and its content. Memories keeps its uploader share on an existing Memory (its media are not
     nodes); this rule is for nodes guests create, built with the first application that needs it (Files).
 12. **The share's recovery copy is mandatory.** `sealedShareKey`/`sealedShareKeyEpoch` ([ADR 0036](0036-editable-share-note-recoverable-share-key.md))
-    become `NOT NULL` on the wire and in the baseline, so every member can always re-show and edit a link.
+    become required in `CreateShareRequest`, so every member can always re-show and edit a link. The columns and
+    `ShareSummary` stay nullable: a tombstoned share clears them (`SharingStore.tombstone`), so the baseline does not
+    change.
 13. **Attachments ([#327](../inbox.md)).** A node attachment's `K_blob` is wrapped under its owning node's key,
    whatever the kind. A chapter's media already work this way: a chapter has its own `K_mem` and `K_blob` hangs under
    it (`memoryNodes.ts:29-33`, `media.ts:368-371`), so a chapter share is cryptographically ready; it stays gated by

@@ -111,19 +111,38 @@ to a second application ([docs/apps/files.md](../docs/apps/files.md), inbox #349
       DB-level guard: `parent_id` holds the scope id at the root, so it cannot carry a foreign key, and both erasure
       guards read `node_id` columns and scope FKs, not the tree's self-reference.
 
-### Slice 5 — shares by kind, tree operations for guests
-- [ ] 5.1 contracts — `sharing.openapi.yaml`: `sealedShareKey`/`sealedShareKeyEpoch` required (inbox #347), guest
-      tree-operation endpoints, role semantics text · Done when: contracts guards green.
-- [ ] 5.2 backend — a `FOLDER` (and, once enabled, a chapter) is a share root; read shares no longer need
-      `ShareGuestWrites.supports` (`SharingHandler.kt:245`); guest create/move/rename/delete in core behind
-      `ShareGuestGate` (structure, `NodeKindRules`, subtree boundary); a per-kind `READ_WRITE` declaration seam,
-      fail closed; baseline `sealed_share_key NOT NULL` + pin · Done when: bite tests 10, 13, 14, 17, 18, 19, 20;
-      `CoreAloneSliceTest` grows (core alone shares a folder); MariaDB race run.
-- [ ] 5.3 web — folder share dialog and a folder share body that embeds each kind's body; a member's root rename
-      re-seals shares' names through the recovery copy · Done when: `npm run check`; e2e: a folder share, a chapter
-      share (if enabled), a contributor moving inside the subtree.
-- [ ] 5.4 docs — role matrix for Memories in `docs/apps/memories.md` (what a contributor may do; cover and date edits
-      are, to verify, member-only today) · Done when: `validate_doc_links` green.
+### Slice 5 — shares by kind, tree operations for guests (backend 5a, web 5b)
+Planned 2026-10-06 from three inventories; each sub-slice is its own worktree run with guard before/after.
+- [ ] 5a.1 share roots by kind and the mandatory recovery copy — contracts: `CreateShareRequest.sealedShareKey` and
+      `sealedShareKeyEpoch` required (`@NotNull`, `ReissueShareRequest` is the model; `ShareSummary` and the columns
+      stay nullable, the baseline does not change); backend: a small fail-closed seam `ShareRoots` (per kind, the
+      roles that may be a share root; core declares `FOLDER` with `READ` and `READ_WRITE`, Memories `MEMORY` with all
+      three, `CHAPTER` none yet) replaces the coupling at `SharingHandler.kt` ~:245 (`ShareGuestWrites.supports` decided
+      both shareability and who runs uploads); `WRITE_ONLY` on a `FOLDER` stays refused until Files' drop box;
+      `SharingResource.create` calls `.validated()`; the `ShareGuestWrites` KDoc promise (:20-21) is reworded ·
+      Done when: `CoreAloneSliceTest` shares a `FOLDER` with `READ` and a guest resolves it; bite tests: a chapter share
+      refused, `WRITE_ONLY` on a folder refused, create without the recovery copy -> 400; guards
+      `validate_contracts_common`, `validate_request_bounds` green.
+- [ ] 5a.2 epoch gap and a principal-free node operation — a move out of the root with an epoch above the current is
+      refused (`NodesHandler.kt` ~:191, any destination); the structure checks of create/placement are extracted as
+      functions of `(scopeId, optional subtree boundary)` · Done when: existing tests green, a bite test for the gap,
+      MariaDB race run.
+- [ ] 5a.3 guest tree operations in core — `POST /api/shares/{shareId}/nodes` and a placement `PATCH`
+      (`sharing` tag, own guest schema, no `wrappedMeta`; headers `X-Share-Password`, `X-Contributor-Token`; create
+      spends the upload budget), lock order scope lock -> `admitted()` -> boundary check (upward walk) -> write;
+      boundary decided under the scope lock; the root never moved, renamed or deleted by a guest and it must be live;
+      `WRITE_ONLY` refused; no guest delete; a fail-closed seam `GuestNodeRules` (per kind and operation, both sides of
+      a move; core declares `FOLDER`, Memories nothing); route table 16 -> 18 with `@RateLimit` · Done when: bite tests
+      13, 17, 18, 19, 20 of the ADR; MariaDB races: guest move against a member move out of the subtree, guest create
+      against trash, guest operation against share delete.
+- [ ] 5a.4 chapter share and role matrix — Memories declares `CHAPTER` as a share root and extends
+      `MediaShareGuestWrites` (:29) and `UploadAdmission` to it (an upload lands in the chapter: `nodeId = rootNodeId`);
+      the role matrix for Memories in `docs/apps/memories.md` from the real code · Done when: bite test 21; the matrix
+      reviewed against the guest operations of `share-media.openapi.yaml`.
+- [ ] 5b web — folder share dialog and body, chapter share (`shareable` in the registry), the member's root rename
+      re-seals share names through the recovery copy, drop the `share_key_not_recoverable` branch (`share.ts`), Restore
+      of a freed-slug descendant in the trash list (slice 4 note) · Done when: `npm run check`; e2e: a folder share,
+      a chapter share, a contributor moving inside the subtree.
 
 ### Slice 6 — the drop-box node (not in this CR)
 Files' work: ADR 0080 decision 11, inbox #349 and #350.
