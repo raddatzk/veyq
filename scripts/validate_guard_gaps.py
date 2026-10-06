@@ -1047,9 +1047,12 @@ def _in_operation(root: pathlib.Path, spec: str, operation_id: str, old: str, ne
 
 
 def forge_concurrency_declaration_dropped(root: pathlib.Path) -> str:
+    # The second declaration, so the first still stands: one declared field must not cover another.
     _in_operation(root, "content.openapi.yaml", "updateNode",
-                  "          - field: metaVersion\n            requiredWith: [wrappedMeta]\n", "")
-    return "updateNode's metaVersion declaration dropped, the field still on the request (must be REJECTED)"
+                  "          - field: placementVersion\n"
+                  "            requiredWith: [encryptedName, parentId, wrappedContentKey, slugToken]\n"
+                  "            conflictCode: stale_placement\n", "")
+    return "updateNode's placementVersion declaration dropped, metaVersion's kept (must be REJECTED)"
 
 
 def forge_second_version_field_undeclared(root: pathlib.Path) -> str:
@@ -1060,8 +1063,9 @@ def forge_second_version_field_undeclared(root: pathlib.Path) -> str:
 
 
 def forge_conflict_code_unnamed(root: pathlib.Path) -> str:
-    _in_operation(root, "content.openapi.yaml", "updateNode", "stale_version", "stale_vers1on", every=True)
-    return "updateNode's 409 no longer names its declared conflict code stale_version (must be REJECTED)"
+    # Only the declaration's own text: the 409 still names stale_version, so one named code must not cover another.
+    _in_operation(root, "content.openapi.yaml", "updateNode", "(`stale_placement`", "(`stale_plac3ment`")
+    return "updateNode's 409 no longer names its declared conflict code stale_placement (must be REJECTED)"
 
 
 # Ids must stay unique: parallel work that adds cases picks the next free id at merge time, not at branch time
