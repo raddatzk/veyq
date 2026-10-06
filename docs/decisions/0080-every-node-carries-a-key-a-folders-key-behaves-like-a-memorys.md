@@ -1,6 +1,6 @@
 # ADR 0080 — Every node carries a key, and a folder's key behaves like a Memory's
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-06
 
 ## Context
@@ -14,6 +14,12 @@ application should not rebuild what Memories already proves. A move carries no r
 (`UpdateNodeRequest`), so re-parenting a keyed node under a different keyed parent breaks its chain; the web
 has no move caller yet.
 
+The framing this ADR settles (owner, 2026-10-06): **the node tree is a sealed filesystem.** A `FOLDER` is a directory;
+an application defines node kinds, its "file types", with the program that opens them; a Memory is a *package*
+(core owns the frame, Memories owns its inside, as a macOS bundle). The group page shows one grid per application,
+which is a view by kind and not a place in the tree, and the user organizes by topic (a trip folder may hold a
+Memory, an expense and a file side by side).
+
 ## Decision
 
 1. **Every node has a random content key**, `FOLDER` included, wrapped under its parent's content key, or under
@@ -21,25 +27,43 @@ has no move caller yet.
    recursively, as ADR 0012's *Recursive `K_mem`*.
 2. **A node's directory entry lives under its parent's key.** The `node-name` seal and the slug key
    (`HKDF(parentKey, "veyq/v1/slug-token:" + parentSlot)`) take the parent's content key, `K_SC` at the root.
-   Whoever holds a folder's key reads every name and opens every key below it.
+   Whoever holds a folder's key reads every name and opens every key below it. The slug key is stable per parent key
+   below the root; at the scope root it is `K_SC` at the entry's epoch (`tree.ts:87,97`), so uniqueness there holds
+   within an epoch, exactly as today (stated, not fixed).
 3. **Move is O(1).** One request: new parent, the key re-wrapped under the new parent's key, the name re-sealed,
    a new slug token. Each node carries a `placement_version`; move and rename state the version they were built
    on and the server compares-and-sets it (`409 stale_placement`, the [ADR 0077](0077-a-write-carries-the-version-it-read.md)
-   shape), so a rename sealed for the old parent cannot land after a move. Seals bind
+   shape), so a rename sealed for the old parent cannot land after a move. Because the `content-key` seal binds the placement
+   version, **a rename re-wraps the key too**: rename and move are the same request shape (a rename is a move to the
+   same parent). Seals bind
    (scope, node, epoch, placement version) ([ADR 0072](0072-a-seal-binds-its-object.md) Decision 1); parents stay
    unbound (Decision 4) — the new parent's key is the binding.
 4. **No per-node epochs, no root rotation.** A keyed folder, like `K_mem`, never re-keys
    ([ADR 0075](0075-a-link-a-departed-member-could-copy-is-reissued.md) Context). Revocation stays layer 1:
-   server-side, re-issue never revive. Only `K_SC` rotates. A scope-root entry is sealed and re-sealed at the
-   **current** epoch and the server refuses any other (`NodesHandler` ~:96 extended to update) — today a rename
-   re-seals under the node's birth epoch and the server cannot check it.
+   server-side, re-issue never revive. Only `K_SC` rotates. The `epoch` of a node matters only for **entries at the scope root**:
+   they are sealed and re-sealed at the **current** epoch and the server refuses any other (`NodesHandler` ~:96
+   extended to update and move; the check applies when the destination is the root) — today a rename re-seals under
+   the node's birth epoch and `UpdateNodeRequest` has no epoch field, so the server cannot check it. A move to or
+   from the root resets the epoch.
 5. **Folders inherit the `K_mem` residual, accepted for parity.** A former guest or removed member who kept a
    folder's key reads everything later created under it, and a group-member removal re-keys no folder. Today that
    reach is one Memory; it widens to a folder subtree. Honest-server revocation is the cut, as ADR 0075 states.
-6. **Guest writes dispatch by the target node's kind.** A READ_WRITE guest wraps a new child under the share
-   root's or a descendant folder's key it holds. A WRITE_ONLY guest uses the drop mechanism
-   ([ADR 0031](0031-uploader-public-share.md) point 7) and holds no content key. The application registered for
-   the target kind (`ShareGuestWrites`) decides what may be written.
+6. **Tree operations for a guest are core operations behind `ShareGuestGate`; content operations are the
+   application's.** Create, move, rename and delete of nodes carry no application semantics, so core serves them
+   (a guest variant of the node operations, authorised by the gate instead of a member session) and checks the
+   structure only: inside the share's subtree, placement by `NodeKindRules`, wraps under keys the guest holds.
+   **Whoever owns the container decides what may be created in it:** under a `FOLDER`, core (a `READ_WRITE` guest
+   may create any kind `NodeKindRules` admits there); inside an application's container (a Memory), that
+   application. Reading needs no server decision (reading is holding keys, and the keys flow down the tree).
+   **`READ_WRITE` is interpreted by each application for its kinds** (what a contributor may do in a Memory, in a
+   file tree, in an expense list), written down as a small role matrix in its `docs/apps/<app>.md`; **a kind with no
+   declaration allows nothing** (fail closed, like the other seams), so a new application can never inherit write
+   rights by accident. `WRITE_ONLY` needs no matrix: such a guest holds no keys of the subtree and can only write
+   through the drop mechanism ([ADR 0031](0031-uploader-public-share.md) point 7), never into an existing Memory
+   below. **Shareability is separate from guest writes:** a `FOLDER` can be shared with `READ` whether or not any
+   application implements guest writes for it (`SharingHandler.kt:245` stops tying creation to
+   `ShareGuestWrites.supports` for the read role). Finer rights ("not the cover", "not the date") come later through
+   a policy seam that asks the application per node and operation, never a role registry in core.
 7. **One key, many wraps.** A Memory inside a shared folder may also be shared alone; its share is another wrap
    of the same key.
 8. **Trash.** Delete, restore and purge are subtree-wide on one marker (`NodesStore.deleteSubtree` re-stamps
@@ -52,7 +76,7 @@ has no move caller yet.
    and resolve serves no node outside the subtree and no parent id of the root.
 10. **Guest moves.** A `READ_WRITE` guest may move a node inside its share's subtree — never the root, never out of
     the subtree, never into a cycle — by re-wrapping the key under the new parent's key it holds. A `WRITE_ONLY` guest
-    cannot move. The server checks the structure only. Finer rights are an application's, later.
+    cannot move. The server checks the structure only; the move is core's like the other tree operations (decision 6).
 11. **A drop box is a node of its own, with one guest folder per identity.** Creating a `WRITE_ONLY` share names a
     new node under the chosen parent (its share name; never an existing folder), so the drop mechanism, its drop
     private key and the guests' folders stay apart from members' own content. A guest creates **one folder per guest
@@ -62,7 +86,8 @@ has no move caller yet.
     Anyone holding the drop box's key opens everything below, with no approval step. Below its own folder the guest
     holds the key, computes slug tokens and gets the normal uniqueness check, and learns nothing about other guests'
     names. Equal display names of two guests' folders are disambiguated by the client at display time (`(1)`,
-    `(2)`, by creation time), never stored. Members may only delete, move out or copy from a drop box and place
+    `(2)`, by creation time), never stored. A guest who loses its identity (browser data cleared) cannot manage its folder any more and
+    starts a new one under a new identity. Members may only delete, move out or copy from a drop box and place
     nothing of their own there (a server placement rule); moving out re-wraps and re-slugs under the target, where
     the normal index applies, so every other folder stays unique and a ZIP export is unambiguous. Revoking the link
     keeps the drop box and its content. Memories keeps its uploader share on an existing Memory (its media are not
@@ -70,7 +95,12 @@ has no move caller yet.
 12. **The share's recovery copy is mandatory.** `sealedShareKey`/`sealedShareKeyEpoch` ([ADR 0036](0036-editable-share-note-recoverable-share-key.md))
     become `NOT NULL` on the wire and in the baseline, so every member can always re-show and edit a link.
 13. **Attachments ([#327](../inbox.md)).** A node attachment's `K_blob` is wrapped under its owning node's key,
-   whatever the kind.
+   whatever the kind. A chapter's media already work this way: a chapter has its own `K_mem` and `K_blob` hangs under
+   it (`memoryNodes.ts:29-33`, `media.ts:368-371`), so a chapter share is cryptographically ready; it stays gated by
+   `shareable: false` (`register.ts:22`) and `MediaShareGuestWrites.kt:29` until Memories decides otherwise.
+14. **The share root's name.** It arrives as `sealedName` under `K_share`. A guest cannot rename the root (it holds
+   no parent key). When a member renames a share root, that member's client re-seals the name of every share on it
+   through the recovery copy (decision 12 makes it available), so the shown name never goes stale.
 
 **What the server stores and learns.** One more opaque wrap per folder and an integer `placement_version`.
 It already sees the tree, kinds, moves and timestamps; it holds no new key.
@@ -94,7 +124,15 @@ its own reasons).
   Serving descendant names is a product change; the owner decides it, and the share view must render or drop
   them.
 - **A core `FOLDER` can be shared** with viewer, contributor and drop-box roles.
-- **Rename and move cost a version compare**, and a client may retry on `409 stale_placement`.
+- **Rename and move cost a version compare**, and a client may retry on `409 stale_placement`; both re-wrap the key.
+- **Reading is limited by position in the tree, never by kind.** Whoever holds a folder's key opens everything
+  below it. A filter by kind exists only for writes (a drop-style share, or an application's policy), so a
+  Memory that must stay hidden from a folder's guests is not placed under that folder. A per-kind read filter would
+  need the share-time fan-out wrap rejected below.
+- **Each application documents a role matrix** for `READ_WRITE` in its `docs/apps/<app>.md`; Memories first.
+- **One guard changes its rule:** `validate_write_concurrency.py` accepts one version-shaped field per operation
+  (`:153-171`); `updateNode` now has two (`metaVersion`, `placementVersion`), so `x-veyq-concurrency` becomes a list
+  of declarations with a conflict code each.
 
 ## Alternatives rejected
 
@@ -102,10 +140,16 @@ its own reasons).
 - **Per-node epoch chains with folder rotation.** Forward secrecy per folder, at the price of an epoch chain on
   every node and an `O(subtree)` rotation; Memories has never needed it, and parity is the goal.
 - **A directory kind per application.** Every application would rebuild keyed directories.
+- **A `ROOT` node per scope, or one root node per application** (`MemoriesFolder`, a Files drive) under the group.
+  It would give each application a clean subtree but forbids mixing kinds by topic and needs a migration of every
+  root entry; `FOLDER` as the universal container with each kind admitted by `NodeKindRules` does both without one.
 
 ## Decided with the owner (2026-10-06)
 
 Guests of a Memory read its chapter titles (the consequence of decision 2). The slug key is stable per parent key.
+A share covers its subtree and nothing above. Contributors may move inside the subtree. Guest nodes in a drop box
+live in one folder per identity. The recovery copy is mandatory. A name's case is folded for files (open question
+below). Tree operations for guests are core's; `READ_WRITE` is interpreted per application, fail closed.
 
 ## Open questions
 
@@ -126,8 +170,6 @@ Guests of a Memory read its chapter titles (the consequence of decision 2). The 
   into the tokens, so a dependency's table change would silently break uniqueness; the function stays ours, and its
   output gets conformance vectors in `contracts/crypto/vectors/v1.json` (it has one for the token only). Decide
   before Files; changing it later invalidates tokens.
-- Whether a chapter's media blob keys hang under the chapter's key or its Memory's decides if a chapter guest can read the
-  chapter's media: to verify while implementing (bite test 12).
 
 ## Bite tests (each must fail if the rule is wrong)
 
@@ -145,3 +187,10 @@ Guests of a Memory read its chapter titles (the consequence of decision 2). The 
 12. A chapter guest opens neither the Memory's key, nor its name, nor a sibling chapter; resolve serves nothing above the root.
 13. A guest moves a node out of its subtree, or its root → refused; a WRITE_ONLY guest moves anything → refused.
 14. A share created without `sealedShareKey` → `400`.
+15. A rename without a re-wrapped key → `400`; a rename built on a stale `placement_version` → `409 stale_placement`.
+16. A move to the scope root at a stale epoch → `409 stale_epoch`; a move between non-root parents ignores the epoch.
+17. A `READ_WRITE` guest creates a kind `NodeKindRules` does not admit under the folder → refused.
+18. A kind with no role declaration, in a `READ_WRITE` share: a write → refused, a read → served (fail closed).
+19. A guest renames the share root → refused; a member renames it → the share's `sealedName` opens to the new name.
+20. A `READ` share on a `FOLDER` is created although no application implements guest writes for it.
+21. A chapter share (once enabled): the guest opens the chapter's media and nothing of the parent Memory.
