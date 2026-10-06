@@ -62,6 +62,12 @@ class NodeEntity : PanacheEntityBase {
     @Column(name = "meta_version", nullable = false)
     var metaVersion: Long = 0
 
+    /** How many times the node was moved or renamed (ADR 0080 Decision 3): 0 at birth, bumped only by the
+     *  compare-and-set in `NodesStore.applyUpdate`, which every placement write (parent, name, slug, key wrap) goes
+     *  through. The `node-name` and `content-key` seals bind it, so a wrap or a name is valid at exactly one version. */
+    @Column(name = "placement_version", nullable = false)
+    var placementVersion: Long = 0
+
     /** The drop private key of the shared root node of a WRITE_ONLY link, sealed under the node's content key (opaque
      *  base64) — set once, by core inside the node's first WRITE_ONLY share, never replaced: what WRITE_ONLY guests
      *  added opens through it (ADR 0031 point 7). A field of its own, never part of [wrappedMeta]. */

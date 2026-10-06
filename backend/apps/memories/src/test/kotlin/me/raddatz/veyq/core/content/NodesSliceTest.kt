@@ -49,7 +49,7 @@ class NodesSliceTest {
             val renamed = "cmVuYW1lZA==" // "renamed"
             whileUncommitted(
                 change = { media.bumpMediaRevision(memory) },
-                overlapping = { nodes.applyUpdate(scopeId, memory, renamed, null, null, null, null, null) },
+                overlapping = { nodes.applyUpdate(scopeId, memory, rootRename(scopeId, renamed), null, null, null) },
             )
             QuarkusTransaction.requiringNew().run {
                 val node = NodeEntity.findById(memory)!!
@@ -106,9 +106,9 @@ class NodesSliceTest {
         val folder = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"b2xk","slugToken":"b2xkLXM=","orderIndex":0,"wrappedContentKey":"a21lbQ=="}""")
         val memory = createNode(userId, scopeId, """{"parentId":"$folder","nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bQ==","slugToken":"bS1z","orderIndex":0,"wrappedContentKey":"aw=="}""")
 
-        // rename the folder (new ciphertext name + recomputed slug)
+        // rename the folder (new ciphertext name + recomputed slug + re-wrapped key, a placement write at the root)
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"encryptedName":"bmV3","slugToken":"bmV3LXM="}""")
+            .body("""{"encryptedName":"bmV3","slugToken":"bmV3LXM=",$REWRAP}""")
             .`when`().patch("/api/scopes/$scopeId/nodes/$folder")
             .then().statusCode(204)
         given().header("Authorization", bearer(userId)).`when`().get("/api/scopes/$scopeId/nodes")
@@ -154,7 +154,7 @@ class NodesSliceTest {
 
         // a rename that OMITS wrappedMeta must leave the sealed blob unchanged (partial semantics)
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"encryptedName":"bmV3","slugToken":"bmV3LXNsdWc="}""")
+            .body("""{"encryptedName":"bmV3","slugToken":"bmV3LXNsdWc=",$REWRAP}""")
             .`when`().patch("/api/scopes/$scopeId/nodes/$memory")
             .then().statusCode(204)
         given().header("Authorization", bearer(userId)).`when`().get("/api/scopes/$scopeId/nodes")
@@ -213,7 +213,7 @@ class NodesSliceTest {
             .then().statusCode(400).body("code", equalTo("invalid_request"))
         listed(userId, scopeId, memory).body("find { it.id == '$memory' }.wrappedMeta", equalTo("djA="))
 
-        patchNode(userId, scopeId, memory, """{"encryptedName":"bmV3","slugToken":"cmVuYW1lZA=="}""").then().statusCode(204)
+        patchNode(userId, scopeId, memory, """{"encryptedName":"bmV3","slugToken":"cmVuYW1lZA==",$REWRAP}""").then().statusCode(204)
         metaVersionOf(userId, scopeId, memory, expect = 0)
         // control: the same blob with its version is accepted
         patchNode(userId, scopeId, memory, """{"wrappedMeta":"YS12MQ==","metaVersion":0}""").then().statusCode(204)
@@ -230,13 +230,14 @@ class NodesSliceTest {
         val memory = createMemory(userId, scopeId, meta = "djA=")
         patchNode(userId, scopeId, memory, """{"wrappedMeta":"YS12MQ==","metaVersion":0}""").then().statusCode(204)
 
-        patchNode(userId, scopeId, memory, """{"encryptedName":"c3RhbGU=","slugToken":"c3RhbGU=","wrappedMeta":"Yi12MQ==","metaVersion":0}""")
+        patchNode(userId, scopeId, memory, """{"encryptedName":"c3RhbGU=","slugToken":"c3RhbGU=",$REWRAP,"wrappedMeta":"Yi12MQ==","metaVersion":0}""")
             .then().statusCode(409).body("code", equalTo("stale_version"))
         listed(userId, scopeId, memory)
             .body("find { it.id == '$memory' }.encryptedName", equalTo("bWVt"))
             .body("find { it.id == '$memory' }.slugToken", equalTo("bWV0YS1z"))
+            .body("find { it.id == '$memory' }.placementVersion", equalTo(0))
         // control: the same rename at the current version lands, name and meta together
-        patchNode(userId, scopeId, memory, """{"encryptedName":"c3RhbGU=","slugToken":"c3RhbGU=","wrappedMeta":"Yi12MQ==","metaVersion":1}""")
+        patchNode(userId, scopeId, memory, """{"encryptedName":"c3RhbGU=","slugToken":"c3RhbGU=",$REWRAP,"wrappedMeta":"Yi12MQ==","metaVersion":1}""")
             .then().statusCode(204)
         listed(userId, scopeId, memory)
             .body("find { it.id == '$memory' }.encryptedName", equalTo("c3RhbGU="))
@@ -244,6 +245,17 @@ class NodesSliceTest {
     }
 
     // --- helpers ---
+
+    private companion object {
+        /** The rest of a placement write at the scope root, built on a new node's version (ADR 0080 Decision 3). */
+        const val REWRAP = """"wrappedContentKey":"cmUtd3JhcA==","epoch":0,"placementVersion":0"""
+    }
+
+    /** A rename of a scope-root node in place, built on placement version 0 — the store's own input. */
+    private fun rootRename(scopeId: String, name: String) = NodesStore.Placement(
+        parentSlot = scopeId, encryptedName = name, slugToken = "cmVuYW1lLXNsdWc=", wrappedContentKey = "cmUtd3JhcA==",
+        epoch = null, expectedVersion = 0,
+    )
 
     private fun createMemory(userId: String, scopeId: String, meta: String): String = createNode(
         userId, scopeId,

@@ -5,6 +5,7 @@ import me.raddatz.veyq.core.content.NodesHandler
 import me.raddatz.veyq.core.content.UpdateNodeOutcome
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
+import me.raddatz.veyq.core.testing.TestFixtures.placementTo
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject
 import java.util.UUID
@@ -94,7 +95,7 @@ class NodeKindMatrixSliceTest {
         for (kind in kinds) for (parent in parents) {
             val t = tree() // a fresh tree per move, so no earlier move changes a later cell's parent or slug
             val node = seedNode(t.scopeId, kind, wrappedContentKey = CONTENT_KEY)
-            val outcome = handler.update(t.userId, t.scopeId, node, null, null, t.slots.getValue(parent), null, null, null)
+            val outcome = handler.update(t.userId, t.scopeId, node, placementTo(t.slots.getValue(parent)), null, null, null)
             val moved = when (outcome) {
                 UpdateNodeOutcome.Updated -> true
                 UpdateNodeOutcome.IllegalStructure -> false

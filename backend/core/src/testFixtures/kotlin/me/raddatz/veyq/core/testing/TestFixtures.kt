@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.testing
 
 import me.raddatz.veyq.core.node.NodeEntity
+import me.raddatz.veyq.core.content.NodesHandler
 import me.raddatz.veyq.core.account.login.SessionService
 import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.membership.MembershipEntity
@@ -10,6 +11,7 @@ import me.raddatz.veyq.core.tenant.TenantEntity
 import io.quarkus.arc.Arc
 import io.quarkus.narayana.jta.QuarkusTransaction
 import java.time.Instant
+import java.util.Base64
 import java.util.UUID
 
 /**
@@ -170,6 +172,23 @@ object TestFixtures {
         }
         return id
     }
+
+    /**
+     * A complete placement write (ADR 0080 Decision 3) to [parentId] (null = the scope root), built on
+     * [placementVersion] and sealed at [epoch]: a fresh slug token, so two placements never collide unless a test
+     * says so, and opaque name and wrap bytes — the server opens neither.
+     */
+    fun placementTo(
+        parentId: String?,
+        placementVersion: Long = 0,
+        epoch: Int = 0,
+        encryptedName: String = "cGxhY2Vk",
+        wrappedContentKey: String = "cmUtd3JhcHBlZA==",
+        slugToken: String = Base64.getEncoder().encodeToString(UUID.randomUUID().toString().toByteArray()),
+    ): NodesHandler.PlacementRequest = NodesHandler.PlacementRequest(
+        parentId = parentId, encryptedName = encryptedName, slugToken = slugToken, wrappedContentKey = wrappedContentKey,
+        epoch = epoch, placementVersion = placementVersion,
+    )
 
     /** The opaque sealed drop keypair halves and a wrapped WRITE_ONLY identity key (ADR 0031 point 7). */
     const val DROP_PUBLIC_KEY = "c2VhbGVkLWRyb3AtcHVibGljLWtleQ=="

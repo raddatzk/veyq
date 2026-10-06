@@ -45,7 +45,7 @@ class ShareDirectoryEntrySliceTest {
     private val nestedName = "bmVzdGVkLW5hbWU="
     private val siblingName = "c2libGluZy1uYW1l"
 
-    private data class Tree(val userId: String, val folder: String, val memory: String, val chapter: String, val nested: String, val sibling: String)
+    private data class Tree(val userId: String, val scopeId: String, val folder: String, val memory: String, val chapter: String, val nested: String, val sibling: String)
 
     /** folder ⊃ { memory ⊃ chapter ⊃ nested, sibling chapter-less Memory } — the share is rooted at `memory`. */
     private fun seedTree(): Tree {
@@ -55,7 +55,7 @@ class ShareDirectoryEntrySliceTest {
         val chapter = seedNode(scopeId, MemoriesNodeKinds.CHAPTER, parentId = memory, wrappedContentKey = CONTENT_KEY, encryptedName = chapterName)
         val nested = seedNode(scopeId, MemoriesNodeKinds.CHAPTER, parentId = chapter, wrappedContentKey = CONTENT_KEY, encryptedName = nestedName)
         val sibling = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = folder, wrappedContentKey = CONTENT_KEY, encryptedName = siblingName)
-        return Tree(userId, folder, memory, chapter, nested, sibling)
+        return Tree(userId, scopeId, folder, memory, chapter, nested, sibling)
     }
 
     @Test
@@ -85,6 +85,27 @@ class ShareDirectoryEntrySliceTest {
             { assertFalse(body.contains(t.sibling) || body.contains(siblingName), "nothing outside the subtree") },
             { assertEquals(2, Regex("\"encryptedName\"").findAll(body).count(), "a name key per descendant, none for the root") },
         )
+    }
+
+    /** ADR 0080 Decision 3: a descendant's name and wrap are sealed at its placement version, so resolve serves the
+     *  version beside them — the one a member's rename moved to — and none for the root, whose entry it does not serve. */
+    @Test
+    fun aResolveServesEachDescendantsPlacementVersionAndNoneForTheRoot() {
+        val t = seedTree()
+        given().header("Authorization", bearer(t.userId)).contentType(ContentType.JSON)
+            .body("""{"parentId":"${t.memory}","encryptedName":"cmVuYW1lZA==","slugToken":"cmVuYW1lZC1zbHVn","wrappedContentKey":"cmUtd3JhcA==","epoch":0,"placementVersion":0}""")
+            .`when`().patch("/api/scopes/${t.scopeId}/nodes/${t.chapter}").then().statusCode(204)
+        val shareId = createShare(t.userId, t.memory, "READ")
+
+        val body = given().`when`().get("/api/shares/$shareId")
+            .then().statusCode(200)
+            .body("nodes.find { it.id == '${t.chapter}' }.placementVersion", equalTo(1))
+            .body("nodes.find { it.id == '${t.chapter}' }.encryptedName", equalTo("cmVuYW1lZA=="))
+            .body("nodes.find { it.id == '${t.chapter}' }.wrappedContentKey", equalTo("cmUtd3JhcA=="))
+            .body("nodes.find { it.id == '${t.nested}' }.placementVersion", equalTo(0))
+            .body("nodes.find { it.id == '${t.memory}' }.placementVersion", nullValue())
+            .extract().asString()
+        assertEquals(2, Regex("\"placementVersion\"").findAll(body).count(), "a version per descendant, none for the root")
     }
 
     @Test

@@ -39,6 +39,13 @@ sealed interface UpdateNodeOutcome {
     object SlugTaken : UpdateNodeOutcome, HttpFailure by Failures.slugTaken
     /** `wrappedMeta` sent without the `metaVersion` it was built from — an old client cannot skip the check. */
     object MissingMetaVersion : UpdateNodeOutcome, HttpFailure by Failures.invalidRequest
+    /** A part of a placement write without the rest — a name, slug, wrap or parent without its re-wrapped key, its
+     *  `epoch` or its `placementVersion` (ADR 0080 Decision 3). */
+    object IncompletePlacement : UpdateNodeOutcome, HttpFailure by Failures.invalidRequest
+    /** The node was moved or renamed past the stated `placementVersion`; nothing was written (ADR 0080 Decision 3). */
+    object StalePlacement : UpdateNodeOutcome, HttpFailure by Failures.stalePlacement
+    /** A placement at the scope root sealed at an epoch that is not the scope's current one (ADR 0080 Decision 4). */
+    object StaleEpoch : UpdateNodeOutcome, HttpFailure by Failures.staleEpoch
     /** The node's `wrappedMeta` moved past the stated version; nothing was written (ADR 0077). Carries the current
      *  blob and version for the loser to re-apply its own change on. */
     data class StaleMeta(val wrappedMeta: String?, val metaVersion: Long) : UpdateNodeOutcome, HttpFailure by Failures.staleVersion
@@ -126,35 +133,85 @@ class NodesHandler(
         return ListNodesOutcome.Nodes(store.list(scopeId))
     }
 
+    /**
+     * What a placement write (a move or a rename — one request shape, ADR 0080 Decision 3) carries: the destination
+     * ([parentId], null = the scope root; a rename names the current parent), the node's content key re-wrapped under
+     * the destination's key, the name and slug re-sealed under it, the [epoch] they were sealed at and the
+     * [placementVersion] they were built on. Every field but the parent is required once any of them is sent.
+     */
+    data class PlacementRequest(
+        val parentId: String?,
+        val encryptedName: String?,
+        val slugToken: String?,
+        val wrappedContentKey: String?,
+        val epoch: Int?,
+        val placementVersion: Long?,
+    ) {
+        /** Whether the request asks for a placement at all — any of its fields, the destination included. */
+        val present: Boolean
+            get() = parentId != null || encryptedName != null || slugToken != null || wrappedContentKey != null ||
+                epoch != null || placementVersion != null
+
+        /** Whether every field a placement needs is there: a rename without a re-wrapped key cannot land, because
+         *  the old wrap is sealed at the old version and would stop opening (bite test 15). */
+        val complete: Boolean
+            get() = !encryptedName.isNullOrBlank() && !slugToken.isNullOrBlank() && !wrappedContentKey.isNullOrBlank() &&
+                epoch != null && placementVersion != null
+    }
+
     fun update(
-        userId: String, scopeId: String, nodeId: String,
-        encryptedName: String?, slugToken: String?, newParentSlotId: String?, orderIndex: Int?, wrappedMeta: String?,
-        metaVersion: Long?,
+        userId: String, scopeId: String, nodeId: String, placement: PlacementRequest, orderIndex: Int?,
+        wrappedMeta: String?, metaVersion: Long?,
     ): UpdateNodeOutcome {
         // The request's own shape first, as the boundary's validation is: a malformed body is a 400 for anyone.
         if (wrappedMeta != null && metaVersion == null) return UpdateNodeOutcome.MissingMetaVersion
+        if (placement.present && !placement.complete) return UpdateNodeOutcome.IncompletePlacement
         access.check(userId, scopeId, WRITE)
             .refusal(UpdateNodeOutcome.NotFound, UpdateNodeOutcome.Suspended, UpdateNodeOutcome.ScopeDeleting)?.let { return it }
+        // A trashed node is not found: it is neither movable nor renamable (its entry is restored, not placed).
         val node = store.findInScope(scopeId, nodeId) ?: return UpdateNodeOutcome.NotFound
 
-        var moveSlot: String? = null
-        if (newParentSlotId != null) { // a move; the root is addressed as the scope id, never null
-            val parent = store.parentSlot(scopeId, newParentSlotId)
+        var write: NodesStore.Placement? = null
+        if (placement.present) {
+            val slot = placement.parentId ?: scopeId // null/absent → the scope root (slot = scope id)
+            val parent = store.parentSlot(scopeId, slot)
+            // A missing, trashed or foreign destination; a kind its placement rule refuses there; the node itself or
+            // a node inside its own subtree (a cycle). The fast path — the store decides the first and the last again
+            // under the tree's lock.
             if (parent is ParentSlot.Missing) return UpdateNodeOutcome.IllegalStructure
             if (!parentAllows(node.kind, parent)) return UpdateNodeOutcome.IllegalStructure
-            if (newParentSlotId == nodeId || store.wouldCycle(scopeId, nodeId, newParentSlotId)) {
-                return UpdateNodeOutcome.IllegalStructure
+            if (slot == nodeId || store.wouldCycle(scopeId, nodeId, slot)) return UpdateNodeOutcome.IllegalStructure
+            // ADR 0080 Decision 4: an entry at the scope root lives under K_SC, so it is sealed at the CURRENT epoch —
+            // a rename at the root and a move into it alike (ADR 0024 Decision 6: an older epoch's key is one a member
+            // removed since still holds). Unlocked, like create's: a placement racing the rotation that supersedes
+            // its epoch was sealed while that epoch was current. Below the root the entry is under the parent's key,
+            // which no rotation changes: a move out of the root stores the epoch the client sealed at, and a
+            // placement between two non-root parents keeps the stored one (the client seals at it; the
+            // compare-and-set guarantees the parent it read is still the node's).
+            val epoch = placement.epoch!!
+            val storedEpoch = when {
+                parent is ParentSlot.Root -> {
+                    if (epoch != store.currentEpoch(scopeId)) return UpdateNodeOutcome.StaleEpoch
+                    epoch
+                }
+                node.parentId == scopeId -> epoch
+                else -> null
             }
-            moveSlot = newParentSlotId
+            write = NodesStore.Placement(
+                parentSlot = slot,
+                encryptedName = placement.encryptedName!!,
+                slugToken = placement.slugToken!!,
+                wrappedContentKey = placement.wrappedContentKey!!,
+                epoch = storedEpoch,
+                expectedVersion = placement.placementVersion!!,
+            )
         }
-        val targetSlot = moveSlot ?: node.parentId
-        if (slugToken != null && store.slugTaken(targetSlot, slugToken, exceptNodeId = nodeId)) {
-            return UpdateNodeOutcome.SlugTaken
-        }
-        return when (val r = store.applyUpdate(scopeId, nodeId, encryptedName, slugToken, moveSlot, orderIndex, wrappedMeta, metaVersion)) {
+        return when (val r = store.applyUpdate(scopeId, nodeId, write, orderIndex, wrappedMeta, metaVersion)) {
             NodesStore.ApplyResult.Applied -> UpdateNodeOutcome.Updated
             NodesStore.ApplyResult.Missing -> UpdateNodeOutcome.NotFound
             NodesStore.ApplyResult.IllegalMove -> UpdateNodeOutcome.IllegalStructure
+            NodesStore.ApplyResult.SlugTaken -> UpdateNodeOutcome.SlugTaken
+            NodesStore.ApplyResult.StalePlacement -> UpdateNodeOutcome.StalePlacement
             is NodesStore.ApplyResult.StaleMeta -> UpdateNodeOutcome.StaleMeta(r.wrappedMeta, r.metaVersion)
         }
     }

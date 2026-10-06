@@ -24,6 +24,9 @@ data class NodeRow(
     val sealedDropPrivateKey: String? = null,
     /** How many times [wrappedMeta] was replaced — the version a meta write states (ADR 0077). */
     val metaVersion: Long = 0,
+    /** How many times the node was moved or renamed — the version its name and key wrap are sealed at, and the one a
+     *  placement write states (ADR 0080 Decision 3). */
+    val placementVersion: Long = 0,
 )
 
 /** One soft-deleted subtree ROOT in the space's trash (uc.memory.delete-node). `deletedAt` is the marker the
@@ -34,6 +37,8 @@ data class TrashedNodeRow(
     val kind: String,
     val encryptedName: String,
     val epoch: Int,
+    /** The placement version [encryptedName] is sealed at; a trash and a restore leave it alone. */
+    val placementVersion: Long,
     val deletedAt: Instant,
 )
 
@@ -138,62 +143,102 @@ class NodesStore {
         NodeEntity.find("scopeId = ?1 and deletedAt is null", scopeId).list().map {
             NodeRow(
                 it.id, it.parentId, it.kind, it.encryptedName, it.slugToken, it.orderIndex, it.epoch, it.wrappedContentKey,
-                it.wrappedMeta, it.sealedDropPrivateKey, it.metaVersion,
+                it.wrappedMeta, it.sealedDropPrivateKey, it.metaVersion, it.placementVersion,
             )
         }
 
-    /** What [applyUpdate] did: applied, found no live node, refused a move its parent no longer allows, or refused a
-     *  stale meta write (with the current value). */
+    /** What [applyUpdate] did: applied, found no live node, refused a placement its destination no longer allows (a
+     *  trashed or foreign parent, a cycle) or whose slug is taken there, or refused a stale placement or a stale meta
+     *  write (the latter with the current value). In every refusal nothing was written. */
     sealed interface ApplyResult {
         object Applied : ApplyResult
         object Missing : ApplyResult
         object IllegalMove : ApplyResult
+        object SlugTaken : ApplyResult
+        object StalePlacement : ApplyResult
         data class StaleMeta(val wrappedMeta: String?, val metaVersion: Long) : ApplyResult
     }
 
     /**
-     * Apply a partial update. A present [wrappedMeta] is written only if [metaVersion] is still the stored one
-     * (ADR 0077); on a miss **nothing** is written — a rename in the same request included — and the current blob
-     * and version come back for the `409`.
+     * A placement write (ADR 0080 Decision 3): every field of the node's directory entry and key wrap at once, built on
+     * [expectedVersion]. [epoch] is the epoch to store, or null to keep the stored one (a placement between two
+     * non-root parents, ADR 0080 Decision 4 — the handler decides which).
+     */
+    data class Placement(
+        val parentSlot: String,
+        val encryptedName: String,
+        val slugToken: String,
+        val wrappedContentKey: String,
+        val epoch: Int?,
+        val expectedVersion: Long,
+    )
+
+    /**
+     * Apply a partial update: a [placement], a reorder, a payload re-seal — each optional. A placement is written only
+     * if the node's `placementVersion` is still [Placement.expectedVersion] (ADR 0080 Decision 3), a [wrappedMeta]
+     * only if [metaVersion] is still the stored one (ADR 0077); on either miss **nothing** is written and the caller
+     * learns which.
      *
-     * The compare-and-set runs FIRST, as a bulk UPDATE, before this transaction loads the entity. Loaded first, the
-     * managed copy would hold the pre-update `wrappedMeta`/`metaVersion`; today `@DynamicUpdate` keeps a rename's
-     * flush off those columns, but this order does not lean on that — loaded after it, the entity reads the row as
-     * it now is, so no flush can write a stale meta back over the compare-and-set's result.
+     * **One statement.** Every column the request changes, both version bumps and both version compares sit in ONE
+     * bulk UPDATE, so its row count is the whole verdict: two compare-and-sets in two statements would have to undo
+     * the first when the second missed. It runs before this transaction loads the node, so no managed copy holds the
+     * pre-update row for a flush to write back; on a miss the node is loaded afterwards, as it now is, to tell the two
+     * conflicts apart.
      *
-     * Under the tree's lock ([lockScope]), taken before anything else: a move's parent and its cycle check are decided
-     * again under it (the handler's are the fast path), and every write finds the node as a trash that held the lock
-     * left it — a move or a slug written onto a subtree being trashed would land on a node the trash just stamped.
-     * Neither check loads the moved node itself, so the order above holds.
+     * **Lock order: the scope row ([lockScope]), then the node row.** The tree's lock is taken before anything else,
+     * and the node row is locked only by the UPDATE, after it. A placement decides by more than its own row — the
+     * destination must be live (a trash enumerates and stamps a subtree under the same lock), must not lie inside the
+     * node's own subtree, and must not already hold the slug — so it serializes on the parent of every row it reads,
+     * the scope (developer-styleguide §12). Two moves that would each be legal alone but form a cycle together (A
+     * into B while B into A) thus run one after the other, and the second's [wouldCycle] reads the first's committed
+     * parent (READ COMMITTED, ADR 0078). No writer takes a node row and then the scope: the media writes that lock a
+     * node row (`MediaStore.commitCover`, a primary bucket) never take the scope lock, and every tree write here
+     * takes the scope first, so there is no inversion.
      */
     @Transactional
     fun applyUpdate(
-        scopeId: String, nodeId: String, encryptedName: String?, slugToken: String?, newParentSlot: String?, orderIndex: Int?,
-        wrappedMeta: String?, metaVersion: Long?,
+        scopeId: String, nodeId: String, placement: Placement?, orderIndex: Int?, wrappedMeta: String?, metaVersion: Long?,
     ): ApplyResult {
         lockScope(scopeId)
-        if (newParentSlot != null &&
-            (parentSlot(scopeId, newParentSlot) is ParentSlot.Missing || wouldCycle(scopeId, nodeId, newParentSlot))
-        ) {
-            return ApplyResult.IllegalMove
+        if (placement != null) {
+            // Decided again under the lock — the handler's checks are the fast path, these are the verdict.
+            if (parentSlot(scopeId, placement.parentSlot) is ParentSlot.Missing ||
+                placement.parentSlot == nodeId || wouldCycle(scopeId, nodeId, placement.parentSlot)
+            ) {
+                return ApplyResult.IllegalMove
+            }
+            if (slugTaken(placement.parentSlot, placement.slugToken, exceptNodeId = nodeId)) return ApplyResult.SlugTaken
         }
+        val sets = mutableListOf<String>()
+        val conds = mutableListOf("id = :id", "deletedAt is null")
+        val params = mutableMapOf<String, Any>("id" to nodeId)
+        placement?.let { p ->
+            sets += listOf(
+                "parentId = :parentId", "encryptedName = :encryptedName", "slugToken = :slugToken",
+                "wrappedContentKey = :wrappedContentKey", "placementVersion = :nextPlacement",
+            )
+            params += mapOf(
+                "parentId" to p.parentSlot, "encryptedName" to p.encryptedName, "slugToken" to p.slugToken,
+                "wrappedContentKey" to p.wrappedContentKey, "nextPlacement" to p.expectedVersion + 1,
+                "placementVersion" to p.expectedVersion,
+            )
+            conds += "placementVersion = :placementVersion"
+            p.epoch?.let { sets += "epoch = :epoch"; params["epoch"] = it }
+        }
+        orderIndex?.let { sets += "orderIndex = :orderIndex"; params["orderIndex"] = it }
         if (wrappedMeta != null) {
             val expected = checkNotNull(metaVersion) { "the handler refuses wrappedMeta without its metaVersion" }
-            val rows = NodeEntity.update(
-                "wrappedMeta = ?1, metaVersion = ?2 where id = ?3 and metaVersion = ?4 and deletedAt is null",
-                wrappedMeta, expected + 1, nodeId, expected,
-            )
-            if (rows == 0) {
-                val current = NodeEntity.findById(nodeId)?.takeIf { it.deletedAt == null } ?: return ApplyResult.Missing
-                return ApplyResult.StaleMeta(current.wrappedMeta, current.metaVersion)
-            }
+            sets += listOf("wrappedMeta = :wrappedMeta", "metaVersion = :nextMeta")
+            params += mapOf("wrappedMeta" to wrappedMeta, "nextMeta" to expected + 1, "metaVersion" to expected)
+            conds += "metaVersion = :metaVersion"
         }
-        val node = NodeEntity.findById(nodeId)?.takeIf { it.deletedAt == null } ?: return ApplyResult.Missing
-        encryptedName?.let { node.encryptedName = it }
-        slugToken?.let { node.slugToken = it }
-        newParentSlot?.let { node.parentId = it }
-        orderIndex?.let { node.orderIndex = it }
-        return ApplyResult.Applied
+        if (sets.isEmpty()) return if (findInScope(scopeId, nodeId) != null) ApplyResult.Applied else ApplyResult.Missing
+        val rows = NodeEntity.update("${sets.joinToString(", ")} where ${conds.joinToString(" and ")}", params)
+        if (rows > 0) return ApplyResult.Applied
+        val current = NodeEntity.findById(nodeId)?.takeIf { it.deletedAt == null } ?: return ApplyResult.Missing
+        if (placement != null && current.placementVersion != placement.expectedVersion) return ApplyResult.StalePlacement
+        if (wrappedMeta != null && current.metaVersion != metaVersion) return ApplyResult.StaleMeta(current.wrappedMeta, current.metaVersion)
+        return ApplyResult.Missing
     }
 
     /**
@@ -282,7 +327,7 @@ class NodesStore {
         val trashedIds = all.mapTo(HashSet()) { it.id }
         return all.filter { it.parentId !in trashedIds }
             .sortedWith(compareByDescending<NodeEntity> { it.deletedAt }.thenBy { it.id })
-            .map { TrashedNodeRow(it.id, it.parentId, it.kind, it.encryptedName, it.epoch, it.deletedAt!!) }
+            .map { TrashedNodeRow(it.id, it.parentId, it.kind, it.encryptedName, it.epoch, it.placementVersion, it.deletedAt!!) }
     }
 
     /** BFS the scope's rows from [rootId], collecting the root + every descendant id (state-blind by design —

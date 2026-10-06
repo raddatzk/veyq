@@ -33,7 +33,7 @@ named the 20 subject operations and `acceptTenantTerms` (a POST outside the verb
 
 **Its limit.** It proves a **declaration** and its **wire form**, never behaviour: that the server actually
 compares the version is proven by the red-first slice tests (`NodesSliceTest`, `MediaSliceTest`,
-`IdentityPinsSliceTest`), and that a `last-writer-wins` reason is *true* is a reviewer's call. A POST edit whose
+`IdentityPinsSliceTest`, the placement's `NodePlacementCoreSliceTest`), and that a `last-writer-wins` reason is *true* is a reviewer's call. A POST edit whose
 `operationId` starts with a verb outside the list slips through unless it carries a version-shaped field. A
 `requiredWith` is not checked against the server's enforcement. The first shape reached for was keyed on the
 method alone (PUT/PATCH), which misses six POST edits (`renameGroup`, `setScopeIcon`, `moveBucketMedia`,
