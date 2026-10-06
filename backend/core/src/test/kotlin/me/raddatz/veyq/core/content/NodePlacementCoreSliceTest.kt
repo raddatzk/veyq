@@ -20,7 +20,8 @@ import org.junit.jupiter.api.Test
 /**
  * Move and rename are one placement write (ADR 0080 Decision 3): the destination, the content key re-wrapped under its
  * key, the re-sealed name and slug, the epoch and the `placementVersion` the write was built on. The server
- * compare-and-sets the version (`409 stale_placement`), checks the epoch only at the scope root (Decision 4), and
+ * compare-and-sets the version (`409 stale_placement`), checks the epoch for equality at the scope root and for "not
+ * above the current" everywhere (Decision 4), and
  * refuses a destination that is missing, trashed or inside the node's own subtree (`422 illegal_structure`). Every
  * refusal writes nothing: each test reads the row back, and each has a control that lands.
  *
@@ -83,8 +84,9 @@ class NodePlacementCoreSliceTest {
         assertRow(t.a, parent = t.scopeId, name = "bmV3", wrap = "bmV3LXdyYXA=", version = 1, epoch = 1)
     }
 
-    /** Bite test 16: a move INTO the root is checked like a root rename; a move between two non-root parents ignores
-     *  the request's epoch and keeps the stored one; a move OUT of the root stores the epoch the client sealed at. */
+    /** Bite test 16: a move INTO the root is checked like a root rename; a move between two non-root parents keeps the
+     *  stored epoch (a request's epoch below the current is not refused); a move OUT of the root stores the epoch the
+     *  client sealed at. */
     @Test
     fun theEpochIsCheckedOnlyAtTheRoot() {
         val t = tree()
@@ -93,10 +95,11 @@ class NodePlacementCoreSliceTest {
             .statusCode(409).body("code", equalTo("stale_epoch"))
         assertRow(t.child, parent = t.a, name = "Y2hpbGQ=", wrap = CONTENT_KEY, version = 0, epoch = 0)
 
-        // between non-root parents: neither a stale nor a made-up epoch is refused, and neither is stored
+        // between non-root parents: an epoch below the current one is not refused, and not stored (one above it is —
+        // anEpochAboveTheCurrentIsRefusedForAnyDestination)
         place(t, t.child, to = t.b, version = 0, name = "aW4tYg==", wrap = "aW4tYi13cmFw", epoch = 0).statusCode(204)
         assertRow(t.child, parent = t.b, name = "aW4tYg==", wrap = "aW4tYi13cmFw", version = 1, epoch = 0)
-        place(t, t.child, to = t.a, version = 1, name = "aW4tYQ==", wrap = "aW4tYS13cmFw", epoch = 7).statusCode(204)
+        place(t, t.child, to = t.a, version = 1, name = "aW4tYQ==", wrap = "aW4tYS13cmFw", epoch = 1).statusCode(204)
         assertRow(t.child, parent = t.a, name = "aW4tYQ==", wrap = "aW4tYS13cmFw", version = 2, epoch = 0)
 
         // into the root at the current epoch: stored
@@ -107,6 +110,30 @@ class NodePlacementCoreSliceTest {
         rotate(t.scopeId, to = 2)
         place(t, t.child, to = t.b, version = 3, name = "b3V0", wrap = "b3V0LXdyYXA=", epoch = 2).statusCode(204)
         assertRow(t.child, parent = t.b, name = "b3V0", wrap = "b3V0LXdyYXA=", version = 4, epoch = 2)
+    }
+
+    /** The epoch gap slice 3 left (5a.2): off the root the request's epoch was stored or ignored unchecked, so a move
+     *  out of the root could store an epoch past the scope's. Above the current epoch is refused for ANY destination;
+     *  below it stays accepted off the root (the entry's own sealed epoch). */
+    @Test
+    fun anEpochAboveTheCurrentIsRefusedForAnyDestination() {
+        val t = tree()
+        rotate(t.scopeId, to = 1)
+        // out of the root, at an epoch that does not exist yet: refused, the stored epoch unchanged
+        place(t, t.a, to = t.b, version = 0, name = "b3V0", wrap = "b3V0LXdyYXA=", epoch = 2)
+            .statusCode(409).body("code", equalTo("stale_epoch"))
+        assertRow(t.a, parent = t.scopeId, name = "YQ==", wrap = CONTENT_KEY, version = 0, epoch = 0)
+        // between two non-root parents: refused too
+        place(t, t.child, to = t.b, version = 0, name = "aW4tYg==", wrap = "aW4tYi13cmFw", epoch = 2)
+            .statusCode(409).body("code", equalTo("stale_epoch"))
+        assertRow(t.child, parent = t.a, name = "Y2hpbGQ=", wrap = CONTENT_KEY, version = 0, epoch = 0)
+
+        // controls: below the current epoch between non-root parents lands (the stored one kept); out of the root at
+        // the current epoch lands and is stored
+        place(t, t.child, to = t.b, version = 0, name = "aW4tYg==", wrap = "aW4tYi13cmFw", epoch = 0).statusCode(204)
+        assertRow(t.child, parent = t.b, name = "aW4tYg==", wrap = "aW4tYi13cmFw", version = 1, epoch = 0)
+        place(t, t.a, to = t.b, version = 0, name = "b3V0", wrap = "b3V0LXdyYXA=", epoch = 1).statusCode(204)
+        assertRow(t.a, parent = t.b, name = "b3V0", wrap = "b3V0LXdyYXA=", version = 1, epoch = 1)
     }
 
     /** Bite test 11: a cycle-forming move → `illegal_structure`, the placement version unchanged. */
