@@ -114,11 +114,12 @@ Guests of a Memory read its chapter titles (the consequence of decision 2). The 
   path segment, and the token freezes it. For Files that is too coarse for **files** (`Day1.md` = `Day1 md`).
   Proposed: a hook per node kind in the registry. **Containers (folders, Memories) keep today's slug**: it is the URL
   segment and the uniqueness at once (`Müller` and `Mueller` collide, accepted: rare, and the message names the
-  colliding sibling). **Leaves (files)** are not in the URL and use a stricter uniqueness: NFC only, otherwise
-  exact (`Day1.md` ≠ `Day1 md`, `README` ≠ `readme`: case is distinguished, as some filesystems expect). A ZIP export
-  detects names that differ only by case and renames the later one (`foto (1).jpg`) with a notice, because macOS (APFS
-  default) and Windows would merge them; that is an export property, not a database invariant. Folders still collide
-  case-insensitively through their slug, because the slug is their URL segment. Display names
+  colliding sibling). **Leaves (files)** are not in the URL and use a stricter uniqueness: NFC plus simple lowercasing (`toLowerCase()`
+  after NFC, no locale rules: `Foto.JPG` = `foto.jpg`, as on OneDrive, Dropbox, macOS and Windows; punctuation is
+  kept, so `Day1.md` ≠ `Day1 md`). The stored name keeps its original case. The folding is frozen into the token, so
+  its output gets conformance vectors. Starting insensitive is the safe direction: loosening later would meet
+  existing pairs. A ZIP export therefore needs no case rule, only a sanitiser for the target system. Folders and
+  files now agree: both collide case-insensitively. Display names
   are always the original. The client checks the decrypted siblings before sending and explains the conflict by
   naming the colliding sibling; the server's `slug_taken` is only the race backstop. Non-Latin names keep the hash
   fallback until someone needs a frozen, versioned transliteration table. **No slug library**: the slug is frozen
