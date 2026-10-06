@@ -53,7 +53,7 @@ class NodeTreeRaceSliceTest {
     fun aNodeCreatedUnderAFolderBeingTrashedIsRefused() {
         repeat(RACE_ROUNDS) { round ->
             val (userId, scopeId) = seedMemberScope()
-            val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = null)
+            val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
             val child = UUID.randomUUID().toString()
             val outcome = whileUncommitted(
                 change = { store.deleteSubtree(scopeId, folder) },
@@ -62,7 +62,7 @@ class NodeTreeRaceSliceTest {
             assertEquals(CreateNodeOutcome.IllegalStructure, outcome, "round $round: a node was created under a trashed folder")
             assertNull(tx { NodeEntity.findById(child) }, "round $round: nothing written")
             // Control: the same create under a folder nobody trashes lands.
-            val live = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = null)
+            val live = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
             val fresh = UUID.randomUUID().toString()
             assertEquals(CreateNodeOutcome.Created(fresh), createMemory(userId, scopeId, fresh, live), "round $round: control")
         }
@@ -72,7 +72,7 @@ class NodeTreeRaceSliceTest {
     fun aNodeMovedUnderAFolderBeingTrashedIsRefused() {
         repeat(RACE_ROUNDS) { round ->
             val (userId, scopeId) = seedMemberScope()
-            val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = null)
+            val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
             val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
             val outcome = whileUncommitted(
                 change = { store.deleteSubtree(scopeId, folder) },
@@ -84,7 +84,7 @@ class NodeTreeRaceSliceTest {
                 assertEquals(scopeId, row.parentId, "round $round: the node stays where it was")
                 assertNull(row.deletedAt, "round $round")
             }
-            val live = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = null)
+            val live = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
             assertEquals(UpdateNodeOutcome.Updated, move(userId, scopeId, memory, live), "round $round: control")
         }
     }

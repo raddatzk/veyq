@@ -97,7 +97,7 @@ class ScopesMemoriesSliceTest {
 
     /** A minimal FOLDER-node create body; `slug` becomes a base64 slug token (unique per parent). */
     private fun nodeBody(slug: String) =
-        """{"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"$groupName","slugToken":"${Base64.getEncoder().encodeToString(slug.toByteArray())}","orderIndex":0}"""
+        """{"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"$groupName","slugToken":"${Base64.getEncoder().encodeToString(slug.toByteArray())}","orderIndex":0,"wrappedContentKey":"a21lbQ=="}"""
 
     /** Create a FOLDER node in a scope (a write) → the new nodeId. */
     private fun createNodeIn(owner: String, scopeId: String, slug: String): String =

@@ -66,13 +66,16 @@ const level = computed(() => childrenOf(treeStore.nodes, currentNodeId.value))
 // isn't reactive, so depend on BOTH `status` (keys set on scope entry) and `epoch` (keys swapped on a rotation
 // without a status flip, `refreshActiveScope`) — else a post-rotation create would seal under the stale/zeroed key.
 const epochs = computed(() => (activeSpace.status === 'ready' && activeSpace.epoch >= 0 ? activeEpochKeys() : null))
-// The open node's K_mem, resolved by walking the content-key chain (the top-level Memory opens under its own
-// epoch's K_SC, a chapter under its parent Memory's K_mem, recursive K_mem; held on device — the server is blind).
-const memoryKey = computed(() =>
-  isOpenable.value && currentNodeId.value && epochs.value
+// The current node's content key, whatever its kind, resolved by walking the key chain through every ancestor (the
+// scope-root node opens under its own epoch's K_SC, each node below under its parent's key, folders included —
+// ADR 0080 Decision 1; held on device, the server is blind). A create here wraps the new node's key under it.
+const currentNodeKey = computed(() =>
+  currentNodeId.value && epochs.value
     ? nodeContentKey(activeSpace.scopeId!, epochs.value, treeStore.nodes, currentNodeId.value)
     : null,
 )
+// The open node's K_mem: the same key, for a kind that opens (a folder browses and is never opened).
+const memoryKey = computed(() => (isOpenable.value ? currentNodeKey.value : null))
 
 // Public-share affordance: offered for a node whose kind descriptor says it is shareable, in a scope the caller is a
 // member of — personal, group, or tenant (cr-0104; the backend rejects a share root of any other kind). Also gated
@@ -232,7 +235,7 @@ async function onDeleteDone() {
       :scope-id="activeSpace.scopeId"
       :epochs="epochs"
       :parent-id="currentNodeId"
-      :parent-key="memoryKey"
+      :parent-key="currentNodeKey"
       :node="mutationNode"
       @done="onMutationDone"
       @close="mutationVisible = false"

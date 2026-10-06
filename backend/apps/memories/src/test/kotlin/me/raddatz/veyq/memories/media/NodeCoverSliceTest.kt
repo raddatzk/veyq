@@ -314,7 +314,7 @@ class NodeCoverSliceTest {
     @Test
     fun coverOnFolderIsIllegalTarget() {
         val (userId, scopeId) = seedMemberScope()
-        val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = null)
+        val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
         val uploadId = startOne(userId, scopeId, TestBlob.SMALL, "Zm9sZA==")
 
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)

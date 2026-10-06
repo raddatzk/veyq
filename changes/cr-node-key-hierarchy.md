@@ -1,7 +1,7 @@
 ---
 id: cr-node-key-hierarchy
 title: Every node carries a key — folders become shareable, move and rename re-wrap (ADR 0080)
-status: planned          # planned → in-progress → done (then harvest what binds, and delete the file)
+status: in-progress      # planned → in-progress → done (then harvest what binds, and delete the file)
 satisfies: [uc.sharing.share-contributor, uc.sharing.share-public-viewer]
 adrs: ["0012", "0024", "0031", "0036", "0072", "0075", "0077", "0079", "0080"]
 invariants: [operator-blind E2EE everywhere, API-first]
@@ -46,11 +46,11 @@ to a second application ([docs/apps/files.md](../docs/apps/files.md), inbox #349
 ## Phases
 
 ### Slice 1 — folder key and `NOT NULL`
-- [ ] 1.1 contracts — `content.openapi.yaml`: `createNode` requires `wrappedContentKey` (with bounds annotation) ·
+- [x] 1.1 contracts — `content.openapi.yaml`: `createNode` requires `wrappedContentKey` (with bounds annotation) ·
       Done when: `validate_request_bounds`, `validate_contracts_common` green.
-- [ ] 1.2 backend — baseline `wrapped_content_key NOT NULL` + pin line in one commit; `NodesHandler.create` refuses a
+- [x] 1.2 backend — baseline `wrapped_content_key NOT NULL` + pin line in one commit; `NodesHandler.create` refuses a
       missing wrap; all backend fixtures supply a key · Done when: `./gradlew check` green; bite test 1.
-- [ ] 1.3 web — `createFolder` mints a key; `nodeContentKey` (`tree.ts:165-180`) stops treating folders as
+- [x] 1.3 web — `createFolder` mints a key; `nodeContentKey` (`tree.ts:165-180`) stops treating folders as
       transparent; web fixtures · Done when: `npm run generate:api && npm run check` green.
 
 ### Slice 2 — names and slugs under the parent's key

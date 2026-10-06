@@ -17,7 +17,8 @@ data class NodeRow(
     val slugToken: String,
     val orderIndex: Int,
     val epoch: Int,
-    val wrappedContentKey: String?,
+    /** Every node's content key, wrapped under its parent's (ADR 0080 Decision 1) — never null. */
+    val wrappedContentKey: String,
     val wrappedMeta: String?,
     /** The drop private key of a WRITE_ONLY link's shared root, sealed under its content key (ADR 0031 point 7), or null until its first WRITE_ONLY share. */
     val sealedDropPrivateKey: String? = null,
@@ -114,7 +115,7 @@ class NodesStore {
     @Transactional
     fun create(
         id: String, scopeId: String, parentSlot: String, kind: String, encryptedName: String,
-        slugToken: String, orderIndex: Int, epoch: Int, wrappedContentKey: String?, wrappedMeta: String?,
+        slugToken: String, orderIndex: Int, epoch: Int, wrappedContentKey: String, wrappedMeta: String?,
     ): Boolean {
         if (idTaken(id)) return false
         NodeEntity().apply {

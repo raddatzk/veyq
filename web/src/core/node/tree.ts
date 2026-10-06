@@ -1,15 +1,16 @@
 // en.memory.tree (web) — the encrypted Memory tree data layer. Operator-blind: node names are sealed under
-// the scope content key K_SC, the slug token is a blinded keyed MAC under K_SC, and every content-bearing node
-// (MEMORY or CHAPTER) carries a fresh random K_mem wrapped under its PARENT's content key — K_SC for a
-// top-level Memory, the parent Memory's K_mem for a chapter (recursive K_mem, the share grain, ADR 0012 +
-// cr-0060). Folders carry no key.
+// the scope content key K_SC, the slug token is a blinded keyed MAC under K_SC, and EVERY node — FOLDER included
+// (ADR 0080 Decision 1) — carries a fresh random content key wrapped under its PARENT's content key: K_SC for a
+// scope-root node, the parent node's key below it, whatever the parent's kind (a folder's, a Memory's, a
+// chapter's). Recursive keys, the share grain (ADR 0012, cr-0060, ADR 0080). Names and slug tokens are still
+// sealed under K_SC: ADR 0080 Decision 2 moves them under the parent's key, a later step of that ADR.
 //
 // **Epochs (ADR 0024, cr-0089).** A rotated scope's `K_SC` is a chain of epoch keys E_0, E_1, …; the caller
 // opens the scope into an {@link EpochKeys} set (the write key `E_current` + a per-epoch lookup) and passes it
-// in. New content seals name/slug + the top-level `K_mem` wrap under the **write key** and is tagged with the
-// current epoch; a read opens each node's name (and a top-level Memory's `K_mem`) under **its own** epoch key,
-// so a tree spanning several epochs decrypts fully. A chapter's `K_mem` wraps under its parent Memory's `K_mem`
-// (epoch-independent) — only the top-level wrap keys off the epoch.
+// in. New content seals name/slug + a scope-root node's key wrap under the **write key** and is tagged with the
+// current epoch; a read opens each node's name (and a scope-root node's key) under **its own** epoch key,
+// so a tree spanning several epochs decrypts fully. A deeper node's key wraps under its parent's key
+// (epoch-independent) — only the scope-root wrap keys off the epoch.
 //
 // **Every seal names its node (ADR 0072).** A name and a `K_mem` wrap are bound to (scope, node, epoch) — the node
 // id the client mints at creation and the epoch it is sealed at — so a server that serves one node's wrap on
@@ -79,43 +80,34 @@ export async function listTree(scopeId: string, epochs: EpochKeys): Promise<Tree
   }))
 }
 
-/** Create a FOLDER (organization only — no content key). Returns its node id. Sealed under the write key `E_current`. */
-export async function createFolder(
-  scopeId: string, epochs: EpochKeys, name: string, parentId: string | null = null,
-): Promise<string> {
-  const parentSlot = parentId ?? scopeId
-  const scopeKey = writeKey(epochs)
-  const node = { scopeId, nodeId: crypto.randomUUID(), epoch: epochs.current } // client-minted id (ADR 0072)
-  const res = await withRefresh(() =>
-    contentApi().createNode({
-      scopeId,
-      createNodeRequest: {
-        nodeId: node.nodeId,
-        parentId: parentId ?? undefined,
-        kind: FOLDER_KIND,
-        encryptedName: sealName(scopeKey, node, name),
-        slugToken: slugTokenFor(scopeKey, parentSlot, name),
-        orderIndex: 0,
-        epoch: epochs.current,
-      },
-    }),
-  )
-  return expectMintedId(node.nodeId, res.nodeId)
+/**
+ * Where a new node goes (ADR 0080 Decision 1): its parent's id and the parent's **content key**, the key the new
+ * node's own key wraps under, or `null` for the scope root, where it wraps under the write key `E_current`.
+ * The parent's key comes from {@link nodeContentKey}.
+ */
+export type NodeParent = { id: string; key: Uint8Array } | null
+
+/** Create a FOLDER. Like every node it births a random content key wrapped under its parent's (ADR 0080
+ *  Decision 1), so whoever holds the folder's key opens every key created below it. Returns its node id. */
+export async function createFolder(scopeId: string, epochs: EpochKeys, name: string, parent: NodeParent = null): Promise<string> {
+  return (await createContentNode(scopeId, epochs, parent, FOLDER_KIND, name)).nodeId
 }
 
 /**
- * Create a content-bearing node — births a fresh random `K_mem`, wrapped under the
- * **parent's content key** `wrapKey` (recursive `K_mem`, ADR 0012): the write key `E_current` for a top-level
- * Memory, the parent Memory's `K_mem` for a chapter. The name + slug are always sealed under the write key, and
- * the node is tagged with the **current epoch** (ADR 0024). The kind is the caller's: an application's own wrappers
- * (Memories: `createMemory` / `createChapter`) call this; core never names a content kind.
+ * Create a node of any kind: births a fresh random content key wrapped under the **parent's content key**
+ * (`parent.key`; the write key `E_current` at the scope root; recursive keys, ADR 0012 / ADR 0080 Decision 1).
+ * The name + slug are sealed under the write key (ADR 0080 Decision 2 moves them under the parent's key in a later
+ * step), and the node is tagged with the **current epoch** (ADR 0024). The kind is the caller's: core's
+ * {@link createFolder} and an application's own wrappers (Memories: `createMemory` / `createChapter`) call this.
  */
 export async function createContentNode(
-  scopeId: string, epochs: EpochKeys, wrapKey: Uint8Array, kind: NodeKind, name: string, parentId: string | null,
+  scopeId: string, epochs: EpochKeys, parent: NodeParent, kind: NodeKind, name: string,
   metaSealer?: (contentKey: Uint8Array, node: NodeAddress) => string,
 ): Promise<{ nodeId: string; contentKey: Uint8Array }> {
+  const parentId = parent?.id ?? null
   const parentSlot = parentId ?? scopeId
   const scopeKey = writeKey(epochs)
+  const wrapKey = parent?.key ?? scopeKey
   const contentKey = v1.randomBytes(32)
   // The client mints the node's id, so its name, K_mem wrap and meta are all sealed bound to it (ADR 0072).
   const node = { scopeId, nodeId: crypto.randomUUID(), epoch: epochs.current }
@@ -140,9 +132,9 @@ export async function createContentNode(
 }
 
 /**
- * Open a content node's `K_mem` by unwrapping `node.wrappedContentKey` under its parent's content key
- * (`parentKey` = `K_SC` for a top-level Memory, the parent Memory's `K_mem` for a chapter). Null if it carries
- * no key (a folder). Bound to (scope, the node's id, its epoch) — the node the caller addresses — so a wrap the
+ * Open a node's content key by unwrapping `node.wrappedContentKey` under its parent's content key
+ * (`parentKey` = `K_SC` at the node's epoch for a scope-root node, the parent node's key below it). Null if the row
+ * carries no wrap (none does since ADR 0080; the read schema still admits null). Bound to (scope, the node's id, its epoch) — the node the caller addresses — so a wrap the
  * server moved onto this row from another node throws `OpenRefused` instead of yielding the other node's key.
  * For a node at arbitrary depth, resolve `parentKey` with [nodeContentKey].
  */
@@ -153,24 +145,25 @@ export function openContentKey(
   return v1.open(contentKeyContext({ scopeId, nodeId: node.id, epoch: node.epoch }), parentKey, fromB64std(node.wrappedContentKey))
 }
 
-/** Back-compat alias: a top-level Memory's `K_mem` opens under `K_SC`. Prefer [openContentKey] / [nodeContentKey]. */
+/** Back-compat alias: a scope-root node's key opens under `K_SC`. Prefer [openContentKey] / [nodeContentKey]. */
 export const openMemory = openContentKey
 
 /**
- * Resolve a content node's `K_mem`, walking the content-bearing ancestors top-down: folders are transparent (no
- * key), so the **top-level Memory** opens under `E_{its epoch}` (ADR 0024) and each nested chapter under its
- * parent's `K_mem`. Returns null if the node carries no key or any link in the chain can't be opened. (Recursive
- * `K_mem`, ADR 0012 — only the top-level wrap keys off the epoch; deeper links chain through `K_mem`.)
+ * Resolve a node's content key, walking **every** ancestor top-down (ADR 0080 Decision 1: a folder is a link of the
+ * chain like any other node, never transparent). The **scope-root ancestor** opens under `E_{its epoch}`
+ * (ADR 0024) and each node below under its parent's key. Returns null if the node is not in the tree, its chain does
+ * not reach the scope root, or a link carries no wrap. (Recursive keys, ADR 0012: only the scope-root wrap keys off
+ * the epoch; deeper links chain through their parent's key.)
  */
 export function nodeContentKey(scopeId: string, epochs: EpochKeys, tree: TreeNode[], nodeId: string): Uint8Array | null {
   const byId = new Map(tree.map((n) => [n.id, n]))
-  // collect the content-bearing chain from the node up to the root (nearest-last → reverse to top-down)
+  // collect the chain from the node up to the scope root (nearest-last → reverse to top-down)
   const chain: TreeNode[] = []
-  for (let cur = byId.get(nodeId); cur; cur = cur.parentId ? byId.get(cur.parentId) : undefined) {
-    if (cur.wrappedContentKey) chain.unshift(cur)
+  for (let cur = byId.get(nodeId); cur && chain.length <= tree.length; cur = cur.parentId ? byId.get(cur.parentId) : undefined) {
+    chain.unshift(cur) // the length bound stops a served parent cycle, which then reaches no root below
   }
-  if (!chain.length) return null
-  let key = keyAt(epochs, chain[0].epoch) // the top-level Memory's K_mem is wrapped under its own epoch's K_SC
+  if (!chain.length || chain[0].parentId !== null) return null // an ancestor missing from the tree: no chain
+  let key = keyAt(epochs, chain[0].epoch) // the scope-root node's key is wrapped under its own epoch's K_SC
   for (const node of chain) {
     const opened = openContentKey(scopeId, key, node)
     if (!opened) return null
@@ -179,7 +172,15 @@ export function nodeContentKey(scopeId: string, epochs: EpochKeys, tree: TreeNod
   return key
 }
 
-/** Rename a node — re-seal the name + recompute the slug under the node's **own** epoch key (its epoch is fixed at
+/** The key `node`'s own key is wrapped under (ADR 0080 Decision 1): its parent's content key, or `E_{node.epoch}` for
+ *  a scope-root node. Null when the parent's chain does not open. */
+export function parentContentKey(
+  scopeId: string, epochs: EpochKeys, tree: TreeNode[], node: { parentId: string | null; epoch: number },
+): Uint8Array | null {
+  return node.parentId === null ? keyAt(epochs, node.epoch) : nodeContentKey(scopeId, epochs, tree, node.parentId)
+}
+
+/** Rename a node —re-seal the name + recompute the slug under the node's **own** epoch key (its epoch is fixed at
  *  birth; a rename never re-tags it, so name and `K_mem`-wrap stay under the same epoch, ADR 0024). */
 export async function renameNode(
   scopeId: string, epochs: EpochKeys, node: { id: string; parentId: string | null; epoch: number }, newName: string,

@@ -13,6 +13,7 @@ import java.util.UUID
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 
 /**
  * Core's placement seam ([NodeKindRules], ADR 0079): the one rule that handles a node's kind decides where it may
@@ -66,7 +67,7 @@ class NodeKindRulesPartitionMemoriesSliceTest {
     fun withCoreAloneOnlyAFolderIsPlaced() {
         val (userId, scopeId) = seedMemberScope()
         val coreAlone = NodesHandler(store, access, mutableListOf(FolderNodeRules()))
-        val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = null)
+        val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
         val memory = seedNode(scopeId, "MEMORY", wrappedContentKey = "aw==")
 
         assertEquals(CreateNodeOutcome.IllegalStructure, create(coreAlone, userId, scopeId, null, "MEMORY"), "a Memory at the root")
@@ -80,5 +81,5 @@ class NodeKindRulesPartitionMemoriesSliceTest {
     }
 
     private fun create(h: NodesHandler, userId: String, scopeId: String, parent: String?, kind: String): CreateNodeOutcome =
-        h.create(userId, scopeId, UUID.randomUUID().toString(), parent, kind, "bg==", "c2x1Zy0${UUID.randomUUID()}".take(60), 0, 0, null, null)
+        h.create(userId, scopeId, UUID.randomUUID().toString(), parent, kind, "bg==", "c2x1Zy0${UUID.randomUUID()}".take(60), 0, 0, CONTENT_KEY, null)
 }

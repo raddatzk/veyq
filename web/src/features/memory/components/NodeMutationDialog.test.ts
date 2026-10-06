@@ -61,15 +61,34 @@ beforeEach(() => {
 })
 
 describe('NodeMutationDialog', () => {
-  it('create-folder calls createFolder with the parent + closes + emits done', async () => {
-    const wrapper = mountDialog({ mode: 'create-folder', parentId: 'parent-1' })
+  it('create-folder calls createFolder with the parent and ITS key + closes + emits done', async () => {
+    const parentKey = new Uint8Array(32).fill(7)
+    const wrapper = mountDialog({ mode: 'create-folder', parentId: 'parent-1', parentKey })
     await wrapper.find('input').setValue('Trips')
     await wrapper.find('form').trigger('submit')
     await Promise.resolve()
 
-    expect(createFolder).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Trips', 'parent-1')
+    expect(createFolder).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Trips', { id: 'parent-1', key: parentKey })
     expect(wrapper.emitted('done')).toBeTruthy()
     expect(wrapper.emitted('close')).toBeTruthy()
+  })
+
+  it('create-memory inside a folder wraps under the folder\'s key (ADR 0080)', async () => {
+    const parentKey = new Uint8Array(32).fill(9)
+    const wrapper = mountDialog({ mode: 'create-memory', parentId: 'folder-1', parentKey })
+    await wrapper.find('input').setValue('Italy')
+    await wrapper.find('form').trigger('submit')
+    await Promise.resolve()
+    expect(createMemory).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Italy', { id: 'folder-1', key: parentKey }, null)
+  })
+
+  it('a create under a parent whose key is missing creates nothing', async () => {
+    const wrapper = mountDialog({ mode: 'create-folder', parentId: 'parent-1', parentKey: null })
+    await wrapper.find('input').setValue('Trips')
+    await wrapper.find('form').trigger('submit')
+    await Promise.resolve()
+    expect(createFolder).not.toHaveBeenCalled()
+    expect(wrapper.emitted('done')).toBeFalsy()
   })
 
   it('create-memory at the root passes parentId null and no pre-armed location (maps off)', async () => {

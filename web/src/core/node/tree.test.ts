@@ -40,38 +40,69 @@ function echoCreate() {
   return vi.fn<ContentApi['createNode']>(async (p) => ({ nodeId: p.createNodeRequest.nodeId }))
 }
 const nameCtx = (nodeId: string, epoch = 0) => ({ purpose: 'node-name', scopeId: SCOPE_ID, nodeId, epoch }) as const
+const PARENT = '5c09e000-0000-4000-8000-000000000f09'
 const kmemCtx = (nodeId: string, epoch = 0) => ({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId, epoch }) as const
 
 describe('nodeContentKey — resolve a chapter key down the chain', () => {
-  it('walks K_SC → Memory K_mem → chapter K_mem (folders are transparent)', () => {
+  const FOLD = '5c09e000-0000-4000-8000-000000000f01'
+  const MEM = '5c09e000-0000-4000-8000-000000000e01'
+  const CHAP = '5c09e000-0000-4000-8000-000000000c01'
+  const wrap = (kek: Uint8Array, nodeId: string, k: Uint8Array) => b64std(v1.seal(kmemCtx(nodeId), kek, k))
+  const node = (id: string, parentId: string | null, kind: string, wrappedContentKey: string | null): TreeNode =>
+    ({ id, parentId, kind: kind as TreeNode['kind'], orderIndex: 0, epoch: 0, name: id, wrappedContentKey, wrappedMeta: null, metaVersion: 0 })
+
+  it('walks K_SC → folder key → Memory K_mem → chapter K_mem: a folder is a link of the chain (ADR 0080)', () => {
+    const folderKey = v1.randomBytes(32)
     const memKey = v1.randomBytes(32)
     const chapKey = v1.randomBytes(32)
-    const FOLD = '5c09e000-0000-4000-8000-000000000f01'
-    const MEM = '5c09e000-0000-4000-8000-000000000e01'
-    const CHAP = '5c09e000-0000-4000-8000-000000000c01'
-    const wrap = (kek: Uint8Array, nodeId: string, k: Uint8Array) => b64std(v1.seal(kmemCtx(nodeId), kek, k))
-    const tree: TreeNode[] = [
-      { id: FOLD, parentId: null, kind: 'FOLDER' as TreeNode['kind'], orderIndex: 0, epoch: 0, name: 'Trips', wrappedContentKey: null, wrappedMeta: null, metaVersion: 0 },
-      { id: MEM, parentId: FOLD, kind: 'MEMORY' as TreeNode['kind'], orderIndex: 0, epoch: 0, name: 'Italy', wrappedContentKey: wrap(scopeKey, MEM, memKey), wrappedMeta: null, metaVersion: 0 },
-      { id: CHAP, parentId: MEM, kind: 'CHAPTER' as TreeNode['kind'], orderIndex: 0, epoch: 0, name: 'Day 1', wrappedContentKey: wrap(memKey, CHAP, chapKey), wrappedMeta: null, metaVersion: 0 },
+    const tree = [
+      node(FOLD, null, 'FOLDER', wrap(scopeKey, FOLD, folderKey)),
+      node(MEM, FOLD, 'MEMORY', wrap(folderKey, MEM, memKey)),
+      node(CHAP, MEM, 'CHAPTER', wrap(memKey, CHAP, chapKey)),
     ]
-    expect(Array.from(nodeContentKey(SCOPE_ID, epochsOf(scopeKey), tree, CHAP)!)).toEqual(Array.from(chapKey))
+    expect(Array.from(nodeContentKey(SCOPE_ID, epochsOf(scopeKey), tree, FOLD)!)).toEqual(Array.from(folderKey))
     expect(Array.from(nodeContentKey(SCOPE_ID, epochsOf(scopeKey), tree, MEM)!)).toEqual(Array.from(memKey))
-    expect(nodeContentKey(SCOPE_ID, epochsOf(scopeKey), tree, FOLD)).toBeNull() // a folder has no content key
+    expect(Array.from(nodeContentKey(SCOPE_ID, epochsOf(scopeKey), tree, CHAP)!)).toEqual(Array.from(chapKey))
+  })
+
+  it('a Memory inside a folder wrapped under K_SC (skipping the folder) does not open', () => {
+    const memKey = v1.randomBytes(32)
+    const tree = [node(FOLD, null, 'FOLDER', wrap(scopeKey, FOLD, v1.randomBytes(32))), node(MEM, FOLD, 'MEMORY', wrap(scopeKey, MEM, memKey))]
+    expect(() => nodeContentKey(SCOPE_ID, epochsOf(scopeKey), tree, MEM)).toThrow(v1.OpenRefused)
+  })
+
+  it('no chain without the scope-root ancestor, nor through a parent cycle', () => {
+    const orphan = [node(MEM, FOLD, 'MEMORY', wrap(scopeKey, MEM, v1.randomBytes(32)))] // its folder is not in the tree
+    expect(nodeContentKey(SCOPE_ID, epochsOf(scopeKey), orphan, MEM)).toBeNull()
+    const cycle = [node(FOLD, MEM, 'FOLDER', 'eA=='), node(MEM, FOLD, 'MEMORY', 'eA==')]
+    expect(nodeContentKey(SCOPE_ID, epochsOf(scopeKey), cycle, MEM)).toBeNull()
   })
 })
 
 describe('createFolder', () => {
-  it('creates a keyless folder (no wrappedContentKey)', async () => {
+  it('mints a content key wrapped under the write key at the scope root (ADR 0080)', async () => {
     const create = echoCreate()
     mockContent({ createNode: create })
     const id = await createFolder(SCOPE_ID, epochsOf(scopeKey), 'Trips')
     const req = create.mock.calls[0][0].createNodeRequest
     expect(req.kind).toBe('FOLDER')
-    expect(req.wrappedContentKey).toBeUndefined()
+    expect(req.parentId).toBeUndefined()
+    expect(v1.open(kmemCtx(id), scopeKey, fromB64(req.wrappedContentKey))).toHaveLength(32)
     expect(req.nodeId).toMatch(UUID)
     expect(id).toBe(req.nodeId)
     expect(new TextDecoder().decode(v1.open(nameCtx(id), scopeKey, fromB64(req.encryptedName)))).toBe('Trips')
+  })
+
+  it('below a parent, wraps its key under the PARENT\'s key, not K_SC; the name stays under K_SC (ADR 0080 slice 1)', async () => {
+    const create = echoCreate()
+    mockContent({ createNode: create })
+    const parentKey = v1.randomBytes(32)
+    const id = await createFolder(SCOPE_ID, epochsOf(scopeKey), 'Day trips', { id: PARENT, key: parentKey })
+    const req = create.mock.calls[0][0].createNodeRequest
+    expect(req.parentId).toBe(PARENT)
+    expect(v1.open(kmemCtx(id), parentKey, fromB64(req.wrappedContentKey))).toHaveLength(32)
+    expect(() => v1.open(kmemCtx(id), scopeKey, fromB64(req.wrappedContentKey))).toThrow(v1.OpenRefused)
+    expect(new TextDecoder().decode(v1.open(nameCtx(id), scopeKey, fromB64(req.encryptedName)))).toBe('Day trips')
   })
 })
 

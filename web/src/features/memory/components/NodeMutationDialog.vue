@@ -14,7 +14,7 @@ import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
 import Checkbox from 'primevue/checkbox'
 import Message from 'primevue/message'
-import { createFolder, renameNode, type TreeNode } from '../../../core/node/tree'
+import { createFolder, renameNode, type NodeParent, type TreeNode } from '../../../core/node/tree'
 import { createMemory, createChapter } from '../memoryNodes'
 import type { EpochKeys } from '../../spaces/epochs'
 import { useMapConfig } from '../../../shared/state/useMapConfig'
@@ -29,7 +29,7 @@ const props = defineProps<{
   scopeId: string
   epochs: EpochKeys // the scope's epoch key set (ADR 0024): create seals under the write epoch, rename under the node's own
   parentId?: string | null // create: the parent (null = root)
-  parentKey?: Uint8Array | null // create-chapter: the parent node's K_mem (wraps the new chapter's K_mem)
+  parentKey?: Uint8Array | null // create: the parent node's content key, which the new node's key wraps under (ADR 0080)
   node?: TreeNode | null // rename: the node being renamed
 }>()
 const emit = defineEmits<{ done: []; close: [] }>()
@@ -52,14 +52,23 @@ const header = computed(() =>
 )
 const confirmLabel = computed(() => (props.mode === 'rename' ? t('memory.save') : t('common.create')))
 
+/** Where a create lands: the scope root (wrapped under the write key), or under the parent with ITS key (ADR 0080
+ *  Decision 1: a node inside a folder wraps under the folder's key, never `K_SC`). A parent whose key is missing
+ *  creates nothing, rather than a node its parent's holders could not open. */
+function createParent(): NodeParent {
+  if (!props.parentId) return null
+  if (!props.parentKey) throw new Error('parent_key_unavailable')
+  return { id: props.parentId, key: props.parentKey }
+}
+
 const { run: runSubmit, pending: loading } = useAsyncAction(
   async () => {
     const trimmed = name.value.trim()
     if (props.mode === 'create-folder') {
-      await createFolder(props.scopeId, props.epochs, trimmed, props.parentId ?? null)
+      await createFolder(props.scopeId, props.epochs, trimmed, createParent())
     } else if (props.mode === 'create-memory') {
       const location = showLocationStep.value && wantsLocation.value ? { name: '', nameSource: 'geocoded' as const, derivedMode: 'auto' as const } : null
-      await createMemory(props.scopeId, props.epochs, trimmed, props.parentId ?? null, location)
+      await createMemory(props.scopeId, props.epochs, trimmed, createParent(), location)
     } else if (props.mode === 'create-chapter') {
       if (!props.parentId || !props.parentKey) throw new Error('chapter_parent_missing')
       await createChapter(props.scopeId, props.epochs, props.parentKey, trimmed, props.parentId)

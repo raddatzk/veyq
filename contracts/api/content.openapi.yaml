@@ -10,9 +10,10 @@ info:
     content key or a payload, and learns only the *shape* of the tree.
 
     The client encrypts the name under the scope content key `K_SC` and computes the blinded slug token (a
-    keyed MAC under `K_SC`); a node of a kind that carries a content key additionally carries a fresh random
-    per-node content key wrapped under its **parent's content key** — `K_SC` at the top of such a chain, the
-    parent node's content key below it (`wrappedContentKey`) — the share grain ([ADR 0012](../../docs/decisions/0012-content-key-hierarchy.md)).
+    keyed MAC under `K_SC`); every node, FOLDER included, additionally carries a fresh random per-node content key
+    wrapped under its **parent's content key** — `K_SC` at the node's epoch for a scope-root node, the parent
+    node's content key below it (`wrappedContentKey`) — the share grain ([ADR 0012](../../docs/decisions/0012-content-key-hierarchy.md),
+    [ADR 0080](../../docs/decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) Decision 1).
     Each node may hold one sealed, versioned payload (`wrappedMeta`, `metaVersion`) whose format is its kind's
     application's. The server enforces structure only: a caller must hold a grant for the scope, slug
     uniqueness per parent (`UNIQUE(parentId, slugToken)`), the placement rule of the node's kind (core's for
@@ -34,8 +35,8 @@ paths:
       summary: Create a node of any kind in the scope's tree.
       description: >
         Adds a node under `parentId` (or the scope root if omitted). The client mints the node's id (`nodeId`,
-        [ADR 0072](../../docs/decisions/0072-a-seal-binds-its-object.md) Decision 3) and supplies the ciphertext name, the blinded slug token, and — for a kind
-        that carries a content key — the `wrappedContentKey` (the node's content key under its parent's), each sealed bound to that id.
+        [ADR 0072](../../docs/decisions/0072-a-seal-binds-its-object.md) Decision 3) and supplies the ciphertext name, the blinded slug token, and the
+        `wrappedContentKey` (the node's content key under its parent's — every kind carries one, ADR 0080), each sealed bound to that id.
         The server stores it opaquely under exactly that id and enforces slug uniqueness per parent + the
         structural rules. An id that already exists — in this scope or any other — is refused `id_taken` and nothing is overwritten; the answer is the same wherever the taken id lives, so it says nothing about another scope. Not idempotent: a retry of a create whose response was lost answers `id_taken` too, and the client re-reads.
       security:
@@ -54,6 +55,7 @@ paths:
               encryptedName: ZW5jcnlwdGVkLW5hbWU=
               slugToken: c2x1Zy10b2tlbi1iYXNlNjQ=
               orderIndex: 0
+              wrappedContentKey: d3JhcHBlZC1rLW1lbQ==
       responses:
         "201":
           description: The node was created.
@@ -88,7 +90,7 @@ paths:
       summary: List the scope's tree (opaque rows).
       description: >
         Returns every node in the scope with its opaque id, parent, kind, ordering, ciphertext name, slug
-        token, sealed payload (`wrappedMeta` + `metaVersion`), and (for a kind that carries one) the `wrappedContentKey`. The client decrypts names with `K_SC` and assembles
+        token, sealed payload (`wrappedMeta` + `metaVersion`), and the `wrappedContentKey`. The client decrypts names with `K_SC` and assembles
         the tree; the operator sees only the shape.
       security:
         - bearerAuth: []
@@ -307,7 +309,7 @@ components:
 
     CreateNodeRequest:
       type: object
-      required: [nodeId, kind, encryptedName, slugToken]
+      required: [nodeId, kind, encryptedName, slugToken, wrappedContentKey]
       properties:
         nodeId:
           x-veyq-visibility: id
@@ -360,12 +362,12 @@ components:
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
         wrappedContentKey:
-          type: [string, "null"]
-          description: The content key of a shareable node — a fresh random key wrapped under its parent's content key (`K_SC` at the top of the chain, the parent node's content key below it; opaque base64). Whether a kind carries one is its application's; absent for a FOLDER.
+          type: string
+          description: The node's content key — a fresh random key wrapped under its parent's content key (`K_SC` at the node's epoch for a scope-root node, the parent node's content key below it; opaque base64). Every kind carries one, FOLDER included (ADR 0080 Decision 1); a create without it is `400`.
           contentEncoding: base64
           maxLength: 256
           example: d3JhcHBlZC1rLW1lbQ==
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         wrappedMeta:
           type: [string, "null"]
           description: The node's versioned sealed payload — AEAD-sealed under this node's content key (seal purpose `node-meta`, bound to scope + node; opaque base64). Its plaintext format is the kind's application's, versioned by that application; absent = the node has none yet. The server never inspects it.
@@ -465,7 +467,7 @@ components:
           type: [string, "null"]
           contentEncoding: base64
           maxLength: 256
-          description: The node's content key wrapped under its parent's content key (see CreateNodeRequest.wrappedContentKey); null for a kind that carries none, FOLDER included.
+          description: The node's content key wrapped under its parent's content key (see CreateNodeRequest.wrappedContentKey). Every node carries one since ADR 0080 (the column is NOT NULL); the read schema still admits null, its tightening is a contract change of its own.
           example: d3JhcHBlZC1rLW1lbQ==
         wrappedMeta:
           type: [string, "null"]

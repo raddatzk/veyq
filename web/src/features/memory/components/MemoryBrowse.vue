@@ -11,8 +11,8 @@
 import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
-import { type TreeNode } from '../../../core/node/tree'
-import { keyAt, type EpochKeys } from '../../spaces/epochs'
+import { parentContentKey, type TreeNode } from '../../../core/node/tree'
+import type { EpochKeys } from '../../spaces/epochs'
 import { sortNodesByDate } from '../memoryDate'
 import { nodeById } from '../../../core/node/browse'
 import { treeStore } from '../../../core/node/treeStore'
@@ -44,11 +44,14 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const { viewMode } = useViewMode()
 
-// Memories ordered by their sealed start date (newest first, undated last) — each opened under its own epoch's
-// K_SC (a top-level Memory's K_mem wraps under E_{node.epoch}); read from wrappedMeta, no media load.
-const datedMemories = computed(() =>
-  sortNodesByDate(activeSpace.scopeId ?? '', (node) => (props.epochs && activeSpace.scopeId ? keyAt(props.epochs, node.epoch) : null), props.memories),
-)
+// Memories ordered by their sealed start date (newest first, undated last) — each K_mem opened under its parent's
+// key: E_{node.epoch} at the scope root, the folder's key inside a folder (ADR 0080 Decision 1); read from
+// wrappedMeta, no media load.
+const datedMemories = computed(() => {
+  const scopeId = activeSpace.scopeId
+  const epochs = props.epochs
+  return sortNodesByDate(scopeId ?? '', (node) => (epochs && scopeId ? parentContentKey(scopeId, epochs, treeStore.nodes, node) : null), props.memories)
+})
 
 // The Karte pins: every located node in this folder's subtree (or the whole space at root), unsealed on device
 // from the wrappedMeta `listNodes` already returned (operator-blind — no locations API). Locked ⇒ no pins.

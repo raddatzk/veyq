@@ -84,7 +84,7 @@ class NodeTrashSliceTest {
     @Test
     fun deleteHidesTheWholeSubtreeAndListsTheRootInTheTrash() {
         val (userId, scopeId) = seedMemberScope()
-        val folder = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"Zg==","slugToken":"Zi1z","orderIndex":0}""")
+        val folder = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"Zg==","slugToken":"Zi1z","orderIndex":0,"wrappedContentKey":"a21lbQ=="}""")
         val memory = createNode(userId, scopeId, """{"parentId":"$folder","nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bQ==","slugToken":"bS1z","orderIndex":0,"wrappedContentKey":"aw=="}""")
         val chapter = createNode(userId, scopeId, """{"parentId":"$memory","nodeId":"${UUID.randomUUID()}","kind":"CHAPTER","encryptedName":"Yw==","slugToken":"Yy1z","orderIndex":0,"wrappedContentKey":"aw=="}""")
 
@@ -237,7 +237,7 @@ class NodeTrashSliceTest {
     @Test
     fun deletingAroundAnAlreadyTrashedSubtreeMakesTheWholeThingAgeOutTogether() {
         val (userId, scopeId) = seedMemberScope()
-        val folder = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"Zg==","slugToken":"c3RyLWY=","orderIndex":0}""")
+        val folder = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"Zg==","slugToken":"c3RyLWY=","orderIndex":0,"wrappedContentKey":"a21lbQ=="}""")
         val memory = createNode(userId, scopeId, """{"parentId":"$folder","nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bQ==","slugToken":"c3RyLW0=","orderIndex":0,"wrappedContentKey":"aw=="}""")
         val chapter = createNode(userId, scopeId, """{"parentId":"$memory","nodeId":"${UUID.randomUUID()}","kind":"CHAPTER","encryptedName":"Yw==","slugToken":"c3RyLWM=","orderIndex":0,"wrappedContentKey":"aw=="}""")
 

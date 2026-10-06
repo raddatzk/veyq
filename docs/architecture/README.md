@@ -311,7 +311,7 @@ The words this project uses precisely. Where a term has a tempting synonym, the 
 |---|---|
 | **Memory** | the product's unit of content — a moment with photos, a date, a place, journal text. **Not** an "album". |
 | **Chapter** | a Memory nested inside a Memory. Recursive: it has its own content key. **Not** a "sub-album". |
-| **Folder** | organizes only; carries no content and no key of its own. |
+| **Folder** | organizes; carries no content, but a key of its own that every node below it wraps under ([ADR 0080](../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)). |
 | **Scope** | the keyed container everything lives in, and the unit of sharing. Three kinds: **personal** (one per user per tenant), **group** (private even from the tenant owner), **tenant** (the root, born cold at activation). |
 | **Tenant** | one instance's household/organization, resolved from the request **Host**. One server may host many. |
 | **Membership** | the relation `(user, scope, role, grant)` — being *in* a scope. Distinct from holding its key. |

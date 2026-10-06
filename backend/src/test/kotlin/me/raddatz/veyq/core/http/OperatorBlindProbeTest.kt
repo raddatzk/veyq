@@ -77,7 +77,7 @@ class OperatorBlindProbeTest {
     private val probes: Map<String, Probe> = mapOf(
         // --- content ---
         "createNode" to Probe(Address.SCOPE) { s ->
-            Call("POST", "/api/scopes/${s.scopeId}/nodes", """{"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"$B64","slugToken":"$slug","orderIndex":0}""")
+            Call("POST", "/api/scopes/${s.scopeId}/nodes", """{"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"$B64","slugToken":"$slug","orderIndex":0,"wrappedContentKey":"$B64"}""")
         },
         "listNodes" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/nodes") },
         "updateNode" to Probe(Address.SCOPE) { s ->

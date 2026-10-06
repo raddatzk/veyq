@@ -17,6 +17,7 @@ import org.hamcrest.CoreMatchers.equalTo
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 
 /**
  * Core's placement seam ([NodeKindRules], ADR 0079): the one rule that handles a node's kind decides where it may
@@ -86,7 +87,7 @@ class NodeKindRulesPartitionSliceTest {
         // `create` takes the kind as a string, and the contract's open token lets any well-formed one through: the
         // registered set is the only gate (the HTTP door is `NodeKindTokenCoreSliceTest`).
         val (userId, scopeId) = seedMemberScope()
-        val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = null)
+        val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
         assertEquals(CreateNodeOutcome.IllegalStructure, create(handler, userId, scopeId, null, "NOT_A_KIND"))
         assertEquals(CreateNodeOutcome.IllegalStructure, create(handler, userId, scopeId, folder, "NOT_A_KIND"))
 
@@ -99,18 +100,18 @@ class NodeKindRulesPartitionSliceTest {
     fun overHttpAFolderLandsInAFolderAndNotUnderAMissingParent() {
         val (userId, scopeId) = seedMemberScope()
         val outer = UUID.randomUUID().toString()
-        post(userId, scopeId, """{"nodeId":"$outer","kind":"FOLDER","encryptedName":"b3V0ZXI=","slugToken":"b3V0ZXI=","orderIndex":0}""")
+        post(userId, scopeId, """{"nodeId":"$outer","kind":"FOLDER","encryptedName":"b3V0ZXI=","slugToken":"b3V0ZXI=","orderIndex":0,"wrappedContentKey":"a21lbQ=="}""")
             .then().statusCode(201).body("nodeId", equalTo(outer))
         val inner = UUID.randomUUID().toString()
-        post(userId, scopeId, """{"parentId":"$outer","nodeId":"$inner","kind":"FOLDER","encryptedName":"aW5uZXI=","slugToken":"aW5uZXI=","orderIndex":0}""")
+        post(userId, scopeId, """{"parentId":"$outer","nodeId":"$inner","kind":"FOLDER","encryptedName":"aW5uZXI=","slugToken":"aW5uZXI=","orderIndex":0,"wrappedContentKey":"a21lbQ=="}""")
             .then().statusCode(201).body("nodeId", equalTo(inner))
 
-        post(userId, scopeId, """{"parentId":"${UUID.randomUUID()}","nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"bG9zdA==","slugToken":"bG9zdA==","orderIndex":0}""")
+        post(userId, scopeId, """{"parentId":"${UUID.randomUUID()}","nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"bG9zdA==","slugToken":"bG9zdA==","orderIndex":0,"wrappedContentKey":"a21lbQ=="}""")
             .then().statusCode(422).body("code", equalTo("illegal_structure"))
     }
 
     private fun create(h: NodesHandler, userId: String, scopeId: String, parent: String?, kind: String): CreateNodeOutcome =
-        h.create(userId, scopeId, UUID.randomUUID().toString(), parent, kind, "bg==", "c2x1Zy0${UUID.randomUUID()}".take(60), 0, 0, null, null)
+        h.create(userId, scopeId, UUID.randomUUID().toString(), parent, kind, "bg==", "c2x1Zy0${UUID.randomUUID()}".take(60), 0, 0, CONTENT_KEY, null)
 
     private fun post(userId: String, scopeId: String, body: String) =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON).body(body)

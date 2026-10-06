@@ -147,16 +147,17 @@ object TestFixtures {
     }
 
     /**
-     * Persist a node and return its id. [kind] and [wrappedContentKey] have no default on purpose: core knows no kind
-     * but `FOLDER`, and a default `MEMORY` here would make core's fixtures name an application's kind (ADR 0079) — so
-     * each call site says which kind it seeds; and the tests that seed nodes disagree on which kinds carry a key, so
-     * each says what its data holds ([CONTENT_KEY] or `null`). Seeded, not created: no `NodeKindRules` is asked.
+     * Persist a node and return its id. [kind] has no default on purpose: core knows no kind but `FOLDER`, and a
+     * default `MEMORY` here would make core's fixtures name an application's kind (ADR 0079) — so each call site says
+     * which kind it seeds. Every node carries a content key (ADR 0080 Decision 1, the column is `NOT NULL`), so
+     * [wrappedContentKey] is never null; it has no default so a test that reads a wrap back says which one it seeded
+     * ([CONTENT_KEY] for most). Seeded, not created: no `NodeKindRules` is asked.
      */
     fun seedNode(
         scopeId: String,
         kind: String,
         parentId: String = scopeId,
-        wrappedContentKey: String?,
+        wrappedContentKey: String,
     ): String {
         val id = UUID.randomUUID().toString()
         QuarkusTransaction.requiringNew().run {

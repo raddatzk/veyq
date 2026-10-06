@@ -31,7 +31,7 @@
 4. **Navigate:** clicking a folder drills into it (new level + breadcrumb); clicking a Memory opens it (its
    detail view is a later slice). The breadcrumb walks back up the local tree.
 5. **Organize:** *create folder* / *create Memory* seal the name + blinded slug under `K_SC` and POST only
-   ciphertext (a Memory also births its random `K_mem` wrapped under `K_SC`); *rename* re-seals the name +
+   ciphertext (every node, a folder too, births its random key wrapped under its parent's key, `K_SC` at the root — ADR 0080); *rename* re-seals the name +
    recomputes the slug; *delete* takes the node and its whole subtree into the space's recoverable trash
    ([uc.memory.delete-node](uc.memory.delete-node.md)). All via [en.memory.tree](../enablers/en.memory.tree.md).
 

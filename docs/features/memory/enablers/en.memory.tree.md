@@ -17,24 +17,28 @@
 - **Preconditions:** An **unlocked** vault (identity → scope key → `K_SC` available for the active scope); a
   scope to write in (e.g. the [personal scope](../../spaces/enablers/en.spaces.personal-scope.md)).
 - **Postconditions (success):** The node exists server-side as opaque ciphertext (encrypted name, `parentId`,
-  `kind`, ordering, `slugToken`); a **Memory** additionally has a fresh random **`K_mem`** wrapped under
-  `K_SC`. The server learned **no name** and holds **no content key**.
+  `kind`, ordering, `slugToken`) plus a fresh random **content key** wrapped under its parent's key (`K_SC` at
+  the scope root; every kind, folders included —
+  [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)). The server
+  learned **no name** and holds **no content key**.
 
 ## Node model
 
 A **node** has an opaque id, a `parentId` (or the scope root), a `kind`, an **encrypted name**, an
 **`orderIndex`**, and a **`slugToken`**:
 
-- **FOLDER** — organization only; **no content key**.
-- **MEMORY** — the content unit; **owns a random `K_mem`** (wrapped under `K_SC`). Its media/journal live under
-  `K_mem`.
+- **FOLDER** — organization; **owns a random content key** like every node (wrapped under its parent's key,
+  `K_SC` at the root — ADR 0080 Decision 1), so whatever is created below it wraps under that key.
+- **MEMORY** — the content unit; **owns a random `K_mem`** (wrapped under its parent's key: `K_SC` at the root, the
+  folder's key inside a folder). Its media/journal live under `K_mem`.
 - **CHAPTER** — a section **inside a Memory**, itself a content unit: it **owns its own random `K_mem`**, wrapped
   under its **parent Memory's `K_mem`** (recursive `K_mem`, one level deeper — *not* the parent's key, *not* a
   separate `K_chapter` type).
 
 **Recursive `K_mem` (chapters — [ADR 0012](../../../decisions/0012-content-key-hierarchy.md)).** Every
-content-bearing node (MEMORY *and* CHAPTER) carries its own random `K_mem`, wrapped under the **content key of
-its parent** — a top-level Memory under `K_SC`, a chapter under its parent Memory's `K_mem` (same `content-key`
+node (FOLDER, MEMORY *and* CHAPTER — ADR 0080 Decision 1) carries its own random key, wrapped under the **content
+key of its parent** — a scope-root node under `K_SC`, a Memory inside a folder under the folder's key, a chapter
+under its parent Memory's `K_mem` (same `content-key`
 purpose, bound to the node the key belongs to — [ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)).
 A media's **`K_blob` is wrapped under the `K_mem` of its *direct* parent node** (chapter media
 under the chapter's key). Consequence of this layout: every content node is a **sharing unit**, and a move is a

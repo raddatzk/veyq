@@ -42,7 +42,7 @@ class NodeKindTokenShareSliceTest {
     fun aSharedSubtreeServesAnUnclaimedKindAsStored() {
         val (userId, scopeId) = seedMemberScope(ScopeEntity.PERSONAL)
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
-        val expense = seedNode(scopeId, "EXPENSE", parentId = memory, wrappedContentKey = null)
+        val expense = seedNode(scopeId, "EXPENSE", parentId = memory, wrappedContentKey = CONTENT_KEY)
         val shareId: String = createShare(userId, memory).then().statusCode(201).extract().path("shareId")
         given().`when`().get("/api/shares/$shareId")
             .then().statusCode(200)
