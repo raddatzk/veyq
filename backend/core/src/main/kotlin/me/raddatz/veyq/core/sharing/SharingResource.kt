@@ -264,6 +264,7 @@ class SharingResource(
         orderIndex = n.orderIndex,
         epoch = n.epoch,
         wrappedContentKey = n.wrappedContentKey,
+        encryptedName = n.encryptedName,
         wrappedMeta = n.wrappedMeta,
         sealedDropPrivateKey = n.sealedDropPrivateKey,
     )

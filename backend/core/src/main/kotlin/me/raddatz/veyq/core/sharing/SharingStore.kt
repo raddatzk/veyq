@@ -16,7 +16,12 @@ import jakarta.transaction.Transactional
 import java.time.Instant
 import java.util.UUID
 
-/** One node of a shared subtree (the name stays sealed under `K_SC`, so it is not returned — the root's comes from `sealedName`). */
+/**
+ * One node of a shared subtree (ADR 0080 Decisions 2 and 9). A descendant carries its directory entry — its name and
+ * its content-key wrap, both under its parent's content key, which the guest derives from the root down. The root
+ * carries none of its own placement: no parent id, no name, no wrap — those belong to the parent's key above the
+ * share; the guest takes the root's key from the share `wrap` and its title from `sealedName`.
+ */
 data class ShareNodeRow(
     val id: String,
     /** The parent within the subtree, or null at the shared root (its content key comes from the share `wrap`). */
@@ -25,7 +30,10 @@ data class ShareNodeRow(
     val orderIndex: Int,
     /** The content-key epoch the node was sealed at — a descendant's content-key wrap is bound to it (ADR 0072). */
     val epoch: Int,
+    /** A descendant's content key wrapped under its parent's; null at the root. */
     val wrappedContentKey: String?,
+    /** A descendant's name sealed under its parent's content key; null at the root. */
+    val encryptedName: String?,
     val wrappedMeta: String?,
     /** The shared root's drop private key sealed under its content key — every reader of the subtree opens uploads through it. */
     val sealedDropPrivateKey: String?,
@@ -389,13 +397,17 @@ class SharingStore(
      *  when the shared root itself is trashed. */
     fun subtree(scopeId: String, rootNodeId: String): List<ShareNodeRow> =
         liveSubtree(scopeId, rootNodeId).map { n ->
+            // The root's entry (parent id, name, wrap) is sealed under the parent's key above the share: none of it
+            // is served (ADR 0080 Decision 9). Each descendant's is — the guest opens it with the chain it derives.
+            val root = n.id == rootNodeId
             ShareNodeRow(
                 id = n.id,
-                parentId = if (n.id == rootNodeId) null else n.parentId,
+                parentId = if (root) null else n.parentId,
                 kind = n.kind,
                 orderIndex = n.orderIndex,
                 epoch = n.epoch,
-                wrappedContentKey = n.wrappedContentKey,
+                wrappedContentKey = if (root) null else n.wrappedContentKey,
+                encryptedName = if (root) null else n.encryptedName,
                 wrappedMeta = n.wrappedMeta,
                 sealedDropPrivateKey = n.sealedDropPrivateKey,
             )

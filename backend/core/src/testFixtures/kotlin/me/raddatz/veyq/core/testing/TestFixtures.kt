@@ -158,12 +158,13 @@ object TestFixtures {
         kind: String,
         parentId: String = scopeId,
         wrappedContentKey: String,
+        encryptedName: String = "bg==",
     ): String {
         val id = UUID.randomUUID().toString()
         QuarkusTransaction.requiringNew().run {
             NodeEntity().apply {
                 this.id = id; this.scopeId = scopeId; this.parentId = parentId; this.kind = kind
-                encryptedName = "bg=="; slugToken = "c2x1Zy0$id".take(120); orderIndex = 0
+                this.encryptedName = encryptedName; slugToken = "c2x1Zy0$id".take(120); orderIndex = 0
                 this.wrappedContentKey = wrappedContentKey; createdAt = Instant.now()
             }.persist()
         }
