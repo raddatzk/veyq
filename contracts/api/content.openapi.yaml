@@ -148,7 +148,8 @@ paths:
         illegal_structure`), and the slug is free there (`409 slug_taken`). **Epoch** (ADR 0080 Decision 4): when
         the destination is the scope root the entry is sealed under `K_SC`, so `epoch` must be the scope's current
         one (else `409 stale_epoch`, nothing stored) and is stored; a move out of the root stores the request's
-        `epoch`; a placement between two non-root parents keeps the node's stored epoch and ignores the request's.
+        `epoch`; a placement between two non-root parents keeps the node's stored epoch. At any destination an
+        `epoch` above the scope's current one is `409 stale_epoch` (no such epoch exists yet).
 
         **Reorder** = `orderIndex`, unversioned.
 
@@ -195,7 +196,8 @@ paths:
             read-only (`scope_deleting`, uc.spaces.delete-group A4); the node was moved or renamed since the stated
             `placementVersion` (`stale_placement` — nothing was written; the client re-reads the node and rebuilds
             the placement against it, ADR 0080 Decision 3); a placement at the scope root stated an `epoch` that is
-            not the scope's current one (`stale_epoch` — nothing was written, ADR 0080 Decision 4); or the node's
+            not the scope's current one, or any placement one above it (`stale_epoch` — nothing was written, ADR 0080
+            Decision 4); or the node's
             `wrappedMeta` moved since the stated `metaVersion` (`stale_version`, with the current blob and version —
             nothing was written, ADR 0077). Every code but `stale_version` carries `code` alone.
           content:
@@ -461,8 +463,8 @@ components:
           description: >
             Placement write — the scope content-key epoch the entry was sealed at (ADR 0024). Must be the scope's
             current one when the destination is the scope root (else `409 stale_epoch`); stored on a move into or
-            out of the root; ignored between two non-root parents, where the node keeps its stored epoch (ADR 0080
-            Decision 4).
+            out of the root; between two non-root parents the node keeps its stored epoch. Above the current one it
+            is refused at any destination (`409 stale_epoch`, ADR 0080 Decision 4).
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
