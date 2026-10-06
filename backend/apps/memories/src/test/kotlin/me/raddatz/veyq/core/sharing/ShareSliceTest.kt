@@ -144,7 +144,7 @@ class ShareSliceTest {
         val past = Instant.now().minusSeconds(3600).toString()
 
         val shareId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"$memory","role":"READ","wrap":"$wrap","sealedName":"$sealedName","expiresAt":"$past"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$memory","role":"READ","wrap":"$wrap","sealedName":"$sealedName",${ShareWriteProof.recovery()},"expiresAt":"$past"}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path<String>("shareId")
 
@@ -165,24 +165,13 @@ class ShareSliceTest {
     }
 
     @Test
-    fun folderNodeIsRejected() {
-        val (userId, scopeId) = seedMemberScope(ScopeEntity.PERSONAL)
-        val folder = seedNode(scopeId, NodeEntity.FOLDER, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
-
-        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"$folder","role":"READ","wrap":"$wrap","sealedName":"$sealedName"}""")
-            .`when`().post("/api/shares")
-            .then().statusCode(422).body("code", equalTo("illegal_scope"))
-    }
-
-    @Test
     fun nonMemberCreateIs404() {
         val (_, scopeId) = seedMemberScope(ScopeEntity.PERSONAL)
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val outsider = seedUser()
 
         given().header("Authorization", bearer(outsider)).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"$memory","role":"READ","wrap":"$wrap","sealedName":"$sealedName"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$memory","role":"READ","wrap":"$wrap","sealedName":"$sealedName",${ShareWriteProof.recovery()}}""")
             .`when`().post("/api/shares")
             .then().statusCode(404).body("code", equalTo("node_not_found"))
     }
@@ -191,7 +180,7 @@ class ShareSliceTest {
     fun unknownNodeCreateIs404() {
         val userId = seedUser()
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"${UUID.randomUUID()}","role":"READ","wrap":"$wrap","sealedName":"$sealedName"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"${UUID.randomUUID()}","role":"READ","wrap":"$wrap","sealedName":"$sealedName",${ShareWriteProof.recovery()}}""")
             .`when`().post("/api/shares")
             .then().statusCode(404).body("code", equalTo("node_not_found"))
     }
@@ -199,7 +188,7 @@ class ShareSliceTest {
     @Test
     fun createRequiresAuth() {
         given().contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"${UUID.randomUUID()}","role":"READ","wrap":"$wrap","sealedName":"$sealedName"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"${UUID.randomUUID()}","role":"READ","wrap":"$wrap","sealedName":"$sealedName",${ShareWriteProof.recovery()}}""")
             .`when`().post("/api/shares")
             .then().statusCode(401).body("code", equalTo("authentication_failed"))
     }
@@ -216,7 +205,7 @@ class ShareSliceTest {
         val (userId, scopeId) = seedMemberScope(ScopeEntity.PERSONAL)
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         fun create(role: String) = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"$memory","role":"$role","wrap":"$wrap","sealedName":"$sealedName"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$memory","role":"$role","wrap":"$wrap","sealedName":"$sealedName",${ShareWriteProof.recovery()}}""")
             .`when`().post("/api/shares")
 
         for (old in listOf("VIEWER", "CONTRIBUTOR", "UPLOADER")) {
@@ -284,7 +273,7 @@ class ShareSliceTest {
         // expired
         val past = Instant.now().minusSeconds(3600).toString()
         val expiredId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"$memory","role":"READ","wrap":"$wrap","sealedName":"$sealedName","expiresAt":"$past"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$memory","role":"READ","wrap":"$wrap","sealedName":"$sealedName",${ShareWriteProof.recovery()},"expiresAt":"$past"}""")
             .`when`().post("/api/shares").then().statusCode(201).extract().path<String>("shareId")
         given().`when`().get("/api/shares/$expiredId/terms")
             .then().statusCode(404).body("code", equalTo("share_not_found"))
@@ -305,7 +294,7 @@ class ShareSliceTest {
 
     private fun createShare(userId: String, nodeId: String): String =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"READ","wrap":"$wrap","sealedName":"$sealedName"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"READ","wrap":"$wrap","sealedName":"$sealedName",${ShareWriteProof.recovery()}}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).body("shareId", notNullValue())
             .extract().path("shareId")

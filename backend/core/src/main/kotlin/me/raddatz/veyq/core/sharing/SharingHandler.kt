@@ -32,6 +32,7 @@ import me.raddatz.veyq.core.membership.ScopeAccess
 import me.raddatz.veyq.core.membership.refusal
 import me.raddatz.veyq.core.persistence.createOrConflict
 import me.raddatz.veyq.core.scope.ScopeEntity
+import io.quarkus.arc.All
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.inject.Instance
@@ -46,7 +47,7 @@ sealed interface CreateShareOutcome {
     object CapabilityDisabled : CreateShareOutcome, HttpFailure by Failures.capabilityDisabled
     /** No such node, or the caller holds no grant for its scope (a 404, no reveal). */
     object NoNode : CreateShareOutcome, HttpFailure by Failures.nodeNotFound
-    /** The node's kind is one no application accepts shares of ([ShareGuestWrites], ADR 0029 §6) — a 422. */
+    /** The node's kind may not be the root of a share of this role ([ShareRoots], ADR 0080 decision 6) — a 422. */
     object IllegalScope : CreateShareOutcome, HttpFailure by httpFailure("illegal_scope", UNPROCESSABLE)
     object IdTaken : CreateShareOutcome, HttpFailure by Failures.idTaken
     /** The keys do not match the role: a wrap on a WRITE_ONLY share, a drop key on any other — a 400. */
@@ -144,7 +145,8 @@ sealed interface UpdateShareOutcome {
     object Deleting : UpdateShareOutcome, HttpFailure by Failures.scopeDeleting
     /** No such share owned by the caller — a non-enumerable 404 (owner-gated, like revoke). */
     object NotFound : UpdateShareOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
-    /** An illegal role change (cr-0119) — `role = WRITE_ONLY`, or a change on a WRITE_ONLY share → 422. */
+    /** An illegal role change (cr-0119) — `role = WRITE_ONLY`, a change on a WRITE_ONLY share, or a role the shared
+     *  node's kind may not be the root of ([ShareRoots]) → 422. */
     object InvalidRole : UpdateShareOutcome, HttpFailure by httpFailure("invalid_role_change", UNPROCESSABLE)
 }
 
@@ -201,8 +203,8 @@ sealed interface ShareTermsOutcome {
 /**
  * Use-case logic for public viewer shares (cr-0100, ADR 0029). Two authorization surfaces:
  *  - **Curator** (create/list/revoke/reactivate/update): authenticated, and gated first by [ScopeAccess] on the
- *    share's (or node's) space — a **node of a kind an application accepts shares of, in a scope the caller is a
- *    member of** (personal, group, or tenant — cr-0104), writable only outside its deletion grace and a suspension (uc.spaces.scope-access).
+ *    share's (or node's) space — a **node of a kind that may be the root of a share of that role ([ShareRoots]), in a
+ *    scope the caller is a member of** (personal, group, or tenant — cr-0104), writable only outside its deletion grace and a suspension (uc.spaces.scope-access).
  *  - **Guest** (resolve/blob): unauthenticated, keyed only on share state (`enabled` + `expiresAt` + a live space) — a
  *    parallel authz path, never a relaxed scope filter. The blob GET is authorized structurally (the blob is
  *    attached under the shared subtree), and bytes go **direct-from-store** so the operator never learns which
@@ -214,6 +216,9 @@ class SharingHandler(
     private val blobStore: BlobStore,
     /** Who writes under a share's root, by the root's node kind (see [ShareGuestWrites]); core only gates and dispatches. */
     private val guestWrites: Instance<ShareGuestWrites>,
+    /** Which roles a node of a kind may be shared with — its owner's answer (see [ShareRoots]); none → no share.
+     *  `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor). */
+    @All private val roots: MutableList<ShareRoots>,
     /** The guest gate every guest call passes first (active link, password, mode, token, budget). */
     private val gate: ShareGuestGate,
     private val rateLimiter: ShareRateLimiter,
@@ -228,26 +233,24 @@ class SharingHandler(
     fun create(
         userId: String, shareId: String, nodeId: String, role: String, wrap: String?,
         sealedDropPublicKey: String?, sealedDropPrivateKey: String?, sealedName: String, expiresAt: Instant?,
-        sealedNote: String?, sealedShareKey: String?, sealedShareKeyEpoch: Int?, sealedShareName: String?,
+        sealedNote: String?, sealedShareKey: String, sealedShareKeyEpoch: Int, sealedShareName: String?,
         passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?, writeVerifier: String,
     ): CreateShareOutcome {
         // Instance policy first (ADR 0032): the capability this role needs must be active, else 422 — checked
         // before any node/scope lookup so it reads as "the operator turned sharing off", not a scope error.
         if (!capabilities.isActive(capabilityFor(role))) return CreateShareOutcome.CapabilityDisabled
         val keys = shareKeys(role, wrap, sealedDropPublicKey, sealedDropPrivateKey) ?: return CreateShareOutcome.InvalidRequest
-        // The recovery copy of K_share and the epoch of K_SC it is sealed under travel together (ADR 0036 point 4).
-        if ((sealedShareKey == null) != (sealedShareKeyEpoch == null)) return CreateShareOutcome.InvalidRequest
         val node = store.findNode(nodeId) ?: return CreateShareOutcome.NoNode
         access.check(userId, node.scopeId, WRITE)
             .refusal(CreateShareOutcome.NoNode, CreateShareOutcome.Suspended, CreateShareOutcome.Deleting)?.let { return it }
-        // Any member of the node's scope may share (cr-0104) — personal, group, or tenant; only a node of a kind some
-        // application registers guest writes for can be public-shared (ADR 0029 §6, ADR 0030).
-        if (guestWrites.none { it.supports(node.kind) }) return CreateShareOutcome.IllegalScope
+        // Any member of the node's scope may share (cr-0104) — personal, group, or tenant; only a node whose kind's owner
+        // declares this role for a share root ([ShareRoots], ADR 0080 decision 6). Whether a guest may then upload
+        // under it is a separate question, [writesFor]'s.
+        if (!ShareRoots.allows(roots, node.kind, role)) return CreateShareOutcome.IllegalScope
         // ADR 0024 Decision 6, as NodesHandler checks it: a recovery copy sealed under an epoch other than the scope's
-        // current one is refused — an older one is an epoch a member removed since still holds.
-        if (sealedShareKeyEpoch != null && sealedShareKeyEpoch != scopes.currentEpoch(node.scopeId)) {
-            return CreateShareOutcome.StaleEpoch
-        }
+        // current one is refused — an older one is an epoch a member removed since still holds. The copy is mandatory
+        // (ADR 0080 decision 12): the request bound refused its absence before the handler.
+        if (sealedShareKeyEpoch != scopes.currentEpoch(node.scopeId)) return CreateShareOutcome.StaleEpoch
         // The client-minted share id (ADR 0072): the recovery wrap and every contributor name are bound to it. A
         // double-submitted create's loser answers as its replay does.
         val replay = { if (store.idTaken(shareId)) SharingStore.CreateResult.ID_TAKEN else null }
@@ -259,9 +262,7 @@ class SharingHandler(
             scopes.lockScope(node.scopeId)
             refused = access.check(userId, node.scopeId, WRITE)
                 .refusal(CreateShareOutcome.NoNode, CreateShareOutcome.Suspended, CreateShareOutcome.Deleting)
-                ?: CreateShareOutcome.StaleEpoch.takeIf {
-                    sealedShareKeyEpoch != null && sealedShareKeyEpoch != scopes.currentEpoch(node.scopeId)
-                }
+                ?: CreateShareOutcome.StaleEpoch.takeIf { sealedShareKeyEpoch != scopes.currentEpoch(node.scopeId) }
             if (refused != null) {
                 null
             } else {
@@ -361,8 +362,9 @@ class SharingHandler(
     /** Edit a share in place (cr-0115/cr-0116/cr-0119, ADR 0036) — owner-gated. A share not owned by the caller is a
      *  non-enumerable 404. The `K_share`-sealed ciphertexts (re-sealed client-side) full-replace the note + name;
      *  a non-null `role` changes the grant in place (READ ↔ READ_WRITE only — WRITE_ONLY, either as the target or
-     *  as the share's current role, is `InvalidRole` → 422). Role change is a plaintext authz change: no re-crypto,
-     *  the wrap/`K_share`/link are untouched. */
+     *  as the share's current role, is `InvalidRole` → 422, and so is a role the shared node's kind may not be the
+     *  root of, [ShareRoots] as on create). Role change is a plaintext authz change: no re-crypto, the
+     *  wrap/`K_share`/link are untouched. */
     fun updateShare(
         userId: String, shareId: String, sealedNote: String?, sealedShareName: String?, role: String?,
         expiresAt: Instant?, passwordRequired: Boolean?, pwSalt: String?, pwVerifier: String?, sealedPassword: String?,
@@ -370,6 +372,11 @@ class SharingHandler(
         val share = store.find(shareId) ?: return UpdateShareOutcome.NotFound
         access.check(userId, share.scopeId, WRITE)
             .refusal(UpdateShareOutcome.NotFound, UpdateShareOutcome.Suspended, UpdateShareOutcome.Deleting)?.let { return it }
+        // The root's kind, read outside the store's row lock: a share never changes its node and a node never its kind.
+        // A root row that is gone answers no kind, and so allows no role (fail closed).
+        if (role != null && !ShareRoots.allows(roots, store.findNode(share.nodeId)?.kind.orEmpty(), role)) {
+            return UpdateShareOutcome.InvalidRole
+        }
         return when (store.updateShare(userId, shareId, sealedNote, sealedShareName, role, expiresAt, passwordRequired, pwSalt, pwVerifier, sealedPassword)) {
             SharingStore.UpdateResult.DONE -> UpdateShareOutcome.Done
             SharingStore.UpdateResult.NOT_FOUND -> UpdateShareOutcome.NotFound
@@ -634,9 +641,9 @@ class SharingHandler(
     /**
      * The application that writes under a share root of [rootKind] ([ShareWriteGate.Admitted.rootKind]; a root that
      * is gone never passes the gate) — called only after the guest gate has passed. Null (read as "not contributable")
-     * for a kind no application registers — unreachable while [create] refuses such a root — or of a kind **more than
-     * one** claims: exactly one per kind is the contract (`ShareGuestWrites`), and picking the first would rest on CDI
-     * bean order. Every case fails closed rather than guessing a writer; `ShareGuestWritesPartitionSliceTest` pins the
+     * for a kind no application registers — a `FOLDER` share with READ_WRITE today: [ShareRoots] lets it be created,
+     * and no application writes under a folder yet — or of a kind **more than one** claims: exactly one per kind is
+     * the contract (`ShareGuestWrites`), and picking the first would rest on CDI bean order. Every case fails closed rather than guessing a writer; `ShareGuestWritesPartitionSliceTest` pins the
      * partition. The start asks [StorageQuota.admissionFor] by the same kind, so writer and measure cannot disagree.
      */
     private fun writesFor(rootKind: String): ShareGuestWrites? = guestWrites.filter { it.supports(rootKind) }.singleOrNull()

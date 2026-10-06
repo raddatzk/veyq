@@ -17,8 +17,10 @@ import me.raddatz.veyq.core.blob.WindowRequest
  * call here. Every method is therefore reached by an already-authorized guest; the share is named by [scopeId] and
  * the guest by [identityId], the same two values the gate resolved.
  *
- * A node kind that no implementation [supports] cannot be shared with guest writes: core refuses to create such a
- * share (`illegal_scope`), so a stored share's root kind always has exactly one implementation.
+ * Whether a kind may be a share root at all is not this seam's question but [ShareRoots]' (ADR 0080 decision 6), so a
+ * stored share's root kind may have no implementation here — a `FOLDER` shared with `READ_WRITE` has none today.
+ * Core then fails closed: a guest's start or window on such a link is `share_not_contributable`, and so is one on a
+ * kind more than one implementation [supports] (`SharingHandler.writesFor`).
  */
 interface ShareGuestWrites {
     /** Whether a share rooted at a node of [nodeKind] accepts guest writes through this implementation. */

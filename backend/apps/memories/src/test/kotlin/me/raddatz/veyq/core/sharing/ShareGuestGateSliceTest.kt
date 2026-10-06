@@ -264,7 +264,7 @@ class ShareGuestGateSliceTest {
     private fun createShare(userId: String, nodeId: String, role: String, password: Boolean = false): String {
         val pw = if (password) ""","passwordRequired":true,"pwSalt":"$pwSalt","pwVerifier":"${sha256b64(pwToken)}"""" else ""
         return given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"$role",${shareKeysJson(role, nodeId, wrap)},"sealedName":"$sealedName"$pw}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"$role",${shareKeysJson(role, nodeId, wrap)},"sealedName":"$sealedName",${ShareWriteProof.recovery()}$pw}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path("shareId")
     }

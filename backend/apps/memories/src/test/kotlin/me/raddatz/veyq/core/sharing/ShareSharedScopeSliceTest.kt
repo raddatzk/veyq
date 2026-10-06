@@ -741,22 +741,37 @@ class ShareSharedScopeSliceTest {
 
     // --- helpers ---
 
-    /** A share of [role] carrying [keys]; with [copyEpoch], also a recovery copy sealed at that epoch (ADR 0036
-     *  point 4). */
+    /** A share of [role] carrying [keys]; with [copyEpoch], a recovery copy sealed at that epoch (ADR 0036 point 4).
+     *  Without it, a share **with no recovery copy** — a row minted before the copy became mandatory (ADR 0080
+     *  decision 12): created with a copy at the scope's current epoch, which is then cleared, as such a row holds none
+     *  ([ReissuePolicy] still judges one). */
     private fun createShare(
         userId: String, nodeId: String, copyEpoch: Int? = null, role: String = "READ", keys: String = """"wrap":"$wrap"""",
-    ): String = postShare(userId, nodeId, TestIds.shareId(), copyEpoch, role, keys)
-        .then().statusCode(201).body("shareId", notNullValue())
-        .extract().path("shareId")
+    ): String {
+        val id: String = postShare(userId, nodeId, TestIds.shareId(), copyEpoch, role, keys)
+            .then().statusCode(201).body("shareId", notNullValue())
+            .extract().path("shareId")
+        if (copyEpoch == null) {
+            QuarkusTransaction.requiringNew().run {
+                ShareEntity.findById(id)!!.apply { sealedShareKey = null; sealedShareKeyEpoch = null }.persist()
+            }
+        }
+        return id
+    }
 
+    /** POST a create; without [copyEpoch] the copy is sealed at the node's scope's current epoch (0 for an unknown node). */
     private fun postShare(
         userId: String, nodeId: String, id: String, copyEpoch: Int? = null, role: String = "READ", keys: String = """"wrap":"$wrap"""",
     ) = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
         .body(
-            """{"shareId":"$id",${ShareWriteProof.field(id)},"nodeId":"$nodeId","role":"$role",$keys,"sealedName":"$sealedName"""" +
-                (copyEpoch?.let { ""","sealedShareKey":"$shareKey","sealedShareKeyEpoch":$it""" } ?: "") + "}",
+            """{"shareId":"$id",${ShareWriteProof.field(id)},"nodeId":"$nodeId","role":"$role",$keys,"sealedName":"$sealedName",""" +
+                """"sealedShareKey":"$shareKey","sealedShareKeyEpoch":${copyEpoch ?: currentEpochOfNode(nodeId)}}""",
         )
         .`when`().post("/api/shares")
+
+    private fun currentEpochOfNode(nodeId: String): Int = QuarkusTransaction.requiringNew().call {
+        NodeEntity.findById(nodeId)?.let { ScopeEntity.findById(it.scopeId)?.currentEpoch } ?: 0
+    }
 
     private fun delete(userId: String, shareId: String) =
         given().header("Authorization", bearer(userId)).`when`().delete("/api/shares/$shareId")

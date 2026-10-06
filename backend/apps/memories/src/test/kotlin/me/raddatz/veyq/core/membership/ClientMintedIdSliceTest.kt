@@ -144,7 +144,7 @@ class ClientMintedIdSliceTest {
     // ── createShare + createShareIdentity ────────────────────────────────────────────────────────────────────
 
     private fun shareBody(shareId: String, nodeId: String, role: String = "READ") =
-        """{"shareId":"$shareId",${ShareWriteProof.field(shareId)},"nodeId":"$nodeId","role":"$role","wrap":"bmV3","sealedName":"bmV3"}"""
+        """{"shareId":"$shareId",${ShareWriteProof.field(shareId)},"nodeId":"$nodeId","role":"$role","wrap":"bmV3","sealedName":"bmV3",${ShareWriteProof.recovery()}}"""
 
     @Test
     fun createShareRefusesAnIdTakenInAnotherScope() {

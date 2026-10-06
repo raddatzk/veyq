@@ -167,7 +167,7 @@ class ShareWriteProofSliceTest {
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val shareId = TestIds.shareId()
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"shareId":"$shareId","nodeId":"$memory","role":"READ","wrap":"$wrap","sealedName":"$sealedName"}""")
+            .body("""{"shareId":"$shareId","nodeId":"$memory","role":"READ","wrap":"$wrap","sealedName":"$sealedName",${ShareWriteProof.recovery()}}""")
             .`when`().post("/api/shares").then().statusCode(400)
         assertNull(QuarkusTransaction.requiringNew().call { ShareEntity.findById(shareId) })
         // control: the same body with the field is created
@@ -179,7 +179,7 @@ class ShareWriteProofSliceTest {
     private fun createShare(userId: String, nodeId: String, role: String): String {
         val shareId = TestIds.shareId()
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"shareId":"$shareId","nodeId":"$nodeId","role":"$role",${shareKeysJson(role, nodeId, wrap)},"sealedName":"$sealedName",${ShareWriteProof.field(shareId)}}""")
+            .body("""{"shareId":"$shareId","nodeId":"$nodeId","role":"$role",${shareKeysJson(role, nodeId, wrap)},"sealedName":"$sealedName",${ShareWriteProof.recovery()},${ShareWriteProof.field(shareId)}}""")
             .`when`().post("/api/shares").then().statusCode(201)
         return shareId
     }

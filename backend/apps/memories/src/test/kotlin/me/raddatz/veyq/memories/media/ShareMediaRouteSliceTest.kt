@@ -59,7 +59,7 @@ class ShareMediaRouteSliceTest {
         "createShare" to Probe("POST", "/api/shares") { w ->
             val id = TestIds.shareId()
             val node = TestIds.uuid()
-            authed(w).body("""{"shareId":"$id",${ShareWriteProof.field(id)},"nodeId":"$node","role":"READ",${shareKeysJson("READ", node)},"sealedName":"$sealedName"}""")
+            authed(w).body("""{"shareId":"$id",${ShareWriteProof.field(id)},"nodeId":"$node","role":"READ",${shareKeysJson("READ", node)},"sealedName":"$sealedName",${ShareWriteProof.recovery()}}""")
                 .`when`().post("/api/shares").then().statusCode(404).body("code", equalTo("node_not_found"))
         },
         "listShares" to Probe("GET", "/api/shares") { w ->
@@ -157,7 +157,7 @@ class ShareMediaRouteSliceTest {
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
         val shareId = TestIds.shareId()
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"shareId":"$shareId",${ShareWriteProof.field(shareId)},"nodeId":"$memory","role":"READ_WRITE",${shareKeysJson("READ_WRITE", memory)},"sealedName":"$sealedName"}""")
+            .body("""{"shareId":"$shareId",${ShareWriteProof.field(shareId)},"nodeId":"$memory","role":"READ_WRITE",${shareKeysJson("READ_WRITE", memory)},"sealedName":"$sealedName",${ShareWriteProof.recovery()}}""")
             .`when`().post("/api/shares").then().statusCode(201)
         val token: String = given().contentType(ContentType.JSON).header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId))
             .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedUploaderName"}""")

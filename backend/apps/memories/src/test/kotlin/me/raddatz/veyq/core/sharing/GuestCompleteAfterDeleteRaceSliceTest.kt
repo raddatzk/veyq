@@ -107,7 +107,7 @@ class GuestCompleteAfterDeleteRaceSliceTest {
     private fun uploaderShare(userId: String, nodeId: String): String {
         val shareId = TestIds.shareId()
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"shareId":"$shareId",${ShareWriteProof.field(shareId)},"nodeId":"$nodeId","role":"WRITE_ONLY",${shareKeysJson("WRITE_ONLY", nodeId)},"sealedName":"$sealedName"}""")
+            .body("""{"shareId":"$shareId",${ShareWriteProof.field(shareId)},"nodeId":"$nodeId","role":"WRITE_ONLY",${shareKeysJson("WRITE_ONLY", nodeId)},"sealedName":"$sealedName",${ShareWriteProof.recovery()}}""")
             .`when`().post("/api/shares").then().statusCode(201)
         return shareId
     }

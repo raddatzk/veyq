@@ -125,7 +125,7 @@ class ShareRootKindSliceTest {
         val pw = if (!password) "" else
             ""","passwordRequired":true,"pwSalt":"$pwSalt","pwVerifier":"${sha256b64(pwToken)}","sealedPassword":"c2VhbGVkLXB3""""
         return given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"$role",${shareKeysJson(role, nodeId, wrap)},"sealedName":"$sealedName"$pw}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"$role",${shareKeysJson(role, nodeId, wrap)},"sealedName":"$sealedName",${ShareWriteProof.recovery()}$pw}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path("shareId")
     }
