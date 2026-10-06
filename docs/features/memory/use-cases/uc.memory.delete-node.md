@@ -39,7 +39,8 @@ design impossible ([ADR 0061](../../../decisions/0061-node-deletion-reversible-n
    now`) in one transaction. Nothing else is touched: media, derivatives, buckets and every blob stay exactly as
    they were, which is what makes the restore cheap and complete.
 3. In the same step the server **frees the node's slug**, so the name is immediately reusable: the deleted node's
-   `slugToken` is replaced by its own id. The server cannot recompute a slug token — it is a blinded MAC under
+   `slugToken` is replaced by its own id — the deleted root's only: a descendant's name lives under a trashed
+   parent, where nothing can claim it, so it keeps its token (inbox #357). The server cannot recompute a slug token — it is a blinded MAC under
    `K_SC` ([ADR 0012](../../../decisions/0012-content-key-hierarchy.md)) — so the original is not kept and the
    client supplies a fresh one on restore (step 6).
 4. The subtree leaves every read at once: the tree listing, the media listings, bucket listings and cover

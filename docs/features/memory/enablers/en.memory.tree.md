@@ -111,8 +111,9 @@ exception to it.
   the subtree's media, derivatives, buckets and blobs are untouched, which is what makes a restore complete. An
   already-trashed *root* is a no-op; an already-trashed *descendant* is **re-stamped**, so the whole subtree ages
   out on one timestamp and the purge can never reach half of it.
-- **The slug is freed at delete**, so the name is immediately reusable: the deleted node's `slugToken` is replaced
-  by its own id. `UNIQUE(parentId, slugToken)` is a plain unique index and the schema is held to the H2 ∩ MariaDB
+- **The slug is freed at delete**, so the name is immediately reusable: the deleted root's `slugToken` is replaced
+  by its own id. Only the root's — a descendant's name lives under a trashed parent, where create, move and restore
+  are all refused, so it keeps its token and returns valid (inbox #357). `UNIQUE(parentId, slugToken)` is a plain unique index and the schema is held to the H2 ∩ MariaDB
   subset, so a partial index over live rows is not available. The server **cannot** recompute a slug token (it is
   a blinded MAC under the parent's key), so the original is not kept — **restore carries a freshly client-computed token**,
   and a collision is the ordinary disambiguation a create already handles.

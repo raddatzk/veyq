@@ -29,7 +29,8 @@ import org.junit.jupiter.api.Test
  * clears the whole subtree; `NodeSubtreePurge` erases every row the marker selects), and create, move and restore
  * refuse a trashed parent. `veyq_node.parent_id` has no foreign key, so these tests are the guarantee.
  *
- * Bite tests 6 (the create half; the move half is `NodePlacementCoreSliceTest.aMoveIntoATrashedParentIs422`), 7 and 8.
+ * Bite tests 6 (the create half; the move half is `NodePlacementCoreSliceTest.aMoveIntoATrashedParentIs422`), 7 and 8,
+ * and inbox #357's two: a delete frees only its root's slug, so a restored descendant comes back with its own.
  * The races (a trash overlapping a create, a move or a restore under it) are `NodeTreeRaceCoreSliceTest` and
  * `NodeTreeRaceSliceTest`. Core alone: every node is a `FOLDER`.
  */
@@ -129,27 +130,73 @@ class NodeTrashConsistencyCoreSliceTest {
         assertNoOrphan(t.scopeId)
     }
 
+    /**
+     * inbox #357: a delete frees only its ROOT's name — the one name under a live parent. Every descendant's name lives
+     * under a trashed parent, where nothing can claim it while the subtree sits in the trash, so it keeps its token and
+     * comes back with it: after the restore a new sibling taking a descendant's name is the ordinary `slug_taken`.
+     * Freed too, the descendant would return holding no name, and the sibling would land beside it as a duplicate.
+     */
+    @Test
+    fun aRestoredDescendantKeepsItsNameAndASiblingCannotTakeIt() {
+        val t = tree()
+        delete(t, t.folder)
+        assertEquals(listOf(t.folder, t.subToken, t.leafToken), tokens(t), "the delete freed the root's name only")
+
+        restore(t, t.folder).statusCode(204)
+
+        assertEquals(listOf(t.subToken, t.leafToken), tokens(t).drop(1), "the descendants came back with their own tokens")
+        create(t, UUID.randomUUID().toString(), parent = t.folder, token = t.subToken).statusCode(409).body("code", equalTo("slug_taken"))
+        create(t, UUID.randomUUID().toString(), parent = t.sub, token = t.leafToken).statusCode(409).body("code", equalTo("slug_taken"))
+        assertNoOrphan(t.scopeId)
+    }
+
+    /**
+     * inbox #357, the earlier-trashed descendant: `sub` trashed on its own frees its name under the then-live folder, a
+     * new sibling takes it, then the folder goes and comes back. `leaf` — a descendant of BOTH deletes — keeps its
+     * token through both and the restore. `sub` itself returns holding its own delete's freed token (its id): the
+     * server cannot re-derive a slug, and whether that node should stay in the trash or be re-named by the client is
+     * the part of #357 still open, so this test pins neither.
+     */
+    @Test
+    fun aDescendantOfTwoDeletesKeepsItsTokenThroughBoth() {
+        val t = tree()
+        delete(t, t.sub)
+        create(t, UUID.randomUUID().toString(), parent = t.folder, token = t.subToken).statusCode(201)
+        delete(t, t.folder)
+
+        restore(t, t.folder).statusCode(204)
+
+        assertEquals(t.leafToken, tokens(t)[2], "the leaf under the earlier-trashed sub kept its token")
+        create(t, UUID.randomUUID().toString(), parent = t.sub, token = t.leafToken).statusCode(409).body("code", equalTo("slug_taken"))
+        assertNoOrphan(t.scopeId)
+    }
+
     // --- helpers ---
 
-    /** folder (root) > sub > leaf, all `FOLDER`, created over HTTP. */
-    private data class Tree(val userId: String, val scopeId: String, val folder: String, val sub: String, val leaf: String)
+    /** folder (root) > sub > leaf, all `FOLDER`, created over HTTP; the two descendants' slug tokens kept. */
+    private data class Tree(
+        val userId: String, val scopeId: String, val folder: String, val sub: String, val leaf: String,
+        val subToken: String, val leafToken: String,
+    )
 
     private fun tree(): Tree {
         val (userId, scopeId) = seedMemberScope()
         val ids = List(3) { UUID.randomUUID().toString() }
-        val t = Tree(userId, scopeId, ids[0], ids[1], ids[2])
+        val t = Tree(userId, scopeId, ids[0], ids[1], ids[2], slug(), slug())
         create(t, t.folder, parent = null).statusCode(201)
-        create(t, t.sub, parent = t.folder).statusCode(201)
-        create(t, t.leaf, parent = t.sub).statusCode(201)
+        create(t, t.sub, parent = t.folder, token = t.subToken).statusCode(201)
+        create(t, t.leaf, parent = t.sub, token = t.leafToken).statusCode(201)
         return t
     }
 
-    private fun create(t: Tree, nodeId: String, parent: String?): ValidatableResponse {
+    private fun create(t: Tree, nodeId: String, parent: String?, token: String = slug()): ValidatableResponse {
         val parentField = parent?.let { "\"parentId\":\"$it\"," } ?: ""
         return given().header("Authorization", bearer(t.userId)).contentType(ContentType.JSON)
-            .body("""{$parentField"nodeId":"$nodeId","kind":"FOLDER","encryptedName":"Zg==","slugToken":"${slug()}","orderIndex":0,"wrappedContentKey":"aw=="}""")
+            .body("""{$parentField"nodeId":"$nodeId","kind":"FOLDER","encryptedName":"Zg==","slugToken":"$token","orderIndex":0,"wrappedContentKey":"aw=="}""")
             .`when`().post("/api/scopes/${t.scopeId}/nodes").then()
     }
+
+    private fun tokens(t: Tree): List<String> = tx { listOf(t.folder, t.sub, t.leaf).map { NodeEntity.findById(it)!!.slugToken } }
 
     private fun delete(t: Tree, nodeId: String) {
         given().header("Authorization", bearer(t.userId)).`when`().delete("/api/scopes/${t.scopeId}/nodes/$nodeId").then().statusCode(204)

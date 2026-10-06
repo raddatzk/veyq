@@ -75,7 +75,7 @@ class NodesStore {
      * Slug uniqueness — one of the **three reads that deliberately keep seeing soft-deleted rows** (ADR 0061).
      * `ux_node_parent_slug` is a plain UNIQUE(parent_id, slug_token) spanning trashed rows (MariaDB has no
      * filtered index), so adding `deletedAt is null` here would let validation pass and the database reject
-     * the insert on flush afterwards — a clean 409 turned into a 500. The trashed row holds its own id as its
+     * the insert on flush afterwards — a clean 409 turned into a 500. A trash root holds its own id as its
      * token, which is outside the contract's base64 token alphabet, so nothing a client can send collides with
      * it through the API; a handler-level caller can, and `NodesSlugTrapTest` pins exactly that.
      */
@@ -266,16 +266,20 @@ class NodesStore {
         val doomed = collectSubtree(all, nodeId)
         val now = Instant.now()
         for (n in all) {
-            if (n.id !in doomed) continue
-            n.deletedAt = now
-            // ADR 0061 Decision 5: free the name immediately, by the WRITE. `ux_node_parent_slug` is a plain
-            // UNIQUE(parent_id, slug_token) spanning trashed rows (MariaDB has no filtered index), so a
-            // trashed node would otherwise hold its name hostage for the whole retention window. The node's own
-            // id is unique by construction, blind (the server may not compute a slug token — it is a MAC under
-            // K_SC), and outside the contract's base64 token alphabet, so nothing a client can send collides
-            // with it. The client re-supplies a fresh token on restore.
-            n.slugToken = n.id
+            if (n.id in doomed) n.deletedAt = now
         }
+        // ADR 0061 Decision 5: free the ROOT's name immediately, by the WRITE. `ux_node_parent_slug` is a plain
+        // UNIQUE(parent_id, slug_token) spanning trashed rows (MariaDB has no filtered index), so a trashed root
+        // would otherwise hold its name hostage under its LIVE parent for the whole retention window. The node's own
+        // id is unique by construction, blind (the server may not compute a slug token — it is a MAC under the
+        // parent's key), and outside the contract's base64 token alphabet, so nothing a client can send collides
+        // with it. The client re-supplies a fresh token on restore.
+        // Only the root: every descendant's name lives under a parent that is trashed now, and nothing can claim a
+        // name there — create, move and restore all refuse a trashed parent (ADR 0080 Decision 8). So a descendant
+        // keeps its token and comes back with a valid one; freeing it too would restore it holding no name at all,
+        // beside which a same-named sibling could then be created (inbox #357). A descendant an EARLIER, narrower
+        // delete trashed holds that delete's freed token, re-stamped or not — the server cannot re-derive it.
+        root.slugToken = root.id
         // cr-0107 (ADR 0033): still no media_revision/delete_revision bump here, but the reason changed with
         // ADR 0061 — the node rows and their counters now SURVIVE the delete, so "no open gallery can poll a
         // deleted node" is no longer true of the rows. It is true of the path: every media read routes through
@@ -293,8 +297,10 @@ class NodesStore {
      * client's freshly computed [slugToken] back onto the root. A subtree is on ONE marker — [deleteSubtree] re-stamps
      * every descendant, one an earlier, narrower delete had trashed included — so a restore brings that node back
      * too (ADR 0080 Decision 8: a child row never outlives, and is never live under, the parent whose key wraps its
-     * own). [RestoreResult.NOT_FOUND] when there is no such trash root in the scope (unknown, already purged, still
-     * live, or under a trashed parent) ⇒ a non-enumerable 404.
+     * own). Only the root's token was freed, so every descendant returns with the token it had — except one an earlier,
+     * narrower delete trashed: it returns holding that delete's freed token (inbox #357, open). [RestoreResult.NOT_FOUND]
+     * when there is no such trash root in the scope (unknown, already purged, still live, or under a trashed parent)
+     * ⇒ a non-enumerable 404.
      */
     @Transactional
     fun restoreSubtree(scopeId: String, nodeId: String, slugToken: String, encryptedName: String?): RestoreResult {
