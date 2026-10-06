@@ -285,16 +285,17 @@ class NodesStore {
         // observable delete-reconcile is still the share delete-own path (cr-0102), which bumps both counters.
     }
 
-    /**
-     * Restore the trashed subtree rooted at [nodeId]: clear `deletedAt` across it and write the client's freshly
-     * computed [slugToken] back onto the root. Only descendants stamped in the **same** delete come back — a node
-     * the user had trashed separately beforehand carries an earlier marker and stays in the trash (where it
-     * becomes a root of its own, its parent being live again). False when there is no such trashed root in the
-     * scope (unknown, already purged, or still live) ⇒ a non-enumerable 404.
-     */
     /** The 3-way result of a restore: applied, no such trashed root, or the name was taken meanwhile. */
     enum class RestoreResult { DONE, NOT_FOUND, SLUG_TAKEN }
 
+    /**
+     * Restore the trashed subtree rooted at [nodeId]: clear `deletedAt` across the **whole** subtree and write the
+     * client's freshly computed [slugToken] back onto the root. A subtree is on ONE marker — [deleteSubtree] re-stamps
+     * every descendant, one an earlier, narrower delete had trashed included — so a restore brings that node back
+     * too (ADR 0080 Decision 8: a child row never outlives, and is never live under, the parent whose key wraps its
+     * own). [RestoreResult.NOT_FOUND] when there is no such trash root in the scope (unknown, already purged, still
+     * live, or under a trashed parent) ⇒ a non-enumerable 404.
+     */
     @Transactional
     fun restoreSubtree(scopeId: String, nodeId: String, slugToken: String, encryptedName: String?): RestoreResult {
         lockScope(scopeId) // the purge's lock: it erases what it selected under it, or finds this restore committed

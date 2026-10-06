@@ -95,8 +95,21 @@ to a second application ([docs/apps/files.md](../docs/apps/files.md), inbox #349
       UI. A restore stays its own endpoint (`restoreNode`, the version unmoved).
 
 ### Slice 4 — trash consistency
-- [ ] 4.1 backend — pin by test: move into a trashed parent, restore under a trashed parent, purge leaves no child;
-      fix the `NodesStore.kt:245` comment · Done when: bite tests 6, 7, 8; MariaDB race run.
+- [x] 4.1 backend — pin by test: move into a trashed parent, restore under a trashed parent, purge leaves no child;
+      fix the `NodesStore.kt:245` comment · Done when: bite tests 6, 7, 8; MariaDB race run. *Measured:* no hole —
+      the code already held Decision 8; slice 4 is tests and the corrected `restoreSubtree` comment.
+      `NodeTrashConsistencyCoreSliceTest`: 6 (create half; the move half is slice 3's `aMoveIntoATrashedParentIs422`),
+      7 (a child or a grandchild trashed earlier by a narrower delete, the folder later, the scheduled purge after the
+      retention: no subtree row and no orphan left), 8 (`404 node_not_found` both when the child went down with the
+      parent and when it was trashed first) and a parent's restore bringing the whole subtree back on its one marker.
+      `NodeTreeRaceCoreSliceTest` adds the other overlap order — a child's restore during its parent's trash, a
+      create or a move committing while the trash waits — beside `NodeTreeRaceSliceTest`'s create and move races;
+      each red against its lever (the trashed-parent filter, the restore's parent check, the purge erasing only trash
+      roots, the scope lock in `deleteSubtree` / `restoreSubtree`, the re-check under the lock in create and
+      `applyUpdate`), green on H2 and the pinned MariaDB. Web: `tree.wire.test.ts` pins a restore's slug token and
+      re-sealed name under the LIVE parent's key (a parent moved meanwhile), at the node's own placement version. No
+      DB-level guard: `parent_id` holds the scope id at the root, so it cannot carry a foreign key, and both erasure
+      guards read `node_id` columns and scope FKs, not the tree's self-reference.
 
 ### Slice 5 — shares by kind, tree operations for guests
 - [ ] 5.1 contracts — `sharing.openapi.yaml`: `sealedShareKey`/`sealedShareKeyEpoch` required (inbox #347), guest

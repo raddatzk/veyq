@@ -17,6 +17,7 @@ import java.util.UUID
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 /**
@@ -71,6 +72,75 @@ class NodeTreeRaceCoreSliceTest {
             )
             assertEquals(Result.success(NodesStore.RestoreResult.NOT_FOUND), restored, "round $round")
             assertNull(tx { NodeEntity.findById(memory) }, "round $round")
+        }
+    }
+
+    /**
+     * ADR 0080 Decision 8 / bite test 8 under overlap: a child (trashed earlier, a trash root while its parent is live)
+     * restored while its parent's trash is uncommitted. The restore waits for the trash on the scope lock and then reads
+     * the parent trashed: `NOT_FOUND`, the child stays in the trash on the parent's marker. Restored on the parent read
+     * live before the trash committed, it would come back live under a trashed parent whose key the purge erases.
+     */
+    @Test
+    fun aChildRestoredWhileItsParentIsTrashedStaysInTheTrash() {
+        repeat(RACE_ROUNDS) { round ->
+            val (_, scopeId) = seedMemberScope()
+            val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
+            val child = seedNode(scopeId, NodeEntity.FOLDER, parentId = folder, wrappedContentKey = CONTENT_KEY)
+            store.deleteSubtree(scopeId, child)
+            val restored = whileUncommitted(
+                change = { store.deleteSubtree(scopeId, folder) },
+                overlapping = { store.restoreSubtree(scopeId, child, slug(), null) },
+            )
+            assertEquals(NodesStore.RestoreResult.NOT_FOUND, restored, "round $round: a child restored under a trashed parent")
+            tx {
+                val (f, c) = listOf(folder, child).map { NodeEntity.findById(it)!! }
+                assertNotNull(c.deletedAt, "round $round: the child is live under a trashed parent")
+                assertEquals(f.deletedAt, c.deletedAt, "round $round: the subtree is on one marker")
+            }
+        }
+        // control: with its parent live the same restore lands
+        val (_, scopeId) = seedMemberScope()
+        val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
+        val child = seedNode(scopeId, NodeEntity.FOLDER, parentId = folder, wrappedContentKey = CONTENT_KEY)
+        store.deleteSubtree(scopeId, child)
+        assertEquals(NodesStore.RestoreResult.DONE, store.restoreSubtree(scopeId, child, slug(), null), "control")
+    }
+
+    /**
+     * The other order of `NodeTreeRaceSliceTest`'s create and move races: the create (or the move) holds its commit
+     * while the parent's trash runs. The trash waits on the scope lock, then enumerates the committed child and stamps
+     * it with the subtree's marker — never a live node under a trashed parent.
+     */
+    @Test
+    fun aChildCreatedOrMovedBeforeItsParentsTrashCommitsIsTrashedWithIt() {
+        repeat(RACE_ROUNDS) { round ->
+            for (how in listOf("create", "move")) {
+                val (_, scopeId) = seedMemberScope()
+                val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
+                val child = if (how == "move") seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY) else UUID.randomUUID().toString()
+                whileUncommitted(
+                    change = {
+                        if (how == "create") {
+                            // the create's own transaction body, as `NodesHandler.create` runs it in `createOrConflict`
+                            store.lockScope(scopeId)
+                            assertTrue(store.create(child, scopeId, folder, NodeEntity.FOLDER, "bmV3", slug(), 0, 0, CONTENT_KEY, null))
+                        } else {
+                            assertEquals(
+                                NodesStore.ApplyResult.Applied,
+                                store.applyUpdate(scopeId, child, NodesStore.Placement(folder, "bmV3", slug(), CONTENT_KEY, null, 0), null, null, null),
+                            )
+                        }
+                    },
+                    overlapping = { store.deleteSubtree(scopeId, folder) },
+                )
+                tx {
+                    val (f, c) = listOf(folder, child).map { NodeEntity.findById(it)!! }
+                    assertEquals(folder, c.parentId, "round $round ($how)")
+                    assertNotNull(f.deletedAt, "round $round ($how)")
+                    assertEquals(f.deletedAt, c.deletedAt, "round $round ($how): the child escaped its parent's trash")
+                }
+            }
         }
     }
 
