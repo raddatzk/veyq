@@ -196,7 +196,8 @@ below). Tree operations for guests are core's; `READ_WRITE` is interpreted per a
 13. A guest moves a node out of its subtree, or its root → refused; a WRITE_ONLY guest moves anything → refused.
 14. A share created without `sealedShareKey` → `400`.
 15. A rename without a re-wrapped key → `400`; a rename built on a stale `placement_version` → `409 stale_placement`.
-16. A move to the scope root at a stale epoch → `409 stale_epoch`; a move between non-root parents ignores the epoch.
+16. A move to the scope root at a stale epoch → `409 stale_epoch`; a move between non-root parents keeps the stored
+    epoch; an epoch above the current one → `409 stale_epoch` at any destination.
 17. A `READ_WRITE` guest creates a kind `NodeKindRules` does not admit under the folder → refused.
 18. A kind with no role declaration, in a `READ_WRITE` share: a write → refused, a read → served (fail closed).
 19. A guest renames the share root → refused; a member renames it → the share's `sealedName` opens to the new name.

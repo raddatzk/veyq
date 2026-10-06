@@ -93,7 +93,7 @@ sequenceDiagram
   (`409 stale_placement`: the client re-reads and rebuilds once) and checks structure only — a live destination in
   the same scope, the kind's placement rule, no cycle, a free slug — under the tree's scope lock. An entry at the
   scope root is sealed at the **current** epoch (`409 stale_epoch` otherwise); between two non-root parents the
-  node keeps its epoch. `placeNode` in `web/src/core/node/tree.ts` is the one client function. **No
+  node keeps its epoch; an epoch above the current one is `409 stale_epoch` at any destination. `placeNode` in `web/src/core/node/tree.ts` is the one client function. **No
   cross-scope move** — that is a copy + re-encrypt under the target scope's `K_SC`/`K_mem` (a separate use-case),
   never a tree move.
 - **Reorder:** update `orderIndex` among siblings.

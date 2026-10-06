@@ -133,10 +133,20 @@ Planned 2026-10-06 from three inventories; each sub-slice is its own worktree ru
       `share_not_contributable`), `ShareKeyRecoveryEpochSliceTest` (create without the copy -> 400). The test bodies
       carry the copy through `ShareWriteProof.recovery()`; `ShareSharedScopeSliceTest` models a copy-less link as a
       legacy row (created, then the copy cleared), which `ReissuePolicy` still judges.
-- [ ] 5a.2 epoch gap and a principal-free node operation — a move out of the root with an epoch above the current is
+- [x] 5a.2 epoch gap and a principal-free node operation — a move out of the root with an epoch above the current is
       refused (`NodesHandler.kt` ~:191, any destination); the structure checks of create/placement are extracted as
       functions of `(scopeId, optional subtree boundary)` · Done when: existing tests green, a bite test for the gap,
-      MariaDB race run.
+      MariaDB race run. *Measured:* `NodesHandler.createInScope` / `updateInScope` / `deleteInScope` (internal, after
+      the caller's gate) take an optional `SubtreeBoundary`, decided only under the scope lock
+      (`NodesStore.withinSubtree`, in `applyUpdate`, `deleteSubtree` and create's locked block): node outside →
+      `node_not_found` (delete: the 404 of a foreign node), the boundary root as the node or a parent/destination
+      outside → `illegal_structure`. `createInScope` owns its transaction (`createOrConflict`), so 5a.3 cannot hold a
+      share-row lock across it — its "scope lock → `admitted()`" order needs a hook inside create's locked block.
+      The epoch check refuses an epoch above the current one at any destination; `theEpochIsCheckedOnlyAtTheRoot`
+      pinned the gap (a made-up epoch 7 accepted between non-root parents) and now sends one below the current.
+      Tests: `NodePlacementCoreSliceTest.anEpochAboveTheCurrentIsRefusedForAnyDestination`,
+      `SubtreeBoundaryCoreSliceTest`, `SubtreeBoundaryRaceCoreSliceTest` (a member's move of the destination out of
+      the boundary while a bounded move/create waits), each red against its lever.
 - [ ] 5a.3 guest tree operations in core — `POST /api/shares/{shareId}/nodes` and a placement `PATCH`
       (`sharing` tag, own guest schema, no `wrappedMeta`; headers `X-Share-Password`, `X-Contributor-Token`; create
       spends the upload budget), lock order scope lock -> `admitted()` -> boundary check (upward walk) -> write;
