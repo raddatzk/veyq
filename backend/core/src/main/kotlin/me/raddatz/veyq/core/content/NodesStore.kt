@@ -109,6 +109,23 @@ class NodesStore {
         return false
     }
 
+    /**
+     * Is [slot] the node [rootNodeId] or below it ([SubtreeBoundary])? The upward walk of [wouldCycle], and like it
+     * without a `deletedAt` predicate: no live node hangs under a trashed ancestor. Only meaningful **under the scope
+     * lock** ([lockScope]) — read before it, a member's move of an ancestor out of the subtree can commit between the
+     * walk and the write, and the write then lands outside.
+     */
+    fun withinSubtree(scopeId: String, rootNodeId: String, slot: String): Boolean {
+        var cur = slot
+        while (true) {
+            if (cur == rootNodeId) return true
+            if (cur == scopeId) return false
+            val p = NodeEntity.findById(cur) ?: return false
+            if (p.scopeId != scopeId) return false
+            cur = p.parentId
+        }
+    }
+
     /** The scope's current content-key epoch (ADR 0024), or null if there is no such scope. */
     fun currentEpoch(scopeId: String): Int? = ScopeEntity.findById(scopeId)?.currentEpoch
 
@@ -194,12 +211,21 @@ class NodesStore {
      * parent (READ COMMITTED, ADR 0078). No writer takes a node row and then the scope: the media writes that lock a
      * node row (`MediaStore.commitCover`, a primary bucket) never take the scope lock, and every tree write here
      * takes the scope first, so there is no inversion.
+     *
+     * A [boundary] ([SubtreeBoundary]) is decided here, under the lock, and only here: the node outside it is
+     * [ApplyResult.Missing], the boundary's root as the node or a destination outside it [ApplyResult.IllegalMove].
      */
     @Transactional
     fun applyUpdate(
         scopeId: String, nodeId: String, placement: Placement?, orderIndex: Int?, wrappedMeta: String?, metaVersion: Long?,
+        boundary: SubtreeBoundary? = null,
     ): ApplyResult {
         lockScope(scopeId)
+        if (boundary != null) {
+            if (nodeId == boundary.rootNodeId) return ApplyResult.IllegalMove
+            if (!withinSubtree(scopeId, boundary.rootNodeId, nodeId)) return ApplyResult.Missing
+            if (placement != null && !withinSubtree(scopeId, boundary.rootNodeId, placement.parentSlot)) return ApplyResult.IllegalMove
+        }
         if (placement != null) {
             // Decided again under the lock — the handler's checks are the fast path, these are the verdict.
             if (parentSlot(scopeId, placement.parentSlot) is ParentSlot.Missing ||
@@ -253,16 +279,24 @@ class NodesStore {
      * has to age out on ONE timestamp, or the purge reaches the inner rows first and erases the Memory inside a
      * folder the user can still see in the trash and still believes is restorable. That is what "stops early and
      * strands the rest" costs, and `NodeTrashSliceTest` pins it against the purge rather than against the marker.
+     *
+     * False, with nothing stamped, when a [boundary] ([SubtreeBoundary]) refuses the node — its root, or a node outside
+     * it — decided under the lock like everything else here.
      */
     @Transactional
-    fun deleteSubtree(scopeId: String, nodeId: String) {
+    fun deleteSubtree(scopeId: String, nodeId: String, boundary: SubtreeBoundary? = null): Boolean {
         lockScope(scopeId) // before the enumeration below: a create or move under the subtree lands before it or not at all
+        if (boundary != null &&
+            (nodeId == boundary.rootNodeId || !withinSubtree(scopeId, boundary.rootNodeId, nodeId))
+        ) {
+            return false
+        }
         // No `deletedAt is null` here — the SECOND of the three reads that deliberately keep seeing trashed rows
         // (ADR 0061). The traversal must reach descendants whatever their own state, or re-deleting a partially
         // deleted subtree stops early and strands the rest (uc.memory.delete-node E3).
         val all = NodeEntity.find("scopeId", scopeId).list()
-        val root = all.firstOrNull { it.id == nodeId } ?: return
-        if (root.deletedAt != null) return // E3: deleting an already-trashed subtree changes nothing
+        val root = all.firstOrNull { it.id == nodeId } ?: return true
+        if (root.deletedAt != null) return true // E3: deleting an already-trashed subtree changes nothing
         val doomed = collectSubtree(all, nodeId)
         val now = Instant.now()
         for (n in all) {
@@ -288,6 +322,7 @@ class NodesStore {
         // node gets a 404 rather than a stale set. The conclusion the note supports is unchanged: the delete
         // leaves each node's own media rows untouched, so no *surviving* node's gallery set changes. The
         // observable delete-reconcile is still the share delete-own path (cr-0102), which bumps both counters.
+        return true
     }
 
     /** The 3-way result of a restore: applied, no such trashed root, or the name was taken meanwhile. */

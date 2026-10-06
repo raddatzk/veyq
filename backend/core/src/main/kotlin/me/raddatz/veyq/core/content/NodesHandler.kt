@@ -44,7 +44,8 @@ sealed interface UpdateNodeOutcome {
     object IncompletePlacement : UpdateNodeOutcome, HttpFailure by Failures.invalidRequest
     /** The node was moved or renamed past the stated `placementVersion`; nothing was written (ADR 0080 Decision 3). */
     object StalePlacement : UpdateNodeOutcome, HttpFailure by Failures.stalePlacement
-    /** A placement at the scope root sealed at an epoch that is not the scope's current one (ADR 0080 Decision 4). */
+    /** A placement at the scope root sealed at an epoch that is not the scope's current one, or any placement stating
+     *  an epoch above it (ADR 0080 Decision 4). */
     object StaleEpoch : UpdateNodeOutcome, HttpFailure by Failures.staleEpoch
     /** The node's `wrappedMeta` moved past the stated version; nothing was written (ADR 0077). Carries the current
      *  blob and version for the loser to re-apply its own change on. */
@@ -96,6 +97,22 @@ class NodesHandler(
     ): CreateNodeOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(CreateNodeOutcome.NoScope, CreateNodeOutcome.Suspended, CreateNodeOutcome.ScopeDeleting)?.let { return it }
+        return createInScope(scopeId, nodeId, parentSlotId, kind, encryptedName, slugToken, orderIndex, epoch, wrappedContentKey, wrappedMeta)
+    }
+
+    /**
+     * The principal-free half of [create]: everything after the caller's own gate (a member's [ScopeAccess], a guest's
+     * share gate). A [boundary] confines the parent to a subtree, decided under the scope lock (a parent outside it is
+     * `illegal_structure`, like a missing one).
+     *
+     * It owns its transaction ([createOrConflict]): a caller must not call it inside an open one, so it cannot hold a
+     * lock of its own — a share row's — across it; the scope lock is the first lock this write takes.
+     */
+    internal fun createInScope(
+        scopeId: String, nodeId: String, parentSlotId: String?, kind: String,
+        encryptedName: String, slugToken: String, orderIndex: Int, epoch: Int, wrappedContentKey: String, wrappedMeta: String?,
+        boundary: SubtreeBoundary? = null,
+    ): CreateNodeOutcome {
         // ADR 0024 Decision 6, layer 1: content sealed under an epoch below the current one is readable by every
         // member removed since — a writer whose grant lags a rotation. The check rename and set-icon already make.
         // Unlocked, like theirs: a create racing the rotation that supersedes its epoch was sealed while that epoch
@@ -123,6 +140,11 @@ class NodesHandler(
             // between took its subtree without this node, which then stayed live under it.
             store.lockScope(scopeId)
             if (store.parentSlot(scopeId, slot) is ParentSlot.Missing) return@createOrConflict CreateNodeOutcome.IllegalStructure
+            // The boundary only here, under the lock: decided before it, a member's move of the parent's ancestor out
+            // of the subtree could commit in between, and the node would land outside.
+            if (boundary != null && !store.withinSubtree(scopeId, boundary.rootNodeId, slot)) {
+                return@createOrConflict CreateNodeOutcome.IllegalStructure
+            }
             val created = store.create(nodeId, scopeId, slot, kind, encryptedName, slugToken, orderIndex, epoch, wrappedContentKey, wrappedMeta)
             if (created) CreateNodeOutcome.Created(nodeId) else replay() ?: CreateNodeOutcome.IdTaken
         }
@@ -164,10 +186,35 @@ class NodesHandler(
         wrappedMeta: String?, metaVersion: Long?,
     ): UpdateNodeOutcome {
         // The request's own shape first, as the boundary's validation is: a malformed body is a 400 for anyone.
-        if (wrappedMeta != null && metaVersion == null) return UpdateNodeOutcome.MissingMetaVersion
-        if (placement.present && !placement.complete) return UpdateNodeOutcome.IncompletePlacement
+        malformed(placement, wrappedMeta, metaVersion)?.let { return it }
         access.check(userId, scopeId, WRITE)
             .refusal(UpdateNodeOutcome.NotFound, UpdateNodeOutcome.Suspended, UpdateNodeOutcome.ScopeDeleting)?.let { return it }
+        return updateInScope(scopeId, nodeId, placement, orderIndex, wrappedMeta, metaVersion)
+    }
+
+    private fun malformed(placement: PlacementRequest, wrappedMeta: String?, metaVersion: Long?): UpdateNodeOutcome? = when {
+        wrappedMeta != null && metaVersion == null -> UpdateNodeOutcome.MissingMetaVersion
+        placement.present && !placement.complete -> UpdateNodeOutcome.IncompletePlacement
+        else -> null
+    }
+
+    /**
+     * The principal-free half of [update]: everything after the caller's own gate (a member's [ScopeAccess], a guest's
+     * share gate). A [boundary] confines the node (strictly inside — never the boundary's root) and the destination
+     * (inside, the root included); [NodesStore.applyUpdate] decides it under the scope lock, never this function's
+     * unlocked fast path: the node outside is `node_not_found`, the root as the node or a destination outside it
+     * `illegal_structure`.
+     *
+     * Lock order: the scope row ([NodesStore.lockScope]), then the node row. A caller may run this inside its own
+     * transaction (`applyUpdate` joins it) and take the scope lock first, then rows of its own (a share row); it must
+     * never lock one of its own rows or a node row BEFORE the scope lock — every tree writer takes the scope first,
+     * so that order would invert theirs.
+     */
+    internal fun updateInScope(
+        scopeId: String, nodeId: String, placement: PlacementRequest, orderIndex: Int?,
+        wrappedMeta: String?, metaVersion: Long?, boundary: SubtreeBoundary? = null,
+    ): UpdateNodeOutcome {
+        malformed(placement, wrappedMeta, metaVersion)?.let { return it }
         // A trashed node is not found: it is neither movable nor renamable (its entry is restored, not placed).
         val node = store.findInScope(scopeId, nodeId) ?: return UpdateNodeOutcome.NotFound
 
@@ -189,9 +236,16 @@ class NodesHandler(
             // placement between two non-root parents keeps the stored one (the client seals at it; the
             // compare-and-set guarantees the parent it read is still the node's).
             val epoch = placement.epoch!!
+            val current = store.currentEpoch(scopeId)
+            // For ANY destination, an epoch above the scope's current one (or a scope without one) is refused: no
+            // epoch past the current exists, so nothing can be sealed at it, and a move out of the root stores the
+            // request's epoch — unchecked, it put an epoch on the row that no later reader or rotation can account
+            // for. An epoch BELOW the current one stays accepted off the root: it is the entry's own sealed epoch,
+            // and there it opens nothing (the entry is under the parent's key, not K_SC@epoch).
+            if (current == null || epoch > current) return UpdateNodeOutcome.StaleEpoch
             val storedEpoch = when {
                 parent is ParentSlot.Root -> {
-                    if (epoch != store.currentEpoch(scopeId)) return UpdateNodeOutcome.StaleEpoch
+                    if (epoch != current) return UpdateNodeOutcome.StaleEpoch
                     epoch
                 }
                 node.parentId == scopeId -> epoch
@@ -206,7 +260,7 @@ class NodesHandler(
                 expectedVersion = placement.placementVersion!!,
             )
         }
-        return when (val r = store.applyUpdate(scopeId, nodeId, write, orderIndex, wrappedMeta, metaVersion)) {
+        return when (val r = store.applyUpdate(scopeId, nodeId, write, orderIndex, wrappedMeta, metaVersion, boundary)) {
             NodesStore.ApplyResult.Applied -> UpdateNodeOutcome.Updated
             NodesStore.ApplyResult.Missing -> UpdateNodeOutcome.NotFound
             NodesStore.ApplyResult.IllegalMove -> UpdateNodeOutcome.IllegalStructure
@@ -219,13 +273,23 @@ class NodesHandler(
     fun delete(userId: String, scopeId: String, nodeId: String): DeleteNodeOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(DeleteNodeOutcome.NoScope, DeleteNodeOutcome.Suspended, DeleteNodeOutcome.ScopeDeleting)?.let { return it }
+        return deleteInScope(scopeId, nodeId)
+    }
+
+    /**
+     * The principal-free half of [delete]: everything after the caller's own gate. A [boundary] confines the node
+     * (strictly inside — never the boundary's root), decided under the scope lock in [NodesStore.deleteSubtree]; a
+     * node it refuses answers the same non-enumerable 404 as a foreign one. Same lock order as [updateInScope]: the
+     * scope lock first, never a caller's own row before it.
+     */
+    internal fun deleteInScope(scopeId: String, nodeId: String, boundary: SubtreeBoundary? = null): DeleteNodeOutcome {
         // Bind the node to THIS scope before deleting (mirrors update, cr-0126): membership on scopeId alone does
         // not authorize deleting a node that lives in another scope. Same NoScope 404 whether the node is foreign
         // or absent — non-enumerable, and it stops the cross-scope delete the primary-key path used to allow.
         // Deliberately the trash-blind lookup: an already-trashed subtree is a no-op 204 (E3), a foreign or
         // unknown node is still the non-enumerable 404 the cross-scope case pins.
         store.findDeletableInScope(scopeId, nodeId) ?: return DeleteNodeOutcome.NoScope
-        store.deleteSubtree(scopeId, nodeId)
+        if (!store.deleteSubtree(scopeId, nodeId, boundary)) return DeleteNodeOutcome.NoScope
         return DeleteNodeOutcome.Deleted
     }
 
