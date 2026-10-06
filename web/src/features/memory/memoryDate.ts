@@ -123,7 +123,7 @@ export function sameMemoryDate(a: MemoryDate | null, b: MemoryDate | null): bool
 
 /**
  * A card node's own date for the browse grid (cr-0067): open its `K_mem` under `parentKey` (`K_SC` for a
- * top-level Memory, the parent Memory's `K_mem` for a chapter), then unseal its `wrappedMeta`. Best-effort:
+ * scope-root Memory, the folder's key for one inside a folder, the parent Memory's `K_mem` for a chapter), then unseal its `wrappedMeta`. Best-effort:
  * null when the key/meta is absent or won't open — **without loading the Memory's media**.
  */
 export function unsealNodeDate(scopeId: string, parentKey: Uint8Array | null, node: TreeNode): MemoryDate | null {
@@ -139,7 +139,8 @@ export function unsealNodeDate(scopeId: string, parentKey: Uint8Array | null, no
 /**
  * Order memory/chapter nodes for the card grid: by **start day, newest first, undated last** (stable within a
  * group). Each node's date is unsealed under the key `keyFor(node)` returns — a **per-node** resolver so a browse
- * grid spanning several epochs opens each top-level Memory under its own epoch's `K_SC` (ADR 0024), while a
+ * grid spanning several epochs opens each scope-root Memory under its own epoch's `K_SC` (ADR 0024) and one inside
+ * a folder under the folder's key (ADR 0080), while a
  * Memory's chapters all resolve under that Memory's single `K_mem`. The result pairs every node with its date so
  * the card can show the range without a second unseal. Reads only `wrappedMeta` — never a Memory's media.
  */

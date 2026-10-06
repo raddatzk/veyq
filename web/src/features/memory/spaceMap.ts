@@ -70,7 +70,8 @@ function inSubtree(byId: Map<string, TreeNode>, nodeId: string, rootFolderId: st
 /**
  * Collect the located pins for the subtree of `rootFolderId` (or the whole tree at the scope root, `null`): every
  * MEMORY/CHAPTER in that subtree whose `location` unseals to a `derived` position, each opened under its own
- * `nodeContentKey(scopeId, epochs, tree, id)` (which resolves the top-level Memory under its epoch's `K_SC`, ADR 0024).
+ * `nodeContentKey(scopeId, epochs, tree, id)` (which walks every ancestor, folders included, from the scope-root node under its epoch's `K_SC`, ADR 0024 /
+ * ADR 0080).
  * Best-effort — a node with no meta, an unresolvable key, or a pending (`derived`-less) location is skipped. The
  * result feeds `SpaceMap.vue` (a marker per pin, click → open the node).
  */

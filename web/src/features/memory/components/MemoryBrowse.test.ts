@@ -7,6 +7,7 @@ vi.mock('leaflet', () => ({ default: {} }))
 
 import { mount } from '@vue/test-utils'
 import MemoryBrowse from './MemoryBrowse.vue'
+import MemoryCard from './MemoryCard.vue'
 import { FOLDER_KIND, type NodeKind } from '../../../core/node/kind'
 import { MEMORY_KIND } from '../kinds'
 import { treeStore } from '../../../core/node/treeStore'
@@ -41,20 +42,32 @@ const uid = (label: string): string => {
   return uuidOf.get(label)!
 }
 
-/** A located Memory whose K_mem is wrapped under `scopeKey` and location sealed under it (mirrors tree.ts), both
- *  bound to the node. `id`/`parentId` are labels, resolved to their UUIDs. */
+// Every node's content key, by label, minted on first use (a Memory may be built before its folder).
+const keyOfLabel = new Map<string, Uint8Array>()
+const keyOf = (label: string): Uint8Array => {
+  if (!keyOfLabel.has(label)) keyOfLabel.set(label, v1.randomBytes(32))
+  return keyOfLabel.get(label)!
+}
+const wrapFor = (id: string, under: Uint8Array, key: Uint8Array) =>
+  b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: 0 }, under, key))
+
+/** A located Memory whose K_mem is wrapped under its parent's key (`scopeKey` at the root, its folder's key inside
+ *  one: ADR 0080) and location sealed under it (mirrors tree.ts), both bound to the node. `id`/`parentId` are
+ *  labels, resolved to their UUIDs. */
 function locatedMemory(label: string, parentLabel: string | null, loc: MemoryLocation): TreeNode {
-  const key = v1.randomBytes(32)
+  const key = keyOf(label)
   const id = uid(label)
   return {
     id, kind: MEMORY_KIND, name: label, parentId: parentLabel === null ? null : uid(parentLabel), orderIndex: 0, epoch: 0,
-    wrappedContentKey: b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: 0 }, scopeKey, key)),
+    wrappedContentKey: wrapFor(id, parentLabel === null ? scopeKey : keyOf(parentLabel), key),
     wrappedMeta: sealNodeMeta(key, { scopeId: SCOPE_ID, nodeId: id }, { v: 1, location: loc }),
     metaVersion: 0,
   }
 }
-/** A folder whose id is the UUID of `label` (so a located Memory's parent label resolves to it). */
-const folderOf = (label: string, name: string): TreeNode => ({ ...node(label, FOLDER_KIND, name), id: uid(label) })
+/** A root folder whose id is the UUID of `label` (so a located Memory's parent label resolves to it), its key wrapped
+ *  under `scopeKey`. */
+const folderOf = (label: string, name: string): TreeNode =>
+  ({ ...node(label, FOLDER_KIND, name), id: uid(label), wrappedContentKey: wrapFor(uid(label), scopeKey, keyOf(label)) })
 const pinNames = (map: { props: (k: string) => unknown }) => (map.props('pins') as { node: TreeNode }[]).map((p) => p.node.name)
 
 const mountBrowse = (props: Partial<InstanceType<typeof MemoryBrowse>['$props']> & { folders: TreeNode[]; memories: TreeNode[] }) =>
@@ -102,6 +115,27 @@ describe('MemoryBrowse', () => {
     const map = wrapper.findComponent(SpaceMapStub)
     expect(map.exists()).toBe(true)
     expect(pinNames(map).sort()).toEqual(['memInA', 'memRoot'])
+  })
+
+  it('inside a folder, dates each Memory under the FOLDER\'s key (ADR 0080) and orders the grid by them', () => {
+    const dated = (label: string, from: string): TreeNode => {
+      const id = uid(label)
+      return {
+        id, kind: MEMORY_KIND, name: label, parentId: uid('fD'), orderIndex: 0, epoch: 0,
+        wrappedContentKey: wrapFor(id, keyOf('fD'), keyOf(label)),
+        wrappedMeta: sealNodeMeta(keyOf(label), { scopeId: SCOPE_ID, nodeId: id }, { v: 1, date: { mode: 'single', from, to: from } }),
+        metaVersion: 0,
+      }
+    }
+    const older = dated('older', '2020-01-01')
+    const newer = dated('newer', '2024-01-01')
+    const fD = folderOf('fD', 'D')
+    treeStore.nodes = [fD, older, newer]
+
+    const wrapper = mountBrowse({ folder: fD, folders: [], memories: [older, newer], epochs: epochsOf(scopeKey) })
+    const cards = wrapper.findAllComponents(MemoryCard)
+    expect(cards.map((c) => (c.props('memory') as TreeNode).name)).toEqual(['newer', 'older']) // newest first
+    expect(cards.map((c) => (c.props('date') as { from?: string } | null)?.from)).toEqual(['2024-01-01', '2020-01-01'])
   })
 
   it('scopes the map to the current folder subtree', () => {

@@ -8,7 +8,7 @@ vi.mock('../../api/client', () => ({
 }))
 
 import { createMemory, createChapter } from './memoryNodes'
-import { openMemory, openContentKey } from '../../core/node/tree'
+import { createFolder, nodeContentKey, openMemory, openContentKey, type TreeNode } from '../../core/node/tree'
 import { epochsOf } from '../spaces/epochsTestUtil'
 import { contentApi } from '../../api/client'
 import { fakeApi } from '../../test/apiMock'
@@ -47,12 +47,37 @@ describe('createMemory', () => {
     // name round-trips under K_SC, bound to this node; the server only ever saw ciphertext
     expect(new TextDecoder().decode(v1.open(nameCtx(nodeId), scopeKey, fromB64(req.encryptedName)))).toBe('Italien 2026')
     // wrapped K_mem opens to exactly the returned key
-    expect(Array.from(openMemory(SCOPE_ID, scopeKey, { id: nodeId, epoch: 0, wrappedContentKey: req.wrappedContentKey ?? null })!)).toEqual(Array.from(memoryKey))
+    expect(Array.from(openMemory(SCOPE_ID, scopeKey, { id: nodeId, epoch: 0, wrappedContentKey: req.wrappedContentKey })!)).toEqual(Array.from(memoryKey))
     // ...and is refused on any other node's row (a server moving the wrap gets no key)
-    expect(() => openMemory(SCOPE_ID, scopeKey, { id: crypto.randomUUID(), epoch: 0, wrappedContentKey: req.wrappedContentKey ?? null }))
+    expect(() => openMemory(SCOPE_ID, scopeKey, { id: crypto.randomUUID(), epoch: 0, wrappedContentKey: req.wrappedContentKey }))
       .toThrow(v1.OpenRefused)
     // slug token = blinded MAC under K_SC over the root parent slot (the scope id) + the slug
     expect(req.slugToken).toBe(b64std(v1.slugToken(scopeKey, SCOPE_ID, 'italien-2026')))
+  })
+})
+
+describe('a Memory inside a folder (ADR 0080 Decision 1)', () => {
+  it('wraps under the FOLDER\'s key and opens through it, from what the server was sent', async () => {
+    const create = echoCreate()
+    mockContent({ createNode: create })
+    const epochs = epochsOf(scopeKey)
+    // A folder at the root, then a Memory inside it — exactly as the browse creates them: the parent key is resolved
+    // down the tree the server lists back, never handed over from the create.
+    const folderId = await createFolder(SCOPE_ID, epochs, 'Reisen')
+    const rows = (): TreeNode[] => create.mock.calls.map(([{ createNodeRequest: r }]) => ({
+      id: r.nodeId, parentId: r.parentId ?? null, kind: r.kind, orderIndex: 0, epoch: r.epoch ?? 0, name: '',
+      wrappedContentKey: r.wrappedContentKey, wrappedMeta: null, metaVersion: 0,
+    }))
+    const folderKey = nodeContentKey(SCOPE_ID, epochs, rows(), folderId)!
+    const { nodeId, memoryKey } = await createMemory(SCOPE_ID, epochs, 'Italien', { id: folderId, key: folderKey })
+
+    const req = create.mock.calls[1][0].createNodeRequest
+    expect(req.parentId).toBe(folderId)
+    // the Memory's K_mem opens under the folder's key, and not under K_SC…
+    expect(Array.from(openContentKey(SCOPE_ID, folderKey, { id: nodeId, epoch: 0, wrappedContentKey: req.wrappedContentKey })!)).toEqual(Array.from(memoryKey))
+    expect(() => openContentKey(SCOPE_ID, scopeKey, { id: nodeId, epoch: 0, wrappedContentKey: req.wrappedContentKey })).toThrow(v1.OpenRefused)
+    // …and the browse's walk from the scope root opens it through the folder
+    expect(Array.from(nodeContentKey(SCOPE_ID, epochs, rows(), nodeId)!)).toEqual(Array.from(memoryKey))
   })
 })
 
@@ -73,7 +98,7 @@ describe('createChapter — recursive K_mem (cr-0060)', () => {
     // the name is still sealed under K_SC (whole-tree navigation), the slug too
     expect(new TextDecoder().decode(v1.open(nameCtx(nodeId), scopeKey, fromB64(req.encryptedName)))).toBe('Tag 1')
     expect(req.slugToken).toBe(b64std(v1.slugToken(scopeKey, MEM, 'tag-1')))
-    const row = { id: nodeId, epoch: 0, wrappedContentKey: req.wrappedContentKey ?? null }
+    const row = { id: nodeId, epoch: 0, wrappedContentKey: req.wrappedContentKey }
     // the K_mem opens under the PARENT key…
     expect(Array.from(openContentKey(SCOPE_ID, parentKey, row)!)).toEqual(Array.from(chapterKey))
     // …and NOT under K_SC (a wrong KEK can't open it — crypto-enforced least privilege)

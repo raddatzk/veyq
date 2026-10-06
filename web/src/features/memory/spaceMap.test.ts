@@ -58,10 +58,8 @@ function content(
   return { node: { id, kind, parentId, orderIndex: 0, epoch: 0, name: label, wrappedContentKey, wrappedMeta, metaVersion: 0 }, key }
 }
 
-const folder = (label: string, parentLabel: string | null = null): TreeNode => ({
-  id: uid(label), kind: FOLDER_KIND, parentId: parentLabel === null ? null : uid(parentLabel), orderIndex: 0,
-  epoch: 0, name: label, wrappedContentKey: null, wrappedMeta: null, metaVersion: 0,
-})
+/** A root FOLDER: it carries a key of its own like every node (ADR 0080), wrapped under K_SC. */
+const folder = (label: string) => content(label, FOLDER_KIND, null, scopeKey)
 
 const ids = (pins: ReturnType<typeof collectLocatedPins>) => pins.map((p) => p.node.name).sort()
 
@@ -72,9 +70,9 @@ describe('collectLocatedPins', () => {
   // memMoved (its located meta was sealed for another node — refused, never shown at that node's place)
   const fA = folder('fA')
   const fB = folder('fB')
-  const memA = content('memA', MEMORY_KIND, 'fA', scopeKey, { location: located(1, 1) })
+  const memA = content('memA', MEMORY_KIND, 'fA', fA.key, { location: located(1, 1) }) // under its folder's key
   const chapA = content('chapA', CHAPTER_KIND, 'memA', memA.key, { location: located(2, 2) })
-  const memB = content('memB', MEMORY_KIND, 'fB', scopeKey, { location: located(3, 3) })
+  const memB = content('memB', MEMORY_KIND, 'fB', fB.key, { location: located(3, 3) })
   const memRoot = content('memRoot', MEMORY_KIND, null, scopeKey, { location: located(4, 4) })
   const memPending = content('memPending', MEMORY_KIND, null, scopeKey, { location: pendingAuto })
   const memLocked = content('memLocked', MEMORY_KIND, null, scopeKey, {
@@ -83,7 +81,7 @@ describe('collectLocatedPins', () => {
   })
   const memMoved = content('memMoved', MEMORY_KIND, null, scopeKey, { location: located(7, 7), metaFor: 'memRoot' })
   const tree: TreeNode[] = [
-    fA, fB, memA.node, chapA.node, memB.node, memRoot.node, memPending.node, memLocked.node, memMoved.node,
+    fA.node, fB.node, memA.node, chapA.node, memB.node, memRoot.node, memPending.node, memLocked.node, memMoved.node,
   ]
 
   it('root (null) pins every located MEMORY/CHAPTER across the whole tree', () => {

@@ -7,5 +7,5 @@
 /** A node kind token. A string: any kind may arrive from the server, registered here or not. */
 export type NodeKind = string
 
-/** The platform's own kind: a folder organizes only, carries no content key, browses and never opens. */
+/** The platform's own kind: a folder organizes, carries a content key like every node (ADR 0080), browses and never opens. */
 export const FOLDER_KIND = 'FOLDER'
