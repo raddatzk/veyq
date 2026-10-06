@@ -264,10 +264,19 @@ class NodeTrashSliceTest {
             "re-deleting around an already-trashed subtree must re-stamp it, or the purge strands the inner rows"
         }
 
-        // and restoring the folder brings the whole thing back
+        // restoring the folder brings the folder back; the Memory its own earlier delete trashed holds that delete's
+        // freed slug token, so it stays in the trash with its chapter — a root of its own now (inbox #357) — and
+        // comes back on its own restore, the whole thing still there
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"slugToken":"c3RyLWY="}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$folder/restore").then().statusCode(204)
+        given().header("Authorization", bearer(userId)).`when`().get("/api/scopes/$scopeId/nodes")
+            .then().statusCode(200).body("id", hasItem(folder)).body("id", not(hasItem(memory))).body("id", not(hasItem(chapter)))
+        given().header("Authorization", bearer(userId)).`when`().get("/api/scopes/$scopeId/trash/nodes")
+            .then().statusCode(200).body("id", hasItem(memory)).body("id", not(hasItem(chapter)))
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+            .body("""{"slugToken":"c3RyLW0="}""")
+            .`when`().post("/api/scopes/$scopeId/nodes/$memory/restore").then().statusCode(204)
         given().header("Authorization", bearer(userId)).`when`().get("/api/scopes/$scopeId/nodes")
             .then().statusCode(200).body("id", hasItem(folder)).body("id", hasItem(memory)).body("id", hasItem(chapter))
     }
