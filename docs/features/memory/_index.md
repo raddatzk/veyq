@@ -17,7 +17,8 @@ tokens; it never sees a name or a content key.
 ## Key model (ADR 0012, in one line)
 
 `scope key (grant) → K_SC` (per scope: names + slug + dedup) `→ K_mem` (per Memory, random: chapter/journal/
-media + sensitive metadata; **the share grain**) `→ K_blob` (per media blob). Folders carry no key.
+media + sensitive metadata; **the share grain**) `→ K_blob` (per media blob). A folder carries a random key of its own
+too, and a Memory inside it wraps under the folder's key instead of `K_SC` ([ADR 0080](../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)).
 
 ## Enablers
 
