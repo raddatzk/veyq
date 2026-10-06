@@ -547,7 +547,8 @@ paths:
       operationId: updateMediaMeta
       x-veyq-concurrency:
         mode: version
-        field: metaVersion
+        fields:
+          - field: metaVersion
       summary: Overwrite a media's sealed listed-metadata blob (e.g. a corrected date) — opaque.
       description: >
         Re-store the media's `wrappedMeta` verbatim: the client re-seals the listed blob

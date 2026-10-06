@@ -122,8 +122,9 @@ paths:
       operationId: updateNode
       x-veyq-concurrency:
         mode: version
-        field: metaVersion
-        requiredWith: wrappedMeta
+        fields:
+          - field: metaVersion
+            requiredWith: [wrappedMeta]
       summary: Rename / move / reorder a node.
       description: >
         Partial update. **Rename** = new `encryptedName` + recomputed `slugToken`. **Move** = new `parentId`

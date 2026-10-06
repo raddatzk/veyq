@@ -254,7 +254,8 @@ paths:
       operationId: putIdentityPins
       x-veyq-concurrency:
         mode: version
-        field: version
+        fields:
+          - field: version
       summary: Store the caller's sealed identity-pin store (optimistic concurrency).
       description: >
         Replaces the caller's sealed pin-store blob. `version` is the version the client last read; the write
@@ -332,7 +333,8 @@ paths:
       operationId: putDeviceRegister
       x-veyq-concurrency:
         mode: version
-        field: version
+        fields:
+          - field: version
       summary: Store the caller's sealed device register (optimistic concurrency).
       description: >
         Replaces the caller's sealed device-register blob. `version` is the version the client last read; the
