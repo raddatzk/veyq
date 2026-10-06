@@ -55,9 +55,12 @@
 
 - **Operator-blind.** The `409` body carries ciphertext the caller can already list; the server sees a version
   number per blob and that two writes raced, nothing inside.
-- **Which writes are not covered, and why.** A rename, a move, a role change carry only the value the member
-  typed, and a share, a profile or a pin set has one writer; those stay last-writer-wins, declared per operation
-  in the contract ([ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md) point 6).
+- **Which writes are not covered, and why.** A role change carries only the value the member typed, and a share,
+  a profile or a pin set has one writer; those stay last-writer-wins, declared per operation in the contract
+  ([ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md) point 6). A rename and a move are
+  version-checked on a version of their own, `placementVersion` — not because of a lost edit, but because the
+  name and key wrap they seal are bound to it, so one sealed for the old parent must never land after a move
+  ([ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) Decision 3).
 
 ## What this means for you / Was das für dich bedeutet
 
