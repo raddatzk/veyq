@@ -29,7 +29,7 @@ const SpaceMapStub = {
 }
 
 const node = (id: string, kind: NodeKind, name: string): TreeNode => ({
-  id, kind, name, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0,
+  id, kind, name, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0,
 })
 
 const SCOPE_ID = '5c09e000-0000-4000-8000-0000000000bb'
@@ -49,7 +49,7 @@ const keyOf = (label: string): Uint8Array => {
   return keyOfLabel.get(label)!
 }
 const wrapFor = (id: string, under: Uint8Array, key: Uint8Array) =>
-  b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: 0 }, under, key))
+  b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementVersion: 0 }, under, key))
 
 /** A located Memory whose K_mem is wrapped under its parent's key (`scopeKey` at the root, its folder's key inside
  *  one: ADR 0080) and location sealed under it (mirrors tree.ts), both bound to the node. `id`/`parentId` are
@@ -61,7 +61,7 @@ function locatedMemory(label: string, parentLabel: string | null, loc: MemoryLoc
     id, kind: MEMORY_KIND, name: label, parentId: parentLabel === null ? null : uid(parentLabel), orderIndex: 0, epoch: 0,
     wrappedContentKey: wrapFor(id, parentLabel === null ? scopeKey : keyOf(parentLabel), key),
     wrappedMeta: sealNodeMeta(key, { scopeId: SCOPE_ID, nodeId: id }, { v: 1, location: loc }),
-    metaVersion: 0,
+    metaVersion: 0, placementVersion: 0,
   }
 }
 /** A root folder whose id is the UUID of `label` (so a located Memory's parent label resolves to it), its key wrapped
@@ -124,7 +124,7 @@ describe('MemoryBrowse', () => {
         id, kind: MEMORY_KIND, name: label, parentId: uid('fD'), orderIndex: 0, epoch: 0,
         wrappedContentKey: wrapFor(id, keyOf('fD'), keyOf(label)),
         wrappedMeta: sealNodeMeta(keyOf(label), { scopeId: SCOPE_ID, nodeId: id }, { v: 1, date: { mode: 'single', from, to: from } }),
-        metaVersion: 0,
+        metaVersion: 0, placementVersion: 0,
       }
     }
     const older = dated('older', '2020-01-01')

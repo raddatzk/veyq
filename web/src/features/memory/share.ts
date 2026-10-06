@@ -718,11 +718,12 @@ function walkSubtree(
     const parentKey = keys.get(parentId)
     if (!parentKey) continue
     for (const child of byParent.get(parentId) ?? []) {
-      if (!child.wrappedContentKey || !child.encryptedName) continue
+      if (!child.wrappedContentKey || !child.encryptedName || child.placementVersion == null) continue
       try {
-        // Both bound to (scope, this chapter, its epoch) — the node they are listed for (ADR 0072) — and both under
-        // the parent's key: the chapter's directory entry (ADR 0080 Decision 2).
-        const node = { scopeId, nodeId: child.id, epoch: child.epoch }
+        // Both bound to (scope, this chapter, its epoch, the placement version served with them) — the node they are
+        // listed for (ADR 0072, ADR 0080 Decision 3) — and both under the parent's key: the chapter's directory entry
+        // (ADR 0080 Decision 2).
+        const node = { scopeId, nodeId: child.id, epoch: child.epoch, placementVersion: child.placementVersion }
         const key = v1.open({ purpose: 'content-key', ...node }, parentKey, fromB64std(child.wrappedContentKey))
         const name = openName(parentKey, node, child.encryptedName)
         keys.set(child.id, key)

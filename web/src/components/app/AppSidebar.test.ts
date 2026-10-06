@@ -228,7 +228,7 @@ describe('AppSidebar tenant switcher', () => {
 describe('AppSidebar favorites — a pinned Memory shows its cover', () => {
   const MEMORY: TreeNode = {
     id: 'n1', name: 'Rom 2026', kind: 'MEMORY', parentId: null, orderIndex: 0, epoch: 0,
-    wrappedContentKey: 'k', wrappedMeta: 'm', metaVersion: 0,
+    wrappedContentKey: 'k', wrappedMeta: 'm', metaVersion: 0, placementVersion: 0,
   }
 
   beforeEach(() => {

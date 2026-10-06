@@ -37,6 +37,7 @@ const ROW: TrashedNode = {
   parentId: null,
   kind: 'MEMORY',
   epoch: 0,
+  placementVersion: 0,
   name: 'Rom 2026',
   deletedAt: new Date('2026-08-17T10:15:30Z'),
   purgeAfter: new Date('2026-09-16T10:15:30Z'),

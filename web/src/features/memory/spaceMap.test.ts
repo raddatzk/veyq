@@ -50,12 +50,12 @@ function content(
   const id = uid(label)
   const key = v1.randomBytes(32)
   const wrappedContentKey = b64std(
-    v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: 0 }, opts.wrapUnder ?? parentKey, key),
+    v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementVersion: 0 }, opts.wrapUnder ?? parentKey, key),
   )
   const metaNode = { scopeId: SCOPE_ID, nodeId: opts.metaFor ? uid(opts.metaFor) : id }
   const wrappedMeta = opts.location ? sealNodeMeta(key, metaNode, { v: 1, location: opts.location }) : null
   const parentId = parentLabel === null ? null : uid(parentLabel)
-  return { node: { id, kind, parentId, orderIndex: 0, epoch: 0, name: label, wrappedContentKey, wrappedMeta, metaVersion: 0 }, key }
+  return { node: { id, kind, parentId, orderIndex: 0, epoch: 0, name: label, wrappedContentKey, wrappedMeta, metaVersion: 0, placementVersion: 0 }, key }
 }
 
 /** A root FOLDER: it carries a key of its own like every node (ADR 0080), wrapped under K_SC. */
@@ -118,7 +118,7 @@ describe('clusterPins', () => {
   // A trivial linear projection: 1 degree = 1 pixel, so pixel distance == degree distance (Leaflet-free).
   const project = (lat: number, lng: number) => ({ x: lng, y: lat })
   const pin = (id: string, lat: number, lng: number): LocatedPin => ({
-    node: { id, kind: MEMORY_KIND, name: id, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0 },
+    node: { id, kind: MEMORY_KIND, name: id, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 },
     location: { name: id, nameSource: 'manual', derivedMode: 'fixed', derived: { lat, lng } },
     date: null,
   })
@@ -150,7 +150,7 @@ describe('clusterPins', () => {
 
 describe('sortPinsByStartDate', () => {
   const dated = (id: string, from?: string): LocatedPin => ({
-    node: { id, kind: MEMORY_KIND, name: id, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0 },
+    node: { id, kind: MEMORY_KIND, name: id, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 },
     location: { name: id, nameSource: 'manual', derivedMode: 'fixed', derived: { lat: 0, lng: 0 } },
     date: from ? ({ mode: 'single', from, to: from } as MemoryDate) : null,
   })

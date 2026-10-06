@@ -43,7 +43,7 @@ const NODE_ID = '22222222-2222-2222-2222-222222222222'
 const THIS_NODE = { scopeId: SCOPE_ID, nodeId: NODE_ID }
 
 const node = (name: string, wrappedMeta: string | null = null): TreeNode => ({
-  id: NODE_ID, kind: MEMORY_KIND, name, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta, metaVersion: 0,
+  id: NODE_ID, kind: MEMORY_KIND, name, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta, metaVersion: 0, placementVersion: 0,
 })
 
 /** A stub deriver: a tiny "JPEG" tagged by the requested maxEdge so each tier's bytes are distinct. */
@@ -307,7 +307,7 @@ describe('MemoryDetail (gallery grid + header)', () => {
     fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const chapters: TreeNode[] = [
-      { id: 'c1', kind: CHAPTER_KIND, name: 'Day 1', parentId: NODE_ID, orderIndex: 0, epoch: 0, wrappedContentKey: 'd3JhcA==', wrappedMeta: null, metaVersion: 0 },
+      { id: 'c1', kind: CHAPTER_KIND, name: 'Day 1', parentId: NODE_ID, orderIndex: 0, epoch: 0, wrappedContentKey: 'd3JhcA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 },
     ]
 
     const wrapper = mountDetail(v1.randomBytes(32), { chapters })

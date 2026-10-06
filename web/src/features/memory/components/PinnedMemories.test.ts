@@ -22,7 +22,7 @@ import { MEMORY_KIND, CHAPTER_KIND } from '../kinds'
 import { realI18n, t } from '../../../test/i18n'
 
 function node(over: Partial<TreeNode> & Pick<TreeNode, 'id' | 'kind'>): TreeNode {
-  return { parentId: null, orderIndex: 0, epoch: 0, name: over.id, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, ...over }
+  return { parentId: null, orderIndex: 0, epoch: 0, name: over.id, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0, ...over }
 }
 
 async function mountPins(variant: 'rail' | 'sheet') {

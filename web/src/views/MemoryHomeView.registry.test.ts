@@ -62,7 +62,7 @@ const Detail = defineComponent({ props: ['node', 'shareable'], setup: (p) => () 
 const Level = defineComponent({ props: ['level'], setup: (p) => () => h('div', { class: 'level' }, `memories=${(p.level.byKind.get(MEMORY_KIND) ?? []).length}`) })
 
 function node(over: Partial<TreeNode> & Pick<TreeNode, 'id' | 'kind'>): TreeNode {
-  return { parentId: null, orderIndex: 0, epoch: 0, name: over.id, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, ...over }
+  return { parentId: null, orderIndex: 0, epoch: 0, name: over.id, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0, ...over }
 }
 
 /** The registry a well-formed application would leave: both kinds with a detail, the level view claimed. */
