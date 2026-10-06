@@ -102,7 +102,11 @@ against.
   soft-deleted rows or validation passes and the database then rejects the insert — a clean rejection turned into
   a 500. The subtree traversal inside the delete itself must reach descendants regardless of their own state and
   **re-stamp** them: a subtree that ages out on two timestamps has its inner rows purged first, and the folder
-  around them is still sitting restorable in the trash when it happens. The delete's own scope binding is the
+  around them is still sitting restorable in the trash when it happens. A re-stamped descendant that was such an
+  earlier delete's root holds that delete's freed token, so the restore of the folder around it leaves it — and
+  its subtree — in the trash on the one marker, a trash root again under the now-live folder, restorable on its own
+  with a fresh token (corrected 2026-10-06, inbox #357: returning it would bring back a node with no name, beside
+  a sibling that may hold its old one). The delete's own scope binding is the
   fourth, and it was found by building rather than by reasoning — gate it on liveness and re-deleting a trashed
   subtree answers 404 instead of the no-op the flow promises, while a foreign node must keep answering the same
   non-enumerable 404; so the delete takes a lookup that sees trashed rows and the *update* path keeps the one
