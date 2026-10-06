@@ -112,9 +112,13 @@ Guests of a Memory read its chapter titles (the consequence of decision 2). The 
 - Who defines a name's slug. Today one client function folds every name (`web/src/shared/naming.ts:21`: lowercase,
   `ä`→`ae`, accents dropped, non-alphanumerics → `-`, a 32-bit hash when nothing is left), the slug is also the URL
   path segment, and the token freezes it. For Files that is too coarse (`Day1.md` = `Day1 md`) and too lax. Proposed:
-  a hook per node kind in the registry — containers keep a URL-safe slug (keeping Unicode letters, percent-encoded
-  in the fragment, instead of the hash), leaves use NFC plus Unicode case folding with punctuation kept. The display
-  name is always the original. Decide before Files; changing it later invalidates tokens.
+  **one filesystem rule per application**, not per kind (Memories keeps today's): the URL segment is the percent-encoded
+  name itself (no folding, no hash fallback); uniqueness is NFC plus Unicode case folding with punctuation kept
+  (`Müller` = `müller`, as on macOS and Windows, but `Müller` ≠ `Mueller`); forbidden names (empty, `/`, control
+  characters, `.`/`..`, a trailing dot or space, over-long) are refused. The display name is always the original.
+  The client checks against the decrypted siblings before sending and explains the conflict by naming the colliding
+  sibling; the server's `slug_taken` is only the race backstop, after which the client explains it the same way.
+  Decide before Files; changing it later invalidates tokens.
 - Whether a chapter's media blob keys hang under the chapter's key or its Memory's decides if a chapter guest can read the
   chapter's media: to verify while implementing (bite test 12).
 
