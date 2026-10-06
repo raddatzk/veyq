@@ -151,8 +151,8 @@ exception to it.
   + the `K_mem` wrap; it never sees a name or a content key. It learns only the **shape** of the tree.
 - **`K_mem` is the share grain** ([ADR 0012](../../../decisions/0012-content-key-hierarchy.md)): every content
   node — a Memory **or a chapter** — is born with a random `K_mem` so it can later be shared (an extra wrap of
-  `K_mem`) without exposing `K_SC`, the parent, or any other node. Folders, being keyless, are never shared —
-  you share a Memory or a chapter.
+  `K_mem`) without exposing `K_SC`, the parent, or any other node. A folder carries a key of its own as well and
+  can be a share root ([ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)).
 - **Blinded permalinks.** The slug token gives human-readable, unique-per-parent permalinks without the
   operator ever seeing or reversing a name (keyed MAC under the parent's key).
 - **Scope of this slice.** Tree + names + `K_mem` only. **Media (`K_blob` + chunked AEAD), journal, places &

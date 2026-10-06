@@ -113,7 +113,7 @@ to a second application ([docs/apps/files.md](../docs/apps/files.md), inbox #349
 
 ### Slice 5 — shares by kind, tree operations for guests (backend 5a, web 5b)
 Planned 2026-10-06 from three inventories; each sub-slice is its own worktree run with guard before/after.
-- [ ] 5a.1 share roots by kind and the mandatory recovery copy — contracts: `CreateShareRequest.sealedShareKey` and
+- [x] 5a.1 share roots by kind and the mandatory recovery copy — contracts: `CreateShareRequest.sealedShareKey` and
       `sealedShareKeyEpoch` required (`@NotNull`, `ReissueShareRequest` is the model; `ShareSummary` and the columns
       stay nullable, the baseline does not change); backend: a small fail-closed seam `ShareRoots` (per kind, the
       roles that may be a share root; core declares `FOLDER` with `READ` and `READ_WRITE`, Memories `MEMORY` with all
@@ -123,6 +123,16 @@ Planned 2026-10-06 from three inventories; each sub-slice is its own worktree ru
       Done when: `CoreAloneSliceTest` shares a `FOLDER` with `READ` and a guest resolves it; bite tests: a chapter share
       refused, `WRITE_ONLY` on a folder refused, create without the recovery copy -> 400; guards
       `validate_contracts_common`, `validate_request_bounds` green.
+      *Measured:* `ShareRoots.roles(kind): Set<String>?` (role names as `ShareEntity` holds them; null = not handled),
+      `FolderShareRoots` (core) and `MemoryShareRoots` (`MEMORY` only; `CHAPTER` handled by nobody). A role change asks
+      it too (`invalid_role_change`, the existing code of that operation). Tests: `CoreAloneSliceTest` (a folder
+      shared READ/READ_WRITE, WRITE_ONLY and every other kind `illegal_scope`; a guest resolves `rootKind FOLDER`,
+      the descendants' names and wraps, not the root's entry, a cover blob under the subtree and not one beside it),
+      `ShareRootsPartitionTest` (none/two implementations), `ShareRootsSliceTest` (chapter refused, folder no drop
+      box, role change on a seeded chapter share refused, a READ_WRITE folder guest's start and window
+      `share_not_contributable`), `ShareKeyRecoveryEpochSliceTest` (create without the copy -> 400). The test bodies
+      carry the copy through `ShareWriteProof.recovery()`; `ShareSharedScopeSliceTest` models a copy-less link as a
+      legacy row (created, then the copy cleared), which `ReissuePolicy` still judges.
 - [ ] 5a.2 epoch gap and a principal-free node operation — a move out of the root with an epoch above the current is
       refused (`NodesHandler.kt` ~:191, any destination); the structure checks of create/placement are extracted as
       functions of `(scopeId, optional subtree boundary)` · Done when: existing tests green, a bite test for the gap,
