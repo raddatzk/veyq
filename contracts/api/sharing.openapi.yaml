@@ -1301,16 +1301,18 @@ components:
           example: null
         nodes:
           type: array
-          description: The live subtree rooted at the shared node — the root plus its descendants, for the content-key chain.
+          description: The live subtree rooted at the shared node — the root plus its descendants, for the content-key chain and the descendants' names; nothing above the root (ADR 0080 Decision 9). Empty for a WRITE_ONLY link and in a locked response.
           items: { $ref: "#/components/schemas/ShareNode" }
 
     ShareNode:
       type: object
       description: >
         One node of the shared subtree. The **root** carries `parentId: null` (the viewer takes its content key
-        from the share `wrap`); a descendant carries its parent's id and its content key wrapped under the
-        parent's in `wrappedContentKey`. The name is **not** returned here (it is sealed under `K_SC`,
-        which a public viewer never holds — the root's name comes from `sealedName`).
+        from the share `wrap`); a descendant carries its parent's id, its content key wrapped under the parent's
+        in `wrappedContentKey`, and its name sealed under the parent's content key in `encryptedName` (ADR 0080
+        Decision 2), so whoever holds the root's key opens every name below it. Nothing of the root's own
+        placement is served: no parent id, no `encryptedName` (both belong to the parent's key, which the guest
+        does not hold, ADR 0080 Decision 9) — the root's name comes from the share's `sealedName`.
       required: [id, kind, epoch]
       properties:
         id: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d, x-veyq-visibility: id }
@@ -1330,12 +1332,25 @@ components:
         epoch:
           x-veyq-visibility: structure
           type: integer
-          description: The content-key epoch the node was sealed at (as `NodeSummary.epoch`) — a descendant's `wrappedContentKey` is bound to it (ADR 0072).
+          description: The content-key epoch the node was sealed at (as `NodeSummary.epoch`) — a descendant's `wrappedContentKey` and `encryptedName` are bound to it (ADR 0072).
           minimum: 0
           example: 0
+        encryptedName:
+          type: string
+          # Omitted, not `null`, at the root: Jackson writes a null property as `null`, and the root's entry is
+          # simply not part of what a share serves.
+          x-field-extra-annotation: '@get:com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
+          description: >
+            A descendant's name, AEAD-sealed under its **parent's** content key (seal purpose `node-name`, bound to
+            scope, node and epoch; opaque base64) — the same value as `NodeSummary.encryptedName`, which the viewer
+            opens with the key chain it derives from the root. Omitted at the root: its name is sealed under a key
+            above the share (ADR 0080 Decision 9); the root's title is the share's `sealedName`.
+          contentEncoding: base64
+          maxLength: 4096
+          example: ZW5jcnlwdGVkLW5hbWU=
         wrappedContentKey:
           type: [string, "null"]
-          description: The content key of a shareable node — a descendant's content key wrapped under its parent's (opaque base64); null/ignored at the root (its content key comes from the share `wrap`).
+          description: A descendant's content key wrapped under its parent's (opaque base64); null at the root (its content key comes from the share `wrap`, and its own wrap belongs to the parent's key above the share, ADR 0080 Decision 9).
           contentEncoding: base64
           maxLength: 256
           example: d3JhcHBlZC1rLW1lbQ==
