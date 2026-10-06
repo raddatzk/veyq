@@ -74,8 +74,9 @@ const { run: runSubmit, pending: loading } = useAsyncAction(
       if (!props.parentId || !props.parentKey) throw new Error('chapter_parent_missing')
       await createChapter(props.scopeId, props.epochs, props.parentKey, trimmed, props.parentId)
     } else if (props.node) {
-      // The name re-seals under the key its entry lives under: the parent's, resolved from the loaded tree (ADR 0080).
-      await renameNode(props.scopeId, props.epochs, treeStore.nodes, { id: props.node.id, parentId: props.node.parentId, epoch: props.node.epoch }, trimmed)
+      // A rename is a placement to the same parent (ADR 0080 Decision 3): the key re-wraps and the name re-seals under
+      // the parent's key, resolved from the loaded tree, at the next placement version.
+      await renameNode(props.scopeId, props.epochs, treeStore.nodes, props.node.id, trimmed)
     }
     emit('done')
     emit('close')

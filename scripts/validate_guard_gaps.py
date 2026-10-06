@@ -167,6 +167,13 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      standing — rejected: `validate_request_bounds` reads a `$ref`'d scalar's bounds as the property's, because the
      generator inlines it as a String and emits none of them. Before that, this property took any tag (measured:
      `9F3A1C04` was enqueued, 201) while its schema said lowercase hex of at most 64
+  59 one of `updateNode`'s version declarations dropped, its field still on the request — rejected:
+     `validate_write_concurrency` requires every version-shaped request property to be the `field` of a declaration.
+     ADR 0080 gave the operation a second, independent version, which is why `x-veyq-concurrency.fields` became a list
+  60 a second version-shaped property added to `UpdateNodeRequest` with no declaration — rejected: the reverse angle
+     holds per field, not per operation, so a declared neighbour does not cover it
+  61 `updateNode`'s `409` no longer naming a declared conflict code — rejected: each declaration's `conflictCode` must
+     appear in the operation's `409` text, so a client meeting it finds it documented
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
 (a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
 which the Gradle module split retired: `:core` has no edge to an application, so either shape fails
@@ -1016,6 +1023,51 @@ def forge_wiki_prose_contradicts_doc(root: pathlib.Path) -> str:
     return "a wiki page claiming the password is sent to the server, against the key model it declares"
 
 
+WRITE_CONCURRENCY = "validate_write_concurrency.py"
+
+
+def _in_operation(root: pathlib.Path, spec: str, operation_id: str, old: str, new: str, *, every: bool = False) -> None:
+    """Replace `old` inside one operation's block (from its `operationId` to the next one) — anchored on the id, so
+    the same text in a neighbouring operation is never what the forgery touches."""
+    f = root / "contracts" / "api" / spec
+    lines = f.read_text().split("\n")
+    try:
+        begin = lines.index(f"      operationId: {operation_id}")
+    except ValueError:
+        raise ForgeError(f"{spec}: operation {operation_id} not found (renamed?)")
+    # The operation's own block opens two lines up (`  /path:` → `    patch:`); the extension sits right below the id.
+    begin = max(0, begin - 2)
+    end = next((j for j in range(begin + 3, len(lines)) if re.match(r"^ {0,4}\S", lines[j])), len(lines))
+    block = "\n".join(lines[begin:end])
+    if old not in block:
+        raise ForgeError(f"{spec} {operation_id}: anchor not found (drifted?): {old!r}")
+    block = block.replace(old, new) if every else block.replace(old, new, 1)
+    lines[begin:end] = block.split("\n")
+    f.write_text("\n".join(lines))
+
+
+def forge_concurrency_declaration_dropped(root: pathlib.Path) -> str:
+    # The second declaration, so the first still stands: one declared field must not cover another.
+    _in_operation(root, "content.openapi.yaml", "updateNode",
+                  "          - field: placementVersion\n"
+                  "            requiredWith: [encryptedName, parentId, wrappedContentKey, slugToken]\n"
+                  "            conflictCode: stale_placement\n", "")
+    return "updateNode's placementVersion declaration dropped, metaVersion's kept (must be REJECTED)"
+
+
+def forge_second_version_field_undeclared(root: pathlib.Path) -> str:
+    _in_request_property(root, "content.openapi.yaml", "UpdateNodeRequest", "metaVersion",
+                         "        metaVersion:\n", "        shadowVersion:\n          type: integer\n"
+                         "          format: int64\n          example: 0\n        metaVersion:\n")
+    return "UpdateNodeRequest gains a version-shaped shadowVersion no declaration names (must be REJECTED)"
+
+
+def forge_conflict_code_unnamed(root: pathlib.Path) -> str:
+    # Only the declaration's own text: the 409 still names stale_version, so one named code must not cover another.
+    _in_operation(root, "content.openapi.yaml", "updateNode", "(`stale_placement`", "(`stale_plac3ment`")
+    return "updateNode's 409 no longer names its declared conflict code stale_placement (must be REJECTED)"
+
+
 # Ids must stay unique: parallel work that adds cases picks the next free id at merge time, not at branch time
 # (two parallel steps both took the same number once, so renumber on the merge, never in the branch).
 # id, target guard, forgery, expect_pass (True = guard passes the forgery = gap still open; False = must reject)
@@ -1076,6 +1128,9 @@ CASES = [
     ("56", "validate_backend_module_graph.py", forge_fixtures_not_indexed, False),
     ("57", "validate_backend_module_graph.py", forge_core_fixtures_depend_on_application, False),
     ("58", "validate_request_bounds.py", forge_request_scalar_ref_unannotated, False),
+    ("59", WRITE_CONCURRENCY, forge_concurrency_declaration_dropped, False),
+    ("60", WRITE_CONCURRENCY, forge_second_version_field_undeclared, False),
+    ("61", WRITE_CONCURRENCY, forge_conflict_code_unnamed, False),
 ]
 
 

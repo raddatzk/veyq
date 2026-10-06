@@ -80,6 +80,10 @@ object Failures {
      *  sealed-meta writes answer it with the blob's current value ([httpStaleSealedMeta], ADR 0077). */
     val staleVersion: HttpFailure = httpFailure("stale_version", CONFLICT)
 
+    /** A placement write (a move or a rename) stated a `placementVersion` the node has moved past → 409; nothing was
+     *  written, and the client re-reads the node and rebuilds the placement against it (ADR 0080 Decision 3). */
+    val stalePlacement: HttpFailure = httpFailure("stale_placement", CONFLICT)
+
     /** Slug already taken under the parent (uniqueness) → 409. */
     val slugTaken: HttpFailure = httpFailure("slug_taken", CONFLICT)
 

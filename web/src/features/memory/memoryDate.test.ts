@@ -268,7 +268,7 @@ describe('unsealNodeDate / sortNodesByDate (browse card grid, cr-0067)', () => {
   function memoryNode(label: string, date: MemoryDate | null): TreeNode {
     const id = crypto.randomUUID()
     const memKey = v1.randomBytes(32)
-    const wrappedContentKey = b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: 0 }, scopeKey, memKey))
+    const wrappedContentKey = b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementVersion: 0 }, scopeKey, memKey))
     return {
       id,
       parentId: null,
@@ -278,7 +278,7 @@ describe('unsealNodeDate / sortNodesByDate (browse card grid, cr-0067)', () => {
       name: label,
       wrappedContentKey,
       wrappedMeta: date ? sealMemoryDate(memKey, { scopeId: SCOPE_ID, nodeId: id }, date) : null,
-      metaVersion: 0,
+      metaVersion: 0, placementVersion: 0,
     }
   }
 

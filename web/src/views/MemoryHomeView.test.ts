@@ -95,7 +95,7 @@ import { realI18n } from '../test/i18n'
 import { registry } from '../core/applications/registry'
 
 function node(over: Partial<TreeNode> & Pick<TreeNode, 'id' | 'kind'>): TreeNode {
-  return { parentId: null, orderIndex: 0, epoch: 0, name: over.id, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, ...over }
+  return { parentId: null, orderIndex: 0, epoch: 0, name: over.id, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0, ...over }
 }
 const TREE: TreeNode[] = [
   node({ id: 'trips', kind: FOLDER_KIND, name: 'Trips' }),

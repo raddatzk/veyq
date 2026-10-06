@@ -101,15 +101,15 @@ describe('NodeMutationDialog', () => {
     expect(createMemory).toHaveBeenCalledWith(SCOPE, EPOCHS, 'Italy', null, null)
   })
 
-  it('rename calls renameNode with the node id + parent', async () => {
-    const node: TreeNode = { id: 'n9', parentId: 'p1', kind: 'FOLDER', name: 'Old', orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0 }
+  it('rename calls renameNode with the node id (a placement to its own parent)', async () => {
+    const node: TreeNode = { id: 'n9', parentId: 'p1', kind: 'FOLDER', name: 'Old', orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 }
     const wrapper = mountDialog({ mode: 'rename', node })
     expect((wrapper.find('input').element as HTMLInputElement).value).toBe('Old') // prefilled
     await wrapper.find('input').setValue('New')
     await wrapper.find('form').trigger('submit')
     await Promise.resolve()
     // the loaded tree travels with it: the name re-seals under the PARENT's key, resolved from it (ADR 0080)
-    expect(renameNode).toHaveBeenCalledWith(SCOPE, EPOCHS, treeStore.nodes, { id: 'n9', parentId: 'p1', epoch: 0 }, 'New')
+    expect(renameNode).toHaveBeenCalledWith(SCOPE, EPOCHS, treeStore.nodes, 'n9', 'New')
   })
 
   it('the maps opt-in arms a PENDING auto location (position + name land with the first media)', async () => {

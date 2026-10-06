@@ -81,7 +81,11 @@ class OperatorBlindProbeTest {
         },
         "listNodes" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/nodes") },
         "updateNode" to Probe(Address.SCOPE) { s ->
-            Call("PATCH", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}", """{"encryptedName":"$B64"}""")
+            // A complete placement write (ADR 0080 Decision 3): a rename at the root, where the world's Memory lives.
+            Call(
+                "PATCH", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}",
+                """{"encryptedName":"$B64","slugToken":"$slug","wrappedContentKey":"$B64","epoch":0,"placementVersion":0}""",
+            )
         },
         "deleteNode" to Probe(Address.SCOPE) { s -> Call("DELETE", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}") },
         "restoreNode" to Probe(Address.SCOPE, prepare = { w -> listOf(w.live, w.control).forEach { trashNode(w, it) } }) { s ->

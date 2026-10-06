@@ -86,10 +86,16 @@ sequenceDiagram
 
 ## Organize — rename / move / reorder
 
-- **Rename:** re-seal the name + **recompute the slug token** (its parent didn't change) → update the node.
-- **Move (within the scope):** set a new `parentId`, **recompute the slug token** for the new parent, with
-  cycle / containment checks. **No cross-scope move** — that is a copy + re-encrypt under the target scope's
-  `K_SC`/`K_mem` (a separate use-case), never a tree move.
+- **Move and rename are one placement write** ([ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
+  Decision 3; a rename is a move to the same parent): the node's own key is **re-wrapped** under the destination
+  parent's key, its name re-sealed and its **slug token recomputed** under that key, all bound to the next
+  `placementVersion`, which the request states it was built on. The server compare-and-sets it
+  (`409 stale_placement`: the client re-reads and rebuilds once) and checks structure only — a live destination in
+  the same scope, the kind's placement rule, no cycle, a free slug — under the tree's scope lock. An entry at the
+  scope root is sealed at the **current** epoch (`409 stale_epoch` otherwise); between two non-root parents the
+  node keeps its epoch. `placeNode` in `web/src/core/node/tree.ts` is the one client function. **No
+  cross-scope move** — that is a copy + re-encrypt under the target scope's `K_SC`/`K_mem` (a separate use-case),
+  never a tree move.
 - **Reorder:** update `orderIndex` among siblings.
 
 ## Delete — soft-delete, trash, purge

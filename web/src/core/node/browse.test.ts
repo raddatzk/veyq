@@ -8,7 +8,7 @@ import type { TreeNode } from './tree'
 const PERSONAL_SCOPE = '~me'
 
 function node(over: Partial<TreeNode> & Pick<TreeNode, 'id' | 'kind'>): TreeNode {
-  return { parentId: null, orderIndex: 0, epoch: 0, name: over.id, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, ...over }
+  return { parentId: null, orderIndex: 0, epoch: 0, name: over.id, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0, ...over }
 }
 
 // A small tree: root has folder "Trips" + memory "Solo"; "Trips" holds memory "Italy" + folder "2025".

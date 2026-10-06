@@ -6,17 +6,21 @@ every operation whose method is PUT or PATCH, plus every POST whose `operationId
 (`rename|set|update|change|commit|move|put`). Each must carry an operation-level `x-veyq-concurrency` mapping
 with a `mode` of one of two values:
 
-  - `version` — the write carries the version it read and is compare-and-set. The mapping names the request
-    `field` (an integer property of the request schema, resolved through `$ref` across spec files); the field is
-    `required`, or the mapping's `requiredWith` names the property whose presence makes it required (the server
-    enforces that half). The operation's `409` response — inline or a `$ref` into `_common` — names the
-    mapping's `conflictCode` (default `stale_version`) in its description or example.
+  - `version` — the write carries the version it read and is compare-and-set. The mapping's `fields` is a
+    non-empty LIST of declarations, one per version the operation checks — an operation may guard two independent
+    things on one row (`updateNode`: the sealed payload's `metaVersion`, the placement's `placementVersion`, ADR
+    0080), and each conflicts on its own. A declaration names the request `field` (an integer property of the
+    request schema, resolved through `$ref` across spec files, declared once); the field is `required`, or the
+    declaration's `requiredWith` names the property — or the list of properties — whose presence makes it required
+    (the server enforces that half). The operation's `409` response — inline or a `$ref` into `_common` — names each
+    declaration's `conflictCode` (default `stale_version`) in its description or example.
   - `last-writer-wins` — with a non-empty `reason`: why no version is needed (one writer, or the write carries
     only what its writer typed).
 
 The reverse angle: any non-GET operation whose request schema carries a version-shaped property (`version`, or
-a name ending in `Version`) must be declared `version` with that property as its `field` — subject or not, so a
-version-checked write outside the verb list is still held to its wire form.
+a name ending in `Version`) must be declared `version` with that property as the `field` of one of its declarations —
+subject or not, so a version-checked write outside the verb list is still held to its wire form, and a second version
+added beside a declared one is not carried silently.
 
 The failure names the list — spec, operation, rule — never a count.
 
@@ -29,11 +33,15 @@ named the 20 subject operations and `acceptTenantTerms` (a POST outside the verb
 
 **Its limit.** It proves a **declaration** and its **wire form**, never behaviour: that the server actually
 compares the version is proven by the red-first slice tests (`NodesSliceTest`, `MediaSliceTest`,
-`IdentityPinsSliceTest`), and that a `last-writer-wins` reason is *true* is a reviewer's call. A POST edit whose
+`IdentityPinsSliceTest`, the placement's `NodePlacementCoreSliceTest`), and that a `last-writer-wins` reason is *true* is a reviewer's call. A POST edit whose
 `operationId` starts with a verb outside the list slips through unless it carries a version-shaped field. A
 `requiredWith` is not checked against the server's enforcement. The first shape reached for was keyed on the
 method alone (PUT/PATCH), which misses six POST edits (`renameGroup`, `setScopeIcon`, `moveBucketMedia`,
-`commitCoverBlob`, `changeTenantDomain`, `changePassword`); the verb list is what closes that.
+`commitCoverBlob`, `changeTenantDomain`, `changePassword`); the verb list is what closes that. The declaration
+was one `field` per operation until ADR 0080 gave `updateNode` a second, independent version (`placementVersion`
+beside `metaVersion`); a single slot would have forced one of them undeclared, so `fields` became a list with a
+conflict code each. Its bite cases are `validate_guard_gaps.py` 59–61 (a declaration dropped, a second
+version-shaped field undeclared, a conflict code the `409` does not name).
 """
 from __future__ import annotations
 
@@ -112,6 +120,34 @@ def conflict_text(specs: dict[str, dict], op: dict, file: str) -> str:
     return " ".join(parts)
 
 
+def check_declaration(
+    where: str, entry: dict, props: dict, required: set[str], conflict: str, declared: list[str],
+) -> list[str]:
+    """One `fields` entry: its version field, what makes it required, and its conflict code in the `409`."""
+    errors: list[str] = []
+    field = entry.get("field")
+    if field in declared:
+        return [f"{where}: version field {field!r} is declared twice"]
+    if field not in props:
+        return [f"{where}: version field {field!r} is not a property of the request schema"]
+    declared.append(field)
+    if not is_integer(props[field]):
+        errors.append(f"{where}: version field {field!r} is not an integer")
+    with_ = entry.get("requiredWith")
+    with_list = [with_] if isinstance(with_, str) else list(with_ or [])
+    if field not in required:
+        if not with_list:
+            errors.append(f"{where}: version field {field!r} is neither required nor `requiredWith` "
+                          f"another property")
+        for w in with_list:
+            if w not in props:
+                errors.append(f"{where}: {field!r} requiredWith {w!r} is not a property of the request schema")
+    code = entry.get("conflictCode") or DEFAULT_CONFLICT
+    if code not in conflict:
+        errors.append(f"{where}: its 409 response does not name `{code}` (the conflict of {field!r})")
+    return errors
+
+
 def main() -> int:
     specs = load_specs()
     errors: list[str] = []
@@ -150,25 +186,25 @@ def main() -> int:
                                       f"{', '.join(versioned)} — a version-carrying write is declared `version`")
                     continue
                 n_version += 1
-                field = decl.get("field")
-                if field not in props:
-                    errors.append(f"{where}: version field {field!r} is not a property of the request schema")
+                if "field" in decl or "requiredWith" in decl or "conflictCode" in decl:
+                    errors.append(f"{where}: a version declaration lists its fields under `fields` "
+                                  f"(a list of {{field, requiredWith, conflictCode}}), not at the top level")
                     continue
-                if not is_integer(props[field]):
-                    errors.append(f"{where}: version field {field!r} is not an integer")
-                with_ = decl.get("requiredWith")
-                if field not in required:
-                    if not with_:
-                        errors.append(f"{where}: version field {field!r} is neither required nor `requiredWith` "
-                                      f"another property")
-                    elif with_ not in props:
-                        errors.append(f"{where}: requiredWith {with_!r} is not a property of the request schema")
-                code = decl.get("conflictCode") or DEFAULT_CONFLICT
-                if code not in conflict_text(specs, op, file):
-                    errors.append(f"{where}: its 409 response does not name `{code}`")
+                fields = decl.get("fields")
+                if not isinstance(fields, list) or not fields:
+                    errors.append(f"{where}: x-veyq-concurrency.fields must be a non-empty list of declarations")
+                    continue
+                text = conflict_text(specs, op, file)
+                declared: list[str] = []
+                for entry in fields:
+                    if not isinstance(entry, dict):
+                        errors.append(f"{where}: a fields entry is {entry!r}, expected a mapping")
+                        continue
+                    errors.extend(check_declaration(where, entry, props, required, text, declared))
                 for other in versioned:
-                    if other != field:
-                        errors.append(f"{where}: carries version-shaped {other!r} beside the declared field {field!r}")
+                    if other not in declared:
+                        errors.append(f"{where}: carries version-shaped {other!r} that no declaration names "
+                                      f"(declared: {', '.join(declared) or 'none'})")
 
     if errors:
         print(f"WRITE-CONCURRENCY VALIDATION FAILED ({len(errors)}):")

@@ -10,6 +10,7 @@ import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
+import me.raddatz.veyq.core.testing.TestFixtures.placementTo
 import me.raddatz.veyq.core.testing.whileUncommitted
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -132,7 +133,7 @@ class NodeTreeRaceSliceTest {
         handler.create(userId, scopeId, nodeId, parent, MemoriesNodeKinds.MEMORY, "bmV3", slug(), 0, 0, CONTENT_KEY, null)
 
     private fun move(userId: String, scopeId: String, nodeId: String, parent: String): UpdateNodeOutcome =
-        handler.update(userId, scopeId, nodeId, null, null, parent, null, null, null)
+        handler.update(userId, scopeId, nodeId, placementTo(parent), null, null, null)
 
     /** A trashed Memory with a Chapter under it, both stamped past the retention as one delete stamps them.
      *  Returns (memory, chapter). */

@@ -122,16 +122,40 @@ paths:
       operationId: updateNode
       x-veyq-concurrency:
         mode: version
-        field: metaVersion
-        requiredWith: wrappedMeta
-      summary: Rename / move / reorder a node.
+        fields:
+          - field: metaVersion
+            requiredWith: [wrappedMeta]
+          - field: placementVersion
+            requiredWith: [encryptedName, parentId, wrappedContentKey, slugToken]
+            conflictCode: stale_placement
+      summary: Move / rename (one placement write), reorder, or re-seal a node's payload.
       description: >
-        Partial update. **Rename** = new `encryptedName` + recomputed `slugToken`. **Move** = new `parentId`
-        (null = scope root) + recomputed `slugToken` (cycle/containment checked; same scope only). **Reorder**
-        = `orderIndex`. **Meta** = a re-sealed `wrappedMeta` with the `metaVersion` it was built from — required
-        whenever `wrappedMeta` is sent (else `400 invalid_request`); the server compare-and-sets it and stores
-        `metaVersion + 1`, or writes **nothing** (a rename in the same request included) and answers `409
-        stale_version` carrying the current blob and version (ADR 0077). Fields not sent are unchanged.
+        Partial update with three independent parts; fields not sent are unchanged.
+
+        **Placement** — move and rename are ONE request shape, a rename being a move to the same parent ([ADR
+        0080](../../docs/decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) Decision
+        3). It carries all of: the destination `parentId` (null/absent = the scope root; a rename sends the
+        current parent), the node's content key re-wrapped under the destination parent's key
+        (`wrappedContentKey`), the name re-sealed under that key (`encryptedName`), the slug token recomputed under
+        it (`slugToken`), the `epoch` the entry was sealed at, and the `placementVersion` it was built on. Sending
+        any of `encryptedName`, `slugToken`, `wrappedContentKey` or a `parentId` without the rest is `400
+        invalid_request`. The wrap and the name are sealed bound to the version the server will store,
+        `placementVersion + 1` (ADR 0072), so a wrap or a name served at another version or on another node's row
+        does not open. The server compare-and-sets the node's placement version and applies every field at once,
+        or writes **nothing** and answers `409 stale_placement` (the client re-reads the node and rebuilds, ADR
+        0077). Structure only: the destination is the root or a live node of the same scope, the kind's placement
+        rule admits it there, it is neither the node nor inside the node's subtree (else `422
+        illegal_structure`), and the slug is free there (`409 slug_taken`). **Epoch** (ADR 0080 Decision 4): when
+        the destination is the scope root the entry is sealed under `K_SC`, so `epoch` must be the scope's current
+        one (else `409 stale_epoch`, nothing stored) and is stored; a move out of the root stores the request's
+        `epoch`; a placement between two non-root parents keeps the node's stored epoch and ignores the request's.
+
+        **Reorder** = `orderIndex`, unversioned.
+
+        **Meta** = a re-sealed `wrappedMeta` with the `metaVersion` it was built from — required whenever
+        `wrappedMeta` is sent (else `400 invalid_request`); the server compare-and-sets it and stores
+        `metaVersion + 1`, or writes **nothing** (a placement in the same request included) and answers `409
+        stale_version` carrying the current blob and version (ADR 0077).
       security:
         - bearerAuth: []
       parameters:
@@ -142,12 +166,18 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/UpdateNodeRequest" }
-            example: { encryptedName: cmVuYW1lZA==, slugToken: bmV3LXNsdWc= }
+            example:
+              parentId: 9b1d4a6e-8b2c-4f2d-9e4a-5b6c7c3f0e2a
+              encryptedName: cmVuYW1lZA==
+              slugToken: bmV3LXNsdWc=
+              wrappedContentKey: cmUtd3JhcHBlZC1rLW1lbQ==
+              epoch: 0
+              placementVersion: 2
       responses:
         "204":
           description: The node was updated.
         "400":
-          description: Malformed request.
+          description: Malformed request, or an incomplete placement write (a name, slug, wrap or parent without the rest of it, or without its `placementVersion` and `epoch`).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401":
@@ -161,13 +191,17 @@ paths:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
         "409":
           description: >
-            A sibling already has that slug (`slug_taken`); the space is being deleted and read-only
-            (`scope_deleting`, uc.spaces.delete-group A4); or the node's `wrappedMeta` moved since the stated
-            `metaVersion` (`stale_version`, with the current blob and version — nothing was written, ADR 0077).
+            A sibling at the destination already has that slug (`slug_taken`); the space is being deleted and
+            read-only (`scope_deleting`, uc.spaces.delete-group A4); the node was moved or renamed since the stated
+            `placementVersion` (`stale_placement` — nothing was written; the client re-reads the node and rebuilds
+            the placement against it, ADR 0080 Decision 3); a placement at the scope root stated an `epoch` that is
+            not the scope's current one (`stale_epoch` — nothing was written, ADR 0080 Decision 4); or the node's
+            `wrappedMeta` moved since the stated `metaVersion` (`stale_version`, with the current blob and version —
+            nothing was written, ADR 0077). Every code but `stale_version` carries `code` alone.
           content:
             application/json: { schema: { $ref: "#/components/schemas/StaleSealedMeta" }, example: { code: stale_version, wrappedMeta: d3JhcHBlZC1tZXRh, metaVersion: 4 } }
         "422":
-          description: Illegal structure (the moved node's kind may not live under the new parent, or a move that would create a cycle).
+          description: Illegal structure (the node's kind may not live under the destination, the destination is missing, trashed or in another scope, or the move would create a cycle — the destination is the node itself or inside its subtree).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_structure } }
     delete:
@@ -333,7 +367,7 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Pattern(regexp = "[A-Z][A-Z0-9_]{0,15}")'
         encryptedName:
           type: string
-          description: The node name, AEAD-sealed under its parent's content key — `K_SC` at the node's epoch for a scope-root node (ADR 0080 Decision 2; opaque base64).
+          description: The node name, AEAD-sealed under its parent's content key — `K_SC` at the node's epoch for a scope-root node (ADR 0080 Decision 2) — bound to scope, node, epoch and placement version 0 (a new node's; ADR 0072; opaque base64).
           contentEncoding: base64
           maxLength: 4096
           example: ZW5jcnlwdGVkLW5hbWU=
@@ -367,7 +401,7 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
         wrappedContentKey:
           type: string
-          description: The node's content key — a fresh random key wrapped under its parent's content key (`K_SC` at the node's epoch for a scope-root node, the parent node's content key below it; opaque base64). Every kind carries one, FOLDER included (ADR 0080 Decision 1); a create without it is `400`.
+          description: The node's content key — a fresh random key wrapped under its parent's content key (`K_SC` at the node's epoch for a scope-root node, the parent node's content key below it; opaque base64), bound to scope, node, epoch and placement version 0. Every kind carries one, FOLDER included (ADR 0080 Decision 1); a create without it is `400`.
           contentEncoding: base64
           maxLength: 256
           example: d3JhcHBlZC1rLW1lbQ==
@@ -382,16 +416,24 @@ components:
 
     UpdateNodeRequest:
       type: object
-      description: Partial update — rename (encryptedName+slugToken), move (parentId+slugToken), reorder (orderIndex). Omitted fields are unchanged.
+      description: >
+        Partial update — a placement write (move or rename: `parentId`, `wrappedContentKey`, `encryptedName`,
+        `slugToken`, `epoch`, `placementVersion`, all together), a reorder (`orderIndex`), a payload re-seal
+        (`wrappedMeta` + `metaVersion`). Omitted fields are unchanged.
       properties:
         encryptedName:
           type: string
+          description: >
+            Placement write: the name re-sealed under the destination parent's content key (`K_SC` at `epoch` at
+            the scope root), seal purpose `node-name` bound to scope, node, `epoch` and `placementVersion + 1` (ADR
+            0072, ADR 0080 Decision 3; opaque base64).
           contentEncoding: base64
           maxLength: 4096
           example: cmVuYW1lZA==
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 4096) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         slugToken:
           type: string
+          description: Placement write — the blinded slug token recomputed under the destination parent's content key (`K_SC` at `epoch` at the scope root) over the destination slot (opaque base64).
           contentEncoding: base64
           maxLength: 128
           example: bmV3LXNsdWc=
@@ -400,8 +442,41 @@ components:
           x-veyq-visibility: id
           type: [string, "null"]
           format: uuid
-          description: New parent for a move (null = scope root).
+          description: Placement write — the destination parent; null/absent = the scope root. A rename sends the node's current parent.
           example: null
+        wrappedContentKey:
+          type: string
+          description: >
+            Placement write — the node's own content key (unchanged) re-wrapped under the destination parent's
+            content key (`K_SC` at `epoch` at the scope root), seal purpose `content-key` bound to scope, node,
+            `epoch` and `placementVersion + 1` (ADR 0080 Decision 3; opaque base64). A rename re-wraps too: the old
+            wrap is bound to the old version.
+          contentEncoding: base64
+          maxLength: 256
+          example: cmUtd3JhcHBlZC1rLW1lbQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        epoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            Placement write — the scope content-key epoch the entry was sealed at (ADR 0024). Must be the scope's
+            current one when the destination is the scope root (else `409 stale_epoch`); stored on a move into or
+            out of the root; ignored between two non-root parents, where the node keeps its stored epoch (ADR 0080
+            Decision 4).
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
+        placementVersion:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          format: int64
+          description: >
+            Placement write — the `NodeSummary.placementVersion` the placement was built on. The server
+            compare-and-sets it and stores `placementVersion + 1`, the version the sent wrap and name are sealed
+            at; a mismatch is `409 stale_placement` with nothing written (ADR 0080 Decision 3, ADR 0077).
+          minimum: 0
+          example: 2
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
         orderIndex:
           x-veyq-visibility: structure
           type: integer
@@ -420,7 +495,8 @@ components:
           format: int64
           description: >
             The `NodeSummary.metaVersion` the sent `wrappedMeta` was built from. Required with `wrappedMeta`,
-            ignored without it — a rename, move or reorder needs no version (ADR 0077).
+            ignored without it — a reorder needs no version, a placement states its own `placementVersion` (ADR
+            0077).
           example: 3
 
     NodeCreated:
@@ -435,8 +511,18 @@ components:
 
     NodeSummary:
       type: object
-      required: [id, kind, encryptedName, slugToken, orderIndex, epoch, wrappedContentKey, metaVersion]
+      required: [id, kind, encryptedName, slugToken, orderIndex, epoch, wrappedContentKey, metaVersion, placementVersion]
       properties:
+        placementVersion:
+          x-veyq-visibility: structure
+          type: integer
+          format: int64
+          description: >
+            How many times the node was moved or renamed (0 at birth): the version its `encryptedName` and
+            `wrappedContentKey` are sealed at (seal purposes `node-name` and `content-key` bind it, ADR 0072), and
+            the version a placement write states it was built on (ADR 0080 Decision 3). Nothing else moves it.
+          minimum: 0
+          example: 2
         id: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d, x-veyq-visibility: id }
         epoch:
           x-veyq-visibility: structure
@@ -521,7 +607,9 @@ components:
             name is retried under a different one, exactly as a create is, and the name and the token it is
             derived from have to land **together**: sent apart, the node is briefly live carrying a slug its own
             name does not produce, and a failure in between leaves it that way. Absent = the stored name is
-            untouched (the ordinary restore). Sealed under the node's own epoch key, opaque base64.
+            untouched (the ordinary restore). Sealed under the key the entry lives under (the live parent's
+            content key, `K_SC` at the node's epoch at the scope root), bound to the node's epoch and its current
+            `placementVersion` — a restore does not move the version (opaque base64).
           contentEncoding: base64
           maxLength: 4096
           example: cmVzdG9yZWQtbmFtZQ==
@@ -533,8 +621,15 @@ components:
         One soft-deleted subtree **root** in the space's trash. `parentId` is the slot the client recomputes the
         restore's slug token against, and it always names a live parent (or the scope root) — a node whose own
         parent is trashed went down with that parent and is not a root.
-      required: [id, kind, encryptedName, epoch, deletedAt, purgeAfter]
+      required: [id, kind, encryptedName, epoch, placementVersion, deletedAt, purgeAfter]
       properties:
+        placementVersion:
+          x-veyq-visibility: structure
+          type: integer
+          format: int64
+          description: The placement version the node's `encryptedName` is sealed at (as `NodeSummary.placementVersion`); a trash does not move it, nor does a restore.
+          minimum: 0
+          example: 2
         id: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d, x-veyq-visibility: id }
         parentId:
           x-veyq-visibility: id

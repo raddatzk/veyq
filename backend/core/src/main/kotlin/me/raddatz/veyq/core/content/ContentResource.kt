@@ -68,9 +68,15 @@ class ContentResource(
     override fun updateNode(scopeId: UUID, nodeId: UUID, updateNodeRequest: UpdateNodeRequest): Response =
         when (val o = handler.update(
             identity.principal.name, scopeId.toString(), nodeId.toString(),
-            updateNodeRequest.encryptedName, updateNodeRequest.slugToken,
-            updateNodeRequest.parentId?.toString(), updateNodeRequest.orderIndex, updateNodeRequest.wrappedMeta,
-            updateNodeRequest.metaVersion,
+            NodesHandler.PlacementRequest(
+                parentId = updateNodeRequest.parentId?.toString(),
+                encryptedName = updateNodeRequest.encryptedName,
+                slugToken = updateNodeRequest.slugToken,
+                wrappedContentKey = updateNodeRequest.wrappedContentKey,
+                epoch = updateNodeRequest.epoch,
+                placementVersion = updateNodeRequest.placementVersion,
+            ),
+            updateNodeRequest.orderIndex, updateNodeRequest.wrappedMeta, updateNodeRequest.metaVersion,
         )) {
             UpdateNodeOutcome.Updated -> Response.noContent().build()
             is UpdateNodeOutcome.StaleMeta -> httpStaleSealedMeta(o, o.wrappedMeta, o.metaVersion)
@@ -105,6 +111,7 @@ class ContentResource(
         kind = kind,
         encryptedName = encryptedName,
         epoch = epoch,
+        placementVersion = placementVersion,
         deletedAt = OffsetDateTime.ofInstant(deletedAt, ZoneOffset.UTC),
         purgeAfter = OffsetDateTime.ofInstant(deletedAt.plus(trashRetention), ZoneOffset.UTC),
         parentId = if (parentId == scopeId) null else UUID.fromString(parentId),
@@ -127,5 +134,6 @@ class ContentResource(
         wrappedMeta = wrappedMeta,
         sealedDropPrivateKey = sealedDropPrivateKey,
         metaVersion = metaVersion,
+        placementVersion = placementVersion,
     )
 }

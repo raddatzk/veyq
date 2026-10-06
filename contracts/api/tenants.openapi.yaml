@@ -879,8 +879,9 @@ paths:
       operationId: acceptTenantTerms
       x-veyq-concurrency:
         mode: version
-        field: version
-        conflictCode: terms_version_changed
+        fields:
+          - field: version
+            conflictCode: terms_version_changed
       summary: Accept the tenant's current terms (member gate; re-accept on a bump).
       description: >
         The signed-in **member** accepts the tenant's terms at the version they were shown. The server records
