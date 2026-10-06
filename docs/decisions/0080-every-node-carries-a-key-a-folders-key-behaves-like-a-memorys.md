@@ -131,7 +131,7 @@ its own reasons).
 - **A Memory guest newly reads chapter titles.** Today a guest sees the root's title and a flat media list.
   Serving descendant names is a product change; the owner decides it, and the share view must render or drop
   them.
-- **A core `FOLDER` can be shared** with viewer, contributor and drop-box roles.
+- **A core `FOLDER` can be shared** with the `READ` and `READ_WRITE` roles (`ShareRoots`); the drop-box role belongs to Files' own drop-box node (decision 11), not to a plain folder.
 - **Rename and move cost a version compare**, and a client may retry on `409 stale_placement`; both re-wrap the key.
 - **Reading is limited by position in the tree, never by kind.** Whoever holds a folder's key opens everything
   below it. A filter by kind exists only for writes (a drop-style share, or an application's policy), so a
