@@ -19,7 +19,7 @@
 //   docker compose -f infra/docker-compose.yml down -v && up -d  → restart backend  →
 //   VEYQ_E2E=1 npx vitest run scopeRotation.e2e
 // Or let `python3 scripts/run_web_e2e.py` do all of that, which is what CI runs.
-import { describe, it, expect } from 'vitest'
+import { beforeAll, describe, it, expect } from 'vitest'
 import { tasksApi } from '../../api/client'
 import { addGroupMember, listScopeMembers, removeTenantMember, setMemberRole, SetMemberRoleRequestRoleEnum } from '../spaces/members'
 import { rotateKeys } from '../account/rotation/rotateKeys'
@@ -32,6 +32,12 @@ import { recordCanaries } from '../../test/canaries'
 import { runGrantDeliveryWorker } from './grantDeliveryWorker'
 import { runScopeRotationWorker } from './scopeRotationWorker'
 import { SCOPE_ROTATION } from './capabilityTags'
+import { registry } from '../../core/applications/registry'
+import { memoriesLifecycle } from '../memory/lifecycle'
+
+// A node-environment file is given no registry (`src/test/setup.ts`), and `rotateKeys` fails closed without a registered
+// `onMasterKeyRotated`; register the real Memories lifecycle, as the other node suites that rotate do (inbox #340).
+beforeAll(() => registry.registerLifecycle('memories', memoriesLifecycle))
 
 async function claimRotation() {
   return (await tasksApi().claimTask({ claimRequest: { capabilityTags: [SCOPE_ROTATION] } })) ?? null
