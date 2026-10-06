@@ -7,7 +7,8 @@
 // Two sides live here:
 //  - **curator** (authed): mint / list / revoke a share.
 //  - **viewer** (anonymous, no session): resolve a share, unwrap `K_mem` from the fragment key, derive each
-//    chapter's `K_mem` down the subtree, and open blobs via the gated share-scoped presign endpoint.
+//    chapter's `K_mem` down the subtree and open each chapter's title under its parent's key (ADR 0080 Decision 2 —
+//    a guest of a Memory reads its chapter titles), and open blobs via the gated share-scoped presign endpoint.
 //
 // A WRITE_ONLY share is the exception to the second wrap (ADR 0031 point 7): its guest is the one party the link
 // exists to keep out, so it gets no `K_mem` at all — only the Memory's drop PUBLIC key under `K_share`. The guest
@@ -28,6 +29,7 @@ import {
   type PublicShareHead,
 } from '../../core/sharing/resolvePublicShare'
 import { dropKeysForShare, mediaKey, mintUploaderKey, openDropPublicKey, uploaderOriginOf } from './mediaKey'
+import { openName } from '../../core/node/tree'
 import { keyAt, writeKey, zeroEpochKeys, type EpochKeys } from '../spaces/epochs'
 import { isStaleEpoch, openScopeById } from '../spaces/scopes'
 import type { LocaleMap } from '../../shared/ui/localeMap'
@@ -643,8 +645,9 @@ export async function deleteSharePhoto(shareId: string, contributorToken: string
 
 /** One shared media resolved for the read-only viewer: the media + the `K_mem` of the node it sits on + the shared
  *  Memory's scope, which every one of its seals is bound to (ADR 0072). A media a WRITE_ONLY guest added carries its
- *  origin, so [mediaKey] opens it through that node's drop key instead (ADR 0031 point 7). */
-export type ShareItem = { item: MediaItem; memoryKey: Uint8Array; scopeId: string }
+ *  origin, so [mediaKey] opens it through that node's drop key instead (ADR 0031 point 7). `chapterName` is the title
+ *  of the chapter it sits in (ADR 0080 Decision 2), null for a media on the shared root itself. */
+export type ShareItem = { item: MediaItem; memoryKey: Uint8Array; scopeId: string; chapterName: string | null }
 
 /**
  * What a resolved link lets its guest do with keys (ADR 0031 point 7):
@@ -690,19 +693,23 @@ function shareMediaToItem(m: ShareMedia, uploader: MediaItem['uploader']): Media
 }
 
 /**
- * Build the per-node `K_mem` map for a shared subtree: the root Memory's `K_mem` comes from the share `wrap`
- * (unwrapped with the fragment key), each chapter's from its `wrappedContentKey` under its parent's `K_mem`
- * (recursive `K_mem`, ADR 0012). Nodes whose chain can't be opened are dropped.
+ * Walk a shared subtree top-down from the root's `K_mem` — unwrapped with the fragment key from the share `wrap` — (ADR
+ * 0012 recursive `K_mem`, ADR 0080 Decisions 2 and 9): each descendant's key unwraps under its parent's, and its name — its directory entry, sealed under the same parent key — opens with it. The root
+ * has no entry here (its title is the share's `sealedName`). A node whose key or name does not open is skipped, and
+ * so is everything below it: its media simply won't render, its title won't show.
  */
-function deriveSubtreeKeys(scopeId: string, nodes: ShareNode[], rootKmem: Uint8Array): Map<string, Uint8Array> {
+function walkSubtree(
+  scopeId: string, nodes: ShareNode[], rootKmem: Uint8Array,
+): { keys: Map<string, Uint8Array>; names: Map<string, string> } {
   const keys = new Map<string, Uint8Array>()
+  const names = new Map<string, string>()
   const byParent = new Map<string, ShareNode[]>()
   let root: ShareNode | undefined
   for (const n of nodes) {
     if (n.parentId == null) root = n
     else byParent.set(n.parentId, [...(byParent.get(n.parentId) ?? []), n])
   }
-  if (!root) return keys
+  if (!root) return { keys, names }
   keys.set(root.id, rootKmem)
   // BFS from the root, deriving each child's K_mem under its parent's (already-known) K_mem.
   const queue: string[] = [root.id]
@@ -711,23 +718,28 @@ function deriveSubtreeKeys(scopeId: string, nodes: ShareNode[], rootKmem: Uint8A
     const parentKey = keys.get(parentId)
     if (!parentKey) continue
     for (const child of byParent.get(parentId) ?? []) {
-      if (!child.wrappedContentKey) continue
+      if (!child.wrappedContentKey || !child.encryptedName) continue
       try {
-        // Bound to (scope, this chapter, its epoch) — the node the key is listed for (ADR 0072).
-        const context = { purpose: 'content-key', scopeId, nodeId: child.id, epoch: child.epoch } as const
-        keys.set(child.id, v1.open(context, parentKey, fromB64std(child.wrappedContentKey)))
+        // Both bound to (scope, this chapter, its epoch) — the node they are listed for (ADR 0072) — and both under
+        // the parent's key: the chapter's directory entry (ADR 0080 Decision 2).
+        const node = { scopeId, nodeId: child.id, epoch: child.epoch }
+        const key = v1.open({ purpose: 'content-key', ...node }, parentKey, fromB64std(child.wrappedContentKey))
+        const name = openName(parentKey, node, child.encryptedName)
+        keys.set(child.id, key)
+        names.set(child.id, name)
         queue.push(child.id)
       } catch {
-        /* a chapter whose K_mem won't open is skipped (its media then simply won't render) */
+        /* a chapter whose K_mem or title won't open is skipped (its media then simply won't render) */
       }
     }
   }
-  return keys
+  return { keys, names }
 }
 
-/** The Memories half of a resolved share: what its link lets the guest do with keys, and every media (each with its
- *  own node's `K_mem` — none for a WRITE_ONLY link, which is served no media). */
-export type OpenedMemory = { access: ShareAccess; items: ShareItem[] }
+/** The Memories half of a resolved share: what its link lets the guest do with keys, every media (each with its
+ *  own node's `K_mem` — none for a WRITE_ONLY link, which is served no media), and the title of every chapter below
+ *  the shared root it could open (ADR 0080 Decision 2; empty for a WRITE_ONLY link, which holds no key to open one). */
+export type OpenedMemory = { access: ShareAccess; items: ShareItem[]; chapterNames: Map<string, string> }
 
 /** No media and no uploader key: what a WRITE_ONLY link is served, and the listing before it is read. */
 export const NO_SHARE_MEDIA: ShareMediaListing = { media: [], identities: [] }
@@ -768,7 +780,7 @@ export function openSharedMemory(head: PublicShareHead, listing: ShareMediaListi
     } catch {
       throw new ShareUnavailableError('bad_fragment_key')
     }
-    return { access: { kind: 'drop', nodeId: share.nodeId, dropPublicKey }, items: [] }
+    return { access: { kind: 'drop', nodeId: share.nodeId, dropPublicKey }, items: [], chapterNames: new Map() }
   }
 
   if (!share.wrap) throw new ShareUnavailableError('not_found')
@@ -778,7 +790,7 @@ export function openSharedMemory(head: PublicShareHead, listing: ShareMediaListi
   } catch {
     throw new ShareUnavailableError('bad_fragment_key')
   }
-  const keys = deriveSubtreeKeys(scopeId, share.nodes, rootKmem)
+  const { keys, names } = walkSubtree(scopeId, share.nodes, rootKmem)
   // A media a WRITE_ONLY guest added opens through its node's drop key and its identity's wrapped key: the resolve's
   // node carries the one, the listing's identities the other (ADR 0031 point 7). That list is all a guest is told
   // about any identity — never a name, which is for the Memory's members (ADR 0030 point 8).
@@ -790,9 +802,9 @@ export function openSharedMemory(head: PublicShareHead, listing: ShareMediaListi
     if (!memoryKey) continue // a media under a chapter whose K_mem didn't open — skip
     const owner = m.identityId ? `share:${m.identityId}` : undefined
     const uploader = uploaderOriginOf(owner, m.nodeId, dropKeyOf.get(m.nodeId), wrapped)
-    items.push({ item: shareMediaToItem(m, uploader), memoryKey, scopeId })
+    items.push({ item: shareMediaToItem(m, uploader), memoryKey, scopeId, chapterName: names.get(m.nodeId) ?? null })
   }
-  return { access: { kind: 'read', memoryKey: rootKmem }, items }
+  return { access: { kind: 'read', memoryKey: rootKmem }, items, chapterNames: names }
 }
 
 /**

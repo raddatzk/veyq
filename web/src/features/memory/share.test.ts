@@ -17,8 +17,8 @@ vi.mock('../spaces/scopes', async (importOriginal) => ({
   openScopeById: vi.fn(),
 }))
 
-import { createShare, reissueShare, isShareDeleted, type ReissuableShare, resolveShare, createContributorIdentity, addSharePhoto, deleteSharePhoto, listSharesFor, reactivateShare, updateShare, readShareNoteMap, readShareName, readSharePassword, shareChunkProvider } from './share'
-import { pickLocaleText, derivePasswordToken, ShareUnavailableError, SharePasswordRequiredError } from '../../core/sharing/resolvePublicShare'
+import { createShare, reissueShare, isShareDeleted, type ReissuableShare, resolveShare, createContributorIdentity, addSharePhoto, deleteSharePhoto, listSharesFor, reactivateShare, updateShare, readShareNoteMap, readShareName, readSharePassword, shareChunkProvider, openSharedMemory } from './share'
+import { pickLocaleText, derivePasswordToken, resolvePublicShare, ShareUnavailableError, SharePasswordRequiredError } from '../../core/sharing/resolvePublicShare'
 // The link builders live in `shareLink.ts` (the UI edge, the only part that needs `window`) — see its header.
 import { buildShareLink, recoverShareLink } from './shareLink'
 import { unsealMeta, CHUNK_SIZE, type MediaDeriver } from './media'
@@ -55,6 +55,11 @@ const addressOf = (req: { shareId: string }) => ({ scopeId: SCOPE_ID, nodeId: NO
 /** Seal a media's listed-metadata tier under a K_mem exactly as the media layer does (bound to scope + media). */
 function sealMeta(key: Uint8Array, mediaId: string, meta: object): string {
   return b64std(v1.seal({ purpose: 'media-meta', scopeId: SCOPE_ID, mediaId }, key, v1.utf8(JSON.stringify(meta))))
+}
+
+/** A node's name sealed under the key its directory entry lives under — its parent's (ADR 0080 Decision 2). */
+function nodeName(parentKey: Uint8Array, nodeId: string, name: string): string {
+  return b64std(v1.seal({ purpose: 'node-name', scopeId: SCOPE_ID, nodeId, epoch: 0 }, parentKey, v1.utf8(name)))
 }
 
 /** A create endpoint that answers as an honest server does: with the share id the client minted. */
@@ -203,7 +208,7 @@ describe('resolveShare (anonymous viewer)', () => {
       sealedName,
       nodes: [
         { id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 },
-        { id: CHAPTER_ID, parentId: NODE_ID, kind: 'CHAPTER', epoch: 0, wrappedContentKey },
+        { id: CHAPTER_ID, parentId: NODE_ID, kind: 'CHAPTER', epoch: 0, wrappedContentKey, encryptedName: nodeName(kMem, CHAPTER_ID, 'Day 1') },
       ],
     }, {
       media: [{ nodeId: CHAPTER_ID, mediaId: MEDIA_2, blobId: 'b2', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta: chapterMeta }],
@@ -214,6 +219,38 @@ describe('resolveShare (anonymous viewer)', () => {
     expect(resolved.items).toHaveLength(1)
     // the chapter media's meta unseals only if the viewer walked wrappedContentKey → the chapter's K_mem
     expect(unsealMeta(SCOPE_ID, resolved.items[0].memoryKey, resolved.items[0].item)).toMatchObject({ w: 800, h: 600 })
+    // …and it carries the title of the chapter it sits in, opened under the Memory's K_mem (ADR 0080 Decision 2)
+    expect(resolved.items[0].chapterName).toBe('Day 1')
+  })
+
+  // Bite test (b): a Memory-share guest opens every chapter title it is served — nested ones through the chain it
+  // derives — from a resolve that carries no name for the root (its title is `sealedName`).
+  it('opens every served chapter title down the chain; the root carries none, a K_SC-sealed one does not open', async () => {
+    const create = vi.fn<SharingApi['createShare']>().mockResolvedValue({ shareId: 'share-3' })
+    mockCurator(create)
+    const kMem = v1.randomBytes(32)
+    const minted = await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Trip')
+    const { wrap, sealedName } = posted(create)
+    const NESTED = '5c09e000-0000-4000-8000-00000000ce02'
+    const STALE = '5c09e000-0000-4000-8000-00000000ce03'
+    const chapterKey = v1.randomBytes(32)
+    const contentKey = (kek: Uint8Array, nodeId: string, k = v1.randomBytes(32)) =>
+      b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId, epoch: 0 }, kek, k))
+    mockGuest({
+      role: 'READ', passwordRequired: false, scopeId: SCOPE_ID, wrap, sealedName,
+      nodes: [
+        { id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 },
+        { id: CHAPTER_ID, parentId: NODE_ID, kind: 'CHAPTER', epoch: 0, wrappedContentKey: contentKey(kMem, CHAPTER_ID, chapterKey), encryptedName: nodeName(kMem, CHAPTER_ID, 'Day 1') },
+        { id: NESTED, parentId: CHAPTER_ID, kind: 'CHAPTER', epoch: 0, wrappedContentKey: contentKey(chapterKey, NESTED), encryptedName: nodeName(chapterKey, NESTED, 'Morning') },
+        // the pre-ADR-0080 entry: a chapter title sealed under a scope key the guest does not hold
+        { id: STALE, parentId: NODE_ID, kind: 'CHAPTER', epoch: 0, wrappedContentKey: contentKey(kMem, STALE), encryptedName: nodeName(v1.randomBytes(32), STALE, 'Hidden') },
+      ],
+    })
+    const head = await resolvePublicShare(minted.shareId, b64url(minted.kShare))
+    expect(head.share.nodes.find((n) => n.id === NODE_ID)?.encryptedName).toBeUndefined()
+
+    const { chapterNames } = openSharedMemory(head)
+    expect(Object.fromEntries(chapterNames)).toEqual({ [CHAPTER_ID]: 'Day 1', [NESTED]: 'Morning' })
   })
 
   it('drops a chapter whose K_mem wrap was sealed for another node (a moved wrap yields no key)', async () => {
@@ -674,7 +711,7 @@ describe('reissueShare (ADR 0075, W1)', () => {
     const drop = v1.generateDropKey()
     const sealedDropPrivateKey = b64std(v1.seal({ purpose: 'drop-private-key', scopeId: SCOPE_ID, nodeId: NODE_ID }, kMem, v1.serializeDropKey(drop)))
     stubApi(contentApi, {
-      listNodes: [{ id: NODE_ID, epoch: 0, parentId: null, kind: 'MEMORY', encryptedName: 'AQ==', slugToken: 'AQ==', orderIndex: 0, sealedDropPrivateKey, metaVersion: 0 }],
+      listNodes: [{ id: NODE_ID, epoch: 0, parentId: null, kind: 'MEMORY', encryptedName: 'AQ==', slugToken: 'AQ==', orderIndex: 0, wrappedContentKey: 'AQ==', sealedDropPrivateKey, metaVersion: 0 }],
     })
     const { old, reissue } = await oldShare(kMem, ShareRole.WriteOnly, '')
 
@@ -723,7 +760,7 @@ describe('shareChunkProvider (Slice 2 SW range seam for the anonymous viewer, AD
     const wrappedBlobKey = b64std(v1.seal({ purpose: 'blob-key', scopeId: SCOPE_ID, ...BLOB }, memoryKey, blobKey))
     const byteSize = frames.reduce((n, f) => n + f.length, 0)
     const ref = { ...BLOB, chunkCount: chunks.length, byteSize, wrappedBlobKey }
-    const si = { item: { mediaId: MEDIA_1, original: ref, derivatives: [] }, memoryKey, scopeId: SCOPE_ID }
+    const si = { item: { mediaId: MEDIA_1, original: ref, derivatives: [] }, memoryKey, scopeId: SCOPE_ID, chapterName: null }
 
     const { resolveShareBlob } = stubApi(publicSharesApi, {
       resolveShareBlob: { presignedGets: frames.map((_, i) => ({ index: i, url: `u/${i}` })) },

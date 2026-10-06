@@ -1,6 +1,8 @@
 // The Memories application's two content-node births — a Memory (wrapped under its parent's key: a folder's, or the
 // write key at the scope root) and a Chapter (wrapped under its parent's K_mem) — over core's kind-agnostic
-// `createContentNode` (ADR 0079, ADR 0080 Decision 1).
+// `createContentNode` (ADR 0079, ADR 0080 Decision 1). The name and slug token go under the same parent key (ADR 0080
+// Decision 2): a Memory's under the folder's key (K_SC at the root), a chapter's under its Memory's K_mem — so a guest
+// of the Memory's share reads its chapter titles.
 import { MEMORY_KIND, CHAPTER_KIND } from './kinds'
 import type { EpochKeys } from '../spaces/epochs'
 import { createContentNode, type NodeAddress, type NodeParent } from '../../core/node/tree'

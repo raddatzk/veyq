@@ -392,13 +392,16 @@ onBeforeUnmount(() => {
             height: `${tile.renderedHeight}px`,
           }"
           :aria-label="t('media.openItem', { index: sortedItems.indexOf(item.si) + 1 })"
+          :title="item.si.chapterName ?? undefined"
           @click="openLightboxAt(sortedItems.indexOf(item.si))"
         >
+          <!-- A media in a chapter is labelled by the chapter's title (ADR 0080 Decision 2: a guest of the Memory reads
+               its chapter titles) — the tile's tooltip and its image's alt text, no new UI. -->
           <img
             v-if="thumbs.get(item.si.item.mediaId)"
             class="media-grid-tile-media media-grid-tile-media-loaded"
             :src="thumbs.get(item.si.item.mediaId)"
-            :alt="memoryName"
+            :alt="item.si.chapterName ?? memoryName"
           />
           <span v-else-if="!hasDerivatives(item.si.item)" class="media-grid-icon pi pi-file" />
           <span v-else class="media-grid-tile-placeholder" />

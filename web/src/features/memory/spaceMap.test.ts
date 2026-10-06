@@ -118,7 +118,7 @@ describe('clusterPins', () => {
   // A trivial linear projection: 1 degree = 1 pixel, so pixel distance == degree distance (Leaflet-free).
   const project = (lat: number, lng: number) => ({ x: lng, y: lat })
   const pin = (id: string, lat: number, lng: number): LocatedPin => ({
-    node: { id, kind: MEMORY_KIND, name: id, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: null, wrappedMeta: null, metaVersion: 0 },
+    node: { id, kind: MEMORY_KIND, name: id, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0 },
     location: { name: id, nameSource: 'manual', derivedMode: 'fixed', derived: { lat, lng } },
     date: null,
   })
@@ -150,7 +150,7 @@ describe('clusterPins', () => {
 
 describe('sortPinsByStartDate', () => {
   const dated = (id: string, from?: string): LocatedPin => ({
-    node: { id, kind: MEMORY_KIND, name: id, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: null, wrappedMeta: null, metaVersion: 0 },
+    node: { id, kind: MEMORY_KIND, name: id, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0 },
     location: { name: id, nameSource: 'manual', derivedMode: 'fixed', derived: { lat: 0, lng: 0 } },
     date: from ? ({ mode: 'single', from, to: from } as MemoryDate) : null,
   })

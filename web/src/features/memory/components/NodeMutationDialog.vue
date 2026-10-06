@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Create a folder / create a Memory / rename a node (cr-0030 P4). Ported dialog shape; wired to the E2EE
-// tree data layer (names sealed under K_SC client-side). One dialog, three modes. Inline slug_taken (409) /
+// tree data layer (names sealed client-side under the parent's key, K_SC at the scope root — ADR 0080). One dialog, three modes. Inline slug_taken (409) /
 // illegal_structure (422) errors.
 //
 // create-memory can **pre-arm a location** (cr-0069) behind the personal maps opt-in — but at creation there are
@@ -15,6 +15,7 @@ import InputText from 'primevue/inputtext'
 import Checkbox from 'primevue/checkbox'
 import Message from 'primevue/message'
 import { createFolder, renameNode, type NodeParent, type TreeNode } from '../../../core/node/tree'
+import { treeStore } from '../../../core/node/treeStore'
 import { createMemory, createChapter } from '../memoryNodes'
 import type { EpochKeys } from '../../spaces/epochs'
 import { useMapConfig } from '../../../shared/state/useMapConfig'
@@ -73,7 +74,8 @@ const { run: runSubmit, pending: loading } = useAsyncAction(
       if (!props.parentId || !props.parentKey) throw new Error('chapter_parent_missing')
       await createChapter(props.scopeId, props.epochs, props.parentKey, trimmed, props.parentId)
     } else if (props.node) {
-      await renameNode(props.scopeId, props.epochs, { id: props.node.id, parentId: props.node.parentId, epoch: props.node.epoch }, trimmed)
+      // The name re-seals under the key its entry lives under: the parent's, resolved from the loaded tree (ADR 0080).
+      await renameNode(props.scopeId, props.epochs, treeStore.nodes, { id: props.node.id, parentId: props.node.parentId, epoch: props.node.epoch }, trimmed)
     }
     emit('done')
     emit('close')

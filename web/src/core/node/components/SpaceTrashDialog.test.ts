@@ -9,7 +9,7 @@ vi.mock('../tree', () => ({
 }))
 
 import SpaceTrashDialog from './SpaceTrashDialog.vue'
-import { listTrash, restoreNode, type TrashedNode } from '../tree'
+import { listTrash, restoreNode, type TrashedNode, type TreeNode } from '../tree'
 import { epochsOf } from '../../../features/spaces/epochsTestUtil'
 import { realI18n, t } from '../../../test/i18n'
 
@@ -29,6 +29,8 @@ const stubs = {
 
 const SCOPE = '11111111-1111-1111-1111-111111111111'
 const EPOCHS = epochsOf(new Uint8Array(32).fill(7))
+// The live tree the dialog is handed: a trashed root's entry lives under its live parent's key (ADR 0080).
+const TREE: TreeNode[] = []
 
 const ROW: TrashedNode = {
   id: 'n1',
@@ -42,7 +44,7 @@ const ROW: TrashedNode = {
 
 function mountDialog() {
   return mount(SpaceTrashDialog, {
-    props: { scopeId: SCOPE, epochs: EPOCHS },
+    props: { scopeId: SCOPE, epochs: EPOCHS, tree: TREE },
     global: { plugins: [realI18n()], stubs },
   })
 }
@@ -69,7 +71,7 @@ describe('SpaceTrashDialog', () => {
     const wrapper = mountDialog()
     await settle(wrapper)
 
-    expect(listTrash).toHaveBeenCalledWith(SCOPE, EPOCHS)
+    expect(listTrash).toHaveBeenCalledWith(SCOPE, EPOCHS, TREE)
     expect(wrapper.text()).toContain('Rom 2026')
     // both dates are rendered — "you can still get it back, and until when"
     expect(wrapper.text()).toContain(t('memory.spaceTrash.deletedOn', { day: ROW.deletedAt.toLocaleDateString('en') }))
@@ -106,7 +108,7 @@ describe('SpaceTrashDialog', () => {
     await settle(wrapper)
 
     // no `newName` — an ordinary restore keeps the stored name
-    expect(restoreNode).toHaveBeenCalledWith(SCOPE, EPOCHS, expect.objectContaining({ id: 'n1' }), undefined)
+    expect(restoreNode).toHaveBeenCalledWith(SCOPE, EPOCHS, TREE, expect.objectContaining({ id: 'n1' }), undefined)
     expect(wrapper.text()).not.toContain('Rom 2026')
     expect(wrapper.emitted('restored')).toHaveLength(1)
   })
@@ -135,7 +137,7 @@ describe('SpaceTrashDialog', () => {
     await restoreButton(wrapper).trigger('click')
     await settle(wrapper)
 
-    expect(restoreNode).toHaveBeenLastCalledWith(SCOPE, EPOCHS, expect.objectContaining({ id: 'n1' }), 'Rom 2026 (2)')
+    expect(restoreNode).toHaveBeenLastCalledWith(SCOPE, EPOCHS, TREE, expect.objectContaining({ id: 'n1' }), 'Rom 2026 (2)')
     expect(wrapper.emitted('restored')).toHaveLength(1)
   })
 

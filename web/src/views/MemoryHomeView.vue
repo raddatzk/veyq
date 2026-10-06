@@ -251,6 +251,7 @@ async function onDeleteDone() {
       v-if="trashVisible && epochs && activeSpace.scopeId"
       :scope-id="activeSpace.scopeId"
       :epochs="epochs"
+      :tree="treeStore.nodes"
       @restored="onTrashRestored"
       @close="trashVisible = false"
     />
