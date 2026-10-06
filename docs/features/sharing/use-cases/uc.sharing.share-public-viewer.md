@@ -24,12 +24,14 @@ slices. The crypto is the per-Memory second-wrap of [ADR 0012](../../../decision
 2. **Hand off.** The client shows the link **`/s/{shareId}#k=<base64url(K_share)>`** to copy. `K_share` lives in
    the **fragment** — never sent to the server. The curator passes it out-of-band (message, QR, wherever).
 3. **Open (anonymous).** A visitor opens the link. The client `GET`s `/api/shares/{shareId}` (**no auth**) → the
-   record **plus the sealed subtree** (the Memory node + its chapters, sealed under `K_mem`), then `GET`s
+   record **plus the sealed subtree** (the Memory node + its chapters: each chapter's key and title sealed under its
+   parent's key, nothing of the Memory's own entry above it — ADR 0080 Decisions 2 and 9), then `GET`s
    `/api/shares/{shareId}/media` → the Memory's media metadata and the wrapped keys of the uploader identities
    whose media it holds (Memories' `listShareMedia`). Both pass the same password gate; without a token the
    resolve answers the locked challenge and the media read a `404`.
-   The client **unwraps `K_mem` with the fragment key**, decrypts names/layout/metadata **locally**, and renders
-   the Memory **read-only**.
+   The client **unwraps `K_mem` with the fragment key**, derives each chapter's key and opens its title down the
+   chain, decrypts layout/metadata **locally**, and renders the Memory **read-only** (the guest reads the chapter
+   titles; the Memory's own title is the share's `sealedName`).
 4. **View media.** For each blob the client calls the **share-scoped, gated** blob endpoint; the server authorizes
    it **iff the blob is attached under the shared subtree**, returns a **presigned store URL**, and the client
    fetches the bytes **directly from the object store** and decrypts them locally.

@@ -134,7 +134,7 @@ flowchart TB
   U["Unlock methods<br>(password+Secret Key floor, passkey PRF,<br>Secret Key recovery, device key L1/L2/L3)"]
   MK["Master Key<br>(one per account, one wrap per method)"]
   ID["Identity private key<br>(hybrid KEM + signing)"]
-  KSC["K_SC — scope content key<br>(one per scope; names + slug tokens)"]
+  KSC["K_SC — scope content key<br>(one per scope; scope-root names + slug tokens)"]
   KMEM["K_mem — per-Memory key<br>(recursive: a chapter has its own)"]
   KBLOB["K_blob — per-media key"]
   WM["wrappedMeta<br>(date / place sealed on the node)"]

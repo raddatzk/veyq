@@ -45,14 +45,18 @@ under the chapter's key). Consequence of this layout: every content node is a **
 single **re-wrap, never a data re-encrypt** — the *decision + rationale* (why recursive, not "shares the
 parent's key") is ADR 0012.
 
-Names, slugs and dedup key off **`K_SC`** (navigation), so one scope key decrypts the whole tree's structure;
-a Memory's *content* needs its `K_mem` ([ADR 0012](../../../decisions/0012-content-key-hierarchy.md)).
+A node's **directory entry** — its name and its slug token — lives under the **same parent key** its content key
+wraps under (`K_SC` at the node's epoch for a scope-root entry, the parent node's key below it — [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
+Decision 2). A member, holding `K_SC`, decrypts the whole tree top-down in one pass (each node's key opens the
+names below it); whoever holds one node's key — a share guest — reads every name below that node and nothing
+above it. Dedup keys off `K_SC`; a Memory's *content* needs its `K_mem` ([ADR 0012](../../../decisions/0012-content-key-hierarchy.md)).
 
 ## Main flow — create a folder / a Memory
 
-1. The client picks a name; it computes the **slug token** `HMAC/HKDF(K_SC, parentId ‖ slugify(name))` (blind;
-   the server can't reverse it) and **encrypts the name** under `K_SC`.
-2. **If a Memory:** generate a fresh random **`K_mem`**, wrap it under `K_SC` (`symWrap(K_SC, K_mem)`).
+1. The client picks a name; it computes the **slug token** `HMAC/HKDF(K_parent, parentId ‖ slugify(name))` (blind;
+   the server can't reverse it) and **encrypts the name** under `K_parent` — the parent's content key, `K_SC` at the
+   scope root.
+2. Generate a fresh random content key (a Memory's **`K_mem`**, a folder's key) and wrap it under `K_parent`.
 3. POST the node: `{ nodeId, parentId, kind, encryptedName, slugToken, orderIndex, wrappedContentKey? }` — the
    client mints `nodeId`, and the name and wrap are sealed bound to it
    ([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)); all opaque to the server. The server refuses
@@ -71,8 +75,9 @@ sequenceDiagram
   participant S as Server<br>(blind)
   U->>C: new Memory "Italien 2026"
   C->>C: nodeId = random UUID #59; K_mem = random(32)
-  C->>C: wrappedContentKey = seal(K_SC, content-key of scope, nodeId, epoch, K_mem)
-  C->>C: encryptedName = seal(K_SC, node-name of scope, nodeId, epoch, name) #59; slugToken = HMAC(K_SC, parentId‖slug)
+  C->>C: K_parent = K_SC at the root, else the parent's content key
+  C->>C: wrappedContentKey = seal(K_parent, content-key of scope, nodeId, epoch, K_mem)
+  C->>C: encryptedName = seal(K_parent, node-name of scope, nodeId, epoch, name) #59; slugToken = HMAC(K_parent, parentId‖slug)
   C->>S: POST node { id:nodeId, kind:MEMORY, parentId, encryptedName, slugToken, wrappedContentKey }
   S->>S: refuse a taken id, enforce UNIQUE(parentId, slugToken) + structural rules
   S-->>C: created
@@ -103,7 +108,7 @@ exception to it.
 - **The slug is freed at delete**, so the name is immediately reusable: the deleted node's `slugToken` is replaced
   by its own id. `UNIQUE(parentId, slugToken)` is a plain unique index and the schema is held to the H2 ∩ MariaDB
   subset, so a partial index over live rows is not available. The server **cannot** recompute a slug token (it is
-  a blinded MAC under `K_SC`), so the original is not kept — **restore carries a freshly client-computed token**,
+  a blinded MAC under the parent's key), so the original is not kept — **restore carries a freshly client-computed token**,
   and a collision is the ordinary disambiguation a create already handles.
 - **Hidden, not marked.** Every user- and guest-facing read carries `deletedAt is null`. Four reads deliberately
   do **not**: slug uniqueness (it must keep seeing the row, or validation passes and the database rejects the
@@ -140,7 +145,7 @@ exception to it.
   `K_mem`) without exposing `K_SC`, the parent, or any other node. Folders, being keyless, are never shared —
   you share a Memory or a chapter.
 - **Blinded permalinks.** The slug token gives human-readable, unique-per-parent permalinks without the
-  operator ever seeing or reversing a name (keyed MAC under `K_SC`).
+  operator ever seeing or reversing a name (keyed MAC under the parent's key).
 - **Scope of this slice.** Tree + names + `K_mem` only. **Media (`K_blob` + chunked AEAD), journal, places &
   tracks, sharing, and rich curation** are their own slices on top of this.
 
