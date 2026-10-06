@@ -86,7 +86,7 @@ class ShareMediaResource(
         return when (val o = handler.complete(shareId, xSharePassword, shareMediaBatchRequest.contributorToken, items)) {
             is ShareMediaCompleteOutcome.Results -> Response.ok(
                 ShareMediaBatchResponse(
-                    results = o.items.map { ShareMediaResultItem(blobId = it.blobId?.let(UUID::fromString), mediaId = it.mediaId?.let(UUID::fromString), error = it.error) },
+                    results = o.items.map { ShareMediaResultItem(blobId = it.blobId?.let(UUID::fromString), mediaId = it.ownerId?.let(UUID::fromString), error = it.error) },
                 ),
             ).build()
             is HttpFailure -> httpError(o)

@@ -74,7 +74,7 @@ class UploadCompletionPartitionSliceTest {
 
     /** Dispatch one item for an unknown upload to [nodeId] through a dispatcher over [acceptors]; its error code. */
     private fun completeOne(acceptors: MutableList<UploadCompletion>, scopeId: String, nodeId: String): String? {
-        val item = CompleteItem(UUID.randomUUID().toString(), nodeId, UUID.randomUUID().toString(), emptyList(), null, null)
+        val item = CompleteItem(UUID.randomUUID().toString(), nodeId, UUID.randomUUID().toString(), emptyList(), emptyMap())
         return QuarkusTransaction.requiringNew().call {
             UploadCompletions(nodes, acceptors).complete(scopeId, listOf(item), UploadOpener.Member(UUID.randomUUID().toString()))
         }.single().error
