@@ -53,11 +53,20 @@ has no move caller yet.
 10. **Guest moves.** A `READ_WRITE` guest may move a node inside its share's subtree — never the root, never out of
     the subtree, never into a cycle — by re-wrapping the key under the new parent's key it holds. A `WRITE_ONLY` guest
     cannot move. The server checks the structure only. Finer rights are an application's, later.
-11. **Guest-keyed nodes.** A `WRITE_ONLY` guest holds no folder key, so a node it creates is wrapped (key and name)
-    under its identity key, which is sealed to the drop public key whose private half is sealed under the folder's key
-    (as Memories' guest media is today). Anyone holding the folder key opens it, with no approval step. It has no
-    slug token and sits outside the uniqueness index until a member optionally re-wraps it under the folder key.
-    Built with the application that needs it (Files), not before.
+11. **A drop box is a node of its own, with one guest folder per identity.** Creating a `WRITE_ONLY` share names a
+    new node under the chosen parent (its share name; never an existing folder), so the drop mechanism, its drop
+    private key and the guests' folders stay apart from members' own content. A guest creates **one folder per guest
+    identity** in it on its first upload (unique by `(drop box, identityId)`: the server already knows the identity,
+    so no slug is needed), minting that folder's key itself and wrapping it under its identity key, which is sealed
+    to the drop public key whose private half is sealed under the drop box's key (as Memories' guest media is today).
+    Anyone holding the drop box's key opens everything below, with no approval step. Below its own folder the guest
+    holds the key, computes slug tokens and gets the normal uniqueness check, and learns nothing about other guests'
+    names. Equal display names of two guests' folders are disambiguated by the client at display time (`(1)`,
+    `(2)`, by creation time), never stored. Members may only delete, move out or copy from a drop box and place
+    nothing of their own there (a server placement rule); moving out re-wraps and re-slugs under the target, where
+    the normal index applies, so every other folder stays unique and a ZIP export is unambiguous. Revoking the link
+    keeps the drop box and its content. Memories keeps its uploader share on an existing Memory (its media are not
+    nodes); this rule is for nodes guests create, built with the first application that needs it (Files).
 12. **The share's recovery copy is mandatory.** `sealedShareKey`/`sealedShareKeyEpoch` ([ADR 0036](0036-editable-share-note-recoverable-share-key.md))
     become `NOT NULL` on the wire and in the baseline, so every member can always re-show and edit a link.
 13. **Attachments ([#327](../inbox.md)).** A node attachment's `K_blob` is wrapped under its owning node's key,
@@ -100,6 +109,12 @@ Guests of a Memory read its chapter titles (the consequence of decision 2). The 
 
 ## Open questions
 
+- Who defines a name's slug. Today one client function folds every name (`web/src/shared/naming.ts:21`: lowercase,
+  `ä`→`ae`, accents dropped, non-alphanumerics → `-`, a 32-bit hash when nothing is left), the slug is also the URL
+  path segment, and the token freezes it. For Files that is too coarse (`Day1.md` = `Day1 md`) and too lax. Proposed:
+  a hook per node kind in the registry — containers keep a URL-safe slug (keeping Unicode letters, percent-encoded
+  in the fragment, instead of the hash), leaves use NFC plus Unicode case folding with punctuation kept. The display
+  name is always the original. Decide before Files; changing it later invalidates tokens.
 - Whether a chapter's media blob keys hang under the chapter's key or its Memory's decides if a chapter guest can read the
   chapter's media: to verify while implementing (bite test 12).
 
