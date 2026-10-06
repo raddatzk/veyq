@@ -111,14 +111,17 @@ Guests of a Memory read its chapter titles (the consequence of decision 2). The 
 
 - Who defines a name's slug. Today one client function folds every name (`web/src/shared/naming.ts:21`: lowercase,
   `ä`→`ae`, accents dropped, non-alphanumerics → `-`, a 32-bit hash when nothing is left), the slug is also the URL
-  path segment, and the token freezes it. For Files that is too coarse (`Day1.md` = `Day1 md`) and too lax. Proposed:
-  **one filesystem rule per application**, not per kind (Memories keeps today's): the URL segment is the percent-encoded
-  name itself (no folding, no hash fallback); uniqueness is NFC plus Unicode case folding with punctuation kept
-  (`Müller` = `müller`, as on macOS and Windows, but `Müller` ≠ `Mueller`); forbidden names (empty, `/`, control
-  characters, `.`/`..`, a trailing dot or space, over-long) are refused. The display name is always the original.
-  The client checks against the decrypted siblings before sending and explains the conflict by naming the colliding
-  sibling; the server's `slug_taken` is only the race backstop, after which the client explains it the same way.
-  Decide before Files; changing it later invalidates tokens.
+  path segment, and the token freezes it. For Files that is too coarse for **files** (`Day1.md` = `Day1 md`).
+  Proposed: a hook per node kind in the registry. **Containers (folders, Memories) keep today's slug**: it is the URL
+  segment and the uniqueness at once (`Müller` and `Mueller` collide, accepted: rare, and the message names the
+  colliding sibling). **Leaves (files)** are not in the URL and use a stricter uniqueness: NFC plus Unicode case
+  folding with punctuation kept (`Day1.md` ≠ `Day1 md`, `README` = `readme` as on macOS and Windows). Display names
+  are always the original. The client checks the decrypted siblings before sending and explains the conflict by
+  naming the colliding sibling; the server's `slug_taken` is only the race backstop. Non-Latin names keep the hash
+  fallback until someone needs a frozen, versioned transliteration table. **No slug library**: the slug is frozen
+  into the tokens, so a dependency's table change would silently break uniqueness; the function stays ours, and its
+  output gets conformance vectors in `contracts/crypto/vectors/v1.json` (it has one for the token only). Decide
+  before Files; changing it later invalidates tokens.
 - Whether a chapter's media blob keys hang under the chapter's key or its Memory's decides if a chapter guest can read the
   chapter's media: to verify while implementing (bite test 12).
 
