@@ -74,16 +74,22 @@ class BlobUploadHandler(
     fun start(userId: String, scopeId: String, declares: List<UploadDeclare>, domain: String?): StartOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(StartOutcome.NoScope, StartOutcome.Suspended, StartOutcome.Deleting)?.let { return it }
-        return StartOutcome.Results(reserveAndOpen(scopeId, UploadOpener.Member(userId), linkShareId = null, declares, domain))
+        return StartOutcome.Results(reserveAndOpen(scopeId, UploadOpener.Member(userId), link = null, declares, domain))
     }
 
     /**
      * The start of an upload link — READ_WRITE or WRITE_ONLY link [shareId], opened by its identity [identityId]. The
      * caller does its own authorization (the link's gate), which runs first; the reservation is [reserveAndOpen]'s,
-     * with the per-link limit checked beside the tenant quota.
+     * with the per-link limit checked beside the tenant quota, the link's usage measured by the application that takes
+     * uploads into a node of [targetKind] (the upload's target, `ShareGuestGate.target`).
      */
-    fun startForLink(scopeId: String, shareId: String, identityId: String, declares: List<UploadDeclare>, domain: String?): List<UploadItemResult> =
-        reserveAndOpen(scopeId, UploadOpener.Contributor(identityId), linkShareId = shareId, declares, domain)
+    fun startForLink(
+        scopeId: String, shareId: String, targetKind: String, identityId: String, declares: List<UploadDeclare>, domain: String?,
+    ): List<UploadItemResult> =
+        reserveAndOpen(scopeId, UploadOpener.Contributor(identityId), LinkStart(shareId, targetKind), declares, domain)
+
+    /** A link start's two keys to the per-link limit: the link, and the kind of the node its uploads are for. */
+    private data class LinkStart(val shareId: String, val targetKind: String)
 
     /**
      * Every start into the store — a member's upload, a cover, a link upload — reserved against what the tenant may
@@ -91,7 +97,7 @@ class BlobUploadHandler(
      *  1. lock the tenant row, so concurrent starts into the tenant serialize (uc.admin.tenant-storage-quota A5);
      *  2. check each item on its own ([admissibility]);
      *  3. ask [StorageQuota] whether the admissible items fit **together**: the tenant quota always, and the per-link
-     *     limit too when [linkShareId] names a link. The two are independent, and either one refuses the whole
+     *     limit too when [link] names a link. The two are independent, and either one refuses the whole
      *     request — every admissible item `quota_exceeded`, no session inserted — so a photo never lands without its
      *     derivatives; admitting item by item would reserve an original alone until the stale-session purge;
      *  4. otherwise insert every admissible session, and commit.
@@ -101,7 +107,7 @@ class BlobUploadHandler(
     private fun reserveAndOpen(
         scopeId: String,
         opener: UploadOpener,
-        linkShareId: String?,
+        link: LinkStart?,
         declares: List<UploadDeclare>,
         domain: String?,
     ): List<UploadItemResult> {
@@ -114,7 +120,7 @@ class BlobUploadHandler(
             val admissible = checked.filter { (_, error) -> error == null }.map { (d, _) -> d }
             val fits = tenant != null &&
                 quota.tenantFits(tenant, admissible) &&
-                (linkShareId == null || quota.linkFits(tenant, linkShareId, admissible))
+                (link == null || quota.linkFits(tenant, link.shareId, link.targetKind, admissible))
             if (!fits) {
                 checked.map { (d, error) -> d to (error ?: "quota_exceeded") } to checked.map { null }
             } else {

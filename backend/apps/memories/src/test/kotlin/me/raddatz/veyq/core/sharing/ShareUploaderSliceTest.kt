@@ -334,8 +334,8 @@ class ShareUploaderSliceTest {
             val identity = createIdentity(createShare(userId, memory, role = "WRITE_ONLY"))
             val mediaId = seedMedia(scopeId, memory, identityId = identity)
             val second = whileUncommitted(
-                change = { assertEquals(true, guestWrites.deleteOwn(scopeId, mediaId, identity), "round $round") },
-                overlapping = { guestWrites.deleteOwn(scopeId, mediaId, identity) },
+                change = { assertEquals(true, guestWrites.deleteOwn(scopeId, memory, mediaId, identity), "round $round") },
+                overlapping = { guestWrites.deleteOwn(scopeId, memory, mediaId, identity) },
             )
             assertEquals(false, second, "round $round: the second delete answers as a replay")
             QuarkusTransaction.requiringNew().run { assertNull(MediaEntity.findById(mediaId), "round $round") }

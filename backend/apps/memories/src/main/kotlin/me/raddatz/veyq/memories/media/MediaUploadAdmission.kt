@@ -13,7 +13,8 @@ import jakarta.persistence.EntityManager
 @ApplicationScoped
 class MediaUploadAdmission(private val em: EntityManager) : UploadAdmission {
 
-    // The kinds a share's root is here, as [MediaShareGuestWrites.supports] answers them.
+    // The kinds a guest uploads into, as [MediaShareGuestWrites.supports] answers them. The measure itself is by
+    // identity, so it counts the link's media in every Memory or chapter of its subtree, not only the root's.
     override fun supports(nodeKind: String): Boolean = nodeKind in MemoriesNodeKinds.SHARE_ROOTS
 
     override fun linkBlobUsage(shareId: String): Long = sum(

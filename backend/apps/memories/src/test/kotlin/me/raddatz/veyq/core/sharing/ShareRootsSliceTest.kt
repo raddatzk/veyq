@@ -110,9 +110,11 @@ class ShareRootsSliceTest {
     }
 
     /**
-     * A `READ_WRITE` folder share is created, and its guest names itself — but no application writes under a folder
-     * yet, so a start and a window both fail closed (`SharingHandler.writesFor`: no [ShareGuestWrites] for the kind;
-     * the start is also refused by the missing admission). Control: the same calls on a Memory's contributor link.
+     * A `READ_WRITE` folder share is created, and its guest names itself — but no application writes into a folder, so
+     * a start and a window naming no node (the target is the folder root itself) both fail closed
+     * (`SharingHandler.writesFor`: no [ShareGuestWrites] for the kind; the start is also refused by the missing
+     * admission). Its uploads into a Memory or chapter below the folder are `SubtreeUploadSliceTest`'s (5a.5). Control:
+     * the same calls on a Memory's contributor link.
      */
     @Test
     fun aGuestOfAReadWriteFolderShareUploadsNothing() {

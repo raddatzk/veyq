@@ -92,8 +92,11 @@ sealed interface CreateIdentityOutcome {
 sealed interface ShareUploadOutcome {
     data class Results(val items: List<UploadItemResult>) : ShareUploadOutcome
     object NotFound : ShareUploadOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
-    /** Not a READ_WRITE share, or the contributor token is invalid — a 403. */
+    /** Not an uploading share, the contributor token is invalid, no application takes guest uploads into the target's
+     *  kind, or the target is refused by the role or a trashed root ([ShareWriteTarget.NotContributable]) — a 403. */
     object NotContributable : ShareUploadOutcome, HttpFailure by httpFailure("share_not_contributable", FORBIDDEN)
+    /** The named target is no live node inside the share's subtree ([ShareWriteTarget.NotFound]) — a 404. */
+    object NodeNotFound : ShareUploadOutcome, HttpFailure by Failures.nodeNotFound
     /** Password-protected + a wrong token (cr-0164) — a 403. */
     object PasswordIncorrect : ShareUploadOutcome, HttpFailure by httpFailure("share_password_incorrect", FORBIDDEN)
     /** Per-share rate limit exceeded — a 429. */
@@ -103,8 +106,10 @@ sealed interface ShareUploadOutcome {
 sealed interface ShareWindowOutcome {
     data class Results(val items: List<WindowItemResult>) : ShareWindowOutcome
     object NotFound : ShareWindowOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
-    /** Not a READ_WRITE share, or the contributor token is invalid — a 403. */
+    /** As [ShareUploadOutcome.NotContributable] — a 403. */
     object NotContributable : ShareWindowOutcome, HttpFailure by httpFailure("share_not_contributable", FORBIDDEN)
+    /** As [ShareUploadOutcome.NodeNotFound] — a 404. */
+    object NodeNotFound : ShareWindowOutcome, HttpFailure by Failures.nodeNotFound
     /** Password-protected + a wrong token (cr-0164) — a 403. */
     object PasswordIncorrect : ShareWindowOutcome, HttpFailure by httpFailure("share_password_incorrect", FORBIDDEN)
     /** Too many wrong password tokens on this share (cr-0165) — a 429. */
@@ -222,7 +227,7 @@ sealed interface ShareTermsOutcome {
 class SharingHandler(
     private val store: SharingStore,
     private val blobStore: BlobStore,
-    /** Who writes under a share's root, by the root's node kind (see [ShareGuestWrites]); core only gates and dispatches. */
+    /** Who takes a guest's uploads, by the target node's kind (see [ShareGuestWrites]); core only gates and dispatches. */
     private val guestWrites: Instance<ShareGuestWrites>,
     /** Which roles a node of a kind may be shared with — its owner's answer (see [ShareRoots]); none → no share.
      *  `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor). */
@@ -234,7 +239,7 @@ class SharingHandler(
     private val scopes: ScopesStore,
     private val tenantTerms: TenantTermsHandler,
     private val access: ScopeAccess,
-    /** Which application measures a link's usage, by the root's node kind (see [UploadAdmission]). */
+    /** Which application measures a link's usage, by the target node's kind (see [UploadAdmission]). */
     private val quota: StorageQuota,
 ) {
 
@@ -610,8 +615,16 @@ class SharingHandler(
         }
     }
 
-    /** Start a contributor upload — gated on the share (contributable + enabled) + a valid token, then presign. */
-    fun startUploads(shareId: String, pwToken: String?, contributorToken: String, declares: List<UploadDeclare>, domain: String?): ShareUploadOutcome {
+    /**
+     * Start a contributor upload — gated on the share (contributable + enabled) + a valid token, then presign. The
+     * uploads are for [nodeId] (ADR 0080 decision 6: a link's role applies to every node below its root as the
+     * application allows it), or the share's root when null ([ShareGuestGate.target]); the writer and the per-link
+     * measure are picked by THAT node's kind. Opening a session writes nothing onto the node, so the target is checked
+     * by a plain read here; the completion decides it again under the scope lock.
+     */
+    fun startUploads(
+        shareId: String, pwToken: String?, contributorToken: String, declares: List<UploadDeclare>, domain: String?, nodeId: String? = null,
+    ): ShareUploadOutcome {
         // Starting creates upload sessions, so it spends the per-share upload budget (ADR 0051, `@RateLimit(key = SHARE)`).
         val gated = when (val g = gate.writeGate(shareId, pwToken, contributorToken, spendUploadBudget = true)) {
             is ShareWriteGate.Admitted -> g
@@ -620,11 +633,16 @@ class SharingHandler(
             ShareWriteGate.RateLimited -> return ShareUploadOutcome.RateLimited
             ShareWriteGate.NotContributable -> return ShareUploadOutcome.NotContributable
         }
-        val writes = writesFor(gated.rootKind) ?: return ShareUploadOutcome.NotContributable
+        val target = when (val t = gate.target(gated, nodeId)) {
+            is ShareWriteTarget.Node -> t
+            ShareWriteTarget.NotFound -> return ShareUploadOutcome.NodeNotFound
+            ShareWriteTarget.NotContributable -> return ShareUploadOutcome.NotContributable
+        }
+        val writes = writesFor(target.kind) ?: return ShareUploadOutcome.NotContributable
         // A link whose usage no single application measures is never admitted (fail closed, [UploadAdmission]); the
         // reservation asks again under the tenant lock, and refuses there too.
-        if (quota.admissionFor(gated.rootKind) == null) return ShareUploadOutcome.NotContributable
-        return ShareUploadOutcome.Results(writes.start(gated.scopeId, shareId, gated.identityId, declares, domain))
+        if (quota.admissionFor(target.kind) == null) return ShareUploadOutcome.NotContributable
+        return ShareUploadOutcome.Results(writes.start(gated.scopeId, shareId, target.kind, gated.identityId, declares, domain))
     }
 
     /**
@@ -632,8 +650,12 @@ class SharingHandler(
      * upload role, token), because a window is where a revoked, expired or disabled link stops an upload already in
      * flight (ADR 0013 §2). It does **not** spend [ShareRateLimiter.allowUpload]: that budget counts the writes that
      * create sessions and rows, and a window creates neither. Only the identity that opened a session gets its window.
+     * The target [nodeId] is checked again as the start checked it (null = the root), so a target trashed or moved out
+     * of the subtree stops the upload at its next window as a revoke does.
      */
-    fun windowUploads(shareId: String, pwToken: String?, contributorToken: String, requests: List<WindowRequest>, domain: String?): ShareWindowOutcome {
+    fun windowUploads(
+        shareId: String, pwToken: String?, contributorToken: String, requests: List<WindowRequest>, domain: String?, nodeId: String? = null,
+    ): ShareWindowOutcome {
         val gated = when (val g = gate.writeGate(shareId, pwToken, contributorToken, spendUploadBudget = false)) {
             is ShareWriteGate.Admitted -> g
             ShareWriteGate.NotFound -> return ShareWindowOutcome.NotFound
@@ -641,7 +663,12 @@ class SharingHandler(
             ShareWriteGate.RateLimited -> return ShareWindowOutcome.RateLimited
             ShareWriteGate.NotContributable -> return ShareWindowOutcome.NotContributable
         }
-        val writes = writesFor(gated.rootKind) ?: return ShareWindowOutcome.NotContributable
+        val target = when (val t = gate.target(gated, nodeId)) {
+            is ShareWriteTarget.Node -> t
+            ShareWriteTarget.NotFound -> return ShareWindowOutcome.NodeNotFound
+            ShareWriteTarget.NotContributable -> return ShareWindowOutcome.NotContributable
+        }
+        val writes = writesFor(target.kind) ?: return ShareWindowOutcome.NotContributable
         return ShareWindowOutcome.Results(writes.window(gated.scopeId, gated.identityId, requests, domain))
     }
 
@@ -667,14 +694,17 @@ class SharingHandler(
         if (role == ShareEntity.WRITE_ONLY) CapabilityIds.SHARING_UPLOADER_LINKS else CapabilityIds.SHARING_PUBLIC_LINKS
 
     /**
-     * The application that writes under a share root of [rootKind] ([ShareWriteGate.Admitted.rootKind]; a root that
-     * is gone never passes the gate) — called only after the guest gate has passed. Null (read as "not contributable")
-     * for a kind no application registers — a `FOLDER` share with READ_WRITE today: [ShareRoots] lets it be created,
-     * and no application writes under a folder yet — or of a kind **more than one** claims: exactly one per kind is
-     * the contract (`ShareGuestWrites`), and picking the first would rest on CDI bean order. Every case fails closed rather than guessing a writer; `ShareGuestWritesPartitionSliceTest` pins the
-     * partition. The start asks [StorageQuota.admissionFor] by the same kind, so writer and measure cannot disagree.
+     * The application that takes a guest's uploads into a node of [targetKind] — the kind of the upload's target
+     * ([ShareGuestGate.target]: the share root, or a node below it the guest named; ADR 0080 decision 6), never the
+     * root's when another node is named — called only after the guest gate has passed. Null (read as "not
+     * contributable") for a kind no application registers — a `FOLDER`, the root of a folder link included: [ShareRoots]
+     * lets a folder be shared READ_WRITE, and its guests upload into the Memories below it, never into the folder — or of
+     * a kind **more than one** claims: exactly one per kind is the contract (`ShareGuestWrites`), and picking the first
+     * would rest on CDI bean order. Every case fails closed rather than guessing a writer;
+     * `ShareGuestWritesPartitionSliceTest` pins the partition. The start asks [StorageQuota.admissionFor] by the same
+     * kind, so writer and measure cannot disagree.
      */
-    private fun writesFor(rootKind: String): ShareGuestWrites? = guestWrites.filter { it.supports(rootKind) }.singleOrNull()
+    private fun writesFor(targetKind: String): ShareGuestWrites? = guestWrites.filter { it.supports(targetKind) }.singleOrNull()
 
     /** ADR 0076 point 5, as the manage list serves it (inbox #270): a link that takes guests but holds no verifier —
      *  minted before the column — refuses every new guest in [createIdentity] until it is re-issued. The same two

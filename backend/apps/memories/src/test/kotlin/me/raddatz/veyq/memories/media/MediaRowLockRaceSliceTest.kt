@@ -39,7 +39,7 @@ class MediaRowLockRaceSliceTest {
         repeat(RACE_ROUNDS) { round ->
             val g = guestUpload()
             val trashed = whileUncommitted(
-                change = { assertTrue(sharing.deleteOwn(g.scopeId, g.mediaId, g.identityId), "round $round") },
+                change = { assertTrue(sharing.deleteOwn(g.scopeId, g.nodeId, g.mediaId, g.identityId), "round $round") },
                 overlapping = { runCatching { store.trashMedia(g.scopeId, g.mediaId, g.userId) } },
             )
             assertEquals(Result.success(null), trashed, "round $round: the trash of a deleted photo")
@@ -54,7 +54,7 @@ class MediaRowLockRaceSliceTest {
         repeat(RACE_ROUNDS) { round ->
             val g = guestUpload()
             val moved = whileUncommitted(
-                change = { assertTrue(sharing.deleteOwn(g.scopeId, g.mediaId, g.identityId), "round $round") },
+                change = { assertTrue(sharing.deleteOwn(g.scopeId, g.nodeId, g.mediaId, g.identityId), "round $round") },
                 overlapping = { runCatching { store.moveMedia(g.scopeId, g.nodeId, listOf(g.mediaId), null) } },
             )
             assertEquals(Result.success(false), moved, "round $round: the move of a deleted photo")

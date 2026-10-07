@@ -83,7 +83,11 @@ class ShareMediaResource(
                 wrappedExif = item.wrappedExif,
             )
         }
-        return when (val o = handler.complete(shareId, xSharePassword, shareMediaBatchRequest.contributorToken, items)) {
+        return when (
+            val o = handler.complete(
+                shareId, xSharePassword, shareMediaBatchRequest.contributorToken, items, shareMediaBatchRequest.nodeId?.toString(),
+            )
+        ) {
             is ShareMediaCompleteOutcome.Results -> Response.ok(
                 ShareMediaBatchResponse(
                     results = o.items.map { ShareMediaResultItem(blobId = it.blobId?.let(UUID::fromString), mediaId = it.ownerId?.let(UUID::fromString), error = it.error) },

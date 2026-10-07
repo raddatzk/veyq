@@ -311,7 +311,12 @@ class SharingResource(
         val declares = shareBlobUploadsRequest.items.map {
             UploadDeclare(it.chunkCount, it.byteSize, it.wrappedBlobKey, it.blobId.toString(), it.ownerId.toString(), it.role.value)
         }
-        return when (val o = handler.startUploads(shareId, xSharePassword, shareBlobUploadsRequest.contributorToken, declares, signingDomain())) {
+        return when (
+            val o = handler.startUploads(
+                shareId, xSharePassword, shareBlobUploadsRequest.contributorToken, declares, signingDomain(),
+                shareBlobUploadsRequest.nodeId?.toString(),
+            )
+        ) {
             is ShareUploadOutcome.Results -> Response.ok(
                 ShareBlobUploadsResponse(
                     results = o.items.map {
@@ -336,7 +341,12 @@ class SharingResource(
     )
     override fun presignShareBlobUploadWindows(shareId: String, shareBlobUploadWindowsRequest: ShareBlobUploadWindowsRequest, xSharePassword: String?): Response {
         val requests = shareBlobUploadWindowsRequest.items.map { WindowRequest(it.uploadId.toString(), it.fromChunk.validated()) }
-        return when (val o = handler.windowUploads(shareId, xSharePassword, shareBlobUploadWindowsRequest.contributorToken, requests, signingDomain())) {
+        return when (
+            val o = handler.windowUploads(
+                shareId, xSharePassword, shareBlobUploadWindowsRequest.contributorToken, requests, signingDomain(),
+                shareBlobUploadWindowsRequest.nodeId?.toString(),
+            )
+        ) {
             is ShareWindowOutcome.Results -> Response.ok(
                 ShareBlobUploadWindowsResponse(
                     results = o.items.map {

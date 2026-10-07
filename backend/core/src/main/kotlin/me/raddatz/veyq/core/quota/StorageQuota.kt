@@ -19,7 +19,8 @@ import jakarta.persistence.EntityManager
  * Two checks, each independent of the other (ADR 0073 §1, §4): the Server Owner's tenant quota ([tenantFits]) on
  * every start, and the tenant owner's per-link limit ([linkFits]) on a link start. A link's usage has two terms: the
  * sessions its identities hold open — core's tables, summed here — and the blobs they contributed, which only the
- * application that owns the link's root kind can find ([UploadAdmission]).
+ * application that takes uploads into the start's target kind can find ([UploadAdmission]; the target is the share
+ * root or a node below it, ADR 0080 decision 6).
  */
 @ApplicationScoped
 class StorageQuota(
@@ -33,20 +34,20 @@ class StorageQuota(
     fun lockTenant(tenantId: String): TenantEntity? = usage.lockTenant(tenantId)
 
     /**
-     * The one [UploadAdmission] that measures a link rooted at a node of [rootKind], or null — none, or more than
-     * one, which would leave the choice to CDI bean order. Null **refuses** the link start (fail closed, like
+     * The one [UploadAdmission] that measures a link's uploads into a node of [targetKind], or null — none, or more
+     * than one, which would leave the choice to CDI bean order. Null **refuses** the link start (fail closed, like
      * `SharingHandler.writesFor`): a link whose usage nobody can measure is never admitted. Asked by the guest gate
      * before the start and again by [linkUsage] inside the reservation; `UploadAdmissionPartitionSliceTest` pins it.
      */
-    fun admissionFor(rootKind: String): UploadAdmission? = admissions.filter { it.supports(rootKind) }.singleOrNull()
+    fun admissionFor(targetKind: String): UploadAdmission? = admissions.filter { it.supports(targetKind) }.singleOrNull()
 
     /**
      * Whether [items] fit the link [shareId] **together** under [tenant]'s per-link limit: their declared sizes plus
      * what the link already holds. Call under [lockTenant], in the transaction that inserts their sessions. A link
-     * whose usage no single [UploadAdmission] measures fits nothing.
+     * whose uploads into [targetKind] no single [UploadAdmission] measures fits nothing.
      */
-    fun linkFits(tenant: TenantEntity, shareId: String, items: List<UploadDeclare>): Boolean {
-        val held = linkUsage(shareId) ?: return false
+    fun linkFits(tenant: TenantEntity, shareId: String, targetKind: String, items: List<UploadDeclare>): Boolean {
+        val held = linkUsage(shareId, targetKind) ?: return false
         return held + items.sumOf { it.byteSize } <= tenant.shareLinkLimitBytes
     }
 
@@ -61,13 +62,19 @@ class StorageQuota(
     }
 
     /**
-     * What link [shareId] holds (ADR 0073 §4): the blobs its identities contributed, as the root kind's
+     * What link [shareId] holds (ADR 0073 §4): the blobs its identities contributed, as [targetKind]'s
      * [UploadAdmission] measures them, plus every open session one of its identities opened. A blob a member
-     * uploaded into the same root is not the link's, and neither is another link's. Null when no single admission
-     * measures the link's root kind ([admissionFor]) — or the link has no root.
+     * uploaded into the same node is not the link's, and neither is another link's. The measure is per link, never per
+     * node: it counts what the link's identities contributed anywhere in its subtree (Memories: by identity, whatever
+     * Memory or chapter holds the medium). Null when no single admission measures [targetKind] ([admissionFor]).
+     *
+     * Dispatched by the start's target kind, not the root's: a folder link's root kind has no measure (no application
+     * takes uploads into a folder) while its guests upload into Memories below. A link whose guests some day upload
+     * into two applications' kinds is then measured by each application for its own starts only — the open question
+     * the first second application answers (one measure summing every application's blobs of the link).
      */
-    fun linkUsage(shareId: String): Long? {
-        val admission = rootKind(shareId)?.let(::admissionFor) ?: return null
+    fun linkUsage(shareId: String, targetKind: String): Long? {
+        val admission = admissionFor(targetKind) ?: return null
         // Two statements where there was one, so the sessions are read FIRST: a completion committing between the
         // two turns a session into a blob, and read in this order it is counted twice (refused a little early),
         // never zero times (admitted over the limit) — each statement reads what is committed when it runs.
@@ -81,11 +88,6 @@ class StorageQuota(
         )
         return open + admission.linkBlobUsage(shareId)
     }
-
-    /** The kind of link [shareId]'s root node — the key [admissionFor] dispatches on, as the guest gate resolves it. */
-    private fun rootKind(shareId: String): String? =
-        em.createNativeQuery("SELECT n.kind FROM veyq_share s JOIN veyq_node n ON n.id = s.node_id WHERE s.id = :key")
-            .setParameter("key", shareId).resultList.singleOrNull() as String?
 
     private fun sum(sql: String, key: String): Long =
         (em.createNativeQuery(sql.trimIndent()).setParameter("key", key).singleResult as Number).toLong()

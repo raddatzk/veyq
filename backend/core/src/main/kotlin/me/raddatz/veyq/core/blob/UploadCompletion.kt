@@ -73,8 +73,9 @@ class UploadCompletions(
 ) {
     /**
      * Verify + attach each item, scoped only by `scopeId`, resolving each upload only for its [opener] — who is also
-     * whom the result is attributed to. Each item's `nodeId` is honoured (the share path sets it to the shared root
-     * node). [admitted] re-asks the caller's gate first in each attach's transaction.
+     * whom the result is attributed to. Each item's `nodeId` is honoured (the share path sets it to the guest's target
+     * — the shared root or a node below it, `ShareGuestGate.target`). [admitted] re-asks the caller's gate first in
+     * each attach's transaction (the share path's also re-decides that target under the scope lock).
      */
     fun complete(
         scopeId: String, items: List<CompleteItem>, opener: UploadOpener, admitted: () -> Boolean = { true },
