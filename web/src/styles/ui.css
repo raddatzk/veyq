@@ -106,6 +106,21 @@
   background: color-mix(in srgb, var(--app-surface) 72%, transparent);
 }
 
+/* A child of a kind no level section serves (core/node/LevelView.vue's fallback): listed, not openable. */
+.veyq-node-card-unsupported {
+  cursor: default;
+}
+
+.veyq-node-card-text {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.veyq-node-card-text small {
+  color: var(--app-muted);
+}
+
 .veyq-empty {
   display: flex;
   align-items: center;

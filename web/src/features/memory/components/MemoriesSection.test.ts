@@ -1,12 +1,17 @@
 // @vitest-environment happy-dom
+// Memories' section of the folder level view (cr-files-application P4b; the Memories half of the former `MemoryBrowse`,
+// whose cases these are — the overview card and the Folders section moved to core with their cases,
+// `core/node/LevelView.test.ts`). The level as a whole, through core's view and the real registry, is pinned by the
+// golden (`views/MemoryHomeView.golden.test.ts`).
 import { describe, it, expect, beforeEach } from 'vitest'
 
 // SpaceMap wraps Leaflet, which we neither need nor can run here — stub the module out; the component is stubbed too.
 import { vi } from 'vitest'
 vi.mock('leaflet', () => ({ default: {} }))
+vi.mock('../favoritesStore', () => ({ isFavorite: vi.fn(), toggleFavorite: vi.fn() }))
 
 import { mount } from '@vue/test-utils'
-import MemoryBrowse from './MemoryBrowse.vue'
+import MemoriesSection from './MemoriesSection.vue'
 import MemoryCard from './MemoryCard.vue'
 import { FOLDER_KIND, type NodeKind } from '../../../core/node/kind'
 import { MEMORY_KIND } from '../kinds'
@@ -20,6 +25,7 @@ import { activeSpace } from '../../../app/activeSpace'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 import { realI18n, t } from '../../../test/i18n'
+import { toggleFavorite } from '../favoritesStore'
 
 // A stub for the Leaflet map — captures the pins it received and re-emits `open` on demand.
 const SpaceMapStub = {
@@ -70,8 +76,11 @@ const folderOf = (label: string, name: string): TreeNode =>
   ({ ...node(label, FOLDER_KIND, name), id: uid(label), wrappedContentKey: wrapFor(uid(label), scopeKey, keyOf(label)) })
 const pinNames = (map: { props: (k: string) => unknown }) => (map.props('pins') as { node: TreeNode }[]).map((p) => p.node.name)
 
-const mountBrowse = (props: Partial<InstanceType<typeof MemoryBrowse>['$props']> & { folders: TreeNode[]; memories: TreeNode[] }) =>
-  mount(MemoryBrowse, { props, global: { plugins: [realI18n()], directives: { tooltip: {} }, stubs: { SpaceMap: SpaceMapStub } } })
+const mountSection = (props: { folder?: TreeNode | null; nodes: TreeNode[]; epochs?: ReturnType<typeof epochsOf> | null; readonly?: boolean }) =>
+  mount(MemoriesSection, {
+    props: { folder: null, epochs: null, readonly: false, ...props },
+    global: { plugins: [realI18n()], directives: { tooltip: {} }, stubs: { SpaceMap: SpaceMapStub } },
+  })
 
 beforeEach(() => {
   setViewMode('grid')
@@ -79,38 +88,52 @@ beforeEach(() => {
   activeSpace.scopeId = SCOPE_ID // the map binds every node's seals to the active scope
 })
 
-describe('MemoryBrowse', () => {
-  it('renders the level (decrypted folder + Memory names) and emits drill/open on click', async () => {
-    const folders = [node('f1', FOLDER_KIND, 'Trips')]
-    const memories = [node('m1', MEMORY_KIND, 'Solo')]
-    const wrapper = mountBrowse({ folders, memories })
-
+describe('MemoriesSection', () => {
+  it('renders its Memories (decrypted names) and emits openNode on a card click', async () => {
+    const wrapper = mountSection({ nodes: [node('m1', MEMORY_KIND, 'Solo')] })
     expect(wrapper.text()).toContain('Solo')
-    expect(wrapper.text()).toContain('Trips')
-
     await wrapper.findAll('button').find((b) => b.text().includes('Solo'))!.trigger('click')
-    expect(wrapper.emitted('openMemory')?.[0]?.[0]).toMatchObject({ id: 'm1' })
-
-    await wrapper.findAll('button').find((b) => b.text().includes('Trips'))!.trigger('click')
-    expect(wrapper.emitted('openFolder')?.[0]?.[0]).toMatchObject({ id: 'f1' })
+    expect(wrapper.emitted('openNode')?.[0]?.[0]).toMatchObject({ id: 'm1' })
   })
 
-  it('shows the empty states when a level has no folders/Memories', () => {
-    const wrapper = mountBrowse({ folders: [], memories: [] })
+  it('shows its empty state beside the create card when the level has no Memory', () => {
+    const wrapper = mountSection({ nodes: [] })
     expect(wrapper.text()).toContain(t('memory.memoryEmpty'))
-    expect(wrapper.text()).toContain(t('memory.folderEmpty'))
+    expect(wrapper.text()).toContain(t('memory.create'))
   })
 
-  it('in map mode replaces the card grids with the subtree map and pins located nodes', () => {
+  it('emits the create mode its dialog understands, and openTrash from its toolbar', async () => {
+    const wrapper = mountSection({ nodes: [] })
+    await wrapper.find('.memory-create-card-memory').trigger('click')
+    expect(wrapper.emitted('create')).toEqual([['create-memory']])
+    await wrapper.findAll('button').find((b) => b.text().includes(t('memory.spaceTrash.open')))!.trigger('click')
+    expect(wrapper.emitted('openTrash')).toHaveLength(1)
+  })
+
+  it('read-only (a scope pending deletion): no create card and no trash, the cards stay', () => {
+    const wrapper = mountSection({ nodes: [node('m1', MEMORY_KIND, 'Solo')], readonly: true })
+    expect(wrapper.find('.memory-create-card').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain(t('memory.spaceTrash.open'))
+    expect(wrapper.text()).toContain('Solo')
+  })
+
+  it('toggles the favourite of a card in the active scope (the section owns the heart)', async () => {
+    const wrapper = mountSection({ nodes: [node('m1', MEMORY_KIND, 'Solo')] })
+    wrapper.findComponent(MemoryCard).vm.$emit('toggleFavorite', node('m1', MEMORY_KIND, 'Solo'))
+    await wrapper.vm.$nextTick()
+    expect(vi.mocked(toggleFavorite)).toHaveBeenCalledWith('m1', SCOPE_ID)
+  })
+
+  it('in map mode replaces the card grid with the subtree map and pins located nodes', () => {
     // folder fA holds a located memory; a second located memory sits at root — at root both are in scope.
     const memInA = locatedMemory('memInA', 'fA', located(1, 1))
     const memRoot = locatedMemory('memRoot', null, located(2, 2))
     treeStore.nodes = [folderOf('fA', 'A'), memInA, memRoot]
     setViewMode('map')
 
-    const wrapper = mountBrowse({ folder: null, folders: [], memories: [memRoot], epochs: epochsOf(scopeKey) })
+    const wrapper = mountSection({ folder: null, nodes: [memRoot], epochs: epochsOf(scopeKey) })
 
-    // the card grids are gone, the map is shown
+    // the card grid is gone, the map is shown
     expect(wrapper.find('.memory-card-grid').exists()).toBe(false)
     const map = wrapper.findComponent(SpaceMapStub)
     expect(map.exists()).toBe(true)
@@ -132,7 +155,7 @@ describe('MemoryBrowse', () => {
     const fD = folderOf('fD', 'D')
     treeStore.nodes = [fD, older, newer]
 
-    const wrapper = mountBrowse({ folder: fD, folders: [], memories: [older, newer], epochs: epochsOf(scopeKey) })
+    const wrapper = mountSection({ folder: fD, nodes: [older, newer], epochs: epochsOf(scopeKey) })
     const cards = wrapper.findAllComponents(MemoryCard)
     expect(cards.map((c) => (c.props('memory') as TreeNode).name)).toEqual(['newer', 'older']) // newest first
     expect(cards.map((c) => (c.props('date') as { from?: string } | null)?.from)).toEqual(['2024-01-01', '2020-01-01'])
@@ -145,66 +168,27 @@ describe('MemoryBrowse', () => {
     treeStore.nodes = [fA, folderOf('fB', 'B'), memInA, memInB]
     setViewMode('map')
 
-    const wrapper = mountBrowse({ folder: fA, folders: [], memories: [], epochs: epochsOf(scopeKey) })
+    const wrapper = mountSection({ folder: fA, nodes: [], epochs: epochsOf(scopeKey) })
     const map = wrapper.findComponent(SpaceMapStub)
     expect(pinNames(map)).toEqual(['memInA'])
   })
 
-  it('a pin open resolves to its TreeNode and emits openMemory', async () => {
+  it('a pin open resolves to its TreeNode and emits openNode', async () => {
     const memRoot = locatedMemory('memRoot', null, located(2, 2))
     treeStore.nodes = [memRoot]
     setViewMode('map')
 
-    const wrapper = mountBrowse({ folder: null, folders: [], memories: [memRoot], epochs: epochsOf(scopeKey) })
+    const wrapper = mountSection({ folder: null, nodes: [memRoot], epochs: epochsOf(scopeKey) })
     wrapper.findComponent(SpaceMapStub).vm.$emit('open', uid('memRoot'))
     await wrapper.vm.$nextTick()
 
-    expect(wrapper.emitted('openMemory')?.[0]?.[0]).toMatchObject({ id: uid('memRoot') })
+    expect(wrapper.emitted('openNode')?.[0]?.[0]).toMatchObject({ id: uid('memRoot') })
   })
 
-  it('grid mode still renders the card grids (map absent)', () => {
+  it('grid mode still renders the card grid (map absent)', () => {
     setViewMode('grid')
-    const wrapper = mountBrowse({ folders: [], memories: [node('m1', MEMORY_KIND, 'Solo')] })
+    const wrapper = mountSection({ nodes: [node('m1', MEMORY_KIND, 'Solo')] })
     expect(wrapper.find('.memory-card-grid').exists()).toBe(true)
     expect(wrapper.findComponent(SpaceMapStub).exists()).toBe(false)
-  })
-})
-
-// cr-node-key-hierarchy 5b.3: the folder overview card carries the share button the host allows (FOLDER's descriptor
-// AND the capability — `MemoryHomeView.test.ts` pins that half), with a Memory's icon and label.
-describe('MemoryBrowse — sharing the folder', () => {
-  const shareButton = (w: ReturnType<typeof mountBrowse>) => w.find(`button[aria-label="${t('share.share')}"]`)
-
-  it('shows the share button on a shareable folder and emits share', async () => {
-    const w = mountBrowse({ folder: node('f', FOLDER_KIND, 'Trips'), folders: [], memories: [], shareable: true })
-    expect(shareButton(w).exists()).toBe(true)
-    expect(shareButton(w).find('.pi-share-alt').exists()).toBe(true)
-    await shareButton(w).trigger('click')
-    expect(w.emitted('share')).toHaveLength(1)
-  })
-
-  it('shows none when the host says the folder is not shareable', () => {
-    const w = mountBrowse({ folder: node('f', FOLDER_KIND, 'Trips'), folders: [], memories: [], shareable: false })
-    expect(shareButton(w).exists()).toBe(false)
-    expect(w.find(`button[aria-label="${t('memory.rename')}"]`).exists(), 'control: the card actions render').toBe(true)
-  })
-
-  // Found in the browser, 2026-10-07: the three carried `memory-action-collapsible` / `memory-action-inline`, which
-  // memory.css hid at 721–1120 px and ≤ 720 px — and this card has no overflow menu to offer them instead. jsdom has no
-  // layout, so the contract pinned is the DOM one: no width-hiding class on any of them.
-  it('keeps share, rename and delete free of any width-hiding class (the card has no overflow menu)', () => {
-    const w = mountBrowse({ folder: node('f', FOLDER_KIND, 'Trips'), folders: [], memories: [], shareable: true })
-    const actions = w.findAll('.memory-folder-overview-actions button')
-    expect(actions.map((b) => b.attributes('aria-label'))).toEqual([t('share.share'), t('memory.rename'), t('memory.delete')])
-    for (const b of actions) {
-      expect(b.classes()).not.toContain('memory-action-collapsible')
-      expect(b.classes()).not.toContain('memory-action-inline')
-    }
-  })
-
-  it('keeps the share (a read of the links) but no rename/delete during a pending deletion', () => {
-    const w = mountBrowse({ folder: node('f', FOLDER_KIND, 'Trips'), folders: [], memories: [], shareable: true, readonly: true })
-    expect(shareButton(w).exists()).toBe(true)
-    expect(w.find(`button[aria-label="${t('memory.rename')}"]`).exists()).toBe(false)
   })
 })

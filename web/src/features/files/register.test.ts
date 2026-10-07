@@ -32,10 +32,11 @@ describe('registerFiles', () => {
     expect(registry.slugFor(FOLDER_KIND, 'Foto.JPG')).not.toBe(fileNameSlug('Foto.JPG'))
   })
 
-  it('claims no slot, no share body and no lifecycle', () => {
+  it('claims no slot, no level section, no share body and no lifecycle', () => {
     const registry = createRegistry()
     registerFiles(registry)
-    for (const slot of ['levelView', 'nodeMutationDialog', 'shareDialog'] as const) expect(registry.slot(slot)).toBeNull()
+    for (const slot of ['nodeMutationDialog', 'shareDialog'] as const) expect(registry.slot(slot)).toBeNull()
+    expect(registry.sections()).toEqual([]) // a FILE child shows in core's fallback section until F1
     for (const slot of ['topbarTray', 'sidebarPins'] as const) expect(registry.slotItems(slot)).toEqual([])
     expect(registry.shareBody(FILE_KIND)).toBeNull()
   })

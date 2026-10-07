@@ -53,25 +53,26 @@ import { createRegistry, type Registry } from '../core/applications/registry'
 import { treeStore } from '../core/node/treeStore'
 import { listMyTenants } from '../features/spaces/scopes'
 import type { TreeNode } from '../core/node/tree'
+import { FOLDER_KIND } from '../core/node/kind'
 import { MEMORY_KIND, CHAPTER_KIND } from '../features/memory/kinds'
 import { capabilityState } from '../shared/state/capabilities'
 import { SHARING_PUBLIC_LINKS } from '../features/platform/capabilities'
 import { realI18n, t } from '../test/i18n'
 
 const Detail = defineComponent({ props: ['node', 'shareable'], setup: (p) => () => h('div', { class: 'detail' }, `${p.node.name}|${p.shareable}`) })
-const Level = defineComponent({ props: ['level'], setup: (p) => () => h('div', { class: 'level' }, `memories=${(p.level.byKind.get(MEMORY_KIND) ?? []).length}`) })
+const Section = defineComponent({ props: ['nodes'], setup: (p) => () => h('section', { class: 'level' }, `memories=${p.nodes.length}`) })
 
 function node(over: Partial<TreeNode> & Pick<TreeNode, 'id' | 'kind'>): TreeNode {
   return { parentId: null, orderIndex: 0, epoch: 0, name: over.id, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0, ...over }
 }
 
 /** The registry a well-formed application would leave: both kinds with a detail and shareable (as Memories registers
- *  them), the level view claimed. */
+ *  them), both naming one level section. */
 function fullRegistry(): Registry {
   const r = createRegistry()
-  r.registerKind({ kind: MEMORY_KIND, detail: Detail, icon: 'pi pi-images', shareable: true })
-  r.registerKind({ kind: CHAPTER_KIND, detail: Detail, icon: 'pi pi-images', shareable: true })
-  r.claimSlot('levelView', Level)
+  const section = { order: 10, component: Section }
+  r.registerKind({ kind: MEMORY_KIND, detail: Detail, icon: 'pi pi-images', shareable: true, section })
+  r.registerKind({ kind: CHAPTER_KIND, detail: Detail, icon: 'pi pi-images', shareable: true, section })
   return r
 }
 
@@ -79,7 +80,7 @@ async function mountAt(hash: string) {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'home', component: { template: '<div />' } }] })
   await router.replace({ name: 'home', hash })
   await router.isReady()
-  const wrapper = mount(MemoryHomeView, { global: { plugins: [router, realI18n()] } })
+  const wrapper = mount(MemoryHomeView, { global: { plugins: [router, realI18n()], directives: { tooltip: {} } } })
   await flushPromises()
   return wrapper
 }
@@ -95,7 +96,7 @@ beforeEach(() => {
 })
 
 describe('MemoryHomeView fail-closed rules', () => {
-  it('control: with everything registered, a chapter opens its detail and the root shows the level view', async () => {
+  it('control: with everything registered, a chapter opens its detail and the root shows the application section', async () => {
     expect((await mountAt('#~me/mem/chap')).find('.detail').text()).toBe('Chap|true')
     expect((await mountAt('#~me')).find('.level').text()).toBe('memories=1')
   })
@@ -104,7 +105,6 @@ describe('MemoryHomeView fail-closed rules', () => {
     const r = createRegistry()
     r.registerKind({ kind: MEMORY_KIND, detail: Detail, icon: 'x', shareable: true })
     r.registerKind({ kind: CHAPTER_KIND, icon: 'x', shareable: false }) // no detail
-    r.claimSlot('levelView', Level)
     holder.reg = r
     const w = await mountAt('#~me/mem/chap')
     expect(w.text()).toContain(t('home.unsupportedKind'))
@@ -114,23 +114,39 @@ describe('MemoryHomeView fail-closed rules', () => {
 
   it('a kind nobody registered shows the unsupported state too', async () => {
     const r = createRegistry()
-    r.claimSlot('levelView', Level)
     holder.reg = r
     const w = await mountAt('#~me/mem')
     expect(w.text()).toContain(t('home.unsupportedKind'))
   })
 
-  it('an unclaimed levelView never leaves a blank scope root: the unsupported state shows', async () => {
+  // Since P4b the level view is core's: with no section registered, folders are still walkable, and the children of
+  // a kind nobody sections (registered or not) show in core's fallback section, never as a blank level.
+  it('no section registered: folders are still walkable, children of unsectioned kinds show the fallback', async () => {
     const r = createRegistry()
-    r.registerKind({ kind: MEMORY_KIND, detail: Detail, icon: 'x', shareable: true })
+    r.registerKind({ kind: MEMORY_KIND, detail: Detail, icon: 'pi pi-images', shareable: true }) // no section
     holder.reg = r
-    expect((await mountAt('#~me')).text()).toContain(t('home.unsupportedKind'))
+    treeStore.nodes = [
+      node({ id: 'trips', kind: FOLDER_KIND, name: 'Trips' }),
+      node({ id: 'mem', kind: MEMORY_KIND, name: 'Mem', parentId: 'trips' }),
+      node({ id: 'odd', kind: 'UNKNOWN_KIND', name: 'Odd', parentId: 'trips' }),
+    ]
+    const root = await mountAt('#~me')
+    expect(root.find('.level').exists()).toBe(false)
+    const folder = root.findAll('button.memory-folder-card').find((b) => b.text() === 'Trips')
+    expect(folder, 'the folder card renders without any application section').toBeDefined()
+    await folder!.trigger('click')
+    await flushPromises()
+
+    const fallbacks = root.findAll('.veyq-level-fallback')
+    expect(fallbacks.map((f) => f.find('h2').text())).toEqual([MEMORY_KIND, 'UNKNOWN_KIND'])
+    expect(fallbacks.map((f) => f.find('strong').text())).toEqual(['Mem', 'Odd'])
+    for (const f of fallbacks) expect(f.text()).toContain(t('home.unsupportedKind'))
+    expect(fallbacks[0].find('.pi-images').exists(), 'a registered kind keeps its icon').toBe(true)
   })
 
   it('shareable comes from the descriptor AND the capability: a descriptor that says no wins over the capability', async () => {
     const r = createRegistry()
     r.registerKind({ kind: MEMORY_KIND, detail: Detail, icon: 'x', shareable: false })
-    r.claimSlot('levelView', Level)
     holder.reg = r
     expect((await mountAt('#~me/mem')).find('.detail').text()).toBe('Mem|false')
     holder.reg = fullRegistry()

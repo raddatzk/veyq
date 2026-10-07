@@ -3,9 +3,10 @@
 // lives in the URL **#fragment** (`#~me/reisen-2026/rom`), resolved against the locally-decrypted tree — the
 // operator-blind server computes no navigation and never sees the path. Renders a folder/root level (browse)
 // or an opened node (detail) by the resolved node's kind, and owns the create / rename / delete dialogs. It names
-// no application kind (ADR 0079): the detail component comes from the registry's kind descriptor, the folder level
-// and the create/rename + share dialogs from the registry's slots — the application that registered them fills them.
-// A FOLDER is core's own kind, so its share dialog is core's too (`core/sharing/FolderShareDialog.vue`).
+// no application kind (ADR 0079): the detail component comes from the registry's kind descriptor, the create/rename +
+// share dialogs from the registry's slots — the application that registered them fills them. The folder level is
+// core's (`core/node/LevelView.vue`), which asks the registry for each application's section. A FOLDER is core's own
+// kind, so its share dialog is core's too (`core/sharing/FolderShareDialog.vue`).
 import { computed, ref, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -26,6 +27,7 @@ import Message from 'primevue/message'
 import DeleteNodeDialog from '../core/node/components/DeleteNodeDialog.vue'
 import SpaceTrashDialog from '../core/node/components/SpaceTrashDialog.vue'
 import FolderShareDialog from '../core/sharing/FolderShareDialog.vue'
+import LevelView from '../core/node/LevelView.vue'
 import { registry } from '../core/applications/registry'
 import TrustResetLink from '../features/account/trustReset/TrustResetLink.vue'
 
@@ -48,7 +50,7 @@ const segments = computed(() => parseHash(route.hash).segments)
 const resolved = computed(() => resolveSlugPath(treeStore.nodes, segments.value))
 const currentNodeId = computed(() => (typeof resolved.value === 'string' ? resolved.value : null))
 const currentNode = computed(() => nodeById(treeStore.nodes, currentNodeId.value))
-// Folders and the scope root browse (the `levelView` slot); any other node OPENS, to the detail component its kind
+// Folders and the scope root browse (core's `LevelView`); any other node OPENS, to the detail component its kind
 // registered. A kind with no registered detail is not guessed at: the host shows an explicit unsupported state.
 const isOpenable = computed(() => !!currentNode.value && currentNode.value.kind !== FOLDER_KIND)
 const kindDetail = computed(() => {
@@ -56,7 +58,6 @@ const kindDetail = computed(() => {
   const info = registry.kind(currentNode.value.kind)
   return info.supported ? (info.detail ?? null) : null
 })
-const levelView = registry.slot('levelView')
 const mutationDialog = registry.slot('nodeMutationDialog')
 const shareDialog = registry.slot('shareDialog')
 const currentFolder = computed(() =>
@@ -219,9 +220,8 @@ async function onDeleteDone() {
         @share="shareVisible = true"
         @share-upload="uploaderVisible = true"
       />
-      <p v-else-if="isOpenable || !levelView" class="home-state-unsupported">{{ t('home.unsupportedKind') }}</p>
-      <component
-        :is="levelView"
+      <p v-else-if="isOpenable" class="home-state-unsupported">{{ t('home.unsupportedKind') }}</p>
+      <LevelView
         v-else
         :folder="currentFolder"
         :level="level"

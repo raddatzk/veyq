@@ -3,8 +3,9 @@
 // (cr-files-application P4-0). The re-cut moves the overview card, the sections and the create cards from Memories into
 // a core level view, and promises that nobody using Memories sees a difference; every e2e suite is API-level, so this
 // file is the proof of that promise. It mounts the REAL host (`MemoryHomeView`), the REAL registry as `main.ts` fills
-// it (`src/test/setup.ts` runs `registerApplications()` into this file's fresh registry), the REAL `MemoryLevelHost`,
-// `MemoryBrowse`, `MemoryCard`, `ViewModeToggle` and PrimeVue buttons, real crypto (every date and pin below is sealed
+// it (`src/test/setup.ts` runs `registerApplications()` into this file's fresh registry), core's REAL `LevelView` (since
+// P4b: the overview card and the Folders section), Memories' REAL `MemoriesSection`, `MemoryCard`, `ViewModeToggle` and
+// PrimeVue buttons, real crypto (every date and pin below is sealed
 // and unsealed for real), and the real i18n catalog. Stubbed: the scope/tree/favourites state (no network), the Leaflet
 // map (no canvas in happy-dom) and the tooltip directive.
 //
@@ -51,14 +52,14 @@ vi.mock('../core/node/treeStore', async () => {
 })
 
 import MemoryHomeView from './MemoryHomeView.vue'
-import MemoryLevelHost from '../features/memory/components/MemoryLevelHost.vue'
+import MemoriesSection from '../features/memory/components/MemoriesSection.vue'
 import { registry } from '../core/applications/registry'
 import { activeSpace } from '../app/activeSpace'
 import { treeStore } from '../core/node/treeStore'
 import { listMyTenants } from '../features/spaces/scopes'
 import { isFavorite } from '../features/memory/favoritesStore'
 import { FOLDER_KIND, type NodeKind } from '../core/node/kind'
-import { MEMORY_KIND } from '../features/memory/kinds'
+import { MEMORY_KIND, CHAPTER_KIND } from '../features/memory/kinds'
 import { sealNodeMeta, type RawNodeMeta } from '../features/memory/nodeMeta'
 import type { TreeNode } from '../core/node/tree'
 import { setViewMode, type ViewMode } from '../shared/state/useViewMode'
@@ -75,7 +76,7 @@ const SpaceMapStub = {
   template: `<div class="space-map-stub">{{ pins.map((p) => p.node.name).sort().join(', ') }}</div>`,
 }
 
-// The fixtures of `MemoryBrowse.test.ts`, mirrored (a test file cannot import another's): canonical UUID ids, each
+// The fixtures of `MemoriesSection.test.ts` (the former `MemoryBrowse.test.ts`), mirrored (a test file cannot import another's): canonical UUID ids, each
 // node's content key wrapped under its parent's key (the scope key at the root, the folder's inside one, ADR 0080) and
 // its meta sealed under its own key, both bound to the node (ADR 0072).
 const uuidOf = new Map<string, string>()
@@ -156,10 +157,10 @@ function pendingDeletion() {
 }
 
 describe('the Memories level view (golden)', () => {
-  // The control every snapshot rests on: the level slot is the real Memories adapter, as `main.ts` registers it — a
-  // golden of a stub would pin nothing about what a user sees.
-  it('control: the level view is the real Memories registration', () => {
-    expect(registry.slot('levelView')).toBe(MemoryLevelHost)
+  // The control every snapshot rests on: the level's one application section is the real Memories one, as `main.ts`
+  // registers it (MEMORY and CHAPTER naming it) — a golden of a stub would pin nothing about what a user sees.
+  it('control: the level view renders the real Memories section registration', () => {
+    expect(registry.sections()).toEqual([{ component: MemoriesSection, order: 10, kinds: [MEMORY_KIND, CHAPTER_KIND] }])
   })
 
   it('space root, grid: Memories section with dated cards and the create card, folders with the new-folder card', async () => {

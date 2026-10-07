@@ -12,11 +12,22 @@
 // convenience: registering a kind twice, claiming a slot twice, or adding a list-slot item under a taken id THROWS —
 // it never overwrites and never merges. Nothing here is exported as mutable state; `registry` exposes only the two register doors and read-only lookups.
 //
-// **Single-claim slots.** A slot that IS one region (the level view, the create/rename dialog, the share dialog) is
-// held by at most ONE application today, because exactly one application exists. A second claim throws, which turns
-// "two applications both think they own the folder level" into a boot-time failure instead of a silently shadowed
-// component. The next application's change request re-cuts these per kind (per-kind composition); freezing that
-// abstraction from one usage is what `docs/ai/README.md` § Refinement checklist ("Spike when the shape is unclear") rules out.
+// **Single-claim slots.** A slot that IS one region (the create/rename dialog, the share dialog) is held by at most ONE
+// application today, because exactly one application exists. A second claim throws, which turns "two applications both
+// think they own the dialog" into a boot-time failure instead of a silently shadowed component. The next application's
+// change request re-cuts these per kind (cr-files-application P4c); freezing that abstraction from one usage is what
+// `docs/ai/README.md` § Refinement checklist ("Spike when the shape is unclear") rules out.
+//
+// **Level sections (`KindDescriptor.section`).** The folder level view is core's (`core/node/LevelView.vue`, cr-files-
+// application P4b): the folder's overview card, then one SECTION per application, then the sub-folders. A kind brings
+// its section with its descriptor — a component that renders its own `<section>` (heading, create action, view modes)
+// from `LevelSectionProps`. Several kinds may name the SAME component (Memories: MEMORY and CHAPTER): a section is keyed
+// by its component's identity, rendered once, and handed the children of every kind that names it (in the order the
+// kinds were registered). `sections()` lists them sorted by `order`, a tie in the order the section was first named.
+// Two kinds naming one component with two different `order`s is a contradiction, so that `registerKind` throws (and
+// registers nothing). A child whose kind no section serves — registered without one, or not registered at all — is
+// not dropped: the level view renders core's fallback section for it (its icon, its name, the explicit unsupported
+// state), never an empty area.
 //
 // **List slots (`addSlotItem`).** The top-bar tray and the sidebar pins are places where several applications each add
 // their own entry, so they are ordered lists: an item is registered under an id (namespaced by its application, e.g.
@@ -72,6 +83,24 @@ export interface KindDescriptor {
    *  never a URL segment may fold more strictly (a file: `fileNameSlug`). **Frozen into stored tokens**: the function
    *  a kind registers must never change once a node of the kind is stored, and must be pinned by vectors. */
   slug?: (name: string) => string
+  /** The section the folder level view renders for this kind's children (see the header): `component` takes
+   *  `LevelSectionProps` and emits `LevelSectionEmits`; `order` sorts the sections (ascending). Omitted: a child of the
+   *  kind shows in core's fallback section. Kinds naming the same component share ONE section. */
+  section?: KindSection
+}
+
+/** A kind's level section: the component and where it sorts among the sections. */
+export interface KindSection {
+  order: number
+  component: Component
+}
+
+/** A level section as the level view renders it: the component, its order, and every kind that named it (in
+ *  registration order) — the section receives the children of all of them. */
+export interface LevelSection {
+  component: Component
+  order: number
+  kinds: readonly NodeKind[]
 }
 
 export type KindLookup = ({ supported: true } & KindDescriptor) | { supported: false; kind: NodeKind }
@@ -100,25 +129,22 @@ export interface NodeDetailEmits {
   shareUpload: []
 }
 
-/** The generic context the host hands the `levelView` slot: a folder (or the scope root, `folder` null) and its
- *  children. Events: `openNode`, `create` (a create mode the `nodeMutationDialog` slot understands),
- *  `renameFolder`, `deleteFolder`, `openTrash`, `share` (the host opens core's folder share dialog). */
-export interface LevelViewProps {
+/** What the folder level view (`core/node/LevelView.vue`) hands an application's section: the folder (or the scope
+ *  root, `folder` null) and the children of every kind that names the section, the scope's epoch keys, and whether
+ *  the scope is read-only (pending deletion: no create action). */
+export interface LevelSectionProps {
   folder: TreeNode | null
-  level: Level
+  nodes: readonly TreeNode[]
   epochs: EpochKeys | null
   readonly: boolean
-  /** Whether a public share may be offered for `folder`: FOLDER's descriptor AND the instance capability. Always false
-   *  at the scope root (there is no node to share). */
-  shareable: boolean
 }
-export interface LevelViewEmits {
+/** Events a section emits to the level view: `openNode` (a child), `create` (a create mode the `nodeMutationDialog`
+ *  slot understands, e.g. Memories' `create-memory`), `openTrash` (the scope's node trash; the toolbar that offers it
+ *  sits in Memories' section until a second application needs it). */
+export interface LevelSectionEmits {
   openNode: [node: TreeNode]
   create: [mode: string]
-  renameFolder: []
-  deleteFolder: []
   openTrash: []
-  share: []
 }
 
 /** The shell's `sidebarPins` list slot: each component an application adds to it is mounted in the left rail
@@ -154,7 +180,7 @@ export interface ShareBodyEmits {
 }
 
 /** The single-claim slots. Each is claimed by at most one application (see the header). */
-export type SlotName = 'levelView' | 'nodeMutationDialog' | 'shareDialog'
+export type SlotName = 'nodeMutationDialog' | 'shareDialog'
 
 /** The list slots: several applications may each add items (see the header). A `topbarTray` item takes no props (the
  *  shell's top bar mounts it beside the invitations badge); a `sidebarPins` item takes `SidebarPinsProps`. */
@@ -198,7 +224,8 @@ export interface Registry {
   /** Throws unless at least one registered application carries `onMasterKeyRotated`: `rotateKeys` refuses to start
    *  without it (fail closed — see the header). */
   assertRotationHooks(): void
-  /** Register a node kind. Throws if the kind is already registered (the platform's own FOLDER included). */
+  /** Register a node kind. Throws if the kind is already registered (the platform's own FOLDER included), or if its
+   *  `section` names a component another kind already named with a different `order`. */
   registerKind(descriptor: KindDescriptor): void
   /** Claim a single-claim slot. Throws if the slot is already claimed, or if `name` is a list slot. */
   claimSlot(name: SlotName, component: Component): void
@@ -215,6 +242,10 @@ export interface Registry {
   slot(name: SlotName): Component | null
   /** The items of a list slot, sorted by `order` (stable); empty when nobody added one (the shell renders nothing). */
   slotItems(slot: ListSlotName): readonly SlotItem[]
+  /** The level sections, one per distinct section component, sorted by `order` (stable: a tie keeps the order in which
+   *  each section was first named); empty when no kind registered one (the level view still renders the overview, the
+   *  fallback and the folders). */
+  sections(): readonly LevelSection[]
 }
 
 const LIST_SLOTS: readonly string[] = ['topbarTray', 'sidebarPins'] satisfies readonly ListSlotName[]
@@ -229,6 +260,8 @@ export function createRegistry(): Registry {
   const slots = new Map<SlotName, Component>()
   const lists = new Map<ListSlotName, { id: string; component: Component; order: number }[]>()
   const lifecycles = new Map<string, LifecycleHooks>()
+  // One entry per distinct section component, in the order each was first named (the stable sort's tie-break).
+  const sections: { component: Component; order: number; kinds: NodeKind[] }[] = []
   // The platform's own share body: a link rooted at a FOLDER browses the subtree (cr-node-key-hierarchy 5b.4b). Pre-claimed
   // like FOLDER's kind above, so an application claiming FOLDER throws.
   const shareBodies = new Map<NodeKind, Component>([[FOLDER_KIND, FolderShareBody]])
@@ -270,7 +303,17 @@ export function createRegistry(): Registry {
     },
     registerKind(descriptor) {
       if (kinds.has(descriptor.kind)) throw new Error(`node kind ${descriptor.kind} is already registered`)
+      const section = descriptor.section
+      const shared = section ? sections.find((s) => s.component === section.component) : undefined
+      if (section && shared && shared.order !== section.order) {
+        throw new Error(
+          `node kind ${descriptor.kind} names the section of ${shared.kinds.join(', ')} with order ${section.order}, not ${shared.order}`,
+        )
+      }
       kinds.set(descriptor.kind, { ...descriptor })
+      if (!section) return
+      if (shared) shared.kinds.push(descriptor.kind)
+      else sections.push({ component: section.component, order: section.order, kinds: [descriptor.kind] })
     },
     claimSlot(name, component) {
       if (LIST_SLOTS.includes(name)) throw new Error(`slot ${name} is a list slot: add to it with addSlotItem`)
@@ -298,6 +341,11 @@ export function createRegistry(): Registry {
     },
     slot(name) {
       return slots.get(name) ?? null
+    },
+    sections() {
+      return [...sections]
+        .sort((a, b) => a.order - b.order) // stable (ES2019): a tie keeps the order each section was first named
+        .map((s) => ({ component: s.component, order: s.order, kinds: [...s.kinds] }))
     },
   }
 }

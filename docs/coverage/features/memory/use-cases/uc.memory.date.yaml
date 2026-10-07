@@ -38,7 +38,7 @@ acceptanceCriteria:
         unit:
           - src/features/memory/components/MemoryCard.test.ts
           - src/features/memory/memoryDate.test.ts
-          - src/features/memory/components/MemoryBrowse.test.ts
+          - src/features/memory/components/MemoriesSection.test.ts
           - src/features/memory/components/MemoryDetail.test.ts
   - id: operator-blind-date
     text: The server sees only the opaque `wrappedMeta` ciphertext + the unchanged node shape — never a day. A malformed or wrong-key blob is treated best-effort as no manual date (falls back to auto, E3), never a broken header/card.
