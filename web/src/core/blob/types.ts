@@ -1,11 +1,10 @@
 // The platform's blob model (ADR 0079; cr-files-application B1): what a sealed, chunked blob IS to the transport —
 // its id, its shape, its K_blob wrap and the (owner, role) slot that wrap is bound to (ADR 0072). Nothing here knows
 // what an owner is (a media, a node, a file): an application builds the ref from the row it addressed and hands it in.
-import type { BlobRole as WireBlobRole } from '../../api/generated/blob'
 
-/** The role a blob plays for its owner — the `K_blob` wrap is sealed bound to it (ADR 0072). Typed from core's own
- *  blob client, so a declare type-checks against the wire item. */
-export type BlobRole = WireBlobRole
+/** The role a blob plays for its owner — the `K_blob` wrap is sealed bound to it (ADR 0072). An open token the owning
+ *  application defines (the contract's and the crypto suite's `BlobRole`, cr-files-application P3), so core names none. */
+export type BlobRole = string
 
 /**
  * Everything needed to open one blob: its id + the metadata + the K_blob wrap (under the owner's key) + where that

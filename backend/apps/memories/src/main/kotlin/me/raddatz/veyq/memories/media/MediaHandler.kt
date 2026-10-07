@@ -291,7 +291,7 @@ class MediaHandler(
         if (!MediaUploadCompletion.attachesMedia(node.kind)) return CoverCommitOutcome.IllegalTarget
         val session = blobs.findSession(scopeId, uploadId, UploadOpener.Member(userId)) ?: return CoverCommitOutcome.NoTarget
         // The cover's K_blob wrap is sealed bound to (this node, COVER) (ADR 0072).
-        if (!session.boundTo(node.id, "COVER")) return CoverCommitOutcome.UploadMismatch
+        if (!session.boundTo(node.id, MemoryBlobRoles.COVER)) return CoverCommitOutcome.UploadMismatch
         val manifest = when (val v = uploads.verifyBlob(session)) {
             is BlobVerify.Ok -> v.manifest
             BlobVerify.Budget -> {

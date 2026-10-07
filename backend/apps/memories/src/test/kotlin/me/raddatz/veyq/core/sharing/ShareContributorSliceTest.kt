@@ -14,6 +14,7 @@ import io.restassured.http.ContentType
 import org.hamcrest.CoreMatchers.endsWith
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.hasItem
+import org.hamcrest.CoreMatchers.not
 import org.hamcrest.CoreMatchers.notNullValue
 import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.Test
@@ -148,6 +149,33 @@ class ShareContributorSliceTest {
         start(257).then().statusCode(400)
             .body("title", equalTo("Constraint Violation"))
             .body("violations.field", hasItem(endsWith(".items")))
+    }
+
+    // The contract's role is an open token (cr-files-application P3-S2); the closed enum that once kept a guest's COVER
+    // out of the wire is now Memories' `admitsGuestRole` behind core's guest start, refused whole as the enum did.
+    @Test
+    fun guestUploadInARoleMemoriesTakesFromNoGuestIs400() {
+        val (userId, scopeId) = seedMemberScope()
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val shareId = createShare(userId, memory, role = "READ_WRITE")
+        val contributorToken = given().contentType(ContentType.JSON)
+            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName"}""")
+            .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
+            .then().statusCode(201).extract().path<String>("contributorToken")
+        fun start(vararg roles: String) = given().contentType(ContentType.JSON)
+            .body("""{"contributorToken":"$contributorToken","items":${roles.joinToString(",", "[", "]") { TestBlob.SMALL.declare("Ymxvyi13cmFw", role = it) }}}""")
+            .`when`().post("/api/shares/$shareId/blob-uploads")
+
+        // control: a medium's three roles in one request open three sessions — so each negative is its role, not the link
+        start("ORIGINAL", "THUMBNAIL", "PREVIEW").then().statusCode(200)
+            .body("results.size()", equalTo(3)).body("results.uploadId", not(hasItem(nullValue())))
+        // a node's cover is a member's write: refused whole, even beside an admissible item
+        start("COVER").then().statusCode(400).body("code", equalTo("invalid_request"))
+        start("ORIGINAL", "COVER").then().statusCode(400).body("code", equalTo("invalid_request"))
+        // a well-formed token Memories names no role in
+        start("FILE_CONTENT").then().statusCode(400).body("code", equalTo("invalid_request"))
+        // a malformed token is the contract's own 400, before the handler
+        start("cover").then().statusCode(400).body("title", equalTo("Constraint Violation"))
     }
 
     // --- helpers ---

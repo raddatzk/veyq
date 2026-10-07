@@ -26,7 +26,7 @@
 Files needs a blob that **a file node references** without going through media, wrapped under a key that is not
 `K_mem`: a **blob-role decision** (who may reference a blob, what reclaims it, which key wraps it). Two prerequisites
 follow from it and are not built yet: a generic `veyq_node_attachment(node_id, slot, blob_id)` table with real foreign
-keys, and a seal purpose plus key rule for non-Memories blobs. Until it is made, Files cannot start without
+keys, and a key rule for non-Memories blobs (decided since: no new seal purpose, see below). Until it is made, Files cannot start without
 depending on Memories, which the rules forbid.
 
 What the decision does **not** have to change is the transfer: the upload itself is core's and neutral. Starting,
@@ -34,9 +34,11 @@ windowing, verifying and downloading a blob, the upload sessions and the quota a
 `core.quota`, served by core's `contracts/api/blob.openapi.yaml`; a blob's `K_blob` wrap, `owner_id` and `blob_role`
 are opaque strings that code stores and compares and never opens. What a verified upload *becomes* is the
 application's, through core's `UploadCompletion` seam (Memories': a media row), and a node kind no application
-accepts takes no upload (`illegal_target`). So the decision lands in three places, none of them the upload path:
-the reference table, the closed `BlobRole` enum (contract, crypto package, its web re-export), and the `blob-key`
-seal's key.
+accepts takes no upload (`illegal_target`). So the decision lands in places none of which is the upload path: the
+reference table, and the role and key of the `blob-key` seal. The role is decided (cr-files-application P3-S1/S2):
+`BlobRole` is an open token in the contract and the crypto package, Files' is `FILE_CONTENT`, and the seal needs no
+new purpose — the file node's random key, wrapped under its parent's, wraps `K_blob`, bound to the node id and the
+role ([ADR 0079 §9](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)).
 
 ## Operator-visible, beyond the platform's `kind`
 

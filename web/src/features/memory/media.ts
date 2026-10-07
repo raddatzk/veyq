@@ -17,7 +17,6 @@ import { isCodedError, isHttpStatus, HttpStatus } from '../../shared/httpError'
 import { mediaApi } from './api'
 import { withRefresh } from '../../app/sessionRefresh'
 import { type MediaListPage, type MediaSummary, type MediaDerivativeKind } from '../../api/generated/media'
-import { type BlobRole as WireBlobRole } from '../../api/generated/blob'
 import { expectMintedId } from '../../core/node/mintedId'
 import {
   authedReserve,
@@ -70,10 +69,10 @@ const mediaExifContext = (scopeId: string, mediaId: string) => ({ purpose: 'medi
 
 // --- read-back model -------------------------------------------------------
 
-/** The role a blob plays for its owner — the `K_blob` wrap is sealed bound to it (ADR 0072). The crypto suite's role is
- *  an open token (`v1.BlobRole`, a string) since Files brought FILE_CONTENT; this layer keeps the four it writes, which
- *  the blob contract still closes, so a declare type-checks against the wire item and no string role reaches it. */
-export type BlobRole = WireBlobRole
+/** Memories' blob roles ([MemoryBlobRole], `./blobRole`) — the contract's and the crypto suite's role is an open token
+ *  (a string) since cr-files-application P3-S2: the blob transport below takes any role, the read-back refs this layer
+ *  builds carry one of Memories' four. */
+export type { MemoryBlobRole } from './blobRole'
 
 /** One role-tagged derivative tier of a media. */
 export type MediaDerivative = { kind: MediaDerivativeKind; ref: BlobRef }

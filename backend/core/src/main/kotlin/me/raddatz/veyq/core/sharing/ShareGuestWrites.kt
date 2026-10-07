@@ -28,6 +28,14 @@ interface ShareGuestWrites {
     /** Whether a guest's uploads into a node of [nodeKind] go through this implementation. */
     fun supports(nodeKind: String): Boolean
 
+    /**
+     * Whether a guest may upload a blob in [role] — the contract's open `BlobRole` token — into a node this
+     * implementation [supports]. Core names no role: it asks this for every declared item before [start] and refuses
+     * the whole request `400 invalid_request` on a single no (as the contract's closed enum did until the role opened,
+     * cr-files-application P3-S2). No default: an application that takes guest uploads says which roles it takes.
+     */
+    fun admitsGuestRole(role: String): Boolean
+
     /** Reserve and open the guest's uploads for the link [shareId] into a node of [targetKind] (quota and per-link limit
      *  are core's reservation, the link's usage measured by the [targetKind]'s `UploadAdmission`). */
     fun start(

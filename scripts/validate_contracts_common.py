@@ -22,7 +22,8 @@ What it asserts:
      core and an application route. A parameter defined once is no copy and is not checked.
   3. Every copy of a shared enum (derivative-kind, membership-role, credential-method, suite-version) carries the
      SAME values. (The node kind left the list when it opened to a bounded token, cr-platform-contract-split
-     slice 4: a token is no value set, and its one definition is `_common`'s `NodeKind`.) An enum that shares **≥1** value with a canonical family but is not exactly it —
+     slice 4: a token is no value set, and its one definition is `_common`'s `NodeKind`; the blob role followed it,
+     cr-files-application P3-S2, and with it went its two intentional variants of derivative-kind.) An enum that shares **≥1** value with a canonical family but is not exactly it —
      nor a declared intentional variant — is drift. **Principled limit:** a *full rename* (0 shared values) is
      undetectable by value — it is indistinguishable from an unrelated domain enum, so no value-based check can
      see it. This ≥1-overlap rule is the hardening over the original ≥2 heuristic, which silently missed a drop
@@ -63,11 +64,6 @@ CANONICAL_ENUMS: dict[str, tuple[str, ...]] = {
 # Value sets that overlap a canonical family on purpose (documented, not drift).
 INTENTIONAL_ENUM_VARIANTS: set[tuple[str, ...]] = {
     ("DEVICE", "DEVICE_KEY"),  # account.openapi.yaml — the device-only wrap-rotation subset of credential-method
-    # blob.openapi.yaml BlobRole — the role a blob's K_blob wrap is sealed bound to (ADR 0072): the derivative
-    # kinds plus the ORIGINAL and a node's COVER. A superset of derivative-kind, not a copy of it.
-    ("COVER", "ORIGINAL", "PREVIEW", "THUMBNAIL"),
-    # sharing.openapi.yaml ShareBlobUploadRequestItem.role — the same, minus COVER: a contributor uploads media only.
-    ("ORIGINAL", "PREVIEW", "THUMBNAIL"),
 }
 
 errors: list[str] = []

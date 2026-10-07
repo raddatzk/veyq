@@ -52,7 +52,7 @@ import {
   type MediaDeriver,
 } from './media'
 import type { ChunkProvider } from '../../sw/protocol'
-import { ShareRole, type ShareBlobUploadRequestItemRoleEnum } from '../../api/generated/sharing'
+import { ShareRole } from '../../api/generated/sharing'
 import type { ShareMedia, ShareMediaListing } from '../../api/generated/share-media'
 import type { MediaDerivativeKind } from '../../api/generated/media'
 
@@ -220,8 +220,9 @@ function shareUploadTransport(shareId: string, contributorToken: string, pwToken
         shareBlobUploadsRequest: {
           contributorToken,
           ...target,
-          // A contributor uploads media only — never a cover — so ORIGINAL/THUMBNAIL/PREVIEW is the whole role set.
-          items: declares.map((d) => ({ ...d, role: d.role as ShareBlobUploadRequestItemRoleEnum })),
+          // A contributor uploads media only — never a cover: ORIGINAL/THUMBNAIL/PREVIEW is the whole role set, and the
+          // server refuses any other role from a guest (`400 invalid_request`, Memories' `admitsGuestRole`).
+          items: declares,
         },
         xSharePassword: pwToken, // cr-0164
       })

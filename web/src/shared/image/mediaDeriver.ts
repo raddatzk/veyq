@@ -5,16 +5,16 @@
 // browser offers one (`mediaDeriveWorker.ts`), on the page thread otherwise; the video poster always runs here.
 // The stage sits behind an injectable `MediaDeriver` so `media.ts`'s add-media wiring is
 // unit-testable against a stub; the real Canvas/`<video>` path is exercised by a live browser round-trip.
-import { type BlobRole } from '../../api/generated/blob'
 import { drawEncoded, type CanvasPort } from './mediaPixels'
 import { deriveImageWorkerFirst } from './mediaDeriveWorker'
 
 /**
- * The derivative tiers this stage produces, typed from core's own `BlobRole` (the role a derivative blob carries),
- * never from Memories' generated `MediaDerivativeKind`: this file is core (`features/spaces` uses it too), and core
- * imports no application client (`validate_web_core_imports_no_applications.py`). The two are the same two values.
+ * The derivative tiers this stage produces — the role a derivative blob carries, as a literal union of its own: core's
+ * `BlobRole` is an open token (a string, cr-files-application P3-S2), so it lists no tier, and Memories' generated
+ * `MediaDerivativeKind` is out of reach: this file is core (`features/spaces` uses it too), and core imports no
+ * application client (`validate_web_core_imports_no_applications.py`). The two hold the same two values.
  */
-export type DerivativeTier = Extract<BlobRole, 'THUMBNAIL' | 'PREVIEW'>
+export type DerivativeTier = 'THUMBNAIL' | 'PREVIEW'
 
 /**
  * Derivative tier specs (en.memory.derivatives → *The three tiers*). `preview` is pinned from the legacy E2EE

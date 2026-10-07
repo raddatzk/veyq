@@ -173,6 +173,23 @@ components:
         key of its own (`wrappedContentKey`, ADR 0080).
       example: FOLDER
 
+    BlobRole:
+      # Shared by the blob spec (a member's upload) and the sharing spec (a guest's). An open, bounded token like
+      # `NodeKind`: it generates a String, so a request property carries the pattern's annotation beside its `$ref`.
+      x-veyq-visibility: structure
+      type: string
+      pattern: '^[A-Z][A-Z0-9_]{0,15}$'
+      maxLength: 16
+      description: >
+        The role a blob plays for its owner: an open token, upper-case, at most 16 characters, that the application
+        owning the node defines; core stores and compares it and never interprets it. The blob's `K_blob` wrap is
+        sealed bound to it (ADR 0072), so a blob attached in another role does not open, and the crypto suite admits
+        any role of this shape with no new seal purpose. Memories' roles are ORIGINAL and its THUMBNAIL/PREVIEW
+        derivatives, and a node's COVER. Which roles an upload may carry is the application's question: Memories'
+        completion attaches only the role it asks for, and a guest's upload start refuses a role the application
+        does not take from a guest (`400 invalid_request`; Memories: every role but COVER).
+      example: ORIGINAL
+
     MasterKeyWrap:
       # Shared by the account, setup and tenants specs. The annotated variant — the copies used to differ, and
       # the generator's file order alone decided that the backend got this one.

@@ -184,6 +184,10 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      `"me.raddatz.veyq.memories.generated"`) — rejected: rule (d) derives the packages from one `"…$owner…"` template
      and refuses a package root spelled for one owner, so the list that refused every unnamed application cannot
      quietly come back as what the rule reads
+  66 a `core/blob/` file naming Memories' blob role `"COVER"` as a literal in code — rejected:
+     `validate_kernel_imports_no_slices` reads the roles an application owns by the node-kind rule since the
+     contract's `BlobRole` opened to a token (cr-files-application P3-S2); core compares a role and names none. The
+     KDoc beside it names the role too and must not be what is read
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
 (a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
 which the Gradle module split retired: `:core` has no edge to an application, so either shape fails
@@ -822,6 +826,19 @@ def forge_core_names_memory_kind(root: pathlib.Path) -> str:
     return "a core/node file naming NodeKind.MEMORY in code (must be REJECTED — core knows FOLDER only)"
 
 
+def forge_core_names_memory_blob_role(root: pathlib.Path) -> str:
+    # A core rule about a Memories blob role: the contract's role is an open token, so a literal is the only spelling.
+    f = root / "backend/core/src/main/kotlin/me/raddatz/veyq/core/blob/GuardGapProbe.kt"
+    if not f.parent.is_dir():
+        raise ForgeError(f"{f.parent.relative_to(root)} is missing — core/blob moved")
+    f.write_text("package me.raddatz.veyq.core.blob\n\n"
+                 "/** Whether this session uploads a COVER. */\n"
+                 "class GuardGapProbe {\n"
+                 "    fun isCover(role: String): Boolean = role == \"COVER\"\n"
+                 "}\n")
+    return "a core/blob file naming the blob role \"COVER\" in code (must be REJECTED — core names no role)"
+
+
 def forge_kernel_imports_slice(root: pathlib.Path) -> str:
     # A kernel package reaching into a slice: the shape the 2026-09-23 review found (tenant kernel classes on the
     # admin feature's tenant entity). Kernel membership is the declared KERNEL list, not a directory.
@@ -1213,6 +1230,7 @@ CASES = [
     ("63", "validate_backend_module_graph.py", forge_spec_directory_module_not_generating, False),
     ("64", "validate_backend_module_graph.py", forge_spec_sets_hardcoded_owner_list, False),
     ("65", "validate_backend_module_graph.py", forge_module_without_spec_directory, True),
+    ("66", "validate_kernel_imports_no_slices.py", forge_core_names_memory_blob_role, False),
 ]
 
 

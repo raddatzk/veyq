@@ -228,6 +228,9 @@ components:
           example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e
         role:
           $ref: "#/components/schemas/BlobRole"
+          # The generator inlines the scalar `BlobRole` as a String and emits none of its bounds: the token's shape
+          # holds here, 400 before the handler; which roles the application attaches is its completion's question.
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 16) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Z][A-Z0-9_]{0,15}")'
         chunkCount:
           x-veyq-visibility: measure
           type: integer
@@ -356,16 +359,7 @@ components:
           example: null
 
     BlobRole:
-      x-veyq-visibility: enum
-      type: string
-      description: >
-        The role a blob plays for its owner. Its `K_blob` wrap is sealed bound to it (ADR 0072), so a blob attached
-        in another role does not open. The values are today Memories' (an attachment's ORIGINAL and its
-        THUMBNAIL/PREVIEW derivatives, a node's COVER), and the set is closed on purpose: the crypto suite's seal
-        encoder admits exactly these four roles (`packages/crypto`), so a new role is a crypto change, not a contract
-        edit. It opens together with generic attachments (inbox #327).
-      enum: [ORIGINAL, THUMBNAIL, PREVIEW, COVER]
-      example: ORIGINAL
+      $ref: '_common.openapi.yaml#/components/schemas/BlobRole'
 
     # --- presign downloads ---------------------------------------------------
     BlobDownloadsBatchRequest:
