@@ -10,7 +10,7 @@ vi.mock('../../api/client', () => ({
 }))
 
 import {
-  listTree, listTrash, restoreNode, renameNode, moveNode, createFolder, nodeContentKey, openName, slugTokenFor,
+  listTree, listTrash, restoreNode, renameNode, moveNode, createFolder, nodeContentKey, contentKeyChain, openName, slugTokenFor,
   PlacementConflictError, PLACEMENT_RETRIES, type TreeNode,
 } from './tree'
 import { httpError } from '../../test/httpError'
@@ -84,6 +84,21 @@ describe('nodeContentKey — resolve a chapter key down the chain', () => {
     expect(nodeContentKey(SCOPE_ID, epochsOf(scopeKey), orphan, MEM)).toBeNull()
     const cycle = [node(FOLD, MEM, 'FOLDER', 'eA=='), node(MEM, FOLD, 'MEMORY', 'eA==')]
     expect(nodeContentKey(SCOPE_ID, epochsOf(scopeKey), cycle, MEM)).toBeNull()
+  })
+
+  // 5b.4b: a member reads what a guest sealed under an ANCESTOR's key (a folder link's guest name on a Memory below).
+  it('contentKeyChain: the node\'s key and every ancestor\'s, nearest first; empty without a chain', () => {
+    const folderKey = v1.randomBytes(32)
+    const memKey = v1.randomBytes(32)
+    const chapKey = v1.randomBytes(32)
+    const tree = [
+      node(FOLD, null, 'FOLDER', wrap(scopeKey, FOLD, folderKey)),
+      node(MEM, FOLD, 'MEMORY', wrap(folderKey, MEM, memKey)),
+      node(CHAP, MEM, 'CHAPTER', wrap(memKey, CHAP, chapKey)),
+    ]
+    expect(contentKeyChain(SCOPE_ID, epochsOf(scopeKey), tree, CHAP).map((k) => Array.from(k)))
+      .toEqual([chapKey, memKey, folderKey].map((k) => Array.from(k)))
+    expect(contentKeyChain(SCOPE_ID, epochsOf(scopeKey), [node(MEM, FOLD, 'MEMORY', wrap(scopeKey, MEM, memKey))], MEM)).toEqual([])
   })
 })
 

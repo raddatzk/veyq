@@ -66,6 +66,46 @@
   transform: translateY(-1px);
 }
 
+/* The card grid of a node list outside an application — core's twin of Memories' `.memory-card-grid` /
+   `.memory-folder-card` (the public folder page, core/sharing/FolderShareBody.vue): an icon tile and a name per node. */
+.veyq-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 260px));
+  align-items: stretch;
+  min-width: 0;
+  max-width: 100%;
+  gap: 1rem;
+}
+
+.veyq-node-card {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 0.8rem;
+  width: 100%;
+  min-height: 82px;
+  padding: 1rem;
+  color: var(--app-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.veyq-node-card > .pi {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: var(--app-accent-soft);
+  color: var(--app-accent);
+  font-size: 1.25rem;
+}
+
+.veyq-node-card-create {
+  background: color-mix(in srgb, var(--app-surface) 72%, transparent);
+}
+
 .veyq-empty {
   display: flex;
   align-items: center;

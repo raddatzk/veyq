@@ -18,6 +18,9 @@ vi.mock('../media', () => ({
   hasDerivatives: vi.fn(),
 }))
 vi.mock('../../spaces/members', () => ({ listScopeMembers: vi.fn() }))
+// The member's epoch keys, for the chain to a guest's name sealed above this node (5b.4b); none unless a test sets them.
+const space = vi.hoisted(() => ({ epochs: null as null | import('../../spaces/epochs').EpochKeys }))
+vi.mock('../../../app/activeSpace', () => ({ activeEpochKeys: () => space.epochs }))
 
 // The undo affordance is now a global toast (cr-0157): stub the shared composable so the test can capture the
 // `showUndo({ onUndo })` call and invoke the restore action (the toast surface itself lives in App.vue).
@@ -41,6 +44,11 @@ import {
   type BucketItem,
 } from '../media'
 import { listScopeMembers } from '../../spaces/members'
+import { treeStore } from '../../../core/node/treeStore'
+import type { TreeNode } from '../../../core/node/tree'
+import { epochsOf } from '../../spaces/epochsTestUtil'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std } from '@veyq/crypto/base64'
 import { realI18n } from '../../../test/i18n'
 import { mediaItem } from '../../../test/models'
 
@@ -85,6 +93,37 @@ beforeEach(() => {
 
 const selectBucket = (w: Awaited<ReturnType<typeof mountBuckets>>, id: string) =>
   w.find(`.bucket-opt[data-val="${id}"]`).trigger('click')
+
+describe('MemoryBuckets — a guest named above this node (cr-node-key-hierarchy 5b.4b)', () => {
+  it("opens a contributor's name with the keys of the node's ancestors, from the loaded tree", async () => {
+    const SCOPE = '5c09e000-0000-4000-8000-0000000005c0'
+    const FOLDER = '5c09e000-0000-4000-8000-0000000000f1'
+    const MEMORY = '5c09e000-0000-4000-8000-0000000000e1'
+    const scopeKey = v1.randomBytes(32)
+    const folderKey = v1.randomBytes(32)
+    const wrap = (kek: Uint8Array, nodeId: string, k: Uint8Array) =>
+      b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE, nodeId, epoch: 0, placementVersion: 0 }, kek, k))
+    const node = (id: string, parentId: string | null, wrappedContentKey: string): TreeNode =>
+      ({ id, parentId, kind: 'FOLDER', orderIndex: 0, epoch: 0, name: id, wrappedContentKey, wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
+    const memoryKey = v1.randomBytes(32)
+    space.epochs = epochsOf(scopeKey)
+    treeStore.nodes = [node(FOLDER, null, wrap(scopeKey, FOLDER, folderKey)), node(MEMORY, FOLDER, wrap(folderKey, MEMORY, memoryKey))]
+    vi.mocked(listBuckets).mockResolvedValue([bucket('b-share', 'share:x', 1, 'ct')])
+    try {
+      mount(MemoryBuckets, {
+        props: { scopeId: SCOPE, nodeId: MEMORY, memoryKey, media: [media('m3', 'share:x', 'b-share')], thumbs: new Map() },
+        global: { plugins: [realI18n()], stubs: { Select: SelectStub, Menu: MenuStub, MediaGrid: MediaGridStub } },
+      })
+      await flushPromises()
+      const [, , , row, above] = vi.mocked(openBucketName).mock.calls[0]
+      expect(row.bucketId).toBe('b-share')
+      expect(above?.map((k) => Array.from(k)), "the folder's key, above the Memory").toEqual([Array.from(folderKey)])
+    } finally {
+      space.epochs = null
+      treeStore.nodes = []
+    }
+  })
+})
 
 describe('MemoryBuckets — selection + delete-to-trash + undo (cr-0122)', () => {
   it('own bucket: select-all selects every tile, then delete soft-deletes each and offers undo → restore', async () => {

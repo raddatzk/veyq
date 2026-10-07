@@ -1093,14 +1093,15 @@ const en = {
     uploaderEmpty: 'No photos in this session. Photos you add appear here and stay visible until you reload — after that they’re gone from your view, but safely saved for the owner.',
     deletePhoto: 'Delete this photo',
     deleteFailed: 'The photo could not be deleted — please try again.',
-    // core's folder share dialog (cr-node-key-hierarchy 5b.3): only where a Memory sentence would be wrong for a
-    // folder. READ_WRITE on a folder = add folders, rename and move inside it; never uploads (docs/apps/memories.md).
+    // core's folder share dialog (cr-node-key-hierarchy 5b.3) and folder page (5b.4b): only where a Memory sentence
+    // would be wrong for a folder. READ_WRITE on a folder = add folders, rename and move inside it, and add photos to
+    // the Memories below it (5a.5, docs/apps/memories.md).
     folder: {
       title: 'Share this folder',
       intro: 'Create a link anyone can open in a browser — no account, no install. It shows this folder and everything in it, and you can switch it off anytime.',
       roleContributor: 'View + organise',
       roleViewerHint: 'Anyone with the link can look at this folder and everything in it, read-only.',
-      roleContributorHint: 'Anyone with the link can look, add folders, and rename or move things inside this folder. They cannot add photos.',
+      roleContributorHint: 'Anyone with the link can look, add folders, rename or move things inside this folder, and add photos to the Memories in it.',
       deleteConfirm: 'Delete this link for good? It can never be switched on or renewed again. What guests added stays in this folder.',
       reissueWarning: 'This makes a new link and deletes the old one. Hand out the new link.',
       // A guest's tree operations on a folder link (core/sharing/guestTree.ts, guestTreeErrorMessageKey).
@@ -1112,6 +1113,18 @@ const en = {
       placementConflict: 'Someone else just changed this. Reload the page and try again.',
       gone: 'This is no longer here. Reload the page.',
       createFailed: 'That did not work — please try again.',
+      // the anonymous /s/ page of a folder link (core/sharing/FolderShareBody.vue)
+      loading: 'Opening this folder…',
+      empty: 'This folder is empty.',
+      readonly: 'Shared with you · read-only',
+      contributorBadge: 'Shared with you · you can add folders and photos',
+      newFolder: 'New folder',
+      newFolderTitle: 'Create a folder',
+      nameLabel: 'Name',
+      unsupportedKind: 'This page cannot show this kind of item.',
+      breadcrumbRoot: 'Where you are in this folder',
+      guestNameTitle: 'What is your name?',
+      guestNameHint: 'Before you add something, tell us your name. Only the people this folder belongs to see it.',
     },
   },
 }
@@ -2175,7 +2188,7 @@ const de: typeof en = {
       intro: 'Erstelle einen Link, den jede:r im Browser öffnen kann — ohne Konto, ohne Installation. Er zeigt diesen Ordner mit allem, was darin liegt, und du kannst ihn jederzeit abschalten.',
       roleContributor: 'Ansehen + ordnen',
       roleViewerHint: 'Wer den Link hat, kann diesen Ordner mit allem darin ansehen — schreibgeschützt.',
-      roleContributorHint: 'Wer den Link hat, kann ansehen, Ordner anlegen und darin umbenennen oder verschieben. Fotos hinzufügen kann man nicht.',
+      roleContributorHint: 'Wer den Link hat, kann ansehen, Ordner anlegen, darin umbenennen oder verschieben und den Erinnerungen darin Fotos hinzufügen.',
       deleteConfirm: 'Diesen Link endgültig löschen? Er lässt sich danach nie wieder einschalten oder erneuern. Was Gäste angelegt haben, bleibt in diesem Ordner.',
       reissueWarning: 'Dadurch entsteht ein neuer Link, und der alte wird gelöscht. Gib den neuen Link weiter.',
       nameTaken: 'Hier gibt es schon „{name}“. Wähle einen anderen Namen.',
@@ -2186,6 +2199,17 @@ const de: typeof en = {
       placementConflict: 'Jemand anderes hat das gerade geändert. Lade die Seite neu und versuche es erneut.',
       gone: 'Das gibt es hier nicht mehr. Lade die Seite neu.',
       createFailed: 'Das hat nicht geklappt — bitte erneut versuchen.',
+      loading: 'Dieser Ordner wird geöffnet …',
+      empty: 'Dieser Ordner ist leer.',
+      readonly: 'Mit dir geteilt · schreibgeschützt',
+      contributorBadge: 'Mit dir geteilt · du kannst Ordner und Fotos hinzufügen',
+      newFolder: 'Neuer Ordner',
+      newFolderTitle: 'Ordner anlegen',
+      nameLabel: 'Name',
+      unsupportedKind: 'Diese Seite kann diese Art von Eintrag nicht anzeigen.',
+      breadcrumbRoot: 'Wo du in diesem Ordner bist',
+      guestNameTitle: 'Wie heißt du?',
+      guestNameHint: 'Bevor du etwas hinzufügst, sag uns deinen Namen. Ihn sehen nur die Personen, denen dieser Ordner gehört.',
     },
   },
 }

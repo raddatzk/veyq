@@ -214,16 +214,27 @@ export const openMemory = openContentKey
  * through their parent's key.)
  */
 export function nodeContentKey(scopeId: string, epochs: EpochKeys, tree: TreeNode[], nodeId: string): Uint8Array | null {
+  return contentKeyChain(scopeId, epochs, tree, nodeId)[0] ?? null
+}
+
+/**
+ * The content keys of `nodeId` and of every ancestor up to its scope-root node, NEAREST FIRST (`[0]` is the node's own,
+ * {@link nodeContentKey}), opened top-down as there. Empty when the node is not in the tree or its chain does not reach
+ * the scope root. What a member reads that was sealed under an ANCESTOR's key needs it: a folder link's guest names
+ * itself under the folder's key, and its name is read on a Memory below (`features/memory/mediaBuckets.ts`).
+ */
+export function contentKeyChain(scopeId: string, epochs: EpochKeys, tree: TreeNode[], nodeId: string): Uint8Array[] {
   const byId = new Map(tree.map((n) => [n.id, n]))
   // collect the chain from the node up to the scope root (nearest-last → reverse to top-down)
   const chain: TreeNode[] = []
   for (let cur = byId.get(nodeId); cur && chain.length <= tree.length; cur = cur.parentId ? byId.get(cur.parentId) : undefined) {
     chain.unshift(cur) // the length bound stops a served parent cycle, which then reaches no root below
   }
-  if (!chain.length || chain[0].parentId !== null) return null // an ancestor missing from the tree: no chain
+  if (!chain.length || chain[0].parentId !== null) return [] // an ancestor missing from the tree: no chain
   let key = keyAt(epochs, chain[0].epoch) // the scope-root node's key is wrapped under its own epoch's K_SC
-  for (const node of chain) key = openContentKey(scopeId, key, node)
-  return key
+  const keys: Uint8Array[] = []
+  for (const node of chain) keys.unshift((key = openContentKey(scopeId, key, node)))
+  return keys
 }
 
 /** The key `node`'s directory entry (name, slug token) and its own key wrap live under (ADR 0080 Decisions 1 and 2):

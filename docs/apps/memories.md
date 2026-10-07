@@ -89,6 +89,11 @@ What the cells rest on:
   (`SharingStore.create`), and every reader of the node — a member's media page and buckets, a viewer link — is served
   what opens it. A guest's name reaches members only; a guest read serves a `WRITE_ONLY` identity's wrapped key and
   never a `READ_WRITE` identity ([ADR 0030](../decisions/0030-contributor-public-share.md) point 8).
+- **A `READ_WRITE` guest's name is sealed under the link ROOT's key**, whichever node it writes in (core's
+  `createGuestIdentity`, one identity per link). A folder link's guest who uploads into a Memory below, or a Memory
+  link's into a chapter, therefore names itself under a key ABOVE the node its bucket is on: a member opens it with
+  the node's key or an ancestor's, through the chain (`openBucketName`'s `ancestorKeys`, `contentKeyChain`; web,
+  cr-node-key-hierarchy 5b.4b).
 - **Tree operations are core's** (`ShareNodesHandler`, `READ_WRITE` only): inside a `FOLDER` core allows them
   (`FolderGuestNodeRules`) and `NodeKindRules` decides where a kind may live; inside a `MEMORY` or a `CHAPTER`
   Memories declares nothing, so `GuestNodeRules` fails closed. The root is never a guest's to move or rename.

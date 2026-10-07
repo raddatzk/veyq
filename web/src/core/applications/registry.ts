@@ -35,12 +35,20 @@
 // `{ supported: false }`, which the host renders as an explicit unsupported state, never as an empty region. The kind
 // is an open string token (`core/node/kind.ts`), so no compiler checks that every kind is handled: this answer and its
 // tests (`registry.test.ts`) are what does.
-import type { Component } from 'vue'
+import { defineAsyncComponent, type Component } from 'vue'
 import { FOLDER_KIND, type NodeKind } from '../node/kind'
 import type { TreeNode } from '../node/tree'
 import type { Level } from '../node/browse'
 import type { EpochKeys } from '../../features/spaces/epochs'
 import type { PublicShareHead } from '../sharing/resolvePublicShare'
+
+// The platform's own share body for a link rooted at a FOLDER (cr-node-key-hierarchy 5b.4b). LAZY, and on purpose: the
+// body reads this registry (`registry.kind`, `registry.shareBody` for what it embeds), so a static import here is a
+// cycle — measured: with `FolderShareBody.vue` evaluated first, the app's `registry` below was built while the body's
+// module was still mid-evaluation and answered null for FOLDER (`createRegistry()` called later answered it). A literal
+// `import()` is still build-time code (bundled and reviewed like every other module, ADR 0079 Decision 5): nothing here
+// is computed or discovered.
+const FolderShareBody = defineAsyncComponent(() => import('../sharing/FolderShareBody.vue'))
 
 /** What core needs to know about a node kind. `detail` is the component the host renders when a node of the kind is
  *  opened. Only the platform's FOLDER has none (a folder browses, it does not open): an application kind that
@@ -124,6 +132,10 @@ export interface ShareBodyProps {
   head: PublicShareHead
   /** Re-resolve the share (after a contribution, so the new media lists); resolves once `head` has been replaced. */
   reload: () => Promise<void>
+  /** Set only when a container's body embeds this one for a node BELOW the share root (core's folder body for a Memory
+   *  in a shared folder, cr-node-key-hierarchy 5b.4b): that node's id, its key and its name as the chain opened them.
+   *  The body renders that node, not the root; the share's note is the container's to show. The shell never sets it. */
+  subtreeRoot?: { nodeId: string; key: Uint8Array; name: string }
 }
 export interface ShareBodyEmits {
   unavailable: []
@@ -184,7 +196,9 @@ export function createRegistry(): Registry {
   ])
   const slots = new Map<SlotName, Component>()
   const lifecycles = new Map<string, LifecycleHooks>()
-  const shareBodies = new Map<NodeKind, Component>()
+  // The platform's own share body: a link rooted at a FOLDER browses the subtree (cr-node-key-hierarchy 5b.4b). Pre-claimed
+  // like FOLDER's kind above, so an application claiming FOLDER throws.
+  const shareBodies = new Map<NodeKind, Component>([[FOLDER_KIND, FolderShareBody]])
   /** Run `f` on every application, never stopping at the first failure; rethrow the first one at the end. */
   async function eachApplication(f: (h: LifecycleHooks) => Promise<void> | void): Promise<void> {
     let failure: { error: unknown } | null = null

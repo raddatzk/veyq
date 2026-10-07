@@ -21,6 +21,9 @@ import {
   unsealMeta, isVideoMediaType, hasDerivatives, type MediaItem, type BucketItem,
 } from '../media'
 import { listScopeMembers } from '../../spaces/members'
+import { contentKeyChain } from '../../../core/node/tree'
+import { treeStore } from '../../../core/node/treeStore'
+import { activeEpochKeys } from '../../../app/activeSpace'
 import { useToast } from '../../../shared/state/useToast'
 import { useUndo } from '../../../shared/state/useUndo'
 
@@ -78,11 +81,23 @@ const dropActive = ref(false)
 
 // --- load + label resolution ------------------------------------------------
 
-function labelFor(b: BucketItem, key: Uint8Array | null, members: Map<string, string>): string {
+/** The keys of this node's ancestors, nearest first, from the loaded tree: a guest of a link rooted ABOVE this node
+ *  (a shared folder, a shared Memory for a chapter) named itself under that root's key (`openBucketName`). */
+function ancestorKeys(): Uint8Array[] {
+  const epochs = activeEpochKeys()
+  if (!epochs) return []
+  try {
+    return contentKeyChain(props.scopeId, epochs, treeStore.nodes, props.nodeId).slice(1)
+  } catch {
+    return [] // a chain that does not open: only this node's own key
+  }
+}
+
+function labelFor(b: BucketItem, key: Uint8Array | null, members: Map<string, string>, above: Uint8Array[]): string {
   // Both a sub-bucket's name and a contributor primary's are bound to their object (ADR 0072), addressed by the
   // scope + node this panel is for; openBucketName picks the right seal from the row.
   if (!b.isPrimary || b.ownerKey.startsWith('share:')) {
-    return (key && openBucketName(props.scopeId, props.nodeId, key, b)) || t('memory.buckets.contributor')
+    return (key && openBucketName(props.scopeId, props.nodeId, key, b, above)) || t('memory.buckets.contributor')
   }
   return members.get(b.ownerKey.slice('user:'.length)) ?? t('memory.buckets.member')
 }
@@ -96,12 +111,13 @@ async function loadBuckets() {
       listScopeMembers(props.scopeId).catch(() => []),
     ])
     const names = new Map(members.map((m) => [m.userId, m.username]))
+    const above = ancestorKeys()
     rawBuckets.value = raw.map((b) => ({
       id: b.bucketId,
       ownerKey: b.ownerKey,
       parentBucketId: b.parentBucketId ?? null,
       isPrimary: b.isPrimary,
-      displayName: labelFor(b, key, names),
+      displayName: labelFor(b, key, names, above),
       mediaCount: b.mediaCount,
       canManage: b.ownerKey.startsWith('user:'), // your own bucket; a contributor (share:) is not yours to manage/move (yet — cr-0123)
       virtual: false,
