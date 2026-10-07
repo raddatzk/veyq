@@ -205,7 +205,7 @@ Planned 2026-10-06 from three inventories; each sub-slice is its own worktree ru
       `share-media.openapi.yaml` says "Memory or chapter". **Owed to 5b:** `shareable: true` for `CHAPTER`
       (`register.ts:22`, whose comment "the backend rejects a non-MEMORY share root" is now false) and the share
       dialog for a chapter; the matrix's three cells marked UNVERIFIED by a test.
-- [ ] 5b web — planned 2026-10-06 from three inventories; owner decisions: an own core dialog and share management for
+- [x] 5b web — planned 2026-10-06 from three inventories; owner decisions: an own core dialog and share management for
       folders (not the Memories dialog), the share-name re-seal on a root rename (needs 5b.0), no move UI is invented
       (inbox #358), `share_key_not_recoverable` stays (tombstoned and legacy shares keep the nullable summary).
   - [x] 5b.0 backend + contracts — a new core operation `PUT /api/shares/{shareId}/sealed-name` (the root's name re-sealed
