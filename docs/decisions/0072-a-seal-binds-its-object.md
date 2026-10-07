@@ -61,8 +61,10 @@ stored at — the write's `version + 1` — because that is the one the reader's
 
 **4. Parents are not bound.** The tree's shape is server-visible metadata and stays that. Binding a node's
 parent would turn every move into a re-seal of everything below it. The harm a parent binding would prevent is
-already closed by the two things above: a node's own ciphertexts are bound to its id, and a `K_mem` wrap moved
-under a different parent meets a different parent key and does not open.
+already closed by the two things above: a node's own ciphertexts are bound to its id, and a node's key wrap moved
+under a different parent meets a different parent key and does not open. What a move does bind is the node's own
+`placement_version` (`node-name`, `content-key`, [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
+Decision 3): a move re-seals the moved node's own entry and key once, never its subtree.
 
 **5. Binding makes an epoch or version *authentic*; it does not make it *fresh*.** Which epoch's grant and which
 version of an object a client receives is still the server's choice. Refusing an older but authentic
@@ -92,7 +94,7 @@ a vector with no live purpose is deleted. `journalSeal` (empty AAD, no caller) i
   stored.
 - **Eight create operations take a client-minted id.** That is a contract change on `content`, `media`,
   `sharing` and `scopes`, and the backend stops generating those ids.
-- **A public share's guest learns the shared Memory's scope id.** Every `K_mem` seal the viewer opens is bound to
+- **A public share's guest learns the shared node's scope id.** Every node-key seal the viewer opens is bound to
   the scope, so the id rides with the subtree; two links into one space become linkable to anyone holding both
   ([security model](../crosscutting/security-model.md) § What is encrypted vs. server-visible).
 - **A grant states the epoch it seals.** A grant-delivery completion names its epoch, and the server records

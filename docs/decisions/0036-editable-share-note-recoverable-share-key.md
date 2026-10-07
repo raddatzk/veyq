@@ -114,7 +114,10 @@ crosses the boundary.
   gap noted in the current `ShareDialog`.
 - **Shares stop being strictly write-once.** `updateShare` introduces controlled mutability into the capability;
   it is owner-gated, swaps ciphertext for ciphertext, and doesn't touch `K_share`/`K_mem`/`role`/the wrap — the
-  capability's *identity and grant* stay immutable, only its curator-authored decoration changes.
+  capability's *identity and grant* stay immutable, only its curator-authored decoration changes. The shared root's
+  own `sealedName` is the one sealed field outside this gate: when any member renames the root, that member re-seals
+  it through this recovery copy with `setShareSealedName`, which every member with write access may call
+  ([ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) Decision 14).
 
 ## Alternatives considered
 

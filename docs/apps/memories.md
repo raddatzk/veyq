@@ -1,9 +1,10 @@
 # Application: Memories
 
 The first application, and the product center today: photos and media, a journal, places, in **Memories**
-nested into **Chapters**. Product language **Memory / Chapter** is unchanged; folders organize only
-([CLAUDE.md](../../CLAUDE.md)). The backend half is a Gradle module of its own; the web half is separated by import
-direction only (see the end).
+nested into **Chapters**. Product language **Memory / Chapter** is unchanged; folders organize — they hold no content,
+though each carries a key and can be shared ([CLAUDE.md](../../CLAUDE.md),
+[ADR 0080](../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)). The backend half is a
+Gradle module of its own; the web half is separated by import direction only (see the end).
 
 ## What it owns
 

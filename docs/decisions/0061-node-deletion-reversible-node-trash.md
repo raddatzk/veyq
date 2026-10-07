@@ -61,7 +61,8 @@ confidentiality regression on an unauthenticated path, introduced by the very co
 unique index, and prod is MariaDB, so a partial index filtered on `deleted_at IS NULL` is not available. A
 soft-deleted node would otherwise hold its name hostage for the whole window. So the soft-delete sets the
 deleted **root's** `slug_token` to its own id — unique by construction, and blind, since the server may not compute
-a slug token at all (it is `HMAC(K_SC, parentId ‖ slug)`, [ADR 0012](0012-content-key-hierarchy.md)). Only the root:
+a slug token at all (it is an HMAC of the slug in the parent's slot, keyed under the parent's content key — `K_SC`
+at the scope root, [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) Decision 2). Only the root:
 its descendants' names live under a parent that is trashed too, where nothing can claim them while it stays so, so
 they keep their tokens and come back valid (corrected 2026-10-06, inbox #357 — freeing every node returned each
 descendant holding no name, beside which a same-named sibling could be created). **Restore carries a
@@ -163,6 +164,7 @@ against.
 - Cross-cutting: [security model](../crosscutting/security-model.md) § *Deletion & erasure* — the mechanism this
   decision joins rather than amends
 - Decisions: [ADR 0014](0014-group-scopes-and-governance.md) §6 (the group grace period),
-  [ADR 0012](0012-content-key-hierarchy.md) (`K_SC`/`K_mem`, and why the server cannot compute a slug token),
+  [ADR 0012](0012-content-key-hierarchy.md) and [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
+  (the node keys, and why the server cannot compute a slug token),
   [ADR 0013](0013-blob-storage-presigned-direct-to-store.md) (the blob store the purge reclaims from),
   [ADR 0033](0033-live-media-updates-revision-polling.md) (the revision reconcile the stale comment belongs to)

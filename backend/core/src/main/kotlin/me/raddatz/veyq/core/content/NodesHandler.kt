@@ -344,8 +344,8 @@ class NodesHandler(
 
     /**
      * Restore a trashed subtree (uc.memory.delete-node step 6). The client supplies the freshly computed
-     * `slugToken` — the server cannot recompute a blinded MAC under `K_SC`, and the delete consumed the
-     * original when it freed the name.
+     * `slugToken` — the server cannot recompute a blinded MAC under the parent's key (`K_SC` only at the scope root,
+     * ADR 0080 Decision 2), and the delete consumed the original when it freed the name.
      */
     fun restore(
         userId: String, scopeId: String, nodeId: String, slugToken: String, encryptedName: String?,

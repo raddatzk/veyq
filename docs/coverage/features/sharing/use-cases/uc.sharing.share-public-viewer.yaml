@@ -77,3 +77,41 @@ acceptanceCriteria:
         integration: [ShareSliceTest.createThenAnonymousResolveReturnsSealedSubtree, ShareSliceTest.createRequiresAuth]
       web:
         unit: [src/features/memory/share.test.ts]
+  - id: folder-share-root
+    text: >-
+      A member shares a folder READ through core's own dialog: the link wraps the folder's own key under K_share and
+      seals its name under K_share. The guest's resolve has rootKind FOLDER and the descendants' names and key wraps,
+      each under its parent's key, and nothing of the root's own entry nor of anything beside or above it; a blob
+      under the subtree is served, one beside it is 404. The guest page browses the folder (a breadcrumb along the
+      parent chain and child folders, both keeping the #k= fragment) and embeds the body claimed for each child's
+      kind, handed that node as its subtree root.
+    coverage:
+      backend:
+        integration: [CoreAloneSliceTest.aFolderIsSharedToReadOrContributeAndNothingElseIs, CoreAloneSliceTest.aGuestOfAFolderShareResolvesTheSubtreeUnderIt]
+      web:
+        unit: [src/core/sharing/folderShare.wire.test.ts, src/core/sharing/FolderShareDialog.test.ts, src/core/sharing/FolderShareBody.test.ts, src/core/sharing/FolderShareBody.breadcrumb.test.ts, src/core/sharing/FolderShareBody.registration.test.ts, src/features/memory/components/MemoryShareBody.embedded.test.ts]
+        e2e: [src/features/memory/folderShare.e2e.test.ts]
+  - id: chapter-share-root
+    text: >-
+      A member shares a chapter through the same dialogs as a Memory, worded for a chapter. The chapter link's guest
+      opens the chapter's own key, its title (as the share's sealedName), the chapters below it and their media, and
+      nothing of the Memory above or of a sibling chapter; the resolve serves no node above the root.
+    coverage:
+      backend:
+        integration: [ChapterShareSliceTest.aChapterGuestReadsTheChapterAndNothingOfItsMemory, ShareRootsSliceTest.aChapterIsAShareRootForEveryRole]
+      web:
+        unit: [src/views/MemoryHomeView.test.ts, src/features/memory/share.test.ts, src/views/ShareView.test.ts, src/features/memory/components/ShareDialog.test.ts]
+        e2e: [src/features/memory/chapterShare.e2e.test.ts]
+  - id: root-rename-reseals-share-names
+    text: >-
+      When a member renames a share root, that member's client re-seals the new name under every share's own
+      K_share — its own shares and other members', switched-off ones too — through each share's recovery copy, and
+      stores it with setShareSealedName, which any member with write access on the scope may call (a reader or a
+      stranger is 404) and which changes sealed_name only. A share without a recovery copy is skipped and a refused
+      write is collected; the next share is still tried, nothing rolls back, and either is reported to the member
+      as one notice, never as a failed rename.
+    coverage:
+      backend:
+        integration: [ShareSealedNameCoreSliceTest.theOwnerAndAnotherWritingMemberSetItAndResolveServesTheNewName, ShareSealedNameCoreSliceTest.aReaderIsRefusedAndWritesNothing, ShareSealedNameCoreSliceTest.aStrangerIsRefusedAndWritesNothing, ShareSealedNameCoreSliceTest.everyOtherColumnOfTheShareStaysUntouched, ShareSealedNameCoreSliceTest.aDeletedShareAndAnUnknownIdAre404, ShareSealedNameCoreSliceTest.aRevokedShareIsRenamedSoAReactivationShowsTheCurrentName, ShareSealedNameCoreSliceTest.aReSealOverlappingAReactivationEndsConsistentWithoutADeadlock]
+      web:
+        unit: [src/core/sharing/manageShares.test.ts, src/core/sharing/resealShareNames.wire.test.ts, src/features/memory/components/NodeMutationDialog.test.ts]

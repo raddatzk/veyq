@@ -14,8 +14,9 @@ per-Memory `K_mem`); the crypto vectors pin a `contentKey`-based `slug_token` / 
 `dedup_token` / `journal_open`. The open question was the **exact granularity and wrapping** — and specifically: *how do you share a single Memory without exposing the rest
 of the scope?* This ADR nails it. (Considered and rejected during refinement: **one content key per scope** —
 sharing one Memory would hand out the whole-scope key, leaving the confidentiality of the *other* Memories to
-**server gating, not crypto**; and **a full per-subtree key tree** — maximal flexibility but a deep key
-hierarchy + re-wrap-on-move complexity the product doesn't need.)
+**server gating, not crypto**. A key on every folder too was first left out here as re-wrap-on-move complexity
+the product did not need; [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) added
+it once a folder had to be shareable, with a move as one O(1) re-wrap.)
 
 ## Decision
 
@@ -23,26 +24,29 @@ hierarchy + re-wrap-on-move complexity the product doesn't need.)
 
 1. **`K_SC` — scope content key (one per scope, rotatable in epochs — [ADR 0024](0024-scope-key-rotation.md)).**
    Obtained by a member by **opening their grant** — the grant's plaintext *is* the scope's current epoch key;
-   there is no key in between. It is the **navigation root**: node **names**
-   (folder / Memory / chapter titles), paths and the **blinded slug tokens** (`slug_token`) key off the scope's
-   **current content-epoch key**, so a member who holds the scope decrypts the **whole tree's structure + names
-   with one key** — without touching any Memory's content. (The per-scope **dedup token** is the one exception: it
+   there is no key in between. It is the **navigation root**: the **names** and **blinded slug tokens**
+   (`slug_token`) of the **scope-root entries** key off the scope's **current content-epoch key**; every node below
+   keeps its name and slug token under its **parent's** content key ([ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
+   Decision 2). A member who holds the scope therefore opens the **whole tree's keys and names** down the chain from
+   `K_SC`. (The per-scope **dedup token** is the one exception: it
    keys off a **stable, non-rotating** scope sub-key so identical blobs still deduplicate across epochs, [ADR 0024](0024-scope-key-rotation.md).)
-2. **`K_mem` — per-Memory content key (one per Memory, a fresh random 32-byte key).** Wrapped under `K_SC`
-   for members. Encrypts that Memory's **content** — chapter bodies, journal, sensitive metadata
+2. **`K_mem` — per-Memory content key (one per Memory, a fresh random 32-byte key).** Wrapped under its
+   parent's content key — `K_SC` for a Memory at the scope root, a folder's key for one inside a folder. Encrypts that Memory's **content** — chapter bodies, journal, sensitive metadata
    (capture time, location) — and **wraps that Memory's `K_blob`s**. A Memory is the **unit of sharing**
    (recursively, so is a chapter — see *Recursive `K_mem`* below).
 3. **`K_blob` — per-blob key (one per media blob, random).** Wrapped under its Memory's `K_mem`; encrypts the
    media blob's `chunk_frame`s. Lets a Memory's media be keyed independently (and dedup tokens stay per-scope).
 
-**Folders carry no key** — they are pure organization. A folder's *name* is navigation metadata under `K_SC`
-like any node; it has no content key.
+**A folder carries a key too** ([ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
+Decision 1): a random content key wrapped under its parent's key like a `K_mem`, under which its children's keys,
+names and slug tokens sit. It holds no content of its own — it organizes — and it can be the root of a share.
 
 **`K_mem` is RANDOM, not derived from `K_SC` — so it is "one key, many wraps"** (the same pattern as the
 Master Key, [ADR 0005](0005-unlock-methods-and-device-trust.md)). This is the crux that makes per-Memory
 sharing **cryptographically** enforced:
 
-- **Members:** `K_mem` is wrapped under `K_SC` (`symWrap`). Every scope member opens it.
+- **Members:** `K_mem` is wrapped under its parent's key (`symWrap`), `K_SC` at the scope root. Every scope member
+  opens it down the chain.
 - **Sharing one Memory adds an *independent second wrap* of that same `K_mem`** — never `K_SC`:
   - **Public link share:** `symWrap(K_share, K_mem)` where `K_share` is a fresh per-share key whose secret
     rides the **URL fragment** (never the server); the shared Memory's name travels in the share record too,
@@ -54,30 +58,31 @@ sharing **cryptographically** enforced:
     identity private key — no link, no fragment key (unlike the public link above, which shares one Memory
     *anonymously*). A capability of the independent-second-wrap model; **not a built feature** (no use-case yet).
 - Because `K_mem` is random, handing a recipient `K_mem` reveals **neither `K_SC`** (so not the rest of the
-  scope) **nor any other Memory's `K_mem`** (each is wrapped under `K_SC`). Least-privilege is **crypto-
-  enforced**, not server-gated.
+  scope) **nor any other Memory's `K_mem`** (each is wrapped under its own parent's key, none derivable from a
+  child's). Least-privilege is **crypto-enforced**, not server-gated.
 
-**Rotation / revocation.** Removing a share record is instant (server-side, no keys). The eventual crypto
-defense is **rotating the affected key**: a single Memory by re-sealing its content under a fresh `K_mem`
-(re-wrapped to members); the whole scope by **rotating `K_SC` forward into a new epoch** — re-wrap the new epoch
-to the remaining members, new content seals under it, nothing existing is re-encrypted (the epoch chain,
+**Rotation / revocation.** Removing a share record is instant (server-side, no keys), and it is the whole
+revocation of a link: a `K_mem`, like every node key, **never re-keys**
+([ADR 0075](0075-a-link-a-departed-member-could-copy-is-reissued.md) Context, [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
+Decision 4). The one key that rotates is `K_SC`, **forward into a new epoch** — re-wrap the new epoch to the
+remaining members, new scope-root entries seal under it, nothing existing is re-encrypted (the epoch chain,
 [ADR 0024](0024-scope-key-rotation.md)). Already-read content cannot be retracted — a stated limitation.
 
-**Operator-blind, unchanged.** The server stores only ciphertext content + the opaque wraps (`K_mem`-under-
-`K_SC`, share wraps), node ids/parents/kinds/ordering/timestamps, and the blinded slug/dedup tokens. It never
+**Operator-blind, unchanged.** The server stores only ciphertext content + the opaque wraps (each node key under
+its parent's key, share wraps), node ids/parents/kinds/ordering/timestamps, and the blinded slug/dedup tokens. It never
 holds `K_SC`, `K_mem`, `K_blob`, or any name.
 
 ## Consequences
 
 - **Per-Memory sharing works without exposing the scope** — the question this ADR was opened to settle: a share is one extra wrap of the
   Memory's `K_mem`; `K_SC` stays in the owner-circle.
-- **Cheap navigation, scoped content.** One `K_SC` decrypts the whole tree's names/structure; a Memory's
-  content needs its `K_mem`. A guest of a shared Memory sees that Memory's name + content and nothing else.
+- **Navigation down the chain, scoped content.** `K_SC` opens the scope-root entries, and each node's key opens
+  the names and keys of its children; a member walks the whole tree from `K_SC`. A guest of a shared node sees that
+  node's subtree — names and content — and nothing beside or above it ([ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
+  Decision 9).
 - **`cross-space-memory-move`** ([memory](../../changes/) note): moving a Memory across scopes is a
   copy + re-encrypt (new scope's `K_SC`/`K_mem`), never a tree move — consistent with [scopes & tenancy](../crosscutting/scopes-and-tenancy.md).
-- **Per-Memory rotation is possible** precisely because `K_mem` is random + wrapped (a derived key could not
-  be rotated without rotating `K_SC`).
-- **Cost:** one wrap (`K_mem`-under-`K_SC`) per Memory + one per `K_blob`; a share adds one wrap per share.
+- **Cost:** one wrap per node (under its parent's key) + one per `K_blob`; a share adds one wrap per share.
   Negligible vs. content size.
 - **Deferred to the implementation CR / vectors:** the exact wire formats (every seal purpose has one vector in
   `contracts/crypto/vectors/v1.json`, and every seal binds the object it belongs to —
@@ -94,12 +99,11 @@ holds `K_SC`, `K_mem`, `K_blob`, or any name.
 A **chapter is itself a Memory**, so it carries the **same kind of key, applied recursively** — there is
 no separate `K_chapter` type:
 
-- **Every content-bearing node (MEMORY *and* CHAPTER) has its own random `K_mem`,** wrapped under the
-  **content key of its parent**: a top-level Memory's `K_mem` under `K_SC`; a chapter's `K_mem` under its
-  **parent Memory's `K_mem`** (the same `content-key` purpose one level deeper, bound like every `K_mem` wrap to
-  the node it belongs to — [ADR 0072](0072-a-seal-binds-its-object.md)). **Folders still carry no
-  key.** This is *not* the "full per-subtree key tree" rejected above — only content nodes get a key, and the
-  shape follows the existing Memory model unchanged.
+- **Every node (FOLDER, MEMORY *and* CHAPTER) has its own random key,** wrapped under the **content key of its
+  parent**: a scope-root node's under `K_SC`; a chapter's `K_mem` under its **parent Memory's `K_mem`** (the same
+  `content-key` purpose one level deeper, bound like every wrap to the node it belongs to and to its placement
+  version — [ADR 0072](0072-a-seal-binds-its-object.md), [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
+  Decisions 1 and 3).
 - **`K_blob` is wrapped under the `K_mem` of the media's *direct* parent node** — media on a chapter under the
   chapter's `K_mem`, media on the Memory under the Memory's `K_mem`.
 - **Every content node is therefore a sharing unit.** Sharing one chapter = one extra wrap of *that* chapter's
@@ -107,7 +111,10 @@ no separate `K_chapter` type:
   its chapters (their keys are wrapped under its `K_mem`) — a Memory share includes its chapters; a chapter
   share never leaks upward.
 - **Moves are a single re-wrap, never a data re-encrypt:** moving media chapter↔Memory re-wraps only its
-  `K_blob`; moving a chapter between Memories re-wraps only that chapter's `K_mem` (its subtree is untouched).
+  `K_blob`. A node's move or rename is one placement write: its key re-wrapped under the (new) parent's key, its
+  name re-sealed and its slug token recomputed there, stated against its `placement_version` (`409 stale_placement`,
+  [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) Decision 3); its subtree is
+  untouched.
 
 **Rejected — a chapter shares its Memory's `K_mem`:** separate **per-chapter sharing** is a product goal, and
 for E2EE data bolting it on later would force a client-side **re-encryption migration** of every chapter's

@@ -23,7 +23,16 @@ here; the server is blind.
 - **An absence asserted through the generated client proves nothing about the wire.** Its `…FromJSON` keeps only
   the fields the spec names, so a field the server still sends (or sends again) is dropped before the test sees
   it. To assert that a response does *not* carry something, read `…Raw(…)` and `.raw.json()`, as the two sharing
-  e2e suites do for the guest name (ADR 0030 point 8).
+  e2e suites do for the guest name (ADR 0030 point 8). The request side mirrors it: `…ToJSON` drops a field the spec
+  does not name, so a bite that adds one to a request body stays green — assert a body at `fetch`, as the
+  `*.wire.test.ts` suites do.
+- **A test that asserts what a click handler calls has not clicked anything.** The element's own default action
+  runs too, and only a real DOM click sees it: a PrimeVue `Breadcrumb` item without a real `url` renders
+  `<a href="#">`, whose default ran after the `command` and cleared the `#k=` fragment that carries a share key —
+  every guest write after a reload then failed, while the unit test that asserted the `router.push` arguments stayed
+  green (found only in a real browser, 2026-10-07). A core page that keeps the share key in the URL fragment
+  navigates with `hash: route.hash` and gives every link a real `href`; its test mounts the real component and the
+  real router and clicks the rendered element (`FolderShareBody.breadcrumb.test.ts`).
 - **`vi.mock` resolves by path, so moving a module silently disarms every mock of it.** A mock left on the old
   path stubs nothing and the real module runs — and a passthrough mock (`withRefresh: (f) => f()`) is green
   either way, so no red announces it. After a move, prove the new mocks bite by sabotaging the *real* module
@@ -124,7 +133,9 @@ here; the server is blind.
   **What an application registers** (its `register.ts`; the registry is write-once, a second registration throws):
   `registerKind` per node kind (detail component, icon, shareable); `claimSlot` for `levelView`,
   `nodeMutationDialog`, `shareDialog`, `topbarTray`, `sidebarPins`; `claimShareBody(rootKind)` for the
-  public share page (`PublicShare.rootKind`, served for every role, so one body per kind picks its screens by role);
+  public share page (`PublicShare.rootKind`, served for every role, so one body per kind picks its screens by role;
+  core claims `FOLDER` itself and embeds the claimed body for each child, handing it `subtreeRoot` — that node's id,
+  key and name — so the body renders and writes into that node, not the share root);
   `registerLifecycle(id, hooks)` with `onScopeReset` / `onScopeEntered` and the **required**
   `onMasterKeyRotated` — `rotateKeys` refuses to start when none is registered, because material sealed under the
   Master Key (Memories' pins) is otherwise undecryptable after a rotation. A kind or share nobody registered renders

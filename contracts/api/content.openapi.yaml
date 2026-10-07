@@ -295,7 +295,9 @@ paths:
       summary: The space's node trash — the soft-deleted subtree roots (uc.memory.delete-node).
       description: >
         Lists only the **root** of each soft-deleted subtree: its descendants went with it and come back with it,
-        so listing them too would offer a restore that cannot be honoured on its own. Each row carries when it was
+        so listing them too would offer a restore that cannot be honoured on its own. The one exception is a
+        descendant an earlier delete trashed on its own: it holds that delete's freed slug, so a restore of the
+        parent leaves it and its subtree in the trash, and it is listed as a root again (ADR 0061 Decision 5). Each row carries when it was
         deleted and when it will be purged. The trash hangs off the *space* rather than the node — a trashed
         node has no live node to hang a tab from (ADR 0061 Decision 3). Newest-deleted first.
       security:
