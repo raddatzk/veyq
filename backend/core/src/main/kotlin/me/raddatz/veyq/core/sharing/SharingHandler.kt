@@ -97,6 +97,8 @@ sealed interface ShareUploadOutcome {
     object NotContributable : ShareUploadOutcome, HttpFailure by httpFailure("share_not_contributable", FORBIDDEN)
     /** The named target is no live node inside the share's subtree ([ShareWriteTarget.NotFound]) — a 404. */
     object NodeNotFound : ShareUploadOutcome, HttpFailure by Failures.nodeNotFound
+    /** A declared role the target's application takes from no guest ([ShareGuestWrites.admitsGuestRole]) — a 400. */
+    object InvalidRequest : ShareUploadOutcome, HttpFailure by Failures.invalidRequest
     /** Password-protected + a wrong token (cr-0164) — a 403. */
     object PasswordIncorrect : ShareUploadOutcome, HttpFailure by httpFailure("share_password_incorrect", FORBIDDEN)
     /** Per-share rate limit exceeded — a 429. */
@@ -642,6 +644,9 @@ class SharingHandler(
         // A link whose usage no single application measures is never admitted (fail closed, [UploadAdmission]); the
         // reservation asks again under the tenant lock, and refuses there too.
         if (quota.admissionFor(target.kind) == null) return ShareUploadOutcome.NotContributable
+        // The role is an open token on the wire; which roles a guest uploads in is the target's application's (Memories:
+        // never a COVER). Asked only past the gate, so an unauthorized caller still learns nothing but its 403/404.
+        if (declares.any { !writes.admitsGuestRole(it.role) }) return ShareUploadOutcome.InvalidRequest
         return ShareUploadOutcome.Results(writes.start(gated.scopeId, shareId, target.kind, gated.identityId, declares, domain))
     }
 

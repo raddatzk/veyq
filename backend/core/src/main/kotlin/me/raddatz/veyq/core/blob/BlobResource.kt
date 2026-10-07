@@ -53,7 +53,7 @@ class BlobResource(
 
     override fun startBlobUploads(scopeId: UUID, blobUploadsBatchRequest: BlobUploadsBatchRequest): Response {
         val declares = blobUploadsBatchRequest.items.map {
-            UploadDeclare(it.chunkCount, it.byteSize, it.wrappedBlobKey, it.blobId.toString(), it.ownerId.toString(), it.role.value)
+            UploadDeclare(it.chunkCount, it.byteSize, it.wrappedBlobKey, it.blobId.toString(), it.ownerId.toString(), it.role)
         }
         return when (val o = blobs.start(identity.principal.name, scopeId.toString(), declares, signingDomain())) {
             is StartOutcome.Results -> Response.ok(

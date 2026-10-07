@@ -32,6 +32,9 @@ class MediaShareGuestWrites(
     // [MediaUploadCompletion]'s "may hold media" set: the two hold the same kinds today, but what may hold media is not
     // by that what a guest may write into.
     override fun supports(nodeKind: String): Boolean = nodeKind in MemoriesNodeKinds.SHARE_ROOTS
+
+    // A guest uploads a medium (its original and derivatives), never a node's cover — that is a member's write.
+    override fun admitsGuestRole(role: String): Boolean = role in MemoryBlobRoles.GUEST
     override fun start(
         scopeId: String, shareId: String, targetKind: String, identityId: String, declares: List<UploadDeclare>, domain: String?,
     ): List<UploadItemResult> =

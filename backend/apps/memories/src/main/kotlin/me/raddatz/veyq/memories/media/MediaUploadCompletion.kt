@@ -47,8 +47,14 @@ class MediaUploadCompletion(
         }
         val allSessions = listOf(original) + derivSessions.map { it.second }
         // Each blob's K_blob wrap is sealed bound to (media, role) (ADR 0072): a session started for another media or
-        // in another role would land a blob nobody can open where it is attached, so the item is refused whole.
-        if (!original.boundTo(item.ownerId, "ORIGINAL") || derivSessions.any { (kind, s) -> !s.boundTo(item.ownerId, kind) }) {
+        // in another role would land a blob nobody can open where it is attached, so the item is refused whole. The
+        // role is an open token (cr-files-application P3-S2), so a derivative also attaches only in a role Memories
+        // names one in: a session started as ORIGINAL, or in any other token, and declared as a derivative of that same
+        // kind would pass the binding check alone (the media contract's closed `MediaDerivativeKind` refuses such a
+        // kind at the wire; this holds it for every caller of the seam).
+        if (!original.boundTo(item.ownerId, MemoryBlobRoles.ORIGINAL) ||
+            derivSessions.any { (kind, s) -> kind !in MemoryBlobRoles.DERIVATIVES || !s.boundTo(item.ownerId, kind) }
+        ) {
             return CompleteItemResult(null, null, "upload_mismatch")
         }
         if (store.mediaIdTaken(item.ownerId)) {

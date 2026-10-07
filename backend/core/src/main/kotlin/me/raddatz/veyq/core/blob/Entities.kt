@@ -68,7 +68,7 @@ class UploadSessionEntity : PanacheEntityBase {
     @Column(name = "owner_id", length = 36)
     var ownerId: String? = null
 
-    /** ORIGINAL / THUMBNAIL / PREVIEW / COVER — the role the wrap is sealed bound to (ADR 0072). */
+    /** The role the wrap is sealed bound to (ADR 0072): a token the owning application defines; core compares it, never names one. */
     @Column(name = "blob_role", length = 16)
     var blobRole: String? = null
 

@@ -30,7 +30,11 @@ names a node kind an application owns (developer-styleguide § 1, ADR 0007's sha
   open, bounded token (cr-platform-contract-split slice 4): the generated models carry it as a `String` and no
   generated type lists a kind, so a literal or an application's constant is the only way core could name one — and
   both are what this rule reads. Each kind must still be named in code by some application main file, so the list
-  cannot rot into names that guard nothing.
+  cannot rot into names that guard nothing. **The blob roles an application owns** (`APPLICATION_BLOB_ROLES`:
+  Memories' `ORIGINAL`, `THUMBNAIL`, `PREVIEW`, `COVER`) are read by the same rule since the contract's `BlobRole`
+  opened to the same kind of token (cr-files-application P3-S2): core stores a role and compares it
+  (`UploadSessionEntity.boundTo`), and which roles exist is the application's (`MemoryBlobRoles`). Core's
+  `cover_blob_id` slot is a column, not the role, and names none.
 
 **What it no longer asserts: core importing an application.** Until the Gradle module split it also held every
 non-Memories main file away from the `me.raddatz.veyq.memories` packages. That is the build's now: `:core` has no project
@@ -114,7 +118,16 @@ APPLICATION_KINDS = [
     "MEMORY",
     "CHAPTER",
 ]
-KIND_REF = re.compile(r"(?<!\w)(" + "|".join(re.escape(k) for k in APPLICATION_KINDS) + r")(?!\w)")
+# The blob roles Memories owns (cr-files-application P3-S2): the contract's `BlobRole` is an open token like the kind,
+# so core stores and compares a role and names none. Read by the same rule as the kinds.
+APPLICATION_BLOB_ROLES = [
+    "ORIGINAL",
+    "THUMBNAIL",
+    "PREVIEW",
+    "COVER",
+]
+APPLICATION_TOKENS = APPLICATION_KINDS + APPLICATION_BLOB_ROLES
+KIND_REF = re.compile(r"(?<!\w)(" + "|".join(re.escape(k) for k in APPLICATION_TOKENS) + r")(?!\w)")
 # A qualified name in code, not preceded by another name part. Its package is resolved against the declared ones.
 QUALIFIED = re.compile(r"(?<![\w.])me\.raddatz\.veyq(?:\.\w+)+")
 PACKAGE = re.compile(r"^\s*package\s+([\w.]+)", re.M)
@@ -173,10 +186,10 @@ def main() -> int:
                       "re-point backend_tree.")
     application_named = {k.group(1) for path, _, _, _ in read if in_application(path)
                          for line in code_of[path] for k in KIND_REF.finditer(line)}
-    unnamed = [k for k in APPLICATION_KINDS if k not in application_named]
+    unnamed = [k for k in APPLICATION_TOKENS if k not in application_named]
     if application_files and unnamed:
-        errors.append("APPLICATION_KINDS names kinds no application main file names in code — the list has rotted or "
-                      "the kind was renamed: " + ", ".join(unnamed))
+        errors.append("APPLICATION_KINDS/APPLICATION_BLOB_ROLES name tokens no application main file names in code — "
+                      "the list has rotted or the token was renamed: " + ", ".join(unnamed))
     if errors:
         print("KERNEL-IMPORTS FAILED —")
         print("\n".join(f"  - {e}" for e in errors))
@@ -195,14 +208,14 @@ def main() -> int:
             k = KIND_REF.search(line)
             if k:
                 hits.setdefault((path, lineno), f"  - {path.relative_to(ROOT)}:{lineno}: platform names the "
-                                                f"application node kind {k.group(1)}: {source[lineno - 1].strip()}")
+                                                f"application node kind or blob role {k.group(1)}: {source[lineno - 1].strip()}")
 
     if hits:
         print("KERNEL-IMPORTS FAILED — a kernel package names a slice (by import or fully-qualified reference), "
-              "or a platform file names a node kind an application owns (developer-styleguide § 1, ADR 0079):")
+              "or a platform file names a node kind or blob role an application owns (developer-styleguide § 1, ADR 0079):")
         print("\n".join(hits[k] for k in sorted(hits)))
         print("Share the rule through a small interface in the kernel that the slice implements, or move the entity "
-              "into the kernel with the slice's store still its only writer. A rule about a Memories node kind is "
+              "into the kernel with the slice's store still its only writer. A rule about a Memories node kind or blob role is "
               "Memories' — answer it through a core seam (NodeKindRules, ShareRoots, GuestNodeRules, ShareGuestWrites, UploadCompletion, "
               "UploadAdmission).")
         return 1
@@ -210,7 +223,7 @@ def main() -> int:
     print(f"kernel imports OK: {len(kernel)} kernel file(s) in {len(KERNEL)} declared package(s), none names one of "
           f"the {len(declared - {p for p in declared if under(p, KERNEL)})} slice package(s) in code; "
           f"{len(platform)} platform file(s) (every main file outside the {application_files} in application modules), "
-          f"none names an application node kind ({', '.join(APPLICATION_KINDS)})")
+          f"none names an application node kind ({', '.join(APPLICATION_KINDS)}) or blob role ({', '.join(APPLICATION_BLOB_ROLES)})")
     return 0
 
 
