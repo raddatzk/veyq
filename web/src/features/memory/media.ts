@@ -18,7 +18,8 @@ import { blobApi } from '../../api/client'
 import { mediaApi } from './api'
 import { withRefresh } from '../../app/sessionRefresh'
 import { type MediaListPage, type MediaSummary, type MediaDerivativeKind } from '../../api/generated/media'
-import { type PresignedUrl, type BlobRole as WireBlobRole } from '../../api/generated/blob'
+import { type PresignedUrl } from '../../api/generated/blob'
+import type { MemoryBlobRole } from './blobRole'
 import { expectMintedId } from '../../core/node/mintedId'
 import { mediaKey, uploaderOriginOf, type UploaderOrigin } from './mediaKey'
 import { MetaConflictError, MetaUnreadableError, writeSealedMeta, type MetaEditContext } from './sealedMetaWrite'
@@ -43,7 +44,7 @@ export { openBucketName, listBuckets, createBucket, renameBucket, deleteBucket, 
  * key (ADR 0031 point 7). A function handed the MEDIA resolves the key itself ([mediaKey]); one handed only an id
  * or a blob ref is handed the key, which its caller asks [mediaKey] for.
  */
-const blobKeyContext = (scopeId: string, ref: { blobId: string; ownerId: string; role: BlobRole }) =>
+const blobKeyContext = (scopeId: string, ref: { blobId: string; ownerId: string; role: string }) =>
   ({ purpose: 'blob-key', scopeId, ownerId: ref.ownerId, blobId: ref.blobId, role: ref.role }) as const
 /**
  * The sealed **listed-metadata** tier of one media (cr-0068), bound to (scope, media). This one blob carries the
@@ -60,10 +61,10 @@ export const CHUNK_SIZE = v1.CHUNK_FRAME_SIZE.plaintextBytes
 
 // --- read-back model -------------------------------------------------------
 
-/** The role a blob plays for its owner — the `K_blob` wrap is sealed bound to it (ADR 0072). The crypto suite's role is
- *  an open token (`v1.BlobRole`, a string) since Files brought FILE_CONTENT; this layer keeps the four it writes, which
- *  the blob contract still closes, so a declare type-checks against the wire item and no string role reaches it. */
-export type BlobRole = WireBlobRole
+/** Memories' blob roles ([MemoryBlobRole], `./blobRole`) — the contract's and the crypto suite's role is an open token
+ *  (a string) since cr-files-application P3-S2: the blob transport below takes any role, the read-back refs this layer
+ *  builds carry one of Memories' four. */
+export type { MemoryBlobRole } from './blobRole'
 
 /**
  * Everything needed to open one blob: its id + the metadata + the K_blob wrap (under K_mem) + where that wrap is
@@ -77,7 +78,7 @@ export type BlobRef = {
   byteSize: number
   wrappedBlobKey: string
   ownerId: string
-  role: BlobRole
+  role: MemoryBlobRole
 }
 
 /** One role-tagged derivative tier of a media. */
@@ -361,13 +362,13 @@ type BlobPlan = {
   byteSize: number
   blobId: string
   ownerId: string
-  role: BlobRole
+  role: string
 }
 
 /** Plan `source` as a blob under a fresh random `K_blob`, wrapped under `K_mem` bound to where it will live — the
  *  client-minted blob id, its owner and its role (ADR 0072). Its shape follows from its size alone: every frame
  *  but the last carries [CHUNK_SIZE] plaintext bytes, and an empty source is one empty frame. */
-function planBlob(scopeId: string, owner: { ownerId: string; role: BlobRole }, memoryKey: Uint8Array, source: Blob): BlobPlan {
+function planBlob(scopeId: string, owner: { ownerId: string; role: string }, memoryKey: Uint8Array, source: Blob): BlobPlan {
   const blobKey = v1.randomBytes(32)
   const blobId = crypto.randomUUID()
   const wrappedBlobKey = b64std(v1.seal(blobKeyContext(scopeId, { blobId, ...owner }), memoryKey, blobKey))
@@ -592,7 +593,7 @@ function throwIfAborted(signal?: AbortSignal): void {
 export type BlobDeclare = {
   blobId: string
   ownerId: string
-  role: BlobRole
+  role: string
   chunkCount: number
   byteSize: number
   wrappedBlobKey: string

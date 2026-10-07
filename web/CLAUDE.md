@@ -125,8 +125,8 @@ here; the server is blind.
   that imports the application or one of its generated clients (every `generate:api` output whose `-i` lies in an
   application's directory `contracts/api/<app>/`, read from `package.json` — today `generated/media`, `generated/favorites`,
   `generated/share-media`; so their
-  factories are `features/memory/api.ts`'s, not `api/client.ts`'s, and a core helper types from core's own client,
-  e.g. `mediaDeriver`'s tiers from `BlobRole`), uses `import.meta.glob`, or names `NodeKind.Memory|Chapter` / `'MEMORY'` /
+  factories are `features/memory/api.ts`'s, not `api/client.ts`'s, and a core helper types from core's own client or
+  from a literal union of its own, e.g. `mediaDeriver`'s tiers, since core's `BlobRole` is an open token), uses `import.meta.glob`, or names `NodeKind.Memory|Chapter` / `'MEMORY'` /
   `'CHAPTER'`. The one exempt file is `src/applications.ts`, the composition root (by exact path, never a
   directory); `main.ts` calls its `registerApplications()` before `boot()`. Build-time only: no glob, no computed
   `import()`, no loading after the fact (ADR 0079 Decision 5, ADR 0026) — registered code runs with every unlocked key.
