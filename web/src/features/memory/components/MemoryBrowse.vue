@@ -96,6 +96,9 @@ watch(
         <div class="veyq-card memory-folder-card memory-folder-overview-card">
           <span class="pi pi-folder" />
           <h2>{{ folder.name }}</h2>
+          <!-- Visible at EVERY width: the card has no overflow menu, so a width-hidden button is a lost action. They
+               carried the Memory header's collapse classes, which hid all three at 721–1120 px and ≤ 720 px (found in the
+               browser, 2026-10-07); three small icon buttons fit, and ≤ 520 px they take their own row (memory.css). -->
           <div v-if="!readonly || shareable" class="memory-folder-overview-actions">
             <!-- The same affordance as a Memory's share button (icon, label, tooltip); listing and copying links is a
                  read, so it stays during a pending deletion, where a new link is refused server-side anyway. -->
@@ -103,7 +106,7 @@ watch(
               v-if="shareable"
               v-tooltip.bottom="t('share.share')"
               type="button"
-              class="veyq-icon-button veyq-prime-icon-button memory-folder-overview-action memory-action-inline memory-action-collapsible"
+              class="veyq-icon-button veyq-prime-icon-button memory-folder-overview-action"
               icon="pi pi-share-alt"
               :aria-label="t('share.share')"
               severity="secondary"
@@ -114,7 +117,7 @@ watch(
             <Button
               v-if="!readonly"
               type="button"
-              class="veyq-icon-button veyq-prime-icon-button memory-folder-overview-action memory-action-inline memory-action-collapsible"
+              class="veyq-icon-button veyq-prime-icon-button memory-folder-overview-action"
               icon="pi pi-pencil"
               :aria-label="t('memory.rename')"
               severity="secondary"
@@ -125,7 +128,7 @@ watch(
             <Button
               v-if="!readonly"
               type="button"
-              class="veyq-icon-button veyq-prime-icon-button memory-folder-overview-action memory-danger-action memory-action-inline memory-action-collapsible"
+              class="veyq-icon-button veyq-prime-icon-button memory-folder-overview-action memory-danger-action"
               icon="pi pi-trash"
               :aria-label="t('memory.delete')"
               severity="danger"
