@@ -10,7 +10,7 @@ package me.raddatz.veyq.core.content
  *    deleted through a boundary;
  *  - a create's parent and a placement's destination lie inside, [rootNodeId] included.
  *
- * No caller passes one yet: the member endpoints act on the whole scope. A share's guest operations will (sub-slice
- * 5a.3 of cr-node-key-hierarchy), with the share's root as [rootNodeId].
+ * The member endpoints pass none (they act on the whole scope); a share's guest tree operations pass the share's root
+ * as [rootNodeId] (`ShareNodesHandler`).
  */
 data class SubtreeBoundary(val rootNodeId: String)

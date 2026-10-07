@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.content
 
 import me.raddatz.veyq.core.node.NodeEntity
+import me.raddatz.veyq.core.persistence.createOrConflict
 import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.placementTo
@@ -82,11 +83,13 @@ class SubtreeBoundaryRaceCoreSliceTest {
     private fun boundedMove(t: Tree): UpdateNodeOutcome =
         handler.updateInScope(t.scopeId, t.x, placementTo(t.a), null, null, null, SubtreeBoundary(t.root))
 
-    private fun boundedCreate(t: Tree, id: String): CreateNodeOutcome =
-        handler.createInScope(
-            t.scopeId, id, t.a, NodeEntity.FOLDER, "bmV3", Base64.getEncoder().encodeToString(id.toByteArray()),
-            0, 0, CONTENT_KEY, null, SubtreeBoundary(t.root),
-        )
+    // createInScope joins its caller's transaction; the caller opens it, as the member's create does.
+    private fun boundedCreate(t: Tree, id: String): CreateNodeOutcome {
+        val slug = Base64.getEncoder().encodeToString(id.toByteArray())
+        return createOrConflict(conflict = handler.createReplay(t.scopeId, t.a, slug, id)) {
+            handler.createInScope(t.scopeId, id, t.a, NodeEntity.FOLDER, "bmV3", slug, 0, 0, CONTENT_KEY, null, SubtreeBoundary(t.root))
+        }
+    }
 
     private fun parentOf(node: String): String = QuarkusTransaction.requiringNew().call { NodeEntity.findById(node)!!.parentId }
 }

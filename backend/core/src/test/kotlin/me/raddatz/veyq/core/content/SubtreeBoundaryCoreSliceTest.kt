@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.content
 
 import me.raddatz.veyq.core.node.NodeEntity
+import me.raddatz.veyq.core.persistence.createOrConflict
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.placementTo
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
@@ -90,9 +91,10 @@ class SubtreeBoundaryCoreSliceTest {
     private fun create(t: Tree, parent: String?): Pair<String, CreateNodeOutcome> {
         val id = UUID.randomUUID().toString()
         val slug = Base64.getEncoder().encodeToString(id.toByteArray())
-        return id to handler.createInScope(
-            t.scopeId, id, parent, NodeEntity.FOLDER, "bmV3", slug, 0, 0, CONTENT_KEY, null, SubtreeBoundary(t.root),
-        )
+        // createInScope joins its caller's transaction; the caller opens it, as the member's create does.
+        return id to createOrConflict(conflict = handler.createReplay(t.scopeId, parent, slug, id)) {
+            handler.createInScope(t.scopeId, id, parent, NodeEntity.FOLDER, "bmV3", slug, 0, 0, CONTENT_KEY, null, SubtreeBoundary(t.root))
+        }
     }
 
     private fun parentOf(node: String): String = QuarkusTransaction.requiringNew().call { NodeEntity.findById(node)!!.parentId }

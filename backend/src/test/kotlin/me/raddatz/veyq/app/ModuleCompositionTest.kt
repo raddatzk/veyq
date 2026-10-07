@@ -11,6 +11,8 @@ import me.raddatz.veyq.core.scope.MembershipEraser
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.scope.ScopeEraser
 import me.raddatz.veyq.core.sharing.GuestIdentityUsage
+import me.raddatz.veyq.core.sharing.GuestNodeOp
+import me.raddatz.veyq.core.sharing.GuestNodeRules
 import me.raddatz.veyq.core.sharing.ShareGuestWrites
 import me.raddatz.veyq.core.sharing.ShareRoots
 import me.raddatz.veyq.core.sharing.ShareWriteProof
@@ -75,6 +77,7 @@ class ModuleCompositionTest {
     @Inject @All lateinit var admissions: MutableList<UploadAdmission>
     @Inject @All lateinit var kindRules: MutableList<NodeKindRules>
     @Inject @All lateinit var shareRoots: MutableList<ShareRoots>
+    @Inject @All lateinit var guestNodeRules: MutableList<GuestNodeRules>
 
     @Inject lateinit var quota: StorageQuota
 
@@ -90,6 +93,7 @@ class ModuleCompositionTest {
         UploadAdmission::class.java to admissions,
         NodeKindRules::class.java to kindRules,
         ShareRoots::class.java to shareRoots,
+        GuestNodeRules::class.java to guestNodeRules,
     )
 
     private val compiled: List<Class<*>> by lazy {
@@ -142,6 +146,13 @@ class ModuleCompositionTest {
         assertFalse(NodeKindRules.parentAllows(kindRules, unclaimed, ParentSlot.Root), "an unclaimed kind is placed")
         assertTrue(NodeKindRules.parentAllows(kindRules, memory, ParentSlot.Root), "control: a Memory at the root")
         assertTrue(NodeKindRules.parentAllows(kindRules, NodeEntity.FOLDER, ParentSlot.Root), "control: a folder")
+
+        // A guest's tree operation inside a container: an unclaimed kind allows none, and so does a Memory — Memories
+        // declares no guest tree operation (ADR 0080 decision 6); core's folder is the control.
+        val create = GuestNodeOp.CreateChild(NodeEntity.FOLDER)
+        assertFalse(GuestNodeRules.readWriteAllows(guestNodeRules, unclaimed, create), "a guest creates in an unclaimed kind")
+        assertFalse(GuestNodeRules.readWriteAllows(guestNodeRules, memory, create), "a guest creates inside a Memory")
+        assertTrue(GuestNodeRules.readWriteAllows(guestNodeRules, NodeEntity.FOLDER, create), "control: inside a folder")
 
         // A link's usage: no admission measures it, so the link start is refused.
         assertNull(quota.admissionFor(unclaimed), "an unclaimed kind's link is measured")
