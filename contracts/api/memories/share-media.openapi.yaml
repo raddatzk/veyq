@@ -19,7 +19,8 @@ info:
     **No auth, operator-blind.** Every operation is anonymous: a guest holds no account, only the link (and, to
     write, the `contributorToken` its identity was issued). The server sees what core's resolve and guest transport
     already show it — the share id, the guest's identity id, opaque upload and media ids, sizes — serves only
-    ciphertext, and attaches each medium to the shared root node itself (the guest names no node). Authorization is
+    ciphertext, and attaches each medium to the shared root node, or to the MEMORY or CHAPTER inside the shared
+    subtree the guest names (ADR 0080 Decision 6; a `WRITE_ONLY` guest names none but the root). Authorization is
     enforced by code (ADR 0008); field validation via `x-field-extra-annotation`.
 
 tags:
@@ -67,15 +68,18 @@ paths:
     post:
       tags: [share-media]
       operationId: completeShareMedia
-      summary: Complete a guest upload (unauthenticated) — the application attaches it to the shared root node.
+      summary: Complete a guest upload (unauthenticated) — the application attaches it to the shared root or a node below.
       description: >
-        **No auth.** A guest's completion of its uploads into media on the shared Memory or chapter. Core's guest gate runs
+        **No auth.** A guest's completion of its uploads into media on the shared Memory or chapter, or on a Memory or chapter below the share's root. Core's guest gate runs
         first (`ShareGuestGate`, ADR 0079) and spends the per-share upload budget. Gated on the share (exists + `enabled` + an access
         mode that lets a guest add) + a valid `contributorToken`. Each item is one of the application's objects
         (`mediaId`): the original upload + up to two role-tagged derivatives; the server verifies the stored objects
-        (declare-then-verify + byte budget), records the blob(s), and attaches **one object to the shared root
-        node** (`nodeId` of the share) **stamped with the guest's `identityId`** (direct-append). The
-        guest is not told which node — the server uses the share's own node. Returns `{ blobId, mediaId }` or
+        (declare-then-verify + byte budget), records the blob(s), and attaches **one object to the target node**
+        — the shared root when the request names no `nodeId`, else that live MEMORY or CHAPTER inside the share's
+        subtree (a link's role applies to every node below its root as Memories allows it, ADR 0080 Decision 6; a
+        `WRITE_ONLY` link only its root) — **stamped with the guest's `identityId`** (direct-append). The target is
+        checked again in each item's write, under the scope lock: one trashed or moved out of the subtree since, or a
+        link revoked or deleted since, refuses the item (`upload_not_found`). Returns `{ blobId, mediaId }` or
         a per-item error.
         **Password-protected shares (cr-0164, ADR 0037):** the password gate fronts this endpoint — no
         `X-Share-Password` → non-enumerable `404`; a wrong token → `403 share_password_incorrect`.
@@ -108,11 +112,11 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "403":
-          description: The share does not allow contributions or the contributor token is invalid (`share_not_contributable`), or it is password-protected and the `X-Share-Password` token is wrong (`share_password_incorrect`, cr-0164).
+          description: The share does not allow contributions, the contributor token is invalid, the target node is no Memory or chapter (a `FOLDER`, the share root's included), the root is in the trash while a `nodeId` is named, or a `WRITE_ONLY` link names a `nodeId` other than its root (`share_not_contributable`); or it is password-protected and the `X-Share-Password` token is wrong (`share_password_incorrect`, cr-0164).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_contributable } }
         "404":
-          description: No such share (disabled/expired/unknown, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4)), or it is password-protected and no `X-Share-Password` token was given (cr-0164) — non-enumerable.
+          description: No such share (disabled/expired/unknown, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4)), or it is password-protected and no `X-Share-Password` token was given (cr-0164) — non-enumerable (`share_not_found`); or the `nodeId` names no live node inside the share's subtree (`node_not_found`, the same for a node outside it as for none).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
 
@@ -128,7 +132,9 @@ paths:
         `contributorToken` rides the **`X-Contributor-Token`** header (no body on DELETE). Gated
         on the share (exists + `enabled` + role ∈ {READ_WRITE, WRITE_ONLY}) + a valid token; the server deletes the
         object (and its derivatives, and puts all their blob objects on the reclaim list) **iff** its `share_identity_id`
-        equals the token's identity — a single-row **ownership** check, never a filtered listing. `404` for any other
+        equals the token's identity — a single-row **ownership** check, never a filtered listing — and it lies on a
+        node inside the share's subtree (ADR 0080 Decision 6: a folder link's guest deletes its own in any Memory or
+        chapter below the root, and none a member has since moved out of it). `404` for any other
         id (a foreign or unknown one is indistinguishable from a missing one). Idempotent-safe: a second
         delete of the same id is `404`.
         **Password-protected shares (cr-0164, ADR 0037):** the password gate fronts this endpoint — no
@@ -310,6 +316,18 @@ components:
           maxLength: 512
           example: Y29udHJpYnV0b3ItdG9rZW4tb3BhcXVl
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 512)'
+        nodeId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: >
+            The node every item attaches to ([ADR 0080](../../../docs/decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
+            Decision 6). Absent = the share root (unchanged behaviour); otherwise a live MEMORY or CHAPTER inside the
+            share's subtree — a node that is not one is `404 node_not_found`, another kind (a `FOLDER`) `403
+            share_not_contributable`; a `WRITE_ONLY` link only accepts its root (`403 share_not_contributable`).
+            Checked again with the write: a target trashed or moved out of the subtree since is refused per item
+            (`upload_not_found`).
+          example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
         items:
           type: array
           minItems: 1
@@ -319,7 +337,7 @@ components:
 
     ShareMediaRequestItem:
       type: object
-      description: One of the application's objects — the original upload + up to two role-tagged derivative uploads. Attaches to the share's own root node (no `nodeId` — the server uses the shared node).
+      description: One of the application's objects — the original upload + up to two role-tagged derivative uploads. Attaches to the request's target node (`ShareMediaBatchRequest.nodeId`, the share's root when absent).
       required: [mediaId, originalUploadId]
       properties:
         mediaId:
