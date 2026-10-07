@@ -283,11 +283,58 @@ without touching core except for the platform prerequisites below, which every l
         (9), `UploadStatusMenu` (4), `AppTopbar` (2), `MemoryDetail` (30), `MemoryShareBody` (7), `MemoryShareBody.embedded`
         (7, its partial mock keeps the real `useUploadQueue`), `ShareView.folder` (1). Not verified in a browser.
   - [ ] B3 the status menu to core and the tray becomes a list (`register.ts` loses its tray claim; needs P4a).
-  - [ ] P4b a core level view `core/node/LevelView.vue` — overview card, application sections ordered by `order`, the folder
+  - [x] P4b a core level view `core/node/LevelView.vue` — overview card, application sections ordered by `order`, the folder
         section, a fallback section for a kind nobody sections ('not supported', never an empty area) · Done when: P4-0
         unchanged, `LevelView.test.ts`.
+        **Measured 2026-10-08:** `registry.ts` gains `KindDescriptor.section?: KindSection {order, component}`,
+        `LevelSectionProps {folder: TreeNode | null; nodes: readonly TreeNode[]; epochs: EpochKeys | null; readonly:
+        boolean}`, `LevelSectionEmits {openNode: [node]; create: [mode: string]; openTrash: []}`, `LevelSection {component,
+        order, kinds}` and `sections(): readonly LevelSection[]`; `LevelViewProps`/`LevelViewEmits` and `'levelView'` in
+        `SlotName` are gone. Rule: a section is keyed by its component's identity — rendered once, handed the children of
+        every kind that names it (kinds in registration order, each bucket in `childrenOf`'s order); sorted by `order`, a
+        tie in the order each section was first named; a kind naming an existing section's component with another `order`
+        makes `registerKind` throw and registers nothing (a re-registered kind throws before its section is added).
+        `core/node/LevelView.vue` (props `folder, level, epochs, readonly, shareable`; emits `openNode, create, renameFolder,
+        deleteFolder, openTrash, share` — the old slot contract) renders the overview card, the sections, one fallback
+        section per unsectioned kind, then the Folders section; the overview card and the Folders section are
+        `MemoryBrowse.vue`'s markup moved verbatim with their `memory-*` classes and `memory.*` keys (P4d renames them, a
+        comment says so). `features/memory/components/MemoriesSection.vue` is the Memories half (cards, date sort, covers,
+        favourites — the heart's toggle moved in from `MemoryLevelHost` —, the create card, `SpaceMap`, the toolbar with
+        the trash and `ViewModeToggle`), registered as `section: {order: 10}` on MEMORY and CHAPTER; `MemoryBrowse.vue` and
+        `MemoryLevelHost.vue` are deleted; `MemoryHomeView` renders `LevelView` where the slot was (its unsupported branch
+        is now `isOpenable` only). Files registers no section: a FILE child shows in the fallback.
+        `npm run check` (fresh `generate:api`) 202 files / 1915 tests → 203 / 1941 (`LevelView.test.ts` 17 new: order,
+        shared-once, empty section, props/events, fallback for a registered and an unregistered kind, folders, map/list,
+        read-only, the overview cases moved from `MemoryBrowse.test.ts`; that file is `MemoriesSection.test.ts` now, 10
+        cases; `registry.test.ts` +7; `applications.test.ts` +1; `MemoryHomeView.test.ts` drives the real `LevelView` over
+        a stubbed `MemoriesSection`, incl. a FILE child in the fallback over the real Memories + Files registry;
+        `MemoryHomeView.registry.test.ts`'s unclaimed-`levelView` case is now "no section registered: folders walkable,
+        unsectioned kinds in the fallback"); 53/53 validators green before and after, the core-import guard 185 → 186 core
+        files (Memories 64 → 63), stylesheet anchors 636 → 639. The golden test's control case now asserts
+        `registry.sections()`; the 8 P4-0 snapshots and the B0 snapshots are byte-identical (no `-u` run).
+        `AppShell.slots.test.ts` needed no change (it never touched `levelView`). Levers, each red then restored green:
+        fallback filtered out (4 red: LevelView 2, MemoryHomeView FILE, registry host); `sections()` unsorted (3 red);
+        a shared section rendered once per kind (9 red: the LevelView once-case and 8 of 8 golden snapshot cases); an
+        import of `features/memory/kinds` in `LevelView.vue` (guard red on `import`); the sections block after the Folders
+        section (golden 7 red, the map scenario has no folders); the overview share `v-if` dropped (golden 1 red).
+        **Decisions taken (owner, please review; each reversible):** (1) `create` still carries the create MODE the
+        `nodeMutationDialog` understands (`create-memory`, `create-folder`), not a kind — P4c re-cuts the dialogs per kind
+        and changes the payload with them. (2) A section renders even with no child of its kinds (Memories' empty state
+        and create card are in the golden). (3) The view-mode seam: core reads the shared `useViewMode` for the Folders
+        grid's list variant and hides the Folders section in map mode, as `MemoryBrowse` did — no event between section
+        and core; P4e may move grid/list into a core toolbar. (4) The fallback: one section per kind, sorted by the kind
+        token, after the application sections and before the Folders; heading = the raw kind token (no kind has a label
+        yet; F1 replaces FILE's), a count, rows as non-clickable `div.veyq-card.veyq-node-card.veyq-node-card-unsupported`
+        (opening one would land on the same unsupported state) with the kind's icon (`pi pi-question-circle` for an
+        unregistered kind), the name and `home.unsupportedKind`; shown in map mode too. Three new `veyq-*` rules in
+        `ui.css`, tokens only. (5) CHAPTER names the section too, although the backend places a CHAPTER only in a MEMORY:
+        an impossible chapter at a folder level would show as a Memories card rather than "unsupported". (6) The trash
+        stays in Memories' section toolbar (the owner's P4 decision); core forwards `openTrash`. (7) `sections()` is read
+        once per mount, as the host reads its slots.
+        **Not verified:** no browser — the layout of the new fallback rows, the visual order and the keyboard (tab) order
+        across sections are unverified; the golden pins the DOM only.
   - [ ] P4c dialogs per kind — a core `FolderNameDialog` (create folder, rename anything), `createDialog` and `shareDialog` per
-        kind; `nodeMutationDialog` and `levelView` slots go · Done when: `MemoryHomeView*.test.ts` updated.
+        kind; the `nodeMutationDialog` slot goes (`levelView` went in P4b) · Done when: `MemoryHomeView*.test.ts` updated.
   - [ ] P4d CSS and i18n neutral — the `memory-folder-*`/`memory-create-card` rules move to `veyq-*` twins (dark tokens), the dead
         rules are deleted (`validate_stylesheet_anchors`), the generic `memory.*` keys move to a core namespace (en + de) ·
         Done when: the golden test is updated deliberately (class names only).
