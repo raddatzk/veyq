@@ -72,10 +72,20 @@ without touching core except for the platform prerequisites below, which every l
       unchanged. Guard-gap cases 62–64 (rejected) and 65 (a module without its directory still passes, as before) bite:
       rule (d) not reading the spec directories turns 62/63 red, tolerating a literal owner list turns 64 red. Note for
       F0: the module is `files`, so its specs go in `contracts/api/files/` (the directory name is the owner).
-- [ ] P3 attachments in core (inbox #327/#345) — planned 2026-10-07 from four plan inventories; owner decisions: the slot of
+- [x] P3 attachments in core (inbox #327/#345) — planned 2026-10-07 from four plan inventories; owner decisions: the slot of
       Files' blob equals its role token `FILE_CONTENT` (one token space); `expectedBlobId` travels in the completion
       `payloads` (Files' own contract, no core wire change); the attachment bytes count as a core term in `linkUsage`;
       the server refuses a guest upload with the role `COVER` explicitly (the enum used to say it).
+      **Done 2026-10-08 (S1–S5).** What P3 built: the blob role is an open token on the wire and in the crypto suite
+      (`FILE_CONTENT` with its own vectors, Memories' four roles its own constants, a guest `COVER` refused); core's
+      `veyq_node_attachment` table (one blob per node slot, no cascades) with its erasers, share contributor and
+      guest-identity usage; `AttachmentStore.attach` — the one transactional write (scope lock, gate, session spent
+      first, liveness by query, CAS replace on `expectedBlobId`, the old blob freed through `deleteBlobRow`), proven on
+      H2 and MariaDB; and the attachment bytes as core's term of a link's usage. Left for F1 (Files' backend): its
+      completion endpoint and `UploadCompletion` for `FILE` calling `attach`; the mapping of `expectedBlobId` out of
+      its completion `payloads`; the wire code for `AttachOutcome.Conflict` (and the others) in Files' contract; and,
+      if Files' guests upload, a `ShareGuestWrites` plus an `UploadAdmission` for `FILE` reporting 0 (P3-S5's decision:
+      core's terms never admit a link alone).
   - [x] P3-S1 crypto — `BlobRole` in `packages/crypto/src/seal.ts` becomes a token (anchored regex `^[A-Z][A-Z0-9_]{0,15}$`),
         no new seal purpose, a new role value `FILE_CONTENT` only (the role is encoded `lp(utf8)`: the bytes of the four
         existing roles stay identical; ADR 0072 asks for suite v2 only on a field change); a new vector block (content key →
@@ -201,8 +211,48 @@ without touching core except for the platform prerequisites below, which every l
         scope-purge race (the purge deletes the scope's sessions, so the spend decides; the attach answers
         `UploadNotFound`, nothing orphaned). A race of attach vs the subtree PURGE is not written: the purge only takes a
         node already trashed, which the liveness query refuses with or without any lock (the trash race covers it).
-  - [ ] P3-S5 quota — attachment bytes as a core term of `linkUsage`/`StorageQuota.linkFits` · Done when: a byte-limit test at
+  - [x] P3-S5 quota — attachment bytes as a core term of `linkUsage`/`StorageQuota.linkFits` · Done when: a byte-limit test at
         the exact boundary.
+        **Measured 2026-10-08:** `StorageQuota.linkUsage(shareId, targetKind)` = open sessions of the link's identities
+        + `linkAttachmentUsage(shareId)` + the target kind's `UploadAdmission.linkBlobUsage(shareId)`, or null when no single
+        admission measures the kind (unchanged). The new term is one native statement: `SUM(veyq_blob.byte_size)` over
+        `veyq_node_attachment` joined to `veyq_share_identity` by `share_identity_id`, `WHERE i.share_id = :key` (index
+        `share_identity_id` from S3), no `deleted_at` filter (trash counts, ADR 0073 §2); read after the sessions, so an
+        attach committing in between double-counts (refuses early), never zero-counts. Signatures of `linkUsage`/`linkFits`
+        and the `StorageQuota` constructor unchanged; no existing test touched. **No overlap:** a blob sits in one arm
+        (each arm's row is born with a fresh blob in the transaction that spends its session; `ux_attachment_blob`), Memories'
+        admission reads `veyq_media`/`veyq_media_derivative` only, and a cover (`veyq_node.cover_blob_id`, member-only since
+        S2 refuses a guest `COVER`) is no attachment row, so neither term counts it. A replace needs no special case: the
+        term joins through the attachment row, which names only the new blob, and `deleteBlobRow(old)` drops the old row.
+        **Decision (reversible, for the owner): the fail-closed rule stays exactly as it was** — core's terms never measure a
+        link alone, so an attachment-only kind (Files' `FILE`) still registers an `UploadAdmission` that reports 0 (F1),
+        rather than `linkFits` admitting a kind with no admission. Evidence: core cannot tell "this kind's uploads are all
+        attachments" from "this kind's admission went missing" without a declaration, and any declaration is itself a bean
+        that can go missing — exactly what the rule guards (an application with rows of its own, e.g. Memories without
+        `MediaUploadAdmission`, would count only its attachments and admit everything). A declaration on `ShareGuestWrites`
+        would have done it at the cost of a second seam answering the measure question; a 0-admission is three lines. The
+        brief's "Files may have no admission" is therefore NOT what was built — owner, say if you want the declaration.
+        KDocs (`StorageQuota`, `UploadAdmission`, `MediaUploadAdmission`), ADR 0073 §4 (the third term), ADR 0079's seam
+        list and `uc.sharing.share-link-storage-limit` (comment, AC text, 7 new coverage rows) edited in place.
+        Tests: `:core` `LinkAttachmentUsageSliceTest` 6 (a StorageQuota over a made-up `EXPENSE` admission reporting a
+        constant 7, so each expectation is 7 + core's terms): two guests counted, another link's guest and a member's
+        attachment not; a cover not counted; the exact boundary (held + S fits at a limit of held + S, one byte over refuses); a replace through
+        `AttachmentStore.attach` with guest sessions (session counts, attach counts it once, the replace counts the new
+        size only and the old row is gone); trash still counts, the subtree purge returns to the baseline; `FOLDER` and an
+        unclaimed kind stay null/refused with attachments held, and core's registered quota refuses `EXPENSE`.
+        `:apps:memories` `LinkUsageTermsSliceTest` 1: a guest medium (128 B) plus a guest attachment (44 B) on one Memory sum
+        to exactly 172. `ShareLinkStorageLimitSliceTest` and `UploadAdmissionPartitionSliceTest` green unchanged.
+        Levers (each red, green restored): core term absent (before the change) → 5 of 6 core + the Memories test red (the
+        fail-closed one passes, as it should); `share_id = :key OR <> :key` → 4 red; `<=` → `<` in `linkFits` → the
+        boundary test red; trashed nodes filtered out → the purge test red at "trash still counts"; a null admission
+        replaced by a 0-admission (core term alone measures) → the closed-kind test red. `deleteBlobRow(old)` skipped → only
+        the replace test's "old row gone" assertion red: the usage stays right because the term joins through the
+        attachment row, so no query lever can count the replaced blob — stated rather than forged.
+        `./gradlew check` green: core 862 → 868, memories 361 → 362 (2 skipped), files 8, root 85; 53/53 `validate_*`
+        before and after; `run_backend_races_on_mariadb.py` green on MariaDB 11.4 (44 race filters, both projects; no race
+        class added — the term is a read inside the existing tenant-locked reservation), and with `--tests` the two new
+        classes there 6/6 and 1/1 (the new statement runs on the production engine). Runner quirk: `--tests A B` ran only
+        `A`; one `--tests` per run.
 - [ ] P4 web re-cut — planned 2026-10-07; two strands. Owner decision: the toolbar (trash, grid/list) stays in Memories'
       section until Files needs it (the visible change P4e is deferred). Every e2e suite is API-level, so only golden and
       characterisation tests prove 'no user-visible change'.
