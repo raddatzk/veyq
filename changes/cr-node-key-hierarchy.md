@@ -387,6 +387,15 @@ Planned 2026-10-06 from three inventories; each sub-slice is its own worktree ru
         `MemoryBuckets` wiring), write controls for READ, the window's target dropped, the embedded upload's target
         dropped, the static registration, the subtree filter, the root's `chapterName`, the note repeated, the guest
         named under another key, an embedded `unavailable` bubbling to the page. No browser check.
+        *Found in the browser, 2026-10-07* (two defects the stubbed unit tests could not see): (1) a guest-page crumb is
+        PrimeVue's `<a href="#">`, whose default action ran after the `command` — it cleared `#k=` and cancelled the
+        push, so a reload was keyless and every guest write `404 share_not_found`; fixed: each crumb carries the real
+        `url` (`router.resolve` of the cards' own target, fragment kept) and its plain click `preventDefault`s and
+        routes through the same `go` (`FolderShareBody.breadcrumb.test.ts`: real Breadcrumb + real router, clicked
+        through the DOM; the old stubbed test pinned `push` arguments only). (2) Memories' folder overview card's
+        share/rename/delete carried `memory-action-collapsible` + `memory-action-inline`, hidden by `memory.css` at
+        721–1120 px and ≤ 720 px, with no overflow menu (the Memory header's that went with them is long gone); fixed: both
+        classes and their three now-dead rules removed (the card was their only user). No browser re-check.
   - [x] 5b.5 clean-up — chapter wording in the member share dialog (en and de: 'Share this chapter', 'It shows only this chapter'; `share.title`/`share.intro` say Memory today); a member's root rename re-seals every share's `sealedName` through the recovery copy (each
         share on its own, a failure is reported, not rolled back); the trash dialog reloads after the tree reload on a
         restore (`SpaceTrashDialog.vue:65`, test `:103`) and shows a freed-slug descendant as a root (#357); docs under

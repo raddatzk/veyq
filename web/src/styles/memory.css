@@ -567,18 +567,6 @@
   --memory-active-ring: color-mix(in srgb, var(--app-success) 24%, transparent);
 }
 
-@container memory-detail-header (max-width: 1080px) {
-  .memory-action-collapsible.p-button {
-    display: none;
-  }
-}
-
-@media (min-width: 721px) and (max-width: 1120px) {
-  .memory-action-collapsible.p-button {
-    display: none;
-  }
-}
-
 .memory-tabs {
   min-width: 0;
 }
@@ -750,10 +738,6 @@
 
   .memory-card-main {
     gap: 0.65rem;
-  }
-
-  .memory-action-inline.p-button {
-    display: none;
   }
 
   .memory-tabs .p-tablist-tab-list {

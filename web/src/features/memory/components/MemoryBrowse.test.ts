@@ -189,6 +189,19 @@ describe('MemoryBrowse — sharing the folder', () => {
     expect(w.find(`button[aria-label="${t('memory.rename')}"]`).exists(), 'control: the card actions render').toBe(true)
   })
 
+  // Found in the browser, 2026-10-07: the three carried `memory-action-collapsible` / `memory-action-inline`, which
+  // memory.css hid at 721–1120 px and ≤ 720 px — and this card has no overflow menu to offer them instead. jsdom has no
+  // layout, so the contract pinned is the DOM one: no width-hiding class on any of them.
+  it('keeps share, rename and delete free of any width-hiding class (the card has no overflow menu)', () => {
+    const w = mountBrowse({ folder: node('f', FOLDER_KIND, 'Trips'), folders: [], memories: [], shareable: true })
+    const actions = w.findAll('.memory-folder-overview-actions button')
+    expect(actions.map((b) => b.attributes('aria-label'))).toEqual([t('share.share'), t('memory.rename'), t('memory.delete')])
+    for (const b of actions) {
+      expect(b.classes()).not.toContain('memory-action-collapsible')
+      expect(b.classes()).not.toContain('memory-action-inline')
+    }
+  })
+
   it('keeps the share (a read of the links) but no rename/delete during a pending deletion', () => {
     const w = mountBrowse({ folder: node('f', FOLDER_KIND, 'Trips'), folders: [], memories: [], shareable: true, readonly: true })
     expect(shareButton(w).exists()).toBe(true)

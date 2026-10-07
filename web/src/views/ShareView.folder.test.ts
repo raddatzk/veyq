@@ -14,7 +14,7 @@ vi.mock('../features/memory/useThumbnailPipeline', () => ({
 vi.mock('../api/client', () => ({ sharesApi: vi.fn(), publicSharesApi: vi.fn(), tokenApi: vi.fn() }))
 vi.mock('../features/memory/api', () => ({ publicShareMediaApi: vi.fn() }))
 const route = vi.hoisted(() => ({ params: { shareId: 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_3' }, hash: '', query: {} as Record<string, string> }))
-vi.mock('vue-router', () => ({ useRoute: () => route, useRouter: () => ({ push: vi.fn() }) }))
+vi.mock('vue-router', () => ({ useRoute: () => route, useRouter: () => ({ push: vi.fn(), resolve: () => ({ href: '/s/stub' }) }) }))
 vi.mock('../core/sharing/resolvePublicShare', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../core/sharing/resolvePublicShare')>()
   return { ...actual, resolvePublicShare: vi.fn(), fetchShareTerms: vi.fn() }
