@@ -16,6 +16,8 @@ import Checkbox from 'primevue/checkbox'
 import Message from 'primevue/message'
 import { createFolder, renameNode, type NodeParent, type TreeNode } from '../../../core/node/tree'
 import { treeStore } from '../../../core/node/treeStore'
+import { resealShareNames } from '../../../core/sharing/manageShares'
+import { useToast } from '../../../shared/state/useToast'
 import { createMemory, createChapter } from '../memoryNodes'
 import type { EpochKeys } from '../../spaces/epochs'
 import { useMapConfig } from '../../../shared/state/useMapConfig'
@@ -36,6 +38,7 @@ const props = defineProps<{
 const emit = defineEmits<{ done: []; close: [] }>()
 const { t } = useI18n()
 const { mapsAvailable } = useMapConfig()
+const toast = useToast()
 
 const name = ref(props.mode === 'rename' ? (props.node?.name ?? '') : '')
 const error = ref('')
@@ -77,6 +80,7 @@ const { run: runSubmit, pending: loading } = useAsyncAction(
       // A rename is a placement to the same parent (ADR 0080 Decision 3): the key re-wraps and the name re-seals under
       // the parent's key, resolved from the loaded tree, at the next placement version.
       await renameNode(props.scopeId, props.epochs, treeStore.nodes, props.node.id, trimmed)
+      await resealAfterRename(props.node.id, trimmed)
     }
     emit('done')
     emit('close')
@@ -88,6 +92,17 @@ const { run: runSubmit, pending: loading } = useAsyncAction(
     },
   },
 )
+/** The rename stands; now every share rooted at the node — any member's, any kind — gets the new name re-sealed under
+ *  its own `K_share` (ADR 0080 decision 14, core's `resealShareNames`). A share it cannot re-seal keeps showing the old
+ *  name to its guests: that is said in a toast, never as a failed rename (the dialog closes either way). */
+async function resealAfterRename(nodeId: string, newName: string): Promise<void> {
+  try {
+    const report = await resealShareNames(nodeId, newName, props.epochs)
+    if (report.failed.length + report.skipped.length > 0) toast.error(t('share.nameResealFailed'))
+  } catch {
+    toast.error(t('share.nameResealFailed'))
+  }
+}
 const canSubmit = computed(() => name.value.trim().length > 0 && !loading.value)
 
 async function submit() {

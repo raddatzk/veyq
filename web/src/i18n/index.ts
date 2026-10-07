@@ -1093,6 +1093,8 @@ const en = {
     uploaderEmpty: 'No photos in this session. Photos you add appear here and stay visible until you reload — after that they’re gone from your view, but safely saved for the owner.',
     deletePhoto: 'Delete this photo',
     deleteFailed: 'The photo could not be deleted — please try again.',
+    // after a member renamed a shared node (NodeMutationDialog → core resealShareNames, ADR 0080 decision 14)
+    nameResealFailed: 'Renamed. Some links to it could not be updated and still show the old name to their guests.',
     // core's folder share dialog (cr-node-key-hierarchy 5b.3) and folder page (5b.4b): only where a Memory sentence
     // would be wrong for a folder. READ_WRITE on a folder = add folders, rename and move inside it, and add photos to
     // the Memories below it (5a.5, docs/apps/memories.md).
@@ -2183,6 +2185,7 @@ const de: typeof en = {
     uploaderEmpty: 'Keine Fotos in dieser Sitzung. Hinzugefügte Fotos erscheinen hier und bleiben bis zum Neuladen sichtbar — danach sind sie aus deiner Ansicht verschwunden, aber sicher für die Person gespeichert, der die Erinnerung gehört.',
     deletePhoto: 'Dieses Foto löschen',
     deleteFailed: 'Das Foto konnte nicht gelöscht werden — bitte erneut versuchen.',
+    nameResealFailed: 'Umbenannt. Einige Links darauf konnten nicht aktualisiert werden und zeigen ihren Gästen noch den alten Namen.',
     folder: {
       title: 'Diesen Ordner teilen',
       intro: 'Erstelle einen Link, den jede:r im Browser öffnen kann — ohne Konto, ohne Installation. Er zeigt diesen Ordner mit allem, was darin liegt, und du kannst ihn jederzeit abschalten.',

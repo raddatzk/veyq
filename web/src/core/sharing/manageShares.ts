@@ -6,7 +6,8 @@
 // fragment key can show the title without `K_SC`.
 //
 // Everything here is kind-independent: mint (READ / READ_WRITE, with the mandatory recovery copy), list, revoke,
-// re-activate, delete, re-issue, edit, and reading a managed share's fields back through its recovery copy. What is not:
+// re-activate, delete, re-issue, edit, reading a managed share's fields back through its recovery copy, and re-sealing
+// every share's root name after a member renamed the root (ADR 0080 decision 14). What is not:
 // a WRITE_ONLY link carries no wrap but the node's drop public key (ADR 0031 point 7), and the drop key is the
 // application's that registered the drop flow — so a WRITE_ONLY mint or re-issue is only reachable through a
 // [WriteOnlyMint] that application hands in (today Memories' `createShare` / `reissueShare` in features/memory/share.ts).
@@ -62,6 +63,11 @@ function sealNoteMap(kShare: Uint8Array, note: LocaleMap): string {
 /** Seal a share's optional private name under `K_share` (opaque base64). */
 function sealShareName(kShare: Uint8Array, name: string): string {
   return b64std(v1.seal(SHARE_NAME, kShare, v1.utf8(name)))
+}
+/** Seal the shared node's own name under `K_share` (`share-memory-name`, the title a guest reads with only the
+ *  fragment key): at a mint, a re-issue and when a member renames the share's root ({@link resealShareNames}). */
+function sealRootName(kShare: Uint8Array, rootName: string): string {
+  return b64std(v1.seal(SHARE_MEMORY_NAME, kShare, v1.utf8(rootName)))
 }
 /** Open a share name sealed under `K_share`. */
 function openShareName(kShare: Uint8Array, sealed: string): string {
@@ -194,7 +200,7 @@ export async function mintShare(
   const shareId = newShareId() // client-minted: the recovery copy below is sealed bound to it (ADR 0072)
   // Only a READ or READ_WRITE link holds the node's key; a WRITE_ONLY link's guest never does.
   const wrap = writeOnly ? undefined : b64std(v1.seal(SHARE_KEY, kShare, rootKey))
-  const sealedName = b64std(v1.seal(SHARE_MEMORY_NAME, kShare, v1.utf8(rootName))) // the node's name re-sealed under K_share
+  const sealedName = sealRootName(kShare, rootName) // the node's name re-sealed under K_share
   // ADR 0036: a recoverable copy of K_share under K_SC(epoch) (so every scope member can reveal, edit and re-copy it
   // later — and no link can, point 4), and the optional per-locale note + private name under K_share. The copy is on
   // EVERY share, so a note/name can be added later even to one minted without them.
@@ -304,7 +310,7 @@ export async function remintShare(
   const kShare = v1.randomBytes(32) // never the old one: the old K_share is what the departed member may hold
   const shareId = newShareId()
   const wrap = writeOnly ? undefined : b64std(v1.seal(SHARE_KEY, kShare, rootKey))
-  const sealedName = b64std(v1.seal(SHARE_MEMORY_NAME, kShare, v1.utf8(rootName)))
+  const sealedName = sealRootName(kShare, rootName)
   const sealedNote = hasLocaleText(settings.note) ? sealNoteMap(kShare, settings.note) : undefined
   const sealedShareName = settings.name.trim() ? sealShareName(kShare, settings.name) : undefined
   const pw = settings.password.trim() ? await buildPasswordFields(kShare, settings.password) : undefined
@@ -442,6 +448,41 @@ export async function listSharesFor(nodeId: string): Promise<ManagedShare[]> {
       writeVerifierMissing: r.writeVerifierMissing,
     }))
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+}
+
+/** What a re-seal of the share names did, by share id: stored, skipped (no recovery copy: a tombstone or a legacy row
+ *  minted before ADR 0080 decision 12, so its title stays the old name) and failed (the copy did not open, or the
+ *  write was refused). */
+export type ResealReport = { resealed: string[]; skipped: string[]; failed: string[] }
+
+/**
+ * After a member renamed [nodeId] to [newName], re-seal the name of EVERY share rooted at it — the caller's own and
+ * every other member's, switched off ones included — so no link shows a stale title (ADR 0080 decision 14). Each
+ * share's `K_share` is opened through its recovery copy under the scope key (decision 12), the new name sealed under
+ * it as a mint does, and stored with `setShareSealedName`, which any member with write access may call (not the
+ * owner-gated `updateShare`). Each share is its own write: one that fails is collected and the next is still tried;
+ * nothing is rolled back and the rename itself is never undone (the name is last-writer-wins, the next rename
+ * re-seals again). A node without shares costs one list request and writes nothing. Throws only when the list itself
+ * cannot be read — then nothing was written.
+ */
+export async function resealShareNames(nodeId: string, newName: string, epochs: EpochKeys): Promise<ResealReport> {
+  const report: ResealReport = { resealed: [], skipped: [], failed: [] }
+  for (const share of await listSharesFor(nodeId)) {
+    if (share.sealedShareKey == null || share.sealedShareKeyEpoch == null) {
+      report.skipped.push(share.shareId) // share_key_not_recoverable: nothing to seal the new name under
+      continue
+    }
+    try {
+      const kShare = recoverShareKey(epochs, share, share)
+      const sealedName = sealRootName(kShare, newName)
+      kShare.fill(0)
+      await withRefresh(() => sharesApi().setShareSealedName({ shareId: share.shareId, setShareSealedNameRequest: { sealedName } }))
+      report.resealed.push(share.shareId)
+    } catch {
+      report.failed.push(share.shareId)
+    }
+  }
+  return report
 }
 
 /** Revoke a share (soft — the next guest request 404s). */

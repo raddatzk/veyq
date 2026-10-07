@@ -9,10 +9,16 @@ vi.mock('../../../core/node/tree', () => ({
 }))
 vi.mock('../memoryNodes', () => ({ createMemory: vi.fn(), createChapter: vi.fn() }))
 vi.mock('../geocode', () => ({ reverseGeocode: vi.fn() }))
+vi.mock('../../../core/sharing/manageShares', () => ({ resealShareNames: vi.fn() }))
+const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }))
+vi.mock('../../../shared/state/useToast', () => ({
+  useToast: () => ({ success: vi.fn(), error: toastError, showUndo: vi.fn(), dismissUndo: vi.fn() }),
+}))
 
 import NodeMutationDialog from './NodeMutationDialog.vue'
 import { createFolder, renameNode } from '../../../core/node/tree'
 import { createMemory, createChapter } from '../memoryNodes'
+import { resealShareNames } from '../../../core/sharing/manageShares'
 import { epochsOf } from '../../spaces/epochsTestUtil'
 import { setMapsConsent, setTileUrl, setGeocoderUrl } from '../../../shared/state/useMapConfig'
 import { realI18n, t } from '../../../test/i18n'
@@ -59,7 +65,13 @@ beforeEach(() => {
   vi.mocked(createMemory).mockResolvedValue({ nodeId: 'node-1', memoryKey: new Uint8Array(32) })
   vi.mocked(createChapter).mockResolvedValue({ nodeId: 'node-1', chapterKey: new Uint8Array(32) })
   vi.mocked(renameNode).mockResolvedValue(undefined)
+  vi.mocked(resealShareNames).mockResolvedValue({ resealed: [], skipped: [], failed: [] })
 })
+
+/** Let the submit's chained awaits (rename, then the share-name re-seal) settle. */
+async function settle() {
+  for (let i = 0; i < 6; i++) await Promise.resolve()
+}
 
 describe('NodeMutationDialog', () => {
   it('create-folder calls createFolder with the parent and ITS key + closes + emits done', async () => {
@@ -110,6 +122,63 @@ describe('NodeMutationDialog', () => {
     await Promise.resolve()
     // the loaded tree travels with it: the name re-seals under the PARENT's key, resolved from it (ADR 0080)
     expect(renameNode).toHaveBeenCalledWith(SCOPE, EPOCHS, treeStore.nodes, 'n9', 'New')
+  })
+
+  // ADR 0080 decision 14: every share rooted at the renamed node gets the new name — for any kind, through core.
+  it.each(['FOLDER', 'MEMORY', 'CHAPTER'])('a rename of a %s re-seals its share names after the rename, then closes', async (kind) => {
+    const order: string[] = []
+    vi.mocked(renameNode).mockImplementation(async () => { order.push('rename') })
+    vi.mocked(resealShareNames).mockImplementation(async () => { order.push('reseal'); return { resealed: ['s1'], skipped: [], failed: [] } })
+    const node: TreeNode = { id: 'n9', parentId: 'p1', kind, name: 'Old', orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 }
+    const wrapper = mountDialog({ mode: 'rename', node })
+    await wrapper.find('input').setValue('New')
+    await wrapper.find('form').trigger('submit')
+    await settle()
+
+    expect(order).toEqual(['rename', 'reseal'])
+    expect(resealShareNames).toHaveBeenCalledWith('n9', 'New', EPOCHS)
+    expect(toastError).not.toHaveBeenCalled()
+    expect(wrapper.emitted('done')).toBeTruthy()
+  })
+
+  it.each([
+    ['a share failed', { resealed: ['a'], skipped: [], failed: ['b'] }],
+    ['a share had no recovery copy', { resealed: [], skipped: ['b'], failed: [] }],
+  ])('says so in a toast when %s, and the rename still stands', async (_, report) => {
+    vi.mocked(resealShareNames).mockResolvedValue(report)
+    const node: TreeNode = { id: 'n9', parentId: null, kind: 'MEMORY', name: 'Old', orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 }
+    const wrapper = mountDialog({ mode: 'rename', node })
+    await wrapper.find('input').setValue('New')
+    await wrapper.find('form').trigger('submit')
+    await settle()
+
+    expect(toastError).toHaveBeenCalledWith(t('share.nameResealFailed'))
+    expect(wrapper.text()).not.toContain(t('memory.saveFailed'))
+    expect(wrapper.emitted('done')).toBeTruthy()
+  })
+
+  it('a share list that cannot be read is a toast too, not a failed rename', async () => {
+    vi.mocked(resealShareNames).mockRejectedValue(new Error('offline'))
+    const node: TreeNode = { id: 'n9', parentId: null, kind: 'FOLDER', name: 'Old', orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 }
+    const wrapper = mountDialog({ mode: 'rename', node })
+    await wrapper.find('input').setValue('New')
+    await wrapper.find('form').trigger('submit')
+    await settle()
+
+    expect(toastError).toHaveBeenCalledWith(t('share.nameResealFailed'))
+    expect(wrapper.emitted('done')).toBeTruthy()
+  })
+
+  it('a refused rename re-seals nothing', async () => {
+    vi.mocked(renameNode).mockRejectedValueOnce(httpError(409))
+    const node: TreeNode = { id: 'n9', parentId: null, kind: 'FOLDER', name: 'Old', orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 }
+    const wrapper = mountDialog({ mode: 'rename', node })
+    await wrapper.find('input').setValue('Dupe')
+    await wrapper.find('form').trigger('submit')
+    await settle()
+
+    expect(resealShareNames).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain(t('memory.slugTaken'))
   })
 
   it('the maps opt-in arms a PENDING auto location (position + name land with the first media)', async () => {

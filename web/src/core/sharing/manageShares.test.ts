@@ -8,11 +8,12 @@ vi.mock('../../api/client', () => ({ sharesApi: vi.fn() }))
 
 import * as v1 from '@veyq/crypto/v1'
 import { fromB64std } from '@veyq/crypto/base64'
-import { mintShare, recoverShareKey, remintShare, type ReissuableShare } from './manageShares'
+import { mintShare, recoverShareKey, remintShare, resealShareNames, type ReissuableShare } from './manageShares'
 import { SHARE_KEY } from './shareTree'
+import { SHARE_MEMORY_NAME } from './resolvePublicShare'
 import { sharesApi } from '../../api/client'
 import { fakeApi } from '../../test/apiMock'
-import { ShareRole, type SharingApi } from '../../api/generated/sharing'
+import { ShareRole, type ShareSummary, type SharingApi } from '../../api/generated/sharing'
 import type { EpochKeys } from '../../features/spaces/epochs'
 
 const SCOPE_ID = '7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c'
@@ -71,5 +72,85 @@ describe('remintShare', () => {
     expect(recoverShareKey(EPOCHS, { scopeId: SCOPE_ID, nodeId: NODE_ID, shareId: minted.shareId }, req)).toEqual(minted.kShare)
     await expect(remintShare({ ...old, role: ShareRole.WriteOnly }, nodeKey, EPOCHS, 'Taxes', settings))
       .rejects.toThrow('share_write_only_mint_mismatch')
+  })
+})
+
+describe('resealShareNames (ADR 0080 decision 14)', () => {
+  /** A share as the manage list serves it, minted through the real `mintShare` so its recovery copy is the real one.
+   *  Each is a second older than the one before, so the list (newest first) keeps the order they were minted in. */
+  let age = 0
+  async function mintedRow(mine: boolean, oldName = 'Taxes'): Promise<{ row: ShareSummary; kShare: Uint8Array }> {
+    const create = vi.fn<SharingApi['createShare']>(async ({ createShareRequest }) => ({ shareId: createShareRequest.shareId }))
+    fakeApi(sharesApi, { createShare: create })
+    const minted = await mintShare(SCOPE_ID, NODE_ID, v1.randomBytes(32), EPOCHS, oldName, ShareRole.Read)
+    const req = create.mock.calls[0][0].createShareRequest
+    const row: ShareSummary = {
+      shareId: minted.shareId, nodeId: NODE_ID, scopeId: SCOPE_ID, role: ShareRole.Read, sealedName: req.sealedName,
+      sealedShareKey: req.sealedShareKey, sealedShareKeyEpoch: req.sealedShareKeyEpoch, enabled: true, mine,
+      reissueRequired: false, deletable: mine, newGuestsRefused: false, writeVerifierMissing: false,
+      createdAt: new Date(Date.UTC(2026, 9, 1) - 1000 * age++),
+    }
+    return { row, kShare: minted.kShare }
+  }
+  const opened = (kShare: Uint8Array, sealed: string) => new TextDecoder().decode(v1.open(SHARE_MEMORY_NAME, kShare, fromB64std(sealed)))
+
+  it('re-seals the new name under EVERY share\'s own K_share — the caller\'s and another member\'s', async () => {
+    const own = await mintedRow(true)
+    const theirs = await mintedRow(false)
+    const set = vi.fn<SharingApi['setShareSealedName']>(async () => undefined)
+    fakeApi(sharesApi, { listShares: async () => [own.row, theirs.row], setShareSealedName: set })
+
+    const report = await resealShareNames(NODE_ID, 'Steuern 2026', EPOCHS)
+
+    expect(report).toEqual({ resealed: [own.row.shareId, theirs.row.shareId], skipped: [], failed: [] })
+    expect(set).toHaveBeenCalledTimes(2)
+    const sealedFor = (shareId: string) => set.mock.calls.find(([r]) => r.shareId === shareId)![0].setShareSealedNameRequest.sealedName
+    for (const { row, kShare } of [own, theirs]) {
+      expect(opened(kShare, sealedFor(row.shareId))).toBe('Steuern 2026')
+    }
+    expect(JSON.stringify(set.mock.calls)).not.toContain('Steuern')
+    // each name opens under its own share's key only
+    expect(() => opened(own.kShare, sealedFor(theirs.row.shareId))).toThrow(v1.OpenRefused)
+  })
+
+  it('skips and reports a share without a recovery copy (a tombstone or a legacy row), and still re-seals the rest', async () => {
+    const legacy = await mintedRow(false)
+    const ok = await mintedRow(true)
+    const set = vi.fn<SharingApi['setShareSealedName']>(async () => undefined)
+    fakeApi(sharesApi, {
+      listShares: async () => [{ ...legacy.row, sealedShareKey: null, sealedShareKeyEpoch: null }, ok.row],
+      setShareSealedName: set,
+    })
+
+    const report = await resealShareNames(NODE_ID, 'New', EPOCHS)
+
+    expect(report).toEqual({ resealed: [ok.row.shareId], skipped: [legacy.row.shareId], failed: [] })
+    expect(set.mock.calls.map(([r]) => r.shareId)).toEqual([ok.row.shareId])
+  })
+
+  it('collects a failing share and goes on with the next — nothing is rolled back', async () => {
+    const refused = await mintedRow(true)
+    const broken = await mintedRow(false)
+    const ok = await mintedRow(false)
+    const set = vi.fn<SharingApi['setShareSealedName']>(async ({ shareId }) => {
+      if (shareId === refused.row.shareId) throw new Error('404')
+    })
+    fakeApi(sharesApi, {
+      // `broken`'s copy is relabelled to another epoch: it opens under no key
+      listShares: async () => [refused.row, { ...broken.row, sealedShareKeyEpoch: 0 }, ok.row],
+      setShareSealedName: set,
+    })
+
+    const report = await resealShareNames(NODE_ID, 'New', EPOCHS)
+
+    expect(report).toEqual({ resealed: [ok.row.shareId], skipped: [], failed: [refused.row.shareId, broken.row.shareId] })
+    expect(set.mock.calls.map(([r]) => r.shareId)).toEqual([refused.row.shareId, ok.row.shareId])
+  })
+
+  it('writes nothing for a node without shares', async () => {
+    const set = vi.fn<SharingApi['setShareSealedName']>()
+    fakeApi(sharesApi, { listShares: async () => [], setShareSealedName: set })
+    expect(await resealShareNames(NODE_ID, 'New', EPOCHS)).toEqual({ resealed: [], skipped: [], failed: [] })
+    expect(set).not.toHaveBeenCalled()
   })
 })
