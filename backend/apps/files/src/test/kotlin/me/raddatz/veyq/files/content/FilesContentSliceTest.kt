@@ -1,0 +1,275 @@
+package me.raddatz.veyq.files.content
+
+import me.raddatz.veyq.core.blob.BlobEntity
+import me.raddatz.veyq.core.blob.NodeAttachmentEntity
+import me.raddatz.veyq.core.blob.UploadSessionEntity
+import me.raddatz.veyq.core.blobstore.FakePresigningBlobStore
+import me.raddatz.veyq.core.blobstore.StoreReclaimEntity
+import me.raddatz.veyq.core.content.NodeSubtreePurge
+import me.raddatz.veyq.core.membership.MembershipEntity
+import me.raddatz.veyq.core.node.NodeEntity
+import me.raddatz.veyq.core.quota.StorageUsage
+import me.raddatz.veyq.core.testing.FakePresignProfile
+import me.raddatz.veyq.core.testing.TestBlob
+import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
+import me.raddatz.veyq.core.testing.TestFixtures.GRANT
+import me.raddatz.veyq.core.testing.TestFixtures.bearer
+import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
+import me.raddatz.veyq.core.testing.TestFixtures.seedNode
+import me.raddatz.veyq.core.testing.TestFixtures.seedUser
+import me.raddatz.veyq.files.FilesNodeKinds
+import io.quarkus.narayana.jta.QuarkusTransaction
+import io.quarkus.test.junit.QuarkusTest
+import io.quarkus.test.junit.TestProfile
+import io.restassured.RestAssured.given
+import io.restassured.http.ContentType
+import io.restassured.response.ValidatableResponse
+import jakarta.inject.Inject
+import java.time.Instant
+import java.util.UUID
+import org.hamcrest.CoreMatchers.equalTo
+import org.hamcrest.CoreMatchers.nullValue
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Test
+
+/**
+ * A member's file, end to end through the wire the web will use (cr-files-application F1a), in the application this
+ * module's tests boot (core + Files, no Memories): core's `startBlobUploads` (role `FILE_CONTENT`, owner = the node),
+ * the chunks staged as an honest client leaves them, Files' `completeFile`, `listFiles`, core's presigned download,
+ * core's trash and purge. [FakePresignProfile] makes declare-then-verify run (`canPresign = true`, scripted `stat`), so
+ * a completion here passes the same budget check a real store does.
+ *
+ * Each refusal sits beside its positive control through the same route. Every check of stored state reads what is
+ * committed, in a fresh transaction.
+ */
+@QuarkusTest
+@TestProfile(FakePresignProfile::class)
+class FilesContentSliceTest {
+
+    @Inject lateinit var fakeStore: FakePresigningBlobStore
+    @Inject lateinit var usage: StorageUsage
+    @Inject lateinit var subtreePurge: NodeSubtreePurge
+
+    @Test
+    fun aFileIsUploadedListedAndItsBlobPresignedForTheMemberOnly() {
+        val (userId, scopeId, tenantId) = seedMemberScope()
+        val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
+        val file = seedNode(scopeId, FilesNodeKinds.FILE, parentId = folder, wrappedContentKey = CONTENT_KEY)
+        val empty = seedNode(scopeId, FilesNodeKinds.FILE, parentId = folder, wrappedContentKey = CONTENT_KEY)
+        val blob = TestBlob.ofChunks(2)
+
+        val upload = start(userId, scopeId, file, blob, wrap = "ZmlsZS13cmFw")
+        val blobId = complete(userId, scopeId, file, upload).statusCode(200)
+            .body("chunkCount", equalTo(2)).body("byteSize", equalTo(blob.byteSize.toInt()))
+            .body("wrappedBlobKey", equalTo("ZmlsZS13cmFw")).body("manifest.size()", equalTo(2))
+            .extract().path<String>("blobId")
+        assertEquals(blobId, attachedBlob(file), "the upload is the file's FILE_CONTENT slot")
+
+        // The listing pairs each live file of the folder with its blob, the empty one with null, in node-id order.
+        val listed = list(userId, scopeId, folder).statusCode(200).body("items.size()", equalTo(2)).extract()
+        val byNode = (0..1).associate { listed.path<String>("items[$it].nodeId") to it }
+        assertEquals(sortedSetOf(file, empty), byNode.keys.toSortedSet())
+        assertEquals(listOf(file, empty).sorted(), (0..1).map { listed.path<String>("items[$it].nodeId") })
+        assertEquals(blobId, listed.path<String>("items[${byNode[file]}].fileBlob.blobId"))
+        assertEquals("ZmlsZS13cmFw", listed.path<String>("items[${byNode[file]}].fileBlob.wrappedBlobKey"))
+        assertNull(listed.path<Any?>("items[${byNode[empty]}].fileBlob"), "a file without an upload lists no blob")
+        // The root holds none of them; a file at the root is listed without a parent.
+        list(userId, scopeId, null).statusCode(200).body("items.size()", equalTo(0))
+        val atRoot = seedNode(scopeId, FilesNodeKinds.FILE, wrappedContentKey = CONTENT_KEY)
+        list(userId, scopeId, null).statusCode(200).body("items.size()", equalTo(1)).body("items[0].nodeId", equalTo(atRoot))
+
+        // The tenant's usage counts the blob through core's path, unchanged.
+        assertEquals(blob.byteSize, QuarkusTransaction.requiringNew().call { usage.tenantUsage(tenantId) })
+
+        // The member presigns the chunks through core's download endpoint; a stranger is told nothing.
+        download(userId, scopeId, blobId).statusCode(200)
+            .body("results[0].error", nullValue()).body("results[0].presignedGets.size()", equalTo(2))
+        val stranger = seedUser()
+        download(stranger, scopeId, blobId).statusCode(404).body("code", equalTo("scope_not_found"))
+        list(stranger, scopeId, folder).statusCode(404).body("code", equalTo("scope_not_found"))
+    }
+
+    @Test
+    fun aReplaceWithTheReadBlobSwapsItAndFreesTheOldOne() {
+        val (userId, scopeId, tenantId) = seedMemberScope()
+        val file = seedNode(scopeId, FilesNodeKinds.FILE, wrappedContentKey = CONTENT_KEY)
+        val first = TestBlob.ofChunks(1)
+        val second = TestBlob.ofChunks(3)
+        val oldBlob = complete(userId, scopeId, file, start(userId, scopeId, file, first)).statusCode(200).extract().path<String>("blobId")
+        val oldKey = storageKeyOf(oldBlob)
+
+        val newBlob = complete(userId, scopeId, file, start(userId, scopeId, file, second), expected = oldBlob).statusCode(200)
+            .body("chunkCount", equalTo(3)).extract().path<String>("blobId")
+
+        assertEquals(newBlob, attachedBlob(file))
+        QuarkusTransaction.requiringNew().run {
+            assertNull(BlobEntity.findById(oldBlob), "the replaced blob's row is gone")
+            assertEquals(1L, StoreReclaimEntity.count("storageKey", oldKey), "and its objects are on the reclaim list")
+        }
+        assertEquals(second.byteSize, QuarkusTransaction.requiringNew().call { usage.tenantUsage(tenantId) }, "only the new blob counts")
+        list(userId, scopeId, null).body("items[0].fileBlob.blobId", equalTo(newBlob))
+    }
+
+    @Test
+    fun aStaleExpectedBlobIsRefusedWithTheCurrentOneAndTheUploadIsFreed() {
+        val (userId, scopeId) = seedMemberScope()
+        val file = seedNode(scopeId, FilesNodeKinds.FILE, wrappedContentKey = CONTENT_KEY)
+        val current = complete(userId, scopeId, file, start(userId, scopeId, file, TestBlob.SMALL)).statusCode(200).extract().path<String>("blobId")
+
+        // A replace built on a blob the slot no longer holds (a peer replaced it).
+        val lost = start(userId, scopeId, file, TestBlob.SMALL)
+        val lostKey = sessionKey(lost)
+        complete(userId, scopeId, file, lost, expected = UUID.randomUUID().toString()).statusCode(409)
+            .body("code", equalTo("stale_file")).body("currentBlobId", equalTo(current))
+        // A first upload into a filled slot is the same conflict.
+        complete(userId, scopeId, file, start(userId, scopeId, file, TestBlob.SMALL)).statusCode(409)
+            .body("code", equalTo("stale_file")).body("currentBlobId", equalTo(current))
+
+        assertEquals(current, attachedBlob(file), "the slot is unchanged")
+        QuarkusTransaction.requiringNew().run {
+            assertNull(UploadSessionEntity.findById(lost), "the loser's upload is spent")
+            assertEquals(1L, StoreReclaimEntity.count("storageKey", lostKey), "and its objects reclaimed")
+        }
+        // control: the right expected blob replaces through the same route
+        complete(userId, scopeId, file, start(userId, scopeId, file, TestBlob.SMALL), expected = current).statusCode(200)
+    }
+
+    @Test
+    fun onlyALiveFileOfTheScopeTakesAnUpload() {
+        val (userId, scopeId) = seedMemberScope()
+        val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
+        val memory = seedNode(scopeId, "MEMORY", wrappedContentKey = CONTENT_KEY)
+        for (target in listOf(folder, memory)) {
+            // The upload is even started for that node in the file role: the kind alone refuses it.
+            complete(userId, scopeId, target, start(userId, scopeId, target, TestBlob.SMALL)).statusCode(422)
+                .body("code", equalTo("illegal_target"))
+            assertNull(attachedBlob(target))
+        }
+
+        val trashed = seedNode(scopeId, FilesNodeKinds.FILE, parentId = folder, wrappedContentKey = CONTENT_KEY)
+        val upload = start(userId, scopeId, trashed, TestBlob.SMALL)
+        given().header("Authorization", bearer(userId)).`when`().delete("/api/scopes/$scopeId/nodes/$folder").then().statusCode(204)
+        complete(userId, scopeId, trashed, upload).statusCode(404).body("code", equalTo("node_not_found"))
+        list(userId, scopeId, folder).statusCode(404).body("code", equalTo("node_not_found"))
+
+        // Another scope's file, addressed through this scope.
+        val other = seedMemberScope(userId = userId)
+        val foreign = seedNode(other.scopeId, FilesNodeKinds.FILE, wrappedContentKey = CONTENT_KEY)
+        complete(userId, scopeId, foreign, start(userId, scopeId, foreign, TestBlob.SMALL)).statusCode(404)
+            .body("code", equalTo("node_not_found"))
+
+        // A session for another node, or in another role, would not open here.
+        val file = seedNode(scopeId, FilesNodeKinds.FILE, wrappedContentKey = CONTENT_KEY)
+        complete(userId, scopeId, file, start(userId, scopeId, folder, TestBlob.SMALL)).statusCode(422).body("code", equalTo("upload_mismatch"))
+        complete(userId, scopeId, file, start(userId, scopeId, file, TestBlob.SMALL, role = "ORIGINAL")).statusCode(422)
+            .body("code", equalTo("upload_mismatch"))
+        complete(userId, scopeId, file, UUID.randomUUID().toString()).statusCode(404).body("code", equalTo("upload_not_found"))
+        // control: the right session lands
+        complete(userId, scopeId, file, start(userId, scopeId, file, TestBlob.SMALL)).statusCode(200)
+    }
+
+    @Test
+    fun aCallerWithoutWriteAccessCompletesNothing() {
+        val (owner, scopeId, tenantId) = seedMemberScope()
+        val file = seedNode(scopeId, FilesNodeKinds.FILE, wrappedContentKey = CONTENT_KEY)
+        val upload = start(owner, scopeId, file, TestBlob.SMALL)
+
+        // A member of the space who left the tenant reads it but writes nothing (the gate's WRITE rule).
+        val reader = seedUser()
+        QuarkusTransaction.requiringNew().run {
+            MembershipEntity().apply {
+                id = UUID.randomUUID().toString(); userId = reader; this.tenantId = tenantId; this.scopeId = scopeId
+                role = MembershipEntity.MEMBER; wrappedGrant = GRANT; createdAt = Instant.now()
+            }.persist()
+        }
+        complete(reader, scopeId, file, upload).statusCode(404).body("code", equalTo("scope_not_found"))
+        list(reader, scopeId, null).statusCode(200).body("items.size()", equalTo(1)) // control: READ passes
+        complete(seedUser(), scopeId, file, upload).statusCode(404).body("code", equalTo("scope_not_found"))
+        assertNull(attachedBlob(file))
+        // control: the opener completes the same upload
+        complete(owner, scopeId, file, upload).statusCode(200)
+    }
+
+    @Test
+    fun aListingNeverReachesIntoAnotherScope() {
+        val (userId, scopeId) = seedMemberScope()
+        val other = seedMemberScope()
+        val foreignFolder = seedNode(other.scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
+        val foreignFile = seedNode(other.scopeId, FilesNodeKinds.FILE, parentId = foreignFolder, wrappedContentKey = CONTENT_KEY)
+        complete(other.userId, other.scopeId, foreignFile, start(other.userId, other.scopeId, foreignFile, TestBlob.SMALL)).statusCode(200)
+
+        list(userId, scopeId, foreignFolder).statusCode(404).body("code", equalTo("node_not_found"))
+        // control: its own member lists it
+        list(other.userId, other.scopeId, foreignFolder).statusCode(200).body("items[0].nodeId", equalTo(foreignFile))
+    }
+
+    @Test
+    fun purgingATrashedFileFreesItsAttachmentAndBlob() {
+        val (userId, scopeId, tenantId) = seedMemberScope()
+        val file = seedNode(scopeId, FilesNodeKinds.FILE, wrappedContentKey = CONTENT_KEY)
+        val blobId = complete(userId, scopeId, file, start(userId, scopeId, file, TestBlob.SMALL)).statusCode(200).extract().path<String>("blobId")
+        val key = storageKeyOf(blobId)
+
+        given().header("Authorization", bearer(userId)).`when`().delete("/api/scopes/$scopeId/nodes/$file").then().statusCode(204)
+        list(userId, scopeId, null).statusCode(200).body("items.size()", equalTo(0))
+        // In the trash it still holds its blob (and the quota counts it, ADR 0073 §2) …
+        assertEquals(blobId, attachedBlob(file))
+        assertEquals(TestBlob.SMALL.byteSize, QuarkusTransaction.requiringNew().call { usage.tenantUsage(tenantId) })
+
+        // … until the purge, which frees the attachment, the blob and records its objects.
+        QuarkusTransaction.requiringNew().run { subtreePurge.eraseExpiredIn(scopeId, Instant.now().plusSeconds(1)) }
+        QuarkusTransaction.requiringNew().run {
+            assertNull(NodeEntity.findById(file), "the node is purged")
+            assertEquals(0L, NodeAttachmentEntity.count("nodeId", file), "its attachment went")
+            assertNull(BlobEntity.findById(blobId), "its blob went")
+            assertEquals(1L, StoreReclaimEntity.count("storageKey", key), "its objects are on the reclaim list")
+        }
+        assertEquals(0L, QuarkusTransaction.requiringNew().call { usage.tenantUsage(tenantId) })
+    }
+
+    // --- the wire ------------------------------------------------------------------------------------------------
+
+    /** Start one upload for [node] in [role] (default: the file role) and stage its chunks at their exact lengths. */
+    private fun start(userId: String, scopeId: String, node: String, blob: TestBlob, wrap: String = "d3JhcA==", role: String = FilesBlobRoles.FILE_CONTENT): String {
+        val uploadId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+            .body("""{"items":[${blob.declare(wrap, ownerId = node, role = role)}]}""")
+            .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
+            .then().statusCode(200).body("results[0].error", nullValue())
+            .extract().path<String>("results[0].uploadId")
+        blob.stage(fakeStore, sessionKey(uploadId))
+        return uploadId
+    }
+
+    private fun complete(userId: String, scopeId: String, node: String, uploadId: String, expected: String? = null): ValidatableResponse {
+        val expectedField = expected?.let { ""","expectedBlobId":"$it"""" } ?: ""
+        return given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+            .body("""{"uploadId":"$uploadId"$expectedField}""")
+            .`when`().post("/api/scopes/$scopeId/files/$node/content").then()
+    }
+
+    private fun list(userId: String, scopeId: String, parentId: String?): ValidatableResponse {
+        val req = given().header("Authorization", bearer(userId))
+        if (parentId != null) req.queryParam("parentId", parentId)
+        return req.`when`().get("/api/scopes/$scopeId/files").then()
+    }
+
+    private fun download(userId: String, scopeId: String, blobId: String): ValidatableResponse =
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+            .body("""{"items":[{"blobId":"$blobId"}]}""")
+            .`when`().post("/api/scopes/$scopeId/blob-downloads-batch").then()
+
+    // --- committed state -----------------------------------------------------------------------------------------
+
+    private fun attachedBlob(node: String): String? = QuarkusTransaction.requiringNew().call {
+        NodeAttachmentEntity.find("nodeId = ?1 and slot = ?2", node, FilesBlobRoles.FILE_CONTENT).firstResult()?.blobId
+    }
+
+    private fun sessionKey(uploadId: String): String = QuarkusTransaction.requiringNew().call {
+        UploadSessionEntity.findById(uploadId)!!.storageKey
+    }
+
+    private fun storageKeyOf(blobId: String): String = QuarkusTransaction.requiringNew().call {
+        BlobEntity.findById(blobId)!!.storageKey
+    }
+}
