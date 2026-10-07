@@ -1,6 +1,7 @@
-// uc.memory.upload (web, cr-0058) — the upload queue: enqueue → sequential upload via addMedia → done, with
-// progress, cancel (abort), and one automatic retry on a transient failure; plus the Safari file-selection
-// helpers (extension fallback + signature merge).
+// uc.memory.upload (web, cr-0058) — Memories' adapter over core's upload queue: a picked file becomes a job whose
+// runner is addMedia (or the batch's share transport), its media id lands on the settled file, the per-file hook
+// fires; plus the Safari file-selection helpers (extension fallback + signature merge). The queue's own rules
+// (states, order, retry, quota_exceeded, cancel, remove) are pinned in core/blob/queue.test.ts over a fake runner.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('./media', () => ({ addMedia: vi.fn() }))
@@ -9,14 +10,11 @@ import { addMedia } from './media'
 import {
   enqueueUploads,
   cancelFile,
-  retryFile,
-  removeFile,
   clearUploads,
   useUploadQueue,
   isSupportedMediaFile,
   inferMediaType,
   mergeFiles,
-  isRetryable,
   type UploadTarget,
 } from './uploadQueue'
 
@@ -93,89 +91,6 @@ describe('uploadQueue — runner', () => {
     expect(completeSawCount).toBe(2)
   })
 
-  it('uploads multiple files sequentially (FIFO)', async () => {
-    const order: string[] = []
-    vi.mocked(addMedia).mockImplementation(async (_s, _n, _k, source) => {
-      order.push(source.mediaType)
-      return { blobId: 'b', mediaId: 'm' }
-    })
-    const { batches } = useUploadQueue()
-    enqueueUploads(TARGET, [sel(png('a.png')), sel(new File([new Uint8Array([9])], 'b.gif', { type: 'image/gif' }))], { label: '2' })
-
-    await vi.waitFor(() => expect(batches.value[0].files.every((f) => f.status === 'done')).toBe(true))
-    expect(order).toEqual(['image/png', 'image/gif'])
-  })
-
-  it('cancelling an uploading file aborts it and marks it cancelled', async () => {
-    vi.mocked(addMedia).mockImplementation(
-      (_s, _n, _k, _src, _d, opts) =>
-        new Promise((_resolve, reject) => {
-          opts?.onProgress?.(0) // first PUT progress → the file flips preparing → uploading (cr-0105 follow-up)
-          const abort = () => reject(new DOMException('cancelled', 'AbortError'))
-          if (opts?.signal?.aborted) return abort() // cancel may land before addMedia is reached (real addMedia throws upfront too)
-          opts?.signal?.addEventListener('abort', abort)
-        }),
-    )
-    const { batches } = useUploadQueue()
-    enqueueUploads(TARGET, [sel(png())], { label: '1' })
-    const file = batches.value[0].files[0]
-
-    await vi.waitFor(() => expect(file.status).toBe('uploading'))
-    cancelFile(file.id)
-    await vi.waitFor(() => expect(file.status).toBe('cancelled'))
-  })
-
-  it('cancelling a still-preparing file (no progress yet) also aborts it → cancelled', async () => {
-    // The pre-network phase (read + derive + seal) reports no progress, so the file sits in `preparing`. A video
-    // whose on-device decode is slow lives here — cancel must abort it, not no-op (cr-0105 follow-up).
-    vi.mocked(addMedia).mockImplementation(
-      (_s, _n, _k, _src, _d, opts) =>
-        new Promise((_resolve, reject) => {
-          const abort = () => reject(new DOMException('cancelled', 'AbortError'))
-          if (opts?.signal?.aborted) return abort()
-          opts?.signal?.addEventListener('abort', abort)
-        }), // deliberately never calls onProgress → stays 'preparing'
-    )
-    const { batches } = useUploadQueue()
-    enqueueUploads(TARGET, [sel(png())], { label: '1' })
-    const file = batches.value[0].files[0]
-
-    await vi.waitFor(() => expect(file.status).toBe('preparing'))
-    cancelFile(file.id)
-    await vi.waitFor(() => expect(file.status).toBe('cancelled'))
-  })
-
-  it('retries once on a transient failure, then succeeds', async () => {
-    let calls = 0
-    vi.mocked(addMedia).mockImplementation(async () => {
-      calls += 1
-      if (calls === 1) throw new Error('chunk_put_failed:500')
-      return { blobId: 'b', mediaId: 'm' }
-    })
-    const { batches } = useUploadQueue()
-    enqueueUploads(TARGET, [sel(png())], { label: '1' })
-    const file = batches.value[0].files[0]
-
-    await vi.waitFor(() => expect(file.status).toBe('done'))
-    expect(calls).toBe(2)
-    expect(file.attempts).toBe(2)
-  })
-
-  // uc.admin.tenant-storage-quota / ADR 0073 §6: no room left is not transient — a retry cannot help, so none is made.
-  // The test above is this one's control: the same queue still retries every other failure once.
-  it('fails a quota_exceeded file on its first attempt, with its reason, and makes no retry', async () => {
-    vi.mocked(addMedia).mockRejectedValue(new Error('quota_exceeded'))
-    const { batches } = useUploadQueue()
-    enqueueUploads(TARGET, [sel(png())], { label: '1' })
-    const file = batches.value[0].files[0]
-
-    await vi.waitFor(() => expect(file.status).toBe('failed'))
-    expect(file.error).toBe('quota_exceeded')
-    expect(file.attempts).toBe(1)
-    expect(addMedia).toHaveBeenCalledOnce()
-    expect(isRetryable(file)).toBe(false)
-  })
-
   it('makes no retry of a link upload refused quota_exceeded either (the share transport rides the same queue)', async () => {
     const upload = vi.fn().mockRejectedValue(new Error('quota_exceeded'))
     const { batches } = useUploadQueue()
@@ -187,33 +102,58 @@ describe('uploadQueue — runner', () => {
     expect(file.error).toBe('quota_exceeded')
   })
 
-  it('removeFile drops a settled file (cr-0102 uploader delete-own) and empties an exhausted batch', async () => {
-    vi.mocked(addMedia).mockResolvedValue({ blobId: 'b', mediaId: 'media-xyz' })
+  it('a share batch settles through its own transport, never addMedia (cr-0101)', async () => {
+    const upload = vi.fn(async (_src: unknown, o: { onProgress?: (p: number) => void }) => {
+      o.onProgress?.(0.5)
+      return { blobId: 'b', mediaId: 'share-media' }
+    })
     const { batches } = useUploadQueue()
-    enqueueUploads(TARGET, [sel(png('a.png')), sel(png('b.png'))], { label: '2' })
-    const [fileA, fileB] = batches.value[0].files
-    await vi.waitFor(() => expect(fileA.status).toBe('done'))
-    await vi.waitFor(() => expect(fileB.status).toBe('done'))
+    enqueueUploads({ key: 'share-1', upload }, [sel(png())], { label: '1' })
+    const file = batches.value[0].files[0]
 
-    removeFile(fileA.id) // one gone, the batch (and the other file) remains
-    expect(batches.value[0].files.map((f) => f.name)).toEqual(['b.png'])
-
-    removeFile(fileB.id) // the last file gone → the whole batch is dropped from the queue
-    expect(batches.value).toHaveLength(0)
+    await vi.waitFor(() => expect(file.status).toBe('done'))
+    expect(addMedia).not.toHaveBeenCalled()
+    expect(file.mediaId).toBe('share-media')
+    expect(batches.value[0].target.key).toBe('share-1')
+    expect(batches.value[0].key).toBe('share-1') // the grouping key core keeps, batchKey's answer
   })
 
-  it('marks a file failed after the retry is exhausted; retryFile re-runs it', async () => {
-    vi.mocked(addMedia).mockRejectedValue(new Error('chunk_put_failed:500'))
+  it('carries the picked file and its media type on the queue item (the optimistic tile reads both)', () => {
+    vi.mocked(addMedia).mockImplementation(() => new Promise(() => {}))
+    const picked = png()
+    const { batches } = useUploadQueue()
+    enqueueUploads(TARGET, [{ file: picked, mediaType: 'image/heic' }], { label: '1' })
+    const file = batches.value[0].files[0]
+
+    expect(file.file).toBe(picked)
+    expect(file.mediaType).toBe('image/heic')
+    expect(file.name).toBe('photo.png')
+    expect(file.sizeBytes).toBe(3)
+    expect(batches.value[0].target).toEqual(TARGET)
+  })
+
+  it("hands addMedia the item's abort signal, so a cancel from the tray reaches the upload → cancelled", async () => {
+    let seen: AbortSignal | undefined
+    vi.mocked(addMedia).mockImplementation(
+      (_s, _n, _k, _src, _d, opts) =>
+        new Promise((_resolve, reject) => {
+          seen = opts?.signal
+          opts?.onProgress?.(0)
+          opts?.signal?.addEventListener('abort', () => reject(new DOMException('cancelled', 'AbortError')))
+        }),
+    )
     const { batches } = useUploadQueue()
     enqueueUploads(TARGET, [sel(png())], { label: '1' })
     const file = batches.value[0].files[0]
 
-    await vi.waitFor(() => expect(file.status).toBe('failed'))
-    expect(file.error).toContain('chunk_put_failed')
+    await vi.waitFor(() => expect(file.status).toBe('uploading'))
+    expect(seen).toBe(file.controller.signal)
+    cancelFile(file.id)
+    await vi.waitFor(() => expect(file.status).toBe('cancelled'))
+  })
 
-    vi.mocked(addMedia).mockResolvedValue({ blobId: 'b', mediaId: 'm' })
-    retryFile(file.id)
-    await vi.waitFor(() => expect(file.status).toBe('done'))
+  it('returns null for an empty pick', () => {
+    expect(enqueueUploads(TARGET, [], { label: '0' })).toBeNull()
   })
 })
 
