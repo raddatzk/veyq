@@ -156,7 +156,7 @@ Planned 2026-10-06 from three inventories; each sub-slice is its own worktree ru
       13, 17, 18, 19, 20 of the ADR; MariaDB races: guest move against a member move out of the subtree, guest create
       against trash, guest operation against share delete.
       *Measured:* `createShareNode` (`CreateShareNodeRequest`: `nodeId` — ADR 0072 binds every seal to it — `parentId`,
-      `kind`, `encryptedName`, `slugToken`, `wrappedContentKey`, `orderIndex`; 201 `ShareNodeCreated`) and
+      `kind`, `encryptedName`, `slugToken`, `epoch`, `wrappedContentKey`, `orderIndex`; 201 `ShareNodeCreated`) and
       `updateShareNode` (`UpdateShareNodeRequest`: every placement field required, no `epoch`; `x-veyq-concurrency`
       `placementVersion`/`stale_placement`); `X-Contributor-Token` is a `ContributorToken` parameter in both
       `sharing.openapi.yaml` and `share-media.openapi.yaml`, held identical by `validate_contracts_common.py`. Codes: the
@@ -176,12 +176,16 @@ Planned 2026-10-06 from three inventories; each sub-slice is its own worktree ru
       `ShareNodeBudgetCoreSliceTest`, `ShareNodeRaceCoreSliceTest` (red on H2 and the pinned MariaDB against an
       unlocked read of the destination / the parent before the scope lock, the dropped `admitted()`, and the share row
       locked first — a deadlock against a re-activation), `ShareMediaRouteSliceTest` 18 rows, `ModuleCompositionTest`
-      with the eleventh seam. **Open, for the owner before 5b:** every seal binds the node's epoch (`node-name`,
-      `content-key`; the reader opens at the stored one), and the server stores a guest's create at the scope's
-      current epoch, which no guest response names (`ShareNode.epoch` is each node's, not the scope's). Either the
-      resolve serves the current epoch — and a rotation between resolve and create still stores a node its own name
-      does not open under — or the guest states the epoch and the server checks it (the member's rule, `409
-      stale_epoch`). Also owed to 5b: the web client of both operations.
+      with the eleventh seam. **The create's epoch (owner, 2026-10-07):** every seal binds the node's epoch
+      (`node-name`, `content-key`; the reader opens at the stored one), so a server-chosen current epoch left a name
+      unopenable whenever it differed from the guest's. The guest now sends the epoch it sealed with
+      (`CreateShareNodeRequest.epoch`, required, `@NotNull`), and `createInScope` checks a bounded create under the
+      scope lock with the member's rule off the root (`NodesHandler.sealableOffRoot`, shared with the placement
+      check): above the current one `409 stale_epoch`, nothing stored; at or below it stored as sent. Placements
+      still state none. Tests: `ShareNodesCoreSliceTest.anEpochAboveTheCurrentIsStaleAndStoresNothing` (red with the
+      check removed), `anEpochBelowTheCurrentIsStoredAsSentWithNoPayload` (red with the current epoch stored in its
+      place), `aCreateWithoutAnEpochIsMalformed`. Owed to 5b: the web client of both operations, and which epoch it
+      seals a create with — the resolve names each node's (`ShareNode.epoch`), never the scope's current one.
 - [ ] 5a.4 chapter share and role matrix — Memories declares `CHAPTER` as a share root and extends
       `MediaShareGuestWrites` (:29) and `UploadAdmission` to it (an upload lands in the chapter: `nodeId = rootNodeId`);
       the role matrix for Memories in `docs/apps/memories.md` from the real code · Done when: bite test 21; the matrix
