@@ -32,6 +32,7 @@ import {
   type WriteOnlyMint,
 } from '../../core/sharing/manageShares'
 import { openShareRoot, walkSubtree } from '../../core/sharing/shareTree'
+import { createGuestIdentity, identityNameContext, type GuestIdentity } from '../../core/sharing/guestIdentity'
 import { dropKeysForShare, mediaKey, mintUploaderKey, openDropPublicKey, uploaderOriginOf } from './mediaKey'
 import type { EpochKeys } from '../spaces/epochs'
 import {
@@ -58,8 +59,8 @@ import type { MediaDerivativeKind } from '../../api/generated/media'
 // The seals and the share management are the platform's (`core/sharing/manageShares.ts`, `core/sharing/shareTree.ts`;
 // lifted in cr-node-key-hierarchy 5b.2) and re-exported here, so this application's dialogs, suites and their
 // `vi.mock('../share')` keep the one module they import. What stays is what involves the drop key or a guest: the
-// WRITE_ONLY half of a mint and a re-issue (the drop key, ADR 0031 point 7), the contributor/uploader identity and
-// transport, and the viewer.
+// WRITE_ONLY half of a mint and a re-issue (the drop key, ADR 0031 point 7), the uploader identity (a contributor's is
+// the platform's `createGuestIdentity`, `core/sharing/guestIdentity.ts`), the upload transport, and the viewer.
 export {
   newShareId,
   hasLocaleText,
@@ -83,10 +84,6 @@ export {
   type ManagedShare,
   type LocaleMap,
 } from '../../core/sharing/manageShares'
-
-/** A contributor's display name under `K_mem` (cr-0101), bound to (scope, share, identity). */
-const identityNameContext = (scopeId: string, shareId: string, identityId: string) =>
-  ({ purpose: 'share-identity-name', scopeId, shareId, identityId }) as const
 
 // --- curator (authenticated) -----------------------------------------------
 
@@ -165,11 +162,11 @@ async function currentSealedDropKey(scopeId: string, nodeId: string): Promise<st
  * WRITE_ONLY identity only — its own key `K_up` (standard base64), which everything it uploads is sealed under
  * (ADR 0031 point 7). Persisted on the guest's device only; it opens nothing but what this identity sealed.
  */
-export type ContributorSession = { identityId: string; contributorToken: string; uploaderKey?: string }
+export type ContributorSession = GuestIdentity & { uploaderKey?: string }
 
 /**
  * Name yourself on a READ_WRITE or WRITE_ONLY share (operator-blind) and create an anonymous share identity.
- * A READ_WRITE guest seals the display name under `K_mem`. A WRITE_ONLY guest, which never holds `K_mem`, mints its own key
+ * A READ_WRITE guest is the platform's {@link createGuestIdentity}: the display name under `K_mem`. A WRITE_ONLY guest, which never holds `K_mem`, mints its own key
  * `K_up`, seals the name under it and hands `K_up` over wrapped to the Memory's drop public key. Returns the
  * identity id + a capability token that authorizes this session's uploads (+ `K_up`). The server never sees the
  * name (only the ciphertext), the key, or the person.
@@ -185,20 +182,18 @@ export async function createContributorIdentity(
   fragmentKey: string,
   pwToken?: string,
 ): Promise<ContributorSession> {
+  // A READ_WRITE guest names itself as on any link: the platform's identity, the name under the root's key (`K_mem`).
+  if (access.kind === 'read') return createGuestIdentity({ shareId, scopeId }, access.memoryKey, { name: displayName, fragmentKey, pwToken })
   const identityId = crypto.randomUUID() // client-minted: the name and the key wrap are sealed bound to it (ADR 0072)
-  const minted = access.kind === 'drop' ? mintUploaderKey(scopeId, access.nodeId, identityId, access.dropPublicKey) : undefined
-  const nameKey = minted ? minted.uploaderKey : access.kind === 'read' ? access.memoryKey : null
-  if (!nameKey) throw new Error('share_not_contributable')
-  const sealedDisplayName = b64std(v1.seal(identityNameContext(scopeId, shareId, identityId), nameKey, v1.utf8(displayName)))
+  const minted = mintUploaderKey(scopeId, access.nodeId, identityId, access.dropPublicKey)
+  const sealedDisplayName = b64std(v1.seal(identityNameContext(scopeId, shareId, identityId), minted.uploaderKey, v1.utf8(displayName)))
   const { contributorToken } = await publicSharesApi().createShareIdentity({
     shareId,
-    createShareIdentityRequest: { identityId, sealedDisplayName, wrappedIdentityKey: minted?.wrappedIdentityKey },
+    createShareIdentityRequest: { identityId, sealedDisplayName, wrappedIdentityKey: minted.wrappedIdentityKey },
     xSharePassword: pwToken, // cr-0164: the password gate fronts the write path too
     xShareWrite: b64std(v1.shareWriteToken(fromB64url(fragmentKey), shareId)),
   })
-  return minted
-    ? { identityId, contributorToken, uploaderKey: b64std(minted.uploaderKey) }
-    : { identityId, contributorToken }
+  return { identityId, contributorToken, uploaderKey: b64std(minted.uploaderKey) }
 }
 
 /**

@@ -1,0 +1,62 @@
+// A guest's named identity on a READ_WRITE link (cr-0101, ADR 0076; cr-node-key-hierarchy 5b.4a) — the platform's half,
+// whatever the shared root's kind: the display name sealed under the root's key, the anonymous identity it creates and
+// the session the guest's device keeps. Core's, because a folder link's guest names itself exactly as a Memory link's
+// does; an application adds only what is its own (Memories: the WRITE_ONLY uploader, whose name is sealed under a key
+// of its own wrapped to the drop key — ADR 0031 point 7 — and which therefore stays in `features/memory/share.ts`).
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, fromB64url } from '@veyq/crypto/base64'
+import { publicSharesApi } from '../../api/client'
+import type { PublicShareHead } from './resolvePublicShare'
+
+/** A guest's display name, sealed bound to (scope, share, identity) (cr-0101, ADR 0072): under the shared root's key for
+ *  a READ_WRITE guest, under its own `K_up` for an uploader. Who reads it opens it with the same context. */
+export const identityNameContext = (scopeId: string, shareId: string, identityId: string) =>
+  ({ purpose: 'share-identity-name', scopeId, shareId, identityId }) as const
+
+/** What creating an identity yields: the client-minted id and the capability token every guest write presents. */
+export type GuestIdentity = { identityId: string; contributorToken: string }
+
+/**
+ * Name yourself on a READ_WRITE link (operator-blind): the display name sealed under the shared root's key `rootKey`,
+ * bound to a client-minted identity id, and an anonymous identity created with it. The request proves the guest holds the
+ * whole link, not only its id (ADR 0076): `X-Share-Write` carries the token derived from `fragmentKey` (the link's
+ * `#k=`), whose hash the share stores; `pwToken` is the password gate's guest token (cr-0164). The server never sees the
+ * name, the key or the person.
+ */
+export async function createGuestIdentity(
+  head: Pick<PublicShareHead, 'shareId' | 'scopeId'>,
+  rootKey: Uint8Array,
+  { name, fragmentKey, pwToken }: { name: string; fragmentKey: string; pwToken?: string },
+): Promise<GuestIdentity> {
+  const { shareId, scopeId } = head
+  const identityId = crypto.randomUUID() // client-minted: the name is sealed bound to it (ADR 0072)
+  const sealedDisplayName = b64std(v1.seal(identityNameContext(scopeId, shareId, identityId), rootKey, v1.utf8(name)))
+  const { contributorToken } = await publicSharesApi().createShareIdentity({
+    shareId,
+    createShareIdentityRequest: { identityId, sealedDisplayName },
+    xSharePassword: pwToken, // cr-0164: the password gate fronts the write path too
+    xShareWrite: b64std(v1.shareWriteToken(fromB64url(fragmentKey), shareId)),
+  })
+  return { identityId, contributorToken }
+}
+
+// --- the guest's session on its device -------------------------------------------------------------------------------
+
+const sessionKey = (shareId: string) => `veyq:share-contributor:${shareId}`
+
+/** The guest's saved session for `shareId` — its identity and token, plus whatever an application keeps beside them
+ *  (`S`; Memories' uploader keeps its `K_up`) — or null when there is none or the store is unreadable. One per link,
+ *  whichever body named the guest; it never leaves the device (localStorage, so a reload keeps the name). */
+export function loadGuestSession<S extends GuestIdentity = GuestIdentity>(shareId: string): S | null {
+  try {
+    const raw = localStorage.getItem(sessionKey(shareId))
+    return raw ? (JSON.parse(raw) as S) : null
+  } catch {
+    return null
+  }
+}
+
+/** Save the guest's session for `shareId`. Throws when the store refuses the write, as the caller's naming step reports. */
+export function saveGuestSession(shareId: string, session: GuestIdentity): void {
+  localStorage.setItem(sessionKey(shareId), JSON.stringify(session))
+}
