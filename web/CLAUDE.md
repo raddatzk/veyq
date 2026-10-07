@@ -111,7 +111,7 @@ here; the server is blind.
   The application is `src/features/memory/` (one constant in the guard); **core is everything else** under `src/` —
   `app/`, `shared/`, `sw/`, `views/`, `components/app/`, every other `features/*`, and `core/`: `core/node/` (the
   node tree: `tree`, `treeStore`, `location`, `browse`, the delete/trash dialogs), `core/applications/registry.ts`
-  (the registry) and `core/sharing/` (the kind-independent half of a public share). Dependencies run application →
+  (the registry) and `core/sharing/` (the kind-independent half of a public share, the subtree walk and the share management — mint, list, revoke, re-issue, recovery; the drop key stays the application's). Dependencies run application →
   core, never back, and `scripts/validate_web_core_imports_no_applications.py` (no allowlist) is red on a core file
   that imports the application or one of its generated clients (every `generate:api` output whose `-i` lies under
   `contracts/api/memories/`, read from `package.json` — today `generated/media`, `generated/favorites`,

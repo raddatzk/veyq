@@ -242,10 +242,23 @@ Planned 2026-10-06 from three inventories; each sub-slice is its own worktree ru
         contributor and an uploader link on a chapter; the raw resolve and media read carry only the chapter) —
         type-checked, linted and discovered, **not yet run** (the orchestrator runs it from the main checkout). Open:
         the member dialog's strings say "this Memory" on a chapter too (`share.title`, `share.intro`).
-  - [ ] 5b.2 lift share management to core — mint (recovery copy mandatory), list, revoke, reactivate, reissue and
+  - [x] 5b.2 lift share management to core — mint (recovery copy mandatory), list, revoke, reactivate, reissue and
         recovery without drop keys move from `features/memory/share.ts` to `core/sharing/manageShares.ts`; `walkSubtree`
         to `core/sharing/shareTree.ts`; drop keys and the uploader stay in Memories · Done when: all tests unchanged
         green, `validate_web_core_imports_no_applications` green.
+        *Measured:* `manageShares.ts` holds `mintShare`/`remintShare` (READ/READ_WRITE; a WRITE_ONLY role only with a
+        `WriteOnlyMint` the application hands in, refused either way round), the recovery copy, edit, list, revoke,
+        reactivate, delete and the read-back helpers; `shareTree.ts` holds `SHARE_KEY`, `openShareRoot` and the exported
+        `walkSubtree` → `{keys, names, nodes}`; `shareLink.ts` moved too (5b.3's dialog needs it). Memories' `createShare`
+        / `reissueShare` keep their signatures and compose the core mint with the drop key; `share.ts` and a
+        `features/memory/shareLink.ts` shim re-export the moved names, so no importer and no `vi.mock` path changed
+        (sabotaging the core `buildShareLink` leaves both dialog suites green and `share.test.ts` red). Zero existing
+        test files touched; new `shareTree.test.ts` (6) and `manageShares.test.ts` (3). `npm run check` 1709 → 1718
+        passed; the core-import guard reads 174 → 177 files. Bites: an application import in `manageShares.ts` (guard
+        red), every node opened under the root key (`shareTree.test.ts` + `share.test.ts` red), the recovery copy
+        dropped from `mintShare` (11 red). For 5b.4: `createContributorIdentity` is core-able for READ_WRITE (its name
+        key is the root key; only the WRITE_ONLY branch needs `mintUploaderKey`), `addSharePhoto`/`deleteSharePhoto`
+        and `resolveShare` are Memories' (media pipeline, the share-media client).
   - [ ] 5b.3 share a folder (member side) — `FOLDER` `shareable` in core; the `levelView` contract gains `shareable` and
         a `share` event; a share button on the folder overview card; a core `FolderShareDialog` (READ, READ_WRITE)
         built from the existing components and `.veyq-*` classes; en and de strings · Done when: `npm run check`.
