@@ -72,16 +72,67 @@ without touching core except for the platform prerequisites below, which every l
       unchanged. Guard-gap cases 62–64 (rejected) and 65 (a module without its directory still passes, as before) bite:
       rule (d) not reading the spec directories turns 62/63 red, tolerating a literal owner list turns 64 red. Note for
       F0: the module is `files`, so its specs go in `contracts/api/files/` (the directory name is the owner).
-- [ ] P3 attachments in core (inbox #327/#345) — contract + migration for `veyq_node_attachment`, `BlobRole` as a token
-      (contract, `packages/crypto/src/seal.ts`, vectors, web re-export), a core completion helper (replace by compare in the
-      `UPDATE`, free the old blob with `deleteBlobRow` in the same transaction), a core `NodeSubtreeEraser` and
-      `SharedSubtreeContributor` for attachments, a generic `UploadAdmission` over the attachment row (per-link byte limit
-      through `share_identity_id`) · Done when: `validate_blob_reference_arity` has the fourth arm and bites without it,
-      the erasure guards stay green, a concurrent-replace race test (MariaDB), conformance both directions.
-- [ ] P4 web: the folder level view and the upload queue move to core — the level view belongs to core and applications
-      claim per kind (row, detail, mutation dialog, share dialog); `topbarTray` and `sidebarPins` become lists; the blob
-      transport (`planBlob`, `sealFrameAt`, the window PUTs, the chunk functions of `features/memory/media.ts`) moves to
-      `web/src/core/blob` · Done when: Memories' e2e suites stay green, `validate_web_core_imports_no_applications` green.
+- [ ] P3 attachments in core (inbox #327/#345) — planned 2026-10-07 from four plan inventories; owner decisions: the slot of
+      Files' blob equals its role token `FILE_CONTENT` (one token space); `expectedBlobId` travels in the completion
+      `payloads` (Files' own contract, no core wire change); the attachment bytes count as a core term in `linkUsage`;
+      the server refuses a guest upload with the role `COVER` explicitly (the enum used to say it).
+  - [ ] P3-S1 crypto — `BlobRole` in `packages/crypto/src/seal.ts` becomes a token (anchored regex `^[A-Z][A-Z0-9_]{0,15}$`),
+        no new seal purpose, a new role value `FILE_CONTENT` only (the role is encoded `lp(utf8)`: the bytes of the four
+        existing roles stay identical; ADR 0072 asks for suite v2 only on a field change); a new vector block (content key →
+        node key → `blob-key` with `FILE_CONTENT`) from an independent Python implementation; conformance rejection cases
+        (`album`, empty, 17 × `A`, `1X`, `ORIGINAL\n`); the commit records the exit code of `npm run mutation -- --force`
+        (web/CLAUDE.md) · Done when: `cd packages/crypto && npm run check`, web `npm run check`, bite tests (an unanchored
+        regex or a closed list → red).
+  - [ ] P3-S2 contract + references — `BlobRole` token in `_common.openapi.yaml` (as `NodeKind`), `$ref` from `blob.openapi.yaml`
+        and `sharing.openapi.yaml` (its second copy, without `COVER`), `@Pattern` on every request property, the two tuples
+        of `validate_contracts_common` go, Memories' roles become its own constants (`MemoryBlobRole` in `features/memory`,
+        Kotlin constants in `apps/memories`; `mediaDeriver.ts` `Extract<BlobRole, …>`), the server refuses a guest `COVER` ·
+        Done when: guards, `./gradlew check`, `npm run check`, a bite test per guard.
+  - [ ] P3-S3 schema + guards — `veyq_node_attachment(id, scope_id, node_id, slot, blob_id, share_identity_id, created_at)`,
+        UNIQUE (node_id, slot) and (blob_id), foreign keys to scope, node, blob and share identity WITHOUT `CASCADE` (a cascade
+        would delete the row without `deleteBlobRow`: a silent orphan, there is no sweep), baseline edit + pin line; the
+        fourth arm of `validate_blob_reference_arity` (`blob_id` on its own line), a core `AttachmentNodeSubtreeEraser` and
+        `AttachmentScopeEraser` (phase < 500), `SharedSubtreeContributor` and a core `GuestIdentityUsage` over attachments
+        (document that an application without its own usage no longer fails closed) · Done when: a purge slice test (attachment
+        and blob gone, nothing orphaned), the guard bites (list edits back → three keys red; contributor removed → live twin
+        red).
+  - [ ] P3-S4 `AttachmentStore.attach` — one transaction: `admitted()`, scope lock, consume the session as the first write,
+        liveness and kind by QUERY (not `findById`: the stale-context trap), `persistBlob` and an explicit flush, a CAS
+        `UPDATE … blob_id = expected` (an insert only into an empty slot; the loser gets `conflict`), `deleteBlobRow(old)`;
+        replace on a trashed node refused · Done when: a race test on H2 and MariaDB (model `NodeCoverSliceTest`
+        `whileUncommitted`), levers: scope lock removed, CAS predicate removed.
+  - [ ] P3-S5 quota — attachment bytes as a core term of `linkUsage`/`StorageQuota.linkFits` · Done when: a byte-limit test at
+        the exact boundary.
+- [ ] P4 web re-cut — planned 2026-10-07; two strands. Owner decision: the toolbar (trash, grid/list) stays in Memories'
+      section until Files needs it (the visible change P4e is deferred). Every e2e suite is API-level, so only golden and
+      characterisation tests prove 'no user-visible change'.
+  - [ ] B0 characterisation test of the upload pipeline — `randomBytes`/`randomUUID` and `fetch` stubbed; per frame method, path,
+        body and SHA-256 for `addMedia`, `uploadCoverBlob` and `addSharePhoto`; plus the `vi.mock` sabotage of web/CLAUDE.md ·
+        Done when: it goes red for a changed `PUMP_IN_FLIGHT` or `PUT_CONTENT_TYPE`.
+  - [ ] P4-0 golden test of the Memories level view — really mounted (fixtures of `MemoryBrowse.test.ts`), serialising tag, class, text,
+        aria-label, disabled; root and folder, grid/list/map, readonly; `toMatchFileSnapshot` · Done when: a changed class
+        goes red.
+  - [ ] B1 move the neutral blob transport to `web/src/core/blob/{types,transport}.ts` (`planBlob`, `reserveAndPump`,
+        `authedReserve`/`authedWindow`, `windowPuts`, `openBlob*`, `presignAllChunks`, `makeChunkProvider`; `pumpBlob`,
+        `sealFrameAt`, `putChunk`, `getChunk` private); `features/memory/media.ts` re-exports; `uploadMediaVia` is split
+        (planning and pumping to core; derivatives, metadata sealing and complete stay) · Done when: B0 unchanged and green,
+        the core-import guard bites on an import from `features/memory`.
+  - [ ] P4a list slots — `addSlotItem`/`slotItems` for `topbarTray` and `sidebarPins` (ordered, write-once per (slot, id)) ·
+        Done when: `registry.test.ts`, `AppShell.slots.test.ts`, `applications.test.ts` updated, a two-entry order case, P4-0
+        unchanged.
+  - [ ] B2 the upload queue with a job runner in `web/src/core/blob/queue.ts` (`UploadJob<R> = {name, sizeBytes, run({onProgress,
+        signal})}`; six states, one automatic retry, never for `quota_exceeded`); Memories' `enqueueUploads` is a thin adapter ·
+        Done when: the queue cases split into generic and Memories ones, `quota_exceeded` never retries, an abort gives
+        `cancelled`.
+  - [ ] B3 the status menu to core and the tray becomes a list (`register.ts` loses its tray claim; needs P4a).
+  - [ ] P4b a core level view `core/node/LevelView.vue` — overview card, application sections ordered by `order`, the folder
+        section, a fallback section for a kind nobody sections ('not supported', never an empty area) · Done when: P4-0
+        unchanged, `LevelView.test.ts`.
+  - [ ] P4c dialogs per kind — a core `FolderNameDialog` (create folder, rename anything), `createDialog` and `shareDialog` per
+        kind; `nodeMutationDialog` and `levelView` slots go · Done when: `MemoryHomeView*.test.ts` updated.
+  - [ ] P4d CSS and i18n neutral — the `memory-folder-*`/`memory-create-card` rules move to `veyq-*` twins (dark tokens), the dead
+        rules are deleted (`validate_stylesheet_anchors`), the generic `memory.*` keys move to a core namespace (en + de) ·
+        Done when: the golden test is updated deliberately (class names only).
 - [ ] P5 ADR 0079 §9 says key derivation takes the application id (HKDF); random node keys under the parent's key satisfy it:
       say so once, in place · Done when: `validate_doc_citations` green.
 
