@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { slugify } from './naming'
+import { fileNameSlug, slugify } from './naming'
 
 describe('slugify', () => {
   it('produces readable URL-safe slugs', () => {
@@ -41,5 +41,32 @@ describe('slugify', () => {
     // carry a leading '-' → 'n-engklk'. This exact pin is the only assertion that dies when the mask is dropped —
     // a fallback pin over an ordinary positive input leaves the >>> 0 mutant alive (same string either way).
     expect(slugify('😀')).toBe('n1kdnhdk')
+  })
+})
+
+// A file's uniqueness slug (inbox #350). The vectors (`naming.conformance.test.ts`) pin the outputs; these name the
+// rules one at a time, each the assertion that dies when its step is dropped.
+describe('fileNameSlug', () => {
+  it('lowercases without any other change: Foto.JPG and foto.jpg are one name, the dot stays', () => {
+    expect(fileNameSlug('Foto.JPG')).toBe('foto.jpg')
+    expect(fileNameSlug('Foto.JPG')).toBe(fileNameSlug('foto.jpg'))
+  })
+
+  it('keeps punctuation and spaces, so Day1.md and Day1 md stay distinct (unlike slugify)', () => {
+    expect(fileNameSlug('Day1.md')).not.toBe(fileNameSlug('Day1 md'))
+    expect(slugify('Day1.md')).toBe(slugify('Day1 md'))
+    expect(fileNameSlug('a/b#c?(1)')).toBe('a/b#c?(1)')
+  })
+
+  it('normalizes to NFC first: a composed and a decomposed ä are one name', () => {
+    expect(fileNameSlug('Käse')).toBe('käse')
+    expect(fileNameSlug('Käse')).toBe(fileNameSlug('Käse'))
+  })
+
+  it('does not trim and does not transliterate (no ß -> ss, no hash fallback)', () => {
+    expect(fileNameSlug('  x  ')).toBe('  x  ')
+    expect(fileNameSlug('Straße')).toBe('straße')
+    expect(fileNameSlug('🎉')).toBe('🎉')
+    expect(fileNameSlug('')).toBe('')
   })
 })

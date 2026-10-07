@@ -9,6 +9,10 @@
 // trim regex was `/^-+|-+$/g`, but the preceding non-alnum collapse guarantees a leading/trailing dash is always
 // SINGLE, so the `+` quantifiers were redundant (`^-+`≡`^-`, `-+$`≡`-$`) — two provably-equivalent mutants. Dropped
 // to `/^-|-$/g`: same output on every input, and the equivalent-mutant surface is gone (naming.ts scores 100%).
+//
+// Two foldings live here (inbox #350): `slugify` for containers (folders, Memories, chapters — the URL segment AND the
+// uniqueness) and `fileNameSlug` for files (uniqueness only). Which one a node uses is its kind's choice, made in the
+// application registry (`KindDescriptor.slug`, `registry.slugFor`); both are pinned by the `name_folding` vectors.
 
 const GERMAN_FOLDING: Record<string, string> = { ä: 'ae', ö: 'oe', ü: 'ue', ß: 'ss' }
 
@@ -27,6 +31,22 @@ export function slugify(name: string): string {
     .replace(/[^a-z0-9]+/g, '-') // any run of non-alphanumerics → a single dash
     .replace(/^-|-$/g, '') // trim leading/trailing dashes
   return slug || `n${fnv1a(name)}`
+}
+
+/**
+ * A FILE name's uniqueness slug (inbox #350, ADR 0080): NFC, then `toLowerCase()` — the locale-free Unicode default
+ * lowercasing (context-sensitive final sigma and `İ` → `i̇` included), nothing else. Punctuation and spaces are KEPT,
+ * so `Foto.JPG` = `foto.jpg` but `Day1.md` ≠ `Day1 md`; a composed and a decomposed `ä` are the same name. It does
+ * NOT trim: the member UI trims a name before it is folded, and the folding must not re-decide that. The stored name
+ * keeps its case; this string only feeds the blinded slug token (a file is never a URL segment).
+ *
+ * **Frozen into tokens.** Like {@link slugify}, its output is HMAC'd into every stored slug token: changing a single
+ * rule here silently stops a stored file from colliding with its own name. Its output is pinned by the
+ * `name_folding` conformance vectors in `contracts/crypto/vectors/v1.json`; no library, because a table change in a
+ * dependency would move the tokens without anyone touching this file.
+ */
+export function fileNameSlug(name: string): string {
+  return name.normalize('NFC').toLowerCase()
 }
 
 /** Tiny deterministic 32-bit hash (FNV-1a) → base36, for the empty-slug fallback only. */

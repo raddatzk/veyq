@@ -3,6 +3,7 @@ import { defineComponent } from 'vue'
 import { createRegistry, type LifecycleHooks } from './registry'
 import { FOLDER_KIND, type NodeKind } from '../node/kind'
 import { MEMORY_KIND, CHAPTER_KIND } from '../../features/memory/kinds'
+import { fileNameSlug, slugify } from '../../shared/naming'
 
 const Stub = defineComponent({ template: '<div />' })
 const Other = defineComponent({ template: '<span />' })
@@ -56,6 +57,37 @@ describe('registry: kinds', () => {
     r.registerKind(d)
     d.shareable = false
     expect(r.kind(MEMORY_KIND)).toMatchObject({ shareable: true })
+  })
+})
+
+// The slug hook (inbox #350): every slug token is derived through `slugFor`, so its default and its per-kind answer are
+// what decides which names collide.
+describe('registry: slugFor', () => {
+  it('folds with slugify for a kind that registers no hook, the platform FOLDER included', () => {
+    const r = createRegistry()
+    r.registerKind({ kind: MEMORY_KIND, icon: 'pi pi-a', shareable: true })
+    expect(r.slugFor(FOLDER_KIND, 'Foto.JPG')).toBe(slugify('Foto.JPG'))
+    expect(r.slugFor(MEMORY_KIND, 'Day1.md')).toBe('day1-md')
+  })
+
+  it('folds with slugify for a kind nobody registered (a token is still computable for it)', () => {
+    expect(createRegistry().slugFor('FUTURE', 'Day1.md')).toBe('day1-md')
+  })
+
+  it('folds with the kind\'s own hook when it registers one, and only for that kind', () => {
+    const r = createRegistry()
+    r.registerKind({ kind: 'LEAF', icon: 'pi pi-file', shareable: false, slug: fileNameSlug })
+    expect(r.slugFor('LEAF', 'Day1.md')).toBe('day1.md')
+    expect(r.slugFor('LEAF', 'Foto.JPG')).toBe(r.slugFor('LEAF', 'foto.jpg'))
+    expect(r.slugFor(FOLDER_KIND, 'Day1.md')).toBe('day1-md')
+    expect(r.kind('LEAF')).toMatchObject({ supported: true, slug: fileNameSlug })
+  })
+
+  it('keeps the first hook: a second registration of the kind throws and does not swap the folding', () => {
+    const r = createRegistry()
+    r.registerKind({ kind: 'LEAF', icon: 'pi pi-file', shareable: false, slug: fileNameSlug })
+    expect(() => r.registerKind({ kind: 'LEAF', icon: 'pi pi-file', shareable: false, slug: () => 'x' })).toThrow(/already registered/)
+    expect(r.slugFor('LEAF', 'A.B')).toBe('a.b')
   })
 })
 

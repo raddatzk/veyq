@@ -8,7 +8,8 @@ import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { openContentKey, openName, sealName, wrapContentKey, PlacementConflictError } from '../node/tree'
 import { FOLDER_KIND } from '../node/kind'
-import { slugify } from '../../shared/naming'
+import { fileNameSlug, slugify } from '../../shared/naming'
+import { registry } from '../applications/registry'
 import { SHARE_KEY } from './shareTree'
 import {
   createShareNodeAsGuest,
@@ -184,6 +185,52 @@ describe('a guest places a node', () => {
     ctx.nodes.set(ITEM, { ...ctx.nodes.get(ITEM)!, placementVersion: undefined })
     await expect(placeShareNodeAsGuest(ctx, { nodeId: ITEM, newParentId: RIGHT })).rejects.toThrow(v1.OpenRefused)
     expect(sent).toHaveLength(0)
+  })
+
+  // Inbox #350: the pre-check compares what the server compares — each sibling's slug folded by ITS kind — and the token
+  // is folded by the node's kind. LEFT holds a folder 'Day1 md' (slugify: day1-md) and a leaf 'foto.jpg' of a kind that
+  // registers the file folding (fileNameSlug: foto.jpg).
+  describe('folds by kind (inbox #350)', () => {
+    const LEAF = 'LEAFTEST'
+    registry.registerKind({ kind: LEAF, icon: 'pi pi-file', shareable: false, slug: fileNameSlug })
+    const DIR = '6e5a0000-0000-4000-8000-0000000000b1'
+    const FILE = '6e5a0000-0000-4000-8000-0000000000b2'
+    const byKind = () => {
+      const ctx = context()
+      const extra = [row(DIR, LEFT, kLeft, v1.randomBytes(32), 'Day1 md', 3, 0), row(FILE, LEFT, kLeft, v1.randomBytes(32), 'foto.jpg', 3, 0, LEAF)]
+      for (const n of extra) {
+        ctx.nodes.set(n.id, n)
+        ctx.names.set(n.id, n.id === DIR ? 'Day1 md' : 'foto.jpg')
+        ctx.keys.set(n.id, v1.randomBytes(32))
+      }
+      return ctx
+    }
+    const failed = (p: Promise<unknown>) => p.then(() => null, (e: unknown) => e as GuestTreeError)
+
+    it('a leaf collides case-insensitively with a leaf, and not with a folder whose slugify slug matches', async () => {
+      const sent = recordFetch(created)
+      expect((await failed(createShareNodeAsGuest(byKind(), { parentId: LEFT, kind: LEAF, name: 'Foto.JPG' })))?.siblingName).toBe('foto.jpg')
+      expect(sent).toHaveLength(0)
+      await createShareNodeAsGuest(byKind(), { parentId: LEFT, kind: LEAF, name: 'Day1.md' })
+      expect(sent).toHaveLength(1)
+      expect(sent[0].json.slugToken).toBe(b64std(v1.slugToken(kLeft, LEFT, 'day1.md')))
+    })
+
+    it('a folder folds with slugify: Day1.md collides with the folder Day1 md, foto.jpg not with the leaf', async () => {
+      const sent = recordFetch(created)
+      expect((await failed(createShareNodeAsGuest(byKind(), { parentId: LEFT, kind: FOLDER_KIND, name: 'Day1.md' })))?.siblingName).toBe('Day1 md')
+      expect(sent).toHaveLength(0)
+      await createShareNodeAsGuest(byKind(), { parentId: LEFT, kind: FOLDER_KIND, name: 'foto.jpg' })
+      expect(sent[0].json.slugToken).toBe(b64std(v1.slugToken(kLeft, LEFT, 'foto-jpg')))
+    })
+
+    it('a placement folds the moved node by its own served kind, in the pre-check and the token', async () => {
+      const sent = recordFetch(noContent)
+      await placeShareNodeAsGuest(byKind(), { nodeId: FILE, newParentId: LEFT, newName: 'Day1 MD.txt' })
+      expect(sent[0].json.slugToken).toBe(b64std(v1.slugToken(kLeft, LEFT, 'day1 md.txt')))
+      expect((await failed(placeShareNodeAsGuest(byKind(), { nodeId: DIR, newParentId: LEFT, newName: 'FOTO JPG' }))), 'a folder renamed: slugify').toBeNull()
+      expect(sent[1].json.slugToken).toBe(b64std(v1.slugToken(kLeft, LEFT, 'foto-jpg')))
+    })
   })
 
   it('refuses a move onto a readable sibling\'s name at the destination, naming it; its own name never collides', async () => {

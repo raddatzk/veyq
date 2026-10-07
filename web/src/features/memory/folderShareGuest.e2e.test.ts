@@ -26,6 +26,7 @@ import { epochsOf } from '../spaces/epochsTestUtil'
 import { createFolder, listTree, nodeContentKey, sealName, slugTokenFor, wrapContentKey } from '../../core/node/tree'
 import { FOLDER_KIND } from '../../core/node/kind'
 import { createChapter, createMemory } from './memoryNodes'
+import { MEMORY_KIND } from './kinds'
 import { addMedia, listMedia, openOriginal } from './media'
 import { mintShare } from '../../core/sharing/manageShares'
 import { resolvePublicShare } from '../../core/sharing/resolvePublicShare'
@@ -137,7 +138,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share guest e2e (live, real crypt
       publicSharesApi().updateShareNodeRaw({
         shareId, nodeId: folderId, xContributorToken: identity.contributorToken,
         updateShareNodeRequest: {
-          parentId: leftId, encryptedName: sealName(rootKey, rootAt, 'Umbenannt'), slugToken: slugTokenFor(rootKey, leftId, 'Umbenannt'),
+          parentId: leftId, encryptedName: sealName(rootKey, rootAt, 'Umbenannt'), slugToken: slugTokenFor(rootKey, leftId, FOLDER_KIND, 'Umbenannt'),
           wrappedContentKey: wrapContentKey(rootKey, rootAt, rootKey), placementVersion: 0,
         },
       }),
@@ -151,7 +152,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share guest e2e (live, real crypt
       publicSharesApi().updateShareNodeRaw({
         shareId, nodeId: memory.nodeId, xContributorToken: identity.contributorToken,
         updateShareNodeRequest: {
-          parentId: leftId, encryptedName: sealName(leftKeyGuest, staleAt, MEMORY_NAME), slugToken: slugTokenFor(leftKeyGuest, leftId, MEMORY_NAME),
+          parentId: leftId, encryptedName: sealName(leftKeyGuest, staleAt, MEMORY_NAME), slugToken: slugTokenFor(leftKeyGuest, leftId, MEMORY_KIND, MEMORY_NAME),
           wrappedContentKey: wrapContentKey(leftKeyGuest, staleAt, memoryKey), placementVersion: 0,
         },
       }),

@@ -30,7 +30,7 @@ import { withRefresh } from '../../app/sessionRefresh'
 import type { NodeSummary, TrashedNodeSummary } from '../../api/generated/content'
 import { FOLDER_KIND, type NodeKind } from './kind'
 import { writeKey, keyAt, type EpochKeys } from '../../features/spaces/epochs'
-import { slugify } from '../../shared/naming'
+import { registry } from '../applications/registry'
 import { HttpStatus, isCodedError } from '../../shared/httpError'
 import { expectMintedId } from './mintedId'
 
@@ -73,10 +73,15 @@ export function sealName(entryKey: Uint8Array, node: NodeAddress, name: string):
 export function openName(entryKey: Uint8Array, node: NodeAddress, encryptedName: string): string {
   return decoder.decode(v1.open(nameContext(node), entryKey, fromB64std(encryptedName)))
 }
-/** The blinded slug token of `name` in the slot `parentSlot` (the parent's id, the scope id at the root), keyed by the
- *  key the entry lives under (ADR 0080 Decision 2): unique per parent, stable per parent key. */
-export function slugTokenFor(entryKey: Uint8Array, parentSlot: string, name: string): string {
-  return b64std(v1.slugToken(entryKey, parentSlot, slugify(name)))
+/** The blinded slug token of `name` for a node of `kind` in the slot `parentSlot` (the parent's id, the scope id at the
+ *  root), keyed by the key the entry lives under (ADR 0080 Decision 2): unique per parent, stable per parent key. The
+ *  name is folded by ITS kind's function (`registry.slugFor`, inbox #350: a container's `slugify`, a file's stricter
+ *  `fileNameSlug`), so every write of one node — create, rename or move, restore, a guest's — must pass that node's
+ *  kind, or its token stops matching the one it was stored with. The server's uniqueness is per token among siblings,
+ *  whatever their kinds: a folder `a.b` (slug `a-b`) and a file `a.b` (slug `a.b`) do not collide, a folder `a.b` and a
+ *  file `a-b` do. */
+export function slugTokenFor(entryKey: Uint8Array, parentSlot: string, kind: NodeKind, name: string): string {
+  return b64std(v1.slugToken(entryKey, parentSlot, registry.slugFor(kind, name)))
 }
 
 /** The fields of a listed row that its directory entry and key chain need. */
@@ -170,7 +175,7 @@ export async function createContentNode(
         parentId: parentId ?? undefined,
         kind,
         encryptedName: sealName(entryKey, node, name),
-        slugToken: slugTokenFor(entryKey, parentSlot, name),
+        slugToken: slugTokenFor(entryKey, parentSlot, kind, name),
         orderIndex: 0,
         epoch: epochs.current,
         wrappedContentKey,
@@ -338,7 +343,7 @@ async function sendPlacement(scopeId: string, epochs: EpochKeys, tree: TreeNode[
         parentId: to.parentId ?? undefined,
         wrappedContentKey: wrapContentKey(destinationKey, sealedAt, contentKey),
         encryptedName: sealName(destinationKey, sealedAt, name),
-        slugToken: slugTokenFor(destinationKey, to.parentId ?? scopeId, name),
+        slugToken: slugTokenFor(destinationKey, to.parentId ?? scopeId, node.kind, name),
         epoch,
         placementVersion: node.placementVersion,
       },
@@ -410,7 +415,7 @@ export async function restoreNode(
   scopeId: string,
   epochs: EpochKeys,
   tree: TreeNode[],
-  node: { id: string; parentId: string | null; epoch: number; placementVersion: number; name: string },
+  node: { id: string; parentId: string | null; kind: NodeKind; epoch: number; placementVersion: number; name: string },
   newName?: string,
 ): Promise<void> {
   const parentSlot = node.parentId ?? scopeId
@@ -424,7 +429,7 @@ export async function restoreNode(
       scopeId,
       nodeId: node.id,
       restoreNodeRequest: {
-        slugToken: slugTokenFor(key, parentSlot, name),
+        slugToken: slugTokenFor(key, parentSlot, node.kind, name),
         encryptedName: newName === undefined ? undefined : sealName(key, address, newName),
       },
     }),
