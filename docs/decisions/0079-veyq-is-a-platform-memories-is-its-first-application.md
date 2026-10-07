@@ -241,7 +241,8 @@ on their own.
   Master Key rotates (that hook is required: a rotation refuses to start without it). Not done on the web: the
   directory is still named `features/memory`; the level view, the create/rename dialog and the share dialog are
   single-claim slots shaped for Memories (the second application re-cuts them per kind), while the top-bar tray and
-  the sidebar pins are ordered list slots each application adds its own item to; the i18n catalog is one file and `styles/memory.css` is global. The kind is a string token on both
+  the sidebar pins are ordered list slots each application adds its own item to (the upload status in the top bar is
+  core's own, listing every application's uploads, so no application adds it); the i18n catalog is one file and `styles/memory.css` is global. The kind is a string token on both
   sides, so that core never names `MEMORY`/`CHAPTER` is guarded (both kind rules read literals), not typed, and no
   compiler lists the kinds: the registry's fail-closed answer and its tests carry what a closed enum's exhaustiveness
   did.

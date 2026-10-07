@@ -29,10 +29,11 @@ describe('AppTopbar breadcrumb', () => {
   })
 })
 
-// The tray is the application's, an item of the `topbarTray` list slot of the REAL registry (src/test/setup.ts
-// registers Memories as main.ts does). If the composition root stopped adding it, this is the test that goes red.
-describe('AppTopbar upload tray (the topbarTray list slot)', () => {
-  it('shows the application\'s upload tray with a live queue', async () => {
+// The upload status is the platform's (cr-files-application B3): the bar mounts core's menu itself, over the REAL
+// registry (src/test/setup.ts registers the applications as main.ts does), and a batch Memories enqueues through its
+// own adapter shows in it. If the bar stopped mounting it, this is the test that goes red.
+describe('AppTopbar upload status (core\'s menu)', () => {
+  it('shows a Memories batch in the platform\'s upload menu with a live queue', async () => {
     vi.mocked(addMedia).mockImplementation(() => new Promise(() => {})) // stays in flight
     clearUploads()
     const w = mountTopbar()

@@ -6,7 +6,6 @@ import { MEMORY_KIND, CHAPTER_KIND } from './features/memory/kinds'
 import { FILE_KIND } from './features/files/kinds'
 import { fileNameSlug } from './shared/naming'
 import { favoritesStore } from './features/memory/favoritesStore'
-import UploadStatusMenu from './features/memory/components/UploadStatusMenu.vue'
 import PinnedMemories from './features/memory/components/PinnedMemories.vue'
 
 // `src/test/setup.ts` has already called registerApplications() once for this file, exactly as main.ts does.
@@ -29,9 +28,10 @@ describe('composition root', () => {
     expect(registry.shareBody(CHAPTER_KIND)).toBe(registry.shareBody(MEMORY_KIND))
   })
 
-  // The tray and the pins are list slots (P4a): Memories adds one item to each, under an id namespaced by the application.
-  it('adds the Memories upload status to the top-bar tray and the pinned Memories to the sidebar pins', () => {
-    expect(registry.slotItems('topbarTray')).toEqual([{ id: 'memories.upload-status', component: UploadStatusMenu }])
+  // The tray and the pins are list slots (P4a). The upload status is core's since B3 (the top bar mounts it itself), so
+  // no installed application adds to the tray; Memories adds its pinned Memories, under an id namespaced by it.
+  it('adds nothing to the top-bar tray and the pinned Memories to the sidebar pins', () => {
+    expect(registry.slotItems('topbarTray')).toEqual([])
     expect(registry.slotItems('sidebarPins')).toEqual([{ id: 'memories.pinned', component: PinnedMemories }])
   })
 

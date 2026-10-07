@@ -4,15 +4,15 @@
 //
 // The single-claim slots filled here (the level view, the create/rename dialog, the share dialog, the public share
 // body) are Memories-shaped today: the next application's change request re-cuts them per kind (the registry's
-// header). The upload tray in the top bar and the pinned rail in the sidebar are list slots: Memories adds one item to
-// each, under an id namespaced by the application.
+// header). The pinned rail in the sidebar is a list slot: Memories adds one item to it, under an id namespaced by the
+// application. The top bar's upload status is core's (`core/blob/UploadStatusMenu.vue`, cr-files-application B3) and
+// lists Memories' batches with every other application's, so Memories adds nothing to the `topbarTray` list.
 import { MEMORY_KIND, CHAPTER_KIND } from './kinds'
 import type { Registry } from '../../core/applications/registry'
 import MemoryDetailHost from './components/MemoryDetailHost.vue'
 import MemoryLevelHost from './components/MemoryLevelHost.vue'
 import NodeMutationDialog from './components/NodeMutationDialog.vue'
 import ShareDialog from './components/ShareDialog.vue'
-import UploadStatusMenu from './components/UploadStatusMenu.vue'
 import PinnedMemories from './components/PinnedMemories.vue'
 import MemoryShareBody from './components/MemoryShareBody.vue'
 import { memoriesLifecycle } from './lifecycle'
@@ -26,7 +26,6 @@ export function registerMemories(registry: Registry): void {
   registry.claimSlot('levelView', MemoryLevelHost)
   registry.claimSlot('nodeMutationDialog', NodeMutationDialog)
   registry.claimSlot('shareDialog', ShareDialog)
-  registry.addSlotItem('topbarTray', 'memories.upload-status', UploadStatusMenu)
   registry.addSlotItem('sidebarPins', 'memories.pinned', PinnedMemories)
   // The public share page: every Memories share — viewer, contributor and the WRITE_ONLY drop — is rooted at a MEMORY
   // or a CHAPTER node (`PublicShare.rootKind`); the one body renders either root and picks its screens by the role.
