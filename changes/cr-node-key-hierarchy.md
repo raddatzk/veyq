@@ -225,9 +225,23 @@ Planned 2026-10-06 from three inventories; each sub-slice is its own worktree ru
         without the annotation), a re-seal overlapping a revoke keeps both writes, and one overlapping a re-activation
         ends consistent (red — a deadlock on H2 and on MariaDB — with the scope row locked after the share row).
         `ShareMediaRouteSliceTest` (19 routes) and `OperatorBlindProbeTest` carry the route.
-  - [ ] 5b.1 chapter share — `CHAPTER` `shareable: true` (`register.ts:22`), `MemoryShareBody` also claimed for
+  - [x] 5b.1 chapter share — `CHAPTER` `shareable: true` (`register.ts:22`), `MemoryShareBody` also claimed for
         `CHAPTER_KIND`, stale comments (`register.ts:19-20,28-29`, `kinds.ts:9`, `MemoryHomeView.vue:81`,
         `MemoryDetail.vue:63`) · Done when: `npm run check`; e2e: a chapter uploader and a chapter contributor.
+        *Measured:* the rest of the path was already kind-blind — the detail, both share dialogs (the node's id, its
+        key from `nodeContentKey`, its name as the tree opened it), `createShare` (wrap, sealed name, drop key bound to
+        the node), `openSharedMemory`/`walkSubtree` (the root is whatever node the server serves with no parent) and
+        `MemoryShareBody`; no logic changed, no string added. Tests: `MemoryHomeView.test.ts` (a chapter is shareable
+        and both dialogs open with its id, its own key and its name — red with `shareable: false`),
+        `applications.test.ts` (both kinds shareable, one body for both — red either way), `ShareView.test.ts` (a
+        viewer and an uploader link rooted at a `CHAPTER` reach the body over the real registry — red, `unavailable`,
+        without the claim), `share.test.ts` (a chapter link's wrap, title, nested chapter and media; the uploader's drop
+        key under the chapter's key bound to the chapter, not the Memory), `MemoryDetail.test.ts` (a chapter's share
+        buttons follow `shareable`); `MemoryHomeView.registry.test.ts` mirrors the real registration and
+        `ShareView.registry.test.ts`'s unclaimed kind is `EXPENSE` now. New e2e `chapterShare.e2e.test.ts` (a
+        contributor and an uploader link on a chapter; the raw resolve and media read carry only the chapter) —
+        type-checked, linted and discovered, **not yet run** (the orchestrator runs it from the main checkout). Open:
+        the member dialog's strings say "this Memory" on a chapter too (`share.title`, `share.intro`).
   - [ ] 5b.2 lift share management to core — mint (recovery copy mandatory), list, revoke, reactivate, reissue and
         recovery without drop keys move from `features/memory/share.ts` to `core/sharing/manageShares.ts`; `walkSubtree`
         to `core/sharing/shareTree.ts`; drop keys and the uploader stay in Memories · Done when: all tests unchanged
