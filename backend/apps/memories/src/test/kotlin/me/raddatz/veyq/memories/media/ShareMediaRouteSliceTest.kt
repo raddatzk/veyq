@@ -84,6 +84,10 @@ class ShareMediaRouteSliceTest {
         "updateShare" to Probe("PATCH", "/api/shares/{shareId}") { w ->
             authed(w).body("{}").`when`().patch("/api/shares/${w.unknown}").then().statusCode(404).body("code", equalTo("share_not_found"))
         },
+        "setShareSealedName" to Probe("PUT", "/api/shares/{shareId}/sealed-name") { w ->
+            authed(w).body("""{"sealedName":"$sealedName"}""").`when`().put("/api/shares/${w.unknown}/sealed-name")
+                .then().statusCode(404).body("code", equalTo("share_not_found"))
+        },
         "deleteShare" to Probe("DELETE", "/api/shares/{shareId}") { w ->
             authed(w).`when`().delete("/api/shares/${w.unknown}").then().statusCode(404).body("code", equalTo("share_not_found"))
         },
@@ -138,7 +142,7 @@ class ShareMediaRouteSliceTest {
     @Test
     fun theTableIsEveryShareRouteOfBothGeneratedApis() {
         val generated = shareOperations()
-        assertEquals(18, generated.size, "the /api/shares operations of both specs: $generated")
+        assertEquals(19, generated.size, "the /api/shares operations of both specs: $generated")
         assertEquals(generated, probes.mapValues { (_, p) -> "${p.method} ${p.path}" }, "a route without a row, or a row without a route")
     }
 

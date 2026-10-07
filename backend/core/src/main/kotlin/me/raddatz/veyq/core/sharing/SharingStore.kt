@@ -208,6 +208,21 @@ class SharingStore(
         return UpdateResult.DONE
     }
 
+    /** Replace a live share's `sealed_name` (ADR 0080 decision 14) — that column and no other, so a re-seal can never
+     *  revert a concurrent edit, revoke or re-activation (`@DynamicUpdate` writes only what changed). False when there
+     *  is no such share, or it is deleted: the row lock ([liveForUpdate]) makes a delete that committed first win.
+     *
+     *  **Lock order: the share row only** — never the scope row. `updateShare` and `revoke` take the same single lock;
+     *  `reactivate` takes the scope row, then this row. Holding one lock, this write can wait for a re-activation but
+     *  never hold what one waits for while it waits itself, so no order of the two deadlocks
+     *  (`ShareSealedNameCoreSliceTest`). Taking the scope row after this one would be the inversion. */
+    @Transactional
+    fun setSealedName(shareId: String, sealedName: String): Boolean {
+        val share = liveForUpdate(shareId) ?: return false
+        share.sealedName = sealedName
+        return true
+    }
+
     /** A share that exists and is not deleted — every reader's lookup (ADR 0029 §7): a tombstone is not found,
      *  to the guest and to every curator operation alike. */
     fun find(shareId: String): ShareEntity? = ShareEntity.findById(shareId)?.takeIf { it.deletedAt == null }

@@ -150,6 +150,14 @@ sealed interface UpdateShareOutcome {
     object InvalidRole : UpdateShareOutcome, HttpFailure by httpFailure("invalid_role_change", UNPROCESSABLE)
 }
 
+sealed interface SetShareSealedNameOutcome {
+    object Done : SetShareSealedNameOutcome
+    object Suspended : SetShareSealedNameOutcome, HttpFailure by Failures.tenantSuspended
+    object Deleting : SetShareSealedNameOutcome, HttpFailure by Failures.scopeDeleting
+    /** No such share, it was deleted, or the caller may not write in its space — one non-enumerable 404. */
+    object NotFound : SetShareSealedNameOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
+}
+
 sealed interface ReactivateShareOutcome {
     object Done : ReactivateShareOutcome
     object Suspended : ReactivateShareOutcome, HttpFailure by Failures.tenantSuspended
@@ -382,6 +390,26 @@ class SharingHandler(
             SharingStore.UpdateResult.NOT_FOUND -> UpdateShareOutcome.NotFound
             SharingStore.UpdateResult.INVALID_ROLE -> UpdateShareOutcome.InvalidRole
         }
+    }
+
+    /**
+     * Store a share root's name re-sealed under the share's `K_share` (ADR 0080 decision 14): the member who renamed
+     * the root re-seals the name of every share on it through each one's recovery copy. **Any** member who may write
+     * in the share's space may — the gate's WRITE answer, as a node rename asks it (`NodesHandler.update`) — not only
+     * the share's owner: `updateShare` stays owner-gated (ADR 0036 point 3) and replaces all its fields, so it cannot
+     * carry this write. A revoked share is renamed too (a later re-activation shows the current name); a deleted one
+     * is the 404. Last writer wins: the value is always the root's current name. The server never opens it.
+     *
+     * The gate is read before the store's transaction, as `updateShare` reads it. Sound by the serial-order rule
+     * (developer-styleguide §12): the write changes an existing row's one column, which no removal enumerates or
+     * reads, so a removal racing it is explained by "the name was set, then the member was removed".
+     */
+    fun setSealedName(userId: String, shareId: String, sealedName: String): SetShareSealedNameOutcome {
+        val share = store.find(shareId) ?: return SetShareSealedNameOutcome.NotFound
+        access.check(userId, share.scopeId, WRITE)
+            .refusal(SetShareSealedNameOutcome.NotFound, SetShareSealedNameOutcome.Suspended, SetShareSealedNameOutcome.Deleting)
+            ?.let { return it }
+        return if (store.setSealedName(shareId, sealedName)) SetShareSealedNameOutcome.Done else SetShareSealedNameOutcome.NotFound
     }
 
     /** Re-activate a soft-revoked share and adopt it (cr-0104): any current member of the share's scope may flip
