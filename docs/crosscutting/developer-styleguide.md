@@ -72,8 +72,9 @@
 - **The OpenAPI spec under `contracts/api/` is the contract.** The build generates JAX-RS interfaces +
   Kotlin/TS models; resources implement the interfaces directly. Never hand-write a DTO that duplicates a
   generated model. The API is internal and may change with its consumers.
-- **Every edit operation declares how it meets a second writer** — `x-veyq-concurrency: version` (the request
-  carries the version it read; a stale one answers `409`) or `last-writer-wins` with its reason
+- **Every edit operation declares how it meets a second writer** — `x-veyq-concurrency` with `mode: version` (a
+  list of `fields`: each version field the request carries, the fields that require it, and the conflict code its
+  stale `409` answers) or `mode: last-writer-wins` with its reason
   ([ADR 0077](../decisions/0077-a-write-carries-the-version-it-read.md); `scripts/validate_write_concurrency.py`
   holds it). A write that more than one account makes **and** that re-sends fields its writer did not edit is
   `version`; the client re-applies only its own change on the conflict body, and never seals a blob it could not

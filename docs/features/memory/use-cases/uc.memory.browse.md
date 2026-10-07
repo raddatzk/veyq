@@ -20,7 +20,9 @@
    exists yet, it is **auto-birthed** first (operator-blind: a fresh `K_SC` sealed to the user's own
    identity).
 2. The client **lists the whole tree** ([en.memory.tree](../enablers/en.memory.tree.md)) and **decrypts
-   names** under `K_SC` on device, assembling the tree from the opaque rows (`id`, `parentId`, `kind`).
+   names** on device down the key chain — a scope-root entry under `K_SC`, every other under its parent's key
+   ([ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)) — assembling
+   the tree from the opaque rows (`id`, `parentId`, `kind`).
 3. The **shell** renders: a sidebar (the personal space + profile menu), a **breadcrumb** built
    **client-side** from the local tree (the blind server cannot compute it), and a content area showing the
    **current level**. A toolbar **display toggle** picks how that level is shown — **grid** (cards, the
@@ -52,7 +54,7 @@
 
 ## Quality notes
 
-- **Operator-blind navigation.** Names are decrypted **on device** under `K_SC`; the **breadcrumb and the
+- **Operator-blind navigation.** Names are decrypted **on device** down the key chain from `K_SC`; the **breadcrumb and the
   whole tree shape are assembled client-side** from opaque rows. The server never computes navigation, never
   sees a folder/Memory name, and learns only the tree's shape + blinded slug tokens. (The pre-E2EE original
   UI relied on a server-computed `MemoryNavigationContext`; that is deliberately re-derived client-side here.)

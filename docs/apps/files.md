@@ -5,14 +5,18 @@
 
 ## Idea
 
-- A **file** is a node kind that holds **one blob**, with its name and metadata sealed. Directories are the platform's `FOLDER`: once every node carries a key and a `FOLDER` can be a share root
-  ([ADR 0080](../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md), proposed), Files needs no
-  directory kind of its own, and a directory can be shared whole (read, read-write, or a drop box). One file tree per
-  scope, created on demand.
+- A **file** is a node kind that holds **one blob**, with its name and metadata sealed. Directories are the platform's
+  `FOLDER`: every node carries a key and a `FOLDER` can be a share root with `READ` or `READ_WRITE`
+  ([ADR 0080](../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md), built), so Files needs
+  no directory kind of its own, and a directory can be shared whole. A file node carries its own key like every node,
+  so a file can be a share root too, if Files declares it one (`ShareRoots`). One file tree per scope, created on
+  demand.
 - **Web only.** No sync client, no versioning: replacing a file replaces its blob.
-- An **uploader share is a drop box** (write-only, [ADR 0031](../decisions/0031-uploader-public-share.md));
-  viewer and contributor shares carry over from the platform.
-- Rides on the platform's blobs, quota and trash, and on `K_SC` for names.
+- A **drop box** (write-only) is a node of its own with one guest folder per identity (ADR 0080 decision 11),
+  built with Files (inbox #349); a `WRITE_ONLY` link on a plain `FOLDER` is refused until then. Viewer and
+  contributor shares carry over from the platform, and what a `READ_WRITE` guest may do with Files' kinds is the role
+  matrix this page will hold (ADR 0080 decision 6; no declaration allows nothing).
+- Rides on the platform's blobs, quota and trash; names sit under the parent's key, `K_SC` only at the scope root.
 
 ## Depends on a decision that is open
 
@@ -43,6 +47,7 @@ File sizes (exact, unless padded), upload and change timestamps, the tree's shap
 - Blob role: the shape of core's generic attachments (inbox #327) — not each application owning its own blob
   table, which [ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Consequences
   (*What the platform is*) rules out.
-- Which key seals a file: `K_SC` directly, or a per-file key so one file can be shared alone?
+- The slug of a file name: containers keep today's slug, files want a stricter case-insensitive uniqueness (inbox
+  #350, ADR 0080 *Open questions*).
 - Preview or thumbnail for images: a Files feature, or out of scope?
 - Is the upper size limit the quota only, or is there a per-file cap?
