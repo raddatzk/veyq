@@ -32,7 +32,9 @@ type AsymVector = {
 /** A binding value one step away from `v`: another canonical id, the next integer, another blob role. */
 const otherValue = (v: string | number): string | number => {
   if (typeof v === 'number') return v + 1
-  if (v === 'ORIGINAL' || v === 'THUMBNAIL' || v === 'PREVIEW' || v === 'COVER') return v === 'COVER' ? 'ORIGINAL' : 'COVER'
+  if (v === 'ORIGINAL' || v === 'THUMBNAIL' || v === 'PREVIEW' || v === 'COVER' || v === 'FILE_CONTENT') {
+    return v === 'COVER' ? 'ORIGINAL' : 'COVER'
+  }
   return v.slice(0, -1) + (v.endsWith('0') ? '1' : '0')
 }
 
@@ -321,16 +323,35 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
           } as unknown as v1.StatementContext),
         ).toThrow(/code is not a six-digit pairing code/)
       })
-      it.each(['ORIGINAL', 'THUMBNAIL', 'PREVIEW', 'COVER'])('blob role %s is accepted, encoded as its name', (role) => {
+      // The role is an open, bounded token (the contract's NodeKind token): Memories' four, Files' FILE_CONTENT, and
+      // any other well-formed token — ALBUM included, which this suite refused while the role was a closed list of
+      // four; an application's own rules, not the encoder, decide which role it writes.
+      it.each(['ORIGINAL', 'THUMBNAIL', 'PREVIEW', 'COVER', 'FILE_CONTENT', 'ALBUM', 'A', 'A'.repeat(16), 'X1_'])(
+        'blob role %s is accepted, encoded as its name',
+        (role) => {
+          const b = symCtx('blob-key')
+          const encoded = hex(v1.encodeSealContext({ ...b, role } as v1.SealContext))
+          expect(encoded.endsWith(hex(v1.lp(new TextEncoder().encode(role))))).toBe(true)
+        },
+      )
+      // The anchors and the bound are load-bearing: a trailing newline or space, a lower-case or a non-ASCII letter,
+      // a leading digit, an empty role or a 17th character would each still contain a well-formed token.
+      it.each([
+        ['lower-case', 'album'],
+        ['empty', ''],
+        ['17 characters', 'A'.repeat(17)],
+        ['a leading digit', '1X'],
+        ['a trailing newline', 'ORIGINAL\n'],
+        ['a trailing space', 'ORIGINAL '],
+        ['a leading space', ' ORIGINAL'],
+        ['non-ASCII', 'ÄLBUM'],
+        ['a hyphen', 'FILE-CONTENT'],
+        ['a boxed String', new String('ORIGINAL')],
+        ['a number', 1],
+        ['absent', undefined],
+      ])('a blob role that is not a token is refused: %s', (_name, role) => {
         const b = symCtx('blob-key')
-        const encoded = hex(v1.encodeSealContext({ ...b, role } as v1.SealContext))
-        expect(encoded.endsWith(hex(v1.lp(new TextEncoder().encode(role))))).toBe(true)
-      })
-      it('a blob role outside the four is refused', () => {
-        const b = symCtx('blob-key')
-        expect(() => v1.encodeSealContext({ ...b, role: 'ALBUM' } as unknown as v1.SealContext)).toThrow(
-          /role is not a blob role/,
-        )
+        expect(() => v1.encodeSealContext({ ...b, role } as unknown as v1.SealContext)).toThrow(/role is not a blob role/)
       })
       it('the refusals are their own classes, so a caller can tell a bad address from a moved ciphertext', () => {
         expect(new v1.SealContextInvalid('x').name).toBe('SealContextInvalid')
@@ -338,6 +359,48 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
         expect(new v1.OpenRefused('node-name').purpose).toBe('node-name')
         expect(new v1.OpenRefused('node-name').message).toBe('open_refused: node-name')
       })
+    })
+  })
+
+  // A Files blob (ADR 0079 §9): no purpose of its own — the blob-key seal with role FILE_CONTENT and ownerId = the
+  // file node binds the wrap to Files' kind and node. The chain: parent content key → the file node's content key
+  // (a content-key seal) → the blob key (a blob-key seal under the node key).
+  describe('file blob (#file_blob)', () => {
+    const f = vectors.file_blob
+    const parentKey = unhex(f.parentContentKey)
+    const nodeCtx = { purpose: 'content-key', ...f.node.context } as v1.SealContext
+    const blobCtx = { purpose: 'blob-key', ...f.blobKey.context } as v1.SealContext
+    it('chains from the content-key vector\'s node', () => {
+      expect(f.parentNodeId).toBe(vectors.seal.sym['content-key'].context.nodeId)
+      expect(f.parentContentKey).toBe(vectors.seal.sym['content-key'].plaintext)
+      expect(f.blobKey.context.ownerId).toBe(f.node.context.nodeId)
+    })
+    it('encodes both contexts canonically', () => {
+      expect(hex(v1.encodeSealContext(nodeCtx))).toBe(f.node.context_bytes)
+      expect(hex(v1.encodeSealContext(blobCtx))).toBe(f.blobKey.context_bytes)
+    })
+    it('seals both links to the vector blobs', () => {
+      const n = f.node
+      const k = f.blobKey
+      expect(hex(raw.symWrap(parentKey, unhex(n.plaintext), unhex(n.context_bytes), unhex(n.nonce)))).toBe(n.blob)
+      expect(hex(raw.symWrap(unhex(n.plaintext), unhex(k.plaintext), unhex(k.context_bytes), unhex(k.nonce)))).toBe(k.blob)
+    })
+    it('opens top-down: the node key under the parent, the blob key under the node key', () => {
+      const nodeKey = v1.open(nodeCtx, parentKey, unhex(f.node.blob))
+      expect(hex(nodeKey)).toBe(f.node.plaintext)
+      expect(hex(v1.open(blobCtx, nodeKey, unhex(f.blobKey.blob)))).toBe(f.blobKey.plaintext)
+    })
+    it.each(['ORIGINAL', 'THUMBNAIL', 'PREVIEW', 'COVER'])('does not open as a Memories %s', (role) => {
+      expect(() =>
+        v1.open({ ...blobCtx, role } as v1.SealContext, unhex(f.node.plaintext), unhex(f.blobKey.blob)),
+      ).toThrow(new v1.OpenRefused('blob-key'))
+    })
+    it.each(['scopeId', 'ownerId', 'blobId'])('does not open with a different %s', (field) => {
+      const moved = { ...blobCtx, [field]: otherValue(f.blobKey.context[field]) } as v1.SealContext
+      expect(() => v1.open(moved, unhex(f.node.plaintext), unhex(f.blobKey.blob))).toThrow(new v1.OpenRefused('blob-key'))
+    })
+    it('does not open under the parent\'s key: the node key is the binding', () => {
+      expect(() => v1.open(blobCtx, parentKey, unhex(f.blobKey.blob))).toThrow(new v1.OpenRefused('blob-key'))
     })
   })
 

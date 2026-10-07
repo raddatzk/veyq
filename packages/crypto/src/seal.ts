@@ -25,14 +25,21 @@ import {
 /**
  * What a binding field is: a canonical lowercase UUID, a share id (the 43-character base64url bearer token a share
  * is addressed by — a capability, so it keeps its 256-bit form rather than becoming a UUID), an unsigned integer
- * (epoch/version), or a blob role. Statements (below) add five kinds a seal never binds: an id that may be absent
+ * (epoch/version), or a blob role (a bounded token). Statements (below) add five kinds a seal never binds: an id that may be absent
  * (encoded as the empty field), a scope kind, a 32-byte SHA-256 digest, an opaque byte string bound whole, and a
  * six-digit pairing code (its ASCII digits).
  */
 type FieldKind = 'id' | 'shareId' | 'uint' | 'role' | 'optionalId' | 'scopeKind' | 'digest' | 'bytes' | 'pairingCode'
 
-/** The role a sealed `K_blob` plays for its owner — a media's ORIGINAL and derivatives, or a node's COVER. */
-export type BlobRole = 'ORIGINAL' | 'THUMBNAIL' | 'PREVIEW' | 'COVER'
+/**
+ * The role a sealed `K_blob` plays for its owner: an open, bounded token (`BLOB_ROLE` below), the same token as the
+ * contract's `NodeKind`. Core names no role; each application brings its own — Memories' ORIGINAL, THUMBNAIL and
+ * PREVIEW of a media and COVER of a node, Files' FILE_CONTENT of a file node. A role is encoded as its UTF-8 name, so
+ * opening the token added a value without changing the bytes of any existing one (ADR 0072: a new value is not a
+ * field change). Together with `ownerId` — the object the blob belongs to, a file's own node id — the role is what
+ * binds a blob's key wrap to its application and kind (ADR 0079 §9), so no application needs a purpose of its own.
+ */
+export type BlobRole = string
 
 /** A scope's kind, as a grant statement signs it (ADR 0028 Decision 6). */
 export type ScopeKind = 'TENANT' | 'GROUP' | 'PERSONAL'
@@ -48,7 +55,7 @@ export const SEAL_PURPOSES = {
   'node-name': [['scopeId', 'id'], ['nodeId', 'id'], ['epoch', 'uint'], ['placementVersion', 'uint']],
   'content-key': [['scopeId', 'id'], ['nodeId', 'id'], ['epoch', 'uint'], ['placementVersion', 'uint']],
   'node-meta': [['scopeId', 'id'], ['nodeId', 'id']],
-  // ownerId is the media id for a media's blobs, the node id for a cover.
+  // ownerId is the media id for a media's blobs, the node id for a cover or a file's content; the role names which.
   'blob-key': [['scopeId', 'id'], ['ownerId', 'id'], ['blobId', 'id'], ['role', 'role']],
   'media-meta': [['scopeId', 'id'], ['mediaId', 'id']],
   'media-exif': [['scopeId', 'id'], ['mediaId', 'id']],
@@ -137,7 +144,9 @@ export class OpenRefused extends Error {
 
 const CANONICAL_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const SHARE_ID = /^[A-Za-z0-9_-]{43}$/
-const ROLES: readonly string[] = ['ORIGINAL', 'THUMBNAIL', 'PREVIEW', 'COVER'] satisfies BlobRole[]
+// The contract's `NodeKind` token (`contracts/api/_common.openapi.yaml`): keep the two equal. Without the `m` flag a
+// JS `$` matches at the end of the input only — unlike Java's or Python's, never before a trailing newline.
+const BLOB_ROLE = /^[A-Z][A-Z0-9_]{0,15}$/
 const SCOPE_KINDS: readonly string[] = ['TENANT', 'GROUP', 'PERSONAL'] satisfies ScopeKind[]
 const PAIRING_CODE = /^[0-9]{6}$/
 
@@ -174,12 +183,8 @@ function encodeField(purpose: string, name: string, kind: FieldKind, value: unkn
       }
       return u64be(value)
     case 'role':
-      if (
-        !ROLES.includes(value as string) ||
-        // Stryker disable next-line ConditionalExpression: equivalent, includes() compares by SameValueZero and so
-        // refused every non-string (a boxed String included) already; this operand only narrows `value` for TS.
-        typeof value !== 'string'
-      ) {
+      // `typeof` first, as for an id: RegExp.prototype.test coerces its argument, so a boxed String would pass.
+      if (typeof value !== 'string' || !BLOB_ROLE.test(value)) {
         throw new SealContextInvalid(`${purpose}.${name} is not a blob role`)
       }
       return utf8(value)
