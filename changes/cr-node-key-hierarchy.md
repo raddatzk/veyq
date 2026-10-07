@@ -259,9 +259,36 @@ Planned 2026-10-06 from three inventories; each sub-slice is its own worktree ru
         dropped from `mintShare` (11 red). For 5b.4: `createContributorIdentity` is core-able for READ_WRITE (its name
         key is the root key; only the WRITE_ONLY branch needs `mintUploaderKey`), `addSharePhoto`/`deleteSharePhoto`
         and `resolveShare` are Memories' (media pipeline, the share-media client).
-  - [ ] 5b.3 share a folder (member side) — `FOLDER` `shareable` in core; the `levelView` contract gains `shareable` and
+  - [x] 5b.3 share a folder (member side) — `FOLDER` `shareable` in core; the `levelView` contract gains `shareable` and
         a `share` event; a share button on the folder overview card; a core `FolderShareDialog` (READ, READ_WRITE)
         built from the existing components and `.veyq-*` classes; en and de strings · Done when: `npm run check`.
+        *Measured:* `createRegistry` registers `FOLDER` `shareable: true`; `LevelViewProps.shareable` (descriptor AND
+        capability, the shell's one `shareable` computed — false at the scope root) and `LevelViewEmits.share`;
+        `MemoryLevelHost` passes both through, `MemoryBrowse`'s folder overview card shows a `pi-share-alt` icon button
+        (`share.share` label and tooltip, as on a Memory's detail), kept during a pending deletion (listing links is a
+        read). `MemoryHomeView` mounts core's `core/sharing/FolderShareDialog.vue` — never the application's
+        `shareDialog` slot — with the folder's own key from `nodeContentKey` and its name. The dialog is built only on
+        `manageShares.ts` + `shareLink.ts`: list (role, note, password, by another member, switched off folded, needs
+        renewing), new link (label, READ / READ_WRITE — no WRITE_ONLY —, note, password, expiry), the link shown and
+        copyable, copy / revoke / re-activate / renew (one click, carried settings, behind a confirm) / delete; shared
+        `.veyq-form` / `.veyq-list-row` / `.veyq-badge` / `.veyq-empty` / `.veyq-dialog-action-row` classes. Strings: the
+        Memory dialog's where the meaning is the same, `share.folder.*` (en + de, 7 keys) where a Memory sentence would
+        be wrong. **Not built:** editing a folder link's label/note/password/expiry/role in place (Memories'
+        `updateShare` form) — a member renews or deletes instead. Tests: `registry.test.ts` (FOLDER shareable, two cases
+        flipped deliberately), `MemoryHomeView.test.ts` (+3: shareable folder level view, core dialog with the folder's
+        key and name, none at the root, none without the capability), `MemoryBrowse.test.ts` (+3), new
+        `FolderShareDialog.test.ts` (8) and `folderShare.wire.test.ts` (2: recovery copy at the write epoch, a `wrap`
+        that opens under `K_share` to a nested folder's chain key — not `K_SC`, not the parent's —, the name under
+        `K_share`). `npm run check` 1718 → 1734 passed; the core-import guard reads 177 → 178 files. Bites: FOLDER
+        `shareable: false` (3 red, the level-view case among them), a WRITE_ONLY option in the dialog (1 red), the
+        `mintShare` wrap sealed over `writeKey(epochs)` (2 red). New e2e `folderShare.e2e.test.ts` (a READ folder link
+        through `mintShare`: `rootKind` FOLDER, the descendants' names and the Memory's key through `openShareRoot` +
+        `walkSubtree`, the raw resolve serves the folder's subtree only and no entry for the root, the Memory's photo
+        on the raw media read, a WRITE_ONLY folder link `422 illegal_scope`) — type-checked, linted and discovered,
+        **not yet run**. Once it runs green, `docs/apps/memories.md`'s UNVERIFIED line loses the `READ` folder media
+        cell. Still saying "one Memory" (5b.5's): `share.title`/`share.intro`, `docs/features/sharing/_index.md`,
+        `uc.sharing.share-public-viewer.md`, `uc.sharing.share-contributor.md`, `uc.sharing.share-uploader.md`; and ADR
+        0080 decision 13 still says "the web still offers no chapter link (`shareable: false`)", false since 5b.1.
   - [ ] 5b.4 folder share on the public page and guest operations — `ShareBodyProps.subtreeRoot {nodeId, key, name}`;
         core `FolderShareBody` (breadcrumb, cards, names opened through the key chain, each child kind's body embedded
         through `registry.shareBody(kind)`, unknown kind -> `.veyq-empty`); `createShareNodeAsGuest` (epoch = the
