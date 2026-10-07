@@ -3,19 +3,22 @@
 // `backend/` composes it into the one fast-jar, where its jar is `lib/main/me.raddatz.veyq.files.jar` — never deployed
 // on its own.
 //
-// A skeleton today (cr-files-application F0): the node kind `FILE` and its placement rule. No `veyq.openapi` yet — Files
-// has no spec until F1; its specs will go in `contracts/api/files/` (the directory name is the owner), and the build then
-// refuses that directory until this file applies `id("veyq.openapi")` and calls `veyqOpenApi { generateOwnSpecs() }`.
-// No migration either: `veyq_node.kind` (`VARCHAR(16)`, core's baseline) takes `FILE` as it is.
+// The node kind `FILE` and its placement rule (cr-files-application F0), a member's upload, replace and listing of a
+// file's blob (F1a): the Files specs' generated API (`openApiGenerateFiles`, `contracts/api/files/`, package
+// `me.raddatz.veyq.files.generated`). No migration: `veyq_node.kind` (`VARCHAR(16)`) takes `FILE` as it is, and a
+// file's blob lives in core's `veyq_node_attachment`.
 //
 // Its tests (`./gradlew :apps:files:test`) boot core plus Files — not Memories: its own `%test` keys sit in
 // `src/test/resources/application-test.properties` beside a comment-only `application.properties` anchor.
 plugins {
     id("veyq.module") // buildSrc: the Kotlin, all-open and java-library plugins and what every module repeats
+    id("veyq.openapi")
     // Only for this module's own `@QuarkusTest`s: a library `@QuarkusTest` fails without the plugin. Its application
     // tasks are disabled by `veyq.module` — the one fast-jar is the root's.
     id("io.quarkus")
 }
+
+veyqOpenApi { generateOwnSpecs() } // `contracts/api/files/`, by its path `:apps:files`
 
 dependencies {
     implementation(project(":core"))

@@ -18,6 +18,7 @@ import me.raddatz.veyq.core.sharing.ShareRoots
 import me.raddatz.veyq.core.sharing.ShareWriteProof
 import me.raddatz.veyq.core.sharing.SharedSubtreeContributor
 import me.raddatz.veyq.core.testing.MainOutputs
+import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
@@ -57,8 +58,8 @@ import org.junit.jupiter.api.Test
  *    Memories' and Files' implementations, so a walk that read nothing cannot pass — and a root build that drops an
  *    application's module (`backend/build.gradle.kts`) is red here, not only in that module's own tests.
  * 2. **Every module's routes are deployed.** Each generated JAX-RS interface (`@Path`) of every module has a deployed
- *    resource bean implementing it — the 404s of step 7's packaged jar, asked of the container. Anchored on both
- *    modules' generated API packages.
+ *    resource bean implementing it — the 404s of step 7's packaged jar, asked of the container. Anchored on every
+ *    module's generated API package (core's, Memories', Files').
  * 3. **The seams fail closed in the composed application.** A kind no application claims is placed nowhere, measured
  *    by no admission, takes no upload (`illegal_target`) and is shared by no one (`illegal_scope`), each beside a
  *    positive control on a `MEMORY` — the kind Memories claims — through the same code path. Core alone, where every
@@ -134,7 +135,7 @@ class ModuleCompositionTest {
         val routes = compiled.filter { it.isInterface && it.isAnnotationPresent(Path::class.java) }
         val unserved = routes.filter { api -> deployed.none { api.isAssignableFrom(it) } }.map { it.name }
         assertEquals(emptyList<String>(), unserved, "a generated API no deployed resource implements answers 404")
-        for (pkg in listOf("me.raddatz.veyq.core.generated.api", "me.raddatz.veyq.memories.generated.api")) {
+        for (pkg in listOf("me.raddatz.veyq.core.generated.api", "me.raddatz.veyq.memories.generated.api", "me.raddatz.veyq.files.generated.api")) {
             assertTrue(routes.any { it.packageName == pkg }, "the walk saw $pkg: ${routes.map { it.name }}")
         }
     }
@@ -166,6 +167,55 @@ class ModuleCompositionTest {
         assertTrue(NodeKindRules.parentAllows(kindRules, file, ParentSlot.Node(NodeEntity.FOLDER)), "a file in a folder")
         assertFalse(NodeKindRules.parentAllows(kindRules, file, ParentSlot.Node("MEMORY")), "a file in a Memory")
         assertTrue(NodeKindRules.parentAllows(kindRules, "CHAPTER", ParentSlot.Node("MEMORY")), "control: a chapter in a Memory")
+    }
+
+    /**
+     * The upload partition across core and every application (cr-files-application F1a): each kind that takes uploads
+     * has exactly one completion and one link admission, the right application's; a `FOLDER` has neither. Two acceptors
+     * of a kind make core's dispatcher refuse it (`illegal_target`) and two admissions refuse its links — only here,
+     * where both applications run, would an application claiming another's kind show.
+     */
+    @Test
+    fun theUploadSeamsOfEveryApplicationPartitionTheKinds() {
+        val owners = mapOf("MEMORY" to "me.raddatz.veyq.memories.", "CHAPTER" to "me.raddatz.veyq.memories.", "FILE" to "me.raddatz.veyq.files.")
+        for ((kind, owner) in owners) {
+            val accepting = completions.filter { it.accepts(kind) }.map(::beanClass)
+            assertEquals(1, accepting.size, "an upload into a $kind must have exactly one completion: $accepting")
+            assertTrue(accepting.single().startsWith(owner), "$kind's completion is $owner's: $accepting")
+            val measuring = admissions.filter { it.supports(kind) }.map(::beanClass)
+            assertEquals(1, measuring.size, "a $kind link must have exactly one admission: $measuring")
+            assertTrue(measuring.single().startsWith(owner), "$kind's admission is $owner's: $measuring")
+        }
+        assertTrue(completions.none { it.accepts(NodeEntity.FOLDER) }, "a folder takes no upload")
+        assertTrue(admissions.none { it.supports(NodeEntity.FOLDER) }, "a folder link is measured by no application")
+    }
+
+    /**
+     * An application's own completion route never hands an upload to another application's completion: Files'
+     * `completeFile` on a `MEMORY` is refused before core's dispatcher would pick Memories' — which would otherwise
+     * read the item as a medium whose id is the node's, and attach it, had the upload been started as that medium's
+     * original. Only the composed application holds both, so only here can it show.
+     */
+    @Test
+    fun filesCompletionRouteNeverReachesMemoriesCompletion() {
+        val (userId, scopeId) = seedMemberScope(ScopeEntity.PERSONAL)
+        val memory = seedNode(scopeId, "MEMORY", parentId = scopeId, wrappedContentKey = "aw==")
+        val asMedium = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+            .body("""{"items":[${TestBlob.SMALL.declare("d3JhcA==", ownerId = memory, role = "ORIGINAL")}]}""")
+            .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
+            .then().statusCode(200).extract().path<String>("results[0].uploadId")
+
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+            .body("""{"uploadId":"$asMedium"}""")
+            .`when`().post("/api/scopes/$scopeId/files/$memory/content")
+            .then().statusCode(422).body("code", equalTo("illegal_target"))
+        given().header("Authorization", bearer(userId)).`when`().get("/api/scopes/$scopeId/nodes/$memory/media")
+            .then().statusCode(200).body("media.size()", equalTo(0))
+        // control: the same upload is a medium through Memories' own route
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+            .body("""{"items":[{"mediaId":"$memory","originalUploadId":"$asMedium","nodeId":"$memory"}]}""")
+            .`when`().post("/api/scopes/$scopeId/media-batch")
+            .then().statusCode(200).body("results[0].error", equalTo(null))
     }
 
     @Test

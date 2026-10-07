@@ -1,0 +1,247 @@
+openapi: 3.1.0
+info:
+  title: veyq Files API
+  version: 0.1.0
+  description: >
+    The **Files** application's own operations ([docs/apps/files.md](../../../docs/apps/files.md), ADR 0079): a file
+    is a node of kind `FILE` that holds **one** sealed blob in its attachment slot `FILE_CONTENT` (core's
+    `veyq_node_attachment`). Everything else a file needs is core's and is not repeated here: the node itself (its
+    sealed name, its content key, its sealed metadata — MIME type, plaintext size, modified time in the node's
+    `wrappedMeta` under the file node's key, written with `updateNode` and its `metaVersion`), its trash and purge
+    (`deleteNode`, the trash operations), and the blob transfer (`startBlobUploads` with `role: FILE_CONTENT` and
+    `ownerId` = the file node's id, the upload windows, `presignBlobDownloads` by `blobId`). This spec is what Files
+    makes of a verified upload — the file's blob, first or as a replacement — and the read that pairs a folder's
+    files with their blobs.
+
+    **Operator-blind:** the server holds the ciphertext chunks, the `K_blob` wrap (sealed under the file node's
+    key, bound to the blob id, the node id and the role — ADR 0072, ADR 0080 Decision 13) and opaque sizes; never
+    a plaintext byte, a key, a file name or a MIME type.
+tags:
+  - name: files
+    description: >
+      A member's files under a scope: complete an upload into a file node (first upload or replace) and list the
+      blob references of a folder's files. One tag = one resource interface rooted at
+      `/api/scopes/{scopeId}/files`.
+
+paths:
+  /api/scopes/{scopeId}/files:
+    get:
+      tags: [files]
+      operationId: listFiles
+      summary: The blob reference of every live file directly in a folder (or at the scope root).
+      description: >
+        For every live `FILE` node whose parent is `parentId` (absent: the scope root), its `nodeId` and the blob
+        its `FILE_CONTENT` slot holds (`fileBlob`) — or `fileBlob: null` for a file created whose upload has not completed yet.
+        Names, keys and sealed metadata are not repeated here: the client has them from core's node listing and
+        joins by `nodeId`. Trashed files are not listed (core's trash lists them). Ordered by `nodeId`. Guards: the
+        caller holds a grant for the scope (READ); the parent, when named, is a live node of this scope
+        (`node_not_found` otherwise, a trashed folder included).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - name: parentId
+          in: query
+          required: false
+          description: The folder whose files are listed; absent for the files at the scope root.
+          schema: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d }
+      responses:
+        "200":
+          description: The files directly under the parent, each with its blob reference or null.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FileListPage" }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "../_common.openapi.yaml#/components/responses/TenantSuspended" }
+        "404":
+          description: >
+            No such scope, or the caller holds no grant for it (`scope_not_found`); or the named parent is no live
+            node of this scope (`node_not_found`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+
+  /api/scopes/{scopeId}/files/{nodeId}/content:
+    post:
+      tags: [files]
+      operationId: completeFile
+      summary: Complete an upload as the file's blob — the first one, or a replacement of the blob the caller read.
+      description: >
+        Promote one `startBlobUploads` session — started with `role: FILE_CONTENT` and `ownerId` = this node, since
+        its `K_blob` wrap is sealed bound to both (ADR 0072) — into the blob of the file node's `FILE_CONTENT` slot.
+        The server verifies the upload (declare-then-verify: every chunk must be stored at exactly its derived
+        length, else the objects are purged and the call fails `budget_exceeded`), records the blob and attaches
+        it, in one transaction under the scope lock. **A file holds one blob, replaced, never versioned:**
+        `expectedBlobId` is the blob the caller saw in the slot — absent for the first upload into an empty slot,
+        else the blob this upload replaces. The swap is a compare-and-set on it: when the slot holds anything else
+        (a peer replaced the file first, or the first upload of an already-filled file), nothing is attached, the
+        upload is spent and its blob reclaimed, and the answer is `409 stale_file` carrying the slot's
+        `currentBlobId` — the client decides, re-reads and re-uploads to retry. A successful replace reclaims the
+        replaced blob in the same transaction (its row goes, its objects go on the reclaim list, ADR 0062). Returns
+        the attached blob's reference. The file's sealed metadata is not part of this call: it lives in the node's
+        `wrappedMeta`, written with core's `updateNode`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/NodeId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FileCompleteRequest" }
+            example:
+              uploadId: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+              expectedBlobId: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
+      responses:
+        "200":
+          description: The file's blob is now this upload's (any replaced blob was reclaimed).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FileBlobRef" }
+        "400":
+          description: Malformed request (`invalid_request`), or the upload failed declare-then-verify (`budget_exceeded`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: budget_exceeded } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "../_common.openapi.yaml#/components/responses/TenantSuspended" }
+        "404":
+          description: >
+            No such scope, or the caller holds no grant for it (`scope_not_found`); no live node of this id in the
+            scope — never was, another scope's, or trashed (`node_not_found`); or no open upload of this caller under
+            `uploadId` — never started, already completed, or expired (`upload_not_found`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+        "409":
+          description: >
+            The slot does not hold `expectedBlobId` (`stale_file`): nothing was attached, the upload was spent and
+            reclaimed, and `currentBlobId` is what the slot holds now (null: empty). Or the space is being deleted
+            and read-only (`scope_deleting`, uc.spaces.delete-group A4), which carries `code` alone.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FileConflict" }
+              example: { code: stale_file, currentBlobId: 8b2c1f2d-3e4a-5b6c-7c3f-0e2a9b1d4a6e }
+        "422":
+          description: >
+            The node is not a `FILE` (`illegal_target`), or the upload was not started for this node in the role
+            `FILE_CONTENT` (`upload_mismatch`: its wrap would not open here).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_target } }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: The opaque access token issued by login / refresh. Any authenticated caller holding a grant for the scope (enforced by code).
+
+  parameters:
+    ScopeId:
+      name: scopeId
+      in: path
+      required: true
+      description: Opaque id of the scope the files live in.
+      schema: { type: string, format: uuid, example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c }
+    NodeId:
+      name: nodeId
+      in: path
+      required: true
+      description: Opaque id of the `FILE` node.
+      schema: { type: string, format: uuid, example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e }
+
+  schemas:
+    FileCompleteRequest:
+      type: object
+      required: [uploadId]
+      properties:
+        uploadId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The upload session opened by `startBlobUploads` for this node in the role `FILE_CONTENT`.
+          example: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+        expectedBlobId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: >
+            The blob the caller saw in the file's slot — the one this upload replaces. Absent (or null) for the first
+            upload into an empty slot. A slot holding anything else answers `409 stale_file`.
+          example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
+
+    FileBlobRef:
+      type: object
+      description: >
+        A file's blob: what the client needs to presign the chunks (`presignBlobDownloads` by `blobId`), unwrap
+        `K_blob` under the file node's key and open the frames. Opaque metadata only.
+      required: [blobId, chunkCount, byteSize, wrappedBlobKey]
+      properties:
+        blobId: { type: string, format: uuid, example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a, x-veyq-visibility: id }
+        chunkCount:
+          x-veyq-visibility: measure
+          type: integer
+          format: int32
+          example: 1
+        byteSize:
+          x-veyq-visibility: measure
+          type: integer
+          format: int64
+          description: The sealed (ciphertext) size; the plaintext size is in the node's sealed metadata.
+          example: 65536
+        manifest:
+          x-veyq-visibility: measure
+          type: [array, "null"]
+          description: Per-chunk ciphertext byte sizes in chunk order (server-recorded at completion; ciphertext sizes only).
+          items: { type: integer, format: int64, example: 65536 }
+        wrappedBlobKey:
+          type: string
+          description: The file blob's random `K_blob` wrapped under the file node's key (opaque base64).
+          contentEncoding: base64
+          maxLength: 256
+          example: d3JhcHBlZC1rLWJsb2I=
+
+    FileListPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/FileListItem" }
+
+    FileListItem:
+      type: object
+      required: [nodeId]
+      properties:
+        nodeId: { type: string, format: uuid, example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e, x-veyq-visibility: id }
+        fileBlob:
+          description: The file's blob, or null while no upload of it has completed.
+          oneOf:
+            - $ref: "#/components/schemas/FileBlobRef"
+            - type: "null"
+
+    FileConflict:
+      type: object
+      description: >
+        A refused `completeFile`. With `code: stale_file` the slot held another blob than the caller expected:
+        `currentBlobId` is what it holds now (null: empty). Any other 409 code (`scope_deleting`) carries `code`
+        alone. Ids only — nothing the caller cannot already list.
+      required: [code]
+      properties:
+        code:
+          x-veyq-visibility: public
+          type: string
+          description: Stable, client-localizable error code.
+          example: stale_file
+        currentBlobId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          example: 8b2c1f2d-3e4a-5b6c-7c3f-0e2a9b1d4a6e
+
+    ErrorResponse:
+      $ref: '../_common.openapi.yaml#/components/schemas/ErrorResponse'

@@ -33,7 +33,7 @@ import java.util.jar.JarFile
  * The **enforcement guard** for the scope-access gate (uc.spaces.scope-access, ADR 0042): every operation in the
  * contract is either **probed** here against each state the gate tells apart, or named on a **reasoned exclusion
  * list**. The operation set is not listed — it is **derived** from the generated API interfaces of every owner
- * (`me.raddatz.veyq.core.generated.api`, `me.raddatz.veyq.memories.generated.api`), i.e. from `contracts/api/`, so an operation
+ * (`API_PACKAGES`: core's, Memories', Files'), i.e. from `contracts/api/`, so an operation
  * nobody classified is red on the day it is added.
  *
  * Each probe runs on its own [ScopeAccessWorld] (a probe the gate lets through may mutate) with five personas:
@@ -136,6 +136,11 @@ class OperatorBlindProbeTest {
         "presignBlobDownloads" to Probe(Address.SCOPE) { s ->
             Call("POST", "/api/scopes/${s.scopeId}/blob-downloads-batch", """{"items":[{"blobId":"${s.blobId}"}]}""")
         },
+        // --- files (the world's node is a Memory, so the control's complete answers `422 illegal_target` — past the gate) ---
+        "completeFile" to Probe(Address.SCOPE) { s ->
+            Call("POST", "/api/scopes/${s.scopeId}/files/${s.nodeId}/content", """{"uploadId":"${s.uploadId}"}""")
+        },
+        "listFiles" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/files") },
         // --- scopes ---
         "listScopeMembers" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/members") },
         "addGroupMember" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/members", """{"username":"ghost",${TestAdmission.json()}}""") },
@@ -420,7 +425,10 @@ class OperatorBlindProbeTest {
      */
     private fun contractOperations(): List<Operation> {
         val names = API_PACKAGES.flatMap(::generatedApiClassNames)
-        for (anchor in listOf("me.raddatz.veyq.core.generated.api.ContentApi", "me.raddatz.veyq.core.generated.api.BlobApi", "me.raddatz.veyq.memories.generated.api.MediaApi")) {
+        for (anchor in listOf(
+            "me.raddatz.veyq.core.generated.api.ContentApi", "me.raddatz.veyq.core.generated.api.BlobApi",
+            "me.raddatz.veyq.memories.generated.api.MediaApi", "me.raddatz.veyq.files.generated.api.FilesApi",
+        )) {
             check(anchor in names) { "found no $anchor among the generated API interfaces on the classpath: $names" }
         }
         return names.flatMap { name ->
@@ -448,8 +456,14 @@ class OperatorBlindProbeTest {
     }
 
     private companion object {
-        /** One generated API package per owner (contracts/api/ → core, contracts/api/memories/ → Memories). */
-        val API_PACKAGES = listOf("me.raddatz.veyq.core.generated.api", "me.raddatz.veyq.memories.generated.api")
+        /**
+         * One generated API package per owner (contracts/api/ → core, contracts/api/<app>/ → that application). A new
+         * application's package is added here with its first spec: until then its operations are not in the set
+         * (Files' were missing for a moment in cr-files-application F1a, caught by reading this list).
+         */
+        val API_PACKAGES = listOf(
+            "me.raddatz.veyq.core.generated.api", "me.raddatz.veyq.memories.generated.api", "me.raddatz.veyq.files.generated.api",
+        )
         val VERBS = linkedMapOf(
             "GET" to GET::class.java, "POST" to POST::class.java, "PUT" to PUT::class.java,
             "PATCH" to PATCH::class.java, "DELETE" to DELETE::class.java,
