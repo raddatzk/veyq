@@ -196,6 +196,19 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      foreign key onto `veyq_node`), but only as a purge that rolls back on every tick; the guard does not lean on it
   69 core's attachment `ScopeEraser` no longer deleting its rows — rejected: `validate_scope_erasure_arity` finds
      `veyq_node_attachment` in the FK closure below `veyq_scope`, with no cascade
+  72 a `features/files` file importing `features/memory` — rejected: `validate_web_core_imports_no_applications`'s
+     application rule reads every application's files for an edge into another one (cr-files-application F0, the
+     second application): an application depends on core only, as the backend's rule (b) holds for the modules
+  73 a `features/files` file importing Memories' generated `media` client — rejected: an application's clients are
+     derived per owner (`contracts/api/<owner>/`), so the edge to another application's client is red as well
+  74 a `core/node/` file re-exporting `features/files` — rejected: core's import rule reads every application of
+     `APPLICATIONS`, not only the first one
+  75 a `core/node/` file naming the Files node kind `'FILE'` — rejected: the kind rule lists every application's kinds
+  76 `:apps:files`' build file depending on `:apps:memories` — rejected: `validate_backend_module_graph` rule (b) on the
+     real second application (case 50 forges one); Gradle accepts the edge without complaint
+  77 the root build no longer composing `:apps:files` (its `implementation(project(…))` line gone) — rejected:
+     `validate_backend_module_graph` rule (a) requires every included module to ship. Before F0 this passed every
+     guard; the module compiled and its tests ran green while the fast-jar held none of it
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
 (a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
 which the Gradle module split retired: `:core` has no edge to an application, so either shape fails
@@ -791,8 +804,9 @@ MEMORIES_BUILD_COPY = "backend/apps/memories/build.gradle.kts"
 
 
 def forge_application_depends_on_application(root: pathlib.Path) -> str:
-    # A second application, valid in every respect the module guard checks — included, indexed, copied by the
-    # Dockerfile, named by the convention — except for one edge: to the first application.
+    # A forged application, valid in every respect the module guard checks — included, composed by the root, indexed,
+    # copied by the Dockerfile, named by the convention — except for one edge: to the first application.
+    _compose_in_root(root, ":apps:other")
     app = root / "backend/apps/other"
     (app / "src/main/resources/META-INF").mkdir(parents=True)
     (app / "src/main/resources/META-INF/beans.xml").write_text("")
@@ -976,6 +990,69 @@ def forge_web_core_names_memory_kind(root: pathlib.Path) -> str:
 def forge_web_core_glob(root: pathlib.Path) -> str:
     _plant_web(root, "shared/guardGapProbe.ts", "export const all = import.meta.glob('../features/*/index.ts')\n")
     return "a core file discovering code with import.meta.glob (must be REJECTED)"
+
+
+def _plant_files(root: pathlib.Path, rel: str, text: str) -> None:
+    if not (root / "web" / "src" / "features" / "files").is_dir():
+        raise ForgeError("web/src/features/files is gone — re-anchor this forgery on the Files application directory")
+    _plant_web(root, rel, text)
+
+
+def forge_web_application_imports_application(root: pathlib.Path) -> str:
+    _plant_files(root, "features/files/guardGapProbe.ts",
+                 "import { MEMORY_KIND } from '../memory/kinds'\nexport const k = MEMORY_KIND\n")
+    return "a features/files file importing features/memory/kinds (must be REJECTED — no application → application)"
+
+
+def forge_web_application_imports_application_client(root: pathlib.Path) -> str:
+    _plant_files(root, "features/files/guardGapProbe.ts",
+                 "import type { MediaItem } from '../../api/generated/media'\nexport type M = MediaItem\n")
+    return ("a features/files file importing Memories' generated media client (must be REJECTED — the client is "
+            "Memories', derived from contracts/api/memories/)")
+
+
+def forge_web_core_imports_second_application(root: pathlib.Path) -> str:
+    _plant_files(root, "core/node/guardGapProbe.ts", "export { FILE_KIND } from '../../features/files/kinds'\n")
+    return "a core/node file re-exporting features/files/kinds (must be REJECTED — core depends on no application)"
+
+
+def forge_web_core_names_file_kind(root: pathlib.Path) -> str:
+    _plant_files(root, "core/node/guardGapProbe.ts", "export const isFile = (kind: string) => kind === 'FILE'\n")
+    return "a core/node file naming the Files node kind 'FILE' (must be REJECTED — the shell asks the registry)"
+
+
+FILES_BUILD = "backend/apps/files/build.gradle.kts"
+
+
+def forge_files_depends_on_memories(root: pathlib.Path) -> str:
+    f = root / FILES_BUILD
+    if not f.is_file():
+        raise ForgeError(f"{FILES_BUILD} is missing — the Files module moved or was deleted")
+    text = f.read_text()
+    anchor = '    implementation(project(":core"))\n'
+    if anchor not in text:
+        raise ForgeError(f"{FILES_BUILD} no longer declares `implementation(project(\":core\"))` — re-anchor")
+    f.write_text(text.replace(anchor, anchor + '    implementation(project(":apps:memories"))\n', 1))
+    return ":apps:files depending on :apps:memories (must be REJECTED — no application → application)"
+
+
+def _compose_in_root(root: pathlib.Path, project: str) -> None:
+    """Compose a forged module into the root build, as every included module must be (rule (a): it ships)."""
+    f = root / ROOT_BUILD
+    text = f.read_text() if f.is_file() else ""
+    if CORE_BUILD_DEPS_ANCHOR not in text:
+        raise ForgeError(f"{ROOT_BUILD} has no `dependencies {{` block — re-anchor this forgery")
+    f.write_text(text.replace(CORE_BUILD_DEPS_ANCHOR,
+                              CORE_BUILD_DEPS_ANCHOR + f'    implementation(project("{project}"))\n', 1))
+
+
+def forge_root_drops_files_module(root: pathlib.Path) -> str:
+    f = root / ROOT_BUILD
+    edge = '    implementation(project(":apps:files"))\n'
+    if not f.is_file() or edge not in f.read_text():
+        raise ForgeError(f"{ROOT_BUILD} no longer composes :apps:files with `implementation(...)` — re-anchor")
+    f.write_text(f.read_text().replace(edge, "", 1))
+    return "the root build no longer composing :apps:files (must be REJECTED — an included module that never ships)"
 
 
 def forge_unmounted_config_secret(root: pathlib.Path) -> str:
@@ -1186,8 +1263,9 @@ def _plant_demo_spec(root: pathlib.Path) -> None:
 
 
 def _plant_demo_module(root: pathlib.Path, opt_in: bool) -> None:
-    # An application valid in every respect the module guard checks — included, indexed, copied by the Dockerfile,
-    # named by the convention, depending on core only — so rule (d) is what judges its specs.
+    # An application valid in every respect the module guard checks — included, composed by the root, indexed, copied
+    # by the Dockerfile, named by the convention, depending on core only — so rule (d) is what judges its specs.
+    _compose_in_root(root, ":apps:demo")
     app = root / "backend/apps/demo"
     (app / "src/main/resources/META-INF").mkdir(parents=True)
     (app / "src/main/resources/META-INF/beans.xml").write_text("")
@@ -1307,6 +1385,12 @@ CASES = [
     ("69", "validate_scope_erasure_arity.py", forge_attachment_scope_eraser_drops_its_delete, False),
     ("70", "validate_scope_erasure_arity.py", forge_attachment_scope_eraser_after_blob_rows, True),
     ("71", "validate_node_subtree_erasure.py", forge_attachment_node_eraser_keeps_the_blobs, True),
+    ("72", WEB_GUARD, forge_web_application_imports_application, False),
+    ("73", WEB_GUARD, forge_web_application_imports_application_client, False),
+    ("74", WEB_GUARD, forge_web_core_imports_second_application, False),
+    ("75", WEB_GUARD, forge_web_core_names_file_kind, False),
+    ("76", "validate_backend_module_graph.py", forge_files_depends_on_memories, False),
+    ("77", "validate_backend_module_graph.py", forge_root_drops_files_module, False),
 ]
 
 
