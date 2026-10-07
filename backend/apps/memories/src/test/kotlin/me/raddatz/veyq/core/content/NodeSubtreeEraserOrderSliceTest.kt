@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.content
 
+import me.raddatz.veyq.core.blob.AttachmentNodeSubtreeEraser
 import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.node.NodeSubtreeEraser
@@ -50,6 +51,7 @@ class NodeSubtreeEraserOrderSliceTest {
         assertEquals(
             mapOf(
                 MediaNodeSubtreeEraser::class.java.simpleName to 100,
+                AttachmentNodeSubtreeEraser::class.java.simpleName to 200,
                 ItemFavoritesNodeSubtreeEraser::class.java.simpleName to 610,
             ),
             byName,
@@ -58,6 +60,7 @@ class NodeSubtreeEraserOrderSliceTest {
         assertEquals(erasers.size, erasers.map { it.phase }.toSet().size, "phases are distinct, so order never rests on a tie")
         assertTrue(erasers.none { it.phase == NodeSubtreeEraser.COVER_BLOBS_PHASE }, "no eraser sits on core's own cover erase")
         assertTrue(byName.getValue("MediaNodeSubtreeEraser") < NodeSubtreeEraser.COVER_BLOBS_PHASE, "media precedes the cover blobs, as the purge always ran it")
+        assertTrue(byName.getValue("AttachmentNodeSubtreeEraser") < NodeSubtreeEraser.COVER_BLOBS_PHASE, "attachments go with the other node-hung blobs, before the covers")
     }
 
     @Test

@@ -355,6 +355,33 @@ CREATE TABLE veyq_share_identity (
 );
 CREATE INDEX ix_share_identity_lookup ON veyq_share_identity (share_id, token_hash);
 
+-- A sealed file on a node (ADR 0079 Consequences, cr-files-application P3): one blob per (node, slot). slot is a
+-- token the owning application names (Files' FILE_CONTENT, equal to the blob role its wrap is sealed to); core
+-- stores and compares it, never names one. share_identity_id is the guest identity that uploaded it, or null for a
+-- member. blob_id is unique: one blob row has exactly one reference, so freeing the attachment frees the blob.
+-- No foreign key here cascades, on purpose: a cascade would drop the row without BlobUploadStore.deleteBlobRow,
+-- leaving its blob row and store objects orphaned with no sweep to find them. The erasers delete these rows first
+-- (AttachmentNodeSubtreeEraser, AttachmentScopeEraser); a path that forgets is refused by the database, loudly.
+-- fk_attachment_node is the first foreign key onto veyq_node. Keep blob_id on a line of its own:
+-- scripts/validate_blob_reference_arity.py reads the column declaration line by line.
+CREATE TABLE veyq_node_attachment (
+    id                VARCHAR(36) NOT NULL PRIMARY KEY,
+    scope_id          VARCHAR(36) NOT NULL,
+    node_id           VARCHAR(36) NOT NULL,
+    slot              VARCHAR(16) NOT NULL,
+    blob_id           VARCHAR(36) NOT NULL,
+    share_identity_id VARCHAR(36) NULL,
+    created_at        TIMESTAMP   NOT NULL,
+    CONSTRAINT ux_attachment_node_slot UNIQUE (node_id, slot),
+    CONSTRAINT ux_attachment_blob UNIQUE (blob_id),
+    CONSTRAINT fk_attachment_scope FOREIGN KEY (scope_id) REFERENCES veyq_scope (id),
+    CONSTRAINT fk_attachment_node FOREIGN KEY (node_id) REFERENCES veyq_node (id),
+    CONSTRAINT fk_attachment_blob FOREIGN KEY (blob_id) REFERENCES veyq_blob (id),
+    CONSTRAINT fk_attachment_share_identity FOREIGN KEY (share_identity_id) REFERENCES veyq_share_identity (id)
+);
+CREATE INDEX ix_attachment_scope ON veyq_node_attachment (scope_id);
+CREATE INDEX ix_attachment_share_identity ON veyq_node_attachment (share_identity_id);
+
 -- A member's acceptance of the tenant terms (ADR 0035).
 CREATE TABLE veyq_tenant_terms_acceptance (
     id               VARCHAR(36) NOT NULL PRIMARY KEY,

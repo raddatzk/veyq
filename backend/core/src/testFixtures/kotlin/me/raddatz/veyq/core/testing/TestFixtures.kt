@@ -1,5 +1,7 @@
 package me.raddatz.veyq.core.testing
 
+import me.raddatz.veyq.core.blob.BlobEntity
+import me.raddatz.veyq.core.blob.NodeAttachmentEntity
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.content.NodesHandler
 import me.raddatz.veyq.core.account.login.SessionService
@@ -171,6 +173,40 @@ object TestFixtures {
             }.persist()
         }
         return id
+    }
+
+    /** What [seedAttachment] persisted: the attachment row, its blob row, and the storage key the blob's chunks live under. */
+    data class SeededAttachment(val attachmentId: String, val blobId: String, val storageKey: String)
+
+    /**
+     * Persist a blob in [scopeId] and attach it to [nodeId] in [slot] (core's `veyq_node_attachment`, cr-files-application
+     * P3), uploaded by the guest [shareIdentityId] or by a member (null). [slot] has no default for the reason
+     * [seedNode]'s kind has none: the slot is the owning application's token, and core's fixtures name none. Seeded,
+     * not uploaded: the rows are written directly.
+     */
+    fun seedAttachment(
+        scopeId: String,
+        nodeId: String,
+        slot: String,
+        shareIdentityId: String? = null,
+    ): SeededAttachment {
+        val seeded = SeededAttachment(
+            attachmentId = UUID.randomUUID().toString(),
+            blobId = UUID.randomUUID().toString(),
+            storageKey = UUID.randomUUID().toString().replace("-", ""),
+        )
+        QuarkusTransaction.requiringNew().run {
+            BlobEntity().apply {
+                id = seeded.blobId; this.scopeId = scopeId; storageKey = seeded.storageKey
+                chunkCount = TestBlob.SMALL.chunkCount; byteSize = TestBlob.SMALL.byteSize
+                wrappedBlobKey = "YXR0YWNobWVudA=="; createdAt = Instant.now()
+            }.persist()
+            NodeAttachmentEntity().apply {
+                id = seeded.attachmentId; this.scopeId = scopeId; this.nodeId = nodeId; this.slot = slot
+                blobId = seeded.blobId; this.shareIdentityId = shareIdentityId; createdAt = Instant.now()
+            }.persist()
+        }
+        return seeded
     }
 
     /**
