@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
-// The personal-space content host over the REAL registry (filled by `src/test/setup.ts`, as `main.ts` does) and the
-// real Memories adapters (`MemoryDetailHost`, `MemoryLevelHost`), with only the two heavy Memories views and the
-// dialogs stubbed to prop recorders. What this pins: which component the host renders for which node kind, and that
-// the generic context (buckets by kind, shareable, content key) arrives in the props `MemoryDetail`/`MemoryBrowse`
-// already take. The registry-variant cases (an unregistered detail, an unclaimed slot) are in
-// `MemoryHomeView.registry.test.ts`, which stubs the registry itself.
+// The personal-space content host over the REAL registry (filled by `src/test/setup.ts`, as `main.ts` does: Memories
+// and Files), core's real level view (`core/node/LevelView.vue`) and the real Memories detail adapter
+// (`MemoryDetailHost`), with only the heavy Memories views (`MemoryDetail`, `MemoriesSection`) and the dialogs stubbed
+// to prop recorders. What this pins: which component the host renders for which node kind, and that the generic
+// context (buckets by kind, shareable, content key) arrives in the props the Memories components take. The
+// registry-variant cases (an unregistered detail, no section at all) are in `MemoryHomeView.registry.test.ts`, which
+// stubs the registry itself.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
@@ -41,7 +42,7 @@ vi.mock('../core/node/tree', async (importOriginal) => ({
   nodeContentKey: (_scopeId: string, _epochs: unknown, _nodes: unknown, nodeId: string) => new Uint8Array(32).fill(nodeId === 'day1' ? 7 : 9),
 }))
 
-// Prop recorders: they render what they were handed, and expose the events the adapters listen to.
+// Prop recorders: they render what they were handed, and expose the events the host and the level view listen to.
 vi.mock('../features/memory/components/MemoryDetail.vue', async () => {
   const { defineComponent, h } = await import('vue')
   return {
@@ -54,15 +55,15 @@ vi.mock('../features/memory/components/MemoryDetail.vue', async () => {
     }),
   }
 })
-vi.mock('../features/memory/components/MemoryBrowse.vue', async () => {
+vi.mock('../features/memory/components/MemoriesSection.vue', async () => {
   const { defineComponent, h } = await import('vue')
   return {
     default: defineComponent({
-      name: 'MemoryBrowseStub',
-      props: ['folder', 'folders', 'memories', 'epochs', 'readonly', 'shareable'],
-      emits: ['openFolder', 'openMemory', 'toggleFavorite', 'createFolder', 'createMemory', 'renameFolder', 'deleteFolder', 'openTrash', 'share'],
-      setup: (p) => () => h('div', { class: 'browse-stub', 'data-shareable': String(p.shareable) },
-        `folder=${p.folder?.name ?? '-'}|folders=${p.folders.map((n: { name: string }) => n.name).join(',')}|memories=${p.memories.map((n: { name: string }) => n.name).join(',')}`),
+      name: 'MemoriesSectionStub',
+      props: ['folder', 'nodes', 'epochs', 'readonly'],
+      emits: ['openNode', 'create', 'openTrash'],
+      setup: (p) => () => h('section', { class: 'section-stub', 'data-readonly': String(p.readonly) },
+        `folder=${p.folder?.name ?? '-'}|memories=${p.nodes.map((n: { name: string }) => n.name).join(',')}`),
     }),
   }
 })
@@ -106,9 +107,10 @@ import { isFavorite } from '../features/memory/favoritesStore'
 import type { TreeNode } from '../core/node/tree'
 import { FOLDER_KIND } from '../core/node/kind'
 import { MEMORY_KIND, CHAPTER_KIND } from '../features/memory/kinds'
+import { FILE_KIND } from '../features/files/kinds'
 import { capabilityState } from '../shared/state/capabilities'
 import { SHARING_PUBLIC_LINKS } from '../features/platform/capabilities'
-import { realI18n } from '../test/i18n'
+import { realI18n, t } from '../test/i18n'
 import { registry } from '../core/applications/registry'
 
 function node(over: Partial<TreeNode> & Pick<TreeNode, 'id' | 'kind'>): TreeNode {
@@ -126,10 +128,12 @@ async function mountAt(hash: string) {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'home', component: { template: '<div />' } }] })
   await router.replace({ name: 'home', hash })
   await router.isReady()
-  const wrapper = mount(MemoryHomeView, { global: { plugins: [router, realI18n()] } })
+  const wrapper = mount(MemoryHomeView, { global: { plugins: [router, realI18n()], directives: { tooltip: {} } } })
   await flushPromises()
   return wrapper
 }
+type Mounted = Awaited<ReturnType<typeof mountAt>>
+const folderCards = (w: Mounted) => w.findAll('button.memory-folder-card').map((b) => b.text())
 
 beforeEach(() => {
   vi.mocked(listMyTenants).mockResolvedValue([])
@@ -139,15 +143,34 @@ beforeEach(() => {
 })
 
 describe('MemoryHomeView over the real registry', () => {
-  it('renders the application level view at the scope root, with the Memories bucket from byKind', async () => {
+  it("renders core's level view at the scope root: Memories' section with the Memories bucket, then the folders", async () => {
     const w = await mountAt('#~me')
-    expect(w.find('.browse-stub').text()).toBe('folder=-|folders=Trips|memories=Solo')
+    expect(w.find('.section-stub').text()).toBe('folder=-|memories=Solo')
+    expect(folderCards(w)).toEqual(['Trips'])
     expect(w.find('.detail-stub').exists()).toBe(false)
   })
 
-  it('renders the level view for a folder, handing it the folder and its own children', async () => {
+  it('renders the level view for a folder, handing the section the folder and its own children', async () => {
     const w = await mountAt('#~me/trips')
-    expect(w.find('.browse-stub').text()).toBe('folder=Trips|folders=|memories=Italy')
+    expect(w.find('.section-stub').text()).toBe('folder=Trips|memories=Italy')
+    expect(folderCards(w)).toEqual([])
+    expect(w.find('.memory-folder-overview-card h2').text()).toBe('Trips')
+    expect(w.find('.section-stub').attributes('data-readonly')).toBe('false')
+  })
+
+  // Files registers FILE with no section yet (F0): a file in a folder is listed in core's fallback section — its icon,
+  // its name, the unsupported state — never dropped, while the Memory beside it stays in Memories' section. F1 replaces
+  // this with Files' own section.
+  it('lists a FILE child in the fallback section, with the Files icon and the unsupported state', async () => {
+    treeStore.nodes = [...TREE.map((n) => ({ ...n })), node({ id: 'report', kind: FILE_KIND, name: 'report.pdf', parentId: 'trips' })]
+    const w = await mountAt('#~me/trips')
+    expect(w.find('.section-stub').text()).toBe('folder=Trips|memories=Italy')
+    const fallback = w.find('.veyq-level-fallback')
+    expect(fallback.find('h2').text()).toBe(FILE_KIND)
+    const row = fallback.find('.veyq-node-card')
+    expect(row.find('strong').text()).toBe('report.pdf')
+    expect(row.find('.pi-file').exists()).toBe(true)
+    expect(row.text()).toContain(t('home.unsupportedKind'))
   })
 
   it('opens a Memory to the registered detail: content key, ordered chapters bucket, shareable', async () => {
@@ -156,7 +179,7 @@ describe('MemoryHomeView over the real registry', () => {
     expect(d.text()).toBe('Italy|Day1,Day2')
     expect(d.attributes('data-key')).toBe('9')
     expect(d.attributes('data-shareable')).toBe('true')
-    expect(w.find('.browse-stub').exists()).toBe(false)
+    expect(w.find('.section-stub').exists()).toBe(false)
   })
 
   // A chapter is a share root of its own (ADR 0080 Decision 13): the same detail offers the share affordances, and both
@@ -207,24 +230,39 @@ describe('MemoryHomeView over the real registry', () => {
     expect(w.find('.delete-stub').text()).toBe('Italy')
   })
 
-  it('wires the level events: create modes (folder, memory), trash, and opening a child navigates', async () => {
+  it('wires the level events: create modes (memory from the section, folder from core), trash, and opening a child navigates', async () => {
     const w = await mountAt('#~me')
-    const level = w.findComponent({ name: 'MemoryBrowseStub' })
+    const section = w.findComponent({ name: 'MemoriesSectionStub' })
 
-    level.vm.$emit('createMemory')
+    section.vm.$emit('create', 'create-memory')
     await flushPromises()
     expect(w.find('.mutation-stub').text()).toBe('create-memory|-|-')
-    level.vm.$emit('createFolder')
+    await w.find('.memory-create-card').trigger('click')
     await flushPromises()
     expect(w.find('.mutation-stub').text()).toBe('create-folder|-|-')
 
-    level.vm.$emit('openTrash')
+    section.vm.$emit('openTrash')
     await flushPromises()
     expect(w.find('.trash-stub').exists()).toBe(true)
 
-    level.vm.$emit('openMemory', TREE[1])
+    section.vm.$emit('openNode', TREE[1])
     await flushPromises()
     expect(w.find('.detail-stub').text()).toBe('Solo|')
+  })
+
+  it('wires the folder overview card (rename, delete for the folder) and a folder card navigates', async () => {
+    const w = await mountAt('#~me/trips')
+    await w.find(`button[aria-label="${t('memory.rename')}"]`).trigger('click')
+    await flushPromises()
+    expect(w.find('.mutation-stub').text()).toBe('rename|trips|Trips')
+    await w.find(`button[aria-label="${t('memory.delete')}"]`).trigger('click')
+    await flushPromises()
+    expect(w.find('.delete-stub').text()).toBe('Trips')
+
+    const root = await mountAt('#~me')
+    await root.findAll('button.memory-folder-card').find((b) => b.text() === 'Trips')!.trigger('click')
+    await flushPromises()
+    expect(root.find('.section-stub').text()).toBe('folder=Trips|memories=Italy')
   })
 })
 
@@ -232,11 +270,13 @@ describe('MemoryHomeView over the real registry', () => {
 // exactly as a Memory's detail does — descriptor AND capability — and the share opens CORE's folder dialog with the
 // folder's own key from the chain, never the application's `shareDialog` slot.
 describe('MemoryHomeView sharing a folder', () => {
-  it('hands the folder level view shareable=true, and the share event opens core\'s dialog for the folder itself', async () => {
-    const w = await mountAt('#~me/trips')
-    expect(w.find('.browse-stub').attributes('data-shareable')).toBe('true')
+  const shareButton = (w: Mounted) => w.find(`.memory-folder-overview-card button[aria-label="${t('share.share')}"]`)
 
-    w.findComponent({ name: 'MemoryBrowseStub' }).vm.$emit('share')
+  it("offers the share on the folder overview card, and it opens core's dialog for the folder itself", async () => {
+    const w = await mountAt('#~me/trips')
+    expect(shareButton(w).exists()).toBe(true)
+
+    await shareButton(w).trigger('click')
     await flushPromises()
 
     const dialog = w.find('.folder-share-stub')
@@ -246,15 +286,17 @@ describe('MemoryHomeView sharing a folder', () => {
     expect(w.find('.share-stub').exists(), "never the application's Memory dialog").toBe(false)
   })
 
-  it('offers no share at the scope root (no node to share)', async () => {
+  it('offers no share at the scope root (no node to share, no overview card)', async () => {
     const w = await mountAt('#~me')
-    expect(w.find('.browse-stub').attributes('data-shareable')).toBe('false')
+    expect(w.find('.memory-folder-overview-card').exists()).toBe(false)
+    expect(w.find(`button[aria-label="${t('share.share')}"]`).exists()).toBe(false)
   })
 
   it('hides the folder share when the instance turns public links off', async () => {
     capabilityState.ids = []
     const w = await mountAt('#~me/trips')
-    expect(w.find('.browse-stub').attributes('data-shareable')).toBe('false')
+    expect(shareButton(w).exists()).toBe(false)
+    expect(w.find(`.memory-folder-overview-card button[aria-label="${t('memory.rename')}"]`).exists(), 'control: the card renders').toBe(true)
   })
 })
 

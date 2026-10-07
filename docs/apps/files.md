@@ -3,7 +3,8 @@
 > **Concept, being built** by `changes/cr-files-application.md`. The smallest possible application: a file tree on
 > the platform's node tree ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)).
 > Built so far (F0): the skeleton only — the Gradle module `:apps:files` with the node kind `FILE` (at the root or in
-> a `FOLDER`, no children, no share root) and its web registration (`web/src/features/files`). No upload, no UI.
+> a `FOLDER`, no children, no share root) and its web registration (`web/src/features/files`). No upload, no UI of its own: no level
+> section yet, so core's folder level view lists a `FILE` child in its fallback section (name, icon, "cannot open").
 
 ## Idea
 

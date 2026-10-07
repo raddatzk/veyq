@@ -133,8 +133,11 @@ here; the server is blind.
   directory); `main.ts` calls its `registerApplications()` before `boot()`. Build-time only: no glob, no computed
   `import()`, no loading after the fact (ADR 0079 Decision 5, ADR 0026) — registered code runs with every unlocked key.
   **What an application registers** (its `register.ts`; the registry is write-once, a second registration throws):
-  `registerKind` per node kind (detail component, icon, shareable); `claimSlot` for `levelView`,
-  `nodeMutationDialog`, `shareDialog`; `addSlotItem(slot, id, component, order?)` for the two list slots `topbarTray`
+  `registerKind` per node kind (detail component, icon, shareable, and its `section` of the folder level view —
+  `{ order, component }`; the level view is core's, `core/node/LevelView.vue`: the folder's overview card, the
+  sections sorted by `order`, a fallback section for a child whose kind no section serves, then the sub-folders; kinds
+  naming the same component share one section, rendered once with the children of all of them, and naming it with two
+  different `order`s throws); `claimSlot` for `nodeMutationDialog`, `shareDialog`; `addSlotItem(slot, id, component, order?)` for the two list slots `topbarTray`
   and `sidebarPins` (an id namespaced by the application, e.g. `memories.pinned`; write-once per (slot, id); the shell
   renders `slotItems(slot)` sorted by `order`, ties in registration order — the top bar after core's own upload status
   menu, `core/blob/UploadStatusMenu.vue`, which lists every application's batches of the one core queue and is no
@@ -145,9 +148,10 @@ here; the server is blind.
   `registerLifecycle(id, hooks)` with `onScopeReset` / `onScopeEntered` and the **required**
   `onMasterKeyRotated` — `rotateKeys` refuses to start when none is registered, because material sealed under the
   Master Key (Memories' pins) is otherwise undecryptable after a rotation. A kind or share nobody registered renders
-  an explicit unsupported/unavailable state, never an empty region. **Limits, stated:** three slots (`levelView`,
-  `nodeMutationDialog`, `shareDialog`) are single-claim and Memories-shaped (the second application re-cuts them per
-  kind), the other two (`topbarTray`, `sidebarPins`) are ordered lists; the kind is an open string token (the generated client has no `NodeKind` enum), so core names its one
+  an explicit unsupported/unavailable state, never an empty region. **Limits, stated:** two slots (`nodeMutationDialog`,
+  `shareDialog`) are single-claim and Memories-shaped (the second application re-cuts them per kind), the level view's
+  moved markup still carries Memories' `memory-*` class names and `memory.*` i18n keys (cr-files-application P4d), the
+  other two (`topbarTray`, `sidebarPins`) are ordered lists; the kind is an open string token (the generated client has no `NodeKind` enum), so core names its one
   `FOLDER_KIND` (`core/node/kind.ts`), Memories its own two (`features/memory/kinds.ts`), and no compiler lists the
   kinds — the registry's `{ supported: false }` answer and its tests do; the directory is still `features/memory`, the i18n catalog
   is one file and `styles/memory.css` is global.

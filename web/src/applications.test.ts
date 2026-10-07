@@ -7,6 +7,7 @@ import { FILE_KIND } from './features/files/kinds'
 import { fileNameSlug } from './shared/naming'
 import { favoritesStore } from './features/memory/favoritesStore'
 import PinnedMemories from './features/memory/components/PinnedMemories.vue'
+import MemoriesSection from './features/memory/components/MemoriesSection.vue'
 
 // `src/test/setup.ts` has already called registerApplications() once for this file, exactly as main.ts does.
 describe('composition root', () => {
@@ -26,6 +27,12 @@ describe('composition root', () => {
   it('claims the one Memories share body for both root kinds', () => {
     expect(registry.shareBody(MEMORY_KIND)).not.toBeNull()
     expect(registry.shareBody(CHAPTER_KIND)).toBe(registry.shareBody(MEMORY_KIND))
+  })
+
+  // The level view is core's (P4b): Memories' one section serves both its kinds; Files brings none yet (its FILE children
+  // show in core's fallback section until F1).
+  it('gives the level view exactly one section, Memories\', for MEMORY and CHAPTER', () => {
+    expect(registry.sections()).toEqual([{ component: MemoriesSection, order: 10, kinds: [MEMORY_KIND, CHAPTER_KIND] }])
   })
 
   // The tray and the pins are list slots (P4a). The upload status is core's since B3 (the top bar mounts it itself), so

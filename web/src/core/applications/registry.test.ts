@@ -93,14 +93,14 @@ describe('registry: slugFor', () => {
 
 describe('registry: slots', () => {
   it('is empty until claimed: slot() is null, not undefined', () => {
-    expect(createRegistry().slot('levelView')).toBeNull()
+    expect(createRegistry().slot('nodeMutationDialog')).toBeNull()
   })
 
   it('is single-claim: a second claim of the same slot throws and the first claimant stays', () => {
     const r = createRegistry()
-    r.claimSlot('levelView', Stub)
-    expect(() => r.claimSlot('levelView', Other)).toThrow(/already claimed/)
-    expect(r.slot('levelView')).toBe(Stub)
+    r.claimSlot('nodeMutationDialog', Stub)
+    expect(() => r.claimSlot('nodeMutationDialog', Other)).toThrow(/already claimed/)
+    expect(r.slot('nodeMutationDialog')).toBe(Stub)
   })
 
   it('keeps slots independent: claiming one does not claim another', () => {
@@ -181,9 +181,74 @@ describe('registry: list slots (topbarTray, sidebarPins)', () => {
     // @ts-expect-error a list slot is not claimable
     expect(() => r.claimSlot('sidebarPins', Stub)).toThrow(/sidebarPins is a list slot/)
     // @ts-expect-error a single-claim slot takes no items
-    expect(() => r.addSlotItem('levelView', 'a', Stub)).toThrow(/levelView is not a list slot/)
+    expect(() => r.addSlotItem('shareDialog', 'a', Stub)).toThrow(/shareDialog is not a list slot/)
     expect(r.slotItems('topbarTray')).toEqual([])
+    expect(r.slot('shareDialog')).toBeNull()
+  })
+})
+
+// cr-files-application P4b: the folder level view is core's; a kind brings its section with its descriptor.
+describe('registry: level sections', () => {
+  it('is empty until a kind brings one, and the level view slot is gone', () => {
+    const r = createRegistry()
+    expect(r.sections()).toEqual([])
+    // @ts-expect-error the level view is core's since P4b, no slot
     expect(r.slot('levelView')).toBeNull()
+  })
+
+  it('sorts the sections by order, not by registration', () => {
+    const r = createRegistry()
+    r.registerKind({ kind: 'LATE', icon: 'x', shareable: false, section: { order: 20, component: Other } })
+    r.registerKind({ kind: 'EARLY', icon: 'x', shareable: false, section: { order: 10, component: Stub } })
+    expect(r.sections()).toEqual([
+      { component: Stub, order: 10, kinds: ['EARLY'] },
+      { component: Other, order: 20, kinds: ['LATE'] },
+    ])
+  })
+
+  it('keeps registration order on a tie (the order each section was first named)', () => {
+    const r = createRegistry()
+    r.registerKind({ kind: 'ONE', icon: 'x', shareable: false, section: { order: 10, component: Other } })
+    r.registerKind({ kind: 'TWO', icon: 'x', shareable: false, section: { order: 10, component: Stub } })
+    expect(r.sections().map((s) => s.component)).toEqual([Other, Stub])
+  })
+
+  it('keys a section by its component: two kinds naming one component are ONE section carrying both kinds', () => {
+    const r = createRegistry()
+    r.registerKind({ kind: MEMORY_KIND, icon: 'x', shareable: true, section: { order: 10, component: Stub } })
+    r.registerKind({ kind: 'OTHER', icon: 'x', shareable: false, section: { order: 5, component: Other } })
+    r.registerKind({ kind: CHAPTER_KIND, icon: 'x', shareable: true, section: { order: 10, component: Stub } })
+    expect(r.sections()).toEqual([
+      { component: Other, order: 5, kinds: ['OTHER'] },
+      { component: Stub, order: 10, kinds: [MEMORY_KIND, CHAPTER_KIND] },
+    ])
+  })
+
+  it('refuses a kind naming a shared section with another order, and registers nothing of it', () => {
+    const r = createRegistry()
+    r.registerKind({ kind: MEMORY_KIND, icon: 'x', shareable: true, section: { order: 10, component: Stub } })
+    expect(() => r.registerKind({ kind: CHAPTER_KIND, icon: 'x', shareable: true, section: { order: 11, component: Stub } }))
+      .toThrow(/CHAPTER names the section of MEMORY with order 11, not 10/)
+    expect(r.kind(CHAPTER_KIND).supported).toBe(false)
+    expect(r.sections()).toEqual([{ component: Stub, order: 10, kinds: [MEMORY_KIND] }])
+  })
+
+  it('a kind without a section adds none, and a refused re-registration does not add its section', () => {
+    const r = createRegistry()
+    r.registerKind({ kind: 'LEAF', icon: 'x', shareable: false })
+    expect(r.sections()).toEqual([])
+    r.registerKind({ kind: MEMORY_KIND, icon: 'x', shareable: true })
+    expect(() => r.registerKind({ kind: MEMORY_KIND, icon: 'x', shareable: true, section: { order: 1, component: Stub } })).toThrow(/already registered/)
+    expect(r.sections()).toEqual([])
+  })
+
+  it('hands out a copy: mutating what sections() returned changes nothing', () => {
+    const r = createRegistry()
+    r.registerKind({ kind: MEMORY_KIND, icon: 'x', shareable: true, section: { order: 10, component: Stub } })
+    const got = r.sections() as unknown as { kinds: string[] }[]
+    got[0].kinds.push('FORGED')
+    ;(got as unknown[]).length = 0
+    expect(r.sections()).toEqual([{ component: Stub, order: 10, kinds: [MEMORY_KIND] }])
   })
 })
 
