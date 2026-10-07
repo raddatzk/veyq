@@ -9,7 +9,7 @@ info:
     [ADR 0031](../../../docs/decisions/0031-uploader-public-share.md)): a guest of a `READ` or `READ_WRITE` link
     lists the media under the shared subtree; a guest of a `READ_WRITE` or `WRITE_ONLY` link completes the uploads it
     started through core's guest transport (`sharing.openapi.yaml` `startShareBlobUploads` /
-    `presignShareBlobUploadWindows`) into media on the shared Memory, and deletes its own.
+    `presignShareBlobUploadWindows`) into media on the shared Memory or chapter, and deletes its own.
     The link itself — its id, password, access mode and guest identities — is core's (`sharing.openapi.yaml`); these
     operations sit under its `/api/shares/{shareId}` path and pass core's guest gate first (`ShareGuestGate`: an
     active share → the password → the mode → the guest's token → the per-share upload budget where the operation
@@ -26,7 +26,7 @@ tags:
   - name: share-media
     description: >
       A guest's media on a public share link — list the media under the shared subtree, complete an upload into a
-      medium on the shared Memory, delete one's own (unauthenticated). One tag = one resource interface owning the `/api/shares/{shareId}/media` subtree:
+      medium on the shared Memory or chapter, delete one's own (unauthenticated). One tag = one resource interface owning the `/api/shares/{shareId}/media` subtree:
       longer than core's `sharing` root `/api/shares`, so these routes reach this resource and every other
       `/api/shares` route stays core's.
 
@@ -69,7 +69,7 @@ paths:
       operationId: completeShareMedia
       summary: Complete a guest upload (unauthenticated) — the application attaches it to the shared root node.
       description: >
-        **No auth.** A guest's completion of its uploads into media on the shared Memory. Core's guest gate runs
+        **No auth.** A guest's completion of its uploads into media on the shared Memory or chapter. Core's guest gate runs
         first (`ShareGuestGate`, ADR 0079) and spends the per-share upload budget. Gated on the share (exists + `enabled` + an access
         mode that lets a guest add) + a valid `contributorToken`. Each item is one of the application's objects
         (`mediaId`): the original upload + up to two role-tagged derivatives; the server verifies the stored objects
@@ -200,7 +200,7 @@ components:
           type: array
           description: >
             The anonymous identities a reader needs to open what it is served: every WRITE_ONLY identity — of any link
-            of the Memory — with a row in `media`, each an opaque `identityId` and its wrapped identity key, without
+            on a node of the subtree — with a row in `media`, each an opaque `identityId` and its wrapped identity key, without
             which that identity's rows cannot be opened (ADR 0031 point 7). No guest's name, and no READ_WRITE identity —
             not even this share's own, whatever its access mode is now: a guest's name is for the Memory's members, who
             read it through the bucket list (ADR 0030 point 8). The member list's `uploaderKeys` items, the same shape.
