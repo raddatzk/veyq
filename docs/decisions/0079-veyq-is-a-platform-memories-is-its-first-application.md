@@ -187,7 +187,10 @@ on their own.
   the platform `me.raddatz.veyq.core.<feature>`, an application `me.raddatz.veyq.<application>.<feature>`, the generated API
   `me.raddatz.veyq.core.generated` / `me.raddatz.veyq.<application>.generated` — and so are the contracts: core's specs in
   `contracts/api/` (`_common.openapi.yaml`, which every shared schema is defined in once, is core's), an
-  application's in `contracts/api/<application>/`. The package root `me.raddatz.veyq` — also the Gradle `group`, so
+  application's in `contracts/api/<application>/`. The build derives the owner from that place, never from a list
+  (inbox #344, built before the second application): a directory below `contracts/api/` holding a spec is the
+  application `:apps:<directory>`, generating into `me.raddatz.veyq.<directory>.generated`; a spec in a directory with
+  no such module, or nested deeper, fails the build while it configures. The package root `me.raddatz.veyq` — also the Gradle `group`, so
   the module jars' prefix — is the owner's domain `raddatz.me` reversed; it was `com.veyq` until
   2026-10-05, and the rename moved no class between packages. Each module owns its migrations under one global version scheme
   (`V<yyyymmddHHMM>__<module>_<slug>.sql`, the module named by the settings; [backend/CLAUDE.md](../../backend/CLAUDE.md)

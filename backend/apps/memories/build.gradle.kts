@@ -15,7 +15,7 @@ plugins {
     id("io.quarkus")
 }
 
-veyqOpenApi { owner("memories") }
+veyqOpenApi { generateOwnSpecs() } // `contracts/api/memories/`, by its path `:apps:memories`
 
 dependencies {
     implementation(project(":core"))

@@ -1,7 +1,9 @@
 """Where the OpenAPI specs live — the one place a script learns it (cr-platform-gradle-modules, step 5).
 
-The contracts name their owner: core's specs sit directly in `contracts/api/`, an application's in a directory of
-its own (`contracts/api/memories/`), and `_common.openapi.yaml` holds the components several specs share. A reader
+The contracts name their owner by where they sit: core's specs directly in `contracts/api/`, an application's in a
+directory named for it (`contracts/api/memories/`), and `_common.openapi.yaml` holds the components several specs
+share. `APPLICATIONS` is **derived**, never listed: every directory directly below `contracts/api/` that holds a spec
+(the same rule `buildSrc`'s `SpecSets` builds by, inbox #344). A reader
 that globs `contracts/api/*.openapi.yaml` non-recursively stops seeing an application's specs without an error, so
 every script that reads the specs asks this module instead: the specs are **found by recursive glob**, never listed.
 
@@ -11,9 +13,11 @@ path relative to `contracts/api` in POSIX form (`blob.openapi.yaml`, `memories/m
 file part is resolved against the directory of the spec that holds it (`ref_key`), so `../_common.openapi.yaml`
 from `memories/` and `_common.openapi.yaml` from the top level name the same file.
 
-**The canary.** `specs()` raises when it finds no spec under `contracts/api/memories/`: a reader that silently lost
-the application's specs would otherwise stay green, because no rule of any guard is Memories-only by *name* (every
-opaque property name a Memories schema carries is also carried by a core one). The opaque-name readers additionally
+**The canary.** `specs()` raises when its recursive glob finds no spec under an application's directory — each one
+`APPLICATIONS` names, found by a separate per-directory listing: a reader that silently lost an application's specs
+would otherwise stay green, because no rule of any guard is Memories-only by *name* (every opaque property name a
+Memories schema carries is also carried by a core one). Since the list is derived, deleting a whole application
+directory removes the application rather than tripping this check. The opaque-name readers additionally
 assert a *location* only `memories/` holds, `OPAQUE_LOCATION_CANARY`.
 
 Not a guard (no `validate_` prefix): it asserts nothing about the contracts and is imported by the scripts that read them.
@@ -26,7 +30,11 @@ import posixpath
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 API = ROOT / "contracts" / "api"
 COMMON = API / "_common.openapi.yaml"
-APPLICATIONS: tuple[str, ...] = ("memories",)  # the directories below contracts/api that hold an application's specs
+# The directories directly below contracts/api that hold an application's specs — listed per directory, independently of
+# the recursive glob in `specs()`, so that glob losing a directory is what the presence check sees.
+APPLICATIONS: tuple[str, ...] = tuple(sorted(
+    d.name for d in (API.iterdir() if API.is_dir() else ()) if d.is_dir() and any(p.is_file() for p in d.glob("*.openapi.yaml"))
+))
 # An opaque property at a location only `memories/` holds — both opaque-name oracles assert they read it, because a
 # check on the NAME alone would stay green if `memories/` vanished (each opaque name a Memories schema carries is
 # carried by a core spec too).

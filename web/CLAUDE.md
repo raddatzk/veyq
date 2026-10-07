@@ -122,8 +122,8 @@ here; the server is blind.
   node tree: `tree`, `treeStore`, `location`, `browse`, the delete/trash dialogs), `core/applications/registry.ts`
   (the registry) and `core/sharing/` (the kind-independent half of a public share, the subtree walk and the share management — mint, list, revoke, re-issue, recovery; the drop key stays the application's). Dependencies run application →
   core, never back, and `scripts/validate_web_core_imports_no_applications.py` (no allowlist) is red on a core file
-  that imports the application or one of its generated clients (every `generate:api` output whose `-i` lies under
-  `contracts/api/memories/`, read from `package.json` — today `generated/media`, `generated/favorites`,
+  that imports the application or one of its generated clients (every `generate:api` output whose `-i` lies in an
+  application's directory `contracts/api/<app>/`, read from `package.json` — today `generated/media`, `generated/favorites`,
   `generated/share-media`; so their
   factories are `features/memory/api.ts`'s, not `api/client.ts`'s, and a core helper types from core's own client,
   e.g. `mediaDeriver`'s tiers from `BlobRole`), uses `import.meta.glob`, or names `NodeKind.Memory|Chapter` / `'MEMORY'` /

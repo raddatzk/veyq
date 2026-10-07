@@ -2,12 +2,13 @@
 """Guard that the web core does not import, nor name the kinds of, the Memories application (ADR 0079, web phase).
 
 **What it asserts.** The application is `web/src/features/memory/**` (the one constant `APPLICATION` below) **plus
-every generated API client whose `generate:api` run reads a spec under `contracts/api/memories/`** (the constant
-`APPLICATION_SPECS`); core is everything else under `web/src` — by exclusion, so a new directory is guarded the day
-it appears. The client half is **derived**, never listed: each `openapi-generator-cli generate` step of
+every generated API client whose `generate:api` run reads an application's spec** — one in a directory directly below
+`contracts/api/` (`contracts/api/<app>/*.openapi.yaml`, the owner rule `buildSrc`'s `SpecSets` builds by, inbox
+#344); core is everything else under `web/src` — by exclusion, so a new directory is guarded the day it appears. The
+client half is **derived**, never listed, and names no application: each `openapi-generator-cli generate` step of
 `web/package.json`'s `generate:api` script is read for its `-i` (spec) and `-o` (output directory), and an output
-whose spec lies under `APPLICATION_SPECS` is the application's (today `api/generated/favorites` and
-`api/generated/media`), so a new Memories client is covered the day its line lands. Core's own clients (`blob`,
+whose spec lies in an application's directory is an application's (today `api/generated/favorites`,
+`api/generated/media` and `api/generated/share-media`), so a new application client is covered the day its line lands. Core's own clients (`blob`,
 `content`, …) stay core's: importing them is the point of generating them. Dependencies run application → core,
 never back. Three rules, each read over every non-test `.ts`/`.vue` file of core:
 - **import**: no file names the application by an import specifier — `from '…'` (so also `export … from '…'`),
@@ -29,8 +30,10 @@ client, which is untracked and spells the kinds by definition. `api/client.ts` i
 file building a Memories client is the edge this guard exists for (the Memories factories live in the application).
 
 **Fail closed.** No `web/package.json`, no `generate:api` script, a generate step without its `-i`/`-o`, no generate
-step at all, or no step reading `APPLICATION_SPECS` (while that directory holds a spec) is red: a parse that found
-nothing would otherwise read as "the application owns no client".
+step at all, or no step reading an application's spec (while some application directory holds one) is red: a parse
+that found nothing would otherwise read as "no application owns a client". That is one check over all applications,
+not one per directory: an application whose specs land before its web client (the phase order is contracts → backend
+→ web) is not red in between.
 
 **No allowlist.** Any violation is red. (The guard was born as a ratchet — core imported the application at 14
 files on the day it landed, so a plain guard would have been red — and the allowlist shrank to nothing as the
@@ -48,8 +51,9 @@ both sides, as in the backend guard). `shared/ui/SecretKeyField` → `features/a
 → a core feature, not core → application), named in the ui-web styleguide, and this guard does not look at it.
 The application's own outbound edges are fine (it may use core) and are not read. **A client generated outside
 `generate:api`** (another script, a hand-run generator, a checked-in copy) is not seen: the client half of the
-application is exactly what that script's `-i`/`-o` pairs say, and a spec under `contracts/api/memories/` generated
-by any other route is core's to this guard.
+application is exactly what that script's `-i`/`-o` pairs say, and a spec under `contracts/api/<app>/` generated
+by any other route is core's to this guard. Every application client is guarded against core alike — there is one
+application directory under `web/src` (`APPLICATION`), so application → application has no rule here yet.
 """
 from __future__ import annotations
 
@@ -66,7 +70,7 @@ SRC = WEB / "src"
 PACKAGE = WEB / "package.json"
 GENERATE_SCRIPT = "generate:api"
 APPLICATION = ("features", "memory")  # relative to web/src — the one constant to change when the directory is renamed
-APPLICATION_SPECS = ("contracts", "api", "memories")  # relative to the repo root — the application's specs
+CONTRACTS_API = ("contracts", "api")  # relative to the repo root; a spec directly in a directory below it is an application's
 COMPOSITION_ROOT = "applications.ts"  # relative to web/src; exact path, never a directory
 GENERATED = ("api", "generated")  # untracked client; defines the kinds, so it names them
 
@@ -122,22 +126,23 @@ def generated_pairs(package_text: str) -> list[tuple[str, str]]:
 
 def application_clients(pairs: list[tuple[str, str]], web: pathlib.Path,
                         root: pathlib.Path) -> list[pathlib.PurePosixPath]:
-    """The output directories (relative to web/src) of the steps that read a spec under `APPLICATION_SPECS`."""
-    specs_dir = pathlib.Path(os.path.normpath(root.joinpath(*APPLICATION_SPECS)))
+    """The output directories (relative to web/src) of the steps that read an application's spec: one directly in a
+    directory below `CONTRACTS_API` (`contracts/api/<app>/x.openapi.yaml`), whichever application that is."""
+    api_dir = pathlib.Path(os.path.normpath(root.joinpath(*CONTRACTS_API)))
     src = pathlib.Path(os.path.normpath(web / "src"))
     owned: list[pathlib.PurePosixPath] = []
     for spec, out in pairs:
         spec_path = pathlib.Path(os.path.normpath(web / spec))
-        if specs_dir not in spec_path.parents:
+        if api_dir not in spec_path.parents or len(spec_path.relative_to(api_dir).parts) != 2:
             continue
         out_path = pathlib.Path(os.path.normpath(web / out))
         if out_path != src and src not in out_path.parents:
             raise ParseError(f"the application's client from {spec} is generated outside web/src ({out}); "
                              "this guard cannot tell its importers")
         owned.append(pathlib.PurePosixPath(out_path.relative_to(src).as_posix()))
-    if not owned and any(specs_dir.glob("*.openapi.yaml")):
-        raise ParseError(f"no `{GENERATE_SCRIPT}` step reads a spec under {'/'.join(APPLICATION_SPECS)}/, which "
-                         "holds specs — the parse found nothing, or the application's clients moved")
+    if not owned and any(api_dir.glob("*/*.openapi.yaml")):
+        raise ParseError(f"no `{GENERATE_SCRIPT}` step reads a spec under {'/'.join(CONTRACTS_API)}/<app>/, where "
+                         "applications hold specs — the parse found nothing, or the applications' clients moved")
     return owned
 
 
