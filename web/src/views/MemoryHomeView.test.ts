@@ -59,9 +59,9 @@ vi.mock('../features/memory/components/MemoryBrowse.vue', async () => {
   return {
     default: defineComponent({
       name: 'MemoryBrowseStub',
-      props: ['folder', 'folders', 'memories', 'epochs', 'readonly'],
-      emits: ['openFolder', 'openMemory', 'toggleFavorite', 'createFolder', 'createMemory', 'renameFolder', 'deleteFolder', 'openTrash'],
-      setup: (p) => () => h('div', { class: 'browse-stub' },
+      props: ['folder', 'folders', 'memories', 'epochs', 'readonly', 'shareable'],
+      emits: ['openFolder', 'openMemory', 'toggleFavorite', 'createFolder', 'createMemory', 'renameFolder', 'deleteFolder', 'openTrash', 'share'],
+      setup: (p) => () => h('div', { class: 'browse-stub', 'data-shareable': String(p.shareable) },
         `folder=${p.folder?.name ?? '-'}|folders=${p.folders.map((n: { name: string }) => n.name).join(',')}|memories=${p.memories.map((n: { name: string }) => n.name).join(',')}`),
     }),
   }
@@ -77,6 +77,16 @@ vi.mock('../features/memory/components/ShareDialog.vue', async () => {
       props: { nodeId: String, uploader: Boolean, memoryName: String, memoryKey: Uint8Array },
       setup: (p) => () => h('div', { class: 'share-stub', 'data-name': p.memoryName, 'data-key': String(p.memoryKey?.[0]) },
         `${p.nodeId}|${p.uploader ? 'uploader' : 'viewer'}`),
+    }),
+  }
+})
+vi.mock('../core/sharing/FolderShareDialog.vue', async () => {
+  const { defineComponent, h } = await import('vue')
+  return {
+    default: defineComponent({
+      props: { scopeId: String, nodeId: String, rootName: String, rootKey: Uint8Array, epochs: Object },
+      setup: (p) => () => h('div', { class: 'folder-share-stub', 'data-name': p.rootName, 'data-key': String(p.rootKey?.[0]) },
+        `${p.scopeId}|${p.nodeId}`),
     }),
   }
 })
@@ -213,6 +223,36 @@ describe('MemoryHomeView over the real registry', () => {
     level.vm.$emit('openMemory', TREE[1])
     await flushPromises()
     expect(w.find('.detail-stub').text()).toBe('Solo|')
+  })
+})
+
+// cr-node-key-hierarchy 5b.3: a FOLDER is shareable (core's descriptor), so its level view offers the share button
+// exactly as a Memory's detail does — descriptor AND capability — and the share opens CORE's folder dialog with the
+// folder's own key from the chain, never the application's `shareDialog` slot.
+describe('MemoryHomeView sharing a folder', () => {
+  it('hands the folder level view shareable=true, and the share event opens core\'s dialog for the folder itself', async () => {
+    const w = await mountAt('#~me/trips')
+    expect(w.find('.browse-stub').attributes('data-shareable')).toBe('true')
+
+    w.findComponent({ name: 'MemoryBrowseStub' }).vm.$emit('share')
+    await flushPromises()
+
+    const dialog = w.find('.folder-share-stub')
+    expect(dialog.text()).toBe('scope-1|trips')
+    expect(dialog.attributes('data-name')).toBe('Trips')
+    expect(dialog.attributes('data-key'), "the folder's own key from the chain").toBe('9')
+    expect(w.find('.share-stub').exists(), "never the application's Memory dialog").toBe(false)
+  })
+
+  it('offers no share at the scope root (no node to share)', async () => {
+    const w = await mountAt('#~me')
+    expect(w.find('.browse-stub').attributes('data-shareable')).toBe('false')
+  })
+
+  it('hides the folder share when the instance turns public links off', async () => {
+    capabilityState.ids = []
+    const w = await mountAt('#~me/trips')
+    expect(w.find('.browse-stub').attributes('data-shareable')).toBe('false')
   })
 })
 

@@ -5,6 +5,7 @@
 // or an opened node (detail) by the resolved node's kind, and owns the create / rename / delete dialogs. It names
 // no application kind (ADR 0079): the detail component comes from the registry's kind descriptor, the folder level
 // and the create/rename + share dialogs from the registry's slots — the application that registered them fills them.
+// A FOLDER is core's own kind, so its share dialog is core's too (`core/sharing/FolderShareDialog.vue`).
 import { computed, ref, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -24,6 +25,7 @@ import type { TreeNode } from '../core/node/tree'
 import Message from 'primevue/message'
 import DeleteNodeDialog from '../core/node/components/DeleteNodeDialog.vue'
 import SpaceTrashDialog from '../core/node/components/SpaceTrashDialog.vue'
+import FolderShareDialog from '../core/sharing/FolderShareDialog.vue'
 import { registry } from '../core/applications/registry'
 import TrustResetLink from '../features/account/trustReset/TrustResetLink.vue'
 
@@ -76,6 +78,9 @@ const currentNodeKey = computed(() =>
 )
 // The open node's K_mem: the same key, for a kind that opens (a folder browses and is never opened).
 const memoryKey = computed(() => (isOpenable.value ? currentNodeKey.value : null))
+// The current folder's own key, for core's folder share dialog: a share of a folder wraps THIS key (never K_SC), so a
+// guest opens the folder's subtree and nothing beside it (ADR 0080 decisions 1 and 12).
+const folderKey = computed(() => (currentFolder.value ? currentNodeKey.value : null))
 
 // Public-share affordance: offered for a node whose kind descriptor says it is shareable, in a scope the caller is a
 // member of — personal, group, or tenant (cr-0104; the backend refuses a share root of a kind no application
@@ -87,6 +92,7 @@ const shareable = computed(() => {
   return info.supported && info.shareable
 })
 const shareVisible = ref(false)
+const folderShareVisible = ref(false) // core's own dialog for a FOLDER (5b.3); the `shareDialog` slot is the application's
 const uploaderVisible = ref(false) // the uploader (drop-box) share dialog — a separate memory action
 
 const mutationVisible = ref(false)
@@ -220,11 +226,13 @@ async function onDeleteDone() {
         :level="level"
         :epochs="epochs"
         :readonly="isPendingDeletion"
+        :shareable="shareable"
         @open-node="openNode"
         @create="startCreate"
         @rename-folder="currentFolder && startRename(currentFolder)"
         @delete-folder="currentFolder && startDelete(currentFolder)"
         @open-trash="trashVisible = true"
+        @share="folderShareVisible = true"
       />
     </template>
 
@@ -264,6 +272,16 @@ async function onDeleteDone() {
       :epochs="epochs"
       :memory-name="currentNode.name"
       @close="shareVisible = false"
+    />
+    <!-- A folder is core's kind, so its share dialog is core's: READ / READ_WRITE, no uploader variant (5b.3). -->
+    <FolderShareDialog
+      v-if="folderShareVisible && currentFolder && folderKey && epochs && activeSpace.scopeId"
+      :scope-id="activeSpace.scopeId"
+      :node-id="currentFolder.id"
+      :root-key="folderKey"
+      :epochs="epochs"
+      :root-name="currentFolder.name"
+      @close="folderShareVisible = false"
     />
     <!-- The SAME dialog component, uploader variant (no role switcher, uploader shares only) — a separate action. -->
     <component

@@ -71,7 +71,7 @@ const folderOf = (label: string, name: string): TreeNode =>
 const pinNames = (map: { props: (k: string) => unknown }) => (map.props('pins') as { node: TreeNode }[]).map((p) => p.node.name)
 
 const mountBrowse = (props: Partial<InstanceType<typeof MemoryBrowse>['$props']> & { folders: TreeNode[]; memories: TreeNode[] }) =>
-  mount(MemoryBrowse, { props, global: { plugins: [realI18n()], stubs: { SpaceMap: SpaceMapStub } } })
+  mount(MemoryBrowse, { props, global: { plugins: [realI18n()], directives: { tooltip: {} }, stubs: { SpaceMap: SpaceMapStub } } })
 
 beforeEach(() => {
   setViewMode('grid')
@@ -167,5 +167,31 @@ describe('MemoryBrowse', () => {
     const wrapper = mountBrowse({ folders: [], memories: [node('m1', MEMORY_KIND, 'Solo')] })
     expect(wrapper.find('.memory-card-grid').exists()).toBe(true)
     expect(wrapper.findComponent(SpaceMapStub).exists()).toBe(false)
+  })
+})
+
+// cr-node-key-hierarchy 5b.3: the folder overview card carries the share button the host allows (FOLDER's descriptor
+// AND the capability — `MemoryHomeView.test.ts` pins that half), with a Memory's icon and label.
+describe('MemoryBrowse — sharing the folder', () => {
+  const shareButton = (w: ReturnType<typeof mountBrowse>) => w.find(`button[aria-label="${t('share.share')}"]`)
+
+  it('shows the share button on a shareable folder and emits share', async () => {
+    const w = mountBrowse({ folder: node('f', FOLDER_KIND, 'Trips'), folders: [], memories: [], shareable: true })
+    expect(shareButton(w).exists()).toBe(true)
+    expect(shareButton(w).find('.pi-share-alt').exists()).toBe(true)
+    await shareButton(w).trigger('click')
+    expect(w.emitted('share')).toHaveLength(1)
+  })
+
+  it('shows none when the host says the folder is not shareable', () => {
+    const w = mountBrowse({ folder: node('f', FOLDER_KIND, 'Trips'), folders: [], memories: [], shareable: false })
+    expect(shareButton(w).exists()).toBe(false)
+    expect(w.find(`button[aria-label="${t('memory.rename')}"]`).exists(), 'control: the card actions render').toBe(true)
+  })
+
+  it('keeps the share (a read of the links) but no rename/delete during a pending deletion', () => {
+    const w = mountBrowse({ folder: node('f', FOLDER_KIND, 'Trips'), folders: [], memories: [], shareable: true, readonly: true })
+    expect(shareButton(w).exists()).toBe(true)
+    expect(w.find(`button[aria-label="${t('memory.rename')}"]`).exists()).toBe(false)
   })
 })

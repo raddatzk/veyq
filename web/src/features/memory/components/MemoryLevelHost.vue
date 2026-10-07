@@ -27,6 +27,7 @@ function onToggleFavorite(node: TreeNode) {
     :memories="memories"
     :epochs="epochs"
     :readonly="readonly"
+    :shareable="shareable"
     @open-folder="emit('openNode', $event)"
     @open-memory="emit('openNode', $event)"
     @toggle-favorite="onToggleFavorite"
@@ -35,5 +36,6 @@ function onToggleFavorite(node: TreeNode) {
     @rename-folder="emit('renameFolder')"
     @delete-folder="emit('deleteFolder')"
     @open-trash="emit('openTrash')"
+    @share="emit('share')"
   />
 </template>

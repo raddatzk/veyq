@@ -8,9 +8,10 @@ const Stub = defineComponent({ template: '<div />' })
 const Other = defineComponent({ template: '<span />' })
 
 describe('registry: kinds', () => {
-  it('holds only the platform kind (FOLDER) until an application registers its own', () => {
+  // FOLDER is a share root since cr-node-key-hierarchy 5b.3 (core's own FolderShareDialog; ADR 0080 decision 12).
+  it('holds only the platform kind (FOLDER, shareable) until an application registers its own', () => {
     const r = createRegistry()
-    expect(r.kind(FOLDER_KIND)).toMatchObject({ supported: true, icon: 'pi pi-folder', shareable: false })
+    expect(r.kind(FOLDER_KIND)).toMatchObject({ supported: true, icon: 'pi pi-folder', shareable: true })
     expect(r.kind(MEMORY_KIND)).toEqual({ supported: false, kind: MEMORY_KIND })
   })
 
@@ -23,8 +24,8 @@ describe('registry: kinds', () => {
 
   it('refuses an application re-registering the platform FOLDER', () => {
     const r = createRegistry()
-    expect(() => r.registerKind({ kind: FOLDER_KIND, icon: 'x', shareable: true })).toThrow(/already registered/)
-    expect(r.kind(FOLDER_KIND)).toMatchObject({ icon: 'pi pi-folder', shareable: false })
+    expect(() => r.registerKind({ kind: FOLDER_KIND, icon: 'x', shareable: false })).toThrow(/already registered/)
+    expect(r.kind(FOLDER_KIND)).toMatchObject({ icon: 'pi pi-folder', shareable: true })
   })
 
   it('resolves an unregistered kind to the explicit unsupported result, never undefined', () => {

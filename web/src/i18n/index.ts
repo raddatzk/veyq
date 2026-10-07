@@ -1093,6 +1093,17 @@ const en = {
     uploaderEmpty: 'No photos in this session. Photos you add appear here and stay visible until you reload — after that they’re gone from your view, but safely saved for the owner.',
     deletePhoto: 'Delete this photo',
     deleteFailed: 'The photo could not be deleted — please try again.',
+    // core's folder share dialog (cr-node-key-hierarchy 5b.3): only where a Memory sentence would be wrong for a
+    // folder. READ_WRITE on a folder = add folders, rename and move inside it; never uploads (docs/apps/memories.md).
+    folder: {
+      title: 'Share this folder',
+      intro: 'Create a link anyone can open in a browser — no account, no install. It shows this folder and everything in it, and you can switch it off anytime.',
+      roleContributor: 'View + organise',
+      roleViewerHint: 'Anyone with the link can look at this folder and everything in it, read-only.',
+      roleContributorHint: 'Anyone with the link can look, add folders, and rename or move things inside this folder. They cannot add photos.',
+      deleteConfirm: 'Delete this link for good? It can never be switched on or renewed again. What guests added stays in this folder.',
+      reissueWarning: 'This makes a new link and deletes the old one. Hand out the new link.',
+    },
   },
 }
 
@@ -2150,6 +2161,15 @@ const de: typeof en = {
     uploaderEmpty: 'Keine Fotos in dieser Sitzung. Hinzugefügte Fotos erscheinen hier und bleiben bis zum Neuladen sichtbar — danach sind sie aus deiner Ansicht verschwunden, aber sicher für die Person gespeichert, der die Erinnerung gehört.',
     deletePhoto: 'Dieses Foto löschen',
     deleteFailed: 'Das Foto konnte nicht gelöscht werden — bitte erneut versuchen.',
+    folder: {
+      title: 'Diesen Ordner teilen',
+      intro: 'Erstelle einen Link, den jede:r im Browser öffnen kann — ohne Konto, ohne Installation. Er zeigt diesen Ordner mit allem, was darin liegt, und du kannst ihn jederzeit abschalten.',
+      roleContributor: 'Ansehen + ordnen',
+      roleViewerHint: 'Wer den Link hat, kann diesen Ordner mit allem darin ansehen — schreibgeschützt.',
+      roleContributorHint: 'Wer den Link hat, kann ansehen, Ordner anlegen und darin umbenennen oder verschieben. Fotos hinzufügen kann man nicht.',
+      deleteConfirm: 'Diesen Link endgültig löschen? Er lässt sich danach nie wieder einschalten oder erneuern. Was Gäste angelegt haben, bleibt in diesem Ordner.',
+      reissueWarning: 'Dadurch entsteht ein neuer Link, und der alte wird gelöscht. Gib den neuen Link weiter.',
+    },
   },
 }
 

@@ -29,7 +29,9 @@ import SpaceMap from './SpaceMap.vue'
 // K_SC — a rotated scope mixes epochs across the grid; null (locked) ⇒ no dates/covers/pins.
 // `readonly` (cr-0090): the scope is being deleted → hide create/rename/delete affordances (every write is
 // server-rejected during the grace window, uc.spaces.scope-access; view + download stay open).
-const props = defineProps<{ folder?: TreeNode | null; folders: TreeNode[]; memories: TreeNode[]; epochs?: EpochKeys | null; readonly?: boolean }>()
+// `shareable`: the host offers a public share of this folder (FOLDER's descriptor AND the instance capability, decided
+// by the host as for a Memory) — the button opens core's folder share dialog through the `share` event.
+const props = defineProps<{ folder?: TreeNode | null; folders: TreeNode[]; memories: TreeNode[]; epochs?: EpochKeys | null; readonly?: boolean; shareable?: boolean }>()
 const emit = defineEmits<{
   openFolder: [folder: TreeNode]
   openMemory: [memory: TreeNode]
@@ -39,6 +41,7 @@ const emit = defineEmits<{
   renameFolder: []
   deleteFolder: []
   openTrash: []
+  share: []
 }>()
 
 const { t } = useI18n()
@@ -93,8 +96,23 @@ watch(
         <div class="veyq-card memory-folder-card memory-folder-overview-card">
           <span class="pi pi-folder" />
           <h2>{{ folder.name }}</h2>
-          <div v-if="!readonly" class="memory-folder-overview-actions">
+          <div v-if="!readonly || shareable" class="memory-folder-overview-actions">
+            <!-- The same affordance as a Memory's share button (icon, label, tooltip); listing and copying links is a
+                 read, so it stays during a pending deletion, where a new link is refused server-side anyway. -->
             <Button
+              v-if="shareable"
+              v-tooltip.bottom="t('share.share')"
+              type="button"
+              class="veyq-icon-button veyq-prime-icon-button memory-folder-overview-action memory-action-inline memory-action-collapsible"
+              icon="pi pi-share-alt"
+              :aria-label="t('share.share')"
+              severity="secondary"
+              outlined
+              size="small"
+              @click="$emit('share')"
+            />
+            <Button
+              v-if="!readonly"
               type="button"
               class="veyq-icon-button veyq-prime-icon-button memory-folder-overview-action memory-action-inline memory-action-collapsible"
               icon="pi pi-pencil"
@@ -105,6 +123,7 @@ watch(
               @click="$emit('renameFolder')"
             />
             <Button
+              v-if="!readonly"
               type="button"
               class="veyq-icon-button veyq-prime-icon-button memory-folder-overview-action memory-danger-action memory-action-inline memory-action-collapsible"
               icon="pi pi-trash"
