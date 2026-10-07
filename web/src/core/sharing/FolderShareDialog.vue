@@ -44,21 +44,17 @@ import {
 } from './manageShares'
 import { buildShareLink, recoverShareLink } from './shareLink'
 import { ShareRole } from '../../api/generated/sharing'
-import type { EpochKeys } from '../../features/spaces/epochs'
+import type { NodeShareDialogProps } from '../applications/registry'
 
 /** A password-protected link needs at least this many characters (the Memory dialog's convention, cr-0118). */
 const MIN_PW = 10
 
-const props = defineProps<{
-  /** The folder's scope — every link's recovery copy of `K_share` is bound to it (ADR 0072). */
-  scopeId: string
-  nodeId: string
-  /** The folder's own content key, as the key chain opens it (ADR 0080 decision 1) — what a link wraps. Key material. */
-  rootKey: Uint8Array
-  epochs: EpochKeys
-  /** The folder's name, re-sealed under `K_share` so a guest sees it without the scope key. */
-  rootName: string
-}>()
+// FOLDER's pre-registered `shareDialog` (cr-files-application P4c), so it takes the platform's share-dialog props: the
+// folder's scope (every link's recovery copy of `K_share` is bound to it, ADR 0072), the folder's own content key as
+// the key chain opens it (`nodeKey`, ADR 0080 decision 1 — what a link wraps; key material) and its name (`nodeName`,
+// re-sealed under `K_share` so a guest sees it without the scope key). `nodeKind` is always FOLDER here; `uploader` is
+// never set for a folder (no WRITE_ONLY link on a folder) and would be ignored.
+const props = defineProps<NodeShareDialogProps>()
 const emit = defineEmits<{ close: [] }>()
 
 const { t, locale } = useI18n()
@@ -190,7 +186,7 @@ async function onReissue(s: ManagedShare) {
   actionError.value = false
   alreadyReplaced.value = false
   try {
-    const minted = await remintShare({ ...s, ...addressOf(s) }, props.rootKey, props.epochs, props.rootName)
+    const minted = await remintShare({ ...s, ...addressOf(s) }, props.nodeKey, props.epochs, props.nodeName)
     link.value = buildShareLink(minted.shareId, minted.kShare)
     view.value = 'link'
   } catch (e) {
@@ -255,7 +251,7 @@ function endOfDay(d: Date): Date {
 const { run: runCreate, pending: creating } = useAsyncAction(
   async () => {
     const minted = await mintShare(
-      props.scopeId, props.nodeId, props.rootKey, props.epochs, props.rootName, role.value,
+      props.scopeId, props.nodeId, props.nodeKey, props.epochs, props.nodeName, role.value,
       expiryEnabled.value && expiresAt.value ? endOfDay(expiresAt.value) : null,
       noteEnabled.value ? note.value : {}, name.value, passwordEnabled.value ? password.value : '',
     )

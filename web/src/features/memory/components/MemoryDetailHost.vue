@@ -45,7 +45,7 @@ function onToggleFavorite() {
     @toggle-favorite="onToggleFavorite"
     @rename="emit('rename')"
     @delete="emit('delete')"
-    @create-chapter="emit('createChild', 'create-chapter')"
+    @create-chapter="emit('createChild', CHAPTER_KIND)"
     @open-chapter="emit('openNode', $event)"
     @share="emit('share')"
     @share-upload="emit('shareUpload')"

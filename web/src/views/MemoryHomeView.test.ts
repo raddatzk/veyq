@@ -67,26 +67,37 @@ vi.mock('../features/memory/components/MemoriesSection.vue', async () => {
     }),
   }
 })
-vi.mock('../features/memory/components/NodeMutationDialog.vue', async () => {
+// Core's name dialog (folder create, rename of any kind) and Memories' create dialog (its kinds' `createDialog`).
+vi.mock('../core/node/FolderNameDialog.vue', async () => {
   const { defineComponent, h } = await import('vue')
-  return { default: defineComponent({ props: ['mode', 'parentId', 'node'], setup: (p) => () => h('div', { class: 'mutation-stub' }, `${p.mode}|${p.parentId ?? '-'}|${p.node?.name ?? '-'}`) }) }
+  return { default: defineComponent({ props: ['mode', 'parentId', 'node'], setup: (p) => () => h('div', { class: 'name-stub' }, `${p.mode}|${p.parentId ?? '-'}|${p.node?.name ?? '-'}`) }) }
+})
+vi.mock('../features/memory/components/MemoryNodeDialog.vue', async () => {
+  const { defineComponent, h } = await import('vue')
+  return {
+    default: defineComponent({
+      props: ['kind', 'parentId', 'parentKey'],
+      setup: (p) => () => h('div', { class: 'create-stub', 'data-key': String(p.parentKey?.[0]) }, `${p.kind}|${p.parentId ?? '-'}`),
+    }),
+  }
 })
 vi.mock('../features/memory/components/ShareDialog.vue', async () => {
   const { defineComponent, h } = await import('vue')
   return {
     default: defineComponent({
-      props: { nodeId: String, uploader: Boolean, memoryName: String, memoryKey: Uint8Array, nodeKind: String },
-      setup: (p) => () => h('div', { class: 'share-stub', 'data-name': p.memoryName, 'data-key': String(p.memoryKey?.[0]), 'data-kind': p.nodeKind },
+      props: { nodeId: String, uploader: Boolean, nodeName: String, nodeKey: Uint8Array, nodeKind: String },
+      setup: (p) => () => h('div', { class: 'share-stub', 'data-name': p.nodeName, 'data-key': String(p.nodeKey?.[0]), 'data-kind': p.nodeKind },
         `${p.nodeId}|${p.uploader ? 'uploader' : 'viewer'}`),
     }),
   }
 })
+// FOLDER's share dialog, pre-registered by the registry (lazily: a `flushPromises` resolves it).
 vi.mock('../core/sharing/FolderShareDialog.vue', async () => {
   const { defineComponent, h } = await import('vue')
   return {
     default: defineComponent({
-      props: { scopeId: String, nodeId: String, rootName: String, rootKey: Uint8Array, epochs: Object },
-      setup: (p) => () => h('div', { class: 'folder-share-stub', 'data-name': p.rootName, 'data-key': String(p.rootKey?.[0]) },
+      props: { scopeId: String, nodeId: String, nodeName: String, nodeKey: Uint8Array, nodeKind: String, epochs: Object },
+      setup: (p) => () => h('div', { class: 'folder-share-stub', 'data-name': p.nodeName, 'data-key': String(p.nodeKey?.[0]), 'data-kind': p.nodeKind },
         `${p.scopeId}|${p.nodeId}`),
     }),
   }
@@ -208,17 +219,20 @@ describe('MemoryHomeView over the real registry', () => {
     expect(w.find('.detail-stub').attributes('data-shareable')).toBe('false')
   })
 
-  it('wires the detail events to the claimed dialogs: rename, create-chapter, share, uploader share, delete', async () => {
+  it("wires the detail events to the kind's dialogs: rename (core's), create-chapter, share, uploader share, delete", async () => {
     const w = await mountAt('#~me/trips/italy')
     const detail = w.findComponent({ name: 'MemoryDetailStub' })
 
     detail.vm.$emit('rename')
     await flushPromises()
-    expect(w.find('.mutation-stub').text()).toBe('rename|italy|Italy')
+    expect(w.find('.name-stub').text(), "a Memory's rename is core's name dialog").toBe('rename|italy|Italy')
 
     detail.vm.$emit('createChapter')
     await flushPromises()
-    expect(w.find('.mutation-stub').text()).toBe('create-chapter|italy|-')
+    // CHAPTER's createDialog (Memories'), under the open Memory and its key; the rename dialog gives way (one at a time)
+    expect(w.find('.create-stub').text()).toBe('CHAPTER|italy')
+    expect(w.find('.create-stub').attributes('data-key')).toBe('9')
+    expect(w.find('.name-stub').exists()).toBe(false)
 
     detail.vm.$emit('share')
     detail.vm.$emit('shareUpload')
@@ -230,16 +244,18 @@ describe('MemoryHomeView over the real registry', () => {
     expect(w.find('.delete-stub').text()).toBe('Italy')
   })
 
-  it('wires the level events: create modes (memory from the section, folder from core), trash, and opening a child navigates', async () => {
+  it("wires the level events: a create by kind (MEMORY's dialog from the section, core's for a folder), trash, and opening a child navigates", async () => {
     const w = await mountAt('#~me')
     const section = w.findComponent({ name: 'MemoriesSectionStub' })
 
-    section.vm.$emit('create', 'create-memory')
+    section.vm.$emit('create', MEMORY_KIND)
     await flushPromises()
-    expect(w.find('.mutation-stub').text()).toBe('create-memory|-|-')
+    expect(w.find('.create-stub').text()).toBe('MEMORY|-')
+    expect(w.find('.name-stub').exists()).toBe(false)
     await w.find('.memory-create-card').trigger('click')
     await flushPromises()
-    expect(w.find('.mutation-stub').text()).toBe('create-folder|-|-')
+    expect(w.find('.name-stub').text()).toBe('create|-|-')
+    expect(w.find('.create-stub').exists(), 'the Memory dialog gives way').toBe(false)
 
     section.vm.$emit('openTrash')
     await flushPromises()
@@ -250,11 +266,26 @@ describe('MemoryHomeView over the real registry', () => {
     expect(w.find('.detail-stub').text()).toBe('Solo|')
   })
 
+  // A kind whose application registered no createDialog (Files' FILE, F0): a create of it opens nothing — no dialog of
+  // another kind, no core dialog — and the level stays as it was.
+  it('a create of a kind with no createDialog opens nothing', async () => {
+    const w = await mountAt('#~me/trips')
+    const section = w.findComponent({ name: 'MemoriesSectionStub' })
+    section.vm.$emit('create', FILE_KIND)
+    await flushPromises()
+    expect(w.find('.create-stub').exists()).toBe(false)
+    expect(w.find('.name-stub').exists()).toBe(false)
+    expect(w.find('.section-stub').text(), 'the level is untouched').toBe('folder=Trips|memories=Italy')
+    section.vm.$emit('create', MEMORY_KIND) // control: the same path with a registered dialog opens it
+    await flushPromises()
+    expect(w.find('.create-stub').text()).toBe('MEMORY|trips')
+  })
+
   it('wires the folder overview card (rename, delete for the folder) and a folder card navigates', async () => {
     const w = await mountAt('#~me/trips')
     await w.find(`button[aria-label="${t('memory.rename')}"]`).trigger('click')
     await flushPromises()
-    expect(w.find('.mutation-stub').text()).toBe('rename|trips|Trips')
+    expect(w.find('.name-stub').text()).toBe('rename|trips|Trips')
     await w.find(`button[aria-label="${t('memory.delete')}"]`).trigger('click')
     await flushPromises()
     expect(w.find('.delete-stub').text()).toBe('Trips')
@@ -267,8 +298,8 @@ describe('MemoryHomeView over the real registry', () => {
 })
 
 // cr-node-key-hierarchy 5b.3: a FOLDER is shareable (core's descriptor), so its level view offers the share button
-// exactly as a Memory's detail does — descriptor AND capability — and the share opens CORE's folder dialog with the
-// folder's own key from the chain, never the application's `shareDialog` slot.
+// exactly as a Memory's detail does — descriptor AND capability — and the share opens FOLDER's share dialog (core's,
+// pre-registered by the registry, P4c) with the folder's own key from the chain, never Memories' dialog.
 describe('MemoryHomeView sharing a folder', () => {
   const shareButton = (w: Mounted) => w.find(`.memory-folder-overview-card button[aria-label="${t('share.share')}"]`)
 
@@ -283,6 +314,7 @@ describe('MemoryHomeView sharing a folder', () => {
     expect(dialog.text()).toBe('scope-1|trips')
     expect(dialog.attributes('data-name')).toBe('Trips')
     expect(dialog.attributes('data-key'), "the folder's own key from the chain").toBe('9')
+    expect(dialog.attributes('data-kind')).toBe(FOLDER_KIND)
     expect(w.find('.share-stub').exists(), "never the application's Memory dialog").toBe(false)
   })
 

@@ -105,7 +105,7 @@ describe('MemoriesSection', () => {
   it('emits the create mode its dialog understands, and openTrash from its toolbar', async () => {
     const wrapper = mountSection({ nodes: [] })
     await wrapper.find('.memory-create-card-memory').trigger('click')
-    expect(wrapper.emitted('create')).toEqual([['create-memory']])
+    expect(wrapper.emitted('create')).toEqual([[MEMORY_KIND]])
     await wrapper.findAll('button').find((b) => b.text().includes(t('memory.spaceTrash.open')))!.trigger('click')
     expect(wrapper.emitted('openTrash')).toHaveLength(1)
   })

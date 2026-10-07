@@ -31,22 +31,14 @@ import {
 } from '../share'
 import { recoverShareLink } from '../shareLink'
 import { ShareRole } from '../../../api/generated/sharing'
-import type { EpochKeys } from '../../spaces/epochs'
+import type { NodeShareDialogProps } from '../../../core/applications/registry'
 import { CHAPTER_KIND } from '../kinds'
 
-const props = defineProps<{
-  /** The shared Memory's (or chapter's) scope — every share's recovery copy of `K_share` is bound to it (ADR 0072). */
-  scopeId: string
-  nodeId: string
-  memoryKey: Uint8Array
-  /** The scope's epoch keys — every share's recovery copy of `K_share` opens under `K_SC` at its epoch. */
-  epochs: EpochKeys
-  memoryName: string
-  /** The uploader (drop-box) variant: list only uploader shares, create with no role switcher. Identical otherwise. */
-  uploader?: boolean
-  /** The shared node's kind as the shell's tree holds it — a chapter link says "chapter", not "Memory" (5b.5). */
-  nodeKind?: string
-}>()
+// Memories' `shareDialog` for MEMORY and CHAPTER (cr-files-application P4c), so it takes the platform's share-dialog
+// props: the scope (every share's recovery copy of `K_share` is bound to it, ADR 0072, and opens under `K_SC` at its
+// epoch), the node and its `K_mem` (`nodeKey`), its name, its kind (a chapter link says "chapter", not "Memory", 5b.5)
+// and `uploader` — the drop-box variant: list only uploader shares, create with no role switcher. Identical otherwise.
+const props = defineProps<NodeShareDialogProps>()
 const emit = defineEmits<{ close: [] }>()
 
 const { t, locale } = useI18n()
@@ -338,9 +330,9 @@ function fmtDate(d: Date): string {
       :key="reissueFrom ? `reissue:${reissueFrom.shareId}` : editShare ? `edit:${editShare.shareId}` : 'new'"
       :scope-id="scopeId"
       :node-id="nodeId"
-      :memory-key="memoryKey"
+      :memory-key="nodeKey"
       :epochs="epochs"
-      :memory-name="memoryName"
+      :memory-name="nodeName"
       :edit-share="editShare"
       :reissue-from="reissueFrom"
       :uploader="uploader"

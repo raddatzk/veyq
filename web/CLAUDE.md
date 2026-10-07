@@ -137,7 +137,12 @@ here; the server is blind.
   `{ order, component }`; the level view is core's, `core/node/LevelView.vue`: the folder's overview card, the
   sections sorted by `order`, a fallback section for a child whose kind no section serves, then the sub-folders; kinds
   naming the same component share one section, rendered once with the children of all of them, and naming it with two
-  different `order`s throws); `claimSlot` for `nodeMutationDialog`, `shareDialog`; `addSlotItem(slot, id, component, order?)` for the two list slots `topbarTray`
+  different `order`s throws; its `createDialog` — props `NodeCreateDialogProps` `{kind, scopeId, epochs, parentId,
+  parentKey}`, mounted by the shell when a section emits `create` or a detail `createChild` with that KIND; and its
+  `shareDialog` — props `NodeShareDialogProps` `{scopeId, nodeId, nodeKey, epochs, nodeName, nodeKind, uploader?}`; a
+  kind without one offers no share. Core owns the rest: a folder's create and every node's rename are
+  `core/node/FolderNameDialog.vue`, which derives the slug by the renamed node's kind, and FOLDER's share dialog
+  `core/sharing/FolderShareDialog.vue` is pre-registered); `addSlotItem(slot, id, component, order?)` for the two list slots `topbarTray`
   and `sidebarPins` (an id namespaced by the application, e.g. `memories.pinned`; write-once per (slot, id); the shell
   renders `slotItems(slot)` sorted by `order`, ties in registration order — the top bar after core's own upload status
   menu, `core/blob/UploadStatusMenu.vue`, which lists every application's batches of the one core queue and is no
@@ -148,10 +153,10 @@ here; the server is blind.
   `registerLifecycle(id, hooks)` with `onScopeReset` / `onScopeEntered` and the **required**
   `onMasterKeyRotated` — `rotateKeys` refuses to start when none is registered, because material sealed under the
   Master Key (Memories' pins) is otherwise undecryptable after a rotation. A kind or share nobody registered renders
-  an explicit unsupported/unavailable state, never an empty region. **Limits, stated:** two slots (`nodeMutationDialog`,
-  `shareDialog`) are single-claim and Memories-shaped (the second application re-cuts them per kind), the level view's
-  moved markup still carries Memories' `memory-*` class names and `memory.*` i18n keys (cr-files-application P4d), the
-  other two (`topbarTray`, `sidebarPins`) are ordered lists; the kind is an open string token (the generated client has no `NodeKind` enum), so core names its one
+  an explicit unsupported/unavailable state, never an empty region. **Limits, stated:** no slot is single-claim any
+  more (the dialogs are per kind since cr-files-application P4c; the two slots `topbarTray`, `sidebarPins` are ordered
+  lists), but the level view's moved markup and core's `FolderNameDialog` still carry Memories' `memory-*` class names
+  and `memory.*` i18n keys (cr-files-application P4d); the kind is an open string token (the generated client has no `NodeKind` enum), so core names its one
   `FOLDER_KIND` (`core/node/kind.ts`), Memories its own two (`features/memory/kinds.ts`), and no compiler lists the
   kinds — the registry's `{ supported: false }` answer and its tests do; the directory is still `features/memory`, the i18n catalog
   is one file and `styles/memory.css` is global.

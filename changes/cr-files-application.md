@@ -459,8 +459,59 @@ without touching core except for the platform prerequisites below, which every l
         once per mount, as the host reads its slots.
         **Not verified:** no browser — the layout of the new fallback rows, the visual order and the keyboard (tab) order
         across sections are unverified; the golden pins the DOM only.
-  - [ ] P4c dialogs per kind — a core `FolderNameDialog` (create folder, rename anything), `createDialog` and `shareDialog` per
+  - [x] P4c dialogs per kind — a core `FolderNameDialog` (create folder, rename anything), `createDialog` and `shareDialog` per
         kind; the `nodeMutationDialog` slot goes (`levelView` went in P4b) · Done when: `MemoryHomeView*.test.ts` updated.
+        **Measured 2026-10-08:** `registry.ts`: `KindDescriptor` gains `createDialog?: Component` and `shareDialog?:
+        Component`; new `NodeCreateDialogProps {kind, scopeId, epochs, parentId: string | null, parentKey: Uint8Array |
+        null}` + `NodeCreateDialogEmits {done, close}` and `NodeShareDialogProps {scopeId, nodeId, nodeKey, epochs, nodeName,
+        nodeKind, uploader?}`; `LevelSectionEmits.create` and `NodeDetailEmits.createChild` carry a `NodeKind`, not a mode.
+        `SlotName`, `claimSlot` and `slot()` are gone (nothing single-claim was left; `addSlotItem` keeps its runtime
+        refusal of a non-list name). FOLDER's descriptor carries `shareDialog: FolderShareDialog`, pre-registered like its
+        share body and LAZY like it: measured cycle `FolderShareDialog` → `shareLink` → `manageShares` → `shareTree` →
+        `core/node/tree` → `registry`; the loader returns `m.default` explicitly (a `vi.mock`ed module is no namespace Vue
+        unwraps — measured: "No `__isTeleport` export"). New core `core/node/FolderNameDialog.vue` (`mode: 'create' |
+        'rename'`): the folder/rename half of the old `NodeMutationDialog`, same template, labels (`memory.*`, P4d moves
+        them), validation, 409/422/else mapping and reseal toast; no scoped style (the old one only styled the Memories
+        opt-in), so its elements lose the old file's `data-v-*` attribute — the only DOM change, not visible. Memories'
+        `NodeMutationDialog.vue` → `MemoryNodeDialog.vue` (git mv): create Memory / chapter only, props
+        `NodeCreateDialogProps`, the `kind` picks the mode; `ShareDialog.vue` takes `NodeShareDialogProps` (passes
+        `nodeKey`/`nodeName` on as `ShareCreateDialog`'s unchanged `memoryKey`/`memoryName`); `FolderShareDialog.vue` takes
+        `NodeShareDialogProps` (`rootKey`/`rootName` → `nodeKey`/`nodeName`). `register.ts` registers both dialogs on MEMORY
+        and CHAPTER instead of the two claims. `MemoryHomeView` mounts `FolderNameDialog` (folder create, every rename),
+        `registry.kind(createKind).createDialog`, and `registry.kind(currentNode.kind).shareDialog` for the share and the
+        uploader share (one mount path for folder and Memory; the FolderShareDialog import is gone). Docs in place:
+        registry header, `web/CLAUDE.md` (what an application registers, Limits), ADR 0079 Consequences sentence,
+        `docs/apps/memories.md`; coverage yamls point at the new tests. `npm run check` (fresh `generate:api`) 203 files /
+        1944 tests → 205 / 1959: `FolderNameDialog.test.ts` (16: the moved folder/rename cases, the rename x FOLDER/MEMORY/
+        CHAPTER/FILE, the 409/422/500 mapping, blank name, no opt-in), `FolderNameDialog.slug.test.ts` (2, on the wire via
+        the real `renameNode` over the real registry: FILE folds by `fileNameSlug`, FOLDER by `slugify`),
+        `MemoryNodeDialog.test.ts` (8), `registry.test.ts` (slot cases → per-kind dialog cases, FOLDER's lazy dialog resolved
+        to the real component, no `claimSlot`/`slot` left), `applications.test.ts` +1, `MemoryHomeView.test.ts` +1 (create of
+        FILE opens nothing, with a control), `MemoryHomeView.registry.test.ts` +1 (shareable kind without `shareDialog`: no
+        share; control opens the kind's own dialog), `files/register.test.ts`, `ShareDialog`/`FolderShareDialog` tests on
+        the new props. `AppShell.slots.test.ts` needed no change (it pins the list slots only). 53/53 validators green
+        before and after; diff: core-import guard 187 → 188 core files (Memories 62 → 62, a rename), doc citations 1215 →
+        1218 files; stylesheet anchors 639 → 639. The 8 P4-0 and 4 B0 snapshots byte-identical (`shasum` before/after, no
+        `-u`). Levers, each red then restored green: FOLDER's pre-registered `shareDialog` dropped (6 red: registry,
+        applications, the MemoryHomeView folder share, golden 3 — the overview share button disappears); the shell's
+        `createDialog` lookup returning null (3 red: detail create-chapter, level create-memory, the no-dialog control);
+        `placeNode` folding with `FOLDER_KIND` instead of `node.kind` (the FILE slug-on-the-wire case red); an import of
+        `features/memory/kinds` in `FolderNameDialog.vue` (guard FAILED on `import`); a `memory-create-card-folder` class
+        added to the folders create card (golden 5 red).
+        **Decisions taken (owner, please review; each reversible):** (1) a create is addressed by KIND: sections emit
+        `create` with the kind, the detail `createChild` with the kind; the shell maps FOLDER to core's `FolderNameDialog`
+        and any other kind to its `createDialog`. One Memories component serves MEMORY and CHAPTER, told apart by its
+        `kind` prop (so `NodeCreateDialogProps` carries `kind`). (2) A create of a kind with no `createDialog` (or an
+        unregistered kind) opens nothing — no toast, no new string: the create action is the application's own, so offering
+        one without a dialog is that application's bug; the test pins "nothing opens, the level is untouched". (3)
+        `shareable` for the host now means descriptor `shareable` AND a `shareDialog` AND the capability, so a kind never
+        shows a share button whose dialog the host cannot mount. (4) The share contract renames the props to node-neutral
+        names (`nodeKey`, `nodeName`) on both dialogs; `nodeKind` is required (the ShareDialog test's `undefined`-kind case is
+        now an unknown kind). (5) At most one name/create dialog is open: opening one closes the other, as the old single
+        mode did. (6) FolderNameDialog's `mode` values are `create`/`rename` (it only creates folders). (7) `memory.slugTaken`/
+        `illegalStructure`/`saveFailed`/`renameTitle`/`createFolderTitle`/`nameLabel`/`save` stay where they are for P4d.
+        **Not verified:** no browser — the dialogs' look, focus and Escape behaviour after the move, and the lazy FOLDER
+        share dialog's first open (one async tick) in a real build.
   - [ ] P4d CSS and i18n neutral — the `memory-folder-*`/`memory-create-card` rules move to `veyq-*` twins (dark tokens), the dead
         rules are deleted (`validate_stylesheet_anchors`), the generic `memory.*` keys move to a core namespace (en + de) ·
         Done when: the golden test is updated deliberately (class names only).

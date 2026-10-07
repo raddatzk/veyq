@@ -160,7 +160,7 @@ describe('LevelView: the folders section', () => {
     await card.trigger('click')
     expect(w.emitted('openNode')).toEqual([[rome]])
     await w.find('.memory-create-card').trigger('click')
-    expect(w.emitted('create')).toEqual([['create-folder']])
+    expect(w.emitted('create')).toEqual([[FOLDER_KIND]])
   })
 
   it('shows its empty state when the level has no folder', () => {

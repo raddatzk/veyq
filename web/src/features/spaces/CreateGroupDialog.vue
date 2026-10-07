@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Create a named group (en.spaces.group-scope, cr-0032). Ported dialog shape (the NodeMutationDialog form);
+// Create a named group (en.spaces.group-scope, cr-0032). Ported dialog shape (the core/node/FolderNameDialog form);
 // wired to the E2EE spaces data layer — the name is sealed under a fresh K_SC client-side, only ciphertext
 // reaches the server. On success it emits the new scope id so the shell can switch into `#@<id>`.
 import { ref, computed } from 'vue'

@@ -24,7 +24,7 @@ acceptanceCriteria:
       web:
         unit:
           - src/features/memory/components/MemoryLocationEditor.test.ts
-          - src/features/memory/components/NodeMutationDialog.test.ts
+          - src/features/memory/components/MemoryNodeDialog.test.ts
           - src/features/memory/components/MemoryDetail.test.ts
   - id: medoid-position
     text: The position `derived` is the MEDOID of the Memory's media GPS — the actual photo minimizing the summed Haversine distance to the others (robust to an outlier), never the arithmetic mean — so it never lands in the sea and barely moves as media are added. `derivedMode` defaults to auto on set-with-media (re-medoids as media are added) and flips to fixed when the user moves the MAP by hand (the centre crosshair becomes the position — "Karte verschieben"); fixed is a frozen snapshot. GPS is read from the always-listed capture tier (promoted alongside `capturedAt`, like cr-0066), so the medoid and every auto re-medoid are list-level — no per-item EXIF fetch; no backfill, so older media without the tier do not contribute.

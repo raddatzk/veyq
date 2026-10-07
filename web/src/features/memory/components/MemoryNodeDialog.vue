@@ -1,9 +1,11 @@
 <script setup lang="ts">
-// Create a folder / create a Memory / rename a node (cr-0030 P4). Ported dialog shape; wired to the E2EE
-// tree data layer (names sealed client-side under the parent's key, K_SC at the scope root — ADR 0080). One dialog, three modes. Inline slug_taken (409) /
+// Create a Memory / create a chapter (cr-0030 P4, ADR 0080 Decision 13): Memories' `createDialog`, registered for both
+// its kinds (cr-files-application P4c; the folder create and every rename are core's `core/node/FolderNameDialog.vue`,
+// with this dialog's markup). Ported dialog shape; wired to the E2EE tree data layer (names sealed client-side under
+// the parent's key, K_SC at the scope root — ADR 0080). The kind to create picks the mode. Inline slug_taken (409) /
 // illegal_structure (422) errors.
 //
-// create-memory can **pre-arm a location** (cr-0069) behind the personal maps opt-in — but at creation there are
+// A Memory's create can **pre-arm a location** (cr-0069) behind the personal maps opt-in — but at creation there are
 // no photos yet, so the heavy map/name belong later (on the open Memory, via the shared editor). Here it is a
 // single opt-in: "Ort — folgt automatisch deinen Fotos" arms a **pending `auto`** place whose position + name are
 // materialized by the first geotagged upload (the `MemoryDetail` self-heal). Sealed at birth into `wrappedMeta`.
@@ -14,47 +16,29 @@ import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
 import Checkbox from 'primevue/checkbox'
 import Message from 'primevue/message'
-import { createFolder, renameNode, type NodeParent, type TreeNode } from '../../../core/node/tree'
-import { treeStore } from '../../../core/node/treeStore'
-import { resealShareNames } from '../../../core/sharing/manageShares'
-import { useToast } from '../../../shared/state/useToast'
+import type { NodeParent } from '../../../core/node/tree'
+import type { NodeCreateDialogProps, NodeCreateDialogEmits } from '../../../core/applications/registry'
 import { createMemory, createChapter } from '../memoryNodes'
-import type { EpochKeys } from '../../spaces/epochs'
+import { CHAPTER_KIND } from '../kinds'
 import { useMapConfig } from '../../../shared/state/useMapConfig'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
 import { httpStatus, HttpStatus } from '../../../shared/httpError'
 
-type Mode = 'create-folder' | 'create-memory' | 'create-chapter' | 'rename'
-
 // Mounted via v-if while open; closing = the parent unmounting it on `close` (robust — no two-way `visible`).
-const props = defineProps<{
-  mode: Mode
-  scopeId: string
-  epochs: EpochKeys // the scope's epoch key set (ADR 0024): create seals under the write epoch, rename under the node's own
-  parentId?: string | null // create: the parent (null = root)
-  parentKey?: Uint8Array | null // create: the parent node's content key, which the new node's key wraps under (ADR 0080)
-  node?: TreeNode | null // rename: the node being renamed
-}>()
-const emit = defineEmits<{ done: []; close: [] }>()
+// `kind`: MEMORY or CHAPTER (the kinds that register this dialog); a chapter is created inside the opened Memory.
+const props = defineProps<NodeCreateDialogProps>()
+const emit = defineEmits<NodeCreateDialogEmits>()
 const { t } = useI18n()
 const { mapsAvailable } = useMapConfig()
-const toast = useToast()
 
-const name = ref(props.mode === 'rename' ? (props.node?.name ?? '') : '')
+const isChapter = computed(() => props.kind === CHAPTER_KIND)
+const name = ref('')
 const error = ref('')
 const wantsLocation = ref(false) // opt into a pending `auto` place (create-memory, behind the maps opt-in)
-const showLocationStep = computed(() => props.mode === 'create-memory' && mapsAvailable.value)
+const showLocationStep = computed(() => !isChapter.value && mapsAvailable.value)
 
-const header = computed(() =>
-  props.mode === 'rename'
-    ? t('memory.renameTitle')
-    : props.mode === 'create-memory'
-      ? t('memory.createMemoryTitle')
-      : props.mode === 'create-chapter'
-        ? t('memory.createChapterTitle')
-        : t('memory.createFolderTitle'),
-)
-const confirmLabel = computed(() => (props.mode === 'rename' ? t('memory.save') : t('common.create')))
+const header = computed(() => (isChapter.value ? t('memory.createChapterTitle') : t('memory.createMemoryTitle')))
+const confirmLabel = computed(() => t('common.create'))
 
 /** Where a create lands: the scope root (wrapped under the write key), or under the parent with ITS key (ADR 0080
  *  Decision 1: a node inside a folder wraps under the folder's key, never `K_SC`). A parent whose key is missing
@@ -68,19 +52,12 @@ function createParent(): NodeParent {
 const { run: runSubmit, pending: loading } = useAsyncAction(
   async () => {
     const trimmed = name.value.trim()
-    if (props.mode === 'create-folder') {
-      await createFolder(props.scopeId, props.epochs, trimmed, createParent())
-    } else if (props.mode === 'create-memory') {
-      const location = showLocationStep.value && wantsLocation.value ? { name: '', nameSource: 'geocoded' as const, derivedMode: 'auto' as const } : null
-      await createMemory(props.scopeId, props.epochs, trimmed, createParent(), location)
-    } else if (props.mode === 'create-chapter') {
+    if (isChapter.value) {
       if (!props.parentId || !props.parentKey) throw new Error('chapter_parent_missing')
       await createChapter(props.scopeId, props.epochs, props.parentKey, trimmed, props.parentId)
-    } else if (props.node) {
-      // A rename is a placement to the same parent (ADR 0080 Decision 3): the key re-wraps and the name re-seals under
-      // the parent's key, resolved from the loaded tree, at the next placement version.
-      await renameNode(props.scopeId, props.epochs, treeStore.nodes, props.node.id, trimmed)
-      await resealAfterRename(props.node.id, trimmed)
+    } else {
+      const location = showLocationStep.value && wantsLocation.value ? { name: '', nameSource: 'geocoded' as const, derivedMode: 'auto' as const } : null
+      await createMemory(props.scopeId, props.epochs, trimmed, createParent(), location)
     }
     emit('done')
     emit('close')
@@ -92,17 +69,6 @@ const { run: runSubmit, pending: loading } = useAsyncAction(
     },
   },
 )
-/** The rename stands; now every share rooted at the node — any member's, any kind — gets the new name re-sealed under
- *  its own `K_share` (ADR 0080 decision 14, core's `resealShareNames`). A share it cannot re-seal keeps showing the old
- *  name to its guests: that is said in a toast, never as a failed rename (the dialog closes either way). */
-async function resealAfterRename(nodeId: string, newName: string): Promise<void> {
-  try {
-    const report = await resealShareNames(nodeId, newName, props.epochs)
-    if (report.failed.length + report.skipped.length > 0) toast.error(t('share.nameResealFailed'))
-  } catch {
-    toast.error(t('share.nameResealFailed'))
-  }
-}
 const canSubmit = computed(() => name.value.trim().length > 0 && !loading.value)
 
 async function submit() {

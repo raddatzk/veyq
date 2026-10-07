@@ -19,7 +19,7 @@ import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import type { TreeNode } from './tree'
 import type { Level } from './browse'
-import type { NodeKind } from './kind'
+import { FOLDER_KIND, type NodeKind } from './kind'
 import type { EpochKeys } from '../../features/spaces/epochs'
 import { registry } from '../applications/registry'
 import { useViewMode } from '../../shared/state/useViewMode'
@@ -37,8 +37,9 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{
   openNode: [node: TreeNode]
-  /** A create mode the `nodeMutationDialog` slot understands (`create-folder` here; a section's own, e.g. `create-memory`). */
-  create: [mode: string]
+  /** The KIND to create at this level: FOLDER from the folders section's create card (core's `FolderNameDialog`), a
+   *  section's own kind otherwise (that kind's `createDialog`, e.g. Memories' MEMORY). */
+  create: [kind: NodeKind]
   renameFolder: []
   deleteFolder: []
   openTrash: []
@@ -181,7 +182,7 @@ const fallbacks = computed(() =>
           v-if="!readonly"
           class="veyq-card veyq-card-interactive memory-create-card"
           type="button"
-          @click="emit('create', 'create-folder')"
+          @click="emit('create', FOLDER_KIND)"
         >
           <span class="pi pi-plus" />
           <strong>{{ t('memory.folderCreate') }}</strong>

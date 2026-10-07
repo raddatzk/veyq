@@ -114,4 +114,4 @@ acceptanceCriteria:
       backend:
         integration: [ShareSealedNameCoreSliceTest.theOwnerAndAnotherWritingMemberSetItAndResolveServesTheNewName, ShareSealedNameCoreSliceTest.aReaderIsRefusedAndWritesNothing, ShareSealedNameCoreSliceTest.aStrangerIsRefusedAndWritesNothing, ShareSealedNameCoreSliceTest.everyOtherColumnOfTheShareStaysUntouched, ShareSealedNameCoreSliceTest.aDeletedShareAndAnUnknownIdAre404, ShareSealedNameCoreSliceTest.aRevokedShareIsRenamedSoAReactivationShowsTheCurrentName, ShareSealedNameCoreSliceTest.aReSealOverlappingAReactivationEndsConsistentWithoutADeadlock]
       web:
-        unit: [src/core/sharing/manageShares.test.ts, src/core/sharing/resealShareNames.wire.test.ts, src/features/memory/components/NodeMutationDialog.test.ts]
+        unit: [src/core/sharing/manageShares.test.ts, src/core/sharing/resealShareNames.wire.test.ts, src/core/node/FolderNameDialog.test.ts]
