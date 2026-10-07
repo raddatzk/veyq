@@ -58,7 +58,9 @@ Memory, an expense and a file side by side).
    **`READ_WRITE` is interpreted by each application for its kinds** (what a contributor may do in a Memory, in a
    file tree, in an expense list), written down as a small role matrix in its `docs/apps/<app>.md`; **a kind with no
    declaration allows nothing** (fail closed, like the other seams), so a new application can never inherit write
-   rights by accident. `WRITE_ONLY` needs no matrix: such a guest holds no keys of the subtree and can only write
+   rights by accident. A `READ_WRITE` share on a folder gives a contributor's rights in every Memory or chapter below it (owner, 2026-10-07: the role is
+   inherited as the share allows; the share root's kind no longer decides who writes, the target node's kind does).
+   `WRITE_ONLY` needs no matrix: such a guest holds no keys of the subtree and can only write
    through the drop mechanism ([ADR 0031](0031-uploader-public-share.md) point 7), never into an existing Memory
    below. **Shareability is separate from guest writes:** a `FOLDER` can be shared with `READ` whether or not any
    application implements guest writes for it (`SharingHandler.kt:245` stops tying creation to

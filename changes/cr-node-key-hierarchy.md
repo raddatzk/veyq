@@ -289,13 +289,36 @@ Planned 2026-10-06 from three inventories; each sub-slice is its own worktree ru
         cell. Still saying "one Memory" (5b.5's): `share.title`/`share.intro`, `docs/features/sharing/_index.md`,
         `uc.sharing.share-public-viewer.md`, `uc.sharing.share-contributor.md`, `uc.sharing.share-uploader.md`; and ADR
         0080 decision 13 still says "the web still offers no chapter link (`shareable: false`)", false since 5b.1.
-  - [ ] 5b.4 folder share on the public page and guest operations — `ShareBodyProps.subtreeRoot {nodeId, key, name}`;
-        core `FolderShareBody` (breadcrumb, cards, names opened through the key chain, each child kind's body embedded
-        through `registry.shareBody(kind)`, unknown kind -> `.veyq-empty`); `createShareNodeAsGuest` (epoch = the
-        parent's served epoch, version 0, slug slot = the parent id) and `placeShareNodeAsGuest` (key re-wrapped under
-        the destination key, the node's epoch, `placementVersion + 1`, one retry on `stale_placement`) in
-        `core/sharing/shareTree.ts` (seal contexts exported from `tree.ts`); guest UI: list, open, new folder ·
-        Done when: `npm run check`; e2e: a folder read share, a contributor creating and moving through the functions.
+  - [ ] 5a.5 backend + contracts — owner decision 2026-10-07: a `READ_WRITE` folder share gives a contributor's rights in every
+        Memory or chapter below it (the role is inherited as the share allows; `WRITE_ONLY` on a folder stays refused).
+        Today `ShareGuestWrites` dispatches by the share ROOT's kind and the server puts every guest upload on the root
+        (`ShareMediaHandler.kt:119`), so a folder guest cannot upload. The guest media operations (start, window,
+        complete, list, delete) gain an optional target `nodeId` (absent = the root, unchanged) that must lie inside the
+        share subtree (the 5a.2 boundary, under the scope lock) and be a kind Memories accepts (`MEMORY`, `CHAPTER`);
+        `ShareGuestWrites` and the upload admission dispatch by the TARGET kind. Update the role matrix in
+        `docs/apps/memories.md` and ADR 0080 decision 6 · Done when: bite tests (a folder `READ_WRITE` guest uploads
+        into a Memory below and a member opens it, deletes only its own, cannot reach a node outside the subtree or a
+        kind Memories refuses; a `READ` guest and a folder `WRITE_ONLY` still refused), MariaDB races, guards green.
+  - [ ] 5b.4a guest tree functions, no UI — export `contentKeyContext` (or a `wrapContentKey` helper) from `tree.ts`
+        and drop the duplicated literal in `shareTree.ts:79`; `core/sharing/guestTree.ts` with a `GuestTreeContext`,
+        `createShareNodeAsGuest` and `placeShareNodeAsGuest` (see the 5b.4 sketch above: parent key from the chain,
+        parent's served epoch, version 0 / served+1, one retry on `stale_placement` after a re-resolve);
+        `createGuestIdentity` for `READ_WRITE` and the localStorage session (`veyq:share-contributor:${shareId}`) in
+        core, Memories calls it (the `WRITE_ONLY` branch stays); errors mapped by code through `decodeHttpError`
+        (`slug_taken` with the colliding sibling's name from a client pre-check) with new `share.folder.*` keys ·
+        Done when: wire and unit tests, `npm run check`; new e2e `folderShareGuest.e2e.test.ts` (a guest creates a
+        folder and a nested one, moves a Memory between two subfolders, refusals: create inside a Memory and a chapter
+        out of a Memory `illegal_scope`, the share root renamed `illegal_structure`, a `READ` link
+        `share_not_contributable`, a stale version `stale_placement`).
+  - [ ] 5b.4b public folder page — optional `ShareBodyProps.subtreeRoot {nodeId, key, name}`; `openSharedMemory` with a
+        root (key from the chain, media filtered to the subtree, `chapterName` null for the root); `MemoryShareBody`
+        embedded: name from the chain, no folder note, `canContribute` from the role AND the target (after 5a.5 an
+        embedded Memory takes uploads and the guest's own deletes); core `FolderShareBody` (PrimeVue `Breadcrumb`,
+        `.veyq-card-interactive` cards through a small core twin of the card grid, `?node=<id>` navigation keeping the
+        `#k=` fragment, child bodies through `registry.shareBody(kind)`, an embedded `unavailable` becomes a local
+        `.veyq-empty`), registered in `createRegistry` (measure the import cycle; else `ShareView` renders `FOLDER`);
+        a small core name dialog for 'New folder' and for the guest's name (asked once, as Memories does); en+de keys ·
+        Done when: component tests with the registry as a Proxy, `npm run check`.
   - [ ] 5b.5 clean-up — chapter wording in the member share dialog (en and de: 'Share this chapter', 'It shows only this chapter'; `share.title`/`share.intro` say Memory today); a member's root rename re-seals every share's `sealedName` through the recovery copy (each
         share on its own, a failure is reported, not rolled back); the trash dialog reloads after the tree reload on a
         restore (`SpaceTrashDialog.vue:65`, test `:103`) and shows a freed-slug descendant as a root (#357); docs under
