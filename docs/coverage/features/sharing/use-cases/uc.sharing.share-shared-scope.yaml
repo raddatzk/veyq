@@ -15,7 +15,7 @@ acceptanceCriteria:
     text: A member of a group/tenant scope may createShare a MEMORY in that scope (personal still works); the create-gate is "a node of a kind that may be a share root with that role (ShareRoots) in a scope the caller is a member of" AND the role's sharing.* capability — not owner-only, not personal-only. A non-member cannot (no reveal).
     coverage:
       backend:
-        integration: [ShareSharedScopeSliceTest.groupMemberCanShareAndAnonymousResolveWorks, ShareSliceTest.nonMemberCreateIs404, ShareRootsSliceTest.aChapterShareIsRefusedForEveryRole]
+        integration: [ShareSharedScopeSliceTest.groupMemberCanShareAndAnonymousResolveWorks, ShareSliceTest.nonMemberCreateIs404, ShareRootsSliceTest.aChapterIsAShareRootForEveryRole]
       web:
         unit: [src/features/memory/share.test.ts]
   - id: removal-deactivates-shares

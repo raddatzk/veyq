@@ -185,9 +185,9 @@ on their own.
   § Migrations): a core migration names no application table, an application's references only core's and its own.
   Core reaches application code through eleven interfaces — `ScopeEraser`, `NodeSubtreeEraser`, `MembershipEraser`,
   `GuestIdentityUsage`, `SharedSubtreeContributor`, `ShareGuestWrites`, `ShareRoots` (which roles a node of the kind may
-  be the root of a share with; core answers for `FOLDER`, Memories for `MEMORY` — [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)),
+  be the root of a share with; core answers for `FOLDER`, Memories for `MEMORY` and `CHAPTER` — [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)),
   `GuestNodeRules` (which tree operations a `READ_WRITE` guest may do inside a container of the kind; core answers for
-  `FOLDER`, Memories declares none, so a guest creates, moves and renames nothing inside a Memory — ADR 0080), `UploadCompletion` (what a verified upload
+  `FOLDER`, Memories declares none, so a guest creates, moves and renames nothing inside a Memory or a chapter — ADR 0080), `UploadCompletion` (what a verified upload
   becomes on a node of the kind, today Memories' media; the seam stays core's, and its item is generic — an
   `ownerId`, role-tagged derivatives and the application's sealed payloads as opaque values, which core carries to
   the one implementation that accepts the kind and never reads (2026-10-06, cr-platform-contract-split;
