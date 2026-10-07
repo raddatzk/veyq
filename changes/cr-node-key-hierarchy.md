@@ -326,7 +326,7 @@ Planned 2026-10-06 from three inventories; each sub-slice is its own worktree ru
         and `CoreAloneSliceTest` hold unchanged (a request naming no node targets the folder root); only their KDoc
         moved. Open for Files: a link spanning two applications is measured per target application only
         (`StorageQuota.linkUsage` KDoc). Owed to 5b.4b: the web sends `nodeId` for an embedded Memory.
-  - [ ] 5b.4a guest tree functions, no UI — export `contentKeyContext` (or a `wrapContentKey` helper) from `tree.ts`
+  - [x] 5b.4a guest tree functions, no UI — export `contentKeyContext` (or a `wrapContentKey` helper) from `tree.ts`
         and drop the duplicated literal in `shareTree.ts:79`; `core/sharing/guestTree.ts` with a `GuestTreeContext`,
         `createShareNodeAsGuest` and `placeShareNodeAsGuest` (see the 5b.4 sketch above: parent key from the chain,
         parent's served epoch, version 0 / served+1, one retry on `stale_placement` after a re-resolve);
@@ -337,6 +337,23 @@ Planned 2026-10-06 from three inventories; each sub-slice is its own worktree ru
         folder and a nested one, moves a Memory between two subfolders, refusals: create inside a Memory and a chapter
         out of a Memory `illegal_scope`, the share root renamed `illegal_structure`, a `READ` link
         `share_not_contributable`, a stale version `stale_placement`).
+        *Measured:* `tree.ts` exports `wrapContentKey` (the one `content-key` seal; `createContentNode`, `sendPlacement`
+        use it) and `walkSubtree` opens through `openContentKey` — no literal left. `core/sharing/guestTree.ts`:
+        `openGuestTreeParts`/`guestTreeContext` (re-resolve = `resolvePublicShare` again), `createShareNodeAsGuest` (no
+        `orderIndex`, no `wrappedMeta`; returns `{nodeId, contentKey}` through `expectMintedId`),
+        `placeShareNodeAsGuest` (the root as source refused client-side `illegal_structure` before sending),
+        `GuestTreeError`/`guestTreeErrorOf`/`guestTreeErrorMessageKey`; `share_not_found` is mapped too (a revoked link,
+        → `gone`), and `slug_taken` from the server has its own key `share.folder.nameTakenHere` (no sibling name to
+        show). `core/sharing/guestIdentity.ts`: `createGuestIdentity`, `identityNameContext`, `loadGuestSession<S>` /
+        `saveGuestSession` (same key and shape; the session type stays Memories' `ContributorSession`). Zero existing
+        test files touched; new `guestTree.wire.test.ts` (25), `guestIdentity.test.ts` (3); `npm run check` 1734 →
+        1762 passed; the core-import guard reads 178 → 180 files; e2e discovery 16 → 17 (not run here). Bites: the
+        create's wrap under the root key (1 red), the placement sealed at the served version (3 red), errors mapped by
+        status (12 red), the pre-check dropped (2 red); an epoch added to the PATCH body stays green — the generated
+        client's `ToJSON` drops a field the spec does not name, so it cannot reach the wire. Sabotaging the moved
+        `createGuestIdentity` reddens `guestIdentity.test.ts` + `share.test.ts`, `loadGuestSession` the three
+        `ShareView` suites + `MemoryShareBody.test.ts` (no mock disarmed by the move). Open for 5b.4b/5b.5:
+        `share.folder.roleContributorHint` still says a folder guest cannot add photos, false since 5a.5.
   - [ ] 5b.4b public folder page — optional `ShareBodyProps.subtreeRoot {nodeId, key, name}`; `openSharedMemory` with a
         root (key from the chain, media filtered to the subtree, `chapterName` null for the root); `MemoryShareBody`
         embedded: name from the chain, no folder note, `canContribute` from the role AND the target (after 5a.5 an
