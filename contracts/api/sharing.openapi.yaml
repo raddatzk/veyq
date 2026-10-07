@@ -304,6 +304,59 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: capability_disabled } }
 
+  /api/shares/{shareId}/sealed-name:
+    put:
+      tags: [sharing]
+      operationId: setShareSealedName
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          The value is always the share root's current name, re-sealed by whichever member renamed it last; a
+          later write carries a later name, so no version guards it (ADR 0080 decision 14).
+      summary: Store a share's root name re-sealed under `K_share` (any member with write access).
+      description: >
+        Replaces the share's `sealedName` — the shared root's name re-sealed under `K_share` (seal purpose
+        `share-memory-name`), the title `resolveShare` serves — after a member renamed that root
+        ([ADR 0080](../../docs/decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
+        decision 14). The renaming member's client opens each share on the root through its recovery copy
+        (`sealedShareKey`), re-seals the new name under that share's `K_share` and stores it here, so the shown
+        name never goes stale. **Any member with write access** to the share's space may call it, not only the
+        share's owner: `updateShare` stays owner-gated
+        ([ADR 0036](../../docs/decisions/0036-editable-share-note-recoverable-share-key.md) point 3) and replaces
+        all of its fields, so it cannot carry this write. Changes `sealedName` and nothing else — note, label,
+        role, expiry, password, keys and the enabled state are untouched. A revoked (disabled) share is renamed
+        too, so a later re-activation shows the current name; a deleted one is `404`. Operator-blind: the server
+        stores the ciphertext opaquely and never opens it.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ShareId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SetShareSealedNameRequest" }
+            example: { sealedName: c2VhbGVkLW5hbWUtdW5kZXItay1zaGFyZQ== }
+      responses:
+        "204":
+          description: The share's sealed name was replaced.
+        "400":
+          description: Malformed request (a missing, blank, oversized or non-base64 `sealedName`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
+        "404":
+          description: >
+            No such share, it was deleted, or the caller may not write in its space (not a member, or a member
+            removed from the tenant) — one non-enumerable answer.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
+        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
+
   /api/shares/{shareId}:
     get:
       tags: [sharing]
@@ -1249,6 +1302,21 @@ components:
           maxLength: 64
           example: FsNwNHCyCakLiKYUidaFcVAETZT9pNhFigWt85nrvSQ=
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    SetShareSealedNameRequest:
+      type: object
+      required: [sealedName]
+      description: >
+        A share root's new name, re-sealed under the share's `K_share` by the member who renamed the root (ADR 0080
+        decision 14). The bounds are `CreateShareRequest.sealedName`'s.
+      properties:
+        sealedName:
+          type: string
+          description: The shared node's current name re-sealed under `K_share` (seal purpose `share-memory-name`, a stored seal id that keeps its name; opaque base64) — what `resolveShare` serves as the title.
+          contentEncoding: base64
+          maxLength: 4096
+          example: c2VhbGVkLW5hbWUtdW5kZXItay1zaGFyZQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 4096) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     ShareCreated:
       type: object
