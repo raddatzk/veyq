@@ -139,7 +139,7 @@ abstract class OpenApiGenerate : DefaultTask() {
         // Measured (cr-platform-gradle-modules step 5): both generators honour a schema mapping — the Kotlin models and
         // the jaxrs-spec interfaces name the core FQN and emit no type of their own for it. `importMappings` alone is
         // the wrong lever: it still generates the model, as a junk file named after the FQN.
-        commonSchemas.forEach { cfg.addSchemaMapping(it, "me.raddatz.veyq.core.generated.model.$it") }
+        commonSchemas.forEach { cfg.addSchemaMapping(it, "${SpecSets.packageRootOf(SpecSets.coreOwner)}.model.$it") }
         library?.let(cfg::setLibrary)
         DefaultGenerator().opts(cfg.toClientOptInput()).generate()
     }

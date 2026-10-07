@@ -3,6 +3,7 @@ package me.raddatz.veyq.buildlogic
 import org.gradle.api.GradleException
 import org.gradle.api.Project
 import org.gradle.api.tasks.SourceSetContainer
+import org.gradle.kotlin.dsl.findByType
 import org.gradle.kotlin.dsl.getByType
 import org.gradle.kotlin.dsl.named
 import org.gradle.kotlin.dsl.register
@@ -10,16 +11,21 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension
 import javax.inject.Inject
 
 /**
- * `veyqOpenApi { owner("core") }` — names the spec set a project generates (`SpecSets`) and registers its tasks:
+ * `veyqOpenApi { generateOwnSpecs() }` — generates the spec set the project owns by its path (`SpecSets.ownerOf`:
+ * `:core` → the specs at the top level of `contracts/api/`, `:apps:<app>` → those in `contracts/api/<app>/`) and
+ * registers its tasks:
  * `openApiGenerate<Owner>`, the aggregate `openApiGenerateSpecs` (`./gradlew openApiGenerateSpecs` from `backend/` runs
  * every owner's) and, for core, `generateAdminChannelOperations`. A method, not a property: the task names depend on
  * the owner, so it is read once, while the project is configured — never in an `afterEvaluate`.
  */
 abstract class VeyqOpenApiExtension @Inject constructor(private val project: Project) {
-    private var owner: String? = null
+    /** The owner this project generates, once `generateOwnSpecs()` ran — read by core's check that every application directory is generated. */
+    internal var owner: String? = null
+        private set
 
-    fun owner(name: String) {
-        owner?.let { throw GradleException("${project.path}: veyqOpenApi names its owner once (it is `$it`)") }
+    fun generateOwnSpecs() {
+        owner?.let { throw GradleException("${project.path}: veyqOpenApi generates its specs once (they are `$it`'s)") }
+        val name = SpecSets.ownerOf(project.path)
         owner = name
         register(project, name)
     }
@@ -27,7 +33,10 @@ abstract class VeyqOpenApiExtension @Inject constructor(private val project: Pro
     private companion object {
         fun register(project: Project, ownerName: String) {
             // `backend/../contracts/api`: every module resolves the specs from the Gradle root, as the tests read them.
-            val sets = SpecSets(project.rootDir.resolve("../contracts/api"))
+            val sets = SpecSets(
+                project.rootDir.resolve("../contracts/api"),
+                SpecSets.applicationModules(project.rootProject.allprojects.map { it.path }),
+            )
             sets.requireNoStray()
             val set = sets.of(ownerName)
             val isCore = set.owner == SpecSets.coreOwner
@@ -35,6 +44,22 @@ abstract class VeyqOpenApiExtension @Inject constructor(private val project: Pro
             val apiDir = generated.map { it.dir("api") }
             val modelsDir = generated.map { it.dir("models") }
             val channelDir = project.layout.buildDirectory.dir("generated/admin-channel")
+
+            if (isCore) {
+                // A module the settings include whose build never calls `generateOwnSpecs()` would leave its directory's
+                // specs generating nothing: the stray check above cannot see that, since the module exists.
+                project.gradle.projectsEvaluated {
+                    val ungenerated = sets.applications.filter { app ->
+                        project.rootProject.findProject(":apps:$app")?.extensions?.findByType<VeyqOpenApiExtension>()?.owner != app
+                    }
+                    if (ungenerated.isNotEmpty()) {
+                        throw GradleException(
+                            ungenerated.joinToString { "contracts/api/$it/" } + ": specs no module generates — apply " +
+                                "`veyq.openapi` and call `veyqOpenApi { generateOwnSpecs() }` in `:apps:<app>`",
+                        )
+                    }
+                }
+            }
 
             val generate = project.tasks.register<OpenApiGenerate>("openApiGenerate${set.owner.replaceFirstChar(Char::uppercase)}") {
                 group = "openapi tools"

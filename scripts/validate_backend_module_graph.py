@@ -32,10 +32,18 @@ module's `java-test-fixtures` source set (`src/testFixtures`, today `:core`'s), 
   `src/testFixtures/resources/META-INF/beans.xml`, or its CDI fakes (`RecordingBlobStore`) are no beans and the
   production bean answers in their place (measured 2026-10-05: with the file removed, `:apps:memories`' and the
   root's `@QuarkusTest`s injected `BlobStoreProducer`'s store, not `RecordingBlobStore`).
-- **(d) No package spans two modules.** Every package a shipped project declares — its hand-written main Kotlin
-  (the `package` lines) and its generated API (the `SpecSet` packages of `buildSrc`'s `SpecSets.kt`, attributed to
-  the project whose build file names that owner in `veyqOpenApi { owner("…") }`) — is declared by that project
-  alone. Kotlin compiles a split package and Quarkus indexes both halves, so nothing fails; but the package no
+- **(d) No package spans two modules, and every spec directory has its module.** Every package a shipped project
+  declares — its hand-written main Kotlin (the `package` lines) and its generated API — is declared by that project
+  alone. The generated packages are **derived**, as `buildSrc` derives them, never read from a list: a project whose
+  build file calls `veyqOpenApi { generateOwnSpecs() }` owns the specs its path names (`:core` the top level of
+  `contracts/api/`, `:apps:<app>` the directory `contracts/api/<app>/`) and generates into the package root spelled
+  once in `SpecSets.kt` as the template `"…$owner.generated"` (`packageRootOf`), with `.api`/`.model` below it. The
+  template must be spelled exactly once and no package root may be spelled for one owner there (a literal
+  `"me.raddatz.veyq.<x>.generated"`): a hand-kept owner list is what this replaced, and it would refuse every new
+  application's directory. And every directory directly below `contracts/api/` that holds a spec
+  (`contract_specs.APPLICATIONS`) needs an included `:apps:<dir>` that generates it — Gradle refuses the first half
+  while it configures (`SpecSets.requireNoStray`) and the second once every project is (`VeyqOpenApiExtension`), this
+  rule before any build. Kotlin compiles a split package and Quarkus indexes both halves, so nothing fails; but the package no
   longer says its owner, and the platform/application boundary the names carry (`me.raddatz.veyq.core.*`,
   `me.raddatz.veyq.<application>.*`) is a lie for the half that sits elsewhere. Test code (`src/test`, `src/testFixtures`)
   is not judged: core's fixtures declare their helpers inside core's packages on purpose
@@ -97,7 +105,7 @@ module or an edge invisible to the rules (an invisible edge shrinks a classpath,
 unseen, and an app → app edge spelled that way passes (b)), the last reads as a missing copy (red, never a false
 green). (b) judges declared edges, not imports: a `:core` file importing an application without an edge does not
 compile, which is the compiler's check, not this one. (d) reads `package` lines (comments masked by the Kotlin
-lexer) and the generator's `SpecSet` literals; a package derived another way is not seen. (e) does not know which other files a module's build reads at configuration time (`:core`'s
+lexer) and the generator's package-root template; a package derived another way is not seen. (e) does not know which other files a module's build reads at configuration time (`:core`'s
 `pitest.scope.json`); the warm-up run in a directory holding only the copied files is the proof for those. (c) checks
 the file exists, not that it is the module's own index (a `beans.xml` with `bean-discovery-mode="none"` passes). For
 (g), it reads files, not the classpath: a config source declared another way (`quarkus.config.locations`, a
@@ -114,6 +122,7 @@ import sys
 from collections import defaultdict
 
 import backend_tree  # where the backend's sources live — resolved by glob, never spelled here
+import contract_specs  # where the specs live and which directories hold an application's — derived, never listed
 from kotlin_lexer import mask  # the one Kotlin lexer in scripts/: comments + literals blanked, offsets kept
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -135,10 +144,11 @@ TEST_EDGE_CONFIGS = {"testImplementation", "testRuntimeOnly", "testCompileOnly",
                      "testFixturesApi", "testFixturesImplementation", "testFixturesRuntimeOnly",
                      "testFixturesCompileOnly"}
 FIXTURES_WRAPPER = "testFixtures"
-# `SpecSet(coreOwner, coreSpecs, "me.raddatz.veyq.core.generated", …)` — the owner (a literal or a `val`) and the package root.
-SPEC_SET = re.compile(r'\bSpecSet\(\s*("?)(\w+)\1\s*,\s*\w+\s*,\s*"([\w.]+)"')
-OWNER_VAL = re.compile(r'\bval\s+(\w+)\s*=\s*"(\w+)"')
-OPENAPI_OWNER = re.compile(r'\bveyqOpenApi\s*\{\s*owner\s*\(\s*"(\w+)"\s*\)')
+# `"me.raddatz.veyq.$owner.generated"` — the one spelling of a generated package root (`SpecSets.packageRootOf`).
+PACKAGE_ROOT_TEMPLATE = re.compile(r'"([\w.]+)\.\$\{?owner\}?\.([\w.]+)"')
+# A package root spelled for ONE owner — the hand-kept owner list this rule must never be what it reads.
+LITERAL_PACKAGE_ROOT = re.compile(r'"me\.raddatz\.veyq\.\w+\.generated[\w.]*"')
+GENERATES_OWN_SPECS = re.compile(r'\bveyqOpenApi\s*\{\s*generateOwnSpecs\s*\(\s*\)\s*\}')
 PACKAGE_LINE = re.compile(r"^\s*package\s+([\w.]+)", re.M)
 # Any spelling of a renamed archive (`archivesName.set(…)`, `archivesName = …`, `base { archivesName… }`), read on
 # comment-masked text so the convention's own warning against it is not what is found.
@@ -369,27 +379,60 @@ def rule_b() -> list[str]:
     return errors
 
 
+def strip_comments(text: str) -> str:
+    """Kotlin text without its `//` and `/* */` comments (a KDoc may name a package root it does not spell)."""
+    return re.sub(r"//[^\n]*", "", re.sub(r"/\*.*?\*/", "", text, flags=re.S))
+
+
+def owner_of(project: str) -> str | None:
+    """The spec owner a project's path names, as `SpecSets.ownerOf` derives it: `:core` → core, `:apps:<app>` → `<app>`."""
+    if project == CORE:
+        return "core"
+    return project.split(":")[-1] if APPLICATION.match(project) else None
+
+
 def generated_packages() -> tuple[dict[str, set[str]], list[str]]:
-    """`{project: generated packages}` from `buildSrc`'s spec sets and each build file's owner."""
-    text = re.sub(r"//[^\n]*", "", SPEC_SETS.read_text(encoding="utf-8")) if SPEC_SETS.is_file() else ""
-    vals = dict(OWNER_VAL.findall(text))
-    roots = {}
-    for quoted, owner, root in SPEC_SET.findall(text):
-        roots[owner if quoted else vals.get(owner, owner)] = root
+    """`{project: generated packages}`, derived from each build file's opt-in and the template in `buildSrc`'s
+    `SpecSets.kt`; and every spec directory held to a module that generates it."""
+    text = strip_comments(SPEC_SETS.read_text(encoding="utf-8")) if SPEC_SETS.is_file() else ""
     errors = []
-    if not roots:
-        errors.append(f"(d) {rel(SPEC_SETS)} declares no `SpecSet(owner, specs, \"<package root>\", …)` — the "
-                      f"generated packages are no longer read. If the generation moved, re-point this rule.")
+    templates = PACKAGE_ROOT_TEMPLATE.findall(text)
+    if len(templates) != 1:
+        errors.append(f"(d) {rel(SPEC_SETS)} spells the generated package root as a `\"…$owner…\"` template "
+                      f"{len(templates)} times, not once — the generated packages are no longer derivable. If the "
+                      f"generation moved, re-point this rule.")
+    for literal in sorted(set(LITERAL_PACKAGE_ROOT.findall(text))):
+        errors.append(f"(d) {rel(SPEC_SETS)} spells the package root {literal} for one owner — an owner is derived from "
+                      f"its directory (`contracts/api/<app>/` → `:apps:<app>`), never listed; a list refuses every "
+                      f"application it does not name.")
+    projects = backend_tree.gradle_projects()
+    generating = set()
     out: dict[str, set[str]] = defaultdict(set)
-    for p in backend_tree.gradle_projects():
+    for p in projects:
         f = build_file(p)
-        text = re.sub(r"//[^\n]*", "", f.read_text(encoding="utf-8")) if f.is_file() else ""
-        for owner in OPENAPI_OWNER.findall(text):
-            if owner not in roots:
-                errors.append(f"(d) {rel(f)} generates the `{owner}` spec set, which {rel(SPEC_SETS)} does "
-                              f"not declare (it knows {sorted(roots)}).")
-                continue
-            out[p] |= {roots[owner], roots[owner] + ".api", roots[owner] + ".model"}
+        if not (f.is_file() and GENERATES_OWN_SPECS.search(strip_comments(f.read_text(encoding="utf-8")))):
+            continue
+        owner = owner_of(p)
+        if owner is None:
+            errors.append(f"(d) {rel(f)} generates specs, but {p} owns none: only {CORE} (the top level of "
+                          f"contracts/api) and :apps:<app> (contracts/api/<app>/) do.")
+            continue
+        generating.add(p)
+        if len(templates) == 1:
+            root = f"{templates[0][0]}.{owner}.{templates[0][1]}"
+            out[p] |= {root, root + ".api", root + ".model"}
+    if not generating:
+        errors.append("(d) no build file calls `veyqOpenApi { generateOwnSpecs() }` — the generated packages are no "
+                      "longer read. If the opt-in is spelled another way now, teach GENERATES_OWN_SPECS it.")
+    for app in contract_specs.APPLICATIONS:
+        module = f":apps:{app}"
+        where = f"{rel(contract_specs.API)}/{app}/"
+        if module not in projects:
+            errors.append(f"(d) {where} holds specs, but {rel(SETTINGS)} includes no {module} — they would generate "
+                          f"nothing (Gradle refuses them as stray). Add the application's module, or move the specs.")
+        elif module not in generating:
+            errors.append(f"(d) {where} holds specs, but {rel(build_file(module))} never calls "
+                          f"`veyqOpenApi {{ generateOwnSpecs() }}` — they would generate nothing.")
     return out, errors
 
 
@@ -506,7 +549,8 @@ def main() -> int:
     cps = classpaths(files)
     edge_count = sum(len(all_edges(p)) for p in backend_tree.gradle_projects())
     print(f"OK: {len(mods)} module(s) ({', '.join(mods)}), each with a build file and included; {edge_count} project "
-          f"edge(s), none against the direction (no application → application); no package in two modules; "
+          f"edge(s), none against the direction (no application → application); no package in two modules, every "
+          f"spec directory ({', '.join(contract_specs.APPLICATIONS) or 'none'}) generated by its :apps:<dir>; "
           f"indexed, copied by the Dockerfile and named by the "
           f"convention (in the fast-jar: {', '.join(sorted(shipped_modules()))}); {len(files)} config file(s) on {len(cps)} "
           f"classpath(s) ({', '.join(cps)}), on each every (profile, key) defined once, one base, every profile "

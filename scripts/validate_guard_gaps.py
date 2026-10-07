@@ -174,6 +174,16 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      holds per field, not per operation, so a declared neighbour does not cover it
   61 `updateNode`'s `409` no longer naming a declared conflict code — rejected: each declaration's `conflictCode` must
      appear in the operation's `409` text, so a client meeting it finds it documented
+  62 a spec directory `contracts/api/demo/` holding a spec with no `:apps:demo` in the settings — rejected:
+     `validate_backend_module_graph` rule (d) derives the application directories from `contracts/api/` and holds each
+     to an included module, as Gradle's `SpecSets.requireNoStray` does while it configures (inbox #344)
+  63 the same directory with an included, otherwise valid `:apps:demo` whose build file never opts in with
+     `veyqOpenApi { generateOwnSpecs() }` — rejected: rule (d), the module must generate its directory, else the
+     specs generate nothing (Gradle refuses it too, once every project is configured)
+  64 `SpecSets.packageRootOf` turned back into a hardcoded owner list (`"me.raddatz.veyq.core.generated"`,
+     `"me.raddatz.veyq.memories.generated"`) — rejected: rule (d) derives the packages from one `"…$owner…"` template
+     and refuses a package root spelled for one owner, so the list that refused every unnamed application cannot
+     quietly come back as what the rule reads
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
 (a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
 which the Gradle module split retired: `:core` has no edge to an application, so either shape fails
@@ -246,6 +256,12 @@ Open gaps — a forgery the guard still passes (a documented limit, not a defect
      `validate_doc_citations`, which reads an id only under a real feature directory. **Left open on purpose** —
      that anchor is what keeps attribute chains (`.parent.parent`, `.value.trim()`) from reading as ids; without
      it the guard cries wolf on Python and TypeScript alike. Pinned so tightening the anchor flips it visibly.
+  65 an included, otherwise valid application `:apps:demo` that opts in with `generateOwnSpecs()` while
+     `contracts/api/demo/` does not exist passes `validate_backend_module_graph`. **Left open on purpose** — it is
+     the module whose directory is missing, handled as before the owners were derived: its spec set is empty, and an
+     empty set is refused only when it would generate (`OpenApiGenerate`), because the Dockerfile's warm-up
+     configures the build before `contracts/` is copied in and a configuration-time refusal broke the image build.
+     Pinned so a rule (d) that starts refusing it is a visible decision against that reason.
   33 a wiki page whose prose contradicts the doc it declares passes `validate_wiki_sources`, which checks the
      address and never the claim. **Left open on purpose** — whether two sentences in two registers say the same
      thing is not decidable by a grep; the forgery is the sentence that bought that guard, put back. Pinned so
@@ -1068,6 +1084,68 @@ def forge_conflict_code_unnamed(root: pathlib.Path) -> str:
     return "updateNode's 409 no longer names its declared conflict code stale_placement (must be REJECTED)"
 
 
+DEMO_SPEC = "contracts/api/demo/demo.openapi.yaml"
+SPEC_SETS_KT = "backend/buildSrc/src/main/kotlin/me/raddatz/veyq/buildlogic/SpecSets.kt"
+PACKAGE_ROOT_FUN = 'fun packageRootOf(owner: String) = "me.raddatz.veyq.$owner.generated"'
+
+
+def _plant_demo_spec(root: pathlib.Path) -> None:
+    spec = root / DEMO_SPEC
+    spec.parent.mkdir(parents=True)
+    spec.write_text("openapi: 3.1.0\ninfo:\n  title: demo\n  version: 0.0.1\npaths:\n  /api/demo:\n    get:\n"
+                    "      tags: [demo]\n      operationId: getDemo\n      responses:\n        '204':\n"
+                    "          description: nothing\n")
+
+
+def _plant_demo_module(root: pathlib.Path, opt_in: bool) -> None:
+    # An application valid in every respect the module guard checks — included, indexed, copied by the Dockerfile,
+    # named by the convention, depending on core only — so rule (d) is what judges its specs.
+    app = root / "backend/apps/demo"
+    (app / "src/main/resources/META-INF").mkdir(parents=True)
+    (app / "src/main/resources/META-INF/beans.xml").write_text("")
+    (app / "build.gradle.kts").write_text(
+        'plugins {\n    id("veyq.module")\n    id("veyq.openapi")\n}\n\n'
+        + ("veyqOpenApi { generateOwnSpecs() }\n\n" if opt_in else "")
+        + 'dependencies {\n    implementation(project(":core"))\n}\n')
+    s = root / SETTINGS
+    s.write_text(s.read_text() + '\ninclude(":apps:demo")\n')
+    d = root / DOCKERFILE
+    text = d.read_text()
+    if MEMORIES_BUILD_COPY not in text or "backend/apps/memories/src" not in text:
+        raise ForgeError(f"the Dockerfile no longer copies {MEMORIES_BUILD_COPY} and its src — re-anchor this forgery")
+    text = text.replace(MEMORIES_BUILD_COPY, f"{MEMORIES_BUILD_COPY} backend/apps/demo/build.gradle.kts", 1)
+    d.write_text(text.replace("backend/apps/memories/src", "backend/apps/memories/src backend/apps/demo/src", 1))
+
+
+def forge_spec_directory_without_module(root: pathlib.Path) -> str:
+    _plant_demo_spec(root)
+    return "contracts/api/demo/ holding a spec with no :apps:demo (must be REJECTED — its specs would generate nothing)"
+
+
+def forge_spec_directory_module_not_generating(root: pathlib.Path) -> str:
+    _plant_demo_spec(root)
+    _plant_demo_module(root, opt_in=False)
+    return ":apps:demo included but never calling generateOwnSpecs() (must be REJECTED — its directory generates nothing)"
+
+
+def forge_spec_sets_hardcoded_owner_list(root: pathlib.Path) -> str:
+    f = root / SPEC_SETS_KT
+    text = f.read_text() if f.is_file() else ""
+    if PACKAGE_ROOT_FUN not in text:
+        raise ForgeError(f"{SPEC_SETS_KT} has no `{PACKAGE_ROOT_FUN}` — re-anchor this forgery")
+    f.write_text(text.replace(PACKAGE_ROOT_FUN,
+                              'fun packageRootOf(owner: String) = when (owner) {\n'
+                              '            "core" -> "me.raddatz.veyq.core.generated"\n'
+                              '            else -> "me.raddatz.veyq.memories.generated"\n'
+                              '        }'))
+    return "SpecSets.packageRootOf back to a hardcoded owner list (must be REJECTED — owners are derived)"
+
+
+def forge_module_without_spec_directory(root: pathlib.Path) -> str:
+    _plant_demo_module(root, opt_in=True)
+    return ":apps:demo generating its own specs with no contracts/api/demo/ (must still PASS — an empty set is refused at generation)"
+
+
 # Ids must stay unique: parallel work that adds cases picks the next free id at merge time, not at branch time
 # (two parallel steps both took the same number once, so renumber on the merge, never in the branch).
 # id, target guard, forgery, expect_pass (True = guard passes the forgery = gap still open; False = must reject)
@@ -1131,6 +1209,10 @@ CASES = [
     ("59", WRITE_CONCURRENCY, forge_concurrency_declaration_dropped, False),
     ("60", WRITE_CONCURRENCY, forge_second_version_field_undeclared, False),
     ("61", WRITE_CONCURRENCY, forge_conflict_code_unnamed, False),
+    ("62", "validate_backend_module_graph.py", forge_spec_directory_without_module, False),
+    ("63", "validate_backend_module_graph.py", forge_spec_directory_module_not_generating, False),
+    ("64", "validate_backend_module_graph.py", forge_spec_sets_hardcoded_owner_list, False),
+    ("65", "validate_backend_module_graph.py", forge_module_without_spec_directory, True),
 ]
 
 

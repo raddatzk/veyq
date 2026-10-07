@@ -23,7 +23,7 @@ plugins {
     `java-test-fixtures`
 }
 
-veyqOpenApi { owner("core") }
+veyqOpenApi { generateOwnSpecs() } // `contracts/api/*.openapi.yaml`, by its path `:core`
 
 dependencies {
     // `api`: the root and every application build on these extensions through core.
