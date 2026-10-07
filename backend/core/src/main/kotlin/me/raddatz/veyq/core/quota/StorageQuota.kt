@@ -17,10 +17,10 @@ import jakarta.persistence.EntityManager
  * happens after it commits, so the lock is never held across signatures.
  *
  * Two checks, each independent of the other (ADR 0073 §1, §4): the Server Owner's tenant quota ([tenantFits]) on
- * every start, and the tenant owner's per-link limit ([linkFits]) on a link start. A link's usage has two terms: the
- * sessions its identities hold open — core's tables, summed here — and the blobs they contributed, which only the
- * application that takes uploads into the start's target kind can find ([UploadAdmission]; the target is the share
- * root or a node below it, ADR 0080 decision 6).
+ * every start, and the tenant owner's per-link limit ([linkFits]) on a link start. A link's usage has three terms: the
+ * sessions its identities hold open and the node attachments they uploaded — core's tables, summed here — and the
+ * blobs they contributed to an application's own rows, which only the application that takes uploads into the start's
+ * target kind can find ([UploadAdmission]; the target is the share root or a node below it, ADR 0080 decision 6).
  */
 @ApplicationScoped
 class StorageQuota(
@@ -62,11 +62,15 @@ class StorageQuota(
     }
 
     /**
-     * What link [shareId] holds (ADR 0073 §4): the blobs its identities contributed, as [targetKind]'s
-     * [UploadAdmission] measures them, plus every open session one of its identities opened. A blob a member
+     * What link [shareId] holds (ADR 0073 §4): every open session one of its identities opened, plus the blob of every
+     * node attachment one of them uploaded ([linkAttachmentUsage]), plus the blobs they contributed to the application's
+     * own rows, as [targetKind]'s [UploadAdmission] measures them. A blob a member
      * uploaded into the same node is not the link's, and neither is another link's. The measure is per link, never per
      * node: it counts what the link's identities contributed anywhere in its subtree (Memories: by identity, whatever
-     * Memory or chapter holds the medium). Null when no single admission measures [targetKind] ([admissionFor]).
+     * Memory or chapter holds the medium). Null when no single admission measures [targetKind] ([admissionFor]) —
+     * whatever the core terms hold: they never measure a link on their own, so a kind whose admission went missing
+     * stays refused (an application with blobs of its own rows would otherwise count only its attachments), and an
+     * application whose guest uploads are all attachments registers an admission that reports 0.
      *
      * Dispatched by the start's target kind, not the root's: a folder link's root kind has no measure (no application
      * takes uploads into a folder) while its guests upload into Memories below. A link whose guests some day upload
@@ -75,9 +79,9 @@ class StorageQuota(
      */
     fun linkUsage(shareId: String, targetKind: String): Long? {
         val admission = admissionFor(targetKind) ?: return null
-        // Two statements where there was one, so the sessions are read FIRST: a completion committing between the
-        // two turns a session into a blob, and read in this order it is counted twice (refused a little early),
-        // never zero times (admitted over the limit) — each statement reads what is committed when it runs.
+        // One statement per term, the sessions read FIRST (the return adds left to right): a completion or an attach
+        // committing between two of them turns a session into a blob, and read in this order it is counted twice
+        // (refused a little early), never zero times (admitted over the limit) — each reads what is committed when it runs.
         val open = sum(
             """
             SELECT COALESCE((SELECT SUM(s.byte_size) FROM veyq_upload_session s
@@ -86,8 +90,26 @@ class StorageQuota(
             """,
             shareId,
         )
-        return open + admission.linkBlobUsage(shareId)
+        return open + linkAttachmentUsage(shareId) + admission.linkBlobUsage(shareId)
     }
+
+    /**
+     * The core blob term of [linkUsage]: the bytes of every attachment's blob (`veyq_node_attachment`) one of link
+     * [shareId]'s identities uploaded — in any node of any kind, trashed ones included (ADR 0073 §2). A replace moves
+     * the row's identity with the blob (`AttachmentStore.attach`), so the term counts what the slot holds now, and
+     * never the replaced blob, whose row is gone. No blob is in two arms (`ux_attachment_blob`; each arm's row is born
+     * with a fresh blob), so no application's term counts one of these too; a cover (`veyq_node.cover_blob_id`) is no
+     * attachment row and a member's.
+     */
+    private fun linkAttachmentUsage(shareId: String): Long = sum(
+        """
+        SELECT COALESCE((SELECT SUM(b.byte_size) FROM veyq_node_attachment a
+               JOIN veyq_blob b ON b.id = a.blob_id
+               JOIN veyq_share_identity i ON i.id = a.share_identity_id
+              WHERE i.share_id = :key), 0)
+        """,
+        shareId,
+    )
 
     private fun sum(sql: String, key: String): Long =
         (em.createNativeQuery(sql.trimIndent()).setParameter("key", key).singleResult as Number).toLong()

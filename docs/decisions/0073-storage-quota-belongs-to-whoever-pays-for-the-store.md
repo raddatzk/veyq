@@ -71,6 +71,8 @@ Who pays for the store differs by deployment. Today there is one store connectio
    - There is no "unlimited", so the anonymous path is always bounded. `0` switches link uploads off.
    - A link's usage is:
      - the blobs of the media its identities contributed, with those media's derivatives;
+     - the blobs of the node attachments its identities uploaded (core's term, whatever the node's kind — an
+       application whose guest uploads are attachments sums nothing of its own);
      - the sessions its identities opened.
    - Freeing that usage:
      - A contributor's delete of their own upload frees it at once.

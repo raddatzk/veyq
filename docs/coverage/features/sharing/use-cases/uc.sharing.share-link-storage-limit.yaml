@@ -2,14 +2,14 @@ useCase: uc.sharing.share-link-storage-limit
 feature: sharing
 title: A share link's storage limit — no one link can fill the server
 # Built by cr-share-link-storage-limit (inbox #155, first half; ADR 0073). The per-link limit lives on the tenant row
-# (`share_link_limit_bytes`, 10 GiB default); `core.quota.StorageQuota` sums the link's open sessions and asks the root kind's `UploadAdmission` (Memories: its contributed blobs) for the rest, and a link start
+# (`share_link_limit_bytes`, 10 GiB default); `core.quota.StorageQuota` sums the link's open sessions and its node attachments' blobs and asks the target kind's `UploadAdmission` (Memories: its contributed media) for the rest, and a link start
 # locks the tenant row, checks, reserves and commits before it presigns. Each term of the link SUM is pinned by a
 # case that pins the usage EXACTLY (refused at usage + S - 1, admitted at usage + S), so a dropped term and an
 # over-reaching scope both go red. The lock is proven on H2 only: MariaDB runs the same `SELECT … FOR UPDATE`, but
 # no CI job runs the race against it. The tenant quota (uc.admin.tenant-storage-quota) is the second half.
 acceptanceCriteria:
   - id: link-usage-is-what-the-link-stored
-    text: A link's usage is the declared size of every blob of the media its identities contributed, with those media's derivatives, plus every upload session its identities opened and nobody has completed or purged. A contribution a member trashed keeps counting until it is purged; a contributor's delete of their own upload frees it at once.
+    text: A link's usage is the declared size of every blob of the media its identities contributed, with those media's derivatives, plus the blob of every node attachment its identities uploaded (the one a slot holds now, not one it replaced), plus every upload session its identities opened and nobody has completed or purged. A contribution a member trashed keeps counting until it is purged; a contributor's delete of their own upload frees it at once.
     coverage:
       backend:
         integration:
@@ -20,6 +20,11 @@ acceptanceCriteria:
           - ShareLinkStorageLimitSliceTest.aSecondLinkOfTheTenantHasItsOwnRoom
           - ShareLinkStorageLimitSliceTest.aMembersUploadIntoTheSameMemoryDoesNotCount
           - ShareLinkStorageLimitSliceTest.anUploaderLinkIsBoundedToo
+          - LinkAttachmentUsageSliceTest.aLinksUsageCountsItsIdentitiesAttachmentsAndNoOtherLinksNorAMembers
+          - LinkAttachmentUsageSliceTest.aCoverIsNoAttachmentAndIsNotCounted
+          - LinkAttachmentUsageSliceTest.aReplaceCountsTheNewBlobAndNoLongerTheOld
+          - LinkAttachmentUsageSliceTest.aPurgedAttachmentNoLongerCounts
+          - LinkUsageTermsSliceTest.aMemoryLinksMediaAndAttachmentsAddWithoutOverlap
   - id: a-start-that-does-not-fit-is-refused-whole
     text: A contributor or uploader start whose admissible items would take the link over the tenant's per-link limit is refused whole — every item `quota_exceeded`, no session created, nothing presigned — while a start that fits is admitted. `0` refuses every link upload.
     coverage:
@@ -29,6 +34,8 @@ acceptanceCriteria:
           - ShareLinkStorageLimitSliceTest.aRequestIsAdmittedWholeOrRefusedWhole
           - ShareLinkStorageLimitSliceTest.anInadmissibleItemKeepsItsOwnCodeAndIsNotCharged
           - ShareLinkStorageLimitSliceTest.aZeroLimitRefusesEveryLinkStart
+          - LinkAttachmentUsageSliceTest.anUploadThatExactlyFitsIsAdmittedAndOneByteMoreIsNot
+          - LinkAttachmentUsageSliceTest.aKindNoAdmissionMeasuresStaysClosedDespiteTheCoreTerm
   - id: parallel-starts-cannot-overshoot
     text: Concurrent starts through one link are serialized on the tenant, so together they admit no more than the remainder of the limit.
     coverage:
