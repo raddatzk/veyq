@@ -1,0 +1,200 @@
+// @vitest-environment happy-dom
+// GOLDEN: the Memories folder level as a user meets it, pinned before the registry/level-view re-cut
+// (cr-files-application P4-0). The re-cut moves the overview card, the sections and the create cards from Memories into
+// a core level view, and promises that nobody using Memories sees a difference; every e2e suite is API-level, so this
+// file is the proof of that promise. It mounts the REAL host (`MemoryHomeView`), the REAL registry as `main.ts` fills
+// it (`src/test/setup.ts` runs `registerApplications()` into this file's fresh registry), the REAL `MemoryLevelHost`,
+// `MemoryBrowse`, `MemoryCard`, `ViewModeToggle` and PrimeVue buttons, real crypto (every date and pin below is sealed
+// and unsealed for real), and the real i18n catalog. Stubbed: the scope/tree/favourites state (no network), the Leaflet
+// map (no canvas in happy-dom) and the tooltip directive.
+//
+// What it does NOT pin: layout and computed CSS (a width rule that hides an element is invisible — the 721–1120 px
+// hiding of the folder card's actions was CSS-only and found in a real browser), the dialogs a click opens, and
+// covers (no cover is sealed here, so every card shows its placeholder).
+//
+// Updating it deliberately: `npx vitest run -u src/views/MemoryHomeView.golden.test.ts`, then READ the diff of
+// `__snapshots__/MemoryHomeView.golden/` — a re-cut that claims "no visible change" may only move class names (P4d).
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { mount, flushPromises } from '@vue/test-utils'
+import { createRouter, createMemoryHistory } from 'vue-router'
+
+vi.mock('leaflet', () => ({ default: {} }))
+const fixed = vi.hoisted(() => ({
+  scopeId: '5c09e000-0000-4000-8000-0000000000bb',
+  scopeKey: new Uint8Array(32).fill(3),
+}))
+vi.mock('../app/activeSpace', async () => {
+  const { reactive } = await import('vue')
+  return {
+    activeSpace: reactive({
+      status: 'ready', scopeId: fixed.scopeId, tenantId: 't-1', kind: 'PERSONAL', name: null, epoch: 0,
+      deletedAt: null, purgeAfter: null, trustRefusal: null,
+    }),
+    enterScope: vi.fn(async () => {}),
+    activeEpochKeys: () => ({ current: 0, keys: new Map([[0, fixed.scopeKey]]) }),
+  }
+})
+vi.mock('../features/memory/favoritesStore', () => ({
+  favoritesStore: { loaded: true, ids: new Set<string>() },
+  loadFavoritesFor: vi.fn(),
+  isFavorite: vi.fn(),
+  toggleFavorite: vi.fn(),
+}))
+vi.mock('../features/spaces/scopes', () => ({ listMyTenants: vi.fn() }))
+vi.mock('../core/node/treeStore', async () => {
+  const { reactive } = await import('vue')
+  return {
+    treeStore: reactive({ nodes: [], loaded: true, error: false }),
+    loadTree: vi.fn(async () => {}),
+    patchNodeMeta: vi.fn(),
+  }
+})
+
+import MemoryHomeView from './MemoryHomeView.vue'
+import MemoryLevelHost from '../features/memory/components/MemoryLevelHost.vue'
+import { registry } from '../core/applications/registry'
+import { activeSpace } from '../app/activeSpace'
+import { treeStore } from '../core/node/treeStore'
+import { listMyTenants } from '../features/spaces/scopes'
+import { isFavorite } from '../features/memory/favoritesStore'
+import { FOLDER_KIND, type NodeKind } from '../core/node/kind'
+import { MEMORY_KIND } from '../features/memory/kinds'
+import { sealNodeMeta, type RawNodeMeta } from '../features/memory/nodeMeta'
+import type { TreeNode } from '../core/node/tree'
+import { setViewMode, type ViewMode } from '../shared/state/useViewMode'
+import { capabilityState } from '../shared/state/capabilities'
+import { SHARING_PUBLIC_LINKS } from '../features/platform/capabilities'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std } from '@veyq/crypto/base64'
+import { realI18n } from '../test/i18n'
+import { serializeDom } from '../test/domGolden'
+
+// The map stub renders the pins it was handed, by name and sorted, so the map scenario pins WHICH nodes are on it.
+const SpaceMapStub = {
+  props: ['pins'],
+  template: `<div class="space-map-stub">{{ pins.map((p) => p.node.name).sort().join(', ') }}</div>`,
+}
+
+// The fixtures of `MemoryBrowse.test.ts`, mirrored (a test file cannot import another's): canonical UUID ids, each
+// node's content key wrapped under its parent's key (the scope key at the root, the folder's inside one, ADR 0080) and
+// its meta sealed under its own key, both bound to the node (ADR 0072).
+const uuidOf = new Map<string, string>()
+const uid = (label: string): string => {
+  if (!uuidOf.has(label)) uuidOf.set(label, crypto.randomUUID())
+  return uuidOf.get(label)!
+}
+const keyOfLabel = new Map<string, Uint8Array>()
+const keyOf = (label: string): Uint8Array => {
+  if (!keyOfLabel.has(label)) keyOfLabel.set(label, v1.randomBytes(32))
+  return keyOfLabel.get(label)!
+}
+const wrapFor = (id: string, under: Uint8Array, key: Uint8Array) =>
+  b64std(v1.seal({ purpose: 'content-key', scopeId: fixed.scopeId, nodeId: id, epoch: 0, placementVersion: 0 }, under, key))
+
+function nodeOf(label: string, kind: NodeKind, parentLabel: string | null, orderIndex: number, meta?: Omit<RawNodeMeta, 'v'>): TreeNode {
+  const id = uid(label)
+  const key = keyOf(label)
+  return {
+    id, kind, name: label, parentId: parentLabel === null ? null : uid(parentLabel), orderIndex, epoch: 0,
+    wrappedContentKey: wrapFor(id, parentLabel === null ? fixed.scopeKey : keyOf(parentLabel), key),
+    wrappedMeta: meta ? sealNodeMeta(key, { scopeId: fixed.scopeId, nodeId: id }, { v: 1, ...meta }) : null,
+    metaVersion: 0, placementVersion: 0,
+  }
+}
+const day = (from: string, to = from) => ({ date: { mode: 'single' as const, from, to } })
+const at = (lat: number, lng: number) => ({ location: { name: `p-${lat}`, nameSource: 'manual' as const, derivedMode: 'fixed' as const, derived: { lat, lng } } })
+
+// The space: at the root three Memories (a range, a single day, an undated located one: sorted newest first, undated
+// last) and two folders; `Trips` holds a dated, located Memory and a sub-folder; `Empty` holds nothing.
+const TREE: TreeNode[] = [
+  nodeOf('Trips', FOLDER_KIND, null, 0),
+  nodeOf('Empty', FOLDER_KIND, null, 1),
+  nodeOf('Solo', MEMORY_KIND, null, 0, day('2023-03-04')),
+  nodeOf('Summer', MEMORY_KIND, null, 1, day('2024-06-01', '2024-06-30')),
+  nodeOf('Beach', MEMORY_KIND, null, 2, at(2, 2)),
+  nodeOf('Italy', MEMORY_KIND, 'Trips', 0, { ...day('2024-05-01', '2024-05-10'), ...at(1, 1) }),
+  nodeOf('Rome', FOLDER_KIND, 'Trips', 1),
+]
+
+async function golden(hash: string, mode: ViewMode = 'grid'): Promise<string> {
+  setViewMode(mode)
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'home', component: { template: '<div />' } }] })
+  await router.replace({ name: 'home', hash })
+  await router.isReady()
+  const w = mount(MemoryHomeView, {
+    global: { plugins: [router, realI18n()], directives: { tooltip: {} }, stubs: { SpaceMap: SpaceMapStub } },
+  })
+  await flushPromises()
+  return serializeDom(w.element)
+}
+
+const file = (name: string) => `./__snapshots__/MemoryHomeView.golden/${name}.txt`
+
+beforeEach(() => {
+  vi.mocked(listMyTenants).mockResolvedValue([])
+  vi.mocked(isFavorite).mockImplementation((id) => id === uid('Solo')) // one favourite, so both pin states show
+  treeStore.nodes = TREE.map((n) => ({ ...n }))
+  capabilityState.ids = [SHARING_PUBLIC_LINKS]
+  activeSpace.deletedAt = null
+  activeSpace.purgeAfter = null
+})
+afterEach(() => {
+  setViewMode('grid')
+  vi.restoreAllMocks()
+})
+
+// The banner formats its purge day in the runner's LOCAL zone, and no single instant is the same calendar day from
+// UTC-12 to UTC+14 (measured: noon UTC read 11/16 under TZ=Pacific/Kiritimati). The day is formatted in UTC here, so
+// the golden is the same on every machine; what the banner says is pinned, not the zone arithmetic.
+function pendingDeletion() {
+  activeSpace.deletedAt = new Date('2026-10-01T12:00:00Z')
+  activeSpace.purgeAfter = new Date('2026-11-15T12:00:00Z')
+  const local = Date.prototype.toLocaleDateString
+  vi.spyOn(Date.prototype, 'toLocaleDateString').mockImplementation(function (this: Date, locales, options) {
+    return local.call(this, locales, { ...options, timeZone: 'UTC' })
+  })
+}
+
+describe('the Memories level view (golden)', () => {
+  // The control every snapshot rests on: the level slot is the real Memories adapter, as `main.ts` registers it — a
+  // golden of a stub would pin nothing about what a user sees.
+  it('control: the level view is the real Memories registration', () => {
+    expect(registry.slot('levelView')).toBe(MemoryLevelHost)
+  })
+
+  it('space root, grid: Memories section with dated cards and the create card, folders with the new-folder card', async () => {
+    await expect(await golden('#~me')).toMatchFileSnapshot(file('root-grid'))
+  })
+
+  it('space root, list: the same level in the list variant of both grids', async () => {
+    await expect(await golden('#~me', 'list')).toMatchFileSnapshot(file('root-list'))
+  })
+
+  it('space root, map: the map replaces the grid, every located node of the space is pinned, no folders section', async () => {
+    await expect(await golden('#~me', 'map')).toMatchFileSnapshot(file('root-map'))
+  })
+
+  it('inside a folder, sharing on: the overview card with share, rename and delete; a Memory and a sub-folder', async () => {
+    await expect(await golden('#~me/trips')).toMatchFileSnapshot(file('folder-grid'))
+  })
+
+  it('inside a folder, sharing off: the overview card keeps rename and delete, no share', async () => {
+    capabilityState.ids = []
+    await expect(await golden('#~me/trips')).toMatchFileSnapshot(file('folder-unshareable'))
+  })
+
+  it('inside a folder of a space pending deletion: the banner, share only, no create cards, no trash', async () => {
+    pendingDeletion()
+    await expect(await golden('#~me/trips')).toMatchFileSnapshot(file('folder-readonly'))
+  })
+
+  it('pending deletion with sharing off: the overview card has no actions row at all', async () => {
+    pendingDeletion()
+    capabilityState.ids = []
+    await expect(await golden('#~me/trips')).toMatchFileSnapshot(file('folder-readonly-unshareable'))
+  })
+
+  it('an empty folder: both empty states beside the create cards', async () => {
+    await expect(await golden('#~me/empty')).toMatchFileSnapshot(file('folder-empty'))
+  })
+})

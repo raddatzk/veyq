@@ -76,13 +76,25 @@ without touching core except for the platform prerequisites below, which every l
       Files' blob equals its role token `FILE_CONTENT` (one token space); `expectedBlobId` travels in the completion
       `payloads` (Files' own contract, no core wire change); the attachment bytes count as a core term in `linkUsage`;
       the server refuses a guest upload with the role `COVER` explicitly (the enum used to say it).
-  - [ ] P3-S1 crypto — `BlobRole` in `packages/crypto/src/seal.ts` becomes a token (anchored regex `^[A-Z][A-Z0-9_]{0,15}$`),
+  - [x] P3-S1 crypto — `BlobRole` in `packages/crypto/src/seal.ts` becomes a token (anchored regex `^[A-Z][A-Z0-9_]{0,15}$`),
         no new seal purpose, a new role value `FILE_CONTENT` only (the role is encoded `lp(utf8)`: the bytes of the four
         existing roles stay identical; ADR 0072 asks for suite v2 only on a field change); a new vector block (content key →
         node key → `blob-key` with `FILE_CONTENT`) from an independent Python implementation; conformance rejection cases
         (`album`, empty, 17 × `A`, `1X`, `ORIGINAL\n`); the commit records the exit code of `npm run mutation -- --force`
         (web/CLAUDE.md) · Done when: `cd packages/crypto && npm run check`, web `npm run check`, bite tests (an unanchored
         regex or a closed list → red).
+        **Measured 2026-10-07:** `BlobRole` is `string` in `seal.ts` checked by `/^[A-Z][A-Z0-9_]{0,15}$/` (equal to `NodeKind`;
+        a `$` without the `m` flag matches only at the input's end, so `ORIGINAL\n` fails); no new seal purpose; the new block
+        `file_blob` in `v1.json` (content key → file node's `content-key` → `blob-key` with `FILE_CONTENT`, owner = the node id)
+        from an independent Python script that first reproduced an existing `blob-key` and `content-key` vector byte for byte;
+        `seal.sym`/`seal.asym` are JSON-identical; crypto 341 → 369 tests, web 1861 unchanged, 53/53 `validate_*`, the mutation
+        gate exit 0 at 100.00 % (466 mutants: 459 killed, 2 timeout, 5 ignored). Bites: the unanchored regex 7 red, the closed list
+        11, `lp` dropped 13. `export type BlobRole` in `media.ts` points at the generated (still closed) contract enum, so no
+        cast. Owed to S2: `mediaDeriver.ts:17` (`Extract<BlobRole, …>` of the GENERATED type becomes `never` with the contract
+        token), the descriptions in `blob.openapi.yaml` ~:363-366 and the sharing copy ('exactly these four'), and ADR 0079 §9
+        (it says a new kind adds seal purposes and asks HKDF with the application id: say once that random node keys under the
+        parent's key and `role` + `ownerId` satisfy it: P5).
+
   - [ ] P3-S2 contract + references — `BlobRole` token in `_common.openapi.yaml` (as `NodeKind`), `$ref` from `blob.openapi.yaml`
         and `sharing.openapi.yaml` (its second copy, without `COVER`), `@Pattern` on every request property, the two tuples
         of `validate_contracts_common` go, Memories' roles become its own constants (`MemoryBlobRole` in `features/memory`,
@@ -125,9 +137,16 @@ without touching core except for the platform prerequisites below, which every l
         throw): `addMedia`+`uploadCoverBlob` — the 8 suites that mock `media` green, `media.test.ts` and the
         characterisation red; `blobApi` — its 5 mockers green, the characterisation red; `withRefresh` — its 14 mockers
         green, `media.test.ts` and the characterisation red. B1 repeats it on the new `core/blob` paths.
-  - [ ] P4-0 golden test of the Memories level view — really mounted (fixtures of `MemoryBrowse.test.ts`), serialising tag, class, text,
+  - [x] P4-0 golden test of the Memories level view — really mounted (fixtures of `MemoryBrowse.test.ts`), serialising tag, class, text,
         aria-label, disabled; root and folder, grid/list/map, readonly; `toMatchFileSnapshot` · Done when: a changed class
-        goes red.
+        goes red. Measured: `web/src/views/MemoryHomeView.golden.test.ts` mounts `MemoryHomeView` over the real registry,
+        `MemoryLevelHost`, `MemoryBrowse`, real crypto and catalog; 8 snapshots in `__snapshots__/MemoryHomeView.golden/`
+        (root grid/list/map, folder shareable/unshareable/readonly/readonly-unshareable, empty folder), serialised by
+        `src/test/domGolden.ts` (own test). Levers, each red then restored green: a renamed `memory-folder-overview-card`
+        (5 red, a one-line diff), the share button's `v-if` dropped (1), `memory.folderCreate` → `memory.create` (5), the
+        two sections swapped (7). It pins the DOM, not layout or computed CSS. Snapshots are `.txt`, which
+        `validate_stylesheet_anchors` does not read, so they keep no dead rule alive for P4d. Update only on purpose:
+        `npx vitest run -u src/views/MemoryHomeView.golden.test.ts`, then review the snapshot diff.
   - [ ] B1 move the neutral blob transport to `web/src/core/blob/{types,transport}.ts` (`planBlob`, `reserveAndPump`,
         `authedReserve`/`authedWindow`, `windowPuts`, `openBlob*`, `presignAllChunks`, `makeChunkProvider`; `pumpBlob`,
         `sealFrameAt`, `putChunk`, `getChunk` private); `features/memory/media.ts` re-exports; `uploadMediaVia` is split

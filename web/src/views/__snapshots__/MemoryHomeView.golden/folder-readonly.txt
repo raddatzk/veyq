@@ -1,0 +1,57 @@
+div.memory-home
+  transition-stub.pending-delete-banner
+    div.p-component.p-message.p-message-warn [role="alert"]
+      div.p-message-content-wrapper
+        div.p-message-content
+          div.p-message-text
+            "Scheduled for deletion on 11/15/2026. Members can still view it; nothing new can be added."
+  div.memory-route-surface
+    section.memory-section.veyq-section
+      div.veyq-section-header
+        div.memory-folder-card.memory-folder-overview-card.veyq-card
+          span.pi.pi-folder
+          h2
+            "Trips"
+          div.memory-folder-overview-actions
+            button.memory-folder-overview-action.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-prime-icon-button [aria-label="Share"]
+              span.p-button-icon.pi.pi-share-alt
+    section.memory-section.veyq-section
+      div.memory-section-header.veyq-section-header
+        h2
+          "Memories"
+        span
+          "1"
+        div.memory-browse-toolbar
+          div.view-mode-toggle [role="group"] [aria-label="View"]
+            button.is-active.view-mode-button [aria-label="Grid view"] [aria-pressed="true"]
+              span.pi.pi-th-large
+            button.view-mode-button [aria-label="List view"] [aria-pressed="false"]
+              span.pi.pi-bars
+            button.view-mode-button [aria-label="Map view"] [aria-pressed="false"]
+              span.pi.pi-map
+      div.memory-card-grid
+        div.memory-card.p-card.p-component.veyq-card.veyq-card-interactive
+          div.p-card-body
+            div.p-card-content
+              button.memory-card-main
+                span.memory-card-cover
+                  span.memory-cover-image
+                    span.memory-card-icon.pi.pi-images
+                span.memory-card-text
+                  strong
+                    "Italy"
+                  small.memory-card-date
+                    "05/01/2024 – 05/10/2024"
+              button.memory-card-pin [aria-label="Favorite"] [aria-pressed="false"]
+                span.pi.pi-heart
+    section.memory-section.veyq-section
+      div.memory-section-header.veyq-section-header
+        h2
+          "Folders"
+        span
+          "1"
+      div.memory-card-grid
+        button.memory-folder-card.veyq-card.veyq-card-interactive
+          span.pi.pi-folder
+          strong
+            "Rome"
