@@ -39,15 +39,27 @@ export type BucketItem = {
  * neutral label). A **contributor** primary's name is the identity's sealed display name (cr-0101, copied
  * server-side); a **sub-bucket** seals with its own purpose (cr-0113). Both are bound to their object (ADR 0072),
  * addressed by the node the caller opened and the row's bucket. Operator-blind — the server relays ciphertext.
+ *
+ * A READ_WRITE guest's name is sealed under the key of its link's ROOT, which need not be this node: a folder link's
+ * guest who uploads into a Memory below, a Memory link's guest into a chapter (5a.5). So a contributor primary also
+ * tries `ancestorKeys` — the keys of this node's ancestors, nearest first, as a member holds them through the chain
+ * (`contentKeyChain`). A sub-bucket's name and a WRITE_ONLY guest's (under its own `K_up`) open under this node's only.
  */
-export function openBucketName(scopeId: string, nodeId: string, memoryKey: Uint8Array, bucket: BucketItem): string | null {
-  if (!bucket.sealedName) return null
-  try {
-    const key = mediaKey(scopeId, memoryKey, bucket)
-    return new TextDecoder().decode(v1.open(bucketNameContext_(scopeId, nodeId, bucket), key, fromB64std(bucket.sealedName)))
-  } catch {
-    return null // not openable → the picker uses a neutral fallback label
+export function openBucketName(
+  scopeId: string, nodeId: string, memoryKey: Uint8Array, bucket: BucketItem, ancestorKeys: readonly Uint8Array[] = [],
+): string | null {
+  const sealed = bucket.sealedName
+  if (!sealed) return null
+  const context = bucketNameContext_(scopeId, nodeId, bucket)
+  const guestName = context.purpose === 'share-identity-name' && !bucket.uploader
+  for (const key of guestName ? [memoryKey, ...ancestorKeys] : [memoryKey]) {
+    try {
+      return new TextDecoder().decode(v1.open(context, mediaKey(scopeId, key, bucket), fromB64std(sealed)))
+    } catch {
+      /* not under this key — the next one up, else the picker's neutral fallback label */
+    }
   }
+  return null
 }
 
 /** A contributor primary's name is its identity's seal; every other named bucket carries its own. */

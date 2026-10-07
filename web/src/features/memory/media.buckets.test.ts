@@ -10,6 +10,9 @@ import { listBuckets, createBucket, moveBucketMedia, openBucketName } from './me
 import { bucketsApi } from './api'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
+import { contentKeyChain, type TreeNode } from '../../core/node/tree'
+import { identityNameContext } from '../../core/sharing/guestIdentity'
+import { epochsOf } from '../spaces/epochsTestUtil'
 
 const SCOPE = '7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c'
 const NODE = '4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d'
@@ -30,6 +33,36 @@ const contributorRow = (sealedName: string) =>
 /** A user-created sub-bucket row. */
 const subRow = (sealedName: string, bucketId = BUCKET) =>
   ({ bucketId, ownerKey: 'user:u1', isPrimary: false, mediaCount: 0, sealedName })
+
+// cr-node-key-hierarchy 5b.4b: a guest of a link rooted ABOVE the node names itself under the ROOT's key — a folder
+// link's guest who uploads into a Memory below the folder. The member opens the Memory's buckets holding the Memory's
+// key and, through the chain, its ancestors'.
+describe('openBucketName — a guest named under an ancestor\'s key', () => {
+  const FOLDER = '5c09e000-0000-4000-8000-0000000000f1'
+  const node = (id: string, parentId: string | null, kind: string, wrappedContentKey: string): TreeNode =>
+    ({ id, parentId, kind, orderIndex: 0, epoch: 0, name: id, wrappedContentKey, wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
+  const wrap = (kek: Uint8Array, nodeId: string, k: Uint8Array) =>
+    b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE, nodeId, epoch: 0, placementVersion: 0 }, kek, k))
+
+  it('a Memory below a shared folder: the member reads the folder guest\'s name through the chain', () => {
+    const scopeKey = v1.randomBytes(32)
+    const folderKey = v1.randomBytes(32)
+    const memoryKey = v1.randomBytes(32)
+    const tree = [node(FOLDER, null, 'FOLDER', wrap(scopeKey, FOLDER, folderKey)), node(NODE, FOLDER, 'MEMORY', wrap(folderKey, NODE, memoryKey))]
+    // what `createGuestIdentity` seals on the folder link, copied by the server onto the guest's bucket in the Memory
+    const row = contributorRow(sealName(folderKey, 'Oma', identityNameContext(SCOPE, SHARE, IDENTITY)))
+    const [own, ...above] = contentKeyChain(SCOPE, epochsOf(scopeKey), tree, NODE)
+    expect(Array.from(own)).toEqual(Array.from(memoryKey))
+    expect(openBucketName(SCOPE, NODE, own, row, above)).toBe('Oma')
+    // the bite: under the Memory's key alone the name does not open
+    expect(openBucketName(SCOPE, NODE, own, row)).toBeNull()
+  })
+
+  it('only a guest\'s name climbs: a sub-bucket sealed under an ancestor\'s key stays closed', () => {
+    const folderKey = v1.randomBytes(32)
+    expect(openBucketName(SCOPE, NODE, v1.randomBytes(32), subRow(sealName(folderKey, 'Urlaub', bucketNameCtx())), [folderKey])).toBeNull()
+  })
+})
 
 describe('media buckets (cr-0113)', () => {
   beforeEach(() => vi.clearAllMocks())
