@@ -36,6 +36,6 @@ another application. What is built and what is open: the ADR's Consequences.
 | [Memories](memories.md) | Built. Backend: its own Gradle module (`:apps:memories`, packages `me.raddatz.veyq.memories`), depending on `:core` and never the reverse; web: separated from core by import direction (`web/src/features/memory`, a build-time registry the shell asks) but not by directory name or per-kind slots. What is and is not done: [ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Consequences. |
 | [Inventory](inventory.md) | Concept only. |
 | [Expenses](expenses.md) | Concept only. |
-| [Files](files.md) | Concept only. |
+| [Files](files.md) | Being built (`cr-files-application`): a skeleton — the Gradle module `:apps:files` (package `me.raddatz.veyq.files`, depending on `:core` only) placing the node kind `FILE` at the root or in a `FOLDER`, and `web/src/features/files` registering the kind; no contract, upload or UI yet. |
 
 A concept doc is **not** state the code answers to: nothing in it is built, refined into use-cases or planned.

@@ -296,11 +296,60 @@ without touching core except for the platform prerequisites below, which every l
       kind adds seal purposes and names the random node key + `ownerId`/`role` in `blob-key` as meeting both rules.
 
 ### Files
-- [ ] F0 skeleton `:apps:files` — settings, root build, module build (only `:core`), `META-INF/beans.xml`, `FilesNodeKindRules`
+- [x] F0 skeleton `:apps:files` — settings, root build, module build (only `:core`), `META-INF/beans.xml`, `FilesNodeKindRules`
       (`FILE` only under the root or a `FOLDER`, no children), two `Dockerfile` COPY lines, an assertion in
       `ModuleCompositionTest` · Done when: `validate_backend_module_graph` green with two applications, `./gradlew check`
       green. UNVERIFIED: the `veyq.files` config prefix against core's `veyq` mapping; Flyway finding migrations of every
       module jar at run time (not needed before F1).
+      **Measured 2026-10-07:** the module is added in `settings.gradle.kts`, the root's `dependencies`, the `Dockerfile`
+      (build file beside Memories' in `backend-build-base`, `src` beside Memories' in `backend-build-jvm`), and named in
+      `Composition.kt`, `backend/CLAUDE.md`, `web/CLAUDE.md`, `docs/apps/{README,files}.md`; the other hits of
+      `apps/memories` (infra, the chart, CI, `run_backend_races_on_mariadb.py`, `backend_tree.py`, `MainOutputs`,
+      `validate_doc_citations.py`) derive the modules and need no line. `apps/files/build.gradle.kts` = `veyq.module` +
+      `io.quarkus` (for its own `@QuarkusTest`, as Memories), `:core` + `testFixtures(:core)`; no `veyq.openapi` — the build
+      does not demand it while `contracts/api/files/` is absent (its check runs only for an existing directory). Code:
+      `me.raddatz.veyq.files.FilesNodeKinds` + `FilesNodeKindRules` in one file (Memories' shape), `parentAllows` also checks
+      the kind itself. The fast-jar's `lib/main` holds `me.raddatz.veyq.{core,files,memories}.jar`; the Files jar holds the
+      two classes and `META-INF/beans.xml`. `./gradlew check`: core 849, memories 361 (2 skipped), files 8 (new), root
+      84 → 85, green; `run_backend_races_on_mariadb.py` green (43 filters, `:core` + `:apps:memories`; Files has no race
+      class), and with `--tests` `FilesNodeSliceTest` (4/4, own database `veyq_apps_files`, core's baseline only) and
+      `ModuleCompositionTest` green on MariaDB 11.4. Tests: `FilesNodeKindRulesTest` (plain JUnit: the matrix, FILE under
+      FILE/MEMORY/CHAPTER refused, no rule of core or Files admits FILE as a parent); `FilesNodeSliceTest` (core + Files, no
+      Memories: the partition, create at root and in a folder 201, a FILE or FOLDER under a FILE 422 `illegal_structure`,
+      a share on a FILE 422 `illegal_scope` beside a FOLDER share 201, rename/move folder→folder→root 204 with the
+      placement version counted, a move into a FILE 422 and unchanged); `ModuleCompositionTest` gains the Files anchor in
+      the seam union and `theRulesOfCoreAndEveryApplicationPartitionTheKinds` (FOLDER/MEMORY/CHAPTER/FILE exactly one rule
+      each, nothing under a FILE) — the only place both applications run, so the cross-application partition lives in the
+      root, not in the module. Web: `features/files/{kinds,register}.ts`, `registerKind({FILE, 'pi pi-file', shareable:
+      false, slug: fileNameSlug})`, `registerApplications()` calls it after Memories; `npm run check` 200 files / 1896 tests
+      → 201 / 1902 (5 in `register.test.ts`, 1 in `applications.test.ts`), B0 and P4-0 snapshots untouched.
+      `validate_web_core_imports_no_applications` now reads `APPLICATIONS` (owner → web directory: `memories` →
+      `features/memory`, `files` → `features/files`), clients derived per owner, a new `application` rule (no application
+      imports another or its clients), `FILE`/`NodeKind.File` in the kind rule; core files read 184 before and after.
+      53/53 `validate_*` before and after; guard-gap cases 69 → 75 (72–76 new, 77 below).
+      **Decisions taken (owner, please review):** (1) no `FileDetailHost`: `KindDescriptor.detail` is optional and an
+      opened FILE already renders the host's explicit `home.unsupportedKind` state, so no placeholder component or i18n
+      key. (2) No runtime test that "core's beans do not depend on files": no compilable lever can make it red (core has
+      no edge to Files; Gradle refuses the cycle, rule (b) the edge) — it would be a test that cannot fail. (3)
+      `ModuleCompositionTest` names `FILE` and `me.raddatz.veyq.files.FilesNodeKindRules` as strings, not imports, so a root
+      build that drops the module fails at run time (2 of 4 red), not at compile. (4) **Rule (a) tightened**: every
+      included module must ship (the root reaches it over a runtime edge) — with the root's Files line dropped, every
+      guard was green and only the composition test caught it; case 77 pins it, and the demo/other forgeries of cases 50
+      and 62–65 now compose their module into the root. (5) The module's tests boot core + Files with its own
+      `src/test/resources` (Memories' keys minus the share-password bound it does not need).
+      **Bites, each red then green:** root line dropped → `ModuleCompositionTest` 2/4 red and rule (a) red;
+      `FilesNodeKindRules.handles` also `FOLDER` → files 6/8 red, root 2/4 red; a `memories` import in `FilesNodeKindRules.kt`
+      → `:apps:files:compileKotlin` red (`Unresolved reference 'memories'`), the guard stays green on it (it reads build
+      files) — with `implementation(project(":apps:memories"))` in Files' build the import compiles and rule (b) is red;
+      `'FILE'` + an import of `features/files` in a `core/node` file → web guard red on `kind` and `import`, the old guard
+      green; `features/memory` re-exporting `features/files` → red on `application`, old guard green; `features/files`
+      importing `features/memory` → red on `application` (the old guard was red too, but treating Files as core).
+      **Level view, unchanged:** `browse.ts` puts a FILE child into `level.byKind['FILE']`, and Memories' `MemoryLevelHost`
+      reads only `MEMORY` — a FILE in a folder is silently not shown, and a folder holding only files shows Memories'
+      empty state. P4b's fallback section is what fixes it; F0 changes nothing there.
+      **Not verified:** the Docker image build, a cold-home verification-metadata run (the module resolves what Memories'
+      identical plugin set does; the warm build verified clean), Flyway at run time (no migration), the `veyq.files`
+      config prefix (none added).
 - [ ] F1 a member uploads and downloads a file — `UploadCompletion` for `FILE`, `registerKind`, the file list in the folder level
       view, the download decrypted in the browser, delete into the trash · Done when: an e2e round trip with identical bytes.
 - [ ] F2 a folder share with files — read, then contributor: a guest creates the `FILE` node (`createShareNode`) and uploads

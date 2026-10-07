@@ -60,6 +60,7 @@ COPY backend/buildSrc ./buildSrc
 # dependencies of the one fast-jar, not images of their own (ADR 0079); validate_backend_module_graph.py rule (e).
 COPY backend/core/build.gradle.kts backend/core/pitest.scope.json ./core/
 COPY backend/apps/memories/build.gradle.kts ./apps/memories/
+COPY backend/apps/files/build.gradle.kts ./apps/files/
 # Cache-friendly warmup: downloads Gradle wrapper/distribution and plugin metadata once
 RUN ./gradlew --no-daemon help
 
@@ -70,6 +71,7 @@ COPY contracts/api ../contracts/api
 COPY backend/src ./src
 COPY backend/core/src ./core/src
 COPY backend/apps/memories/src ./apps/memories/src
+COPY backend/apps/files/src ./apps/files/src
 COPY --from=frontend-build /src/web/dist ./src/main/resources/META-INF/resources
 # Dropped `-Dquarkus.package.type=fast-jar`: removed in Quarkus 3.x (this is 3.36.0, backend/build.gradle.kts:26)
 # and fast-jar is the default anyway — ci.yml builds the same artifact with a bare `quarkusBuild`.

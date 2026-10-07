@@ -117,17 +117,19 @@ here; the server is blind.
   transient `M` files + stray `stryker-setup-*.js` — never run other `web/` work (git ops, `npm run check`, an
   edit) against the tree while a mutation run is live; wait for it to finish and restore.
 - **Core and application ([ADR 0079](../docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)).**
-  The application is `src/features/memory/` (one constant in the guard); **core is everything else** under `src/` —
+  The applications are `src/features/memory/` (Memories) and `src/features/files/` (Files, a skeleton: the `FILE`
+  kind) — the guard's `APPLICATIONS`, keyed by owner; **core is everything else** under `src/` —
   `app/`, `shared/`, `sw/`, `views/`, `components/app/`, every other `features/*`, and `core/`: `core/node/` (the
   node tree: `tree`, `treeStore`, `location`, `browse`, the delete/trash dialogs), `core/applications/registry.ts`
   (the registry) and `core/sharing/` (the kind-independent half of a public share, the subtree walk and the share management — mint, list, revoke, re-issue, recovery; the drop key stays the application's). Dependencies run application →
-  core, never back, and `scripts/validate_web_core_imports_no_applications.py` (no allowlist) is red on a core file
-  that imports the application or one of its generated clients (every `generate:api` output whose `-i` lies in an
+  core, never back and never application → application, and `scripts/validate_web_core_imports_no_applications.py`
+  (no allowlist) is red on a core file that imports an application or one of its generated clients, and on an
+  application file that imports another application or its clients (every `generate:api` output whose `-i` lies in an
   application's directory `contracts/api/<app>/`, read from `package.json` — today `generated/media`, `generated/favorites`,
   `generated/share-media`; so their
   factories are `features/memory/api.ts`'s, not `api/client.ts`'s, and a core helper types from core's own client or
-  from a literal union of its own, e.g. `mediaDeriver`'s tiers, since core's `BlobRole` is an open token), uses `import.meta.glob`, or names `NodeKind.Memory|Chapter` / `'MEMORY'` /
-  `'CHAPTER'`. The one exempt file is `src/applications.ts`, the composition root (by exact path, never a
+  from a literal union of its own, e.g. `mediaDeriver`'s tiers, since core's `BlobRole` is an open token), uses `import.meta.glob`, or names `NodeKind.Memory|Chapter|File` / `'MEMORY'` /
+  `'CHAPTER'` / `'FILE'`. The one exempt file is `src/applications.ts`, the composition root (by exact path, never a
   directory); `main.ts` calls its `registerApplications()` before `boot()`. Build-time only: no glob, no computed
   `import()`, no loading after the fact (ADR 0079 Decision 5, ADR 0026) — registered code runs with every unlocked key.
   **What an application registers** (its `register.ts`; the registry is write-once, a second registration throws):

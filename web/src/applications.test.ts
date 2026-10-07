@@ -3,6 +3,8 @@ import { describe, it, expect } from 'vitest'
 import { registerApplications } from './applications'
 import { registry } from './core/applications/registry'
 import { MEMORY_KIND, CHAPTER_KIND } from './features/memory/kinds'
+import { FILE_KIND } from './features/files/kinds'
+import { fileNameSlug } from './shared/naming'
 import { favoritesStore } from './features/memory/favoritesStore'
 import UploadStatusMenu from './features/memory/components/UploadStatusMenu.vue'
 import PinnedMemories from './features/memory/components/PinnedMemories.vue'
@@ -14,6 +16,12 @@ describe('composition root', () => {
   it('registers the Memories kinds into the real registry, both shareable', () => {
     expect(registry.kind(MEMORY_KIND)).toMatchObject({ supported: true, shareable: true })
     expect(registry.kind(CHAPTER_KIND)).toMatchObject({ supported: true, shareable: true })
+  })
+
+  // Files, the second application (cr-files-application F0): one kind, not a share root, its names folded as file names.
+  it('registers the Files kind into the same registry, not shareable, with the file-name folding', () => {
+    expect(registry.kind(FILE_KIND)).toMatchObject({ supported: true, shareable: false, slug: fileNameSlug })
+    expect(registry.shareBody(FILE_KIND)).toBeNull()
   })
 
   it('claims the one Memories share body for both root kinds', () => {

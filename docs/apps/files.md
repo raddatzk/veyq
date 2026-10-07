@@ -1,7 +1,9 @@
 # Application: Files (concept)
 
-> **Concept only.** Nothing here is built, refined or planned. The smallest possible application: a file tree on
+> **Concept, being built** by `changes/cr-files-application.md`. The smallest possible application: a file tree on
 > the platform's node tree ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)).
+> Built so far (F0): the skeleton only — the Gradle module `:apps:files` with the node kind `FILE` (at the root or in
+> a `FOLDER`, no children, no share root) and its web registration (`web/src/features/files`). No upload, no UI.
 
 ## Idea
 
