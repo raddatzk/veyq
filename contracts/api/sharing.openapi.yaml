@@ -960,6 +960,9 @@ components:
     NodeKind:
       $ref: '_common.openapi.yaml#/components/schemas/NodeKind'
 
+    BlobRole:
+      $ref: '_common.openapi.yaml#/components/schemas/BlobRole'
+
     CreateShareRequest:
       type: object
       required: [shareId, nodeId, role, sealedName, sealedShareKey, sealedShareKeyEpoch, writeVerifier]
@@ -1860,14 +1863,10 @@ components:
             The client-minted id of the application's object the guest completion will attach the blob to — the `wrappedBlobKey` is sealed bound to it.
           example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e
         role:
-          x-veyq-visibility: enum
-          type: string
-          description: >
-            The blob's role, closed with the blob API's `BlobRole` (the crypto suite's seal encoder admits only its
-            values, so a new role is a crypto change; it opens with generic attachments, inbox #327). A guest
-            upload takes every role but COVER.
-          enum: [ORIGINAL, THUMBNAIL, PREVIEW]
-          example: ORIGINAL
+          $ref: "#/components/schemas/BlobRole"
+          # The token's shape holds here (400 before the handler); which roles a guest may upload is the target
+          # node's application's (`ShareGuestWrites.admitsGuestRole`): any other is `400 invalid_request`.
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 16) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Z][A-Z0-9_]{0,15}")'
         chunkCount:
           x-veyq-visibility: measure
           type: integer
