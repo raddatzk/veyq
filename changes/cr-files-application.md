@@ -282,7 +282,38 @@ without touching core except for the platform prerequisites below, which every l
         (`MemoryDetail.optimistic`, `ShareView.order`, `ShareView.picker`) green; red: the core test (16), `uploadQueue.test.ts`
         (9), `UploadStatusMenu` (4), `AppTopbar` (2), `MemoryDetail` (30), `MemoryShareBody` (7), `MemoryShareBody.embedded`
         (7, its partial mock keeps the real `useUploadQueue`), `ShareView.folder` (1). Not verified in a browser.
-  - [ ] B3 the status menu to core and the tray becomes a list (`register.ts` loses its tray claim; needs P4a).
+  - [x] B3 the status menu to core and the tray becomes a list (`register.ts` loses its tray claim; needs P4a).
+        **Measured 2026-10-08:** `UploadStatusMenu.vue` moved verbatim to `core/blob/` (template and scoped CSS unchanged
+        but for the i18n keys); it imports only `./queue` and reads core's `useUploadQueue()`, i.e. EVERY batch. Evidence
+        that this is all it needs: its template reads `batch.id/label/files/finishedAt` and `item.id/name/status/progress/
+        error` only — no `mediaId`, `target`, `file`, thumbnail, memory name or link — so no per-batch `label`/`href`
+        extra was added (nothing to carry; reversible if a later menu wants a link). Memories' adapter-filtered
+        `useUploadQueue` stays: `useOptimisticTiles` still reads it. `AppTopbar` mounts `<UploadStatusMenu />` right
+        after `<InvitationsBadge />`, where Memories' one tray item sat, then the `slotItems('topbarTray')` loop;
+        `register.ts` drops its tray item (pins stay), so the real registry's `topbarTray` is empty (`applications.test.ts`).
+        i18n: a core `upload.*` namespace (`title`, `active`, `none`, `cancelAll`, `cancel`, `retry`, `status.*`,
+        `noSpace`, `close`), en + de, values byte-equal to the `media.*` ones; deleted `media.uploads/uploadActive/
+        uploadNone/uploadCancelAll/uploadCancel` (grep: no other reader); kept `media.uploadStatus.*` (OptimisticTile),
+        `media.uploadRetry` (OptimisticTile), `media.uploadNoSpace` (MemoryDetail's cover), `media.close` (MediaLightbox).
+        CSS: the menu's classes were already neutral scoped `uploads-*`, no `memory-*` — nothing renamed; the only
+        attribute that changes is the scoped `data-v-*` hash, which Vite derives from the file path. DOM proof, two ways:
+        (1) a throwaway capture (not committed) of the real `AppTopbar` over the real registry, scoped ids and comments
+        stripped, in six states (empty; two files active closed; opened; one cancelled; all cancelled with Close; a
+        quota failure + a retryable failure) — byte-identical before and after; (2) committed in `AppShell.slots.test.ts`:
+        the pre-B3 template written out (`PreB3Topbar`: badge + the list holding `memories.upload-status`) against today's
+        bar with no tray item, empty and with an upload in flight closed/opened, fragment anchors stripped as P4a did, plus
+        the one-item case now `badge, uploads-tray, item`. New in `core/blob/UploadStatusMenu.test.ts` (plain queue jobs,
+        no application): a second application's batch (`extra: {folder}`, no `target`) listed by its label and item names
+        beside a Memories-shaped one, in enqueue order, the badge counting both. `npm run check` (fresh `generate:api`) 202
+        files / 1915 tests → 202 / 1918; 53 validators green before and after, the core-import guard 185 → 186 core files
+        (64 → 63 memories); stylesheet anchors green (636); B0 and P4-0 snapshots untouched. Levers, each red then restored
+        green: a `features/memory/uploadQueue` import in the core menu (guard red); the menu rendered after the tray loop
+        (1 red: the one-item order case — the pre-B3 comparison cannot see it, since with Memories alone the list renders
+        no element, only the stripped anchors); the loop dropped (3 red); the menu filtering to batches with a `target` (5
+        red, the second-application case among them); the menu wrapped in a `<span>` (3 red, both pre-B3 comparisons
+        among them). Open for the owner: `upload.noSpace` keeps its value, which says "Deleted photos …" — Memories'
+        wording now in a core string a Files batch would show; reword when Files enqueues (F-phase or P4d). Not verified in
+        a browser.
   - [ ] P4b a core level view `core/node/LevelView.vue` — overview card, application sections ordered by `order`, the folder
         section, a fallback section for a kind nobody sections ('not supported', never an empty area) · Done when: P4-0
         unchanged, `LevelView.test.ts`.
