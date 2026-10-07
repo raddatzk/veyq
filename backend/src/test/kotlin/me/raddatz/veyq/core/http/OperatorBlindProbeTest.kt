@@ -176,6 +176,7 @@ class OperatorBlindProbeTest {
         "reactivateShare" to Probe(Address.SHARE) { s -> Call("POST", "/api/shares/${s.shareId}/reactivate") },
         "updateShare" to Probe(Address.SHARE) { s -> Call("PATCH", "/api/shares/${s.shareId}", "{}") },
         "deleteShare" to Probe(Address.SHARE) { s -> Call("DELETE", "/api/shares/${s.shareId}") },
+        "setShareSealedName" to Probe(Address.SHARE) { s -> Call("PUT", "/api/shares/${s.shareId}/sealed-name", """{"sealedName":"$B64"}""") },
         "reissueShare" to Probe(Address.SHARE) { s ->
             Call(
                 "POST", "/api/shares/${s.shareId}/reissue",

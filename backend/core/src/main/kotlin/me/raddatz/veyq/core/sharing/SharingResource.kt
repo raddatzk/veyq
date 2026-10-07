@@ -13,6 +13,7 @@ import me.raddatz.veyq.core.generated.model.LocalizedMarkdown
 import me.raddatz.veyq.core.generated.model.PresignedUrl
 import me.raddatz.veyq.core.generated.model.PublicShare
 import me.raddatz.veyq.core.generated.model.ReissueShareRequest
+import me.raddatz.veyq.core.generated.model.SetShareSealedNameRequest
 import me.raddatz.veyq.core.generated.model.ShareBlobDownload
 import me.raddatz.veyq.core.generated.model.ShareBlobUploadResultItem
 import me.raddatz.veyq.core.generated.model.ShareBlobUploadWindowResultItem
@@ -185,6 +186,14 @@ class SharingResource(
             updateShareRequest.passwordRequired, updateShareRequest.pwSalt, updateShareRequest.pwVerifier, updateShareRequest.sealedPassword,
         )) {
             UpdateShareOutcome.Done -> Response.noContent().build()
+            is HttpFailure -> httpError(o)
+        }
+
+    // A share root's re-sealed name (ADR 0080 decision 14) — any member who may write in the share's space, not
+    // only its owner; the handler changes `sealedName` and nothing else. Opaque ciphertext in, nothing opened.
+    override fun setShareSealedName(shareId: String, setShareSealedNameRequest: SetShareSealedNameRequest): Response =
+        when (val o = handler.setSealedName(identity.principal.name, shareId, setShareSealedNameRequest.sealedName)) {
+            SetShareSealedNameOutcome.Done -> Response.noContent().build()
             is HttpFailure -> httpError(o)
         }
 

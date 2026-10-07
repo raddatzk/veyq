@@ -208,13 +208,23 @@ Planned 2026-10-06 from three inventories; each sub-slice is its own worktree ru
 - [ ] 5b web — planned 2026-10-06 from three inventories; owner decisions: an own core dialog and share management for
       folders (not the Memories dialog), the share-name re-seal on a root rename (needs 5b.0), no move UI is invented
       (inbox #358), `share_key_not_recoverable` stays (tombstoned and legacy shares keep the nullable summary).
-  - [ ] 5b.0 backend + contracts — a new core operation `PUT /api/shares/{shareId}/sealed-name` (the root's name re-sealed
+  - [x] 5b.0 backend + contracts — a new core operation `PUT /api/shares/{shareId}/sealed-name` (the root's name re-sealed
         under `K_share`, stored opaque, bounds as the create field): any member with WRITE access on the share's scope
         may call it (NOT the owner gate of `updateShare`, ADR 0036 point 3, which also replaces its fields wholesale);
         it changes only `sealed_name`, takes the row lock like `liveForUpdate`, a deleted share answers 404; its own
         `x-veyq-concurrency` declaration (last writer wins: the value is always the root's current name) · Done when:
         bite tests (any member may, a stranger may not, the other fields untouched, resolve serves the new value),
         guards green.
+        *Measured:* `setShareSealedName` (`SharingHandler.setSealedName`, `SharingStore.setSealedName`): the gate's WRITE
+        answer on the share's scope (a reader — a group member removed from the tenant — and a stranger are the 404),
+        a revoked share is renamed too (a re-activation shows the current name), a deleted one is the 404. It takes the
+        share row's lock only, as `updateShare`/`revoke` do; `reactivate` takes the scope row, then the share row, so no
+        order deadlocks. `ShareSealedNameCoreSliceTest` (`:core`, a `FOLDER` share): owner and co-member set it and
+        resolve serves it (red with an owner gate), reader and stranger refused (each red without the gate), every other
+        column untouched (red writing `sealed_note`), deleted/unknown 404 (red with tombstones found), 400 bounds (red
+        without the annotation), a re-seal overlapping a revoke keeps both writes, and one overlapping a re-activation
+        ends consistent (red — a deadlock on H2 and on MariaDB — with the scope row locked after the share row).
+        `ShareMediaRouteSliceTest` (19 routes) and `OperatorBlindProbeTest` carry the route.
   - [ ] 5b.1 chapter share — `CHAPTER` `shareable: true` (`register.ts:22`), `MemoryShareBody` also claimed for
         `CHAPTER_KIND`, stale comments (`register.ts:19-20,28-29`, `kinds.ts:9`, `MemoryHomeView.vue:81`,
         `MemoryDetail.vue:63`) · Done when: `npm run check`; e2e: a chapter uploader and a chapter contributor.
