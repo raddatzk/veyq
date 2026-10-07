@@ -119,5 +119,6 @@ the **ciphertext grant** (the scope key sealed to a member's identity); it never
   on a future per-Memory **participants** tag (sealed `userId`s)
 - Public share of a subtree — **refined** → [Sharing](../sharing/_index.md)
   ([uc.sharing.share-public-viewer](../sharing/use-cases/uc.sharing.share-public-viewer.md), [ADR 0029](../../decisions/0029-public-viewer-share.md)):
-  a per-share key, anonymous link, least-privilege (only that one Memory's `K_mem`); a Memory of any scope the
+  a per-share key, anonymous link, least-privilege (only the shared node's own key: a Memory, a chapter or a folder,
+  [ADR 0080](../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)); a node of any scope the
   curator belongs to (ADR 0029 §6, [uc.sharing.share-shared-scope](../sharing/use-cases/uc.sharing.share-shared-scope.md))

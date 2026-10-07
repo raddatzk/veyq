@@ -1009,7 +1009,7 @@ components:
 
     UploaderKey:
       type: object
-      description: A WRITE_ONLY identity's own key, wrapped to the Memory's drop public key — how a reader opens what that guest uploaded.
+      description: A WRITE_ONLY identity's own key, wrapped to the node's (a Memory's or a chapter's) drop public key — how a reader opens what that guest uploaded.
       required: [identityId, wrappedIdentityKey]
       properties:
         identityId: { type: string, format: uuid, example: 6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c, x-veyq-visibility: id }
@@ -1172,8 +1172,8 @@ components:
         wrappedIdentityKey:
           type: [string, "null"]
           description: >
-            For a **WRITE_ONLY** identity's primary only: the identity's key wrapped to the Memory's drop public key
-            (AAD `upload-identity-key`; opaque base64). That primary's `sealedName` is sealed under the identity's
+            For a **WRITE_ONLY** identity's primary only: the identity's key wrapped to the node's (a Memory's or
+            chapter's) drop public key (AAD `upload-identity-key`; opaque base64). That primary's `sealedName` is sealed under the identity's
             key, not `K_mem` (ADR 0031 point 7). Null otherwise.
           contentEncoding: base64
           maxLength: 2048

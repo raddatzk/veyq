@@ -387,11 +387,47 @@ Planned 2026-10-06 from three inventories; each sub-slice is its own worktree ru
         `MemoryBuckets` wiring), write controls for READ, the window's target dropped, the embedded upload's target
         dropped, the static registration, the subtree filter, the root's `chapterName`, the note repeated, the guest
         named under another key, an embedded `unavailable` bubbling to the page. No browser check.
-  - [ ] 5b.5 clean-up — chapter wording in the member share dialog (en and de: 'Share this chapter', 'It shows only this chapter'; `share.title`/`share.intro` say Memory today); a member's root rename re-seals every share's `sealedName` through the recovery copy (each
+  - [x] 5b.5 clean-up — chapter wording in the member share dialog (en and de: 'Share this chapter', 'It shows only this chapter'; `share.title`/`share.intro` say Memory today); a member's root rename re-seals every share's `sealedName` through the recovery copy (each
         share on its own, a failure is reported, not rolled back); the trash dialog reloads after the tree reload on a
         restore (`SpaceTrashDialog.vue:65`, test `:103`) and shows a freed-slug descendant as a root (#357); docs under
         `docs/features/sharing/` and the two contract texts that say only a Memory can be shared · Done when:
         `npm run check`, `validate_doc_links`, e2e.
+        *Measured:* **the re-seal** is core's `resealShareNames(nodeId, newName, epochs)` (`manageShares.ts`): it lists
+        the node's shares (every member's, switched-off ones too), opens each `K_share` through its recovery copy,
+        seals the new name with `sealRootName` (the one `share-memory-name` seal, now shared with `mintShare` /
+        `remintShare`) and stores it with `setShareSealedName`; a share without a copy is `skipped`, a refused write or a
+        copy that does not open `failed`, the next one is still tried, nothing rolls back; it throws only when the list
+        cannot be read. It is called from Memories' `NodeMutationDialog` (the only rename path, every kind: FOLDER,
+        MEMORY, CHAPTER) right after a successful `renameNode`, before `done`; skipped/failed or a list failure is one
+        `useToast().error` (`share.nameResealFailed`, en + de), never the dialog's save error. **The trash**: the dialog
+        still drops the restored row at once, then re-reads the list when the host's reloaded tree reaches its `tree`
+        prop (a `watch`, a later reload wins), so a descendant left in the trash shows as a root; comments in
+        `SpaceTrashDialog.vue`, `tree.ts` (`listTrash`, `TrashedNode`) and `MemoryHomeView.vue` follow, inbox #357
+        notes the web half. The `listTrashedNodes` description (`content.openapi.yaml:297`: "its descendants went with
+        it and come back with it") is backend text and now incomplete — listed, not edited. **Wording**: the shell
+        hands the share dialog `nodeKind` (an open token, no literal in core); Memories' `ShareDialog` picks
+        `share.chapterTitle` / `share.chapterIntro` for its `CHAPTER_KIND` (the uploader copy still says "Memory");
+        `share.folder.roleContributor` is 'View + contribute' / 'Ansehen + mitwirken'. **Stale code**: none found — no
+        `shareable: false` comment, no "non-MEMORY share root", no "folders are never shared" left in `web/src` (the
+        `shareable: false` hits are registry tests); `share_key_not_recoverable` and the null guards stay; only
+        `ShareDialog.vue`'s header and scope prop now name the chapter. **Docs**: `docs/features/sharing/_index.md`
+        (a share is rooted at a Memory, a chapter or a folder; the role matrix linked; the rename re-seal), the three
+        UCs (a "Share roots today" line each, the viewer's least-privilege note), `docs/features/spaces/_index.md`,
+        `security-model.md` (the share = one node's key; the guest learns the shared node's scope id); contracts:
+        `sharing.openapi.yaml` already said "one node", so only `memories/media.openapi.yaml`'s two "the Memory's drop
+        public key" became the node's (description text; client regenerated). `wiki/`: no now-false claim found.
+        Tests: `manageShares.test.ts` (+4: own and another member's share re-sealed and each opens under its own
+        `K_share` only, a share without a copy skipped, a refused write and a relabelled copy collected while the
+        next succeeds, no shares no write), new `resealShareNames.wire.test.ts` (1: GET list, then one PUT whose body
+        is exactly `{sealedName}`), `NodeMutationDialog.test.ts` (+7: rename → re-seal for each kind, toasts, a refused
+        rename re-seals nothing), `SpaceTrashDialog.test.ts` (+1, and `restores a row…` changed deliberately: it
+        asserted only the local filtering), `ShareDialog.test.ts` (+4), `MemoryHomeView.test.ts` (the shell passes the
+        kind). Bites (each red, then green): other members' shares skipped (4 red), the name sealed under the scope's
+        write key (2 red), abort on the first failure (1 red), the dialog's re-seal call dropped (6 red), the list
+        re-read before the host's tree reload (1 red), the chapter wording never chosen (1 red), `nodeKind` not passed
+        by the shell (1 red). `npm run check` 1795 (193 files) → 1812 (194 files) passed; the core-import guard reads 182 → 182
+        files (the new file is a test); 53 guards green before and after. No new e2e; **no e2e run and no browser
+        check** here.
 
 ### Slice 6 — the drop-box node (not in this CR)
 Files' work: ADR 0080 decision 11, inbox #349 and #350.

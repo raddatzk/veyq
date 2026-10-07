@@ -7,6 +7,10 @@
   add photos** — while the server stays operator-blind and the rest of your content stays private.
 - **Preconditions:** an **authenticated, unlocked** curator; the target Memory is in the caller's **personal scope**
   (v1 restriction); the caller can open it (holds `K_mem`).
+- **Share roots today:** a contributor link can be rooted at a **Memory**, a **chapter** (its photos land in the
+  chapter) or a **folder** ([ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) decisions 6 and 13): a folder's contributor organises folders and
+  Memories inside it and adds photos to any Memory or chapter below it. This use-case walks the Memory case; what
+  each root kind allows is the [role matrix](../../../apps/memories.md#what-a-guest-may-do--the-role-matrix).
 - **Postconditions (success):** a share record with **role READ_WRITE** exists (opaque), and a link
   `/s/{shareId}#k=<K_share>` lets any anonymous visitor open the Memory **and contribute photos** — after naming
   themselves — until the curator revokes it or it expires. Contributed photos appear in the Memory immediately
