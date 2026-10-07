@@ -3,22 +3,24 @@
 // (features/memory/share `listShareMedia`) and opens the rest (`openSharedMemory`). A share test that stubs them writes
 // the ONE resolved shape it cares about and lets these helpers split it the way the production code does.
 import { MEMORY_KIND } from '../features/memory/kinds'
+import type { NodeKind } from '../core/node/kind'
 import type { PublicShare } from '../api/generated/sharing'
 import type { PublicShareHead } from '../core/sharing/resolvePublicShare'
 import type { OpenedMemory, ResolvedShare } from '../features/memory/share'
 
-/** The platform half of a resolved share. Every Memory share is rooted at a MEMORY node, a WRITE_ONLY one too (the
- *  server names the root kind for every unlocked role). */
-export function headOf(r: ResolvedShare, shareId = 's1'): PublicShareHead {
+/** The platform half of a resolved share. A Memories share is rooted at a MEMORY node unless [rootKind] says otherwise
+ *  (a chapter is a share root too, ADR 0080 Decision 13), a WRITE_ONLY one too (the server names the root kind for
+ *  every unlocked role). */
+export function headOf(r: ResolvedShare, shareId = 's1', rootKind: NodeKind = MEMORY_KIND): PublicShareHead {
   return {
     shareId,
-    share: { role: r.role, scopeId: r.scopeId, rootKind: MEMORY_KIND, nodes: [] } as unknown as PublicShare,
+    share: { role: r.role, scopeId: r.scopeId, rootKind, nodes: [] } as unknown as PublicShare,
     kShare: new Uint8Array(32),
     scopeId: r.scopeId,
     name: r.memoryName,
     noteByLocale: r.noteByLocale,
     role: r.role,
-    rootKind: MEMORY_KIND,
+    rootKind,
   }
 }
 

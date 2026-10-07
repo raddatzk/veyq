@@ -37,7 +37,8 @@ vi.mock('../core/node/treeStore', async () => {
 })
 vi.mock('../core/node/tree', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../core/node/tree')>()),
-  nodeContentKey: () => new Uint8Array(32).fill(9),
+  // Each node's key as the chain would resolve it: the chapter `day1` has its own (7), every other node 9.
+  nodeContentKey: (_scopeId: string, _epochs: unknown, _nodes: unknown, nodeId: string) => new Uint8Array(32).fill(nodeId === 'day1' ? 7 : 9),
 }))
 
 // Prop recorders: they render what they were handed, and expose the events the adapters listen to.
@@ -71,7 +72,13 @@ vi.mock('../features/memory/components/NodeMutationDialog.vue', async () => {
 })
 vi.mock('../features/memory/components/ShareDialog.vue', async () => {
   const { defineComponent, h } = await import('vue')
-  return { default: defineComponent({ props: { nodeId: String, uploader: Boolean }, setup: (p) => () => h('div', { class: 'share-stub' }, `${p.nodeId}|${p.uploader ? 'uploader' : 'viewer'}`) }) }
+  return {
+    default: defineComponent({
+      props: { nodeId: String, uploader: Boolean, memoryName: String, memoryKey: Uint8Array },
+      setup: (p) => () => h('div', { class: 'share-stub', 'data-name': p.memoryName, 'data-key': String(p.memoryKey?.[0]) },
+        `${p.nodeId}|${p.uploader ? 'uploader' : 'viewer'}`),
+    }),
+  }
 })
 vi.mock('../core/node/components/DeleteNodeDialog.vue', async () => {
   const { defineComponent, h } = await import('vue')
@@ -142,10 +149,22 @@ describe('MemoryHomeView over the real registry', () => {
     expect(w.find('.browse-stub').exists()).toBe(false)
   })
 
-  it('opens a chapter to the same detail, but not shareable (its descriptor says so)', async () => {
+  // A chapter is a share root of its own (ADR 0080 Decision 13): the same detail offers the share affordances, and both
+  // dialogs open for the chapter itself — its id, its own K_mem (the key chain's, not the Memory's) and its name as the
+  // tree opened it, which the dialog re-seals under K_share.
+  it('opens a chapter to the same detail, shareable, and shares the chapter itself (both dialogs)', async () => {
     const w = await mountAt('#~me/trips/italy/day1')
     expect(w.find('.detail-stub').text()).toBe('Day1|')
-    expect(w.find('.detail-stub').attributes('data-shareable')).toBe('false')
+    expect(w.find('.detail-stub').attributes('data-shareable')).toBe('true')
+
+    const detail = w.findComponent({ name: 'MemoryDetailStub' })
+    detail.vm.$emit('share')
+    detail.vm.$emit('shareUpload')
+    await flushPromises()
+    const dialogs = w.findAll('.share-stub')
+    expect(dialogs.map((s) => s.text())).toEqual(['day1|viewer', 'day1|uploader'])
+    expect(dialogs.map((s) => s.attributes('data-name'))).toEqual(['Day1', 'Day1'])
+    expect(dialogs.map((s) => s.attributes('data-key')), "the chapter's own key, not its Memory's (9)").toEqual(['7', '7'])
   })
 
   it('hides the share affordance when the instance turns public links off, even for a shareable kind', async () => {

@@ -60,7 +60,7 @@ const props = defineProps<{
   // filter is HIDDEN rather than rendered disabled (uc.memory.gallery E4).
   personalScope?: boolean
   chapters?: TreeNode[] // child CHAPTER nodes of this Memory/chapter (cr-0060)
-  shareable?: boolean // this is a personal-scope MEMORY → offer the public-share affordance (cr-0100)
+  shareable?: boolean // the host offers the public-share affordances for this node (a Memory or a chapter; cr-0100)
 }>()
 const emit = defineEmits<{
   toggleFavorite: []

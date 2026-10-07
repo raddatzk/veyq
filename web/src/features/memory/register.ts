@@ -16,17 +16,19 @@ import MemoryShareBody from './components/MemoryShareBody.vue'
 import { memoriesLifecycle } from './lifecycle'
 
 export function registerMemories(registry: Registry): void {
-  // A Memory is shareable (cr-0104); a chapter is a Memory of its own that opens the same detail but is not
-  // shareable (the backend rejects a non-MEMORY share root). Both open to the gallery (cr-0060).
+  // A Memory (cr-0104) and a chapter (ADR 0080 Decision 13) are both share roots for every role — the backend's
+  // `MemoryShareRoots` — and both open the same detail, to the gallery (cr-0060). A chapter's share wraps its own
+  // `K_mem`: its guest holds nothing of the Memory above it.
   registry.registerKind({ kind: MEMORY_KIND, detail: MemoryDetailHost, icon: 'pi pi-images', shareable: true })
-  registry.registerKind({ kind: CHAPTER_KIND, detail: MemoryDetailHost, icon: 'pi pi-images', shareable: false })
+  registry.registerKind({ kind: CHAPTER_KIND, detail: MemoryDetailHost, icon: 'pi pi-images', shareable: true })
   registry.claimSlot('levelView', MemoryLevelHost)
   registry.claimSlot('nodeMutationDialog', NodeMutationDialog)
   registry.claimSlot('shareDialog', ShareDialog)
   registry.claimSlot('topbarTray', UploadStatusMenu)
   registry.claimSlot('sidebarPins', PinnedMemories)
-  // The public share page: every Memory share — viewer, contributor and the WRITE_ONLY drop — is rooted at a MEMORY
-  // node (`PublicShare.rootKind`); the one body picks its screens by the share's role.
+  // The public share page: every Memories share — viewer, contributor and the WRITE_ONLY drop — is rooted at a MEMORY
+  // or a CHAPTER node (`PublicShare.rootKind`); the one body renders either root and picks its screens by the role.
   registry.claimShareBody(MEMORY_KIND, MemoryShareBody)
+  registry.claimShareBody(CHAPTER_KIND, MemoryShareBody)
   registry.registerLifecycle('memories', memoriesLifecycle)
 }

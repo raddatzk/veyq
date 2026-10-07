@@ -34,6 +34,7 @@ import { PRODUCTION_ARGON_TIMEOUT_MS } from '@veyq/crypto/testArgon'
 import { ShareRole, type PublicShare, type SharingApi } from '../../api/generated/sharing'
 import type { ShareMediaListing } from '../../api/generated/share-media'
 import { fakeApi, stubApi } from '../../test/apiMock'
+import { openDropKey } from './mediaKey'
 
 const SCOPE_ID = '7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c'
 const NODE_ID = '4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d'
@@ -808,5 +809,83 @@ describe('shareChunkProvider (Slice 2 SW range seam for the anonymous viewer, AD
     expect(resolveShareBlob).toHaveBeenCalledWith({ shareId: 'share-1', blobId: BLOB.blobId, xSharePassword: 'pw-token' })
     // a wrap served for another scope (the one the resolved share names) is refused, not opened
     expect(() => shareChunkProvider('share-1', { ...si, scopeId: crypto.randomUUID() }, ref)).toThrow(v1.OpenRefused)
+  })
+})
+
+// ADR 0080 Decision 13: a chapter is a share root of its own. Its link wraps the CHAPTER's K_mem (never its Memory's),
+// its title is the chapter's name re-sealed under K_share, the server roots the served subtree at the chapter (no
+// parent id, no entry of its own), and the same `openSharedMemory` walks it — the chapters below it and their media.
+describe('a chapter share (ADR 0080 Decision 13)', () => {
+  const NESTED = '5c09e000-0000-4000-8000-00000000ce11'
+  const contentKey = (kek: Uint8Array, nodeId: string, k: Uint8Array) =>
+    b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId, epoch: 0, placementVersion: 0 }, kek, k))
+
+  it("a viewer link opens the chapter's own K_mem and title and the chapters below it", async () => {
+    const create = echoCreate()
+    mockCurator(create)
+    const chapterKey = v1.randomBytes(32)
+    const nestedKey = v1.randomBytes(32)
+    const minted = await createShare(SCOPE_ID, CHAPTER_ID, chapterKey, EPOCHS, 'Day 1')
+    const { wrap, sealedName, nodeId } = posted(create)
+    expect(nodeId, 'the share is rooted at the chapter').toBe(CHAPTER_ID)
+    expect(v1.open({ purpose: 'share-key' }, minted.kShare, fromB64std(wrap!)), "the wrap carries the chapter's key").toEqual(chapterKey)
+
+    mockGuest({
+      role: 'READ', passwordRequired: false, scopeId: SCOPE_ID, wrap, sealedName, rootKind: 'CHAPTER',
+      nodes: [
+        { id: CHAPTER_ID, parentId: null, kind: 'CHAPTER', epoch: 0 }, // the root: no entry, no parent served
+        {
+          id: NESTED, parentId: CHAPTER_ID, kind: 'CHAPTER', epoch: 0, placementVersion: 0,
+          wrappedContentKey: contentKey(chapterKey, NESTED, nestedKey), encryptedName: nodeName(chapterKey, NESTED, 'Morning'),
+        },
+      ],
+    }, {
+      media: [
+        { nodeId: CHAPTER_ID, mediaId: MEDIA_1, blobId: 'b1', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta: sealMeta(chapterKey, MEDIA_1, { v: 1, w: 1600, h: 1200 }) },
+        { nodeId: NESTED, mediaId: MEDIA_2, blobId: 'b2', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta: sealMeta(nestedKey, MEDIA_2, { v: 1, w: 800, h: 600 }) },
+      ],
+      identities: [],
+    })
+
+    const resolved = await resolveShare(minted.shareId, b64url(minted.kShare))
+    expect(resolved.memoryName, "the chapter's title, opened from the share's sealed name").toBe('Day 1')
+    expect(resolved.access).toEqual({ kind: 'read', memoryKey: chapterKey })
+    const byId = new Map(resolved.items.map((i) => [i.item.mediaId, i]))
+    const own = byId.get(MEDIA_1)!
+    const nested = byId.get(MEDIA_2)!
+    expect(unsealMeta(SCOPE_ID, own.memoryKey, own.item), "the chapter's own media opens").toMatchObject({ w: 1600 })
+    expect(own.chapterName, 'a media on the shared root carries no chapter title').toBeNull()
+    expect(unsealMeta(SCOPE_ID, nested.memoryKey, nested.item), 'a nested chapter opens down the chain').toMatchObject({ w: 800 })
+    expect(nested.chapterName).toBe('Morning')
+  })
+
+  it("an uploader link seals the chapter's drop key under the chapter's K_mem, bound to the chapter", async () => {
+    const create = echoCreate()
+    mockCurator(create)
+    const chapterKey = v1.randomBytes(32)
+    stubApi(contentApi, {
+      listNodes: [{ id: CHAPTER_ID, epoch: 0, parentId: NODE_ID, kind: 'CHAPTER', encryptedName: 'AQ==', slugToken: 'AQ==', orderIndex: 0, wrappedContentKey: 'AQ==', sealedDropPrivateKey: null, metaVersion: 0, placementVersion: 0 }],
+    })
+
+    const minted = await createShare(SCOPE_ID, CHAPTER_ID, chapterKey, EPOCHS, 'Day 1', ShareRole.WriteOnly)
+
+    const req = posted(create)
+    expect(req.nodeId).toBe(CHAPTER_ID)
+    expect(req.wrap, 'an uploader link carries no K_mem wrap').toBeUndefined()
+    // the private half opens for a member of the chapter, under its K_mem, bound to the chapter's id …
+    const drop = openDropKey(SCOPE_ID, CHAPTER_ID, chapterKey, req.sealedDropPrivateKey!)
+    expect(v1.open({ purpose: 'drop-public-key' }, minted.kShare, fromB64std(req.sealedDropPublicKey!)))
+      .toEqual(v1.serializeHybridPublic(v1.dropKeyPublic(drop)))
+    // … and not as the parent Memory's drop key
+    expect(() => openDropKey(SCOPE_ID, NODE_ID, chapterKey, req.sealedDropPrivateKey!)).toThrow(v1.OpenRefused)
+
+    // the guest of that link opens the chapter's drop public key and nothing else
+    mockGuest({
+      role: 'WRITE_ONLY', passwordRequired: false, scopeId: SCOPE_ID, nodeId: CHAPTER_ID, rootKind: 'CHAPTER',
+      sealedName: req.sealedName, sealedDropPublicKey: req.sealedDropPublicKey, nodes: [],
+    })
+    const resolved = await resolveShare(minted.shareId, b64url(minted.kShare))
+    expect(resolved.memoryName).toBe('Day 1')
+    expect(resolved.access).toMatchObject({ kind: 'drop', nodeId: CHAPTER_ID })
   })
 })

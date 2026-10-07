@@ -78,9 +78,9 @@ const currentNodeKey = computed(() =>
 const memoryKey = computed(() => (isOpenable.value ? currentNodeKey.value : null))
 
 // Public-share affordance: offered for a node whose kind descriptor says it is shareable, in a scope the caller is a
-// member of — personal, group, or tenant (cr-0104; the backend rejects a share root of any other kind). Also gated
-// on the `sharing.public-links` capability (ADR 0032): an operator can turn public sharing off instance-wide, in
-// which case the affordance is hidden entirely (and the server rejects createShare with 422).
+// member of — personal, group, or tenant (cr-0104; the backend refuses a share root of a kind no application
+// declares). Also gated on the `sharing.public-links` capability (ADR 0032): an operator can turn public sharing off
+// instance-wide, in which case the affordance is hidden entirely (and the server rejects createShare with 422).
 const shareable = computed(() => {
   if (!hasCapability(SHARING_PUBLIC_LINKS) || !currentNode.value) return false
   const info = registry.kind(currentNode.value.kind)

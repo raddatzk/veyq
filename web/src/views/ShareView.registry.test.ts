@@ -38,7 +38,7 @@ import {
 } from '../core/sharing/resolvePublicShare'
 import { createRegistry, type Registry } from '../core/applications/registry'
 import type { NodeKind } from '../core/node/kind'
-import { MEMORY_KIND, CHAPTER_KIND } from '../features/memory/kinds'
+import { MEMORY_KIND } from '../features/memory/kinds'
 import { ShareRole } from '../api/generated/sharing'
 import { realI18n } from '../test/i18n'
 
@@ -86,7 +86,7 @@ describe('ShareView dispatches on the share root kind', () => {
 
   it('a root kind nobody claimed is the explicit unavailable state, not a blank page (live control above)', async () => {
     holder.reg = registryWith([MEMORY_KIND])
-    vi.mocked(resolvePublicShare).mockResolvedValue(head({ rootKind: CHAPTER_KIND }))
+    vi.mocked(resolvePublicShare).mockResolvedValue(head({ rootKind: 'EXPENSE' }))
     const w = mountShare()
     await flushPromises()
     expect(w.find('.body-stub').exists()).toBe(false)

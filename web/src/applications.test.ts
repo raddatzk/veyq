@@ -7,9 +7,16 @@ import { favoritesStore } from './features/memory/favoritesStore'
 
 // `src/test/setup.ts` has already called registerApplications() once for this file, exactly as main.ts does.
 describe('composition root', () => {
-  it('registers the Memories kinds into the real registry', () => {
+  // Both Memories kinds are share roots (ADR 0080 Decision 13, the backend's `MemoryShareRoots`): a chapter is shareable
+  // on its own and its public page is the same Memories body as a Memory's.
+  it('registers the Memories kinds into the real registry, both shareable', () => {
     expect(registry.kind(MEMORY_KIND)).toMatchObject({ supported: true, shareable: true })
-    expect(registry.kind(CHAPTER_KIND)).toMatchObject({ supported: true, shareable: false })
+    expect(registry.kind(CHAPTER_KIND)).toMatchObject({ supported: true, shareable: true })
+  })
+
+  it('claims the one Memories share body for both root kinds', () => {
+    expect(registry.shareBody(MEMORY_KIND)).not.toBeNull()
+    expect(registry.shareBody(CHAPTER_KIND)).toBe(registry.shareBody(MEMORY_KIND))
   })
 
   // The rotation hook is REQUIRED (the registry's header): this is the test that goes red when the composition root
