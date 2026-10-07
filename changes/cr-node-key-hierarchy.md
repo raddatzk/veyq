@@ -186,10 +186,25 @@ Planned 2026-10-06 from three inventories; each sub-slice is its own worktree ru
       check removed), `anEpochBelowTheCurrentIsStoredAsSentWithNoPayload` (red with the current epoch stored in its
       place), `aCreateWithoutAnEpochIsMalformed`. Owed to 5b: the web client of both operations, and which epoch it
       seals a create with — the resolve names each node's (`ShareNode.epoch`), never the scope's current one.
-- [ ] 5a.4 chapter share and role matrix — Memories declares `CHAPTER` as a share root and extends
+- [x] 5a.4 chapter share and role matrix — Memories declares `CHAPTER` as a share root and extends
       `MediaShareGuestWrites` (:29) and `UploadAdmission` to it (an upload lands in the chapter: `nodeId = rootNodeId`);
       the role matrix for Memories in `docs/apps/memories.md` from the real code · Done when: bite test 21; the matrix
       reviewed against the guest operations of `share-media.openapi.yaml`.
+      *Measured:* one set, `MemoriesNodeKinds.SHARE_ROOTS` (`MEMORY`, `CHAPTER`), answers `MemoryShareRoots` (all three
+      roles), `MediaShareGuestWrites.supports` and `MediaUploadAdmission.supports`; no core change was needed (the
+      resolve, the view gate, the blob GET, the drop key and the member media/bucket reads are kind-blind). Tests:
+      `ChapterShareSliceTest` — bite 21 and the chapter half of 12 (red with the subtree walked from the root's
+      parent), an uploader link on a chapter (drop key on the chapter, not the Memory; the upload lands in the chapter,
+      red with the complete attaching to the parent; a member's chapter media page and buckets serve what opens it; a
+      viewer link serves the identity's wrapped key and no name), a contributor's start/window/complete/delete-own
+      (red with `MediaShareGuestWrites` or `MediaUploadAdmission` back to `MEMORY` only), no guest tree operation
+      inside a chapter (red with `FolderGuestNodeRules` claiming `CHAPTER`). `ShareRootsSliceTest` changed on purpose:
+      `aChapterShareIsRefusedForEveryRole` became `aChapterIsAShareRootForEveryRole` (red with `MemoryShareRoots` back
+      to `MEMORY` only), the role-change refusal moved to a seeded share on a kind nobody declares (red with the
+      `ShareRoots` check dropped from `updateShare`), and `aChapterLinkChangesRoleAsAMemorysDoes`. Contract text only:
+      `share-media.openapi.yaml` says "Memory or chapter". **Owed to 5b:** `shareable: true` for `CHAPTER`
+      (`register.ts:22`, whose comment "the backend rejects a non-MEMORY share root" is now false) and the share
+      dialog for a chapter; the matrix's three cells marked UNVERIFIED by a test.
 - [ ] 5b web — folder share dialog and body, chapter share (`shareable` in the registry), the member's root rename
       re-seals share names through the recovery copy, drop the `share_key_not_recoverable` branch (`share.ts`), Restore
       of a freed-slug descendant in the trash list (slice 4 note) · Done when: `npm run check`; e2e: a folder share,

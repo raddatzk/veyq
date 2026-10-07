@@ -39,6 +39,60 @@ direction only (see the end).
 | Seals bound to their object | [ADR 0072](../decisions/0072-a-seal-binds-its-object.md) |
 | Concurrent writes to a sealed blob | [ADR 0077](../decisions/0077-a-write-carries-the-version-it-read.md) |
 
+## What a guest may do — the role matrix
+
+ADR 0080 decision 6 has each application write down what a link's role lets a guest do with its kinds; a kind with
+no declaration allows nothing. This is Memories' answer, measured from the code after cr-node-key-hierarchy 5a.4
+(2026-10-07), for a link rooted at a `MEMORY`, at a `CHAPTER`, and — for the Memories content it reaches — at core's
+`FOLDER`. The roles: `READ` (viewer, [ADR 0029](../decisions/0029-public-viewer-share.md)), `READ_WRITE`
+(contributor, [ADR 0030](../decisions/0030-contributor-public-share.md)), `WRITE_ONLY` (uploader,
+[ADR 0031](../decisions/0031-uploader-public-share.md)). ✓ allowed, ✗ refused (the answer in brackets).
+
+| Operation | `READ` | `READ_WRITE` on `MEMORY` / `CHAPTER` | `READ_WRITE` on `FOLDER` | `WRITE_ONLY` on `MEMORY` / `CHAPTER` |
+|---|---|---|---|---|
+| Read: the subtree's nodes, its media, their blobs | ✓ | ✓ | ✓ (the Memories below it with their media) | ✗ (no node, empty media lists, blob `404`) |
+| Upload media (start, window, complete) | ✗ (`share_not_contributable`) | ✓, always into the root node itself | ✗ (`share_not_contributable`: no application writes under a folder) | ✓, into the root node itself |
+| Delete the own media | ✗ (`share_not_contributable`) | ✓ | ✗ (`share_not_contributable`) | ✓ |
+| Delete others' media | ✗ | ✗ (`404 share_media_not_found`) | ✗ | ✗ (`404 share_media_not_found`) |
+| Edit a medium's meta | ✗ (no guest operation) | ✗ (no guest operation) | ✗ | ✗ |
+| Rename a node | ✗ (`share_not_contributable`) | ✗: the root never (`illegal_structure`), a chapter inside a Memory `illegal_scope` | ✓ a child of a `FOLDER`; ✗ the root, a chapter (`illegal_scope`) | ✗ (`share_not_contributable`) |
+| Cover, date, place of a node (`wrappedMeta`, cover blob) | ✗ (no guest operation) | ✗ (no guest operation) | ✗ (no guest operation) | ✗ |
+| Create a chapter or a Memory | ✗ (`share_not_contributable`) | ✗ (`illegal_scope`: Memories declares no `GuestNodeRules`) | ✓ a `MEMORY` or `FOLDER` under a `FOLDER`; ✗ a chapter (`illegal_scope` inside a Memory, `illegal_structure` under a folder) | ✗ (`share_not_contributable`) |
+| Move a node | ✗ (`share_not_contributable`) | ✗ (`illegal_scope`; the root `illegal_structure`) | ✓ a `FOLDER` or `MEMORY` between folders of the subtree; ✗ a chapter out of or into a Memory (`illegal_scope`), anything out of the subtree | ✗ (`share_not_contributable`) |
+| Delete a node | ✗ (no guest operation) | ✗ (no guest operation) | ✗ (no guest operation, ADR 0080 decision 6) | ✗ |
+
+What the cells rest on:
+
+- **A `CHAPTER` link is a smaller `MEMORY` link.** The chapter has its own `K_mem`, its media's `K_blob` hang under
+  it, and the resolve, the media list and the blob GET all read the subtree under the share's root
+  (`SharingStore.subtree`, `ShareGuestGate.viewGate`, `SharingStore.authorizedBlob`): a chapter guest is served the
+  chapter (without its own entry, which is sealed under the Memory's key) and nothing of the Memory or a sibling
+  chapter (`ChapterShareSliceTest`, bite test 21). `NodeKindRules` puts a chapter only directly inside a Memory, so a
+  chapter link has no node below its root.
+- **Uploads land in the root node** (`ShareMediaHandler.complete`: `nodeId = rootNodeId`, never client-chosen): a
+  `MEMORY` link's guest uploads into the Memory, never into one of its chapters; a `CHAPTER` link's into the chapter.
+  A `WRITE_ONLY` link seals to the root node's own drop key, set on that node by its first uploader link
+  (`SharingStore.create`), and every reader of the node — a member's media page and buckets, a viewer link — is served
+  what opens it. A guest's name reaches members only; a guest read serves a `WRITE_ONLY` identity's wrapped key and
+  never a `READ_WRITE` identity ([ADR 0030](../decisions/0030-contributor-public-share.md) point 8).
+- **Tree operations are core's** (`ShareNodesHandler`, `READ_WRITE` only): inside a `FOLDER` core allows them
+  (`FolderGuestNodeRules`) and `NodeKindRules` decides where a kind may live; inside a `MEMORY` or a `CHAPTER`
+  Memories declares nothing, so `GuestNodeRules` fails closed. The root is never a guest's to move or rename.
+- **No guest route exists** for a medium's meta (`updateMediaMeta`), a node's `wrappedMeta` or cover, or a node
+  delete: `share-media.openapi.yaml` holds list, complete and delete-own; `sharing.openapi.yaml`'s guest node schemas
+  carry no `wrappedMeta`.
+- A `WRITE_ONLY` link on a `FOLDER` cannot be created (`ShareRoots`: a drop box is Files' own node, ADR 0080
+  decision 11), and a role change never reaches or leaves `WRITE_ONLY` (`invalid_role_change`); `READ` ↔
+  `READ_WRITE` flips in place on all three kinds.
+
+**Verified by a test vs. by reading the code.** Every `MEMORY` and `CHAPTER` cell has a slice test
+(`ChapterShareSliceTest`, `ShareRootsSliceTest`, `ShareNodesSliceTest`, the share media suites). The `FOLDER` column's
+upload, rename, create and move cells are tested (`ShareRootsSliceTest`, `ShareNodesSliceTest`,
+`ShareNodesCoreSliceTest`). **UNVERIFIED by a test** (read from the code only): a `READ` or `READ_WRITE` folder guest
+being served the media of a Memory below the folder (`ShareMediaHandler.list` reads the whole live subtree and asks
+no kind); a folder guest's create of a chapter directly under a folder answering `illegal_structure`
+(`FolderGuestNodeRules` allows, `MemoryNodeKindRules` refuses); a `READ` ↔ `READ_WRITE` flip on a folder link.
+
 ## How far it is separated
 
 Measured 2026-10-05 (`ls backend/core/src/main/kotlin/me/raddatz/veyq/core backend/apps/memories/src/main/kotlin/me/raddatz/veyq/memories`):
@@ -48,8 +102,8 @@ package — the platform in `me.raddatz.veyq.core` (the node tree in `core.conte
 Memories in `me.raddatz.veyq.memories` (`media`, `favorites`, `itemfavorites`, `node`) — and core reaches Memories only
 through the interfaces Memories implements: it attaches its media through `UploadCompletion`, measures a link's
 contributed blobs through `UploadAdmission`, places its `MEMORY` and `CHAPTER` through `NodeKindRules` (core places
-only `FOLDER`), declares that a `MEMORY` may be the root of a share of every role through `ShareRoots` (a `CHAPTER`
-of none yet) and takes guest writes through `ShareGuestWrites`. Memories' tests run in `:apps:memories`, beside the
+only `FOLDER`), declares that a `MEMORY` and a `CHAPTER` may be the root of a share of every role through
+`ShareRoots` and takes guest writes under both through `ShareGuestWrites` (one set, `MemoriesNodeKinds.SHARE_ROOTS`). Memories' tests run in `:apps:memories`, beside the
 core tests that need an application at runtime; `:core`'s own run with no application at all. **The web is separated
 by import direction only**: `features/memory` is the application (core imports it nowhere but the composition root
 and asks a registry for what to render), though its directory name and five single-claim slots are still

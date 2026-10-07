@@ -13,9 +13,9 @@ import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional
 
 /**
- * The Memories half of a guest's write on a share: a share is rooted at a MEMORY (ADR 0029 §6, ADR 0030), so this is
- * the implementation for that kind. Its seam half only forwards core's guest transport (start, window) to core's
- * generic upload. [deleteOwn] is Memories' own: [ShareMediaHandler] calls it past core's guest gate, and completes a
+ * The Memories half of a guest's write on a share: a share of Memories is rooted at a MEMORY or a CHAPTER (ADR 0029
+ * §6, ADR 0030, ADR 0080 decision 13), so this is the implementation for those kinds. Its seam half only forwards
+ * core's guest transport (start, window) to core's generic upload. [deleteOwn] is Memories' own: [ShareMediaHandler] calls it past core's guest gate, and completes a
  * guest's uploads itself through core's completion dispatcher (which reaches [MediaUploadCompletion]).
  */
 @ApplicationScoped
@@ -24,9 +24,9 @@ class MediaShareGuestWrites(
     private val store: MediaStore,
 ) : ShareGuestWrites {
 
-    // MEMORY only, not [MediaUploadCompletion]'s wider "may hold media" set (MEMORY or CHAPTER): a share's root is a Memory,
-    // and what a CHAPTER may hold is not what may be shared.
-    override fun supports(nodeKind: String): Boolean = nodeKind == MemoriesNodeKinds.MEMORY
+    // The kinds Memories roots a share at ([MemoriesNodeKinds.SHARE_ROOTS]), not [MediaUploadCompletion]'s "may hold
+    // media" set: the two hold the same kinds today, but what may hold media is not by that what may be shared.
+    override fun supports(nodeKind: String): Boolean = nodeKind in MemoriesNodeKinds.SHARE_ROOTS
 
     override fun start(scopeId: String, shareId: String, identityId: String, declares: List<UploadDeclare>, domain: String?): List<UploadItemResult> =
         uploads.startForLink(scopeId, shareId, identityId, declares, domain)

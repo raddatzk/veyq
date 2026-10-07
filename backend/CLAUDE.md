@@ -13,7 +13,7 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   configuration — never another application) is `scripts/validate_backend_module_graph.py`'s, its docstring the list. `:core`'s tests boot core
   with **no** application (`CoreAloneSliceTest`). **A test
   lives where what it exercises runs:** in `:core` if it passes with core alone, in `:apps:memories` if it needs
-  Memories at runtime — every share of a `MEMORY` (core alone shares only a `FOLDER`, `ShareRoots`), every
+  Memories at runtime — every share of a `MEMORY` or a `CHAPTER` (core alone shares only a `FOLDER`, `ShareRoots`), every
   `MEMORY`/`CHAPTER` placement, a seam's registered partition — even when its package is core's. **A `--tests`
   filter must name the project that holds the class** — `./gradlew :core:test --tests '*SessionPurgeTest'`,
   `./gradlew :apps:memories:test --tests '*ShareSliceTest'`: a bare `test --tests X` fails "No tests found" in every

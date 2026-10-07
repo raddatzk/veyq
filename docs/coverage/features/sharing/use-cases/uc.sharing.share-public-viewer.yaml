@@ -64,10 +64,10 @@ acceptanceCriteria:
           - src/features/memory/components/ShareCreateDialog.test.ts
           - src/features/memory/components/ShareDialog.test.ts
   - id: least-privilege-personal-only
-    text: A share exposes only that one Memory subtree — K_mem is random and independently wrapped, so the link reveals neither K_SC (the rest of the scope) nor any sibling Memory's K_mem (crypto-enforced least privilege, ADR 0012). Which node kinds may be a share root, with which roles, is the kind's owner's (ShareRoots, ADR 0080) — a MEMORY with every role, a FOLDER with READ or READ_WRITE (never WRITE_ONLY), a CHAPTER not yet (422). This use-case's v1 was personal-scope only; group/tenant Memories became shareable in cr-0104 (uc.sharing.share-shared-scope), gated on scope membership.
+    text: A share exposes only that one Memory subtree — K_mem is random and independently wrapped, so the link reveals neither K_SC (the rest of the scope) nor any sibling Memory's K_mem (crypto-enforced least privilege, ADR 0012). Which node kinds may be a share root, with which roles, is the kind's owner's (ShareRoots, ADR 0080) — a MEMORY and a CHAPTER with every role (a chapter link is a smaller Memory link — its guest reads the chapter and nothing of the Memory above or of a sibling chapter, ADR 0080 decisions 9 and 13), a FOLDER with READ or READ_WRITE (never WRITE_ONLY), any other kind none (422). This use-case's v1 was personal-scope only; group/tenant Memories became shareable in cr-0104 (uc.sharing.share-shared-scope), gated on scope membership.
     coverage:
       backend:
-        integration: [ShareSliceTest.resolveLeaksNothingOutsideTheSubtree, ShareRootsSliceTest.aChapterShareIsRefusedForEveryRole, ShareRootsSliceTest.aFolderIsNoDropBox]
+        integration: [ShareSliceTest.resolveLeaksNothingOutsideTheSubtree, ShareRootsSliceTest.aChapterIsAShareRootForEveryRole, ShareRootsSliceTest.aFolderIsNoDropBox, ChapterShareSliceTest.aChapterGuestReadsTheChapterAndNothingOfItsMemory]
       web:
         unit: [src/features/memory/share.test.ts]
   - id: operator-blind-and-tier-honesty
