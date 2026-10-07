@@ -30,6 +30,7 @@ import {
   type ContributorSession,
 } from '../share'
 import { pickLocaleText, type PublicShareHead } from '../../../core/sharing/resolvePublicShare'
+import { loadGuestSession, saveGuestSession } from '../../../core/sharing/guestIdentity'
 import { unsealMeta, effectiveCapturedAt, hasDerivatives, downloadRef, type MediaItem } from '../media'
 import { collectPickedFiles, inferMediaType, enqueueUploads, retryFile, removeFile } from '../uploadQueue'
 import { useOptimisticTiles, type OptimisticTileVM } from '../useOptimisticTiles'
@@ -128,17 +129,8 @@ const isUploader = computed(() => role.value === ShareRole.WriteOnly)
 // Either contributing role names itself once, then may add photos (the backend accepts both on the upload path).
 const canContribute = computed(() => isContributor.value || isUploader.value)
 // The named contributor session, persisted per-share so a reload keeps the name (never leaves the device).
-const sessionKey = `veyq:share-contributor:${shareId}`
-const session = ref<ContributorSession | null>(null)
-function loadSession() {
-  try {
-    const raw = localStorage.getItem(sessionKey)
-    session.value = raw ? (JSON.parse(raw) as ContributorSession) : null
-  } catch {
-    session.value = null
-  }
-}
-loadSession() // before the first render: the shell mounts this body once the share is ready, so no name-gate flash
+// The platform keeps it (`core/sharing/guestIdentity.ts`), one per link whichever body named the guest.
+const session = ref<ContributorSession | null>(loadGuestSession<ContributorSession>(shareId)) // before the first render: the shell mounts this body once the share is ready, so no name-gate flash
 // The key this session's uploads seal under — K_mem for a contributor, the uploader's own key for an uploader.
 const sealKey = computed(() => (session.value && access.value ? sessionSealKey(session.value, access.value) : null))
 // A READ_WRITE or WRITE_ONLY share shows a mandatory name pre-screen until the visitor has named themselves — and
@@ -154,7 +146,7 @@ async function submitName() {
   nameError.value = false
   try {
     const created = await createContributorIdentity(shareId, shareScopeId.value, access.value, name, props.fragmentKey, props.pwToken)
-    localStorage.setItem(sessionKey, JSON.stringify(created))
+    saveGuestSession(shareId, created)
     session.value = created
   } catch {
     nameError.value = true

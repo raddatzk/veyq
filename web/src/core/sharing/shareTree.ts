@@ -8,7 +8,7 @@
 // application's own guest read).
 import * as v1 from '@veyq/crypto/v1'
 import { fromB64std } from '@veyq/crypto/base64'
-import { openName } from '../node/tree'
+import { openContentKey, openName } from '../node/tree'
 import { ShareUnavailableError, type PublicShareHead } from './resolvePublicShare'
 import type { PublicShare, ShareNode } from '../../api/generated/sharing'
 
@@ -76,7 +76,9 @@ export function walkSubtree(scopeId: string, nodes: ShareNode[], rootKey: Uint8A
         // listed for (ADR 0072, ADR 0080 Decision 3) — and both under the parent's key: the node's directory entry
         // (ADR 0080 Decision 2).
         const node = { scopeId, nodeId: child.id, epoch: child.epoch, placementVersion: child.placementVersion }
-        const key = v1.open({ purpose: 'content-key', ...node }, parentKey, fromB64std(child.wrappedContentKey))
+        const key = openContentKey(scopeId, parentKey, {
+          id: child.id, epoch: child.epoch, placementVersion: child.placementVersion, wrappedContentKey: child.wrappedContentKey,
+        })
         const name = openName(parentKey, node, child.encryptedName)
         keys.set(child.id, key)
         names.set(child.id, name)
