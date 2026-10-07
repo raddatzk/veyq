@@ -205,10 +205,34 @@ Planned 2026-10-06 from three inventories; each sub-slice is its own worktree ru
       `share-media.openapi.yaml` says "Memory or chapter". **Owed to 5b:** `shareable: true` for `CHAPTER`
       (`register.ts:22`, whose comment "the backend rejects a non-MEMORY share root" is now false) and the share
       dialog for a chapter; the matrix's three cells marked UNVERIFIED by a test.
-- [ ] 5b web — folder share dialog and body, chapter share (`shareable` in the registry), the member's root rename
-      re-seals share names through the recovery copy, drop the `share_key_not_recoverable` branch (`share.ts`), Restore
-      of a freed-slug descendant in the trash list (slice 4 note) · Done when: `npm run check`; e2e: a folder share,
-      a chapter share, a contributor moving inside the subtree.
+- [ ] 5b web — planned 2026-10-06 from three inventories; owner decisions: an own core dialog and share management for
+      folders (not the Memories dialog), the share-name re-seal on a root rename (needs 5b.0), no move UI is invented
+      (inbox #358), `share_key_not_recoverable` stays (tombstoned and legacy shares keep the nullable summary).
+  - [ ] 5b.0 backend + contracts — `UpdateShareRequest.sealedName` (the root's name re-sealed under `K_share`, stored
+        opaque, same bounds as the create field; member WRITE access like the other update fields) · Done when: a bite
+        test, guards green.
+  - [ ] 5b.1 chapter share — `CHAPTER` `shareable: true` (`register.ts:22`), `MemoryShareBody` also claimed for
+        `CHAPTER_KIND`, stale comments (`register.ts:19-20,28-29`, `kinds.ts:9`, `MemoryHomeView.vue:81`,
+        `MemoryDetail.vue:63`) · Done when: `npm run check`; e2e: a chapter uploader and a chapter contributor.
+  - [ ] 5b.2 lift share management to core — mint (recovery copy mandatory), list, revoke, reactivate, reissue and
+        recovery without drop keys move from `features/memory/share.ts` to `core/sharing/manageShares.ts`; `walkSubtree`
+        to `core/sharing/shareTree.ts`; drop keys and the uploader stay in Memories · Done when: all tests unchanged
+        green, `validate_web_core_imports_no_applications` green.
+  - [ ] 5b.3 share a folder (member side) — `FOLDER` `shareable` in core; the `levelView` contract gains `shareable` and
+        a `share` event; a share button on the folder overview card; a core `FolderShareDialog` (READ, READ_WRITE)
+        built from the existing components and `.veyq-*` classes; en and de strings · Done when: `npm run check`.
+  - [ ] 5b.4 folder share on the public page and guest operations — `ShareBodyProps.subtreeRoot {nodeId, key, name}`;
+        core `FolderShareBody` (breadcrumb, cards, names opened through the key chain, each child kind's body embedded
+        through `registry.shareBody(kind)`, unknown kind -> `.veyq-empty`); `createShareNodeAsGuest` (epoch = the
+        parent's served epoch, version 0, slug slot = the parent id) and `placeShareNodeAsGuest` (key re-wrapped under
+        the destination key, the node's epoch, `placementVersion + 1`, one retry on `stale_placement`) in
+        `core/sharing/shareTree.ts` (seal contexts exported from `tree.ts`); guest UI: list, open, new folder ·
+        Done when: `npm run check`; e2e: a folder read share, a contributor creating and moving through the functions.
+  - [ ] 5b.5 clean-up — a member's root rename re-seals every share's `sealedName` through the recovery copy (each
+        share on its own, a failure is reported, not rolled back); the trash dialog reloads after the tree reload on a
+        restore (`SpaceTrashDialog.vue:65`, test `:103`) and shows a freed-slug descendant as a root (#357); docs under
+        `docs/features/sharing/` and the two contract texts that say only a Memory can be shared · Done when:
+        `npm run check`, `validate_doc_links`, e2e.
 
 ### Slice 6 — the drop-box node (not in this CR)
 Files' work: ADR 0080 decision 11, inbox #349 and #350.
