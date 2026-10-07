@@ -66,8 +66,12 @@ Memory, an expense and a file side by side).
    (a `READ_WRITE` guest may), into or out of the inside of an application's container (a chapter out of a Memory)
    that application decides, and Memories declares nothing, so it is refused. **A guest may not delete a node
    in the first cut:** nodes store no authorship, so "delete the own" cannot be checked and a contributor could remove
-   anything in the folder; it comes with stored authorship. A guest's create is stored at the scope's current epoch
-   chosen by the server (a guest never targets the scope root). Finer rights ("not the cover", "not the date") come later through
+   anything in the folder; it comes with stored authorship. A guest's create states the epoch it sealed with, and
+   the server checks it as a member's placement off the scope root (a guest never targets the scope root): above the
+   scope's current epoch it is `409 stale_epoch`, at or below it the epoch is stored as sent — the `node-name` and
+   `content-key` seals bind it, so the reader opens at the stored number (owner, 2026-10-07; it replaced a server-chosen
+   current epoch, which left a name unopenable whenever that differed from the one the guest sealed with).
+   A guest's placement states no epoch: the node keeps its own. Finer rights ("not the cover", "not the date") come later through
    a policy seam that asks the application per node and operation, never a role registry in core.
 7. **One key, many wraps.** A Memory inside a shared folder may also be shared alone; its share is another wrap
    of the same key.

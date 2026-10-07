@@ -157,7 +157,7 @@ class ShareNodeRaceCoreSliceTest {
         guest.update(t.link.shareId, null, t.link.token, node, to, "cGxhY2Vk", GuestTreeShare.slug(), "cmUtd3JhcHBlZA==", 0)
 
     private fun guestCreates(t: Tree, parent: String, id: String): CreateShareNodeOutcome =
-        guest.create(t.link.shareId, null, t.link.token, id, parent, NodeEntity.FOLDER, "bmV3", GuestTreeShare.slug(), 0, CONTENT_KEY)
+        guest.create(t.link.shareId, null, t.link.token, id, parent, NodeEntity.FOLDER, "bmV3", GuestTreeShare.slug(), 0, 0, CONTENT_KEY)
 
     private fun <T> inRequest(body: () -> T): T {
         val request = Arc.container().requestContext()

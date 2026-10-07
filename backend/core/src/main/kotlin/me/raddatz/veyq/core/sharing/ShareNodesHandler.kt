@@ -33,6 +33,9 @@ sealed interface CreateShareNodeOutcome {
     object IllegalScope : CreateShareNodeOutcome, HttpFailure by httpFailure("illegal_scope", UNPROCESSABLE)
     object SlugTaken : CreateShareNodeOutcome, HttpFailure by Failures.slugTaken
     object IdTaken : CreateShareNodeOutcome, HttpFailure by Failures.idTaken
+    /** The epoch the guest sealed with is above the scope's current one (or the scope has none) — a 409, nothing
+     *  stored (ADR 0080 Decision 6, the rule a member's placement off the root follows). */
+    object StaleEpoch : CreateShareNodeOutcome, HttpFailure by Failures.staleEpoch
 }
 
 sealed interface UpdateShareNodeOutcome {
@@ -87,7 +90,7 @@ class ShareNodesHandler(
 
     fun create(
         shareId: String, pwToken: String?, contributorToken: String, nodeId: String, parentId: String, kind: String,
-        encryptedName: String, slugToken: String, orderIndex: Int, wrappedContentKey: String,
+        encryptedName: String, slugToken: String, orderIndex: Int, epoch: Int, wrappedContentKey: String,
     ): CreateShareNodeOutcome {
         // A create adds a row, so it spends the upload budget (ADR 0051, `@RateLimit(key = SHARE)`) — after every check
         // of the gate, so an unauthorized caller spends nothing.
@@ -114,10 +117,10 @@ class ShareNodesHandler(
             if (!GuestNodeRules.readWriteAllows(rules, parentKind, GuestNodeOp.CreateChild(kind))) {
                 return@createOrConflict CreateShareNodeOutcome.IllegalScope
             }
-            // ADR 0080 decision 6: stored at the scope's current epoch, chosen here — read under the scope lock a rotation
-            // takes, so the create's own epoch check sees the same value. A guest never writes at the scope root, so the
-            // epoch keys nothing of the entry (it is under the parent's key) — it is the tag every seal binds.
-            val epoch = tree.currentEpoch(scopeId) ?: return@createOrConflict CreateShareNodeOutcome.NotFound
+            // ADR 0080 decision 6: the epoch the guest sealed with, stored as sent — its name and wrap bind it, so the
+            // reader opens at that number. A guest never writes at the scope root, so it keys nothing of the entry (that
+            // is under the parent's key); `createInScope` checks it under this scope lock with the rule off the root (at
+            // or below the current one, else `stale_epoch`), as a member's placement there.
             fromNodes(
                 nodes.createInScope(
                     scopeId, nodeId, parentId, kind, encryptedName, slugToken, orderIndex, epoch, wrappedContentKey,
@@ -209,9 +212,9 @@ class ShareNodesHandler(
         CreateNodeOutcome.IllegalStructure -> CreateShareNodeOutcome.IllegalStructure
         CreateNodeOutcome.SlugTaken -> CreateShareNodeOutcome.SlugTaken
         CreateNodeOutcome.IdTaken -> CreateShareNodeOutcome.IdTaken
-        // The epoch is the scope's current one, read under the lock a rotation takes; the gate refused a space that
-        // serves no guests, and `createInScope` answers none of the member gate's refusals.
-        CreateNodeOutcome.StaleEpoch, CreateNodeOutcome.NoScope, CreateNodeOutcome.Suspended, CreateNodeOutcome.ScopeDeleting ->
-            error("a guest create at the current epoch past the gate cannot answer $o")
+        CreateNodeOutcome.StaleEpoch -> CreateShareNodeOutcome.StaleEpoch
+        // The gate refused a space that serves no guests, and `createInScope` answers none of the member gate's refusals.
+        CreateNodeOutcome.NoScope, CreateNodeOutcome.Suspended, CreateNodeOutcome.ScopeDeleting ->
+            error("a guest create past the gate cannot answer $o")
     }
 }

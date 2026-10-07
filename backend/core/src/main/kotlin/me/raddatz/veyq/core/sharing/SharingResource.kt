@@ -356,6 +356,7 @@ class SharingResource(
             encryptedName = createShareNodeRequest.encryptedName,
             slugToken = createShareNodeRequest.slugToken,
             orderIndex = createShareNodeRequest.orderIndex ?: 0,
+            epoch = createShareNodeRequest.epoch.validated(),
             wrappedContentKey = createShareNodeRequest.wrappedContentKey,
         )) {
             is CreateShareNodeOutcome.Created -> Response.status(Response.Status.CREATED)

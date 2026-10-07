@@ -21,7 +21,8 @@ sealed interface CreateNodeOutcome {
     object IllegalStructure : CreateNodeOutcome, HttpFailure by Failures.illegalStructure
     object SlugTaken : CreateNodeOutcome, HttpFailure by Failures.slugTaken
     object IdTaken : CreateNodeOutcome, HttpFailure by Failures.idTaken
-    /** The node is tagged with an epoch that is not the scope's current one (ADR 0024 Decision 6) — nothing stored. */
+    /** The node is tagged with an epoch that is not the scope's current one (ADR 0024 Decision 6) — a bounded create:
+     *  one above it (ADR 0080 Decision 6) — nothing stored. */
     object StaleEpoch : CreateNodeOutcome, HttpFailure by Failures.staleEpoch
 }
 
@@ -92,6 +93,14 @@ class NodesHandler(
     private fun parentAllows(kind: String, parent: ParentSlot): Boolean =
         NodeKindRules.parentAllows(kindRules, kind, parent)
 
+    /**
+     * The epoch rule for an entry OFF the scope root (ADR 0080 Decisions 4 and 6): it is under its parent's key, not
+     * `K_SC`, so it may carry the epoch it was sealed at — the [current] one or one below, which there opens nothing.
+     * One above the current (or a scope without one) was sealed at no epoch that exists; stored, it is a number no
+     * later reader or rotation can account for. A member's placement off the root and a guest's create ask it.
+     */
+    private fun sealableOffRoot(epoch: Int, current: Int?): Boolean = current != null && epoch <= current
+
     fun create(
         userId: String, scopeId: String, nodeId: String, parentSlotId: String?, kind: String,
         encryptedName: String, slugToken: String, orderIndex: Int, epoch: Int, wrappedContentKey: String, wrappedMeta: String?,
@@ -147,8 +156,13 @@ class NodesHandler(
         store.lockScope(scopeId)
         // ADR 0024 Decision 6, layer 1: content sealed under an epoch below the current one is readable by every
         // member removed since — a writer whose grant lags a rotation. Under the lock a rotation takes, so a rotation
-        // that committed first is seen.
-        if (epoch != store.currentEpoch(scopeId)) return CreateNodeOutcome.StaleEpoch
+        // that committed first is seen. A bounded create (a guest's, ADR 0080 Decision 6) never lands at the scope
+        // root — its parent is a node of the subtree, the boundary below refuses any other — so it takes the rule
+        // off the root: the epoch it sealed with, at or below the current one, stored as sent (its name and wrap
+        // bind it, so the reader must open at that number).
+        val current = store.currentEpoch(scopeId)
+        val epochAdmitted = if (boundary == null) epoch == current else sealableOffRoot(epoch, current)
+        if (!epochAdmitted) return CreateNodeOutcome.StaleEpoch
         val slot = parentSlotId ?: scopeId // null/absent → the scope root (slot = scope id)
         val parent = store.parentSlot(scopeId, slot)
         if (parent is ParentSlot.Missing) return CreateNodeOutcome.IllegalStructure
@@ -272,12 +286,10 @@ class NodesHandler(
                 null
             } else {
                 val current = store.currentEpoch(scopeId)
-                // For ANY destination, an epoch above the scope's current one (or a scope without one) is refused: no
-                // epoch past the current exists, so nothing can be sealed at it, and a move out of the root stores the
-                // request's epoch — unchecked, it put an epoch on the row that no later reader or rotation can account
-                // for. An epoch BELOW the current one stays accepted off the root: it is the entry's own sealed epoch,
-                // and there it opens nothing (the entry is under the parent's key, not K_SC@epoch).
-                if (current == null || epoch > current) return UpdateNodeOutcome.StaleEpoch
+                // For ANY destination, the rule off the root first ([sealableOffRoot]): an epoch above the current one
+                // is refused, since a move out of the root stores the request's epoch. One BELOW the current one stays
+                // accepted off the root; at the root the stricter rule below follows.
+                if (!sealableOffRoot(epoch, current)) return UpdateNodeOutcome.StaleEpoch
                 when {
                     parent is ParentSlot.Root -> {
                         if (epoch != current) return UpdateNodeOutcome.StaleEpoch
