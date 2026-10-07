@@ -106,9 +106,25 @@ without touching core except for the platform prerequisites below, which every l
 - [ ] P4 web re-cut — planned 2026-10-07; two strands. Owner decision: the toolbar (trash, grid/list) stays in Memories'
       section until Files needs it (the visible change P4e is deferred). Every e2e suite is API-level, so only golden and
       characterisation tests prove 'no user-visible change'.
-  - [ ] B0 characterisation test of the upload pipeline — `randomBytes`/`randomUUID` and `fetch` stubbed; per frame method, path,
+  - [x] B0 characterisation test of the upload pipeline — `randomBytes`/`randomUUID` and `fetch` stubbed; per frame method, path,
         body and SHA-256 for `addMedia`, `uploadCoverBlob` and `addSharePhoto`; plus the `vi.mock` sabotage of web/CLAUDE.md ·
         Done when: it goes red for a changed `PUMP_IN_FLIGHT` or `PUT_CONTENT_TYPE`.
+        **Measured 2026-10-07:** `features/memory/uploadWire.characterisation.test.ts` pins `crypto.getRandomValues` (a seeded
+        stream: every `K_blob`, nonce, seal), `crypto.randomUUID` (a counter) and `Date.now`, reset per scenario; a fake
+        server at `fetch` signs 3 PUTs per window and answers each PUT after a timer; the real `media.ts`, `share.ts`,
+        generated clients, `api/client.ts` and `withRefresh` run (only `exifr` is mocked, so the EXIF tier and the derived
+        pixels are not pinned). Recorded per request in order: method, path, headers (`content-type` by value, the rest
+        `<present>`), the canonical JSON body, a PUT body's length + SHA-256; plus the max in-flight PUTs and the result,
+        into `__snapshots__/uploadWire.*.json`. Each scenario runs twice and must record the same. Pinned: `addMedia`
+        one-chunk image 5 requests / 3 PUTs / max 1; `addMedia` 7-chunk original 13 / 9 / max 4 (2 windows);
+        `uploadCoverBlob` 3-chunk cover 5 / 3 / max 3; `addSharePhoto` (below the root, with a share password) 5-chunk
+        original 10 / 7 / max 4 (1 window), no `authorization`. Red for `PUMP_IN_FLIGHT` 4→3, `PUT_CONTENT_TYPE`,
+        `CHUNK_SIZE` halved, blobs pumped last-first, no window lookahead, the original's `blob-key` wrap sealed under
+        another role; green restored. A deliberate wire change updates it with `npx vitest run -u <the file>` and the
+        snapshot diff is part of that change; B1 must leave the files untouched. `vi.mock` sabotage (each export made to
+        throw): `addMedia`+`uploadCoverBlob` — the 8 suites that mock `media` green, `media.test.ts` and the
+        characterisation red; `blobApi` — its 5 mockers green, the characterisation red; `withRefresh` — its 14 mockers
+        green, `media.test.ts` and the characterisation red. B1 repeats it on the new `core/blob` paths.
   - [ ] P4-0 golden test of the Memories level view — really mounted (fixtures of `MemoryBrowse.test.ts`), serialising tag, class, text,
         aria-label, disabled; root and folder, grid/list/map, readonly; `toMatchFileSnapshot` · Done when: a changed class
         goes red.

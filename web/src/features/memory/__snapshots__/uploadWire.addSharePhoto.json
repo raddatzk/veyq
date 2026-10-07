@@ -1,0 +1,173 @@
+{
+  "requests": [
+    {
+      "method": "POST",
+      "path": "/api/shares/Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_0/blob-uploads",
+      "headers": {
+        "content-type": "application/json",
+        "x-share-password": "<present>"
+      },
+      "body": {
+        "contributorToken": "<present>",
+        "items": [
+          {
+            "blobId": "00000000-0000-4000-8000-000000000002",
+            "byteSize": 1048733,
+            "chunkCount": 5,
+            "ownerId": "00000000-0000-4000-8000-000000000001",
+            "role": "ORIGINAL",
+            "wrappedBlobKey": "AmpnKrZh0NicShCXeuhfLLyYXelR6N+Z7d5q/J6ZjxtnAkD/+krh+e937LGGbnSgW3c/3/vtGOtw6iGcbQ=="
+          },
+          {
+            "blobId": "00000000-0000-4000-8000-000000000003",
+            "byteSize": 278,
+            "chunkCount": 1,
+            "ownerId": "00000000-0000-4000-8000-000000000001",
+            "role": "THUMBNAIL",
+            "wrappedBlobKey": "AofnBtNFdvNCHdjlaNuqyNUCU0chMZijaR2wTE/pOKaO31Enhv5QHS8TxMT9KEVeJ/jkX8+NZeaM+0TgCw=="
+          },
+          {
+            "blobId": "00000000-0000-4000-8000-000000000004",
+            "byteSize": 828,
+            "chunkCount": 1,
+            "ownerId": "00000000-0000-4000-8000-000000000001",
+            "role": "PREVIEW",
+            "wrappedBlobKey": "Agru/C67JrjTaC7lL+TG77J32pU6AIfEpRkOHMZoy/L+TDXrUIRqdtmQdBVEpvvx1GVTXCQfdzVKrp1Z5w=="
+          }
+        ],
+        "nodeId": "6e5a0000-0000-4000-8000-0000000000b1"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/shares/Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_0/blob-upload-windows",
+      "headers": {
+        "content-type": "application/json",
+        "x-share-password": "<present>"
+      },
+      "body": {
+        "contributorToken": "<present>",
+        "items": [
+          {
+            "fromChunk": 3,
+            "uploadId": "upload-1"
+          }
+        ],
+        "nodeId": "6e5a0000-0000-4000-8000-0000000000b1"
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/bucket/upload-1/0?X-Sig=s",
+      "headers": {
+        "content-type": "application/octet-stream"
+      },
+      "bytes": {
+        "length": 262172,
+        "sha256": "2ed23c97ed8cca36d31d032ab3a99db2309f88ce803acdf9cf1d54366bdb13fc"
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/bucket/upload-1/1?X-Sig=s",
+      "headers": {
+        "content-type": "application/octet-stream"
+      },
+      "bytes": {
+        "length": 262172,
+        "sha256": "d8610aead3f54302e621bb5e746917c74f6bbc0005a767b3fb79fbfe4897c037"
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/bucket/upload-1/2?X-Sig=s",
+      "headers": {
+        "content-type": "application/octet-stream"
+      },
+      "bytes": {
+        "length": 262172,
+        "sha256": "a7ca14dbe76d924b911e2a185eee04929c9bf807f77693eee2b90a769f4365d7"
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/bucket/upload-1/3?X-Sig=s",
+      "headers": {
+        "content-type": "application/octet-stream"
+      },
+      "bytes": {
+        "length": 262172,
+        "sha256": "bcb585eb6ebaf4ec8aeef56882384a3d273d7903b2cff2855dbc66150d44f5e8"
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/bucket/upload-1/4?X-Sig=s",
+      "headers": {
+        "content-type": "application/octet-stream"
+      },
+      "bytes": {
+        "length": 45,
+        "sha256": "8415e5f5f883c657d976f79750b8c8200a7f8b2d8d10a0b4be0a6c71c15e00d1"
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/bucket/upload-2/0?X-Sig=s",
+      "headers": {
+        "content-type": "application/octet-stream"
+      },
+      "bytes": {
+        "length": 278,
+        "sha256": "57bc77015d99d4931cde02055a7e6e09db7e629026904f0960ccf92303bfcf95"
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/bucket/upload-3/0?X-Sig=s",
+      "headers": {
+        "content-type": "application/octet-stream"
+      },
+      "bytes": {
+        "length": 828,
+        "sha256": "b513cf991b29a6209aafb243c3a2d9a409a8f082cf5849f53de13f7891cf0c87"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/shares/Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_0/media",
+      "headers": {
+        "content-type": "application/json",
+        "x-share-password": "<present>"
+      },
+      "body": {
+        "contributorToken": "<present>",
+        "items": [
+          {
+            "derivatives": [
+              {
+                "kind": "THUMBNAIL",
+                "uploadId": "upload-2"
+              },
+              {
+                "kind": "PREVIEW",
+                "uploadId": "upload-3"
+              }
+            ],
+            "mediaId": "00000000-0000-4000-8000-000000000001",
+            "originalUploadId": "upload-1",
+            "wrappedExif": null,
+            "wrappedMeta": "AoQEBAw0Z/lToEX87oXWBN9RrKK+z/e33EbVJIZk80m4Pl+L5LQ+l+laVyOpGq07qX9PX9QIc/Ekj1pX8D0iJffgwQVIdBQ+OTuL3pKaROA3Ry6qnv+McLdytSgEUnbRFHRWO2JBC7Tanw2vJdmTWRy05EzHg76jRkOJwJnAMj3PGVZc"
+          }
+        ],
+        "nodeId": "6e5a0000-0000-4000-8000-0000000000b1"
+      }
+    }
+  ],
+  "putCount": 7,
+  "maxInFlightPuts": 4,
+  "result": {
+    "blobId": "00000000-0000-4000-8000-000000000002",
+    "mediaId": "00000000-0000-4000-8000-000000000001"
+  }
+}

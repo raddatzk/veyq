@@ -1,0 +1,78 @@
+{
+  "requests": [
+    {
+      "method": "POST",
+      "path": "/api/scopes/33333333-3333-4333-8333-333333333333/blob-uploads-batch",
+      "headers": {
+        "authorization": "<present>",
+        "content-type": "application/json"
+      },
+      "body": {
+        "items": [
+          {
+            "blobId": "00000000-0000-4000-8000-000000000001",
+            "byteSize": 524377,
+            "chunkCount": 3,
+            "ownerId": "6e5a0000-0000-4000-8000-0000000000b1",
+            "role": "COVER",
+            "wrappedBlobKey": "AtBT3Z7YRZvapZ9Wkcognh3uhz4ssO4zOY9dJVVTTEmR/yLd59PQxen2jKvQuOw+rfuuKMLZWy43Cuu8Qg=="
+          }
+        ]
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/bucket/upload-1/0?X-Sig=s",
+      "headers": {
+        "content-type": "application/octet-stream"
+      },
+      "bytes": {
+        "length": 262172,
+        "sha256": "c45af0487df035ef977089c554547141e5fbf67ed3b86fff2ee51f4fa45b3691"
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/bucket/upload-1/1?X-Sig=s",
+      "headers": {
+        "content-type": "application/octet-stream"
+      },
+      "bytes": {
+        "length": 262172,
+        "sha256": "5959c2502cc9675b8bc0fe3d8533441ddfd0ea51cebb8079957404be31807a3a"
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/bucket/upload-1/2?X-Sig=s",
+      "headers": {
+        "content-type": "application/octet-stream"
+      },
+      "bytes": {
+        "length": 33,
+        "sha256": "4ec3ff42600db9fe61d685f21e3cf904af9d1e4eb1d68772dddc65c79b2b6def"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/scopes/33333333-3333-4333-8333-333333333333/nodes/6e5a0000-0000-4000-8000-0000000000b1/cover-blob",
+      "headers": {
+        "authorization": "<present>",
+        "content-type": "application/json"
+      },
+      "body": {
+        "uploadId": "upload-1"
+      }
+    }
+  ],
+  "putCount": 3,
+  "maxInFlightPuts": 3,
+  "result": {
+    "blobId": "00000000-0000-4000-8000-000000000001",
+    "chunkCount": 3,
+    "byteSize": 524377,
+    "wrappedBlobKey": "AtBT3Z7YRZvapZ9Wkcognh3uhz4ssO4zOY9dJVVTTEmR/yLd59PQxen2jKvQuOw+rfuuKMLZWy43Cuu8Qg==",
+    "ownerId": "6e5a0000-0000-4000-8000-0000000000b1",
+    "role": "COVER"
+  }
+}
