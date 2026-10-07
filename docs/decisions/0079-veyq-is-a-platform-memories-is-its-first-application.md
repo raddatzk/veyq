@@ -28,14 +28,16 @@ That was the state when this was decided; what has moved since is under Conseque
 
 **1. veyq is a platform; an application is a set of node kinds with its own domain data and its own client
 screens.** **Memories** is the first one. The product language **Memory / Chapter** is unchanged and now belongs
-to Memories ([CLAUDE.md](../../CLAUDE.md)); folders organize only. The term is "application" (German
+to Memories ([CLAUDE.md](../../CLAUDE.md)); a folder organizes — it holds no content, and like every node it carries
+a key and can be the root of a share ([ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)).
+The term is "application" (German
 *Anwendung*), not "plugin" — it is first-party code, not something installed.
 
 **2. What is the platform ("core").** The server, tenants (resolved by `Host`, unchanged), users, the scope
 kinds `TENANT` / `GROUP` / `PERSONAL`, memberships (role + grant), invitations and admit/deliver, key
 management (epochs, rotation, revocation), public shares (viewer / contributor / uploader, password, reissue),
 blobs and the storage quota, the trash, and **the node tree**: a domain-neutral tree of objects in a scope in
-which every node has a `kind`, with folders and move / rename / trash. Application-neutral means the platform
+which every node has a `kind` and a content key, with folders and move / rename (one placement write) / trash. Application-neutral means the platform
 never branches on what a kind means.
 
 **3. What an application owns.** Its node kinds, its payload formats, its tables, its endpoints and its
@@ -96,7 +98,7 @@ on their own.
   boundary (400), the web types it as a string with core's one `FOLDER` constant. `PublicShare.rootKind` is the
   root row's kind as stored, served for every unlocked role (a `WRITE_ONLY` guest, served no node, learns this one
   structural fact) and omitted on a locked response and while the root is in the trash; the public share page renders the body the kind's application
-  claimed, whatever the role.
+  claimed, whatever the role — for a `FOLDER`, core's own body, which embeds the body claimed for each child's kind.
 - **What the server learns grows by one fact.** The node `kind` is already a server-visible column; once
   further kinds exist it also tells the operator which applications a scope uses, and the rows, timestamps and
   sizes each kind produces. [security-model](../crosscutting/security-model.md) lists it.
@@ -128,7 +130,8 @@ on their own.
   gives every node one sealed, versioned payload (`wrappedMeta`, `metaVersion`): core stores it, compare-and-sets
   it ([ADR 0077](0077-a-write-carries-the-version-it-read.md)) and lists it with the tree, and never opens it. Its
   plaintext format is the node kind's application's, versioned per Decision 7. `wrappedContentKey` is the content
-  key of a shareable node, chained so a share's viewer derives every descendant's key. These are platform columns,
+  key of every node, `FOLDER` included ([ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)),
+  chained so a share's guest derives every descendant's key. These are platform columns,
   not an application widening `veyq_node` (Decision 6). That only one application fills them today makes this an
   intermediate state, re-examined when a second application does. Rejected: moving the payload into a Memories
   table with endpoints — it loses the atomic create and the payload in the tree listing that sorting relies on,
@@ -143,17 +146,23 @@ on their own.
   The seal purposes `drop-public-key`/`drop-private-key` are a stored format and keep their names.
 - **Three access modes** (decided 2026-10-06, cr-platform-contract-split). A link grants one of three access
   modes: `READ`, `READ_WRITE`, `WRITE_ONLY` — `ShareRole`'s wire values. Core enforces the mode (who
-  may read the shared subtree, who may add through the guest transport). What "write" means on a node is the
-  application's, through `ShareGuestWrites`. The modes are bound in no seal. Application-specific roles, if ever
+  may read the shared subtree, who may add through the guest transport). Which roles a node may be shared with is
+  its kind's owner's (`ShareRoots`). A `READ_WRITE` guest's tree operations — create, move, rename — are core's,
+  behind the gate, and each container's owner decides them inside it (`GuestNodeRules`: core allows them in a
+  `FOLDER`, Memories nothing in a Memory or chapter); what "write" means on an application's node is the
+  application's, through `ShareGuestWrites`, asked for the kind of the node written into — the root or a node below it
+  the guest names ([ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) Decision 6). The
+  modes are bound in no seal. Application-specific roles, if ever
   needed, come through a policy seam where core asks the application whether an action is allowed for a mode —
   never through a registry of roles.
 - **Application guest operations** (decided 2026-10-06, cr-platform-contract-split). Core owns the public link and
   its guest gate: active link, password, the mode's capability, the guest identity's token, and the per-link
   upload budget where the operation spends one. Core exposes the gate as a service an application calls before its
   own guest read or write. Core's share contract keeps only kind-neutral guest operations: resolve (the link plus
-  the shared nodes and their keys, no application data), terms, blob transport and download, guest identity. An
-  application serves its rows and its writes on its own route under the share, checks that the share's root kind
-  is its own, and carries the privacy rules of its rows with them (for Memories:
+  the shared nodes, their names and keys, no application data), terms, blob transport and download, guest identity,
+  and the tree operations (`createShareNode`, `updateShareNode`). An
+  application serves its rows and its writes on its own route under the share, checks that the kind of the node it
+  writes into is its own, and carries the privacy rules of its rows with them (for Memories:
   [ADR 0030](0030-contributor-public-share.md) point 8). Partly the code: the gate is core's service
   (`ShareGuestGate`), and Memories' two guest writes (complete an upload, delete one's own) are its own operations
   that call it (`ShareMediaHandler`), handing the gate's re-check of the link on unevaluated to the transaction that

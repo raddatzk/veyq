@@ -41,10 +41,10 @@ Memory, an expense and a file side by side).
 4. **No per-node epochs, no root rotation.** A keyed folder, like `K_mem`, never re-keys
    ([ADR 0075](0075-a-link-a-departed-member-could-copy-is-reissued.md) Context). Revocation stays layer 1:
    server-side, re-issue never revive. Only `K_SC` rotates. The `epoch` of a node matters only for **entries at the scope root**:
-   they are sealed and re-sealed at the **current** epoch and the server refuses any other (`NodesHandler` ~:96
-   extended to update and move; the check applies when the destination is the root) — today a rename re-seals under
-   the node's birth epoch and `UpdateNodeRequest` has no epoch field, so the server cannot check it. A move to or
-   from the root resets the epoch.
+   they are sealed and re-sealed at the **current** epoch and the server refuses any other (`409 stale_epoch` on
+   create, rename and move whose destination is the root). Off the root an epoch above the current one is refused at
+   any destination (`NodesHandler.sealableOffRoot`), a move out of the root stores the epoch it states, and a move
+   between non-root parents keeps the stored one.
 5. **Folders inherit the `K_mem` residual, accepted for parity.** A former guest or removed member who kept a
    folder's key reads everything later created under it, and a group-member removal re-keys no folder. Today that
    reach is one Memory; it widens to a folder subtree. Honest-server revocation is the cut, as ADR 0075 states.
@@ -65,8 +65,8 @@ Memory, an expense and a file side by side).
    `WRITE_ONLY` needs no matrix: such a guest holds no keys of the subtree and can only write
    through the drop mechanism ([ADR 0031](0031-uploader-public-share.md) point 7), never into an existing Memory
    below. **Shareability is separate from guest writes:** a `FOLDER` can be shared with `READ` whether or not any
-   application implements guest writes for it (`SharingHandler.kt:245` stops tying creation to
-   `ShareGuestWrites.supports` for the read role). A move or rename is decided by the owners of the containers on **both** sides: between folders core decides
+   application implements guest writes for it — `ShareRoots` answers which roles a kind may be shared with, apart
+   from `ShareGuestWrites`. A move or rename is decided by the owners of the containers on **both** sides: between folders core decides
    (a `READ_WRITE` guest may), into or out of the inside of an application's container (a chapter out of a Memory)
    that application decides, and Memories declares nothing, so it is refused. **A guest may not delete a node
    in the first cut:** nodes store no authorship, so "delete the own" cannot be checked and a contributor could remove
@@ -131,12 +131,15 @@ It already sees the tree, kinds, moves and timestamps; it holds no new key.
 
 **Migration.** Edit the core baseline `V202610041200__core_baseline.sql` (`wrapped_content_key NOT NULL`,
 `placement_version BIGINT NOT NULL DEFAULT 0`) with its pin line in `scripts/applied_migrations.sha256` in the
-same commit (`release: none`). `V202610041201__memories_baseline.sql` holds no node-key column (to verify while
-implementing). Development instances are reset; no data migration.
+same commit (`release: none`). `V202610041201__memories_baseline.sql` holds no node-key column. Development
+instances are reset; no data migration.
 
 **Contracts.** `content.openapi.yaml` (create: wrap required; update: `wrappedContentKey`, `placementVersion`,
-`epoch`; `NodeSummary.placementVersion`), `sharing.openapi.yaml` (`ShareNode` gains `encryptedName`), the
-`node-name` and `content-key` vectors in `contracts/crypto/vectors/v1.json`.
+`epoch`; `NodeSummary.placementVersion`), `sharing.openapi.yaml` (`ShareNode` gains `encryptedName` and
+`placementVersion`; the guest tree operations `createShareNode` and `updateShareNode`; `setShareSealedName`; the
+recovery copy required on create), a guest upload's optional target `nodeId` (core's share blob-upload requests,
+Memories' `ShareMediaBatchRequest`), and the `node-name` and `content-key` seals binding the placement version, with
+their vectors in `contracts/crypto/vectors/v1.json`.
 
 **Superseded or edited.** ADR 0012's "folders carry no key" and its `K_SC` naming rule; ADR 0079's "folders
 organize only" wording; `docs/apps/files.md` (a `FOLDER` can be a share root; Files may keep its own kind for
@@ -168,16 +171,25 @@ its own reasons).
   It would give each application a clean subtree but forbids mixing kinds by topic and needs a migration of every
   root entry; `FOLDER` as the universal container with each kind admitted by `NodeKindRules` does both without one.
 
-## Decided with the owner (2026-10-06)
+## Decided with the owner (2026-10-06 and 2026-10-07)
 
 Guests of a Memory read its chapter titles (the consequence of decision 2). The slug key is stable per parent key.
 A share covers its subtree and nothing above. Contributors may move inside the subtree. Guest nodes in a drop box
-live in one folder per identity. The recovery copy is mandatory. A name's case is folded for files (open question
-below). Tree operations for guests are core's; `READ_WRITE` is interpreted per application, fail closed.
+live in one folder per identity. The recovery copy is mandatory. Tree operations for guests are core's;
+`READ_WRITE` is interpreted per application, fail closed. **A guest deletes no node in the first cut** (no stored
+authorship). **A guest's create states the epoch it sealed with**, checked as a member's placement off the root —
+this replaced a server-chosen current epoch, which left a name unopenable whenever it differed. **A role is
+inherited down the subtree as the share allows:** a `READ_WRITE` folder link contributes in every Memory or chapter
+below it, a `WRITE_ONLY` link writes into its root only. **A `CHAPTER` is a share root with every role.** **The
+share root's name is re-sealed by its own operation** (`setShareSealedName`), callable by any member with write
+access, not by the owner-gated `updateShare`. A folder is shared through core's own dialog, not the Memories one,
+and no guest move control is invented in the web yet (inbox #358).
 
 ## Open questions
 
-- Who defines a name's slug. Today one client function folds every name (`web/src/shared/naming.ts:21`: lowercase,
+- **The drop box node** (decision 11) is decided and not built: it comes with Files, the first application that
+  needs it (inbox #349). Until then a `WRITE_ONLY` link on a `FOLDER` is refused (`ShareRoots`).
+- Who defines a name's slug (inbox #350). Today one client function folds every name (`web/src/shared/naming.ts:21`: lowercase,
   `ä`→`ae`, accents dropped, non-alphanumerics → `-`, a 32-bit hash when nothing is left), the slug is also the URL
   path segment, and the token freezes it. For Files that is too coarse for **files** (`Day1.md` = `Day1 md`).
   Proposed: a hook per node kind in the registry. **Containers (folders, Memories) keep today's slug**: it is the URL

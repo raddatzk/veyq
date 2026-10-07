@@ -65,10 +65,15 @@ one-element set over the stored one.
 5. **A whole-set write never starts from a set it has not loaded.** The item-mark and Memory-pin toggles refuse
    until their store holds a successful load for that node or scope.
 6. **Every other edit is last-writer-wins on purpose, and says why in its contract.** Every PUT/PATCH and every
-   POST whose `operationId` starts with an edit verb declares `x-veyq-concurrency: version` or
-   `last-writer-wins` with a reason; `scripts/validate_write_concurrency.py` keeps a new edit from skipping that
-   decision. The reasons today are two: the write carries only what its writer typed (a rename, a move, a role),
-   or only one account writes it (a share is edited by its owner only, a profile by its holder).
+   POST whose `operationId` starts with an edit verb declares `x-veyq-concurrency` — `mode: version` with a list of
+   `fields`, each version field with the request fields that require it and the conflict code its `409` answers, or
+   `mode: last-writer-wins` with a reason; `scripts/validate_write_concurrency.py` keeps a new edit from skipping that
+   decision. The reasons today are two: the write carries only what its writer typed (a role, a share root's
+   re-sealed name, which is always the root's current name), or only one account writes it (a share is edited by its
+   owner only, a profile by its holder). A node's rename and move are **not** last-writer-wins: they are one
+   placement write that re-wraps the node's key under the (new) parent's key, so it states the `placementVersion` it
+   was built on (`409 stale_placement`, [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
+   Decision 3) — `updateNode` carries two version fields, `metaVersion` and `placementVersion`.
 
 ## Consequences
 
@@ -85,7 +90,8 @@ one-element set over the stored one.
 - **Rejected: re-GET on conflict.** Neither entity has a single-item read — the node is listed with its whole
   tree, the media through the per-node delta — so the conflict body carries the current value instead.
 - **Rejected: binding the seal to the version** ([ADR 0072](0072-a-seal-binds-its-object.md)'s pin form). It
-  would detect an operator rolling a blob back, which is a different threat; the seal stays bound to its node or
-  media only.
+  would detect an operator rolling a blob back, which is a different threat; the `wrappedMeta` seal stays bound to
+  its node or media only. (The `node-name` and `content-key` seals do bind `placementVersion`, for ADR 0080's reason:
+  a name or key wrap served at another placement must not open.)
 - **Rejected: a lock.** A lease the server holds across a client's think time is a lock nobody releases when a
   tab closes; a compare-and-set needs nothing held.
