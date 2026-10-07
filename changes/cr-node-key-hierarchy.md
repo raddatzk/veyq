@@ -256,7 +256,7 @@ Planned 2026-10-06 from three inventories; each sub-slice is its own worktree ru
         the destination key, the node's epoch, `placementVersion + 1`, one retry on `stale_placement`) in
         `core/sharing/shareTree.ts` (seal contexts exported from `tree.ts`); guest UI: list, open, new folder ·
         Done when: `npm run check`; e2e: a folder read share, a contributor creating and moving through the functions.
-  - [ ] 5b.5 clean-up — a member's root rename re-seals every share's `sealedName` through the recovery copy (each
+  - [ ] 5b.5 clean-up — chapter wording in the member share dialog (en and de: 'Share this chapter', 'It shows only this chapter'; `share.title`/`share.intro` say Memory today); a member's root rename re-seals every share's `sealedName` through the recovery copy (each
         share on its own, a failure is reported, not rolled back); the trash dialog reloads after the tree reload on a
         restore (`SpaceTrashDialog.vue:65`, test `:103`) and shows a freed-slug descendant as a root (#357); docs under
         `docs/features/sharing/` and the two contract texts that say only a Memory can be shared · Done when:
