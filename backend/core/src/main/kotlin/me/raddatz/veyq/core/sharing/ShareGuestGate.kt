@@ -88,9 +88,13 @@ class ShareGuestGate(
     /**
      * The gate for a guest write on [shareId] by the identity [contributorToken] names. [spendUploadBudget] spends one
      * token of the share's upload budget ([ShareRateLimiter.allowUpload]) after every other check has passed, so an
-     * unauthorized caller spends nothing.
+     * unauthorized caller spends nothing. [onlyRole], when set, narrows the uploading roles to that one (core's guest
+     * tree operations take only `READ_WRITE`, ADR 0080 decision 6) — refused as [ShareWriteGate.NotContributable], before
+     * the token and the budget.
      */
-    fun writeGate(shareId: String, pwToken: String?, contributorToken: String, spendUploadBudget: Boolean): ShareWriteGate {
+    fun writeGate(
+        shareId: String, pwToken: String?, contributorToken: String, spendUploadBudget: Boolean, onlyRole: String? = null,
+    ): ShareWriteGate {
         val share = activeShare(shareId) ?: return ShareWriteGate.NotFound
         when (passwordCheck(share, pwToken)) { // cr-0164: the password gate fronts the write path, before the role check
             PwCheck.MISSING -> return ShareWriteGate.NotFound // no token → non-enumerable 404 (no role reveal)
@@ -99,6 +103,7 @@ class ShareGuestGate(
             PwCheck.OK -> {}
         }
         if (!ShareAccessPolicy.canUpload(share.role)) return ShareWriteGate.NotContributable
+        if (onlyRole != null && share.role != onlyRole) return ShareWriteGate.NotContributable
         val identity = store.findIdentity(shareId, contributorToken) ?: return ShareWriteGate.NotContributable
         if (spendUploadBudget && !rateLimiter.allowUpload(shareId)) return ShareWriteGate.RateLimited
         // The root's kind picks the application that writes; a root that is gone has none (not contributable).

@@ -36,7 +36,9 @@ import java.util.jar.JarFile
  * nothing about the other's routes, so every route is called here.
  *
  * Each row's anchor is an answer only its handler gives: core's sharing handlers name an unknown link
- * `share_not_found` (or, for the curator's create and list, the node and the caller's own links); Memories' list
+ * `share_not_found` (or, for the curator's create and list, the node and the caller's own links; for a guest's tree
+ * operations on the real link, the `illegal_scope` of a create inside a Memory and the `node_not_found` of a placement
+ * of an unknown node); Memories' list
  * answers a real link with its two lists, its complete answers a real link's bogus upload per item (`upload_not_found` in a 200), and its delete names an unknown
  * contribution `share_media_not_found`. A route that misses its class answers RESTEasy's bare 404/405, none of these.
  * The table is held to the generated interfaces: its operations are exactly every `/api/shares` operation of both
@@ -104,6 +106,19 @@ class ShareMediaRouteSliceTest {
             given().contentType(ContentType.JSON).body("""{"contributorToken":"${w.token}","items":[{"uploadId":"${TestIds.uuid()}","fromChunk":0}]}""")
                 .`when`().post("/api/shares/${w.unknown}/blob-upload-windows").then().statusCode(404).body("code", equalTo("share_not_found"))
         },
+        "createShareNode" to Probe("POST", "/api/shares/{shareId}/nodes") { w ->
+            // A real READ_WRITE link on a Memory: Memories declares no guest tree operation inside its Memory
+            // (GuestNodeRules), so only this handler answers `illegal_scope` here.
+            val id = TestIds.uuid()
+            given().contentType(ContentType.JSON).header("X-Contributor-Token", w.token)
+                .body("""{"nodeId":"$id","parentId":"${w.memory}","kind":"FOLDER","encryptedName":"bmFtZQ==","slugToken":"c2x1Zw==","wrappedContentKey":"d3JhcA=="}""")
+                .`when`().post("/api/shares/${w.shareId}/nodes").then().statusCode(422).body("code", equalTo("illegal_scope"))
+        },
+        "updateShareNode" to Probe("PATCH", "/api/shares/{shareId}/nodes/{nodeId}") { w ->
+            given().contentType(ContentType.JSON).header("X-Contributor-Token", w.token)
+                .body("""{"parentId":"${w.memory}","encryptedName":"bmFtZQ==","slugToken":"c2x1Zw==","wrappedContentKey":"d3JhcA==","placementVersion":0}""")
+                .`when`().patch("/api/shares/${w.shareId}/nodes/${TestIds.uuid()}").then().statusCode(404).body("code", equalTo("node_not_found"))
+        },
         // --- Memories `share-media` (root /api/shares/{shareId}/media) ---
         "listShareMedia" to Probe("GET", "/api/shares/{shareId}/media") { w ->
             given().`when`().get("/api/shares/${w.shareId}/media").then().statusCode(200)
@@ -123,7 +138,7 @@ class ShareMediaRouteSliceTest {
     @Test
     fun theTableIsEveryShareRouteOfBothGeneratedApis() {
         val generated = shareOperations()
-        assertEquals(16, generated.size, "the /api/shares operations of both specs: $generated")
+        assertEquals(18, generated.size, "the /api/shares operations of both specs: $generated")
         assertEquals(generated, probes.mapValues { (_, p) -> "${p.method} ${p.path}" }, "a route without a row, or a row without a route")
     }
 

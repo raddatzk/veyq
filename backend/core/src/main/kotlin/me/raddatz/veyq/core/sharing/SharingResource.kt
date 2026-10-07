@@ -5,6 +5,9 @@ import me.raddatz.veyq.core.blob.WindowRequest
 import me.raddatz.veyq.core.sharing.ShareEntity
 import me.raddatz.veyq.core.generated.api.SharingApi
 import me.raddatz.veyq.core.generated.model.CreateShareIdentityRequest
+import me.raddatz.veyq.core.generated.model.CreateShareNodeRequest
+import me.raddatz.veyq.core.generated.model.ShareNodeCreated
+import me.raddatz.veyq.core.generated.model.UpdateShareNodeRequest
 import me.raddatz.veyq.core.generated.model.CreateShareRequest
 import me.raddatz.veyq.core.generated.model.LocalizedMarkdown
 import me.raddatz.veyq.core.generated.model.PresignedUrl
@@ -53,6 +56,8 @@ import java.util.UUID
 )
 class SharingResource(
     private val handler: SharingHandler,
+    /** A READ_WRITE guest's tree operations (`createShareNode`, `updateShareNode`). */
+    private val nodes: ShareNodesHandler,
     private val identity: SecurityIdentity,
     private val tenant: RequestTenant,
 ) : SharingApi {
@@ -333,4 +338,51 @@ class SharingResource(
             is HttpFailure -> httpError(o)
         }
     }
+
+    // --- a READ_WRITE guest's tree operations (ADR 0080 decisions 6 and 10; @PermitAll — gated by the link + token) ---
+
+    @PermitAll
+    // A create adds a node row, so it rides the per-share upload budget like the other row-creating guest writes
+    // (ShareRateLimiter.allowUpload, spent in the handler after the gate's other checks).
+    @RateLimit(key = RateLimitKey.SHARE)
+    override fun createShareNode(
+        shareId: String, xContributorToken: String, createShareNodeRequest: CreateShareNodeRequest, xSharePassword: String?,
+    ): Response =
+        when (val o = nodes.create(
+            shareId, xSharePassword, xContributorToken,
+            nodeId = createShareNodeRequest.nodeId.toString(),
+            parentId = createShareNodeRequest.parentId.toString(),
+            kind = createShareNodeRequest.kind,
+            encryptedName = createShareNodeRequest.encryptedName,
+            slugToken = createShareNodeRequest.slugToken,
+            orderIndex = createShareNodeRequest.orderIndex ?: 0,
+            wrappedContentKey = createShareNodeRequest.wrappedContentKey,
+        )) {
+            is CreateShareNodeOutcome.Created -> Response.status(Response.Status.CREATED)
+                .entity(ShareNodeCreated(nodeId = UUID.fromString(o.nodeId))).build()
+            is HttpFailure -> httpError(o)
+        }
+
+    @PermitAll
+    @RateLimitExempt(
+        reason = "A placement adds no row: it rewrites one node's entry inside the shared subtree, compare-and-set on " +
+            "its placement version, so its volume is bounded by the nodes the subtree already holds — which members " +
+            "and the create budget bound. Raw call volume by a link holder stays open, as for the guest reads " +
+            "(cc.security.rate-limit § Unbounded by decision).",
+    )
+    override fun updateShareNode(
+        shareId: String, nodeId: UUID, xContributorToken: String, updateShareNodeRequest: UpdateShareNodeRequest, xSharePassword: String?,
+    ): Response =
+        when (val o = nodes.update(
+            shareId, xSharePassword, xContributorToken,
+            nodeId = nodeId.toString(),
+            parentId = updateShareNodeRequest.parentId.toString(),
+            encryptedName = updateShareNodeRequest.encryptedName,
+            slugToken = updateShareNodeRequest.slugToken,
+            wrappedContentKey = updateShareNodeRequest.wrappedContentKey,
+            placementVersion = updateShareNodeRequest.placementVersion.validated(),
+        )) {
+            UpdateShareNodeOutcome.Updated -> Response.noContent().build()
+            is HttpFailure -> httpError(o)
+        }
 }

@@ -10,6 +10,7 @@ import me.raddatz.veyq.core.membership.ScopeAccess
 import me.raddatz.veyq.core.membership.refusal
 import me.raddatz.veyq.core.persistence.createOrConflict
 import io.quarkus.arc.All
+import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 
 sealed interface CreateNodeOutcome {
@@ -97,7 +98,25 @@ class NodesHandler(
     ): CreateNodeOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(CreateNodeOutcome.NoScope, CreateNodeOutcome.Suspended, CreateNodeOutcome.ScopeDeleting)?.let { return it }
-        return createInScope(scopeId, nodeId, parentSlotId, kind, encryptedName, slugToken, orderIndex, epoch, wrappedContentKey, wrappedMeta)
+        // The member's create opens its own transaction: the loser of a concurrent create answers as its replay does.
+        return createOrConflict(conflict = createReplay(scopeId, parentSlotId, slugToken, nodeId)) {
+            createInScope(scopeId, nodeId, parentSlotId, kind, encryptedName, slugToken, orderIndex, epoch, wrappedContentKey, wrappedMeta)
+        }
+    }
+
+    /**
+     * The replay a create's loser answers (developer-styleguide §12, the insert half) — the `conflict` of the
+     * [createOrConflict] a caller of [createInScope] opens. A node is unique twice — its id, and its slug under the
+     * parent (`ux_node_parent_slug`) — so a concurrent create's loser re-asks both, in the order [createInScope] checks
+     * them. That holds too when it loses at the store's own id check, which a winner that committed after the slug
+     * check already trips.
+     */
+    internal fun createReplay(scopeId: String, parentSlotId: String?, slugToken: String, nodeId: String): () -> CreateNodeOutcome? = {
+        when {
+            store.slugTaken(parentSlotId ?: scopeId, slugToken) -> CreateNodeOutcome.SlugTaken
+            store.idTaken(nodeId) -> CreateNodeOutcome.IdTaken
+            else -> null
+        }
     }
 
     /**
@@ -105,49 +124,42 @@ class NodesHandler(
      * share gate). A [boundary] confines the parent to a subtree, decided under the scope lock (a parent outside it is
      * `illegal_structure`, like a missing one).
      *
-     * It owns its transaction ([createOrConflict]): a caller must not call it inside an open one, so it cannot hold a
-     * lock of its own — a share row's — across it; the scope lock is the first lock this write takes.
+     * It **joins its caller's transaction**, like [updateInScope] and [deleteInScope], and refuses to run without one:
+     * the caller opens it with [createOrConflict] and [createReplay] — a failed flush marks a JTA transaction
+     * rollback-only, so only the transaction's opener can answer a lost race as its replay. A caller may therefore take
+     * the scope lock ([NodesStore.lockScope]) first and then a row of its own — a guest's share row
+     * (`ShareNodesHandler`) — before this runs, all in the one transaction that writes. It must never lock a row of its
+     * own BEFORE the scope lock: every tree writer takes the scope first, so that order would invert theirs.
      */
     internal fun createInScope(
         scopeId: String, nodeId: String, parentSlotId: String?, kind: String,
         encryptedName: String, slugToken: String, orderIndex: Int, epoch: Int, wrappedContentKey: String, wrappedMeta: String?,
         boundary: SubtreeBoundary? = null,
     ): CreateNodeOutcome {
+        check(QuarkusTransaction.isActive()) { "createInScope joins its caller's transaction; open one with createOrConflict" }
+        // Every decision under the tree's lock (NodesStore.lockScope), taken before ANY node is read. Not only because
+        // a parent trashed, or an ancestor moved out of the boundary, between an unlocked read and the write would let
+        // the node land under a trashed parent or outside the subtree: this runs inside its caller's transaction, and
+        // a node read before the lock stays in that transaction's persistence context — a check after the lock is
+        // then handed the stale copy instead of the committed row (measured: `SubtreeBoundaryRaceCoreSliceTest`'s
+        // create landed outside with the reads before the lock). A caller that took the lock already — a guest's
+        // create — re-takes it here at no cost: the row is this transaction's.
+        store.lockScope(scopeId)
         // ADR 0024 Decision 6, layer 1: content sealed under an epoch below the current one is readable by every
-        // member removed since — a writer whose grant lags a rotation. The check rename and set-icon already make.
-        // Unlocked, like theirs: a create racing the rotation that supersedes its epoch was sealed while that epoch
-        // was current, which is the same as having landed a moment earlier.
+        // member removed since — a writer whose grant lags a rotation. Under the lock a rotation takes, so a rotation
+        // that committed first is seen.
         if (epoch != store.currentEpoch(scopeId)) return CreateNodeOutcome.StaleEpoch
         val slot = parentSlotId ?: scopeId // null/absent → the scope root (slot = scope id)
         val parent = store.parentSlot(scopeId, slot)
         if (parent is ParentSlot.Missing) return CreateNodeOutcome.IllegalStructure
+        // The boundary before anything that answers by what lies outside it (a slug taken there).
+        if (boundary != null && !store.withinSubtree(scopeId, boundary.rootNodeId, slot)) return CreateNodeOutcome.IllegalStructure
         if (!parentAllows(kind, parent)) return CreateNodeOutcome.IllegalStructure
         if (store.slugTaken(slot, slugToken)) return CreateNodeOutcome.SlugTaken
-        // The client-minted id (ADR 0072): the name, content-key wrap and payload are sealed bound to it, so it is stored
-        // verbatim or not at all.
-        // A node is unique twice — its id, and its slug under the parent (`ux_node_parent_slug`) — so a concurrent
-        // create's loser re-asks both, in the order above: what its replay answers. That holds too when it loses at
-        // the store's own id check, which a winner that committed after the slug check above already trips.
-        val replay = {
-            when {
-                store.slugTaken(slot, slugToken) -> CreateNodeOutcome.SlugTaken
-                store.idTaken(nodeId) -> CreateNodeOutcome.IdTaken
-                else -> null
-            }
-        }
-        return createOrConflict(conflict = replay) {
-            // The parent again, under the tree's lock (NodesStore.lockScope): read above only, a parent trashed in
-            // between took its subtree without this node, which then stayed live under it.
-            store.lockScope(scopeId)
-            if (store.parentSlot(scopeId, slot) is ParentSlot.Missing) return@createOrConflict CreateNodeOutcome.IllegalStructure
-            // The boundary only here, under the lock: decided before it, a member's move of the parent's ancestor out
-            // of the subtree could commit in between, and the node would land outside.
-            if (boundary != null && !store.withinSubtree(scopeId, boundary.rootNodeId, slot)) {
-                return@createOrConflict CreateNodeOutcome.IllegalStructure
-            }
-            val created = store.create(nodeId, scopeId, slot, kind, encryptedName, slugToken, orderIndex, epoch, wrappedContentKey, wrappedMeta)
-            if (created) CreateNodeOutcome.Created(nodeId) else replay() ?: CreateNodeOutcome.IdTaken
-        }
+        // The client-minted id (ADR 0072): the name, content-key wrap and payload are sealed bound to it, so it is
+        // stored verbatim or not at all.
+        val created = store.create(nodeId, scopeId, slot, kind, encryptedName, slugToken, orderIndex, epoch, wrappedContentKey, wrappedMeta)
+        return if (created) CreateNodeOutcome.Created(nodeId) else createReplay(scopeId, parentSlotId, slugToken, nodeId)() ?: CreateNodeOutcome.IdTaken
     }
 
     fun list(userId: String, scopeId: String): ListNodesOutcome {
@@ -177,8 +189,13 @@ class NodesHandler(
         /** Whether every field a placement needs is there: a rename without a re-wrapped key cannot land, because
          *  the old wrap is sealed at the old version and would stop opening (bite test 15). */
         val complete: Boolean
+            get() = completeWithoutEpoch && epoch != null
+
+        /** [complete] but for the [epoch] — what a bounded placement needs ([updateInScope]): it never touches the
+         *  scope root, so it keeps the node's stored epoch and states none. */
+        val completeWithoutEpoch: Boolean
             get() = !encryptedName.isNullOrBlank() && !slugToken.isNullOrBlank() && !wrappedContentKey.isNullOrBlank() &&
-                epoch != null && placementVersion != null
+                placementVersion != null
     }
 
     fun update(
@@ -192,9 +209,13 @@ class NodesHandler(
         return updateInScope(scopeId, nodeId, placement, orderIndex, wrappedMeta, metaVersion)
     }
 
-    private fun malformed(placement: PlacementRequest, wrappedMeta: String?, metaVersion: Long?): UpdateNodeOutcome? = when {
+    /** [epochOptional]: only a bounded placement may leave the epoch out ([updateInScope]). */
+    private fun malformed(
+        placement: PlacementRequest, wrappedMeta: String?, metaVersion: Long?, epochOptional: Boolean = false,
+    ): UpdateNodeOutcome? = when {
         wrappedMeta != null && metaVersion == null -> UpdateNodeOutcome.MissingMetaVersion
-        placement.present && !placement.complete -> UpdateNodeOutcome.IncompletePlacement
+        placement.present && !(if (epochOptional) placement.completeWithoutEpoch else placement.complete) ->
+            UpdateNodeOutcome.IncompletePlacement
         else -> null
     }
 
@@ -205,16 +226,24 @@ class NodesHandler(
      * unlocked fast path: the node outside is `node_not_found`, the root as the node or a destination outside it
      * `illegal_structure`.
      *
+     * **A bounded placement may state no epoch** (a guest's, ADR 0080 Decision 6): its node lies strictly inside the
+     * boundary and its destination inside it, so neither its current parent nor its destination is the scope root,
+     * and the node keeps its stored epoch — the path a placement between two non-root parents always takes. A
+     * destination at the scope root without an epoch is `illegal_structure` here already (it is outside every
+     * boundary); a node at the scope root is outside it too, which the store answers under the lock.
+     *
      * Lock order: the scope row ([NodesStore.lockScope]), then the node row. A caller may run this inside its own
-     * transaction (`applyUpdate` joins it) and take the scope lock first, then rows of its own (a share row); it must
-     * never lock one of its own rows or a node row BEFORE the scope lock — every tree writer takes the scope first,
-     * so that order would invert theirs.
+     * transaction (`applyUpdate` joins it), and then it **takes the scope lock first**, before this function's
+     * unlocked fast path reads any node: a node read before the lock stays in the transaction's persistence context,
+     * and the decisions under the lock would be handed that stale copy (the boundary walk included). After the scope
+     * lock it may take rows of its own (a share row, `ShareNodesHandler`); it must never lock one of its own rows or a
+     * node row BEFORE the scope lock — every tree writer takes the scope first, so that order would invert theirs.
      */
     internal fun updateInScope(
         scopeId: String, nodeId: String, placement: PlacementRequest, orderIndex: Int?,
         wrappedMeta: String?, metaVersion: Long?, boundary: SubtreeBoundary? = null,
     ): UpdateNodeOutcome {
-        malformed(placement, wrappedMeta, metaVersion)?.let { return it }
+        malformed(placement, wrappedMeta, metaVersion, epochOptional = boundary != null)?.let { return it }
         // A trashed node is not found: it is neither movable nor renamable (its entry is restored, not placed).
         val node = store.findInScope(scopeId, nodeId) ?: return UpdateNodeOutcome.NotFound
 
@@ -235,21 +264,28 @@ class NodesHandler(
             // which no rotation changes: a move out of the root stores the epoch the client sealed at, and a
             // placement between two non-root parents keeps the stored one (the client seals at it; the
             // compare-and-set guarantees the parent it read is still the node's).
-            val epoch = placement.epoch!!
-            val current = store.currentEpoch(scopeId)
-            // For ANY destination, an epoch above the scope's current one (or a scope without one) is refused: no
-            // epoch past the current exists, so nothing can be sealed at it, and a move out of the root stores the
-            // request's epoch — unchecked, it put an epoch on the row that no later reader or rotation can account
-            // for. An epoch BELOW the current one stays accepted off the root: it is the entry's own sealed epoch,
-            // and there it opens nothing (the entry is under the parent's key, not K_SC@epoch).
-            if (current == null || epoch > current) return UpdateNodeOutcome.StaleEpoch
-            val storedEpoch = when {
-                parent is ParentSlot.Root -> {
-                    if (epoch != current) return UpdateNodeOutcome.StaleEpoch
-                    epoch
+            val epoch = placement.epoch
+            val storedEpoch = if (epoch == null) {
+                // A bounded placement without an epoch (see the KDoc): the node keeps its stored one. The scope root
+                // as its destination is outside every boundary; refused here, it never reaches a write with no epoch.
+                if (parent is ParentSlot.Root) return UpdateNodeOutcome.IllegalStructure
+                null
+            } else {
+                val current = store.currentEpoch(scopeId)
+                // For ANY destination, an epoch above the scope's current one (or a scope without one) is refused: no
+                // epoch past the current exists, so nothing can be sealed at it, and a move out of the root stores the
+                // request's epoch — unchecked, it put an epoch on the row that no later reader or rotation can account
+                // for. An epoch BELOW the current one stays accepted off the root: it is the entry's own sealed epoch,
+                // and there it opens nothing (the entry is under the parent's key, not K_SC@epoch).
+                if (current == null || epoch > current) return UpdateNodeOutcome.StaleEpoch
+                when {
+                    parent is ParentSlot.Root -> {
+                        if (epoch != current) return UpdateNodeOutcome.StaleEpoch
+                        epoch
+                    }
+                    node.parentId == scopeId -> epoch
+                    else -> null
                 }
-                node.parentId == scopeId -> epoch
-                else -> null
             }
             write = NodesStore.Placement(
                 parentSlot = slot,
@@ -280,7 +316,8 @@ class NodesHandler(
      * The principal-free half of [delete]: everything after the caller's own gate. A [boundary] confines the node
      * (strictly inside — never the boundary's root), decided under the scope lock in [NodesStore.deleteSubtree]; a
      * node it refuses answers the same non-enumerable 404 as a foreign one. Same lock order as [updateInScope]: the
-     * scope lock first, never a caller's own row before it.
+     * scope lock first, never a caller's own row before it — and a caller that runs this in its own transaction takes
+     * it before the node lookup below, for the same persistence-context reason.
      */
     internal fun deleteInScope(scopeId: String, nodeId: String, boundary: SubtreeBoundary? = null): DeleteNodeOutcome {
         // Bind the node to THIS scope before deleting (mirrors update, cr-0126): membership on scopeId alone does
