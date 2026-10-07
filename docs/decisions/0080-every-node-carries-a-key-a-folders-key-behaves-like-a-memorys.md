@@ -59,7 +59,9 @@ Memory, an expense and a file side by side).
    file tree, in an expense list), written down as a small role matrix in its `docs/apps/<app>.md`; **a kind with no
    declaration allows nothing** (fail closed, like the other seams), so a new application can never inherit write
    rights by accident. A `READ_WRITE` share on a folder gives a contributor's rights in every Memory or chapter below it (owner, 2026-10-07: the role is
-   inherited as the share allows; the share root's kind no longer decides who writes, the target node's kind does).
+   inherited as the share allows; the share root's kind no longer decides who writes, the target node's kind does):
+   a guest's upload names an optional target node below the root, checked inside the live subtree and decided again
+   under the scope lock where the medium is written; a `WRITE_ONLY` link's target is its root only.
    `WRITE_ONLY` needs no matrix: such a guest holds no keys of the subtree and can only write
    through the drop mechanism ([ADR 0031](0031-uploader-public-share.md) point 7), never into an existing Memory
    below. **Shareability is separate from guest writes:** a `FOLDER` can be shared with `READ` whether or not any
@@ -112,8 +114,9 @@ Memory, an expense and a file side by side).
    whatever the kind. A chapter's media already work this way: a chapter has its own `K_mem` and `K_blob` hangs under
    it (`memoryNodes.ts:29-33`, `media.ts:368-371`), so a chapter share is cryptographically ready. Memories decided
    it: a `CHAPTER` is a share root with all three roles, a smaller Memory link (`MemoriesNodeKinds.SHARE_ROOTS`, which
-   `MemoryShareRoots`, `MediaShareGuestWrites` and `MediaUploadAdmission` all answer from; a guest's upload lands in the
-   chapter, an uploader seals to the chapter's own drop key). The web offers the chapter link through the same share dialogs as a Memory (`shareable: true`,
+   `MemoryShareRoots`, `MediaShareGuestWrites` and `MediaUploadAdmission` all answer from; a chapter link's guest
+   uploads into the chapter, a Memory link's contributor also into a chapter below it (decision 6), and an uploader
+   seals to the chapter's own drop key). The web offers the chapter link through the same share dialogs as a Memory (`shareable: true`,
    `register.ts`). What each role may do is the role matrix in [`docs/apps/memories.md`](../apps/memories.md).
 14. **The share root's name.** It arrives as `sealedName` under `K_share`. A guest cannot rename the root (it holds
    no parent key). When a member renames a share root, that member's client re-seals the name of every share on it

@@ -42,7 +42,7 @@ direction only (see the end).
 ## What a guest may do — the role matrix
 
 ADR 0080 decision 6 has each application write down what a link's role lets a guest do with its kinds; a kind with
-no declaration allows nothing. This is Memories' answer, measured from the code after cr-node-key-hierarchy 5a.4
+no declaration allows nothing. This is Memories' answer, measured from the code after cr-node-key-hierarchy 5a.5
 (2026-10-07), for a link rooted at a `MEMORY`, at a `CHAPTER`, and — for the Memories content it reaches — at core's
 `FOLDER`. The roles: `READ` (viewer, [ADR 0029](../decisions/0029-public-viewer-share.md)), `READ_WRITE`
 (contributor, [ADR 0030](../decisions/0030-contributor-public-share.md)), `WRITE_ONLY` (uploader,
@@ -51,8 +51,8 @@ no declaration allows nothing. This is Memories' answer, measured from the code 
 | Operation | `READ` | `READ_WRITE` on `MEMORY` / `CHAPTER` | `READ_WRITE` on `FOLDER` | `WRITE_ONLY` on `MEMORY` / `CHAPTER` |
 |---|---|---|---|---|
 | Read: the subtree's nodes, its media, their blobs | ✓ | ✓ | ✓ (the Memories below it with their media) | ✗ (no node, empty media lists, blob `404`) |
-| Upload media (start, window, complete) | ✗ (`share_not_contributable`) | ✓, always into the root node itself | ✗ (`share_not_contributable`: no application writes under a folder) | ✓, into the root node itself |
-| Delete the own media | ✗ (`share_not_contributable`) | ✓ | ✗ (`share_not_contributable`) | ✓ |
+| Upload media (start, window, complete) | ✗ (`share_not_contributable`) | ✓ into the root, or into a chapter below a `MEMORY` root (`nodeId`) | ✓ into any `MEMORY` or `CHAPTER` below the folder (`nodeId`); ✗ into a folder, the root itself included (`share_not_contributable`) | ✓, into the root node only (another `nodeId`: `share_not_contributable`) |
+| Delete the own media | ✗ (`share_not_contributable`) | ✓ | ✓ (in any Memory or chapter of the subtree) | ✓ |
 | Delete others' media | ✗ | ✗ (`404 share_media_not_found`) | ✗ | ✗ (`404 share_media_not_found`) |
 | Edit a medium's meta | ✗ (no guest operation) | ✗ (no guest operation) | ✗ | ✗ |
 | Rename a node | ✗ (`share_not_contributable`) | ✗: the root never (`illegal_structure`), a chapter inside a Memory `illegal_scope` | ✓ a child of a `FOLDER`; ✗ the root, a chapter (`illegal_scope`) | ✗ (`share_not_contributable`) |
@@ -69,8 +69,22 @@ What the cells rest on:
   chapter (without its own entry, which is sealed under the Memory's key) and nothing of the Memory or a sibling
   chapter (`ChapterShareSliceTest`, bite test 21). `NodeKindRules` puts a chapter only directly inside a Memory, so a
   chapter link has no node below its root.
-- **Uploads land in the root node** (`ShareMediaHandler.complete`: `nodeId = rootNodeId`, never client-chosen): a
-  `MEMORY` link's guest uploads into the Memory, never into one of its chapters; a `CHAPTER` link's into the chapter.
+- **A role applies to every node below the root as Memories allows it** (ADR 0080 decision 6, owner 2026-10-07;
+  cr-node-key-hierarchy 5a.5). A guest's start, every window and the completion name an optional target `nodeId`;
+  absent, it is the root, as before. Core checks a named target (`ShareGuestGate.target`): live, inside the share's
+  subtree (else `404 node_not_found`, the same for a node outside as for none), the root live (else
+  `share_not_contributable`); and core dispatches the writer (`ShareGuestWrites`), the per-link measure
+  (`UploadAdmission`) and the completion by the TARGET's kind — Memories takes `MEMORY` and `CHAPTER`, so a folder,
+  the root of a folder link included, is `share_not_contributable`. The completion decides the target again in each
+  item's write, under the scope lock and then the share row's (`ShareGuestGate.admittedInto`): a target trashed or
+  moved out of the subtree since, or a link revoked since, refuses the item (`upload_not_found`,
+  `GuestCompleteTargetRaceSliceTest`). A `MEMORY` link's contributor so uploads into the Memory or one of its
+  chapters, a `FOLDER` link's into any Memory or chapter below the folder, a `CHAPTER` link's into the chapter. The
+  per-link limit counts the link's media by identity, wherever in the subtree they lie; a guest read serves a
+  contributor's media below the root without its identity, as on the root (ADR 0030 point 8). A guest's delete of
+  its own reaches its media anywhere in the subtree, and none a member has since moved out of it.
+- **A `WRITE_ONLY` link writes into its root only** (another `nodeId`: `share_not_contributable`): its guest holds no
+  key below the root ([ADR 0031](../decisions/0031-uploader-public-share.md) point 7).
   A `WRITE_ONLY` link seals to the root node's own drop key, set on that node by its first uploader link
   (`SharingStore.create`), and every reader of the node — a member's media page and buckets, a viewer link — is served
   what opens it. A guest's name reaches members only; a guest read serves a `WRITE_ONLY` identity's wrapped key and
@@ -86,9 +100,10 @@ What the cells rest on:
   `READ_WRITE` flips in place on all three kinds.
 
 **Verified by a test vs. by reading the code.** Every `MEMORY` and `CHAPTER` cell has a slice test
-(`ChapterShareSliceTest`, `ShareRootsSliceTest`, `ShareNodesSliceTest`, the share media suites). The `FOLDER` column's
-upload, rename, create and move cells are tested (`ShareRootsSliceTest`, `ShareNodesSliceTest`,
-`ShareNodesCoreSliceTest`). A `READ` folder guest is served the media of a Memory below the folder (e2e `folderShare.e2e.test.ts`,
+(`ChapterShareSliceTest`, `ShareRootsSliceTest`, `ShareNodesSliceTest`, the share media suites, `SubtreeUploadSliceTest`
+for an upload into a chapter below a Memory link and the `WRITE_ONLY` root-only rule). The `FOLDER` column's
+upload, delete-own, rename, create and move cells are tested (`SubtreeUploadSliceTest`, `ShareRootsSliceTest`,
+`ShareNodesSliceTest`, `ShareNodesCoreSliceTest`). A `READ` folder guest is served the media of a Memory below the folder (e2e `folderShare.e2e.test.ts`,
 2026-10-07). **UNVERIFIED by a test** (read from the code only): a folder guest's create of a chapter directly under a folder answering `illegal_structure`
 (`FolderGuestNodeRules` allows, `MemoryNodeKindRules` refuses); a `READ` ↔ `READ_WRITE` flip on a folder link.
 

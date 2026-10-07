@@ -289,7 +289,7 @@ Planned 2026-10-06 from three inventories; each sub-slice is its own worktree ru
         cell. Still saying "one Memory" (5b.5's): `share.title`/`share.intro`, `docs/features/sharing/_index.md`,
         `uc.sharing.share-public-viewer.md`, `uc.sharing.share-contributor.md`, `uc.sharing.share-uploader.md`; and ADR
         0080 decision 13 still says "the web still offers no chapter link (`shareable: false`)", false since 5b.1.
-  - [ ] 5a.5 backend + contracts — owner decision 2026-10-07: a `READ_WRITE` folder share gives a contributor's rights in every
+  - [x] 5a.5 backend + contracts — owner decision 2026-10-07: a `READ_WRITE` folder share gives a contributor's rights in every
         Memory or chapter below it (the role is inherited as the share allows; `WRITE_ONLY` on a folder stays refused).
         Today `ShareGuestWrites` dispatches by the share ROOT's kind and the server puts every guest upload on the root
         (`ShareMediaHandler.kt:119`), so a folder guest cannot upload. The guest media operations (start, window,
@@ -299,6 +299,33 @@ Planned 2026-10-06 from three inventories; each sub-slice is its own worktree ru
         `docs/apps/memories.md` and ADR 0080 decision 6 · Done when: bite tests (a folder `READ_WRITE` guest uploads
         into a Memory below and a member opens it, deletes only its own, cannot reach a node outside the subtree or a
         kind Memories refuses; a `READ` guest and a folder `WRITE_ONLY` still refused), MariaDB races, guards green.
+        *Measured:* the optional `nodeId` sits on `ShareBlobUploadsRequest`, `ShareBlobUploadWindowsRequest` (core) and
+        `ShareMediaBatchRequest` (Memories) — one target per request; list needs none (already subtree-wide) and delete
+        addresses a media id. Core's `ShareGuestGate.target` (plain read): absent = the root as stored (every old
+        answer unchanged); named: `WRITE_ONLY` and not the root → `share_not_contributable`, the root trashed →
+        `share_not_contributable`, not live inside the subtree → `404 node_not_found` (the codes the guest tree
+        operations answer); the writer, `StorageQuota.admissionFor`/`linkFits`/`linkUsage` (now take the target kind) and
+        the completion dispatch by the TARGET's kind, so a folder — the root of a folder link included — stays
+        `share_not_contributable`. The completion's `admitted` closure is `ShareGuestGate.admittedInto`: scope lock →
+        share row (`admitted()`) → a named target still live inside the subtree, first in `MediaStore.attach`'s
+        transaction; refused, the item is `upload_not_found`. The scope lock is taken for an absent target too (one lock
+        order), nothing else changes there. `deleteOwn` now also requires the medium's node to be a Memories kind inside
+        the share's subtree (structural walk, trash ignored; read under the media row lock only, not the scope's): a
+        folder guest deletes its own below the folder, none a member moved out. Tests: `SubtreeUploadSliceTest` (7: a
+        folder contributor into a Memory and a chapter below, a member reads it, the guest read serves no identity; own
+        delete only, not after a move out; outside / unknown / trashed `node_not_found`, folder / sub-folder / unknown
+        kind / no node `share_not_contributable` on start, window and complete; `READ` refused; `WRITE_ONLY` root only;
+        a Memory link into its chapter; the link limit counts a medium in another node of the subtree — each red against
+        its lever: the target ignored, the boundary walk dropped, the `WRITE_ONLY` rule dropped, the delete's walk
+        dropped, `FOLDER` claimed by `MediaShareGuestWrites`, the usage SQL bound to the root node, `canUpload` dropped),
+        `GuestCompleteTargetRaceSliceTest` (complete vs a member trash / a member move out / a revoke: red on H2 and the
+        pinned MariaDB with the scope lock dropped (trash, move), the named re-check dropped (trash, move) and
+        `admitted()` dropped (revoke)). Signature-only test edits: `deleteOwn(scopeId, rootNodeId, …)` in
+        `MediaSliceTest`, `MediaRowLockRaceSliceTest`, `ShareUploaderSliceTest`; `linkUsage`/`linkFits` with a kind in
+        `UploadAdmissionPartitionSliceTest`, `ShareLinkStorageLimitSliceTest`. `ShareRootsSliceTest`'s folder-root refusal
+        and `CoreAloneSliceTest` hold unchanged (a request naming no node targets the folder root); only their KDoc
+        moved. Open for Files: a link spanning two applications is measured per target application only
+        (`StorageQuota.linkUsage` KDoc). Owed to 5b.4b: the web sends `nodeId` for an embedded Memory.
   - [ ] 5b.4a guest tree functions, no UI — export `contentKeyContext` (or a `wrapContentKey` helper) from `tree.ts`
         and drop the duplicated literal in `shareTree.ts:79`; `core/sharing/guestTree.ts` with a `GuestTreeContext`,
         `createShareNodeAsGuest` and `placeShareNodeAsGuest` (see the 5b.4 sketch above: parent key from the chain,
