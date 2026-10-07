@@ -1,10 +1,12 @@
-# Application: Files (concept)
+# Application: Files
 
-> **Concept, being built** by `changes/cr-files-application.md`. The smallest possible application: a file tree on
-> the platform's node tree ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)).
-> Built so far (F0): the skeleton only — the Gradle module `:apps:files` with the node kind `FILE` (at the root or in
-> a `FOLDER`, no children, no share root) and its web registration (`web/src/features/files`). No upload, no UI of its own: no level
-> section yet, so core's folder level view lists a `FILE` child in its fallback section (name, icon, "cannot open").
+> **Being built** by `changes/cr-files-application.md`. The smallest possible application: a file tree on the
+> platform's node tree ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)).
+> Built so far: the Gradle module `:apps:files` with the node kind `FILE` (at the root or in a `FOLDER`, no children,
+> no share root) and its web registration (`web/src/features/files`); the **backend half of a member's file**
+> (F1a): its contract `contracts/api/files/files.openapi.yaml` and the upload completion, replace and listing below.
+> No web UI of its own yet (F1b): core's folder level view lists a `FILE` child in its fallback section (name, icon,
+> "cannot open"). No guests (F2), no drop box (F3).
 
 ## Idea
 
@@ -21,38 +23,50 @@
   matrix this page will hold (ADR 0080 decision 6; no declaration allows nothing).
 - Rides on the platform's blobs, quota and trash; names sit under the parent's key, `K_SC` only at the scope root.
 
-## Depends on a decision that is open
+## How a file is stored
 
-`veyq_blob` is scope-keyed, but every blob is referenced today through Memories' tables — `veyq_media.blob_id`,
-`veyq_media_derivative.blob_id`, or the cover slot `veyq_node.cover_blob_id` (a node column, no media row) — and its
-`K_blob` is wrapped under a Memory's `K_mem` (measured: `grep -rn 'blob_id' backend/core/src/main/resources/db/migration backend/apps/memories/src/main/resources/db/migration`).
-Files needs a blob that **a file node references** without going through media, wrapped under a key that is not
-`K_mem`: a **blob-role decision** (who may reference a blob, what reclaims it, which key wraps it). Two prerequisites
-follow from it and are not built yet: a generic `veyq_node_attachment(node_id, slot, blob_id)` table with real foreign
-keys, and a key rule for non-Memories blobs (decided since: no new seal purpose, see below). Until it is made, Files cannot start without
-depending on Memories, which the rules forbid.
+- **The node** is core's: a `FILE` node with its sealed name and slug (`fileNameSlug`, case-folded), its random key
+  wrapped under its parent's, and its sealed metadata — MIME type, plaintext size, modified time — in the node's
+  generic `wrappedMeta` under the file node's key, written with core's `updateNode` and its `metaVersion`
+  ([ADR 0077](../decisions/0077-a-write-carries-the-version-it-read.md)). Files adds no column and no table.
+- **The blob** is a core attachment: the slot `FILE_CONTENT` of `veyq_node_attachment` (one blob per slot), its
+  role the same token. Its `K_blob` is wrapped under the file node's key and sealed bound to the blob id, the node id
+  (`ownerId`) and the role ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md), ADR 0080 Decision 13), so no
+  new seal purpose exists for Files.
+- **Trash and purge** are core's: deleting the node trashes it with its attachment (the quota still counts it, ADR
+  0073 §2); the purge frees the attachment row and the blob through core's eraser.
+- **The quota:** a member's upload counts against the tenant quota through core's start, unchanged. A link's usage
+  for a `FILE` is core's attachment term; Files' `UploadAdmission` reports 0 for it (core never admits a link by its
+  own terms alone).
 
-What the decision does **not** have to change is the transfer: the upload itself is core's and neutral. Starting,
-windowing, verifying and downloading a blob, the upload sessions and the quota are `me.raddatz.veyq.core.blob` and
-`core.quota`, served by core's `contracts/api/blob.openapi.yaml`; a blob's `K_blob` wrap, `owner_id` and `blob_role`
-are opaque strings that code stores and compares and never opens. What a verified upload *becomes* is the
-application's, through core's `UploadCompletion` seam (Memories': a media row), and a node kind no application
-accepts takes no upload (`illegal_target`). So the decision lands in places none of which is the upload path: the
-reference table, and the role and key of the `blob-key` seal. The role is decided (cr-files-application P3-S1/S2):
-`BlobRole` is an open token in the contract and the crypto package, Files' is `FILE_CONTENT`, and the seal needs no
-new purpose — the file node's random key, wrapped under its parent's, wraps `K_blob`, bound to the node id and the
-role ([ADR 0079 §9](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)).
+## The contract (member, `contracts/api/files/files.openapi.yaml`, tag `files`)
+
+- `completeFile` — `POST /api/scopes/{scopeId}/files/{nodeId}/content`, body `{uploadId, expectedBlobId?}`. The upload
+  was started with core's `startBlobUploads` (`role: FILE_CONTENT`, `ownerId` = the node). Without `expectedBlobId`
+  it fills an empty slot; with it, it replaces exactly that blob (a compare-and-set; the replaced blob is reclaimed in
+  the same transaction). `200` the attached `FileBlobRef`; `409 stale_file` with the slot's `currentBlobId` when it
+  holds anything else (the upload is spent and reclaimed); `404 node_not_found` (no live node — trashed, another
+  scope's), `404 upload_not_found`, `422 illegal_target` (not a `FILE`), `422 upload_mismatch` (started for another
+  node or role), `400 budget_exceeded`.
+- `listFiles` — `GET /api/scopes/{scopeId}/files?parentId=` (absent: the scope root): `{items: [{nodeId, fileBlob|null}]}`
+  for every live `FILE` directly under the parent, ordered by node id. Names, keys and metadata come from core's node
+  listing; the client joins by `nodeId`. `404 node_not_found` for a parent that is no live node of the scope.
+- **A download** is core's `presignBlobDownloads` with the blob id (scope READ). **Delete** is core's node delete
+  (trash). **Replace** is another `completeFile` with the blob the client read.
+
+Backend: `me.raddatz.veyq.files.content` — `FilesResource`/`FilesHandler` (the scope-access gate first), core's
+dispatcher to `FilesUploadCompletion` (`UploadCompletion` for `FILE`, maps the item's `expectedBlobId` payload onto
+`AttachmentStore.attach`), `FilesUploadAdmission`, `FilesStore` (the listing's reads).
 
 ## Operator-visible, beyond the platform's `kind`
 
-File sizes (exact, unless padded), upload and change timestamps, the tree's shape.
+File sizes (exact sealed sizes, unless padded), upload and change timestamps, the tree's shape, and when a file's blob
+was replaced.
 
 ## Open questions
 
-- Blob role: the shape of core's generic attachments (inbox #327) — not each application owning its own blob
-  table, which [ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Consequences
-  (*What the platform is*) rules out.
-- The slug of a file name: containers keep today's slug, files want a stricter case-insensitive uniqueness (inbox
-  #350, ADR 0080 *Open questions*).
-- Preview or thumbnail for images: a Files feature, or out of scope?
-- Is the upper size limit the quota only, or is there a per-file cap?
+- Preview or thumbnail for images: a Files feature (later a derivative through another attachment slot), or out of
+  scope?
+- An operator-configurable per-file size cap (the quota only, at first).
+- The metadata write is not atomic with the blob swap: a client that replaces the blob and then fails before its
+  `updateNode` leaves the old MIME type/size beside the new bytes until the next write.

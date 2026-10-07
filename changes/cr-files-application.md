@@ -525,6 +525,83 @@ without touching core except for the platform prerequisites below, which every l
       config prefix (none added).
 - [ ] F1 a member uploads and downloads a file — `UploadCompletion` for `FILE`, `registerKind`, the file list in the folder level
       view, the download decrypted in the browser, delete into the trash · Done when: an e2e round trip with identical bytes.
+  - [x] F1a backend — Files' contract `contracts/api/files/files.openapi.yaml` + `:apps:files` code (member only; no web, no
+        guests) · Done when: slice tests with bite levers, `./gradlew check`, MariaDB races, `validate_*` green.
+        **Measured 2026-10-08:** the module opts in (`id("veyq.openapi")`, `veyqOpenApi { generateOwnSpecs() }`) and
+        generates `me.raddatz.veyq.files.generated.{api.FilesApi, model.*}`, root `@Path("/api/scopes/{scopeId}/files")`.
+        Operations: `completeFile` `POST …/files/{nodeId}/content` `{uploadId, expectedBlobId?}` → `200 FileBlobRef`
+        `{blobId, chunkCount, byteSize, manifest?, wrappedBlobKey}`, `409 FileConflict {code: stale_file, currentBlobId}`,
+        `404 scope_not_found|node_not_found|upload_not_found`, `422 illegal_target|upload_mismatch`, `400
+        budget_exceeded|invalid_request`, `403`, `409 scope_deleting`; `listFiles` `GET …/files?parentId=` → `{items:
+        [{nodeId, fileBlob: FileBlobRef|null}]}` (live `FILE` children of the parent, the root when absent, by node id;
+        `404 node_not_found` for a parent that is no live node of the scope). Code in `me.raddatz.veyq.files.content`:
+        `FilesResource` → `FilesHandler` (gate first: WRITE for the complete, READ for the list; then the node must be a
+        live `FILE`; then core's `UploadCompletions` dispatcher) → `FilesUploadCompletion` (`accepts("FILE")`;
+        `findSession` → `verifyBlob` (Budget → `purge`) → `AttachmentStore.attach(scopeId, node, {FILE}, "FILE_CONTENT",
+        session, manifest, payloads["expectedBlobId"], admitted)`; outcomes → `Attached` = blob id, `Conflict` →
+        `stale_file`, `NotAdmitted`/`UploadNotFound` → `upload_not_found`, the rest their own codes; derivatives →
+        `upload_mismatch`), `FilesBlobRoles.FILE_CONTENT`, `FilesUploadAdmission` (`supports("FILE")`, 0), `FilesStore`
+        (three bounded reads: nodes by scope+parent+kind, their attachments in the slot, those blobs). No migration, no
+        core main code changed. Tests: `:apps:files` 8 → 16 — `FilesContentSliceTest` 7 under `FakePresignProfile` (so
+        declare-then-verify runs): upload → list (blob and a `null` one, root vs folder) → tenant usage = the blob →
+        member presigns 2 chunks via core's `blob-downloads-batch`, stranger `404`; replace with the read blob (old row
+        gone, 1 reclaim record, usage = the new size only); stale expected and first-into-filled → `409 stale_file` +
+        current id, loser's session spent and reclaimed, slot unchanged; FOLDER and MEMORY → `422 illegal_target`, a
+        node in a trashed folder → `404 node_not_found` (and its folder's listing), another scope's file → `404`, a
+        session for another node or role → `422 upload_mismatch`, unknown upload → `404 upload_not_found`; a scope member
+        outside the tenant (gate: no WRITE) and a stranger → `404 scope_not_found`, the READ listing passes; another
+        scope's folder → `404`; trash keeps attachment and usage, the subtree purge frees attachment, blob, reclaim
+        record, usage 0. `FilesNodeSliceTest` +1 (the upload seams claim `FILE` only; admission 0). Root 85 → 89:
+        `ModuleCompositionTest` +2 (the completion/admission partition MEMORY/CHAPTER/FILE across both applications,
+        none for FOLDER; `completeFile` on a MEMORY whose upload was started as that medium's original → `422`, no
+        medium, control through `media-batch` 200), route anchor `files.generated.api`; `OperatorBlindProbeTest`
+        probes `completeFile` and `listFiles` (5 personas each). **Found:** `OperatorBlindProbeTest.API_PACKAGES` was a
+        literal list (core, Memories), so Files' operations were invisible to the gate's classification — added with an
+        anchor `FilesApi` and a KDoc saying a new application adds its package (not derived: a next application must
+        remember it; a derivation from `MainOutputs` would close it — not done here).
+        **Bites, each red then green:** `expectedBlobId` ignored (null passed) → replace test and stale test red (409
+        where 200); `accepts` = true → `FilesNodeSliceTest` seam test, `ModuleCompositionTest` partition (MEMORY two
+        completions) and `aKindNoApplicationClaims…` red, and the whole `OperatorBlindProbeTest` (its world's media
+        complete fails); `access.check(WRITE)` skipped → `aCallerWithoutWriteAccess…` (`upload_not_found` where
+        `scope_not_found`) and the `completeFile` probe (5 failures) red; the list's parent resolved without the scope
+        (and listed in the parent's scope) → cross-scope and trashed-parent tests red (200 where 404); the handler's
+        `FILE` check dropped → Files' own tests stay green (attach refuses FOLDER, no MEMORY completion there) but the
+        root's `filesCompletionRouteNeverReachesMemoriesCompletion` red: a `MEMORY` upload through `completeFile`
+        attached a medium (200) — the check is load-bearing only in the composition; the `completeFile` probe renamed →
+        the classification test red ("unclassified operations").
+        **Decisions (reversible, for the owner):** (1) conflict code `stale_file` (the `stale_*` family of ADR 0077),
+        body `FileConflict {code, currentBlobId}` — Files' own schema, built in the resource beside `httpError` (not an
+        `ErrorResponse`, so `validate_http_failure_projection` is unaffected). (2) `CompleteItemResult` has no field for
+        the conflict's current blob, so the handler re-reads the slot after the transaction (also "what is there now");
+        no core change. (3) `completeFile` carries no metadata: the file's MIME type/size/mtime stay in the node's
+        `wrappedMeta` through core's `updateNode` + `metaVersion` — atomicity would need a meta CAS inside
+        `AttachmentStore.attach`'s transaction (a core change); the price (a crash between the swap and the meta write
+        leaves the old meta beside the new bytes) is an open question in `docs/apps/files.md`. (4) Single-item,
+        HTTP-status errors (the cover commit's shape), not a batch: a file is one blob. (5) No `getFileBlob`: the parent's
+        listing covers a refresh; a deep link lists its parent. (6) No `role` in `FileBlobRef` (always `FILE_CONTENT`);
+        `manifest` included as the media refs do. (7) No pagination for `listFiles` (core's node listing has none either).
+        (8) `completeFile` checks the node is a live `FILE` before the dispatcher (the measured bite above). (9) A
+        success whose blob a peer replaced before the read answers `409 stale_file` (never a 200 without a body).
+        (10) No start-time role check for a member: core's member `startBlobUploads` has no application seam (only
+        guests ask `ShareGuestWrites.admitsGuestRole`), so a `FILE_CONTENT` session for a non-`FILE` node is opened and
+        never attached (`illegal_target`), expiring as any unfinished upload (inbox #366 unchanged). (13) The list item's
+        blob field is `fileBlob`, not `blob`: `validate_opaque_names_disjoint` refused `blob` (opaque in
+        `account.openapi.yaml#IdentityPins.blob`), the guard's first red of this slice. (11) No
+        `x-veyq-concurrency`: `completeFile` is no edit verb and carries no version-shaped field — its CAS is on a blob
+        id, which the guard does not model (stated in the description). (12) No web client pair in `generate:api`: the
+        web guard needs a client for at least one application over all (Memories has three), so F1b adds Files' pair.
+        **Proof:** `./gradlew check` green (core 868, memories 362 with 2 skipped, files 16, root 89), `quarkusBuild`
+        green (`lib/main` holds the three module jars); `run_backend_races_on_mariadb.py` green on MariaDB 11.4 (44
+        filters, 2 projects — Files has no race class: its one write is core's attach, raced in P3-S4), and with
+        `--tests '*FilesContentSliceTest'` 7/7 there (own database `veyq_apps_files`); 53/53 `validate_*` before (on a
+        clean copy of HEAD) and after; web `generate:api` + `npm run check` green (203 files / 1944 tests, 18/23
+        skipped), no web file changed. Not run: e2e, a browser, `pitest`, a cold-home verification-metadata write (no
+        dependency added).
+        Docs: `docs/apps/files.md` (no longer "concept"; the contract and what is built), `docs/apps/README.md`,
+        `backend/CLAUDE.md`, ADR 0079 Consequences (the attachments sentence and "Memories, the only implementation" of
+        `UploadCompletion` were false).
+  - [ ] F1b web — the generated client, the file list in the folder level view (Files' section), upload/replace through the
+        core queue, the download decrypted in the browser, delete into the trash · Done when: the e2e round trip.
 - [ ] F2 a folder share with files — read, then contributor: a guest creates the `FILE` node (`createShareNode`) and uploads
       into it; a file in the trash answers 404; Files' `GuestIdentityUsage` · Done when: e2e, race tests.
 - [ ] F3 the drop box ([ADR 0080](../docs/decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)

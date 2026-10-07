@@ -118,10 +118,11 @@ on their own.
   An application supplies the **meaning**: which node kinds exist, what the plaintext means, which rules apply to
   structure, attachments and guests, and the user interface. `READ`/`READ_WRITE`/`WRITE_ONLY` are the wire values
   (`ShareRole`, renamed from `VIEWER`/`CONTRIBUTOR`/`UPLOADER` on 2026-10-06).
-  Attachments are the target, not yet the code: today what a verified upload becomes is application work
-  (`UploadCompletion`), and Memories' cover and revision columns still sit on `veyq_node`. Generic attachments are
-  formalised as a core spec (inbox #327) when the second application needs them; that "every application needs
-  attachments" is an assumption the second application tests. A Files or Storage product is an application on
+  Attachments are core's since cr-files-application P3 (`veyq_node_attachment`, written only by
+  `AttachmentStore.attach`), and Files is the first application on them (a `FILE` holds one blob in its slot); what a
+  verified upload becomes is still each application's (`UploadCompletion`), Memories' media keep their own tables, and
+  Memories' cover and revision columns still sit on `veyq_node`. That "every application needs attachments" is an
+  assumption the second application tests. A Files or Storage product is an application on
   core's attachments, never a dependency of another application (Decision 4: an application depends on core only).
 - **Contracts by owner** (decided 2026-10-06, cr-platform-contract-split). A core spec describes what core does.
   Where a value's meaning belongs to an application — a node's sealed payload, a blob role, a kind — its
@@ -205,11 +206,12 @@ on their own.
   be the root of a share with; core answers for `FOLDER`, Memories for `MEMORY` and `CHAPTER` — [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)),
   `GuestNodeRules` (which tree operations a `READ_WRITE` guest may do inside a container of the kind; core answers for
   `FOLDER`, Memories declares none, so a guest creates, moves and renames nothing inside a Memory or a chapter — ADR 0080), `UploadCompletion` (what a verified upload
-  becomes on a node of the kind, today Memories' media; the seam stays core's, and its item is generic — an
+  becomes on a node of the kind: Memories' media, Files' one attachment of a `FILE`; the seam stays core's, and its item is generic — an
   `ownerId`, role-tagged derivatives and the application's sealed payloads as opaque values, which core carries to
   the one implementation that accepts the kind and never reads (2026-10-06, cr-platform-contract-split;
-  `UploadCompletionGenericItemCoreSliceTest`); Memories, the only implementation, maps its request items onto it and
-  `ownerId` back to its `mediaId`), `UploadAdmission` (what a share link's guests contributed to the application's own rows, for its
+  `UploadCompletionGenericItemCoreSliceTest`); Memories maps its request items onto it and
+  `ownerId` back to its `mediaId`, Files carries the blob a replace expects as a payload and calls core's
+  `AttachmentStore.attach`), `UploadAdmission` (what a share link's guests contributed to the application's own rows, for its
   per-link limit; their open sessions and node attachments core sums itself, and a kind whose guest uploads are all
   attachments still needs one, reporting 0) and `NodeKindRules` (where a node of the kind may live; core answers for `FOLDER`, Memories
   for `MEMORY` and `CHAPTER`) — and `ShareRoots`, `GuestNodeRules` and the last four fail closed: a kind no application (or two) claims takes no
