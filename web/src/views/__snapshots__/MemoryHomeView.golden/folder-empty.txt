@@ -1,0 +1,53 @@
+div.memory-home
+  div.memory-route-surface
+    section.memory-section.veyq-section
+      div.veyq-section-header
+        div.memory-folder-card.memory-folder-overview-card.veyq-card
+          span.pi.pi-folder
+          h2
+            "Empty"
+          div.memory-folder-overview-actions
+            button.memory-folder-overview-action.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-prime-icon-button [aria-label="Share"]
+              span.p-button-icon.pi.pi-share-alt
+            button.memory-folder-overview-action.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-prime-icon-button [aria-label="Rename"]
+              span.p-button-icon.pi.pi-pencil
+            button.memory-danger-action.memory-folder-overview-action.p-button.p-button-danger.p-button-icon-only.p-button-outlined.p-button-sm.p-component.veyq-icon-button.veyq-prime-icon-button [aria-label="Delete"]
+              span.p-button-icon.pi.pi-trash
+    section.memory-section.veyq-section
+      div.memory-section-header.veyq-section-header
+        h2
+          "Memories"
+        span
+          "0"
+        div.memory-browse-toolbar
+          button.p-button.p-button-outlined.p-button-secondary.p-button-sm.p-component [aria-label="Trash"]
+            span.p-button-icon.p-button-icon-left.pi.pi-trash
+            span.p-button-label
+              "Trash"
+          div.view-mode-toggle [role="group"] [aria-label="View"]
+            button.is-active.view-mode-button [aria-label="Grid view"] [aria-pressed="true"]
+              span.pi.pi-th-large
+            button.view-mode-button [aria-label="List view"] [aria-pressed="false"]
+              span.pi.pi-bars
+            button.view-mode-button [aria-label="Map view"] [aria-pressed="false"]
+              span.pi.pi-map
+      div.memory-card-grid
+        p.veyq-empty.veyq-empty-inline
+          "No Memories here yet."
+        button.memory-create-card.memory-create-card-memory.veyq-card.veyq-card-interactive
+          span.pi.pi-plus
+          strong
+            "New Memory"
+    section.memory-section.veyq-section
+      div.memory-section-header.veyq-section-header
+        h2
+          "Folders"
+        span
+          "0"
+      div.memory-card-grid
+        p.veyq-empty.veyq-empty-inline
+          "No folders here yet."
+        button.memory-create-card.veyq-card.veyq-card-interactive
+          span.pi.pi-plus
+          strong
+            "New folder"
