@@ -1,7 +1,7 @@
 ---
 id: cr-node-key-hierarchy
 title: Every node carries a key — folders become shareable, move and rename re-wrap (ADR 0080)
-status: in-progress      # planned → in-progress → done (then harvest what binds, and delete the file)
+status: done      # planned → in-progress → done (then harvest what binds, and delete the file)
 satisfies: [uc.sharing.share-contributor, uc.sharing.share-public-viewer]
 adrs: ["0012", "0024", "0031", "0036", "0072", "0075", "0077", "0079", "0080"]
 invariants: [operator-blind E2EE everywhere, API-first]
@@ -441,7 +441,7 @@ Planned 2026-10-06 from three inventories; each sub-slice is its own worktree ru
 ### Slice 6 — the drop-box node (not in this CR)
 Files' work: ADR 0080 decision 11, inbox #349 and #350.
 
-- [ ] N coverage — `docs/coverage/` for `uc.sharing.share-contributor` and `uc.sharing.share-public-viewer` ·
+- [x] N coverage — `docs/coverage/` for `uc.sharing.share-contributor` and `uc.sharing.share-public-viewer` ·
       Done when: `python3 scripts/validate_coverage.py` green.
 
 ## Definition of done
@@ -452,4 +452,23 @@ e2e suites named above; `docs/coverage/` updated; ADR 0012/0079 and `files.md` e
 should bind (the role matrix, the placement rule) ends up in the ADR or a guard, not only here.
 
 ## Retrospective
-(Filled at close.)
+
+Closed 2026-10-07 (harvest: ADRs 0012/0036/0061/0072/0077/0079/0080 in place, `docs/apps/files.md`, `memories.md`,
+`uc.memory.browse`, seven coverage criteria with three criterion gaps, `web/CLAUDE.md`, `docs/ai/README.md`, inbox
+#346/#347 done).
+
+- **Planner agents lost their results.** Three planning agents either spawned nested agents (whose answers never
+  reached the caller) or stalled on one wide inventory. Root cause: a planning brief that asked one agent for the
+  whole surface. Fix: flat, small inventories, one question per agent, no nested spawning; that shape planned 5b.
+- **A role assumption diverged from the build until the owner asked.** Slice 1's plan assumed "READ_WRITE inherits
+  down the tree"; 5a built root-kind dispatch, so a folder guest could not upload, and it surfaced only when the
+  owner asked (5a.5 followed). Root cause: an assumption in the plan that no bite test pinned. Fix: a rights
+  assumption in a plan gets a named test before the slice that relies on it starts.
+- **Two defects passed 33 green unit tests and fell in the first real-browser click** (the breadcrumb's `href="#"`
+  clearing `#k=`, the folder card's actions hidden up to 1120 px). Root cause: the tests asserted the programmatic
+  path (`push` arguments, a stubbed DOM). Fix: a DOM-click test on the real component and router, and the rule in
+  `docs/ai/README.md` (a UI slice is not done before it was clicked) and `web/CLAUDE.md`.
+- **E2E from a worktree must not run** (it recreates the user's dev-compose services onto worktree mounts). Every
+  sub-slice left its e2e suites "type-checked, not run"; they ran green on `main` only at the end (18 suites,
+  remembered from that commit's message). Fix kept: e2e is the main checkout's step after a merge, named in each
+  sub-slice's done-when as such, not as the worktree's.
