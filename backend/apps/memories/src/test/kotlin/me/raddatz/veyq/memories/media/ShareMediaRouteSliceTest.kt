@@ -111,7 +111,7 @@ class ShareMediaRouteSliceTest {
             // (GuestNodeRules), so only this handler answers `illegal_scope` here.
             val id = TestIds.uuid()
             given().contentType(ContentType.JSON).header("X-Contributor-Token", w.token)
-                .body("""{"nodeId":"$id","parentId":"${w.memory}","kind":"FOLDER","encryptedName":"bmFtZQ==","slugToken":"c2x1Zw==","wrappedContentKey":"d3JhcA=="}""")
+                .body("""{"nodeId":"$id","parentId":"${w.memory}","kind":"FOLDER","encryptedName":"bmFtZQ==","slugToken":"c2x1Zw==","epoch":0,"wrappedContentKey":"d3JhcA=="}""")
                 .`when`().post("/api/shares/${w.shareId}/nodes").then().statusCode(422).body("code", equalTo("illegal_scope"))
         },
         "updateShareNode" to Probe("PATCH", "/api/shares/{shareId}/nodes/{nodeId}") { w ->

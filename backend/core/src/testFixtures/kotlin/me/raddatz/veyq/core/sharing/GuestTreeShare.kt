@@ -43,12 +43,12 @@ object GuestTreeShare {
 
     fun create(
         link: Link, parentId: String, kind: String, nodeId: String = UUID.randomUUID().toString(), slugToken: String = slug(),
-        encryptedName: String = "bmFtZQ==", wrappedContentKey: String = "d3JhcA==", extra: String = "",
+        encryptedName: String = "bmFtZQ==", wrappedContentKey: String = "d3JhcA==", epoch: Int = 0, extra: String = "",
     ): ValidatableResponse =
         given().contentType(ContentType.JSON).header("X-Contributor-Token", link.token)
             .body(
                 """{"nodeId":"$nodeId","parentId":"$parentId","kind":"$kind","encryptedName":"$encryptedName",""" +
-                    """"slugToken":"$slugToken","wrappedContentKey":"$wrappedContentKey"$extra}""",
+                    """"slugToken":"$slugToken","epoch":$epoch,"wrappedContentKey":"$wrappedContentKey"$extra}""",
             )
             .`when`().post("/api/shares/${link.shareId}/nodes").then()
 
