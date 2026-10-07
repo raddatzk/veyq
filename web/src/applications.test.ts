@@ -8,6 +8,9 @@ import { fileNameSlug } from './shared/naming'
 import { favoritesStore } from './features/memory/favoritesStore'
 import PinnedMemories from './features/memory/components/PinnedMemories.vue'
 import MemoriesSection from './features/memory/components/MemoriesSection.vue'
+import MemoryNodeDialog from './features/memory/components/MemoryNodeDialog.vue'
+import ShareDialog from './features/memory/components/ShareDialog.vue'
+import { FOLDER_KIND } from './core/node/kind'
 
 // `src/test/setup.ts` has already called registerApplications() once for this file, exactly as main.ts does.
 describe('composition root', () => {
@@ -22,6 +25,19 @@ describe('composition root', () => {
   it('registers the Files kind into the same registry, not shareable, with the file-name folding', () => {
     expect(registry.kind(FILE_KIND)).toMatchObject({ supported: true, shareable: false, slug: fileNameSlug })
     expect(registry.shareBody(FILE_KIND)).toBeNull()
+  })
+
+  // The dialogs are per kind (P4c): Memories' one create dialog and one share dialog serve both its kinds; FOLDER keeps
+  // core's pre-registered share dialog; FILE brings neither yet.
+  it('gives both Memories kinds the Memories create and share dialogs, and leaves FOLDER and FILE alone', () => {
+    for (const kind of [MEMORY_KIND, CHAPTER_KIND]) {
+      expect(registry.kind(kind)).toMatchObject({ createDialog: MemoryNodeDialog, shareDialog: ShareDialog })
+    }
+    const folder = registry.kind(FOLDER_KIND)
+    expect(folder.supported && folder.shareDialog).toBeTruthy()
+    expect(folder.supported && folder.shareDialog).not.toBe(ShareDialog)
+    expect(registry.kind(FILE_KIND)).not.toHaveProperty('createDialog')
+    expect(registry.kind(FILE_KIND)).not.toHaveProperty('shareDialog')
   })
 
   it('claims the one Memories share body for both root kinds', () => {

@@ -30,7 +30,7 @@ const { t } = useI18n()
   >
     <p class="dialog-copy">{{ confirmRequest.message }}</p>
     <!-- The request's opt-in (useConfirm's askWithOption): unchecked each time it opens, read back only on accept.
-         Laid out as NodeMutationDialog's opt-in — the label, then its consequence. -->
+         Laid out as MemoryNodeDialog's opt-in — the label, then its consequence. -->
     <div v-if="confirmRequest.option" class="confirm-option">
       <Checkbox v-model="confirmOption" input-id="confirm-option" binary />
       <label for="confirm-option" class="confirm-option-text">

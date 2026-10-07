@@ -1,6 +1,6 @@
 // The application registry (ADR 0079): what the shell asks instead of
-// importing an application. Core renders by node kind and by slot; an application says, once, what it renders for
-// which kind and which slot it fills.
+// importing an application. Core renders by node kind and by list slot; an application says, once, what it renders for
+// which kind and which list items it adds.
 //
 // **Build-time only (ADR 0079 Decision 5, ADR 0026).** The registry is filled by plain function calls from ONE
 // composition root (`web/src/applications.ts`), which statically imports each application. There is no glob, no
@@ -9,14 +9,17 @@
 // discovering one by glob.
 //
 // **Write-once.** Registered code runs with every unlocked key, so the registry is a trust surface and not a
-// convenience: registering a kind twice, claiming a slot twice, or adding a list-slot item under a taken id THROWS —
+// convenience: registering a kind twice, claiming a share body twice, or adding a list-slot item under a taken id THROWS —
 // it never overwrites and never merges. Nothing here is exported as mutable state; `registry` exposes only the two register doors and read-only lookups.
 //
-// **Single-claim slots.** A slot that IS one region (the create/rename dialog, the share dialog) is held by at most ONE
-// application today, because exactly one application exists. A second claim throws, which turns "two applications both
-// think they own the dialog" into a boot-time failure instead of a silently shadowed component. The next application's
-// change request re-cuts these per kind (cr-files-application P4c); freezing that abstraction from one usage is what
-// `docs/ai/README.md` § Refinement checklist ("Spike when the shape is unclear") rules out.
+// **Dialogs per kind (cr-files-application P4c).** A kind brings its dialogs with its descriptor: `createDialog` (the
+// dialog that creates a node of the kind, mounted by the shell when a section or a detail asks for a create of that
+// kind; props `NodeCreateDialogProps`) and `shareDialog` (the share management dialog of a node of the kind; props
+// `NodeShareDialogProps`). The platform pre-registers FOLDER's share dialog (`core/sharing/FolderShareDialog.vue`) the
+// way it pre-claims FOLDER's share body; a folder's create and every node's rename are core's own `FolderNameDialog`
+// (`core/node/FolderNameDialog.vue`), which the shell mounts itself — a rename re-seals the name and derives the slug
+// token by the node's kind (`slugFor`), whatever application it belongs to. A kind with no `shareDialog` offers no
+// share; a create for a kind with no `createDialog` opens nothing. Every shell slot is a list slot (below).
 //
 // **Level sections (`KindDescriptor.section`).** The folder level view is core's (`core/node/LevelView.vue`, cr-files-
 // application P4b): the folder's overview card, then one SECTION per application, then the sub-folders. A kind brings
@@ -32,8 +35,9 @@
 // **List slots (`addSlotItem`).** The top-bar tray and the sidebar pins are places where several applications each add
 // their own entry, so they are ordered lists: an item is registered under an id (namespaced by its application, e.g.
 // `memories.pinned`), write-once per (slot, id) — a second registration of the same id in the same list throws. The
-// shell renders them sorted by `order` (default: registration order; a tie keeps registration order). `claimSlot`
-// refuses a list slot at runtime too, so a caller outside the type checker gets an error, never a silent no-op.
+// shell renders them sorted by `order` (default: registration order; a tie keeps registration order). `addSlotItem`
+// refuses a name that is no list slot at runtime too, so a caller outside the type checker gets an error, never a
+// silent no-op.
 //
 // **Share bodies (`claimShareBody`).** The public share page (`views/ShareView.vue`) is a shell: it resolves the
 // kind-independent half (core/sharing/resolvePublicShare.ts), runs the password and terms gates, then renders the body
@@ -59,6 +63,12 @@ import type { Level } from '../node/browse'
 import type { EpochKeys } from '../../features/spaces/epochs'
 import type { PublicShareHead } from '../sharing/resolvePublicShare'
 import { slugify } from '../../shared/naming'
+
+// The platform's own share dialog for a FOLDER (cr-node-key-hierarchy 5b.3), FOLDER's `shareDialog` since P4c. LAZY for
+// the reason the share body below is: the dialog's module graph reaches this registry again (measured: `shareLink` →
+// `manageShares` → `shareTree` → `core/node/tree`, which asks `registry.slugFor`), so a static import is a cycle.
+// `.default` explicitly: a test's `vi.mock` of the module is no ES-module namespace Vue would unwrap on its own.
+const FolderShareDialog = defineAsyncComponent(() => import('../sharing/FolderShareDialog.vue').then((m) => m.default))
 
 // The platform's own share body for a link rooted at a FOLDER (cr-node-key-hierarchy 5b.4b). LAZY, and on purpose: the
 // body reads this registry (`registry.kind`, `registry.shareBody` for what it embeds), so a static import here is a
@@ -87,6 +97,13 @@ export interface KindDescriptor {
    *  `LevelSectionProps` and emits `LevelSectionEmits`; `order` sorts the sections (ascending). Omitted: a child of the
    *  kind shows in core's fallback section. Kinds naming the same component share ONE section. */
   section?: KindSection
+  /** The dialog that creates a node of this kind (props `NodeCreateDialogProps`, emits `NodeCreateDialogEmits`),
+   *  mounted by the shell when a section emits `create` or a detail emits `createChild` with this kind. Omitted: a
+   *  create of the kind opens nothing. FOLDER has none: its create is core's `FolderNameDialog`. */
+  createDialog?: Component
+  /** The share management dialog of a node of this kind (props `NodeShareDialogProps`, emits `close`). Omitted: the
+   *  kind offers no share, whatever `shareable` says. FOLDER's is core's own `FolderShareDialog`, pre-registered. */
+  shareDialog?: Component
 }
 
 /** A kind's level section: the component and where it sorts among the sections. */
@@ -118,12 +135,13 @@ export interface NodeDetailProps {
   /** Whether a public share may be offered for this node: the kind's descriptor AND the instance capability. */
   shareable: boolean
 }
-/** Events a `detail` component emits to the host: `rename`, `delete`, `createChild` (a create mode the
- *  `nodeMutationDialog` slot understands), `openNode` (a child), `share`, `shareUpload`. */
+/** Events a `detail` component emits to the host: `rename` (core's `FolderNameDialog`, any kind), `delete`,
+ *  `createChild` (the KIND of the child to create: the host mounts that kind's `createDialog` under the opened node),
+ *  `openNode` (a child), `share` and `shareUpload` (the opened kind's `shareDialog`, the second with `uploader`). */
 export interface NodeDetailEmits {
   rename: []
   delete: []
-  createChild: [mode: string]
+  createChild: [kind: NodeKind]
   openNode: [node: TreeNode]
   share: []
   shareUpload: []
@@ -138,13 +156,43 @@ export interface LevelSectionProps {
   epochs: EpochKeys | null
   readonly: boolean
 }
-/** Events a section emits to the level view: `openNode` (a child), `create` (a create mode the `nodeMutationDialog`
- *  slot understands, e.g. Memories' `create-memory`), `openTrash` (the scope's node trash; the toolbar that offers it
- *  sits in Memories' section until a second application needs it). */
+/** Events a section emits to the level view: `openNode` (a child), `create` (the KIND to create at this level, e.g.
+ *  Memories' MEMORY: the host mounts that kind's `createDialog`), `openTrash` (the scope's node trash; the toolbar that
+ *  offers it sits in Memories' section until a second application needs it). */
 export interface LevelSectionEmits {
   openNode: [node: TreeNode]
-  create: [mode: string]
+  create: [kind: NodeKind]
   openTrash: []
+}
+
+/** What the host hands a kind's `createDialog`: the kind to create (one component may serve several kinds), the scope,
+ *  its epoch keys (a create seals under the write epoch), and the parent — `parentId` null at the scope root, else the
+ *  parent's id and its content key, which the new node's key wraps under (ADR 0080 Decision 1). The dialog is mounted
+ *  while open; it emits `done` after a create (the host reloads the tree) and `close`. */
+export interface NodeCreateDialogProps {
+  kind: NodeKind
+  scopeId: string
+  epochs: EpochKeys
+  parentId: string | null
+  parentKey: Uint8Array | null
+}
+export interface NodeCreateDialogEmits {
+  done: []
+  close: []
+}
+
+/** What the host hands a kind's `shareDialog`: the node, its content key as the key chain opens it (what a link wraps;
+ *  key material), the scope's epoch keys (each link's recovery copy opens under `K_SC`), the node's name as the tree
+ *  opened it (re-sealed under `K_share`) and its kind. `uploader`: the uploader (WRITE_ONLY drop) variant, set only on
+ *  the detail's `shareUpload` — a kind whose dialog has no such variant ignores it. Mounted while open; emits `close`. */
+export interface NodeShareDialogProps {
+  scopeId: string
+  nodeId: string
+  nodeKey: Uint8Array
+  epochs: EpochKeys
+  nodeName: string
+  nodeKind: NodeKind
+  uploader?: boolean
 }
 
 /** The shell's `sidebarPins` list slot: each component an application adds to it is mounted in the left rail
@@ -178,9 +226,6 @@ export interface ShareBodyProps {
 export interface ShareBodyEmits {
   unavailable: []
 }
-
-/** The single-claim slots. Each is claimed by at most one application (see the header). */
-export type SlotName = 'nodeMutationDialog' | 'shareDialog'
 
 /** The list slots: several applications may each add items (see the header). A `topbarTray` item takes no props (the
  *  shell's top bar mounts it after the invitations badge and core's own upload status menu); a `sidebarPins` item
@@ -228,8 +273,6 @@ export interface Registry {
   /** Register a node kind. Throws if the kind is already registered (the platform's own FOLDER included), or if its
    *  `section` names a component another kind already named with a different `order`. */
   registerKind(descriptor: KindDescriptor): void
-  /** Claim a single-claim slot. Throws if the slot is already claimed, or if `name` is a list slot. */
-  claimSlot(name: SlotName, component: Component): void
   /** Add an item to a list slot under `id`. Throws if that slot already holds an item with this id. `order` sorts the
    *  list (ascending); omitted, the item's registration index is used. Ties keep registration order. */
   addSlotItem(slot: ListSlotName, id: string, component: Component, order?: number): void
@@ -239,8 +282,6 @@ export interface Registry {
    *  registered: the server stores any kind, and a token must still be computable for it). Every slug token is
    *  derived through this, so a node's token always uses ITS kind's folding (`core/node/tree.ts` `slugTokenFor`). */
   slugFor(kind: NodeKind, name: string): string
-  /** The component filling the slot, or null when no application claimed it (the shell renders nothing). */
-  slot(name: SlotName): Component | null
   /** The items of a list slot, sorted by `order` (stable); empty when nobody added one (the shell renders nothing). */
   slotItems(slot: ListSlotName): readonly SlotItem[]
   /** The level sections, one per distinct section component, sorted by `order` (stable: a tie keeps the order in which
@@ -252,13 +293,12 @@ export interface Registry {
 const LIST_SLOTS: readonly string[] = ['topbarTray', 'sidebarPins'] satisfies readonly ListSlotName[]
 
 /** A fresh registry holding only the platform's own kind (FOLDER: browsable, never openable, shareable through core's
- *  own `core/sharing/FolderShareDialog.vue` — cr-node-key-hierarchy 5b.3).
+ *  own `core/sharing/FolderShareDialog.vue`, its pre-registered `shareDialog` — cr-node-key-hierarchy 5b.3).
  *  The app uses the single `registry` below; tests build their own to prove the rules on an untouched instance. */
 export function createRegistry(): Registry {
   const kinds = new Map<NodeKind, KindDescriptor>([
-    [FOLDER_KIND, { kind: FOLDER_KIND, icon: 'pi pi-folder', shareable: true }],
+    [FOLDER_KIND, { kind: FOLDER_KIND, icon: 'pi pi-folder', shareable: true, shareDialog: FolderShareDialog }],
   ])
-  const slots = new Map<SlotName, Component>()
   const lists = new Map<ListSlotName, { id: string; component: Component; order: number }[]>()
   const lifecycles = new Map<string, LifecycleHooks>()
   // One entry per distinct section component, in the order each was first named (the stable sort's tie-break).
@@ -316,11 +356,6 @@ export function createRegistry(): Registry {
       if (shared) shared.kinds.push(descriptor.kind)
       else sections.push({ component: section.component, order: section.order, kinds: [descriptor.kind] })
     },
-    claimSlot(name, component) {
-      if (LIST_SLOTS.includes(name)) throw new Error(`slot ${name} is a list slot: add to it with addSlotItem`)
-      if (slots.has(name)) throw new Error(`slot ${name} is already claimed`)
-      slots.set(name, component)
-    },
     addSlotItem(slot, id, component, order) {
       if (!LIST_SLOTS.includes(slot)) throw new Error(`slot ${slot} is not a list slot`)
       const items = lists.get(slot) ?? []
@@ -339,9 +374,6 @@ export function createRegistry(): Registry {
     },
     slugFor(kind, name) {
       return (kinds.get(kind)?.slug ?? slugify)(name)
-    },
-    slot(name) {
-      return slots.get(name) ?? null
     },
     sections() {
       return [...sections]

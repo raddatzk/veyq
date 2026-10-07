@@ -649,7 +649,7 @@ async function onRestore() {
 </template>
 
 <style scoped>
-/* The removal confirmation's opt-in (ADR 0075) takes a row of its own, like NodeMutationDialog's opt-in. */
+/* The removal confirmation's opt-in (ADR 0075) takes a row of its own, like MemoryNodeDialog's opt-in. */
 .management-actions:has(.remove-revoke-links) {
   flex-wrap: wrap;
 }

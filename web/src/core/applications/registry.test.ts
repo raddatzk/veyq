@@ -91,32 +91,51 @@ describe('registry: slugFor', () => {
   })
 })
 
-describe('registry: slots', () => {
-  it('is empty until claimed: slot() is null, not undefined', () => {
-    expect(createRegistry().slot('nodeMutationDialog')).toBeNull()
+// cr-files-application P4c: a kind brings its create and share dialogs with its descriptor; no single-claim slot is left.
+describe('registry: dialogs per kind', () => {
+  it("pre-registers core's FolderShareDialog as FOLDER's share dialog, and FOLDER has no create dialog", async () => {
+    const folder = createRegistry().kind(FOLDER_KIND)
+    expect(folder.supported).toBe(true)
+    if (!folder.supported) return
+    expect(folder.createDialog).toBeUndefined() // a folder's create is core's FolderNameDialog, mounted by the shell
+    // Lazy (the dialog's module graph reaches the registry again): resolve the async wrapper to the real component.
+    const loader = (folder.shareDialog as { __asyncLoader?: () => Promise<unknown> } | undefined)?.__asyncLoader
+    expect(loader, 'an async component wrapping the folder dialog').toBeTypeOf('function')
+    const FolderShareDialog = (await import('../sharing/FolderShareDialog.vue')).default
+    expect(await loader!()).toBe(FolderShareDialog)
   })
 
-  it('is single-claim: a second claim of the same slot throws and the first claimant stays', () => {
+  it('hands each kind its own createDialog and shareDialog; one component may serve several kinds', () => {
     const r = createRegistry()
-    r.claimSlot('nodeMutationDialog', Stub)
-    expect(() => r.claimSlot('nodeMutationDialog', Other)).toThrow(/already claimed/)
-    expect(r.slot('nodeMutationDialog')).toBe(Stub)
+    r.registerKind({ kind: MEMORY_KIND, icon: 'x', shareable: true, createDialog: Stub, shareDialog: Other })
+    r.registerKind({ kind: CHAPTER_KIND, icon: 'x', shareable: true, createDialog: Stub, shareDialog: Other })
+    r.registerKind({ kind: 'LEAF', icon: 'x', shareable: false })
+    for (const k of [MEMORY_KIND, CHAPTER_KIND]) expect(r.kind(k)).toMatchObject({ createDialog: Stub, shareDialog: Other })
+    const leaf = r.kind('LEAF')
+    expect(leaf.supported && [leaf.createDialog, leaf.shareDialog]).toEqual([undefined, undefined])
+    expect(r.kind('NOBODY')).toEqual({ supported: false, kind: 'NOBODY' }) // no dialog to find for an unregistered kind
   })
 
-  it('keeps slots independent: claiming one does not claim another', () => {
+  it("an application cannot replace FOLDER's share dialog (FOLDER is write-once like every kind)", () => {
     const r = createRegistry()
-    r.claimSlot('nodeMutationDialog', Stub)
-    expect(r.slot('shareDialog')).toBeNull()
-    expect(() => r.claimSlot('shareDialog', Other)).not.toThrow()
+    const before = r.kind(FOLDER_KIND)
+    expect(() => r.registerKind({ kind: FOLDER_KIND, icon: 'x', shareable: true, shareDialog: Stub })).toThrow(/already registered/)
+    expect(r.kind(FOLDER_KIND)).toEqual(before)
+  })
+
+  it('has no single-claim slot left', () => {
+    const r = createRegistry()
+    // @ts-expect-error the per-kind descriptor fields replaced the single-claim slots in P4c
+    expect(r.claimSlot).toBeUndefined()
+    // @ts-expect-error see above
+    expect(r.slot).toBeUndefined()
   })
 
   it('two registries do not share state', () => {
     const a = createRegistry()
     const b = createRegistry()
-    a.claimSlot('shareDialog', Stub)
     a.addSlotItem('topbarTray', 'a.tray', Stub)
-    a.registerKind({ kind: MEMORY_KIND, icon: 'x', shareable: true })
-    expect(b.slot('shareDialog')).toBeNull()
+    a.registerKind({ kind: MEMORY_KIND, icon: 'x', shareable: true, shareDialog: Stub })
     expect(b.slotItems('topbarTray')).toEqual([])
     expect(b.kind(MEMORY_KIND).supported).toBe(false)
   })
@@ -172,18 +191,13 @@ describe('registry: list slots (topbarTray, sidebarPins)', () => {
     expect(r.slotItems('topbarTray')).toHaveLength(1)
   })
 
-  it('refuses claimSlot on a list slot (a JS caller gets an error, not a silent claim) and addSlotItem on a single one', () => {
+  it('refuses addSlotItem on a name that is no list slot (a JS caller gets an error, not a silent add)', () => {
     const r = createRegistry()
-    // The types refuse all three (each `@ts-expect-error` turns `npm run typecheck` red if a type widens again); the
-    // runtime guard is for a caller the type checker does not see.
-    // @ts-expect-error a list slot is not claimable
-    expect(() => r.claimSlot('topbarTray', Stub)).toThrow(/topbarTray is a list slot/)
-    // @ts-expect-error a list slot is not claimable
-    expect(() => r.claimSlot('sidebarPins', Stub)).toThrow(/sidebarPins is a list slot/)
-    // @ts-expect-error a single-claim slot takes no items
+    // The type refuses it (the `@ts-expect-error` turns `npm run typecheck` red if the type widens again); the runtime
+    // guard is for a caller the type checker does not see.
+    // @ts-expect-error the former single-claim slot is no list slot
     expect(() => r.addSlotItem('shareDialog', 'a', Stub)).toThrow(/shareDialog is not a list slot/)
     expect(r.slotItems('topbarTray')).toEqual([])
-    expect(r.slot('shareDialog')).toBeNull()
   })
 })
 
@@ -192,8 +206,8 @@ describe('registry: level sections', () => {
   it('is empty until a kind brings one, and the level view slot is gone', () => {
     const r = createRegistry()
     expect(r.sections()).toEqual([])
-    // @ts-expect-error the level view is core's since P4b, no slot
-    expect(r.slot('levelView')).toBeNull()
+    // @ts-expect-error the level view is core's since P4b, and `slot()` went with the last single-claim slot in P4c
+    expect(r.slot).toBeUndefined()
   })
 
   it('sorts the sections by order, not by registration', () => {

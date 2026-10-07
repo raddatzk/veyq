@@ -32,10 +32,12 @@ describe('registerFiles', () => {
     expect(registry.slugFor(FOLDER_KIND, 'Foto.JPG')).not.toBe(fileNameSlug('Foto.JPG'))
   })
 
-  it('claims no slot, no level section, no share body and no lifecycle', () => {
+  it('brings no dialog, no level section, no list item, no share body and no lifecycle', () => {
     const registry = createRegistry()
     registerFiles(registry)
-    for (const slot of ['nodeMutationDialog', 'shareDialog'] as const) expect(registry.slot(slot)).toBeNull()
+    const file = registry.kind(FILE_KIND)
+    expect(file.supported && file.createDialog).toBeUndefined() // a create of a FILE opens nothing until F1
+    expect(file.supported && file.shareDialog).toBeUndefined() // not a share root: no share offered
     expect(registry.sections()).toEqual([]) // a FILE child shows in core's fallback section until F1
     for (const slot of ['topbarTray', 'sidebarPins'] as const) expect(registry.slotItems(slot)).toEqual([])
     expect(registry.shareBody(FILE_KIND)).toBeNull()

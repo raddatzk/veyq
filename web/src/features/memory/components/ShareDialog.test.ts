@@ -53,16 +53,16 @@ const stubs = {
 
 const mountList = () =>
   mount(ShareDialog, {
-    props: { scopeId: SCOPE_ID, nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), epochs: EPOCHS, memoryName: 'Rom' },
+    props: { scopeId: SCOPE_ID, nodeId: 'n1', nodeKey: new Uint8Array([1, 2, 3]), epochs: EPOCHS, nodeName: 'Rom', nodeKind: 'MEMORY' },
     global: { plugins: [realI18n()], stubs },
   })
 
 // cr-node-key-hierarchy 5b.5: a chapter is a share root of its own, so the dialog on one says "chapter", not "Memory";
 // the uploader variant keeps its own copy.
 describe('ShareDialog — the wording follows the shared node\'s kind', () => {
-  const mountKind = (nodeKind: string | undefined, uploader = false) =>
+  const mountKind = (nodeKind: string, uploader = false) =>
     mount(ShareDialog, {
-      props: { scopeId: SCOPE_ID, nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), epochs: EPOCHS, memoryName: 'Tag 2', nodeKind, uploader },
+      props: { scopeId: SCOPE_ID, nodeId: 'n1', nodeKey: new Uint8Array([1, 2, 3]), epochs: EPOCHS, nodeName: 'Tag 2', nodeKind, uploader },
       global: { plugins: [realI18n()], stubs },
     })
 
@@ -75,7 +75,8 @@ describe('ShareDialog — the wording follows the shared node\'s kind', () => {
     expect(w.html(), 'the header (the Dialog stub carries it as an attribute)').toContain(t('share.chapterTitle'))
   })
 
-  it.each([['MEMORY'], [undefined]])('a Memory (%s) keeps the Memory wording', async (kind) => {
+  // Any kind but CHAPTER keeps the Memory wording (the dialog is registered for MEMORY and CHAPTER only).
+  it.each([['MEMORY'], ['SOME_OTHER_KIND']])('a Memory (%s) keeps the Memory wording', async (kind) => {
     listSharesFor.mockResolvedValue([])
     const w = mountKind(kind)
     await flushPromises()

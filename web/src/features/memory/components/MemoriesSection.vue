@@ -15,6 +15,7 @@ import Button from 'primevue/button'
 import { parentContentKey, type TreeNode } from '../../../core/node/tree'
 import type { LevelSectionProps, LevelSectionEmits } from '../../../core/applications/registry'
 import { sortNodesByDate } from '../memoryDate'
+import { MEMORY_KIND } from '../kinds'
 import { nodeById } from '../../../core/node/browse'
 import { treeStore } from '../../../core/node/treeStore'
 import { collectLocatedPins } from '../spaceMap'
@@ -127,7 +128,7 @@ watch(
         v-if="!readonly"
         class="veyq-card veyq-card-interactive memory-create-card memory-create-card-memory"
         type="button"
-        @click="emit('create', 'create-memory')"
+        @click="emit('create', MEMORY_KIND)"
       >
         <span class="pi pi-plus" />
         <strong>{{ t('memory.create') }}</strong>

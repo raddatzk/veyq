@@ -61,18 +61,19 @@ import { realI18n, t } from '../test/i18n'
 
 const Detail = defineComponent({ props: ['node', 'shareable'], setup: (p) => () => h('div', { class: 'detail' }, `${p.node.name}|${p.shareable}`) })
 const Section = defineComponent({ props: ['nodes'], setup: (p) => () => h('section', { class: 'level' }, `memories=${p.nodes.length}`) })
+const Share = defineComponent({ props: ['nodeId'], setup: (p) => () => h('div', { class: 'share' }, p.nodeId) })
 
 function node(over: Partial<TreeNode> & Pick<TreeNode, 'id' | 'kind'>): TreeNode {
   return { parentId: null, orderIndex: 0, epoch: 0, name: over.id, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0, ...over }
 }
 
-/** The registry a well-formed application would leave: both kinds with a detail and shareable (as Memories registers
- *  them), both naming one level section. */
+/** The registry a well-formed application would leave: both kinds with a detail, shareable with a share dialog (as
+ *  Memories registers them), both naming one level section. */
 function fullRegistry(): Registry {
   const r = createRegistry()
   const section = { order: 10, component: Section }
-  r.registerKind({ kind: MEMORY_KIND, detail: Detail, icon: 'pi pi-images', shareable: true, section })
-  r.registerKind({ kind: CHAPTER_KIND, detail: Detail, icon: 'pi pi-images', shareable: true, section })
+  r.registerKind({ kind: MEMORY_KIND, detail: Detail, icon: 'pi pi-images', shareable: true, section, shareDialog: Share })
+  r.registerKind({ kind: CHAPTER_KIND, detail: Detail, icon: 'pi pi-images', shareable: true, section, shareDialog: Share })
   return r
 }
 
@@ -151,5 +152,20 @@ describe('MemoryHomeView fail-closed rules', () => {
     expect((await mountAt('#~me/mem')).find('.detail').text()).toBe('Mem|false')
     holder.reg = fullRegistry()
     expect((await mountAt('#~me/mem')).find('.detail').text()).toBe('Mem|true')
+  })
+
+  // cr-files-application P4c: the share dialog is the kind's. A kind that says `shareable` but brings no `shareDialog`
+  // offers no share — the host never shows a button whose dialog it cannot mount.
+  it('a kind without a shareDialog offers no share, even when its descriptor says shareable', async () => {
+    const r = createRegistry()
+    r.registerKind({ kind: MEMORY_KIND, detail: Detail, icon: 'x', shareable: true }) // no shareDialog
+    holder.reg = r
+    expect((await mountAt('#~me/mem')).find('.detail').text()).toBe('Mem|false')
+    holder.reg = fullRegistry() // control: the same kind with its dialog is shared, and the dialog is the kind's own
+    const w = await mountAt('#~me/mem')
+    expect(w.find('.detail').text()).toBe('Mem|true')
+    w.findComponent(Detail).vm.$emit('share')
+    await flushPromises()
+    expect(w.find('.share').text()).toBe('mem')
   })
 })
