@@ -14,12 +14,22 @@ import exifr from 'exifr'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { isCodedError, isHttpStatus, HttpStatus } from '../../shared/httpError'
-import { blobApi } from '../../api/client'
 import { mediaApi } from './api'
 import { withRefresh } from '../../app/sessionRefresh'
 import { type MediaListPage, type MediaSummary, type MediaDerivativeKind } from '../../api/generated/media'
-import { type PresignedUrl, type BlobRole as WireBlobRole } from '../../api/generated/blob'
+import { type BlobRole as WireBlobRole } from '../../api/generated/blob'
 import { expectMintedId } from '../../core/node/mintedId'
+import {
+  authedReserve,
+  authedWindow,
+  makeChunkProvider,
+  openBlob,
+  planBlob,
+  presignAllChunks,
+  reserveAndPump,
+  throwIfAborted,
+} from '../../core/blob/transport'
+import type { BlobDeclare, BlobRef, ReservedUpload, WindowFn } from '../../core/blob/types'
 import { mediaKey, uploaderOriginOf, type UploaderOrigin } from './mediaKey'
 import { MetaConflictError, MetaUnreadableError, writeSealedMeta, type MetaEditContext } from './sealedMetaWrite'
 import type { ChunkProvider } from '../../sw/protocol'
@@ -34,17 +44,21 @@ export { scaleToMaxEdge, TIER_SPECS, createBrowserDeriver, type MediaDeriver, ty
 // their import path unchanged.
 export { openBucketName, listBuckets, createBucket, renameBucket, deleteBucket, moveBucketMedia, type BucketItem } from './mediaBuckets'
 
-/**
- * Every seal in this layer binds the object it is stored as (ADR 0072). A `K_blob` wrap is bound to (scope, owner,
- * blob, role) — the owner is the media for its tiers and the node for a cover — so a server that attaches a blob
- * under another media, or serves a thumbnail in another's slot, gets a wrap that does not open there.
- *
- * A media's seals are under `K_mem`, except for one a WRITE_ONLY guest added: that one's are under the guest's own
- * key (ADR 0031 point 7). A function handed the MEDIA resolves the key itself ([mediaKey]); one handed only an id
- * or a blob ref is handed the key, which its caller asks [mediaKey] for.
- */
-const blobKeyContext = (scopeId: string, ref: { blobId: string; ownerId: string; role: BlobRole }) =>
-  ({ purpose: 'blob-key', scopeId, ownerId: ref.ownerId, blobId: ref.blobId, role: ref.role }) as const
+// The neutral blob transport — plan, pump, the authed reserve/window, the read side and the chunk provider — is core's
+// (`core/blob/`, cr-files-application B1). Re-exported here so existing importers of `./media` (share.ts, the cover
+// store, tests) keep their import path unchanged.
+export { CHUNK_SIZE, PUMP_IN_FLIGHT, windowPuts, openBlobFromUrls, openBlob, makeChunkProvider } from '../../core/blob/transport'
+export type { BlobRef, BlobDeclare, ChunkPut, ReservedUpload, WindowFn } from '../../core/blob/types'
+
+// Every seal in this layer binds the object it is stored as (ADR 0072). A `K_blob` wrap is bound to (scope, owner,
+// blob, role) by core's blob transport — the owner is the media for its tiers and the node for a cover — so a server
+// that attaches a blob under another media, or serves a thumbnail in another's slot, gets a wrap that does not open
+// there.
+//
+// A media's seals are under `K_mem`, except for one a WRITE_ONLY guest added: that one's are under the guest's own
+// key (ADR 0031 point 7). A function handed the MEDIA resolves the key itself ([mediaKey]); one handed only an id
+// or a blob ref is handed the key, which its caller asks [mediaKey] for.
+
 /**
  * The sealed **listed-metadata** tier of one media (cr-0068), bound to (scope, media). This one blob carries the
  * geometry (`w,h`), the capture time (`capturedAt*`), and the GPS (`gpsLat,gpsLng`) — everything the grid, the
@@ -54,31 +68,12 @@ const mediaMetaContext = (scopeId: string, mediaId: string) => ({ purpose: 'medi
 /** The sealed heavy EXIF tier of one media (cr-0064) — its own purpose, bound to (scope, media). */
 const mediaExifContext = (scopeId: string, mediaId: string) => ({ purpose: 'media-exif', scopeId, mediaId }) as const
 
-/** Plaintext bytes per full chunk before sealing — the contract's frame size (ADR 0013 §3), not a choice made here:
- *  the server derives `chunkCount` from `byteSize` on exactly this and refuses any other. */
-export const CHUNK_SIZE = v1.CHUNK_FRAME_SIZE.plaintextBytes
-
 // --- read-back model -------------------------------------------------------
 
 /** The role a blob plays for its owner — the `K_blob` wrap is sealed bound to it (ADR 0072). The crypto suite's role is
  *  an open token (`v1.BlobRole`, a string) since Files brought FILE_CONTENT; this layer keeps the four it writes, which
  *  the blob contract still closes, so a declare type-checks against the wire item and no string role reaches it. */
 export type BlobRole = WireBlobRole
-
-/**
- * Everything needed to open one blob: its id + the metadata + the K_blob wrap (under K_mem) + where that wrap is
- * sealed — its owner (the media it is a tier of, or the node it is the cover of) and its role there. The owner and
- * role are set by whoever built the ref from the row it addressed (a media row's id, the node whose cover it is),
- * never read back from the blob, so a ref the server moved to another row carries that row's owner and refuses.
- */
-export type BlobRef = {
-  blobId: string
-  chunkCount: number
-  byteSize: number
-  wrappedBlobKey: string
-  ownerId: string
-  role: BlobRole
-}
 
 /** One role-tagged derivative tier of a media. */
 export type MediaDerivative = { kind: MediaDerivativeKind; ref: BlobRef }
@@ -348,42 +343,6 @@ export async function readCaptureTime(file: Blob, mediaType: string, lastModifie
 
 // --- add-media -------------------------------------------------------------
 
-/**
- * A blob about to be uploaded: its plaintext source, a fresh `K_blob` (with its wrap under `K_mem`) and the shape
- * the frame size fixes. Nothing is sealed yet — the pump seals frame `i` from `source.slice` when it is about to
- * send it, so the client never holds the whole file, nor its sealed copy (ADR 0013 Consequences).
- */
-type BlobPlan = {
-  source: Blob
-  blobKey: Uint8Array
-  wrappedBlobKey: string
-  chunkCount: number
-  byteSize: number
-  blobId: string
-  ownerId: string
-  role: BlobRole
-}
-
-/** Plan `source` as a blob under a fresh random `K_blob`, wrapped under `K_mem` bound to where it will live — the
- *  client-minted blob id, its owner and its role (ADR 0072). Its shape follows from its size alone: every frame
- *  but the last carries [CHUNK_SIZE] plaintext bytes, and an empty source is one empty frame. */
-function planBlob(scopeId: string, owner: { ownerId: string; role: BlobRole }, memoryKey: Uint8Array, source: Blob): BlobPlan {
-  const blobKey = v1.randomBytes(32)
-  const blobId = crypto.randomUUID()
-  const wrappedBlobKey = b64std(v1.seal(blobKeyContext(scopeId, { blobId, ...owner }), memoryKey, blobKey))
-  const chunkCount = Math.max(1, Math.ceil(source.size / CHUNK_SIZE))
-  return { source, blobKey, wrappedBlobKey, chunkCount, byteSize: source.size + chunkCount * v1.FRAME_OVERHEAD, blobId, ...owner }
-}
-
-/** Read and seal frame `index` of a planned blob — one [CHUNK_SIZE] slice of the source, never more. */
-async function sealFrameAt(plan: BlobPlan, index: number): Promise<Uint8Array> {
-  const slice = plan.source.slice(index * CHUNK_SIZE, (index + 1) * CHUNK_SIZE)
-  const plain = new Uint8Array(await slice.arrayBuffer())
-  // Outside the typed seal union on purpose (ADR 0072 Decision 2): the frame key is this blob's own K_blob, so the
-  // key is the object binding; the AAD binds only the frame's position (index ‖ total).
-  return v1.sealFrame(plan.blobKey, index, plan.chunkCount, plain, v1.randomBytes(12))
-}
-
 /** Seal a small JSON payload under `K_mem` as the object `context` names (a short AEAD blob) → opaque base64. */
 function sealJson(memoryKey: Uint8Array, value: unknown, context: v1.SealContext): string {
   const bytes = new TextEncoder().encode(JSON.stringify(value))
@@ -583,26 +542,6 @@ function prune<T extends object>(obj: T): Partial<T> {
 /** Upload progress (0..1) + cancellation hooks for [addMedia], used by the upload queue (uc.memory.upload). */
 export type AddMediaOptions = { onProgress?: (fraction: number) => void; signal?: AbortSignal }
 
-/** Throw an AbortError if the caller cancelled — the queue maps it to a cancelled (not failed) upload. */
-function throwIfAborted(signal?: AbortSignal): void {
-  if (signal?.aborted) throw new DOMException('Upload cancelled', 'AbortError')
-}
-
-/** One blob to reserve: its declared shape + the K_blob wrap (under K_mem) + the ids that wrap is bound to. */
-export type BlobDeclare = {
-  blobId: string
-  ownerId: string
-  role: BlobRole
-  chunkCount: number
-  byteSize: number
-  wrappedBlobKey: string
-}
-/** One presigned PUT: the chunk it is for + its URL. */
-export type ChunkPut = { index: number; url: string }
-/** One reserved upload: the session id + the PUTs of its first window (ADR 0013 §2 — never the whole blob). */
-export type ReservedUpload = { uploadId: string; puts: ChunkPut[] }
-/** Sign the window of an open upload that starts at `fromChunk` — each next window, or one whose URLs expired. */
-export type WindowFn = (uploadId: string, fromChunk: number) => Promise<ChunkPut[]>
 /** One logical media to complete: the original session + its role-tagged derivative sessions + the sealed metadata. */
 export type CompleteDecl = {
   /** The client-minted media id every upload of it was started for (ADR 0072). */
@@ -624,104 +563,17 @@ export type MediaUploadTransport = {
   complete(media: CompleteDecl): Promise<{ blobId: string; mediaId: string }>
 }
 
-/** How many `PUT`s the pump keeps in flight — and so how many sealed frames it holds (≈256 KiB each). */
-export const PUMP_IN_FLIGHT = 4
-
-/**
- * How close to the end of the signed range the pump asks for the next window: when it starts a chunk this few
- * places before the last signed one. Enough that the next window is usually back before the pump reaches it.
- */
-const WINDOW_LOOKAHEAD = 2 * PUMP_IN_FLIGHT
-
-/**
- * The one upload pump (ADR 0013 §2 + Consequences): read, seal and `PUT` a planned blob one frame at a time, with
- * at most [PUMP_IN_FLIGHT] `PUT`s in flight, signing each next window before the URLs in hand run out. A `PUT` the
- * store answers `403` (its window's TTL ran out — a stall, a slow link) re-signs from that chunk and is retried
- * once, as the GET side does. Every upload — member, contributor, cover — goes through here.
- */
-async function pumpBlob(
-  plan: BlobPlan,
-  upload: ReservedUpload,
-  signWindow: WindowFn,
-  onChunkDone: () => void,
-  signal?: AbortSignal,
-): Promise<void> {
-  const urls = new Map<number, string>()
-  let signedUpTo = 0 // exclusive: every chunk below it has been signed at least once
-  const take = (puts: ChunkPut[]) => {
-    for (const p of puts) {
-      urls.set(p.index, p.url)
-      signedUpTo = Math.max(signedUpTo, p.index + 1)
-    }
-  }
-  take(upload.puts)
-
-  // At most one next-window request at a time; every worker that needs it waits on the same one.
-  let pending: Promise<void> | null = null
-  const nextWindow = (): Promise<void> => {
-    pending ??= signWindow(upload.uploadId, signedUpTo).then(take).finally(() => { pending = null })
-    return pending
-  }
-
-  let next = 0
-  const worker = async () => {
-    for (;;) {
-      throwIfAborted(signal)
-      const i = next++
-      if (i >= plan.chunkCount) return
-      if (signedUpTo < plan.chunkCount && i >= signedUpTo - WINDOW_LOOKAHEAD) nextWindow().catch(() => {}) // ahead; a failure resurfaces below
-      while (!urls.has(i)) {
-        const before = signedUpTo
-        await nextWindow()
-        if (signedUpTo === before) throw new Error('upload_failed') // a window that signs nothing would spin forever
-      }
-      const frame = await sealFrameAt(plan, i)
-      try {
-        await putChunk(urls.get(i)!, frame, signal)
-      } catch (e) {
-        if (chunkPutStatus(e) !== HttpStatus.forbidden) throw e
-        take(await signWindow(upload.uploadId, i)) // the window expired → re-sign from this chunk, retry it once
-        await putChunk(urls.get(i)!, frame, signal)
-      }
-      urls.delete(i)
-      onChunkDone()
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(PUMP_IN_FLIGHT, plan.chunkCount) }, worker))
-}
-
-/** Reserve [plans] through [transport] and pump each in turn, reporting progress over every chunk of every blob. */
-async function reserveAndPump(
-  plans: BlobPlan[],
-  reserve: (declares: BlobDeclare[]) => Promise<ReservedUpload[]>,
-  signWindow: WindowFn,
-  onProgress?: (fraction: number) => void,
-  signal?: AbortSignal,
-): Promise<string[]> {
-  throwIfAborted(signal)
-  const reserved = await reserve(plans.map((p) => ({
-    blobId: p.blobId, ownerId: p.ownerId, role: p.role,
-    chunkCount: p.chunkCount, byteSize: p.byteSize, wrappedBlobKey: p.wrappedBlobKey,
-  })))
-  if (reserved.length !== plans.length) throw new Error('upload_failed')
-  const totalChunks = plans.reduce((n, p) => n + p.chunkCount, 0)
-  let doneChunks = 0
-  onProgress?.(0)
-  for (const [i, plan] of plans.entries()) {
-    await pumpBlob(plan, reserved[i], signWindow, () => {
-      doneChunks += 1
-      onProgress?.(doneChunks / totalChunks)
-    }, signal)
-  }
-  return reserved.map((r) => r.uploadId)
-}
-
 /**
  * Seal the original + its derivatives (each under its own `K_blob`), upload all ciphertext chunks direct-to-store,
  * and complete + attach — via an injected [MediaUploadTransport]. Shared by the authed [addMedia] and the
  * anonymous contributor upload. `memoryKey` is the key the new media is sealed under: `K_mem`, or a WRITE_ONLY
  * guest's own identity key, since that guest never holds `K_mem` (ADR 0031 point 7). `deriver` is injectable for
  * tests; `opts` carries `onProgress` (0..1) + an `AbortSignal`.
+ *
+ * The seam to core (cr-files-application B1): planning each blob ([planBlob]) and reserving + pumping them
+ * ([reserveAndPump]) are core's blob transport; deriving the tiers, sealing the metadata and the complete are this
+ * application's. The order — derive, seal metadata, plan, reserve + pump every blob, complete — is pinned on the wire
+ * by `uploadWire.characterisation.test.ts`.
  */
 export async function uploadMediaVia(
   scopeId: string,
@@ -762,41 +614,11 @@ export async function uploadMediaVia(
   return { blobId: expectMintedId(plans[0].blobId, done.blobId), mediaId: expectMintedId(mediaId, done.mediaId) }
 }
 
-/** Reserve through core's authed blob control plane (`startBlobUploads`) — the member upload and the cover share it. */
-async function mediaReserve(scopeId: string, declares: BlobDeclare[]): Promise<ReservedUpload[]> {
-  const started = await withRefresh(() =>
-    blobApi().startBlobUploads({ scopeId, blobUploadsBatchRequest: { items: declares } }),
-  )
-  if (started.results.length !== declares.length) throw new Error('upload_failed')
-  return started.results.map((r) => {
-    if (!r || r.error) throw new Error(r?.error ?? 'upload_failed')
-    if (!r.uploadId || !r.presignedPuts) throw new Error('store_unavailable')
-    return { uploadId: r.uploadId, puts: r.presignedPuts }
-  })
-}
-
-/** Sign an authed upload's next window (`presignBlobUploadWindows`). */
-function mediaWindow(scopeId: string): WindowFn {
-  return async (uploadId, fromChunk) => {
-    const signed = await withRefresh(() =>
-      blobApi().presignBlobUploadWindows({ scopeId, blobUploadWindowsRequest: { items: [{ uploadId, fromChunk }] } }),
-    )
-    return windowPuts(signed.results[0])
-  }
-}
-
-/** One window result → its PUTs, or the per-item error it carries (`upload_not_found`, `range_invalid`, …). */
-export function windowPuts(r: { presignedPuts?: PresignedUrl[] | null; error?: string | null } | undefined): ChunkPut[] {
-  if (!r || r.error) throw new Error(r?.error ?? 'upload_failed')
-  if (!r.presignedPuts) throw new Error('store_unavailable')
-  return r.presignedPuts
-}
-
 /** The authed upload transport — the internal Memory control plane (`startBlobUploads` + `presignBlobUploadWindows` + `completeMedia`). */
 function mediaApiTransport(scopeId: string, nodeId: string): MediaUploadTransport {
   return {
-    reserve: (declares) => mediaReserve(scopeId, declares),
-    window: mediaWindow(scopeId),
+    reserve: (declares) => authedReserve(scopeId, declares),
+    window: authedWindow(scopeId),
     async complete(media) {
       const done = await withRefresh(() =>
         mediaApi().completeMedia({
@@ -867,7 +689,7 @@ export async function uploadCoverBlob(
   // A cover's owner is its node, in the COVER role (ADR 0072) — the server commits only an upload started so.
   const cover = { ownerId: nodeId, role: 'COVER' } as const
   const plan = planBlob(scopeId, cover, memoryKey, blob)
-  const [uploadId] = await reserveAndPump([plan], (d) => mediaReserve(scopeId, d), mediaWindow(scopeId))
+  const [uploadId] = await reserveAndPump([plan], (d) => authedReserve(scopeId, d), authedWindow(scopeId))
 
   const committed = await withRefresh(() =>
     mediaApi().commitCoverBlob({ scopeId, nodeId, coverBlobCommitRequest: { uploadId } }),
@@ -1188,40 +1010,6 @@ export function downloadRef(item: MediaItem): BlobRef {
   return item.original
 }
 
-/**
- * Open a blob from a set of **already-presigned** per-chunk GET URLs: unwrap its `K_blob` under `K_mem`, fetch
- * the ciphertext frames direct-from-store, and `openFrame` them back to plaintext (the AAD position check still
- * applies). Shared by the authed [openBlob] (presign via the media endpoint) and the anonymous share viewer
- * (presign via the gated share endpoint, cr-0100) — the decrypt is identical; only who presigns differs.
- */
-export async function openBlobFromUrls(scopeId: string, memoryKey: Uint8Array, ref: BlobRef, getUrls: string[]): Promise<Uint8Array> {
-  const blobKey = v1.open(blobKeyContext(scopeId, ref), memoryKey, fromB64std(ref.wrappedBlobKey))
-  const frames = await Promise.all(getUrls.map((url) => getChunk(url)))
-  const chunks = frames.map((frame, i) => v1.openFrame(blobKey, i, frames.length, frame))
-  return v1.concat(...chunks)
-}
-
-/**
- * Presign GETs for **every** chunk of a blob — the whole-blob presign the authed read paths share (the batch
- * endpoint is whole-blob only; there is no per-chunk presign). Returned as URLs ordered by chunk index.
- */
-async function presignAllChunks(scopeId: string, blobId: string): Promise<string[]> {
-  const presigned = await withRefresh(() =>
-    blobApi().presignBlobDownloads({ scopeId, blobDownloadsBatchRequest: { items: [{ blobId }] } }),
-  )
-  const d = presigned.results[0]
-  if (!d || d.error || !d.presignedGets) throw new Error(d?.error ?? 'store_unavailable')
-  return byIndex(d.presignedGets)
-}
-
-/**
- * Open a blob: unwrap its `K_blob` under `K_mem`, presign the chunk GETs, fetch the ciphertext frames
- * direct-from-store, and `openFrame` them back to plaintext (the AAD position check still applies).
- */
-export async function openBlob(scopeId: string, memoryKey: Uint8Array, ref: BlobRef): Promise<Uint8Array> {
-  return openBlobFromUrls(scopeId, memoryKey, ref, await presignAllChunks(scopeId, ref.blobId))
-}
-
 /** Open the grid tier (thumbnail) of a media — under the key its origin fixes ([mediaKey]). */
 export const openGrid = (scopeId: string, memoryKey: Uint8Array, item: MediaItem) =>
   openBlob(scopeId, mediaKey(scopeId, memoryKey, item), gridRef(item))
@@ -1234,97 +1022,12 @@ export const openOriginal = (scopeId: string, memoryKey: Uint8Array, item: Media
 
 // --- Slice-2 range streaming: the page-side chunk provider (ADR 0047) --------
 //
-// The Service-Worker range layer (cr-inline-video-playback Slice 2) holds NO key and NO auth: it asks the page
-// for the decrypted *plaintext* of individual chunks over a MessagePort and assembles the byte ranges the
-// <video> demuxer requests. This is that page-side seam — a per-blob source of plaintext chunks over the same
-// presign→openFrame plumbing the whole-blob read paths use. K_blob and the auth context never leave the page.
-
-/** Re-presign a little before the backend's 600 s TTL (`application.properties`) so a long playback never races expiry. */
-const PRESIGN_REFRESH_MS = 9 * 60 * 1000
-
-/** Parse the HTTP status out of a {@link getChunk} failure (`chunk_get_failed:<status>`), or undefined if not one. */
-function chunkGetStatus(e: unknown): number | undefined {
-  const m = e instanceof Error ? /^chunk_get_failed:(\d+)$/.exec(e.message) : null
-  return m ? Number(m[1]) : undefined
-}
-
-/**
- * Build a {@link ChunkProvider} over a `presignAll` that yields the whole blob's per-chunk GET URLs (ordered by
- * index). The two auth contexts — the authed app ({@link chunkProvider}) and the anonymous share
- * (`shareChunkProvider`, share.ts) — differ ONLY in that function; the unwrap + `openFrame` core here is
- * identical, so the SW never learns which route served the bytes. `K_blob` is unwrapped once; the presigned URLs
- * are cached with their issue time and re-presigned on TTL/expiry or a store `403`.
- */
-export function makeChunkProvider(
-  scopeId: string,
-  memoryKey: Uint8Array,
-  ref: BlobRef,
-  presignAll: () => Promise<string[]>,
-): ChunkProvider {
-  const blobKey = v1.open(blobKeyContext(scopeId, ref), memoryKey, fromB64std(ref.wrappedBlobKey))
-  let urls: string[] | undefined
-  let issuedAt = 0
-  async function freshUrls(force: boolean): Promise<string[]> {
-    if (force || !urls || Date.now() - issuedAt > PRESIGN_REFRESH_MS) {
-      urls = await presignAll()
-      issuedAt = Date.now()
-    }
-    return urls
-  }
-  return {
-    chunkCount: ref.chunkCount,
-    byteSize: ref.byteSize,
-    async getPlaintextChunk(index: number): Promise<Uint8Array> {
-      if (!Number.isInteger(index) || index < 0 || index >= ref.chunkCount) {
-        throw new Error(`chunk_out_of_range:${index}/${ref.chunkCount}`)
-      }
-      let all = await freshUrls(false)
-      let frame: Uint8Array
-      try {
-        frame = await getChunk(all[index])
-      } catch (e) {
-        if (chunkGetStatus(e) !== HttpStatus.forbidden) throw e
-        all = await freshUrls(true) // presign expired → re-presign the WHOLE blob, retry the one chunk once
-        frame = await getChunk(all[index])
-      }
-      // AAD trap (load-bearing): `total` is the WHOLE blob's chunkCount, never the streamed range subset —
-      // openFrame binds `index‖total` (v1.ts), so a subset `total` fails every open. See the CR Slice-2 §5b.
-      return v1.openFrame(blobKey, index, ref.chunkCount, frame)
-    },
-  }
-}
+// The provider itself is core's ([makeChunkProvider], `core/blob/transport.ts`); this is the authed app's wiring of it
+// over a media's original.
 
 /** A {@link ChunkProvider} for the authed app over a media's original: presigns the whole blob via the media
  *  endpoint (bearer, `withRefresh`), and opens it under the key the media's origin fixes ([mediaKey]). */
 export function chunkProvider(scopeId: string, memoryKey: Uint8Array, item: MediaItem): ChunkProvider {
   const ref = downloadRef(item)
   return makeChunkProvider(scopeId, mediaKey(scopeId, memoryKey, item), ref, () => presignAllChunks(scopeId, ref.blobId))
-}
-
-// --- transport helpers -----------------------------------------------------
-
-/** Order presigned URLs by their declared chunk index (the server returns them in order, but don't assume). */
-function byIndex(urls: PresignedUrl[]): string[] {
-  return [...urls].sort((a, b) => a.index - b.index).map((u) => u.url)
-}
-
-/** The one `Content-Type` a presigned PUT signs, so the store refuses any other (ADR 0013 §6). The uploader no
- *  longer chooses the stored type: whatever the store later serves is never renderable. */
-const PUT_CONTENT_TYPE = 'application/octet-stream'
-
-async function putChunk(url: string, frame: Uint8Array, signal?: AbortSignal): Promise<void> {
-  const res = await fetch(url, { method: 'PUT', headers: { 'Content-Type': PUT_CONTENT_TYPE }, body: frame as BodyInit, signal })
-  if (!res.ok) throw new Error(`chunk_put_failed:${res.status}`)
-}
-
-/** Parse the HTTP status out of a {@link putChunk} failure (`chunk_put_failed:<status>`), or undefined if not one. */
-function chunkPutStatus(e: unknown): number | undefined {
-  const m = e instanceof Error ? /^chunk_put_failed:(\d+)$/.exec(e.message) : null
-  return m ? Number(m[1]) : undefined
-}
-
-async function getChunk(url: string): Promise<Uint8Array> {
-  const res = await fetch(url, { method: 'GET' })
-  if (!res.ok) throw new Error(`chunk_get_failed:${res.status}`)
-  return new Uint8Array(await res.arrayBuffer())
 }
