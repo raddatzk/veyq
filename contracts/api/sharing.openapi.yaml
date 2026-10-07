@@ -671,6 +671,161 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: rate_limited } }
 
+  /api/shares/{shareId}/nodes:
+    post:
+      tags: [sharing]
+      operationId: createShareNode
+      summary: Create a node inside a shared subtree (unauthenticated) — a READ_WRITE guest's tree operation.
+      description: >
+        **No auth.** A guest's create of a node under a node of the shared subtree ([ADR 0080](../../docs/decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
+        Decisions 6 and 9): a core tree operation behind core's guest gate (`ShareGuestGate`: an active share → the
+        password → the access mode → the `X-Contributor-Token` identity → the per-share upload budget, which a create
+        spends). Only a **READ_WRITE** link takes it; a READ or WRITE_ONLY link is `403 share_not_contributable`.
+        The guest mints the node's id (ADR 0072 Decision 3), its content key, wraps it under the parent's content key
+        it holds, and seals the name and slug token under that key. **The server checks structure only** and opens
+        nothing: the parent is a live node inside the share's subtree, the share's root itself included (else `422
+        illegal_structure` — the scope root is never a guest's parent); the share's root is live (else `403
+        share_not_contributable`); the kind's placement rule (`NodeKindRules`) admits it under the parent (else `422
+        illegal_structure`); the owner of the parent's kind lets a READ_WRITE guest create that kind in it
+        (`GuestNodeRules`: core for a `FOLDER`; a kind no owner declares allows nothing — `422 illegal_scope`); the
+        slug is free under the parent (`409 slug_taken`). **Epoch:** the request carries none — a guest never
+        writes at the scope root, and the server stores the node at the scope's current epoch (ADR 0080 Decision 6);
+        the name and the wrap are sealed bound to scope, node, that epoch and placement version 0. No `wrappedMeta`:
+        a node's payload is its application's content, never a core tree operation's.
+        **Password-protected shares (cr-0164, ADR 0037):** no `X-Share-Password` → non-enumerable `404`; a wrong
+        token → `403 share_password_incorrect`.
+      parameters:
+        - $ref: "#/components/parameters/ShareId"
+        - $ref: "#/components/parameters/SharePassword"
+        - $ref: "#/components/parameters/ContributorToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateShareNodeRequest" }
+            example:
+              nodeId: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
+              parentId: 9b1d4a6e-8b2c-4f2d-9e4a-5b6c7c3f0e2a
+              kind: FOLDER
+              encryptedName: ZW5jcnlwdGVkLW5hbWU=
+              slugToken: c2x1Zy10b2tlbi1iYXNlNjQ=
+              orderIndex: 0
+              wrappedContentKey: d3JhcHBlZC1rLW1lbQ==
+      responses:
+        "201":
+          description: The node was created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ShareNodeCreated" }
+              example: { nodeId: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d }
+        "400":
+          description: Malformed request (missing/invalid fields, or a `kind` outside the `NodeKind` token's shape).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "403":
+          description: The share is not a READ_WRITE link, the contributor token names no identity of it, or its root is in the trash or gone (`share_not_contributable`); or it is password-protected and the `X-Share-Password` token is wrong (`share_password_incorrect`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_contributable } }
+        "404":
+          description: No such share (disabled/expired/unknown/deleted, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4)), or it is password-protected and no `X-Share-Password` token was given — non-enumerable, identical in every case.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
+        "409":
+          description: A sibling under the parent already has that slug (`slug_taken`), or the `nodeId` is already taken, in any scope (`id_taken`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: slug_taken } }
+        "422":
+          description: >
+            Illegal structure (`illegal_structure` — the parent is missing, trashed, or outside the share's subtree, or
+            the kind's placement rule refuses it there), or the owner of the parent's kind does not let a READ_WRITE
+            guest create that kind in it (`illegal_scope`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_structure } }
+        "429":
+          description: Too many wrong password attempts on this share, or its upload budget is spent for the current window (per-share rate limit).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: rate_limited } }
+
+  /api/shares/{shareId}/nodes/{nodeId}:
+    patch:
+      tags: [sharing]
+      operationId: updateShareNode
+      x-veyq-concurrency:
+        mode: version
+        fields:
+          - field: placementVersion
+            conflictCode: stale_placement
+      summary: Move or rename a node inside a shared subtree (unauthenticated) — one placement write.
+      description: >
+        **No auth.** A guest's placement write ([ADR 0080](../../docs/decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
+        Decisions 3, 6 and 10): move and rename are ONE request shape, a rename being a move to the node's current
+        parent, as in `updateNode`. Behind core's guest gate like `createShareNode`, without spending the upload
+        budget; only a **READ_WRITE** link takes it. The request carries the destination `parentId`, the node's
+        content key re-wrapped under the destination's key (`wrappedContentKey`), the name and the slug token
+        re-sealed under it, and the `placementVersion` it was built on; the wrap and the name are bound to scope,
+        node, the node's stored epoch and `placementVersion + 1`. **No `epoch`:** a guest's node never moves into or
+        out of the scope root, so it keeps its stored epoch. **Structure only:** the node lies strictly inside the
+        share's subtree — the root is never moved or renamed by a guest (`422 illegal_structure`), a node outside is
+        `404 node_not_found`; the destination is a live node inside the subtree, the root included, not the node
+        and not inside its own subtree (else `422 illegal_structure`); the kind's placement rule admits it there
+        (else `422 illegal_structure`); the owners of the containers on both sides allow it (`GuestNodeRules`: a
+        move needs the source parent's owner to let a READ_WRITE guest move that kind out and the destination's to
+        let it move in, a rename the parent's to let it rename — `422 illegal_scope` otherwise); the slug is free
+        there (`409 slug_taken`). The server compare-and-sets the placement version and writes everything at once,
+        or nothing (`409 stale_placement`). No guest delete: nodes store no authorship.
+        **Password-protected shares (cr-0164, ADR 0037):** no `X-Share-Password` → non-enumerable `404`; a wrong
+        token → `403 share_password_incorrect`.
+      parameters:
+        - $ref: "#/components/parameters/ShareId"
+        - $ref: "#/components/parameters/NodeId"
+        - $ref: "#/components/parameters/SharePassword"
+        - $ref: "#/components/parameters/ContributorToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateShareNodeRequest" }
+            example:
+              parentId: 9b1d4a6e-8b2c-4f2d-9e4a-5b6c7c3f0e2a
+              encryptedName: cmVuYW1lZA==
+              slugToken: bmV3LXNsdWc=
+              wrappedContentKey: cmUtd3JhcHBlZC1rLW1lbQ==
+              placementVersion: 2
+      responses:
+        "204":
+          description: The node was moved or renamed.
+        "400":
+          description: Malformed request (missing/invalid fields — every placement field is required).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "403":
+          description: The share is not a READ_WRITE link, the contributor token names no identity of it, or its root is in the trash or gone (`share_not_contributable`); or it is password-protected and the `X-Share-Password` token is wrong (`share_password_incorrect`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_contributable } }
+        "404":
+          description: No such share (disabled/expired/unknown/deleted, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4)), or it is password-protected and no `X-Share-Password` token was given (`share_not_found`); or no live node inside the share's subtree has that id (`node_not_found`) — non-enumerable.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+        "409":
+          description: >
+            A sibling at the destination already has that slug (`slug_taken`), or the node was moved or renamed since
+            the stated `placementVersion` (`stale_placement` — nothing was written; the client re-reads the share and
+            rebuilds the placement, ADR 0080 Decision 3).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_placement } }
+        "422":
+          description: >
+            Illegal structure (`illegal_structure` — the node is the share's root, the destination is missing, trashed,
+            outside the share's subtree, the node itself or inside its subtree, or the kind's placement rule refuses
+            it there), or an owner of the containers on either side does not let a READ_WRITE guest move or rename
+            that kind (`illegal_scope`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_structure } }
+        "429":
+          description: Too many wrong password attempts on this share (the password gate's own limiter).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: rate_limited } }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -714,6 +869,19 @@ components:
         outside the base64 alphabet is the boundary's `400` instead, answered before any lookup and so the same for
         every id.
       schema: { type: string, maxLength: 64, pattern: "^[A-Za-z0-9+/]*={0,2}$" }
+    ContributorToken:
+      name: X-Contributor-Token
+      x-veyq-visibility: token
+      in: header
+      required: true
+      description: The opaque `contributorToken` from `createShareIdentity` — names the guest identity the write is made as.
+      schema: { type: string, minLength: 43, maxLength: 43, pattern: "^[A-Za-z0-9_-]{43}$", example: Y29udHJpYnV0b3ItdG9rZW4tb3BhcXVl }
+    NodeId:
+      name: nodeId
+      in: path
+      required: true
+      description: Opaque id of a node inside the shared subtree.
+      schema: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d }
 
   schemas:
     ShareRole:
@@ -1388,6 +1556,117 @@ components:
           contentEncoding: base64
           maxLength: 256
           example: null
+
+    CreateShareNodeRequest:
+      type: object
+      required: [nodeId, parentId, kind, encryptedName, slugToken, wrappedContentKey]
+      description: >
+        A READ_WRITE guest's create inside the shared subtree (`createShareNode`): the member's `CreateNodeRequest`
+        without `epoch` (the server stores the scope's current one; a guest never writes at the scope root) and
+        without `wrappedMeta` (a node's payload is its application's content, not a core tree operation's). The
+        parent is always a node of the subtree.
+      properties:
+        nodeId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: >
+            The client-minted UUIDv4 id of the node to create (ADR 0072 Decision 3). Its name and content-key wrap are sealed bound to this id, so the server stores it verbatim; a taken id is `409 id_taken`.
+          example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
+        parentId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The parent node — the share's root or a live node below it.
+          example: 9b1d4a6e-8b2c-4f2d-9e4a-5b6c7c3f0e2a
+        kind:
+          $ref: "#/components/schemas/NodeKind"
+          # As on `CreateNodeRequest`: the generator inlines the scalar token as a String, so its shape is held here.
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Pattern(regexp = "[A-Z][A-Z0-9_]{0,15}")'
+        encryptedName:
+          type: string
+          description: The node name, AEAD-sealed under the parent's content key (seal purpose `node-name`), bound to scope, node, the scope's current epoch and placement version 0 (ADR 0072, ADR 0080 Decision 2; opaque base64).
+          contentEncoding: base64
+          maxLength: 4096
+          example: ZW5jcnlwdGVkLW5hbWU=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 4096) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        slugToken:
+          type: string
+          description: Blinded slug token — a keyed MAC under the parent's content key over (parent ‖ slug); the server enforces uniqueness per parent without seeing the name (opaque base64).
+          contentEncoding: base64
+          maxLength: 128
+          example: c2x1Zy10b2tlbi1iYXNlNjQ=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        orderIndex:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          description: Ordering among siblings (default 0 / append).
+          example: 0
+        wrappedContentKey:
+          type: string
+          description: The node's content key — a fresh random key the guest mints, wrapped under the parent's content key (seal purpose `content-key`), bound to scope, node, the scope's current epoch and placement version 0 (ADR 0080 Decision 1; opaque base64).
+          contentEncoding: base64
+          maxLength: 256
+          example: d3JhcHBlZC1rLW1lbQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    ShareNodeCreated:
+      type: object
+      required: [nodeId]
+      properties:
+        nodeId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
+
+    UpdateShareNodeRequest:
+      type: object
+      required: [parentId, encryptedName, slugToken, wrappedContentKey, placementVersion]
+      description: >
+        A READ_WRITE guest's placement write (`updateShareNode`) — every field of the node's directory entry and key
+        wrap at once, as the placement half of the member's `UpdateNodeRequest`, without `epoch` (the node keeps its
+        stored one) and without the reorder and the payload re-seal.
+      properties:
+        parentId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The destination parent — the share's root or a live node below it; a rename sends the node's current parent.
+          example: 9b1d4a6e-8b2c-4f2d-9e4a-5b6c7c3f0e2a
+        encryptedName:
+          type: string
+          description: The name re-sealed under the destination parent's content key (seal purpose `node-name`), bound to scope, node, the node's stored epoch and `placementVersion + 1` (ADR 0072, ADR 0080 Decision 3; opaque base64).
+          contentEncoding: base64
+          maxLength: 4096
+          example: cmVuYW1lZA==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 4096) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        slugToken:
+          type: string
+          description: The blinded slug token recomputed under the destination parent's content key over the destination slot (opaque base64).
+          contentEncoding: base64
+          maxLength: 128
+          example: bmV3LXNsdWc=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        wrappedContentKey:
+          type: string
+          description: The node's own content key (unchanged) re-wrapped under the destination parent's content key (seal purpose `content-key`), bound to scope, node, the node's stored epoch and `placementVersion + 1` (opaque base64). A rename re-wraps too.
+          contentEncoding: base64
+          maxLength: 256
+          example: cmUtd3JhcHBlZC1rLW1lbQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        placementVersion:
+          x-veyq-visibility: structure
+          # nullable type + @NotNull: a required primitive binds a missing field to 0 (backend/CLAUDE.md)
+          type: [integer, "null"]
+          format: int64
+          description: >
+            The `ShareNode.placementVersion` the placement was built on. The server compare-and-sets it and stores
+            `placementVersion + 1`; a mismatch is `409 stale_placement` with nothing written (ADR 0080 Decision 3).
+          minimum: 0
+          example: 2
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
 
     ShareBlobDownload:
       type: object
