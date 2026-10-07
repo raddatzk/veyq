@@ -66,7 +66,7 @@ class ShareLinkStorageLimitSliceTest {
         startOk(f, d)
         memberUpload(f, d)
         assertEquals(300L, s.byteSize + 2 * d.byteSize, "the fixture's sizes")
-        assertEquals(300L, QuarkusTransaction.requiringNew().call { quota.linkUsage(f.shareId) })
+        assertEquals(300L, QuarkusTransaction.requiringNew().call { quota.linkUsage(f.shareId, MemoriesNodeKinds.MEMORY) })
     }
 
     /** The live defect (red before the fix): a link start over the limit left sessions open for the scope. */

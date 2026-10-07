@@ -71,7 +71,8 @@ import org.junit.jupiter.api.Test
  * 2. **Every seam fails closed with nobody behind it**: a `FOLDER` is created and a `MEMORY` is `illegal_structure`;
  *    a share of any other kind, or a `WRITE_ONLY` one on a `FOLDER`, is `illegal_scope`; a completion is
  *    `illegal_target` for every kind; a link start on a `READ_WRITE` folder share is refused
- *    (`share_not_contributable`: no application writes under a folder) and no kind has an admission.
+ *    (`share_not_contributable`: no application takes uploads into a folder, and core alone none into any kind) and
+ *    no kind has an admission.
  * 3. **What core owns works alone**: a blob upload starts and windows, and a seeded blob downloads, through core's
  *    `BlobResource`; a `FOLDER` is shared with `READ` or `READ_WRITE` and its guest resolves the subtree under it
  *    (ADR 0080); an unauthenticated core route answers.

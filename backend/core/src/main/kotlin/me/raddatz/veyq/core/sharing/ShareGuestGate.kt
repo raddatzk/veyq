@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.sharing
 
+import me.raddatz.veyq.core.content.NodesStore
 import me.raddatz.veyq.core.membership.ScopeAccess
 import jakarta.enterprise.context.ApplicationScoped
 import java.security.MessageDigest
@@ -22,6 +23,9 @@ sealed interface ShareWriteGate {
         val rootNodeId: String,
         val rootKind: String,
         val identityId: String,
+        /** The link's role as the gate read it — `READ_WRITE` or `WRITE_ONLY` (a `WRITE_ONLY` guest writes only into
+         *  the root, [ShareGuestGate.target]). */
+        val role: String,
         val admitted: () -> Boolean,
     ) : ShareWriteGate
 
@@ -35,6 +39,25 @@ sealed interface ShareWriteGate {
     /** The mode takes no guest writes, the contributor token names no identity of this share, or the root is gone —
      *  a 403. */
     object NotContributable : ShareWriteGate
+}
+
+/**
+ * What [ShareGuestGate.target] answers: the node a guest's upload is for (ADR 0080 decision 6 — a link's role applies
+ * to every node below its root as the application allows it).
+ */
+sealed interface ShareWriteTarget {
+    /**
+     * The node [nodeId] of [kind] — the application that takes this kind writes into it. [named] is false for the share
+     * root taken by default (no node named: every check and answer as before targets existed), true for a node the
+     * guest named, which the write checks again under the scope lock ([ShareGuestGate.admittedInto]).
+     */
+    data class Node(val nodeId: String, val kind: String, val named: Boolean) : ShareWriteTarget
+    /** No live node inside the share's subtree has that id — the same for a node outside it as for none (as a guest's
+     *  placement answers it: `node_not_found`). */
+    object NotFound : ShareWriteTarget
+    /** A `WRITE_ONLY` link named a node other than its root (its guest holds no key below it), or the root is in the
+     *  trash — `share_not_contributable`, as a guest's tree operations answer a trashed root. */
+    object NotContributable : ShareWriteTarget
 }
 
 /** What [ShareGuestGate.viewGate] answers. */
@@ -83,6 +106,7 @@ class ShareGuestGate(
     private val rateLimiter: ShareRateLimiter,
     private val passwordAttemptLimiter: SharePasswordAttemptLimiter,
     private val access: ScopeAccess,
+    private val nodes: NodesStore,
 ) {
 
     /**
@@ -108,8 +132,47 @@ class ShareGuestGate(
         if (spendUploadBudget && !rateLimiter.allowUpload(shareId)) return ShareWriteGate.RateLimited
         // The root's kind picks the application that writes; a root that is gone has none (not contributable).
         val rootKind = store.findNode(share.nodeId)?.kind ?: return ShareWriteGate.NotContributable
-        return ShareWriteGate.Admitted(share.scopeId, share.nodeId, rootKind, identity.id) { store.admitsGuests(shareId) }
+        return ShareWriteGate.Admitted(share.scopeId, share.nodeId, rootKind, identity.id, share.role) { store.admitsGuests(shareId) }
     }
+
+    /**
+     * The node a guest's upload past [gated] is for. [nodeId] null is the share root as stored — trashed or not, so an
+     * upload that names no node is decided exactly as before targets existed (the application answers a trashed root).
+     * A named node must be, in this order (none answering by anything outside the subtree): allowed by the role — a
+     * `WRITE_ONLY` link only its root; the root live; the node live and inside the share's subtree (an upward walk,
+     * [NodesStore.withinSubtree]). Which kinds take uploads is not this gate's question but its caller's, which
+     * dispatches by [ShareWriteTarget.Node.kind] (`ShareGuestWrites`, `UploadAdmission`, the application's completion).
+     *
+     * A plain read: a start or a window writes nothing onto the node, and the write that does (the completion) asks
+     * again under the scope lock ([admittedInto]).
+     */
+    fun target(gated: ShareWriteGate.Admitted, nodeId: String?): ShareWriteTarget {
+        if (nodeId == null) return ShareWriteTarget.Node(gated.rootNodeId, gated.rootKind, named = false)
+        if (gated.role == ShareEntity.WRITE_ONLY && nodeId != gated.rootNodeId) return ShareWriteTarget.NotContributable
+        if (nodes.findInScope(gated.scopeId, gated.rootNodeId) == null) return ShareWriteTarget.NotContributable
+        val node = liveInside(gated, nodeId) ?: return ShareWriteTarget.NotFound
+        return ShareWriteTarget.Node(node.id, node.kind, named = true)
+    }
+
+    /**
+     * The write-side re-check of an upload into [target], handed out **unevaluated** like [ShareWriteGate.Admitted.admitted]
+     * and called first in the transaction that writes. **Lock order**, as `ShareNodesHandler`'s: (1) the scope row — the
+     * lock every tree writer takes first, so a member's trash of the target, or a move of it or an ancestor out of the
+     * subtree, has either committed and is seen (READ COMMITTED, ADR 0078) or waits until this write is done; (2) the
+     * share row ([ShareWriteGate.Admitted.admitted]: the link still live under the lock its revoke and delete hold);
+     * (3) for a named target, the root live and the target live and inside the subtree (its kind never changes; the
+     * caller checked it). The root taken by default passes the same two locks and nothing more, so its answers stay
+     * what they were. Never the share row first: a re-activation holds the scope and waits for the share row.
+     */
+    fun admittedInto(gated: ShareWriteGate.Admitted, target: ShareWriteTarget.Node): () -> Boolean = {
+        nodes.lockScope(gated.scopeId)
+        gated.admitted() &&
+            (!target.named || (nodes.findInScope(gated.scopeId, gated.rootNodeId) != null && liveInside(gated, target.nodeId) != null))
+    }
+
+    /** [nodeId] as a live node of the share's scope inside its subtree (the root included), or null. */
+    private fun liveInside(gated: ShareWriteGate.Admitted, nodeId: String) =
+        nodes.findInScope(gated.scopeId, nodeId)?.takeIf { nodes.withinSubtree(gated.scopeId, gated.rootNodeId, nodeId) }
 
     /** The gate for a guest read on [shareId]: past it, the shared subtree's live nodes for a viewable mode. */
     fun viewGate(shareId: String, pwToken: String?): ShareViewGate {

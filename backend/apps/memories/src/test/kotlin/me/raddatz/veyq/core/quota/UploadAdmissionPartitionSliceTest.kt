@@ -71,11 +71,11 @@ class UploadAdmissionPartitionSliceTest {
 
     private fun fits(list: MutableList<UploadAdmission>, tenantId: String, shareId: String): Boolean =
         QuarkusTransaction.requiringNew().call {
-            quota(list).linkFits(TenantEntity.findById(tenantId)!!, shareId, listOf(TestBlob.SMALL.upload("d3JhcA==")))
+            quota(list).linkFits(TenantEntity.findById(tenantId)!!, shareId, MemoriesNodeKinds.MEMORY, listOf(TestBlob.SMALL.upload("d3JhcA==")))
         }
 
     private fun linkUsage(list: MutableList<UploadAdmission>, shareId: String): Long? =
-        QuarkusTransaction.requiringNew().call { quota(list).linkUsage(shareId) }
+        QuarkusTransaction.requiringNew().call { quota(list).linkUsage(shareId, MemoriesNodeKinds.MEMORY) }
 
     /** A READ_WRITE link on a fresh Memory, its tenant's default per-link limit far above one small blob. */
     private fun link(): Pair<String, String> {
