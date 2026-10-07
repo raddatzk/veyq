@@ -115,7 +115,7 @@ without touching core except for the platform prerequisites below, which every l
         sharing property → `validate_request_bounds` red; `COVER` in `MemoryBlobRoles.GUEST` → the guest test red (200);
         the derivative check off → the seam test red; a `"COVER"` literal in `core/blob/Entities.kt` → the kernel guard
         red; the roles off the kernel guard's list → case 66 red. B0 and P4-0 snapshots untouched.
-  - [ ] P3-S3 schema + guards — `veyq_node_attachment(id, scope_id, node_id, slot, blob_id, share_identity_id, created_at)`,
+  - [x] P3-S3 schema + guards — `veyq_node_attachment(id, scope_id, node_id, slot, blob_id, share_identity_id, created_at)`,
         UNIQUE (node_id, slot) and (blob_id), foreign keys to scope, node, blob and share identity WITHOUT `CASCADE` (a cascade
         would delete the row without `deleteBlobRow`: a silent orphan, there is no sweep), baseline edit + pin line; the
         fourth arm of `validate_blob_reference_arity` (`blob_id` on its own line), a core `AttachmentNodeSubtreeEraser` and
@@ -123,6 +123,34 @@ without touching core except for the platform prerequisites below, which every l
         (document that an application without its own usage no longer fails closed) · Done when: a purge slice test (attachment
         and blob gone, nothing orphaned), the guard bites (list edits back → three keys red; contributor removed → live twin
         red).
+        **Measured 2026-10-07:** the table is in core's baseline after `veyq_share_identity` (it references it), constraints
+        `ux_attachment_node_slot`, `ux_attachment_blob`, `fk_attachment_{scope,node,blob,share_identity}` (none cascades),
+        indexes on `scope_id` and `share_identity_id`; pin line re-hashed in the same commit (`release: none`). **The owner
+        recreates the dev database** (`docker compose -f infra/docker-compose.yml down -v`): a changed baseline fails Flyway's
+        checksum on every database that ran the old one. Everything lives in `core/blob` beside `BlobEntity`
+        (`NodeAttachmentEntity`, `@DynamicUpdate` — `DynamicUpdateEverywhereTest` asked for it). `AttachmentNodeSubtreeEraser`
+        (phase 200) reads the guest ids, bulk-deletes the rows, then frees each blob through `deleteBlobRow`;
+        `AttachmentScopeEraser` (phase 200) deletes rows only (`ScopePurge` records the blobs); the contributor authorizes the
+        attachment blobs of core's live node ids (an attachment has no trash of its own); `AttachmentGuestIdentityUsage`
+        counts `share_identity_id`. With core's usage the `@All` set is never empty, so `GuestIdentityUsage.unreferenced`'s
+        fail-closed branch no longer occurs at runtime — its KDoc says every application whose rows name a guest identity
+        must implement it (Memories does; its `share_identity_id` has no FK, so a missing usage there would be silent).
+        `CoreAloneSliceTest` now pins core's own attachment beans in four seams; the Memories order tables carry phase 200.
+        Guards: blob arms 3 → 4 (2 → 3 of them FK-backed, all 4 in the live twin), node-keyed entities 4 → 5, scope closure
+        13 → 14 tables, `validate_store_reclaim_arity` does not react (no `BlobStore` call added); 53/53 green before and
+        after. Bites: the three list edits back → entity, schema and backstop red "unexpected reference arm"; the contributor
+        file removed → live twin red; the node eraser removed → node-subtree guard red; the scope eraser removed → scope
+        guard red. Guard-gap cases 67–69 (rejected: those three forgeries) and 70–71 (open: the scope eraser moved past the
+        blob rows, and the node eraser keeping the blobs, both green there and held only by the slice test), 64 → 69 cases.
+        `NodeAttachmentSliceTest` (core alone, 7 tests) — each red with its lever, green without: `deleteBlobRow` dropped →
+        the subtree purge leaves the blob row; the guest set not returned → the dead link's guest survives; the scope eraser at
+        650 → `FK_ATTACHMENT_BLOB` refuses the purge; the contributor empty → the guest's 200 is a 404; the usage always
+        false → the identity delete fails on `fk_attachment_share_identity`; `ON DELETE CASCADE` on the node FK → the node
+        delete is no longer refused; `ux_attachment_blob` dropped → the second attachment of one blob is accepted.
+        `./gradlew check` green (core 849, memories 361 with 2 skipped, root 84). On MariaDB 11.4 (the pinned image):
+        `run_backend_races_on_mariadb.py` green (43 race filters, both projects — the baseline with the new DDL migrates
+        there), and with `--tests` `NodeAttachmentSliceTest` 7/7, `CoreAloneSliceTest` 8/8 and both eraser-order tables
+        green — the FK refusals come from the MariaDB driver there.
   - [ ] P3-S4 `AttachmentStore.attach` — one transaction: `admitted()`, scope lock, consume the session as the first write,
         liveness and kind by QUERY (not `findById`: the stale-context trap), `persistBlob` and an explicit flush, a CAS
         `UPDATE … blob_id = expected` (an insert only into an empty slot; the loser gets `conflict`), `deleteBlobRow(old)`;

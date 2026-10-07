@@ -65,9 +65,9 @@ data class ShareBlobRef(val storageKey: String, val chunkCount: Int)
  */
 @ApplicationScoped
 class SharingStore(
-    /** The blobs the application hangs under a shared node (today: media + derivatives). Merged without order. */
+    /** The blobs hung under a shared node beyond the cover (today: core's attachments, Memories' media + derivatives). Merged without order. */
     private val contributors: Instance<SharedSubtreeContributor>,
-    /** What of the application still names a guest identity (today: media + buckets). Combined with "any". */
+    /** What still names a guest identity (today: core's attachments, Memories' media + buckets). Combined with "any". */
     private val identityUsages: Instance<GuestIdentityUsage>,
 ) {
 
@@ -459,7 +459,7 @@ class SharingStore(
         return ShareBlobRef(blob.storageKey, blob.chunkCount)
     }
 
-    /** Every blob id attached under the subtree: the contributors' (live media originals + derivatives) + node cover blobs. */
+    /** Every blob id attached under the subtree: the contributors' (attachments, live media originals + derivatives) + node cover blobs. */
     private fun subtreeBlobIds(scopeId: String, rootNodeId: String): Set<String> {
         val subtreeIds = collectSubtreeIds(scopeId, rootNodeId)
         // `deletedAt is null` — the sibling of [subtree]'s predicate, deliberately its OWN read (ADR 0061).

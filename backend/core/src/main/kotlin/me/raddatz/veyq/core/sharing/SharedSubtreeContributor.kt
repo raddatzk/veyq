@@ -3,7 +3,8 @@ package me.raddatz.veyq.core.sharing
 /**
  * What the application attaches under a shared subtree beyond the nodes core itself owns, as far as a share's blob
  * GET must see it. Core knows the node tree, the live-node predicate and the cover blob; every other blob that hangs
- * off a node — today the media and their derivatives — is an application's, contributed here.
+ * off a node is contributed here — core's own attachments (`AttachmentSharedSubtreeContributor`) and an
+ * application's rows (today Memories' media and their derivatives).
  *
  * Core serves no application rows to a guest: what an application lists under a share is its own guest read, behind
  * core's view gate ([ShareGuestGate.viewGate], ADR 0079 § Application guest operations). That listing and this

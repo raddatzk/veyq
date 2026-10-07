@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.spaces.scope
 
+import me.raddatz.veyq.core.blob.AttachmentScopeEraser
 import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.node.NodeScopeEraser
 import me.raddatz.veyq.core.scope.ScopeEraser
@@ -49,6 +50,7 @@ class ScopeEraserOrderSliceTest {
         assertEquals(
             mapOf(
                 MediaScopeEraser::class.java.simpleName to 100,
+                AttachmentScopeEraser::class.java.simpleName to 200,
                 FavoritesScopeEraser::class.java.simpleName to 600,
                 ItemFavoritesScopeEraser::class.java.simpleName to 610,
                 NodeScopeEraser::class.java.simpleName to 700,
@@ -60,6 +62,7 @@ class ScopeEraserOrderSliceTest {
         assertEquals(erasers.size, erasers.map { it.phase }.toSet().size, "phases are distinct, so order never rests on a tie")
         assertTrue(erasers.none { it.phase == ScopeEraser.BLOB_ROWS_PHASE }, "no eraser sits on core's own blob delete")
         assertTrue(byName.getValue("MediaScopeEraser") < ScopeEraser.BLOB_ROWS_PHASE, "media (derivative -> media) precedes the blob delete")
+        assertTrue(byName.getValue("AttachmentScopeEraser") < ScopeEraser.BLOB_ROWS_PHASE, "attachments (fk_attachment_blob) precede the blob delete")
         listOf("FavoritesScopeEraser", "ItemFavoritesScopeEraser", "NodeScopeEraser", "ShareScopeEraser").forEach {
             assertTrue(byName.getValue(it) > ScopeEraser.BLOB_ROWS_PHASE, "$it runs after the blob delete, as the purge always ran it")
         }

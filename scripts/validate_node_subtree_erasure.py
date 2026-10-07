@@ -17,9 +17,13 @@ At least one `NodeSubtreeEraser` implementation must exist at all; zero is red o
 **The defect that bought it.** A review forgery (2026-10-04, ADR 0079 phase 1, step 6): with
 `MediaNodeSubtreeEraser.kt` (then `features/media`, now `memories/media`) deleted, `validate_scope_erasure_arity`, `validate_blob_reference_arity`
 and `validate_store_reclaim_arity` all stayed green, and `NodeSubtreePurge` would then delete the node rows with
-nothing erasing their media, derivative and bucket rows or reclaiming their blobs. Unlike the scope side there is
-**no foreign key onto `veyq_node`**, so nothing at runtime refuses either: the orphans are silent — inbox #131,
-the defect the purge was built to close, back in one deleted file.
+nothing erasing their media, derivative and bucket rows or reclaiming their blobs. Unlike the scope side, nothing
+at runtime refuses that: none of those tables has a foreign key onto `veyq_node`, so the orphans are silent — inbox
+#131, the defect the purge was built to close, back in one deleted file. The one foreign key onto `veyq_node` is
+core's attachment table's (`fk_attachment_node`, cr-files-application P3-S3, deliberately without a cascade: a
+cascade would drop the row without freeing its blob): an attachment the erasure misses makes the node delete — and
+with it the whole purge of that scope — fail loudly instead. That is a backstop for one table, not for the others,
+so this guard still holds every node-keyed table, that one included.
 
 **Its limit.** It reads **text, not a running purge**. (a) It proves each node-keyed entity is *named* by an
 eraser's `erase` body (everything after that file's first `override fun erase`), never that the delete is reached,
@@ -101,7 +105,7 @@ def main() -> int:
             "no class implementing `NodeSubtreeEraser` with an `override fun erase(` was found under backend main "
             "Kotlin. The media, bucket and item-favorite rows of an erased subtree are deleted by those; with none, "
             "NodeSubtreePurge deletes the node rows and leaves every row keyed on them orphaned — silently, as no "
-            "foreign key points at veyq_node."
+            "foreign key onto veyq_node guards them (only core's attachments have one)."
         )
     deleted = set(ERASED_ENTITY.findall(bodies))
 

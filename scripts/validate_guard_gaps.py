@@ -45,7 +45,7 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      `validate_config_secret_persistence` pins the mount, so the KEK cannot silently stop surviving a
      container recreate (the hole ADR 0056 § Consequences surfaced)
   12 a fourth column referencing `veyq_blob`, declared in Kotlin and in a migration with its own foreign key —
-     rejected: `validate_blob_reference_arity` pins the three arms by name, so an arm added without teaching
+     rejected: `validate_blob_reference_arity` pins the arms by name (four since cr-files-application P3-S3), so an arm added without teaching
      the predicates that enumerate them cannot land quietly. It is the one case here whose cost is *user
      data*: a reclaim predicate short by one arm deletes live content, and the arm it would miss
      (`veyq_node.cover_blob_id`) is the one with no foreign key to refuse
@@ -109,8 +109,8 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      package's eraser is red. Without the union (the guard read only `ScopePurge.eraseScope`) the extraction
      would have made every media delete invisible to it, or — kept hard-wired — blocked on all of them
   37 the media `NodeSubtreeEraser` deleted outright — rejected: `validate_node_subtree_erasure` derives the
-     node-keyed entities from their `node_id` column and requires an eraser to reach each. No foreign key points
-     at `veyq_node`, so nothing at runtime refuses the purge; before that guard the scope, blob and reclaim
+     node-keyed entities from their `node_id` column and requires an eraser to reach each. None of those tables
+     has a foreign key onto `veyq_node`, so nothing at runtime refuses the purge; before that guard the scope, blob and reclaim
      guards were all green on this exact forgery while the purge orphaned every media, bucket and blob row
   39 a core `shared/ui/` file importing `features/memory/memoryNodes` — rejected: `validate_web_core_imports_no_applications`
      resolves a relative specifier against the importing file, so the web core cannot grow a back-edge into the
@@ -188,6 +188,14 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      `validate_kernel_imports_no_slices` reads the roles an application owns by the node-kind rule since the
      contract's `BlobRole` opened to a token (cr-files-application P3-S2); core compares a role and names none. The
      KDoc beside it names the role too and must not be what is read
+  67 core's attachment `SharedSubtreeContributor` deleted — rejected: `validate_blob_reference_arity`'s live twin
+     names the attachment arm (`NodeAttachmentEntity` in a contributor body); the three declaration keys are
+     unchanged by it, and a share's blob GET would refuse every file under it (cr-files-application P3-S3)
+  68 core's attachment `NodeSubtreeEraser` deleted — rejected: `validate_node_subtree_erasure` derives
+     `NodeAttachmentEntity` from its `node_id` column. The runtime refuses too here (`fk_attachment_node`, the one
+     foreign key onto `veyq_node`), but only as a purge that rolls back on every tick; the guard does not lean on it
+  69 core's attachment `ScopeEraser` no longer deleting its rows — rejected: `validate_scope_erasure_arity` finds
+     `veyq_node_attachment` in the FK closure below `veyq_scope`, with no cascade
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
 (a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
 which the Gradle module split retired: `:core` has no edge to an application, so either shape fails
@@ -266,6 +274,14 @@ Open gaps — a forgery the guard still passes (a documented limit, not a defect
      empty set is refused only when it would generate (`OpenApiGenerate`), because the Dockerfile's warm-up
      configures the build before `contracts/` is copied in and a configuration-time refusal broke the image build.
      Pinned so a rule (d) that starts refusing it is a visible decision against that reason.
+  70 core's attachment `ScopeEraser` moved to a phase after `ScopeEraser.BLOB_ROWS_PHASE` passes
+     `validate_scope_erasure_arity`, which proves a table is named, never the order (its limit (d)). At runtime
+     `fk_attachment_blob` refuses core's blob delete and no group holding a file is ever erased; the order is held
+     by `NodeAttachmentSliceTest` and `ScopeEraserOrderSliceTest`, which execute it. Pinned so the limit is executable
+  71 core's attachment `NodeSubtreeEraser` deleting its rows without freeing their blobs (`deleteBlobRow` dropped)
+     passes `validate_node_subtree_erasure`, which proves each node-keyed table is named, never that what its rows
+     referenced goes with them. The blob rows and their store objects would outlive every purged file, unreferenced
+     and with no sweep; `NodeAttachmentSliceTest` holds it. Pinned so the limit is executable
   33 a wiki page whose prose contradicts the doc it declares passes `validate_wiki_sources`, which checks the
      address and never the claim. **Left open on purpose** — whether two sentences in two registers say the same
      thing is not decidable by a grep; the forgery is the sentence that bought that guard, put back. Pinned so
@@ -692,12 +708,67 @@ MEDIA_NODE_ERASER = "backend/apps/memories/src/main/kotlin/me/raddatz/veyq/memor
 
 def forge_media_node_eraser_deleted(root: pathlib.Path) -> str:
     # The whole media step of the node subtree purge removed. Nothing else names veyq_media or veyq_bucket on that
-    # path, and no FK onto veyq_node refuses the node-row delete, so the orphans are silent at runtime.
+    # path, and neither table has an FK onto veyq_node to refuse the node-row delete, so the orphans are silent.
     f = root / MEDIA_NODE_ERASER
     if not f.is_file():
         raise ForgeError(f"{MEDIA_NODE_ERASER} is missing — the media node eraser moved or was deleted")
     f.unlink()
     return "the media NodeSubtreeEraser deleted (must be REJECTED — media and buckets would outlive their node)"
+
+
+ATTACHMENT_DIR = "backend/core/src/main/kotlin/me/raddatz/veyq/core/blob/"
+ATTACHMENT_CONTRIBUTOR = ATTACHMENT_DIR + "AttachmentSharedSubtreeContributor.kt"
+ATTACHMENT_NODE_ERASER = ATTACHMENT_DIR + "AttachmentNodeSubtreeEraser.kt"
+ATTACHMENT_SCOPE_ERASER = ATTACHMENT_DIR + "AttachmentScopeEraser.kt"
+
+
+def _attachment_file(root: pathlib.Path, rel: str) -> pathlib.Path:
+    f = root / rel
+    if not f.is_file():
+        raise ForgeError(f"{rel} is missing — core's attachment piece moved or was deleted")
+    return f
+
+
+def forge_attachment_contributor_deleted(root: pathlib.Path) -> str:
+    # Core's attachment contributor removed. Every declaration key of the arity guard is UNCHANGED (the column, the
+    # table and its foreign key all stay); only the live twin sees that no share's blob GET authorizes an attachment
+    # any more — a guest of a share would 404 on every file in it.
+    _attachment_file(root, ATTACHMENT_CONTRIBUTOR).unlink()
+    return "core's attachment SharedSubtreeContributor deleted (must be REJECTED — the live twin misses the arm)"
+
+
+def forge_attachment_node_eraser_deleted(root: pathlib.Path) -> str:
+    # Core's attachment step of the node subtree purge removed. The runtime is loud here, unlike for media
+    # (`fk_attachment_node` refuses the node delete, the scope's purge rolls back every tick), but the text guard
+    # must not lean on that: it is red because the `node_id` column is derived, not because the FK exists.
+    _attachment_file(root, ATTACHMENT_NODE_ERASER).unlink()
+    return "core's attachment NodeSubtreeEraser deleted (must be REJECTED — attachments would block their node's purge)"
+
+
+def forge_attachment_scope_eraser_drops_its_delete(root: pathlib.Path) -> str:
+    # Core's attachment step of the group erasure stops deleting: veyq_node_attachment is in the FK closure below
+    # veyq_scope with no cascade, so the blob, node, identity and scope deletes are all refused.
+    f = _attachment_file(root, ATTACHMENT_SCOPE_ERASER)
+    f.write_text(_sub(f.read_text(), '        NodeAttachmentEntity.delete("scopeId", scopeId)\n', ""))
+    return "core's attachment ScopeEraser no longer deleting NodeAttachmentEntity (must be REJECTED)"
+
+
+def forge_attachment_scope_eraser_after_blob_rows(root: pathlib.Path) -> str:
+    # The attachment step moved above ScopeEraser.BLOB_ROWS_PHASE: it still names its table, so the arity guard is
+    # green — and at runtime core's blob delete is refused by fk_attachment_blob, so no group with a file is ever
+    # erased. Ordering is the slice tests' (`NodeAttachmentSliceTest`, `ScopeEraserOrderSliceTest`), not a grep's.
+    f = _attachment_file(root, ATTACHMENT_SCOPE_ERASER)
+    f.write_text(_sub(f.read_text(), "    override val phase = 200\n", "    override val phase = 650\n"))
+    return "core's attachment ScopeEraser at a phase after the blob rows (an OPEN gap — order is not read)"
+
+
+def forge_attachment_node_eraser_keeps_the_blobs(root: pathlib.Path) -> str:
+    # The attachment step deletes its rows and never frees their blobs: every node-keyed table is still named, so
+    # the guard is green, and every purged file leaves a blob row and its store objects behind with no reference
+    # and no sweep. Freeing is the purge slice test's (`NodeAttachmentSliceTest`), not a grep's.
+    f = _attachment_file(root, ATTACHMENT_NODE_ERASER)
+    f.write_text(_sub(f.read_text(), "        attachments.forEach { blobs.deleteBlobRow(it.blobId) }\n", ""))
+    return "core's attachment NodeSubtreeEraser deleting rows but not their blobs (an OPEN gap — freeing is not read)"
 
 
 CORE_BUILD = "backend/core/build.gradle.kts"
@@ -1231,6 +1302,11 @@ CASES = [
     ("64", "validate_backend_module_graph.py", forge_spec_sets_hardcoded_owner_list, False),
     ("65", "validate_backend_module_graph.py", forge_module_without_spec_directory, True),
     ("66", "validate_kernel_imports_no_slices.py", forge_core_names_memory_blob_role, False),
+    ("67", "validate_blob_reference_arity.py", forge_attachment_contributor_deleted, False),
+    ("68", "validate_node_subtree_erasure.py", forge_attachment_node_eraser_deleted, False),
+    ("69", "validate_scope_erasure_arity.py", forge_attachment_scope_eraser_drops_its_delete, False),
+    ("70", "validate_scope_erasure_arity.py", forge_attachment_scope_eraser_after_blob_rows, True),
+    ("71", "validate_node_subtree_erasure.py", forge_attachment_node_eraser_keeps_the_blobs, True),
 ]
 
 

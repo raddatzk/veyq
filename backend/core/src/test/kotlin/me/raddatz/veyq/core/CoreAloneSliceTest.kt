@@ -1,5 +1,9 @@
 package me.raddatz.veyq.core
 
+import me.raddatz.veyq.core.blob.AttachmentGuestIdentityUsage
+import me.raddatz.veyq.core.blob.AttachmentNodeSubtreeEraser
+import me.raddatz.veyq.core.blob.AttachmentScopeEraser
+import me.raddatz.veyq.core.blob.AttachmentSharedSubtreeContributor
 import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.blob.CompleteItem
 import me.raddatz.veyq.core.blob.CompleteItemResult
@@ -64,10 +68,12 @@ import org.junit.jupiter.api.Test
  * config key only an application defines (the boot fails), or a seam whose empty collection fails *open* — admits a
  * link, places a kind, completes an upload — instead of refusing. So:
  *
- * 1. **Every seam holds exactly core's own implementations**: `ScopeEraser` core's two (nodes, shares),
- *    `NodeKindRules` and `ShareRoots` core's `FOLDER` answers, and every other seam — `NodeSubtreeEraser`, `MembershipEraser`,
- *    `GuestIdentityUsage`, `SharedSubtreeContributor`, `ShareGuestWrites`, `UploadCompletion`, `UploadAdmission` —
- *    none. The composed application's sets are the root's `ModuleCompositionTest`.
+ * 1. **Every seam holds exactly core's own implementations**: `ScopeEraser` core's three (attachments, nodes, shares),
+ *    `NodeKindRules` and `ShareRoots` core's `FOLDER` answers, `NodeSubtreeEraser`, `GuestIdentityUsage` and
+ *    `SharedSubtreeContributor` core's attachment one each (cr-files-application P3-S3), and every other seam —
+ *    `MembershipEraser`, `ShareGuestWrites`, `UploadCompletion`, `UploadAdmission` — none. The composed application's
+ *    sets are the root's `ModuleCompositionTest`. (`GuestIdentityUsage` is therefore never empty: its fail-closed
+ *    branch for no usage at all is `GuestIdentityUsageTest`'s, boot-free, and no longer reachable here.)
  * 2. **Every seam fails closed with nobody behind it**: a `FOLDER` is created and a `MEMORY` is `illegal_structure`;
  *    a share of any other kind, or a `WRITE_ONLY` one on a `FOLDER`, is `illegal_scope`; a completion is
  *    `illegal_target` for every kind; a link start on a `READ_WRITE` folder share is refused
@@ -117,13 +123,16 @@ class CoreAloneSliceTest {
 
     @Test
     fun everySeamHoldsExactlyCoresOwnImplementations() {
-        assertEquals(setOf(NodeScopeEraser::class.java, ShareScopeEraser::class.java), classes(scopeErasers),
-            "ScopeEraser: core's own two, and no application's")
+        assertEquals(setOf(AttachmentScopeEraser::class.java, NodeScopeEraser::class.java, ShareScopeEraser::class.java),
+            classes(scopeErasers), "ScopeEraser: core's own three, and no application's")
+        assertEquals(setOf(AttachmentNodeSubtreeEraser::class.java), classes(subtreeErasers), "NodeSubtreeEraser: core's attachments only")
+        assertEquals(setOf(AttachmentGuestIdentityUsage::class.java), classes(identityUsages), "GuestIdentityUsage: core's attachments only")
+        assertEquals(setOf(AttachmentSharedSubtreeContributor::class.java), classes(contributors),
+            "SharedSubtreeContributor: core's attachments only")
         assertEquals(setOf(FolderNodeRules::class.java), classes(kindRules), "NodeKindRules: core's FOLDER rule only")
         assertEquals(setOf(FolderShareRoots::class.java), classes(shareRoots), "ShareRoots: core's FOLDER answer only")
         for ((seam, beans) in mapOf(
-            "NodeSubtreeEraser" to subtreeErasers, "MembershipEraser" to membershipErasers,
-            "GuestIdentityUsage" to identityUsages, "SharedSubtreeContributor" to contributors,
+            "MembershipEraser" to membershipErasers,
             "ShareGuestWrites" to guestWrites, "UploadCompletion" to completions, "UploadAdmission" to admissions,
         )) {
             assertEquals(emptySet<Class<*>>(), classes(beans), "$seam: core implements none, and no application is here")
