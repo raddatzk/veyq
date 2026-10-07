@@ -161,7 +161,7 @@ export async function createContentNode(
   // The client mints the node's id, so its name, K_mem wrap and meta are all sealed bound to it (ADR 0072), at the
   // placement version a new node has (0, ADR 0080 Decision 3).
   const node = { scopeId, nodeId: crypto.randomUUID(), epoch: epochs.current, placementVersion: 0 }
-  const wrappedContentKey = b64std(v1.seal(contentKeyContext(node), entryKey, contentKey))
+  const wrappedContentKey = wrapContentKey(entryKey, node, contentKey)
   const res = await withRefresh(() =>
     contentApi().createNode({
       scopeId,
@@ -179,6 +179,13 @@ export async function createContentNode(
     }),
   )
   return { nodeId: expectMintedId(node.nodeId, res.nodeId), contentKey }
+}
+
+/** Wrap a node's content key under the key its entry lives under (its parent's, `K_SC` at a scope-root), bound to the
+ *  node's address (the counterpart to {@link openContentKey}). The one place the `content-key` seal is made: a guest's
+ *  tree operations (`core/sharing/guestTree.ts`) wrap through it too, so no second copy of the context drifts. */
+export function wrapContentKey(entryKey: Uint8Array, node: NodeAddress, contentKey: Uint8Array): string {
+  return b64std(v1.seal(contentKeyContext(node), entryKey, contentKey))
 }
 
 /**
@@ -318,7 +325,7 @@ async function sendPlacement(scopeId: string, epochs: EpochKeys, tree: TreeNode[
       nodeId,
       updateNodeRequest: {
         parentId: to.parentId ?? undefined,
-        wrappedContentKey: b64std(v1.seal(contentKeyContext(sealedAt), destinationKey, contentKey)),
+        wrappedContentKey: wrapContentKey(destinationKey, sealedAt, contentKey),
         encryptedName: sealName(destinationKey, sealedAt, name),
         slugToken: slugTokenFor(destinationKey, to.parentId ?? scopeId, name),
         epoch,
