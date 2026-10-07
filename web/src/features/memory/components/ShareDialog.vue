@@ -1,8 +1,8 @@
 <script setup lang="ts">
 // The curator's share MANAGEMENT dialog (cr-0116, redesigned toward the legacy shape): a **list-only** view of a
-// Memory's share links + a "New" button that opens the separate create dialog. Shared by BOTH share flows via the
-// `uploader` flag so they stay identical by construction: the NORMAL variant lists READ/READ_WRITE shares and
-// creates them with a role switcher; the WRITE_ONLY (drop-box) variant lists uploader shares and creates them with no
+// Memory's or a chapter's share links (a folder's are core's `FolderShareDialog`) + a "New" button that opens the
+// separate create dialog. Shared by BOTH share flows via the `uploader` flag so they stay identical by construction:
+// the NORMAL variant lists READ/READ_WRITE shares and creates them with a role switcher; the WRITE_ONLY (drop-box) variant lists uploader shares and creates them with no
 // switcher (a separate memory action, capability-gated at that action). Each row shows the share's private name (or
 // the role), badges (note present / disabled / by another member), and per-row actions: **copy link** (copy-only —
 // reconstructed via the member-recoverable K_share), edit name+note, switch off / re-activate, and **renew** (re-issue,
@@ -35,7 +35,7 @@ import type { EpochKeys } from '../../spaces/epochs'
 import { CHAPTER_KIND } from '../kinds'
 
 const props = defineProps<{
-  /** The shared Memory's scope — every share's recovery copy of `K_share` is bound to it (ADR 0072). */
+  /** The shared Memory's (or chapter's) scope — every share's recovery copy of `K_share` is bound to it (ADR 0072). */
   scopeId: string
   nodeId: string
   memoryKey: Uint8Array
