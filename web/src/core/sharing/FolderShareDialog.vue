@@ -5,10 +5,13 @@
 // on the Memories application's share dialogs, whose uploader (WRITE_ONLY) variant has no meaning here: the backend
 // refuses a WRITE_ONLY link on a folder (`illegal_scope`), so no such option is offered.
 //
-// What a READ_WRITE link lets a guest do inside a folder is the application's role matrix (docs/apps/memories.md):
-// add folders and move or rename inside it — never upload. The helper text says no more than that.
+// What a READ_WRITE link lets a guest do below a folder is the role matrix (docs/apps/memories.md): add folders, move
+// and rename between them (core), and contribute photos to any Memory or chapter below (Memories) — never upload into
+// a folder itself.
 //
-// One dialog, three views: the list, the create form, and the freshly-minted link (after a create or a renew).
+// One dialog, three views: the list, the create form, and the freshly-minted link (after a create or a renew). Not
+// built: editing a link's label, note, password, expiry or role in place (Memories' `updateShare` form) — a member
+// renews or deletes the link instead.
 // Operator-blind throughout: the folder's key is wrapped under a fresh `K_share` that rides only the link's fragment;
 // name, note and password are sealed under `K_share`; the list re-opens `K_share` through the recovery copy under the
 // scope key, which no link carries (ADR 0036 point 4). Strings are the Memory dialog's wherever the meaning is the
