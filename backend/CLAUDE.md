@@ -63,14 +63,23 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   Quarkus (plugin and BOM), the OpenAPI generator — is declared once, in `gradle/libs.versions.toml`.
 
 ## Conventions (see [developer styleguide](../docs/crosscutting/developer-styleguide.md))
-- **API-first.** Edit the spec in `../contracts/api/` — core's specs at its top level, the Memories application's in
-  `memories/`, shared schemas in `_common.openapi.yaml` (core's); the Gradle build generates Kotlin models + JAX-RS
-  interfaces per owner, in the module that owns them (`:core:openApiGenerateCore` → `core/build/generated/openapi/core/`,
-  package `me.raddatz.veyq.core.generated`; `:apps:memories:openApiGenerateMemories` →
-  `apps/memories/build/generated/openapi/memories/`, package `me.raddatz.veyq.memories.generated`; `openApiGenerateSpecs`
-  from `backend/` runs both). A schema two owners share lives in `_common` and is ONE generated type, core's:
-  the Memories set maps every `_common` schema to core's class, and a Memories model named like a core one fails the
-  build; so does `x-veyq-channel` on a Memories operation (the admin channel is core's). Never hand-write a DTO that
+- **API-first.** Edit the spec in `../contracts/api/` — core's specs at its top level, an application's in the
+  directory named for it (`memories/`), shared schemas in `_common.openapi.yaml` (core's); the Gradle build generates
+  Kotlin models + JAX-RS interfaces per owner, in the module that owns them. **The owner is derived from the
+  directory, never listed** (`buildSrc`'s `SpecSets`, inbox #344): the top level is `:core`'s
+  (`:core:openApiGenerateCore` → `core/build/generated/openapi/core/`, package `me.raddatz.veyq.core.generated`),
+  `contracts/api/<app>/` is `:apps:<app>`'s (`:apps:memories:openApiGenerateMemories` →
+  `apps/memories/build/generated/openapi/memories/`, package `me.raddatz.veyq.memories.generated`); `openApiGenerateSpecs`
+  from `backend/` runs every owner's. A module opts in with `veyqOpenApi { generateOwnSpecs() }`, which reads its
+  owner from its project path — so a new application's specs need only their directory and the module. The build
+  refuses, while it configures, a spec nested deeper than one directory, a directory that is no application name
+  (lowercase letters and digits) and one with no included `:apps:<dir>`; and a module that is included but never
+  opts in, once every project is configured (`validate_backend_module_graph.py` rule (d) holds both before any build).
+  A module whose directory is missing configures fine and is refused only when it generates (an empty set), because
+  the Dockerfile's warm-up configures the build before `contracts/` is copied in. A schema two owners share lives in
+  `_common` and is ONE generated type, core's: an application's set maps every `_common` schema to core's class, and
+  an application model named like a core one fails the build; so does `x-veyq-channel` on an application's operation
+  (the admin channel is core's). Never hand-write a DTO that
   duplicates a generated model.
   **Nothing generated is tracked** (`backend/build/` is gitignored), and the generator emits no descriptions —
   `useSwaggerAnnotations` / `useMicroProfileOpenAPIAnnotations` are both `false` in `buildSrc`'s `OpenApiGenerate`.

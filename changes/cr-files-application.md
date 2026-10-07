@@ -46,12 +46,21 @@ without touching core except for the platform prerequisites below, which every l
       placement, restore, guest tree); conformance vectors for BOTH foldings in `contracts/crypto/vectors/v1.json` ·
       Done when: `npm run check` green, bite tests (a kind with its own folding gets its own token; folding changed ->
       the vector test red), `validate_*` green. Must land before the first stored `FILE` (the token freezes the folding).
-- [ ] P2 contract owners from directories (inbox #344) — `buildSrc` `SpecSets.kt` derives the owner from the directory
+- [x] P2 contract owners from directories (inbox #344) — `buildSrc` `SpecSets.kt` derives the owner from the directory
       (top level = core, `contracts/api/<app>/` = application `<app>`, `_common` shared; `requireNoStray` keeps failing for
       anything else), `scripts/contract_specs.py` and rule (d) of `scripts/validate_backend_module_graph.py` derive the same
       way in the SAME commit, `validate_web_core_imports_no_applications.py` derives application clients from any
       `contracts/api/<app>/` pair · Done when: a throwaway second application directory in a scratch tree is accepted and
       generates `me.raddatz.veyq.<app>.generated`, a stray directory without a module is refused, the guard bites.
+      **Measured 2026-10-07:** a module opts in with `veyqOpenApi { generateOwnSpecs() }` (owner from its project path,
+      replacing `owner("…")`); a throwaway `contracts/api/demo/` + `:apps:demo` generated `DemoApi`/`DemoThing` in
+      `me.raddatz.veyq.demo.generated.{api,model}`; without the include `gradlew help` refused it ("`demo/` is no
+      application — the settings include no `:apps:demo`"), included without the opt-in it refused it too, and so did a
+      spec two levels deep and a `Bad/` directory; with the pre-#344 owner list put back the demo was refused, green
+      again without it. Core's and Memories' generated trees byte-identical before/after (594 files), the web client
+      unchanged. Guard-gap cases 62–64 (rejected) and 65 (a module without its directory still passes, as before) bite:
+      rule (d) not reading the spec directories turns 62/63 red, tolerating a literal owner list turns 64 red. Note for
+      F0: the module is `files`, so its specs go in `contracts/api/files/` (the directory name is the owner).
 - [ ] P3 attachments in core (inbox #327/#345) — contract + migration for `veyq_node_attachment`, `BlobRole` as a token
       (contract, `packages/crypto/src/seal.ts`, vectors, web re-export), a core completion helper (replace by compare in the
       `UPDATE`, free the old blob with `deleteBlobRow` in the same transaction), a core `NodeSubtreeEraser` and
