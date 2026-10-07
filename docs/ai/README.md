@@ -107,6 +107,13 @@ Five rules follow:
    was real, but it was found only after the substrate was established — everything before that was noise
    presented as evidence.
 
+   **And a UI slice is not done before it was clicked in a real browser.** The public folder page of
+   cr-node-key-hierarchy landed with 33 new unit tests green and two defects only a browser showed: a breadcrumb
+   whose `href="#"` cleared the share key from the URL fragment, and a card's actions hidden by a width rule at
+   every width up to 1120 px. Each test had asserted the programmatic path (the `push` it was handed, the element
+   in a stubbed DOM); none clicked what the browser rendered. Unit tests prove the logic; the click proves the
+   screen.
+
    **A live parallel session is a hazard for WRITES too, and this one bites harder than a stale count.** Commits
    here go straight to `main`, so a second session's tip and its uncommitted tree share yours. Two moves are
    therefore forbidden regardless of how clean the tree *looked* when the phase started: `git add -A` (which on
