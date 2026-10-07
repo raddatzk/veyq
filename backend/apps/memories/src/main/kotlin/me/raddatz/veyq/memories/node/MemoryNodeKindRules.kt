@@ -10,8 +10,16 @@ object MemoriesNodeKinds {
     /** The content unit: holds media, carries its own `K_mem` under `K_SC`, the root of a share. */
     const val MEMORY = "MEMORY"
 
-    /** A part of a Memory: holds media, carries its own `K_mem` wrapped under the parent Memory's. */
+    /** A part of a Memory: holds media, carries its own `K_mem` wrapped under the parent Memory's, the root of a share
+     *  (a smaller Memory link: its key opens nothing of the parent, ADR 0080 decisions 9 and 13). */
     const val CHAPTER = "CHAPTER"
+
+    /**
+     * The kinds a share of Memories is rooted at, with every role, and so the kinds Memories runs a guest's media writes
+     * under: [MemoryShareRoots], `MediaShareGuestWrites` and `MediaUploadAdmission` all answer from this one set, so the
+     * role a link was created with, its writer and its usage measure cannot disagree about a kind.
+     */
+    val SHARE_ROOTS: Set<String> = setOf(MEMORY, CHAPTER)
 }
 
 /**

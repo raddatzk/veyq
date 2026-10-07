@@ -7,14 +7,14 @@ import jakarta.persistence.EntityManager
 
 /**
  * The Memories half of a link's usage (ADR 0073 §4): the blobs of every medium the link's identities contributed —
- * the medium's own blob and each derivative's. A medium a member uploaded into the same Memory is not the link's, and
+ * the medium's own blob and each derivative's. A medium a member uploaded into the same Memory or chapter is not the link's, and
  * neither is another link's. Core adds the link's open sessions (`StorageQuota.linkUsage`).
  */
 @ApplicationScoped
 class MediaUploadAdmission(private val em: EntityManager) : UploadAdmission {
 
-    // MEMORY only, the one kind a share's root is here ([MediaShareGuestWrites.supports]).
-    override fun supports(nodeKind: String): Boolean = nodeKind == MemoriesNodeKinds.MEMORY
+    // The kinds a share's root is here, as [MediaShareGuestWrites.supports] answers them.
+    override fun supports(nodeKind: String): Boolean = nodeKind in MemoriesNodeKinds.SHARE_ROOTS
 
     override fun linkBlobUsage(shareId: String): Long = sum(
         """

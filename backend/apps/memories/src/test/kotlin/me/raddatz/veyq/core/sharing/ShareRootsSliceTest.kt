@@ -22,8 +22,9 @@ import org.junit.jupiter.api.Test
 
 /**
  * Share roots by kind, with Memories present (ADR 0080 decisions 6, 11, 13): which roles a node of a kind may be shared
- * with is its owner's answer through [ShareRoots] — core's `FOLDER` READ and READ_WRITE, Memories' `MEMORY` all three,
- * a `CHAPTER` nobody's yet — and it holds on create and on a role change alike. Whether a guest may then upload under
+ * with is its owner's answer through [ShareRoots] — core's `FOLDER` READ and READ_WRITE, Memories' `MEMORY` and
+ * `CHAPTER` all three (a chapter link since cr-node-key-hierarchy 5a.4; it was refused before), a kind nobody declares
+ * none — and it holds on create and on a role change alike. Whether a guest may then upload under
  * the root is a separate seam ([ShareGuestWrites]): a `READ_WRITE` folder share exists, and its guest's upload falls
  * closed. Each refusal sits beside a control through the same path on the kind that admits it.
  * [FakePresignProfile]: the control upload is answered with presigned URLs, which the in-memory store cannot make.
@@ -32,16 +33,21 @@ import org.junit.jupiter.api.Test
 @TestProfile(FakePresignProfile::class)
 class ShareRootsSliceTest {
 
+    /** A chapter is a share root with every role, as the Memory above it (ADR 0080 decision 13; until 5a.4 every
+     *  role here was `illegal_scope`). A kind nobody declares stays refused with the same body. */
     @Test
-    fun aChapterShareIsRefusedForEveryRole() {
+    fun aChapterIsAShareRootForEveryRole() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val chapter = seedNode(scopeId, MemoriesNodeKinds.CHAPTER, parentId = memory, wrappedContentKey = CONTENT_KEY)
         for (role in listOf("READ", "READ_WRITE", "WRITE_ONLY")) {
-            create(userId, chapter, role).statusCode(422).body("code", equalTo("illegal_scope"))
+            create(userId, chapter, role).statusCode(201)
         }
-        // control: the Memory above it is shared with the same body
-        create(userId, memory, "READ").statusCode(201)
+        // control: a node of a kind no owner declares is refused every role
+        val stray = seedNode(scopeId, "NOT_A_KIND", wrappedContentKey = CONTENT_KEY)
+        for (role in listOf("READ", "READ_WRITE", "WRITE_ONLY")) {
+            create(userId, stray, role).statusCode(422).body("code", equalTo("illegal_scope"))
+        }
     }
 
     @Test
@@ -56,29 +62,51 @@ class ShareRootsSliceTest {
         create(userId, memory, "WRITE_ONLY").statusCode(201)
     }
 
-    /** A role change asks [ShareRoots] for the new role as a create does. A share on a `CHAPTER` cannot be created any
-     *  more, so the row is seeded (as one minted before the rule); changing its role is refused, and the same change on
-     *  a Memory's share passes. */
+    /** A role change asks [ShareRoots] for the new role as a create does. A share on a kind nobody declares cannot be
+     *  created, so the row is seeded (as one minted before the rule); changing its role is refused, and the same change
+     *  on a Memory's share passes. */
     @Test
     fun aRoleChangeToARoleTheKindDoesNotAllowIsRefused() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
-        val chapter = seedNode(scopeId, MemoriesNodeKinds.CHAPTER, parentId = memory, wrappedContentKey = CONTENT_KEY)
-        val chapterShare = TestIds.shareId()
+        val stray = seedNode(scopeId, "NOT_A_KIND", wrappedContentKey = CONTENT_KEY)
+        val strayShare = TestIds.shareId()
         QuarkusTransaction.requiringNew().run {
             ShareEntity().apply {
-                id = chapterShare; ownerAccount = userId; this.scopeId = scopeId; nodeId = chapter; role = "READ"
+                id = strayShare; ownerAccount = userId; this.scopeId = scopeId; nodeId = stray; role = "READ"
                 wrap = "d3JhcA=="; sealedName = "c2VhbGVk"; createdAt = Instant.now()
-                writeVerifier = ShareWriteProof.verifier(chapterShare)
+                writeVerifier = ShareWriteProof.verifier(strayShare)
             }.persist()
         }
-        changeRole(userId, chapterShare, "READ_WRITE").statusCode(422).body("code", equalTo("invalid_role_change"))
-        QuarkusTransaction.requiringNew().run { assertRole(chapterShare, "READ") }
+        changeRole(userId, strayShare, "READ_WRITE").statusCode(422).body("code", equalTo("invalid_role_change"))
+        QuarkusTransaction.requiringNew().run { assertRole(strayShare, "READ") }
 
         // control: the same change on a Memory's share
         val memoryShare: String = create(userId, memory, "READ").statusCode(201).extract().path("shareId")
         changeRole(userId, memoryShare, "READ_WRITE").statusCode(204)
         QuarkusTransaction.requiringNew().run { assertRole(memoryShare, "READ_WRITE") }
+    }
+
+    /**
+     * A chapter link changes role as a Memory's does: READ and READ_WRITE flip in place both ways; a change to
+     * WRITE_ONLY, or of a WRITE_ONLY link, is `invalid_role_change` (cr-0119), the role unchanged.
+     */
+    @Test
+    fun aChapterLinkChangesRoleAsAMemorysDoes() {
+        val (userId, scopeId) = seedMemberScope()
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val chapter = seedNode(scopeId, MemoriesNodeKinds.CHAPTER, parentId = memory, wrappedContentKey = CONTENT_KEY)
+        val viewer: String = create(userId, chapter, "READ").statusCode(201).extract().path("shareId")
+        changeRole(userId, viewer, "READ_WRITE").statusCode(204)
+        QuarkusTransaction.requiringNew().run { assertRole(viewer, "READ_WRITE") }
+        changeRole(userId, viewer, "READ").statusCode(204)
+        QuarkusTransaction.requiringNew().run { assertRole(viewer, "READ") }
+        changeRole(userId, viewer, "WRITE_ONLY").statusCode(422).body("code", equalTo("invalid_role_change"))
+        QuarkusTransaction.requiringNew().run { assertRole(viewer, "READ") }
+
+        val uploader: String = create(userId, chapter, "WRITE_ONLY").statusCode(201).extract().path("shareId")
+        changeRole(userId, uploader, "READ_WRITE").statusCode(422).body("code", equalTo("invalid_role_change"))
+        QuarkusTransaction.requiringNew().run { assertRole(uploader, "WRITE_ONLY") }
     }
 
     /**
