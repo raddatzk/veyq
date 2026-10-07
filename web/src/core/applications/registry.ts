@@ -82,12 +82,15 @@ export interface NodeDetailEmits {
 
 /** The generic context the host hands the `levelView` slot: a folder (or the scope root, `folder` null) and its
  *  children. Events: `openNode`, `create` (a create mode the `nodeMutationDialog` slot understands),
- *  `renameFolder`, `deleteFolder`, `openTrash`. */
+ *  `renameFolder`, `deleteFolder`, `openTrash`, `share` (the host opens core's folder share dialog). */
 export interface LevelViewProps {
   folder: TreeNode | null
   level: Level
   epochs: EpochKeys | null
   readonly: boolean
+  /** Whether a public share may be offered for `folder`: FOLDER's descriptor AND the instance capability. Always false
+   *  at the scope root (there is no node to share). */
+  shareable: boolean
 }
 export interface LevelViewEmits {
   openNode: [node: TreeNode]
@@ -95,6 +98,7 @@ export interface LevelViewEmits {
   renameFolder: []
   deleteFolder: []
   openTrash: []
+  share: []
 }
 
 /** The shell's `sidebarPins` slot: the component an application fills it with is mounted in the left rail
@@ -171,11 +175,12 @@ export interface Registry {
   slot(name: SlotName): Component | null
 }
 
-/** A fresh registry holding only the platform's own kind (FOLDER: browsable, never openable, never shareable).
+/** A fresh registry holding only the platform's own kind (FOLDER: browsable, never openable, shareable through core's
+ *  own `core/sharing/FolderShareDialog.vue` — cr-node-key-hierarchy 5b.3).
  *  The app uses the single `registry` below; tests build their own to prove the rules on an untouched instance. */
 export function createRegistry(): Registry {
   const kinds = new Map<NodeKind, KindDescriptor>([
-    [FOLDER_KIND, { kind: FOLDER_KIND, icon: 'pi pi-folder', shareable: false }],
+    [FOLDER_KIND, { kind: FOLDER_KIND, icon: 'pi pi-folder', shareable: true }],
   ])
   const slots = new Map<SlotName, Component>()
   const lifecycles = new Map<string, LifecycleHooks>()

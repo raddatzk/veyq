@@ -5,11 +5,12 @@
 // language that has none, and an explicit act to remove one. It never renders a language the map does not
 // carry — that is the difference between "no German terms" and "an empty German box".
 //
-// Two callers, deliberately: the share note (`features/memory/ShareCreateDialog`) and the tenant terms
+// Two callers shaped it: the share note (`features/memory/ShareCreateDialog`) and the tenant terms
 // (`features/tenant/TenantTermsPanel`). `docs/ai/README.md` § *Spike when the shape is unclear* wants five real
 // usages before a shared abstraction is trusted, so the props surface below is kept to what the SECOND caller
 // actually needed — a `:locales` universe, a placeholder, a vetoable remove and a row-actions slot — and not one
-// knob more. `scripts/validate_locale_editor_single_home.py` keeps it the only one.
+// knob more. The third, core's folder share note (`core/sharing/FolderShareDialog`), needed none.
+// `scripts/validate_locale_editor_single_home.py` keeps it the only one.
 //
 // Operator-blind: this edits plaintext only. Whether the result is sealed (the share note, under `K_share` in
 // `share.ts`) or public operational content (the tenant terms) is the caller's business, never this file's.
