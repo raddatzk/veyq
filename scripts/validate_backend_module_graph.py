@@ -15,7 +15,10 @@ module's `java-test-fixtures` source set (`src/testFixtures`, today `:core`'s), 
   do not include is compiled by nothing — its classes, migrations and tests silently never run — and an include
   without a build file configures an empty project. Every included project is `:core` (the platform) or
   `:apps:<name>` (an application, ADR 0079 Decision 1): rule (b)'s direction is defined for exactly those, so a third
-  kind is red until the direction is decided for it.
+  kind is red until the direction is decided for it. And every included module **ships**: a module the root reaches
+  over no runtime edge compiles and passes its own tests while the fast-jar holds none of it — Gradle and Quarkus
+  build that without a word (measured cr-files-application F0: with `implementation(project(":apps:files"))` dropped
+  from the root, this guard was green and only the root's `ModuleCompositionTest` went red, on its Files anchor).
 - **(b) The dependency direction (ADR 0079 Decision 4).** Every project edge, any configuration — a module's
   `testFixtures*` configurations included: `:core` depends on no project (its fixtures neither: an edge to an
   application would put that application into `:core`'s tests, which must boot core alone); an application depends
@@ -321,6 +324,12 @@ def rule_a() -> list[str]:
                       f"silently never run. Include it, or delete the directory.")
     for p in sorted(included - on_disk):
         errors.append(f"(a) {rel(SETTINGS)} includes {p}, which has no build.gradle.kts — an empty project.")
+    shipped = runtime_closure({":"})
+    for p in sorted(included & on_disk):
+        if p not in shipped:
+            errors.append(f"(a) {p} is included but the root reaches it over no runtime edge, so it is not in the "
+                          f"fast-jar: its own tests run green while the deliverable has none of its code. Add "
+                          f"`implementation(project(\"{p}\"))` to backend/build.gradle.kts.")
     for p in sorted(included):
         if p != CORE and not APPLICATION.match(p):
             errors.append(f"(a) {p} is neither {CORE} (the platform) nor :apps:<name> (an application, ADR 0079) — "

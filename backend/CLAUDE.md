@@ -5,8 +5,9 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
 ## Prove your work
 - `./gradlew check` (compile + slice tests) — runs on **in-memory H2** (`%test`, hermetic + fast). Run from
   `backend/`, it checks every project: `:core` (`backend/core`, the platform — its tests run as `:core:test`),
-  `:apps:memories` (`backend/apps/memories`, the Memories application; its tests run as `:apps:memories:test`), the
-  root (`:test`, the composition — no main code — and only the whole-app tests: `OperatorBlindProbeTest`, the posture
+  `:apps:memories` (`backend/apps/memories`, the Memories application; its tests run as `:apps:memories:test`),
+  `:apps:files` (`backend/apps/files`, the Files application — a skeleton: the `FILE` kind; its tests boot core plus
+  Files and run as `:apps:files:test`), the root (`:test`, the composition — no main code — and only the whole-app tests: `OperatorBlindProbeTest`, the posture
   and entity sweeps, `ModuleCompositionTest`). A new
   application is one more `:apps:<name>`; what a module must have (an `include`, a `beans.xml`, the `veyq.module` plugin,
   its Dockerfile `COPY`s) and which edges it may declare (`:core`, and `testFixtures(project(":core"))` over a test

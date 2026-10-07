@@ -53,8 +53,9 @@ import org.junit.jupiter.api.Test
  * 1. **Every seam collects every implementation that was compiled.** For each interface core reaches an application
  *    through, the beans ArC deployed equal the concrete implementations in the compiled main outputs of every backend
  *    project ([MainOutputs], the posture sweeps' walk) — derived, so a third module's implementations are expected the
- *    day they compile, and an unindexed module's are missing by name. Anchored: the union holds core's own and
- *    Memories' implementations, so a walk that read nothing cannot pass.
+ *    day they compile, and an unindexed module's are missing by name. Anchored: the union holds core's own,
+ *    Memories' and Files' implementations, so a walk that read nothing cannot pass — and a root build that drops an
+ *    application's module (`backend/build.gradle.kts`) is red here, not only in that module's own tests.
  * 2. **Every module's routes are deployed.** Each generated JAX-RS interface (`@Path`) of every module has a deployed
  *    resource bean implementing it — the 404s of step 7's packaged jar, asked of the container. Anchored on both
  *    modules' generated API packages.
@@ -122,6 +123,7 @@ class ModuleCompositionTest {
         val union = seams().values.flatten().map(::beanClass)
         assertTrue(union.any { it.startsWith("me.raddatz.veyq.core.") }, "core's own implementations are collected: $union")
         assertTrue(union.any { it.startsWith("me.raddatz.veyq.memories.") }, "Memories' implementations are collected: $union")
+        assertTrue(union.any { it.startsWith("me.raddatz.veyq.files.") }, "Files' implementations are collected: $union")
     }
 
     @Test
@@ -135,6 +137,35 @@ class ModuleCompositionTest {
         for (pkg in listOf("me.raddatz.veyq.core.generated.api", "me.raddatz.veyq.memories.generated.api")) {
             assertTrue(routes.any { it.packageName == pkg }, "the walk saw $pkg: ${routes.map { it.name }}")
         }
+    }
+
+    /**
+     * The placement partition across core and EVERY application — the one place both applications run together, so
+     * the one place a kind two of them claim would show (each module's own partition test sees core and itself only).
+     * Exactly one rule per kind, the right owner for each, and no rule of any of them admits a `FILE` as a parent: a
+     * file has no children, whichever application's kind the child is. The applications' kinds and classes are named as
+     * the wire and the jar spell them, not imported — as for Memories in this class: a root build that drops a module
+     * must fail here at run time, not stop this file from compiling.
+     */
+    @Test
+    fun theRulesOfCoreAndEveryApplicationPartitionTheKinds() {
+        val file = "FILE"
+        val kinds = listOf(NodeEntity.FOLDER, "MEMORY", "CHAPTER", file)
+        for (kind in kinds) {
+            val claiming = kindRules.filter { it.handles(kind) }.map(::beanClass)
+            assertEquals(1, claiming.size, "node kind $kind must be handled by exactly one NodeKindRules: $claiming")
+        }
+        assertEquals("me.raddatz.veyq.files.FilesNodeKindRules", beanClass(kindRules.single { it.handles(file) }), "FILE is Files'")
+        assertTrue(beanClass(kindRules.single { it.handles("MEMORY") }).startsWith("me.raddatz.veyq.memories."), "MEMORY is Memories'")
+
+        for (child in kinds) {
+            assertFalse(NodeKindRules.parentAllows(kindRules, child, ParentSlot.Node(file)), "a $child inside a file")
+        }
+        // control: a file at the root and in a folder, never in a Memory; a chapter in its Memory
+        assertTrue(NodeKindRules.parentAllows(kindRules, file, ParentSlot.Root), "a file at the root")
+        assertTrue(NodeKindRules.parentAllows(kindRules, file, ParentSlot.Node(NodeEntity.FOLDER)), "a file in a folder")
+        assertFalse(NodeKindRules.parentAllows(kindRules, file, ParentSlot.Node("MEMORY")), "a file in a Memory")
+        assertTrue(NodeKindRules.parentAllows(kindRules, "CHAPTER", ParentSlot.Node("MEMORY")), "control: a chapter in a Memory")
     }
 
     @Test
