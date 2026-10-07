@@ -95,11 +95,26 @@ without touching core except for the platform prerequisites below, which every l
         (it says a new kind adds seal purposes and asks HKDF with the application id: say once that random node keys under the
         parent's key and `role` + `ownerId` satisfy it: P5).
 
-  - [ ] P3-S2 contract + references — `BlobRole` token in `_common.openapi.yaml` (as `NodeKind`), `$ref` from `blob.openapi.yaml`
+  - [x] P3-S2 contract + references — `BlobRole` token in `_common.openapi.yaml` (as `NodeKind`), `$ref` from `blob.openapi.yaml`
         and `sharing.openapi.yaml` (its second copy, without `COVER`), `@Pattern` on every request property, the two tuples
         of `validate_contracts_common` go, Memories' roles become its own constants (`MemoryBlobRole` in `features/memory`,
         Kotlin constants in `apps/memories`; `mediaDeriver.ts` `Extract<BlobRole, …>`), the server refuses a guest `COVER` ·
         Done when: guards, `./gradlew check`, `npm run check`, a bite test per guard.
+        **Measured 2026-10-07:** `_common`'s `BlobRole` (`^[A-Z][A-Z0-9_]{0,15}$`, `maxLength: 16`, visibility `structure`)
+        generates a `String`; both request properties carry `@Size(max = 16) @Pattern`; the web client has no `BlobRole`
+        left. Core names no role (it compares, `UploadSessionEntity.boundTo`; its `cover_blob_id` is a column, not the
+        role): `validate_kernel_imports_no_slices` reads Memories' four roles as it reads its kinds (guard-gap case 66).
+        Memories: `MemoryBlobRoles` (Kotlin), `MemoryBlobRole` (`features/memory/blobRole.ts`); the neutral transport in
+        `media.ts` takes `role: string`, `mediaDeriver`'s tiers are a literal union. The guest start asks the new
+        `ShareGuestWrites.admitsGuestRole` past the gate and refuses the whole request `400 invalid_request` (the
+        contract's existing 400 code; the enum used to give a 400 too): Memories admits ORIGINAL/THUMBNAIL/PREVIEW. The
+        completion now refuses a derivative in a role outside `MemoryBlobRoles.DERIVATIVES` (`upload_mismatch`): a session
+        started as ORIGINAL and declared as a derivative of kind ORIGINAL passed the binding check alone (the media
+        contract's closed `MediaDerivativeKind` refused it at the wire only). A member's start takes any token; a session
+        in a role Memories names nothing for is never attached and expires as any unfinished one. Bites: `@Pattern` off the
+        sharing property → `validate_request_bounds` red; `COVER` in `MemoryBlobRoles.GUEST` → the guest test red (200);
+        the derivative check off → the seam test red; a `"COVER"` literal in `core/blob/Entities.kt` → the kernel guard
+        red; the roles off the kernel guard's list → case 66 red. B0 and P4-0 snapshots untouched.
   - [ ] P3-S3 schema + guards — `veyq_node_attachment(id, scope_id, node_id, slot, blob_id, share_identity_id, created_at)`,
         UNIQUE (node_id, slot) and (blob_id), foreign keys to scope, node, blob and share identity WITHOUT `CASCADE` (a cascade
         would delete the row without `deleteBlobRow`: a silent orphan, there is no sweep), baseline edit + pin line; the
@@ -168,8 +183,9 @@ without touching core except for the platform prerequisites below, which every l
   - [ ] P4d CSS and i18n neutral — the `memory-folder-*`/`memory-create-card` rules move to `veyq-*` twins (dark tokens), the dead
         rules are deleted (`validate_stylesheet_anchors`), the generic `memory.*` keys move to a core namespace (en + de) ·
         Done when: the golden test is updated deliberately (class names only).
-- [ ] P5 ADR 0079 §9 says key derivation takes the application id (HKDF); random node keys under the parent's key satisfy it:
-      say so once, in place · Done when: `validate_doc_citations` green.
+- [x] P5 ADR 0079 §9 says key derivation takes the application id (HKDF); random node keys under the parent's key satisfy it:
+      say so once, in place · Done when: `validate_doc_citations` green. Done 2026-10-07 with P3-S2: §9 no longer says a new
+      kind adds seal purposes and names the random node key + `ownerId`/`role` in `blob-key` as meeting both rules.
 
 ### Files
 - [ ] F0 skeleton `:apps:files` — settings, root build, module build (only `:core`), `META-INF/beans.xml`, `FilesNodeKindRules`

@@ -72,11 +72,16 @@ mechanism ([ADR 0032](0032-capability-discovery-version-gating.md)); that is an 
 `422 capability_disabled`, not a per-tenant product setting.
 
 **9. Crypto does not change.** No existing format, seal purpose or suite id moves; nothing is re-encrypted.
-A new node kind adds seal purposes, which is additive ([ADR 0072](0072-a-seal-binds-its-object.md): a new
+A new seal purpose would be additive ([ADR 0072](0072-a-seal-binds-its-object.md): a new
 variant plus its vector is backward-compatible). For a **new** application, its keys are derived from the scope
 key by HKDF with the application id as context (`veyq/v1/<application id>:…`, the form the existing derivations
 use in `packages/crypto/src/v1.ts`), so two applications never share a key by accident; the seals' associated
-data binds the application id or kind, the object id and the version, by the ADR 0072 mechanism. **Memories'
+data binds the application id or kind, the object id and the version, by the ADR 0072 mechanism. **Measured with
+Files (cr-files-application P3-S1/P5), a new kind meets both rules with no new seal purpose and no HKDF context:**
+its node key is random and wrapped under its parent's key ([ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)),
+so it shares no key with another application's node by construction, which is what the HKDF context was for; and
+its blob's `blob-key` seal binds `ownerId` (the owning node's id) and `role` — an open token the application
+defines, Files' `FILE_CONTENT` — which names the application's object and kind. **Memories'
 existing keys are the documented exemption**: they derive as they always have, and are not re-derived under a
 Memories context — that would be a suite `v2` and a re-encryption for no gain, since there is no earlier
 application to be separated from.
@@ -218,18 +223,17 @@ on their own.
   **What core still knows of Memories**, each a decision a later change takes, not an oversight (the decided
   targets are the bullets above): `veyq_node` carries Memories-flavoured columns in core's baseline (`cover_blob_id`,
   `cover_byte_size`, `media_revision`, `delete_revision` — moving a column is a schema change, not a rename);
-  `BlobRole` (`ORIGINAL`/`THUMBNAIL`/`PREVIEW`/`COVER`) is a closed enum in core's `blob.openapi.yaml`, described there as
-  Memories' values and closed because the crypto encoder is (until inbox #327); and the upload retention
+  and the upload retention
   and purge keys keep their `veyq.media.*` names though core reads them.
   **Open prerequisites for the next application** (on inbox #325–#327, where it will be refined): a generic
   `veyq_node_attachment(node_id, slot, blob_id)` table with real foreign keys, built with the first application that
   needs a blob (Expenses or Files) and cut on that case — `validate_blob_reference_arity` pins today's three
   `veyq_blob` arms, so a fourth is red until the reclaim predicates learn it; the generalisation of the cover columns
-  and revision counters above; and a seal purpose plus key rule for blobs that are not Memories' — the server side
-  is neutral (a blob's `K_blob` wrap, `owner_id` and `blob_role` are opaque strings core stores and compares), but the
-  `blob-key` seal derives under a Memory's `K_mem` and `BlobRole` is closed in three places (the contract, the crypto
-  package, its web re-export), so a new role or key is an [ADR 0072](0072-a-seal-binds-its-object.md) stored-format
-  decision, not a rename.
+  and revision counters above. The blob role is no longer one of them (cr-files-application P3-S1/S2): `BlobRole` is
+  an open token (`^[A-Z][A-Z0-9_]{0,15}$`, like `NodeKind`) in the contract's `_common` and in the crypto package,
+  core stores and compares it and names none (`validate_kernel_imports_no_slices.py` reads Memories' four roles
+  as it reads its kinds), and Memories holds its own (`MemoryBlobRoles`, `MemoryBlobRole`) and refuses a guest's
+  `COVER` through `ShareGuestWrites.admitsGuestRole`.
   **The web side is separated by import direction, not by name or by kind:** `web/src/features/memory` is the
   application, and no core file imports it except the composition root `web/src/applications.ts`; the shell asks a
   build-time registry (`web/src/core/applications/registry.ts`) what to render for a node kind, which slot an
