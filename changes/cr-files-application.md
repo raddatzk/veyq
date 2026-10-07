@@ -196,9 +196,22 @@ without touching core except for the platform prerequisites below, which every l
         importing `CHUNK_SIZE` would pull `@veyq/crypto` and the API client into the service-worker bundle, which that
         file keeps out on purpose; `core/blob/transport.test.ts` asserts `CHUNK_SIZE === PLAINTEXT_CHUNK_SIZE` (and
         `range.test.ts` already pins it to the crypto export).
-  - [ ] P4a list slots — `addSlotItem`/`slotItems` for `topbarTray` and `sidebarPins` (ordered, write-once per (slot, id)) ·
+  - [x] P4a list slots — `addSlotItem`/`slotItems` for `topbarTray` and `sidebarPins` (ordered, write-once per (slot, id)) ·
         Done when: `registry.test.ts`, `AppShell.slots.test.ts`, `applications.test.ts` updated, a two-entry order case, P4-0
         unchanged.
+        **Measured 2026-10-07:** `registry.ts` gains `ListSlotName = 'topbarTray' | 'sidebarPins'`, `SlotItem {id, component}`,
+        `addSlotItem(slot, id, component, order?)` (a duplicate id in the same list throws naming both; `order` defaults to
+        the registration index; the sort is the stable `Array.sort`, so a tie keeps registration order) and
+        `slotItems(slot): readonly SlotItem[]` (a sorted copy). `SlotName` narrows to `levelView | nodeMutationDialog |
+        shareDialog`; `claimSlot` also refuses a list slot at runtime, `addSlotItem` a single one. `AppTopbar`/`AppSidebar`
+        render `<component :is v-for :key="id">` in the same place, no wrapper; Memories adds `memories.upload-status` and
+        `memories.pinned`. `npm run check` 200 files / 1884 tests → 200 / 1896; 53 validators green before and after
+        (identical); B0 and P4-0 snapshots untouched. The one-item DOM is pinned by hand-written expectations
+        (`AppShell.slots.test.ts`), shown equal to the old templates by running them (their lookup adapted to
+        `slotItems(…)[0]`) against the new tests: those passed, only the two-item cases went red. Levers, each red then
+        restored green: duplicate check dropped (1 red), `order` ignored (3), `AppTopbar` rendering only the first item
+        (1), `claimSlot`'s list-slot guard dropped (1), `topbarTray` back in `SlotName` (typecheck red: an unused
+        `@ts-expect-error`). Not verified in a browser.
   - [ ] B2 the upload queue with a job runner in `web/src/core/blob/queue.ts` (`UploadJob<R> = {name, sizeBytes, run({onProgress,
         signal})}`; six states, one automatic retry, never for `quota_exceeded`); Memories' `enqueueUploads` is a thin adapter ·
         Done when: the queue cases split into generic and Memories ones, `quota_exceeded` never retries, an abort gives

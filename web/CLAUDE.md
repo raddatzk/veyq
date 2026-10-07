@@ -132,15 +132,18 @@ here; the server is blind.
   `import()`, no loading after the fact (ADR 0079 Decision 5, ADR 0026) — registered code runs with every unlocked key.
   **What an application registers** (its `register.ts`; the registry is write-once, a second registration throws):
   `registerKind` per node kind (detail component, icon, shareable); `claimSlot` for `levelView`,
-  `nodeMutationDialog`, `shareDialog`, `topbarTray`, `sidebarPins`; `claimShareBody(rootKind)` for the
+  `nodeMutationDialog`, `shareDialog`; `addSlotItem(slot, id, component, order?)` for the two list slots `topbarTray`
+  and `sidebarPins` (an id namespaced by the application, e.g. `memories.pinned`; write-once per (slot, id); the shell
+  renders `slotItems(slot)` sorted by `order`, ties in registration order); `claimShareBody(rootKind)` for the
   public share page (`PublicShare.rootKind`, served for every role, so one body per kind picks its screens by role;
   core claims `FOLDER` itself and embeds the claimed body for each child, handing it `subtreeRoot` — that node's id,
   key and name — so the body renders and writes into that node, not the share root);
   `registerLifecycle(id, hooks)` with `onScopeReset` / `onScopeEntered` and the **required**
   `onMasterKeyRotated` — `rotateKeys` refuses to start when none is registered, because material sealed under the
   Master Key (Memories' pins) is otherwise undecryptable after a rotation. A kind or share nobody registered renders
-  an explicit unsupported/unavailable state, never an empty region. **Limits, stated:** the five slots are
-  single-claim and Memories-shaped (the second application re-cuts them per kind); the kind is an open string token (the generated client has no `NodeKind` enum), so core names its one
+  an explicit unsupported/unavailable state, never an empty region. **Limits, stated:** three slots (`levelView`,
+  `nodeMutationDialog`, `shareDialog`) are single-claim and Memories-shaped (the second application re-cuts them per
+  kind), the other two (`topbarTray`, `sidebarPins`) are ordered lists; the kind is an open string token (the generated client has no `NodeKind` enum), so core names its one
   `FOLDER_KIND` (`core/node/kind.ts`), Memories its own two (`features/memory/kinds.ts`), and no compiler lists the
   kinds — the registry's `{ supported: false }` answer and its tests do; the directory is still `features/memory`, the i18n catalog
   is one file and `styles/memory.css` is global.

@@ -93,7 +93,7 @@ describe('registry: slugFor', () => {
 
 describe('registry: slots', () => {
   it('is empty until claimed: slot() is null, not undefined', () => {
-    expect(createRegistry().slot('topbarTray')).toBeNull()
+    expect(createRegistry().slot('levelView')).toBeNull()
   })
 
   it('is single-claim: a second claim of the same slot throws and the first claimant stays', () => {
@@ -105,18 +105,85 @@ describe('registry: slots', () => {
 
   it('keeps slots independent: claiming one does not claim another', () => {
     const r = createRegistry()
-    r.claimSlot('sidebarPins', Stub)
-    expect(r.slot('topbarTray')).toBeNull()
-    expect(() => r.claimSlot('topbarTray', Other)).not.toThrow()
+    r.claimSlot('nodeMutationDialog', Stub)
+    expect(r.slot('shareDialog')).toBeNull()
+    expect(() => r.claimSlot('shareDialog', Other)).not.toThrow()
   })
 
   it('two registries do not share state', () => {
     const a = createRegistry()
     const b = createRegistry()
     a.claimSlot('shareDialog', Stub)
+    a.addSlotItem('topbarTray', 'a.tray', Stub)
     a.registerKind({ kind: MEMORY_KIND, icon: 'x', shareable: true })
     expect(b.slot('shareDialog')).toBeNull()
+    expect(b.slotItems('topbarTray')).toEqual([])
     expect(b.kind(MEMORY_KIND).supported).toBe(false)
+  })
+})
+
+describe('registry: list slots (topbarTray, sidebarPins)', () => {
+  const Third = defineComponent({ template: '<p />' })
+
+  it('is empty until an item is added: slotItems() is an empty list', () => {
+    const r = createRegistry()
+    expect(r.slotItems('topbarTray')).toEqual([])
+    expect(r.slotItems('sidebarPins')).toEqual([])
+  })
+
+  it('keeps registration order when no order is given', () => {
+    const r = createRegistry()
+    r.addSlotItem('topbarTray', 'a.tray', Stub)
+    r.addSlotItem('topbarTray', 'b.tray', Other)
+    expect(r.slotItems('topbarTray')).toEqual([
+      { id: 'a.tray', component: Stub },
+      { id: 'b.tray', component: Other },
+    ])
+  })
+
+  it('sorts by order, ascending; a tie keeps registration order', () => {
+    const r = createRegistry()
+    r.addSlotItem('sidebarPins', 'late', Stub, 20)
+    r.addSlotItem('sidebarPins', 'tie-first', Other, 10)
+    r.addSlotItem('sidebarPins', 'tie-second', Third, 10)
+    expect(r.slotItems('sidebarPins').map((i) => i.id)).toEqual(['tie-first', 'tie-second', 'late'])
+  })
+
+  it('is write-once per (slot, id): a duplicate id throws, naming slot and id, and the first item stays', () => {
+    const r = createRegistry()
+    r.addSlotItem('topbarTray', 'memories.upload-status', Stub)
+    expect(() => r.addSlotItem('topbarTray', 'memories.upload-status', Other)).toThrow(
+      /topbarTray.*memories\.upload-status/,
+    )
+    expect(r.slotItems('topbarTray')).toEqual([{ id: 'memories.upload-status', component: Stub }])
+  })
+
+  it('scopes the id to its list: the same id in the other list is fine', () => {
+    const r = createRegistry()
+    r.addSlotItem('topbarTray', 'x', Stub)
+    expect(() => r.addSlotItem('sidebarPins', 'x', Other)).not.toThrow()
+    expect(r.slotItems('sidebarPins')).toEqual([{ id: 'x', component: Other }])
+  })
+
+  it('hands out a copy: mutating the returned list does not change the slot', () => {
+    const r = createRegistry()
+    r.addSlotItem('topbarTray', 'a', Stub)
+    ;(r.slotItems('topbarTray') as { id: string; component: unknown }[]).push({ id: 'b', component: Other })
+    expect(r.slotItems('topbarTray')).toHaveLength(1)
+  })
+
+  it('refuses claimSlot on a list slot (a JS caller gets an error, not a silent claim) and addSlotItem on a single one', () => {
+    const r = createRegistry()
+    // The types refuse all three (each `@ts-expect-error` turns `npm run typecheck` red if a type widens again); the
+    // runtime guard is for a caller the type checker does not see.
+    // @ts-expect-error a list slot is not claimable
+    expect(() => r.claimSlot('topbarTray', Stub)).toThrow(/topbarTray is a list slot/)
+    // @ts-expect-error a list slot is not claimable
+    expect(() => r.claimSlot('sidebarPins', Stub)).toThrow(/sidebarPins is a list slot/)
+    // @ts-expect-error a single-claim slot takes no items
+    expect(() => r.addSlotItem('levelView', 'a', Stub)).toThrow(/levelView is not a list slot/)
+    expect(r.slotItems('topbarTray')).toEqual([])
+    expect(r.slot('levelView')).toBeNull()
   })
 })
 
