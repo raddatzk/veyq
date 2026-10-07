@@ -688,9 +688,10 @@ paths:
         share_not_contributable`); the kind's placement rule (`NodeKindRules`) admits it under the parent (else `422
         illegal_structure`); the owner of the parent's kind lets a READ_WRITE guest create that kind in it
         (`GuestNodeRules`: core for a `FOLDER`; a kind no owner declares allows nothing — `422 illegal_scope`); the
-        slug is free under the parent (`409 slug_taken`). **Epoch:** the request carries none — a guest never
-        writes at the scope root, and the server stores the node at the scope's current epoch (ADR 0080 Decision 6);
-        the name and the wrap are sealed bound to scope, node, that epoch and placement version 0. No `wrappedMeta`:
+        slug is free under the parent (`409 slug_taken`). **Epoch:** the request carries the epoch the guest sealed
+        with (ADR 0080 Decision 6) — the name and the wrap are bound to scope, node, that epoch and placement version
+        0, so the server stores it as sent; a guest never writes at the scope root, so the server checks it as a
+        member's placement off the root: at or below the scope's current epoch, else `409 stale_epoch`. No `wrappedMeta`:
         a node's payload is its application's content, never a core tree operation's.
         **Password-protected shares (cr-0164, ADR 0037):** no `X-Share-Password` → non-enumerable `404`; a wrong
         token → `403 share_password_incorrect`.
@@ -710,6 +711,7 @@ paths:
               encryptedName: ZW5jcnlwdGVkLW5hbWU=
               slugToken: c2x1Zy10b2tlbi1iYXNlNjQ=
               orderIndex: 0
+              epoch: 0
               wrappedContentKey: d3JhcHBlZC1rLW1lbQ==
       responses:
         "201":
@@ -731,7 +733,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
         "409":
-          description: A sibling under the parent already has that slug (`slug_taken`), or the `nodeId` is already taken, in any scope (`id_taken`).
+          description: A sibling under the parent already has that slug (`slug_taken`), the `nodeId` is already taken, in any scope (`id_taken`), or the `epoch` is above the scope's current one — nothing stored (`stale_epoch`).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: slug_taken } }
         "422":
@@ -1559,12 +1561,12 @@ components:
 
     CreateShareNodeRequest:
       type: object
-      required: [nodeId, parentId, kind, encryptedName, slugToken, wrappedContentKey]
+      required: [nodeId, parentId, kind, encryptedName, slugToken, epoch, wrappedContentKey]
       description: >
         A READ_WRITE guest's create inside the shared subtree (`createShareNode`): the member's `CreateNodeRequest`
-        without `epoch` (the server stores the scope's current one; a guest never writes at the scope root) and
-        without `wrappedMeta` (a node's payload is its application's content, not a core tree operation's). The
-        parent is always a node of the subtree.
+        with a required `epoch` checked as off the scope root (a guest never writes there) and without
+        `wrappedMeta` (a node's payload is its application's content, not a core tree operation's). The parent is
+        always a node of the subtree.
       properties:
         nodeId:
           x-veyq-visibility: id
@@ -1585,7 +1587,7 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Pattern(regexp = "[A-Z][A-Z0-9_]{0,15}")'
         encryptedName:
           type: string
-          description: The node name, AEAD-sealed under the parent's content key (seal purpose `node-name`), bound to scope, node, the scope's current epoch and placement version 0 (ADR 0072, ADR 0080 Decision 2; opaque base64).
+          description: The node name, AEAD-sealed under the parent's content key (seal purpose `node-name`), bound to scope, node, `epoch` and placement version 0 (ADR 0072, ADR 0080 Decision 2; opaque base64).
           contentEncoding: base64
           maxLength: 4096
           example: ZW5jcnlwdGVkLW5hbWU=
@@ -1603,9 +1605,21 @@ components:
           format: int32
           description: Ordering among siblings (default 0 / append).
           example: 0
+        epoch:
+          x-veyq-visibility: structure
+          # nullable type + @NotNull: a required primitive binds a missing field to 0 (backend/CLAUDE.md)
+          type: [integer, "null"]
+          description: >
+            The scope content-key epoch the guest sealed the name and the wrap with (ADR 0024, ADR 0080 Decision 6).
+            Every seal binds it, so the server stores it as sent and a reader opens at it. The entry is under the
+            parent's key, never `K_SC`, so an epoch below the current one is accepted; one above the scope's current
+            epoch is `409 stale_epoch`, nothing stored (the rule of a member's placement off the root).
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
         wrappedContentKey:
           type: string
-          description: The node's content key — a fresh random key the guest mints, wrapped under the parent's content key (seal purpose `content-key`), bound to scope, node, the scope's current epoch and placement version 0 (ADR 0080 Decision 1; opaque base64).
+          description: The node's content key — a fresh random key the guest mints, wrapped under the parent's content key (seal purpose `content-key`), bound to scope, node, `epoch` and placement version 0 (ADR 0080 Decision 1; opaque base64).
           contentEncoding: base64
           maxLength: 256
           example: d3JhcHBlZC1rLW1lbQ==
