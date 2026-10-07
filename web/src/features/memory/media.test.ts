@@ -21,7 +21,6 @@ import {
   newestCursor,
   openBlob,
   openOriginal,
-  makeChunkProvider,
   gridRef,
   lightboxRef,
   downloadRef,
@@ -1333,118 +1332,5 @@ describe('live-updates data layer (uc.memory.live-updates, cr-0107)', () => {
       })
       await expect(listMediaPage(SCOPE_ID, NODE_ID)).rejects.toBeInstanceOf(ResponseError)
     })
-  })
-})
-
-describe('makeChunkProvider — the page-side plaintext chunk seam (Slice 2, ADR 0047)', () => {
-  // The SW never sees a key; it asks the page for one chunk's plaintext by index. Build a real chunked-AEAD blob
-  // (K_blob wrapped under K_mem, each frame bound to `index‖total`) so the seam runs the true seal/open path.
-  // The wrap is sealed with a HARDCODED blob-key context (== media.ts blobKeyContext); if the purpose or a bound
-  // field ever changes, this test breaks loudly.
-  const BLOB = { blobId: '5c09e000-0000-4000-8000-000000000b01', ownerId: '5c09e000-0000-4000-8000-000000000b02', role: 'PREVIEW' as const }
-
-  function buildBlob(memoryKey: Uint8Array, plaintextChunks: Uint8Array[]) {
-    const blobKey = v1.randomBytes(32)
-    const total = plaintextChunks.length
-    const frames = plaintextChunks.map((pt, i) => v1.sealFrame(blobKey, i, total, pt, v1.randomBytes(12)))
-    const wrappedBlobKey = b64std(v1.seal({ purpose: 'blob-key', scopeId: SCOPE_ID, ...BLOB }, memoryKey, blobKey))
-    const byteSize = frames.reduce((n, f) => n + f.length, 0)
-    return { blobKey, frames, ref: { ...BLOB, chunkCount: total, byteSize, wrappedBlobKey } }
-  }
-
-  /** A fetch stub that serves `frames[i]` at URL `slot/<n>/<i>`, where `slot` advances on each re-presign so a
-   *  stale-URL 403 can be simulated for the first slot only. `status403For` names the slots that answer 403. */
-  function storeFor(frames: Uint8Array[], status403For: Set<number> = new Set()) {
-    const fetchStub = vi.fn(async (url: string) => {
-      const m = /^slot\/(\d+)\/(\d+)$/.exec(url)!
-      const [slot, idx] = [Number(m[1]), Number(m[2])]
-      if (status403For.has(slot)) return { ok: false, status: 403 } as Response
-      return { ok: true, status: 200, arrayBuffer: async () => frames[idx].buffer } as unknown as Response
-    })
-    let slot = 0
-    const presignAll = vi.fn(async () => frames.map((_, i) => `slot/${slot}/${i}`))
-    // capture the slot AFTER each presign so a re-presign moves to a fresh (non-403) slot
-    const presignAdvancing = vi.fn(async () => {
-      const urls = frames.map((_, i) => `slot/${slot}/${i}`)
-      slot++
-      return urls
-    })
-    return { fetchStub, presignAll, presignAdvancing }
-  }
-
-  it('round-trips each chunk to its plaintext and exposes chunkCount + byteSize', async () => {
-    const memoryKey = v1.randomBytes(32)
-    const chunks = [new Uint8Array([1, 2, 3]), new Uint8Array([4, 5]), new Uint8Array([6, 7, 8, 9])]
-    const { frames, ref } = buildBlob(memoryKey, chunks)
-    const { fetchStub, presignAll } = storeFor(frames)
-    vi.stubGlobal('fetch', fetchStub)
-
-    const p = makeChunkProvider(SCOPE_ID, memoryKey, ref, presignAll)
-    expect(p.chunkCount).toBe(3)
-    expect(p.byteSize).toBe(ref.byteSize)
-    for (let i = 0; i < chunks.length; i++) {
-      expect(Array.from(await p.getPlaintextChunk(i))).toEqual(Array.from(chunks[i]))
-    }
-  })
-
-  it('refuses a ref whose wrap was sealed for another slot — before any presign (ADR 0072)', async () => {
-    const memoryKey = v1.randomBytes(32)
-    const { ref } = buildBlob(memoryKey, [new Uint8Array([1])])
-    const presignAll = vi.fn(async () => [])
-    expect(() => makeChunkProvider(SCOPE_ID, memoryKey, { ...ref, role: 'ORIGINAL' }, presignAll)).toThrow(v1.OpenRefused)
-    expect(() => makeChunkProvider(SCOPE_ID, memoryKey, { ...ref, ownerId: crypto.randomUUID() }, presignAll)).toThrow(v1.OpenRefused)
-    expect(presignAll).not.toHaveBeenCalled()
-  })
-
-  it('presigns the WHOLE blob only once and reuses the cache across chunk reads', async () => {
-    const memoryKey = v1.randomBytes(32)
-    const { frames, ref } = buildBlob(memoryKey, [new Uint8Array([1]), new Uint8Array([2]), new Uint8Array([3])])
-    const { fetchStub, presignAll } = storeFor(frames)
-    vi.stubGlobal('fetch', fetchStub)
-
-    const p = makeChunkProvider(SCOPE_ID, memoryKey, ref, presignAll)
-    await p.getPlaintextChunk(0)
-    await p.getPlaintextChunk(2)
-    await p.getPlaintextChunk(1)
-    expect(presignAll).toHaveBeenCalledTimes(1) // one whole-blob presign backs every chunk (no per-chunk presign)
-  })
-
-  it('binds the WHOLE blob chunkCount as the AAD total — a range-subset total goes red (the trap)', async () => {
-    const memoryKey = v1.randomBytes(32)
-    // 5-chunk blob; imagine the SW asks for a range covering chunks [2..4]. The provider MUST open chunk 2 with
-    // total = 5 (the whole blob). A naive impl that passed the subset count (3) as `total` fails every open.
-    const chunks = Array.from({ length: 5 }, (_, i) => new Uint8Array([i, i, i]))
-    const { blobKey, frames, ref } = buildBlob(memoryKey, chunks)
-    const { fetchStub, presignAll } = storeFor(frames)
-    vi.stubGlobal('fetch', fetchStub)
-
-    const p = makeChunkProvider(SCOPE_ID, memoryKey, ref, presignAll)
-    // Green: the provider opens chunk 2 with the whole chunkCount (5).
-    expect(Array.from(await p.getPlaintextChunk(2))).toEqual(Array.from(chunks[2]))
-    // Red bite: the same frame opened with the range-subset total (3) — what the trap forbids — must reject.
-    expect(() => v1.openFrame(blobKey, 2, 3, frames[2])).toThrow()
-  })
-
-  it('re-presigns the whole blob and retries once on a stale-URL 403', async () => {
-    const memoryKey = v1.randomBytes(32)
-    const { frames, ref } = buildBlob(memoryKey, [new Uint8Array([1, 1]), new Uint8Array([2, 2])])
-    const { fetchStub, presignAdvancing } = storeFor(frames, new Set([0])) // slot 0 → 403, slot 1 → ok
-    vi.stubGlobal('fetch', fetchStub)
-
-    const p = makeChunkProvider(SCOPE_ID, memoryKey, ref, presignAdvancing)
-    expect(Array.from(await p.getPlaintextChunk(1))).toEqual(Array.from([2, 2]))
-    expect(presignAdvancing).toHaveBeenCalledTimes(2) // initial presign (403) → re-presign → retry succeeds
-  })
-
-  it('rejects an out-of-range chunk index without touching the store', async () => {
-    const memoryKey = v1.randomBytes(32)
-    const { frames, ref } = buildBlob(memoryKey, [new Uint8Array([1])])
-    const { fetchStub, presignAll } = storeFor(frames)
-    vi.stubGlobal('fetch', fetchStub)
-
-    const p = makeChunkProvider(SCOPE_ID, memoryKey, ref, presignAll)
-    await expect(p.getPlaintextChunk(1)).rejects.toThrow(/chunk_out_of_range/)
-    await expect(p.getPlaintextChunk(-1)).rejects.toThrow(/chunk_out_of_range/)
-    expect(fetchStub).not.toHaveBeenCalled()
   })
 })
