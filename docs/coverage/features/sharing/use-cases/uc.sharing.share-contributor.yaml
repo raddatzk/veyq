@@ -117,3 +117,72 @@ acceptanceCriteria:
     coverage:
       web:
         unit: [src/views/ShareView.picker.test.ts]
+  - id: contributor-root-kinds
+    text: >-
+      A contributor link may be rooted at a Memory, a chapter or a folder (ADR 0080 decisions 6 and 13). A chapter
+      link's guest uploads into the chapter and deletes only its own; a member shares a folder READ or READ_WRITE
+      through core's own dialog, never WRITE_ONLY, and the link wraps the folder's own key under K_share.
+    coverage:
+      backend:
+        integration: [ChapterShareSliceTest.aContributorOnAChapterUploadsIntoItAndDeletesOnlyItsOwn, ShareRootsSliceTest.aChapterIsAShareRootForEveryRole, CoreAloneSliceTest.aFolderIsSharedToReadOrContributeAndNothingElseIs, ShareRootsSliceTest.aFolderIsNoDropBox]
+      web:
+        unit: [src/views/MemoryHomeView.test.ts, src/core/sharing/FolderShareDialog.test.ts, src/core/sharing/folderShare.wire.test.ts]
+        e2e: [src/features/memory/chapterShare.e2e.test.ts]
+  - id: rights-inherit-below-a-folder
+    text: >-
+      A READ_WRITE folder link gives its guest a contributor's rights in every Memory or chapter below the folder: an
+      upload names an optional target nodeId, which must lie live inside the share's subtree and be a kind Memories
+      accepts — a node outside or unknown is 404 node_not_found, a folder (the link's root included) is
+      share_not_contributable — and is decided again under the scope lock when the medium is written (a target a
+      member trashed or moved out meanwhile, or a link revoked meanwhile, refuses the item). The guest deletes its own
+      media anywhere in the subtree and none a member moved out. A READ link uploads nowhere; a WRITE_ONLY link only
+      into its root. A Memory link's contributor may target a chapter of that Memory.
+    coverage:
+      backend:
+        integration: [SubtreeUploadSliceTest.aFolderContributorUploadsIntoAMemoryAndAChapterBelow, SubtreeUploadSliceTest.aFolderContributorDeletesOnlyItsOwnAndOnlyInsideTheSubtree, SubtreeUploadSliceTest.aTargetTheLinkDoesNotReachIsRefused, SubtreeUploadSliceTest.aReadGuestIsRefusedForEveryTarget, SubtreeUploadSliceTest.anUploaderNamesNothingButItsRoot, SubtreeUploadSliceTest.aMemoryContributorUploadsIntoAChapterBelow, SubtreeUploadSliceTest.theLinkLimitCountsMediaInEveryNodeOfTheSubtree, ShareRootsSliceTest.aGuestOfAReadWriteFolderShareUploadsNothing, GuestCompleteTargetRaceSliceTest.aCompletionIntoAMemoryAMemberTrashesMeanwhileIsRefused, GuestCompleteTargetRaceSliceTest.aCompletionIntoAMemoryAMemberMovesOutOfTheSubtreeMeanwhileIsRefused, GuestCompleteTargetRaceSliceTest.aCompletionOnALinkRevokedMeanwhileIsRefused]
+      web:
+        unit: [src/features/memory/shareTarget.wire.test.ts, src/features/memory/components/MemoryShareBody.embedded.test.ts]
+        e2e: [src/features/memory/folderShareUpload.e2e.test.ts]
+    gaps:
+      - surface: web
+        reason: >-
+          The web offers no delete control for a guest's own photo (inbox #361); the right exists server-side, and
+          the web side of an own delete below the folder is asserted by no test that drives a screen.
+  - id: folder-guest-tree-operations
+    text: >-
+      A READ_WRITE folder link's guest creates folders (and Memories) inside the shared subtree and moves or renames
+      a node between folders of it, as one placement write re-wrapped under the destination's key and stated against
+      the node's placementVersion (409 stale_placement, nothing written). A create states the epoch the guest sealed
+      with: above the scope's current one is 409 stale_epoch, at or below it is stored as sent. Never the share root,
+      never out of the subtree, never into a cycle; a taken slug is 409 on create and on move; a trashed root takes
+      no tree operation. Each is decided under the scope lock, then the share row's.
+    coverage:
+      backend:
+        integration: [ShareNodesCoreSliceTest.aGuestCreatesAFolderAndANestedNodeAndAMemberListsThem, ShareNodesCoreSliceTest.aGuestMovesAndRenamesInsideTheSubtree, ShareNodesCoreSliceTest.aStalePlacementVersionIsAConflictAndWritesNothing, ShareNodesCoreSliceTest.anEpochAboveTheCurrentIsStaleAndStoresNothing, ShareNodesCoreSliceTest.anEpochBelowTheCurrentIsStoredAsSentWithNoPayload, ShareNodesCoreSliceTest.aTakenSlugIsAConflictOnCreateAndOnMove, ShareNodesCoreSliceTest.aGuestNeverMovesANodeOutOfTheSubtreeTheRootOrIntoACycle, ShareNodesCoreSliceTest.aGuestCreatesNothingOutsideTheSubtree, ShareNodesCoreSliceTest.aGuestNeverRenamesTheShareRoot, ShareNodesCoreSliceTest.aTrashedShareRootTakesNoTreeOperation, ShareNodesSliceTest.aGuestMovesAMemoryBetweenTwoSubfoldersOfASharedFolder, ShareNodeRaceCoreSliceTest.aGuestMoveIntoAFolderAMemberMovesOutOfTheSubtreeMeanwhileIsRefused, ShareNodeRaceCoreSliceTest.aGuestCreateUnderAParentAMemberTrashesMeanwhileIsRefused, ShareNodeRaceCoreSliceTest.aRevokedOrDeletedLinkNeverAcceptsAGuestWriteMeanwhile, ShareNodeRaceCoreSliceTest.aGuestWriteAndAReactivationOfTheLinkBothLandWithoutADeadlock]
+      web:
+        unit: [src/core/sharing/guestTree.wire.test.ts, src/core/sharing/FolderShareBody.test.ts]
+        e2e: [src/features/memory/folderShareGuest.e2e.test.ts]
+    gaps:
+      - surface: web
+        reason: >-
+          The guest page offers "New folder" only: no move or rename control exists (inbox #358), so a guest's
+          placement is proven through placeShareNodeAsGuest by the wire test and the e2e, not through a screen.
+  - id: guest-tree-refusals
+    text: >-
+      Inside an application's container the application decides, and Memories declares nothing: a guest's create
+      inside a Memory, a chapter moved out of or into a Memory, and a chapter renamed are 422 illegal_scope, while
+      the guest still reads all of it; a Memory- or chapter-rooted link gains no tree operation; a kind
+      NodeKindRules does not place under a folder is 422 illegal_structure; a READ or WRITE_ONLY link does none
+      (403 share_not_contributable).
+    coverage:
+      backend:
+        integration: [ShareNodesSliceTest.insideAMemoryAGuestWritesNothingAndReadsEverything, ShareNodesSliceTest.aGuestCannotMoveAChapterOutOfAMemory, ShareNodesSliceTest.aMemoryRootedLinkGainsNoTreeOperation, ChapterShareSliceTest.aChapterGuestDoesNoTreeOperation, ShareNodesCoreSliceTest.aKindNodeKindRulesDoesNotAdmitUnderTheFolderIsRefused, ShareNodesCoreSliceTest.aWriteOnlyOrAReadGuestDoesNoTreeOperation, ShareNodesCoreSliceTest.theGateRefusesAsTheOtherGuestWritesDo]
+      web:
+        unit: [src/core/sharing/guestTree.wire.test.ts]
+        e2e: [src/features/memory/folderShareGuest.e2e.test.ts]
+    gaps:
+      - surface: backend
+        reason: >-
+          The illegal_structure case is proven in core alone, with a MEMORY no rule places; a CHAPTER created
+          directly under a folder with Memories registered (FolderGuestNodeRules allows, MemoryNodeKindRules
+          refuses) is read from the code, not asserted by a test.
