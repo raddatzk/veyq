@@ -12,6 +12,13 @@
 // Claimed by `register.ts` for both Memories root kinds — a Memory and a chapter, whose share opens the same way: the
 // root's `K_mem` from the wrap, its title from the share's sealed name, the chapters below it — for every role (a WRITE_ONLY share is the drop), the order the shell
 // runs the gates in is password -> terms -> name -> content, and this body starts at "name".
+//
+// **Embedded** (`subtreeRoot`, cr-node-key-hierarchy 5b.4b): core's folder body renders this one for a Memory or chapter
+// BELOW a shared folder. It then shows that node — its name and key from the chain, its media and chapters only — and
+// not the share's note (the folder body shows it once). The rights follow the link's role down (ADR 0080 Decision 6,
+// 5a.5): a READ_WRITE guest adds photos here, every upload naming this node as its target; a READ guest only looks.
+// The guest is named once per link, under the share ROOT's key (`nameShareGuest`) and only when it first adds a photo —
+// no pre-screen in front of a node it browsed into; a session the folder body already saved is reused.
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
@@ -30,7 +37,8 @@ import {
   type ContributorSession,
 } from '../share'
 import { pickLocaleText, type PublicShareHead } from '../../../core/sharing/resolvePublicShare'
-import { loadGuestSession, saveGuestSession } from '../../../core/sharing/guestIdentity'
+import { loadGuestSession, saveGuestSession, nameShareGuest } from '../../../core/sharing/guestIdentity'
+import ShareNameDialog from '../../../core/sharing/ShareNameDialog.vue'
 import { unsealMeta, effectiveCapturedAt, hasDerivatives, downloadRef, type MediaItem } from '../media'
 import { collectPickedFiles, inferMediaType, enqueueUploads, retryFile, removeFile } from '../uploadQueue'
 import { useOptimisticTiles, type OptimisticTileVM } from '../useOptimisticTiles'
@@ -51,6 +59,7 @@ const props = defineProps<{
   pwToken: string | undefined
   head: PublicShareHead
   reload: () => Promise<void>
+  subtreeRoot?: { nodeId: string; key: Uint8Array; name: string }
 }>()
 const emit = defineEmits<{ unavailable: [] }>()
 
@@ -58,10 +67,14 @@ const { t, locale } = useI18n()
 
 // A share's id never changes under a mounted body (the shell re-mounts per route).
 const shareId = props.shareId
-const memoryName = computed(() => props.head.name)
+// Embedded for one node below the share root (see the header) — fixed for a mounted body: the folder body re-mounts per node.
+const embeddedRoot = props.subtreeRoot
+const memoryName = computed(() => embeddedRoot?.name ?? props.head.name)
+// The upload group: the share, or the embedded node within it, so another Memory of the link shows none of its tiles.
+const uploadGroup = embeddedRoot ? `${shareId}:${embeddedRoot.nodeId}` : shareId
 // cr-0115: the optional curator note (a message the sharer attached), picked for the viewer's locale (cr-0116) and
 // rendered as markdown (the safe escape-first subset — no raw HTML/script survives, so v-html is safe).
-const note = computed(() => pickLocaleText(props.head.noteByLocale, locale.value))
+const note = computed(() => (embeddedRoot ? '' : pickLocaleText(props.head.noteByLocale, locale.value)))
 const renderedNote = computed(() => (note.value ? renderMarkdown(note.value) : ''))
 
 const items = ref<ShareItem[]>([])
@@ -73,7 +86,7 @@ const shareById = computed(() => new Map(items.value.map((si) => [si.item.mediaI
 const listedMediaIds = computed(() => new Set(items.value.map((si) => si.item.mediaId)))
 // Optimistic in-grid upload tiles (cr-0074) — the SAME shared composable as the internal gallery, grouped by
 // this shareId: a contributor's picked photos appear instantly with a progress ring, reconciled once listed.
-const { optimisticTiles, donorPreviewFor } = useOptimisticTiles(computed(() => shareId), listedMediaIds)
+const { optimisticTiles, donorPreviewFor } = useOptimisticTiles(computed(() => uploadGroup), listedMediaIds)
 // The thumbnail pipeline (cr-0150) — the SAME decrypt-per-tile → object-URL map as the internal gallery, here
 // keyed on the share's per-item K_mem and gated presign (`openShareGrid`); the single revoke owner of every thumb.
 const pipeline = useThumbnailPipeline<ShareItem>({
@@ -135,7 +148,12 @@ const session = ref<ContributorSession | null>(loadGuestSession<ContributorSessi
 const sealKey = computed(() => (session.value && access.value ? sessionSealKey(session.value, access.value) : null))
 // A READ_WRITE or WRITE_ONLY share shows a mandatory name pre-screen until the visitor has named themselves — and
 // again for an uploader session saved without its own key, which has nothing to seal with.
-const needsName = computed(() => canContribute.value && !sealKey.value)
+// Embedded, the guest is asked at its first photo instead (`askName`), never by a pre-screen.
+const needsName = computed(() => !embeddedRoot && canContribute.value && !sealKey.value)
+const askName = ref(false)
+async function nameEmbeddedGuest(name: string) {
+  session.value = await nameShareGuest(props.head, { name, fragmentKey: props.fragmentKey, pwToken: props.pwToken })
+}
 const displayName = ref('')
 const naming = ref(false)
 const nameError = ref(false)
@@ -163,6 +181,13 @@ async function submitName() {
 const fileInput = ref<HTMLInputElement | null>(null)
 let cancelPickWindow: (() => void) | null = null
 function triggerAddPhotos() {
+  if (embeddedRoot && !sealKey.value) {
+    session.value ??= loadGuestSession<ContributorSession>(shareId) // the folder body may have named the guest since
+    if (!sealKey.value) {
+      askName.value = true
+      return
+    }
+  }
   fileInput.value?.click()
 }
 function onFilesPicked() {
@@ -177,7 +202,12 @@ function enqueueBatch(picked: File[]) {
   const scopeId = shareScopeId.value
   if (!s || !key) return
   enqueueUploads(
-    { key: shareId, upload: (source, opts) => addSharePhoto({ shareId, scopeId, sealKey: key, ...s, pwToken: props.pwToken }, source, undefined, opts) },
+    {
+      key: uploadGroup,
+      // Embedded: the target is this node (5a.5); at the root no target is named, as before.
+      upload: (source, opts) =>
+        addSharePhoto({ shareId, scopeId, sealKey: key, ...s, pwToken: props.pwToken, ...(embeddedRoot ? { nodeId: embeddedRoot.nodeId } : {}) }, source, undefined, opts),
+    },
     picked.map((file) => ({ file, mediaType: inferMediaType(file) })),
     // READ_WRITE: re-resolve so the contributed photo lists. WRITE_ONLY: never re-resolve (the resolve serves the
     // uploader no media) — the done optimistic tile stays as the session-only own-view from its local preview.
@@ -249,7 +279,7 @@ watch(
     listing.catch(() => {}) // awaited below, unless the keys fail to open first
     let opened
     try {
-      opened = openSharedMemory(head)
+      opened = openSharedMemory(head, undefined, embeddedRoot)
     } catch {
       emit('unavailable') // a response the fragment key does not open: the shell shows its honest unavailable state
       return
@@ -257,7 +287,7 @@ watch(
     access.value = opened.access
     let withMedia
     try {
-      withMedia = openSharedMemory(head, await listing)
+      withMedia = openSharedMemory(head, await listing, embeddedRoot)
     } catch {
       if (props.head === head) emit('unavailable') // the link went away between its resolve and this read
       return
@@ -417,6 +447,18 @@ onBeforeUnmount(() => {
     :meta-resolver="metaResolver"
     :video-chunk-provider="videoChunkProvider"
     @close="lightboxIndex = null"
+  />
+
+  <!-- Embedded: the guest names itself once per link, at its first photo (the folder body's dialog). -->
+  <ShareNameDialog
+    v-if="askName"
+    :title="t('share.folder.guestNameTitle')"
+    :label="t('share.yourName')"
+    :submit-label="t('share.join')"
+    :hint="t('share.folder.guestNameHint')"
+    :action="nameEmbeddedGuest"
+    :error-text="() => t('share.joinFailed')"
+    @close="askName = false"
   />
 </template>
 

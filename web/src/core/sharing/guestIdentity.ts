@@ -7,6 +7,7 @@ import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64url } from '@veyq/crypto/base64'
 import { publicSharesApi } from '../../api/client'
 import type { PublicShareHead } from './resolvePublicShare'
+import { openShareRoot } from './shareTree'
 
 /** A guest's display name, sealed bound to (scope, share, identity) (cr-0101, ADR 0072): under the shared root's key for
  *  a READ_WRITE guest, under its own `K_up` for an uploader. Who reads it opens it with the same context. */
@@ -38,6 +39,20 @@ export async function createGuestIdentity(
     xShareWrite: b64std(v1.shareWriteToken(fromB64url(fragmentKey), shareId)),
   })
   return { identityId, contributorToken }
+}
+
+/**
+ * Name the guest of a READ_WRITE link once for every body of it (cr-node-key-hierarchy 5b.4b): {@link createGuestIdentity}
+ * under the SHARE ROOT's key — whichever body asks first, so a folder link's guest is named under the folder's key even
+ * when its first write is in a Memory below — and saved as the link's one session ({@link saveGuestSession}). A member
+ * opens the name through the chain (the node's key or one of its ancestors', `features/memory/mediaBuckets.ts`).
+ */
+export async function nameShareGuest(
+  head: PublicShareHead, { name, fragmentKey, pwToken }: { name: string; fragmentKey: string; pwToken?: string },
+): Promise<GuestIdentity> {
+  const identity = await createGuestIdentity(head, openShareRoot(head).key, { name, fragmentKey, pwToken })
+  saveGuestSession(head.shareId, identity)
+  return identity
 }
 
 // --- the guest's session on its device -------------------------------------------------------------------------------

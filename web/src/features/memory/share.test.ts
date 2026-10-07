@@ -889,3 +889,64 @@ describe('a chapter share (ADR 0080 Decision 13)', () => {
     expect(resolved.access).toMatchObject({ kind: 'drop', nodeId: CHAPTER_ID })
   })
 })
+
+describe('openSharedMemory embedded below a shared folder (cr-node-key-hierarchy 5b.4b)', () => {
+  const FOLDER = '5c09e000-0000-4000-8000-0000000f0001'
+  const SIBLING = '5c09e000-0000-4000-8000-0000000f0002'
+  const MEDIA_3 = '5c09e000-0000-4000-8000-00000000ae03'
+  const contentKey = (kek: Uint8Array, nodeId: string, k: Uint8Array) =>
+    b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId, epoch: 0, placementVersion: 0 }, kek, k))
+  const kShare = v1.randomBytes(32)
+  const folderKey = v1.randomBytes(32)
+  const memoryKey = v1.randomBytes(32)
+  const chapterKey = v1.randomBytes(32)
+  const siblingKey = v1.randomBytes(32)
+  const child = (id: string, parentId: string, kind: string, parentKey: Uint8Array, key: Uint8Array, name: string) =>
+    ({ id, parentId, kind, epoch: 0, placementVersion: 0, wrappedContentKey: contentKey(parentKey, id, key), encryptedName: nodeName(parentKey, id, name) })
+  const head = {
+    shareId: 'S'.repeat(43), kShare, scopeId: SCOPE_ID, name: 'Familie', noteByLocale: { en: 'Hello' }, role: ShareRole.ReadWrite, rootKind: 'FOLDER',
+    share: {
+      role: ShareRole.ReadWrite, scopeId: SCOPE_ID, passwordRequired: false, rootKind: 'FOLDER',
+      wrap: b64std(v1.seal({ purpose: 'share-key' }, kShare, folderKey)),
+      nodes: [
+        { id: FOLDER, parentId: null, kind: 'FOLDER', epoch: 0 },
+        child(NODE_ID, FOLDER, 'MEMORY', folderKey, memoryKey, 'Trip'),
+        child(CHAPTER_ID, NODE_ID, 'CHAPTER', memoryKey, chapterKey, 'Day 1'),
+        child(SIBLING, FOLDER, 'MEMORY', folderKey, siblingKey, 'Other trip'),
+      ],
+    } as PublicShare,
+  }
+  const listing: ShareMediaListing = {
+    media: [
+      { nodeId: NODE_ID, mediaId: MEDIA_1, blobId: 'b1', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta: sealMeta(memoryKey, MEDIA_1, { v: 1, w: 1600, h: 1200 }) },
+      { nodeId: CHAPTER_ID, mediaId: MEDIA_2, blobId: 'b2', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta: sealMeta(chapterKey, MEDIA_2, { v: 1, w: 800, h: 600 }) },
+      { nodeId: SIBLING, mediaId: MEDIA_3, blobId: 'b3', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta: sealMeta(siblingKey, MEDIA_3, { v: 1, w: 640, h: 480 }) },
+    ],
+    identities: [],
+  }
+
+  it("lists the embedded Memory and its chapters only, under the chain's keys, with the Memory's key as access", () => {
+    const opened = openSharedMemory(head, listing, { nodeId: NODE_ID, key: memoryKey })
+    expect(opened.access).toEqual({ kind: 'read', memoryKey })
+    const byId = new Map(opened.items.map((i) => [i.item.mediaId, i]))
+    expect([...byId.keys()].sort(), "the sibling Memory's media are not this body's").toEqual([MEDIA_1, MEDIA_2].sort())
+    const own = byId.get(MEDIA_1)!
+    expect(unsealMeta(SCOPE_ID, own.memoryKey, own.item)).toMatchObject({ w: 1600 })
+    expect(own.chapterName, "a media on the embedded Memory itself carries no chapter title (not the Memory's name)").toBeNull()
+    const inChapter = byId.get(MEDIA_2)!
+    expect(unsealMeta(SCOPE_ID, inChapter.memoryKey, inChapter.item)).toMatchObject({ w: 800 })
+    expect(inChapter.chapterName).toBe('Day 1')
+    expect(Object.fromEntries(opened.chapterNames), 'only the chapters below the embedded Memory').toEqual({ [CHAPTER_ID]: 'Day 1' })
+  })
+
+  it('at the share root (no embedded node) every media of the subtree lists, as before', () => {
+    const opened = openSharedMemory(head, listing)
+    expect(opened.access).toEqual({ kind: 'read', memoryKey: folderKey })
+    expect(opened.items.map((i) => i.item.mediaId).sort()).toEqual([MEDIA_1, MEDIA_2, MEDIA_3].sort())
+    expect(opened.items.find((i) => i.item.mediaId === MEDIA_1)!.chapterName).toBe('Trip')
+  })
+
+  it('an embedded node the walk did not open is a share this body cannot open', () => {
+    expect(() => openSharedMemory(head, listing, { nodeId: '5c09e000-0000-4000-8000-0000000f0009', key: memoryKey })).toThrow(ShareUnavailableError)
+  })
+})

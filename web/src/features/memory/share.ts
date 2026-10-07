@@ -209,13 +209,17 @@ export function sessionSealKey(session: ContributorSession, access: ShareAccess)
 /** The share-scoped upload transport (no auth) — reserve via `startShareBlobUploads`, sign each next window via
  *  `presignShareBlobUploadWindows` (the link's gate again, so a revoked link stops the upload there), complete via
  *  `completeShareMedia`. */
-function shareUploadTransport(shareId: string, contributorToken: string, pwToken?: string): MediaUploadTransport {
+function shareUploadTransport(shareId: string, contributorToken: string, pwToken?: string, nodeId?: string): MediaUploadTransport {
+  // The target (5a.5): a Memory or chapter below the share root, named on every start, window and completion — one target
+  // per request. Absent for the root itself, so a root-level upload sends exactly what it always did.
+  const target = nodeId === undefined ? {} : { nodeId }
   return {
     async reserve(declares) {
       const started = await publicSharesApi().startShareBlobUploads({
         shareId,
         shareBlobUploadsRequest: {
           contributorToken,
+          ...target,
           // A contributor uploads media only — never a cover — so ORIGINAL/THUMBNAIL/PREVIEW is the whole role set.
           items: declares.map((d) => ({ ...d, role: d.role as ShareBlobUploadRequestItemRoleEnum })),
         },
@@ -231,7 +235,7 @@ function shareUploadTransport(shareId: string, contributorToken: string, pwToken
     async window(uploadId, fromChunk) {
       const signed = await publicSharesApi().presignShareBlobUploadWindows({
         shareId,
-        shareBlobUploadWindowsRequest: { contributorToken, items: [{ uploadId, fromChunk }] },
+        shareBlobUploadWindowsRequest: { contributorToken, ...target, items: [{ uploadId, fromChunk }] },
         xSharePassword: pwToken, // cr-0164
       })
       return windowPuts(signed.results[0])
@@ -241,6 +245,7 @@ function shareUploadTransport(shareId: string, contributorToken: string, pwToken
         shareId,
         shareMediaBatchRequest: {
           contributorToken,
+          ...target,
           items: [{
             mediaId: media.mediaId,
             originalUploadId: media.originalUploadId,
@@ -263,15 +268,20 @@ function shareUploadTransport(shareId: string, contributorToken: string, pwToken
  * `K_mem` for a contributor, the guest's own `K_up` for an uploader) with its derivatives + metadata and upload it
  * via the share-scoped endpoints — the exact same operator-blind pipeline as the curator's `addMedia`, only the
  * transport is share-gated. Returns the new blob + media ids.
+ *
+ * `nodeId` targets a Memory or chapter BELOW the share root (a folder link's Memory, a Memory link's chapter — 5a.5,
+ * ADR 0080 Decision 6); `sealKey` is then that node's key from the chain, never the root's. Omitted, the upload lands on
+ * the root, as every upload did before.
  */
 export async function addSharePhoto(
-  session: ContributorSession & { shareId: string; scopeId: string; sealKey: Uint8Array; pwToken?: string },
+  session: ContributorSession & { shareId: string; scopeId: string; sealKey: Uint8Array; pwToken?: string; nodeId?: string },
   source: AddMediaSource,
   deriver: MediaDeriver = createBrowserDeriver(),
   opts: AddMediaOptions = {},
 ): Promise<{ blobId: string; mediaId: string }> {
   return uploadMediaVia(
-    session.scopeId, session.sealKey, source, deriver, shareUploadTransport(session.shareId, session.contributorToken, session.pwToken), opts,
+    session.scopeId, session.sealKey, source, deriver,
+    shareUploadTransport(session.shareId, session.contributorToken, session.pwToken, session.nodeId), opts,
   )
 }
 
@@ -340,6 +350,10 @@ function shareMediaToItem(m: ShareMedia, uploader: MediaItem['uploader']): Media
  *  the shared root it could open (ADR 0080 Decision 2; empty for a WRITE_ONLY link, which holds no key to open one). */
 export type OpenedMemory = { access: ShareAccess; items: ShareItem[]; chapterNames: Map<string, string> }
 
+/** The node a container's body embeds this one for (`ShareBodyProps.subtreeRoot`): a Memory or chapter below the share
+ *  root, and its key as the chain opened it. */
+export type SubtreeRoot = { nodeId: string; key: Uint8Array }
+
 /** No media and no uploader key: what a WRITE_ONLY link is served, and the listing before it is read. */
 export const NO_SHARE_MEDIA: ShareMediaListing = { media: [], identities: [] }
 
@@ -366,8 +380,12 @@ export async function listShareMedia(shareId: string, role: ShareRole, pwToken?:
  * the keys alone — what the body needs before the listing lands (a contributor's name gate reads the access). Throws
  * [ShareUnavailableError] when the response cannot be opened (a server that served a share without the wrap or drop key
  * the role needs, or one that does not open under the fragment key).
+ *
+ * With a [root] (a container's body embeds this one below its share root — a folder link's Memory, cr-node-key-hierarchy
+ * 5b.4b), the chain is still walked from the share root, but only that node and its descendants are listed: its media
+ * open under the keys of the chain, its own carry no chapter title, and `access.memoryKey` is the root's key.
  */
-export function openSharedMemory(head: PublicShareHead, listing: ShareMediaListing = NO_SHARE_MEDIA): OpenedMemory {
+export function openSharedMemory(head: PublicShareHead, listing: ShareMediaListing = NO_SHARE_MEDIA, root?: SubtreeRoot): OpenedMemory {
   const { share, kShare, scopeId } = head
   // ADR 0031 point 7: a WRITE_ONLY link opens the drop public key and nothing else. It never unwraps `K_mem`, even
   // from a row that still carries a wrap, and it is served no media to key.
@@ -382,8 +400,14 @@ export function openSharedMemory(head: PublicShareHead, listing: ShareMediaListi
     return { access: { kind: 'drop', nodeId: share.nodeId, dropPublicKey }, items: [], chapterNames: new Map() }
   }
 
-  const rootKmem = openShareRoot(head).key // READ / READ_WRITE only (guarded above)
-  const { keys, names } = walkSubtree(scopeId, share.nodes, rootKmem)
+  const shareRootKey = openShareRoot(head).key // READ / READ_WRITE only (guarded above)
+  const { keys, names, nodes } = walkSubtree(scopeId, share.nodes, shareRootKey)
+  // Embedded below a container's share (a folder link's Memory): only that node and what hangs below it, keyed by the
+  // chain the walk opened. A root the walk did not reach is a share this body cannot open.
+  const within = root ? subtreeOf(nodes, root.nodeId) : null
+  if (root && !keys.has(root.nodeId)) throw new ShareUnavailableError('not_found')
+  const rootId = root?.nodeId
+  const rootKmem = root?.key ?? shareRootKey
   // A media a WRITE_ONLY guest added opens through its node's drop key and its identity's wrapped key: the resolve's
   // node carries the one, the listing's identities the other (ADR 0031 point 7). That list is all a guest is told
   // about any identity — never a name, which is for the Memory's members (ADR 0030 point 8).
@@ -391,13 +415,32 @@ export function openSharedMemory(head: PublicShareHead, listing: ShareMediaListi
   const wrapped = new Map(listing.identities.map((i) => [i.identityId, i.wrappedIdentityKey]))
   const items: ShareItem[] = []
   for (const m of listing.media) {
+    if (within && !within.has(m.nodeId)) continue // a media of another node of the container's share
     const memoryKey = keys.get(m.nodeId)
     if (!memoryKey) continue // a media under a chapter whose K_mem didn't open — skip
     const owner = m.identityId ? `share:${m.identityId}` : undefined
     const uploader = uploaderOriginOf(owner, m.nodeId, dropKeyOf.get(m.nodeId), wrapped)
-    items.push({ item: shareMediaToItem(m, uploader), memoryKey, scopeId, chapterName: names.get(m.nodeId) ?? null })
+    // The embedded root's own media carry no chapter title: its name is the body's heading, not a chapter's.
+    const chapterName = m.nodeId === rootId ? null : (names.get(m.nodeId) ?? null)
+    items.push({ item: shareMediaToItem(m, uploader), memoryKey, scopeId, chapterName })
   }
-  return { access: { kind: 'read', memoryKey: rootKmem }, items, chapterNames: names }
+  const chapterNames = within ? new Map([...names].filter(([id]) => within.has(id) && id !== rootId)) : names
+  return { access: { kind: 'read', memoryKey: rootKmem }, items, chapterNames }
+}
+
+/** `rootId` and every node the walk opened below it, through the served `parentId`s. */
+function subtreeOf(nodes: ReadonlyMap<string, { parentId?: string | null }>, rootId: string): Set<string> {
+  const within = new Set([rootId])
+  for (let grew = true; grew; ) {
+    grew = false
+    for (const [id, n] of nodes) {
+      if (!within.has(id) && n.parentId != null && within.has(n.parentId)) {
+        within.add(id)
+        grew = true
+      }
+    }
+  }
+  return within
 }
 
 /**
