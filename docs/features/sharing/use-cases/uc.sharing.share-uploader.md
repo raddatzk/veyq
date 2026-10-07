@@ -8,6 +8,9 @@
   operator-blind.
 - **Preconditions:** an **authenticated, unlocked** curator; the target Memory is in the caller's **personal scope**
   (v1 restriction); the caller can open it (holds `K_mem`).
+- **Share roots today:** an uploader link can be rooted at a **Memory** or a **chapter** (sealed to the chapter's
+  own drop key, its photos land in the chapter — [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) decision 13), never at a folder (`422`). This
+  use-case walks the Memory case; what each root kind allows is the [role matrix](../../../apps/memories.md#what-a-guest-may-do--the-role-matrix).
 - **Postconditions (success):** a share record with **role WRITE_ONLY** exists (opaque), and a link
   `/s/{shareId}#k=<K_share>` lets any anonymous visitor **add photos** (after naming themselves) that append to the
   Memory — visible to the curator in *their* gallery. The uploader sees **only the photos they add this session**

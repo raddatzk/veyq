@@ -173,7 +173,8 @@ async function onMutationDone() {
   await loadTree()
 }
 /** A restore puts a whole subtree back, so the tree is refetched exactly as a delete refetches it — no local
- *  splice. The position stays where it is: the restored node reappears wherever it belonged. */
+ *  splice. The position stays where it is: the restored node reappears wherever it belonged. The open trash dialog
+ *  re-reads its list when the new tree reaches its `tree` prop (a descendant left behind is a root then, inbox #357). */
 async function onTrashRestored() {
   await loadTree()
 }
@@ -271,6 +272,7 @@ async function onDeleteDone() {
       :memory-key="memoryKey"
       :epochs="epochs"
       :memory-name="currentNode.name"
+      :node-kind="currentNode.kind"
       @close="shareVisible = false"
     />
     <!-- A folder is core's kind, so its share dialog is core's: READ / READ_WRITE, no uploader variant (5b.3). -->
@@ -293,6 +295,7 @@ async function onDeleteDone() {
       :memory-key="memoryKey"
       :epochs="epochs"
       :memory-name="currentNode.name"
+      :node-kind="currentNode.kind"
       @close="uploaderVisible = false"
     />
   </div>

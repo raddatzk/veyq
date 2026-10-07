@@ -57,6 +57,42 @@ const mountList = () =>
     global: { plugins: [realI18n()], stubs },
   })
 
+// cr-node-key-hierarchy 5b.5: a chapter is a share root of its own, so the dialog on one says "chapter", not "Memory";
+// the uploader variant keeps its own copy.
+describe('ShareDialog — the wording follows the shared node\'s kind', () => {
+  const mountKind = (nodeKind: string | undefined, uploader = false) =>
+    mount(ShareDialog, {
+      props: { scopeId: SCOPE_ID, nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), epochs: EPOCHS, memoryName: 'Tag 2', nodeKind, uploader },
+      global: { plugins: [realI18n()], stubs },
+    })
+
+  it('a chapter is shared as "this chapter"', async () => {
+    listSharesFor.mockResolvedValue([])
+    const w = mountKind('CHAPTER')
+    await flushPromises()
+    expect(w.text()).toContain(t('share.chapterIntro'))
+    expect(w.text()).not.toContain(t('share.intro'))
+    expect(w.html(), 'the header (the Dialog stub carries it as an attribute)').toContain(t('share.chapterTitle'))
+  })
+
+  it.each([['MEMORY'], [undefined]])('a Memory (%s) keeps the Memory wording', async (kind) => {
+    listSharesFor.mockResolvedValue([])
+    const w = mountKind(kind)
+    await flushPromises()
+    expect(w.text()).toContain(t('share.intro'))
+    expect(w.html()).toContain(t('share.title'))
+    expect(w.html()).not.toContain(t('share.chapterTitle'))
+  })
+
+  it('the uploader variant on a chapter keeps its own copy', async () => {
+    listSharesFor.mockResolvedValue([])
+    const w = mountKind('CHAPTER', true)
+    await flushPromises()
+    expect(w.text()).toContain(t('share.uploaderDialogCopy'))
+    expect(w.html()).not.toContain(t('share.chapterTitle'))
+  })
+})
+
 describe('ShareDialog — expiry display (cr-share-link-expiry-ui)', () => {
   it('shows the expiry line for a share with expiresAt, and only for that one', async () => {
     listSharesFor.mockResolvedValue([

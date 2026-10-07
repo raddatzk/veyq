@@ -74,8 +74,8 @@ vi.mock('../features/memory/components/ShareDialog.vue', async () => {
   const { defineComponent, h } = await import('vue')
   return {
     default: defineComponent({
-      props: { nodeId: String, uploader: Boolean, memoryName: String, memoryKey: Uint8Array },
-      setup: (p) => () => h('div', { class: 'share-stub', 'data-name': p.memoryName, 'data-key': String(p.memoryKey?.[0]) },
+      props: { nodeId: String, uploader: Boolean, memoryName: String, memoryKey: Uint8Array, nodeKind: String },
+      setup: (p) => () => h('div', { class: 'share-stub', 'data-name': p.memoryName, 'data-key': String(p.memoryKey?.[0]), 'data-kind': p.nodeKind },
         `${p.nodeId}|${p.uploader ? 'uploader' : 'viewer'}`),
     }),
   }
@@ -175,6 +175,8 @@ describe('MemoryHomeView over the real registry', () => {
     expect(dialogs.map((s) => s.text())).toEqual(['day1|viewer', 'day1|uploader'])
     expect(dialogs.map((s) => s.attributes('data-name'))).toEqual(['Day1', 'Day1'])
     expect(dialogs.map((s) => s.attributes('data-key')), "the chapter's own key, not its Memory's (9)").toEqual(['7', '7'])
+    // the node's kind travels with it, so the application's dialog can say "chapter" (5b.5)
+    expect(dialogs.map((s) => s.attributes('data-kind'))).toEqual(['CHAPTER', 'CHAPTER'])
   })
 
   it('hides the share affordance when the instance turns public links off, even for a shareable kind', async () => {

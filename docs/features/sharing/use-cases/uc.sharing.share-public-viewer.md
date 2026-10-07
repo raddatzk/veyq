@@ -7,6 +7,10 @@
   link can open — while the server stays operator-blind and the rest of your content stays private.
 - **Preconditions:** an **authenticated, unlocked** curator; the target Memory is in the caller's **personal scope**
   (v1 restriction); the caller can open it (holds `K_mem`).
+- **Share roots today:** a viewer link can be rooted at a **Memory**, a **chapter** or a **folder**
+  ([ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) decisions 9 and 13); it shows that node and what lies below it, never what is beside or above
+  it. This use-case walks the Memory case; the other roots take the same steps with that node's own key. What each
+  role may do per root kind is the [role matrix](../../../apps/memories.md#what-a-guest-may-do--the-role-matrix).
 - **Postconditions (success):** a share record exists server-side (opaque), and a link `/s/{shareId}#k=<K_share>` opens
   the Memory subtree read-only for any anonymous visitor — until the curator revokes it or it expires. Operator-blind
   throughout: the server never sees `K_share`, `K_mem`, any name, the viewer, or which media the viewer opens.
@@ -77,9 +81,10 @@ sequenceDiagram
 - **Operator-blind.** The server stores only `shareId`, the wrap `symWrap(K_share, K_mem)`, the plaintext `role`,
   the `K_share`-sealed name, and `nodeId`. It never sees `K_share`, `K_mem`, a name, the viewer, or — because
   blobs are fetched direct-from-store — **which media a viewer opens**.
-- **Least-privilege, crypto-enforced.** A share exposes **only that one Memory subtree**: `K_mem` is random and
-  independently wrapped, so the link reveals neither `K_SC` (the rest of the scope) nor any sibling Memory's
-  `K_mem` ([ADR 0012](../../../decisions/0012-content-key-hierarchy.md)).
+- **Least-privilege, crypto-enforced.** A share exposes **only the subtree under its root** (a Memory, a chapter or
+  a folder): every node's key is random and independently wrapped, so the link reveals neither `K_SC` (the rest of
+  the scope) nor the key of anything beside or above its root ([ADR 0012](../../../decisions/0012-content-key-hierarchy.md),
+  [ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) decisions 1 and 9).
 - **Client-integrity trust tier ([ADR 0026](../../../decisions/0026-client-trust-tiers.md)).** The crypto keeps
   the operator blind, but a **no-install viewer is served as operator-controlled web code** — so against an
   **actively malicious, foreign** operator, confidentiality depends on client integrity (it could serve tampered

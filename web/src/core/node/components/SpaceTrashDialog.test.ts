@@ -100,7 +100,11 @@ describe('SpaceTrashDialog', () => {
     expect(wrapper.text()).toContain(t('memory.spaceTrash.empty'))
   })
 
-  it('restores a row, drops it from the list, and asks the host to refetch the tree', async () => {
+  // Changed deliberately in cr-node-key-hierarchy 5b.5 (inbox #357): this used to assert only that the row is filtered
+  // out locally. The list is now read again once the host has reloaded the tree — a descendant left in the trash (its
+  // name was freed by an earlier delete) becomes a root of its own, and its name opens only under the parent the
+  // reloaded tree holds — so the order is part of the contract: restore → `restored` → host's tree → re-read.
+  it('restores a row, asks the host to refetch the tree, and re-reads the list against the RELOADED tree', async () => {
     vi.mocked(listTrash).mockResolvedValue([ROW])
     const wrapper = mountDialog()
     await settle(wrapper)
@@ -112,6 +116,32 @@ describe('SpaceTrashDialog', () => {
     expect(restoreNode).toHaveBeenCalledWith(SCOPE, EPOCHS, TREE, expect.objectContaining({ id: 'n1' }), undefined)
     expect(wrapper.text()).not.toContain('Rom 2026')
     expect(wrapper.emitted('restored')).toHaveLength(1)
+    // not re-read against the old tree: the restored parent is not in it yet
+    expect(listTrash).toHaveBeenCalledTimes(1)
+
+    // the host reloads the tree: now the list is read again, against the new tree, and the left-behind child shows
+    const RELOADED: TreeNode[] = [{ id: 'n1', parentId: null, kind: 'MEMORY', orderIndex: 0, epoch: 0, name: 'Rom 2026', wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 }]
+    const CHILD: TrashedNode = { ...ROW, id: 'c1', parentId: 'n1', kind: 'CHAPTER', name: 'Tag 2' }
+    vi.mocked(listTrash).mockResolvedValue([CHILD])
+    await wrapper.setProps({ tree: RELOADED })
+    await settle(wrapper)
+
+    expect(listTrash).toHaveBeenCalledTimes(2)
+    expect(listTrash).toHaveBeenLastCalledWith(SCOPE, EPOCHS, RELOADED)
+    expect(wrapper.text()).toContain('Tag 2')
+    expect(wrapper.text()).not.toContain('Rom 2026')
+  })
+
+  it('a re-read that fails after a restore says so instead of showing an empty trash', async () => {
+    vi.mocked(listTrash).mockResolvedValueOnce([ROW]).mockRejectedValueOnce(new Error('OpenRefused'))
+    const wrapper = mountDialog()
+    await settle(wrapper)
+    await restoreButton(wrapper).trigger('click')
+    await settle(wrapper)
+    await wrapper.setProps({ tree: [...TREE] })
+    await settle(wrapper)
+
+    expect(wrapper.text()).toContain(t('memory.spaceTrash.loadFailed'))
   })
 
   /**

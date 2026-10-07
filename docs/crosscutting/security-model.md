@@ -100,7 +100,7 @@ request the **user** turned on, straight to the chosen provider.
   plus its `bucket_id` and the bucket rows' shape: node, parentage, `is_primary`, per-bucket counts; the
   bucket/uploader **names stay sealed** under `K_mem` — a WRITE_ONLY guest's under its own key, [ADR 0034](../decisions/0034-media-uploader-buckets.md),
   [ADR 0031](../decisions/0031-uploader-public-share.md) point 7);
-  per-parent blinded tokens; to a **public share's guest**, the shared Memory's **scope id** — every `K_mem` seal the
+  per-parent blinded tokens; to a **public share's guest**, the shared node's **scope id** — every `K_mem` seal the
   viewer opens is bound to it ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md)), so it rides with the
   subtree, and two links into one space are therefore linkable by anyone holding both (the ids of the shared
   node and its media already made the subtree linkable; the scope id extends that to sibling Memories of one
@@ -190,7 +190,8 @@ flowchart TB
 ```
 
 - **Cheap grants, scoped shares.** Adding a member = one seal of the scope's current content-epoch key to
-  their identity. A public share = one Memory's content key wrapped to a per-share key. **Revoking a member
+  their identity. A public share = one node's content key (a Memory's, a chapter's or a folder's —
+  [ADR 0080](../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)) wrapped to a per-share key. **Revoking a member
   = rotate `K_SC` forward into a new epoch** granted to the remaining members
   ([ADR 0024](../decisions/0024-scope-key-rotation.md)); already-read content cannot be retroactively pulled
   back (a documented limitation). The concrete per-Memory key model — `K_SC` (scope), `K_mem` (per Memory, the

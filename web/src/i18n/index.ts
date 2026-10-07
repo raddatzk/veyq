@@ -986,6 +986,9 @@ const en = {
     share: 'Share',
     title: 'Share this Memory',
     intro: 'Create a link anyone can open in a browser — no account, no install. It shows only this one Memory, and you can switch it off anytime.',
+    // the same dialog on a chapter (a chapter is a share root of its own, ADR 0080 decision 13)
+    chapterTitle: 'Share this chapter',
+    chapterIntro: 'Create a link anyone can open in a browser — no account, no install. It shows only this chapter, and you can switch it off anytime.',
     roleLabel: 'What can people do?',
     roleViewer: 'View only',
     roleContributor: 'View + add photos',
@@ -1093,13 +1096,15 @@ const en = {
     uploaderEmpty: 'No photos in this session. Photos you add appear here and stay visible until you reload — after that they’re gone from your view, but safely saved for the owner.',
     deletePhoto: 'Delete this photo',
     deleteFailed: 'The photo could not be deleted — please try again.',
+    // after a member renamed a shared node (NodeMutationDialog → core resealShareNames, ADR 0080 decision 14)
+    nameResealFailed: 'Renamed. Some links to it could not be updated and still show the old name to their guests.',
     // core's folder share dialog (cr-node-key-hierarchy 5b.3) and folder page (5b.4b): only where a Memory sentence
     // would be wrong for a folder. READ_WRITE on a folder = add folders, rename and move inside it, and add photos to
     // the Memories below it (5a.5, docs/apps/memories.md).
     folder: {
       title: 'Share this folder',
       intro: 'Create a link anyone can open in a browser — no account, no install. It shows this folder and everything in it, and you can switch it off anytime.',
-      roleContributor: 'View + organise',
+      roleContributor: 'View + contribute',
       roleViewerHint: 'Anyone with the link can look at this folder and everything in it, read-only.',
       roleContributorHint: 'Anyone with the link can look, add folders, rename or move things inside this folder, and add photos to the Memories in it.',
       deleteConfirm: 'Delete this link for good? It can never be switched on or renewed again. What guests added stays in this folder.',
@@ -2081,6 +2086,8 @@ const de: typeof en = {
     share: 'Teilen',
     title: 'Diese Erinnerung teilen',
     intro: 'Erstelle einen Link, den jede:r im Browser öffnen kann — ohne Konto, ohne Installation. Er zeigt nur diese eine Erinnerung, und du kannst ihn jederzeit abschalten.',
+    chapterTitle: 'Dieses Kapitel teilen',
+    chapterIntro: 'Erstelle einen Link, den jede:r im Browser öffnen kann — ohne Konto, ohne Installation. Er zeigt nur dieses Kapitel, und du kannst ihn jederzeit abschalten.',
     roleLabel: 'Was dürfen andere?',
     roleViewer: 'Nur ansehen',
     roleContributor: 'Ansehen + Fotos hinzufügen',
@@ -2183,10 +2190,11 @@ const de: typeof en = {
     uploaderEmpty: 'Keine Fotos in dieser Sitzung. Hinzugefügte Fotos erscheinen hier und bleiben bis zum Neuladen sichtbar — danach sind sie aus deiner Ansicht verschwunden, aber sicher für die Person gespeichert, der die Erinnerung gehört.',
     deletePhoto: 'Dieses Foto löschen',
     deleteFailed: 'Das Foto konnte nicht gelöscht werden — bitte erneut versuchen.',
+    nameResealFailed: 'Umbenannt. Einige Links darauf konnten nicht aktualisiert werden und zeigen ihren Gästen noch den alten Namen.',
     folder: {
       title: 'Diesen Ordner teilen',
       intro: 'Erstelle einen Link, den jede:r im Browser öffnen kann — ohne Konto, ohne Installation. Er zeigt diesen Ordner mit allem, was darin liegt, und du kannst ihn jederzeit abschalten.',
-      roleContributor: 'Ansehen + ordnen',
+      roleContributor: 'Ansehen + mitwirken',
       roleViewerHint: 'Wer den Link hat, kann diesen Ordner mit allem darin ansehen — schreibgeschützt.',
       roleContributorHint: 'Wer den Link hat, kann ansehen, Ordner anlegen, darin umbenennen oder verschieben und den Erinnerungen darin Fotos hinzufügen.',
       deleteConfirm: 'Diesen Link endgültig löschen? Er lässt sich danach nie wieder einschalten oder erneuern. Was Gäste angelegt haben, bleibt in diesem Ordner.',

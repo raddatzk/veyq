@@ -1,11 +1,16 @@
 # Feature: Sharing
 
-Reaching people **outside** a scope with **one Memory**. Sharing *with* a registered veyq user is what
-[groups / scope grants](../spaces/_index.md) already do; sharing's own job is the **public link** — handing a
-single Memory to anyone, including **anonymous visitors with no account**. It rides the per-Memory content key
-`K_mem` ([ADR 0012](../../decisions/0012-content-key-hierarchy.md)): a share adds an **independent second wrap**
-of that one Memory's key, so it exposes **neither the rest of the scope (`K_SC`) nor any sibling Memory** —
-least-privilege is crypto-enforced, and the server stays blind.
+Reaching people **outside** a scope with **one node and what lies below it**. Sharing *with* a registered veyq
+user is what [groups / scope grants](../spaces/_index.md) already do; sharing's own job is the **public link** —
+handing one node to anyone, including **anonymous visitors with no account**. A share is rooted at a **Memory**, a
+**chapter** or a **folder** ([ADR 0080](../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
+decisions 6, 9 and 13): it rides that node's own content key ([ADR 0012](../../decisions/0012-content-key-hierarchy.md);
+every node carries one since ADR 0080 decision 1) and adds an **independent second wrap** of it, so it exposes **neither the
+rest of the scope (`K_SC`) nor anything beside or above the shared node** — least-privilege is crypto-enforced, and
+the server stays blind. Which roles a root kind takes and what each lets a guest do (a folder takes `READ` and
+`READ_WRITE`, never `WRITE_ONLY`; a folder contributor organises inside it and adds photos to the Memories below) is
+the role matrix in [`docs/apps/memories.md`](../../apps/memories.md#what-a-guest-may-do--the-role-matrix). When a
+member renames a shared node, their client re-seals the name of every share on it (ADR 0080 decision 14).
 
 - **Cross-cutting:** [Security Model](../../crosscutting/security-model.md) (key hierarchy + the client-integrity
   trust tier + the T&S "decryptable-on-report" corollary for public shares),
@@ -32,7 +37,8 @@ least-privilege is crypto-enforced, and the server stays blind.
   previews (never a download), delete-your-own is **token-gated + ownership-checked**, and the ephemerality is
   warned in four places; personal-scope only; [ADR 0031](../../decisions/0031-uploader-public-share.md))
 - [uc.sharing.share-shared-scope](use-cases/uc.sharing.share-shared-scope.md) — **built (web)** (cr-0104: lifts
-  the personal-scope-only restriction so **any member** of a **group/tenant** scope may public-share a Memory there,
+  the personal-scope-only restriction so **any member** of a **group/tenant** scope may public-share a Memory (since
+  ADR 0080 also a chapter or a folder) there,
   across all three roles; **member removal soft-revokes** the removed member's shares, **re-activation transfers
   ownership**; `K_mem` is stable across rotation so the share follows new content and the server-side deactivation
   is the honest-server revocation; [ADR 0029](../../decisions/0029-public-viewer-share.md) §6)
