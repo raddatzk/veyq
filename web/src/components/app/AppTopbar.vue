@@ -20,8 +20,8 @@ import InvitationsBadge from '../../features/spaces/InvitationsBadge.vue'
 import { registry } from '../../core/applications/registry'
 
 const router = useRouter()
-// What an application put in the tray (the Memories upload status); nothing claimed → nothing rendered.
-const tray = registry.slot('topbarTray')
+// What the applications put in the tray (the Memories upload status), in their `order`; none → nothing rendered.
+const trayItems = registry.slotItems('topbarTray')
 
 const home = computed<MenuItem>(() => ({
   label: breadcrumb.trail[0]?.name,
@@ -40,7 +40,7 @@ const items = computed<MenuItem[]>(() =>
     <Breadcrumb :model="items" :home="home" class="app-breadcrumb" />
     <div class="workspace-topbar-actions">
       <InvitationsBadge />
-      <component :is="tray" v-if="tray" />
+      <component :is="item.component" v-for="item in trayItems" :key="item.id" />
     </div>
   </header>
 </template>

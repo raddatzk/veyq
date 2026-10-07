@@ -4,6 +4,8 @@ import { registerApplications } from './applications'
 import { registry } from './core/applications/registry'
 import { MEMORY_KIND, CHAPTER_KIND } from './features/memory/kinds'
 import { favoritesStore } from './features/memory/favoritesStore'
+import UploadStatusMenu from './features/memory/components/UploadStatusMenu.vue'
+import PinnedMemories from './features/memory/components/PinnedMemories.vue'
 
 // `src/test/setup.ts` has already called registerApplications() once for this file, exactly as main.ts does.
 describe('composition root', () => {
@@ -17,6 +19,12 @@ describe('composition root', () => {
   it('claims the one Memories share body for both root kinds', () => {
     expect(registry.shareBody(MEMORY_KIND)).not.toBeNull()
     expect(registry.shareBody(CHAPTER_KIND)).toBe(registry.shareBody(MEMORY_KIND))
+  })
+
+  // The tray and the pins are list slots (P4a): Memories adds one item to each, under an id namespaced by the application.
+  it('adds the Memories upload status to the top-bar tray and the pinned Memories to the sidebar pins', () => {
+    expect(registry.slotItems('topbarTray')).toEqual([{ id: 'memories.upload-status', component: UploadStatusMenu }])
+    expect(registry.slotItems('sidebarPins')).toEqual([{ id: 'memories.pinned', component: PinnedMemories }])
   })
 
   // The rotation hook is REQUIRED (the registry's header): this is the test that goes red when the composition root

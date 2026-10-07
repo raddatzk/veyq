@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// The Memories application's fill of the shell's `sidebarPins` slot: the **favorites** section — each pinned
+// The Memories application's item in the shell's `sidebarPins` list slot (`memories.pinned`): the **favorites** section — each pinned
 // Memory with its own chosen cover (uc.memory.cover's fourth surface, after the browse card, the detail header
 // and the map pin). It used to be inline in `AppSidebar`; it lives here because the pin set, the kind filter and
 // the covers are Memories concepts the shell must not name (ADR 0079). The shell mounts it twice, once per

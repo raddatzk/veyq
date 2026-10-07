@@ -2,8 +2,10 @@
 // composition root (`web/src/applications.ts`), which is the only core file allowed to import this application.
 // The registry is a parameter, not an import of the singleton, so a test can register into a fresh one.
 //
-// The slots filled here (the level view, the create/rename dialog, the share dialog, the upload tray in the top bar,
-// the pinned rail in the sidebar, the public share body) are single-claim and Memories-shaped today: the next application's change request re-cuts them per kind (the registry's header).
+// The single-claim slots filled here (the level view, the create/rename dialog, the share dialog, the public share
+// body) are Memories-shaped today: the next application's change request re-cuts them per kind (the registry's
+// header). The upload tray in the top bar and the pinned rail in the sidebar are list slots: Memories adds one item to
+// each, under an id namespaced by the application.
 import { MEMORY_KIND, CHAPTER_KIND } from './kinds'
 import type { Registry } from '../../core/applications/registry'
 import MemoryDetailHost from './components/MemoryDetailHost.vue'
@@ -24,8 +26,8 @@ export function registerMemories(registry: Registry): void {
   registry.claimSlot('levelView', MemoryLevelHost)
   registry.claimSlot('nodeMutationDialog', NodeMutationDialog)
   registry.claimSlot('shareDialog', ShareDialog)
-  registry.claimSlot('topbarTray', UploadStatusMenu)
-  registry.claimSlot('sidebarPins', PinnedMemories)
+  registry.addSlotItem('topbarTray', 'memories.upload-status', UploadStatusMenu)
+  registry.addSlotItem('sidebarPins', 'memories.pinned', PinnedMemories)
   // The public share page: every Memories share — viewer, contributor and the WRITE_ONLY drop — is rooted at a MEMORY
   // or a CHAPTER node (`PublicShare.rootKind`); the one body renders either root and picks its screens by the role.
   registry.claimShareBody(MEMORY_KIND, MemoryShareBody)

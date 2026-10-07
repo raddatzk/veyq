@@ -9,14 +9,20 @@
 // discovering one by glob.
 //
 // **Write-once.** Registered code runs with every unlocked key, so the registry is a trust surface and not a
-// convenience: registering a kind twice, or claiming a slot twice, THROWS — it never overwrites and never merges.
-// Nothing here is exported as mutable state; `registry` exposes only the two register doors and read-only lookups.
+// convenience: registering a kind twice, claiming a slot twice, or adding a list-slot item under a taken id THROWS —
+// it never overwrites and never merges. Nothing here is exported as mutable state; `registry` exposes only the two register doors and read-only lookups.
 //
-// **Single-claim slots.** A slot (a level view, a dialog, the topbar tray, the sidebar pins) is held by at most ONE
-// application today, because exactly one application exists. A second claim throws, which turns "two applications
-// both think they own the folder level" into a boot-time failure instead of a silently shadowed component. The
-// next application's change request re-cuts the slots it needs to share (per-kind composition); freezing that
+// **Single-claim slots.** A slot that IS one region (the level view, the create/rename dialog, the share dialog) is
+// held by at most ONE application today, because exactly one application exists. A second claim throws, which turns
+// "two applications both think they own the folder level" into a boot-time failure instead of a silently shadowed
+// component. The next application's change request re-cuts these per kind (per-kind composition); freezing that
 // abstraction from one usage is what `docs/ai/README.md` § Refinement checklist ("Spike when the shape is unclear") rules out.
+//
+// **List slots (`addSlotItem`).** The top-bar tray and the sidebar pins are places where several applications each add
+// their own entry, so they are ordered lists: an item is registered under an id (namespaced by its application, e.g.
+// `memories.pinned`), write-once per (slot, id) — a second registration of the same id in the same list throws. The
+// shell renders them sorted by `order` (default: registration order; a tie keeps registration order). `claimSlot`
+// refuses a list slot at runtime too, so a caller outside the type checker gets an error, never a silent no-op.
 //
 // **Share bodies (`claimShareBody`).** The public share page (`views/ShareView.vue`) is a shell: it resolves the
 // kind-independent half (core/sharing/resolvePublicShare.ts), runs the password and terms gates, then renders the body
@@ -115,7 +121,7 @@ export interface LevelViewEmits {
   share: []
 }
 
-/** The shell's `sidebarPins` slot: the component an application fills it with is mounted in the left rail
+/** The shell's `sidebarPins` list slot: each component an application adds to it is mounted in the left rail
  *  (`variant: 'rail'`) and in the mobile navigation sheet (`'sheet'`); it renders nothing when it has nothing to
  *  pin. It emits `navigate` when the member follows one of its links, so the sheet can close. */
 export interface SidebarPinsProps {
@@ -147,9 +153,18 @@ export interface ShareBodyEmits {
   unavailable: []
 }
 
-/** The single-claim slots. Each is claimed by at most one application (see the header). `topbarTray` takes no
- *  props (the shell's top bar mounts it beside the invitations badge); `sidebarPins` takes `SidebarPinsProps`. */
-export type SlotName = 'levelView' | 'nodeMutationDialog' | 'shareDialog' | 'topbarTray' | 'sidebarPins'
+/** The single-claim slots. Each is claimed by at most one application (see the header). */
+export type SlotName = 'levelView' | 'nodeMutationDialog' | 'shareDialog'
+
+/** The list slots: several applications may each add items (see the header). A `topbarTray` item takes no props (the
+ *  shell's top bar mounts it beside the invitations badge); a `sidebarPins` item takes `SidebarPinsProps`. */
+export type ListSlotName = 'topbarTray' | 'sidebarPins'
+
+/** One entry of a list slot, as the shell renders it (`id` is the item's key). */
+export interface SlotItem {
+  id: string
+  component: Component
+}
 
 /** What an application runs at the platform's lifecycle moments. `onMasterKeyRotated` is mandatory (the type says
  *  so; the registry additionally refuses a hook set that is not a function at runtime). */
@@ -185,8 +200,11 @@ export interface Registry {
   assertRotationHooks(): void
   /** Register a node kind. Throws if the kind is already registered (the platform's own FOLDER included). */
   registerKind(descriptor: KindDescriptor): void
-  /** Claim a slot. Throws if the slot is already claimed. */
+  /** Claim a single-claim slot. Throws if the slot is already claimed, or if `name` is a list slot. */
   claimSlot(name: SlotName, component: Component): void
+  /** Add an item to a list slot under `id`. Throws if that slot already holds an item with this id. `order` sorts the
+   *  list (ascending); omitted, the item's registration index is used. Ties keep registration order. */
+  addSlotItem(slot: ListSlotName, id: string, component: Component, order?: number): void
   /** The kind's descriptor, or `{ supported: false }` — never `undefined`. */
   kind(kind: NodeKind): KindLookup
   /** The slug of `name` for a node of `kind`: the kind's own `slug` hook, else `slugify` (also for a kind nobody
@@ -195,7 +213,11 @@ export interface Registry {
   slugFor(kind: NodeKind, name: string): string
   /** The component filling the slot, or null when no application claimed it (the shell renders nothing). */
   slot(name: SlotName): Component | null
+  /** The items of a list slot, sorted by `order` (stable); empty when nobody added one (the shell renders nothing). */
+  slotItems(slot: ListSlotName): readonly SlotItem[]
 }
+
+const LIST_SLOTS: readonly string[] = ['topbarTray', 'sidebarPins'] satisfies readonly ListSlotName[]
 
 /** A fresh registry holding only the platform's own kind (FOLDER: browsable, never openable, shareable through core's
  *  own `core/sharing/FolderShareDialog.vue` — cr-node-key-hierarchy 5b.3).
@@ -205,6 +227,7 @@ export function createRegistry(): Registry {
     [FOLDER_KIND, { kind: FOLDER_KIND, icon: 'pi pi-folder', shareable: true }],
   ])
   const slots = new Map<SlotName, Component>()
+  const lists = new Map<ListSlotName, { id: string; component: Component; order: number }[]>()
   const lifecycles = new Map<string, LifecycleHooks>()
   // The platform's own share body: a link rooted at a FOLDER browses the subtree (cr-node-key-hierarchy 5b.4b). Pre-claimed
   // like FOLDER's kind above, so an application claiming FOLDER throws.
@@ -250,8 +273,21 @@ export function createRegistry(): Registry {
       kinds.set(descriptor.kind, { ...descriptor })
     },
     claimSlot(name, component) {
+      if (LIST_SLOTS.includes(name)) throw new Error(`slot ${name} is a list slot: add to it with addSlotItem`)
       if (slots.has(name)) throw new Error(`slot ${name} is already claimed`)
       slots.set(name, component)
+    },
+    addSlotItem(slot, id, component, order) {
+      if (!LIST_SLOTS.includes(slot)) throw new Error(`slot ${slot} is not a list slot`)
+      const items = lists.get(slot) ?? []
+      if (items.some((i) => i.id === id)) throw new Error(`slot ${slot} already holds an item ${id}`)
+      items.push({ id, component, order: order ?? items.length })
+      lists.set(slot, items)
+    },
+    slotItems(slot) {
+      return [...(lists.get(slot) ?? [])]
+        .sort((a, b) => a.order - b.order) // stable (ES2019): a tie keeps registration order
+        .map(({ id, component }) => ({ id, component }))
     },
     kind(kind) {
       const d = kinds.get(kind)

@@ -29,9 +29,9 @@ describe('AppTopbar breadcrumb', () => {
   })
 })
 
-// The tray is the application's, filled through the `topbarTray` slot of the REAL registry (src/test/setup.ts
-// registers Memories as main.ts does). If the composition root stopped claiming it, this is the test that goes red.
-describe('AppTopbar upload tray (the topbarTray slot)', () => {
+// The tray is the application's, an item of the `topbarTray` list slot of the REAL registry (src/test/setup.ts
+// registers Memories as main.ts does). If the composition root stopped adding it, this is the test that goes red.
+describe('AppTopbar upload tray (the topbarTray list slot)', () => {
   it('shows the application\'s upload tray with a live queue', async () => {
     vi.mocked(addMedia).mockImplementation(() => new Promise(() => {})) // stays in flight
     clearUploads()
