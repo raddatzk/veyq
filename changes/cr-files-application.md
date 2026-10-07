@@ -151,11 +151,56 @@ without touching core except for the platform prerequisites below, which every l
         `run_backend_races_on_mariadb.py` green (43 race filters, both projects — the baseline with the new DDL migrates
         there), and with `--tests` `NodeAttachmentSliceTest` 7/7, `CoreAloneSliceTest` 8/8 and both eraser-order tables
         green — the FK refusals come from the MariaDB driver there.
-  - [ ] P3-S4 `AttachmentStore.attach` — one transaction: `admitted()`, scope lock, consume the session as the first write,
+  - [x] P3-S4 `AttachmentStore.attach` — one transaction: `admitted()`, scope lock, consume the session as the first write,
         liveness and kind by QUERY (not `findById`: the stale-context trap), `persistBlob` and an explicit flush, a CAS
         `UPDATE … blob_id = expected` (an insert only into an empty slot; the loser gets `conflict`), `deleteBlobRow(old)`;
         replace on a trashed node refused · Done when: a race test on H2 and MariaDB (model `NodeCoverSliceTest`
         `whileUncommitted`), levers: scope lock removed, CAS predicate removed.
+        **Measured 2026-10-07:** `core/blob/AttachmentStore.kt`: `attach(scopeId, nodeId, kinds: Set<String>, slot, session,
+        manifest, expectedBlobId: String?, admitted = { true }): AttachOutcome` (`Attached(blobId, replacedBlobId?)`,
+        `Conflict(currentBlobId?)`, `NotAdmitted`, `UploadNotFound`, `UploadMismatch`, `NodeNotFound`, `IllegalTarget`),
+        `@Transactional` joining the caller's. Order built: slot shape + `session.boundTo(nodeId, slot)` (no DB) →
+        `lockScope` → `admitted()` → session `delete` (first write, count ≠ 1 → `UploadNotFound`) → kind by a scalar JPQL
+        query (`select n.kind … deletedAt is null`) → `persistBlob` + `BlobEntity.flush()` → insert (empty slot, read under
+        the lock) or the CAS `update … where nodeId and slot and blobId = expected` → `deleteBlobRow(expected)`. Every
+        refusal before the swap is `setRollbackOnly` (session stays open, expires as any unfinished upload); a conflict
+        commits: the session spent and the new blob freed by `deleteBlobRow` (reclaim record) in the same transaction.
+        **Decisions taken (reversible, for the owner):** (1) the scope lock BEFORE `admitted()`, not after as the plan's
+        list said: a guest's gate takes the share row, and scope → share is the order `ShareNodesHandler`/`admittedInto`
+        name (`admittedInto` locks the scope itself, so for it both orders are equal; a plain `Admitted.admitted` passed
+        alone would have inverted it). (2) The store takes the verified session entity + manifest (as `MediaStore.attach`/
+        `commitCover`), not an upload id or a wrap: the wrap moves via `persistBlob`. (3) No `shareIdentityId`
+        parameter — the uploader is the session's own `openerShareIdentityId` (cannot disagree with who opened it); a
+        replace moves it with the blob, `created_at` stays the attachment's. (4) The store itself refuses a session not
+        `boundTo(nodeId, slot)` (`UploadMismatch`): owner decision "slot = role token", and ADR 0080 Decision 13's
+        owner = the node. (5) A slot outside `^[A-Z][A-Z0-9_]{0,15}$` is a programming error (`require`, throws), not an
+        outcome. (6) A conflict carries the slot's current blob (ADR 0077: the miss answers what is there now) and frees
+        the loser's upload (spent, reclaimed) — a client re-uploads to retry; keeping the session for a retry would be
+        the alternative. (7) An occupied slot with `expectedBlobId == null`, and an empty one with a non-null expected,
+        are both `Conflict`. (8) The integration point is the class KDoc's usage (findSession → verifyBlob → attach →
+        map) — no new seam, no helper, and core names no wire code for `Conflict` (Files' contract owns it, F1).
+        Tests (core): `AttachmentStoreSliceTest` 8 (first attach; replace frees the old blob + one reclaim record;
+        stale expected → `Conflict(current)`, new upload freed; occupied/empty conflicts; trashed node (replace and first)
+        `NodeNotFound`, FOLDER `IllegalTarget`, another scope's node `NodeNotFound`; session twice → `UploadNotFound`;
+        gate refused, slot/node mismatch, four bad slots; through `UploadCompletions` with a test-only `EXPENSE` completion
+        carrying `expectedBlobId` in its payloads) and `AttachmentRaceSliceTest` 5 races × `RACE_ROUNDS` with
+        `whileUncommitted`. Levers, each run on H2 AND MariaDB 11.4 (via `run_backend_races_on_mariadb.py --tests`), same
+        reds on both: scope lock removed → two first attaches (the loser's commit fails at `ux_attachment_node_slot`) and
+        attach-vs-trash (attached to the trashed node) red; CAS predicate removed → replace race and stale-expected test
+        red; liveness by `findById` → attach-vs-trash red (only through a caller that holds a transaction and resolved
+        the node before the lock — the dispatcher in a caller's transaction; a fresh transaction's `findById` after the
+        lock reads committed state, so the trap needs that shape); `deleteBlobRow(old)` skipped → the replace test, the
+        replace race and the dispatcher test red; spend after the swap → session-twice (sequential and race:
+        duplicate `veyq_blob` primary key, a 500), stale-expected (session left open) and the scope-purge race red (there
+        only by the answer, `NodeNotFound` for `UploadNotFound`, nothing orphaned). Not proven by a test: the guest
+        path's lock order (no test drives a real share gate through `attach`; the KDoc and `admittedInto` hold it).
+        `./gradlew check` green (core 849 → 862, memories 361 with 2 skipped, root 84); `run_backend_races_on_mariadb.py`
+        green on MariaDB 11.4 (43 → 44 race filters, `AttachmentRaceSliceTest` 5/5); `validate_store_reclaim_arity` and
+        the other `validate_*` 53/53 before and after (no guard reacts: the new blob frees go through `deleteBlobRow`).
+        NOT held by the scope lock (measured green without it): the replace race (the CAS alone serializes it) and the
+        scope-purge race (the purge deletes the scope's sessions, so the spend decides; the attach answers
+        `UploadNotFound`, nothing orphaned). A race of attach vs the subtree PURGE is not written: the purge only takes a
+        node already trashed, which the liveness query refuses with or without any lock (the trash race covers it).
   - [ ] P3-S5 quota — attachment bytes as a core term of `linkUsage`/`StorageQuota.linkFits` · Done when: a byte-limit test at
         the exact boundary.
 - [ ] P4 web re-cut — planned 2026-10-07; two strands. Owner decision: the toolbar (trash, grid/list) stays in Memories'
