@@ -111,8 +111,8 @@ Memory, an expense and a file side by side).
    it (`memoryNodes.ts:29-33`, `media.ts:368-371`), so a chapter share is cryptographically ready. Memories decided
    it: a `CHAPTER` is a share root with all three roles, a smaller Memory link (`MemoriesNodeKinds.SHARE_ROOTS`, which
    `MemoryShareRoots`, `MediaShareGuestWrites` and `MediaUploadAdmission` all answer from; a guest's upload lands in the
-   chapter, an uploader seals to the chapter's own drop key). The web still offers no chapter link (`shareable: false`,
-   `register.ts:22`). What each role may do is the role matrix in [`docs/apps/memories.md`](../apps/memories.md).
+   chapter, an uploader seals to the chapter's own drop key). The web offers the chapter link through the same share dialogs as a Memory (`shareable: true`,
+   `register.ts`). What each role may do is the role matrix in [`docs/apps/memories.md`](../apps/memories.md).
 14. **The share root's name.** It arrives as `sealedName` under `K_share`. A guest cannot rename the root (it holds
    no parent key). When a member renames a share root, that member's client re-seals the name of every share on it
    through the recovery copy (decision 12 makes it available) and stores it with its own operation

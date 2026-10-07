@@ -88,9 +88,8 @@ What the cells rest on:
 **Verified by a test vs. by reading the code.** Every `MEMORY` and `CHAPTER` cell has a slice test
 (`ChapterShareSliceTest`, `ShareRootsSliceTest`, `ShareNodesSliceTest`, the share media suites). The `FOLDER` column's
 upload, rename, create and move cells are tested (`ShareRootsSliceTest`, `ShareNodesSliceTest`,
-`ShareNodesCoreSliceTest`). **UNVERIFIED by a test** (read from the code only): a `READ` or `READ_WRITE` folder guest
-being served the media of a Memory below the folder (`ShareMediaHandler.list` reads the whole live subtree and asks
-no kind); a folder guest's create of a chapter directly under a folder answering `illegal_structure`
+`ShareNodesCoreSliceTest`). A `READ` folder guest is served the media of a Memory below the folder (e2e `folderShare.e2e.test.ts`,
+2026-10-07). **UNVERIFIED by a test** (read from the code only): a folder guest's create of a chapter directly under a folder answering `illegal_structure`
 (`FolderGuestNodeRules` allows, `MemoryNodeKindRules` refuses); a `READ` ↔ `READ_WRITE` flip on a folder link.
 
 ## How far it is separated
