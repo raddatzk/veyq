@@ -22,7 +22,7 @@ vi.mock('../applications/registry', async (importOriginal) => {
 })
 vi.mock('../../api/client', () => ({ sharesApi: vi.fn(), publicSharesApi: vi.fn(), tokenApi: vi.fn() }))
 const nav = vi.hoisted(() => ({ route: null as null | { query: Record<string, string>; hash: string }, push: null as null | ((to: unknown) => Promise<void>) }))
-vi.mock('vue-router', () => ({ useRoute: () => nav.route, useRouter: () => ({ push: nav.push }) }))
+vi.mock('vue-router', () => ({ useRoute: () => nav.route, useRouter: () => ({ push: nav.push, resolve: () => ({ href: '/s/stub' }) }) }))
 
 import FolderShareBody from './FolderShareBody.vue'
 import ShareNameDialog from './ShareNameDialog.vue'
@@ -94,10 +94,12 @@ const BrokenBody = defineComponent({
   },
 })
 
+// This Breadcrumb stub pins only WHERE a crumb pushes; the real rendered `<a>` (its href, its prevented default action)
+// is clicked in `FolderShareBody.breadcrumb.test.ts` — the stub could not see the fragment the browser lost.
 const stubs = {
   Breadcrumb: {
     props: ['home', 'model'],
-    template: '<nav class="crumbs"><a class="crumb crumb-home" @click="home.command()">{{ home.label }}</a><a v-for="m in model" :key="m.label" class="crumb" @click="m.command()">{{ m.label }}</a></nav>',
+    template: '<nav class="crumbs"><a class="crumb crumb-home" @click="home.command({ originalEvent: $event })">{{ home.label }}</a><a v-for="m in model" :key="m.label" class="crumb" @click="m.command({ originalEvent: $event })">{{ m.label }}</a></nav>',
   },
   Dialog: { props: ['visible', 'header'], template: '<div v-if="visible" class="dialog-stub"><h1 class="header">{{ header }}</h1><slot /></div>' },
   Button: { props: ['label', 'type', 'disabled'], emits: ['click'], template: '<button :type="type || \'button\'" :disabled="disabled" @click="$emit(\'click\')">{{ label }}</button>' },

@@ -88,15 +88,34 @@ const trail = computed<string[]>(() => {
   return ids[0] === p.rootId ? ids : [p.rootId]
 })
 
-function go(id: string) {
+/** Where node `id` is: `?node=<id>` (no query for the root), the fragment KEPT — it carries the share key the shell
+ *  re-resolves with. The one target the cards and the breadcrumb both navigate to. */
+function targetOf(id: string) {
   const p = parts.value
-  // Keep the fragment: it carries the share key the shell re-resolves with.
-  void router.push({ query: p && id === p.rootId ? {} : { node: id }, hash: route.hash })
+  return { query: p && id === p.rootId ? {} : { node: id }, hash: route.hash }
 }
-const home = computed<MenuItem>(() => ({ label: props.head.name, command: () => parts.value && go(parts.value.rootId) }))
+function go(id: string) {
+  void router.push(targetOf(id))
+}
+/** A crumb is a real link to its node (a modified click opens it elsewhere, key included) whose plain click the router
+ *  handles. PrimeVue renders every crumb as an `<a>` and only CALLS `command`, so the anchor's default action still
+ *  runs unless prevented: without a `url` that is `href="#"`, which — measured in the browser, 2026-10-07 — cleared the
+ *  `#k=` fragment AND cancelled the push (`?node=` stayed), leaving a reload keyless and every guest write refused. */
+function crumb(label: string, id: string): MenuItem {
+  return {
+    label,
+    url: router.resolve(targetOf(id)).href,
+    command: ({ originalEvent: e }) => {
+      if (e instanceof MouseEvent && (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)) return // the browser opens the href
+      e.preventDefault()
+      go(id)
+    },
+  }
+}
+const home = computed<MenuItem>(() => crumb(props.head.name, parts.value?.rootId ?? ''))
 const crumbs = computed<MenuItem[]>(() => {
   const p = parts.value
-  return p ? trail.value.slice(1).map((id) => ({ label: nameOf(p, id), command: () => go(id) })) : []
+  return p ? trail.value.slice(1).map((id) => crumb(nameOf(p, id), id)) : []
 })
 
 /** The current folder's children the walk opened, by name. */
