@@ -147,11 +147,40 @@ without touching core except for the platform prerequisites below, which every l
         two sections swapped (7). It pins the DOM, not layout or computed CSS. Snapshots are `.txt`, which
         `validate_stylesheet_anchors` does not read, so they keep no dead rule alive for P4d. Update only on purpose:
         `npx vitest run -u src/views/MemoryHomeView.golden.test.ts`, then review the snapshot diff.
-  - [ ] B1 move the neutral blob transport to `web/src/core/blob/{types,transport}.ts` (`planBlob`, `reserveAndPump`,
+  - [x] B1 move the neutral blob transport to `web/src/core/blob/{types,transport}.ts` (`planBlob`, `reserveAndPump`,
         `authedReserve`/`authedWindow`, `windowPuts`, `openBlob*`, `presignAllChunks`, `makeChunkProvider`; `pumpBlob`,
         `sealFrameAt`, `putChunk`, `getChunk` private); `features/memory/media.ts` re-exports; `uploadMediaVia` is split
         (planning and pumping to core; derivatives, metadata sealing and complete stay) · Done when: B0 unchanged and green,
         the core-import guard bites on an import from `features/memory`.
+        **Measured 2026-10-07:** moved verbatim (bodies unchanged, `memoryKey` params named `key`): `core/blob/types.ts`
+        holds `BlobRole` (a plain re-use of the generated blob client's type, as `media.ts` had it), `BlobRef`, `BlobPlan`,
+        `BlobDeclare`, `ChunkPut`, `ReservedUpload`, `WindowFn`; `core/blob/transport.ts` holds `blobKeyContext`,
+        `sealFrameAt`, `WINDOW_LOOKAHEAD`, `pumpBlob`, `PRESIGN_REFRESH_MS`, the chunk PUT/GET helpers and their status
+        parsers (all private, as before) and exports `CHUNK_SIZE`, `PUMP_IN_FLIGHT`, `planBlob`, `throwIfAborted`,
+        `reserveAndPump`, `authedReserve`/`authedWindow` (were the private `mediaReserve`/`mediaWindow`, same signatures;
+        nothing outside imported them, so no aliases), `windowPuts`, `openBlobFromUrls`, `presignAllChunks`, `openBlob`,
+        `makeChunkProvider`. It imports `@veyq/crypto`, `shared/httpError`, `api/client` (`blobApi`), `app/sessionRefresh`
+        and types from `generated/blob` and `sw/protocol` only. `media.ts` keeps its own `BlobRole` line untouched (P3-S2's),
+        the meta/EXIF tiers, `CompleteDecl`, `MediaUploadTransport`, `mediaApiTransport`, `addMedia`, `uploadCoverBlob`,
+        `openGrid/Lightbox/Original`, `chunkProvider`, and re-exports `CHUNK_SIZE`, `PUMP_IN_FLIGHT`, `windowPuts`,
+        `openBlobFromUrls`, `openBlob`, `makeChunkProvider` and the five types; no importer changed. The `uploadMediaVia`
+        split is only that its `planBlob`/`reserveAndPump` calls are core's now; the order is the same. Tests: the six
+        `makeChunkProvider` cases moved unchanged to `core/blob/transport.test.ts`; the five pump cases and the read-back
+        ones stay in `media.test.ts`, since they drive `addMedia`/`listMedia`/`uploadCoverBlob`; the core test adds
+        `planBlob`, `reserveAndPump` over `authedReserve`/`authedWindow` (windows, in-flight bound, progress, round trip
+        through `openBlob`), the pre-abort and `windowPuts`. `npm run check` 199 files / 1879 tests → 200 / 1884; 53
+        validators green before and after, the core-import guard reading 182 → 184 core files; B0 and P4-0 snapshots
+        untouched. Levers, each red then restored green: an import of `features/memory/media` in `transport.ts` (guard
+        red), `PUMP_IN_FLIGHT` 4→3 in core (B0: 2 of 4 red), planning the blobs before `sealMetadata` in `uploadMediaVia`
+        (B0: 3 of 4 red). `vi.mock` sabotage on the new paths: `blobApi` throwing — its 6 mockers (the new core test is one)
+        green, B0 red (3 of 4; the share upload does not use it); `withRefresh` — its 14 mockers green, `media.test.ts`
+        (47), B0 (3) and the core test (1) red; `reserveAndPump` + `makeChunkProvider` throwing in core — nobody mocks
+        `core/blob/transport`, the 8 `media` mockers green, the core test (8), `media.test.ts` (31), `sealBinding.test.ts`
+        (2, through the re-export) and B0 (4) red; `addMedia` + `uploadCoverBlob` — the 8 `media` mockers green,
+        `media.test.ts` (32) and B0 (3) red, the core test green. `sw/range.ts`'s `PLAINTEXT_CHUNK_SIZE` stays a literal:
+        importing `CHUNK_SIZE` would pull `@veyq/crypto` and the API client into the service-worker bundle, which that
+        file keeps out on purpose; `core/blob/transport.test.ts` asserts `CHUNK_SIZE === PLAINTEXT_CHUNK_SIZE` (and
+        `range.test.ts` already pins it to the crypto export).
   - [ ] P4a list slots — `addSlotItem`/`slotItems` for `topbarTray` and `sidebarPins` (ordered, write-once per (slot, id)) ·
         Done when: `registry.test.ts`, `AppShell.slots.test.ts`, `applications.test.ts` updated, a two-entry order case, P4-0
         unchanged.
