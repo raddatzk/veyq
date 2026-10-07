@@ -18,7 +18,7 @@ import { blobApi } from '../../api/client'
 import { mediaApi } from './api'
 import { withRefresh } from '../../app/sessionRefresh'
 import { type MediaListPage, type MediaSummary, type MediaDerivativeKind } from '../../api/generated/media'
-import { type PresignedUrl } from '../../api/generated/blob'
+import { type PresignedUrl, type BlobRole as WireBlobRole } from '../../api/generated/blob'
 import { expectMintedId } from '../../core/node/mintedId'
 import { mediaKey, uploaderOriginOf, type UploaderOrigin } from './mediaKey'
 import { MetaConflictError, MetaUnreadableError, writeSealedMeta, type MetaEditContext } from './sealedMetaWrite'
@@ -60,8 +60,10 @@ export const CHUNK_SIZE = v1.CHUNK_FRAME_SIZE.plaintextBytes
 
 // --- read-back model -------------------------------------------------------
 
-/** The role a blob plays for its owner — the `K_blob` wrap is sealed bound to it (ADR 0072). */
-export type BlobRole = v1.BlobRole
+/** The role a blob plays for its owner — the `K_blob` wrap is sealed bound to it (ADR 0072). The crypto suite's role is
+ *  an open token (`v1.BlobRole`, a string) since Files brought FILE_CONTENT; this layer keeps the four it writes, which
+ *  the blob contract still closes, so a declare type-checks against the wire item and no string role reaches it. */
+export type BlobRole = WireBlobRole
 
 /**
  * Everything needed to open one blob: its id + the metadata + the K_blob wrap (under K_mem) + where that wrap is
