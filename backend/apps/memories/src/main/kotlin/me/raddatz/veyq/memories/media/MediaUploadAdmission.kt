@@ -8,7 +8,8 @@ import jakarta.persistence.EntityManager
 /**
  * The Memories half of a link's usage (ADR 0073 §4): the blobs of every medium the link's identities contributed —
  * the medium's own blob and each derivative's. A medium a member uploaded into the same Memory or chapter is not the link's, and
- * neither is another link's. Core adds the link's open sessions (`StorageQuota.linkUsage`).
+ * neither is another link's. Core adds the link's open sessions and its node attachments' blobs (`StorageQuota.linkUsage`);
+ * a cover is a member's, never a guest's, and counts in neither.
  */
 @ApplicationScoped
 class MediaUploadAdmission(private val em: EntityManager) : UploadAdmission {

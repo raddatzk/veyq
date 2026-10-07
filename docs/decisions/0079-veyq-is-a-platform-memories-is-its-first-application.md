@@ -209,8 +209,9 @@ on their own.
   `ownerId`, role-tagged derivatives and the application's sealed payloads as opaque values, which core carries to
   the one implementation that accepts the kind and never reads (2026-10-06, cr-platform-contract-split;
   `UploadCompletionGenericItemCoreSliceTest`); Memories, the only implementation, maps its request items onto it and
-  `ownerId` back to its `mediaId`), `UploadAdmission` (what a share link's guests contributed, for its per-link
-  limit) and `NodeKindRules` (where a node of the kind may live; core answers for `FOLDER`, Memories
+  `ownerId` back to its `mediaId`), `UploadAdmission` (what a share link's guests contributed to the application's own rows, for its
+  per-link limit; their open sessions and node attachments core sums itself, and a kind whose guest uploads are all
+  attachments still needs one, reporting 0) and `NodeKindRules` (where a node of the kind may live; core answers for `FOLDER`, Memories
   for `MEMORY` and `CHAPTER`) — and `ShareRoots`, `GuestNodeRules` and the last four fail closed: a kind no application (or two) claims takes no
   uploads (`illegal_target`), is placed nowhere (`illegal_structure`), is shared by no one (`illegal_scope`), takes no
   guest tree operation inside it (`illegal_scope`), and a link whose usage no single application measures is refused
