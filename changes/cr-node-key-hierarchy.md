@@ -147,7 +147,7 @@ Planned 2026-10-06 from three inventories; each sub-slice is its own worktree ru
       Tests: `NodePlacementCoreSliceTest.anEpochAboveTheCurrentIsRefusedForAnyDestination`,
       `SubtreeBoundaryCoreSliceTest`, `SubtreeBoundaryRaceCoreSliceTest` (a member's move of the destination out of
       the boundary while a bounded move/create waits), each red against its lever.
-- [ ] 5a.3 guest tree operations in core — `POST /api/shares/{shareId}/nodes` and a placement `PATCH`
+- [x] 5a.3 guest tree operations in core — `POST /api/shares/{shareId}/nodes` and a placement `PATCH`
       (`sharing` tag, own guest schema, no `wrappedMeta`; headers `X-Share-Password`, `X-Contributor-Token`; create
       spends the upload budget), lock order scope lock -> `admitted()` -> boundary check (upward walk) -> write;
       boundary decided under the scope lock; the root never moved, renamed or deleted by a guest and it must be live;
@@ -155,6 +155,33 @@ Planned 2026-10-06 from three inventories; each sub-slice is its own worktree ru
       a move; core declares `FOLDER`, Memories nothing); route table 16 -> 18 with `@RateLimit` · Done when: bite tests
       13, 17, 18, 19, 20 of the ADR; MariaDB races: guest move against a member move out of the subtree, guest create
       against trash, guest operation against share delete.
+      *Measured:* `createShareNode` (`CreateShareNodeRequest`: `nodeId` — ADR 0072 binds every seal to it — `parentId`,
+      `kind`, `encryptedName`, `slugToken`, `wrappedContentKey`, `orderIndex`; 201 `ShareNodeCreated`) and
+      `updateShareNode` (`UpdateShareNodeRequest`: every placement field required, no `epoch`; `x-veyq-concurrency`
+      `placementVersion`/`stale_placement`); `X-Contributor-Token` is a `ContributorToken` parameter in both
+      `sharing.openapi.yaml` and `share-media.openapi.yaml`, held identical by `validate_contracts_common.py`. Codes: the
+      gate's as the share-media writes map them (`share_not_found` 404, `share_not_contributable` 403 — also a READ or
+      WRITE_ONLY link, `ShareGuestGate.writeGate(onlyRole = READ_WRITE)` before the token and the budget, and a trashed
+      root — `share_password_incorrect`, `rate_limited`); a node outside the subtree `node_not_found`; the root as the
+      node, a parent or destination outside, a cycle, a kind `NodeKindRules` refuses `illegal_structure`; a container
+      `GuestNodeRules` refuses `illegal_scope` (the code a refused kind-and-role pair answers on create). Backend:
+      `ShareNodesHandler` (core/sharing), `GuestNodeRules` + `FolderGuestNodeRules`; `createInScope` joins its caller's
+      transaction (the member's `create` opens it with `createOrConflict` + `createReplay`) and takes the scope lock
+      before reading any node — with the reads before the lock, a node loaded first stayed in the transaction's
+      persistence context and the boundary walk under the lock was handed the stale copy
+      (`SubtreeBoundaryRaceCoreSliceTest`'s create landed outside, measured). A bounded placement may state no epoch
+      (`PlacementRequest.completeWithoutEpoch`): the node keeps its stored one. Tests: `ShareNodesCoreSliceTest`,
+      `ShareNodesSliceTest` (Memories: a Memory moved between subfolders; a chapter neither created, moved out, moved
+      in nor renamed — `illegal_scope` — while the resolve serves it), `GuestNodeRulesPartitionTest`,
+      `ShareNodeBudgetCoreSliceTest`, `ShareNodeRaceCoreSliceTest` (red on H2 and the pinned MariaDB against an
+      unlocked read of the destination / the parent before the scope lock, the dropped `admitted()`, and the share row
+      locked first — a deadlock against a re-activation), `ShareMediaRouteSliceTest` 18 rows, `ModuleCompositionTest`
+      with the eleventh seam. **Open, for the owner before 5b:** every seal binds the node's epoch (`node-name`,
+      `content-key`; the reader opens at the stored one), and the server stores a guest's create at the scope's
+      current epoch, which no guest response names (`ShareNode.epoch` is each node's, not the scope's). Either the
+      resolve serves the current epoch — and a rotation between resolve and create still stores a node its own name
+      does not open under — or the guest states the epoch and the server checks it (the member's rule, `409
+      stale_epoch`). Also owed to 5b: the web client of both operations.
 - [ ] 5a.4 chapter share and role matrix — Memories declares `CHAPTER` as a share root and extends
       `MediaShareGuestWrites` (:29) and `UploadAdmission` to it (an upload lands in the chapter: `nodeId = rootNodeId`);
       the role matrix for Memories in `docs/apps/memories.md` from the real code · Done when: bite test 21; the matrix
