@@ -115,7 +115,11 @@ Memory, an expense and a file side by side).
    `register.ts:22`). What each role may do is the role matrix in [`docs/apps/memories.md`](../apps/memories.md).
 14. **The share root's name.** It arrives as `sealedName` under `K_share`. A guest cannot rename the root (it holds
    no parent key). When a member renames a share root, that member's client re-seals the name of every share on it
-   through the recovery copy (decision 12 makes it available), so the shown name never goes stale.
+   through the recovery copy (decision 12 makes it available) and stores it with its own operation
+   (`PUT /api/shares/{shareId}/sealed-name`), which any member with WRITE access may call, not only the share's owner:
+   `updateShare` stays owner-gated ([ADR 0036](0036-editable-share-note-recoverable-share-key.md) point 3) and replaces
+   its fields wholesale, so it cannot carry this write. The name is last-writer-wins: it is always the root's current
+   name, so the shown name never goes stale.
 
 **What the server stores and learns.** One more opaque wrap per folder and an integer `placement_version`.
 It already sees the tree, kinds, moves and timestamps; it holds no new key.
