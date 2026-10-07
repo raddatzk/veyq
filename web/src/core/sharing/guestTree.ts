@@ -25,7 +25,7 @@ import { publicSharesApi } from '../../api/client'
 import { sealName, slugTokenFor, wrapContentKey, PlacementConflictError, PLACEMENT_RETRIES } from '../node/tree'
 import { expectMintedId } from '../node/mintedId'
 import type { NodeKind } from '../node/kind'
-import { slugify } from '../../shared/naming'
+import { registry } from '../applications/registry'
 import { decodeHttpError, HttpStatus, isCodedError } from '../../shared/httpError'
 import { resolvePublicShare, ShareUnavailableError, type PublicShareHead } from './resolvePublicShare'
 import { openShareRoot, walkSubtree, type SharedSubtree } from './shareTree'
@@ -118,14 +118,16 @@ export function guestTreeErrorMessageKey(err: unknown): { key: string; params?: 
   }
 }
 
-/** Refuse `name` under `parentId` when a sibling the guest can read already slugs to the same slug — naming that sibling.
- *  `self` is the node being placed (its own entry never collides with itself). */
-function assertNameFree(parts: SharedSubtree, parentId: string, name: string, self?: string): void {
-  const slug = slugify(name)
+/** Refuse `name` for a node of `kind` under `parentId` when a sibling the guest can read already slugs to the same slug —
+ *  naming that sibling. `self` is the node being placed (its own entry never collides with itself). It compares what the
+ *  server compares: siblings' tokens share the parent's key and slot, so equal tokens are equal slugs, each folded by
+ *  ITS OWN kind's function (`registry.slugFor`, inbox #350) — whatever the two kinds are. */
+function assertNameFree(parts: SharedSubtree, parentId: string, kind: NodeKind, name: string, self?: string): void {
+  const slug = registry.slugFor(kind, name)
   for (const sibling of parts.nodes.values()) {
     if (sibling.parentId !== parentId || sibling.id === self) continue
     const siblingName = parts.names.get(sibling.id)
-    if (siblingName !== undefined && slugify(siblingName) === slug) throw new GuestTreeError('slug_taken', siblingName)
+    if (siblingName !== undefined && registry.slugFor(sibling.kind, siblingName) === slug) throw new GuestTreeError('slug_taken', siblingName)
   }
 }
 
@@ -142,7 +144,7 @@ export async function createShareNodeAsGuest(
   const parentKey = ctx.keys.get(parentId)
   const parent = ctx.nodes.get(parentId)
   if (!parentKey || !parent) throw new v1.OpenRefused('content-key') // never K_SC: a guest writes only under keys it holds
-  assertNameFree(ctx, parentId, name)
+  assertNameFree(ctx, parentId, kind, name)
   const contentKey = v1.randomBytes(32)
   const node = { scopeId: ctx.scopeId, nodeId: crypto.randomUUID(), epoch: parent.epoch, placementVersion: 0 }
   try {
@@ -155,7 +157,7 @@ export async function createShareNodeAsGuest(
         parentId,
         kind,
         encryptedName: sealName(parentKey, node, name),
-        slugToken: slugTokenFor(parentKey, parentId, name),
+        slugToken: slugTokenFor(parentKey, parentId, kind, name),
         epoch: node.epoch,
         wrappedContentKey: wrapContentKey(parentKey, node, contentKey),
       },
@@ -203,7 +205,7 @@ async function sendGuestPlacement(
   if (!node || !key || !destinationKey || name === undefined || node.placementVersion == null) {
     throw new v1.OpenRefused('content-key') // nothing to re-wrap, or nothing to re-wrap it under
   }
-  assertNameFree(parts, newParentId, name, nodeId)
+  assertNameFree(parts, newParentId, node.kind, name, nodeId)
   const sealedAt = { scopeId: ctx.scopeId, nodeId, epoch: node.epoch, placementVersion: node.placementVersion + 1 }
   await publicSharesApi().updateShareNode({
     shareId: ctx.shareId,
@@ -213,7 +215,7 @@ async function sendGuestPlacement(
     updateShareNodeRequest: {
       parentId: newParentId,
       encryptedName: sealName(destinationKey, sealedAt, name),
-      slugToken: slugTokenFor(destinationKey, newParentId, name),
+      slugToken: slugTokenFor(destinationKey, newParentId, node.kind, name),
       wrappedContentKey: wrapContentKey(destinationKey, sealedAt, key),
       placementVersion: node.placementVersion,
     },

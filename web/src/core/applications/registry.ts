@@ -41,6 +41,7 @@ import type { TreeNode } from '../node/tree'
 import type { Level } from '../node/browse'
 import type { EpochKeys } from '../../features/spaces/epochs'
 import type { PublicShareHead } from '../sharing/resolvePublicShare'
+import { slugify } from '../../shared/naming'
 
 // The platform's own share body for a link rooted at a FOLDER (cr-node-key-hierarchy 5b.4b). LAZY, and on purpose: the
 // body reads this registry (`registry.kind`, `registry.shareBody` for what it embeds), so a static import here is a
@@ -60,6 +61,11 @@ export interface KindDescriptor {
   icon: string
   /** Whether a public share can be created for a node of this kind (the capability check still applies). */
   shareable: boolean
+  /** How a name of this kind folds before it is HMAC'd into its blinded slug token (inbox #350; read through
+   *  {@link Registry.slugFor}). Omitted: `slugify`, the container folding that is also the URL segment. A kind that is
+   *  never a URL segment may fold more strictly (a file: `fileNameSlug`). **Frozen into stored tokens**: the function
+   *  a kind registers must never change once a node of the kind is stored, and must be pinned by vectors. */
+  slug?: (name: string) => string
 }
 
 export type KindLookup = ({ supported: true } & KindDescriptor) | { supported: false; kind: NodeKind }
@@ -183,6 +189,10 @@ export interface Registry {
   claimSlot(name: SlotName, component: Component): void
   /** The kind's descriptor, or `{ supported: false }` — never `undefined`. */
   kind(kind: NodeKind): KindLookup
+  /** The slug of `name` for a node of `kind`: the kind's own `slug` hook, else `slugify` (also for a kind nobody
+   *  registered: the server stores any kind, and a token must still be computable for it). Every slug token is
+   *  derived through this, so a node's token always uses ITS kind's folding (`core/node/tree.ts` `slugTokenFor`). */
+  slugFor(kind: NodeKind, name: string): string
   /** The component filling the slot, or null when no application claimed it (the shell renders nothing). */
   slot(name: SlotName): Component | null
 }
@@ -246,6 +256,9 @@ export function createRegistry(): Registry {
     kind(kind) {
       const d = kinds.get(kind)
       return d ? { supported: true, ...d } : { supported: false, kind }
+    },
+    slugFor(kind, name) {
+      return (kinds.get(kind)?.slug ?? slugify)(name)
     },
     slot(name) {
       return slots.get(name) ?? null

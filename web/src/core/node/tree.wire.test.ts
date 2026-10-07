@@ -6,8 +6,10 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
-import { moveNode, renameNode, restoreNode, type TreeNode } from './tree'
+import { createContentNode, moveNode, renameNode, restoreNode, type TreeNode } from './tree'
 import { epochsOf } from '../../features/spaces/epochsTestUtil'
+import { registry } from '../applications/registry'
+import { fileNameSlug } from '../../shared/naming'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const A = '5c09e000-0000-4000-8000-0000000000a0'
@@ -87,7 +89,7 @@ describe('a restore on the wire (ADR 0080 Decision 8)', () => {
     // A moved under B: its key is now wrapped under B's, at the version the move took it to
     { ...row(A, B, keyB, keyA, 'Reisen'), kind: 'FOLDER', placementVersion: 5, wrappedContentKey: sealAt(keyB, A, keyA, 5) },
   ]
-  const trashed = { id: M, parentId: A, epoch: 0, placementVersion: 3, name: 'Italien' }
+  const trashed = { id: M, parentId: A, kind: 'MEMORY', epoch: 0, placementVersion: 3, name: 'Italien' }
 
   it('an ordinary restore sends only the slug token, derived under the live parent\'s key', async () => {
     const bodies = recordFetch()
@@ -116,5 +118,57 @@ describe('a restore on the wire (ADR 0080 Decision 8)', () => {
     for (const [key, version] of [[keyA, 4], [keyA, 0], [keyB, 3], [scopeKey, 3]] as const) {
       expect(() => v1.open({ purpose: 'node-name', ...at(version) }, key, name)).toThrow(v1.OpenRefused)
     }
+  })
+})
+
+// Inbox #350: a node's slug token is folded by ITS kind's function, on every write of it. A test kind registers the
+// file folding (`fileNameSlug`) as its hook — this node-environment suite gets no application registry, so it registers
+// on the app's registry itself; the FOLDER keeps `slugify`. Each write's token is compared to both foldings, so a
+// caller that passes the wrong kind (or none) is told apart from one that passes the right one.
+describe('a slug token is folded by its node\'s kind (inbox #350)', () => {
+  const LEAF = 'LEAFTEST'
+  registry.registerKind({ kind: LEAF, icon: 'pi pi-file', shareable: false, slug: fileNameSlug })
+  const NAME = 'Day1.MD'
+  const leafToken = (key: Uint8Array, slot: string) => b64std(v1.slugToken(key, slot, 'day1.md'))
+  const folderToken = (key: Uint8Array, slot: string) => b64std(v1.slugToken(key, slot, 'day1-md'))
+  const leafRow = (): TreeNode => ({ ...row(M, A, keyA, keyM, 'Italien'), kind: LEAF })
+  function recordCreate() {
+    const bodies: Record<string, unknown>[] = []
+    vi.stubGlobal('fetch', vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const json = JSON.parse(String(init?.body)) as Record<string, unknown>
+      bodies.push(json)
+      return new Response(JSON.stringify({ nodeId: json.nodeId }), { status: 201, headers: { 'Content-Type': 'application/json' } })
+    }))
+    return bodies
+  }
+
+  it('a create folds with the created kind; a folder of the same name keeps slugify', async () => {
+    const bodies = recordCreate()
+    await createContentNode(SCOPE_ID, epochsOf(scopeKey), { id: A, key: keyA }, LEAF, NAME)
+    await createContentNode(SCOPE_ID, epochsOf(scopeKey), { id: A, key: keyA }, 'FOLDER', NAME)
+    expect(bodies[0].slugToken).toBe(leafToken(keyA, A))
+    expect(bodies[1].slugToken).toBe(folderToken(keyA, A))
+    expect(bodies[0].slugToken).not.toBe(bodies[1].slugToken)
+  })
+
+  it('a rename and a move fold with the node\'s own kind', async () => {
+    const bodies = recordFetch()
+    const t = [...tree().filter((n) => n.id !== M), leafRow()]
+    await renameNode(SCOPE_ID, epochsOf(scopeKey), t, M, NAME)
+    await moveNode(SCOPE_ID, epochsOf(scopeKey), [...tree().filter((n) => n.id !== M), { ...leafRow(), name: NAME }], M, B)
+    expect(bodies[0].json.slugToken).toBe(leafToken(keyA, A))
+    expect(bodies[0].json.slugToken).not.toBe(folderToken(keyA, A))
+    expect(bodies[1].json.slugToken).toBe(leafToken(keyB, B))
+  })
+
+  it('a restore folds with the trashed node\'s kind, on the plain restore and the taken-name retry', async () => {
+    const bodies = recordFetch()
+    const trashed = { id: M, parentId: A, kind: LEAF, epoch: 0, placementVersion: 3, name: NAME }
+    await restoreNode(SCOPE_ID, epochsOf(scopeKey), tree(), trashed)
+    await restoreNode(SCOPE_ID, epochsOf(scopeKey), tree(), trashed, 'FOTO.jpg')
+    expect(bodies[0].json.slugToken).toBe(leafToken(keyA, A))
+    expect(bodies[1].json.slugToken).toBe(b64std(v1.slugToken(keyA, A, 'foto.jpg')))
+    await restoreNode(SCOPE_ID, epochsOf(scopeKey), tree(), { ...trashed, kind: 'FOLDER' })
+    expect(bodies[2].json.slugToken).toBe(folderToken(keyA, A))
   })
 })

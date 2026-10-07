@@ -14,6 +14,7 @@ import {
   PlacementConflictError, PLACEMENT_RETRIES, type TreeNode,
 } from './tree'
 import { httpError } from '../../test/httpError'
+import { FOLDER_KIND } from './kind'
 import { epochsOf } from '../../features/spaces/epochsTestUtil'
 import { contentApi } from '../../api/client'
 import { fakeApi } from '../../test/apiMock'
@@ -249,7 +250,7 @@ describe('restoreNode', () => {
     const restore = vi.fn<ContentApi['restoreNode']>()
     mockContent({ restoreNode: restore })
 
-    await restoreNode(SCOPE_ID, epochs, [], { id: 'n1', parentId: null, epoch: 0, placementVersion: 0, name: 'Rom 2026' })
+    await restoreNode(SCOPE_ID, epochs, [], { id: 'n1', parentId: null, kind: 'FOLDER', epoch: 0, placementVersion: 0, name: 'Rom 2026' })
 
     const req = restore.mock.calls[0][0].restoreNodeRequest
     // E_0, because the node's epoch is fixed at birth and a restore does not re-tag it (as a rename does not)
@@ -266,7 +267,7 @@ describe('restoreNode', () => {
     const folderKey = v1.randomBytes(32)
 
     const N1 = '5c09e000-0000-4000-8000-0000000000b1'
-    await restoreNode(SCOPE_ID, epochs, [liveParent(F1, scopeKey, folderKey)], { id: N1, parentId: F1, epoch: 0, placementVersion: 0, name: 'Rom 2026' }, 'Rom 2026 (2)')
+    await restoreNode(SCOPE_ID, epochs, [liveParent(F1, scopeKey, folderKey)], { id: N1, parentId: F1, kind: 'FOLDER', epoch: 0, placementVersion: 0, name: 'Rom 2026' }, 'Rom 2026 (2)')
 
     const req = restore.mock.calls[0][0].restoreNodeRequest
     if (req.encryptedName == null) throw new Error('the taken-name retry sent no name')
@@ -279,7 +280,7 @@ describe('restoreNode', () => {
   it('refuses to restore under a parent whose key it cannot derive, rather than sealing under K_SC', async () => {
     const restore = vi.fn<ContentApi['restoreNode']>()
     mockContent({ restoreNode: restore })
-    await expect(restoreNode(SCOPE_ID, epochsOf(scopeKey), [], { id: 'n1', parentId: F1, epoch: 0, placementVersion: 0, name: 'x' })).rejects.toBeInstanceOf(v1.OpenRefused)
+    await expect(restoreNode(SCOPE_ID, epochsOf(scopeKey), [], { id: 'n1', parentId: F1, kind: 'FOLDER', epoch: 0, placementVersion: 0, name: 'x' })).rejects.toBeInstanceOf(v1.OpenRefused)
     expect(restore).not.toHaveBeenCalled()
   })
 })
@@ -478,8 +479,8 @@ describe('directory_entry conformance vector', () => {
 
   it('the child\'s slug token is keyed by the parent\'s content key, and differs from the K_SC-keyed one', () => {
     const hex = (b64: string) => Array.from(fromB64(b64), (x) => x.toString(16).padStart(2, '0')).join('')
-    expect(hex(slugTokenFor(parentContentKey, d.parentNodeId, d.slug))).toBe(d.token)
-    expect(hex(slugTokenFor(unhex(d.scopeKey), d.parentNodeId, d.slug))).toBe(d.token_under_scope_key)
+    expect(hex(slugTokenFor(parentContentKey, d.parentNodeId, FOLDER_KIND, d.slug))).toBe(d.token)
+    expect(hex(slugTokenFor(unhex(d.scopeKey), d.parentNodeId, FOLDER_KIND, d.slug))).toBe(d.token_under_scope_key)
     expect(d.token).not.toBe(d.token_under_scope_key)
   })
 })
