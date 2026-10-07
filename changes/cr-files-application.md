@@ -240,10 +240,48 @@ without touching core except for the platform prerequisites below, which every l
         restored green: duplicate check dropped (1 red), `order` ignored (3), `AppTopbar` rendering only the first item
         (1), `claimSlot`'s list-slot guard dropped (1), `topbarTray` back in `SlotName` (typecheck red: an unused
         `@ts-expect-error`). Not verified in a browser.
-  - [ ] B2 the upload queue with a job runner in `web/src/core/blob/queue.ts` (`UploadJob<R> = {name, sizeBytes, run({onProgress,
+  - [x] B2 the upload queue with a job runner in `web/src/core/blob/queue.ts` (`UploadJob<R> = {name, sizeBytes, run({onProgress,
         signal})}`; six states, one automatic retry, never for `quota_exceeded`); Memories' `enqueueUploads` is a thin adapter ·
         Done when: the queue cases split into generic and Memories ones, `quota_exceeded` never retries, an abort gives
         `cancelled`.
+        **Measured 2026-10-07:** `core/blob/queue.ts` exports `UploadStatus` (the six states unchanged), `UploadJobContext
+        {onProgress(fraction), signal}`, `UploadJob<R, X> {name, sizeBytes, run(ctx): Promise<R>, extra?: X}`, `UploadItem<R, X>`
+        (`X` & id, name, sizeBytes, status, progress, error?, attempts, controller, `result?: R`), `UploadBatch<R, X, B>` (`B` &
+        id, label, `key?`, `files`, seq, finishedAt, acknowledged, onComplete?, `onItemDone?`), `enqueue(jobs, {label, key?,
+        onComplete?, onItemDone?, extra?}): string | null`, `QUOTA_EXCEEDED`, `isRetryable`, `cancelFile`, `cancelBatch`,
+        `cancelAll`, `retryFile`, `removeFile`, `acknowledgeBatch`, `clearUploads`, `useUploadQueue`; the runner, retry,
+        abort and progress rules are moved verbatim. `features/memory/uploadQueue.ts` keeps `UploadTarget`, `batchKey`,
+        `UploadFn`, the picker helpers and `enqueueUploads(target, selections, opts)` (same signature): one job per file whose
+        `run` is `target.upload ?? addMedia(...)`, `extra` {mediaType, file} on the item and {target} on the batch, `key:
+        batchKey(target)`, and an `onItemDone` that sets `file.mediaId = file.result?.mediaId` and then calls the caller's
+        `onFileDone`; it re-exports the core names, so no importer changed. Decisions (each reversible): (1) progress stays
+        a fraction 0..1, not `bytesDone` as the plan sketched — `addMedia` reports a fraction of its chunks (derivatives
+        included), and bytes would divide by a zero `sizeBytes`; (2) the core batch keeps the array name `files` and the
+        functions their names (`cancelFile`, `retryFile`, `removeFile`), because the brief asked for today's names and every
+        consumer and the hand-built batches in `MemoryDetail.optimistic`/`ShareView.order` read `batch.files`; (3) the
+        application's own fields ride as `extra` copied onto the item/batch, so Memories' `UploadFile`/`UploadBatch` keep
+        their shape (`file`, `mediaType`, `mediaId`, `target`) and `optimisticUpload`, `useOptimisticTiles` and the status
+        menu are untouched; the batch's stored hook is `onItemDone` (Memories' type lost the `onFileDone` field nobody read);
+        (4) the job lives in a module `Map` by item id, not on the reactive item; (5) `mediaId` is set in the settle hook,
+        after `status = 'done'` in the same synchronous step, where it was set before — no watcher runs in between (no
+        `flush: 'sync'` watcher reads the queue); (6) Memories' `useUploadQueue` keeps only batches carrying a `target`, so
+        another application's batches never reach `batchKey`; `activeFileCount` stays core's (all batches) — moot until B3
+        moves the menu. Tests: 15 cases in `uploadQueue.test.ts` → 12 there (addMedia wiring, File unread, mediaId, onFileDone
+        order, the share transport's quota and settle, the item's file/mediaType, the abort signal handed to addMedia, empty
+        pick, the 3 picker helpers) + 16 in `core/blob/queue.test.ts` over a fake runner (states, progress flip, order across
+        batches with max one in flight, onItemDone before onComplete, retry, quota never retried, retryFile, abort/AbortError →
+        cancelled, cancelFile/Batch/All, remove, acknowledge, clear, `extra`). Coverage yaml rows `global-uploads-tray`,
+        `progress-and-cancel`, `transient-retry`, `delete-own-in-session`, `the-member-is-told-there-is-no-space` name the
+        core test. `npm run check` (fresh `generate:api`) 200 files / 1896 tests → 201 / 1909; 53 validators green before and
+        after, the core-import guard 184 → 185 core files; B0 and P4-0 snapshots untouched. Levers, each red then restored
+        green: retry also for `quota_exceeded` (3 red: the core quota case, Memories' share-quota case, the status menu's
+        no-space case); an abort leaving the status as it was (6 red: 4 core cancel cases, Memories' signal case, the status
+        menu's cancel); `import … from '../../features/memory/uploadQueue'` in `queue.ts` (guard red); the adapter returning
+        only `{blobId}` (3 Memories cases red). `vi.mock` sabotage: `enqueue` + `useUploadQueue` throwing in core — nobody
+        mocks `core/blob/queue`; the three suites that replace `features/memory/uploadQueue`'s queue functions
+        (`MemoryDetail.optimistic`, `ShareView.order`, `ShareView.picker`) green; red: the core test (16), `uploadQueue.test.ts`
+        (9), `UploadStatusMenu` (4), `AppTopbar` (2), `MemoryDetail` (30), `MemoryShareBody` (7), `MemoryShareBody.embedded`
+        (7, its partial mock keeps the real `useUploadQueue`), `ShareView.folder` (1). Not verified in a browser.
   - [ ] B3 the status menu to core and the tray becomes a list (`register.ts` loses its tray claim; needs P4a).
   - [ ] P4b a core level view `core/node/LevelView.vue` — overview card, application sections ordered by `order`, the folder
         section, a fallback section for a kind nobody sections ('not supported', never an empty area) · Done when: P4-0
