@@ -354,7 +354,7 @@ Planned 2026-10-06 from three inventories; each sub-slice is its own worktree ru
         `createGuestIdentity` reddens `guestIdentity.test.ts` + `share.test.ts`, `loadGuestSession` the three
         `ShareView` suites + `MemoryShareBody.test.ts` (no mock disarmed by the move). Open for 5b.4b/5b.5:
         `share.folder.roleContributorHint` still says a folder guest cannot add photos, false since 5a.5.
-  - [ ] 5b.4b public folder page — optional `ShareBodyProps.subtreeRoot {nodeId, key, name}`; `openSharedMemory` with a
+  - [x] 5b.4b public folder page — optional `ShareBodyProps.subtreeRoot {nodeId, key, name}`; `openSharedMemory` with a
         root (key from the chain, media filtered to the subtree, `chapterName` null for the root); `MemoryShareBody`
         embedded: name from the chain, no folder note, `canContribute` from the role AND the target (after 5a.5 an
         embedded Memory takes uploads and the guest's own deletes); core `FolderShareBody` (PrimeVue `Breadcrumb`,
@@ -363,6 +363,30 @@ Planned 2026-10-06 from three inventories; each sub-slice is its own worktree ru
         `.veyq-empty`), registered in `createRegistry` (measure the import cycle; else `ShareView` renders `FOLDER`);
         a small core name dialog for 'New folder' and for the guest's name (asked once, as Memories does); en+de keys ·
         Done when: component tests with the registry as a Proxy, `npm run check`.
+        *Measured:* `core/sharing/FolderShareBody.vue` (opens through `openGuestTreeParts`; breadcrumb `.app-breadcrumb`,
+        the note once as `.veyq-surface.markdown-body`, children as `.veyq-card-grid` / `.veyq-node-card` — the core twin
+        in `styles/ui.css`, tokens only — a FOLDER child `router.push({ query: { node }, hash: route.hash })`, any other
+        kind embedded with `subtreeRoot`, `share.folder.unsupportedKind` / `share.folder.gone` as local `.veyq-empty`).
+        **The import cycle bites:** with `FolderShareBody.vue` evaluated before `registry.ts`, a static registration left
+        the app's `registry` answering null for FOLDER (a fresh `createRegistry()` answered it) — so `createRegistry`
+        pre-claims FOLDER with `defineAsyncComponent(() => import(...))` (a literal import, bundled; the KDoc at the line),
+        pinned by `FolderShareBody.registration.test.ts` (red with the static import). `core/sharing/ShareNameDialog.vue`
+        is the one small dialog (new folder; the guest's name). The guest is named once per link under the SHARE ROOT's
+        key (`nameShareGuest` in `guestIdentity.ts`), at its first write — the folder body's 'New folder' or an embedded
+        Memory's 'Add photos' (no pre-screen in front of a node the guest browsed into); the session key is the one
+        Memories uses. `openSharedMemory(head, listing, root?)` filters to `{root} ∪ descendants` and keys the root;
+        `addSharePhoto`'s `nodeId` threads into start, window and complete (absent: no `nodeId` key — the wire test
+        reads the JSON at `fetch`). **The guest-name risk was real:** a folder guest's name is under the folder's key, a
+        member opened it under the Memory's — `contentKeyChain` (core `tree.ts`; `nodeContentKey` is now its head) and
+        `openBucketName(…, ancestorKeys)` (a contributor primary only), wired in `MemoryBuckets.vue`; this also fixes a
+        Memory link's guest uploading into a chapter. No delete control for a contributor's own photo (root-level parity;
+        the right exists server-side, the e2e uses it). Fixed: `share.folder.roleContributorHint` (en, de). `npm run
+        check` 1762 → 1795 passed (188 → 193 files); core-import guard 180 → 182 files; e2e discovery 17 → 18 (new
+        `folderShareUpload.e2e.test.ts`, type-checked and linted, **not run**). Bites (each red, then green): `subtreeRoot`
+        dropped, `canContribute` false, the hash dropped from the push, guest names under the node key only (unit and
+        `MemoryBuckets` wiring), write controls for READ, the window's target dropped, the embedded upload's target
+        dropped, the static registration, the subtree filter, the root's `chapterName`, the note repeated, the guest
+        named under another key, an embedded `unavailable` bubbling to the page. No browser check.
   - [ ] 5b.5 clean-up — chapter wording in the member share dialog (en and de: 'Share this chapter', 'It shows only this chapter'; `share.title`/`share.intro` say Memory today); a member's root rename re-seals every share's `sealedName` through the recovery copy (each
         share on its own, a failure is reported, not rolled back); the trash dialog reloads after the tree reload on a
         restore (`SpaceTrashDialog.vue:65`, test `:103`) and shows a freed-slug descendant as a root (#357); docs under
