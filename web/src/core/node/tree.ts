@@ -354,7 +354,8 @@ export async function deleteNode(scopeId: string, nodeId: string): Promise<void>
   await withRefresh(() => contentApi().deleteNode({ scopeId, nodeId }))
 }
 
-/** One soft-deleted subtree ROOT in the space's trash, its name decrypted client-side. */
+/** One soft-deleted subtree ROOT in the space's trash (a deleted node's own root, or a descendant a restore left
+ *  behind because its name was freed, see {@link listTrash}), its name decrypted client-side. */
 export type TrashedNode = {
   id: string
   parentId: string | null
@@ -369,10 +370,13 @@ export type TrashedNode = {
   purgeAfter: Date
 }
 
-/** The space's node trash: the ROOT of each deleted subtree (the descendants went with it and return with it), each
- *  name opened under the key its entry lives under — its **live** parent's content key, resolved from the loaded
- *  `tree` (a trashed root's parent is always live, or the scope root), or **its own** epoch key `E_{node.epoch}` at the
- *  scope root — exactly as {@link listTree} does. */
+/** The space's node trash: the ROOT of each deleted subtree (the descendants went with it and return with it — except
+ *  one whose own name an earlier delete freed: a restore of its parent leaves it in the trash, where it is a root of
+ *  its own from then on, inbox #357), each name opened under the key its entry lives under — its **live** parent's
+ *  content key, resolved from the loaded `tree` (a trashed root's parent is always live, or the scope root), or **its
+ *  own** epoch key `E_{node.epoch}` at the scope root — exactly as {@link listTree} does. So after a restore the list is
+ *  read against the RELOADED tree: the parent that just came back is in no older one, and its left-behind child's
+ *  entry opens under no key there (`OpenRefused`). */
 export async function listTrash(scopeId: string, epochs: EpochKeys, tree: TreeNode[]): Promise<TrashedNode[]> {
   const rows = await withRefresh(() => contentApi().listTrashedNodes({ scopeId }))
   return rows.map((r: TrashedNodeSummary) => {

@@ -173,7 +173,8 @@ async function onMutationDone() {
   await loadTree()
 }
 /** A restore puts a whole subtree back, so the tree is refetched exactly as a delete refetches it — no local
- *  splice. The position stays where it is: the restored node reappears wherever it belonged. */
+ *  splice. The position stays where it is: the restored node reappears wherever it belonged. The open trash dialog
+ *  re-reads its list when the new tree reaches its `tree` prop (a descendant left behind is a root then, inbox #357). */
 async function onTrashRestored() {
   await loadTree()
 }

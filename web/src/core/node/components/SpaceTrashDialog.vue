@@ -2,12 +2,16 @@
 // The space's node trash (uc.memory.delete-node, ADR 0061). A trashed *medium* lives in a tab on its Memory; a
 // trashed *Memory* cannot, because its own Memory is what was deleted — so the node trash hangs off the SPACE
 // and opens from the browse toolbar. It lists only the ROOT of each deleted subtree: the descendants went down
-// with it and come back with it, so offering them separately would offer a restore that cannot stand alone.
+// with it and come back with it, so offering them separately would offer a restore that cannot stand alone. The one
+// exception the server makes (inbox #357): a descendant whose own name was freed by an earlier delete stays in the
+// trash when its parent is restored, and is then a root of its own — so after a restore the list is read again, once
+// the host has reloaded the tree (that descendant's name opens under its now live parent's key, which only the
+// reloaded tree holds; read against the old one it would refuse to open).
 //
 // Restore can legitimately fail: a node created while this one sat in the trash may already hold the name. That
 // is the ordinary disambiguation a create takes (A1), so the row turns into a name field and retries — it does
 // NOT silently rename, and it does not refuse forever.
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
@@ -41,6 +45,21 @@ const { run: load, pending: loading } = useAsyncAction(
   { onError: () => { loadFailed.value = true } },
 )
 
+/** Re-read the list without the spinner, after the host handed over a reloaded tree. A later reload wins over an
+ *  earlier one still in flight (two restores in a row). */
+let reloads = 0
+async function reload() {
+  const mine = ++reloads
+  try {
+    const fresh = await listTrash(props.scopeId, props.epochs, props.tree)
+    if (mine === reloads) { rows.value = fresh; loadFailed.value = false }
+  } catch {
+    if (mine === reloads) loadFailed.value = true
+  }
+}
+// The host answers `restored` by reloading the tree and passing the new one in — only then is the list read again.
+watch(() => props.tree, () => void reload())
+
 function day(d: Date): string {
   return d.toLocaleDateString(locale.value)
 }
@@ -62,9 +81,9 @@ async function restore(row: TrashedNode, newName?: string) {
   busy.value = row.id
   try {
     await restoreNode(props.scopeId, props.epochs, props.tree, row, newName)
-    rows.value = rows.value.filter((r) => r.id !== row.id)
+    rows.value = rows.value.filter((r) => r.id !== row.id) // at once; the reload after the tree's replaces the list
     renaming.value = null
-    emit('restored')
+    emit('restored') // the host reloads the tree; the new `tree` prop then reloads this list
   } catch (e) {
     // A `slug_taken` is the ONLY recoverable one, and it is recovered the way a create is — the row turns into
     // a name field. `scope_deleting` and everything else are a plain failure: the remedy is not a new name.
