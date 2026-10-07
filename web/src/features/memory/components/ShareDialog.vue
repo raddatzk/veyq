@@ -32,6 +32,7 @@ import {
 import { recoverShareLink } from '../shareLink'
 import { ShareRole } from '../../../api/generated/sharing'
 import type { EpochKeys } from '../../spaces/epochs'
+import { CHAPTER_KIND } from '../kinds'
 
 const props = defineProps<{
   /** The shared Memory's scope — every share's recovery copy of `K_share` is bound to it (ADR 0072). */
@@ -43,6 +44,8 @@ const props = defineProps<{
   memoryName: string
   /** The uploader (drop-box) variant: list only uploader shares, create with no role switcher. Identical otherwise. */
   uploader?: boolean
+  /** The shared node's kind as the shell's tree holds it — a chapter link says "chapter", not "Memory" (5b.5). */
+  nodeKind?: string
 }>()
 const emit = defineEmits<{ close: [] }>()
 
@@ -75,8 +78,9 @@ const sections = computed(() => [
   { key: 'on', foldable: false, shares: visibleShares.value.filter((s) => s.enabled) },
   { key: 'off', foldable: true, shares: visibleShares.value.filter((s) => !s.enabled) },
 ])
-const headerTitle = computed(() => (props.uploader ? t('share.uploaderTitle') : t('share.title')))
-const introText = computed(() => (props.uploader ? t('share.uploaderDialogCopy') : t('share.intro')))
+const isChapter = computed(() => props.nodeKind === CHAPTER_KIND)
+const headerTitle = computed(() => (props.uploader ? t('share.uploaderTitle') : isChapter.value ? t('share.chapterTitle') : t('share.title')))
+const introText = computed(() => (props.uploader ? t('share.uploaderDialogCopy') : isChapter.value ? t('share.chapterIntro') : t('share.intro')))
 const createLabel = computed(() => (props.uploader ? t('share.uploaderCreate') : t('share.createNew')))
 const emptyLabel = computed(() => (props.uploader ? t('share.uploaderNone') : t('share.none')))
 

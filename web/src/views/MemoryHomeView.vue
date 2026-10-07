@@ -272,6 +272,7 @@ async function onDeleteDone() {
       :memory-key="memoryKey"
       :epochs="epochs"
       :memory-name="currentNode.name"
+      :node-kind="currentNode.kind"
       @close="shareVisible = false"
     />
     <!-- A folder is core's kind, so its share dialog is core's: READ / READ_WRITE, no uploader variant (5b.3). -->
@@ -294,6 +295,7 @@ async function onDeleteDone() {
       :memory-key="memoryKey"
       :epochs="epochs"
       :memory-name="currentNode.name"
+      :node-kind="currentNode.kind"
       @close="uploaderVisible = false"
     />
   </div>
