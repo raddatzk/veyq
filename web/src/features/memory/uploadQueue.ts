@@ -1,38 +1,51 @@
-// uc.memory.upload (web, cr-0058) — the global upload queue, ported from legacy/frontend-noe2ee's
-// useUploadQueue and rewired onto the contracts `addMedia`. A module singleton so uploads survive navigation;
-// the TopBar UploadStatusMenu renders `useUploadQueue()` and the gallery enqueues against the open Memory.
+// uc.memory.upload (web, cr-0058) — Memories' side of the global upload queue. The queue itself (the six states,
+// the sequential runner, the one automatic retry that `quota_exceeded` never gets, cancel/retry/remove/acknowledge,
+// the reactive view) is core's, `core/blob/queue.ts` (cr-files-application B2); this module is the thin adapter that
+// turns picked media files into queue jobs whose runner is `addMedia` (or a share-scoped transport), plus the media
+// picker helpers. The TopBar UploadStatusMenu renders `useUploadQueue()` and the gallery enqueues against the open
+// Memory.
 //
-// First slice: SEQUENTIAL (one file at a time), fraction-based progress (no speed/ETA), one automatic retry on
-// a transient failure, explicit retry on a hard failure — except a refusal no retry can help (`quota_exceeded`),
-// which fails at once and offers none. Operator-blind is entirely `addMedia`'s concern.
-import { reactive, computed } from 'vue'
+// Media specifics: `preparing` is the pre-network phase (derive poster/dimensions, read the metadata — sealing is
+// not part of it, the file is read and sealed one frame at a time as it is sent), and it flips to `uploading` on
+// media.ts's `onProgress?.(0)` right before the chunk PUTs. Operator-blind is entirely `addMedia`'s concern.
+import { computed } from 'vue'
 import { addMedia, type AddMediaSource, type AddMediaOptions } from './media'
+import {
+  enqueue as enqueueJobs,
+  useUploadQueue as useCoreUploadQueue,
+  type UploadItem,
+  type UploadBatch as CoreUploadBatch,
+} from '../../core/blob/queue'
 
-// `preparing` = picked up, but still in the pre-network phase (derive poster/dimensions, read the metadata). For a
-// video this can take a visible moment — especially the on-device frame decode — so it gets its own state instead
-// of masquerading as a stuck 0% `uploading`. Sealing is not part of it: the file is read and sealed one frame at a
-// time as it is sent. It flips to `uploading` the instant the first PUT progress arrives (media.ts `onProgress?.(0)`,
-// right before the chunk PUTs).
-export type UploadStatus = 'queued' | 'preparing' | 'uploading' | 'done' | 'failed' | 'cancelled'
+export {
+  QUOTA_EXCEEDED,
+  isRetryable,
+  cancelFile,
+  cancelBatch,
+  cancelAll,
+  retryFile,
+  removeFile,
+  acknowledgeBatch,
+  clearUploads,
+  type UploadStatus,
+} from '../../core/blob/queue'
+
+/** What one media upload settles to — `addMedia`'s result; the queue keeps it on the item as `result`. */
+export type MediaUploadResult = { blobId: string; mediaId: string }
 
 /** How one file is sealed + uploaded — the authed `addMedia` (default) or a share-scoped transport (cr-0101). */
-export type UploadFn = (source: AddMediaSource, opts: AddMediaOptions) => Promise<{ blobId: string; mediaId: string }>
+export type UploadFn = (source: AddMediaSource, opts: AddMediaOptions) => Promise<MediaUploadResult>
 
-export type UploadFile = {
-  id: string
-  name: string
-  sizeBytes: number
+/** Memories' own fields on a queue item (its job's `extra`); the queue never reads them. */
+type MediaFileFields = {
   mediaType: string
-  status: UploadStatus
-  progress: number // 0..1
-  error?: string
-  attempts: number
-  controller: AbortController
   file: File
   /** The media id `addMedia` returned once this file settled `done` — lets the gallery reconcile its optimistic
    *  in-grid tile against the listed media by id (cr-0074). Undefined until then. */
   mediaId?: string
 }
+
+export type UploadFile = UploadItem<MediaUploadResult, MediaFileFields>
 
 /**
  * Where a batch's media attach + how they upload. The **authed** curator path passes `{ scopeId, nodeId,
@@ -53,35 +66,9 @@ export type UploadTarget = {
 /** The grouping key of a batch — its explicit `key`, else its `nodeId` (the authed default). */
 export const batchKey = (t: UploadTarget): string | undefined => t.key ?? t.nodeId
 
-export type UploadBatch = {
-  id: string
-  label: string
-  target: UploadTarget
-  files: UploadFile[]
-  seq: number
-  finishedAt: number | null
-  acknowledged: boolean
-  onComplete?: (batch: UploadBatch) => void
-  /** Per-file settle hook (cr-0111): fired the moment ONE file finishes `done`, so the gallery reconciles that
-   *  file's optimistic tile immediately instead of waiting for the whole batch's `onComplete`. */
-  onFileDone?: (file: UploadFile) => void
-}
-
-const MAX_ATTEMPTS = 2 // one automatic retry on a transient failure
-
-/**
- * The server refused the file because the tenant or the link has no room left (ADR 0073 §6). No retry can help —
- * the room is still gone a moment later — so the file fails on its first attempt and no retry is offered. A
- * member's upload and a link visitor's both carry this code; each surface words it for its own reader.
- */
-export const QUOTA_EXCEEDED = 'quota_exceeded'
-
-/** Whether a failed file is one a retry could help — every failure but [QUOTA_EXCEEDED]. */
-export const isRetryable = (f: Pick<UploadFile, 'error'>): boolean => f.error !== QUOTA_EXCEEDED
-
-const batches = reactive<UploadBatch[]>([])
-let seq = 0
-let running = false
+/** A Memories batch: core's, carrying the `target` it was enqueued against. Its per-file settle hook is the
+ *  queue's `onItemDone`, which `enqueueUploads` wires to the caller's `onFileDone`. */
+export type UploadBatch = CoreUploadBatch<MediaUploadResult, MediaFileFields, { target: UploadTarget }>
 
 // --- file-selection helpers (Safari Photos import, uc.memory.upload E3) ----
 
@@ -178,74 +165,7 @@ export function collectPickedFiles(input: HTMLInputElement, enqueue: (files: Fil
   }
 }
 
-// --- queue -----------------------------------------------------------------
-
-function nextQueued(): UploadFile | null {
-  for (const batch of batches.slice().sort((a, b) => a.seq - b.seq)) {
-    const file = batch.files.find((f) => f.status === 'queued')
-    if (file) return file
-  }
-  return null
-}
-
-function finalize(batch: UploadBatch): void {
-  const settled = (f: UploadFile) => f.status === 'done' || f.status === 'failed' || f.status === 'cancelled'
-  if (batch.finishedAt === null && batch.files.every(settled)) {
-    batch.finishedAt = Date.now()
-    batch.onComplete?.(batch)
-  }
-}
-
-async function uploadOne(file: UploadFile): Promise<void> {
-  const batch = batches.find((b) => b.files.includes(file))
-  if (!batch) return
-  file.status = 'preparing' // pre-network: derive + metadata; flips to 'uploading' on the first PUT progress
-  file.progress = 0
-  file.attempts += 1
-  try {
-    const t = batch.target
-    // the batch's transport: the share-scoped upload fn, or the authed addMedia over scope/node/K_mem (default).
-    // the file's creation date is passed so a source with no EXIF date can fall back to it (cr-0066).
-    const upload: UploadFn = t.upload ?? ((source, opts) => addMedia(t.scopeId!, t.nodeId!, t.memoryKey!, source, undefined, opts))
-    // the File itself, never its bytes: the pump reads and seals it a frame at a time (ADR 0013 Consequences)
-    const { mediaId } = await upload({ blob: file.file, mediaType: file.mediaType, lastModified: file.file.lastModified, name: file.name }, {
-      onProgress: (p) => {
-        if (file.status === 'preparing') file.status = 'uploading' // first PUT progress → the network phase began
-        file.progress = p
-      },
-      signal: file.controller.signal,
-    })
-    file.mediaId = mediaId // the gallery reconciles its optimistic tile against the listed media by this id (cr-0074)
-    file.status = 'done'
-    file.progress = 1
-    batch.onFileDone?.(file) // cr-0111: reconcile THIS file's tile now, not only at the batch's onComplete
-  } catch (e) {
-    const error = (e as Error)?.message ?? 'upload_failed'
-    if (file.controller.signal.aborted || (e as { name?: string })?.name === 'AbortError') {
-      file.status = 'cancelled'
-    } else if (file.attempts < MAX_ATTEMPTS && isRetryable({ error })) {
-      file.status = 'queued' // one automatic retry on a transient failure
-    } else {
-      file.status = 'failed'
-      file.error = error
-    }
-  }
-  finalize(batch)
-}
-
-function scheduleRunner(): void {
-  if (running) return
-  running = true
-  void (async () => {
-    try {
-      let file: UploadFile | null
-      while ((file = nextQueued())) await uploadOne(file)
-    } finally {
-      running = false
-      if (nextQueued()) scheduleRunner() // a retry re-queued after the loop ended
-    }
-  })()
-}
+// --- the queue adapter -------------------------------------------------------
 
 /** Enqueue a batch of selected files against a Memory. Returns the batch id, or null when nothing was given. */
 export function enqueueUploads(
@@ -253,108 +173,39 @@ export function enqueueUploads(
   selections: { file: File; mediaType: string }[],
   opts: { label: string; onComplete?: (batch: UploadBatch) => void; onFileDone?: (file: UploadFile) => void } = { label: '' },
 ): string | null {
-  if (selections.length === 0) return null
-  const files: UploadFile[] = selections.map((s) => ({
-    id: crypto.randomUUID(),
-    name: s.file.name,
-    sizeBytes: s.file.size,
-    mediaType: s.mediaType,
-    status: 'queued',
-    progress: 0,
-    attempts: 0,
-    controller: new AbortController(),
-    file: s.file,
-  }))
-  const batch: UploadBatch = {
-    id: crypto.randomUUID(),
-    label: opts.label || `${files.length}`,
-    target,
-    files,
-    seq: seq++,
-    finishedAt: null,
-    acknowledged: false,
-    onComplete: opts.onComplete,
-    onFileDone: opts.onFileDone,
-  }
-  batches.push(batch)
-  scheduleRunner()
-  return batch.id
-}
-
-export function cancelFile(fileId: string): void {
-  for (const batch of batches) {
-    const file = batch.files.find((f) => f.id === fileId)
-    if (!file) continue
-    if (file.status === 'queued') file.status = 'cancelled'
-    // in-flight (preparing or uploading): abort — uploadMediaVia's throwIfAborted checkpoints map it → cancelled
-    else if (file.status === 'preparing' || file.status === 'uploading') file.controller.abort()
-    finalize(batch)
-    return
-  }
-}
-
-export function cancelBatch(batchId: string): void {
-  const batch = batches.find((b) => b.id === batchId)
-  batch?.files.forEach((f) => cancelFile(f.id))
-}
-
-export function cancelAll(): void {
-  batches.slice().forEach((b) => cancelBatch(b.id))
-}
-
-/** Retry a hard-failed file (resets its attempts). */
-export function retryFile(fileId: string): void {
-  for (const batch of batches) {
-    const file = batch.files.find((f) => f.id === fileId)
-    if (!file || file.status !== 'failed') continue
-    file.status = 'queued'
-    file.attempts = 0
-    file.error = undefined
-    batch.finishedAt = null
-    scheduleRunner()
-    return
-  }
-}
-
-/**
- * Remove a settled file from the queue entirely (cr-0102 uploader delete-own) — drops its optimistic tile and
- * lets the preview lifecycle revoke its object URL. Empties the batch if it was the last file. Only a settled
- * file should be removed; an in-flight file must be cancelled first.
- */
-export function removeFile(fileId: string): void {
-  for (const batch of batches) {
-    const idx = batch.files.findIndex((f) => f.id === fileId)
-    if (idx === -1) continue
-    batch.files.splice(idx, 1)
-    if (batch.files.length === 0) {
-      const bi = batches.indexOf(batch)
-      if (bi !== -1) batches.splice(bi, 1)
-    }
-    return
-  }
-}
-
-/** Hide a finished batch from the tray. */
-export function acknowledgeBatch(batchId: string): void {
-  const batch = batches.find((b) => b.id === batchId)
-  if (batch) batch.acknowledged = true
-}
-
-/** Test/teardown: cancel everything and empty the queue. */
-export function clearUploads(): void {
-  cancelAll()
-  batches.length = 0
-  running = false
-}
-
-/** Reactive view for the UI: the un-acknowledged batches + a count of still-active files. */
-export function useUploadQueue() {
-  const visibleBatches = computed(() => batches.filter((b) => !b.acknowledged))
-  const activeFileCount = computed(() =>
-    batches.reduce(
-      (n, b) => n + b.files.filter((f) => f.status === 'queued' || f.status === 'preparing' || f.status === 'uploading').length,
-      0,
-    ),
+  // the batch's transport: the share-scoped upload fn, or the authed addMedia over scope/node/K_mem (default).
+  // the file's creation date is passed so a source with no EXIF date can fall back to it (cr-0066).
+  const upload: UploadFn =
+    target.upload ?? ((source, o) => addMedia(target.scopeId!, target.nodeId!, target.memoryKey!, source, undefined, o))
+  return enqueueJobs<MediaUploadResult, MediaFileFields, { target: UploadTarget }>(
+    selections.map((s) => ({
+      name: s.file.name,
+      sizeBytes: s.file.size,
+      extra: { mediaType: s.mediaType, file: s.file },
+      // the File itself, never its bytes: the pump reads and seals it a frame at a time (ADR 0013 Consequences)
+      run: ({ onProgress, signal }) =>
+        upload({ blob: s.file, mediaType: s.mediaType, lastModified: s.file.lastModified, name: s.file.name }, { onProgress, signal }),
+    })),
+    {
+      label: opts.label,
+      key: batchKey(target),
+      extra: { target },
+      onComplete: opts.onComplete,
+      onItemDone: (file) => {
+        // the gallery reconciles its optimistic tile against the listed media by this id (cr-0074)
+        file.mediaId = file.result?.mediaId
+        opts.onFileDone?.(file) // cr-0111: reconcile THIS file's tile now, not only at the batch's onComplete
+      },
+    },
   )
-  return { batches: visibleBatches, activeFileCount }
 }
+
+/** Reactive view for the UI: the un-acknowledged Memories batches + a count of still-active files. Only the
+ *  batches `enqueueUploads` made (the ones carrying a `target`) are Memories' to render; another application's
+ *  batches carry neither a `target` nor a `file`, so the cast below holds exactly for what the filter keeps. */
+export function useUploadQueue() {
+  const core = useCoreUploadQueue()
+  const batches = computed(() => core.batches.value.filter((b) => 'target' in b) as unknown as UploadBatch[])
+  return { batches, activeFileCount: core.activeFileCount }
+}
+

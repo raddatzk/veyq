@@ -57,7 +57,7 @@ acceptanceCriteria:
       backend:
         integration: [ShareUploaderSliceTest.uploaderNamesUploadsAttachesStampedAndDeletesOwn, ShareUploaderSliceTest.aDeleteOwnOverlappingItselfAnswersAsAReplay, ShareUploaderSliceTest.foreignIdentityDeleteIs404, ShareUploaderSliceTest.badTokenDeleteIs403]
       web:
-        unit: [src/features/memory/share.test.ts, src/features/memory/uploadQueue.test.ts]
+        unit: [src/features/memory/share.test.ts, src/core/blob/queue.test.ts]
   - id: ephemerality-warned
     text: The write-only, session-only nature is surfaced prominently in four places - (a) the mandatory name pre-screen before the first upload; (b) a persistent header badge ("visible only in this session") in place of the viewer's read-only badge; (c) a dedicated empty-state after a reload (not a blank gallery); (d) a note that delete works only in this session. The plain-language "what this means for you" states it too.
     # The four warning surfaces (name-pre-screen warning, header badge, session note, reload empty-state) are

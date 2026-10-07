@@ -32,6 +32,7 @@ acceptanceCriteria:
         unit:
           - src/features/memory/components/UploadStatusMenu.test.ts
           - src/features/memory/uploadQueue.test.ts
+          - src/core/blob/queue.test.ts
   - id: progress-and-cancel
     text: Per-file progress advances as the ciphertext chunks land; cancelling an in-flight upload aborts its PUTs before completing, so no media is attached.
     coverage:
@@ -39,6 +40,7 @@ acceptanceCriteria:
         unit:
           - src/features/memory/media.test.ts
           - src/features/memory/uploadQueue.test.ts
+          - src/core/blob/queue.test.ts
   - id: abandoned-session-reclaimed
     text: >-
       An upload that never reaches `complete` — cancelled, killed mid-flight, or rejected by the complete-time
@@ -172,7 +174,7 @@ acceptanceCriteria:
     text: A transient upload failure is retried once automatically; a hard failure is marked failed and retried only on explicit request.
     coverage:
       web:
-        unit: [src/features/memory/uploadQueue.test.ts]
+        unit: [src/core/blob/queue.test.ts]
   - id: safari-photos-import
     text: >-
       Files imported from the Photos gallery (empty MIME, late/repeated input population) are accepted by
