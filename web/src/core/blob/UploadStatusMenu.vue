@@ -2,7 +2,12 @@
 // uc.memory.upload (web, cr-0058) — the TopBar uploads tray. Ported from legacy/frontend-noe2ee's
 // UploadStatusMenu (button + custom popover), rewired onto our uploadQueue. Shows every in-flight/finished
 // batch with per-file progress + cancel/retry; the button badges the active-file count and spins while uploads
-// run. Mounted in AppTopbar's actions slot; the queue is a module singleton so it persists across navigation.
+// run. The queue is a module singleton so it persists across navigation.
+//
+// The platform's, not an application's (cr-files-application B3): the core top bar mounts it directly, and it lists
+// EVERY batch of the one core queue, whichever application enqueued it. It reads only the neutral item and batch
+// fields (name, status, progress, error, label, finishedAt) — never an application's `extra` — so a Files batch shows
+// exactly like a Memories one, and nothing here may import an application.
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
@@ -14,8 +19,8 @@ import {
   isRetryable,
   QUOTA_EXCEEDED,
   type UploadBatch,
-  type UploadFile,
-} from '../uploadQueue'
+  type UploadItem,
+} from './queue'
 
 const { t } = useI18n()
 const { batches, activeFileCount } = useUploadQueue()
@@ -37,13 +42,13 @@ function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') close()
 }
 
-const canCancel = (f: UploadFile) => f.status === 'queued' || f.status === 'preparing' || f.status === 'uploading'
+const canCancel = (f: UploadItem) => f.status === 'queued' || f.status === 'preparing' || f.status === 'uploading'
 const percent = (fraction: number) => Math.round(fraction * 100)
 function batchProgress(batch: UploadBatch): number {
   if (batch.files.length === 0) return 0
   return percent(batch.files.reduce((n, f) => n + (f.status === 'done' ? 1 : f.progress), 0) / batch.files.length)
 }
-function statusIcon(f: UploadFile): string {
+function statusIcon(f: UploadItem): string {
   if (f.status === 'done') return 'pi pi-check'
   if (f.status === 'failed') return 'pi pi-times'
   if (f.status === 'cancelled') return 'pi pi-ban'
@@ -68,8 +73,8 @@ onBeforeUnmount(() => {
       v-if="hasUploads || activeFileCount"
       type="button"
       class="uploads-trigger"
-      :aria-label="t('media.uploads')"
-      :title="t('media.uploads')"
+      :aria-label="t('upload.title')"
+      :title="t('upload.title')"
       @click="toggle"
     >
       <span class="pi" :class="activeFileCount > 0 ? 'pi-spin pi-spinner' : 'pi-list'" />
@@ -79,16 +84,16 @@ onBeforeUnmount(() => {
     <section v-if="open" class="uploads-panel">
       <header class="uploads-header">
         <div>
-          <h3>{{ t('media.uploads') }}</h3>
+          <h3>{{ t('upload.title') }}</h3>
           <!-- Only the active summary here; the "no uploads" line lives in the empty row below (no double). -->
-          <p v-if="activeFileCount">{{ t('media.uploadActive', { count: activeFileCount }) }}</p>
+          <p v-if="activeFileCount">{{ t('upload.active', { count: activeFileCount }) }}</p>
         </div>
         <button v-if="activeFileCount" type="button" class="uploads-cancel-all" @click="cancelAll">
-          {{ t('media.uploadCancelAll') }}
+          {{ t('upload.cancelAll') }}
         </button>
       </header>
 
-      <p v-if="!hasUploads" class="uploads-empty">{{ t('media.uploadNone') }}</p>
+      <p v-if="!hasUploads" class="uploads-empty">{{ t('upload.none') }}</p>
 
       <article v-for="batch in batches" :key="batch.id" class="uploads-batch">
         <div class="uploads-batch-head">
@@ -102,13 +107,13 @@ onBeforeUnmount(() => {
           <li v-for="file in batch.files" :key="file.id" class="uploads-file" :class="`is-${file.status}`">
             <span class="uploads-file-icon" :class="statusIcon(file)" aria-hidden="true" />
             <span class="uploads-file-name">{{ file.name }}</span>
-            <span class="uploads-file-status">{{ t(`media.uploadStatus.${file.status}`) }}</span>
+            <span class="uploads-file-status">{{ t(`upload.status.${file.status}`) }}</span>
             <button
               v-if="canCancel(file)"
               type="button"
               class="uploads-file-action"
-              :aria-label="t('media.uploadCancel')"
-              :title="t('media.uploadCancel')"
+              :aria-label="t('upload.cancel')"
+              :title="t('upload.cancel')"
               @click="cancelFile(file.id)"
             >
               <span class="pi pi-times" aria-hidden="true" />
@@ -117,20 +122,20 @@ onBeforeUnmount(() => {
               v-else-if="file.status === 'failed' && isRetryable(file)"
               type="button"
               class="uploads-file-action"
-              :aria-label="t('media.uploadRetry')"
-              :title="t('media.uploadRetry')"
+              :aria-label="t('upload.retry')"
+              :title="t('upload.retry')"
               @click="retryFile(file.id)"
             >
               <span class="pi pi-refresh" aria-hidden="true" />
             </button>
             <!-- A refusal for lack of room says why, and offers no retry: none can help (ADR 0073 §6). -->
             <span v-if="file.status === 'failed' && file.error === QUOTA_EXCEEDED" class="uploads-file-reason">
-              {{ t('media.uploadNoSpace') }}
+              {{ t('upload.noSpace') }}
             </span>
           </li>
         </ul>
         <button v-if="batch.finishedAt !== null" type="button" class="uploads-dismiss" @click="acknowledgeBatch(batch.id)">
-          {{ t('media.close') }}
+          {{ t('upload.close') }}
         </button>
       </article>
     </section>

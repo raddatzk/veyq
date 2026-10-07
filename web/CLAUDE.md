@@ -136,7 +136,9 @@ here; the server is blind.
   `registerKind` per node kind (detail component, icon, shareable); `claimSlot` for `levelView`,
   `nodeMutationDialog`, `shareDialog`; `addSlotItem(slot, id, component, order?)` for the two list slots `topbarTray`
   and `sidebarPins` (an id namespaced by the application, e.g. `memories.pinned`; write-once per (slot, id); the shell
-  renders `slotItems(slot)` sorted by `order`, ties in registration order); `claimShareBody(rootKind)` for the
+  renders `slotItems(slot)` sorted by `order`, ties in registration order — the top bar after core's own upload status
+  menu, `core/blob/UploadStatusMenu.vue`, which lists every application's batches of the one core queue and is no
+  application's item, so today no application adds to `topbarTray`); `claimShareBody(rootKind)` for the
   public share page (`PublicShare.rootKind`, served for every role, so one body per kind picks its screens by role;
   core claims `FOLDER` itself and embeds the claimed body for each child, handing it `subtreeRoot` — that node's id,
   key and name — so the body renders and writes into that node, not the share root);

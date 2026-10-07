@@ -2,8 +2,9 @@
 // the sequential runner, the one automatic retry that `quota_exceeded` never gets, cancel/retry/remove/acknowledge,
 // the reactive view) is core's, `core/blob/queue.ts` (cr-files-application B2); this module is the thin adapter that
 // turns picked media files into queue jobs whose runner is `addMedia` (or a share-scoped transport), plus the media
-// picker helpers. The TopBar UploadStatusMenu renders `useUploadQueue()` and the gallery enqueues against the open
-// Memory.
+// picker helpers. The gallery enqueues against the open Memory and its optimistic tiles read this module's
+// `useUploadQueue()` (Memories' batches only); the top bar's status menu is core's and reads core's queue, every
+// application's batches (cr-files-application B3).
 //
 // Media specifics: `preparing` is the pre-network phase (derive poster/dimensions, read the metadata — sealing is
 // not part of it, the file is read and sealed one frame at a time as it is sent), and it flips to `uploading` on

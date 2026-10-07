@@ -54,7 +54,7 @@ acceptanceCriteria:
         unit:
           - src/core/blob/queue.test.ts
           - src/features/memory/uploadQueue.test.ts
-          - src/features/memory/components/UploadStatusMenu.test.ts
+          - src/core/blob/UploadStatusMenu.test.ts
           - src/features/memory/useMemoryCover.test.ts
           - src/features/tenant/TenantStoragePanel.test.ts
 gaps:

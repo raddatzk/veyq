@@ -2,13 +2,15 @@
 // The shell's two application slots against a STUBBED registry (a fresh `createRegistry()` per test behind a
 // delegating `registry` export): `AppTopbar` renders the `topbarTray` list, `AppSidebar` the `sidebarPins` list (rail
 // and mobile sheet). The case that matters: an application that fills NEITHER leaves a working shell — no throw, no
-// tray, no pinned section — and the same shell with an item added renders it (the live control); two items render
-// in their `order`, and ONE item renders exactly the DOM the single-claim slot rendered before the lists (P4a). The
-// real registry with the real Memories fills is covered in `AppTopbar.test.ts` and `AppSidebar.test.ts`.
+// tray item, no pinned section — and the same shell with an item added renders it (the live control); two items
+// render in their `order`, and ONE item renders exactly the DOM the single-claim slot rendered before the lists (P4a).
+// The top bar's upload status is core's since cr-files-application B3: the bar mounts it before the tray items, and
+// with no tray item (Memories alone) the actions row is exactly the pre-B3 one, where the menu WAS Memories' tray item.
+// The real registry with the real Memories fills is covered in `AppTopbar.test.ts` and `AppSidebar.test.ts`.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
-import { defineComponent, h } from 'vue'
+import { defineComponent, h, type Component } from 'vue'
 
 const holder = vi.hoisted(() => ({ reg: null as null | import('../../core/applications/registry').Registry }))
 vi.mock('../../core/applications/registry', async (importOriginal) => {
@@ -37,6 +39,10 @@ vi.mock('../../features/account/profile/profile', async (importOriginal) => ({
 
 import AppTopbar from './AppTopbar.vue'
 import AppSidebar from './AppSidebar.vue'
+import Breadcrumb from 'primevue/breadcrumb'
+import InvitationsBadge from '../../features/spaces/InvitationsBadge.vue'
+import UploadStatusMenu from '../../core/blob/UploadStatusMenu.vue'
+import { enqueue, clearUploads } from '../../core/blob/queue'
 import { createRegistry } from '../../core/applications/registry'
 import { listMyTenants, listMyGroups, openMyTenantIcon } from '../../features/spaces/scopes'
 import { getMyProfile } from '../../features/account/profile/profile'
@@ -69,13 +75,41 @@ async function mountSidebar() {
   await flushPromises()
   return w
 }
-const mountTopbar = () =>
-  mount(AppTopbar, {
+const mountTopbar = (component: Component = AppTopbar) =>
+  mount(component, {
     global: {
       plugins: [realI18n()],
       stubs: { InvitationsBadge: true, Breadcrumb: true },
     },
   })
+
+// AppTopbar's template before B3, written out: the actions row is the badge, then the `topbarTray` list, which with
+// Memories installed held exactly one item, Memories' `memories.upload-status` → the upload status menu. Its menu is
+// the one that moved verbatim to core (the old file's markup, minus nothing).
+const PreB3Topbar = defineComponent({
+  components: { Breadcrumb, InvitationsBadge },
+  setup: () => ({ trayItems: [{ id: 'memories.upload-status', component: UploadStatusMenu }] }),
+  template: `
+  <header class="workspace-topbar">
+    <Breadcrumb class="app-breadcrumb" />
+    <div class="workspace-topbar-actions">
+      <InvitationsBadge />
+      <component :is="item.component" v-for="item in trayItems" :key="item.id" />
+    </div>
+  </header>`,
+})
+/** The actions row as markup; the fragment anchors (`<!--[-->`) are not elements and are dropped, as in P4a's case. */
+const actionsRow = (w: ReturnType<typeof mount>) => w.get('.workspace-topbar-actions').element.outerHTML.replace(/<!--.*?-->/g, '')
+/** A job that stays in flight until aborted, so the menu shows an active upload. */
+const pendingJob = (name: string) => ({
+  name,
+  sizeBytes: 1,
+  run: ({ onProgress, signal }: { onProgress(f: number): void; signal: AbortSignal }) =>
+    new Promise<never>((_r, reject) => {
+      onProgress(0.5)
+      signal.addEventListener('abort', () => reject(new DOMException('cancelled', 'AbortError')))
+    }),
+})
 
 beforeEach(() => {
   vi.mocked(listMyTenants).mockResolvedValue([myTenant({ tenantId: 't-1', domain: '127.0.0.1' })])
@@ -84,12 +118,14 @@ beforeEach(() => {
   vi.mocked(getMyProfile).mockResolvedValue(memberProfile({ username: '' }))
   clearActiveSpace()
   holder.reg = createRegistry()
+  clearUploads()
 })
 
 describe('an application that fills no shell slot', () => {
-  it('leaves the top bar working: the actions row is there, with no tray in it', async () => {
+  it('leaves the top bar working: the actions row is there, with core\'s upload status and no tray item in it', async () => {
     const w = mountTopbar()
     expect(w.find('.workspace-topbar-actions').exists()).toBe(true)
+    expect(w.find('.workspace-topbar-actions .uploads-tray').exists()).toBe(true)
     expect(w.find('.tray-probe').exists()).toBe(false)
   })
 
@@ -148,12 +184,12 @@ describe('two items in a list slot', () => {
 // Personal-space nav and the groups section, and the `sheet` one as the last child of the sheet), written out by hand:
 // with ONE item the list renders no wrapper and nothing else around it.
 describe('one item renders the DOM of the former single-claim slot', () => {
-  it('top bar: the actions row is the badge, then the tray item, nothing else', async () => {
+  it('top bar: the actions row is the badge, then core\'s upload status, then the tray item, nothing else', async () => {
     holder.reg!.addSlotItem('topbarTray', 'app.tray', Tray)
     const w = mountTopbar()
-    expect(w.get('.workspace-topbar-actions').element.innerHTML.replace(/<!--.*?-->/g, '')).toBe(
-      '<invitations-badge-stub></invitations-badge-stub><button class="tray-probe">tray</button>',
-    )
+    expect(
+      w.get('.workspace-topbar-actions').element.innerHTML.replace(/<!--.*?-->/g, '').replace(/ data-v-[0-9a-f]+=""/g, ''),
+    ).toBe('<invitations-badge-stub></invitations-badge-stub><div class="uploads-tray"></div><button class="tray-probe">tray</button>')
   })
 
   it('sidebar: the pins sit between the Personal nav and the groups section in the rail, and close the sheet', async () => {
@@ -169,5 +205,27 @@ describe('one item renders the DOM of the former single-claim slot', () => {
     expect(sheet.outerHTML).toBe('<a class="pins-probe pins-sheet">sheet</a>')
     expect(sheet.previousElementSibling!.tagName).toBe('SECTION')
     expect(sheet.nextElementSibling).toBeNull()
+  })
+})
+
+// B3's refactoring guarantee: with Memories alone (no tray item, as the real registry has it now) the top bar renders
+// the DOM it rendered when the upload status was Memories' one tray item — compared against the pre-B3 template
+// above, not hand-written, in each state the menu can be in: an empty queue, an active upload (closed, then opened).
+describe('the upload status moved to core: the top bar DOM with Memories alone is the pre-B3 one', () => {
+  it('with an empty queue', () => {
+    expect(actionsRow(mountTopbar())).toBe(actionsRow(mountTopbar(PreB3Topbar)))
+  })
+
+  it('with an upload in flight, closed and then opened', async () => {
+    enqueue([pendingJob('photo.png'), pendingJob('b.png')], { label: '2 photos' })
+    await flushPromises()
+    const now = mountTopbar()
+    const before = mountTopbar(PreB3Topbar)
+    expect(actionsRow(now)).toContain('uploads-badge') // the live control: the comparison sees an active menu
+    expect(actionsRow(now)).toBe(actionsRow(before))
+    await now.get('.uploads-trigger').trigger('click')
+    await before.get('.uploads-trigger').trigger('click')
+    expect(actionsRow(now)).toContain('uploads-panel')
+    expect(actionsRow(now)).toBe(actionsRow(before))
   })
 })

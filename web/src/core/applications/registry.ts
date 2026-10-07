@@ -157,7 +157,8 @@ export interface ShareBodyEmits {
 export type SlotName = 'levelView' | 'nodeMutationDialog' | 'shareDialog'
 
 /** The list slots: several applications may each add items (see the header). A `topbarTray` item takes no props (the
- *  shell's top bar mounts it beside the invitations badge); a `sidebarPins` item takes `SidebarPinsProps`. */
+ *  shell's top bar mounts it after the invitations badge and core's own upload status menu); a `sidebarPins` item
+ *  takes `SidebarPinsProps`. */
 export type ListSlotName = 'topbarTray' | 'sidebarPins'
 
 /** One entry of a list slot, as the shell renders it (`id` is the item's key). */
