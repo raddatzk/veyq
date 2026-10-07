@@ -36,6 +36,8 @@ import { fakeApi } from '../../../test/apiMock'
 import type { TreeNode } from '../../../core/node/tree'
 import { galleryFakeStore } from './galleryFakeStore'
 import { realI18n, t } from '../../../test/i18n'
+import { capabilityState } from '../../../shared/state/capabilities'
+import { SHARING_UPLOADER_LINKS } from '../../platform/capabilities'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const NODE_ID = '22222222-2222-2222-2222-222222222222'
@@ -671,5 +673,45 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     await flushPromises()
     expect(wrapper.find('.loc-editor').exists()).toBe(false) // no editor
     expect(wrapper.find('.dlg').text()).toContain(t('memory.place.consentBody')) // the consent dialog body
+  })
+})
+
+// ADR 0080 Decision 13: a chapter is a share root of its own, so its detail — the same `MemoryDetail` — offers both
+// share actions when the host says it is shareable (the descriptor half is `MemoryHomeView.test.ts`), and offers none
+// when it does not: the button follows `shareable`, never the node's kind.
+describe('share actions on a chapter', () => {
+  const chapter: TreeNode = {
+    id: 'c1', kind: CHAPTER_KIND, name: 'Day 1', parentId: NODE_ID, orderIndex: 0, epoch: 0, wrappedContentKey: 'd3JhcA==',
+    wrappedMeta: null, metaVersion: 0, placementVersion: 0,
+  }
+  beforeEach(() => {
+    const store = galleryFakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    vi.stubGlobal('fetch', store.fetchStub)
+    capabilityState.ids = [SHARING_UPLOADER_LINKS]
+  })
+  afterEach(() => {
+    capabilityState.ids = []
+  })
+
+  it('shows the share and the uploader-link buttons on a shareable chapter and emits each', async () => {
+    const wrapper = mountDetail(v1.randomBytes(32), { node: chapter, shareable: true })
+    await flushPromises()
+    const share = wrapper.find(`button[aria-label="${t('share.share')}"]`)
+    const upload = wrapper.find(`button[aria-label="${t('share.uploadRequest')}"]`)
+    expect(share.exists()).toBe(true)
+    expect(upload.exists()).toBe(true)
+    await share.trigger('click')
+    await upload.trigger('click')
+    expect(wrapper.emitted('share')).toHaveLength(1)
+    expect(wrapper.emitted('shareUpload')).toHaveLength(1)
+  })
+
+  it('shows neither when the host does not offer sharing (live control above)', async () => {
+    const wrapper = mountDetail(v1.randomBytes(32), { node: chapter, shareable: false })
+    await flushPromises()
+    expect(wrapper.find(`button[aria-label="${t('share.share')}"]`).exists()).toBe(false)
+    expect(wrapper.find(`button[aria-label="${t('share.uploadRequest')}"]`).exists()).toBe(false)
   })
 })

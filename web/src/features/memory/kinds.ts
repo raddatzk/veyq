@@ -6,5 +6,5 @@
 /** A Memory: top level or in a folder, shareable, opens to its gallery. */
 export const MEMORY_KIND = 'MEMORY'
 
-/** A chapter: lives in a Memory, opens to the same gallery, not shareable on its own. */
+/** A chapter: lives in a Memory (or a chapter), opens to the same gallery, shareable on its own (its own `K_mem`). */
 export const CHAPTER_KIND = 'CHAPTER'

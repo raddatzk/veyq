@@ -51,6 +51,8 @@ import { openSharedMemory, listShareMedia, NO_SHARE_MEDIA, type ResolvedShare, t
 import { headOf, openedOf } from '../test/shareHead'
 import { ShareRole } from '../api/generated/sharing'
 import { realI18n } from '../test/i18n'
+import type { NodeKind } from '../core/node/kind'
+import { MEMORY_KIND, CHAPTER_KIND } from '../features/memory/kinds'
 
 function mountShareView() {
   return mount(ShareView, {
@@ -62,8 +64,8 @@ function mountShareView() {
 }
 
 /** Serve one resolved share to the shell (head) and the Memories body (the rest), as production splits it. */
-function serve(r: ResolvedShare) {
-  vi.mocked(resolvePublicShare).mockReset().mockResolvedValue(headOf(r))
+function serve(r: ResolvedShare, rootKind: NodeKind = MEMORY_KIND) {
+  vi.mocked(resolvePublicShare).mockReset().mockResolvedValue(headOf(r, 's1', rootKind))
   vi.mocked(openSharedMemory).mockReset().mockReturnValue(openedOf(r))
   vi.mocked(listShareMedia).mockReset().mockResolvedValue(NO_SHARE_MEDIA) // the items come from openSharedMemory's stub
 }
@@ -178,5 +180,32 @@ describe('ShareView — who sees a guest name', () => {
     expect(card.exists()).toBe(true) // the gate itself, so the text checks below cannot pass on an empty page
     expect(card.text()).toContain('Only the people this memory belongs to see your name.')
     expect(card.text()).not.toContain('everyone')
+  })
+})
+
+// A chapter is a share root of its own (ADR 0080 Decision 13): over the REAL registry, a share the server roots at a
+// CHAPTER reaches the same Memories body as a Memory's — for a viewer, and for the WRITE_ONLY drop — never the
+// shell's unavailable state, which is what an unclaimed root kind renders (`ShareView.registry.test.ts`).
+describe('ShareView — a chapter share', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: TENANT, termsVersion: 0, terms: {} })
+  })
+
+  it('a viewer link rooted at a CHAPTER renders the Memories body under the chapter\'s title', async () => {
+    serve({ ...viewerShare(), memoryName: 'Day 1' }, CHAPTER_KIND)
+    const wrapper = mountShareView()
+    await flushPromises()
+    expect(wrapper.find('.share-view-unavailable').exists()).toBe(false)
+    expect(wrapper.find('.share-view-header').text()).toContain('Day 1')
+  })
+
+  it('an uploader link rooted at a CHAPTER reaches the drop\'s name screen', async () => {
+    const access: ShareAccess = { kind: 'drop', nodeId: 'chapter-1', dropPublicKey: { x: new Uint8Array(), m: new Uint8Array() } }
+    serve({ ...viewerShare(), memoryName: 'Day 1', role: ShareRole.WriteOnly, access }, CHAPTER_KIND)
+    const wrapper = mountShareView()
+    await flushPromises()
+    expect(wrapper.find('.share-view-unavailable').exists()).toBe(false)
+    expect(wrapper.find('.share-name-card').exists()).toBe(true)
   })
 })

@@ -65,11 +65,12 @@ function node(over: Partial<TreeNode> & Pick<TreeNode, 'id' | 'kind'>): TreeNode
   return { parentId: null, orderIndex: 0, epoch: 0, name: over.id, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0, ...over }
 }
 
-/** The registry a well-formed application would leave: both kinds with a detail, the level view claimed. */
+/** The registry a well-formed application would leave: both kinds with a detail and shareable (as Memories registers
+ *  them), the level view claimed. */
 function fullRegistry(): Registry {
   const r = createRegistry()
   r.registerKind({ kind: MEMORY_KIND, detail: Detail, icon: 'pi pi-images', shareable: true })
-  r.registerKind({ kind: CHAPTER_KIND, detail: Detail, icon: 'pi pi-images', shareable: false })
+  r.registerKind({ kind: CHAPTER_KIND, detail: Detail, icon: 'pi pi-images', shareable: true })
   r.claimSlot('levelView', Level)
   return r
 }
@@ -95,7 +96,7 @@ beforeEach(() => {
 
 describe('MemoryHomeView fail-closed rules', () => {
   it('control: with everything registered, a chapter opens its detail and the root shows the level view', async () => {
-    expect((await mountAt('#~me/mem/chap')).find('.detail').text()).toBe('Chap|false')
+    expect((await mountAt('#~me/mem/chap')).find('.detail').text()).toBe('Chap|true')
     expect((await mountAt('#~me')).find('.level').text()).toBe('memories=1')
   })
 
