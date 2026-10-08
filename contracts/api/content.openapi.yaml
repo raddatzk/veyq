@@ -515,8 +515,18 @@ components:
 
     NodeSummary:
       type: object
-      required: [id, kind, encryptedName, slugToken, orderIndex, epoch, wrappedContentKey, metaVersion, placementVersion]
+      required: [id, kind, encryptedName, slugToken, orderIndex, epoch, wrappedContentKey, metaVersion, placementVersion, createdAt]
       properties:
+        createdAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: >
+            When the server stored the node, to the millisecond — server-observed, never client-supplied (no
+            request carries it), set once at creation and kept by every rename, move, trash and restore. Siblings
+            are ordered by it, then by id, wherever equal names must be told apart (the URL segments `anna`,
+            `anna-2`; ADR 0015).
+          example: "2026-08-17T10:15:30.123Z"
         placementVersion:
           x-veyq-visibility: structure
           type: integer
