@@ -14,9 +14,11 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   configuration — never another application) is `scripts/validate_backend_module_graph.py`'s, its docstring the list.
   **What no guard derives, a new application adds by hand**, and forgetting it turns nothing red: its node kinds and
   blob roles to `validate_kernel_imports_no_slices.py`'s lists (and its web kinds to
-  `validate_web_core_imports_no_applications.py`'s `KIND`), its generated API package to
-  `OperatorBlindProbeTest.API_PACKAGES` (inbox #368), and its seam anchors to `ModuleCompositionTest` — Files' tokens
-  were missing from the kind lists (all of them on the backend, `FILES_DROPBOX` on the web) until its CR closed. `:core`'s tests boot core
+  `validate_web_core_imports_no_applications.py`'s `KIND`), and its seam anchors to `ModuleCompositionTest` — Files' tokens
+  were missing from the kind lists (all of them on the backend, `FILES_DROPBOX` on the web) until its CR closed. Its
+  generated API is **not** on that list: `OperatorBlindProbeTest` gets the packages from the root build, which hands
+  over `SpecSets`' own derivation, and reads its classpath against them both ways (inbox #368) — so a new
+  application's operations are red there, unclassified, the day its spec lands. `:core`'s tests boot core
   with **no** application (`CoreAloneSliceTest`). **A test
   lives where what it exercises runs:** in `:core` if it passes with core alone, in `:apps:memories` if it needs
   Memories at runtime — every share of a `MEMORY` or a `CHAPTER` (core alone shares only a `FOLDER`, `ShareRoots`), every
