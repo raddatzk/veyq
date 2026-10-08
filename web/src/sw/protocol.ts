@@ -9,10 +9,14 @@
  * controlling SW built at a different version answers a mismatch (or nothing), and the page falls back to the
  * Slice-1 full-blob path. This is what lets a freshly-deployed page detect a stale still-controlling SW.
  */
-export const PROTOCOL_VERSION = 2
+export const PROTOCOL_VERSION = 3
 
 /** The synthetic in-origin path the SW intercepts. `<handle>` is opaque + per-playback — never a blobId (ADR 0047). */
 export const MEDIA_PATH_PREFIX = '/__media/'
+
+/** The synthetic in-origin path of a streamed download (inbox #371): a navigation to `/__download/<handle>` is answered
+ *  with the bytes the page streams over the registered port, as an attachment. `<handle>` is opaque and one-shot. */
+export const DOWNLOAD_PATH_PREFIX = '/__download/'
 
 /** One `video/<subtype>` MIME essence: no list, no parameters, no whitespace — the subtype is an RFC 9110 token. */
 const VIDEO_ESSENCE = /^video\/[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/
@@ -66,7 +70,16 @@ export type EndSessionMsg = { type: 'veyq-end-session' }
 /** The end-session reply: every playback this SW held is gone. */
 export type EndSessionAck = { type: 'veyq-end-session-ack' }
 
-export type PageToSwMessage = HandshakeMsg | RegisterMsg | RevokeMsg | EndSessionMsg
+/** Register a download (inbox #371): the SW answers ONE navigation to `/__download/<handle>` with `size` bytes the page
+ *  pushes over the transferred port, saved as `name`. Neither is trusted by the SW: the name is sanitised into the
+ *  `Content-Disposition`, and a stream that ends short of, or runs past, `size` is errored. The SW acks on the port
+ *  ({@link DownloadRegistered}) before the page navigates. */
+export type RegisterDownloadMsg = { type: 'veyq-register-download'; handle: string; size: number; name: string }
+/** Sent to the SW's global scope while a download streams: a message event keeps an idle-terminated SW alive, a
+ *  message on the port does not. Carries nothing. */
+export type DownloadKeepaliveMsg = { type: 'veyq-download-keepalive' }
+
+export type PageToSwMessage = HandshakeMsg | RegisterMsg | RevokeMsg | EndSessionMsg | RegisterDownloadMsg | DownloadKeepaliveMsg
 
 // --- SW ↔ page (over the per-playback MessagePort) ---------------------------
 
@@ -76,3 +89,25 @@ export type ChunkRequest = { type: 'veyq-chunk-req'; id: number; index: number }
 export type ChunkReply =
   | { type: 'veyq-chunk-res'; id: number; bytes: ArrayBuffer }
   | { type: 'veyq-chunk-err'; id: number; error: string }
+
+// --- SW ↔ page (over the per-download MessagePort) ---------------------------
+//
+// Credit-based: the page sends one `veyq-dl-data` (or the final `veyq-dl-end`) per `veyq-dl-pull` it received, so the
+// SW never holds more than one chunk the browser has not consumed. `veyq-dl-error` needs no credit.
+
+/** SW → page: the registration is held; the page may navigate to the download URL now. */
+export type DownloadRegistered = { type: 'veyq-dl-registered' }
+/** SW → page: one credit — send the next chunk, or `veyq-dl-end` if there is none. */
+export type DownloadPull = { type: 'veyq-dl-pull' }
+/** SW → page: the browser cancelled the download (the user, a closed tab): stop. */
+export type DownloadCancel = { type: 'veyq-dl-cancel' }
+/** SW → page: the handle was never fetched within its time-to-live, or the session ended: it is gone. */
+export type DownloadGone = { type: 'veyq-dl-gone'; reason: 'expired' | 'ended' }
+export type SwToPageDownloadMessage = DownloadRegistered | DownloadPull | DownloadCancel | DownloadGone
+
+/** page → SW: the next plaintext bytes (a transferred ArrayBuffer), the clean end, or a failure. A failure errors the
+ *  response stream, so the browser marks the download failed — never a clean, truncated file. */
+export type PageToSwDownloadMessage =
+  | { type: 'veyq-dl-data'; bytes: ArrayBuffer }
+  | { type: 'veyq-dl-end' }
+  | { type: 'veyq-dl-error'; error: string }

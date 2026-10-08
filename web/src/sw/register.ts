@@ -6,7 +6,9 @@
 // handles and decrypted plaintext do. If no SW controls the page, or the handshake version mismatches, every
 // entry point resolves to "no SW" so the caller falls back to the Slice-1 full-blob path.
 
+import type { ByteSink } from '../core/blob/stream'
 import {
+  DOWNLOAD_PATH_PREFIX,
   MEDIA_PATH_PREFIX,
   PROTOCOL_VERSION,
   type ChunkReply,
@@ -14,6 +16,10 @@ import {
   type EndSessionAck,
   type EndSessionMsg,
   type ChunkProvider,
+  type DownloadKeepaliveMsg,
+  type PageToSwDownloadMessage,
+  type RegisterDownloadMsg,
+  type SwToPageDownloadMessage,
 } from './protocol'
 
 /** Metadata the SW needs to size the resource + set the response Content-Type; carries no key and no id that
@@ -144,6 +150,7 @@ export function revokePlayback(handle: string): void {
  * know it simply lets the timeout run.
  */
 export async function endAllPlaybacks(timeoutMs = 1000): Promise<void> {
+  for (const end of [...activeDownloads]) end(new Error('download_ended'))
   for (const wired of active.values()) {
     wired.channel.port1.onmessage = null
     wired.channel.port1.close()
@@ -166,6 +173,139 @@ export async function endAllPlaybacks(timeoutMs = 1000): Promise<void> {
     }
     sw.postMessage({ type: 'veyq-end-session' } satisfies EndSessionMsg, [ch.port2])
   })
+}
+
+// --- streamed downloads (inbox #371; ADR 0047 § Addendum) --------------------------------------------------------
+
+/** What the SW needs to serve a download: the exact plaintext size (its `Content-Length`) and the file name. */
+export type DownloadMeta = { name: string; size: number }
+
+export type DownloadOptions = {
+  /** Starts the download: a top-level navigation to the handle's URL (a link click by default; tests replace it). */
+  navigate?: (url: string) => void
+  /** How long to wait for the SW to acknowledge the registration before giving up (the caller falls back). */
+  ackTimeoutMs?: number
+  /** How long, after the navigation, the first pull may take before the download is given up as never started. */
+  startTimeoutMs?: number
+  /** How often the page pings the SW's global scope while the download runs (a port message does not keep it alive). */
+  keepaliveMs?: number
+}
+
+/** The downloads this page is streaming, each by its "end now" function — sign-out ends them all. */
+const activeDownloads = new Set<(reason: unknown) => void>()
+
+/** A navigation to `url` in this tab. The SW answers it as an attachment, so the page stays; never a `download`
+ *  attribute (that is a browser download the SW may not see) and never a new window (a popup to block). */
+function navigateByLink(url: string): void {
+  const a = document.createElement('a')
+  a.href = url
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}
+
+/**
+ * Register a streamed download with the controlling SW, start it, and return the sink its bytes go into — or null when
+ * no SW at our protocol version controls the page or it did not acknowledge in time (the caller then picks another
+ * sink; nothing was written). The sink is credit-based: `write` resolves once the SW asked for the next chunk, so the
+ * browser's own download speed is the backpressure. `close` ends the file cleanly and `abort` fails it (the browser
+ * marks it failed — never a truncated file saved as whole). A write rejects with an `AbortError` when the browser
+ * cancelled the download, and with an Error when the SW dropped it (never fetched, or the session ended). The SW sees
+ * only the handle, the size, the name and the plaintext — never a key or a token.
+ */
+export async function registerDownload(meta: DownloadMeta, options: DownloadOptions = {}): Promise<ByteSink | null> {
+  const { navigate = navigateByLink, ackTimeoutMs = 2000, startTimeoutMs = 35_000, keepaliveMs = 10_000 } = options
+  const sw = await controllingSw()
+  if (!sw || !(await handshake(sw))) return null
+
+  const handle = newHandle()
+  const channel = new MessageChannel()
+  const port = channel.port1
+  let credits = 0
+  let pulled = false
+  let failure: unknown = null
+  let ended = false
+  let waiter: { resolve: () => void; reject: (e: unknown) => void } | null = null
+  let onAck: (() => void) | null = null
+  const timers: { keepalive?: ReturnType<typeof setInterval>; start?: ReturnType<typeof setTimeout> } = {}
+
+  const cleanup = () => {
+    ended = true
+    clearInterval(timers.keepalive)
+    clearTimeout(timers.start)
+    // The port is not closed here: a final message just posted must still reach the SW, which closes its end.
+    port.onmessage = null
+    activeDownloads.delete(fail)
+  }
+  function fail(e: unknown) {
+    if (ended) return
+    failure = e
+    waiter?.reject(e)
+    waiter = null
+    cleanup()
+  }
+  const post = (msg: PageToSwDownloadMessage, transfer: Transferable[] = []) => port.postMessage(msg, transfer)
+
+  port.onmessage = (e: MessageEvent) => {
+    const msg = e.data as SwToPageDownloadMessage | undefined
+    if (msg?.type === 'veyq-dl-registered') onAck?.()
+    else if (msg?.type === 'veyq-dl-pull') {
+      if (!pulled) clearTimeout(timers.start)
+      pulled = true
+      credits += 1
+      waiter?.resolve()
+      waiter = null
+    } else if (msg?.type === 'veyq-dl-cancel') fail(new DOMException('Download cancelled', 'AbortError'))
+    else if (msg?.type === 'veyq-dl-gone') fail(new Error(`download_${msg.reason}`))
+  }
+  port.start?.()
+
+  const acked = await new Promise<boolean>((resolve) => {
+    const timer = setTimeout(() => resolve(false), ackTimeoutMs)
+    onAck = () => {
+      clearTimeout(timer)
+      resolve(true)
+    }
+    sw.postMessage(
+      { type: 'veyq-register-download', handle, size: meta.size, name: meta.name } satisfies RegisterDownloadMsg,
+      [channel.port2],
+    )
+  })
+  onAck = null
+  if (!acked) {
+    cleanup()
+    port.close()
+    return null
+  }
+
+  activeDownloads.add(fail)
+  timers.start = setTimeout(() => fail(new Error('download_not_started')), startTimeoutMs)
+  timers.keepalive = setInterval(() => sw.postMessage({ type: 'veyq-download-keepalive' } satisfies DownloadKeepaliveMsg), keepaliveMs)
+  navigate(DOWNLOAD_PATH_PREFIX + encodeURIComponent(handle))
+
+  const credit = async () => {
+    if (failure) throw failure
+    if (ended) throw new Error('download_closed')
+    if (credits === 0) await new Promise<void>((resolve, reject) => (waiter = { resolve, reject }))
+    credits -= 1
+  }
+  return {
+    async write(bytes) {
+      await credit()
+      const copy = bytes.slice() // a standalone buffer to transfer (the chunk may be a view into a larger one)
+      post({ type: 'veyq-dl-data', bytes: copy.buffer }, [copy.buffer])
+    },
+    async close() {
+      await credit()
+      post({ type: 'veyq-dl-end' })
+      cleanup()
+    },
+    async abort() {
+      if (ended) return
+      post({ type: 'veyq-dl-error', error: 'page_failed' }) // no detail: the SW only needs to fail the download
+      cleanup()
+    },
+  }
 }
 
 /** Extract the handle from a `/__media/<handle>` URL produced by {@link registerPlayback} (for revoke on close). */
