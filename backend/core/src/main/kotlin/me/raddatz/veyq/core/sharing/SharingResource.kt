@@ -282,6 +282,8 @@ class SharingResource(
         placementVersion = n.placementVersion,
         wrappedMeta = n.wrappedMeta,
         sealedDropPrivateKey = n.sealedDropPrivateKey,
+        shareIdentityId = n.shareIdentityId?.let(UUID::fromString),
+        wrappedIdentityKey = n.wrappedIdentityKey,
     )
 
     // --- contributor guest ops (cr-0101; @PermitAll — account-less, gated only by share state + token) ---

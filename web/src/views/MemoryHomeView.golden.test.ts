@@ -54,7 +54,8 @@ vi.mock('../core/node/treeStore', async () => {
 import MemoryHomeView from './MemoryHomeView.vue'
 import MemoriesSection from '../features/memory/components/MemoriesSection.vue'
 import FilesSection from '../features/files/components/FilesSection.vue'
-import { FILE_KIND } from '../features/files/kinds'
+import DropBoxSection from '../features/files/components/DropBoxSection.vue'
+import { DROPBOX_KIND, FILE_KIND } from '../features/files/kinds'
 import { registry } from '../core/applications/registry'
 import { activeSpace } from '../app/activeSpace'
 import { treeStore } from '../core/node/treeStore'
@@ -167,6 +168,7 @@ describe('the Memories level view (golden)', () => {
     expect(registry.sections()).toEqual([
       { component: MemoriesSection, order: 10, kinds: [MEMORY_KIND, CHAPTER_KIND] },
       { component: FilesSection, order: 20, kinds: [FILE_KIND] },
+      { component: DropBoxSection, order: 21, kinds: [DROPBOX_KIND] },
     ])
   })
 

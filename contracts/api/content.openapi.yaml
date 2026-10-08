@@ -588,6 +588,27 @@ components:
             first WRITE_ONLY share (`createShare`), and never replaced: what WRITE_ONLY guests added opens through
             it (ADR 0031 point 7). A field of its own, never part of the node's payload. Null until then.
           example: null
+        shareIdentityId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: >
+            Set on a guest's **identity folder** only (ADR 0080 decision 11): the `FOLDER` a `WRITE_ONLY` guest created
+            in its link's root (a drop box) for its own uploads, one per (drop box, identity). Its `encryptedName`,
+            `slugToken` and `wrappedContentKey` are then under that identity's key `K_up`, not under the parent's
+            content key: a reader opens the parent's `sealedDropPrivateKey`, then `wrappedIdentityKey`, then the
+            entry. Null for every other node, and cleared when a member moves the folder out (it is re-wrapped under
+            its new parent then).
+          example: null
+        wrappedIdentityKey:
+          type: [string, "null"]
+          description: >
+            With `shareIdentityId` only: that identity's key `K_up` wrapped to the parent's drop public key (AAD
+            `upload-identity-key`, bound to scope + the parent node + the identity; opaque base64), as the guest
+            created it (`createShareIdentity`). Null otherwise.
+          contentEncoding: base64
+          maxLength: 2048
+          example: null
 
     RestoreNodeRequest:
       type: object
@@ -627,6 +648,18 @@ components:
         parent is trashed went down with that parent and is not a root.
       required: [id, kind, encryptedName, epoch, placementVersion, deletedAt, purgeAfter]
       properties:
+        shareIdentityId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: As `NodeSummary.shareIdentityId` — set on a trashed guest's identity folder, whose `encryptedName` (and a restore's slug token) is under that identity's `K_up` (ADR 0080 decision 11).
+          example: null
+        wrappedIdentityKey:
+          type: [string, "null"]
+          description: As `NodeSummary.wrappedIdentityKey`, with `shareIdentityId` only.
+          contentEncoding: base64
+          maxLength: 2048
+          example: null
         placementVersion:
           x-veyq-visibility: structure
           type: integer

@@ -14,9 +14,10 @@ import jakarta.enterprise.context.ApplicationScoped
 /**
  * The Files half of a guest's upload on a share (cr-files-application F2, ADR 0080 decision 6): a `READ_WRITE` guest of a
  * folder link uploads into a `FILE` below the root — one it created with core's `createShareNode`, or one already
- * there, whose blob it replaces. A `FILE` is never a share root (Files declares no `ShareRoots`), so a guest's target
- * is always a node it named below a folder root, and a `WRITE_ONLY` link never reaches one (core's
- * `ShareGuestGate.target` refuses a named node other than its root). The seam half only forwards core's guest transport
+ * there, whose blob it replaces; and a drop-box guest (F3, a `WRITE_ONLY` link on a `FILES_DROPBOX`) into a `FILE` it
+ * created in its own identity folder (core's `ShareGuestGate.target` lets a `WRITE_ONLY` link name nothing else below
+ * its root). A `FILE` is never a share root, so a guest's target is always a node it named below the root; the drop box
+ * itself takes no upload (no writer supports it). The seam half only forwards core's guest transport
  * to core's generic upload, as Memories' does; what the upload becomes is `ShareFilesHandler.complete`, through core's
  * completion dispatcher to `FilesUploadCompletion`.
  *

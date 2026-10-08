@@ -624,7 +624,7 @@ paths:
         completion. What an upload becomes is the application's (`ShareGuestWrites`), picked by the kind of the
         **target node**: the share root, or the optional `nodeId` — a live node inside the share's subtree that its
         application takes guest uploads into (Memories: a MEMORY or CHAPTER; Files: a FILE; a `WRITE_ONLY` link only its
-        root). The in-memory dev store cannot presign (`503`).
+        root or a node inside its guest's own identity folder, ADR 0080 decision 11). The in-memory dev store cannot presign (`503`).
         Per-share rate-limited.
         **Storage limit ([ADR 0073](../../docs/decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md)):**
         the link stores at most its tenant's per-link limit. The request's admissible items are reserved together
@@ -662,7 +662,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "403":
-          description: The share does not allow contributions, the contributor token is invalid, no application takes guest uploads into the target node's kind (a `FOLDER`, the share root's included), the root is in the trash while a `nodeId` is named, or a `WRITE_ONLY` link names a `nodeId` other than its root (`share_not_contributable`); or it is password-protected and the `X-Share-Password` token is wrong (`share_password_incorrect`, cr-0164).
+          description: The share does not allow contributions, the contributor token is invalid, no application takes guest uploads into the target node's kind (a `FOLDER`, the share root's included), the root is in the trash while a `nodeId` is named, or a `WRITE_ONLY` link names a `nodeId` other than its root outside its guest's own identity folder (`share_not_contributable`); or it is password-protected and the `X-Share-Password` token is wrong (`share_password_incorrect`, cr-0164).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_contributable } }
         "404":
@@ -716,7 +716,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "403":
-          description: The share does not allow contributions, the contributor token is invalid, no application takes guest uploads into the target node's kind (a `FOLDER`, the share root's included), the root is in the trash while a `nodeId` is named, or a `WRITE_ONLY` link names a `nodeId` other than its root (`share_not_contributable`); or it is password-protected and the `X-Share-Password` token is wrong (`share_password_incorrect`, cr-0164).
+          description: The share does not allow contributions, the contributor token is invalid, no application takes guest uploads into the target node's kind (a `FOLDER`, the share root's included), the root is in the trash while a `nodeId` is named, or a `WRITE_ONLY` link names a `nodeId` other than its root outside its guest's own identity folder (`share_not_contributable`); or it is password-protected and the `X-Share-Password` token is wrong (`share_password_incorrect`, cr-0164).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_contributable } }
         "404":
@@ -737,7 +737,12 @@ paths:
         **No auth.** A guest's create of a node under a node of the shared subtree ([ADR 0080](../../docs/decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
         Decisions 6 and 9): a core tree operation behind core's guest gate (`ShareGuestGate`: an active share → the
         password → the access mode → the `X-Contributor-Token` identity → the per-share upload budget, which a create
-        spends). Only a **READ_WRITE** link takes it; a READ or WRITE_ONLY link is `403 share_not_contributable`.
+        spends). A **READ_WRITE** link takes it anywhere in its subtree; a **WRITE_ONLY** link only inside its guest's
+        own identity folder (ADR 0080 decision 11: the folder the application's own operation created for this
+        identity in the link's root, e.g. Files' `ensureShareDropFolder`) — a parent anywhere else is `422
+        illegal_structure`, and no live identity folder is `403 share_not_contributable`; a READ link is `403
+        share_not_contributable`. Inside an identity folder nobody else creates: a READ_WRITE guest of a link above it
+        (and a member, `createNode`) is `422 illegal_structure` there.
         The guest mints the node's id (ADR 0072 Decision 3), its content key, wraps it under the parent's content key
         it holds, and seals the name and slug token under that key. **The server checks structure only** and opens
         nothing: the parent is a live node inside the share's subtree, the share's root itself included (else `422
@@ -782,7 +787,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "403":
-          description: The share is not a READ_WRITE link, the contributor token names no identity of it, or its root is in the trash or gone (`share_not_contributable`); or it is password-protected and the `X-Share-Password` token is wrong (`share_password_incorrect`).
+          description: The share is a READ link, a WRITE_ONLY link whose identity has no live identity folder, the contributor token names no identity of it, or its root is in the trash or gone (`share_not_contributable`); or it is password-protected and the `X-Share-Password` token is wrong (`share_password_incorrect`).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_contributable } }
         "404":
@@ -1633,6 +1638,27 @@ components:
           contentEncoding: base64
           maxLength: 256
           example: null
+        shareIdentityId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: >
+            Set on a guest's **identity folder** only (ADR 0080 decision 11): the `FOLDER` a `WRITE_ONLY` guest created
+            in its link's root (a drop box) for its own uploads, one per (drop box, identity). Its `encryptedName`,
+            `slugToken` and `wrappedContentKey` are then under that identity's key `K_up`, not under the parent's
+            content key: a reader opens the parent's `sealedDropPrivateKey`, then `wrappedIdentityKey`, then the
+            entry. Null for every other node, and cleared when a member moves the folder out (it is re-wrapped under
+            its new parent then).
+          example: null
+        wrappedIdentityKey:
+          type: [string, "null"]
+          description: >
+            With `shareIdentityId` only: that identity's key `K_up` wrapped to the parent's drop public key (AAD
+            `upload-identity-key`, bound to scope + the parent node + the identity; opaque base64), as the guest
+            created it (`createShareIdentity`). Null otherwise.
+          contentEncoding: base64
+          maxLength: 2048
+          example: null
 
     CreateShareNodeRequest:
       type: object
@@ -1834,7 +1860,7 @@ components:
             Decision 6: a link's role applies to every node below its root as the application allows it). Absent =
             the share root (unchanged behaviour); otherwise a live node inside the share's subtree whose application
             takes guest uploads (Memories: a MEMORY or CHAPTER; Files: a FILE) — a node that is not one is `404 node_not_found`, a kind no application takes guest uploads into is `403
-            share_not_contributable`; a `WRITE_ONLY` link only accepts its root (`403 share_not_contributable`).
+            share_not_contributable`; a `WRITE_ONLY` link only accepts its root or a node inside its guest's own identity folder (`403 share_not_contributable` otherwise).
             The same node is named again on every window and at the completion.
           example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
         items:
@@ -1952,7 +1978,7 @@ components:
             Decision 6: a link's role applies to every node below its root as the application allows it). Absent =
             the share root (unchanged behaviour); otherwise a live node inside the share's subtree whose application
             takes guest uploads (Memories: a MEMORY or CHAPTER; Files: a FILE) — a node that is not one is `404 node_not_found`, a kind no application takes guest uploads into is `403
-            share_not_contributable`; a `WRITE_ONLY` link only accepts its root (`403 share_not_contributable`).
+            share_not_contributable`; a `WRITE_ONLY` link only accepts its root or a node inside its guest's own identity folder (`403 share_not_contributable` otherwise).
             The same node is named again on every window and at the completion.
           example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
         items:

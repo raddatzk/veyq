@@ -22,8 +22,9 @@ sealed interface GuestNodeOp {
  * of the container decides** — core for a `FOLDER` ([FolderGuestNodeRules]), an application for its own kinds. The
  * guest tree operations (`ShareNodesHandler`) ask it on both sides of a move: the source parent's owner lets the child
  * out, the destination's lets it in; a rename asks the parent's owner, a create the parent's. It is asked in addition
- * to `NodeKindRules` (where a kind may live at all), never instead of it, and only for a `READ_WRITE` guest — a
- * `WRITE_ONLY` one does no tree operation at all.
+ * to `NodeKindRules` (where a kind may live at all), never instead of it, for a `READ_WRITE` guest — and for a
+ * `WRITE_ONLY` one's only tree operation, a create inside its own identity folder (ADR 0080 decision 11), asked as
+ * a `READ_WRITE` guest's there; a `WRITE_ONLY` guest places nothing.
  *
  * **Exactly one implementation per kind, and none is the default** — the partition of `NodeKindRules` and
  * [ShareRoots]. A container kind no implementation handles, or one two implementations claim, allows a guest nothing

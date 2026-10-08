@@ -9,3 +9,7 @@ export const FILE_KIND = 'FILE'
 /** The role of a file's blob, and the attachment slot it fills (one token space, cr-files-application P3): its `K_blob`
  *  wrap is sealed bound to it (ADR 0072). The backend's counterpart is `FilesBlobRoles.FILE_CONTENT`. */
 export const FILE_CONTENT_ROLE = 'FILE_CONTENT'
+
+/** A drop box (cr-files-application F3, ADR 0080 decision 11): a node shared WRITE_ONLY only, whose children are its
+ *  guests' identity folders (core FOLDERs, one per guest identity). The backend's counterpart is `FilesNodeKinds.DROPBOX`. */
+export const DROPBOX_KIND = 'FILES_DROPBOX'

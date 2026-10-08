@@ -5,7 +5,8 @@
 > Built so far: the Gradle module `:apps:files` with the node kind `FILE` (at the root or in a `FOLDER`, no children,
 > no share root) and its web registration (`web/src/features/files`); a **member's file** end to end: its contract
 > `contracts/api/files/files.openapi.yaml` and the upload completion, replace and listing below (F1a), and the web half
-> (F1b, § The web below); a **folder share with files** (F2, § Guests below). No drop box (F3).
+> (F1b, § The web below); a **folder share with files** (F2, § Guests below); the **drop box** (F3, § The drop box
+> below).
 
 ## Idea
 
@@ -16,8 +17,8 @@
   so a file can be a share root too, if Files declares it one (`ShareRoots`). One file tree per scope, created on
   demand.
 - **Web only.** No sync client, no versioning: replacing a file replaces its blob.
-- A **drop box** (write-only) is a node of its own with one guest folder per identity (ADR 0080 decision 11),
-  built with Files (inbox #349); a `WRITE_ONLY` link on a plain `FOLDER` is refused until then. Viewer and
+- A **drop box** (write-only) is a node of its own with one guest folder per identity (ADR 0080 decision 11,
+  § The drop box); a `WRITE_ONLY` link on a plain `FOLDER` stays refused. Viewer and
   contributor shares carry over from the platform; what a guest may do with a `FILE` is the role matrix in § Guests
   (ADR 0080 decision 6; no declaration allows nothing).
 - Rides on the platform's blobs, quota and trash; names sit under the parent's key, `K_SC` only at the scope root.
@@ -111,10 +112,47 @@ A `FILE` is **no share root** (Files declares no `ShareRoots`): a file is shared
   row. The guest names itself once per link through the page's own dialog (`requestGuest`). No rename on the guest
   page (no kind has one there yet).
 
+## The drop box (F3)
+
+A **`FILES_DROPBOX`** is a Files node at the root or in a `FOLDER` (no placement rule admits anything under it), shared
+**`WRITE_ONLY` only** (`FilesShareRoots`). Its guests hold no key of it; what they send lands in **identity folders**,
+one per guest identity, which are core `FOLDER`s carrying `veyq_node.share_identity_id` (ADR 0080 decision 11).
+
+- **The keys.** The drop box's drop key pair is core's (`veyq_node.sealed_drop_private_key` under the drop box's key,
+  the public half per link under `K_share`, set with the first link exactly as for a Memory's uploader link,
+  `core/sharing/dropKey.ts`). A guest names itself with its own identity key `K_up`, wrapped to the drop public key
+  (`veyq_share_identity.wrapped_identity_key`, seal `upload-identity-key`) and its name sealed under `K_up`. Its folder's
+  entry — name (the guest's display name), slug and the folder's fresh key `K_F` — is sealed under **`K_up`** (seals
+  `node-name`, `content-key`, epoch 0); everything below the folder is an ordinary subtree under `K_F`. A member (or a
+  guest of a link above the drop box) opens drop box key → drop private key → `K_up` → `K_F` (core's tree,
+  `childEntryKey`); no new seal purpose, no vector change. A guest-sealed entry that does not open leaves that folder
+  out of the member's tree instead of failing it.
+- **The guest** (`components/DropBoxShareBody.vue`, `dropBox.ts`): names itself once (the session keeps identity,
+  token and `K_up` on the device), then **`ensureShareDropFolder`** — `POST /api/shares/{shareId}/files/drop-folder`,
+  Files' operation over core's `IdentityFolders`: the first call creates the folder from the guest's ciphertext, every
+  later call (a reload, a second tab, a concurrent first upload) answers the same folder with its stored wrap. Then per
+  file core's guest create **inside its own folder** (`createShareNode`: a `WRITE_ONLY` link creates only there), core's
+  guest transport and `completeShareFile` (core's `ShareGuestGate.target`: a `WRITE_ONLY` link names nothing else below
+  its root). It sees nothing of the drop box or of others (no node served, `listShareFiles` empty) — only what it sent
+  in this session.
+- **The member** (`components/DropBoxSection.vue`, `DropBoxDetail.vue`, `DropBoxCreateDialog.vue`,
+  `DropBoxShareDialog.vue`): creates a drop box from a folder level, mints, copies, switches off and deletes its links,
+  opens it to its guests' folders (a repeated guest name numbered at display time, never stored), opens a folder
+  (core's level view, read-only there: download only) and deletes a folder. **Members place nothing** in a drop box or
+  a guest's folder (core: no rule places into the drop box; a create, move or rename into an identity folder is
+  `illegal_structure`, `NodesHandler`), and only delete or move out — a move out re-wraps and re-slugs under the
+  target and ends the folder's identity link. The server allows the move out; the web offers no move yet.
+- **Revoking or deleting a link keeps the drop box and everything in it**: an identity a folder names is kept
+  (`NodeGuestIdentityUsage`, `fk_node_share_identity`), so the member still opens it; the purge of a trashed drop box
+  erases its folders, then the identities nothing names any more.
+- **A trashed identity folder** takes nothing: the guest's next `ensureShareDropFolder` and creates there answer
+  `403 share_not_contributable` (it starts over under a new identity); a member restores the folder from the trash.
+
 ## Operator-visible, beyond the platform's `kind`
 
 File sizes (exact sealed sizes, unless padded), upload and change timestamps, the tree's shape, and when a file's blob
-was replaced.
+was replaced. For a drop box: how many guests sent something (one folder per identity), which identity holds which
+folder and its files, and when.
 
 ## Open questions
 

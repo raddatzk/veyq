@@ -4,6 +4,7 @@ import me.raddatz.veyq.core.node.FolderNodeRules
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.node.NodeKindRules
 import me.raddatz.veyq.core.node.ParentSlot
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -34,8 +35,26 @@ class FilesNodeKindRulesTest {
     }
 
     @Test
-    fun itAnswersForTheFileKindOnly() {
+    fun aDropBoxLivesWhereAFileDoesAndNothingIsPlacedInIt() {
+        val dropBox = FilesNodeKinds.DROPBOX
+        assertTrue(rules.parentAllows(dropBox, ParentSlot.Root), "a drop box at the root")
+        assertTrue(rules.parentAllows(dropBox, ParentSlot.Node(NodeEntity.FOLDER)), "a drop box in a folder")
+        assertFalse(rules.parentAllows(dropBox, ParentSlot.Node(dropBox)), "a drop box in a drop box")
+        // ADR 0080 decision 11: no rule of core's or Files' places anything in a drop box — its identity folders are
+        // core's own placement (IdentityFolders), so a member can only delete or move out.
+        val composed = listOf(FolderNodeRules(), rules)
+        for (child in listOf(NodeEntity.FOLDER, file, dropBox)) {
+            assertFalse(NodeKindRules.parentAllows(composed, child, ParentSlot.Node(dropBox)), "a $child placed in a drop box")
+        }
+        // and it is shared WRITE_ONLY only
+        assertEquals(setOf("WRITE_ONLY"), FilesShareRoots().roles(dropBox))
+        assertEquals(null, FilesShareRoots().roles(file), "a file is no share root")
+    }
+
+    @Test
+    fun itAnswersForItsOwnKindsOnly() {
         assertTrue(rules.handles(file))
+        assertTrue(rules.handles(FilesNodeKinds.DROPBOX))
         for (kind in listOf(NodeEntity.FOLDER, "MEMORY", "CHAPTER", "NOT_A_KIND", "file")) {
             assertFalse(rules.handles(kind), "Files answers for $kind")
         }

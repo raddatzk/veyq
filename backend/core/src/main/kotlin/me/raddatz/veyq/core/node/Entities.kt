@@ -74,6 +74,17 @@ class NodeEntity : PanacheEntityBase {
     @Column(name = "sealed_drop_private_key")
     var sealedDropPrivateKey: String? = null
 
+    /** Set on a guest's **identity folder** only (ADR 0080 decision 11): the `FOLDER` a `WRITE_ONLY` guest's identity
+     *  holds in its link's root (a drop box, e.g. Files' `FILES_DROPBOX`), created by the application's own operation
+     *  through [me.raddatz.veyq.core.sharing.IdentityFolders] — one per (parent, identity), `ux_node_parent_identity`.
+     *  Its name, slug and key wrap are under that identity's key `K_up`, not the parent's; a reader opens the parent's
+     *  [sealedDropPrivateKey], then the identity's wrapped `K_up`, then the entry. Inside such a folder only that
+     *  identity creates (`NodesHandler.createInScope`); a placement clears it (the only placement it can take is a
+     *  member's move out, which re-wraps the key under the new parent). Kept on a trashed row: the trash and a restore
+     *  still need the identity's key to open the entry, and `NodeGuestIdentityUsage` keeps the identity alive. */
+    @Column(name = "share_identity_id", length = 36)
+    var shareIdentityId: String? = null
+
     /** The node's standalone **cover** blob id (cr-0073): a veyq_blob with NO veyq_media row (never in the gallery), or null. Opaque — the server never learns it is "the cover" (that stays in the sealed `wrappedMeta.cover`). */
     @Column(name = "cover_blob_id", length = 36)
     var coverBlobId: String? = null

@@ -5,8 +5,11 @@ import me.raddatz.veyq.core.http.httpError
 import me.raddatz.veyq.core.ratelimit.RateLimit
 import me.raddatz.veyq.core.ratelimit.RateLimitExempt
 import me.raddatz.veyq.core.ratelimit.RateLimitKey
+import me.raddatz.veyq.core.validation.validated
 import me.raddatz.veyq.files.content.FilesResource
 import me.raddatz.veyq.files.generated.api.ShareFilesApi
+import me.raddatz.veyq.files.generated.model.DropFolder
+import me.raddatz.veyq.files.generated.model.DropFolderRequest
 import me.raddatz.veyq.files.generated.model.FileListItem
 import me.raddatz.veyq.files.generated.model.ShareFileListing
 import me.raddatz.veyq.files.generated.model.ShareFileCompleteRequest
@@ -23,7 +26,30 @@ import java.util.UUID
  */
 class ShareFilesResource(
     private val handler: ShareFilesHandler,
+    private val dropFolders: DropFolderHandler,
 ) : ShareFilesApi {
+
+    @PermitAll
+    // A drop-box guest's folder is a row a guest adds (once per identity), so it rides the per-share upload budget,
+    // as createShareNode does.
+    @RateLimit(key = RateLimitKey.SHARE)
+    override fun ensureShareDropFolder(shareId: String, dropFolderRequest: DropFolderRequest, xSharePassword: String?): Response {
+        val r = dropFolderRequest
+        return when (
+            val o = dropFolders.ensure(
+                shareId, xSharePassword, r.contributorToken, r.nodeId.toString(), r.encryptedName, r.slugToken,
+                r.epoch.validated(), r.wrappedContentKey,
+            )
+        ) {
+            is DropFolderOutcome.Folder -> Response.ok(
+                DropFolder(
+                    nodeId = UUID.fromString(o.folder.nodeId), epoch = o.folder.epoch, placementVersion = o.folder.placementVersion,
+                    wrappedContentKey = o.folder.wrappedContentKey, created = o.folder.created,
+                ),
+            ).build()
+            is HttpFailure -> httpError(o)
+        }
+    }
 
     @PermitAll
     @RateLimitExempt(

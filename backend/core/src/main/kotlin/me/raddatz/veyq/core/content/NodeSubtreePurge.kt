@@ -121,11 +121,15 @@ class NodeSubtreePurge(
         //    and the identities of guests with uploads elsewhere still hang off it.
         sharing.tombstoneAllOn(nodeIds)
 
-        // The guests of ANY deleted link whose last media or bucket went above — a link deleted earlier loses its
-        //    guests here, with the last Memory that held their uploads. After every eraser above and the tombstones,
-        //    which it reads (GuestIdentityUsage).
-        sharing.dropDeadIdentities(guests)
-
+        // The node rows, before the identities: a guest's identity folder names its identity
+        //    (`veyq_node.share_identity_id`, ADR 0080 decision 11; `NodeGuestIdentityUsage` keeps it while a row does),
+        //    so the folder's row goes first and its identity joins the ones the step below may drop.
+        guests += expired.mapNotNull { it.shareIdentityId }
         expired.forEach { NodeEntity.deleteById(it.id) }
+
+        // The guests of ANY deleted link whose last media, bucket, attachment or identity folder went above — a link
+        //    deleted earlier loses its guests here, with the last node that held their uploads. After every eraser
+        //    above, the tombstones and the node rows, which it reads (GuestIdentityUsage).
+        sharing.dropDeadIdentities(guests)
     }
 }

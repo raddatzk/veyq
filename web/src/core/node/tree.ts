@@ -33,6 +33,7 @@ import { writeKey, keyAt, type EpochKeys } from '../../features/spaces/epochs'
 import { registry } from '../applications/registry'
 import { HttpStatus, isCodedError } from '../../shared/httpError'
 import { expectMintedId } from './mintedId'
+import { identityEntryKey } from '../sharing/dropKey'
 
 /** Which node a seal belongs to: its scope, its id, the epoch it is sealed at and the placement version the wire stores
  *  it at (ADR 0072, ADR 0080 Decision 3). */
@@ -61,6 +62,32 @@ export type TreeNode = {
   /** The placement version the node's name and key wrap are sealed at — what a move or rename states it was built on
    *  (ADR 0080 Decision 3). */
   placementVersion: number
+  /** The node's drop private key sealed under its content key (a WRITE_ONLY link's root, ADR 0031 point 7), if any. */
+  sealedDropPrivateKey?: string | null
+  /** A guest's identity folder only (ADR 0080 decision 11): the identity whose `K_up` its entry lives under, and that
+   *  `K_up` wrapped to the parent's drop public key ({@link childEntryKey}). */
+  shareIdentityId?: string | null
+  wrappedIdentityKey?: string | null
+}
+
+/** What {@link childEntryKey} reads of a parent and of a child. */
+type DropParent = { id: string; sealedDropPrivateKey?: string | null }
+type IdentityChild = { shareIdentityId?: string | null; wrappedIdentityKey?: string | null }
+
+/**
+ * The key a child's directory entry (name, slug, content-key wrap) lives under, given its parent's content key: that
+ * key itself (ADR 0080 Decision 2) — except for a guest's **identity folder** (ADR 0080 decision 11), whose entry the
+ * WRITE_ONLY guest sealed under its own identity key `K_up`, opened here through the parent's drop key
+ * (`core/sharing/dropKey.ts`). Throws `OpenRefused` when that chain does not open.
+ */
+export function childEntryKey(scopeId: string, parent: DropParent, parentKey: Uint8Array, child: IdentityChild): Uint8Array {
+  if (!child.shareIdentityId) return parentKey
+  if (!parent.sealedDropPrivateKey || !child.wrappedIdentityKey) throw new v1.OpenRefused('content-key')
+  return identityEntryKey(
+    scopeId,
+    { id: parent.id, key: parentKey, sealedDropPrivateKey: parent.sealedDropPrivateKey },
+    { identityId: child.shareIdentityId, wrappedIdentityKey: child.wrappedIdentityKey },
+  )
 }
 
 /** Seal a node's name (the `node-name` seal, ADR 0012), bound to the node, under the key its **directory entry** lives
@@ -87,7 +114,7 @@ export function slugTokenFor(entryKey: Uint8Array, parentSlot: string, kind: Nod
 /** The fields of a listed row that its directory entry and key chain need. */
 type EntryRow = {
   id: string; parentId: string | null; epoch: number; placementVersion: number; encryptedName: string; wrappedContentKey: string
-}
+} & DropParent & IdentityChild
 
 /**
  * Open every row's name **top-down in one pass** (ADR 0080 Decision 2): a scope-root entry under its own epoch's
@@ -95,20 +122,38 @@ type EntryRow = {
  * live only in this call. A row whose chain does not reach the scope root (its parent is not listed, or a served
  * parent cycle) has no key to open its name with: it is refused like a name that does not open (`OpenRefused`), and
  * so is a name or a wrap the server moved onto another row.
+ *
+ * **What a guest sealed never fails the tree** (ADR 0080 decision 11): a guest's identity folder and everything below
+ * it carry entries a WRITE_ONLY guest sealed — its identity key, its folder's name and key, its files'. One that does
+ * not open (a guest's garbage, a wrap of another identity) leaves that folder's subtree out of the result instead of
+ * refusing the member's whole space; every other row keeps the strict rule above.
  */
 function openEntries(scopeId: string, epochs: EpochKeys, rows: EntryRow[]): Map<string, string> {
   const children = new Map<string | null, EntryRow[]>()
   for (const r of rows) children.set(r.parentId, [...(children.get(r.parentId) ?? []), r])
   const names = new Map<string, string>()
-  const level: { row: EntryRow; entryKey: Uint8Array }[] = (children.get(null) ?? []).map((row) => ({ row, entryKey: keyAt(epochs, row.epoch) }))
+  let leftOut = 0
+  const countSubtree = (id: string): number => 1 + (children.get(id) ?? []).reduce((n, c) => n + countSubtree(c.id), 0)
+  type Item = { row: EntryRow; parent: EntryRow | null; parentKey: Uint8Array; guestSealed: boolean }
+  const level: Item[] = (children.get(null) ?? []).map((row) => ({ row, parent: null, parentKey: keyAt(epochs, row.epoch), guestSealed: false }))
   while (level.length) {
-    const { row, entryKey } = level.shift()!
+    const { row, parent, parentKey, guestSealed } = level.shift()!
+    const inGuestFolder = guestSealed || !!row.shareIdentityId
     const node = { scopeId, nodeId: row.id, epoch: row.epoch, placementVersion: row.placementVersion }
-    names.set(row.id, openName(entryKey, node, row.encryptedName))
-    const key = openContentKey(scopeId, entryKey, row)
-    for (const child of children.get(row.id) ?? []) level.push({ row: child, entryKey: key })
+    let key: Uint8Array
+    try {
+      const entryKey = parent ? childEntryKey(scopeId, parent, parentKey, row) : parentKey
+      names.set(row.id, openName(entryKey, node, row.encryptedName))
+      key = openContentKey(scopeId, entryKey, row)
+    } catch (e) {
+      if (!inGuestFolder) throw e
+      names.delete(row.id)
+      leftOut += countSubtree(row.id)
+      continue
+    }
+    for (const child of children.get(row.id) ?? []) level.push({ row: child, parent: row, parentKey: key, guestSealed: inGuestFolder })
   }
-  if (names.size !== new Set(rows.map((r) => r.id)).size) throw new v1.OpenRefused('node-name') // a row no chain reaches
+  if (names.size + leftOut !== new Set(rows.map((r) => r.id)).size) throw new v1.OpenRefused('node-name') // a row no chain reaches
   return names
 }
 
@@ -121,7 +166,7 @@ export async function listTree(scopeId: string, epochs: EpochKeys): Promise<Tree
     parentId: r.parentId ?? null,
   }))
   const names = openEntries(scopeId, epochs, rows)
-  return rows.map((r) => ({
+  return rows.filter((r) => names.has(r.id)).map((r) => ({
     id: r.id,
     parentId: r.parentId,
     kind: r.kind,
@@ -132,6 +177,9 @@ export async function listTree(scopeId: string, epochs: EpochKeys): Promise<Tree
     wrappedMeta: r.wrappedMeta ?? null,
     metaVersion: r.metaVersion,
     placementVersion: r.placementVersion,
+    sealedDropPrivateKey: r.sealedDropPrivateKey ?? null,
+    shareIdentityId: r.shareIdentityId ?? null,
+    wrappedIdentityKey: r.wrappedIdentityKey ?? null,
   }))
 }
 
@@ -238,21 +286,32 @@ export function contentKeyChain(scopeId: string, epochs: EpochKeys, tree: TreeNo
   if (!chain.length || chain[0].parentId !== null) return [] // an ancestor missing from the tree: no chain
   let key = keyAt(epochs, chain[0].epoch) // the scope-root node's key is wrapped under its own epoch's K_SC
   const keys: Uint8Array[] = []
-  for (const node of chain) keys.unshift((key = openContentKey(scopeId, key, node)))
+  chain.forEach((node, i) => {
+    // an identity folder's wrap is under its guest's K_up, opened through the parent's drop key (ADR 0080 decision 11)
+    const entryKey = i === 0 ? key : childEntryKey(scopeId, chain[i - 1], key, node)
+    keys.unshift((key = openContentKey(scopeId, entryKey, node)))
+  })
   return keys
 }
 
 /** The key `node`'s directory entry (name, slug token) and its own key wrap live under (ADR 0080 Decisions 1 and 2):
  *  its parent's content key, or `E_{node.epoch}` for a scope-root node. Null when the parent's chain does not open. */
 export function parentContentKey(
-  scopeId: string, epochs: EpochKeys, tree: TreeNode[], node: { parentId: string | null; epoch: number },
+  scopeId: string, epochs: EpochKeys, tree: TreeNode[], node: { parentId: string | null; epoch: number } & IdentityChild,
 ): Uint8Array | null {
-  return node.parentId === null ? keyAt(epochs, node.epoch) : nodeContentKey(scopeId, epochs, tree, node.parentId)
+  if (node.parentId === null) return keyAt(epochs, node.epoch)
+  const parentKey = nodeContentKey(scopeId, epochs, tree, node.parentId)
+  const parent = tree.find((n) => n.id === node.parentId)
+  if (!parentKey || !parent) return null
+  // a guest's identity folder: its entry lives under the guest's K_up, not the parent's key (ADR 0080 decision 11)
+  return childEntryKey(scopeId, parent, parentKey, node)
 }
 
 /** {@link parentContentKey} for a write or a read that cannot go on without it: a parent whose chain does not open has
  *  no key to seal or open the entry under, refused like a name that does not open. */
-function entryKeyOf(scopeId: string, epochs: EpochKeys, tree: TreeNode[], node: { parentId: string | null; epoch: number }): Uint8Array {
+function entryKeyOf(
+  scopeId: string, epochs: EpochKeys, tree: TreeNode[], node: { parentId: string | null; epoch: number } & IdentityChild,
+): Uint8Array {
   const key = parentContentKey(scopeId, epochs, tree, node)
   if (!key) throw new v1.OpenRefused('node-name')
   return key
@@ -373,7 +432,7 @@ export type TrashedNode = {
   deletedAt: Date
   /** When the scheduled job erases it for good — derived server-side from the operator's window, not stored. */
   purgeAfter: Date
-}
+} & IdentityChild
 
 /** The space's node trash: the ROOT of each deleted subtree (the descendants went with it and return with it — except
  *  one whose own name an earlier delete freed: a restore of its parent leaves it in the trash, where it is a root of
@@ -384,19 +443,29 @@ export type TrashedNode = {
  *  entry opens under no key there (`OpenRefused`). */
 export async function listTrash(scopeId: string, epochs: EpochKeys, tree: TreeNode[]): Promise<TrashedNode[]> {
   const rows = await withRefresh(() => contentApi().listTrashedNodes({ scopeId }))
-  return rows.map((r: TrashedNodeSummary) => {
+  return rows.flatMap((r: TrashedNodeSummary) => {
     const parentId = r.parentId ?? null
-    const entryKey = entryKeyOf(scopeId, epochs, tree, { parentId, epoch: r.epoch })
-    return {
+    const identity = { shareIdentityId: r.shareIdentityId ?? null, wrappedIdentityKey: r.wrappedIdentityKey ?? null }
+    let name: string
+    try {
+      const entryKey = entryKeyOf(scopeId, epochs, tree, { parentId, epoch: r.epoch, ...identity })
+      name = openName(entryKey, { scopeId, nodeId: r.id, epoch: r.epoch, placementVersion: r.placementVersion }, r.encryptedName)
+    } catch (e) {
+      // a guest-sealed entry that does not open is left out, never failing the member's trash (ADR 0080 decision 11)
+      if (identity.shareIdentityId) return []
+      throw e
+    }
+    return [{
       id: r.id,
       parentId,
       kind: r.kind,
       epoch: r.epoch,
       placementVersion: r.placementVersion,
-      name: openName(entryKey, { scopeId, nodeId: r.id, epoch: r.epoch, placementVersion: r.placementVersion }, r.encryptedName),
+      ...identity,
+      name,
       deletedAt: r.deletedAt,
       purgeAfter: r.purgeAfter,
-    }
+    }]
   })
 }
 
@@ -415,7 +484,7 @@ export async function restoreNode(
   scopeId: string,
   epochs: EpochKeys,
   tree: TreeNode[],
-  node: { id: string; parentId: string | null; kind: NodeKind; epoch: number; placementVersion: number; name: string },
+  node: { id: string; parentId: string | null; kind: NodeKind; epoch: number; placementVersion: number; name: string } & IdentityChild,
   newName?: string,
 ): Promise<void> {
   const parentSlot = node.parentId ?? scopeId

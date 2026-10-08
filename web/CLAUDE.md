@@ -123,7 +123,7 @@ here; the server is blind.
   `app/`, `shared/`, `sw/`, `views/`, `components/app/`, every other `features/*`, and `core/`: `core/node/` (the
   node tree: `tree`, `treeStore`, `location`, `browse`, the delete/trash dialogs, the sealed-meta write loop
   `sealedMetaWrite`), `core/applications/registry.ts`
-  (the registry) and `core/sharing/` (the kind-independent half of a public share, the subtree walk and the share management — mint, list, revoke, re-issue, recovery; the drop key stays the application's). Dependencies run application →
+  (the registry) and `core/sharing/` (the kind-independent half of a public share, the subtree walk and the share management — mint, list, revoke, re-issue, recovery — and the drop key with its guests' identity keys, `dropKey.ts`, since cr-files-application F3: Memories' uploader media and Files' drop-box folders both open through it). Dependencies run application →
   core, never back and never application → application, and `scripts/validate_web_core_imports_no_applications.py`
   (no allowlist) is red on a core file that imports an application or one of its generated clients, and on an
   application file that imports another application or its clients (every `generate:api` output whose `-i` lies in an

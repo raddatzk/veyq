@@ -24,7 +24,7 @@ sealed interface ShareWriteGate {
         val rootKind: String,
         val identityId: String,
         /** The link's role as the gate read it — `READ_WRITE` or `WRITE_ONLY` (a `WRITE_ONLY` guest writes only into
-         *  the root, [ShareGuestGate.target]). */
+         *  the root or inside its own identity folder there, [ShareGuestGate.target]). */
         val role: String,
         val admitted: () -> Boolean,
     ) : ShareWriteGate
@@ -55,8 +55,9 @@ sealed interface ShareWriteTarget {
     /** No live node inside the share's subtree has that id — the same for a node outside it as for none (as a guest's
      *  placement answers it: `node_not_found`). */
     object NotFound : ShareWriteTarget
-    /** A `WRITE_ONLY` link named a node other than its root (its guest holds no key below it), or the root is in the
-     *  trash — `share_not_contributable`, as a guest's tree operations answer a trashed root. */
+    /** A `WRITE_ONLY` link named a node other than its root outside its guest's own identity folder (its guest holds
+     *  no other key below it), or the root is in the trash — `share_not_contributable`, as a guest's tree operations
+     *  answer a trashed root. */
     object NotContributable : ShareWriteTarget
 }
 
@@ -139,8 +140,9 @@ class ShareGuestGate(
      * The node a guest's upload past [gated] is for. [nodeId] null is the share root as stored — trashed or not, so an
      * upload that names no node is decided exactly as before targets existed (the application answers a trashed root).
      * A named node must be, in this order (none answering by anything outside the subtree): allowed by the role — a
-     * `WRITE_ONLY` link only its root; the root live; the node live and inside the share's subtree (an upward walk,
-     * [NodesStore.withinSubtree]). Which kinds take uploads is not this gate's question but its caller's, which
+     * `WRITE_ONLY` link only its root, or a node inside its guest's own live identity folder in the root (ADR 0080
+     * decision 11, [writeOnlyBoundary]); the root live; the node live and inside the share's subtree — for a
+     * `WRITE_ONLY` link, inside that identity folder (an upward walk, [NodesStore.withinSubtree]). Which kinds take uploads is not this gate's question but its caller's, which
      * dispatches by [ShareWriteTarget.Node.kind] (`ShareGuestWrites`, `UploadAdmission`, the application's completion).
      *
      * A plain read: a start or a window writes nothing onto the node, and the write that does (the completion) asks
@@ -148,11 +150,23 @@ class ShareGuestGate(
      */
     fun target(gated: ShareWriteGate.Admitted, nodeId: String?): ShareWriteTarget {
         if (nodeId == null) return ShareWriteTarget.Node(gated.rootNodeId, gated.rootKind, named = false)
-        if (gated.role == ShareEntity.WRITE_ONLY && nodeId != gated.rootNodeId) return ShareWriteTarget.NotContributable
+        if (gated.role == ShareEntity.WRITE_ONLY && nodeId != gated.rootNodeId) {
+            val folder = writeOnlyBoundary(gated) ?: return ShareWriteTarget.NotContributable
+            if (!nodes.withinSubtree(gated.scopeId, folder, nodeId)) return ShareWriteTarget.NotContributable
+        }
         if (nodes.findInScope(gated.scopeId, gated.rootNodeId) == null) return ShareWriteTarget.NotContributable
         val node = liveInside(gated, nodeId) ?: return ShareWriteTarget.NotFound
         return ShareWriteTarget.Node(node.id, node.kind, named = true)
     }
+
+    /**
+     * The subtree a `WRITE_ONLY` guest past [gated] may name nodes in below its root: its own identity folder there
+     * (ADR 0080 decision 11, `veyq_node.share_identity_id`), live — or null when it has none, or a member trashed it.
+     * Nothing ever moves into an identity folder (`NodesHandler`), so only a trash or a move out changes the answer, and
+     * [admittedInto] asks it again under the scope lock.
+     */
+    fun writeOnlyBoundary(gated: ShareWriteGate.Admitted): String? =
+        nodes.identityFolder(gated.rootNodeId, gated.identityId)?.takeIf { it.deletedAt == null && it.shareIdentityId != null }?.id
 
     /**
      * The write-side re-check of an upload into [target], handed out **unevaluated** like [ShareWriteGate.Admitted.admitted]
@@ -167,7 +181,11 @@ class ShareGuestGate(
     fun admittedInto(gated: ShareWriteGate.Admitted, target: ShareWriteTarget.Node): () -> Boolean = {
         nodes.lockScope(gated.scopeId)
         gated.admitted() &&
-            (!target.named || (nodes.findInScope(gated.scopeId, gated.rootNodeId) != null && liveInside(gated, target.nodeId) != null))
+            (!target.named || (nodes.findInScope(gated.scopeId, gated.rootNodeId) != null && liveInside(gated, target.nodeId) != null)) &&
+            // A WRITE_ONLY guest's named node: still inside its own live identity folder (a member may have trashed it
+            // or moved it out of the drop box meanwhile, ADR 0080 decision 11).
+            (!target.named || target.nodeId == gated.rootNodeId || gated.role != ShareEntity.WRITE_ONLY ||
+                writeOnlyBoundary(gated)?.let { nodes.withinSubtree(gated.scopeId, it, target.nodeId) } == true)
     }
 
     /** [nodeId] as a live node of the share's scope inside its subtree (the root included), or null. */

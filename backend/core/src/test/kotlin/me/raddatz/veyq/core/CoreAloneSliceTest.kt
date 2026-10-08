@@ -23,6 +23,7 @@ import me.raddatz.veyq.core.scope.MembershipEraser
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.scope.ScopeEraser
 import me.raddatz.veyq.core.sharing.GuestIdentityUsage
+import me.raddatz.veyq.core.sharing.NodeGuestIdentityUsage
 import me.raddatz.veyq.core.sharing.ShareEntity
 import me.raddatz.veyq.core.sharing.ShareGuestWrites
 import me.raddatz.veyq.core.sharing.FolderShareRoots
@@ -126,7 +127,8 @@ class CoreAloneSliceTest {
         assertEquals(setOf(AttachmentScopeEraser::class.java, NodeScopeEraser::class.java, ShareScopeEraser::class.java),
             classes(scopeErasers), "ScopeEraser: core's own three, and no application's")
         assertEquals(setOf(AttachmentNodeSubtreeEraser::class.java), classes(subtreeErasers), "NodeSubtreeEraser: core's attachments only")
-        assertEquals(setOf(AttachmentGuestIdentityUsage::class.java), classes(identityUsages), "GuestIdentityUsage: core's attachments only")
+        assertEquals(setOf(AttachmentGuestIdentityUsage::class.java, NodeGuestIdentityUsage::class.java), classes(identityUsages),
+            "GuestIdentityUsage: core's attachments and identity folders only")
         assertEquals(setOf(AttachmentSharedSubtreeContributor::class.java), classes(contributors),
             "SharedSubtreeContributor: core's attachments only")
         assertEquals(setOf(FolderNodeRules::class.java), classes(kindRules), "NodeKindRules: core's FOLDER rule only")

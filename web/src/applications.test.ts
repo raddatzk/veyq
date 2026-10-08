@@ -3,12 +3,13 @@ import { describe, it, expect } from 'vitest'
 import { registerApplications } from './applications'
 import { registry } from './core/applications/registry'
 import { MEMORY_KIND, CHAPTER_KIND } from './features/memory/kinds'
-import { FILE_KIND } from './features/files/kinds'
+import { DROPBOX_KIND, FILE_KIND } from './features/files/kinds'
 import { fileNameSlug } from './shared/naming'
 import { favoritesStore } from './features/memory/favoritesStore'
 import PinnedMemories from './features/memory/components/PinnedMemories.vue'
 import MemoriesSection from './features/memory/components/MemoriesSection.vue'
 import FilesSection from './features/files/components/FilesSection.vue'
+import DropBoxSection from './features/files/components/DropBoxSection.vue'
 import MemoryNodeDialog from './features/memory/components/MemoryNodeDialog.vue'
 import ShareDialog from './features/memory/components/ShareDialog.vue'
 import { FOLDER_KIND } from './core/node/kind'
@@ -51,6 +52,7 @@ describe('composition root', () => {
     expect(registry.sections()).toEqual([
       { component: MemoriesSection, order: 10, kinds: [MEMORY_KIND, CHAPTER_KIND] },
       { component: FilesSection, order: 20, kinds: [FILE_KIND] },
+      { component: DropBoxSection, order: 21, kinds: [DROPBOX_KIND] },
     ])
   })
 

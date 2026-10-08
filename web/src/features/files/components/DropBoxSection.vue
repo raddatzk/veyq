@@ -1,0 +1,76 @@
+<script setup lang="ts">
+// The drop boxes of a folder level (cr-files-application F3): a row per `FILES_DROPBOX` child that opens it (its
+// `detail`, `DropBoxDetail.vue`), and a "New drop box" action (its `createDialog`). Files' file rows' markup (the
+// `veyq-list` rows of `FilesSection.vue`); hidden in map mode like the folders and the files.
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import Button from 'primevue/button'
+import type { LevelSectionEmits, LevelSectionProps } from '../../../core/applications/registry'
+import { useViewMode } from '../../../shared/state/useViewMode'
+import { DROPBOX_KIND } from '../kinds'
+
+const props = defineProps<LevelSectionProps>()
+const emit = defineEmits<LevelSectionEmits>()
+const { t } = useI18n()
+const { viewMode } = useViewMode()
+
+const boxes = computed(() => props.nodes.filter((n) => n.kind === DROPBOX_KIND))
+</script>
+
+<template>
+  <section v-if="viewMode !== 'map' && (boxes.length || !readonly)" class="veyq-section dropbox-section">
+    <div class="veyq-section-header">
+      <h2>{{ t('files.dropBox.section') }}</h2>
+      <span>{{ boxes.length }}</span>
+      <div v-if="!readonly" class="dropbox-toolbar">
+        <Button
+          type="button"
+          :label="t('files.dropBox.create')"
+          icon="pi pi-inbox"
+          severity="secondary"
+          outlined
+          size="small"
+          :disabled="!epochs"
+          @click="emit('create', DROPBOX_KIND)"
+        />
+      </div>
+    </div>
+    <ul v-if="boxes.length" class="veyq-list">
+      <li v-for="box in boxes" :key="box.id" class="veyq-list-row">
+        <button type="button" class="dropbox-row-open" :aria-label="t('files.dropBox.open', { name: box.name })" @click="emit('openNode', box)">
+          <span class="pi pi-inbox" aria-hidden="true" />
+          <span class="veyq-row-main">
+            <span class="veyq-row-title">{{ box.name }}</span>
+          </span>
+        </button>
+      </li>
+    </ul>
+  </section>
+</template>
+
+<style scoped>
+.dropbox-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+.dropbox-row-open {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.dropbox-row-open:focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: 2px;
+  border-radius: var(--app-radius-sm);
+}
+</style>

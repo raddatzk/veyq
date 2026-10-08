@@ -3,6 +3,7 @@ package me.raddatz.veyq.core.content
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.node.ParentSlot
 import me.raddatz.veyq.core.scope.ScopeEntity
+import me.raddatz.veyq.core.sharing.ShareIdentityEntity
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 import java.time.Instant
@@ -27,6 +28,11 @@ data class NodeRow(
     /** How many times the node was moved or renamed — the version its name and key wrap are sealed at, and the one a
      *  placement write states (ADR 0080 Decision 3). */
     val placementVersion: Long = 0,
+    /** An identity folder's guest identity (ADR 0080 decision 11, [NodeEntity.shareIdentityId]), else null. */
+    val shareIdentityId: String? = null,
+    /** With [shareIdentityId]: that identity's `K_up` wrapped to the parent's drop public key, the first link of the
+     *  chain its entry opens through. */
+    val wrappedIdentityKey: String? = null,
 )
 
 /** One soft-deleted subtree ROOT in the space's trash (uc.memory.delete-node). `deletedAt` is the marker the
@@ -40,6 +46,9 @@ data class TrashedNodeRow(
     /** The placement version [encryptedName] is sealed at; a trash and a restore leave it alone. */
     val placementVersion: Long,
     val deletedAt: Instant,
+    /** A trashed identity folder's identity and its wrapped `K_up` (ADR 0080 decision 11), which its entry opens through. */
+    val shareIdentityId: String? = null,
+    val wrappedIdentityKey: String? = null,
 )
 
 /**
@@ -156,13 +165,68 @@ class NodesStore {
         return true
     }
 
-    fun list(scopeId: String): List<NodeRow> =
-        NodeEntity.find("scopeId = ?1 and deletedAt is null", scopeId).list().map {
+    fun list(scopeId: String): List<NodeRow> {
+        val nodes = NodeEntity.find("scopeId = ?1 and deletedAt is null", scopeId).list()
+        val wrapped = identityKeys(nodes.mapNotNull { it.shareIdentityId })
+        return nodes.map {
             NodeRow(
                 it.id, it.parentId, it.kind, it.encryptedName, it.slugToken, it.orderIndex, it.epoch, it.wrappedContentKey,
                 it.wrappedMeta, it.sealedDropPrivateKey, it.metaVersion, it.placementVersion,
+                it.shareIdentityId, it.shareIdentityId?.let(wrapped::get),
             )
         }
+    }
+
+    /** The wrapped `K_up` of each of [identityIds] (ADR 0080 decision 11) — what an identity folder's entry opens
+     *  through. One bounded read; an identity without a wrapped key (a READ_WRITE guest's) is absent. */
+    fun identityKeys(identityIds: Collection<String>): Map<String, String> =
+        if (identityIds.isEmpty()) emptyMap()
+        else ShareIdentityEntity.find("id in ?1 and wrappedIdentityKey is not null", identityIds.distinct()).list()
+            .associate { it.id to it.wrappedIdentityKey!! }
+
+    /**
+     * The identity whose identity folder holds [slot] — the slot itself or its nearest ancestor that names one
+     * ([NodeEntity.shareIdentityId], ADR 0080 decision 11) — or null when [slot] lies in no identity folder. The upward
+     * walk of [withinSubtree], and like it without a `deletedAt` predicate. Inside an identity folder only its identity
+     * creates (`NodesHandler.createInScope`). Nothing ever moves INTO an identity folder (that rule refuses it), so the
+     * answer for a live slot cannot change under a concurrent write.
+     */
+    fun identityFolderOwner(scopeId: String, slot: String): String? {
+        var cur = slot
+        while (cur != scopeId) {
+            val p = NodeEntity.findById(cur) ?: return null
+            if (p.scopeId != scopeId) return null
+            p.shareIdentityId?.let { return it }
+            cur = p.parentId
+        }
+        return null
+    }
+
+    /** The identity folder [identityId] holds directly under [parentId], live or trashed, or null. */
+    fun identityFolder(parentId: String, identityId: String): NodeEntity? =
+        NodeEntity.find("parentId = ?1 and shareIdentityId = ?2", parentId, identityId).firstResult()
+
+    /** Persist an identity folder (ADR 0080 decision 11): a `FOLDER` under [parentId] that [identityId] holds, its entry
+     *  and key wrap under the identity's `K_up`. Joins its caller's transaction, which decided everything under the
+     *  scope lock (`IdentityFolders.ensure`); `ux_node_parent_identity` is the backstop of one per (parent, identity). */
+    fun createIdentityFolder(
+        id: String, scopeId: String, parentId: String, identityId: String, encryptedName: String, slugToken: String,
+        epoch: Int, wrappedContentKey: String,
+    ) {
+        NodeEntity().apply {
+            this.id = id
+            this.scopeId = scopeId
+            this.parentId = parentId
+            this.kind = NodeEntity.FOLDER
+            this.encryptedName = encryptedName
+            this.slugToken = slugToken
+            this.orderIndex = 0
+            this.epoch = epoch
+            this.wrappedContentKey = wrappedContentKey
+            this.shareIdentityId = identityId
+            createdAt = Instant.now()
+        }.persist()
+    }
 
     /** What [applyUpdate] did: applied, found no live node, refused a placement its destination no longer allows (a
      *  trashed or foreign parent, a cycle) or whose slug is taken there, or refused a stale placement or a stale meta
@@ -242,6 +306,10 @@ class NodesStore {
             sets += listOf(
                 "parentId = :parentId", "encryptedName = :encryptedName", "slugToken = :slugToken",
                 "wrappedContentKey = :wrappedContentKey", "placementVersion = :nextPlacement",
+                // An identity folder's one possible placement is a member's move out of its drop box (a rename or a
+                // move inside is refused by the kinds' placement rules): its key is re-wrapped under the new parent's,
+                // so it is no identity's folder any more (ADR 0080 decision 11). A no-op on every other node.
+                "shareIdentityId = null",
             )
             params += mapOf(
                 "parentId" to p.parentSlot, "encryptedName" to p.encryptedName, "slugToken" to p.slugToken,
@@ -374,9 +442,16 @@ class NodesStore {
     fun listTrashRoots(scopeId: String): List<TrashedNodeRow> {
         val all = NodeEntity.find("scopeId = ?1 and deletedAt is not null", scopeId).list()
         val trashedIds = all.mapTo(HashSet()) { it.id }
-        return all.filter { it.parentId !in trashedIds }
+        val roots = all.filter { it.parentId !in trashedIds }
+        val wrapped = identityKeys(roots.mapNotNull { it.shareIdentityId })
+        return roots
             .sortedWith(compareByDescending<NodeEntity> { it.deletedAt }.thenBy { it.id })
-            .map { TrashedNodeRow(it.id, it.parentId, it.kind, it.encryptedName, it.epoch, it.placementVersion, it.deletedAt!!) }
+            .map {
+                TrashedNodeRow(
+                    it.id, it.parentId, it.kind, it.encryptedName, it.epoch, it.placementVersion, it.deletedAt!!,
+                    it.shareIdentityId, it.shareIdentityId?.let(wrapped::get),
+                )
+            }
     }
 
     /** BFS the scope's rows from [rootId], collecting the root + every descendant id (state-blind by design —

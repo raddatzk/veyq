@@ -275,6 +275,75 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: rate_limited } }
 
+  /api/shares/{shareId}/files/drop-folder:
+    post:
+      tags: [share-files]
+      operationId: ensureShareDropFolder
+      summary: A drop-box guest's own folder — created on its first call, the same one on every later call (unauthenticated).
+      description: >
+        **No auth.** A `WRITE_ONLY` guest of a drop-box link (a `FILES_DROPBOX` root, [ADR 0080](../../../docs/decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
+        decision 11, [docs/apps/files.md](../../../docs/apps/files.md) § The drop box) holds no key of the drop box,
+        so it cannot place a node there with core's `createShareNode`. This operation gives its identity ONE folder in
+        the drop box, unique by (drop box, identity): the first call creates a core `FOLDER` from the request — a
+        node id, a content key, a name and a slug token the guest minted and sealed under its own identity key
+        `K_up` (the key it handed over wrapped to the drop box's drop public key in `createShareIdentity`) — and every
+        later call by the same identity, concurrent ones included, answers that same folder with its stored wrap and
+        ignores the request's. Below it the guest creates its files with `createShareNode` and uploads into them
+        (`startShareBlobUploads` with `nodeId`, `completeShareFile`), all decided again by core's guest gate: a
+        `WRITE_ONLY` guest writes only inside its own identity folder. Core's guest gate runs first (`ShareGuestGate`:
+        an active share → the password → the mode → the contributor token → the per-share upload budget, which a
+        create spends). **The server opens nothing:** it stores the ciphertext, the identity it was asked by (the
+        folder's `shareIdentityId`), and checks structure only. **Epoch:** off the scope root, at or below the scope's
+        current epoch, stored as sent (a write-only link serves no epoch; the client seals at 0). A member reads the
+        folder through the drop box's key: drop private key → the identity's `K_up` → the folder's entry.
+        **Password-protected shares (ADR 0037):** no `X-Share-Password` → non-enumerable `404`; a wrong token → `403
+        share_password_incorrect`.
+      parameters:
+        - $ref: "#/components/parameters/ShareId"
+        - $ref: "#/components/parameters/SharePassword"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DropFolderRequest" }
+            example:
+              contributorToken: Y29udHJpYnV0b3ItdG9rZW4tb3BhcXVl
+              nodeId: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
+              encryptedName: ZW5jcnlwdGVkLW5hbWU=
+              slugToken: c2x1Zy10b2tlbi1iYXNlNjQ=
+              epoch: 0
+              wrappedContentKey: d3JhcHBlZC1rLW1lbQ==
+      responses:
+        "200":
+          description: The identity's folder — `created` true when this call made it.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DropFolder" }
+        "400":
+          description: Malformed request (`invalid_request`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "403":
+          description: >
+            The link is no `WRITE_ONLY` link, its root is no live `FILES_DROPBOX`, the contributor token names no
+            identity of it, or the identity's folder is in the trash (a member removed it; the guest starts over under
+            a new identity) — `share_not_contributable`; or it is password-protected and the `X-Share-Password` token
+            is wrong (`share_password_incorrect`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_contributable } }
+        "404":
+          description: No such share (disabled/expired/unknown/deleted, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4)), or it is password-protected and no `X-Share-Password` token was given — non-enumerable (`share_not_found`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
+        "409":
+          description: The `nodeId` is already taken, in any scope (`id_taken`), or the `epoch` is above the scope's current one (`stale_epoch`) — nothing stored.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } }
+        "429":
+          description: Too many wrong password attempts on this share, or its upload budget is spent for the current window (per-share rate limit).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: rate_limited } }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -447,6 +516,85 @@ components:
         items:
           type: array
           items: { $ref: "#/components/schemas/FileListItem" }
+
+    DropFolderRequest:
+      type: object
+      required: [contributorToken, nodeId, encryptedName, slugToken, epoch, wrappedContentKey]
+      description: >
+        The folder a drop-box guest's identity gets on its first call, sealed under the guest's identity key `K_up` —
+        never under a key of the drop box, which the guest does not hold. Ignored when the identity has its folder.
+      properties:
+        contributorToken:
+          x-veyq-visibility: token
+          type: string
+          description: The capability token from `createShareIdentity`.
+          maxLength: 512
+          example: Y29udHJpYnV0b3ItdG9rZW4tb3BhcXVl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 512)'
+        nodeId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The client-minted id of the folder; its name and wrap are sealed bound to it (ADR 0072).
+          example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
+        encryptedName:
+          type: string
+          description: The folder's name (the guest's display name) sealed under `K_up` (seal purpose `node-name`, bound to scope, node, `epoch` and placement version 0; opaque base64).
+          contentEncoding: base64
+          maxLength: 4096
+          example: ZW5jcnlwdGVkLW5hbWU=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 4096) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        slugToken:
+          type: string
+          description: The folder's slug token under `K_up` in the drop box's slot (opaque base64). Uniqueness in the drop box is by identity, not by slug, so two guests of one name never collide.
+          contentEncoding: base64
+          maxLength: 128
+          example: c2x1Zy10b2tlbi1iYXNlNjQ=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        epoch:
+          x-veyq-visibility: structure
+          # nullable type + @NotNull: a required primitive binds a missing field to 0 (backend/CLAUDE.md)
+          type: [integer, "null"]
+          description: The epoch the seals bind (off the scope root; at or below the scope's current one, stored as sent).
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0) @field:jakarta.validation.constraints.NotNull'
+        wrappedContentKey:
+          type: string
+          description: The folder's fresh random content key wrapped under `K_up` (seal purpose `content-key`, bound to scope, node, `epoch` and placement version 0; opaque base64).
+          contentEncoding: base64
+          maxLength: 256
+          example: d3JhcHBlZC1rLW1lbQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    DropFolder:
+      type: object
+      description: >
+        A drop-box guest's own folder as stored: what the guest opens its key from (under `K_up`) and creates its files
+        under. Ids, numbers and the guest's own ciphertext only.
+      required: [nodeId, epoch, placementVersion, wrappedContentKey, created]
+      properties:
+        nodeId: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d, x-veyq-visibility: id }
+        epoch:
+          x-veyq-visibility: structure
+          type: integer
+          example: 0
+        placementVersion:
+          x-veyq-visibility: structure
+          type: integer
+          format: int64
+          example: 0
+        wrappedContentKey:
+          type: string
+          description: The folder's content key wrapped under the identity's `K_up`, as stored (opaque base64).
+          contentEncoding: base64
+          maxLength: 256
+          example: d3JhcHBlZC1rLW1lbQ==
+        created:
+          x-veyq-visibility: structure
+          type: boolean
+          description: True when this call created the folder; false when the identity already had it.
+          example: true
 
     ErrorResponse:
       $ref: '../_common.openapi.yaml#/components/schemas/ErrorResponse'
