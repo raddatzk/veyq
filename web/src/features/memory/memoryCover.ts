@@ -20,7 +20,7 @@
 import { hasDerivatives, listMedia, openBlob, openGrid, type BlobRef } from './media'
 import { editField, unsealNodeMeta } from './nodeMeta'
 import { writeNodeMeta } from './nodeMetaWrite'
-import type { SealedMetaState } from './sealedMetaWrite'
+import type { SealedMetaState } from '../../core/node/sealedMetaWrite'
 
 /**
  * A crop rectangle in the source image's **normalized `0..1`** coordinates (the pre-E2EE design source's

@@ -4,9 +4,10 @@ import { FOLDER_KIND } from '../../core/node/kind'
 import { fileNameSlug, slugify } from '../../shared/naming'
 import { registerFiles } from './register'
 import { FILE_KIND } from './kinds'
+import FilesSection from './components/FilesSection.vue'
 
 describe('registerFiles', () => {
-  it('registers the FILE kind: not shareable, a file icon, no detail yet', () => {
+  it('registers the FILE kind: not shareable, a file icon, its level section, no detail', () => {
     const registry = createRegistry()
     registerFiles(registry)
     expect(registry.kind(FILE_KIND)).toEqual({
@@ -15,6 +16,7 @@ describe('registerFiles', () => {
       icon: 'pi pi-file',
       shareable: false,
       slug: fileNameSlug,
+      section: { order: 20, component: FilesSection },
     })
   })
 
@@ -32,13 +34,13 @@ describe('registerFiles', () => {
     expect(registry.slugFor(FOLDER_KIND, 'Foto.JPG')).not.toBe(fileNameSlug('Foto.JPG'))
   })
 
-  it('brings no dialog, no level section, no list item, no share body and no lifecycle', () => {
+  it('brings its own level section after Memories\' (order 20), and no dialog, list item, share body or lifecycle', () => {
     const registry = createRegistry()
     registerFiles(registry)
     const file = registry.kind(FILE_KIND)
-    expect(file.supported && file.createDialog).toBeUndefined() // a create of a FILE opens nothing until F1
+    expect(file.supported && file.createDialog).toBeUndefined() // a file is created by uploading it, never by a name dialog
     expect(file.supported && file.shareDialog).toBeUndefined() // not a share root: no share offered
-    expect(registry.sections()).toEqual([]) // a FILE child shows in core's fallback section until F1
+    expect(registry.sections()).toEqual([{ component: FilesSection, order: 20, kinds: [FILE_KIND] }])
     for (const slot of ['topbarTray', 'sidebarPins'] as const) expect(registry.slotItems(slot)).toEqual([])
     expect(registry.shareBody(FILE_KIND)).toBeNull()
   })

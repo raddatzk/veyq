@@ -2,7 +2,7 @@
 // (ADR 0077). Shared by the date, place and cover slices so the three editors answer a conflict the same way.
 import { useI18n } from 'vue-i18n'
 import { useToast } from '../../shared/state/useToast'
-import { MetaConflictError, MetaUnreadableError, staleMetaOf, type SealedMetaState } from './sealedMetaWrite'
+import { MetaConflictError, MetaUnreadableError, staleMetaOf, type SealedMetaState } from '../../core/node/sealedMetaWrite'
 
 /** A node's sealed meta moved — the host patches its tree copy (the blob and the version it is at). */
 export type NodeMetaUpdate = { nodeId: string } & SealedMetaState

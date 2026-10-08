@@ -3,10 +3,9 @@
 > **Being built** by `changes/cr-files-application.md`. The smallest possible application: a file tree on the
 > platform's node tree ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)).
 > Built so far: the Gradle module `:apps:files` with the node kind `FILE` (at the root or in a `FOLDER`, no children,
-> no share root) and its web registration (`web/src/features/files`); the **backend half of a member's file**
-> (F1a): its contract `contracts/api/files/files.openapi.yaml` and the upload completion, replace and listing below.
-> No web UI of its own yet (F1b): core's folder level view lists a `FILE` child in its fallback section (name, icon,
-> "cannot open"). No guests (F2), no drop box (F3).
+> no share root) and its web registration (`web/src/features/files`); a **member's file** end to end: its contract
+> `contracts/api/files/files.openapi.yaml` and the upload completion, replace and listing below (F1a), and the web half
+> (F1b, § The web below). No guests (F2), no drop box (F3).
 
 ## Idea
 
@@ -57,6 +56,23 @@
 Backend: `me.raddatz.veyq.files.content` — `FilesResource`/`FilesHandler` (the scope-access gate first), core's
 dispatcher to `FilesUploadCompletion` (`UploadCompletion` for `FILE`, maps the item's `expectedBlobId` payload onto
 `AttachmentStore.attach`), `FilesUploadAdmission`, `FilesStore` (the listing's reads).
+
+## The web (`web/src/features/files`)
+
+- **Files' section** of core's folder level view (`components/FilesSection.vue`, `section` order 20, after Memories'):
+  in every folder and at the scope root, its FILE children as rows (icon, name, size and modified time from the
+  sealed meta, else the plaintext size the blob's sealed size gives), with download, replace, rename (core's
+  `FolderNameDialog`, through the section's `rename` event) and delete (into core's trash, restored from core's trash
+  dialog). An upload button and a drop onto the section; an empty folder says so. Hidden in map mode, like the
+  folders. Read-only during a pending deletion: download only.
+- **The upload** is one job of core's upload queue per file (`uploadFile.ts`): create the `FILE` node (or, for a name a
+  FILE sibling already holds by `fileNameSlug`, replace that file after the member confirmed), plan and pump the blob
+  under the node's own key, `completeFile` with `expectedBlobId`, then write the meta (`fileMeta.ts`). The status menu
+  shows progress; the section says why a file of its folder was not uploaded (a taken name, `stale_file` with
+  "replace anyway", no space) or that its meta is missing.
+- **The download** (`download.ts`) presigns the blob's chunks, opens them under the node key at most four at a time and
+  saves one `Blob` under the file's name: a file needs about its own size in tab memory (unverified beyond a few MB; a
+  streaming save is not built).
 
 ## Operator-visible, beyond the platform's `kind`
 

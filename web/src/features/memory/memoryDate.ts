@@ -13,7 +13,7 @@ import { effectiveCapturedAt, unsealMeta, type MediaItem } from './media'
 import { openContentKey, type TreeNode } from '../../core/node/tree'
 import { editField, sealNodeMeta, unsealNodeMeta, type NodeMetaAddress } from './nodeMeta'
 import { writeNodeMeta } from './nodeMetaWrite'
-import type { SealedMetaState } from './sealedMetaWrite'
+import type { SealedMetaState } from '../../core/node/sealedMetaWrite'
 
 /** The four date modes: derive from media (`auto`), a single day, a `from..to` span, or an open-ended `since`. */
 export type MemoryDateMode = 'auto' | 'single' | 'range' | 'ongoing'

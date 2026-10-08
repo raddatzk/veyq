@@ -242,6 +242,7 @@ async function onDeleteDone() {
         @open-node="openNode"
         @create="startCreate"
         @rename-folder="currentFolder && startRename(currentFolder)"
+        @rename-node="startRename"
         @delete-folder="currentFolder && startDelete(currentFolder)"
         @open-trash="trashVisible = true"
         @share="shareVisible = true"

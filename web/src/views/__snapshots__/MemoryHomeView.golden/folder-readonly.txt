@@ -44,6 +44,14 @@ div.memory-home
                     "05/01/2024 – 05/10/2024"
               button.memory-card-pin [aria-label="Favorite"] [aria-pressed="false"]
                 span.pi.pi-heart
+    section.files-section.veyq-section
+      div.veyq-section-header
+        h2
+          "Files"
+        span
+          "0"
+      p.veyq-empty.veyq-empty-inline
+        "No files yet — upload the first one."
     section.veyq-section
       div.veyq-level-section-header.veyq-section-header
         h2

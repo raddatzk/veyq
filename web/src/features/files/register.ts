@@ -2,17 +2,27 @@
 // (`web/src/applications.ts`), which is the only core file allowed to import an application. The registry is a
 // parameter, not an import of the singleton, so a test can register into a fresh one.
 //
-// A skeleton today (cr-files-application F0): the `FILE` kind only. No `detail` yet — an opened file renders the host's
-// explicit unsupported state (`home.unsupportedKind`), never an empty region — and no `section`: core's folder level
-// view lists a FILE child in its fallback section (icon, name, the unsupported state) until F1 brings Files' own
-// section (the file list, the upload and the download).
+// The `FILE` kind with its level SECTION (cr-files-application F1b): the file list of a folder, the upload, replace,
+// download, rename and delete. No `detail` — a file is not opened, it is downloaded from its row (an opened FILE, e.g.
+// by a typed URL, renders the host's explicit unsupported state, `home.unsupportedKind`), no `createDialog` (a file is
+// created by uploading it, never by naming an empty one) and no `shareDialog` (a file is shared through its folder).
 import { FILE_KIND } from './kinds'
 import type { Registry } from '../../core/applications/registry'
 import { fileNameSlug } from '../../shared/naming'
+import FilesSection from './components/FilesSection.vue'
+
+/** Where Files' section sorts among the level view's sections: after Memories' (10). */
+export const FILES_SECTION_ORDER = 20
 
 export function registerFiles(registry: Registry): void {
   // A file is no share root (the backend declares no `ShareRoots` for it): it is shared through its folder. Its name
   // folds by `fileNameSlug` (inbox #350: `Foto.JPG` and `foto.jpg` collide, `Day1.md` and `Day1 md` do not) — frozen
   // into every stored slug token from the first `FILE` on, and pinned by `name_folding` in `contracts/crypto/vectors/v1.json`.
-  registry.registerKind({ kind: FILE_KIND, icon: 'pi pi-file', shareable: false, slug: fileNameSlug })
+  registry.registerKind({
+    kind: FILE_KIND,
+    icon: 'pi pi-file',
+    shareable: false,
+    slug: fileNameSlug,
+    section: { order: FILES_SECTION_ORDER, component: FilesSection },
+  })
 }

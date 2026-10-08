@@ -27,7 +27,7 @@ import { fakeApi, stubApi } from '../../test/apiMock'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { epochMsToIsoDate } from '../../shared/isoDate'
-import { MetaConflictError, MetaUnreadableError } from './sealedMetaWrite'
+import { MetaConflictError, MetaUnreadableError } from '../../core/node/sealedMetaWrite'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const nodeKey = v1.randomBytes(32)

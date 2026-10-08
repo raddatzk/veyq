@@ -42,6 +42,8 @@ const emit = defineEmits<{
    *  section's own kind otherwise (that kind's `createDialog`, e.g. Memories' MEMORY). */
   create: [kind: NodeKind]
   renameFolder: []
+  /** A section's child renamed in place (a kind that does not open, e.g. Files' file): the host's `FolderNameDialog`. */
+  renameNode: [node: TreeNode]
   deleteFolder: []
   openTrash: []
   share: []
@@ -140,6 +142,7 @@ const fallbacks = computed(() =>
       @open-node="emit('openNode', $event)"
       @create="emit('create', $event)"
       @open-trash="emit('openTrash')"
+      @rename="emit('renameNode', $event)"
     />
 
     <!-- A kind no section serves: listed, never dropped, and said plainly that this client cannot show it. Not

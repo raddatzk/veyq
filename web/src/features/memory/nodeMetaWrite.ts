@@ -4,7 +4,7 @@
 import { contentApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import { openNodeMetaForWrite, sealNodeMeta, type RawNodeMeta } from './nodeMeta'
-import { writeSealedMeta, type MetaEditContext, type SealedMetaResult, type SealedMetaState } from './sealedMetaWrite'
+import { writeSealedMeta, type MetaEditContext, type SealedMetaResult, type SealedMetaState } from '../../core/node/sealedMetaWrite'
 
 /**
  * Write a node's sealed meta, version-checked (ADR 0077): open the blob at `base`, apply `edit`, seal, and PATCH
