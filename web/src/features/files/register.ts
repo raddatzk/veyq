@@ -47,6 +47,8 @@ export function registerFiles(registry: Registry): void {
     shareable: false,
     slug: fileNameSlug,
     renameSelectionEnd: fileNameStemEnd,
+    // A trashed file that holds no blob is one whose upload never finished (inbox #391): core's trash says so.
+    emptyInTrash: 'files.trashEmpty',
     section: { order: FILES_SECTION_ORDER, component: FilesSection },
     shareSection: { order: FILES_SECTION_ORDER, component: ShareFilesSection },
   })
@@ -58,6 +60,8 @@ export function registerFiles(registry: Registry): void {
     detail: DropBoxDetail,
     // Core's delete dialog (the detail's delete): "Delete drop box", the detail's own button label.
     deleteTitle: 'files.dropBox.delete',
+    // …and its sentence names what goes with it: the guests' folders, and the links that stop taking files (#395).
+    deleteCopy: 'files.dropBox.deleteConfirm',
     section: { order: DROPBOX_SECTION_ORDER, component: DropBoxSection },
     createDialog: DropBoxCreateDialog,
     shareDialog: DropBoxShareDialog,

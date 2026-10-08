@@ -234,6 +234,24 @@ class FilesContentSliceTest {
         assertEquals(0L, QuarkusTransaction.requiringNew().call { usage.tenantUsage(tenantId) })
     }
 
+    /** Inbox #391: the trash tells a file that holds content from one whose upload never finished (no attachment row) —
+     *  core's `attached`, so the web does not offer an empty file as a restorable one. */
+    @Test
+    fun theTrashTellsAFileWithContentFromAnEmptyOne() {
+        val (userId, scopeId) = seedMemberScope()
+        val full = seedNode(scopeId, FilesNodeKinds.FILE, wrappedContentKey = CONTENT_KEY)
+        complete(userId, scopeId, full, start(userId, scopeId, full, TestBlob.SMALL)).statusCode(200)
+        val empty = seedNode(scopeId, FilesNodeKinds.FILE, wrappedContentKey = CONTENT_KEY)
+        for (node in listOf(full, empty)) {
+            given().header("Authorization", bearer(userId)).`when`().delete("/api/scopes/$scopeId/nodes/$node").then().statusCode(204)
+        }
+
+        given().header("Authorization", bearer(userId)).`when`().get("/api/scopes/$scopeId/trash/nodes").then().statusCode(200)
+            .body("size()", equalTo(2))
+            .body("find { it.id == '$full' }.attached", equalTo(true))
+            .body("find { it.id == '$empty' }.attached", equalTo(false))
+    }
+
     // --- the wire ------------------------------------------------------------------------------------------------
 
     /** Start one upload for [node] in [role] (default: the file role) and stage its chunks at their exact lengths. */

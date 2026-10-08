@@ -30,6 +30,7 @@ import { FOLDER_KIND, type NodeKind } from './kind'
 import type { EpochKeys } from '../../features/spaces/epochs'
 import { registry } from '../applications/registry'
 import { useViewMode } from '../../shared/state/useViewMode'
+import { compareByCreation, displayNamesOf } from './location'
 
 // `readonly` (cr-0090): the scope is being deleted → no create/rename/delete affordance (every write is server-rejected
 // during the grace window, uc.spaces.scope-access; view, share listing and download stay open).
@@ -42,6 +43,12 @@ const props = defineProps<{
   readonly: boolean
   shareable: boolean
   hideEmptySections?: boolean
+  /** A child may still be deleted (into the trash) while `readonly`: a guest's identity folder, where a member places
+   *  nothing but removes what a guest sent, file by file (inbox #391). Handed to every section as `deletable`. */
+  deletable?: boolean
+  /** The folder's name as its siblings tell it apart (`displayNamesOf`: a guest's folder `Anna (2)` beside `Anna`,
+   *  inbox #393), when the host knows the siblings. Omitted: the folder's own name. */
+  folderName?: string
 }>()
 const emit = defineEmits<{
   openNode: [node: TreeNode]
@@ -75,6 +82,8 @@ const sectionViews = computed(() =>
     .filter((s) => !props.hideEmptySections || s.nodes.length > 0),
 )
 const showFolders = computed(() => !props.hideEmptySections || props.level.folders.length > 0)
+// The sub-folders' card labels: a repeated name numbered, in creation order — the rule the URL segments follow too.
+const folderLabels = computed(() => displayNamesOf(props.level.folders, (n) => n.name, compareByCreation))
 const nothingShown = computed(() => props.hideEmptySections && !sectionViews.value.length && !fallbacks.value.length && !showFolders.value)
 
 // The children no section serves, one bucket per kind, sorted by kind so the order is stable. A kind the registry
@@ -109,7 +118,7 @@ const fallbacks = computed(() =>
       <div class="veyq-section-header">
         <div class="veyq-card veyq-folder-card veyq-folder-overview-card">
           <span class="pi pi-folder" />
-          <h2>{{ folder.name }}</h2>
+          <h2>{{ folderName ?? folder.name }}</h2>
           <!-- Visible at EVERY width: the card has no overflow menu, so a width-hidden button is a lost action. They
                carried the Memory header's collapse classes, which hid all three at 721–1120 px and ≤ 720 px (found in the
                browser, 2026-10-07); three small icon buttons fit, and ≤ 520 px they take their own row (ui.css). -->
@@ -163,6 +172,7 @@ const fallbacks = computed(() =>
       :nodes="s.nodes"
       :epochs="epochs"
       :readonly="readonly"
+      :deletable="!readonly || deletable"
       @open-node="emit('openNode', $event)"
       @create="emit('create', $event)"
       @rename="emit('renameNode', $event)"
@@ -205,7 +215,7 @@ const fallbacks = computed(() =>
           @click="emit('openNode', child)"
         >
           <span class="pi pi-folder" aria-hidden="true" />
-          <strong>{{ child.name }}</strong>
+          <strong>{{ folderLabels.get(child.id) ?? child.name }}</strong>
         </button>
         <button
           v-if="!readonly"

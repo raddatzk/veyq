@@ -13,6 +13,8 @@
 // one remedy there is (replace anyway after a peer's replace). A file that holds no content (an upload that never
 // finished, e.g. the tab closed mid-way; a given-up job trashes its own empty node) offers an upload into it instead of
 // a replace, and a picked file of its name fills it without the replace question — there is nothing to replace (#384).
+// In a guest's identity folder the level is read-only but `deletable` (inbox #391): download and delete per file, a
+// content-less one ('not uploaded yet', a guest's upload that never finished) too — a guest deletes nothing itself.
 //
 // Operator-blind: the names, sizes, types and dates shown are opened here under keys the server never sees; the only
 // call of Files' own is `listFiles`, which returns ids and sealed sizes.
@@ -36,7 +38,7 @@ import type { FileBlobRef } from '../../../api/generated/files'
 import { filesApi } from '../api'
 import { FILE_KIND } from '../kinds'
 import { readFileMeta } from '../fileMeta'
-import { fileUploadJob, FileUploadError, type FileJobExtra, type FileUploadResult } from '../uploadFile'
+import { deliveredSince, fileUploadJob, FileUploadError, type FileJobExtra, type FileUploadResult } from '../uploadFile'
 import { downloadFile } from '../download'
 import { isSaveCancelled, SaveTooLarge } from '../../../shared/saveStream'
 
@@ -52,6 +54,9 @@ const { viewMode } = useViewMode()
 
 // Only FILE nodes, whatever the level hands in: the section speaks for its own kind alone.
 const fileNodes = computed(() => props.nodes.filter((n) => n.kind === FILE_KIND))
+/** Delete into the trash: wherever the level writes, and in a guest's identity folder, which takes no write but a
+ *  member's delete (the host's `deletable`, inbox #391). Not during a pending deletion. */
+const canDelete = computed(() => !props.readonly || props.deletable)
 
 const keyOf = (node: TreeNode): Uint8Array | null =>
   props.epochs && activeSpace.scopeId ? nodeContentKey(activeSpace.scopeId, props.epochs, treeStore.nodes, node.id) : null
@@ -212,11 +217,13 @@ function onDrop(e: DragEvent) {
 
 type Notice = { item: UploadItem<FileUploadResult, FileJobExtra>; severity: 'error' | 'warn'; text: string; replaceAnyway: boolean }
 const KNOWN_ERRORS = new Set<string>([...Object.values(FileUploadError), QUOTA_EXCEEDED])
-const notices = computed<Notice[]>(() =>
-  batches.value
-    .filter((b) => b.key === batchKey.value)
+const notices = computed<Notice[]>(() => {
+  const mine = batches.value.filter((b) => b.key === batchKey.value)
+  const madeGood = deliveredSince(mine) // the same file uploaded since: nothing left to explain (inbox #395)
+  return mine
     .flatMap((b) => b.files as UploadItem<FileUploadResult, FileJobExtra>[])
     .flatMap((item): Notice[] => {
+      if (item.status === 'failed' && madeGood.has(item.id)) return []
       if (item.status === 'failed') {
         const code = item.error && KNOWN_ERRORS.has(item.error) ? item.error : 'failed'
         return [{ item, severity: 'error', text: t(`files.errors.${code}`, { name: item.name }), replaceAnyway: code === FileUploadError.staleFile }]
@@ -225,8 +232,8 @@ const notices = computed<Notice[]>(() =>
         return [{ item, severity: 'warn', text: t('files.metaWarning', { name: item.name }), replaceAnyway: false }]
       }
       return []
-    }),
-)
+    })
+})
 
 /** After a peer's replace: upload the same file again, expecting the blob the slot holds NOW (re-read first). */
 async function replaceAnyway(n: Notice) {
@@ -257,7 +264,7 @@ async function download(row: Row) {
 
 async function remove(node: TreeNode) {
   const scopeId = activeSpace.scopeId
-  if (!scopeId) return
+  if (!scopeId || !canDelete.value) return
   const accepted = await ask({
     header: t('files.deleteTitle'),
     message: t('files.deleteConfirm', { name: node.name }),
@@ -368,17 +375,20 @@ async function remove(node: TreeNode) {
               size="small"
               @click="emit('rename', row.node)"
             />
-            <Button
-              type="button"
-              class="veyq-icon-button veyq-prime-icon-button"
-              icon="pi pi-trash"
-              :aria-label="t('files.delete', { name: row.node.name })"
-              severity="danger"
-              outlined
-              size="small"
-              @click="remove(row.node)"
-            />
           </template>
+          <!-- Delete also where nothing is placed (`deletable`): a guest's identity folder, where a member removes what a
+               guest sent file by file — a content-less one too, a guest's upload that never finished (inbox #391). -->
+          <Button
+            v-if="canDelete"
+            type="button"
+            class="veyq-icon-button veyq-prime-icon-button"
+            icon="pi pi-trash"
+            :aria-label="t('files.delete', { name: row.node.name })"
+            severity="danger"
+            outlined
+            size="small"
+            @click="remove(row.node)"
+          />
         </span>
       </li>
     </ul>

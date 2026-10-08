@@ -2,10 +2,12 @@
 // An opened drop box (cr-files-application F3, ADR 0080 decision 11): its guests' identity folders — one per guest
 // identity, each named by its guest (its entry opened through the drop box's drop key, core's tree) — with how many
 // files each holds. A folder opens to core's level view, read-only there (a member places nothing in a drop box: the
-// host's `readonly` for a node inside an identity folder); a member deletes a folder here, or the drop box, and shares
+// host's `readonly` for a node inside an identity folder) but for a delete per file (`deletable`, inbox #391); a member
+// deletes a folder here, or the drop box, and shares
 // it (`DropBoxShareDialog`). Two guests of one name are told apart at display time, never stored ("Anna", "Anna (2)",
-// in the order the server made their folders, a same-millisecond pair by id) — core's `compareByCreation`, the order the
-// URL segments `anna`, `anna-2` of the same two folders come from (`core/node/location.ts` `segmentsOf`).
+// in the order the server made their folders, a same-millisecond pair by id) — core's `displayNamesOf` in
+// `compareByCreation` order, the order the URL segments `anna`, `anna-2` of the same two folders come from
+// (`core/node/location.ts` `segmentsOf`), and the label the folder's own heading and breadcrumb show (inbox #393).
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
@@ -13,7 +15,7 @@ import type { NodeDetailEmits, NodeDetailProps } from '../../../core/application
 import { deleteNode, type TreeNode } from '../../../core/node/tree'
 import { treeStore, loadTree } from '../../../core/node/treeStore'
 import { FOLDER_KIND } from '../../../core/node/kind'
-import { compareByCreation } from '../../../core/node/location'
+import { compareByCreation, displayNamesOf } from '../../../core/node/location'
 import { useConfirm } from '../../../shared/state/useConfirm'
 import { useToast } from '../../../shared/state/useToast'
 import { FILE_KIND } from '../kinds'
@@ -29,12 +31,11 @@ const folders = computed(() => {
   const own = treeStore.nodes
     .filter((n) => n.parentId === props.node.id && n.kind === FOLDER_KIND)
     .sort(compareByCreation)
-  const seen = new Map<string, number>()
+  // Core's one numbering (the folder's heading and breadcrumb say the same, inbox #393).
+  const labels = displayNamesOf(own, (n) => n.name, compareByCreation)
   return own.map((folder) => {
-    const n = (seen.get(folder.name) ?? 0) + 1
-    seen.set(folder.name, n)
     const files = treeStore.nodes.filter((c) => c.parentId === folder.id && c.kind === FILE_KIND).length
-    return { folder, label: n === 1 ? folder.name : `${folder.name} (${n})`, files }
+    return { folder, label: labels.get(folder.id) ?? folder.name, files }
   })
 })
 

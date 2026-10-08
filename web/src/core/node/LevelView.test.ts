@@ -39,10 +39,11 @@ function sectionStub(name: string) {
       nodes: { type: Array as PropType<readonly TreeNode[]>, required: true },
       epochs: { type: Object, default: null },
       readonly: { type: Boolean, required: true },
+      deletable: { type: Boolean, default: false },
     },
     emits: ['openNode', 'create', 'rename'],
     setup: (p, { emit }) => () =>
-      h('section', { class: 'stub-section', 'data-name': name, 'data-readonly': String(p.readonly), 'data-folder': p.folder?.name ?? '-' }, [
+      h('section', { class: 'stub-section', 'data-name': name, 'data-readonly': String(p.readonly), 'data-deletable': String(p.deletable), 'data-folder': p.folder?.name ?? '-' }, [
         h('span', { class: 'stub-nodes' }, p.nodes.map((n) => n.name).join(',')),
         h('button', { class: 'stub-open', onClick: () => emit('openNode', p.nodes[0]) }),
         h('button', { class: 'stub-create', onClick: () => emit('create', `create-${name}`) }),
@@ -59,13 +60,15 @@ function node(id: string, kind: NodeKind, parentId: string | null = null, orderI
 
 const TRIPS = node('Trips', FOLDER_KIND)
 function mountLevel(
-  tree: TreeNode[], over: { folder?: TreeNode | null; readonly?: boolean; shareable?: boolean; hideEmptySections?: boolean } = {},
+  tree: TreeNode[],
+  over: { folder?: TreeNode | null; readonly?: boolean; shareable?: boolean; hideEmptySections?: boolean; deletable?: boolean; folderName?: string } = {},
 ) {
   const folder = over.folder ?? null
   return mount(LevelView, {
     props: {
       folder, level: childrenOf(tree, folder?.id ?? null), epochs: null, readonly: over.readonly ?? false,
-      shareable: over.shareable ?? false, hideEmptySections: over.hideEmptySections,
+      shareable: over.shareable ?? false, hideEmptySections: over.hideEmptySections, deletable: over.deletable,
+      folderName: over.folderName,
     },
     global: { plugins: [realI18n()], directives: { tooltip: {} } },
   })
@@ -131,6 +134,20 @@ describe('LevelView: application sections', () => {
   })
 })
 
+// Inbox #391: where nothing is placed (a guest's identity folder) a member still deletes — the host says so with
+// `deletable`; a section is handed it, `!readonly` everywhere else, and never during a pending deletion.
+describe('LevelView: deletable', () => {
+  beforeEach(() => reg().registerKind({ kind: 'ALPHA', icon: 'pi pi-a', shareable: false, section: { order: 10, component: A } }))
+  const handed = (over: { readonly: boolean; deletable?: boolean }) =>
+    mountLevel([TRIPS, node('a1', 'ALPHA', 'Trips')], { folder: TRIPS, ...over }).find('.stub-section').attributes('data-deletable')
+
+  it('hands a section `deletable` where the level writes, and where the host allows a delete only', () => {
+    expect(handed({ readonly: false })).toBe('true')
+    expect(handed({ readonly: true, deletable: true })).toBe('true')
+    expect(handed({ readonly: true })).toBe('false')
+  })
+})
+
 describe('LevelView: the fallback section (a kind no section serves)', () => {
   it('lists a registered kind without a section: its icon, each name and the unsupported state, not clickable', () => {
     reg().registerKind({ kind: 'ALPHA', icon: 'pi pi-a', shareable: false, section: { order: 10, component: A } })
@@ -182,6 +199,14 @@ describe('LevelView: the folders section', () => {
     expect(w.find('button.veyq-folder-card .pi').attributes('aria-hidden')).toBe('true')
   })
 
+  // Two folders of one name (a drop box's guests) are told apart as everywhere: the first created keeps it.
+  it('numbers sub-folders of one name in creation order', () => {
+    const later = treeNode({ ...node('f-a', FOLDER_KIND), name: 'Anna', createdAt: 2000 })
+    const first = treeNode({ ...node('f-b', FOLDER_KIND), name: 'Anna', createdAt: 1000 })
+    // listed in the level's order (the later one first here), numbered by creation: the earlier keeps the plain name
+    expect(mountLevel([later, first]).findAll('.veyq-folder-card strong').map((s) => s.text())).toEqual(['Anna (2)', 'Anna'])
+  })
+
   it('shows its empty state when the level has no folder', () => {
     expect(mountLevel([]).text()).toContain(t('node.folderEmpty'))
   })
@@ -205,6 +230,12 @@ describe('LevelView: the folders section', () => {
 // and label.
 describe('LevelView: the folder overview card', () => {
   const shareButton = (w: ReturnType<typeof mountLevel>) => w.find(`button[aria-label="${t('share.share')}"]`)
+
+  // Inbox #393 (b): the heading says what the list said ("Anna (2)"), when the host knows it; else the folder's name.
+  it('heads the card with the host\'s display name, else the folder\'s own', () => {
+    expect(mountLevel([TRIPS], { folder: TRIPS, folderName: 'Trips (2)' }).find('.veyq-folder-overview-card h2').text()).toBe('Trips (2)')
+    expect(mountLevel([TRIPS], { folder: TRIPS }).find('.veyq-folder-overview-card h2').text()).toBe('Trips')
+  })
 
   it('shows no overview card at the scope root', () => {
     expect(blocks(mountLevel([]))).toEqual(['folders'])

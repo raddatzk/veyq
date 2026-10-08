@@ -234,4 +234,33 @@ describe('a contributor uploads into the shared folder', () => {
     await flushPromises()
     expect(w.text()).toContain(t('files.guest.linkFull', { name: 'big.iso' }))
   })
+
+  // Inbox #392 (owner decision): a contributor's upload of a name a file here holds stays refused (409 slug_taken) —
+  // and says so plainly, with where the replace is; a name taken by something else keeps the generic wording.
+  it('a refused name a file here holds says a file exists and points at its replace; another taken name stays generic', async () => {
+    const w = mountSection({ canWrite: true })
+    await flushPromises()
+    const refused = (name: string) => ({ name, sizeBytes: 1, run: async () => { throw new Error('slug_taken') }, extra: { file: new File([''], name) } })
+    enqueue([refused('report.PDF'), refused('Sub')], { label: 'x', key: `files-share:${SHARE}:${ROOT}` })
+    await vi.waitFor(() => expect(useUploadQueue().batches.value[0]?.files.every((f) => f.status === 'failed')).toBe(true))
+    await flushPromises()
+    expect(w.text()).toContain(t('files.guest.fileExists', { name: 'report.PDF' }))
+    expect(w.text()).toContain(t('files.errors.slug_taken', { name: 'Sub' }))
+    expect(w.text()).not.toContain(t('files.errors.slug_taken', { name: 'report.PDF' }))
+  })
+
+  // Inbox #395 (F9): once the same file arrives, its failure is no longer explained.
+  it('a failure is no longer shown once the same file has been uploaded since', async () => {
+    const w = mountSection({ canWrite: true })
+    await flushPromises()
+    const key = `files-share:${SHARE}:${ROOT}`
+    enqueue([{ name: 'x.txt', sizeBytes: 1, run: async () => { throw new Error('upload_failed') }, extra: { file: new File([''], 'x.txt') } }], { label: 'x', key })
+    await vi.waitFor(() => expect(useUploadQueue().batches.value[0]?.files[0]?.status).toBe('failed'))
+    await flushPromises()
+    expect(w.text()).toContain(t('files.errors.failed', { name: 'x.txt' }))
+    enqueue([fakeJob('x.txt')], { label: 'x', key })
+    await vi.waitFor(() => expect(useUploadQueue().batches.value.flatMap((b) => b.files).some((f) => f.status === 'done')).toBe(true))
+    await flushPromises()
+    expect(w.text()).not.toContain(t('files.errors.failed', { name: 'x.txt' }))
+  })
 })

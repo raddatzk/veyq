@@ -35,7 +35,8 @@ import Breadcrumb from 'primevue/breadcrumb'
 import type { MenuItem } from 'primevue/menuitem'
 import { registry } from '../applications/registry'
 import { FOLDER_KIND } from '../node/kind'
-import { ShareRole } from '../../api/generated/sharing'
+import { compareById, displayNamesOf } from '../node/location'
+import { ShareRole, type ShareNode } from '../../api/generated/sharing'
 import { pickLocaleText, type PublicShareHead } from './resolvePublicShare'
 import { openGuestTreeParts, guestTreeContext, createShareNodeAsGuest, guestTreeErrorMessageKey, type GuestTreeParts } from './guestTree'
 import { loadGuestSession, nameShareGuest, type GuestIdentity } from './guestIdentity'
@@ -83,7 +84,26 @@ const currentId = computed<string | null>(() => {
   const q = route.query.node
   return typeof q === 'string' && p.keys.has(q) ? q : p.rootId
 })
-const nameOf = (p: GuestTreeParts, id: string) => (id === p.rootId ? props.head.name : (p.names.get(id) ?? ''))
+/** Every opened node's label: its name, a name repeated among its siblings numbered (core's `displayNamesOf`, in node-id
+ *  order — a guest's resolve serves no creation time): a drop box's second `Anna` is `Anna (2)` in the list it is picked
+ *  from, in its heading and in the breadcrumb (inbox #393). */
+const labels = computed(() => {
+  const p = parts.value
+  const out = new Map<string, string>()
+  if (!p) return out
+  const byParent = new Map<string, ShareNode[]>()
+  for (const n of p.nodes.values()) {
+    if (!p.names.has(n.id) || !n.parentId) continue
+    const group = byParent.get(n.parentId)
+    if (group) group.push(n)
+    else byParent.set(n.parentId, [n])
+  }
+  for (const group of byParent.values()) {
+    for (const [id, label] of displayNamesOf(group, (n) => p.names.get(n.id) ?? '', compareById)) out.set(id, label)
+  }
+  return out
+})
+const nameOf = (p: GuestTreeParts, id: string) => (id === p.rootId ? props.head.name : (labels.value.get(id) ?? p.names.get(id) ?? ''))
 const currentKind = computed(() => (parts.value && currentId.value ? (parts.value.nodes.get(currentId.value)?.kind ?? null) : null))
 const atFolder = computed(() => currentKind.value === FOLDER_KIND)
 const currentName = computed(() => (parts.value && currentId.value ? nameOf(parts.value, currentId.value) : ''))

@@ -25,6 +25,7 @@ import {
   type DropFolder, type DropGuestSession,
 } from '../dropBox'
 import { guestFileUploadJob } from '../shareUpload'
+import { useConfirm } from '../../../shared/state/useConfirm'
 import { FileUploadError } from '../uploadFile'
 
 const props = defineProps<ShareBodyProps>()
@@ -33,6 +34,9 @@ const { t, locale } = useI18n()
 const session = ref<DropGuestSession | null>(loadDropGuest(props.shareId))
 const displayName = ref('')
 const busy = ref(false)
+/** A start over after a gone link is reading the link again. */
+const restarting = ref(false)
+const { ask } = useConfirm()
 const error = ref<string | null>(null)
 const picker = ref<HTMLInputElement | null>(null)
 // The folder's key is key material: kept out of a deep reactive ref (a plain variable, read when the jobs start).
@@ -131,8 +135,28 @@ async function onPicked(e: Event) {
   )
 }
 
-/** "Not you?" / start over: forget this device's session and ask for a name again. Nothing on the server changes. */
-function notYou() {
+/** "Not you?" / start over: forget this device's session and ask for a name again. Nothing on the server changes.
+ *  "Not you?" asks first — the session is the only way back into this folder from here (inbox #395). After a gone
+ *  link the link itself is read again first (inbox #393 (a)): a revoked or deleted one leaves the shell's "not
+ *  available" page (its `reload` says so) instead of a name form for a link that takes nothing; one that still resolves
+ *  — this guest's folder was trashed, the link lives — starts over under a new name. */
+async function notYou() {
+  if (linkGone.value) {
+    restarting.value = true
+    try {
+      await props.reload() // a dead link: the shell turns to its unavailable state and this page goes
+    } finally {
+      restarting.value = false
+    }
+  } else {
+    const accepted = await ask({
+      header: t('files.dropBox.guestNotYouTitle'),
+      message: t('files.dropBox.guestNotYouConfirm', { name: session.value?.displayName || t('files.dropBox.guestNameFallback') }),
+      acceptLabel: t('files.dropBox.guestNotYouAccept'),
+      acceptIcon: 'pi pi-refresh',
+    })
+    if (!accepted) return
+  }
   forgetDropGuest(props.shareId)
   session.value = null
   folder = null
@@ -173,6 +197,7 @@ function notYou() {
           severity="secondary"
           text
           :disabled="sending"
+          :loading="restarting"
           @click="notYou"
         />
       </p>

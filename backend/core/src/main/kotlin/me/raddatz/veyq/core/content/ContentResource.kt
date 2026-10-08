@@ -117,6 +117,7 @@ class ContentResource(
         parentId = if (parentId == scopeId) null else UUID.fromString(parentId),
         shareIdentityId = shareIdentityId?.let(UUID::fromString),
         wrappedIdentityKey = wrappedIdentityKey,
+        attached = attached,
     )
 
     /**

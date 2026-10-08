@@ -50,6 +50,13 @@ describe('DeleteNodeDialog', () => {
     expect(mountDialog('MEMORY').text()).toContain(t('node.deleteCopy', { name: 'Rom 2026' }))
   })
 
+  // Inbox #395: a kind's `deleteCopy` names what goes with it — a drop box its guests' folders and links; a kind without
+  // one keeps the neutral sentence.
+  it('says a kind\'s registered deleteCopy (a drop box: its guests\' folders and links), else the neutral one', () => {
+    expect(mountDialog('FILES_DROPBOX').find('.dialog-copy').text()).toBe(t('files.dropBox.deleteConfirm', { name: 'Rom 2026' }))
+    expect(mountDialog('FILE').find('.dialog-copy').text()).toBe(t('node.deleteCopy', { name: 'Rom 2026' }))
+  })
+
   it('falls back to the neutral "Delete" for a kind without a deleteTitle and for a kind nobody registered', () => {
     for (const kind of ['FILE', 'SOME_NEWER_KIND']) {
       const header = mountDialog(kind).find('.header').text()

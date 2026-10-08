@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.content
 
+import me.raddatz.veyq.core.blob.NodeAttachmentEntity
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.node.ParentSlot
 import me.raddatz.veyq.core.scope.ScopeEntity
@@ -51,6 +52,9 @@ data class TrashedNodeRow(
     /** A trashed identity folder's identity and its wrapped `K_up` (ADR 0080 decision 11), which its entry opens through. */
     val shareIdentityId: String? = null,
     val wrappedIdentityKey: String? = null,
+    /** Whether the node itself holds a blob in one of core's attachment slots (inbox #391: a `FILE` whose upload never
+     *  finished holds none — the trash says so rather than offering it as a file). */
+    val attached: Boolean = false,
 )
 
 /**
@@ -446,12 +450,14 @@ class NodesStore {
         val trashedIds = all.mapTo(HashSet()) { it.id }
         val roots = all.filter { it.parentId !in trashedIds }
         val wrapped = identityKeys(roots.mapNotNull { it.shareIdentityId })
+        val attached = if (roots.isEmpty()) emptySet() else NodeAttachmentEntity
+            .find("scopeId = ?1 and nodeId in ?2", scopeId, roots.map { it.id }).list().mapTo(HashSet()) { it.nodeId }
         return roots
             .sortedWith(compareByDescending<NodeEntity> { it.deletedAt }.thenBy { it.id })
             .map {
                 TrashedNodeRow(
                     it.id, it.parentId, it.kind, it.encryptedName, it.epoch, it.placementVersion, it.deletedAt!!,
-                    it.shareIdentityId, it.shareIdentityId?.let(wrapped::get),
+                    it.shareIdentityId, it.shareIdentityId?.let(wrapped::get), it.id in attached,
                 )
             }
     }

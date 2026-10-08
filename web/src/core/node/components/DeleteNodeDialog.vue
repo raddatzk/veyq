@@ -2,7 +2,8 @@
 // Delete a node (a folder with its subtree, or any application's node) (cr-0030 P4). Wired to the E2EE tree data layer.
 // Core serves every application's nodes, so its own strings name none (inbox #375): a folder has its own title and copy,
 // any other node takes its title from its kind's `deleteTitle` in the registry (Memories: "Delete Memory") and falls
-// back to the neutral "Delete" for a kind that registered none, or that nobody registered.
+// back to the neutral "Delete" for a kind that registered none, or that nobody registered; its sentence likewise from
+// the kind's `deleteCopy` (a drop box names its guests' folders and links, inbox #395), else the neutral one.
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
@@ -25,11 +26,11 @@ const header = computed(() => {
   const info = registry.kind(props.node.kind)
   return t(info.supported && info.deleteTitle ? info.deleteTitle : 'node.delete')
 })
-const copy = computed(() =>
-  isFolder.value
-    ? t('node.deleteFolderCopy', { name: props.node.name })
-    : t('node.deleteCopy', { name: props.node.name }),
-)
+const copy = computed(() => {
+  if (isFolder.value) return t('node.deleteFolderCopy', { name: props.node.name })
+  const info = registry.kind(props.node.kind)
+  return t(info.supported && info.deleteCopy ? info.deleteCopy : 'node.deleteCopy', { name: props.node.name })
+})
 
 const { run: runConfirm, pending: loading } = useAsyncAction(
   async () => {

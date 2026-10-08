@@ -2,8 +2,10 @@
 // The drop box's `shareDialog` (cr-files-application F3): its WRITE_ONLY links — list, create, copy, switch off,
 // delete — on core's `manageShares`/`shareLink`, as core's `FolderShareDialog` builds a folder's. A drop box is shared
 // WRITE_ONLY only (the backend's `FilesShareRoots`), so there is no role to pick: a new link carries the drop box's drop
-// public key (`mintDropBoxLink`), never its key. Not built here (the folder dialog's extras): a label, a note, a
-// password, an expiry, a renew.
+// public key (`mintDropBoxLink`), never its key. Switching a link off asks first and is undone by switching it on again
+// (core's `reactivateShare`, as the folder dialog does, inbox #394); a link a departed member may hold comes back only by
+// a renew (ADR 0075), which this dialog does not build — it says so and points at a new link. Not built here (the folder
+// dialog's extras): a label, a note, a password, an expiry, a renew.
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Dialog from 'primevue/dialog'
@@ -11,7 +13,9 @@ import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import type { NodeShareDialogProps } from '../../../core/applications/registry'
-import { deleteShare, listSharesFor, revokeShare, type ManagedShare } from '../../../core/sharing/manageShares'
+import {
+  deleteShare, isReissueRequired, listSharesFor, reactivateShare, revokeShare, type ManagedShare,
+} from '../../../core/sharing/manageShares'
 import { buildShareLink, recoverShareLink } from '../../../core/sharing/shareLink'
 import { ShareRole } from '../../../api/generated/sharing'
 import { mintDropBoxLink } from '../dropBox'
@@ -70,6 +74,31 @@ async function remove(shareId: string) {
   if (confirmed) await run(() => deleteShare(shareId))
 }
 
+/** Switch a link off, after the member said so; it can be switched on again (below). */
+async function switchOff(shareId: string) {
+  const confirmed = await ask({
+    header: t('files.dropBox.shareRevoke'),
+    message: t('files.dropBox.shareRevokeConfirm'),
+    acceptLabel: t('files.dropBox.shareRevoke'),
+    acceptIcon: 'pi pi-power-off',
+  })
+  if (confirmed) await run(() => revokeShare(shareId))
+}
+
+/** Switch a link back on (core's `reactivateShare`, which also hands it to the caller). Refused `reissue_required` for
+ *  a link a departed member may hold: the list then marks it (its `reissueRequired`), with no switch to offer. */
+const reissueRefused = ref(false)
+const switchOn = (shareId: string) =>
+  run(async () => {
+    reissueRefused.value = false
+    try {
+      await reactivateShare(shareId)
+    } catch (e) {
+      if (!(await isReissueRequired(e))) throw e
+      reissueRefused.value = true
+    }
+  })
+
 async function copy(text: string, id: string) {
   try {
     await navigator.clipboard.writeText(text)
@@ -92,7 +121,11 @@ async function copy(text: string, id: string) {
       <ul v-else class="veyq-list">
         <li v-for="row in links" :key="row.share.shareId" class="veyq-list-row">
           <span class="veyq-row-main">
-            <span class="veyq-row-title">{{ row.share.enabled ? row.link ?? row.share.shareId : t('files.dropBox.shareOff') }}</span>
+            <span class="veyq-row-title">{{ row.link ?? row.share.shareId }}</span>
+            <span v-if="!row.share.enabled" class="veyq-row-subtitle">
+              <span class="veyq-badge muted dropbox-link-off">{{ t('files.dropBox.shareOff') }}</span>
+              <template v-if="row.share.reissueRequired"> {{ t('files.dropBox.shareReissueHint') }}</template>
+            </span>
           </span>
           <span class="veyq-action-group veyq-action-group-icons">
             <Button
@@ -116,7 +149,19 @@ async function copy(text: string, id: string) {
               outlined
               size="small"
               :disabled="busy"
-              @click="run(() => revokeShare(row.share.shareId))"
+              @click="switchOff(row.share.shareId)"
+            />
+            <Button
+              v-else-if="!row.share.reissueRequired"
+              type="button"
+              class="veyq-icon-button veyq-prime-icon-button"
+              icon="pi pi-refresh"
+              :aria-label="t('files.dropBox.shareReactivate')"
+              severity="secondary"
+              outlined
+              size="small"
+              :disabled="busy"
+              @click="switchOn(row.share.shareId)"
             />
             <Button
               type="button"
@@ -132,7 +177,8 @@ async function copy(text: string, id: string) {
           </span>
         </li>
       </ul>
-      <Message v-if="failed" severity="error" :closable="false">{{ t('files.dropBox.shareFailed') }}</Message>
+      <Message v-if="reissueRefused" severity="warn" :closable="false">{{ t('files.dropBox.shareReissueHint') }}</Message>
+      <Message v-else-if="failed" severity="error" :closable="false">{{ t('files.dropBox.shareFailed') }}</Message>
       <div class="veyq-dialog-action-row">
         <Button type="button" :label="t('files.dropBox.close')" severity="secondary" outlined @click="emit('close')" />
         <Button type="button" :label="t('files.dropBox.shareCreate')" icon="pi pi-plus" :loading="busy" @click="create" />

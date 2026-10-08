@@ -56,6 +56,38 @@ export function compareByCreation(a: { id: string; createdAt: number }, b: { id:
   return a.id < b.id ? -1 : 1
 }
 
+/** Node-id order (UTF-16 code units, locale-free): where no creation instant is served — a guest's resolve (inbox #377
+ *  (e)) — the one stable order left for {@link displayNamesOf}. */
+export function compareById(a: { id: string }, b: { id: string }): number {
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+}
+
+/**
+ * The display label of each of one parent's children, keyed by node id: its name, and where several siblings carry the
+ * SAME name — two drop-box guests named `Anna` (their entries sit under different guest keys, so the server's slug
+ * uniqueness never sees the pair, ADR 0080 decision 11) — the first in `order` keeps it and the n-th reads `Anna (n)`.
+ * Display only, never stored. The **one** numbering every view of such siblings uses (the drop box's list, the level
+ * view's heading and cards, the breadcrumb, the guest's folder page, inbox #393), so a folder is called the same in the
+ * list it is picked from and on the page it opens. A member's views order by {@link compareByCreation} — the order
+ * {@link segmentsOf} gives the URL its `anna`, `anna-2` — and a guest's by {@link compareById}, its resolve serving no
+ * creation time (the numbers a guest sees may then differ from the member's).
+ */
+export function displayNamesOf<T extends { id: string }>(
+  siblings: readonly T[],
+  nameOf: (n: T) => string,
+  order: (a: T, b: T) => number,
+): Map<string, string> {
+  const seen = new Map<string, number>()
+  const labels = new Map<string, string>()
+  for (const n of [...siblings].sort(order)) {
+    const name = nameOf(n)
+    const count = (seen.get(name) ?? 0) + 1
+    seen.set(name, count)
+    labels.set(n.id, count === 1 ? name : `${name} (${count})`)
+  }
+  return labels
+}
+
 const childrenOfParent = (tree: readonly TreeNode[], parentId: string | null) =>
   tree.filter((n) => (n.parentId ?? null) === parentId)
 

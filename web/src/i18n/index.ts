@@ -952,6 +952,8 @@ const en = {
     deleteConfirm: '“{name}” moves to the trash. You can restore it from there until it is deleted for good.',
     deleteAccept: 'Delete',
     deleteFailed: 'The file could not be deleted. Please try again.',
+    // Core's trash, on a trashed file that holds no content (inbox #391): what a restore brings back.
+    trashEmpty: 'No content — its upload did not finish. Restoring brings back an empty file you can upload into.',
     downloadFailed: 'The file could not be downloaded. Please try again.',
     downloadTooLarge: 'This file is too large to download in this browser.',
     metaWarning: '“{name}” was uploaded, but its type, size and date could not be saved.',
@@ -972,6 +974,8 @@ const en = {
       // A contributor's page (inbox #383): what an upload or a replace does, said before it happens.
       contributorHint: 'You can upload files here and replace any file, including the owner’s. A replaced file cannot be brought back: there is no version history.',
       replaceConfirm: 'Replace the content of “{name}” with “{file}”? It changes for everyone who sees this folder, the owner too. The old content cannot be restored: there is no version history.',
+      // A contributor's upload of a name a file here already has (inbox #392): refused (409), and what to do instead.
+      fileExists: '“{name}” was not uploaded: a file with this name already exists here. To replace it, use the replace button in its row.',
     },
     // The drop box (cr-files-application F3): a member's section, detail, create and share dialogs; a guest's page.
     dropBox: {
@@ -987,8 +991,10 @@ const en = {
       share: 'Share link',
       delete: 'Delete drop box',
       deleteFolder: 'Delete {name}',
-      deleteFolderConfirm: '“{name}” and everything in it move to the trash.',
-      readOnlyHint: 'Guests’ files can only be downloaded here. To remove what someone sent, delete their folder.',
+      deleteFolderConfirm: '“{name}” and everything in it move to the trash. You can restore it from there until it is removed for good.',
+      // Core's delete dialog for a drop box (`deleteCopy`, inbox #395): what goes with it.
+      deleteConfirm: '“{name}” moves to the trash with every guest’s folder in it, and its links take no files while it is there. You can restore it from the trash until it is removed for good.',
+      readOnlyHint: 'Open a guest’s folder to download or delete their files. To remove everything someone sent, delete their folder.',
       shareTitle: 'Drop box links',
       shareHint: 'Anyone with a link can add files. Nobody with it sees the drop box or what others added.',
       shareNone: 'No link yet.',
@@ -998,6 +1004,10 @@ const en = {
       shareRevoke: 'Switch off',
       shareDelete: 'Delete link',
       shareDeleteConfirm: 'Delete this link for good? Nobody can send files with it any more. What guests already sent stays in the drop box.',
+      // Switching off asks first and can be undone (inbox #394), as on a folder's links.
+      shareRevokeConfirm: 'Switch this link off? Nobody can send files with it until you switch it back on. What guests already sent stays in the drop box.',
+      shareReactivate: 'Switch on again',
+      shareReissueHint: 'This link cannot be switched back on: someone who has left this space may still hold it. Create a new link instead.',
       shareOff: 'Off',
       shareFailed: 'That didn’t work. Please try again.',
       close: 'Close',
@@ -1010,6 +1020,10 @@ const en = {
       guestAs: 'Sending as {name}.',
       guestNotYou: 'Not you?',
       guestStartOver: 'Start over under a new name',
+      // "Not you?" asks first (inbox #395): the session this device holds is forgotten.
+      guestNotYouTitle: 'Start over under a new name?',
+      guestNotYouConfirm: 'This device forgets that you send as “{name}”. What was already sent stays with the owner; your next files go to a new folder under the name you give next.',
+      guestNotYouAccept: 'Start over',
       // The folder's name when a session saved before names were kept sends its first file (its folder exists already).
       guestNameFallback: 'Guest',
       guestPick: 'Choose files',
@@ -2107,10 +2121,10 @@ const de: typeof en = {
       emptyBucket: 'Noch nichts in diesem Bucket.',
       options: 'Optionen',
       upload: 'Hochladen',
-      createBucket: 'Neuer Unterbucket',
+      createBucket: 'Neues Unter-Bucket',
       rename: 'Umbenennen',
       delete: 'Löschen',
-      bucketDialogCreate: 'Neuer Unterbucket',
+      bucketDialogCreate: 'Neues Unter-Bucket',
       bucketDialogRename: 'Bucket umbenennen',
       bucketName: 'Name',
       deleteBucketTitle: 'Bucket löschen?',
@@ -2120,8 +2134,8 @@ const de: typeof en = {
       move: 'Verschieben',
       moveMedia: 'Medium verschieben',
       moveTitle: 'Auswahl verschieben',
-      moveTarget: 'Zielbucket',
-      moveEmpty: 'Noch kein anderes eigenes Bucket — leg zuerst einen Unterbucket an.',
+      moveTarget: 'Ziel-Bucket',
+      moveEmpty: 'Noch kein anderes eigenes Bucket — leg zuerst ein Unter-Bucket an.',
       deleteMediaAction: 'In den Papierkorb',
       selectAllVisible: 'Alle auswählen',
       deselectAll: 'Alle abwählen',
@@ -2163,6 +2177,7 @@ const de: typeof en = {
     deleteConfirm: '„{name}“ kommt in den Papierkorb. Dort kannst du sie wiederherstellen, bis sie endgültig gelöscht wird.',
     deleteAccept: 'Löschen',
     deleteFailed: 'Die Datei konnte nicht gelöscht werden. Bitte versuche es erneut.',
+    trashEmpty: 'Ohne Inhalt — das Hochladen wurde nicht abgeschlossen. Wiederherstellen bringt eine leere Datei zurück, in die du hochladen kannst.',
     downloadFailed: 'Die Datei konnte nicht heruntergeladen werden. Bitte versuche es erneut.',
     downloadTooLarge: 'Diese Datei ist zu groß, um sie in diesem Browser herunterzuladen.',
     metaWarning: '„{name}“ wurde hochgeladen, aber Typ, Größe und Datum konnten nicht gespeichert werden.',
@@ -2180,6 +2195,7 @@ const de: typeof en = {
       linkFull: '„{name}“ wurde nicht hochgeladen: Dieser Link nimmt gerade keine weiteren Uploads an.',
       contributorHint: 'Du kannst hier Dateien hochladen und jede Datei ersetzen, auch die der Person, der der Ordner gehört. Eine ersetzte Datei lässt sich nicht zurückholen: Es gibt keinen Versionsverlauf.',
       replaceConfirm: 'Den Inhalt von „{name}“ durch „{file}“ ersetzen? Er ändert sich für alle, die diesen Ordner sehen, auch für die Person, der er gehört. Der alte Inhalt lässt sich nicht wiederherstellen: Es gibt keinen Versionsverlauf.',
+      fileExists: '„{name}“ wurde nicht hochgeladen: Hier gibt es schon eine Datei mit diesem Namen. Um sie zu ersetzen, nutze die Schaltfläche zum Ersetzen in ihrer Zeile.',
     },
     dropBox: {
       section: 'Briefkästen',
@@ -2194,8 +2210,9 @@ const de: typeof en = {
       share: 'Link teilen',
       delete: 'Briefkasten löschen',
       deleteFolder: '{name} löschen',
-      deleteFolderConfirm: '„{name}“ und alles darin kommen in den Papierkorb.',
-      readOnlyHint: 'Die Dateien von Gästen lassen sich hier nur herunterladen. Um zu entfernen, was jemand eingeworfen hat, lösche den Ordner der Person.',
+      deleteFolderConfirm: '„{name}“ und alles darin kommen in den Papierkorb. Dort lässt sich alles wiederherstellen, bis es endgültig entfernt wird.',
+      deleteConfirm: '„{name}“ kommt mit den Ordnern aller Gäste in den Papierkorb, und seine Links nehmen dort keine Dateien an. Dort lässt er sich wiederherstellen, bis er endgültig entfernt wird.',
+      readOnlyHint: 'Öffne den Ordner einer Person, um ihre Dateien herunterzuladen oder zu löschen. Um alles zu entfernen, was jemand eingeworfen hat, lösche den Ordner der Person.',
       shareTitle: 'Links zum Briefkasten',
       shareHint: 'Wer einen Link hat, kann Dateien einwerfen. Den Briefkasten und was andere eingeworfen haben, sieht damit niemand.',
       shareNone: 'Noch kein Link.',
@@ -2205,6 +2222,9 @@ const de: typeof en = {
       shareRevoke: 'Ausschalten',
       shareDelete: 'Link löschen',
       shareDeleteConfirm: 'Diesen Link endgültig löschen? Niemand kann damit noch Dateien einwerfen. Was Gäste schon eingeworfen haben, bleibt im Briefkasten.',
+      shareRevokeConfirm: 'Diesen Link ausschalten? Niemand kann damit Dateien einwerfen, bis du ihn wieder einschaltest. Was Gäste schon eingeworfen haben, bleibt im Briefkasten.',
+      shareReactivate: 'Wieder einschalten',
+      shareReissueHint: 'Dieser Link lässt sich nicht wieder einschalten: Jemand, der diesen Bereich verlassen hat, könnte ihn noch haben. Erstelle stattdessen einen neuen Link.',
       shareOff: 'Aus',
       shareFailed: 'Das hat nicht geklappt. Bitte versuche es erneut.',
       close: 'Schließen',
@@ -2216,6 +2236,9 @@ const de: typeof en = {
       guestAs: 'Du sendest als {name}.',
       guestNotYou: 'Nicht du?',
       guestStartOver: 'Mit neuem Namen neu beginnen',
+      guestNotYouTitle: 'Mit neuem Namen neu beginnen?',
+      guestNotYouConfirm: 'Dieses Gerät vergisst, dass du als „{name}“ sendest. Was schon gesendet wurde, bleibt bei der Person, der der Briefkasten gehört; deine nächsten Dateien gehen in einen neuen Ordner unter dem Namen, den du dann angibst.',
+      guestNotYouAccept: 'Neu beginnen',
       guestNameFallback: 'Gast',
       guestPick: 'Dateien auswählen',
       guestSession: 'Deine Dateien in dieser Sitzung',
@@ -2450,7 +2473,7 @@ const de: typeof en = {
   },
 }
 
-import { ref, type Ref } from 'vue'
+import { ref, watch, type Ref } from 'vue'
 
 export const SUPPORTED_LOCALES: SupportedLocale[] = ['en', 'de']
 // Endonyms — a language is named in its own tongue regardless of the current UI locale.
@@ -2499,6 +2522,16 @@ export const i18n = createI18n({
   fallbackLocale: 'en',
   messages: { en, de },
 })
+
+// The document's language follows the UI's (inbox #395): `index.html` ships `lang="en"`, and a screen reader, the
+// browser's hyphenation and its translate offer read `<html lang>` — set at start and on every switch.
+watch(
+  i18n.global.locale,
+  (locale) => {
+    if (typeof document !== 'undefined') document.documentElement.lang = locale
+  },
+  { immediate: true, flush: 'sync' },
+)
 
 /** Set the language preference (a concrete language, or "system") and remember it. */
 export function setLocalePreference(pref: LocalePreference): void {
