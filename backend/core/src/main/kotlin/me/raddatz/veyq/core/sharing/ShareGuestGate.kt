@@ -113,7 +113,8 @@ class ShareGuestGate(
     /**
      * The gate for a guest write on [shareId] by the identity [contributorToken] names. [spendUploadBudget] spends one
      * token of the share's upload budget ([ShareRateLimiter.allowUpload]) after every other check has passed, so an
-     * unauthorized caller spends nothing. [onlyRole], when set, narrows the uploading roles to that one (core's guest
+     * unauthorized caller spends nothing. Core's guest upload start passes false and spends the token itself, after its
+     * own request checks (`SharingHandler.startUploads`, inbox #367): its role check needs the target this gate admits. [onlyRole], when set, narrows the uploading roles to that one (core's guest
      * tree operations take only `READ_WRITE`, ADR 0080 decision 6) — refused as [ShareWriteGate.NotContributable], before
      * the token and the budget.
      */

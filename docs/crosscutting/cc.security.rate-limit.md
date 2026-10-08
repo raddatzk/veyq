@@ -215,7 +215,9 @@ Two further per-share budgets on the anonymous contributor path (`ShareRateLimit
 **separate** so one abusive axis cannot take the other down with it:
 
 - **Uploads** — `startShareBlobUploads` + `completeShareMedia` / `completeShareFile` (the start and attach halves
-  of one flow; core's guest `createShareNode` spends the same budget).
+  of one flow; core's guest `createShareNode` spends the same budget). The start spends its token last, after its
+  own request checks (target node, writer, admission, role), so a start refused for its request opens nothing and
+  spends nothing (inbox #367, `ShareGuestGateSliceTest.aStartRefusedForItsOwnRequestSpendsNoUploadBudget`).
   Generous by intent: a legitimate bulk contributor uploading an evening's photos is the normal case.
   `veyq.share.upload.rate.*` (default 300 / 60 s).
 - **Identity creation** — `createShareIdentity`, the one guest call that writes a row **before any upload

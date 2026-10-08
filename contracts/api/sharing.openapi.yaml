@@ -625,7 +625,8 @@ paths:
         **target node**: the share root, or the optional `nodeId` — a live node inside the share's subtree that its
         application takes guest uploads into (Memories: a MEMORY or CHAPTER; Files: a FILE; a `WRITE_ONLY` link only its
         root or a node inside its guest's own identity folder, ADR 0080 decision 11). The in-memory dev store cannot presign (`503`).
-        Per-share rate-limited.
+        Per-share rate-limited: a start spends one token of the link's upload budget only once it passed its own
+        checks — a request refused for its target node or a role (`400`, `403`, `404`) spends none.
         **Storage limit ([ADR 0073](../../docs/decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md)):**
         the link stores at most its tenant's per-link limit. The request's admissible items are reserved together
         against what the link already holds (its contributions with their derivatives, trash included, plus its

@@ -1,5 +1,6 @@
 package me.raddatz.veyq.app
 
+import me.raddatz.veyq.core.blob.MemberBlobRoles
 import me.raddatz.veyq.core.blob.UploadCompletion
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.node.NodeKindRules
@@ -82,6 +83,7 @@ class ModuleCompositionTest {
     @Inject @All lateinit var shareRoots: MutableList<ShareRoots>
     @Inject @All lateinit var guestNodeRules: MutableList<GuestNodeRules>
     @Inject @All lateinit var writeOnlyGuestKinds: MutableList<WriteOnlyGuestKinds>
+    @Inject @All lateinit var memberRoles: MutableList<MemberBlobRoles>
 
     @Inject lateinit var quota: StorageQuota
 
@@ -99,6 +101,7 @@ class ModuleCompositionTest {
         ShareRoots::class.java to shareRoots,
         GuestNodeRules::class.java to guestNodeRules,
         WriteOnlyGuestKinds::class.java to writeOnlyGuestKinds,
+        MemberBlobRoles::class.java to memberRoles,
     )
 
     private val compiled: List<Class<*>> by lazy {
@@ -229,6 +232,23 @@ class ModuleCompositionTest {
             .body("""{"items":[{"mediaId":"$memory","originalUploadId":"$asMedium","nodeId":"$memory"}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200).body("results[0].error", equalTo(null))
+    }
+
+    /**
+     * Inbox #366: a member's start takes every role an application declares — Memories' four and Files' one, which only
+     * this composition holds together — and refuses a well-formed token none declares, whole and before any session.
+     */
+    @Test
+    fun aMemberStartTakesTheRolesTheApplicationsDeclare() {
+        val declared = memberRoles.flatMap { it.roles() }.toSet()
+        assertEquals(setOf("ORIGINAL", "THUMBNAIL", "PREVIEW", "COVER", "FILE_CONTENT"), declared, "the roles the applications declare")
+        val (userId, scopeId) = seedMemberScope(ScopeEntity.PERSONAL)
+        fun start(role: String) = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+            .body("""{"items":[${TestBlob.SMALL.declare("d3JhcA==", role = role)}]}""")
+            .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
+            .then()
+        for (role in declared) start(role).statusCode(200).body("results[0].error", equalTo(null))
+        start("NOT_A_ROLE").statusCode(400).body("code", equalTo("invalid_request"))
     }
 
     @Test

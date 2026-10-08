@@ -627,8 +627,8 @@ class SharingHandler(
     fun startUploads(
         shareId: String, pwToken: String?, contributorToken: String, declares: List<UploadDeclare>, domain: String?, nodeId: String? = null,
     ): ShareUploadOutcome {
-        // Starting creates upload sessions, so it spends the per-share upload budget (ADR 0051, `@RateLimit(key = SHARE)`).
-        val gated = when (val g = gate.writeGate(shareId, pwToken, contributorToken, spendUploadBudget = true)) {
+        // The gate without the budget: a start spends it only once its own request checks have passed (below).
+        val gated = when (val g = gate.writeGate(shareId, pwToken, contributorToken, spendUploadBudget = false)) {
             is ShareWriteGate.Admitted -> g
             ShareWriteGate.NotFound -> return ShareUploadOutcome.NotFound
             ShareWriteGate.PasswordIncorrect -> return ShareUploadOutcome.PasswordIncorrect
@@ -647,6 +647,10 @@ class SharingHandler(
         // The role is an open token on the wire; which roles a guest uploads in is the target's application's (Memories:
         // never a COVER). Asked only past the gate, so an unauthorized caller still learns nothing but its 403/404.
         if (declares.any { !writes.admitsGuestRole(it.role) }) return ShareUploadOutcome.InvalidRequest
+        // Starting creates upload sessions, so it spends the per-share upload budget (ADR 0051, `@RateLimit(key = SHARE)`)
+        // — last, after the target, the writer and the roles: a start refused for its own request creates nothing and so
+        // spends nothing (inbox #367; the role needs the target's writer, which only the gate's identity can name).
+        if (!rateLimiter.allowUpload(shareId)) return ShareUploadOutcome.RateLimited
         return ShareUploadOutcome.Results(writes.start(gated.scopeId, shareId, target.kind, gated.identityId, declares, domain))
     }
 

@@ -17,6 +17,7 @@ import me.raddatz.veyq.core.membership.refusal
 import me.raddatz.veyq.core.persistence.createOrConflict
 import me.raddatz.veyq.core.quota.StorageQuota
 import me.raddatz.veyq.core.scope.ScopeEntity
+import io.quarkus.arc.All
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import java.util.UUID
@@ -29,6 +30,8 @@ sealed interface StartOutcome {
     object Suspended : StartOutcome, HttpFailure by Failures.tenantSuspended
     object Deleting : StartOutcome, HttpFailure by Failures.scopeDeleting
     object NoScope : StartOutcome, HttpFailure by Failures.scopeNotFound
+    /** A declared role no application attaches a member's upload in ([MemberBlobRoles]): the whole request, a 400. */
+    object InvalidRequest : StartOutcome, HttpFailure by Failures.invalidRequest
 }
 
 sealed interface WindowOutcome {
@@ -66,6 +69,9 @@ class BlobUploadHandler(
     private val reclaim: StoreReclaimStore,
     private val access: ScopeAccess,
     private val quota: StorageQuota,
+    /** The roles the applications attach a member's upload in (see [MemberBlobRoles]); none → no member start.
+     *  `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor). */
+    @All private val memberRoles: MutableList<MemberBlobRoles>,
     config: VeyqConfig,
 ) {
     private val maxBytes: Long = config.blob().maxBytes()
@@ -74,6 +80,10 @@ class BlobUploadHandler(
     fun start(userId: String, scopeId: String, declares: List<UploadDeclare>, domain: String?): StartOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(StartOutcome.NoScope, StartOutcome.Suspended, StartOutcome.Deleting)?.let { return it }
+        // The role is an open token on the wire; one no application attaches a member's upload in would hold its quota
+        // reservation until the stale-session purge (inbox #366). Refused whole, as a guest's start refuses a role its
+        // target's application does not take — and only past the access check, so a non-member still learns its 404.
+        if (declares.any { !MemberBlobRoles.admits(memberRoles, it.role) }) return StartOutcome.InvalidRequest
         return StartOutcome.Results(reserveAndOpen(scopeId, UploadOpener.Member(userId), link = null, declares, domain))
     }
 

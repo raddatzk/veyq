@@ -26,4 +26,7 @@ object MemoryBlobRoles {
      * write (`commitCover`). The contract's closed enum said this until the role opened to a token.
      */
     val GUEST: Set<String> = setOf(ORIGINAL) + DERIVATIVES
+
+    /** The roles a member uploads in: every role above — a guest's and the [COVER] ([MemoriesMemberBlobRoles]). */
+    val MEMBER: Set<String> = GUEST + COVER
 }
