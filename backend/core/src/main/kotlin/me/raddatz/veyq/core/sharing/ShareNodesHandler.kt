@@ -48,8 +48,9 @@ sealed interface UpdateShareNodeOutcome {
     object NotContributable : UpdateShareNodeOutcome, HttpFailure by httpFailure("share_not_contributable", FORBIDDEN)
     object PasswordIncorrect : UpdateShareNodeOutcome, HttpFailure by httpFailure("share_password_incorrect", FORBIDDEN)
     object RateLimited : UpdateShareNodeOutcome, HttpFailure by Failures.rateLimited
-    /** The node is the share's root; the destination is missing, trashed, outside the subtree, the node or inside its
-     *  subtree; or `NodeKindRules` refuses the kind there. */
+    /** The node is the share's root, a guest's identity folder or inside one (only a member moves out of a drop box,
+     *  ADR 0080 decision 11); the destination is missing, trashed, outside the subtree, the node or inside its subtree;
+     *  or `NodeKindRules` refuses the kind there. */
     object IllegalStructure : UpdateShareNodeOutcome, HttpFailure by Failures.illegalStructure
     /** An owner of the containers on either side refuses the move or the rename ([GuestNodeRules]). */
     object IllegalScope : UpdateShareNodeOutcome, HttpFailure by httpFailure("illegal_scope", UNPROCESSABLE)
@@ -70,7 +71,9 @@ sealed interface UpdateShareNodeOutcome {
  * at all (`NodeKindRules`, which the node operations ask). A `WRITE_ONLY` guest only creates, and only inside its own
  * identity folder in the root (ADR 0080 decision 11: the application's own operation made it, `IdentityFolders`), the
  * folder being its subtree here, and only the kinds its root's application declares ([WriteOnlyGuestKinds]: a drop
- * box's guests create `FILE`s only); it places nothing (refused by the gate, before its token and the budget). A create
+ * box's guests create `FILE`s only); it places nothing (refused by the gate, before its token and the budget). No guest
+ * places an identity folder or anything inside one — a `READ_WRITE` guest of a link above the drop box reads them, and
+ * only a member moves them out (decision 11). A create
  * spends the per-share upload budget, a placement does not.
  *
  * **Lock order, in ONE transaction:** (1) the scope row ([NodesStore.lockScope]) — the lock every tree writer takes
@@ -173,6 +176,12 @@ class ShareNodesHandler(
             val node = tree.findInScope(scopeId, nodeId)
             if (node == null || !tree.withinSubtree(scopeId, root, nodeId)) return@call UpdateShareNodeOutcome.NodeNotFound
             if (!tree.withinSubtree(scopeId, root, parentId)) return@call UpdateShareNodeOutcome.IllegalStructure
+            // Only a member moves anything out of a drop box (ADR 0080 decision 11, owner decision 2026-10-08, inbox #377
+            // (a)): a guest places neither a guest's identity folder nor anything inside one — known by core's own column
+            // (`share_identity_id`, [NodesStore.identityFolderOwner]), never by an application's kind. Decided here, before
+            // the owners' rules, so it holds whatever an application declares for the container above. Stable under the
+            // scope lock: nothing ever moves INTO an identity folder, and a member's move out commits before or after.
+            if (tree.identityFolderOwner(scopeId, nodeId) != null) return@call UpdateShareNodeOutcome.IllegalStructure
             // Both containers' owners decide (ADR 0080 decisions 6 and 10): a rename asks the parent's, a move the
             // source's to let the child out and the destination's to let it in. The node lies strictly inside, so its
             // parent is a node of the subtree.
