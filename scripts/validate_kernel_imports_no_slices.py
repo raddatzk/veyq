@@ -19,7 +19,7 @@ names a node kind an application owns (developer-styleguide § 1, ADR 0007's sha
   store still its only writer. Every `KERNEL` entry must be declared by some main file, so the list cannot rot into
   names that guard nothing, and a run in which no file is kernel is red.
 - **Node-kind rule (ADR 0079).** Core knows the node kind `FOLDER` only; the kinds an application owns
-  (`APPLICATION_KINDS`: Memories' `MEMORY` and `CHAPTER`) are named only by that application's code, which answers
+  (`APPLICATION_KINDS`: Memories' `MEMORY` and `CHAPTER`, Files' `FILE` and `FILES_DROPBOX`) are named only by that application's code, which answers
   for them through core's `NodeKindRules`, `ShareRoots`, `GuestNodeRules`, `ShareGuestWrites`, `UploadCompletion` and
   `UploadAdmission` (`GuestNodeRules` by declaring nothing: a kind no one declares allows a guest no tree operation). A
   **platform** file is every main file outside an application module (a project `:apps:<name>`, read by
@@ -31,9 +31,12 @@ names a node kind an application owns (developer-styleguide § 1, ADR 0007's sha
   generated type lists a kind, so a literal or an application's constant is the only way core could name one — and
   both are what this rule reads. Each kind must still be named in code by some application main file, so the list
   cannot rot into names that guard nothing. **The blob roles an application owns** (`APPLICATION_BLOB_ROLES`:
-  Memories' `ORIGINAL`, `THUMBNAIL`, `PREVIEW`, `COVER`) are read by the same rule since the contract's `BlobRole`
+  Memories' `ORIGINAL`, `THUMBNAIL`, `PREVIEW`, `COVER`, Files' `FILE_CONTENT`) are read by the same rule since the contract's `BlobRole`
   opened to the same kind of token (cr-files-application P3-S2): core stores a role and compares it
-  (`UploadSessionEntity.boundTo`), and which roles exist is the application's (`MemoryBlobRoles`). Core's
+  (`UploadSessionEntity.boundTo`), and which roles exist is the application's (`MemoryBlobRoles`, `FilesBlobRoles`).
+  The lists are by hand (a token is a value, not a path): a new application adds its kinds and roles here — Files'
+  sat out of them for its whole build until its harvest, and nothing turned red, because a missing entry guards nothing
+  silently. Core's
   `cover_blob_id` slot is a column, not the role, and names none.
 
 **What it no longer asserts: core importing an application.** Until the Gradle module split it also held every
@@ -113,18 +116,21 @@ KERNEL = [
     "me.raddatz.veyq.core.tenant",
     "me.raddatz.veyq.core.validation",
 ]
-# The node kinds Memories owns (ADR 0079 Decision 3). Core names `FOLDER` only.
+# The node kinds the applications own (ADR 0079 Decision 3). Core names `FOLDER` only.
 APPLICATION_KINDS = [
     "MEMORY",
     "CHAPTER",
+    "FILE",
+    "FILES_DROPBOX",
 ]
-# The blob roles Memories owns (cr-files-application P3-S2): the contract's `BlobRole` is an open token like the kind,
+# The blob roles the applications own (cr-files-application P3-S2): the contract's `BlobRole` is an open token like the kind,
 # so core stores and compares a role and names none. Read by the same rule as the kinds.
 APPLICATION_BLOB_ROLES = [
     "ORIGINAL",
     "THUMBNAIL",
     "PREVIEW",
     "COVER",
+    "FILE_CONTENT",
 ]
 APPLICATION_TOKENS = APPLICATION_KINDS + APPLICATION_BLOB_ROLES
 KIND_REF = re.compile(r"(?<!\w)(" + "|".join(re.escape(k) for k in APPLICATION_TOKENS) + r")(?!\w)")

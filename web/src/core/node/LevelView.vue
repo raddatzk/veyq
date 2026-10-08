@@ -14,7 +14,8 @@
 //
 // **The view mode is the shared one** (`shared/state/useViewMode`): the folders grid takes its list variant from it,
 // and the folders section steps aside while the map is shown (Memories' section draws the map, whose pins span the
-// whole subtree, folders included). Interim until P4e puts grid/list into a core toolbar.
+// whole subtree, folders included). Interim: the toolbar (trash, grid/list) is still Memories' section's — the
+// owner kept it there until a second application needs it; moving it into a core toolbar is inbox #370.
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'

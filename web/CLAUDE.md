@@ -117,8 +117,8 @@ here; the server is blind.
   transient `M` files + stray `stryker-setup-*.js` — never run other `web/` work (git ops, `npm run check`, an
   edit) against the tree while a mutation run is live; wait for it to finish and restore.
 - **Core and application ([ADR 0079](../docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)).**
-  The applications are `src/features/memory/` (Memories) and `src/features/files/` (Files: the `FILE` kind, its level
-  section, upload, download — [docs/apps/files.md](../docs/apps/files.md)) — the guard's `APPLICATIONS`, keyed by owner;
+  The applications are `src/features/memory/` (Memories) and `src/features/files/` (Files: the `FILE` and `FILES_DROPBOX` kinds, their level
+  and share sections, upload, download, the drop box — [docs/apps/files.md](../docs/apps/files.md)) — the guard's `APPLICATIONS`, keyed by owner;
   **core is everything else** under `src/` —
   `app/`, `shared/`, `sw/`, `views/`, `components/app/`, every other `features/*`, and `core/`: `core/node/` (the
   node tree: `tree`, `treeStore`, `location`, `browse`, the delete/trash dialogs, the sealed-meta write loop
@@ -131,7 +131,7 @@ here; the server is blind.
   `generated/share-media` (Memories) and `generated/files` (Files); so their
   factories are each application's `api.ts`, not `api/client.ts`'s, and a core helper types from core's own client or
   from a literal union of its own, e.g. `mediaDeriver`'s tiers, since core's `BlobRole` is an open token), uses `import.meta.glob`, or names `NodeKind.Memory|Chapter|File` / `'MEMORY'` /
-  `'CHAPTER'` / `'FILE'`. The one exempt file is `src/applications.ts`, the composition root (by exact path, never a
+  `'CHAPTER'` / `'FILE'` / `'FILES_DROPBOX'` (a hand list: a new kind is added to the guard's `KIND` with its application). The one exempt file is `src/applications.ts`, the composition root (by exact path, never a
   directory); `main.ts` calls its `registerApplications()` before `boot()`. Build-time only: no glob, no computed
   `import()`, no loading after the fact (ADR 0079 Decision 5, ADR 0026) — registered code runs with every unlocked key.
   **What an application registers** (its `register.ts`; the registry is write-once, a second registration throws):
@@ -163,7 +163,7 @@ here; the server is blind.
   lists); the level view and core's `FolderNameDialog` carry core `veyq-*` classes (`styles/ui.css`, dark twins in
   `dark.css`) and core `node.*` i18n keys since cr-files-application P4d, which Memories' own dialogs and detail read
   too for the shared labels; the kind is an open string token (the generated client has no `NodeKind` enum), so core names its one
-  `FOLDER_KIND` (`core/node/kind.ts`), Memories its own two (`features/memory/kinds.ts`), and no compiler lists the
+  `FOLDER_KIND` (`core/node/kind.ts`), each application its own (`features/memory/kinds.ts`, `features/files/kinds.ts`), and no compiler lists the
   kinds — the registry's `{ supported: false }` answer and its tests do; the directory is still `features/memory`, the i18n catalog
   is one file and `styles/memory.css` is global.
   **Testing against it:** `src/test/setup.ts` fills the registry in a `beforeAll` *dynamic* import (a static one

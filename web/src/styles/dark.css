@@ -1,3 +1,7 @@
+/* Nothing checks that a light rule keeps its dark twin here: deleting `.veyq-folder-card > .pi` below left the
+   stylesheet-anchor guard, the level-view golden and `LevelView.test.ts` green (measured, cr-files-application P4d;
+   the golden pins the DOM, never computed CSS). A move or rename of a light rule carries its twins by hand, and
+   compares the dark rule set before and after. */
 .veyq-dark {
   body {
     background: var(--app-bg);

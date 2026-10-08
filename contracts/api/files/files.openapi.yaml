@@ -37,6 +37,9 @@ info:
     write, the `contributorToken` its identity was issued). The server sees ids, opaque sizes and the `K_blob` wrap
     (sealed under the file node's key) — never a plaintext byte, a key, a file name or a MIME type.
 
+# Member and guest operations share ONE spec on purpose (two tags, two interfaces): a second spec file aliasing
+# `FileListPage`/`FileListItem` across files (share-media's `UploaderKey` pattern) made the generator emit anonymous
+# `…FileBlob`/`…Inner` types and changed the MEMBER interface's types (measured, cr-files-application F2).
 tags:
   - name: files
     description: >
@@ -446,6 +449,8 @@ components:
       required: [nodeId]
       properties:
         nodeId: { type: string, format: uuid, example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e, x-veyq-visibility: id }
+        # Not `blob`: that name is opaque elsewhere (`account.openapi.yaml#IdentityPins.blob`), and
+        # validate_opaque_names_disjoint refuses a name that is opaque in one place and plaintext in another.
         fileBlob:
           description: The file's blob, or null while no upload of it has completed.
           oneOf:

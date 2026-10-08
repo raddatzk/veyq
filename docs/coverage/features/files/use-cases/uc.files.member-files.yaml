@@ -1,0 +1,64 @@
+useCase: uc.files.member-files
+feature: files
+title: Member files — upload, download, replace, rename and delete a file
+# Built by cr-files-application (P1 the file-name folding, P3 core's attachments, F0 the kind, F1a the backend, F1b the
+# web). Backend: :apps:files slice tests (core + Files, no Memories) and the root's composition test; web: the wire
+# tests record every request a Files job sends at `fetch`, the section test mounts the real catalog; files.e2e.test.ts
+# runs in the web-e2e job against a live backend, MariaDB and the S3 store, with its own fetch wrapper asserting that
+# no file name or MIME type crosses the wire.
+acceptanceCriteria:
+  - id: a-file-lives-at-the-root-or-in-a-folder
+    text: A FILE node is created at the scope root or in a FOLDER and takes no child; it is placed nowhere else (not under a Memory, a chapter or another file), and every kind has exactly one placement rule across core and the applications.
+    coverage:
+      backend:
+        unit: [FilesNodeKindRulesTest.aFileLivesAtTheRootOrInAFolder, FilesNodeKindRulesTest.aFileLivesNowhereElse, FilesNodeKindRulesTest.noRuleOfCoreOrFilesAdmitsAFileAsAParent]
+        integration: [FilesNodeSliceTest.aFileIsCreatedAtTheRootAndInAFolderAndTakesNoChild, FilesNodeSliceTest.aFileIsRenamedAndMovedBetweenFolders, ModuleCompositionTest.theRulesOfCoreAndEveryApplicationPartitionTheKinds]
+      web: { unit: [src/features/files/register.test.ts] }
+  - id: upload-attaches-one-sealed-blob
+    text: An upload creates the FILE node under the folder's key, seals its blob under the file node's own key (role FILE_CONTENT, owner the node), and completeFile without an expected blob attaches it to the empty slot; the folder's listing then serves the blob reference, and only a member of the scope can presign its chunks.
+    coverage:
+      backend: { integration: [FilesContentSliceTest.aFileIsUploadedListedAndItsBlobPresignedForTheMemberOnly, FilesNodeSliceTest.theUploadSeamsClaimFileAndNothingElse, ModuleCompositionTest.theUploadSeamsOfEveryApplicationPartitionTheKinds] }
+      web:
+        unit: [src/features/files/uploadFile.wire.test.ts, src/features/files/components/FilesSection.test.ts]
+        e2e: [src/features/files/files.e2e.test.ts]
+  - id: download-returns-the-original-bytes
+    text: A download presigns the blob's chunks, opens every frame under the file node's key and returns the original bytes; a blob listed for another node, or opened under another key, does not open.
+    coverage:
+      backend: { integration: [FilesContentSliceTest.aFileIsUploadedListedAndItsBlobPresignedForTheMemberOnly] }
+      web:
+        unit: [src/features/files/download.test.ts]
+        e2e: [src/features/files/files.e2e.test.ts]
+    gaps:
+      - surface: web
+        reason: The download assembles one Blob in tab memory; the refs prove the bytes for small files only. A multi-gigabyte file is unverified and a streaming save is not built (inbox #371).
+  - id: replace-is-a-compare-and-set-on-the-blob
+    text: A replace completes with the blob the member read (expectedBlobId); the server swaps it and frees the old blob in the same transaction. A stale or missing expectation is 409 stale_file with the slot's current blob, the slot unchanged and the new upload freed; the client then offers replace anyway on the current blob.
+    coverage:
+      backend: { integration: [FilesContentSliceTest.aReplaceWithTheReadBlobSwapsItAndFreesTheOldOne, FilesContentSliceTest.aStaleExpectedBlobIsRefusedWithTheCurrentOneAndTheUploadIsFreed] }
+      web:
+        unit: [src/features/files/uploadFile.wire.test.ts, src/features/files/components/FilesSection.test.ts]
+        e2e: [src/features/files/files.e2e.test.ts]
+  - id: a-file-name-is-folded-as-a-file-name
+    text: A file's slug folds by fileNameSlug (NFC, lower case, punctuation kept), so a picked name a file of the folder already holds asks to replace it, a rename folds by the renamed node's kind, and a folder keeps slugify.
+    coverage:
+      web: { unit: [src/features/files/register.test.ts, src/features/files/components/FilesSection.test.ts, src/core/node/FolderNameDialog.slug.test.ts] }
+  - id: metadata-is-sealed-on-the-node
+    text: The file's MIME type, plaintext size and modified time are a v1 envelope sealed under the file node's key and written on the node with core's updateNode at the version it read; a field the client does not know is kept, and a failed metadata write leaves the upload done and says the metadata is missing.
+    coverage:
+      web: { unit: [src/features/files/fileMeta.test.ts, src/features/files/fileMeta.wire.test.ts, src/features/files/uploadFile.wire.test.ts] }
+  - id: only-a-live-file-of-the-scope-takes-an-upload
+    text: completeFile attaches only into a live FILE of the caller's scope that the caller may write; a folder, a Memory, a trashed file, another scope's node, a session started for another node or role, and a caller without write access are refused with nothing attached, and a listing never reaches into another scope.
+    coverage:
+      backend: { integration: [FilesContentSliceTest.onlyALiveFileOfTheScopeTakesAnUpload, FilesContentSliceTest.aCallerWithoutWriteAccessCompletesNothing, FilesContentSliceTest.aListingNeverReachesIntoAnotherScope, ModuleCompositionTest.filesCompletionRouteNeverReachesMemoriesCompletion] }
+      web: { e2e: [src/features/files/files.e2e.test.ts] }
+  - id: refusals-end-without-a-repeat
+    text: A create refused as slug_taken or illegal_structure, and a stale_file conflict, end the job without a second request; a transient failure retries once into the node already created; the section says why a file of its folder was not uploaded.
+    coverage:
+      web: { unit: [src/features/files/uploadFile.wire.test.ts, src/features/files/components/FilesSection.test.ts] }
+  - id: delete-goes-to-the-trash
+    text: Delete asks, then moves the node to core's trash; a trashed file keeps its attachment and its quota until the purge, which frees the attachment and the blob.
+    coverage:
+      backend: { integration: [FilesContentSliceTest.purgingATrashedFileFreesItsAttachmentAndBlob] }
+      web:
+        unit: [src/features/files/components/FilesSection.test.ts]
+        e2e: [src/features/files/files.e2e.test.ts]

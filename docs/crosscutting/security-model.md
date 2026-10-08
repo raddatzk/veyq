@@ -123,7 +123,7 @@ request the **user** turned on, straight to the chosen provider.
   ([ADR 0049](../decisions/0049-email-delivery-boundary.md)).
 
 **Applications widen what is visible by one fact: the node `kind`.** The kind of every node is a server-visible
-column already (`FOLDER`, `MEMORY`, `CHAPTER` today). Once an application adds kinds, it also shows the operator
+column already (`FOLDER`, `MEMORY`, `CHAPTER`, `FILE`, `FILES_DROPBOX` today). Once an application adds kinds, it also shows the operator
 **which applications a scope uses**, and the rows, timestamps and sizes each kind produces
 ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)). Each application's concept
 doc lists the further metadata its own kinds expose ([docs/apps](../apps/README.md)).

@@ -1,0 +1,52 @@
+useCase: uc.files.share-folder-files
+feature: files
+title: Files on a shared folder — guests download, contributors add and replace
+# Built by cr-files-application F2. Backend: ShareFilesSliceTest (core + Files) and the race class holding the
+# completion against a trash, a move out and a revoke held uncommitted; web: the share section mounted with the real
+# catalog, the guest's wire recorded at fetch, core's folder page rendering the share sections; filesShare.e2e.test.ts
+# runs in the web-e2e job.
+acceptanceCriteria:
+  - id: a-read-guest-lists-and-downloads-the-subtree
+    text: A guest of a READ or READ_WRITE folder link lists every live FILE of the shared subtree (never one beside it) with name, size and date opened under the link's chain, and downloads it through the link byte for byte.
+    coverage:
+      backend: { integration: [ShareFilesSliceTest.aReadGuestListsAndDownloadsTheFilesOfTheSubtreeOnly] }
+      web:
+        unit: [src/features/files/components/ShareFilesSection.test.ts, src/core/sharing/FolderShareBody.sections.test.ts]
+        e2e: [src/features/files/filesShare.e2e.test.ts]
+  - id: a-read-guest-writes-nothing
+    text: A READ guest's upload start and completion are refused, and its page offers no upload or replace.
+    coverage:
+      backend: { integration: [ShareFilesSliceTest.aReadGuestListsAndDownloadsTheFilesOfTheSubtreeOnly] }
+      web:
+        unit: [src/features/files/components/ShareFilesSection.test.ts]
+        e2e: [src/features/files/filesShare.e2e.test.ts]
+  - id: a-contributor-adds-and-replaces-files
+    text: A READ_WRITE guest creates a FILE under a folder of the subtree, uploads into it and replaces any file of the subtree (a member's too) with the blob it saw; its sealed metadata rides on completeShareFile and is written in the attach's transaction only when the swap happened; a stale replace is 409 stale_file with no metadata written.
+    coverage:
+      backend: { integration: [ShareFilesSliceTest.aContributorCreatesAFileUploadsReplacesAndRenamesIt] }
+      web:
+        unit: [src/features/files/shareUpload.wire.test.ts, src/features/files/components/ShareFilesSection.test.ts]
+        e2e: [src/features/files/filesShare.e2e.test.ts]
+  - id: a-guest-writes-only-a-file-of-its-subtree
+    text: A guest's completion targets only a FILE of its subtree in the FILE_CONTENT role; a folder (root or named) is share_not_contributable, a node outside the subtree is not found, another role is invalid_request, another node's session is upload_mismatch, a wrong token is refused.
+    coverage:
+      backend: { integration: [ShareFilesSliceTest.aGuestUploadsOnlyIntoAFileOfItsSubtreeInTheFileRole] }
+      web: { unit: [src/features/files/shareUpload.wire.test.ts] }
+  - id: the-write-is-decided-again-under-the-lock
+    text: A file trashed or moved out of the subtree, or a link revoked, between a guest's start and its completion refuses the completion; nothing is attached and no metadata written.
+    coverage:
+      backend: { integration: [ShareFileCompleteRaceSliceTest.aCompletionIntoAFileAMemberTrashesMeanwhileIsRefused, ShareFileCompleteRaceSliceTest.aCompletionIntoAFileAMemberMovesOutOfTheSubtreeMeanwhileIsRefused, ShareFileCompleteRaceSliceTest.aCompletionOnALinkRevokedMeanwhileIsRefused] }
+  - id: a-trashed-file-is-gone-for-guests
+    text: A file in the trash, or under a trashed folder, is not listed to a guest, its blob is 404 through the link, and an upload into it is 404 node_not_found.
+    coverage:
+      backend: { integration: [ShareFilesSliceTest.aFileInTheTrashAnswers404ToAGuest] }
+      web: { e2e: [src/features/files/filesShare.e2e.test.ts] }
+  - id: guest-files-count-against-the-link-limit
+    text: A guest's file counts against the tenant's per-link storage limit through core's attachment term, refused at the exact byte, and the page says the link is full in its own words.
+    coverage:
+      backend: { integration: [ShareFilesSliceTest.aGuestsFilesCountAgainstTheLinkLimitToTheByte] }
+      web: { unit: [src/features/files/components/ShareFilesSection.test.ts] }
+  - id: a-deleted-link-keeps-the-guest-identity-its-file-names
+    text: Deleting a link keeps the guest identity while a file's attachment names it (core's attachment usage).
+    coverage:
+      backend: { integration: [ShareFilesSliceTest.aDeletedLinkKeepsItsGuestsIdentityWhileItsFileNamesIt] }
