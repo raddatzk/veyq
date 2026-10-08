@@ -49,6 +49,7 @@ import { epochsOf } from '../../spaces/epochsTestUtil'
 import { realI18n, t } from '../../../test/i18n'
 import { SaveCancelled, SaveTooLarge } from '../../../shared/saveStream'
 import { stubApi } from '../../../test/apiMock'
+import { treeNode } from '../../../test/models'
 
 const SCOPE = '5c09e000-0000-4000-8000-0000000000bb'
 const D = '5c09e000-0000-4000-8000-0000000000d0'
@@ -56,7 +57,7 @@ const R = '5c09e000-0000-4000-8000-0000000000e1'
 const N = '5c09e000-0000-4000-8000-0000000000e2'
 const P = '5c09e000-0000-4000-8000-0000000000e3'
 const M = '5c09e000-0000-4000-8000-0000000000e4'
-const node = (id: string, kind: string, name: string, over: Partial<TreeNode> = {}): TreeNode => ({
+const node = (id: string, kind: string, name: string, over: Partial<TreeNode> = {}): TreeNode => treeNode({
   id, kind, name, parentId: D, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0, ...over,
 })
 const keyFor = (id: string) => {

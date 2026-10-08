@@ -28,6 +28,7 @@ import { FOLDER_KIND, type NodeKind } from './kind'
 import type { TreeNode } from './tree'
 import { setViewMode } from '../../shared/state/useViewMode'
 import { realI18n, t } from '../../test/i18n'
+import { treeNode } from '../../test/models'
 
 /** A section stub: renders its name, what it was handed, and offers buttons for the three events. */
 function sectionStub(name: string) {
@@ -53,7 +54,7 @@ const A = sectionStub('a')
 const B = sectionStub('b')
 
 function node(id: string, kind: NodeKind, parentId: string | null = null, orderIndex = 0): TreeNode {
-  return { id, kind, name: id, parentId, orderIndex, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 }
+  return treeNode({ id, kind, name: id, parentId, orderIndex, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
 }
 
 const TRIPS = node('Trips', FOLDER_KIND)

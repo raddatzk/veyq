@@ -4,8 +4,8 @@
 // files each holds. A folder opens to core's level view, read-only there (a member places nothing in a drop box: the
 // host's `readonly` for a node inside an identity folder); a member deletes a folder here, or the drop box, and shares
 // it (`DropBoxShareDialog`). Two guests of one name are told apart at display time, never stored ("Anna", "Anna (2)",
-// in node-id order: no creation time is listed) — core's `compareNodeIds`, the order the URL segments `anna`, `anna-2`
-// of the same two folders come from (`core/node/location.ts` `segmentsOf`).
+// in the order the server made their folders, a same-millisecond pair by id) — core's `compareByCreation`, the order the
+// URL segments `anna`, `anna-2` of the same two folders come from (`core/node/location.ts` `segmentsOf`).
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
@@ -13,7 +13,7 @@ import type { NodeDetailEmits, NodeDetailProps } from '../../../core/application
 import { deleteNode, type TreeNode } from '../../../core/node/tree'
 import { treeStore, loadTree } from '../../../core/node/treeStore'
 import { FOLDER_KIND } from '../../../core/node/kind'
-import { compareNodeIds } from '../../../core/node/location'
+import { compareByCreation } from '../../../core/node/location'
 import { useConfirm } from '../../../shared/state/useConfirm'
 import { useToast } from '../../../shared/state/useToast'
 import { FILE_KIND } from '../kinds'
@@ -28,7 +28,7 @@ const toast = useToast()
 const folders = computed(() => {
   const own = treeStore.nodes
     .filter((n) => n.parentId === props.node.id && n.kind === FOLDER_KIND)
-    .sort(compareNodeIds)
+    .sort(compareByCreation)
   const seen = new Map<string, number>()
   return own.map((folder) => {
     const n = (seen.get(folder.name) ?? 0) + 1

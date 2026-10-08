@@ -15,6 +15,7 @@ import { fakeApi } from '../../test/apiMock'
 import type { ContentApi } from '../../api/generated/content'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std as fromB64 } from '@veyq/crypto/base64'
+import { treeNode } from '../../test/models'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const scopeKey = v1.randomBytes(32)
@@ -64,7 +65,7 @@ describe('a Memory inside a folder (ADR 0080 Decision 1)', () => {
     // A folder at the root, then a Memory inside it — exactly as the browse creates them: the parent key is resolved
     // down the tree the server lists back, never handed over from the create.
     const folderId = await createFolder(SCOPE_ID, epochs, 'Reisen')
-    const rows = (): TreeNode[] => create.mock.calls.map(([{ createNodeRequest: r }]) => ({
+    const rows = (): TreeNode[] => create.mock.calls.map(([{ createNodeRequest: r }]) => treeNode({
       id: r.nodeId, parentId: r.parentId ?? null, kind: r.kind, orderIndex: 0, epoch: r.epoch ?? 0, name: '',
       wrappedContentKey: r.wrappedContentKey, wrappedMeta: null, metaVersion: 0, placementVersion: 0,
     }))

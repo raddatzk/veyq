@@ -26,6 +26,7 @@ import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 import { realI18n, t } from '../../../test/i18n'
 import { toggleFavorite } from '../favoritesStore'
+import { treeNode } from '../../../test/models'
 
 // A stub for the Leaflet map — captures the pins it received and re-emits `open` on demand.
 const SpaceMapStub = {
@@ -34,7 +35,7 @@ const SpaceMapStub = {
   template: `<div class="space-map-stub">{{ pins.length }}</div>`,
 }
 
-const node = (id: string, kind: NodeKind, name: string): TreeNode => ({
+const node = (id: string, kind: NodeKind, name: string): TreeNode => treeNode({
   id, kind, name, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0,
 })
 
@@ -63,12 +64,12 @@ const wrapFor = (id: string, under: Uint8Array, key: Uint8Array) =>
 function locatedMemory(label: string, parentLabel: string | null, loc: MemoryLocation): TreeNode {
   const key = keyOf(label)
   const id = uid(label)
-  return {
+  return treeNode({
     id, kind: MEMORY_KIND, name: label, parentId: parentLabel === null ? null : uid(parentLabel), orderIndex: 0, epoch: 0,
     wrappedContentKey: wrapFor(id, parentLabel === null ? scopeKey : keyOf(parentLabel), key),
     wrappedMeta: sealNodeMeta(key, { scopeId: SCOPE_ID, nodeId: id }, { v: 1, location: loc }),
     metaVersion: 0, placementVersion: 0,
-  }
+  })
 }
 /** A root folder whose id is the UUID of `label` (so a located Memory's parent label resolves to it), its key wrapped
  *  under `scopeKey`. */
@@ -146,12 +147,12 @@ describe('MemoriesSection', () => {
   it('inside a folder, dates each Memory under the FOLDER\'s key (ADR 0080) and orders the grid by them', () => {
     const dated = (label: string, from: string): TreeNode => {
       const id = uid(label)
-      return {
+      return treeNode({
         id, kind: MEMORY_KIND, name: label, parentId: uid('fD'), orderIndex: 0, epoch: 0,
         wrappedContentKey: wrapFor(id, keyOf('fD'), keyOf(label)),
         wrappedMeta: sealNodeMeta(keyOf(label), { scopeId: SCOPE_ID, nodeId: id }, { v: 1, date: { mode: 'single', from, to: from } }),
         metaVersion: 0, placementVersion: 0,
-      }
+      })
     }
     const older = dated('older', '2020-01-01')
     const newer = dated('newer', '2024-01-01')

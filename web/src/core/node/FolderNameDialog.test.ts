@@ -24,6 +24,7 @@ import { epochsOf } from '../../features/spaces/epochsTestUtil'
 import { realI18n, t } from '../../test/i18n'
 import type { TreeNode } from './tree'
 import { treeStore } from './treeStore'
+import { treeNode } from '../../test/models'
 
 const stubs = {
   Dialog: { name: 'Dialog', props: ['header'], emits: ['show'], template: '<div><h3 class="hdr">{{ header }}</h3><slot /></div>' },
@@ -50,7 +51,7 @@ function mountDialog(props: Omit<DialogProps, 'scopeId' | 'epochs'>) {
   })
 }
 const nodeOf = (kind: string, parentId: string | null = 'p1'): TreeNode =>
-  ({ id: 'n9', parentId, kind, name: 'Old', orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
+  treeNode({ id: 'n9', parentId, kind, name: 'Old', orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
 
 beforeEach(() => {
   vi.clearAllMocks()

@@ -46,10 +46,12 @@ export function buildHash(scope: string, segments: string[]): string {
   return tokens.length ? `#${tokens.map(encodeURIComponent).join('/')}` : ''
 }
 
-/** Node-id order (UTF-16 code units, locale-free): the one order that tells equal names apart, both in the URL
- *  ({@link segmentsOf}) and where an application numbers equal display names (Files' drop box). No creation time is
- *  listed, and node ids are client-minted UUIDv4 (ADR 0072), so this order is deterministic but not creation order. */
-export function compareNodeIds(a: { id: string }, b: { id: string }): number {
+/** Sibling order: the server-observed creation instant (`NodeSummary.createdAt`, to the millisecond, ADR 0015), then the
+ *  node id in UTF-16 code units (locale-free) for two born in one millisecond — the one order that tells equal names
+ *  apart, both in the URL ({@link segmentsOf}) and where an application numbers equal display names (Files' drop box).
+ *  Neither part can be steered by a client: the instant is the server's, and the id breaks only a same-millisecond tie. */
+export function compareByCreation(a: { id: string; createdAt: number }, b: { id: string; createdAt: number }): number {
+  if (a.createdAt !== b.createdAt) return a.createdAt - b.createdAt
   if (a.id === b.id) return 0
   return a.id < b.id ? -1 : 1
 }
@@ -65,14 +67,16 @@ const childrenOfParent = (tree: readonly TreeNode[], parentId: string | null) =>
  * `registry.slugFor`, is not the URL's). Siblings can share a plain segment: two drop-box guests of one display name
  * (their entries sit under different guest keys, so the server's slug uniqueness never sees the pair, ADR 0080
  * decision 11), or a file and a folder whose kinds fold differently (`a.b` and `a-b`). Among the siblings of one
- * plain segment, in {@link compareNodeIds} order, the first keeps it and each further one gets `<slug>-<n>` with the
+ * plain segment, in {@link compareByCreation} order, the first keeps it and each further one gets `<slug>-<n>` with the
  * smallest `n ≥ 2` above the previous one's that no sibling holds as its plain segment — a real sibling named
  * `Anna 2` keeps `anna-2`, and the second `Anna` becomes `anna-3`. Consequences, all deterministic: a node whose
- * plain segment is unique among its siblings always keeps it; a sibling whose id sorts after the existing ones never
- * changes their segments; one whose id sorts before them (ids are random) takes the plain segment and shifts the
- * others, and a sibling later given the literal name `anna-3` takes that segment over. A suffixed segment can never
- * equal another group's suffixed segment (`<a>-<n>` = `<b>-<m>` with digits-only n, m forces a = b), so the result
- * does not depend on the order the groups are visited in.
+ * plain segment is unique among its siblings always keeps it; a sibling created later never changes the earlier ones'
+ * segments (two born in one millisecond fall to their ids); a node keeps its creation instant through a rename, a move,
+ * a trash and a restore, so an older sibling that comes back — restored, or moved or renamed in — takes its birth
+ * place (the plain segment, if it is the oldest) and shifts the later ones' segments; and a sibling later given the
+ * literal name `anna-3` takes that segment over. A suffixed segment can never equal another group's suffixed segment
+ * (`<a>-<n>` = `<b>-<m>` with digits-only n, m forces a = b), so the result does not depend on the order the groups
+ * are visited in.
  *
  * **A future folder export** (ADR 0080 names a ZIP export) names its directories by this same rule, so an exported
  * tree and the in-app paths agree; it is client-side only — nothing here is stored or sealed.
@@ -87,7 +91,7 @@ export function segmentsOf(siblings: readonly TreeNode[]): Map<string, string> {
   }
   const segments = new Map<string, string>()
   for (const [plain, group] of byPlain) {
-    const [first, ...rest] = [...group].sort(compareNodeIds)
+    const [first, ...rest] = [...group].sort(compareByCreation)
     segments.set(first.id, plain)
     let suffix = 1
     for (const n of rest) {

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest'
 import { httpError } from '../test/httpError'
-import { setupStatus } from '../test/models'
+import { setupStatus, treeNode } from '../test/models'
 
 vi.mock('../features/spaces/scopes', () => ({
   ensurePersonalScope: vi.fn(),
@@ -160,10 +160,10 @@ describe('enterScope — group', () => {
 describe('enterScope — re-entry resets per-scope state', () => {
   it('clears the tree + favorites so nothing bleeds across a scope switch', async () => {
     // Seed stale per-scope state as if a previous scope was loaded.
-    const stale: TreeNode = {
+    const stale: TreeNode = treeNode({
       id: 'stale', name: 'Stale', parentId: null, kind: FOLDER_KIND, orderIndex: 0, epoch: 0,
       wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0,
-    }
+    })
     treeStore.nodes = [stale]
     treeStore.loaded = true
     favoritesStore.ids = new Set(['fav-1'])

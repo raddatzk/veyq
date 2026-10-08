@@ -45,6 +45,7 @@ import type { TreeNode } from '../../../core/node/tree'
 import { galleryFakeStore } from './galleryFakeStore'
 import { fakeApi, stubApi } from '../../../test/apiMock'
 import { realI18n, t } from '../../../test/i18n'
+import { treeNode } from '../../../test/models'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const NODE_ID = '22222222-2222-2222-2222-222222222222'
@@ -52,7 +53,7 @@ const NODE_ID = '22222222-2222-2222-2222-222222222222'
 const OLD = Date.UTC(2019, 2, 3)
 const NEW = Date.UTC(2024, 8, 9)
 
-const node = (name: string): TreeNode => ({
+const node = (name: string): TreeNode => treeNode({
   id: NODE_ID, kind: MEMORY_KIND, name, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0,
 })
 

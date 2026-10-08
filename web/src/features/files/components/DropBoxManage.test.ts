@@ -21,6 +21,7 @@ import type { TreeNode } from '../../../core/node/tree'
 import { DROPBOX_KIND } from '../kinds'
 import { realI18n, t } from '../../../test/i18n'
 import { epochsOf } from '../../spaces/epochsTestUtil'
+import { treeNode } from '../../../test/models'
 
 const SCOPE = '11111111-1111-4111-8111-111111111111'
 const EPOCHS = epochsOf(new Uint8Array(32).fill(1))
@@ -39,7 +40,7 @@ describe('the drop box create dialog', () => {
 })
 
 describe('the drop boxes section', () => {
-  const box: TreeNode = { id: 'b1', kind: DROPBOX_KIND, name: 'Einsendungen', parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 }
+  const box: TreeNode = treeNode({ id: 'b1', kind: DROPBOX_KIND, name: 'Einsendungen', parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
   const section = (nodes: TreeNode[]) => mount(DropBoxSection, { props: { folder: null, nodes, epochs: EPOCHS, readonly: false }, global })
 
   it('with none yet, says what a drop box is; with one, lists it instead', () => {

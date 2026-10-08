@@ -62,6 +62,10 @@ export type TreeNode = {
   /** The placement version the node's name and key wrap are sealed at — what a move or rename states it was built on
    *  (ADR 0080 Decision 3). */
   placementVersion: number
+  /** When the server stored the node, in epoch milliseconds (`NodeSummary.createdAt`): server-observed, set once and
+   *  kept by every rename, move, trash and restore. Siblings are ordered by it, then by id (`location.ts`
+   *  `compareByCreation`). */
+  createdAt: number
   /** The node's drop private key sealed under its content key (a WRITE_ONLY link's root, ADR 0031 point 7), if any. */
   sealedDropPrivateKey?: string | null
   /** A guest's identity folder only (ADR 0080 decision 11): the identity whose `K_up` its entry lives under, and that
@@ -177,6 +181,7 @@ export async function listTree(scopeId: string, epochs: EpochKeys): Promise<Tree
     wrappedMeta: r.wrappedMeta ?? null,
     metaVersion: r.metaVersion,
     placementVersion: r.placementVersion,
+    createdAt: r.createdAt.getTime(),
     sealedDropPrivateKey: r.sealedDropPrivateKey ?? null,
     shareIdentityId: r.shareIdentityId ?? null,
     wrappedIdentityKey: r.wrappedIdentityKey ?? null,

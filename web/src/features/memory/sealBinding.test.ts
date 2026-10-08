@@ -21,7 +21,7 @@ import { MEMORY_KIND } from './kinds'
 import { MediaDerivativeKind, type MediaSummary } from '../../api/generated/media'
 import { ScopeKind, type ScopeSummary } from '../../api/generated/scopes'
 import { stubApi } from '../../test/apiMock'
-import { accountKeyMaterial } from '../../test/models'
+import { accountKeyMaterial, treeNode } from '../../test/models'
 
 const SCOPE = '5c09e000-0000-4000-8000-000000000001'
 const OTHER_SCOPE = '5c09e000-0000-4000-8000-000000000002'
@@ -46,7 +46,7 @@ function expectRefused(fn: () => unknown, purpose: string): void {
 const epochsOf = (key: Uint8Array) => ({ current: 0, keys: new Map([[0, key]]) })
 const kmemWrap = (scopeKey: Uint8Array, nodeId: string, kMem: Uint8Array) =>
   b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE, nodeId, epoch: 0, placementVersion: 0 }, scopeKey, kMem))
-const memoryRow = (id: string, wrappedContentKey: string): TreeNode => ({
+const memoryRow = (id: string, wrappedContentKey: string): TreeNode => treeNode({
   id, parentId: null, kind: MEMORY_KIND, orderIndex: 0, epoch: 0, name: id, wrappedContentKey, wrappedMeta: null, metaVersion: 0, placementVersion: 0,
 })
 

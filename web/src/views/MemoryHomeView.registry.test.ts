@@ -58,13 +58,14 @@ import { MEMORY_KIND, CHAPTER_KIND } from '../features/memory/kinds'
 import { capabilityState } from '../shared/state/capabilities'
 import { SHARING_PUBLIC_LINKS } from '../features/platform/capabilities'
 import { realI18n, t } from '../test/i18n'
+import { treeNode } from '../test/models'
 
 const Detail = defineComponent({ props: ['node', 'shareable'], setup: (p) => () => h('div', { class: 'detail' }, `${p.node.name}|${p.shareable}`) })
 const Section = defineComponent({ props: ['nodes'], setup: (p) => () => h('section', { class: 'level' }, `memories=${p.nodes.length}`) })
 const Share = defineComponent({ props: ['nodeId'], setup: (p) => () => h('div', { class: 'share' }, p.nodeId) })
 
 function node(over: Partial<TreeNode> & Pick<TreeNode, 'id' | 'kind'>): TreeNode {
-  return { parentId: null, orderIndex: 0, epoch: 0, name: over.id, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0, ...over }
+  return treeNode({ parentId: null, orderIndex: 0, epoch: 0, name: over.id, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0, ...over })
 }
 
 /** The registry a well-formed application would leave: both kinds with a detail, shareable with a share dialog (as

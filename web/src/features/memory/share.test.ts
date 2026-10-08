@@ -740,7 +740,7 @@ describe('reissueShare (ADR 0075, W1)', () => {
     const drop = v1.generateDropKey()
     const sealedDropPrivateKey = b64std(v1.seal({ purpose: 'drop-private-key', scopeId: SCOPE_ID, nodeId: NODE_ID }, kMem, v1.serializeDropKey(drop)))
     stubApi(contentApi, {
-      listNodes: [{ id: NODE_ID, epoch: 0, parentId: null, kind: 'MEMORY', encryptedName: 'AQ==', slugToken: 'AQ==', orderIndex: 0, wrappedContentKey: 'AQ==', sealedDropPrivateKey, metaVersion: 0, placementVersion: 0 }],
+      listNodes: [{ id: NODE_ID, epoch: 0, parentId: null, kind: 'MEMORY', encryptedName: 'AQ==', slugToken: 'AQ==', orderIndex: 0, wrappedContentKey: 'AQ==', sealedDropPrivateKey, metaVersion: 0, placementVersion: 0, createdAt: new Date(0) }],
     })
     const { old, reissue } = await oldShare(kMem, ShareRole.WriteOnly, '')
 
@@ -864,7 +864,7 @@ describe('a chapter share (ADR 0080 Decision 13)', () => {
     mockCurator(create)
     const chapterKey = v1.randomBytes(32)
     stubApi(contentApi, {
-      listNodes: [{ id: CHAPTER_ID, epoch: 0, parentId: NODE_ID, kind: 'CHAPTER', encryptedName: 'AQ==', slugToken: 'AQ==', orderIndex: 0, wrappedContentKey: 'AQ==', sealedDropPrivateKey: null, metaVersion: 0, placementVersion: 0 }],
+      listNodes: [{ id: CHAPTER_ID, epoch: 0, parentId: NODE_ID, kind: 'CHAPTER', encryptedName: 'AQ==', slugToken: 'AQ==', orderIndex: 0, wrappedContentKey: 'AQ==', sealedDropPrivateKey: null, metaVersion: 0, placementVersion: 0, createdAt: new Date(0) }],
     })
 
     const minted = await createShare(SCOPE_ID, CHAPTER_ID, chapterKey, EPOCHS, 'Day 1', ShareRole.WriteOnly)

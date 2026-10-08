@@ -18,6 +18,7 @@ import type { TreeNode } from '../../core/node/tree'
 import { epochsOf } from '../spaces/epochsTestUtil'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
+import { treeNode } from '../../test/models'
 
 const SCOPE_ID = '5c09e000-0000-4000-8000-0000000000aa'
 const scopeKey = v1.randomBytes(32)
@@ -55,7 +56,7 @@ function content(
   const metaNode = { scopeId: SCOPE_ID, nodeId: opts.metaFor ? uid(opts.metaFor) : id }
   const wrappedMeta = opts.location ? sealNodeMeta(key, metaNode, { v: 1, location: opts.location }) : null
   const parentId = parentLabel === null ? null : uid(parentLabel)
-  return { node: { id, kind, parentId, orderIndex: 0, epoch: 0, name: label, wrappedContentKey, wrappedMeta, metaVersion: 0, placementVersion: 0 }, key }
+  return { node: treeNode({ id, kind, parentId, orderIndex: 0, epoch: 0, name: label, wrappedContentKey, wrappedMeta, metaVersion: 0, placementVersion: 0 }), key }
 }
 
 /** A root FOLDER: it carries a key of its own like every node (ADR 0080), wrapped under K_SC. */
@@ -118,7 +119,7 @@ describe('clusterPins', () => {
   // A trivial linear projection: 1 degree = 1 pixel, so pixel distance == degree distance (Leaflet-free).
   const project = (lat: number, lng: number) => ({ x: lng, y: lat })
   const pin = (id: string, lat: number, lng: number): LocatedPin => ({
-    node: { id, kind: MEMORY_KIND, name: id, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 },
+    node: treeNode({ id, kind: MEMORY_KIND, name: id, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 }),
     location: { name: id, nameSource: 'manual', derivedMode: 'fixed', derived: { lat, lng } },
     date: null,
   })
@@ -150,7 +151,7 @@ describe('clusterPins', () => {
 
 describe('sortPinsByStartDate', () => {
   const dated = (id: string, from?: string): LocatedPin => ({
-    node: { id, kind: MEMORY_KIND, name: id, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 },
+    node: treeNode({ id, kind: MEMORY_KIND, name: id, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 }),
     location: { name: id, nameSource: 'manual', derivedMode: 'fixed', derived: { lat: 0, lng: 0 } },
     date: from ? ({ mode: 'single', from, to: from } as MemoryDate) : null,
   })

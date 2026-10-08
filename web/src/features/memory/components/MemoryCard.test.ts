@@ -6,9 +6,10 @@ import { MEMORY_KIND } from '../kinds'
 import type { TreeNode } from '../../../core/node/tree'
 import type { MemoryDate } from '../memoryDate'
 import { realI18n, t } from '../../../test/i18n'
+import { treeNode } from '../../../test/models'
 
 
-const memory: TreeNode = { id: 'm1', kind: MEMORY_KIND, name: 'Rom', parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 }
+const memory: TreeNode = treeNode({ id: 'm1', kind: MEMORY_KIND, name: 'Rom', parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
 
 const mountCard = (favorite: boolean) =>
   mount(MemoryCard, { props: { memory, favorite }, global: { plugins: [realI18n()] } })
