@@ -33,6 +33,7 @@ import {
 } from '../../core/sharing/manageShares'
 import { openShareRoot, walkSubtree } from '../../core/sharing/shareTree'
 import { createGuestIdentity, identityNameContext, type GuestIdentity } from '../../core/sharing/guestIdentity'
+import { guestReserve, guestWindow, type GuestUploadTarget } from '../../core/sharing/guestBlob'
 import { dropKeysForShare, mediaKey, mintUploaderKey, openDropPublicKey, uploaderOriginOf } from './mediaKey'
 import type { EpochKeys } from '../spaces/epochs'
 import {
@@ -42,7 +43,6 @@ import {
   openBlobFromUrls,
   makeChunkProvider,
   uploadMediaVia,
-  windowPuts,
   createBrowserDeriver,
   type BlobRef,
   type MediaItem,
@@ -206,41 +206,19 @@ export function sessionSealKey(session: ContributorSession, access: ShareAccess)
   return access.memoryKey
 }
 
-/** The share-scoped upload transport (no auth) — reserve via `startShareBlobUploads`, sign each next window via
- *  `presignShareBlobUploadWindows` (the link's gate again, so a revoked link stops the upload there), complete via
- *  `completeShareMedia`. */
+/** The share-scoped upload transport (no auth) — reserve and sign each next window through core's guest blob transport
+ *  (`core/sharing/guestBlob.ts`: `startShareBlobUploads`, then `presignShareBlobUploadWindows`, the link's gate again, so
+ *  a revoked link stops the upload there), complete via `completeShareMedia`. */
 function shareUploadTransport(shareId: string, contributorToken: string, pwToken?: string, nodeId?: string): MediaUploadTransport {
   // The target (5a.5): a Memory or chapter below the share root, named on every start, window and completion — one target
   // per request. Absent for the root itself, so a root-level upload sends exactly what it always did.
   const target = nodeId === undefined ? {} : { nodeId }
+  // A contributor uploads media only — never a cover: ORIGINAL/THUMBNAIL/PREVIEW is the whole role set, and the server
+  // refuses any other role from a guest (`400 invalid_request`, Memories' `admitsGuestRole`).
+  const to: GuestUploadTarget = { shareId, contributorToken, pwToken, ...target } // pwToken: cr-0164
   return {
-    async reserve(declares) {
-      const started = await publicSharesApi().startShareBlobUploads({
-        shareId,
-        shareBlobUploadsRequest: {
-          contributorToken,
-          ...target,
-          // A contributor uploads media only — never a cover: ORIGINAL/THUMBNAIL/PREVIEW is the whole role set, and the
-          // server refuses any other role from a guest (`400 invalid_request`, Memories' `admitsGuestRole`).
-          items: declares,
-        },
-        xSharePassword: pwToken, // cr-0164
-      })
-      if (started.results.length !== declares.length) throw new Error('upload_failed')
-      return started.results.map((r) => {
-        if (!r || r.error) throw new Error(r?.error ?? 'upload_failed')
-        if (!r.uploadId || !r.presignedPuts) throw new Error('store_unavailable')
-        return { uploadId: r.uploadId, puts: r.presignedPuts }
-      })
-    },
-    async window(uploadId, fromChunk) {
-      const signed = await publicSharesApi().presignShareBlobUploadWindows({
-        shareId,
-        shareBlobUploadWindowsRequest: { contributorToken, ...target, items: [{ uploadId, fromChunk }] },
-        xSharePassword: pwToken, // cr-0164
-      })
-      return windowPuts(signed.results[0])
-    },
+    reserve: (declares) => guestReserve(to, declares),
+    window: guestWindow(to),
     async complete(media) {
       const done = await publicShareMediaApi().completeShareMedia({
         shareId,
