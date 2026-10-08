@@ -164,7 +164,7 @@ describe('LevelView: the folders section', () => {
     const card = w.findAll('button.veyq-folder-card').find((b) => b.text() === 'Rome')!
     await card.trigger('click')
     expect(w.emitted('openNode')).toEqual([[rome]])
-    await w.find('.veyq-create-card').trigger('click')
+    await w.find('.veyq-level-grid .veyq-create-card').trigger('click')
     expect(w.emitted('create')).toEqual([[FOLDER_KIND]])
   })
 
@@ -181,7 +181,7 @@ describe('LevelView: the folders section', () => {
 
   it('read-only: no new-folder card, the folder cards stay', () => {
     const w = mountLevel([TRIPS, node('Rome', FOLDER_KIND, 'Trips')], { folder: TRIPS, readonly: true })
-    expect(w.find('.veyq-create-card').exists()).toBe(false)
+    expect(w.find('.veyq-level-grid .veyq-create-card').exists()).toBe(false)
     expect(w.text()).toContain('Rome')
   })
 })

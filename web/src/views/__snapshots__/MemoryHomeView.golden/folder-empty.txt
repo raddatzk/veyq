@@ -34,7 +34,7 @@ div.memory-home
       div.memory-card-grid
         p.veyq-empty.veyq-empty-inline
           "No Memories here yet."
-        button.memory-create-card.memory-create-card-memory.veyq-card.veyq-card-interactive
+        button.memory-create-card-memory.veyq-card.veyq-card-interactive.veyq-create-card
           span.pi.pi-plus
           strong
             "New Memory"

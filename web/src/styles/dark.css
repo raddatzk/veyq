@@ -51,7 +51,6 @@
     color: var(--app-text);
   }
 
-  .memory-create-card,
   .veyq-create-card {
     background: color-mix(in srgb, var(--app-surface) 72%, transparent);
   }
@@ -67,8 +66,7 @@
   .memory-card-cover,
   .memory-card-icon,
   .veyq-folder-card > .pi,
-  .veyq-create-card .pi,
-  .memory-create-card .pi {
+  .veyq-create-card .pi {
     background: var(--app-accent-soft);
     color: var(--app-accent);
   }
@@ -144,8 +142,7 @@
 
   .memory-card:hover,
   .veyq-folder-card:hover,
-  .veyq-create-card:hover,
-  .memory-create-card:hover {
+  .veyq-create-card:hover {
     border-color: var(--app-line);
   }
 

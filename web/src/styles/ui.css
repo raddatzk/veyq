@@ -511,8 +511,11 @@
    `ui.css`, `layout.css` and `forms.css`, and some of those tie with them on specificity and lose by source order
    (`.veyq-section-header h2`/`span` against the overview card's `h2`; `.veyq-card` against the cards' own
    declarations). Nothing in `layout.css`/`forms.css` matches these elements, so the end of `ui.css` is the same
-   cascade position. Memories' own create cards (`.memory-create-card`: New Memory, Add chapter) keep their twin
-   rules in `memory.css`. The grid is `.veyq-card-grid` (the identical track rule) plus `.veyq-level-grid` for the
+   cascade position. `.veyq-create-card` is also Memories' New Memory / Add chapter card (inbox #375 merged its
+   `memory.css` twin, the same declarations in the same order): Memories adds only `.memory-create-card-memory` and
+   its list variant in `memory.css`, which come after these and win where they differ — the one place the twin's later
+   position had decided anything, `white-space: nowrap` on the label beating the modifier's `normal`, is kept by the
+   modifier no longer saying `normal`. The grid is `.veyq-card-grid` (the identical track rule) plus `.veyq-level-grid` for the
    list variant and the narrow-screen column. The dark counterparts are in `dark.css`. */
 .veyq-level-section-header h2 {
   font-size: 1rem;
