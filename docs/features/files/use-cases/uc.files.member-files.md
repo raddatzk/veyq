@@ -51,7 +51,8 @@
   compare-and-set on the blob id, never a blind overwrite.
 - **A file is no container and no share root:** nothing is placed under a `FILE`; a file is shared through its
   folder ([uc.files.share-folder-files](uc.files.share-folder-files.md)).
-- **The download holds the whole file in memory** (one `Blob`); a multi-gigabyte file is unverified.
+- **The download streams** into a picked file or the Service Worker's download route, and only falls back to an
+  in-memory `Blob` up to 512 MiB; a multi-gigabyte download in a real browser is unverified (inbox #371).
 
 ## What this means for you / Was das für dich bedeutet
 

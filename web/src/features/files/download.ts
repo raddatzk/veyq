@@ -3,15 +3,15 @@
 // `presignAllChunks`, by blob id: the scope READ gate), and each frame is opened under the `K_blob` the file node's key
 // unwraps, bound to (scope, node, blob, `FILE_CONTENT`) — a ref the server moved to another node does not open.
 //
-// **Memory, stated (not verified for multi-GB files).** The frames are fetched and opened one by one (at most
-// [DOWNLOAD_IN_FLIGHT] at a time, as the upload pump bounds its PUTs), but the plaintext chunks are then held until
-// the last one arrived and assembled into one `Blob`: a file of N bytes needs about N bytes of memory (more while the
-// browser copies the parts into the Blob), so a 2 GB file needs about 2 GB of tab memory and may fail there. A
-// streaming save (`showSaveFilePicker` / a `ReadableStream` through the Service Worker) would bound it and is out of
-// scope here.
+// **Memory (inbox #371).** The frames are streamed: opened at most [DOWNLOAD_IN_FLIGHT] at a time and written in order
+// into the save target `shared/saveStream.ts` opens (a picked file, the Service Worker's download route, or — only up
+// to its cap — an in-memory Blob), each dropped once written. So the tab holds a few frames, not the file. Measured
+// only in unit tests: no multi-GB download has run in a real browser yet (#371 keeps that open).
 import { makeChunkProvider, presignAllChunks } from '../../core/blob/transport'
+import { streamBlob, type ByteSink } from '../../core/blob/stream'
 import type { BlobRef } from '../../core/blob/types'
-import { saveBlob } from '../../shared/saveBytes'
+import { plaintextTotal } from '../../sw/range'
+import { openSaveTarget } from '../../shared/saveStream'
 import type { FileBlobRef } from '../../api/generated/files'
 import { FILE_CONTENT_ROLE } from './kinds'
 
@@ -31,31 +31,39 @@ export function fileBlobRef(nodeId: string, blob: FileBlobRef): BlobRef {
  *  (`shareChunkUrls(shareId, blobId, pwToken)`, the share's subtree gate — cr-files-application F2). */
 export type PresignFileChunks = (blobId: string) => Promise<string[]>
 
+/** The provider over a file's chunks: `K_blob` unwrapped (synchronously — a ref listed for another node throws
+ *  `OpenRefused` here, before anything is fetched) and the chunks presigned on first read. */
+function fileChunks(scopeId: string, nodeKey: Uint8Array, nodeId: string, blob: FileBlobRef, presign?: PresignFileChunks) {
+  const ref = fileBlobRef(nodeId, blob)
+  const provider = makeChunkProvider(scopeId, nodeKey, ref, () => (presign ?? ((id) => presignAllChunks(scopeId, id)))(ref.blobId))
+  return { ref, provider }
+}
+
 /**
- * Decrypt a file's blob into a `Blob`: unwrap `K_blob` under the file node's key, presign every chunk, fetch and open
- * each frame (its position bound into the AAD), in order. Throws `OpenRefused` for a ref that is not this node's.
+ * Decrypt a file's blob into a `Blob` in memory — the whole file, so for reading a small file back (the e2e suites),
+ * never for a user's download, which streams ([downloadFile]). Throws `OpenRefused` for a ref that is not this node's.
  */
 export async function fetchFileContent(
-  scopeId: string, nodeKey: Uint8Array, nodeId: string, blob: FileBlobRef,
-  presign: PresignFileChunks = (blobId) => presignAllChunks(scopeId, blobId),
+  scopeId: string, nodeKey: Uint8Array, nodeId: string, blob: FileBlobRef, presign?: PresignFileChunks,
 ): Promise<Blob> {
-  const ref = fileBlobRef(nodeId, blob)
-  const provider = makeChunkProvider(scopeId, nodeKey, ref, () => presign(ref.blobId))
-  const parts: Uint8Array[] = new Array(ref.chunkCount)
-  // Chunk 0 alone first: the provider presigns on its first read, and parallel first reads would each presign.
-  parts[0] = await provider.getPlaintextChunk(0)
-  let next = 1
-  const worker = async () => {
-    for (let i = next++; i < ref.chunkCount; i = next++) parts[i] = await provider.getPlaintextChunk(i)
-  }
-  await Promise.all(Array.from({ length: Math.min(DOWNLOAD_IN_FLIGHT, ref.chunkCount) }, worker))
-  // `application/octet-stream` whatever the sealed MIME type says: the anchor downloads it, nothing renders it.
+  const { provider } = fileChunks(scopeId, nodeKey, nodeId, blob, presign)
+  const parts: Uint8Array[] = []
+  const collect: ByteSink = { write: async (b) => void parts.push(b), close: async () => {}, abort: async () => {} }
+  await streamBlob(provider, collect, { inFlight: DOWNLOAD_IN_FLIGHT })
   return new Blob(parts as BlobPart[], { type: 'application/octet-stream' })
 }
 
-/** Decrypt a file and save it to the member's device under `name` (the decrypted node name). */
+/**
+ * Decrypt a file and save it to the user's device under `name` (the decrypted node name), streamed into the target
+ * `openSaveTarget` picks. Call it straight from the click handler with nothing awaited before: the save-file picker
+ * needs the click's activation, and it is the first thing awaited here. Throws what `openSaveTarget` throws
+ * (`SaveCancelled`, `SaveTooLarge`), `OpenRefused` for a ref that is not this node's, or the stream's failure — after
+ * which the target is aborted, never left as a truncated file.
+ */
 export async function downloadFile(
   scopeId: string, nodeKey: Uint8Array, nodeId: string, blob: FileBlobRef, name: string, presign?: PresignFileChunks,
 ): Promise<void> {
-  saveBlob(await fetchFileContent(scopeId, nodeKey, nodeId, blob, presign), name)
+  const { ref, provider } = fileChunks(scopeId, nodeKey, nodeId, blob, presign)
+  const sink = await openSaveTarget(name, plaintextTotal(ref.byteSize, ref.chunkCount))
+  await streamBlob(provider, sink, { inFlight: DOWNLOAD_IN_FLIGHT })
 }

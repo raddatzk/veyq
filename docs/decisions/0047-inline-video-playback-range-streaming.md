@@ -163,3 +163,32 @@ therefore applies [ADR 0013 §6](0013-blob-storage-presigned-direct-to-store.md)
 - **Native surfaces.** A Service Worker is a web-only mechanism; a future native client feeds its own player the
   same decrypted ranges through the platform equivalent. This ADR governs the **web** playback path (the current
   V1 priority); it does not bind native to a SW.
+
+## Addendum: the download route
+
+*2026-10-08, inbox #371.* A file download held the whole decrypted file in one `Blob` in tab memory. The same
+key-free delegation now also **saves** a file: the page registers a download with the SW (an opaque one-shot handle,
+the plaintext size, the file name and a `MessagePort`), then navigates the tab to `/__download/<handle>`; the SW answers
+that navigation with an attachment whose body pulls the page's decrypted chunks over the port, one credit per chunk the
+browser consumed. The browser writes the file itself, so the tab holds a few chunks, not the file. The SW still holds
+no key and no token; the page presigns and opens every frame, as for playback. It is the second of three save targets
+(`web/src/shared/saveStream.ts`): a file picked through the File System Access API comes first where the browser has
+it, an in-memory `Blob` capped at 512 MiB last. Above the cap, with neither streaming target, the download is refused
+with a message. Rejected: a "stream saver" library, because its man-in-the-middle iframe is served from another
+origin by default (a self-hostability regression) and the app's CSP allows no frame at all (`frame-src 'none'`).
+
+This route is the first one on the app origin that a **navigation** reaches, the exact case the playback shim refuses.
+So it is held to the inert rules above and to more: it answers **only** a `GET` navigation (a `fetch()` of a handle
+is 404); the handle serves **one** navigation and expires after 30 s unfetched; the response is
+`Content-Disposition: attachment` with a sanitised `filename` and the exact name as `filename*=UTF-8''…` (controls,
+CR/LF, bidi overrides and path separators removed), `application/octet-stream` whatever the file is, `nosniff`, the
+sandbox CSP, `Cache-Control: no-store` and the exact `Content-Length`. A handle the SW does not hold answers **204**,
+which leaves the tab where it is (a 404 would replace the page holding the keys with an empty document). A page
+failure, a stream that ends short of or runs past the registered size, and an ended session **error** the body, so
+the browser marks the download failed and never keeps a truncated file as if it were whole; a cancelled download
+reaches the page as an abort. The protocol is version 3.
+
+The download is whole-blob and sequential, so it adds no access pattern beyond what a whole-blob read already shows.
+The page must stay open while it runs, since it holds the key. What only a browser can prove (memory flat at
+gigabyte scale, the SW's lifetime during a long download, Safari and iOS) is still open in inbox #371.
+

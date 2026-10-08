@@ -8,6 +8,9 @@
 // operator-blindness (no plaintext is ever stored today), and it is the shortcut a later change is most tempted
 // to take, so it is forbidden here explicitly.
 //
+// The same worker serves streamed file downloads (`/__download/<handle>`, inbox #371, ADR 0047 § Addendum): the session,
+// its credit protocol and the filename rules live in `downloadRoute.ts`; the routing and the response are here.
+//
 // The file typechecks under the app's DOM lib (no WebWorker lib, which collides with DOM on `self`/`fetch`): the
 // core (PlaintextCache, PlaybackSession, buildRangeResponse) uses only DOM-available types, and the sliver of the
 // service-worker global scope we touch is declared locally as `MediaSwScope`. This is the deliberate resolution
@@ -22,13 +25,16 @@ import {
   unsatisfiedRange,
   type ByteRange,
 } from './range'
+import { contentDisposition, DownloadSession, makeDownloadRegistry, type DownloadRegistry } from './downloadRoute'
 import {
+  DOWNLOAD_PATH_PREFIX,
   MEDIA_PATH_PREFIX,
   PROTOCOL_VERSION,
   isVideoMediaType,
   type ChunkReply,
   type EndSessionAck,
   type PageToSwMessage,
+  type RegisterDownloadMsg,
 } from './protocol'
 
 /** Max decrypted plaintext held in the read-ahead cache, per playback. A UX/bandwidth dial, NOT a privacy control
@@ -193,19 +199,43 @@ export function buildRangeResponse(session: PlaybackSession, rangeHeader: string
   return new Response(rangeBody(session, range), { status: parsed.kind === 'full' ? 200 : 206, headers })
 }
 
+/** The response to a `/__download/<handle>` navigation (ADR 0047 § Addendum): an attachment the browser saves and never
+ *  renders — octet-stream whatever the file is, the inert headers, the exact plaintext length, and no caching. */
+export function buildDownloadResponse(session: DownloadSession): Response {
+  return new Response(session.body(), {
+    status: 200,
+    headers: {
+      ...INERT_HEADERS,
+      'Content-Type': 'application/octet-stream',
+      'Content-Disposition': contentDisposition(session.name),
+      'Content-Length': String(session.size),
+      'Cache-Control': 'no-store',
+    },
+  })
+}
+
 // --- the registry + event handlers (driven by the SW scope) ------------------
 
 export type PlaybackRegistry = {
   register(handle: string, session: PlaybackSession): void
   revoke(handle: string): void
-  /** Drop every playback: a session ended, and the SW outlives the page that registered them. */
+  /** Drop every playback and every download: a session ended, and the SW outlives the page that registered them. */
   revokeAll(): void
   get(handle: string): PlaybackSession | undefined
+  /** The registered downloads (one-shot handles). */
+  readonly downloads: DownloadRegistry
 }
 
-export function makeRegistry(): PlaybackRegistry {
+/** A download registration the SW accepts: a handle, a non-negative integer size and a string name. */
+function validDownload(msg: RegisterDownloadMsg): boolean {
+  return typeof msg.handle === 'string' && msg.handle !== '' && Number.isSafeInteger(msg.size) && msg.size >= 0
+    && typeof msg.name === 'string'
+}
+
+export function makeRegistry(downloads: DownloadRegistry = makeDownloadRegistry()): PlaybackRegistry {
   const sessions = new Map<string, PlaybackSession>()
   return {
+    downloads,
     register: (handle, session) => {
       sessions.get(handle)?.close()
       sessions.set(handle, session)
@@ -217,12 +247,14 @@ export function makeRegistry(): PlaybackRegistry {
     revokeAll: () => {
       sessions.forEach((session) => session.close())
       sessions.clear()
+      downloads.dropAll()
     },
     get: (handle) => sessions.get(handle),
   }
 }
 
-/** Handle a `postMessage` to the SW: handshake, register, revoke, or end-session. Exported for unit testing. */
+/** Handle a `postMessage` to the SW: handshake, register (a playback or a download), revoke, keepalive or end-session.
+ *  Exported for unit testing. */
 export function handleMessage(registry: PlaybackRegistry, data: unknown, ports: readonly MessagePort[]): void {
   const msg = data as PageToSwMessage
   if (!msg || typeof msg !== 'object') return
@@ -234,6 +266,10 @@ export function handleMessage(registry: PlaybackRegistry, data: unknown, ports: 
     if (ports[0] && isVideoMediaType(msg.mediaType)) {
       registry.register(msg.handle, new PlaybackSession(msg.chunkCount, msg.byteSize, ports[0], msg.mediaType))
     }
+  } else if (msg.type === 'veyq-register-download') {
+    if (ports[0] && validDownload(msg)) {
+      registry.downloads.register(msg.handle, new DownloadSession(msg.size, msg.name, ports[0]))
+    }
   } else if (msg.type === 'veyq-revoke-playback') {
     registry.revoke(msg.handle)
   } else if (msg.type === 'veyq-end-session') {
@@ -243,10 +279,13 @@ export function handleMessage(registry: PlaybackRegistry, data: unknown, ports: 
   }
 }
 
-/** Resolve a `/__media/<handle>` request to a Response, or null if the URL is not ours (caller falls through). */
+/** Resolve a `/__media/<handle>` or `/__download/<handle>` request to a Response, or null if the URL is not ours
+ *  (caller falls through). */
 export function handleFetch(registry: PlaybackRegistry, origin: string, request: Request): Response | null {
   const url = new URL(request.url)
-  if (url.origin !== origin || !url.pathname.startsWith(MEDIA_PATH_PREFIX)) return null
+  if (url.origin !== origin) return null
+  if (url.pathname.startsWith(DOWNLOAD_PATH_PREFIX)) return downloadFetch(registry.downloads, url, request)
+  if (!url.pathname.startsWith(MEDIA_PATH_PREFIX)) return null
   // A `<video>` fetch is the only caller the shim has, so a page load of a handle ("open video in new tab") is
   // by definition not one — served, it would be decrypted bytes as a document on the app origin.
   if (request.mode === 'navigate') return notFound()
@@ -254,6 +293,22 @@ export function handleFetch(registry: PlaybackRegistry, origin: string, request:
   const session = registry.get(handle)
   if (!session) return notFound()
   return buildRangeResponse(session, request.headers.get('Range'))
+}
+
+/** A download is started by the page navigating to its handle, so a navigation is its only caller — the mirror of the
+ *  playback rule: a `fetch()` of a handle is not one and gets nothing. The handle is taken on first use. A navigation
+ *  to a handle the SW does not hold (used, expired, never registered) answers 204, which leaves the tab where it is:
+ *  a 404 would replace the page that holds the keys with an empty document. */
+function downloadFetch(downloads: DownloadRegistry, url: URL, request: Request): Response {
+  if (request.mode !== 'navigate' || (request.method ?? 'GET') !== 'GET') return notFound()
+  let handle: string
+  try {
+    handle = decodeURIComponent(url.pathname.slice(DOWNLOAD_PATH_PREFIX.length))
+  } catch {
+    handle = '' // a malformed escape is no handle; a throw here would let the navigation fall through to the network
+  }
+  const session = handle ? downloads.take(handle) : undefined
+  return session ? buildDownloadResponse(session) : new Response(null, { status: 204, headers: INERT_HEADERS })
 }
 
 // --- the service-worker global scope (declared locally; see the file header) --
