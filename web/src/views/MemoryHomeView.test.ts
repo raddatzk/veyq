@@ -61,7 +61,7 @@ vi.mock('../features/memory/components/MemoriesSection.vue', async () => {
     default: defineComponent({
       name: 'MemoriesSectionStub',
       props: ['folder', 'nodes', 'epochs', 'readonly'],
-      emits: ['openNode', 'create', 'openTrash'],
+      emits: ['openNode', 'create'],
       setup: (p) => () => h('section', { class: 'section-stub', 'data-readonly': String(p.readonly) },
         `folder=${p.folder?.name ?? '-'}|memories=${p.nodes.map((n: { name: string }) => n.name).join(',')}`),
     }),
@@ -73,7 +73,7 @@ vi.mock('../features/files/components/FilesSection.vue', async () => {
     default: defineComponent({
       name: 'FilesSectionStub',
       props: ['folder', 'nodes', 'epochs', 'readonly'],
-      emits: ['openNode', 'create', 'openTrash', 'rename'],
+      emits: ['openNode', 'create', 'rename'],
       setup: (p) => () => h('section', { class: 'files-stub' }, `files=${p.nodes.map((n: { name: string }) => n.name).join(',')}`),
     }),
   }
@@ -181,16 +181,30 @@ describe('MemoryHomeView over the real registry', () => {
   })
 
   // A guest's identity folder (ADR 0080 decision 11) and a folder below it: a member places nothing there, so the level
-  // is read-only (the server refuses a create or a move in); the folder beside it stays writable.
-  it('renders a guest identity folder, and a folder below it, read-only', async () => {
+  // is read-only (the server refuses a create or a move in); the folder beside it stays writable. It offers no share and
+  // leaves out its empty sections (inbox #385): Memories' empty one is not rendered there, Files' with the file is.
+  it('renders a guest identity folder, and a folder below it, read-only, unshared and without its empty sections', async () => {
     treeStore.nodes = [
       ...TREE.map((n) => ({ ...n })),
       node({ id: 'anna', kind: FOLDER_KIND, name: 'Anna', parentId: 'trips', shareIdentityId: 'identity-1' }),
       node({ id: 'deep', kind: FOLDER_KIND, name: 'Deep', parentId: 'anna' }),
+      node({ id: 'memo', kind: MEMORY_KIND, name: 'Memo', parentId: 'deep' }),
+      node({ id: 'scan', kind: FILE_KIND, name: 'scan.pdf', parentId: 'anna' }),
     ]
-    expect((await mountAt('#~me/trips/anna')).find('.section-stub').attributes('data-readonly')).toBe('true')
-    expect((await mountAt('#~me/trips/anna/deep')).find('.section-stub').attributes('data-readonly')).toBe('true')
-    expect((await mountAt('#~me/trips')).find('.section-stub').attributes('data-readonly')).toBe('false') // control
+    const share = (w: Mounted) => w.find(`button[aria-label="${t('share.share')}"]`)
+    const anna = await mountAt('#~me/trips/anna')
+    expect(anna.find('.section-stub').exists(), 'no empty Memories section').toBe(false)
+    expect(anna.find('.files-stub').text()).toBe('files=scan.pdf')
+    expect(folderCards(anna)).toEqual(['Deep'])
+    expect(share(anna).exists()).toBe(false)
+    expect(anna.find('.veyq-level-toolbar').exists(), 'no trash where nothing is written').toBe(false)
+    const deep = await mountAt('#~me/trips/anna/deep')
+    expect(deep.find('.section-stub').attributes('data-readonly')).toBe('true')
+    expect(deep.find('.files-stub').exists(), 'no empty Files section').toBe(false)
+    // control: the folder beside it is writable, shared, and shows its sections empty or not
+    const trips = await mountAt('#~me/trips')
+    expect(trips.find('.section-stub').attributes('data-readonly')).toBe('false')
+    expect(share(trips).exists()).toBe(true)
   })
 
   // Files registers FILE with its own section (F1b): a file in a folder is listed there, after Memories' section, and no
@@ -291,7 +305,7 @@ describe('MemoryHomeView over the real registry', () => {
     expect(w.find('.name-stub').text()).toBe('create|-|-')
     expect(w.find('.create-stub').exists(), 'the Memory dialog gives way').toBe(false)
 
-    section.vm.$emit('openTrash')
+    await w.find('.veyq-level-toolbar button').trigger('click')
     await flushPromises()
     expect(w.find('.trash-stub').exists()).toBe(true)
 

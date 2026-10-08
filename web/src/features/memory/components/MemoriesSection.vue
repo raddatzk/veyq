@@ -5,13 +5,13 @@
 // former `MemoryBrowse.vue`, whose template and classes were the design source's MemoryFolderOverview verbatim; the
 // overview card and the Folders section around it are core's now, this is the Memories half, markup unchanged.
 //
-// Two deliberate deviations from that source stay: the browse toolbar (trash + view mode) sits *inside* this section's
-// header rather than on a row of its own — right-aligned controls on an otherwise empty row read as a blank line — and
-// the section stays mounted in map mode (the map is its body instead of the grid), which keeps the toolbar reachable
-// there without a second copy of it. The toolbar stays here until a second application needs it (owner decision, P4e).
+// Two deliberate deviations from that source stay: the view-mode toggle sits *inside* this section's header rather than
+// on a row of its own — right-aligned controls on an otherwise empty row read as a blank line — and the section stays
+// mounted in map mode (the map is its body instead of the grid), which keeps the toggle reachable there without a
+// second copy of it. The space's trash button was here too until Files needed it: it is core's level view's now
+// (inbox #370, #385; the toggle stays, its map being Memories').
 import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
 import { parentContentKey, type TreeNode } from '../../../core/node/tree'
 import type { LevelSectionProps, LevelSectionEmits } from '../../../core/applications/registry'
 import { sortNodesByDate } from '../memoryDate'
@@ -29,7 +29,7 @@ import SpaceMap from './SpaceMap.vue'
 
 // `epochs` (the scope's epoch key set, ADR 0024) unseals each Memory's sealed date/cover/pins under its own epoch's
 // K_SC — a rotated scope mixes epochs across the grid; null (locked) ⇒ no dates/covers/pins.
-// `readonly` (cr-0090): the scope is being deleted → no create card and no trash (a restore is a write).
+// `readonly` (cr-0090): the scope is being deleted → no create card.
 const props = defineProps<LevelSectionProps>()
 const emit = defineEmits<LevelSectionEmits>()
 
@@ -92,19 +92,6 @@ watch(
       <!-- the map's pins span the whole subtree, so this level's count would misread there -->
       <span v-if="viewMode !== 'map'">{{ nodes.length }}</span>
       <div class="memory-browse-toolbar">
-        <!-- The space's node trash (uc.memory.delete-node): a deleted Memory has no Memory to hang a Trash tab
-             from, so it lives on the SPACE and opens from here. Hidden during a pending-deletion grace window,
-             like every other write affordance — a restore is a write. -->
-        <Button
-          v-if="!readonly"
-          type="button"
-          :label="t('memory.spaceTrash.open')"
-          icon="pi pi-trash"
-          severity="secondary"
-          outlined
-          size="small"
-          @click="emit('openTrash')"
-        />
         <ViewModeToggle show-map />
       </div>
     </div>
@@ -128,9 +115,10 @@ watch(
         v-if="!readonly"
         class="veyq-card veyq-card-interactive veyq-create-card memory-create-card-memory"
         type="button"
+        :aria-label="t('memory.create')"
         @click="emit('create', MEMORY_KIND)"
       >
-        <span class="pi pi-plus" />
+        <span class="pi pi-plus" aria-hidden="true" />
         <strong>{{ t('memory.create') }}</strong>
       </button>
     </div>

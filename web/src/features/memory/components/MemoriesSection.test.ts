@@ -102,18 +102,21 @@ describe('MemoriesSection', () => {
     expect(wrapper.text()).toContain(t('memory.create'))
   })
 
-  it('emits the create mode its dialog understands, and openTrash from its toolbar', async () => {
+  it('emits the create mode its dialog understands; the space\'s trash is not its button (core\'s level view, inbox #385)', async () => {
     const wrapper = mountSection({ nodes: [] })
     await wrapper.find('.memory-create-card-memory').trigger('click')
     expect(wrapper.emitted('create')).toEqual([[MEMORY_KIND]])
-    await wrapper.findAll('button').find((b) => b.text().includes(t('memory.spaceTrash.open')))!.trigger('click')
-    expect(wrapper.emitted('openTrash')).toHaveLength(1)
+    // named by its text alone, its icon hidden from assistive technology (inbox #385)
+    expect(wrapper.find('.memory-create-card-memory').text()).toBe(t('memory.create'))
+    expect(wrapper.find('.memory-create-card-memory').attributes('aria-label')).toBe(t('memory.create'))
+    expect(wrapper.find('.memory-create-card-memory .pi').attributes('aria-hidden')).toBe('true')
+    expect(wrapper.find('.pi-trash').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain(t('node.trash.open'))
   })
 
-  it('read-only (a scope pending deletion): no create card and no trash, the cards stay', () => {
+  it('read-only (a scope pending deletion): no create card, the cards stay', () => {
     const wrapper = mountSection({ nodes: [node('m1', MEMORY_KIND, 'Solo')], readonly: true })
     expect(wrapper.find('.memory-create-card-memory').exists()).toBe(false)
-    expect(wrapper.text()).not.toContain(t('memory.spaceTrash.open'))
     expect(wrapper.text()).toContain('Solo')
   })
 

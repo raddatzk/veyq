@@ -757,6 +757,8 @@ const en = {
     folders: 'Folders',
     folderEmpty: 'No folders here yet.',
     folderCreate: 'New folder',
+    // A level where empty sections are left out (a guest's folder in a drop box) and nothing is left to show.
+    levelEmpty: 'Nothing here yet.',
     createFolderTitle: 'Create a folder',
     renameTitle: 'Rename',
     nameLabel: 'Name',
@@ -774,6 +776,8 @@ const en = {
     // The space's node trash (core's `SpaceTrashDialog`): it holds every application's nodes, so it names none.
     trash: {
       title: 'Trash',
+      // The level view's own toolbar button (core's: the trash holds every application's nodes).
+      open: 'Trash',
       hint: 'Deleted items wait here — with everything inside them — until the date shown. Restore one and it comes back complete.',
       empty: 'Nothing has been deleted here.',
       loadFailed: 'Could not open the trash. Please try again.',
@@ -861,9 +865,6 @@ const en = {
       save: 'Save cover',
     },
     // The toolbar button in Memories' section that opens core's node trash (`node.trash.*`).
-    spaceTrash: {
-      open: 'Trash',
-    },
     trash: {
       title: 'Trash',
       empty: 'The trash is empty.',
@@ -972,6 +973,8 @@ const en = {
       section: 'Drop boxes',
       create: 'New drop box',
       createTitle: 'New drop box',
+      createHint: 'A drop box collects files from people without an account. Share a link: everyone who uses it gets a folder of their own here, and nobody sees what others sent.',
+      sectionEmpty: 'No drop boxes yet. A drop box collects files from people without an account.',
       createFailed: 'The drop box could not be created. Please try again.',
       open: 'Open {name}',
       empty: 'Nobody has dropped anything yet. Share a link to collect files.',
@@ -979,8 +982,8 @@ const en = {
       share: 'Share link',
       delete: 'Delete drop box',
       deleteFolder: 'Delete {name}',
-      deleteFolderConfirm: '“{name}” and everything in it moves to the trash.',
-      readOnlyHint: 'What guests dropped here can only be downloaded, deleted or moved out.',
+      deleteFolderConfirm: '“{name}” and everything in it move to the trash.',
+      readOnlyHint: 'Guests’ files can only be downloaded here. To remove what someone sent, delete their folder.',
       shareTitle: 'Drop box links',
       shareHint: 'Anyone with a link can add files. Nobody with it sees the drop box or what others added.',
       shareNone: 'No link yet.',
@@ -989,6 +992,7 @@ const en = {
       shareCopied: 'Copied',
       shareRevoke: 'Switch off',
       shareDelete: 'Delete link',
+      shareDeleteConfirm: 'Delete this link for good? Nobody can send files with it any more. What guests already sent stays in the drop box.',
       shareOff: 'Off',
       shareFailed: 'That didn’t work. Please try again.',
       close: 'Close',
@@ -1973,6 +1977,7 @@ const de: typeof en = {
     folders: 'Ordner',
     folderEmpty: 'Hier gibt es noch keine Ordner.',
     folderCreate: 'Neuer Ordner',
+    levelEmpty: 'Hier ist noch nichts.',
     createFolderTitle: 'Ordner anlegen',
     renameTitle: 'Umbenennen',
     nameLabel: 'Name',
@@ -1987,6 +1992,7 @@ const de: typeof en = {
     deleteFailed: 'Konnte nicht gelöscht werden. Bitte versuche es erneut.',
     trash: {
       title: 'Papierkorb',
+      open: 'Papierkorb',
       hint: 'Gelöschte Einträge warten hier — mit allem, was darin ist — bis zum angezeigten Datum. Stellst du etwas wieder her, kommt es vollständig zurück.',
       empty: 'Hier wurde noch nichts gelöscht.',
       loadFailed: 'Der Papierkorb konnte nicht geöffnet werden. Bitte erneut versuchen.',
@@ -2070,9 +2076,6 @@ const de: typeof en = {
       isCover: 'Aktuelles Cover',
       remove: 'Cover entfernen',
       save: 'Cover speichern',
-    },
-    spaceTrash: {
-      open: 'Papierkorb',
     },
     trash: {
       title: 'Papierkorb',
@@ -2171,6 +2174,8 @@ const de: typeof en = {
       section: 'Briefkästen',
       create: 'Neuer Briefkasten',
       createTitle: 'Neuer Briefkasten',
+      createHint: 'Ein Briefkasten sammelt Dateien von Personen ohne Konto. Teile einen Link: Wer ihn nutzt, bekommt hier einen eigenen Ordner, und niemand sieht, was andere eingeworfen haben.',
+      sectionEmpty: 'Noch keine Briefkästen. Ein Briefkasten sammelt Dateien von Personen ohne Konto.',
       createFailed: 'Der Briefkasten konnte nicht angelegt werden. Bitte versuche es erneut.',
       open: '{name} öffnen',
       empty: 'Noch hat niemand etwas eingeworfen. Teile einen Link, um Dateien einzusammeln.',
@@ -2178,8 +2183,8 @@ const de: typeof en = {
       share: 'Link teilen',
       delete: 'Briefkasten löschen',
       deleteFolder: '{name} löschen',
-      deleteFolderConfirm: '„{name}“ und alles darin wandert in den Papierkorb.',
-      readOnlyHint: 'Was Gäste hier eingeworfen haben, lässt sich nur herunterladen, löschen oder herausverschieben.',
+      deleteFolderConfirm: '„{name}“ und alles darin kommen in den Papierkorb.',
+      readOnlyHint: 'Die Dateien von Gästen lassen sich hier nur herunterladen. Um zu entfernen, was jemand eingeworfen hat, lösche den Ordner der Person.',
       shareTitle: 'Links zum Briefkasten',
       shareHint: 'Wer einen Link hat, kann Dateien einwerfen. Den Briefkasten und was andere eingeworfen haben, sieht damit niemand.',
       shareNone: 'Noch kein Link.',
@@ -2188,6 +2193,7 @@ const de: typeof en = {
       shareCopied: 'Kopiert',
       shareRevoke: 'Ausschalten',
       shareDelete: 'Link löschen',
+      shareDeleteConfirm: 'Diesen Link endgültig löschen? Niemand kann damit noch Dateien einwerfen. Was Gäste schon eingeworfen haben, bleibt im Briefkasten.',
       shareOff: 'Aus',
       shareFailed: 'Das hat nicht geklappt. Bitte versuche es erneut.',
       close: 'Schließen',

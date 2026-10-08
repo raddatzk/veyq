@@ -178,13 +178,12 @@ export interface LevelSectionProps {
   readonly: boolean
 }
 /** Events a section emits to the level view: `openNode` (a child), `create` (the KIND to create at this level, e.g.
- *  Memories' MEMORY: the host mounts that kind's `createDialog`), `openTrash` (the scope's node trash; the toolbar that
- *  offers it sits in Memories' section until a second application needs it), `rename` (a child renamed in place, for a
- *  kind that does not open — Files' file: the host mounts core's `FolderNameDialog` in rename mode for it). */
+ *  Memories' MEMORY: the host mounts that kind's `createDialog`), `rename` (a child renamed in place, for a kind that
+ *  does not open — Files' file: the host mounts core's `FolderNameDialog` in rename mode for it). The scope's node trash
+ *  is the level view's own toolbar button, no section's (inbox #370, #385). */
 export interface LevelSectionEmits {
   openNode: [node: TreeNode]
   create: [kind: NodeKind]
-  openTrash: []
   rename: [node: TreeNode]
 }
 

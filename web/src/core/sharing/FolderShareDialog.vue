@@ -459,7 +459,8 @@ function onDialogVisible(visible: boolean) {
                     · {{ t('share.expires', { date: fmtDate(share.expiresAt) }) }}</template>
                 </span>
                 <div class="veyq-row-meta">
-                  <span class="veyq-badge success folder-share-role">{{ roleLabel(share.role) }}</span>
+                  <!-- An unnamed link's title is already its role (`titleFor`): the badge would say it twice (inbox #385). -->
+                  <span v-if="decoded.get(share.shareId)?.name" class="veyq-badge success folder-share-role">{{ roleLabel(share.role) }}</span>
                   <span v-if="decoded.get(share.shareId)?.hasNote" class="veyq-badge">{{ t('share.hasNote') }}</span>
                   <span v-if="share.passwordRequired" class="veyq-badge"><span class="pi pi-lock" />{{ t('share.passwordBadge') }}</span>
                   <span v-if="!share.mine" class="veyq-badge muted">{{ t('share.byMember') }}</span>

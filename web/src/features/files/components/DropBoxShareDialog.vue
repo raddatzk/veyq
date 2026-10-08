@@ -15,10 +15,12 @@ import { deleteShare, listSharesFor, revokeShare, type ManagedShare } from '../.
 import { buildShareLink, recoverShareLink } from '../../../core/sharing/shareLink'
 import { ShareRole } from '../../../api/generated/sharing'
 import { mintDropBoxLink } from '../dropBox'
+import { useConfirm } from '../../../shared/state/useConfirm'
 
 const props = defineProps<NodeShareDialogProps>()
 const emit = defineEmits<{ close: [] }>()
 const { t } = useI18n()
+const { ask } = useConfirm()
 
 const shares = ref<ManagedShare[]>([])
 const fresh = ref<string | null>(null)
@@ -55,6 +57,18 @@ const create = () =>
     const minted = await mintDropBoxLink(props.scopeId, props.nodeId, props.nodeKey, props.epochs, props.nodeName)
     fresh.value = buildShareLink(minted.shareId, minted.kShare)
   })
+
+/** Delete a link for good, after the member said so — the same confirmation core's folder share dialog asks (inbox #385).
+ *  What its guests sent stays in the drop box. */
+async function remove(shareId: string) {
+  const confirmed = await ask({
+    header: t('files.dropBox.shareDelete'),
+    message: t('files.dropBox.shareDeleteConfirm'),
+    acceptLabel: t('files.dropBox.shareDelete'),
+    acceptIcon: 'pi pi-trash',
+  })
+  if (confirmed) await run(() => deleteShare(shareId))
+}
 
 async function copy(text: string, id: string) {
   try {
@@ -113,7 +127,7 @@ async function copy(text: string, id: string) {
               outlined
               size="small"
               :disabled="busy"
-              @click="run(() => deleteShare(row.share.shareId))"
+              @click="remove(row.share.shareId)"
             />
           </span>
         </li>

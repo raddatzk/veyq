@@ -39,13 +39,12 @@ function sectionStub(name: string) {
       epochs: { type: Object, default: null },
       readonly: { type: Boolean, required: true },
     },
-    emits: ['openNode', 'create', 'openTrash', 'rename'],
+    emits: ['openNode', 'create', 'rename'],
     setup: (p, { emit }) => () =>
       h('section', { class: 'stub-section', 'data-name': name, 'data-readonly': String(p.readonly), 'data-folder': p.folder?.name ?? '-' }, [
         h('span', { class: 'stub-nodes' }, p.nodes.map((n) => n.name).join(',')),
         h('button', { class: 'stub-open', onClick: () => emit('openNode', p.nodes[0]) }),
         h('button', { class: 'stub-create', onClick: () => emit('create', `create-${name}`) }),
-        h('button', { class: 'stub-trash', onClick: () => emit('openTrash') }),
         h('button', { class: 'stub-rename', onClick: () => emit('rename', p.nodes[0]) }),
       ]),
   })
@@ -58,17 +57,23 @@ function node(id: string, kind: NodeKind, parentId: string | null = null, orderI
 }
 
 const TRIPS = node('Trips', FOLDER_KIND)
-function mountLevel(tree: TreeNode[], over: { folder?: TreeNode | null; readonly?: boolean; shareable?: boolean } = {}) {
+function mountLevel(
+  tree: TreeNode[], over: { folder?: TreeNode | null; readonly?: boolean; shareable?: boolean; hideEmptySections?: boolean } = {},
+) {
   const folder = over.folder ?? null
   return mount(LevelView, {
-    props: { folder, level: childrenOf(tree, folder?.id ?? null), epochs: null, readonly: over.readonly ?? false, shareable: over.shareable ?? false },
+    props: {
+      folder, level: childrenOf(tree, folder?.id ?? null), epochs: null, readonly: over.readonly ?? false,
+      shareable: over.shareable ?? false, hideEmptySections: over.hideEmptySections,
+    },
     global: { plugins: [realI18n()], directives: { tooltip: {} } },
   })
 }
 
-/** The level's top-level blocks in DOM order, each named by what it is. */
+/** The level's top-level blocks in DOM order, each named by what it is — but the toolbar, which has its own tests. */
 function blocks(w: ReturnType<typeof mountLevel>): string[] {
-  return [...w.element.children].map((el) => {
+  return [...w.element.children].filter((el) => !el.classList.contains('veyq-level-toolbar')).map((el) => {
+    if (el.classList.contains('veyq-empty')) return `empty:${el.textContent?.trim()}`
     if (el.classList.contains('stub-section')) return `section:${el.getAttribute('data-name')}`
     if (el.classList.contains('veyq-level-fallback')) return `fallback:${el.querySelector('h2')?.textContent}`
     if (el.querySelector('.veyq-folder-overview-card')) return 'overview'
@@ -108,7 +113,7 @@ describe('LevelView: application sections', () => {
     expect(w.find('.stub-nodes').text()).toBe('')
   })
 
-  it('hands each section the folder, the read-only flag, and forwards its openNode, create, openTrash and rename', async () => {
+  it('hands each section the folder, the read-only flag, and forwards its openNode, create and rename', async () => {
     reg().registerKind({ kind: 'ALPHA', icon: 'pi pi-a', shareable: false, section: { order: 10, component: A } })
     const a1 = node('a1', 'ALPHA', 'Trips')
     const w = mountLevel([TRIPS, a1], { folder: TRIPS, readonly: true })
@@ -116,11 +121,9 @@ describe('LevelView: application sections', () => {
     expect(w.find('.stub-section').attributes('data-readonly')).toBe('true')
     await w.find('.stub-open').trigger('click')
     await w.find('.stub-create').trigger('click')
-    await w.find('.stub-trash').trigger('click')
     await w.find('.stub-rename').trigger('click')
     expect(w.emitted('openNode')).toEqual([[a1]])
     expect(w.emitted('create')).toEqual([['create-a']])
-    expect(w.emitted('openTrash')).toHaveLength(1)
     // a section's child renamed in place reaches the host as `renameNode` with that node (never as the folder's rename)
     expect(w.emitted('renameNode')).toEqual([[a1]])
     expect(w.emitted('renameFolder')).toBeUndefined()
@@ -166,6 +169,16 @@ describe('LevelView: the folders section', () => {
     expect(w.emitted('openNode')).toEqual([[rome]])
     await w.find('.veyq-level-grid .veyq-create-card').trigger('click')
     expect(w.emitted('create')).toEqual([[FOLDER_KIND]])
+  })
+
+  // inbox #385 (g): a tile is named by its text alone — its icon glyph is hidden from assistive technology.
+  it('names the new-folder card and each folder card by their text, their icons hidden', () => {
+    const w = mountLevel([TRIPS, node('Rome', FOLDER_KIND, 'Trips')], { folder: TRIPS })
+    const create = w.find('.veyq-level-grid .veyq-create-card')
+    expect(create.text()).toBe(t('node.folderCreate'))
+    expect(create.attributes('aria-label'), 'named outright too: an accessibility-tree reader showed the tile unnamed').toBe(t('node.folderCreate'))
+    expect(create.find('.pi').attributes('aria-hidden')).toBe('true')
+    expect(w.find('button.veyq-folder-card .pi').attributes('aria-hidden')).toBe('true')
   })
 
   it('shows its empty state when the level has no folder', () => {
@@ -235,5 +248,45 @@ describe('LevelView: the folder overview card', () => {
     const w = mountLevel([TRIPS], { folder: TRIPS, shareable: true, readonly: true })
     expect(shareButton(w).exists()).toBe(true)
     expect(w.find(`button[aria-label="${t('node.rename')}"]`).exists()).toBe(false)
+  })
+})
+
+// inbox #370/#385 (f): the space's trash holds every application's nodes, so it is the level view's own button — no
+// section's (it sat in Memories' header, where it read as Memories' trash).
+describe('LevelView: the toolbar', () => {
+  const trash = (w: ReturnType<typeof mountLevel>) => w.findAll('.veyq-level-toolbar button').find((b) => b.text() === t('node.trash.open'))
+
+  it('offers the space\'s trash first, at the root and in a folder, and emits openTrash', async () => {
+    reg().registerKind({ kind: 'ALPHA', icon: 'pi pi-a', shareable: false, section: { order: 10, component: A } })
+    for (const w of [mountLevel([]), mountLevel([TRIPS], { folder: TRIPS })]) {
+      expect(w.element.firstElementChild?.classList.contains('veyq-level-toolbar')).toBe(true)
+      await trash(w)!.trigger('click')
+      expect(w.emitted('openTrash')).toHaveLength(1)
+    }
+  })
+
+  it('has none where nothing is written (a pending deletion, a guest\'s folder)', () => {
+    expect(mountLevel([], { readonly: true }).find('.veyq-level-toolbar').exists()).toBe(false)
+  })
+})
+
+// inbox #385 (b): a guest's folder in a drop box (the host's `hideEmptySections`) shows only what is there.
+describe('LevelView: hideEmptySections', () => {
+  beforeEach(() => {
+    reg().registerKind({ kind: 'ALPHA', icon: 'pi pi-a', shareable: false, section: { order: 10, component: A } })
+    reg().registerKind({ kind: 'BETA', icon: 'pi pi-b', shareable: false, section: { order: 20, component: B } })
+  })
+
+  it('leaves out every section and the folders section with nothing to show', () => {
+    const w = mountLevel([TRIPS, node('b1', 'BETA', 'Trips')], { folder: TRIPS, readonly: true, hideEmptySections: true })
+    expect(blocks(w)).toEqual(['overview', 'section:b'])
+    // control: without the flag every section shows, empty or not
+    expect(blocks(mountLevel([TRIPS, node('b1', 'BETA', 'Trips')], { folder: TRIPS, readonly: true }))).toEqual(['overview', 'section:a', 'section:b', 'folders'])
+  })
+
+  it('keeps a section or the folders that have something, and says once when nothing is left', () => {
+    const rome = node('Rome', FOLDER_KIND, 'Trips')
+    expect(blocks(mountLevel([TRIPS, rome], { folder: TRIPS, readonly: true, hideEmptySections: true }))).toEqual(['overview', 'folders'])
+    expect(blocks(mountLevel([TRIPS], { folder: TRIPS, readonly: true, hideEmptySections: true }))).toEqual(['overview', `empty:${t('node.levelEmpty')}`])
   })
 })

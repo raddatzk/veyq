@@ -197,4 +197,17 @@ describe('FolderShareDialog — the folder\'s links', () => {
     expect(deleteShare).toHaveBeenCalledWith('off')
     expect(w.findAll('.folder-share-row')).toHaveLength(0)
   })
+
+  // inbox #385 (c): an unnamed link is titled by its role, so its role badge would repeat it ("View only" twice).
+  it('says an unnamed link\'s role once (its title); a named link keeps the role badge beside its name', async () => {
+    listSharesFor.mockResolvedValue([row({ shareId: 'plain' }), row({ shareId: 'named', sealedShareName: 'sealed' })])
+    vi.mocked(manage.readShareName).mockImplementation((_e, a) => (a.shareId === 'named' ? 'For Grandma' : ''))
+    const w = mountDialog()
+    await flushPromises()
+    const [plain, named] = w.findAll('.folder-share-row')
+    expect(plain.find('.veyq-row-title').text()).toBe(t('share.roleViewer'))
+    expect(plain.text().split(t('share.roleViewer')).length - 1, 'the role said once').toBe(1)
+    expect(named.find('.veyq-row-title').text()).toBe('For Grandma')
+    expect(named.find('.folder-share-role').text()).toBe(t('share.roleViewer'))
+  })
 })
