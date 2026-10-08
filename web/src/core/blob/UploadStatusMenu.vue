@@ -75,13 +75,15 @@ onBeforeUnmount(() => {
       class="uploads-trigger"
       :aria-label="t('upload.title')"
       :title="t('upload.title')"
+      :aria-expanded="open"
+      aria-controls="uploads-panel"
       @click="toggle"
     >
-      <span class="pi" :class="activeFileCount > 0 ? 'pi-spin pi-spinner' : 'pi-list'" />
+      <span class="pi" :class="activeFileCount > 0 ? 'pi-spin pi-spinner' : 'pi-list'" aria-hidden="true" />
       <span v-if="activeFileCount" class="uploads-badge">{{ activeFileCount }}</span>
     </button>
 
-    <section v-if="open" class="uploads-panel">
+    <section v-if="open" id="uploads-panel" class="uploads-panel">
       <header class="uploads-header">
         <div>
           <h3>{{ t('upload.title') }}</h3>

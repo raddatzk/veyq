@@ -9,6 +9,7 @@ import { i18n } from './i18n'
 import { boot } from './app/boot'
 import { registerApplications } from './applications'
 import { initializeTheme } from './shared/state/useThemeState'
+import { syncPrimeVueLocale } from './app/primeVueLocale'
 import './style.css'
 import 'primeicons/primeicons.css'
 
@@ -28,6 +29,7 @@ async function bootstrap() {
     .use(i18n)
     .use(router)
   app.directive('tooltip', Tooltip)
+  syncPrimeVueLocale(app)
 
   router.isReady().then(() => app.mount('#app'))
 }
