@@ -220,10 +220,10 @@ acceptanceCriteria:
           page-path wait to fall below, so the proof is a bundled page that counts the Worker's posts and replies
           (24 of 24 answered per 12-photo batch, en.memory.derivatives § Generation & attachment).
   - id: sealed-original-filename
-    text: The original's filename is sealed into the lazy panel bundle at upload and is NEVER sent — no request payload carries it, so uc.memory.gallery's "no pixel, no filename" stays a true statement about the server's view now that the name exists at all. Both AddMediaSource construction sites (the upload queue and the cover upload) pass it.
+    text: The original's filename is sealed into the lazy panel bundle at upload — for every media that has one (a video, an image without EXIF, a PDF too, not only a parsed EXIF bundle), since the lightbox downloads the original under it, and it is never shed to fit the tier's cap — and is NEVER sent in the clear — no request carries it, checked at fetch over every path, header, binary body and DECODED base64 field, for a member's and a guest's upload, so uc.memory.gallery's "no pixel, no filename" stays a true statement about the server's view now that the name exists at all. It never enters the 512-base64 listed tier. Both AddMediaSource construction sites (the upload queue and the cover upload) pass it.
     coverage:
       web:
-        unit: [src/features/memory/media.test.ts]
+        unit: [src/features/memory/media.test.ts, src/features/memory/originalName.wire.test.ts]
   - id: original-decoded-once-per-upload
     text: Inside addMedia a picked original is decoded ONCE — the preview is derived from it, the thumbnail from the already-downscaled preview, and the intrinsic geometry the metadata tier seals rides back from that same decode instead of a separate probe. Both tiers still arrive at their pinned specs (4032 to 2048 to 512 traverses the same steps of at most 2x that two independent runs did), so the progressive-halving downscale rule is honoured rather than traded for the saving; the tier derivation is therefore ORDERED, preview before thumbnail. A video is unchanged — one poster decode, zero image decodes.
     # The count is bitten by a deriver that records each decode's SOURCE SIZE, so a decode of the original is

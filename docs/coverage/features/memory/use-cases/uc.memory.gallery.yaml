@@ -31,6 +31,10 @@ acceptanceCriteria:
           stored objects, presigned GET and fetched back byte-identical — is measured only by
           `BlobBatchE2ETest.uploadThenDownloadRoundTripsBytes`, which runs when `VEYQ_S3_E2E=1`. No CI job sets it,
           so it makes no coverage claim (ADR 0040) and is named here instead.
+  - id: download-stable-name
+    text: The original downloads under its own file name, sealed into the EXIF tier at upload and loaded with the item's details, so the same item keeps its download name when newer uploads shift the gallery (the owner's repro — two photos, then a third — pinned). The download button enables once those details are in or known absent, so the save picker stays the click's first await and a quick click cannot save under the fallback; a named media opens the save target before any request and sniffs a missing type from chunk 0 as it streams. Only a media that never sealed a name falls back to the Memory name + its gallery position (inbox #395 F10).
+    coverage:
+      web: { unit: [src/features/memory/components/MediaLightbox.test.ts, src/features/memory/download.stream.test.ts] }
   - id: favorite-toggle
     text: >
       The header toggle pins/unpins the Memory (operator-blind, via en.memory.favorites), and the pin is
