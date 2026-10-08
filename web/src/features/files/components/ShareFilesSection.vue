@@ -28,6 +28,7 @@ import { readFileMeta } from '../fileMeta'
 import { FileUploadError, type FileJobExtra, type FileUploadResult } from '../uploadFile'
 import { guestFileUploadJob } from '../shareUpload'
 import { downloadFile } from '../download'
+import { isSaveCancelled, SaveTooLarge } from '../../../shared/saveStream'
 
 const props = defineProps<ShareSectionProps>()
 
@@ -160,9 +161,11 @@ async function download(row: Row) {
   if (!row.key || !row.blob || downloading.value) return
   downloading.value = row.node.id
   try {
+    // Nothing awaited before it: the save-file picker needs this click's activation (`openSaveTarget`).
     await downloadFile(props.head.scopeId, row.key, row.node.id, row.blob, row.name, (blobId) => shareChunkUrls(props.shareId, blobId, props.pwToken))
-  } catch {
-    toast.error(t('files.downloadFailed'))
+  } catch (e) {
+    if (e instanceof SaveTooLarge) toast.error(t('files.downloadTooLarge'))
+    else if (!isSaveCancelled(e)) toast.error(t('files.downloadFailed'))
   } finally {
     downloading.value = null
   }

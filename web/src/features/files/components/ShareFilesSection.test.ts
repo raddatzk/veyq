@@ -11,6 +11,10 @@ import type { ShareNode } from '../../../api/generated/sharing'
 
 vi.mock('../api', () => ({ publicShareFilesApi: vi.fn() }))
 vi.mock('../download', () => ({ downloadFile: vi.fn() }))
+const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }))
+vi.mock('../../../shared/state/useToast', () => ({
+  useToast: () => ({ success: vi.fn(), error: toastError, showUndo: vi.fn(), dismissUndo: vi.fn() }),
+}))
 vi.mock('../shareUpload', () => ({ guestFileUploadJob: vi.fn() }))
 vi.mock('../../../core/sharing/guestBlob', () => ({ shareChunkUrls: vi.fn(async () => ['https://store.test/0']) }))
 vi.mock('../../../core/sharing/guestTree', () => ({ guestTreeContext: vi.fn((head: unknown, o: object) => ({ head, rootId: ROOT, keys: KEYS, ...o })) }))
@@ -28,6 +32,7 @@ import { formatBytes } from '../../../shared/formatBytes'
 import type { PublicShareHead } from '../../../core/sharing/resolvePublicShare'
 import type { GuestIdentity } from '../../../core/sharing/guestIdentity'
 import { realI18n, t } from '../../../test/i18n'
+import { SaveCancelled, SaveTooLarge } from '../../../shared/saveStream'
 import { stubApi } from '../../../test/apiMock'
 
 const SCOPE = '5c09e000-0000-4000-8000-0000000000cc'
@@ -97,6 +102,22 @@ describe('a guest reads the files of a shared folder', () => {
     expect(Array.from(key)).toEqual(Array.from(KEYS.get(R)!))
     await presign!('blob-r')
     expect(shareChunkUrls).toHaveBeenCalledWith(SHARE, 'blob-r', PW)
+  })
+
+  it('a guest\'s download starts inside the click; too large says so, a cancelled save says nothing', async () => {
+    const w = mountSection()
+    await flushPromises()
+    const button = () => w.find(`[aria-label="${t('files.download', { name: 'Report.pdf' })}"]`)
+    vi.mocked(downloadFile).mockRejectedValueOnce(new SaveTooLarge(2 ** 33))
+    void button().trigger('click')
+    expect(downloadFile).toHaveBeenCalledOnce() // synchronously in the click: the save picker needs its activation
+    await flushPromises()
+    expect(toastError.mock.calls).toEqual([[t('files.downloadTooLarge')]])
+    toastError.mockClear()
+    vi.mocked(downloadFile).mockRejectedValueOnce(new SaveCancelled())
+    await button().trigger('click')
+    await flushPromises()
+    expect(toastError).not.toHaveBeenCalled()
   })
 
   it('an empty folder says so', async () => {

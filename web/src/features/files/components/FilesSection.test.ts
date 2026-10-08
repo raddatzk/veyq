@@ -12,6 +12,10 @@ import type { FileListPage } from '../../../api/generated/files'
 const keys = vi.hoisted(() => new Map<string, Uint8Array>())
 vi.mock('../api', () => ({ filesApi: vi.fn() }))
 vi.mock('../download', () => ({ downloadFile: vi.fn() }))
+const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }))
+vi.mock('../../../shared/state/useToast', () => ({
+  useToast: () => ({ success: vi.fn(), error: toastError, showUndo: vi.fn(), dismissUndo: vi.fn() }),
+}))
 vi.mock('../uploadFile', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../uploadFile')>()),
   fileUploadJob: vi.fn(),
@@ -43,6 +47,7 @@ import { setViewMode } from '../../../shared/state/useViewMode'
 import { activeSpace } from '../../../app/activeSpace'
 import { epochsOf } from '../../spaces/epochsTestUtil'
 import { realI18n, t } from '../../../test/i18n'
+import { SaveCancelled, SaveTooLarge } from '../../../shared/saveStream'
 import { stubApi } from '../../../test/apiMock'
 
 const SCOPE = '5c09e000-0000-4000-8000-0000000000bb'
@@ -221,6 +226,30 @@ describe('FilesSection', () => {
     await w.find('button.files-row-open').trigger('click')
     await flushPromises()
     expect(downloadFile).toHaveBeenCalledWith(SCOPE, keyFor(N), N, BLOBS.items[1].fileBlob, 'notes.txt')
+  })
+
+  it('download starts inside the click — nothing awaited first, the save picker needs its activation', async () => {
+    const w = mountSection({ nodes: [NOTES] })
+    await flushPromises()
+    void w.find('button.files-row-open').trigger('click')
+    expect(downloadFile).toHaveBeenCalledOnce() // before any microtask: the click handler called it synchronously
+    await flushPromises()
+  })
+
+  it('download outcomes: too large says so, a cancelled save says nothing, any other failure says it failed', async () => {
+    const w = mountSection({ nodes: [NOTES] })
+    await flushPromises()
+    const outcome = async (error: unknown) => {
+      toastError.mockClear()
+      vi.mocked(downloadFile).mockRejectedValueOnce(error)
+      await w.find('button.files-row-open').trigger('click')
+      await flushPromises()
+      return toastError.mock.calls.map(([summary]) => summary)
+    }
+    expect(await outcome(new SaveTooLarge(2 ** 33))).toEqual([t('files.downloadTooLarge')])
+    expect(await outcome(new SaveCancelled())).toEqual([])
+    expect(await outcome(new DOMException('cancelled', 'AbortError'))).toEqual([])
+    expect(await outcome(new Error('chunk_get_failed:500'))).toEqual([t('files.downloadFailed')])
   })
 
   it('delete asks, then moves the node to the trash through core and reloads the tree; declined, nothing happens', async () => {

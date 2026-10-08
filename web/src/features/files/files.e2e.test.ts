@@ -1,6 +1,7 @@
 // Live e2e (VEYQ_E2E=1) for Files' member half (cr-files-application F1b) — against a REAL backend, MariaDB and the
 // bundled S3-compatible store, with REAL crypto and the real functions the section runs (no mock): a member's file is
-// created, uploaded over real presigned PUTs in several frames, listed, downloaded and decrypted byte for byte,
+// created, uploaded over real presigned PUTs in several frames, listed, downloaded and decrypted byte for byte (whole,
+// and streamed into a save target as the section's download does — inbox #371, written but not yet run),
 // replaced through the compare-and-set, refused when the replace is stale, trashed and restored through core, and
 // refused to a caller without a grant; a second member of a shared scope replaces it. Run against a FRESH instance:
 // `python3 scripts/run_web_e2e.py` (what CI runs) gives this file its own database.
@@ -15,7 +16,7 @@
 //
 // UNVERIFIED when written (no run from the worktree that wrote it): that a tenant member holding a delivered grant has
 // WRITE on the tenant scope's files (the backend's gate for `completeFile` is WRITE).
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 import { become, birthInstance, mkActor, onboardMember } from '../../test/e2eBootstrap'
 import { recordCanaries } from '../../test/canaries'
 import { ensurePersonalScope, openScope } from '../spaces/scopes'
@@ -27,7 +28,7 @@ import { httpStatus } from '../../shared/httpError'
 import { filesApi } from './api'
 import { FILE_CONTENT_ROLE, FILE_KIND } from './kinds'
 import { fileUploadJob, completeFileUpload, StaleFileError } from './uploadFile'
-import { fetchFileContent } from './download'
+import { downloadFile, fetchFileContent } from './download'
 import { readFileMeta } from './fileMeta'
 
 const NAME = 'Quartalsbericht Ü-e2e.pdf'
@@ -89,6 +90,24 @@ describe.skipIf(!process.env.VEYQ_E2E)('files e2e (live, operator-blind, direct-
 
     // download: the real presigned GETs, decrypted under the node key — the original bytes
     expect(await contentOf(await fetchFileContent(scopeId, nodeKey, nodeId, blob1))).toEqual(Array.from(first))
+
+    // the user's download streams (inbox #371): the same bytes, frame by frame, into the save target — here a picked
+    // file that collects its writes — and the file is closed, not aborted
+    const saved = { parts: [] as number[], ended: '' }
+    vi.stubGlobal('showSaveFilePicker', async () => ({
+      createWritable: async () => ({
+        write: async (b: Uint8Array) => void saved.parts.push(...b),
+        close: async () => void (saved.ended = 'close'),
+        abort: async () => void (saved.ended = 'abort'),
+      }),
+    }))
+    try {
+      await downloadFile(scopeId, nodeKey, nodeId, blob1, NAME)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+    expect(saved.parts).toEqual(Array.from(first))
+    expect(saved.ended).toBe('close')
 
     // replace with new bytes, expecting the blob read: the download returns the new bytes, the blob id moved
     const second = bytesOf(CHUNK_SIZE + 7, 2)

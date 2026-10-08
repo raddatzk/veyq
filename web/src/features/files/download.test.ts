@@ -1,11 +1,12 @@
 // A file's download (`download.ts`) through the REAL transport — core's `presignAllChunks` and `makeChunkProvider`,
 // the generated blob client — against a fake control plane and a fake store serving frames sealed the way the pump
 // seals them. It decrypts to the original bytes, presigns once, keeps a bounded number of frames in flight, and refuses
-// a ref the server served for another node.
+// a ref the server served for another node. The user's download streams (inbox #371) into the save target — here a
+// picked file whose writes are collected — and opens the picker before it awaits anything.
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { CHUNK_SIZE, planBlob } from '../../core/blob/transport'
-import { fetchFileContent, DOWNLOAD_IN_FLIGHT } from './download'
+import { downloadFile, fetchFileContent, DOWNLOAD_IN_FLIGHT } from './download'
 import { session } from '../../app/session'
 
 const SCOPE = '33333333-3333-4333-8333-333333333333'
@@ -13,6 +14,21 @@ const NODE = '5c09e000-0000-4000-8000-0000000000e1'
 const OTHER = '5c09e000-0000-4000-8000-0000000000e2'
 
 afterEach(() => vi.unstubAllGlobals())
+
+/** A save-file picker whose file collects what is written, in order, and records how it ended. */
+function collectingPicker() {
+  const file = { written: [] as Uint8Array[], ended: '' }
+  const picker = vi.fn(async () => ({
+    createWritable: async () => ({
+      write: async (b: Uint8Array) => void file.written.push(b.slice()),
+      close: async () => void (file.ended = 'close'),
+      abort: async () => void (file.ended = 'abort'),
+    }),
+  }))
+  vi.stubGlobal('showSaveFilePicker', picker)
+  const bytes = () => Array.from(file.written.flatMap((b) => Array.from(b)))
+  return { picker, file, bytes }
+}
 
 const bytesOf = (n: number) => new Uint8Array(n).map((_, i) => (i * 7 + 3) % 253)
 
@@ -82,5 +98,52 @@ describe('a file download', () => {
     fakeStore(ref.blobId, frames)
     await expect(fetchFileContent(SCOPE, nodeKey, OTHER, ref)).rejects.toThrow(v1.OpenRefused)
     await expect(fetchFileContent(SCOPE, v1.randomBytes(32), NODE, ref)).rejects.toThrow(v1.OpenRefused)
+  })
+
+  it('streams a multi-chunk file into the picked file byte-identical, then closes it', async () => {
+    const nodeKey = v1.randomBytes(32)
+    const plain = bytesOf(7 * CHUNK_SIZE + 5)
+    const { ref, frames } = await storedFile(nodeKey, plain)
+    const counts = fakeStore(ref.blobId, frames)
+    const { picker, file, bytes } = collectingPicker()
+
+    await downloadFile(SCOPE, nodeKey, NODE, ref, 'report.pdf')
+
+    expect(picker).toHaveBeenCalledWith({ suggestedName: 'report.pdf' })
+    expect(bytes()).toEqual(Array.from(plain))
+    expect(file.written).toHaveLength(8)
+    expect(file.ended).toBe('close')
+    expect(counts.presign).toBe(1)
+    expect(counts.maxInFlight).toBeLessThanOrEqual(DOWNLOAD_IN_FLIGHT)
+  })
+
+  it('opens the save-file picker before it awaits anything — the click activation is still there', () => {
+    const nodeKey = v1.randomBytes(32)
+    const plain = bytesOf(10)
+    return storedFile(nodeKey, plain).then(({ ref, frames }) => {
+      fakeStore(ref.blobId, frames)
+      const { picker } = collectingPicker()
+      const done = downloadFile(SCOPE, nodeKey, NODE, ref, 'a.txt')
+      expect(picker).toHaveBeenCalledOnce() // synchronously, inside the call: no microtask has run yet
+      return done
+    })
+  })
+
+  it('a store failure mid-file aborts the picked file — never closes a truncated one', async () => {
+    const nodeKey = v1.randomBytes(32)
+    const { ref, frames } = await storedFile(nodeKey, bytesOf(3 * CHUNK_SIZE))
+    fakeStore(ref.blobId, [frames[0], frames[1].slice(0, 10), frames[2]]) // chunk 1 does not open
+    const { file } = collectingPicker()
+    await expect(downloadFile(SCOPE, nodeKey, NODE, ref, 'a.bin')).rejects.toThrow()
+    expect(file.ended).toBe('abort')
+  })
+
+  it('a ref listed for another node is refused before the picker opens: nothing is asked, nothing written', async () => {
+    const nodeKey = v1.randomBytes(32)
+    const { ref, frames } = await storedFile(nodeKey, bytesOf(10))
+    fakeStore(ref.blobId, frames)
+    const { picker } = collectingPicker()
+    await expect(downloadFile(SCOPE, nodeKey, OTHER, ref, 'a.txt')).rejects.toThrow(v1.OpenRefused)
+    expect(picker).not.toHaveBeenCalled()
   })
 })
