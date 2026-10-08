@@ -9,6 +9,7 @@ import {
 } from './location'
 import { FOLDER_KIND, type NodeKind } from './kind'
 import { MEMORY_KIND } from '../../features/memory/kinds'
+import { DROPBOX_KIND } from '../../features/files/kinds'
 import type { TreeNode } from './tree'
 
 // A concrete personal token — any `~<username>` parses as personal (ADR 0023); `~me` is the fallback.
@@ -102,5 +103,31 @@ describe('resolveSlugPath', () => {
         expect(resolveSlugPath(tree, segments)).toBe(n.id)
       }
     }
+  })
+})
+
+// Two drop-box guests who give the same display name get two identity folders of that name (ADR 0080 decision 11:
+// each entry is sealed under its own guest's K_up, so the server's slug uniqueness cannot see the pair). This pins
+// what the slug path does with them TODAY — the ambiguity inbox #372 named.
+describe('equal sibling slugs (characterisation, before the suffix rule)', () => {
+  const BOX = 'b0000000-0000-4000-8000-000000000000'
+  const ANNA_1 = 'a1000000-0000-4000-8000-000000000000'
+  const ANNA_2 = 'a2000000-0000-4000-8000-000000000000'
+  const identityFolder = (id: string, name: string): TreeNode => ({ ...node(id, name, BOX), shareIdentityId: `i-${id}` })
+  const dropTree: TreeNode[] = [
+    node(BOX, 'Uploads', null, DROPBOX_KIND),
+    // Listed in reverse id order on purpose: the resolver's answer must not hinge on the list order either.
+    identityFolder(ANNA_2, 'Anna'),
+    identityFolder(ANNA_1, 'Anna'),
+  ]
+
+  it('builds the same path for both folders', () => {
+    expect(slugPathOf(dropTree, ANNA_1)).toEqual(['uploads', 'anna'])
+    expect(slugPathOf(dropTree, ANNA_2)).toEqual(['uploads', 'anna'])
+  })
+
+  it('resolves that one path to whichever folder the list holds first, so the other is unreachable', () => {
+    expect(resolveSlugPath(dropTree, ['uploads', 'anna'])).toBe(ANNA_2)
+    expect(resolveSlugPath([...dropTree].reverse(), ['uploads', 'anna'])).toBe(ANNA_1)
   })
 })
