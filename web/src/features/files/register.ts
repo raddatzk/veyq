@@ -6,10 +6,13 @@
 // download, rename and delete. No `detail` — a file is not opened, it is downloaded from its row (an opened FILE, e.g.
 // by a typed URL, renders the host's explicit unsupported state, `home.unsupportedKind`), no `createDialog` (a file is
 // created by uploading it, never by naming an empty one) and no `shareDialog` (a file is shared through its folder).
+// Its SHARE SECTION (F2): the file list of a shared folder on the public page, the download for every guest, the upload
+// and replace for a contributor (`components/ShareFilesSection.vue`); no share body — a file is never a share root.
 import { FILE_KIND } from './kinds'
 import type { Registry } from '../../core/applications/registry'
 import { fileNameSlug } from '../../shared/naming'
 import FilesSection from './components/FilesSection.vue'
+import ShareFilesSection from './components/ShareFilesSection.vue'
 
 /** Where Files' section sorts among the level view's sections: after Memories' (10). */
 export const FILES_SECTION_ORDER = 20
@@ -24,5 +27,6 @@ export function registerFiles(registry: Registry): void {
     shareable: false,
     slug: fileNameSlug,
     section: { order: FILES_SECTION_ORDER, component: FilesSection },
+    shareSection: { order: FILES_SECTION_ORDER, component: ShareFilesSection },
   })
 }
