@@ -32,7 +32,9 @@
 - **The blob** is a core attachment: the slot `FILE_CONTENT` of `veyq_node_attachment` (one blob per slot), its
   role the same token. Its `K_blob` is wrapped under the file node's key and sealed bound to the blob id, the node id
   (`ownerId`) and the role ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md), ADR 0080 Decision 13), so no
-  new seal purpose exists for Files.
+  new seal purpose exists for Files. Core's blob can also carry its own sealed metadata (`wrappedBlobMeta`, the
+  `blob-meta` seal under `K_blob`: type, upload name, modification time; write-once, served on `FileBlobRef`); the
+  contract and the store hold it, and Files does not write or read it yet (inbox #397).
 - **Trash and purge** are core's: deleting the node trashes it with its attachment (the quota still counts it, ADR
   0073 §2); the purge frees the attachment row and the blob through core's eraser.
 - **The quota:** a member's upload counts against the tenant quota through core's start, unchanged. That start takes

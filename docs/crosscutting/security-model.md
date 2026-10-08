@@ -88,7 +88,10 @@ request the **user** turned on, straight to the chosen provider.
 
 - **Encrypted (server-blind):** media bytes and all derivatives; journal text and embeds; sensitive
   metadata — titles, captions, descriptions, places, people/faces, participant relationships, tags;
-  track and playlist details; GPS and capture time (sealed client-side, never read off the file).
+  track and playlist details; GPS and capture time (sealed client-side, never read off the file); a blob's
+  **type, upload name and modification time** (the `blob-meta` seal under the blob's own `K_blob`, declared once at
+  the upload and never rewritten — padded to a 256-byte bucket, so its length tells the operator one of four sizes,
+  never how long a name is; the plaintext size and upload time are left out because the server already holds both).
 - **Server-visible (low-sensitivity operational metadata):** existence and IDs of memories, media and
   shares; scope and membership (who belongs to which tenant/group); a member's **per-tenant username,
   identity public key, and group-add-consent flag** — visible to, and effectively **enumerable by**, any

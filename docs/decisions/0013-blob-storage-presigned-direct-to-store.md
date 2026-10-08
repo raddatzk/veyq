@@ -50,7 +50,9 @@ URL cannot `GET`, grants nothing about any other object, and expires in minutes.
 plain `PUT`/`GET` and **no credentials of its own**; the store just verifies the signature.
 
 - **Upload:** the client asks the backend to **start a batch of blobs** (each declaring `byteSize`, the
-  `chunkCount` that follows from it (§3), and the `K_blob` wrap); the backend opens a session per blob, **bound
+  `chunkCount` that follows from it (§3), the `K_blob` wrap, and optionally the blob's metadata sealed under that
+  `K_blob` — the `blob-meta` seal, which the blob row keeps write-once and every read of the blob serves back
+  unchanged); the backend opens a session per blob, **bound
   to whoever opened it** — an account, or a share contributor's identity — and returns presigned `PUT` URLs for
   the blob's **first window** of chunks. The client asks for **each next window** as it goes (the same
   operation re-signs a window whose URLs expired), and every such request is **authorized again**: the session

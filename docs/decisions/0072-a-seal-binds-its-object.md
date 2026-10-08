@@ -39,7 +39,9 @@ envelope, so a ciphertext moved to a different slot fails to open.
 
 **2. Where the key is unique to one object, the key is the binding and the context names the purpose only.**
 Chunk frames under a per-blob `K_blob` (their AAD stays `index ‖ total`, and the `K_blob` wrap itself is bound
-to its blob), a share's fields under its own `K_share`, the Master-Key wraps under a KEK with a fresh salt, the
+to its blob), a blob's sealed metadata under that same `K_blob` (`blob-meta` — its type, upload name and
+modification time; its AAD `0x02 ‖ 'v1' ‖ lp('blob-meta')` is 16 bytes against a frame's 8, so the two never open as
+each other), a share's fields under its own `K_share`, the Master-Key wraps under a KEK with a fresh salt, the
 single-use pairing envelope, and the two WebCrypto seals under a non-extractable per-device key. Those WebCrypto
 seals carry no AAD today, and they gain their purpose as `additionalData`.
 
