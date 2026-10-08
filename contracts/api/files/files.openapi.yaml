@@ -16,12 +16,39 @@ info:
     **Operator-blind:** the server holds the ciphertext chunks, the `K_blob` wrap (sealed under the file node's
     key, bound to the blob id, the node id and the role — ADR 0072, ADR 0080 Decision 13) and opaque sizes; never
     a plaintext byte, a key, a file name or a MIME type.
+
+    **Guest operations** (tag `share-files`, cr-files-application F2): on a public share link ([docs/apps/files.md](../../../docs/apps/files.md),
+    [ADR 0080](../../../docs/decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
+    Decision 6): a guest of a `READ` or `READ_WRITE` folder link lists the blob references of the files in the shared
+    subtree; a guest of a `READ_WRITE` link completes an upload it started through core's guest transport
+    (`sharing.openapi.yaml` `startShareBlobUploads` / `presignShareBlobUploadWindows`, with `role: FILE_CONTENT`,
+    `ownerId` and `nodeId` = the file node) into a file below the root — one it created with core's
+    `createShareNode`, or one already there, replacing its blob. Everything else is core's and is not repeated here:
+    the shared nodes with their keys, names and sealed metadata (`resolveShare`), a file's download
+    (`resolveShareBlob` by `blobId`), a guest's create, rename and move (`createShareNode`, `updateShareNode`). A
+    guest deletes no file (nodes store no authorship, ADR 0080 Decision 6).
+    The link itself — its id, password, access mode and guest identities — is core's; these operations sit under its
+    `/api/shares/{shareId}` path and pass core's guest gate first (`ShareGuestGate`: an active share → the password →
+    the mode → the guest's token → the per-share upload budget where the operation spends it), then do the
+    application's work ([ADR 0079](../../../docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)
+    § Application guest operations).
+
+    **No auth, operator-blind.** Every guest operation is anonymous: a guest holds no account, only the link (and, to
+    write, the `contributorToken` its identity was issued). The server sees ids, opaque sizes and the `K_blob` wrap
+    (sealed under the file node's key) — never a plaintext byte, a key, a file name or a MIME type.
+
 tags:
   - name: files
     description: >
       A member's files under a scope: complete an upload into a file node (first upload or replace) and list the
       blob references of a folder's files. One tag = one resource interface rooted at
       `/api/scopes/{scopeId}/files`.
+  - name: share-files
+    description: >
+      A guest's files on a public share link — list the file blobs under the shared subtree, complete an upload into a
+      file below the root (unauthenticated). One tag = one resource interface owning the `/api/shares/{shareId}/files`
+      subtree: longer than core's `sharing` root `/api/shares`, so these routes reach this resource and every other
+      `/api/shares` route stays core's.
 
 paths:
   /api/scopes/{scopeId}/files:
@@ -133,6 +160,121 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_target } }
 
+  /api/shares/{shareId}/files:
+    get:
+      tags: [share-files]
+      operationId: listShareFiles
+      summary: The blob reference of every live file under a share (unauthenticated).
+      description: >
+        **No auth.** The Files half of a guest's read of a link: core's `resolveShare` serves the shared nodes with
+        their keys, names and sealed metadata, this serves the blob each live `FILE` among them holds — `fileBlob:
+        null` for one whose upload has not completed. Core's guest gate runs first (`ShareGuestGate`): an active
+        share → the password → the access mode. Only files of the **live** shared subtree are listed: a file in the
+        trash, or under a trashed folder, is not (and its blob answers `404` at `resolveShareBlob`). Ordered by
+        `nodeId`. A `WRITE_ONLY` link is served an empty list. A disabled, expired, or unknown share is a
+        non-enumerable `404`.
+        **Password-protected shares (ADR 0037):** the valid `X-Share-Password` token is required — a missing token
+        is `404` (the password challenge is `resolveShare`'s locked response), a wrong one `403
+        share_password_incorrect`.
+      parameters:
+        - $ref: "#/components/parameters/ShareId"
+        - $ref: "#/components/parameters/SharePassword"
+      responses:
+        "200":
+          description: Every live file under the live shared subtree with its blob reference or null (empty for a `WRITE_ONLY` link).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ShareFileListing" }
+        "403":
+          description: The share is password-protected and the presented `X-Share-Password` token is wrong.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_password_incorrect } }
+        "404":
+          description: No such share (disabled/expired/unknown, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4)), or a required password token is absent — non-enumerable, identical in every case.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
+        "429":
+          description: Too many wrong password attempts on this share (the password gate's own limiter).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: rate_limited } }
+
+  /api/shares/{shareId}/files/{nodeId}/content:
+    post:
+      tags: [share-files]
+      operationId: completeShareFile
+      summary: Complete a guest upload as a file's blob (unauthenticated) — the first one, or a replacement of the blob the guest read.
+      description: >
+        **No auth.** A `READ_WRITE` guest's `completeFile`: promote one session it opened with `startShareBlobUploads`
+        (`role: FILE_CONTENT`, `ownerId` = `nodeId` = this file) into the blob of the file's `FILE_CONTENT` slot.
+        Core's guest gate runs first (`ShareGuestGate`) and spends the per-share upload budget. The node must be a
+        live `FILE` inside the share's subtree (a link's role applies to every node below its root as Files allows
+        it, ADR 0080 Decision 6) — checked again in the write, under the scope lock, with the link: a file trashed or
+        moved out of the subtree since, or a link revoked or deleted since, refuses it (`upload_not_found`).
+        Declare-then-verify, the compare-and-set on `expectedBlobId` and the reclaim of a replaced blob are exactly
+        `completeFile`'s. The attachment is stamped with the guest's identity: the per-link storage limit counts it
+        (ADR 0073 §4). **`wrappedMeta`**, when given, is the file's sealed metadata under the file node's key (the
+        format `completeFile`'s caller writes with `updateNode`); it replaces the node's `wrappedMeta` in the same
+        transaction as the swap, so the description goes with the bytes it describes, and the node's `metaVersion`
+        moves by one. A guest has no other way to write a node's payload (`createShareNode` takes none).
+        **Password-protected shares (ADR 0037):** no `X-Share-Password` → non-enumerable `404`; a wrong token →
+        `403 share_password_incorrect`.
+      parameters:
+        - $ref: "#/components/parameters/ShareId"
+        - $ref: "#/components/parameters/NodeId"
+        - $ref: "#/components/parameters/SharePassword"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ShareFileCompleteRequest" }
+            example:
+              contributorToken: Y29udHJpYnV0b3ItdG9rZW4tb3BhcXVl
+              uploadId: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+              wrappedMeta: bWV0YS1jaXBoZXJ0ZXh0
+      responses:
+        "200":
+          description: The file's blob is now this upload's (any replaced blob was reclaimed).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FileBlobRef" }
+        "400":
+          description: Malformed request (`invalid_request`), or the upload failed declare-then-verify (`budget_exceeded`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: budget_exceeded } }
+        "403":
+          description: >
+            The share does not allow contributions, the contributor token is invalid, the root is in the trash, the
+            node is no `FILE` (a `FOLDER`, the share root's included), or a `WRITE_ONLY` link names a node below its
+            root (`share_not_contributable`); or it is password-protected and the `X-Share-Password` token is wrong
+            (`share_password_incorrect`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_contributable } }
+        "404":
+          description: >
+            No such share (disabled/expired/unknown, or its space is being deleted or its tenant suspended
+            (uc.spaces.scope-access A4)), or it is password-protected and no `X-Share-Password` token was given —
+            non-enumerable (`share_not_found`); the node is no live node inside the share's subtree — trashed, outside
+            it, or none (`node_not_found`); or no open upload of this guest under `uploadId` — never started, already
+            completed, expired, or refused by the write's re-check (`upload_not_found`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+        "409":
+          description: >
+            The slot does not hold `expectedBlobId` (`stale_file`): nothing was attached, the upload was spent and
+            reclaimed, and `currentBlobId` is what the slot holds now (null: empty).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FileConflict" }
+              example: { code: stale_file, currentBlobId: 8b2c1f2d-3e4a-5b6c-7c3f-0e2a9b1d4a6e }
+        "422":
+          description: The upload was not started for this node in the role `FILE_CONTENT` (`upload_mismatch`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: upload_mismatch } }
+        "429":
+          description: Too many wrong password attempts on this share, or its upload budget is spent for the current window (per-share rate limit).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: rate_limited } }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -153,6 +295,23 @@ components:
       required: true
       description: Opaque id of the `FILE` node.
       schema: { type: string, format: uuid, example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e }
+
+    ShareId:
+      name: shareId
+      in: path
+      required: true
+      description: The opaque 256-bit share id (base64url, unguessable) — half the capability; the other half is the fragment key.
+      schema: { type: string, minLength: 43, maxLength: 43, pattern: "^[A-Za-z0-9_-]{43}$", example: 3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i }
+    SharePassword:
+      name: X-Share-Password
+      x-veyq-visibility: token
+      in: header
+      required: false
+      description: >
+        The password token `base64(Argon2id(password, pwSalt))` for a password-protected share (cr-0118, ADR 0037).
+        Omit for a share with no password; a locked resolve then returns only `passwordRequired` + `pwSalt` so the
+        client can prompt and retry with this header.
+      schema: { type: string, maxLength: 64, pattern: "^[A-Za-z0-9+/]*={0,2}$" }
 
   schemas:
     FileCompleteRequest:
@@ -242,6 +401,52 @@ components:
           type: [string, "null"]
           format: uuid
           example: 8b2c1f2d-3e4a-5b6c-7c3f-0e2a9b1d4a6e
+
+    ShareFileCompleteRequest:
+      type: object
+      required: [contributorToken, uploadId]
+      properties:
+        contributorToken:
+          x-veyq-visibility: token
+          type: string
+          description: The capability token from `createShareIdentity`.
+          maxLength: 512
+          example: Y29udHJpYnV0b3ItdG9rZW4tb3BhcXVl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 512)'
+        uploadId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The upload session this guest opened with `startShareBlobUploads` for this node in the role `FILE_CONTENT`.
+          example: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+        expectedBlobId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: >
+            The blob the guest saw in the file's slot (`listShareFiles`) — the one this upload replaces. Absent (or
+            null) for the first upload into an empty slot. A slot holding anything else answers `409 stale_file`.
+          example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
+        wrappedMeta:
+          type: [string, "null"]
+          description: >
+            The file's sealed metadata under the file node's key (AAD `node-meta`; opaque base64, Files' format) — it
+            replaces the node's `wrappedMeta` with the swap. Absent: the node's metadata is left as it is.
+          contentEncoding: base64
+          maxLength: 8192
+          example: bWV0YS1jaXBoZXJ0ZXh0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    ShareFileListing:
+      type: object
+      description: >
+        What a guest is served of the files under a shared subtree: one item per live `FILE`, the member listing's
+        item shape.
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/FileListItem" }
 
     ErrorResponse:
       $ref: '../_common.openapi.yaml#/components/schemas/ErrorResponse'
