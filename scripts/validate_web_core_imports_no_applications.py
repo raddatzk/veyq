@@ -26,7 +26,7 @@ Dependencies run application → core, never back, and never application → app
 - **glob** (core): no file contains `import.meta.glob`. Discovery by glob would hide an edge from the rules above,
   and ADR 0079 Decision 5 says what runs is what was reviewed.
 - **kind** (core): no file names an application's node kind — `NodeKind.Memory`, `NodeKind.Chapter`,
-  `NodeKind.File`, `'MEMORY'`, `'CHAPTER'` or `'FILE'`. The shell asks a registry what to render for a kind; it does
+  `NodeKind.File`, `'MEMORY'`, `'CHAPTER'`, `'FILE'` or `'FILES_DROPBOX'`. The shell asks a registry what to render for a kind; it does
   not know which kinds the applications have. Since the contract's `NodeKind` opened to a bounded token
   (cr-platform-contract-split slice 4) the generated client has no `NodeKind` enum and core types a kind as a string
   with a `FOLDER_KIND` constant (`core/node/kind.ts`), so a literal is the spelling left; the enum spelling stays
@@ -98,7 +98,7 @@ SPECIFIER = re.compile(r"""(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)(['"])([^'"
 GLOB = re.compile(r"\bimport\.meta\.glob(?:Eager)?\b")
 # The applications' kinds — Memories' MEMORY and CHAPTER, Files' FILE. Built from parts so this file never spells a
 # kind literal it forbids.
-KIND = re.compile(r"\bNodeKind\.(?:Memory|Chapter|File)\b|['\"](?:" + "MEMO" + "RY|" + "CHAP" + "TER|" + "FI" + "LE)['\"]")
+KIND = re.compile(r"\bNodeKind\.(?:Memory|Chapter|File)\b|['\"](?:" + "MEMO" + "RY|" + "CHAP" + "TER|" + "FI" + "LE|" + "FILES_DROP" + "BOX)['\"]")
 
 
 def application_of(rel: pathlib.PurePosixPath) -> str | None:
