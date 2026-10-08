@@ -1,5 +1,7 @@
 // uc.memory.concurrent-curation (web) — the one write loop behind every sealed-meta writer (ADR 0077): a node's
-// `wrappedMeta` (a Memory's date, place, cover) and a media's listed tier (corrected time, place name, media type).
+// `wrappedMeta` (a Memory's date, place, cover; a file's MIME type, size, modified time) and a media's listed tier
+// (corrected time, place name, media type). Core's since cr-files-application F1b (moved from Memories unchanged), so
+// every application's meta writer runs the same loop; each brings its own envelope (`open`/`seal`) and its own `send`.
 // Any member writes these blobs WHOLE, and the server cannot merge what it cannot read, so the merge is ours:
 // every write states the `metaVersion` it was built from; a `409 stale_version` hands back the current blob, and
 // the writer re-runs ONLY its own change on it — the identity-pin loop (`account/identityPins.ts`).

@@ -68,7 +68,7 @@ import {
 } from '../../api/generated/blob'
 import { fakeApi, stubApi } from '../../test/apiMock'
 import { mediaItem } from '../../test/models'
-import { MetaConflictError, MetaUnreadableError } from './sealedMetaWrite'
+import { MetaConflictError, MetaUnreadableError } from '../../core/node/sealedMetaWrite'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 

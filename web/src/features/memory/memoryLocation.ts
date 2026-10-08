@@ -13,7 +13,7 @@
 import { unsealMeta, type MediaItem } from './media'
 import { editField, unsealNodeMeta } from './nodeMeta'
 import { writeNodeMeta } from './nodeMetaWrite'
-import type { SealedMetaState } from './sealedMetaWrite'
+import type { SealedMetaState } from '../../core/node/sealedMetaWrite'
 import type { GeoLevel } from './geocode'
 
 /** A geographic point in decimal degrees. */

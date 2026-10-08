@@ -30,7 +30,7 @@ import {
 } from '../../core/blob/transport'
 import type { BlobDeclare, BlobRef, ReservedUpload, WindowFn } from '../../core/blob/types'
 import { mediaKey, uploaderOriginOf, type UploaderOrigin } from './mediaKey'
-import { MetaConflictError, MetaUnreadableError, writeSealedMeta, type MetaEditContext } from './sealedMetaWrite'
+import { MetaConflictError, MetaUnreadableError, writeSealedMeta, type MetaEditContext } from '../../core/node/sealedMetaWrite'
 import type { ChunkProvider } from '../../sw/protocol'
 import { createBrowserDeriver, deriveTiers, type MediaDeriver, type AddMediaSource, type Dimensions } from '../../shared/image/mediaDeriver'
 

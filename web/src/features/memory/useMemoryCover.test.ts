@@ -19,7 +19,7 @@ vi.mock('./memoryCover', () => ({
 import { deleteCoverBlob, uploadCoverBlob, type BlobRef } from './media'
 import { setMemoryCover, unsealMemoryCover, type MemoryCover } from './memoryCover'
 import { useMemoryCover } from './useMemoryCover'
-import { MetaConflictError, MetaUnreadableError } from './sealedMetaWrite'
+import { MetaConflictError, MetaUnreadableError } from '../../core/node/sealedMetaWrite'
 import { i18n } from '../../i18n'
 import type { TreeNode } from '../../core/node/tree'
 

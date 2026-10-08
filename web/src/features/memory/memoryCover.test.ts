@@ -31,7 +31,7 @@ import {
   type MemoryCover,
 } from './memoryCover'
 import { contentApi } from '../../api/client'
-import { MetaConflictError } from './sealedMetaWrite'
+import { MetaConflictError } from '../../core/node/sealedMetaWrite'
 import { listMedia, openGrid, openBlob, hasDerivatives } from './media'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'

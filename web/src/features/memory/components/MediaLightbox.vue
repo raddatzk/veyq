@@ -26,7 +26,7 @@ import {
   type MediaMeta,
   type MediaMetaWrite,
 } from '../media'
-import { MetaConflictError, MetaUnreadableError, staleMetaOf, type SealedMetaState } from '../sealedMetaWrite'
+import { MetaConflictError, MetaUnreadableError, staleMetaOf, type SealedMetaState } from '../../../core/node/sealedMetaWrite'
 import { derivedDownloadName, sniffMediaType } from '../download'
 import { saveBytes } from '../../../shared/saveBytes'
 import type { ChunkProvider } from '../../../sw/protocol'

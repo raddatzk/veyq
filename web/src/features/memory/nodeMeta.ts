@@ -14,7 +14,7 @@
 // `memoryLocation`, `memoryCover`) own how each sub-object is validated + materialized.
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
-import { MetaConflictError, MetaUnreadableError, stableJson, type MetaEditContext, type SealedMetaState } from './sealedMetaWrite'
+import { MetaConflictError, MetaUnreadableError, stableJson, type MetaEditContext, type SealedMetaState } from '../../core/node/sealedMetaWrite'
 
 /** The node a metadata blob belongs to (ADR 0072). */
 export type NodeMetaAddress = { scopeId: string; nodeId: string }
