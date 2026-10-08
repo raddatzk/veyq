@@ -19,8 +19,10 @@ acceptanceCriteria:
     text: An explicit download fetches the pristine, full-resolution original (the only byte-identical copy).
     coverage:
       backend: { integration: [MediaSliceTest.startCompleteListRoundTrip] }
-      web: { unit: [src/features/memory/media.test.ts, src/features/memory/components/MediaLightbox.test.ts, src/features/memory/download.test.ts] }
+      web: { unit: [src/features/memory/media.test.ts, src/features/memory/components/MediaLightbox.test.ts, src/features/memory/download.test.ts, src/features/memory/download.stream.test.ts] }
     gaps:
+      - surface: web
+        reason: The download streams into a save target (a picked file, the Service Worker's download route, or a Blob up to 512 MiB), proven by unit tests with the real chunk provider over a fake store and fake sinks; no real browser has streamed a multi-gigabyte original, and no e2e drives the lightbox's download (inbox #371).
       - surface: backend
         reason: >
           The integration ref runs against the in-memory store, which moves no bytes: it proves the upload's
@@ -134,12 +136,13 @@ acceptanceCriteria:
           - src/features/memory/media.test.ts
           - src/features/memory/components/MemoryDetail.test.ts
   - id: media-type-lazy-backfill
-    text: A pre-field media (uploaded before the sealed mediaType existed) carries no video signal; on the first download of its original the client sniffs the decrypted bytes (magic bytes, incl. WebM/MKV via the EBML DocType) and re-seals the type into the tier (updateMediaMeta), so the next listing shows the badge + the <video> branch. Never in the read-only public viewer (no authed write path); a never-fetched pre-field video stays without a signal — the accepted boundary (ADR 0047). cr-inline-video-playback (#104/#105).
+    text: A pre-field media (uploaded before the sealed mediaType existed) carries no video signal; on the first download of its original the client sniffs the decrypted first chunk, read before the save target opens (magic bytes, incl. WebM/MKV via the EBML DocType) and re-seals the type into the tier (updateMediaMeta), so the next listing shows the badge + the <video> branch. Never in the read-only public viewer (no authed write path); a never-fetched pre-field video stays without a signal — the accepted boundary (ADR 0047). cr-inline-video-playback (#104/#105).
     coverage:
       web:
         unit:
           - src/features/memory/media.test.ts
           - src/features/memory/download.test.ts
+          - src/features/memory/download.stream.test.ts
           - src/features/memory/components/MediaLightbox.test.ts
   - id: sw-range-streaming
     text: A playing video is streamed, not fetched whole — a Service Worker intercepts a synthetic in-origin URL, parses the demuxer's HTTP Range (first probe, closed, open-ended, suffix; no-Range → 200 + Accept-Ranges), maps the plaintext byte-range to the covering ciphertext chunk indices (plaintextTotal = byteSize − 28·chunkCount), assembles the window and answers 206 Partial Content with Content-Range. The range↔chunk math is pure + unit-tested; the SW's fetch/206 assembly is tested against a mocked page port. cr-inline-video-playback Slice 2 (ADR 0047).
