@@ -73,7 +73,13 @@ dispatcher to `FilesUploadCompletion` (`UploadCompletion` for `FILE`, maps the i
   FILE sibling already holds by `fileNameSlug`, replace that file after the member confirmed), plan and pump the blob
   under the node's own key, `completeFile` with `expectedBlobId`, then write the meta (`fileMeta.ts`). The status menu
   shows progress; the section says why a file of its folder was not uploaded (a taken name, `stale_file` with
-  "replace anyway", no space) or that its meta is missing.
+  "replace anyway", no space) or that its meta is missing. **A given-up job cleans up** (inbox #384): failed after its
+  retry or cancelled (core's queue calls the job's `abandon`), a job moves a node it created to the trash once
+  `listFiles` shows it still holds no content — best effort; a node it cannot trash stays and its retry fills it. A file
+  that holds no content anyway (an upload cut off, e.g. a closed tab; a guest's, which a guest cannot delete) offers an
+  upload into it instead of a replace, and a picked file of its name fills it without the replace question. The row's
+  replace keeps the file's name (its tooltip says so); a rename selects the name without its extension (`register.ts`
+  `renameSelectionEnd`).
 - **The download** (`download.ts`) presigns the blob's chunks, opens them under the node key at most four at a time and
   streams them in order (`core/blob/stream.ts`) into the save target `shared/saveStream.ts` opens: a file the member
   picks (File System Access, where the browser has it), else the Service Worker's download route
@@ -117,8 +123,8 @@ A `FILE` is **no share root** (Files declares no `ShareRoots`): a file is shared
   `shareSection` for its children; Files' is `components/ShareFilesSection.vue` — the files with name, size and date
   opened under the chain's keys, download through the link, and for a contributor an upload button (one core-queue job
   per file, `shareUpload.ts`: guest create → guest transport → `completeShareFile` with the meta) and a replace per
-  row, above the list the sentence that it can replace any file, the owner's too, and that no version is kept (no
-  confirmation asks yet, inbox #383). The guest names itself once per link through the page's own dialog (`requestGuest`). No rename on the guest
+  row (an upload into it, for a file that holds no content), above the list the sentence that it can replace any file,
+  the owner's too, and that no version is kept (no confirmation asks yet, inbox #383). The guest names itself once per link through the page's own dialog (`requestGuest`). No rename on the guest
   page (no kind has one there yet, inbox #358).
 
 ## The drop box
@@ -137,7 +143,9 @@ one per guest identity, which are core `FOLDER`s carrying `veyq_node.share_ident
   `childEntryKey`); no new seal purpose, no vector change. A guest-sealed entry that does not open leaves that folder
   out of the member's tree instead of failing it.
 - **The guest** (`components/DropBoxShareBody.vue`, `dropBox.ts`): names itself once (the session keeps identity,
-  token and `K_up` on the device), then **`ensureShareDropFolder`** — `POST /api/shares/{shareId}/files/drop-folder`,
+  token, `K_up` and the name on the device; the page says "Sending as …" with a "Not you?" that forgets the session there
+  and asks for a name again — a new identity, the old one's folder untouched; after a gone link the same action starts
+  over), then, with its **first file**, **`ensureShareDropFolder`** — `POST /api/shares/{shareId}/files/drop-folder`,
   Files' operation over core's `IdentityFolders`: the first call creates the folder from the guest's ciphertext, every
   later call (a reload, a second tab, a concurrent first upload) answers the same folder with its stored wrap. Then per
   file core's guest create **inside its own folder** (`createShareNode`: a `WRITE_ONLY` link creates only there, and
@@ -153,7 +161,8 @@ one per guest identity, which are core `FOLDER`s carrying `veyq_node.share_ident
 - **The member** (`components/DropBoxSection.vue`, `DropBoxDetail.vue`, `DropBoxCreateDialog.vue`,
   `DropBoxShareDialog.vue`): creates a drop box from a folder level, mints, copies, switches off and deletes its links,
   opens it to its guests' folders (a repeated guest name numbered at display time, never stored), opens a folder
-  (core's level view, read-only there: download only) and deletes a folder. **Members place nothing** in a drop box or
+  (core's level view, read-only there: download only, no share, and no section that has nothing to show — the host's
+  `hideEmptySections`) and deletes a folder. **Members place nothing** in a drop box or
   a guest's folder (core: no rule places into the drop box; a create, move or rename into an identity folder is
   `illegal_structure`, `NodesHandler`), and only delete or move out — a move out re-wraps and re-slugs under the
   target and ends the folder's identity link. The server allows the move out; the web offers no move yet (inbox #358).

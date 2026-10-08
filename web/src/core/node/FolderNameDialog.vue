@@ -15,6 +15,7 @@ import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import { createFolder, renameNode, type NodeParent, type TreeNode } from './tree'
 import { treeStore } from './treeStore'
+import { registry } from '../applications/registry'
 import { resealShareNames } from '../sharing/manageShares'
 import { useToast } from '../../shared/state/useToast'
 import type { EpochKeys } from '../../features/spaces/epochs'
@@ -83,6 +84,20 @@ async function resealAfterRename(nodeId: string, newName: string): Promise<void>
 }
 const canSubmit = computed(() => name.value.trim().length > 0 && !loading.value)
 
+/** A rename selects what its kind says a rename usually changes (`KindDescriptor.renameSelectionEnd`: a file's name
+ *  without its extension), once, as the dialog opens — on its `show`, BEFORE it focuses the field: a programmatic focus
+ *  keeps a selection already set, and a focus event is not to be relied on (a window without system focus fires none,
+ *  measured in the browser pane). */
+const nameInput = ref<{ $el: HTMLElement } | null>(null)
+function selectForRename() {
+  if (props.mode !== 'rename' || !props.node) return
+  const info = registry.kind(props.node.kind)
+  const end = info.supported ? info.renameSelectionEnd?.(name.value) : undefined
+  const el = nameInput.value?.$el
+  const input = el instanceof HTMLInputElement ? el : el?.querySelector('input')
+  if (end !== undefined && input) input.setSelectionRange(0, end)
+}
+
 async function submit() {
   if (!canSubmit.value) return
   error.value = ''
@@ -91,11 +106,11 @@ async function submit() {
 </script>
 
 <template>
-  <Dialog :visible="true" :header="header" modal :closable="!loading" :close-on-escape="!loading" @update:visible="emit('close')">
+  <Dialog :visible="true" :header="header" modal :closable="!loading" :close-on-escape="!loading" @update:visible="emit('close')" @show="selectForRename">
     <form class="veyq-form" @submit.prevent="submit">
       <label>
         {{ t('node.nameLabel') }}
-        <InputText v-model="name" autocomplete="off" required autofocus :disabled="loading" />
+        <InputText ref="nameInput" v-model="name" autocomplete="off" required autofocus :disabled="loading" />
       </label>
 
       <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>

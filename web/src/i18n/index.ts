@@ -5,7 +5,7 @@ import { createI18n } from 'vue-i18n'
 export type SupportedLocale = 'en' | 'de'
 
 const en = {
-  common: { email: 'Email', password: 'Password', cancel: 'Cancel', save: 'Save', create: 'Create', done: 'Done', show: 'Show', hide: 'Hide', undo: 'Undo', more: 'More', zoom: 'Zoom', unreachable: 'This instance can’t be reached right now. Please try again.' },
+  common: { email: 'Email', password: 'Password', cancel: 'Cancel', save: 'Save', create: 'Create', close: 'Close', done: 'Done', show: 'Show', hide: 'Hide', undo: 'Undo', more: 'More', zoom: 'Zoom', unreachable: 'This instance can’t be reached right now. Please try again.' },
   notSetUp: {
     title: 'This instance isn’t set up yet',
     sub: 'Nobody has created the first account on this server, so there is nothing here to sign in to yet.',
@@ -757,6 +757,8 @@ const en = {
     folders: 'Folders',
     folderEmpty: 'No folders here yet.',
     folderCreate: 'New folder',
+    // A level where empty sections are left out (a guest's folder in a drop box) and nothing is left to show.
+    levelEmpty: 'Nothing here yet.',
     createFolderTitle: 'Create a folder',
     renameTitle: 'Rename',
     nameLabel: 'Name',
@@ -768,14 +770,17 @@ const en = {
     // The delete dialog (core's `DeleteNodeDialog`): a folder's own title and copy; any other node's title is its kind's
     // `deleteTitle` from the registry (Memories: `memory.deleteMemoryTitle`), else the neutral `node.delete`.
     deleteFolderTitle: 'Delete folder',
-    deleteFolderCopy: 'Delete “{name}” and everything inside it? This can’t be undone.',
-    deleteCopy: 'Delete “{name}”? This can’t be undone.',
+    // Every node delete is a move to the space's trash (`deleteNode`, ADR 0061): the copy says so (inbox #385).
+    deleteFolderCopy: '“{name}” and everything inside it move to the trash. You can restore them from there until they are removed for good.',
+    deleteCopy: '“{name}” moves to the trash. You can restore it from there until it is removed for good.',
     deleteFailed: 'Could not delete it. Please try again.',
     // The space's node trash (core's `SpaceTrashDialog`): it holds every application's nodes, so it names none.
     trash: {
       title: 'Trash',
+      // The level view's own toolbar button (core's: the trash holds every application's nodes).
+      open: 'Trash',
       hint: 'Deleted items wait here — with everything inside them — until the date shown. Restore one and it comes back complete.',
-      empty: 'Nothing has been deleted here.',
+      empty: 'The trash is empty.',
       loadFailed: 'Could not open the trash. Please try again.',
       restore: 'Restore',
       restoreFailed: 'Could not restore this. Please try again.',
@@ -861,9 +866,6 @@ const en = {
       save: 'Save cover',
     },
     // The toolbar button in Memories' section that opens core's node trash (`node.trash.*`).
-    spaceTrash: {
-      open: 'Trash',
-    },
     trash: {
       title: 'Trash',
       empty: 'The trash is empty.',
@@ -934,11 +936,14 @@ const en = {
     notUploaded: 'Not uploaded yet',
     modified: 'Modified {date}',
     download: 'Download {name}',
-    replace: 'Replace {name}',
+    // The row's replace keeps the file's name: the picked file's content goes into it (inbox #385).
+    replace: 'Replace the content of {name} — the name stays',
+    // A file that holds no content (an upload that never finished, inbox #384): its row uploads into it.
+    uploadInto: 'Upload {name} again',
     rename: 'Rename {name}',
     delete: 'Delete {name}',
     replaceTitle: 'Replace file',
-    replaceConfirm: 'Replace {name}? A file with this name is already here: its content is replaced by the file you picked, and the old content is deleted.',
+    replaceConfirm: 'Replace “{name}”? A file with this name is already here: its content is replaced by the file you picked, and the old content is deleted.',
     replaceAccept: 'Replace',
     deleteTitle: 'Delete file',
     deleteConfirm: '“{name}” moves to the trash. You can restore it from there until it is deleted for good.',
@@ -969,6 +974,8 @@ const en = {
       section: 'Drop boxes',
       create: 'New drop box',
       createTitle: 'New drop box',
+      createHint: 'A drop box collects files from people without an account. Share a link: everyone who uses it gets a folder of their own here, and nobody sees what others sent.',
+      sectionEmpty: 'No drop boxes yet. A drop box collects files from people without an account.',
       createFailed: 'The drop box could not be created. Please try again.',
       open: 'Open {name}',
       empty: 'Nobody has dropped anything yet. Share a link to collect files.',
@@ -976,8 +983,8 @@ const en = {
       share: 'Share link',
       delete: 'Delete drop box',
       deleteFolder: 'Delete {name}',
-      deleteFolderConfirm: '“{name}” and everything in it moves to the trash.',
-      readOnlyHint: 'What guests dropped here can only be downloaded, deleted or moved out.',
+      deleteFolderConfirm: '“{name}” and everything in it move to the trash.',
+      readOnlyHint: 'Guests’ files can only be downloaded here. To remove what someone sent, delete their folder.',
       shareTitle: 'Drop box links',
       shareHint: 'Anyone with a link can add files. Nobody with it sees the drop box or what others added.',
       shareNone: 'No link yet.',
@@ -986,6 +993,7 @@ const en = {
       shareCopied: 'Copied',
       shareRevoke: 'Switch off',
       shareDelete: 'Delete link',
+      shareDeleteConfirm: 'Delete this link for good? Nobody can send files with it any more. What guests already sent stays in the drop box.',
       shareOff: 'Off',
       shareFailed: 'That didn’t work. Please try again.',
       close: 'Close',
@@ -994,6 +1002,12 @@ const en = {
       guestNameLabel: 'Your name',
       guestNameHint: 'The owner sees your files under this name.',
       guestStart: 'Continue',
+      // Whose session this device holds (inbox #385): its name, and a way for the next person to start their own.
+      guestAs: 'Sending as {name}.',
+      guestNotYou: 'Not you?',
+      guestStartOver: 'Start over under a new name',
+      // The folder's name when a session saved before names were kept sends its first file (its folder exists already).
+      guestNameFallback: 'Guest',
       guestPick: 'Choose files',
       // The guest's files of this session (inbox #381): what is being sent, what arrived, what did not and why.
       guestSession: 'Your files in this session',
@@ -1243,7 +1257,7 @@ const en = {
 }
 
 const de: typeof en = {
-  common: { email: 'E-Mail', password: 'Passwort', cancel: 'Abbrechen', save: 'Speichern', create: 'Erstellen', done: 'Fertig', show: 'Anzeigen', hide: 'Verbergen', undo: 'Rückgängig', more: 'Mehr', zoom: 'Zoom', unreachable: 'Diese Instanz ist gerade nicht erreichbar. Bitte erneut versuchen.' },
+  common: { email: 'E-Mail', password: 'Passwort', cancel: 'Abbrechen', save: 'Speichern', create: 'Erstellen', close: 'Schließen', done: 'Fertig', show: 'Anzeigen', hide: 'Verbergen', undo: 'Rückgängig', more: 'Mehr', zoom: 'Zoom', unreachable: 'Diese Instanz ist gerade nicht erreichbar. Bitte erneut versuchen.' },
   notSetUp: {
     title: 'Diese Instanz ist noch nicht eingerichtet',
     sub: 'Auf diesem Server wurde noch kein erstes Konto angelegt — es gibt hier also noch nichts, wo du dich anmelden könntest.',
@@ -1964,6 +1978,7 @@ const de: typeof en = {
     folders: 'Ordner',
     folderEmpty: 'Hier gibt es noch keine Ordner.',
     folderCreate: 'Neuer Ordner',
+    levelEmpty: 'Hier ist noch nichts.',
     createFolderTitle: 'Ordner anlegen',
     renameTitle: 'Umbenennen',
     nameLabel: 'Name',
@@ -1973,13 +1988,14 @@ const de: typeof en = {
     illegalStructure: 'Das ist hier nicht erlaubt.',
     saveFailed: 'Das hat nicht geklappt. Bitte versuche es erneut.',
     deleteFolderTitle: 'Ordner löschen',
-    deleteFolderCopy: '„{name}" und alles darin löschen? Das lässt sich nicht rückgängig machen.',
-    deleteCopy: '„{name}" löschen? Das lässt sich nicht rückgängig machen.',
+    deleteFolderCopy: '„{name}“ und alles darin kommen in den Papierkorb. Dort lässt sich alles wiederherstellen, bis es endgültig entfernt wird.',
+    deleteCopy: '„{name}“ kommt in den Papierkorb. Dort lässt es sich wiederherstellen, bis es endgültig entfernt wird.',
     deleteFailed: 'Konnte nicht gelöscht werden. Bitte versuche es erneut.',
     trash: {
       title: 'Papierkorb',
+      open: 'Papierkorb',
       hint: 'Gelöschte Einträge warten hier — mit allem, was darin ist — bis zum angezeigten Datum. Stellst du etwas wieder her, kommt es vollständig zurück.',
-      empty: 'Hier wurde noch nichts gelöscht.',
+      empty: 'Der Papierkorb ist leer.',
       loadFailed: 'Der Papierkorb konnte nicht geöffnet werden. Bitte erneut versuchen.',
       restore: 'Wiederherstellen',
       restoreFailed: 'Konnte nicht wiederhergestellt werden. Bitte erneut versuchen.',
@@ -2062,9 +2078,6 @@ const de: typeof en = {
       remove: 'Cover entfernen',
       save: 'Cover speichern',
     },
-    spaceTrash: {
-      open: 'Papierkorb',
-    },
     trash: {
       title: 'Papierkorb',
       empty: 'Der Papierkorb ist leer.',
@@ -2130,11 +2143,12 @@ const de: typeof en = {
     notUploaded: 'Noch nicht hochgeladen',
     modified: 'Geändert {date}',
     download: '{name} herunterladen',
-    replace: '{name} ersetzen',
+    replace: 'Inhalt von {name} ersetzen — der Name bleibt',
+    uploadInto: '{name} erneut hochladen',
     rename: '{name} umbenennen',
     delete: '{name} löschen',
     replaceTitle: 'Datei ersetzen',
-    replaceConfirm: '{name} ersetzen? Eine Datei mit diesem Namen liegt schon hier: Ihr Inhalt wird durch die gewählte Datei ersetzt, der alte Inhalt wird gelöscht.',
+    replaceConfirm: '„{name}“ ersetzen? Eine Datei mit diesem Namen liegt schon hier: Ihr Inhalt wird durch die gewählte Datei ersetzt, der alte Inhalt wird gelöscht.',
     replaceAccept: 'Ersetzen',
     deleteTitle: 'Datei löschen',
     deleteConfirm: '„{name}“ kommt in den Papierkorb. Dort kannst du sie wiederherstellen, bis sie endgültig gelöscht wird.',
@@ -2161,6 +2175,8 @@ const de: typeof en = {
       section: 'Briefkästen',
       create: 'Neuer Briefkasten',
       createTitle: 'Neuer Briefkasten',
+      createHint: 'Ein Briefkasten sammelt Dateien von Personen ohne Konto. Teile einen Link: Wer ihn nutzt, bekommt hier einen eigenen Ordner, und niemand sieht, was andere eingeworfen haben.',
+      sectionEmpty: 'Noch keine Briefkästen. Ein Briefkasten sammelt Dateien von Personen ohne Konto.',
       createFailed: 'Der Briefkasten konnte nicht angelegt werden. Bitte versuche es erneut.',
       open: '{name} öffnen',
       empty: 'Noch hat niemand etwas eingeworfen. Teile einen Link, um Dateien einzusammeln.',
@@ -2168,8 +2184,8 @@ const de: typeof en = {
       share: 'Link teilen',
       delete: 'Briefkasten löschen',
       deleteFolder: '{name} löschen',
-      deleteFolderConfirm: '„{name}“ und alles darin wandert in den Papierkorb.',
-      readOnlyHint: 'Was Gäste hier eingeworfen haben, lässt sich nur herunterladen, löschen oder herausverschieben.',
+      deleteFolderConfirm: '„{name}“ und alles darin kommen in den Papierkorb.',
+      readOnlyHint: 'Die Dateien von Gästen lassen sich hier nur herunterladen. Um zu entfernen, was jemand eingeworfen hat, lösche den Ordner der Person.',
       shareTitle: 'Links zum Briefkasten',
       shareHint: 'Wer einen Link hat, kann Dateien einwerfen. Den Briefkasten und was andere eingeworfen haben, sieht damit niemand.',
       shareNone: 'Noch kein Link.',
@@ -2178,6 +2194,7 @@ const de: typeof en = {
       shareCopied: 'Kopiert',
       shareRevoke: 'Ausschalten',
       shareDelete: 'Link löschen',
+      shareDeleteConfirm: 'Diesen Link endgültig löschen? Niemand kann damit noch Dateien einwerfen. Was Gäste schon eingeworfen haben, bleibt im Briefkasten.',
       shareOff: 'Aus',
       shareFailed: 'Das hat nicht geklappt. Bitte versuche es erneut.',
       close: 'Schließen',
@@ -2186,6 +2203,10 @@ const de: typeof en = {
       guestNameLabel: 'Dein Name',
       guestNameHint: 'Unter diesem Namen sieht die Person, die den Link geteilt hat, deine Dateien.',
       guestStart: 'Weiter',
+      guestAs: 'Du sendest als {name}.',
+      guestNotYou: 'Nicht du?',
+      guestStartOver: 'Mit neuem Namen neu beginnen',
+      guestNameFallback: 'Gast',
       guestPick: 'Dateien auswählen',
       guestSession: 'Deine Dateien in dieser Sitzung',
       guestSending: 'Wird gesendet…',

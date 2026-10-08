@@ -4,7 +4,13 @@
 // folder in the drop box, picks files and uploads them there — one core-queue job per file, the folder contributor's
 // guest job (`shareUpload.ts`) with its folder as the one key it holds. It sees nothing of the drop box or of other
 // guests (the resolve serves no node, `listShareFiles` an empty list): only what it sent in this session. Its session
-// (identity, token, `K_up`) stays on the device, so a reload keeps uploading into the same folder.
+// (identity, token, `K_up`, the name it gave) stays on the device, so a reload keeps uploading into the same folder.
+//
+// Inbox #385 (a): the page says whose session it is ("Sending as Anna") with a "Not you?" that forgets it on this device
+// and asks for a name again — a new identity; the old one's folder stays in the drop box untouched. The same action
+// starts over after the link stopped taking files from this guest (its folder trashed, inbox #381). The folder is made
+// with the FIRST file, not when the guest names itself (`ensureDropFolder` is idempotent: the same folder on every later
+// call), so a visitor who names itself and leaves leaves no empty folder behind — only the identity.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
@@ -14,7 +20,8 @@ import type { ShareBodyProps } from '../../../core/applications/registry'
 import { enqueue, retryFile, useUploadQueue, QUOTA_EXCEEDED, type UploadItem } from '../../../core/blob/queue'
 import { formatBytes } from '../../../shared/formatBytes'
 import {
-  DROP_LINK_GONE, dropGuestContext, dropGuestJob, ensureDropFolder, isDropLinkGone, loadDropGuest, nameDropGuest, saveDropGuest,
+  DROP_LINK_GONE, dropGuestContext, dropGuestJob, ensureDropFolder, forgetDropGuest, isDropLinkGone, loadDropGuest, nameDropGuest,
+  saveDropGuest,
   type DropFolder, type DropGuestSession,
 } from '../dropBox'
 import { guestFileUploadJob } from '../shareUpload'
@@ -44,7 +51,8 @@ const link = {
 }
 
 const queue = useUploadQueue()
-const batchKey = computed(() => `files-drop:${props.shareId}`)
+// Per identity: after "Not you?" the next visitor does not see the files the one before sent.
+const batchKey = computed(() => `files-drop:${props.shareId}:${session.value?.identityId ?? ''}`)
 /** Every file of this session but the cancelled ones: the guest page has no upload menu, so this list is where a
  *  guest sees what is being sent, what arrived and what did not, and why. */
 const items = computed(() =>
@@ -79,6 +87,9 @@ function icon(item: UploadItem): string {
 const retryable = (item: UploadItem) =>
   item.status === 'failed' && !linkGone.value && ![DROP_LINK_GONE, QUOTA_EXCEEDED, FileUploadError.slugTaken].includes(item.error ?? '')
 
+/** A file of this session is still on its way: "Not you?" waits for it (it goes out under the current identity). */
+const sending = computed(() => items.value.some((f) => f.status === 'queued' || f.status === 'preparing' || f.status === 'uploading'))
+
 async function start() {
   const name = displayName.value.trim()
   if (!name) return
@@ -88,7 +99,6 @@ async function start() {
     const named = await nameDropGuest(props.head, { name, pwToken: props.pwToken })
     saveDropGuest(props.shareId, named)
     session.value = named
-    folder = await ensureDropFolder(props.head, session.value, name, props.pwToken)
   } catch (e) {
     if (await isDropLinkGone(e)) linkGone.value = true
     else error.value = t('files.dropBox.guestFailed')
@@ -105,8 +115,10 @@ async function onPicked(e: Event) {
   error.value = null
   try {
     // The guest's one folder: made on its first upload, the same one on every later (and after a reload); the name
-    // sent with the first call is the folder's, later calls' names are ignored by the server.
-    folder ??= await ensureDropFolder(props.head, session.value, displayName.value.trim() || props.head.name, props.pwToken)
+    // sent with the first call is the folder's, later calls' names are ignored by the server. A session saved before
+    // the name was kept already has its folder (it was made when the guest named itself), so its fallback is never used.
+    const name = session.value.displayName || displayName.value.trim() || t('files.dropBox.guestNameFallback')
+    folder ??= await ensureDropFolder(props.head, session.value, name, props.pwToken)
   } catch (err) {
     if (await isDropLinkGone(err)) linkGone.value = true
     else error.value = t('files.dropBox.guestFailed')
@@ -118,6 +130,16 @@ async function onPicked(e: Event) {
     { label: props.head.name, key: batchKey.value },
   )
 }
+
+/** "Not you?" / start over: forget this device's session and ask for a name again. Nothing on the server changes. */
+function notYou() {
+  forgetDropGuest(props.shareId)
+  session.value = null
+  folder = null
+  displayName.value = ''
+  error.value = null
+  linkGone.value = false
+}
 </script>
 
 <template>
@@ -127,7 +149,9 @@ async function onPicked(e: Event) {
     </div>
     <p>{{ t('files.dropBox.guestHint', { name: head.name }) }}</p>
 
-    <form v-if="!session" class="veyq-form" @submit.prevent="start">
+    <!-- Refused before a session exists (the link is gone): said, with no form to try again. -->
+    <Message v-if="!session && linkGone" severity="error" :closable="false">{{ t('files.dropBox.guestGone') }}</Message>
+    <form v-else-if="!session" class="veyq-form" @submit.prevent="start">
       <label>
         {{ t('files.dropBox.guestNameLabel') }}
         <InputText v-model="displayName" autocomplete="name" required :disabled="busy" />
@@ -139,6 +163,19 @@ async function onPicked(e: Event) {
     </form>
 
     <template v-else>
+      <p class="dropbox-guest-identity">
+        <span v-if="session.displayName">{{ t('files.dropBox.guestAs', { name: session.displayName }) }}</span>
+        <Button
+          type="button"
+          class="dropbox-guest-not-you"
+          :label="linkGone ? t('files.dropBox.guestStartOver') : t('files.dropBox.guestNotYou')"
+          size="small"
+          severity="secondary"
+          text
+          :disabled="sending"
+          @click="notYou"
+        />
+      </p>
       <Message v-if="linkGone" severity="error" :closable="false">{{ t('files.dropBox.guestGone') }}</Message>
       <template v-else>
         <input ref="picker" class="dropbox-picker" type="file" multiple hidden @change="onPicked" />
@@ -174,6 +211,13 @@ async function onPicked(e: Event) {
 </template>
 
 <style scoped>
+.dropbox-guest-identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  margin: 0;
+}
 /* A session row: the status icon inline before the name (the list row's grid stacks it on a phone), the name cut
    with its full text in the tooltip, the reason a file was not sent wrapped rather than cut. */
 .dropbox-guest-row {

@@ -71,7 +71,10 @@ const rows = computed(() =>
             .filter((s): s is string => s !== null)
             .join(' · ')
         : t('files.notUploaded')
-      return { node, key, name, blob, detail }
+      // Known to hold no content (an upload that never finished; a guest cannot delete it): its row offers an upload
+      // into it rather than a replace, since there is nothing to replace (inbox #384).
+      const empty = blobs.value.has(node.id) && blob === null
+      return { node, key, name, blob, detail, empty }
     })
     .sort((a, b) => a.name.localeCompare(b.name, locale.value)),
 )
@@ -220,8 +223,8 @@ async function download(row: Row) {
             v-if="canWrite"
             type="button"
             class="veyq-icon-button veyq-prime-icon-button"
-            icon="pi pi-sync"
-            :aria-label="t('files.replace', { name: row.name })"
+            :icon="row.empty ? 'pi pi-upload' : 'pi pi-sync'"
+            :aria-label="t(row.empty ? 'files.uploadInto' : 'files.replace', { name: row.name })"
             severity="secondary"
             outlined
             size="small"

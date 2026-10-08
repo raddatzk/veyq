@@ -26,7 +26,7 @@ import type { TreeNode } from './tree'
 import { treeStore } from './treeStore'
 
 const stubs = {
-  Dialog: { props: ['header'], template: '<div><h3 class="hdr">{{ header }}</h3><slot /></div>' },
+  Dialog: { name: 'Dialog', props: ['header'], emits: ['show'], template: '<div><h3 class="hdr">{{ header }}</h3><slot /></div>' },
   InputText: {
     props: ['modelValue'],
     template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value); $emit(\'input\', $event)" />',
@@ -181,5 +181,20 @@ describe('FolderNameDialog', () => {
     await wrapper.find('form').trigger('submit')
     await settle()
     expect(createFolder).not.toHaveBeenCalled()
+  })
+
+  // inbox #385 (h): a file's rename selects its name without the extension (the kind's `renameSelectionEnd`, Files'
+  // registration through the real registry) as the dialog shows; a kind that declares none leaves the caret alone.
+  it('a rename selects what its kind declares as the dialog shows: a file\'s name without its extension', async () => {
+    const shown = async (kind: string, name: string) => {
+      const w = mountDialog({ mode: 'rename', node: { ...nodeOf(kind), name } })
+      const input = w.find('input').element as HTMLInputElement
+      input.setSelectionRange(name.length, name.length)
+      w.findComponent({ name: 'Dialog' }).vm.$emit('show')
+      await w.vm.$nextTick()
+      return [input.selectionStart, input.selectionEnd]
+    }
+    expect(await shown('FILE', 'Bericht 2026.final.pdf')).toEqual([0, 'Bericht 2026.final'.length])
+    expect(await shown('FOLDER', 'Reisen.2026')).toEqual([11, 11])
   })
 })

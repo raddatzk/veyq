@@ -175,6 +175,22 @@ describe('a contributor uploads into the shared folder', () => {
     expect(Array.from(target.replace!.nodeKey)).toEqual(Array.from(KEYS.get(R)!))
   })
 
+  // inbox #384: a guest cannot delete the content-less file an unfinished upload left; its row uploads into it instead.
+  it('a file known to hold no content offers an upload into it, filling that node with nothing to replace', async () => {
+    const w = mountSection({ canWrite: true })
+    await flushPromises()
+    expect(w.find(`[aria-label="${t('files.replace', { name: 'aaa.bin' })}"]`).exists()).toBe(false)
+    const into = w.find(`[aria-label="${t('files.uploadInto', { name: 'aaa.bin' })}"]`)
+    expect(into.find('.pi-upload').exists()).toBe(true)
+    await into.trigger('click')
+    const single = w.find('input[type="file"]:not([multiple])')
+    Object.defineProperty(single.element, 'files', { value: [new File(['n'], 'again.bin')], configurable: true })
+    await single.trigger('change')
+    await flushPromises()
+    const target = vi.mocked(guestFileUploadJob).mock.calls[0][0] as GuestFileTarget
+    expect(target.replace).toMatchObject({ nodeId: P, expectedBlobId: null })
+  })
+
   it("a refused upload of this folder is explained: a link that is full says so, not the members' trash", async () => {
     const w = mountSection({ canWrite: true })
     await flushPromises()

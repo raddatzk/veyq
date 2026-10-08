@@ -75,3 +75,14 @@ export function loadGuestSession<S extends GuestIdentity = GuestIdentity>(shareI
 export function saveGuestSession(shareId: string, session: GuestIdentity): void {
   localStorage.setItem(sessionKey(shareId), JSON.stringify(session))
 }
+
+/** Forget the guest's session for `shareId` on this device (the drop-box page's "Not you?"): the next visitor names
+ *  itself afresh. The identity, and whatever it left on the server, stay as they are. A store that refuses is ignored —
+ *  the caller drops the session from its own state either way. */
+export function forgetGuestSession(shareId: string): void {
+  try {
+    localStorage.removeItem(sessionKey(shareId))
+  } catch {
+    /* unreadable store: nothing was kept there either */
+  }
+}

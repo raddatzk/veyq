@@ -47,6 +47,19 @@ describe('UploadStatusMenu', () => {
     expect(w.text()).toContain(t('upload.status.uploading'))
   })
 
+  it('says whether its panel is open (aria-expanded) and which panel it opens (inbox #385)', async () => {
+    enqueue([pendingJob()], { label: '1 photo' })
+    const w = mountTray()
+    await flushPromises()
+    const trigger = w.find('.uploads-trigger')
+    expect(trigger.attributes('aria-expanded')).toBe('false')
+    await trigger.trigger('click')
+    expect(trigger.attributes('aria-expanded')).toBe('true')
+    expect(w.find(`#${trigger.attributes('aria-controls')}`).classes()).toContain('uploads-panel')
+    await trigger.trigger('click')
+    expect(trigger.attributes('aria-expanded')).toBe('false')
+  })
+
   it('cancels the in-flight file from the tray', async () => {
     enqueue([pendingJob()], { label: '1 photo' })
     const w = mountTray()

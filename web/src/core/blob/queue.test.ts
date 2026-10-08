@@ -181,6 +181,40 @@ describe('core upload queue — failure and retry', () => {
     expect(complete).toHaveBeenCalledTimes(2)
   })
 
+  it('abandons a job once it settles failed or cancelled — never between the automatic retry\'s attempts (inbox #384)', async () => {
+    const abandon = vi.fn()
+    let attemptsAtAbandon = -1
+    const run = vi.fn<Run>().mockRejectedValue(new Error('chunk_put_failed:500'))
+    const { batches } = useUploadQueue()
+    enqueue([{ ...job('a', run), abandon: () => { attemptsAtAbandon = run.mock.calls.length; abandon() } }], { label: '1' })
+    const item = batches.value[0].files[0]
+    await vi.waitFor(() => expect(item.status).toBe('failed'))
+    expect(abandon).toHaveBeenCalledOnce()
+    expect(attemptsAtAbandon).toBe(2) // after the retry, not after the first attempt
+
+    // a cancelled job, in flight or still queued, is abandoned too; a throwing abandon fails nothing
+    const thrown = vi.fn(() => { throw new Error('boom') })
+    const queued = vi.fn()
+    enqueue([{ ...job('b', untilAborted(true)), abandon: thrown }, { ...job('c', untilAborted(true)), abandon: queued }], { label: '2' })
+    const [b, c] = batches.value[1].files
+    await vi.waitFor(() => expect(b.status).toBe('uploading'))
+    cancelFile(c.id)
+    expect(queued).toHaveBeenCalledOnce()
+    cancelFile(b.id)
+    await vi.waitFor(() => expect(b.status).toBe('cancelled'))
+    expect(thrown).toHaveBeenCalledOnce()
+    expect(batches.value[1].finishedAt).not.toBeNull()
+  })
+
+  it('does not abandon a job that succeeds', async () => {
+    const abandon = vi.fn()
+    const run = vi.fn<Run>().mockRejectedValueOnce(new Error('chunk_put_failed:500')).mockResolvedValue('ok')
+    const { batches } = useUploadQueue()
+    enqueue([{ ...job('a', run), abandon }], { label: '1' })
+    await vi.waitFor(() => expect(batches.value[0].files[0].status).toBe('done'))
+    expect(abandon).not.toHaveBeenCalled()
+  })
+
   it('retryFile leaves a job that is not failed alone', async () => {
     const run = vi.fn<Run>().mockResolvedValue('ok')
     const { batches } = useUploadQueue()

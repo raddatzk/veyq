@@ -111,6 +111,10 @@ export interface KindDescriptor {
    *  never a URL segment may fold more strictly (a file: `fileNameSlug`). **Frozen into stored tokens**: the function
    *  a kind registers must never change once a node of the kind is stored, and must be pinned by vectors. */
   slug?: (name: string) => string
+  /** Where core's rename dialog (`core/node/FolderNameDialog.vue`) ends the selection it puts on a node's name when the
+   *  field takes focus: the length of the part a rename usually changes (a file: the name without its extension, inbox
+   *  #385). Omitted: no selection, the caret at the end. */
+  renameSelectionEnd?: (name: string) => number
   /** The section the folder level view renders for this kind's children (see the header): `component` takes
    *  `LevelSectionProps` and emits `LevelSectionEmits`; `order` sorts the sections (ascending). Omitted: a child of the
    *  kind shows in core's fallback section. Kinds naming the same component share ONE section. */
@@ -178,13 +182,12 @@ export interface LevelSectionProps {
   readonly: boolean
 }
 /** Events a section emits to the level view: `openNode` (a child), `create` (the KIND to create at this level, e.g.
- *  Memories' MEMORY: the host mounts that kind's `createDialog`), `openTrash` (the scope's node trash; the toolbar that
- *  offers it sits in Memories' section until a second application needs it), `rename` (a child renamed in place, for a
- *  kind that does not open — Files' file: the host mounts core's `FolderNameDialog` in rename mode for it). */
+ *  Memories' MEMORY: the host mounts that kind's `createDialog`), `rename` (a child renamed in place, for a kind that
+ *  does not open — Files' file: the host mounts core's `FolderNameDialog` in rename mode for it). The scope's node trash
+ *  is the level view's own toolbar button, no section's (inbox #370, #385). */
 export interface LevelSectionEmits {
   openNode: [node: TreeNode]
   create: [kind: NodeKind]
-  openTrash: []
   rename: [node: TreeNode]
 }
 
