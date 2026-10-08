@@ -40,6 +40,13 @@ const { hasCapability } = useCapabilities()
 // Pending-deletion (cr-0090): the active GROUP is being deleted — the shell shows a banner and the browse hides
 // its create affordances (every write is server-rejected during the grace window anyway, uc.spaces.scope-access).
 const isPendingDeletion = computed(() => activeSpace.deletedAt !== null)
+// A guest's identity folder in a drop box, or a folder below one (ADR 0080 decision 11, `TreeNode.shareIdentityId`): a
+// member places nothing there (the server refuses it), so its level is read-only — download only; a member deletes a
+// guest's folder from its drop box (the application's detail; a move out is the server's, not offered here yet).
+const inIdentityFolder = computed(() => {
+  for (let n = currentNode.value; n; n = nodeById(treeStore.nodes, n.parentId)) if (n.shareIdentityId) return true
+  return false
+})
 const pendingPurgeDay = computed(() =>
   activeSpace.purgeAfter ? new Date(activeSpace.purgeAfter).toLocaleDateString(locale.value) : '',
 )
@@ -237,7 +244,7 @@ async function onDeleteDone() {
         :folder="currentFolder"
         :level="level"
         :epochs="epochs"
-        :readonly="isPendingDeletion"
+        :readonly="isPendingDeletion || inIdentityFolder"
         :shareable="shareable"
         @open-node="openNode"
         @create="startCreate"

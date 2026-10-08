@@ -180,6 +180,19 @@ describe('MemoryHomeView over the real registry', () => {
     expect(w.find('.section-stub').attributes('data-readonly')).toBe('false')
   })
 
+  // A guest's identity folder (ADR 0080 decision 11) and a folder below it: a member places nothing there, so the level
+  // is read-only (the server refuses a create or a move in); the folder beside it stays writable.
+  it('renders a guest identity folder, and a folder below it, read-only', async () => {
+    treeStore.nodes = [
+      ...TREE.map((n) => ({ ...n })),
+      node({ id: 'anna', kind: FOLDER_KIND, name: 'Anna', parentId: 'trips', shareIdentityId: 'identity-1' }),
+      node({ id: 'deep', kind: FOLDER_KIND, name: 'Deep', parentId: 'anna' }),
+    ]
+    expect((await mountAt('#~me/trips/anna')).find('.section-stub').attributes('data-readonly')).toBe('true')
+    expect((await mountAt('#~me/trips/anna/deep')).find('.section-stub').attributes('data-readonly')).toBe('true')
+    expect((await mountAt('#~me/trips')).find('.section-stub').attributes('data-readonly')).toBe('false') // control
+  })
+
   // Files registers FILE with its own section (F1b): a file in a folder is listed there, after Memories' section, and no
   // longer in core's fallback; the Memory beside it stays in Memories' section.
   it('hands a FILE child to Files\' section, after Memories\', and leaves no fallback', async () => {

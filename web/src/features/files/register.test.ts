@@ -3,9 +3,14 @@ import { createRegistry } from '../../core/applications/registry'
 import { FOLDER_KIND } from '../../core/node/kind'
 import { fileNameSlug, slugify } from '../../shared/naming'
 import { registerFiles } from './register'
-import { FILE_KIND } from './kinds'
+import { DROPBOX_KIND, FILE_KIND } from './kinds'
 import FilesSection from './components/FilesSection.vue'
 import ShareFilesSection from './components/ShareFilesSection.vue'
+import DropBoxSection from './components/DropBoxSection.vue'
+import DropBoxCreateDialog from './components/DropBoxCreateDialog.vue'
+import DropBoxDetail from './components/DropBoxDetail.vue'
+import DropBoxShareDialog from './components/DropBoxShareDialog.vue'
+import DropBoxShareBody from './components/DropBoxShareBody.vue'
 
 describe('registerFiles', () => {
   it('registers the FILE kind: not shareable, a file icon, its level and share sections, no detail', () => {
@@ -36,13 +41,33 @@ describe('registerFiles', () => {
     expect(registry.slugFor(FOLDER_KIND, 'Foto.JPG')).not.toBe(fileNameSlug('Foto.JPG'))
   })
 
-  it('brings its own level section after Memories\' (order 20), and no dialog, list item, share body or lifecycle', () => {
+  it('registers the FILES_DROPBOX kind: shareable, its section after the files, its dialogs, detail and share body (F3)', () => {
+    const registry = createRegistry()
+    registerFiles(registry)
+    expect(registry.kind(DROPBOX_KIND)).toEqual({
+      supported: true,
+      kind: DROPBOX_KIND,
+      icon: 'pi pi-inbox',
+      shareable: true,
+      detail: DropBoxDetail,
+      section: { order: 21, component: DropBoxSection },
+      createDialog: DropBoxCreateDialog,
+      shareDialog: DropBoxShareDialog,
+    })
+    expect(registry.shareBody(DROPBOX_KIND)).toBe(DropBoxShareBody)
+    expect(registry.slugFor(DROPBOX_KIND, 'Foto.JPG')).toBe(slugify('Foto.JPG')) // a container's folding
+  })
+
+  it('brings its own level sections after Memories\' (files 20, drop boxes 21), and no FILE dialog, list item, share body or lifecycle', () => {
     const registry = createRegistry()
     registerFiles(registry)
     const file = registry.kind(FILE_KIND)
     expect(file.supported && file.createDialog).toBeUndefined() // a file is created by uploading it, never by a name dialog
     expect(file.supported && file.shareDialog).toBeUndefined() // not a share root: no share offered
-    expect(registry.sections()).toEqual([{ component: FilesSection, order: 20, kinds: [FILE_KIND] }])
+    expect(registry.sections()).toEqual([
+      { component: FilesSection, order: 20, kinds: [FILE_KIND] },
+      { component: DropBoxSection, order: 21, kinds: [DROPBOX_KIND] },
+    ])
     // The guest's file list on a shared folder (F2) — a section of core's folder page, never a share body of its own.
     expect(registry.shareSections()).toEqual([{ component: ShareFilesSection, order: 20, kinds: [FILE_KIND] }])
     for (const slot of ['topbarTray', 'sidebarPins'] as const) expect(registry.slotItems(slot)).toEqual([])
