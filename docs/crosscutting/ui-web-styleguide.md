@@ -89,7 +89,14 @@ boundaries onto `--app-*` roles; that block is the one place to change a PrimeVu
 `<style>` and never `main.ts`'s preset. `scripts/validate_web_contrast.py` (trust-chain glob) computes every key
 pair from `base.css` in both modes and is red below the floor, or when a pair reads a `--p-*` variable the block no
 longer sets. **A new pairing — a role's text on a fill no row names — gets a row in its `PAIRS`**; nothing else
-will notice it. `admin-web/` has its own copy of the sheets and is not covered yet.
+will notice it.
+
+**`admin-web/` follows the same rule on its own copy** (inbox #390): its `src/styles/base.css` carries the same three
+tokens with both twins and the same `--p-*` block — ported, not imported (ADR 0065) — and the guard reads that
+sheet against the same `PAIRS` (its `SHEETS`), so a lightened admin primary is red there too. Before the port the
+copy was still on Aura's defaults: 34 pairs below AA (23 light, 11 dark), measured on a throwaway harness of the
+real PrimeVue preset, admin-web's `style.css` and its `LoginView`. The guard holds each copy to the floor, not the
+two to each other — they may drift apart, and both must still pass.
 
 ## Typography
 
