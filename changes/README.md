@@ -416,6 +416,12 @@ entry with a reason) — and leaves `python3 scripts/validate_coverage.py` **gre
 while the trust chain is red. (A use-case refined ahead of any implementation ships a `status: planned`
 coverage file that gaps every target surface.)
 
+**Where a CR may not name its use-cases yet, a phase owns writing them.** A new application cannot name use-cases
+before its concept settles, so `cr-files-application` started with `satisfies: []` and *"written with F1"* — and
+F1, F2 and F3 each closed saying they were not written; fourteen phases later the harvest wrote them from the tests,
+which inverts what a criterion is for. So the waiver names the phase: the first user-facing phase writes the
+use-cases with `status: planned` coverage, and every later phase turns its own gaps into refs.
+
 **A criterion belongs to the use-case that OWNS the property, not to the one that triggers it — and
 `satisfies:` will quietly answer the wrong question.** The refine session names one or two use-cases, the
 coverage file is then written under them by default, and nobody asks whether that is where a reader would
@@ -517,6 +523,11 @@ so the merged client would have signed a member out, and called an unrevoked fam
 the tenant. Found only by re-reading the merged predicate. So a CR that classifies responses re-reads that
 classification against the codes the merge brought in (`git diff <before>..main -- contracts/ | grep -i code`)
 before it lands.
+
+**The same holds for a CR's own phases run as a wave: a phase's open points are re-read against the phases merged
+before it.** `cr-files-application` F1b reported core's `upload.noSpace` as still photo-worded, an open point it had
+from B3's notes, while P4d, merged first, had already reworded it; a phase brief is a snapshot of the CR at dispatch,
+so its "still open" list is checked against the merged tree before it is written down.
 
 **Which makes "can I commit at all?" a precondition of the first phase, not a question for the first commit.**
 A phased CR ends each phase with the repo in a verifiable state, and *verifiable* is the committed tree — so a
@@ -1341,6 +1352,15 @@ its E4 check "with the network offline" — but the flow ends in a document load
 refuses too, so the sign-in page the notice is shown on could never have loaded. Stopping the backend (the dev
 proxy then answers 502) fails exactly the calls under test and nothing else. Its other precondition, "a video
 having played", needed a tenant with media on the browsed host; the dev DB had none that day.
+
+### A UI phase's done-when names its browser pass
+
+[`docs/ai`](../docs/ai/README.md) step 3 says a UI slice is not done before it was clicked. `cr-files-application`
+had eight UI phases, and every one closed *"not verified in a browser"* — its done-whens named unit tests, goldens and
+e2e, all API- or DOM-level, so each phase could tick with the rule unmet and nobody had to decide to skip it. A rule
+the done-when does not ask for is skipped by default. So a phase that changes a screen names in its done-when what
+is clicked and where (and § above: what the instance must hold for it); a phase that cannot run a browser says so
+and the CR carries the pass as an open item, not a footnote.
 
 ### A constraint on a module's imports is measured on what that module must CALL
 
