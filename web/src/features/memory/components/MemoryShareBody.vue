@@ -491,7 +491,7 @@ onBeforeUnmount(() => {
   border: 0;
   border-radius: 999px;
   background: var(--app-accent);
-  color: var(--app-on-strong);
+  color: var(--app-on-fill);
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;

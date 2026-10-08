@@ -564,7 +564,7 @@ function openTile(index: number) { emit('openLightbox', { items: filteredMedia.v
   width: 100%; padding: 0.5rem 0.65rem; border: 1px solid var(--app-line); border-radius: 8px;
   background: var(--app-surface); color: inherit; font: inherit;
 }
-.veyq-dialog-button-danger { background: var(--app-danger); color: var(--app-on-strong); }
+.veyq-dialog-button-danger { background: var(--app-danger); color: var(--app-on-fill); }
 @media (max-width: 760px) {
   .bucket-action-row { justify-content: flex-start; }
   .bucket-picker { width: 100%; }

@@ -49,7 +49,8 @@ counts are colour, and colour is what goes stale. Re-measure before quoting them
 ## Color — semantic role tokens
 
 Use `--app-*` role tokens before raw colors. **Both values live in `styles/base.css`**: the light one under
-`:root`, the dark one under `:root.veyq-dark` (40 tokens there [M: 2026-09-21]). A new one must define both.
+`:root`, the dark one under `:root.veyq-dark` (45 tokens there [M: 2026-10-08, `awk '/^:root.veyq-dark/{f=1;next}
+f&&/^}/{f=0} f' web/src/styles/base.css | grep -cE '^\s*--'`]). A new one must define both.
 
 **`styles/dark.css` is not where the values are, and this page said it was until 2026-09-21.** That sheet
 defines no custom property at all — it is one `.veyq-dark { … }` of *component* overrides that read the tokens.
@@ -65,6 +66,30 @@ pre-#146 file too: the sentence was wrong when written, not made wrong by a dele
 
 Raw colors are allowed only for *rendered content* (lightbox overlays, media scrims, map/SVG/canvas
 values), never for application UI roles. Repeated raw colors must become a role token before merge.
+
+### Contrast — WCAG AA, in both modes, pinned by a guard
+
+**Text reaches 4.5:1 against what it sits on; a control's boundary or fill, an icon that carries meaning and the
+focus ring reach 3:1** (WCAG 1.4.3 / 1.4.11) — in light **and** dark. Exempt: disabled controls, text over media or
+a gradient (rendered content), decorative dividers (`--app-line`). Three tokens carry the rule:
+
+- **`--app-primary` / `-hover` / `-active`** — the submit/confirm green. PrimeVue's primary is routed onto them, so
+  every primary button, checkbox, switch and primary-coloured link follows. Light is emerald-700/800/900 under
+  white text; dark keeps Aura's emerald-400/300/200 under dark text.
+- **`--app-on-fill`** — text or an icon on a *filled* role colour (primary, accent, success, danger): white in light,
+  near-black in dark, because the dark twins of those fills are light. **Not `--app-on-strong`**, which stays white
+  in both modes and paints white surfaces and labels over media scrims.
+- **`--app-control-line`** — the boundary of an input, checkbox or switch track. `--app-line` stays the decorative
+  divider and is not held to 3:1.
+
+**PrimeVue's colours come from our tokens, not from its preset.** Aura's defaults failed AA in 36 pairs (inbox
+#388: white on `#10b981` 2.54:1, warn/success/error messages 2.8–4.4:1, input borders 1.5:1). The `--p-*` block at
+the end of `:root` in `styles/base.css` routes the primary, the danger and warn buttons, messages, toasts and form
+boundaries onto `--app-*` roles; that block is the one place to change a PrimeVue colour — never a component's
+`<style>` and never `main.ts`'s preset. `scripts/validate_web_contrast.py` (trust-chain glob) computes every key
+pair from `base.css` in both modes and is red below the floor, or when a pair reads a `--p-*` variable the block no
+longer sets. **A new pairing — a role's text on a fill no row names — gets a row in its `PAIRS`**; nothing else
+will notice it. `admin-web/` has its own copy of the sheets and is not covered yet.
 
 ## Typography
 
@@ -221,6 +246,8 @@ before component-specific media queries.
 
 - Reused a `.veyq-*` class and `--app-*` token before adding local styles / raw colors.
 - Defined light **and** dark for any new semantic color — both in `styles/base.css` (`:root` and `:root.veyq-dark`).
+- Text 4.5:1, controls/icons/focus 3:1, both modes; text on a filled role colour uses `--app-on-fill`; a new
+  colour pairing has a row in `scripts/validate_web_contrast.py` (§ *Contrast*).
 - **Every rule is anchored on a class the markup applies** — enforced, not advice: `scripts/validate_stylesheet_anchors.py` fails the build on a rule whose *first* compound names only classes nothing renders. Landing a stylesheet ahead of its markup turns CI red, and that is the point (inbox #140: a shipped feature's only signal of missing its surface was CSS nobody had matched). Overriding a PrimeVue class is unaffected as long as it stays scoped by one of ours (`.memory-card .p-card-body`, `.veyq-danger-action.p-button`) — which is the house style anyway, and is what lets that guard need no list of vendor class names.
 - Memory/Chapter language; folders secondary; no Album/Explorer.
 - Rows for management data, cards for content; no nested cards.

@@ -106,6 +106,7 @@
 }
 .media-tile-check.is-on {
   background: var(--app-accent);
+  color: var(--app-on-fill);
 }
 .media-tile-check input {
   position: absolute;

@@ -346,7 +346,7 @@ function enableMaps() {
   height: 40px;
   border-radius: 999px;
   background: var(--p-primary-color, #6d5ae6);
-  color: #fff;
+  color: var(--app-on-fill);
   font-weight: 800;
   font-size: 0.95rem;
   border: 3px solid #fff;

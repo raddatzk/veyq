@@ -722,7 +722,7 @@ onBeforeUnmount(() => {
 }
 /* The "Set as cover" button, when THIS photo is the current cover: an accent-filled state ("it's the cover"). */
 .lightbox-cover-active {
-  color: var(--app-on-strong);
+  color: var(--app-on-fill);
   background: var(--app-accent);
   border-color: var(--app-accent);
 }
@@ -822,6 +822,7 @@ onBeforeUnmount(() => {
 }
 .media-lightbox-play:hover:not(:disabled) {
   background: var(--app-accent);
+  color: var(--app-on-fill);
 }
 .media-lightbox-play:disabled {
   cursor: default;

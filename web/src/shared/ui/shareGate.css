@@ -48,7 +48,7 @@
   border: 0;
   border-radius: 8px;
   background: var(--app-accent);
-  color: var(--app-on-strong);
+  color: var(--app-on-fill);
   font-weight: 600;
   cursor: pointer;
 }

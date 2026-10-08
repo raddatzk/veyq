@@ -73,7 +73,7 @@
 
   .sidebar-tenant-link-active .sidebar-tenant-avatar {
     background: linear-gradient(135deg, var(--app-accent), color-mix(in srgb, var(--app-accent) 72%, var(--app-backdrop-strong)));
-    color: var(--app-on-strong);
+    color: var(--app-on-fill);
   }
 
   .sidebar-scope-icon.pi-users {
