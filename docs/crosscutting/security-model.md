@@ -139,7 +139,9 @@ the object store then observes **which ciphertext chunks a playing client fetche
 access pattern (which parts were watched, re-watched, skipped, seeked to), more granular than the
 timestamps or sizes above. The owner accepted this for playback: hiding it would mean either downloading the whole
 original first or proxying bytes through the server (breaking operator-blindness). It is scoped to playback and
-changes nothing about content, which the server still never reads.
+changes nothing about content, which the server still never reads. A **file download** streams through the same
+key-free Service Worker ([ADR 0047 § Addendum](../decisions/0047-inline-video-playback-range-streaming.md#addendum-the-download-route))
+but reads every chunk in order, so it shows the operator no more than a whole-blob read.
 
 This split is written in *kinds*; the contracts are written in *field names*. [ADR 0044](../decisions/0044-field-visibility-declared-at-the-field.md)
 is what connects them: every field in `contracts/api/` declares which of these kinds it is, or the build fails.

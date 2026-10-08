@@ -72,8 +72,12 @@ dispatcher to `FilesUploadCompletion` (`UploadCompletion` for `FILE`, maps the i
   shows progress; the section says why a file of its folder was not uploaded (a taken name, `stale_file` with
   "replace anyway", no space) or that its meta is missing.
 - **The download** (`download.ts`) presigns the blob's chunks, opens them under the node key at most four at a time and
-  saves one `Blob` under the file's name: a file needs about its own size in tab memory (unverified at gigabyte scale;
-  a streaming save is not built, inbox #371).
+  streams them in order (`core/blob/stream.ts`) into the save target `shared/saveStream.ts` opens: a file the member
+  picks (File System Access, where the browser has it), else the Service Worker's download route
+  ([ADR 0047 § Addendum](../decisions/0047-inline-video-playback-range-streaming.md#addendum-the-download-route)),
+  else an in-memory `Blob` up to 512 MiB — above that, with no streaming target, the download is refused with a
+  message rather than built as a multi-GB Blob. Proven in unit tests only; no real browser has streamed a large file yet
+  (inbox #371).
 
 ## Guests (a folder share)
 

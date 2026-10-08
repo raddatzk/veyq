@@ -30,7 +30,7 @@ acceptanceCriteria:
         e2e: [src/features/files/files.e2e.test.ts]
     gaps:
       - surface: web
-        reason: The download assembles one Blob in tab memory; the refs prove the bytes for small files only. A multi-gigabyte file is unverified and a streaming save is not built (inbox #371).
+        reason: The download streams into a save target (a picked file, the Service Worker's download route, or a Blob up to 512 MiB), proven by unit tests with fake sinks and ports; no real browser has streamed a multi-gigabyte file, and the streamed e2e step is written but not yet run (inbox #371).
   - id: replace-is-a-compare-and-set-on-the-blob
     text: A replace completes with the blob the member read (expectedBlobId); the server swaps it and frees the old blob in the same transaction. A stale or missing expectation is 409 stale_file with the slot's current blob, the slot unchanged and the new upload freed; the client then offers replace anyway on the current blob.
     coverage:
