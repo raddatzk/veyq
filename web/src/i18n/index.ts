@@ -997,6 +997,12 @@ const en = {
       guestNameLabel: 'Your name',
       guestNameHint: 'The owner sees your files under this name.',
       guestStart: 'Continue',
+      // Whose session this device holds (inbox #385): its name, and a way for the next person to start their own.
+      guestAs: 'Sending as {name}.',
+      guestNotYou: 'Not you?',
+      guestStartOver: 'Start over under a new name',
+      // The folder's name when a session saved before names were kept sends its first file (its folder exists already).
+      guestNameFallback: 'Guest',
       guestPick: 'Choose files',
       // The guest's files of this session (inbox #381): what is being sent, what arrived, what did not and why.
       guestSession: 'Your files in this session',
@@ -2190,6 +2196,10 @@ const de: typeof en = {
       guestNameLabel: 'Dein Name',
       guestNameHint: 'Unter diesem Namen sieht die Person, die den Link geteilt hat, deine Dateien.',
       guestStart: 'Weiter',
+      guestAs: 'Du sendest als {name}.',
+      guestNotYou: 'Nicht du?',
+      guestStartOver: 'Mit neuem Namen neu beginnen',
+      guestNameFallback: 'Gast',
       guestPick: 'Dateien auswählen',
       guestSession: 'Deine Dateien in dieser Sitzung',
       guestSending: 'Wird gesendet…',

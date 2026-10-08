@@ -16,7 +16,7 @@ import { identityNameContext } from '../../core/sharing/guestIdentity'
 import { registry } from '../../core/applications/registry'
 import type { PublicShareHead } from '../../core/sharing/resolvePublicShare'
 import { fileNameSlug } from '../../shared/naming'
-import { dropGuestContext, ensureDropFolder, loadDropGuest, nameDropGuest, saveDropGuest } from './dropBox'
+import { dropGuestContext, ensureDropFolder, forgetDropGuest, loadDropGuest, nameDropGuest, saveDropGuest } from './dropBox'
 import { guestFileUploadJob } from './shareUpload'
 import { FILE_KIND } from './kinds'
 
@@ -76,8 +76,14 @@ describe('a drop-box guest on the wire', () => {
     const kUp = openIdentityKey(SCOPE, BOX, openDropKey(SCOPE, BOX, boxKey, drop.sealedDropPrivateKey!), String(sent.identityId), String(sent.wrappedIdentityKey))
     expect(b64std(kUp)).toBe(session.identityKey)
     expect(new TextDecoder().decode(v1.open(identityNameContext(SCOPE, SHARE, String(sent.identityId)), kUp, fromB64std(String(sent.sealedDisplayName))))).toBe('Adelgunde')
+    // the name stays on the device for the page ("Sending as …", the folder's name at the first file) — never on the wire
+    expect(session.displayName).toBe('Adelgunde')
+    expect(requests.map((r) => JSON.stringify(r.json ?? {})).join('')).not.toContain('Adelgunde')
     saveDropGuest(SHARE, session)
     expect(loadDropGuest(SHARE)?.identityKey).toBe(session.identityKey)
+    // "Not you?" forgets it on this device
+    forgetDropGuest(SHARE)
+    expect(loadDropGuest(SHARE)).toBeNull()
   })
 
   it('seals its folder under K_up, opens the stored wrap, and uploads a file into the folder under K_F', async () => {

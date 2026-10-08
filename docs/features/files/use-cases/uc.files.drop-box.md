@@ -15,8 +15,10 @@
 
 ## Main flow
 
-1. The guest opens the link and names itself once; its device keeps the identity, its token and its identity key.
-2. The client asks for the guest's folder (`ensureShareDropFolder`): the first call creates it from the guest's
+1. The guest opens the link and names itself once; its device keeps the identity, its token, its identity key and the
+   name, and the page says whose session it is ("Sending as …").
+2. With the first file, the client asks for the guest's folder (`ensureShareDropFolder`) — a guest that names itself
+   and sends nothing leaves no folder: the first call creates it from the guest's
    ciphertext (name and key sealed under the guest's identity key), every later call — a reload, a second tab, a
    concurrent first upload — answers the same folder.
 3. Per file the client creates a `FILE` inside that folder, uploads its blob and completes it, as a contributor does
@@ -36,7 +38,9 @@
   box:** refused (`illegal_structure`).
 - **E3 — the link is revoked or deleted:** the drop box, its folders, files and the identities that open them stay.
 - **E4 — the guest's folder is in the trash:** its next call and creates are refused; the guest starts over under a new
-  identity, a member may restore the folder.
+  identity (the page offers it), a member may restore the folder.
+- **A4a — someone else uses the same device** ("Not you?"): the page forgets the session on that device and asks for a
+  name again — a new identity and, with its first file, a new folder; the earlier one's folder stays as it was.
 - **E5 — a guest-sealed folder entry does not open:** that folder is left out of the member's tree; the rest opens.
 - **E6 — a `WRITE_ONLY` link on a plain folder, or another role on a drop box:** refused (`ShareRoots`).
 - **A7 — the trashed drop box is purged:** its folders and files go, then the identities nothing names any more.

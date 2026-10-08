@@ -6,7 +6,8 @@
 // every folder through the drop box's key (core's tree, `childEntryKey`).
 //
 //   member: createDropBox → mintDropBoxLink (the drop key is set on the node with the first link)
-//   guest:  nameDropGuest (K_up) → ensureDropFolder (its folder, K_F under K_up) → dropGuestContext → guestFileUploadJob
+//   guest:  nameDropGuest (K_up) → [first file] ensureDropFolder (its folder, K_F under K_up) → dropGuestContext →
+//           guestFileUploadJob
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { contentApi, publicSharesApi } from '../../api/client'
@@ -16,7 +17,7 @@ import { createContentNode, openContentKey, sealName, slugTokenFor, wrapContentK
 import { FOLDER_KIND } from '../../core/node/kind'
 import { mintShare, type MintedShare } from '../../core/sharing/manageShares'
 import { dropKeysForShare, mintIdentityKey, openDropPublicKey } from '../../core/sharing/dropKey'
-import { identityNameContext, loadGuestSession, saveGuestSession, type GuestIdentity } from '../../core/sharing/guestIdentity'
+import { forgetGuestSession, identityNameContext, loadGuestSession, saveGuestSession, type GuestIdentity } from '../../core/sharing/guestIdentity'
 import type { PublicShareHead } from '../../core/sharing/resolvePublicShare'
 import { GuestTreeError, type GuestTreeContext } from '../../core/sharing/guestTree'
 import type { UploadJob } from '../../core/blob/queue'
@@ -56,8 +57,11 @@ export function mintDropBoxLink(
 
 // --- the guest -------------------------------------------------------------------------------------------------------
 
-/** A drop-box guest's session on its device: the platform's identity and token plus its own `K_up` (standard base64). */
-export type DropGuestSession = GuestIdentity & { identityKey: string }
+/** A drop-box guest's session on its device: the platform's identity and token plus its own `K_up` (standard base64)
+ *  and the name it gave — kept on the device only, so the page can say whose session it is and name the guest's folder
+ *  when its first file goes out (the folder is made then, not when the guest names itself, inbox #385). A session saved
+ *  before the name was kept has none. */
+export type DropGuestSession = GuestIdentity & { identityKey: string; displayName?: string }
 
 /** The saved session of `shareId`, when it is a drop-box guest's (it carries a `K_up`). */
 export function loadDropGuest(shareId: string): DropGuestSession | null {
@@ -69,6 +73,12 @@ export function loadDropGuest(shareId: string): DropGuestSession | null {
  *  store refuses it. */
 export function saveDropGuest(shareId: string, session: DropGuestSession): void {
   saveGuestSession(shareId, session)
+}
+
+/** "Not you?": forget this device's session of `shareId`, so the next visitor names itself afresh under a new identity.
+ *  The old identity's folder and files stay in the drop box, untouched. */
+export function forgetDropGuest(shareId: string): void {
+  forgetGuestSession(shareId)
 }
 
 /**
@@ -95,7 +105,7 @@ export async function nameDropGuest(
     xSharePassword: pwToken,
     xShareWrite: b64std(v1.shareWriteToken(kShare, shareId)),
   })
-  const session: DropGuestSession = { identityId, contributorToken, identityKey: b64std(minted.identityKey) }
+  const session: DropGuestSession = { identityId, contributorToken, identityKey: b64std(minted.identityKey), displayName: name }
   return session
 }
 

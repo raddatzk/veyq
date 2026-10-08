@@ -8,6 +8,7 @@
 // whose `run` fails as the wire would.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import PrimeVue from 'primevue/config'
 import * as v1 from '@veyq/crypto/v1'
 
 vi.mock('../dropBox', async (importOriginal) => ({
@@ -15,13 +16,14 @@ vi.mock('../dropBox', async (importOriginal) => ({
   loadDropGuest: vi.fn(),
   nameDropGuest: vi.fn(),
   saveDropGuest: vi.fn(),
+  forgetDropGuest: vi.fn(),
   ensureDropFolder: vi.fn(),
   dropGuestContext: vi.fn(),
 }))
 vi.mock('../shareUpload', () => ({ guestFileUploadJob: vi.fn() }))
 
 import DropBoxShareBody from './DropBoxShareBody.vue'
-import { dropGuestContext, ensureDropFolder, loadDropGuest, type DropGuestSession } from '../dropBox'
+import { dropGuestContext, ensureDropFolder, forgetDropGuest, loadDropGuest, nameDropGuest, saveDropGuest, type DropGuestSession } from '../dropBox'
 import { guestFileUploadJob } from '../shareUpload'
 import type { FileUploadResult } from '../uploadFile'
 import { clearUploads } from '../../../core/blob/queue'
@@ -61,6 +63,9 @@ beforeEach(() => {
   runs.clear()
   outcome = async () => ({ nodeId: 'n', metaWritten: true })
   vi.mocked(loadDropGuest).mockReset().mockReturnValue(SESSION)
+  vi.mocked(nameDropGuest).mockReset()
+  vi.mocked(saveDropGuest).mockReset()
+  vi.mocked(forgetDropGuest).mockReset()
   vi.mocked(ensureDropFolder).mockReset().mockResolvedValue(FOLDER)
   vi.mocked(dropGuestContext).mockReset().mockReturnValue({} as GuestTreeContext)
   vi.mocked(guestFileUploadJob).mockReset().mockImplementation((_t, file) => fakeJob(file))
@@ -69,7 +74,7 @@ beforeEach(() => {
 function mountPage() {
   return mount(DropBoxShareBody, {
     props: { shareId: SHARE, fragmentKey: 'frag', pwToken: undefined, head: HEAD, reload: async () => {} },
-    global: { plugins: [realI18n()] },
+    global: { plugins: [realI18n(), PrimeVue] },
   })
 }
 type Page = ReturnType<typeof mountPage>
@@ -187,5 +192,85 @@ describe('DropBoxShareBody: what became of every file (inbox #381)', () => {
     expect(w.text()).toContain(t('files.dropBox.guestFailed'))
     expect(w.text()).not.toContain(t('files.dropBox.guestGone'))
     expect(w.find('input.dropbox-picker').exists()).toBe(true)
+  })
+})
+
+describe('DropBoxShareBody: whose session this is (inbox #385 a)', () => {
+  const ANNA: DropGuestSession = { ...SESSION, displayName: 'Anna' }
+  const BEN: DropGuestSession = { identityId: 'id-2', contributorToken: 'tok-2', identityKey: 'a2V5Mg==', displayName: 'Ben' }
+  const notYou = (w: Page) => w.find('button.dropbox-guest-not-you')
+  async function name(w: Page, who: string) {
+    await w.find('input').setValue(who)
+    await w.find('form').trigger('submit')
+    await flushPromises()
+  }
+
+  it('naming makes no folder; the first file does, under the name the guest gave', async () => {
+    vi.mocked(loadDropGuest).mockReturnValue(null)
+    vi.mocked(nameDropGuest).mockResolvedValue(ANNA)
+    const w = mountPage()
+    await name(w, 'Anna')
+    expect(saveDropGuest).toHaveBeenCalledWith(SHARE, ANNA)
+    expect(ensureDropFolder, 'no folder for a guest who sent nothing').not.toHaveBeenCalled()
+    await pick(w, 'a.pdf', 'b.pdf')
+    expect(ensureDropFolder).toHaveBeenCalledOnce()
+    expect(vi.mocked(ensureDropFolder).mock.calls[0][2]).toBe('Anna')
+    await settled(w, 2)
+  })
+
+  it('a reload says whose session it is; "Not you?" forgets it and asks for a name, without the files sent before', async () => {
+    vi.mocked(loadDropGuest).mockReturnValue(ANNA)
+    const w = mountPage()
+    expect(w.text()).toContain(t('files.dropBox.guestAs', { name: 'Anna' }))
+    await pick(w, 'annas.pdf')
+    await settled(w, 1)
+    expect(vi.mocked(ensureDropFolder).mock.calls[0][2], 'after a reload the folder is named from the session').toBe('Anna')
+    expect(notYou(w).text()).toBe(t('files.dropBox.guestNotYou'))
+
+    await notYou(w).trigger('click')
+    expect(forgetDropGuest).toHaveBeenCalledWith(SHARE)
+    expect(w.find('form').exists(), 'the name form again').toBe(true)
+    expect(w.text()).not.toContain('Anna')
+
+    vi.mocked(nameDropGuest).mockResolvedValue(BEN)
+    vi.mocked(ensureDropFolder).mockClear()
+    await name(w, 'Ben')
+    expect(w.text()).toContain(t('files.dropBox.guestAs', { name: 'Ben' }))
+    expect(w.text(), 'the next visitor does not see what Anna sent').not.toContain('annas.pdf')
+    await pick(w, 'bens.pdf')
+    expect(vi.mocked(ensureDropFolder).mock.calls[0][1], 'a new identity, a new folder').toEqual(BEN)
+    await settled(w, 1)
+  })
+
+  it('"Not you?" waits while a file is still being sent', async () => {
+    let finish: () => void = () => {}
+    outcome = () => new Promise((resolve) => { finish = () => resolve({ nodeId: 'n', metaWritten: true }) })
+    const w = mountPage()
+    await pick(w, 'a.pdf')
+    await vi.waitFor(() => expect(notYou(w).attributes('disabled')).toBeDefined())
+    finish()
+    await settled(w, 1)
+    expect(notYou(w).attributes('disabled')).toBeUndefined()
+  })
+
+  it('a link gone for this guest (its folder trashed) offers to start over under a new name', async () => {
+    vi.mocked(ensureDropFolder).mockRejectedValue(http(403, 'share_not_contributable'))
+    const w = mountPage()
+    await pick(w, 'a.pdf')
+    expect(w.text()).toContain(t('files.dropBox.guestGone'))
+    expect(notYou(w).text()).toBe(t('files.dropBox.guestStartOver'))
+    await notYou(w).trigger('click')
+    expect(forgetDropGuest).toHaveBeenCalledWith(SHARE)
+    expect(w.find('form').exists()).toBe(true)
+    expect(w.text()).not.toContain(t('files.dropBox.guestGone'))
+  })
+
+  it('refused before any session (the link is gone at naming): the gone state, no form', async () => {
+    vi.mocked(loadDropGuest).mockReturnValue(null)
+    vi.mocked(nameDropGuest).mockRejectedValue(http(404, 'share_not_found'))
+    const w = mountPage()
+    await name(w, 'Anna')
+    expect(w.text()).toContain(t('files.dropBox.guestGone'))
+    expect(w.find('form').exists()).toBe(false)
   })
 })
