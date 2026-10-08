@@ -57,10 +57,16 @@ routes stay history-mode.**
   kind's function (a file `a.b` and a folder `a-b` coexist with one URL segment), and two drop-box guests' identity
   folders sit under different guest keys, so two guests named "Anna" both slugify to `anna`. So the client
   disambiguates, by one rule for building and resolving a path (`web/src/core/node/location.ts` `segmentsOf`):
-  among siblings of one plain segment the first in node-id order keeps it, the others get `-2`, `-3`, … skipping a
-  number whose segment a sibling holds as its own name. It is client-side only (nothing stored or sealed), a
-  sibling whose id sorts later never moves an earlier path, and a future folder export names its directories by
-  the same rule. Group slugs are **not** server-enforced (no group slug token) — same-named groups resolve
+  among siblings of one plain segment the first in **creation order** keeps it, the others get `-2`, `-3`, …
+  skipping a number whose segment a sibling holds as its own name. Creation order is the server-observed
+  `NodeSummary.createdAt` (to the millisecond, `veyq_node.created_at TIMESTAMP(3)`), then the node id for two born
+  in one millisecond (`compareByCreation`) — an order no client can steer: the instant is the server's, set once and
+  kept by every rename, move, trash and restore, and node ids are client-minted random UUIDv4 that only break a tie.
+  (Node ids alone, the first rule, let a later sibling whose id happened to sort first take an earlier one's path;
+  time-ordered client ids — UUIDv7 — were rejected because a client's clock is forgeable and would leak, inbox #387.)
+  The rule is client-side only (nothing stored or sealed); a later-created sibling never moves an earlier path; an
+  older sibling that comes back (restored, or moved or renamed in) takes its birth place and shifts the younger
+  ones' segments — deterministic, by design; and a future folder export names its directories by the same rule. Group slugs are **not** server-enforced (no group slug token) — same-named groups resolve
   first-match, client-side ([ADR 0014](0014-group-scopes-and-governance.md)).
 - **History-mode for the top level.** `/`, `/login`, `/setup`, … stay real paths; only the content position
   rides the fragment. The shell renders **browse or detail by the resolved node's `kind`** — no per-node route.

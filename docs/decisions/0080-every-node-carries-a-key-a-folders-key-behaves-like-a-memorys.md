@@ -100,8 +100,9 @@ Memory, an expense and a file side by side).
     Anyone holding the drop box's key opens everything below, with no approval step. Below its own folder the guest
     holds the key, computes slug tokens and gets the normal uniqueness check, and learns nothing about other guests'
     names. Equal display names of two guests' folders are disambiguated by the client at display time (`Anna`,
-    `Anna (2)`, in node-id order: no creation time is listed), never stored, and their URL segments by the same
-    order (`anna`, `anna-2`; [ADR 0015](0015-operator-blind-readable-urls.md)). A guest who loses its identity (browser data cleared) cannot manage its folder any more and
+    `Anna (2)`, in creation order: the server-observed `createdAt` the members' listing carries, then the node id
+    for one millisecond), never stored, and their URL segments by the same order (`anna`, `anna-2`;
+    [ADR 0015](0015-operator-blind-readable-urls.md)). A guest who loses its identity (browser data cleared) cannot manage its folder any more and
     starts a new one under a new identity. Members may only delete, move out or copy from a drop box and place
     nothing of their own there (a server placement rule); moving out re-wraps and re-slugs under the target, where
     the normal index applies, so every other folder stays unique; a ZIP export (not built) names the identity
@@ -215,9 +216,11 @@ None open from this decision set. **The drop box node** (decision 11) is built w
 own operation; its entry is under the guest's `K_up`, which the reader opens through the parent's drop key. A
 `WRITE_ONLY` link on a plain `FOLDER` stays refused (`ShareRoots`). **Open for the owner:** where the build differs
 from decision 11 as written — a `READ_WRITE` guest of a link above may move a guest's folder out (the decision says
-members), a trashed identity folder ends that identity's folder for good, the folder call spends the link's upload
-budget each time, and equal names are numbered by node id, not creation time — is [inbox #377](../inbox.md); the
-decision stands as written until the owner rules. Ruled 2026-10-08: inside its own folder a `WRITE_ONLY` guest creates
+members), a trashed identity folder ends that identity's folder for good, and the folder call spends the link's upload
+budget each time — is [inbox #377](../inbox.md); the decision stands as written until the owner rules. Ruled
+2026-10-08: equal names are numbered by creation time as the decision says — the members' listing carries the
+server-observed `createdAt` (to the millisecond), the node id breaks a same-millisecond tie (inbox #377(e), ADR 0015).
+Ruled 2026-10-08: inside its own folder a `WRITE_ONLY` guest creates
 `FILE`s only (the root kind's application declares it, core's `WriteOnlyGuestKinds`; anything else `illegal_scope`).
 
 ## Bite tests (each must fail if the rule is wrong)
