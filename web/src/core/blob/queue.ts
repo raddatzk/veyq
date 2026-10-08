@@ -34,6 +34,13 @@ export type UploadJob<R = unknown, X extends object = object> = {
   sizeBytes: number
   run(ctx: UploadJobContext): Promise<R>
   extra?: X
+  /**
+   * Called once each time a run of the job settles `failed` (its automatic retry spent, or a refusal no retry helps) or
+   * `cancelled` — never between the automatic retry's attempts. The job undoes here what a run left half-done and no
+   * one will finish (Files: a file node it created that holds no content, inbox #384), so that a later retry by the
+   * user starts clean. Awaited before the batch settles; a throw is swallowed (best effort, never a second failure).
+   */
+  abandon?(): Promise<void> | void
 }
 
 /** A job in the queue, with its state. `X` is the application's own fields from the job's `extra`. */
@@ -139,8 +146,17 @@ async function runOne(item: AnyItem): Promise<void> {
       item.status = 'failed'
       item.error = error
     }
+    if (item.status !== 'queued') await abandon(job)
   }
   finalize(batch)
+}
+
+async function abandon(job: UploadJob<unknown, object>): Promise<void> {
+  try {
+    await job.abandon?.()
+  } catch {
+    /* best effort: the job's own leftovers stay as they are */
+  }
 }
 
 function scheduleRunner(): void {
@@ -198,7 +214,11 @@ export function cancelFile(fileId: string): void {
   for (const batch of batches) {
     const item = batch.files.find((f) => f.id === fileId)
     if (!item) continue
-    if (item.status === 'queued') item.status = 'cancelled'
+    if (item.status === 'queued') {
+      item.status = 'cancelled'
+      const job = jobs.get(item.id)
+      if (job) void abandon(job) // a re-queued retry may have left something of its earlier run
+    }
     // in-flight (preparing or uploading): abort — the runner's abort checkpoints map it → cancelled
     else if (item.status === 'preparing' || item.status === 'uploading') item.controller.abort()
     finalize(batch)

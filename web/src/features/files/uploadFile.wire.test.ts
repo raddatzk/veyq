@@ -54,6 +54,9 @@ type Answers = {
   complete?: (body: Record<string, unknown>) => Response | undefined
   patch?: () => Response
   put?: (n: number) => Response | undefined
+  /** `listFiles` of the parent: by default every node created here, none holding a blob. */
+  list?: (created: string[]) => Response
+  remove?: () => Response
 }
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 
@@ -64,6 +67,7 @@ function fakeServer(answers: Answers = {}) {
   const uploads = new Map<string, { blobId: string; chunkCount: number; byteSize: number; wrappedBlobKey: string }>()
   let seq = 0
   let puts = 0
+  const created: string[] = []
   const window = (uploadId: string, from: number) =>
     Array.from({ length: Math.max(0, Math.min(SERVER_WINDOW, uploads.get(uploadId)!.chunkCount - from)) }, (_, k) => ({
       index: from + k, url: `https://store.test/b/${uploadId}/${from + k}`,
@@ -79,8 +83,14 @@ function fakeServer(answers: Answers = {}) {
     requests.push({ method, path: url.pathname + url.search, json: body })
     const path = url.pathname
     if (method === 'POST' && path === `/api/scopes/${SCOPE}/nodes`) {
-      return answers.create?.() ?? json({ nodeId: body!.nodeId }, 201)
+      const answered = answers.create?.()
+      if (!answered || answered.ok) created.push(body!.nodeId as string)
+      return answered ?? json({ nodeId: body!.nodeId }, 201)
     }
+    if (method === 'GET' && path === `/api/scopes/${SCOPE}/files`) {
+      return answers.list?.(created) ?? json({ items: created.map((nodeId) => ({ nodeId, fileBlob: null })) })
+    }
+    if (method === 'DELETE' && path.startsWith(`/api/scopes/${SCOPE}/nodes/`)) return answers.remove?.() ?? new Response(null, { status: 204 })
     if (method === 'POST' && path.endsWith('/blob-uploads-batch')) {
       const items = body!.items as { blobId: string; chunkCount: number; byteSize: number; wrappedBlobKey: string }[]
       return json({ results: items.map((it) => {
@@ -264,5 +274,71 @@ describe('a file upload\'s other outcomes', () => {
     const starts = requests.filter((r) => r.path.endsWith('/blob-uploads-batch'))
     expect(starts.map((s) => (s.json!.items as { ownerId: string }[])[0].ownerId)).toEqual([nodeId, nodeId])
     expect(requests.find((r) => r.path.endsWith('/content'))!.json).toEqual({ uploadId: '00000000-0000-4000-8000-000000000002' })
+  })
+
+  it('given up after its retry, a job trashes the node it created when the slot is still empty (inbox #384)', async () => {
+    const requests = fakeServer({ put: () => new Response(null, { status: 500 }) })
+    enqueue([fileUploadJob(newTarget(), fileOf(10))], { label: 'Docs', key: 'files:test' })
+    const { batches } = useUploadQueue()
+    await vi.waitFor(() => expect(batches.value[0].finishedAt).not.toBeNull())
+    expect(batches.value[0].files[0]).toMatchObject({ status: 'failed', attempts: 2 })
+    const nodeId = requests.find((r) => r.path === `/api/scopes/${SCOPE}/nodes`)!.json!.nodeId as string
+    expect(requests.filter((r) => r.path === `/api/scopes/${SCOPE}/nodes`), 'the retry reused the node').toHaveLength(1)
+    expect(shape(requests).slice(-2)).toEqual([
+      `GET /api/scopes/${SCOPE}/files?parentId=${FOLDER}`,
+      `DELETE /api/scopes/${SCOPE}/nodes/${nodeId}`,
+    ])
+  })
+
+  it('a cancelled upload trashes its empty node too; the member\'s retry then creates the file afresh', async () => {
+    const requests = fakeServer()
+    const job = fileUploadJob(newTarget(), fileOf(10))
+    const aborted = new AbortController()
+    const run = job.run({ onProgress: () => aborted.abort(), signal: aborted.signal })
+    await expect(run).rejects.toThrow()
+    await job.abandon!()
+    const creates = () => requests.filter((r) => r.path === `/api/scopes/${SCOPE}/nodes`)
+    expect(requests.filter((r) => r.method === 'DELETE')).toHaveLength(1)
+
+    await job.run(ctx())
+    expect(creates(), 'a fresh node, not the trashed one').toHaveLength(2)
+    expect(creates()[1].json!.nodeId).not.toBe(creates()[0].json!.nodeId)
+  })
+
+  it('trashes nothing that holds content, nothing it did not create, and keeps the node when the trash call fails', async () => {
+    // the completion's answer was lost, but the slot holds the blob: nothing to undo
+    let requests = fakeServer({
+      complete: () => new Response(null, { status: 502 }),
+      list: (created) => json({ items: created.map((nodeId) => ({ nodeId, fileBlob: { blobId: '9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a', chunkCount: 1, byteSize: 50, wrappedBlobKey: 'AA==' } })) }),
+    })
+    let job = fileUploadJob(newTarget(), fileOf(10))
+    await expect(job.run(ctx())).rejects.toBeTruthy()
+    await job.abandon!()
+    expect(requests.some((r) => r.method === 'DELETE')).toBe(false)
+    vi.unstubAllGlobals()
+
+    // the completion attached the blob, and a later check failed: the node holds the file, so it is not even listed
+    requests = fakeServer({ complete: () => json({ blobId: '9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a', chunkCount: 1, byteSize: 50, wrappedBlobKey: 'AA==' }) })
+    job = fileUploadJob(newTarget(), fileOf(10))
+    await expect(job.run(ctx())).rejects.toBeTruthy()
+    await job.abandon!()
+    expect(requests.some((r) => r.method === 'DELETE' || r.method === 'GET')).toBe(false)
+    vi.unstubAllGlobals()
+
+    // a replace: the node was there before the job
+    requests = fakeServer({ complete: () => new Response(null, { status: 502 }) })
+    job = fileUploadJob(replaceTarget(null), fileOf(10))
+    await expect(job.run(ctx())).rejects.toBeTruthy()
+    await job.abandon!()
+    expect(requests.some((r) => r.method === 'DELETE' || r.method === 'GET')).toBe(false)
+    vi.unstubAllGlobals()
+
+    // the trash call fails: the node stays, and a retry fills it instead of colliding with it
+    requests = fakeServer({ put: (n) => (n === 1 ? new Response(null, { status: 500 }) : undefined), remove: () => new Response(null, { status: 500 }) })
+    job = fileUploadJob(newTarget(), fileOf(10))
+    await expect(job.run(ctx())).rejects.toThrow('chunk_put_failed:500')
+    await expect(job.abandon!()).rejects.toBeTruthy()
+    await job.run(ctx())
+    expect(requests.filter((r) => r.path === `/api/scopes/${SCOPE}/nodes`)).toHaveLength(1)
   })
 })

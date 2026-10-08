@@ -220,6 +220,38 @@ describe('FilesSection', () => {
     expect(targets()).toEqual([{ name: 'other-name.md', target: expect.objectContaining({ replace: expect.objectContaining({ nodeId: N, expectedBlobId: 'blob-notes' }) }) }])
   })
 
+  // inbox #384: a file that holds no content has nothing to replace — its row uploads into it, and a picked file of its
+  // name fills it without the replace question (which says the old content is deleted).
+  it('a file known to hold no content offers an upload into it, and a picked file of its name fills it without a question', async () => {
+    const w = mountSection({ nodes: [PENDING, NOTES] })
+    await flushPromises()
+    expect(byLabel(w, t('files.replace', { name: 'pending.bin' })).exists()).toBe(false)
+    const uploadInto = byLabel(w, t('files.uploadInto', { name: 'pending.bin' }))
+    expect(uploadInto.find('.pi-upload').exists()).toBe(true)
+    expect(byLabel(w, t('files.replace', { name: 'notes.txt' })).exists(), 'control: a file with content is replaced').toBe(true)
+
+    await uploadInto.trigger('click')
+    await pick(w, 1, [new File(['x'], 'anything.bin')])
+    await pick(w, 0, [new File(['y'], 'Pending.BIN')])
+    expect(confirmRequest.value).toBeNull()
+    expect(targets()).toEqual([
+      { name: 'anything.bin', target: expect.objectContaining({ replace: expect.objectContaining({ nodeId: P, expectedBlobId: null }) }) },
+      { name: 'Pending.BIN', target: expect.objectContaining({ replace: expect.objectContaining({ nodeId: P, expectedBlobId: null }) }) },
+    ])
+  })
+
+  it('a file whose content could not be read is not taken for empty: a picked file of its name still asks', async () => {
+    listFiles.mockRejectedValue(new TypeError('Failed to fetch'))
+    const w = mountSection({ nodes: [PENDING] })
+    await flushPromises()
+    expect(byLabel(w, t('files.replace', { name: 'pending.bin' })).exists()).toBe(true)
+    const picking = pick(w, 0, [new File(['y'], 'pending.bin')])
+    await flushPromises()
+    expect(confirmRequest.value).toMatchObject({ message: t('files.replaceConfirm', { name: 'pending.bin' }) })
+    settleConfirm(false)
+    await picking
+  })
+
   it('rename asks the host for core\'s name dialog with the node; download decrypts the row\'s blob under its key', async () => {
     const w = mountSection({ nodes: [NOTES] })
     await flushPromises()

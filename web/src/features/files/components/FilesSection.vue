@@ -10,7 +10,9 @@
 // delete (into the scope's trash, core's `deleteNode`; restored from core's trash dialog like any node). Uploading
 // enqueues one core-queue job per picked or dropped file (`uploadFile.ts`): the top bar's status menu shows its
 // progress, and this section shows what only it can explain — why a file of THIS folder was not uploaded, with the
-// one remedy there is (replace anyway after a peer's replace).
+// one remedy there is (replace anyway after a peer's replace). A file that holds no content (an upload that never
+// finished, e.g. the tab closed mid-way; a given-up job trashes its own empty node) offers an upload into it instead of
+// a replace, and a picked file of its name fills it without the replace question — there is nothing to replace (#384).
 //
 // Operator-blind: the names, sizes, types and dates shown are opened here under keys the server never sees; the only
 // call of Files' own is `listFiles`, which returns ids and sealed sizes.
@@ -85,6 +87,9 @@ watch(
 
 const dateFormat = computed(() => new Intl.DateTimeFormat(locale.value === 'de' ? 'de-DE' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' }))
 
+/** Whether the file is KNOWN to hold no content: listed without a blob (not merely unlisted after a failed read). */
+const isEmpty = (node: TreeNode): boolean => blobs.value.has(node.id) && blobs.value.get(node.id) === null
+
 const rows = computed(() =>
   fileNodes.value.map((node) => {
     const key = keyOf(node)
@@ -97,7 +102,7 @@ const rows = computed(() =>
           .filter((s): s is string => s !== null)
           .join(' · ')
       : t('files.notUploaded')
-    return { node, key, blob, detail }
+    return { node, key, blob, detail, empty: isEmpty(node) }
   }),
 )
 type Row = (typeof rows.value)[number]
@@ -144,7 +149,7 @@ async function startUploads(files: File[], replaceNode?: TreeNode): Promise<void
   const jobs = []
   for (const file of files) {
     const existing = replaceNode ?? siblingFile(file.name)
-    if (existing && !replaceNode) {
+    if (existing && !replaceNode && !isEmpty(existing)) {
       const accepted = await ask({
         header: t('files.replaceTitle'),
         message: t('files.replaceConfirm', { name: existing.name }),
@@ -336,11 +341,13 @@ async function remove(node: TreeNode) {
             @click="download(row)"
           />
           <template v-if="!readonly">
+            <!-- Its tooltip says what the icon cannot: the picked file's content goes in, the name stays (inbox #385). -->
             <Button
+              v-tooltip.bottom="t(row.empty ? 'files.uploadInto' : 'files.replace', { name: row.node.name })"
               type="button"
               class="veyq-icon-button veyq-prime-icon-button"
-              icon="pi pi-sync"
-              :aria-label="t('files.replace', { name: row.node.name })"
+              :icon="row.empty ? 'pi pi-upload' : 'pi pi-sync'"
+              :aria-label="t(row.empty ? 'files.uploadInto' : 'files.replace', { name: row.node.name })"
               severity="secondary"
               outlined
               size="small"

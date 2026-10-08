@@ -19,7 +19,13 @@
 // The queue retries a failure once by running the job again, so the job keeps what it already did: a node it created
 // is reused (a second create would collide with its own name), and a refusal no retry can change — a taken name, an
 // illegal place, a peer's replace — is remembered and rethrown at once, without a second upload.
-import { createContentNode, type NodeParent } from '../../core/node/tree'
+//
+// Once the job is given up (failed after its retry, or cancelled — the queue's `abandon`), a node it CREATED that still
+// holds no content is moved to the trash (inbox #384): otherwise it stays as a content-less "not uploaded yet" row that
+// takes the name. Only after `listFiles` confirmed the slot is empty (a completion whose answer was lost may have
+// attached it after all), and best effort: a node the trash call misses stays, and the section offers an upload into
+// it. A replace never trashes anything — the node was there before the job.
+import { createContentNode, deleteNode, type NodeParent } from '../../core/node/tree'
 import { planBlob, reserveAndPump, authedReserve, authedWindow, throwIfAborted } from '../../core/blob/transport'
 import type { UploadJob, UploadJobContext } from '../../core/blob/queue'
 import type { SealedMetaState } from '../../core/node/sealedMetaWrite'
@@ -125,6 +131,8 @@ export function fileUploadJob(target: FileUploadTarget, file: File): UploadJob<F
   let node: { nodeId: string; nodeKey: Uint8Array; meta: SealedMetaState; expectedBlobId: string | null } | null =
     target.replace ? { ...target.replace } : null
   let final: Error | null = null
+  /** The node this job created and that holds nothing of it yet — what {@link abandon} trashes. */
+  let created: string | null = null
 
   async function run({ onProgress, signal }: UploadJobContext): Promise<FileUploadResult> {
     if (final) throw final
@@ -134,11 +142,13 @@ export function fileUploadJob(target: FileUploadTarget, file: File): UploadJob<F
       if (!node) {
         // A new node's meta is empty at version 0: the first meta write is built on it.
         node = { ...(await createFileNode(target, file.name)), meta: { wrappedMeta: null, metaVersion: 0 }, expectedBlobId: null }
+        created = node.nodeId
       }
       const plan = planBlob(scopeId, { ownerId: node.nodeId, role: FILE_CONTENT_ROLE }, node.nodeKey, file)
       const [uploadId] = await reserveAndPump([plan], (d) => authedReserve(scopeId, d), authedWindow(scopeId), onProgress, signal)
       throwIfAborted(signal)
       attached = await completeFileUpload(scopeId, node.nodeId, uploadId, node.expectedBlobId)
+      created = null // the node holds the file now: nothing to undo, whatever fails after
       expectMintedId(plan.blobId, attached.blobId)
     } catch (e) {
       if (e instanceof Error && FINAL.has(e.message)) final = e
@@ -154,10 +164,27 @@ export function fileUploadJob(target: FileUploadTarget, file: File): UploadJob<F
     return { nodeId: node.nodeId, metaWritten }
   }
 
+  /** Given up: trash the node this job created if it is still empty, and forget it, so the member's retry creates the
+   *  file afresh. A node that could not be trashed is kept: the retry then fills it rather than colliding with it. */
+  async function abandon(): Promise<void> {
+    const nodeId = created
+    if (!nodeId) return
+    const page = await withRefresh(() => filesApi().listFiles({ scopeId, parentId: target.parent?.id }))
+    const listed = page.items.find((i) => i.nodeId === nodeId)
+    if (listed?.fileBlob) {
+      created = null // attached after all (a lost answer): the file is there, nothing to undo
+      return
+    }
+    if (listed) await deleteNode(scopeId, nodeId)
+    created = null
+    node = null
+  }
+
   return {
     name: file.name,
     sizeBytes: file.size,
     run,
+    abandon,
     extra: target.replace ? { file, replaceNodeId: target.replace.nodeId } : { file },
   }
 }
