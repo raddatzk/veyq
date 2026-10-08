@@ -138,7 +138,7 @@ describe('MemoryNodeDialog', () => {
     await Promise.resolve()
     await Promise.resolve()
 
-    expect(wrapper.text()).toContain(t('node.slugTaken'))
+    expect(wrapper.text()).toContain(t('memory.slugTaken'))
     expect(wrapper.emitted('done')).toBeFalsy()
   })
 })

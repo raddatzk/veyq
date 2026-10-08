@@ -5,7 +5,7 @@ import { createI18n } from 'vue-i18n'
 export type SupportedLocale = 'en' | 'de'
 
 const en = {
-  common: { email: 'Email', password: 'Password', cancel: 'Cancel', save: 'Save', create: 'Create', done: 'Done', show: 'Show', hide: 'Hide', undo: 'Undo', more: 'More', unreachable: 'This instance can’t be reached right now. Please try again.' },
+  common: { email: 'Email', password: 'Password', cancel: 'Cancel', save: 'Save', create: 'Create', done: 'Done', show: 'Show', hide: 'Hide', undo: 'Undo', more: 'More', zoom: 'Zoom', unreachable: 'This instance can’t be reached right now. Please try again.' },
   notSetUp: {
     title: 'This instance isn’t set up yet',
     sub: 'Nobody has created the first account on this server, so there is nothing here to sign in to yet.',
@@ -750,8 +750,9 @@ const en = {
     unsupportedKind: 'This client cannot open this kind of item.',
   },
   // Core's node tree (core/node/: the folder level view `LevelView.vue`, `FolderNameDialog.vue`, the delete and trash
-  // dialogs), cr-files-application P4d: moved from `memory.*` with the same values; Memories' own dialogs and detail
-  // read the shared ones (name label, rename, delete, the slug/structure/save errors) from here too.
+  // dialogs). Core serves every application's nodes, so no value here names one (inbox #375); Memories' own dialogs and
+  // detail read the shared ones (name label, rename, delete, the structure/save errors) from here too, and keep their own
+  // wording where it names a Memory (`memory.slugTaken`, `memory.deleteMemoryTitle`).
   node: {
     folders: 'Folders',
     folderEmpty: 'No folders here yet.',
@@ -761,9 +762,27 @@ const en = {
     nameLabel: 'Name',
     rename: 'Rename',
     delete: 'Delete',
-    slugTaken: 'A folder or Memory with a similar name already exists here.',
+    slugTaken: 'Something with a similar name already exists here.',
     illegalStructure: 'That isn’t allowed here.',
     saveFailed: 'That didn’t work. Please try again.',
+    // The delete dialog (core's `DeleteNodeDialog`): a folder's own title and copy; any other node's title is its kind's
+    // `deleteTitle` from the registry (Memories: `memory.deleteMemoryTitle`), else the neutral `node.delete`.
+    deleteFolderTitle: 'Delete folder',
+    deleteFolderCopy: 'Delete “{name}” and everything inside it? This can’t be undone.',
+    deleteCopy: 'Delete “{name}”? This can’t be undone.',
+    deleteFailed: 'Could not delete it. Please try again.',
+    // The space's node trash (core's `SpaceTrashDialog`): it holds every application's nodes, so it names none.
+    trash: {
+      title: 'Trash',
+      hint: 'Deleted items wait here — with everything inside them — until the date shown. Restore one and it comes back complete.',
+      empty: 'Nothing has been deleted here.',
+      loadFailed: 'Could not open the trash. Please try again.',
+      restore: 'Restore',
+      restoreFailed: 'Could not restore this. Please try again.',
+      deletedOn: 'Deleted {day}',
+      purgeOn: 'removed for good on {day}',
+      retryName: 'New name',
+    },
   },
   memory: {
     memories: 'Memories',
@@ -780,11 +799,10 @@ const en = {
     viewMap: 'Map view',
     favorite: 'Favorite',
     unfavorite: 'Remove favorite',
-    deleteFolderTitle: 'Delete folder',
+    // MEMORY's and CHAPTER's `deleteTitle` (registered in `register.ts`, read by core's delete dialog).
     deleteMemoryTitle: 'Delete Memory',
-    deleteFolderCopy: 'Delete “{name}” and everything inside it? This can’t be undone.',
-    deleteMemoryCopy: 'Delete “{name}”? This can’t be undone.',
-    deleteFailed: 'Could not delete it. Please try again.',
+    // Memories' own create dialog keeps naming what can collide in a folder; core's `node.slugTaken` is neutral.
+    slugTaken: 'A folder or Memory with a similar name already exists here.',
     meta: {
       conflict: 'Someone else changed this meanwhile. It now shows their version — save again to replace it.',
       unreadable:
@@ -842,16 +860,8 @@ const en = {
       remove: 'Remove cover',
       save: 'Save cover',
     },
+    // The toolbar button in Memories' section that opens core's node trash (`node.trash.*`).
     spaceTrash: {
-      title: 'Trash',
-      hint: 'Deleted memories, chapters and folders wait here — with everything inside them — until the date shown. Restore one and it comes back complete.',
-      empty: 'Nothing has been deleted here.',
-      loadFailed: 'Could not open the trash. Please try again.',
-      restore: 'Restore',
-      restoreFailed: 'Could not restore this. Please try again.',
-      deletedOn: 'Deleted {day}',
-      purgeOn: 'removed for good on {day}',
-      retryName: 'New name',
       open: 'Trash',
     },
     trash: {
@@ -900,7 +910,6 @@ const en = {
       saveFailed: 'Could not save the bucket.',
       moveFailed: 'Could not move the media.',
     },
-    zoom: 'Zoom',
   },
   // The platform's upload status menu in the top bar (core/blob/UploadStatusMenu.vue, cr-files-application B3): every
   // application's batches. `status`, `retry` and `close` repeat `media.*` values Memories' own tiles and lightbox still
@@ -1222,7 +1231,7 @@ const en = {
 }
 
 const de: typeof en = {
-  common: { email: 'E-Mail', password: 'Passwort', cancel: 'Abbrechen', save: 'Speichern', create: 'Erstellen', done: 'Fertig', show: 'Anzeigen', hide: 'Verbergen', undo: 'Rückgängig', more: 'Mehr', unreachable: 'Diese Instanz ist gerade nicht erreichbar. Bitte erneut versuchen.' },
+  common: { email: 'E-Mail', password: 'Passwort', cancel: 'Abbrechen', save: 'Speichern', create: 'Erstellen', done: 'Fertig', show: 'Anzeigen', hide: 'Verbergen', undo: 'Rückgängig', more: 'Mehr', zoom: 'Zoom', unreachable: 'Diese Instanz ist gerade nicht erreichbar. Bitte erneut versuchen.' },
   notSetUp: {
     title: 'Diese Instanz ist noch nicht eingerichtet',
     sub: 'Auf diesem Server wurde noch kein erstes Konto angelegt — es gibt hier also noch nichts, wo du dich anmelden könntest.',
@@ -1948,9 +1957,24 @@ const de: typeof en = {
     nameLabel: 'Name',
     rename: 'Umbenennen',
     delete: 'Löschen',
-    slugTaken: 'Ein Ordner oder eine Erinnerung mit ähnlichem Namen existiert hier bereits.',
+    slugTaken: 'Hier gibt es bereits etwas mit ähnlichem Namen.',
     illegalStructure: 'Das ist hier nicht erlaubt.',
     saveFailed: 'Das hat nicht geklappt. Bitte versuche es erneut.',
+    deleteFolderTitle: 'Ordner löschen',
+    deleteFolderCopy: '„{name}" und alles darin löschen? Das lässt sich nicht rückgängig machen.',
+    deleteCopy: '„{name}" löschen? Das lässt sich nicht rückgängig machen.',
+    deleteFailed: 'Konnte nicht gelöscht werden. Bitte versuche es erneut.',
+    trash: {
+      title: 'Papierkorb',
+      hint: 'Gelöschte Einträge warten hier — mit allem, was darin ist — bis zum angezeigten Datum. Stellst du etwas wieder her, kommt es vollständig zurück.',
+      empty: 'Hier wurde noch nichts gelöscht.',
+      loadFailed: 'Der Papierkorb konnte nicht geöffnet werden. Bitte erneut versuchen.',
+      restore: 'Wiederherstellen',
+      restoreFailed: 'Konnte nicht wiederhergestellt werden. Bitte erneut versuchen.',
+      deletedOn: 'Gelöscht am {day}',
+      purgeOn: 'endgültig entfernt am {day}',
+      retryName: 'Neuer Name',
+    },
   },
   memory: {
     memories: 'Erinnerungen',
@@ -1967,11 +1991,8 @@ const de: typeof en = {
     viewMap: 'Kartenansicht',
     favorite: 'Favorit',
     unfavorite: 'Favorit entfernen',
-    deleteFolderTitle: 'Ordner löschen',
     deleteMemoryTitle: 'Erinnerung löschen',
-    deleteFolderCopy: '„{name}" und alles darin löschen? Das lässt sich nicht rückgängig machen.',
-    deleteMemoryCopy: '„{name}" löschen? Das lässt sich nicht rückgängig machen.',
-    deleteFailed: 'Konnte nicht gelöscht werden. Bitte versuche es erneut.',
+    slugTaken: 'Ein Ordner oder eine Erinnerung mit ähnlichem Namen existiert hier bereits.',
     meta: {
       conflict: 'Jemand anderes hat das inzwischen geändert. Jetzt steht dort diese Version — speichere erneut, um sie zu ersetzen.',
       unreadable:
@@ -2030,15 +2051,6 @@ const de: typeof en = {
       save: 'Cover speichern',
     },
     spaceTrash: {
-      title: 'Papierkorb',
-      hint: 'Gelöschte Erinnerungen, Kapitel und Ordner warten hier — mit allem, was darin ist — bis zum angezeigten Datum. Stellst du etwas wieder her, kommt es vollständig zurück.',
-      empty: 'Hier wurde noch nichts gelöscht.',
-      loadFailed: 'Der Papierkorb konnte nicht geöffnet werden. Bitte erneut versuchen.',
-      restore: 'Wiederherstellen',
-      restoreFailed: 'Konnte nicht wiederhergestellt werden. Bitte erneut versuchen.',
-      deletedOn: 'Gelöscht am {day}',
-      purgeOn: 'endgültig entfernt am {day}',
-      retryName: 'Neuer Name',
       open: 'Papierkorb',
     },
     trash: {
@@ -2087,7 +2099,6 @@ const de: typeof en = {
       saveFailed: 'Bucket konnte nicht gespeichert werden.',
       moveFailed: 'Medien konnten nicht verschoben werden.',
     },
-    zoom: 'Zoom',
   },
   upload: {
     title: 'Uploads',

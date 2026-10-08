@@ -331,7 +331,7 @@ describe('MemoryDetail (gallery grid + header)', () => {
     expect(wrapper.emitted('openChapter')?.[0]?.[0]).toMatchObject({ id: 'c1' })
 
     // the create card asks the host to start creation
-    await wrapper.find('.memory-create-card').trigger('click')
+    await wrapper.find('.memory-create-card-memory').trigger('click')
     expect(wrapper.emitted('createChapter')).toBeTruthy()
   })
 

@@ -3,16 +3,17 @@
 // an upload at its next window) and `resolveShareBlob` (the presigned GETs of a blob under the shared subtree), shaped as
 // the reserve/window/presign functions core's `core/blob/transport.ts` pumps and reads with. Kind-neutral: the target
 // node and the role come from the caller; which kinds take a guest's upload is the server's `ShareGuestWrites`.
-// Memories' guest upload keeps its own copy of the reserve/window inside its media transport (`features/memory/share.ts`,
-// pinned byte for byte by its characterisation test) — this is the one an application without a transport of its own
-// uses.
+// The one copy: Files' guest upload and Memories' guest media transport (`features/memory/share.ts`) both reserve and
+// window here (inbox #376) — Memories' wire is pinned byte for byte by its characterisation test
+// (`features/memory/uploadWire.characterisation.test.ts`), which held unchanged across the merge.
 import { publicSharesApi } from '../../api/client'
 import { windowPuts } from '../blob/transport'
 import type { BlobDeclare, ReservedUpload, WindowFn } from '../blob/types'
 
 /** Who uploads where: the link, the guest's token, the password token when the link has one, and the node below the
- *  root the uploads are for (named on every start and window, as the server checks it on each). */
-export type GuestUploadTarget = { shareId: string; contributorToken: string; pwToken?: string; nodeId: string }
+ *  root the uploads are for (named on every start and window, as the server checks it on each). `nodeId` absent: the
+ *  share root itself, and the body carries no `nodeId` at all (Memories' root-level upload, as it always did). */
+export type GuestUploadTarget = { shareId: string; contributorToken: string; pwToken?: string; nodeId?: string }
 
 /** Reserve a guest's uploads (`startShareBlobUploads`): one session per declare, its first window of PUTs. A per-item
  *  error (`quota_exceeded`, `id_taken`, …) is thrown as its code. */

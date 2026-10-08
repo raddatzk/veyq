@@ -112,7 +112,7 @@ describe('MemoriesSection', () => {
 
   it('read-only (a scope pending deletion): no create card and no trash, the cards stay', () => {
     const wrapper = mountSection({ nodes: [node('m1', MEMORY_KIND, 'Solo')], readonly: true })
-    expect(wrapper.find('.memory-create-card').exists()).toBe(false)
+    expect(wrapper.find('.memory-create-card-memory').exists()).toBe(false)
     expect(wrapper.text()).not.toContain(t('memory.spaceTrash.open'))
     expect(wrapper.text()).toContain('Solo')
   })

@@ -557,7 +557,7 @@ watch(
               @open="$emit('openChapter', $event)"
             />
             <button
-              class="veyq-card veyq-card-interactive memory-create-card memory-create-card-memory"
+              class="veyq-card veyq-card-interactive veyq-create-card memory-create-card-memory"
               type="button"
               :disabled="!memoryKey"
               @click="$emit('createChapter')"

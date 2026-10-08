@@ -126,7 +126,7 @@ watch(
       />
       <button
         v-if="!readonly"
-        class="veyq-card veyq-card-interactive memory-create-card memory-create-card-memory"
+        class="veyq-card veyq-card-interactive veyq-create-card memory-create-card-memory"
         type="button"
         @click="emit('create', MEMORY_KIND)"
       >

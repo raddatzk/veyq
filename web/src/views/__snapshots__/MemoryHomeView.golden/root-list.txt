@@ -59,7 +59,7 @@ div.memory-home
                     "Beach"
               button.memory-card-pin [aria-label="Favorite"] [aria-pressed="false"]
                 span.pi.pi-heart
-        button.memory-create-card.memory-create-card-memory.veyq-card.veyq-card-interactive
+        button.memory-create-card-memory.veyq-card.veyq-card-interactive.veyq-create-card
           span.pi.pi-plus
           strong
             "New Memory"

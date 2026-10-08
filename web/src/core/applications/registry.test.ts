@@ -103,7 +103,9 @@ describe('registry: dialogs per kind', () => {
     expect(loader, 'an async component wrapping the folder dialog').toBeTypeOf('function')
     const FolderShareDialog = (await import('../sharing/FolderShareDialog.vue')).default
     expect(await loader!()).toBe(FolderShareDialog)
-  })
+    // The import transforms the dialog's whole graph (PrimeVue's DatePicker among it) cold in this file: ~2 s alone,
+    // past the 5 s default in a loaded full run (measured 2026-10-08, three reds in a row, green at 60 s — slow, not hung).
+  }, 30_000)
 
   it('hands each kind its own createDialog and shareDialog; one component may serve several kinds', () => {
     const r = createRegistry()

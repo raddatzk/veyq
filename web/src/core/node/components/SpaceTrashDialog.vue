@@ -91,7 +91,7 @@ async function restore(row: TrashedNode, newName?: string) {
       rowError.value = { id: row.id, message: t('node.slugTaken') }
       startRetry(row)
     } else {
-      rowError.value = { id: row.id, message: t('memory.spaceTrash.restoreFailed') }
+      rowError.value = { id: row.id, message: t('node.trash.restoreFailed') }
     }
   } finally {
     busy.value = null
@@ -104,24 +104,24 @@ onMounted(() => void load())
 <template>
   <Dialog
     :visible="true"
-    :header="t('memory.spaceTrash.title')"
+    :header="t('node.trash.title')"
     modal
     :style="{ width: 'min(38rem, 92vw)' }"
     @update:visible="emit('close')"
   >
-    <p class="dialog-copy">{{ t('memory.spaceTrash.hint') }}</p>
+    <p class="dialog-copy">{{ t('node.trash.hint') }}</p>
 
     <div v-if="loading" class="trash-state"><ProgressSpinner style="width: 2rem; height: 2rem" /></div>
-    <Message v-else-if="loadFailed" severity="error" :closable="false">{{ t('memory.spaceTrash.loadFailed') }}</Message>
-    <p v-else-if="rows.length === 0" class="trash-state">{{ t('memory.spaceTrash.empty') }}</p>
+    <Message v-else-if="loadFailed" severity="error" :closable="false">{{ t('node.trash.loadFailed') }}</Message>
+    <p v-else-if="rows.length === 0" class="trash-state">{{ t('node.trash.empty') }}</p>
 
     <div v-else class="veyq-list">
       <div v-for="row in rows" :key="row.id" class="veyq-list-row trash-row">
         <div class="veyq-row-main">
           <strong class="veyq-row-title"><i :class="icon(row.kind)" aria-hidden="true"></i> {{ row.name }}</strong>
           <span class="veyq-row-subtitle">
-            {{ t('memory.spaceTrash.deletedOn', { day: day(row.deletedAt) }) }} ·
-            {{ t('memory.spaceTrash.purgeOn', { day: day(row.purgeAfter) }) }}
+            {{ t('node.trash.deletedOn', { day: day(row.deletedAt) }) }} ·
+            {{ t('node.trash.purgeOn', { day: day(row.purgeAfter) }) }}
           </span>
           <Message
             v-if="rowError && rowError.id === row.id"
@@ -134,12 +134,12 @@ onMounted(() => void load())
         <div v-if="renaming === row.id" class="trash-actions">
           <InputText
             v-model="retryName"
-            :aria-label="t('memory.spaceTrash.retryName')"
+            :aria-label="t('node.trash.retryName')"
             :disabled="busy === row.id"
             @keyup.enter="restore(row, retryName)"
           />
           <Button
-            :label="t('memory.spaceTrash.restore')"
+            :label="t('node.trash.restore')"
             icon="pi pi-undo"
             size="small"
             :loading="busy === row.id"
@@ -157,7 +157,7 @@ onMounted(() => void load())
         </div>
         <div v-else class="trash-actions">
           <Button
-            :label="t('memory.spaceTrash.restore')"
+            :label="t('node.trash.restore')"
             icon="pi pi-undo"
             size="small"
             :loading="busy === row.id"

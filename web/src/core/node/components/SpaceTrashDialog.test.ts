@@ -57,7 +57,7 @@ async function settle(wrapper: ReturnType<typeof mountDialog>) {
 }
 
 function restoreButton(wrapper: ReturnType<typeof mountDialog>) {
-  return wrapper.findAll('button').find((b) => b.text() === t('memory.spaceTrash.restore'))!
+  return wrapper.findAll('button').find((b) => b.text() === t('node.trash.restore'))!
 }
 
 beforeEach(() => {
@@ -75,8 +75,8 @@ describe('SpaceTrashDialog', () => {
     expect(listTrash).toHaveBeenCalledWith(SCOPE, EPOCHS, TREE)
     expect(wrapper.text()).toContain('Rom 2026')
     // both dates are rendered — "you can still get it back, and until when"
-    expect(wrapper.text()).toContain(t('memory.spaceTrash.deletedOn', { day: ROW.deletedAt.toLocaleDateString('en') }))
-    expect(wrapper.text()).toContain(t('memory.spaceTrash.purgeOn', { day: ROW.purgeAfter.toLocaleDateString('en') }))
+    expect(wrapper.text()).toContain(t('node.trash.deletedOn', { day: ROW.deletedAt.toLocaleDateString('en') }))
+    expect(wrapper.text()).toContain(t('node.trash.purgeOn', { day: ROW.purgeAfter.toLocaleDateString('en') }))
   })
 
   it('draws each row with its kind\'s own icon from the registry; a kind nobody registered gets a neutral one', async () => {
@@ -97,7 +97,7 @@ describe('SpaceTrashDialog', () => {
   it('shows the empty state when nothing was deleted', async () => {
     const wrapper = mountDialog()
     await settle(wrapper)
-    expect(wrapper.text()).toContain(t('memory.spaceTrash.empty'))
+    expect(wrapper.text()).toContain(t('node.trash.empty'))
   })
 
   // Changed deliberately in cr-node-key-hierarchy 5b.5 (inbox #357): this used to assert only that the row is filtered
@@ -141,7 +141,7 @@ describe('SpaceTrashDialog', () => {
     await wrapper.setProps({ tree: [...TREE] })
     await settle(wrapper)
 
-    expect(wrapper.text()).toContain(t('memory.spaceTrash.loadFailed'))
+    expect(wrapper.text()).toContain(t('node.trash.loadFailed'))
   })
 
   /**
@@ -182,7 +182,7 @@ describe('SpaceTrashDialog', () => {
     await restoreButton(wrapper).trigger('click')
     await settle(wrapper)
 
-    expect(wrapper.text()).toContain(t('memory.spaceTrash.restoreFailed'))
+    expect(wrapper.text()).toContain(t('node.trash.restoreFailed'))
     expect(wrapper.find('input.retry-name').exists()).toBe(false)
   })
 
@@ -190,7 +190,7 @@ describe('SpaceTrashDialog', () => {
     vi.mocked(listTrash).mockRejectedValue(new Error('boom'))
     const wrapper = mountDialog()
     await settle(wrapper)
-    expect(wrapper.text()).toContain(t('memory.spaceTrash.loadFailed'))
-    expect(wrapper.text()).not.toContain(t('memory.spaceTrash.empty'))
+    expect(wrapper.text()).toContain(t('node.trash.loadFailed'))
+    expect(wrapper.text()).not.toContain(t('node.trash.empty'))
   })
 })

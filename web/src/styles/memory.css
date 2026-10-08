@@ -326,7 +326,7 @@
 .memory-card-grid.is-list .memory-card-text {
   padding: 0;
 }
-.memory-card-grid.is-list .memory-create-card {
+.memory-card-grid.is-list .veyq-create-card {
   min-height: 0;
   padding: 0.6rem 0.75rem;
 }
@@ -343,19 +343,6 @@
   padding: 0;
 }
 
-.memory-create-card {
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  align-items: center;
-  gap: 0.8rem;
-  width: 100%;
-  min-height: 82px;
-  padding: 1rem;
-  color: var(--app-text);
-  text-align: left;
-  cursor: pointer;
-}
-
 .memory-card-main {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -368,18 +355,6 @@
   background: transparent;
   box-shadow: none;
   transform: none;
-}
-
-.memory-create-card .pi {
-  display: grid;
-  place-items: center;
-  width: 84px;
-  height: 84px;
-  border-radius: 10px;
-  overflow: hidden;
-  background: var(--app-accent-soft);
-  color: var(--app-accent);
-  font-size: 1.25rem;
 }
 
 .memory-card-cover {
@@ -423,17 +398,6 @@
   height: 100%;
 }
 
-.memory-create-card .pi {
-  width: 42px;
-  height: 42px;
-}
-
-.memory-create-card {
-  border-style: dashed;
-  background: color-mix(in srgb, var(--app-surface) 66%, transparent);
-  color: var(--app-muted);
-}
-
 .memory-create-card-memory {
   grid-template-columns: 1fr;
   justify-items: center;
@@ -452,18 +416,8 @@
   border-radius: 10px;
 }
 
-.memory-create-card .pi {
-  background: var(--app-accent-soft);
-  color: var(--app-accent);
-}
-
-.memory-create-card strong {
-  color: var(--app-control-text);
-}
-
 .memory-create-card-memory strong {
   padding: 0;
-  white-space: normal;
 }
 
 .memory-card-text {
@@ -475,12 +429,6 @@
 .memory-card-text {
   align-content: center;
   padding: 0.8rem 0.85rem 0.9rem;
-}
-
-.memory-create-card strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .memory-card-text strong {

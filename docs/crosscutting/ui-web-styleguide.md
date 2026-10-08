@@ -102,7 +102,8 @@ or a one-off `1rem` label sitting in them.
 - **Node cards (core):** `.veyq-card-grid` is the one track rule for a grid of node cards; the folder level view
   (`core/node/LevelView.vue`) adds `.veyq-level-grid` (list variant, narrow column), `.veyq-folder-card`,
   `.veyq-folder-overview-card`, `.veyq-create-card` and `.veyq-danger-action` (`styles/ui.css`, end of sheet; dark
-  twins in `dark.css`). Memories' `.memory-card-grid` / `.memory-create-card` are its own twins of the same look.
+  twins in `dark.css`). Memories' create cards wear `.veyq-create-card` too, plus their own `.memory-create-card-memory`;
+  `.memory-card-grid` is Memories' twin of the grid.
 - **Badges:** `.veyq-badge.success|.warning|.muted` for status; no one-off pills.
 - **Forms:** `.veyq-form`, `.veyq-form-grid`, `.veyq-form-copy`; full-width inputs; concise labels;
   muted helper text that explains *consequences*, not the label.
@@ -177,7 +178,7 @@ Two title voices coexist, and that is the rule rather than an inconsistency to f
   "Replace your keys?", "Delete bucket?". **4 of 4** question headers sit there, on a consequence-only body.
 
 So: match the voice to the mechanism you picked, and do not "fix" one to look like the other. The single
-counterexample is `DeleteNodeDialog` ("Delete folder" / "Delete Memory") — a dedicated dialog wearing the
+counterexample is `DeleteNodeDialog` ("Delete folder", or the kind's own title such as "Delete Memory") — a dedicated dialog wearing the
 imperative voice. It is the mechanism axis it crosses, not the voice one: both its headers are imperative.
 
 **`window.confirm` is retired, and `no-alert` is what keeps it retired** — in `web/eslint.config.js` and in

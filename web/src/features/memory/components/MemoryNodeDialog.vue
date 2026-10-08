@@ -65,7 +65,7 @@ const { run: runSubmit, pending: loading } = useAsyncAction(
   {
     onError: (e) => {
       const status = httpStatus(e)
-      error.value = status === HttpStatus.conflict ? t('node.slugTaken') : status === HttpStatus.unprocessable ? t('node.illegalStructure') : t('node.saveFailed')
+      error.value = status === HttpStatus.conflict ? t('memory.slugTaken') : status === HttpStatus.unprocessable ? t('node.illegalStructure') : t('node.saveFailed')
     },
   },
 )

@@ -131,11 +131,14 @@ here; the server is blind.
   `generated/share-media` (Memories) and `generated/files` (Files); so their
   factories are each application's `api.ts`, not `api/client.ts`'s, and a core helper types from core's own client or
   from a literal union of its own, e.g. `mediaDeriver`'s tiers, since core's `BlobRole` is an open token), uses `import.meta.glob`, or names `NodeKind.Memory|Chapter|File` / `'MEMORY'` /
-  `'CHAPTER'` / `'FILE'` / `'FILES_DROPBOX'` (a hand list: a new kind is added to the guard's `KIND` with its application). The one exempt file is `src/applications.ts`, the composition root (by exact path, never a
+  `'CHAPTER'` / `'FILE'` / `'FILES_DROPBOX'` (a hand list: a new kind is added to the guard's `KIND` with its application),
+  or reads an application's i18n namespace — `'memory.…'` / `'media.…'` / `'files.…'` (the guard's `I18N_NAMESPACES`;
+  core serves every application's nodes, so its strings are `node.*`/`common.*` and a kind's noun comes from its descriptor). The one exempt file is `src/applications.ts`, the composition root (by exact path, never a
   directory); `main.ts` calls its `registerApplications()` before `boot()`. Build-time only: no glob, no computed
   `import()`, no loading after the fact (ADR 0079 Decision 5, ADR 0026) — registered code runs with every unlocked key.
   **What an application registers** (its `register.ts`; the registry is write-once, a second registration throws):
-  `registerKind` per node kind (detail component, icon, shareable, and its `section` of the folder level view —
+  `registerKind` per node kind (detail component, icon, shareable, `deleteTitle` — the i18n key core's delete dialog
+  titles a node of the kind with, else a neutral "Delete" — and its `section` of the folder level view —
   `{ order, component }`; the level view is core's, `core/node/LevelView.vue`: the folder's overview card, the
   sections sorted by `order`, a fallback section for a child whose kind no section serves, then the sub-folders; kinds
   naming the same component share one section, rendered once with the children of all of them, and naming it with two

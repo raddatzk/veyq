@@ -286,7 +286,7 @@ describe('MemoryHomeView over the real registry', () => {
     await flushPromises()
     expect(w.find('.create-stub').text()).toBe('MEMORY|-')
     expect(w.find('.name-stub').exists()).toBe(false)
-    await w.find('.veyq-create-card').trigger('click')
+    await w.find('.veyq-level-grid .veyq-create-card').trigger('click')
     await flushPromises()
     expect(w.find('.name-stub').text()).toBe('create|-|-')
     expect(w.find('.create-stub').exists(), 'the Memory dialog gives way').toBe(false)
