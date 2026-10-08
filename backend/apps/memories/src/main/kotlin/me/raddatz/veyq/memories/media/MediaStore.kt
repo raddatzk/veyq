@@ -34,6 +34,8 @@ data class MediaRow(
     val bucketId: String? = null,
     /** How many times [wrappedMeta] was replaced — the version a meta write states (ADR 0077). */
     val metaVersion: Long = 0,
+    /** The original blob's sealed metadata as its upload declared it (core's `blob-meta`; opaque, write-once). */
+    val wrappedBlobMeta: String?,
 )
 
 /**
@@ -54,6 +56,8 @@ data class DerivativeRow(
     val byteSize: Long,
     val wrappedBlobKey: String,
     val manifest: List<Long>?,
+    /** The derivative blob's sealed metadata as its upload declared it (opaque, write-once). */
+    val wrappedBlobMeta: String?,
 )
 
 /** A verified derivative upload to attach: its role + session + the verified per-chunk manifest. */
@@ -66,6 +70,8 @@ data class BlobRefData(
     val byteSize: Long,
     val wrappedBlobKey: String,
     val manifest: List<Long>?,
+    /** The blob's sealed metadata as its upload declared it (opaque, write-once). */
+    val wrappedBlobMeta: String?,
 )
 
 /** A node's uploader bucket for the "Beiträge" tab (en.memory.buckets, cr-0113): opaque owner_key + structure + count. */
@@ -309,7 +315,7 @@ class MediaStore(private val blobs: BlobUploadStore) {
         val blob = BlobEntity.findById(m.blobId) ?: return null
         val derivatives = MediaDerivativeEntity.find("mediaId = ?1", m.id).list().mapNotNull { d ->
             val derivBlob = BlobEntity.findById(d.blobId) ?: return@mapNotNull null
-            DerivativeRow(d.kind, derivBlob.id, derivBlob.chunkCount, derivBlob.byteSize, derivBlob.wrappedBlobKey, blobs.decodeManifest(derivBlob.manifest))
+            DerivativeRow(d.kind, derivBlob.id, derivBlob.chunkCount, derivBlob.byteSize, derivBlob.wrappedBlobKey, blobs.decodeManifest(derivBlob.manifest), derivBlob.wrappedBlobMeta)
         }
         return MediaRow(
             m.id, blob.id, blob.chunkCount, blob.byteSize, blob.wrappedBlobKey, blobs.decodeManifest(blob.manifest),
@@ -317,6 +323,7 @@ class MediaStore(private val blobs: BlobUploadStore) {
             m.deletedAt, m.deletedBy, // cr-0110: null for live media, populated in the trashed listing
             m.createdBy, m.bucketId, // cr-0113: `attach` stamps both
             m.metaVersion,
+            wrappedBlobMeta = blob.wrappedBlobMeta,
         )
     }
 
@@ -386,7 +393,7 @@ class MediaStore(private val blobs: BlobUploadStore) {
         node.coverBlobId = blobId
         node.coverByteSize = session.byteSize
         node.persist()
-        return BlobRefData(blobId, session.chunkCount, session.byteSize, session.wrappedBlobKey, manifest)
+        return BlobRefData(blobId, session.chunkCount, session.byteSize, session.wrappedBlobKey, manifest, session.wrappedBlobMeta)
     }
 
     /** What [clearCover] did: detached the expected blob, found an empty slot (or no live node), or found another blob. */

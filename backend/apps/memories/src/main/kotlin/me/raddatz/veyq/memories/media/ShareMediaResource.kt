@@ -63,9 +63,11 @@ class ShareMediaResource(
                 byteSize = d.byteSize,
                 wrappedBlobKey = d.wrappedBlobKey,
                 manifest = d.manifest,
+                wrappedBlobMeta = d.wrappedBlobMeta,
             )
         },
         wrappedMeta = s.row.wrappedMeta,
+        wrappedBlobMeta = s.row.wrappedBlobMeta,
         identityId = s.identityId?.let(UUID::fromString),
     )
 

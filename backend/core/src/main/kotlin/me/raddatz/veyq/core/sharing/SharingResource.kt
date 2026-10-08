@@ -311,7 +311,7 @@ class SharingResource(
     @RateLimit(key = RateLimitKey.SHARE)
     override fun startShareBlobUploads(shareId: String, shareBlobUploadsRequest: ShareBlobUploadsRequest, xSharePassword: String?): Response {
         val declares = shareBlobUploadsRequest.items.map {
-            UploadDeclare(it.chunkCount, it.byteSize, it.wrappedBlobKey, it.blobId.toString(), it.ownerId.toString(), it.role)
+            UploadDeclare(it.chunkCount, it.byteSize, it.wrappedBlobKey, it.blobId.toString(), it.ownerId.toString(), it.role, it.wrappedBlobMeta)
         }
         return when (
             val o = handler.startUploads(

@@ -404,6 +404,27 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
     })
   })
 
+  // A blob's sealed metadata: the purpose-only blob-meta seal under the blob's own K_blob — here #file_blob's — whose
+  // plaintext is the padded document the independent implementation wrote, so the vector pins the layout too.
+  describe('blob meta (seal.sym[\'blob-meta\'])', () => {
+    const m = vectors.seal.sym['blob-meta']
+    const meta = { type: 'application/pdf', name: 'Steuerbescheid 2025 – Müller.pdf', modifiedAt: 1767225600000 }
+    it('is sealed under #file_blob\'s blob key', () => {
+      expect(m.kek).toBe(vectors.file_blob.blobKey.plaintext)
+    })
+    it('the writer produces the vector\'s plaintext byte for byte, from an NFD name too', () => {
+      expect(hex(v1.encodeBlobMeta(meta))).toBe(m.plaintext)
+      expect(hex(v1.encodeBlobMeta({ ...meta, name: 'Steuerbescheid 2025 – Müller.pdf' }))).toBe(m.plaintext)
+    })
+    it('the reader opens the vector blob to the document', () => {
+      expect(v1.openBlobMeta(unhex(m.kek), unhex(m.blob))).toEqual({ v: 1, ...meta })
+    })
+    it('its AAD is twice a chunk frame\'s length, so neither can be the other', () => {
+      expect(1 + 2 + unhex(m.context_bytes).length).toBe(16)
+      expect(unhex(m.plaintext).length).toBe(256)
+    })
+  })
+
   it('group name-key derivation from the name epoch key (cr-0096, ADR 0027)', () => {
     const g = vectors.group_name_key
     // K_name = HKDF-SHA256(E_e, salt="", info=utf8("veyq/v1/group-name-key"), 32).

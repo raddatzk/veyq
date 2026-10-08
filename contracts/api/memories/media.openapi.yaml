@@ -883,6 +883,15 @@ components:
           contentEncoding: base64
           maxLength: 256
           example: d3JhcHBlZC1rLWJsb2I=
+        wrappedBlobMeta:
+          type: [string, "null"]
+          description: >
+            The blob's sealed metadata exactly as its upload declared it: under the blob's own `K_blob` (the
+            `blob-meta` seal), client-supplied, write-once, opaque base64 to the server. Null when the upload
+            declared none.
+          contentEncoding: base64
+          maxLength: 2048
+          example: c2VhbGVkLWJsb2ItbWV0YQ==
         derivatives:
           type: [array, "null"]
           description: Role-tagged derivative tiers (THUMBNAIL, PREVIEW), each its own blob ref with its own wrap.
@@ -1048,6 +1057,15 @@ components:
           contentEncoding: base64
           maxLength: 256
           example: d3JhcHBlZC1rLWJsb2I=
+        wrappedBlobMeta:
+          type: [string, "null"]
+          description: >
+            The blob's sealed metadata exactly as its upload declared it: under the blob's own `K_blob` (the
+            `blob-meta` seal), client-supplied, write-once, opaque base64 to the server. Null when the upload
+            declared none.
+          contentEncoding: base64
+          maxLength: 2048
+          example: c2VhbGVkLWJsb2ItbWV0YQ==
 
     MediaExifResponse:
       type: object
@@ -1294,6 +1312,15 @@ components:
           contentEncoding: base64
           maxLength: 256
           example: d3JhcHBlZC1rLWJsb2I=
+        wrappedBlobMeta:
+          type: [string, "null"]
+          description: >
+            The blob's sealed metadata exactly as its upload declared it: under the blob's own `K_blob` (the
+            `blob-meta` seal), client-supplied, write-once, opaque base64 to the server. Null when the upload
+            declared none.
+          contentEncoding: base64
+          maxLength: 2048
+          example: c2VhbGVkLWJsb2ItbWV0YQ==
 
     ErrorResponse:
       $ref: '../_common.openapi.yaml#/components/schemas/ErrorResponse'

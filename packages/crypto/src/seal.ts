@@ -87,6 +87,10 @@ export const SEAL_PURPOSES = {
   // The Memory's drop PUBLIC key on a WRITE_ONLY share: the guest seals to it, so the server can neither read nor
   // substitute it.
   'drop-public-key': [],
+  // Purpose only: a blob's sealed metadata (type, name, modification time — ./blobMeta.ts) under the blob's own
+  // K_blob, which is the binding as it is for the blob's chunk frames. A frame's AAD is u32be(index) ‖ u32be(total),
+  // 8 bytes; this one is 0x02 ‖ 'v1' ‖ lp('blob-meta'), 16 — the two can never open as each other.
+  'blob-meta': [],
   // Purpose only: under a KEK with a fresh salt, or under the account's own Master Key.
   'master-key': [],
   'identity-priv': [],

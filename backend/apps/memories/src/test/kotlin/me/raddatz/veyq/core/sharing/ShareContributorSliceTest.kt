@@ -84,6 +84,55 @@ class ShareContributorSliceTest {
             .body("buckets.find { it.ownerKey == 'share:$identityId' }.sealedName", equalTo(sealedContributorName))
     }
 
+    /**
+     * The sealed blob meta (`wrappedBlobMeta`) reaches a guest unchanged through the share read: a member's medium's
+     * original and its derivative tiers, and a guest's own upload; a tier that declared none is null. Over the cap the
+     * guest start is the contract's 400, at the cap it opens.
+     */
+    @Test
+    fun theShareReadServesEachTiersBlobMetaUnchanged() {
+        val (userId, scopeId) = seedMemberScope()
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        fun memberStart(blob: TestBlob, ownerId: String, role: String, meta: String?): String =
+            given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+                .body("""{"items":[${blob.declare(wrap, ownerId = ownerId, role = role, meta = meta)}]}""")
+                .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
+                .then().statusCode(200).extract().path("results[0].uploadId")
+        val membersMedia = TestIds.uuid()
+        val original = memberStart(TestBlob.ofChunks(2), membersMedia, "ORIGINAL", "b3JpZy1tZXRh")
+        val thumb = memberStart(TestBlob.SMALL, membersMedia, "THUMBNAIL", "dGh1bWItbWV0YQ==")
+        val preview = memberStart(TestBlob.SMALL, membersMedia, "PREVIEW", null)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+            .body(
+                """{"items":[{"nodeId":"$memory","mediaId":"$membersMedia","originalUploadId":"$original","derivatives":[""" +
+                    """{"kind":"THUMBNAIL","uploadId":"$thumb"},{"kind":"PREVIEW","uploadId":"$preview"}]}]}""",
+            )
+            .`when`().post("/api/scopes/$scopeId/media-batch").then().statusCode(200).body("results[0].error", nullValue())
+
+        val shareId = createShare(userId, memory, role = "READ_WRITE")
+        val contributorToken = given().contentType(ContentType.JSON)
+            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName"}""")
+            .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
+            .then().statusCode(201).extract().path<String>("contributorToken")
+        fun guestStart(meta: String?) = given().contentType(ContentType.JSON)
+            .body("""{"contributorToken":"$contributorToken","items":[${TestBlob.SMALL.declare("Ymxvyi13cmFw", meta = meta)}]}""")
+            .`when`().post("/api/shares/$shareId/blob-uploads").then()
+        val guestUpload = guestStart("Z3Vlc3QtbWV0YQ==").statusCode(200).extract().path<String>("results[0].uploadId")
+        val guestsMedia = given().contentType(ContentType.JSON)
+            .body("""{"contributorToken":"$contributorToken","items":[{"mediaId":"${TestBlob.ownerOf(guestUpload)}","originalUploadId":"$guestUpload"}]}""")
+            .`when`().post("/api/shares/$shareId/media")
+            .then().statusCode(200).extract().path<String>("results[0].mediaId")
+
+        ShareMediaRead.of(shareId).then().statusCode(200)
+            .body("media.find { it.mediaId == '$membersMedia' }.wrappedBlobMeta", equalTo("b3JpZy1tZXRh"))
+            .body("media.find { it.mediaId == '$membersMedia' }.derivatives.find { it.kind == 'THUMBNAIL' }.wrappedBlobMeta", equalTo("dGh1bWItbWV0YQ=="))
+            .body("media.find { it.mediaId == '$membersMedia' }.derivatives.find { it.kind == 'PREVIEW' }.wrappedBlobMeta", nullValue())
+            .body("media.find { it.mediaId == '$guestsMedia' }.wrappedBlobMeta", equalTo("Z3Vlc3QtbWV0YQ=="))
+
+        guestStart("A".repeat(2049)).statusCode(400).body("title", equalTo("Constraint Violation"))
+        guestStart("A".repeat(2048)).statusCode(200).body("results[0].uploadId", notNullValue()) // control
+    }
+
     @Test
     fun viewerShareRejectsContribution() {
         val (userId, scopeId) = seedMemberScope()

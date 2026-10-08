@@ -29,6 +29,16 @@ export {
   type ScopeKind,
   type StatementContext,
 } from './seal'
+export {
+  sealBlobMeta,
+  openBlobMeta,
+  encodeBlobMeta,
+  decodeBlobMeta,
+  BlobMetaInvalid,
+  BLOB_META,
+  type BlobMeta,
+  type OpenedBlobMeta,
+} from './blobMeta'
 
 export type ArgonParams = { t: number; m: number; p: number; dkLen: number }
 /** auth-path default: m in KiB = 32 MiB. Model B has no server-side verifier (ADR 0003). The one profile this

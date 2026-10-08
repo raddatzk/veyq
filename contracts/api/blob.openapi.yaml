@@ -267,6 +267,19 @@ components:
           maxLength: 256
           example: d3JhcHBlZC1rLWJsb2I=
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        wrappedBlobMeta:
+          type: string
+          description: >
+            Optional, client-supplied: the blob's metadata (its type, the name it was uploaded under, its modification
+            time) sealed under the blob's own `K_blob` — the purpose-only `blob-meta` seal, because that key is the
+            binding ([ADR 0072](../../docs/decisions/0072-a-seal-binds-its-object.md) Decision 2). Opaque base64 to
+            the server, which never reads it: it is stored write-once with the blob and served back unchanged
+            wherever the blob's `wrappedBlobKey` is; no operation changes it. Absent ⇒ the blob carries none.
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 2048
+          example: c2VhbGVkLWJsb2ItbWV0YQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 2048) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     BlobUploadsBatchResponse:
       type: object

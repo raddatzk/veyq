@@ -48,6 +48,11 @@ class UploadSessionEntity : PanacheEntityBase {
     @Column(name = "wrapped_blob_key", nullable = false)
     lateinit var wrappedBlobKey: String
 
+    /** The blob's metadata sealed under its own `K_blob` (the `blob-meta` seal), as `start` declared it; opaque,
+     *  optional. Written once — `updatable = false` keeps it out of every UPDATE — and copied to the blob row. */
+    @Column(name = "wrapped_meta", updatable = false)
+    var wrappedBlobMeta: String? = null
+
     @Column(name = "created_at", nullable = false)
     lateinit var createdAt: Instant
 
@@ -80,7 +85,7 @@ class UploadSessionEntity : PanacheEntityBase {
 
 /**
  * A completed blob (cr-0028): the chunk `manifest` (per-chunk ciphertext sizes, JSON array, or null when the
- * dev store has no transport) + the `K_blob` wrap. The bytes live in the object store under `storageKey/<i>`,
+ * dev store has no transport) + the `K_blob` wrap + the blob's sealed metadata. The bytes live in the object store under `storageKey/<i>`,
  * never here. Operator-blind throughout.
  */
 @Entity
@@ -105,6 +110,15 @@ class BlobEntity : PanacheEntityBase {
 
     @Column(name = "wrapped_blob_key", nullable = false)
     lateinit var wrappedBlobKey: String
+
+    /**
+     * The blob's metadata (type, name, modification time) sealed by the client under the blob's own `K_blob` — the
+     * `blob-meta` seal — copied from the upload session; opaque, optional (null when the upload declared none).
+     * **Write-once:** `updatable = false` keeps it out of every UPDATE Hibernate writes, and no operation names it,
+     * so what a read ref serves is what the upload declared.
+     */
+    @Column(name = "wrapped_meta", updatable = false)
+    var wrappedBlobMeta: String? = null
 
     @Column(name = "manifest")
     var manifest: String? = null

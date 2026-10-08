@@ -234,6 +234,73 @@ class FilesContentSliceTest {
         assertEquals(0L, QuarkusTransaction.requiringNew().call { usage.tenantUsage(tenantId) })
     }
 
+    /**
+     * A blob's sealed metadata (`wrappedBlobMeta`, the `blob-meta` seal under `K_blob`): declared at the start, carried
+     * by the session to the blob row unchanged, served back on the completion's answer and the listing — and absent
+     * stays null on both, through the same routes.
+     */
+    @Test
+    fun theDeclaredBlobMetaIsServedBackUnchangedAndAbsentStaysNull() {
+        val (userId, scopeId) = seedMemberScope()
+        val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
+        val withMeta = seedNode(scopeId, FilesNodeKinds.FILE, parentId = folder, wrappedContentKey = CONTENT_KEY)
+        val without = seedNode(scopeId, FilesNodeKinds.FILE, parentId = folder, wrappedContentKey = CONTENT_KEY)
+
+        val upload = start(userId, scopeId, withMeta, TestBlob.SMALL, meta = BLOB_META)
+        assertEquals(BLOB_META, QuarkusTransaction.requiringNew().call { UploadSessionEntity.findById(upload)!!.wrappedBlobMeta })
+        val blobId = complete(userId, scopeId, withMeta, upload).statusCode(200)
+            .body("wrappedBlobMeta", equalTo(BLOB_META)).extract().path<String>("blobId")
+        assertEquals(BLOB_META, QuarkusTransaction.requiringNew().call { BlobEntity.findById(blobId)!!.wrappedBlobMeta }, "copied session to blob")
+        complete(userId, scopeId, without, start(userId, scopeId, without, TestBlob.SMALL)).statusCode(200)
+            .body("wrappedBlobMeta", nullValue())
+
+        list(userId, scopeId, folder).statusCode(200)
+            .body("items.find { it.nodeId == '$withMeta' }.fileBlob.wrappedBlobMeta", equalTo(BLOB_META))
+            .body("items.find { it.nodeId == '$without' }.fileBlob.wrappedBlobMeta", nullValue())
+    }
+
+    /** The bound is the spec's: 400 before the handler over 2048 characters, empty or not base64, no session opened. */
+    @Test
+    fun aBlobMetaOverItsCapOrEmptyIsRefused400() {
+        val (userId, scopeId) = seedMemberScope()
+        val file = seedNode(scopeId, FilesNodeKinds.FILE, wrappedContentKey = CONTENT_KEY)
+        startRequest(userId, scopeId, file, TestBlob.SMALL, meta = "A".repeat(2049)).statusCode(400)
+        startRequest(userId, scopeId, file, TestBlob.SMALL, meta = "").statusCode(400)
+        startRequest(userId, scopeId, file, TestBlob.SMALL, meta = "not base64!").statusCode(400)
+        assertEquals(0L, QuarkusTransaction.requiringNew().call { UploadSessionEntity.count("scopeId", scopeId) }, "no session opened")
+        // control: exactly at the cap, through the same route
+        startRequest(userId, scopeId, file, TestBlob.SMALL, meta = "A".repeat(2048)).statusCode(200).body("results[0].error", nullValue())
+    }
+
+    /**
+     * Write-once: no operation names the meta after the start, and the column is `updatable = false` on both rows, so
+     * even a write through the entity — the only way code could change it — leaves what the upload declared.
+     */
+    @Test
+    fun theBlobMetaIsWriteOnce() {
+        val (userId, scopeId) = seedMemberScope()
+        val file = seedNode(scopeId, FilesNodeKinds.FILE, wrappedContentKey = CONTENT_KEY)
+        val upload = start(userId, scopeId, file, TestBlob.SMALL, meta = BLOB_META)
+        val touched = Instant.parse("2030-01-01T00:00:00Z")
+        QuarkusTransaction.requiringNew().run {
+            UploadSessionEntity.findById(upload)!!.apply { wrappedBlobMeta = "b3RoZXI="; lastWindowAt = touched }
+        }
+        QuarkusTransaction.requiringNew().run {
+            val session = UploadSessionEntity.findById(upload)!!
+            assertEquals(touched, session.lastWindowAt, "control: the same write reached an updatable column")
+            assertEquals(BLOB_META, session.wrappedBlobMeta)
+        }
+        val blobId = complete(userId, scopeId, file, upload).statusCode(200).extract().path<String>("blobId")
+        QuarkusTransaction.requiringNew().run {
+            BlobEntity.findById(blobId)!!.apply { wrappedBlobMeta = "b3RoZXI="; manifest = "[1]" }
+        }
+        QuarkusTransaction.requiringNew().run {
+            val blob = BlobEntity.findById(blobId)!!
+            assertEquals("[1]", blob.manifest, "control: the same write reached an updatable column")
+            assertEquals(BLOB_META, blob.wrappedBlobMeta)
+        }
+    }
+
     /** Inbox #391: the trash tells a file that holds content from one whose upload never finished (no attachment row) —
      *  core's `attached`, so the web does not offer an empty file as a restorable one. */
     @Test
@@ -254,17 +321,28 @@ class FilesContentSliceTest {
 
     // --- the wire ------------------------------------------------------------------------------------------------
 
+    private companion object {
+        /** An opaque stand-in for a client's `blob-meta` seal: the server never reads it, only stores and serves it. */
+        const val BLOB_META = "c2VhbGVkLWJsb2ItbWV0YQ=="
+    }
+
     /** Start one upload for [node] in [role] (default: the file role) and stage its chunks at their exact lengths. */
-    private fun start(userId: String, scopeId: String, node: String, blob: TestBlob, wrap: String = "d3JhcA==", role: String = FilesBlobRoles.FILE_CONTENT): String {
-        val uploadId = startRequest(userId, scopeId, node, blob, wrap, role).statusCode(200).body("results[0].error", nullValue())
+    private fun start(
+        userId: String, scopeId: String, node: String, blob: TestBlob, wrap: String = "d3JhcA==",
+        role: String = FilesBlobRoles.FILE_CONTENT, meta: String? = null,
+    ): String {
+        val uploadId = startRequest(userId, scopeId, node, blob, wrap, role, meta).statusCode(200).body("results[0].error", nullValue())
             .extract().path<String>("results[0].uploadId")
         blob.stage(fakeStore, sessionKey(uploadId))
         return uploadId
     }
 
-    private fun startRequest(userId: String, scopeId: String, node: String, blob: TestBlob, wrap: String = "d3JhcA==", role: String = FilesBlobRoles.FILE_CONTENT): ValidatableResponse =
+    private fun startRequest(
+        userId: String, scopeId: String, node: String, blob: TestBlob, wrap: String = "d3JhcA==",
+        role: String = FilesBlobRoles.FILE_CONTENT, meta: String? = null,
+    ): ValidatableResponse =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[${blob.declare(wrap, ownerId = node, role = role)}]}""")
+            .body("""{"items":[${blob.declare(wrap, ownerId = node, role = role, meta = meta)}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
             .then()
 
