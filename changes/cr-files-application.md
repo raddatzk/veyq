@@ -835,7 +835,7 @@ without touching core except for the platform prerequisites below, which every l
       `claimShareBody(FILE)`: the folder page embeds a body only for the node on screen, so a per-file body would mean a
       click per file. (8) Core's guest reserve/window are a new core module (`guestBlob.ts`); Memories keeps its own copy
       inside its transport (B0 pins its wire byte for byte) — merging is a later, characterised change.
-      **Not verified:** the e2e itself (written, typechecked, discovered — runs from the main checkout), a browser (the
+      **Not verified:** the e2e itself was not run in the worktree — **run on main 2026-10-08 after the merge: 20/20 incl. `filesShare.e2e.test.ts`**, a browser (the
       section's look on the public page, drag-and-drop, the name dialog interplay), the mutation gate.
 - [ ] F3 the drop box ([ADR 0080](../docs/decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
       decision 11) — kind `FILES_DROPBOX`, `identity_id` unique per (drop box, identity), members only delete or move out,
