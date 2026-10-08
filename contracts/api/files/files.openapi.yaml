@@ -6,10 +6,12 @@ info:
     The **Files** application's own operations ([docs/apps/files.md](../../../docs/apps/files.md), ADR 0079): a file
     is a node of kind `FILE` that holds **one** sealed blob in its attachment slot `FILE_CONTENT` (core's
     `veyq_node_attachment`). Everything else a file needs is core's and is not repeated here: the node itself (its
-    sealed name, its content key, its sealed metadata — MIME type, plaintext size, modified time in the node's
-    `wrappedMeta` under the file node's key, written with `updateNode` and its `metaVersion`), its trash and purge
-    (`deleteNode`, the trash operations), and the blob transfer (`startBlobUploads` with `role: FILE_CONTENT` and
-    `ownerId` = the file node's id, the upload windows, `presignBlobDownloads` by `blobId`). This spec is what Files
+    sealed name and its content key), its trash and purge (`deleteNode`, the trash operations), and the blob transfer
+    (`startBlobUploads` with `role: FILE_CONTENT` and `ownerId` = the file node's id, the upload windows,
+    `presignBlobDownloads` by `blobId`). A file's type, the name it was uploaded under and its modified time are its
+    BLOB's sealed metadata — `wrappedBlobMeta`, sealed under the blob's own `K_blob`, declared once with the upload and
+    served back on `FileBlobRef` — so they change with the bytes they describe, atomically, and only then; the file's
+    plaintext size is the blob's sealed size less the frames' overhead. This spec is what Files
     makes of a verified upload — the file's blob, first or as a replacement — and the read that pairs a folder's
     files with their blobs.
 
@@ -62,8 +64,8 @@ paths:
       description: >
         For every live `FILE` node whose parent is `parentId` (absent: the scope root), its `nodeId` and the blob
         its `FILE_CONTENT` slot holds (`fileBlob`) — or `fileBlob: null` for a file created whose upload has not completed yet.
-        Names, keys and sealed metadata are not repeated here: the client has them from core's node listing and
-        joins by `nodeId`. Trashed files are not listed (core's trash lists them). Ordered by `nodeId`. Guards: the
+        Names and keys are not repeated here: the client has them from core's node listing and joins by `nodeId`;
+        a file's type and modified time are its blob's `wrappedBlobMeta`, served on `fileBlob`. Trashed files are not listed (core's trash lists them). Ordered by `nodeId`. Guards: the
         caller holds a grant for the scope (READ); the parent, when named, is a live node of this scope
         (`node_not_found` otherwise, a trashed folder included).
       security:
@@ -110,8 +112,8 @@ paths:
         upload is spent and its blob reclaimed, and the answer is `409 stale_file` carrying the slot's
         `currentBlobId` — the client decides, re-reads and re-uploads to retry. A successful replace reclaims the
         replaced blob in the same transaction (its row goes, its objects go on the reclaim list, ADR 0062). Returns
-        the attached blob's reference. The file's sealed metadata is not part of this call: it lives in the node's
-        `wrappedMeta`, written with core's `updateNode`.
+        the attached blob's reference, its `wrappedBlobMeta` (the file's type, uploaded name and modified time,
+        declared with the upload) included — nothing about the file is written beside the blob.
       security:
         - bearerAuth: []
       parameters:
@@ -170,7 +172,7 @@ paths:
       summary: The blob reference of every live file under a share (unauthenticated).
       description: >
         **No auth.** The Files half of a guest's read of a link: core's `resolveShare` serves the shared nodes with
-        their keys, names and sealed metadata, this serves the blob each live `FILE` among them holds — `fileBlob:
+        their keys and names, this serves the blob each live `FILE` among them holds (its `wrappedBlobMeta` with it) — `fileBlob:
         null` for one whose upload has not completed. Core's guest gate runs first (`ShareGuestGate`): an active
         share → the password → the access mode. Only files of the **live** shared subtree are listed: a file in the
         trash, or under a trashed folder, is not (and its blob answers `404` at `resolveShareBlob`). Ordered by
@@ -215,10 +217,8 @@ paths:
         moved out of the subtree since, or a link revoked or deleted since, refuses it (`upload_not_found`).
         Declare-then-verify, the compare-and-set on `expectedBlobId` and the reclaim of a replaced blob are exactly
         `completeFile`'s. The attachment is stamped with the guest's identity: the per-link storage limit counts it
-        (ADR 0073 §4). **`wrappedMeta`**, when given, is the file's sealed metadata under the file node's key (the
-        format `completeFile`'s caller writes with `updateNode`); it replaces the node's `wrappedMeta` in the same
-        transaction as the swap, so the description goes with the bytes it describes, and the node's `metaVersion`
-        moves by one. A guest has no other way to write a node's payload (`createShareNode` takes none).
+        (ADR 0073 §4). The file's metadata travels as the upload's `wrappedBlobMeta` (declared at
+        `startShareBlobUploads`), so this call writes nothing but the swap — no node payload, as for a member.
         **Password-protected shares (ADR 0037):** no `X-Share-Password` → non-enumerable `404`; a wrong token →
         `403 share_password_incorrect`.
       parameters:
@@ -233,7 +233,6 @@ paths:
             example:
               contributorToken: Y29udHJpYnV0b3ItdG9rZW4tb3BhcXVl
               uploadId: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
-              wrappedMeta: bWV0YS1jaXBoZXJ0ZXh0
       responses:
         "200":
           description: The file's blob is now this upload's (any replaced blob was reclaimed).
@@ -423,7 +422,7 @@ components:
           x-veyq-visibility: measure
           type: integer
           format: int64
-          description: The sealed (ciphertext) size; the plaintext size is in the node's sealed metadata.
+          description: The sealed (ciphertext) size; the plaintext size is this less the frames' overhead (28 bytes per chunk).
           example: 65536
         manifest:
           x-veyq-visibility: measure
@@ -511,15 +510,6 @@ components:
             The blob the guest saw in the file's slot (`listShareFiles`) — the one this upload replaces. Absent (or
             null) for the first upload into an empty slot. A slot holding anything else answers `409 stale_file`.
           example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
-        wrappedMeta:
-          type: [string, "null"]
-          description: >
-            The file's sealed metadata under the file node's key (AAD `node-meta`; opaque base64, Files' format) — it
-            replaces the node's `wrappedMeta` with the swap. Absent: the node's metadata is left as it is.
-          contentEncoding: base64
-          maxLength: 8192
-          example: bWV0YS1jaXBoZXJ0ZXh0
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     ShareFileListing:
       type: object
