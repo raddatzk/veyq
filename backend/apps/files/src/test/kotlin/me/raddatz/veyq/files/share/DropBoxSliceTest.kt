@@ -26,6 +26,8 @@ import io.restassured.http.ContentType
 import io.restassured.response.ValidatableResponse
 import jakarta.inject.Inject
 import java.time.Instant
+import java.time.OffsetDateTime
+import java.time.temporal.ChronoUnit
 import java.util.Base64
 import java.util.UUID
 import org.hamcrest.CoreMatchers.equalTo
@@ -34,6 +36,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 /**
@@ -223,6 +226,22 @@ class DropBoxSliceTest {
         // The API shares a drop box WRITE_ONLY only.
         share(t.userId, t.dropBox, "READ").statusCode(422).body("code", equalTo("illegal_scope"))
         share(t.userId, t.dropBox, "WRITE_ONLY").statusCode(201)
+    }
+
+    /** An identity folder is born by core's other create path (`NodesStore.createIdentityFolder`); the members' listing
+     *  serves its server-observed `createdAt` like any node's — the order two guests of one name are told apart by. */
+    @Test
+    fun anIdentityFolderListsTheInstantTheServerMadeIt() {
+        val t = tree()
+        val before = Instant.now().truncatedTo(ChronoUnit.MILLIS)
+        val folder = ensure(dropLink(t)).statusCode(200).body("created", equalTo(true)).extract().path<String>("nodeId")
+        val after = Instant.now()
+        val listed = OffsetDateTime.parse(
+            given().header("Authorization", bearer(t.userId)).`when`().get("/api/scopes/${t.scopeId}/nodes")
+                .then().statusCode(200).extract().path<String>("find { it.id == '$folder' }.createdAt"),
+        ).toInstant()
+        assertEquals(tx { NodeEntity.findById(folder)!!.createdAt }, listed)
+        assertTrue(!listed.isBefore(before) && !listed.isAfter(after), "$listed is not within [$before, $after]")
     }
 
     // --- the wire ------------------------------------------------------------------------------------------------

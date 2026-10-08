@@ -183,7 +183,9 @@ CREATE UNIQUE INDEX ux_membership_user_scope ON veyq_membership (user_id, scope_
 -- it is not a foreign key; slug uniqueness is per parent slot. ux_node_parent_slug spans trashed rows on
 -- purpose: a trash frees the slug by writing the node's own id into slug_token (ADR 0061), because neither
 -- engine pair has a filtered index. cover_blob_id, cover_byte_size, media_revision and delete_revision serve
--- the Memories application today and stay here until they are generalised (ADR 0079 Consequences).
+-- the Memories application today and stay here until they are generalised (ADR 0079 Consequences). Of this table's
+-- times only created_at keeps the millisecond (TIMESTAMP(3)): clients order equal-named siblings by it, then by id
+-- (ADR 0015).
 CREATE TABLE veyq_node (
     id                      VARCHAR(36) NOT NULL PRIMARY KEY,
     scope_id                VARCHAR(36) NOT NULL,
@@ -193,7 +195,7 @@ CREATE TABLE veyq_node (
     slug_token              VARCHAR(128) NOT NULL,
     order_index             INT NOT NULL,
     wrapped_content_key     TEXT NOT NULL,
-    created_at              TIMESTAMP NOT NULL,
+    created_at              TIMESTAMP(3) NOT NULL,
     wrapped_meta            TEXT NULL,
     cover_blob_id           VARCHAR(36) NULL,
     cover_byte_size         BIGINT NULL,
