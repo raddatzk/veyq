@@ -28,6 +28,7 @@ import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { epochMsToIsoDate } from '../../shared/isoDate'
 import { MetaConflictError, MetaUnreadableError } from '../../core/node/sealedMetaWrite'
+import { treeNode } from '../../test/models'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const nodeKey = v1.randomBytes(32)
@@ -269,7 +270,7 @@ describe('unsealNodeDate / sortNodesByDate (browse card grid, cr-0067)', () => {
     const id = crypto.randomUUID()
     const memKey = v1.randomBytes(32)
     const wrappedContentKey = b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementVersion: 0 }, scopeKey, memKey))
-    return {
+    return treeNode({
       id,
       parentId: null,
       kind: MEMORY_KIND,
@@ -279,7 +280,7 @@ describe('unsealNodeDate / sortNodesByDate (browse card grid, cr-0067)', () => {
       wrappedContentKey,
       wrappedMeta: date ? sealMemoryDate(memKey, { scopeId: SCOPE_ID, nodeId: id }, date) : null,
       metaVersion: 0, placementVersion: 0,
-    }
+    })
   }
 
   it('unseals a node’s own date by opening its K_mem under the parent key', () => {

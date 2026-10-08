@@ -2,14 +2,16 @@
 // serializes, not the object handed to it — so a field the client dropped or renamed fails here. A rename carries the
 // whole placement (parent, re-wrapped key, re-sealed name, slug token, epoch, the version it was built on), and the
 // wrap it sends opens only under the destination parent's key at the NEXT version. A restore's token and name are
-// derived under the live parent's key (ADR 0080 Decision 8). No mock of the API client.
+// derived under the live parent's key (ADR 0080 Decision 8). A listing's `createdAt` reaches the tree (ADR 0015). No
+// mock of the API client.
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
-import { createContentNode, moveNode, renameNode, restoreNode, type TreeNode } from './tree'
+import { createContentNode, listTree, moveNode, renameNode, restoreNode, type TreeNode } from './tree'
 import { epochsOf } from '../../features/spaces/epochsTestUtil'
 import { registry } from '../applications/registry'
 import { fileNameSlug } from '../../shared/naming'
+import { treeNode } from '../../test/models'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const A = '5c09e000-0000-4000-8000-0000000000a0'
@@ -25,7 +27,7 @@ const keyM = v1.randomBytes(32)
 const at = (placementVersion: number) => ({ scopeId: SCOPE_ID, nodeId: M, epoch: 0, placementVersion })
 const sealWrap = (kek: Uint8Array, id: string, k: Uint8Array) =>
   b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementVersion: 3 }, kek, k))
-const row = (id: string, parentId: string | null, kek: Uint8Array, k: Uint8Array, name: string): TreeNode => ({
+const row = (id: string, parentId: string | null, kek: Uint8Array, k: Uint8Array, name: string): TreeNode => treeNode({
   id, parentId, kind: parentId === null ? 'FOLDER' : 'MEMORY', orderIndex: 0, epoch: 0, name, wrappedContentKey: sealWrap(kek, id, k),
   wrappedMeta: null, metaVersion: 0, placementVersion: 3,
 })
@@ -170,5 +172,23 @@ describe('a slug token is folded by its node\'s kind (inbox #350)', () => {
     expect(bodies[1].json.slugToken).toBe(b64std(v1.slugToken(keyA, A, 'foto.jpg')))
     await restoreNode(SCOPE_ID, epochsOf(scopeKey), tree(), { ...trashed, kind: 'FOLDER' })
     expect(bodies[2].json.slugToken).toBe(folderToken(keyA, A))
+  })
+})
+
+// The listing on the wire (ADR 0015): the server's `createdAt` reaches the TreeNode as epoch milliseconds, every digit of
+// the millisecond kept — the instant siblings are ordered by. Served as JSON at `fetch`, read through the real client.
+describe('a listing on the wire', () => {
+  it('carries each node\'s server-observed createdAt to the millisecond', async () => {
+    const name = b64std(v1.seal({ purpose: 'node-name', scopeId: SCOPE_ID, nodeId: A, epoch: 0, placementVersion: 3 }, scopeKey, v1.utf8('Reisen')))
+    const summary = {
+      id: A, kind: 'FOLDER', encryptedName: name, slugToken: 'c2x1Zw==', orderIndex: 0, epoch: 0,
+      wrappedContentKey: sealWrap(scopeKey, A, keyA), metaVersion: 0, placementVersion: 3, createdAt: '2026-10-08T10:15:30.123Z',
+    }
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([summary]), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+
+    const [listed] = await listTree(SCOPE_ID, epochsOf(scopeKey))
+
+    expect(listed.name).toBe('Reisen')
+    expect(listed.createdAt).toBe(Date.UTC(2026, 9, 8, 10, 15, 30, 123))
   })
 })

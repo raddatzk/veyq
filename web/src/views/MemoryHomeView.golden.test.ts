@@ -72,6 +72,7 @@ import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 import { realI18n } from '../test/i18n'
 import { serializeDom } from '../test/domGolden'
+import { treeNode } from '../test/models'
 
 // The map stub renders the pins it was handed, by name and sorted, so the map scenario pins WHICH nodes are on it.
 const SpaceMapStub = {
@@ -98,12 +99,12 @@ const wrapFor = (id: string, under: Uint8Array, key: Uint8Array) =>
 function nodeOf(label: string, kind: NodeKind, parentLabel: string | null, orderIndex: number, meta?: Omit<RawNodeMeta, 'v'>): TreeNode {
   const id = uid(label)
   const key = keyOf(label)
-  return {
+  return treeNode({
     id, kind, name: label, parentId: parentLabel === null ? null : uid(parentLabel), orderIndex, epoch: 0,
     wrappedContentKey: wrapFor(id, parentLabel === null ? fixed.scopeKey : keyOf(parentLabel), key),
     wrappedMeta: meta ? sealNodeMeta(key, { scopeId: fixed.scopeId, nodeId: id }, { v: 1, ...meta }) : null,
     metaVersion: 0, placementVersion: 0,
-  }
+  })
 }
 const day = (from: string, to = from) => ({ date: { mode: 'single' as const, from, to } })
 const at = (lat: number, lng: number) => ({ location: { name: `p-${lat}`, nameSource: 'manual' as const, derivedMode: 'fixed' as const, derived: { lat, lng } } })

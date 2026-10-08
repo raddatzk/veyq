@@ -12,6 +12,7 @@ import SpaceTrashDialog from './SpaceTrashDialog.vue'
 import { listTrash, restoreNode, type TrashedNode, type TreeNode } from '../tree'
 import { epochsOf } from '../../../features/spaces/epochsTestUtil'
 import { realI18n, t } from '../../../test/i18n'
+import { treeNode } from '../../../test/models'
 
 const stubs = {
   Dialog: { template: '<div><slot /></div>' },
@@ -120,7 +121,7 @@ describe('SpaceTrashDialog', () => {
     expect(listTrash).toHaveBeenCalledTimes(1)
 
     // the host reloads the tree: now the list is read again, against the new tree, and the left-behind child shows
-    const RELOADED: TreeNode[] = [{ id: 'n1', parentId: null, kind: 'MEMORY', orderIndex: 0, epoch: 0, name: 'Rom 2026', wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 }]
+    const RELOADED: TreeNode[] = [treeNode({ id: 'n1', parentId: null, kind: 'MEMORY', orderIndex: 0, epoch: 0, name: 'Rom 2026', wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 })]
     const CHILD: TrashedNode = { ...ROW, id: 'c1', parentId: 'n1', kind: 'CHAPTER', name: 'Tag 2' }
     vi.mocked(listTrash).mockResolvedValue([CHILD])
     await wrapper.setProps({ tree: RELOADED })

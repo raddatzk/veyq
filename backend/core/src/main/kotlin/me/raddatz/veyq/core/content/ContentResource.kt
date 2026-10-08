@@ -139,5 +139,6 @@ class ContentResource(
         placementVersion = placementVersion,
         shareIdentityId = shareIdentityId?.let(UUID::fromString),
         wrappedIdentityKey = wrappedIdentityKey,
+        createdAt = OffsetDateTime.ofInstant(createdAt, ZoneOffset.UTC),
     )
 }

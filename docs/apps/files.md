@@ -161,7 +161,8 @@ one per guest identity, which are core `FOLDER`s carrying `veyq_node.share_ident
 - **The member** (`components/DropBoxSection.vue`, `DropBoxDetail.vue`, `DropBoxCreateDialog.vue`,
   `DropBoxShareDialog.vue`): creates a drop box from a folder level, mints, copies, switches off and deletes its links,
   opens it to its guests' folders (a repeated guest name numbered at display time, never stored: `Anna`, `Anna (2)` in
-  node-id order, core's `compareNodeIds`; the same two folders' URL segments are `anna`, `anna-2` by the same order,
+  creation order — the server-observed `createdAt` of core's listing, then the node id for one millisecond, core's
+  `compareByCreation`; the same two folders' URL segments are `anna`, `anna-2` by the same order,
   core's `segmentsOf` in `core/node/location.ts`, which a future folder export uses for its directory names too), opens a folder
   (core's level view, read-only there: download only, no share, and no section that has nothing to show — the host's
   `hideEmptySections`) and deletes a folder. **Members place nothing** in a drop box or

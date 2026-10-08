@@ -50,7 +50,7 @@ import { epochsOf } from '../../spaces/epochsTestUtil'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 import { realI18n } from '../../../test/i18n'
-import { mediaItem } from '../../../test/models'
+import { mediaItem, treeNode } from '../../../test/models'
 
 // Stub the PrimeVue Select + Menu (not under test) and MediaGrid (renders the tile slot per item so the tile chrome
 // — checkbox + 3-dot — is exercised).
@@ -104,7 +104,7 @@ describe('MemoryBuckets — a guest named above this node (cr-node-key-hierarchy
     const wrap = (kek: Uint8Array, nodeId: string, k: Uint8Array) =>
       b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE, nodeId, epoch: 0, placementVersion: 0 }, kek, k))
     const node = (id: string, parentId: string | null, wrappedContentKey: string): TreeNode =>
-      ({ id, parentId, kind: 'FOLDER', orderIndex: 0, epoch: 0, name: id, wrappedContentKey, wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
+      treeNode({ id, parentId, kind: 'FOLDER', orderIndex: 0, epoch: 0, name: id, wrappedContentKey, wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
     const memoryKey = v1.randomBytes(32)
     space.epochs = epochsOf(scopeKey)
     treeStore.nodes = [node(FOLDER, null, wrap(scopeKey, FOLDER, folderKey)), node(MEMORY, FOLDER, wrap(folderKey, MEMORY, memoryKey))]

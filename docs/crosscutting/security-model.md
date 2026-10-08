@@ -94,7 +94,8 @@ request the **user** turned on, straight to the chosen provider.
   identity public key, and group-add-consent flag** — visible to, and effectively **enumerable by**, any
   fellow tenant member (anyone can create a group to run the member-resolve, [ADR 0014](../decisions/0014-group-scopes-and-governance.md) §5);
   server timestamps (created, changed, trashed, last rotated) for ordering — stored as written, to the second (a
-  medium's change time to the millisecond); nothing rounds them, so they tell *when*, never *what*; sizes; job-queue and op-log offsets; presence facts; a media
+  medium's change time and a node's creation time to the millisecond — the latter served to members on the node
+  listing, `NodeSummary.createdAt`, as the order equal-named siblings are told apart by, [ADR 0015](../decisions/0015-operator-blind-readable-urls.md)); nothing rounds them, so they tell *when*, never *what*; sizes; job-queue and op-log offsets; presence facts; a media
   item's **trash state** (a trashed flag + who trashed it + when, until the scheduled purge); a media item's
   **uploader attribution + bucket structure** (an opaque `owner_key` per medium — `user:{id}` / `share:{id}` —
   plus its `bucket_id` and the bucket rows' shape: node, parentage, `is_primary`, per-bucket counts; the

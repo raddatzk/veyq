@@ -50,13 +50,14 @@ import { setMapsConsent } from '../../../shared/state/useMapConfig'
 import { MEMORY_KIND } from '../kinds'
 import type { LocatedPin } from '../spaceMap'
 import { realI18n, t } from '../../../test/i18n'
+import { treeNode } from '../../../test/models'
 
 const stubs = {
   Button: { props: ['label'], template: `<button class="p-btn" @click="$emit('click', $event)">{{ label }}</button>` },
 }
 
 const pin = (id: string, name: string, lat: number, lng: number): LocatedPin => ({
-  node: { id, name, kind: MEMORY_KIND, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 },
+  node: treeNode({ id, name, kind: MEMORY_KIND, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 }),
   location: { name: `${name} place`, nameSource: 'manual', derivedMode: 'fixed', derived: { lat, lng } },
   date: null,
 })

@@ -23,15 +23,17 @@ import { slugPathOf } from '../../../core/node/location'
 import { confirmRequest, settleConfirm } from '../../../shared/state/useConfirm'
 import { DROPBOX_KIND, FILE_KIND } from '../kinds'
 import { realI18n } from '../../../test/i18n'
+import { treeNode } from '../../../test/models'
 
 const SCOPE = '11111111-1111-4111-8111-111111111111'
-const node = (id: string, kind: string, name: string, parentId: string | null, over: Partial<TreeNode> = {}): TreeNode => ({
+const node = (id: string, kind: string, name: string, parentId: string | null, over: Partial<TreeNode> = {}): TreeNode => treeNode({
   id, kind, name, parentId, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0, ...over,
 })
 const BOX = node('b0000000-0000-4000-8000-000000000000', DROPBOX_KIND, 'Einsendungen', null)
-const ANNA_1 = node('a1000000-0000-4000-8000-000000000000', FOLDER_KIND, 'Anna', BOX.id, { shareIdentityId: 'i1' })
-const ANNA_2 = node('a2000000-0000-4000-8000-000000000000', FOLDER_KIND, 'Anna', BOX.id, { shareIdentityId: 'i2' })
-const BEN = node('c0000000-0000-4000-8000-000000000000', FOLDER_KIND, 'Ben', BOX.id, { shareIdentityId: 'i3' })
+// The Annas' ids sort against the order the server made their folders in, so the numbering below is the creation order's.
+const ANNA_1 = node('a2000000-0000-4000-8000-000000000000', FOLDER_KIND, 'Anna', BOX.id, { shareIdentityId: 'i1', createdAt: 1_000 })
+const ANNA_2 = node('a1000000-0000-4000-8000-000000000000', FOLDER_KIND, 'Anna', BOX.id, { shareIdentityId: 'i2', createdAt: 2_000 })
+const BEN = node('c0000000-0000-4000-8000-000000000000', FOLDER_KIND, 'Ben', BOX.id, { shareIdentityId: 'i3', createdAt: 3_000 })
 
 function mountDetail(shareable = true) {
   return mount(DropBoxDetail, {
@@ -52,7 +54,7 @@ beforeEach(() => {
 })
 
 describe('DropBoxDetail', () => {
-  it('lists the guests’ folders, a repeated name numbered in node-id order, each with its file count', () => {
+  it('lists the guests’ folders, a repeated name numbered in creation order, each with its file count', () => {
     const w = mountDetail()
     const rows = w.findAll('.veyq-row-title').map((e) => e.text())
     expect(rows).toEqual(['Anna', 'Anna (2)', 'Ben'])

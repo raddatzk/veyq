@@ -45,7 +45,7 @@ import type { LoadedCover } from '../../features/memory/memoryCover'
 import { favoritesStore } from '../../features/memory/favoritesStore'
 
 import { realI18n, t } from '../../test/i18n'
-import { memberProfile, myTenant } from '../../test/models'
+import { memberProfile, myTenant, treeNode } from '../../test/models'
 
 // The overview lives in a teleporting PrimeVue Popover — stub it with a pass-through that always renders its
 // slot (so the tenant list is assertable) and exposes the toggle/hide the trigger calls.
@@ -226,10 +226,10 @@ describe('AppSidebar tenant switcher', () => {
 // tell was in the stylesheet — `.sidebar-favorite-cover .memory-cover-image` and three `.mobile-nav-favorite`
 // rules existed with nothing in the markup matching them.
 describe('AppSidebar favorites — a pinned Memory shows its cover', () => {
-  const MEMORY: TreeNode = {
+  const MEMORY: TreeNode = treeNode({
     id: 'n1', name: 'Rom 2026', kind: 'MEMORY', parentId: null, orderIndex: 0, epoch: 0,
     wrappedContentKey: 'k', wrappedMeta: 'm', metaVersion: 0, placementVersion: 0,
-  }
+  })
 
   beforeEach(() => {
     treeStore.nodes = [MEMORY]

@@ -4,11 +4,12 @@ import { TENANT_SCOPE } from './location'
 import { FOLDER_KIND, type NodeKind } from './kind'
 import { MEMORY_KIND, CHAPTER_KIND } from '../../features/memory/kinds'
 import type { TreeNode } from './tree'
+import { treeNode } from '../../test/models'
 
 const PERSONAL_SCOPE = '~me'
 
 function node(over: Partial<TreeNode> & Pick<TreeNode, 'id' | 'kind'>): TreeNode {
-  return { parentId: null, orderIndex: 0, epoch: 0, name: over.id, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0, ...over }
+  return treeNode({ parentId: null, orderIndex: 0, epoch: 0, name: over.id, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0, ...over })
 }
 
 // A small tree: root has folder "Trips" + memory "Solo"; "Trips" holds memory "Italy" + folder "2025".

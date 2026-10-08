@@ -19,6 +19,7 @@ import { FILE_KIND } from '../../features/files/kinds'
 import { epochsOf } from '../../features/spaces/epochsTestUtil'
 import { fileNameSlug, slugify } from '../../shared/naming'
 import { realI18n } from '../../test/i18n'
+import { treeNode } from '../../test/models'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const A = '5c09e000-0000-4000-8000-0000000000a0'
@@ -28,7 +29,7 @@ const keyA = v1.randomBytes(32)
 const keyF = v1.randomBytes(32)
 const sealWrap = (kek: Uint8Array, id: string, k: Uint8Array) =>
   b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementVersion: 3 }, kek, k))
-const row = (id: string, parentId: string | null, kind: string, kek: Uint8Array, k: Uint8Array, name: string): TreeNode => ({
+const row = (id: string, parentId: string | null, kind: string, kek: Uint8Array, k: Uint8Array, name: string): TreeNode => treeNode({
   id, parentId, kind, orderIndex: 0, epoch: 0, name, wrappedContentKey: sealWrap(kek, id, k), wrappedMeta: null, metaVersion: 0, placementVersion: 3,
 })
 

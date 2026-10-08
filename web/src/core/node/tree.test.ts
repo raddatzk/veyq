@@ -21,6 +21,7 @@ import { fakeApi } from '../../test/apiMock'
 import type { ContentApi, NodeSummary } from '../../api/generated/content'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
+import { treeNode } from '../../test/models'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const scopeKey = v1.randomBytes(32)
@@ -58,7 +59,7 @@ describe('nodeContentKey — resolve a chapter key down the chain', () => {
   const MEM = '5c09e000-0000-4000-8000-000000000e01'
   const CHAP = '5c09e000-0000-4000-8000-000000000c01'
   const node = (id: string, parentId: string | null, kind: string, wrappedContentKey: string): TreeNode =>
-    ({ id, parentId, kind: kind as TreeNode['kind'], orderIndex: 0, epoch: 0, name: id, wrappedContentKey, wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
+    treeNode({ id, parentId, kind: kind as TreeNode['kind'], orderIndex: 0, epoch: 0, name: id, wrappedContentKey, wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
 
   it('walks K_SC → folder key → Memory K_mem → chapter K_mem: a folder is a link of the chain (ADR 0080)', () => {
     const folderKey = v1.randomBytes(32)
@@ -150,7 +151,7 @@ describe('createFolder', () => {
 /** A listed row whose name is sealed under `entryKey` and whose key wraps `ownKey` under the same key. */
 function row(id: string, parentId: string | null, entryKey: Uint8Array, ownKey: Uint8Array, name: string, epoch = 0): NodeSummary {
   return {
-    id, parentId, kind: 'FOLDER', epoch, slugToken: 'x', orderIndex: 0, metaVersion: 0, placementVersion: 0,
+    id, parentId, kind: 'FOLDER', epoch, slugToken: 'x', orderIndex: 0, metaVersion: 0, placementVersion: 0, createdAt: new Date(0),
     encryptedName: sealUnder(entryKey, id, epoch, name), wrappedContentKey: wrap(entryKey, id, ownKey, epoch),
   }
 }
@@ -212,7 +213,7 @@ function fromB64(s: string): Uint8Array {
 
 /** A live folder `id` at the scope root (epoch 0) under `e0`, carrying `key` — a trashed root's live parent. */
 function liveParent(id: string, e0: Uint8Array, key: Uint8Array): TreeNode {
-  return { id, parentId: null, kind: 'FOLDER', orderIndex: 0, epoch: 0, name: 'Reisen', wrappedContentKey: wrap(e0, id, key), wrappedMeta: null, metaVersion: 0, placementVersion: 0 }
+  return treeNode({ id, parentId: null, kind: 'FOLDER', orderIndex: 0, epoch: 0, name: 'Reisen', wrappedContentKey: wrap(e0, id, key), wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
 }
 const F1 = '5c09e000-0000-4000-8000-0000000000f1'
 
@@ -300,7 +301,7 @@ describe('placeNode — move and rename re-wrap and re-seal at the next placemen
     b64std(v1.seal({ purpose: 'content-key', ...at(nodeId, epoch, version) }, kek, k))
   const unwrapAt = (kek: Uint8Array, nodeId: string, blob: string, epoch = 0, version = 0) =>
     v1.open({ purpose: 'content-key', ...at(nodeId, epoch, version) }, kek, fromB64(blob))
-  const treeRow = (id: string, parentId: string | null, kind: string, name: string, under: Uint8Array, own: Uint8Array, epoch = 0, version = 0): TreeNode => ({
+  const treeRow = (id: string, parentId: string | null, kind: string, name: string, under: Uint8Array, own: Uint8Array, epoch = 0, version = 0): TreeNode => treeNode({
     id, parentId, kind, orderIndex: 0, epoch, name, wrappedContentKey: wrapAt(under, id, own, epoch, version), wrappedMeta: null,
     metaVersion: 0, placementVersion: version,
   })
@@ -377,7 +378,7 @@ describe('placeNode — move and rename re-wrap and re-seal at the next placemen
       .mockResolvedValueOnce(undefined)
     // what a peer's rename left: M at version 1, its name and wrap sealed there
     const listed = (): NodeSummary[] => tree().map((n) => ({
-      id: n.id, parentId: n.parentId, kind: n.kind, epoch: n.epoch, slugToken: 'x', orderIndex: 0, metaVersion: 0,
+      id: n.id, parentId: n.parentId, kind: n.kind, epoch: n.epoch, slugToken: 'x', orderIndex: 0, metaVersion: 0, createdAt: new Date(n.createdAt),
       placementVersion: n.id === M ? 1 : 0,
       encryptedName: b64std(v1.seal(
         { purpose: 'node-name', ...at(n.id, 0, n.id === M ? 1 : 0) }, n.parentId === null ? e0 : n.parentId === A ? keys.A : keys.M,
@@ -444,7 +445,7 @@ describe('placeNode — move and rename re-wrap and re-seal at the next placemen
   function summaryOf(n: TreeNode): NodeSummary {
     const entryKey = n.parentId === null ? e0 : n.parentId === A ? keys.A : n.parentId === B ? keys.B : keys.M
     return {
-      id: n.id, parentId: n.parentId, kind: n.kind, epoch: n.epoch, slugToken: 'x', orderIndex: 0, metaVersion: 0,
+      id: n.id, parentId: n.parentId, kind: n.kind, epoch: n.epoch, slugToken: 'x', orderIndex: 0, metaVersion: 0, createdAt: new Date(n.createdAt),
       placementVersion: n.placementVersion, wrappedContentKey: n.wrappedContentKey,
       encryptedName: b64std(v1.seal({ purpose: 'node-name', ...at(n.id, n.epoch, n.placementVersion) }, entryKey, v1.utf8(n.name))),
     }

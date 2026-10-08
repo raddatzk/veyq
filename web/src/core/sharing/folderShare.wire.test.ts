@@ -13,6 +13,7 @@ import { SHARE_KEY } from './shareTree'
 import { SHARE_MEMORY_NAME } from './resolvePublicShare'
 import { ShareRole } from '../../api/generated/sharing'
 import type { EpochKeys } from '../../features/spaces/epochs'
+import { treeNode } from '../../test/models'
 
 const SCOPE_ID = '22222222-2222-4222-8222-222222222222'
 const TOP = '5c09e000-0000-4000-8000-0000000000a1'
@@ -28,7 +29,7 @@ const keyTop = v1.randomBytes(32)
 const keySub = v1.randomBytes(32)
 const wrapUnder = (kek: Uint8Array, id: string, k: Uint8Array) =>
   b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementVersion: 0 }, kek, k))
-const folder = (id: string, parentId: string | null, kek: Uint8Array, k: Uint8Array, name: string): TreeNode => ({
+const folder = (id: string, parentId: string | null, kek: Uint8Array, k: Uint8Array, name: string): TreeNode => treeNode({
   id, parentId, kind: FOLDER_KIND, orderIndex: 0, epoch: 0, name, wrappedContentKey: wrapUnder(kek, id, k),
   wrappedMeta: null, metaVersion: 0, placementVersion: 0,
 })

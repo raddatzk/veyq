@@ -7,6 +7,7 @@ import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 import org.hibernate.annotations.DynamicUpdate
 
 /**
@@ -113,11 +114,20 @@ class NodeEntity : PanacheEntityBase {
     @Column(name = "deleted_at")
     var deletedAt: Instant? = null
 
+    /** When the server stored the node — server-observed, to the millisecond (`TIMESTAMP(3)`), set once at creation
+     *  ([birthInstant]) and never written again: a rename, a move, a trash and a restore all keep it, and no request
+     *  carries it. Members' tree listing serves it (`NodeSummary.createdAt`), and clients order equal-named siblings by
+     *  (createdAt, id) (ADR 0015). Never on a guest's share listing nor the trash listing. */
     @Column(name = "created_at", nullable = false)
     lateinit var createdAt: Instant
 
     companion object : PanacheCompanionBase<NodeEntity, String> {
         /** Core's one node kind. Every other kind is an application's, named by that application (ADR 0079). */
         const val FOLDER = "FOLDER"
+
+        /** A new node's [createdAt]: now, cut to the column's millisecond. Cut HERE, not by the database: MariaDB drops the
+         *  digits past the column's precision while H2 rounds them, so an uncut write would list a different instant on
+         *  each engine. Cut, both store and list exactly this value. */
+        fun birthInstant(): Instant = Instant.now().truncatedTo(ChronoUnit.MILLIS)
     }
 }

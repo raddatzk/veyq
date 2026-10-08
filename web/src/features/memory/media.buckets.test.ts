@@ -13,6 +13,7 @@ import { b64std } from '@veyq/crypto/base64'
 import { contentKeyChain, type TreeNode } from '../../core/node/tree'
 import { identityNameContext } from '../../core/sharing/guestIdentity'
 import { epochsOf } from '../spaces/epochsTestUtil'
+import { treeNode } from '../../test/models'
 
 const SCOPE = '7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c'
 const NODE = '4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d'
@@ -40,7 +41,7 @@ const subRow = (sealedName: string, bucketId = BUCKET) =>
 describe('openBucketName — a guest named under an ancestor\'s key', () => {
   const FOLDER = '5c09e000-0000-4000-8000-0000000000f1'
   const node = (id: string, parentId: string | null, kind: string, wrappedContentKey: string): TreeNode =>
-    ({ id, parentId, kind, orderIndex: 0, epoch: 0, name: id, wrappedContentKey, wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
+    treeNode({ id, parentId, kind, orderIndex: 0, epoch: 0, name: id, wrappedContentKey, wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
   const wrap = (kek: Uint8Array, nodeId: string, k: Uint8Array) =>
     b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE, nodeId, epoch: 0, placementVersion: 0 }, kek, k))
 

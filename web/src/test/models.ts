@@ -77,5 +77,6 @@ export const treeNode = (o: Partial<TreeNode> = {}): TreeNode => ({
   wrappedMeta: null,
   metaVersion: 0,
   placementVersion: 0,
+  createdAt: 0,
   ...o,
 })

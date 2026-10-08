@@ -33,6 +33,8 @@ data class NodeRow(
     /** With [shareIdentityId]: that identity's `K_up` wrapped to the parent's drop public key, the first link of the
      *  chain its entry opens through. */
     val wrappedIdentityKey: String? = null,
+    /** When the server stored the node, to the millisecond ([NodeEntity.createdAt]): set once, never moved. */
+    val createdAt: Instant,
 )
 
 /** One soft-deleted subtree ROOT in the space's trash (uc.memory.delete-node). `deletedAt` is the marker the
@@ -160,7 +162,7 @@ class NodesStore {
             this.epoch = epoch
             this.wrappedContentKey = wrappedContentKey
             this.wrappedMeta = wrappedMeta
-            createdAt = Instant.now()
+            createdAt = NodeEntity.birthInstant()
         }.persist()
         return true
     }
@@ -172,7 +174,7 @@ class NodesStore {
             NodeRow(
                 it.id, it.parentId, it.kind, it.encryptedName, it.slugToken, it.orderIndex, it.epoch, it.wrappedContentKey,
                 it.wrappedMeta, it.sealedDropPrivateKey, it.metaVersion, it.placementVersion,
-                it.shareIdentityId, it.shareIdentityId?.let(wrapped::get),
+                it.shareIdentityId, it.shareIdentityId?.let(wrapped::get), it.createdAt,
             )
         }
     }
@@ -224,7 +226,7 @@ class NodesStore {
             this.epoch = epoch
             this.wrappedContentKey = wrappedContentKey
             this.shareIdentityId = identityId
-            createdAt = Instant.now()
+            createdAt = NodeEntity.birthInstant()
         }.persist()
     }
 

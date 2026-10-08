@@ -38,13 +38,14 @@ import { galleryFakeStore } from './galleryFakeStore'
 import { realI18n, t } from '../../../test/i18n'
 import { capabilityState } from '../../../shared/state/capabilities'
 import { SHARING_UPLOADER_LINKS } from '../../platform/capabilities'
+import { treeNode } from '../../../test/models'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const NODE_ID = '22222222-2222-2222-2222-222222222222'
 /** The node every meta fixture here belongs to — node-meta seals are bound to it (ADR 0072). */
 const THIS_NODE = { scopeId: SCOPE_ID, nodeId: NODE_ID }
 
-const node = (name: string, wrappedMeta: string | null = null): TreeNode => ({
+const node = (name: string, wrappedMeta: string | null = null): TreeNode => treeNode({
   id: NODE_ID, kind: MEMORY_KIND, name, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta, metaVersion: 0, placementVersion: 0,
 })
 
@@ -309,7 +310,7 @@ describe('MemoryDetail (gallery grid + header)', () => {
     fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
     const chapters: TreeNode[] = [
-      { id: 'c1', kind: CHAPTER_KIND, name: 'Day 1', parentId: NODE_ID, orderIndex: 0, epoch: 0, wrappedContentKey: 'd3JhcA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 },
+      treeNode({ id: 'c1', kind: CHAPTER_KIND, name: 'Day 1', parentId: NODE_ID, orderIndex: 0, epoch: 0, wrappedContentKey: 'd3JhcA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 }),
     ]
 
     const wrapper = mountDetail(v1.randomBytes(32), { chapters })
@@ -680,10 +681,10 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
 // share actions when the host says it is shareable (the descriptor half is `MemoryHomeView.test.ts`), and offers none
 // when it does not: the button follows `shareable`, never the node's kind.
 describe('share actions on a chapter', () => {
-  const chapter: TreeNode = {
+  const chapter: TreeNode = treeNode({
     id: 'c1', kind: CHAPTER_KIND, name: 'Day 1', parentId: NODE_ID, orderIndex: 0, epoch: 0, wrappedContentKey: 'd3JhcA==',
     wrappedMeta: null, metaVersion: 0, placementVersion: 0,
-  }
+  })
   beforeEach(() => {
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
