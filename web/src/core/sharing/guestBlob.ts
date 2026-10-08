@@ -1,0 +1,50 @@
+// A guest's blob transport on a public link (cr-files-application F2): core's guest calls `startShareBlobUploads` /
+// `presignShareBlobUploadWindows` (reserve and window, the link's whole gate again on every window — a revoked link stops
+// an upload at its next window) and `resolveShareBlob` (the presigned GETs of a blob under the shared subtree), shaped as
+// the reserve/window/presign functions core's `core/blob/transport.ts` pumps and reads with. Kind-neutral: the target
+// node and the role come from the caller; which kinds take a guest's upload is the server's `ShareGuestWrites`.
+// Memories' guest upload keeps its own copy of the reserve/window inside its media transport (`features/memory/share.ts`,
+// pinned byte for byte by its characterisation test) — this is the one an application without a transport of its own
+// uses.
+import { publicSharesApi } from '../../api/client'
+import { windowPuts } from '../blob/transport'
+import type { BlobDeclare, ReservedUpload, WindowFn } from '../blob/types'
+
+/** Who uploads where: the link, the guest's token, the password token when the link has one, and the node below the
+ *  root the uploads are for (named on every start and window, as the server checks it on each). */
+export type GuestUploadTarget = { shareId: string; contributorToken: string; pwToken?: string; nodeId: string }
+
+/** Reserve a guest's uploads (`startShareBlobUploads`): one session per declare, its first window of PUTs. A per-item
+ *  error (`quota_exceeded`, `id_taken`, …) is thrown as its code. */
+export async function guestReserve(t: GuestUploadTarget, declares: BlobDeclare[]): Promise<ReservedUpload[]> {
+  const started = await publicSharesApi().startShareBlobUploads({
+    shareId: t.shareId,
+    shareBlobUploadsRequest: { contributorToken: t.contributorToken, nodeId: t.nodeId, items: declares },
+    xSharePassword: t.pwToken,
+  })
+  if (started.results.length !== declares.length) throw new Error('upload_failed')
+  return started.results.map((r) => {
+    if (!r || r.error) throw new Error(r?.error ?? 'upload_failed')
+    if (!r.uploadId || !r.presignedPuts) throw new Error('store_unavailable')
+    return { uploadId: r.uploadId, puts: r.presignedPuts }
+  })
+}
+
+/** Sign a guest upload's next window (`presignShareBlobUploadWindows`) — only for the identity that opened it. */
+export function guestWindow(t: GuestUploadTarget): WindowFn {
+  return async (uploadId, fromChunk) => {
+    const signed = await publicSharesApi().presignShareBlobUploadWindows({
+      shareId: t.shareId,
+      shareBlobUploadWindowsRequest: { contributorToken: t.contributorToken, nodeId: t.nodeId, items: [{ uploadId, fromChunk }] },
+      xSharePassword: t.pwToken,
+    })
+    return windowPuts(signed.results[0])
+  }
+}
+
+/** The presigned GET of every chunk of `blobId` under the link (`resolveShareBlob`), in chunk order. A blob outside the
+ *  live shared subtree — a file in the trash included — is the server's `404`. */
+export async function shareChunkUrls(shareId: string, blobId: string, pwToken?: string): Promise<string[]> {
+  const dl = await publicSharesApi().resolveShareBlob({ shareId, blobId, xSharePassword: pwToken })
+  return [...dl.presignedGets].sort((a, b) => a.index - b.index).map((u) => u.url)
+}
