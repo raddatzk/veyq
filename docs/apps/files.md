@@ -80,7 +80,9 @@ dispatcher to `FilesUploadCompletion` (`UploadCompletion` for `FILE`, maps the i
   retry or cancelled (core's queue calls the job's `abandon`), a job moves a node it created to the trash once
   `listFiles` shows it still holds no content — best effort; a node it cannot trash stays and its retry fills it. A file
   that holds no content anyway (an upload cut off, e.g. a closed tab; a guest's, which a guest cannot delete) offers an
-  upload into it instead of a replace, and a picked file of its name fills it without the replace question. The row's
+  upload into it instead of a replace, and a picked file of its name fills it without the replace question; in core's
+  trash such a file (core's `attached` false on the trash row, Files' `emptyInTrash`) says it holds no content — its
+  restore stays offered (inbox #391). A failure the same file has since been uploaded over is no longer shown. The row's
   replace keeps the file's name (its tooltip says so); a rename selects the name without its extension (`register.ts`
   `renameSelectionEnd`).
 - **The download** (`download.ts`) presigns the blob's chunks, opens them under the node key at most four at a time and
@@ -127,7 +129,9 @@ A `FILE` is **no share root** (Files declares no `ShareRoots`): a file is shared
   opened under the chain's keys, download through the link, and for a contributor an upload button (one core-queue job
   per file, `shareUpload.ts`: guest create → guest transport → `completeShareFile` with the meta) and a replace per
   row (an upload into it, for a file that holds no content), above the list the sentence that it can replace any file,
-  the owner's too, and that no version is kept. **Every replace asks first** (owner decision 2026-10-08, inbox #383) —
+  the owner's too, and that no version is kept. An upload of a name a file there already holds stays refused (`409
+  slug_taken`, no replace by upload for a guest, owner decision 2026-10-08, inbox #392); its notice says a file of that
+  name exists and to use its row's replace. **Every replace asks first** (owner decision 2026-10-08, inbox #383) —
   the contributor's row replace, after the file is picked and before the guest is named ("it changes for everyone who
   sees this folder, the owner too; the old content cannot be restored"), as the member's does (§ The web); a file that
   holds no content asks nothing. The guest names itself once per link through the page's own dialog (`requestGuest`).
@@ -151,9 +155,9 @@ one per guest identity, which are core `FOLDER`s carrying `veyq_node.share_ident
   out of the member's tree instead of failing it.
 - **The guest** (`components/DropBoxGuestForm.vue`, what Files' share body `DropBoxShareBody.vue` renders on the link
   rooted at the drop box; `dropBox.ts`): names itself once (the session keeps identity,
-  token, `K_up` and the name on the device; the page says "Sending as …" with a "Not you?" that forgets the session there
-  and asks for a name again — a new identity, the old one's folder untouched; after a gone link the same action starts
-  over), then, with its **first file**, **`ensureShareDropFolder`** — `POST /api/shares/{shareId}/files/drop-folder`,
+  token, `K_up` and the name on the device; the page says "Sending as …" with a "Not you?" that asks, then forgets the
+  session there and asks for a name again — a new identity, the old one's folder untouched; after a gone link the same
+  action reads the link again first — a revoked or deleted one turns the page to "not available", inbox #393), then, with its **first file**, **`ensureShareDropFolder`** — `POST /api/shares/{shareId}/files/drop-folder`,
   Files' operation over core's `IdentityFolders`: the first call creates the folder from the guest's ciphertext, every
   later call (a reload, a second tab, a concurrent first upload) answers the same folder with its stored wrap. Then per
   file core's guest create **inside its own folder** (`createShareNode`: a `WRITE_ONLY` link creates only there, and
@@ -167,13 +171,14 @@ one per guest identity, which are core `FOLDER`s carrying `veyq_node.share_ident
   takes files from you" without a picker, and `dropGuestJob` stops the rest of the batch without a request; a store's own
   refusal (`chunk_put_failed:403`) is a failed file, not a gone link.
 - **The member** (`components/DropBoxSection.vue`, `DropBoxDetail.vue`, `DropBoxCreateDialog.vue`,
-  `DropBoxShareDialog.vue`): creates a drop box from a folder level, mints, copies, switches off and deletes its links,
+  `DropBoxShareDialog.vue`): creates a drop box from a folder level, mints, copies, switches off (after a question) and
+  on again (core's `reactivateShare`; a link a departed member may hold says to make a new one) and deletes its links,
   opens it to its guests' folders (a repeated guest name numbered at display time, never stored: `Anna`, `Anna (2)` in
   creation order — the server-observed `createdAt` of core's listing, then the node id for one millisecond, core's
-  `compareByCreation`; the same two folders' URL segments are `anna`, `anna-2` by the same order,
+  `compareByCreation`, by core's `displayNamesOf`, which the folder's heading and breadcrumb use too; the same two folders' URL segments are `anna`, `anna-2` by the same order,
   core's `segmentsOf` in `core/node/location.ts`, which a future folder export uses for its directory names too), opens a folder
-  (core's level view, read-only there: download only, no share, and no section that has nothing to show — the host's
-  `hideEmptySections`) and deletes a folder. **Members place nothing** in a drop box or
+  (core's level view, read-only there: download and a delete per file — a content-less one too — through the level's
+  `deletable`, no share, and no section that has nothing to show — the host's `hideEmptySections`) and deletes a folder. **Members place nothing** in a drop box or
   a guest's folder (core: no rule places into the drop box; a create, move or rename into an identity folder is
   `illegal_structure`, `NodesHandler`), and only delete or move out — a move out re-wraps and re-slugs under the
   target and ends the folder's identity link. The server allows the move out; the web offers no move yet (inbox #358).
