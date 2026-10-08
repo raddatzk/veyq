@@ -1,7 +1,9 @@
 package me.raddatz.veyq.files.content
 
 import me.raddatz.veyq.core.blob.BlobEntity
+import me.raddatz.veyq.core.blob.BlobUploadStore
 import me.raddatz.veyq.core.blob.NodeAttachmentEntity
+import me.raddatz.veyq.core.blob.UploadOpener
 import me.raddatz.veyq.core.blob.UploadSessionEntity
 import me.raddatz.veyq.core.blobstore.FakePresigningBlobStore
 import me.raddatz.veyq.core.blobstore.StoreReclaimEntity
@@ -48,6 +50,7 @@ import org.junit.jupiter.api.Test
 class FilesContentSliceTest {
 
     @Inject lateinit var fakeStore: FakePresigningBlobStore
+    @Inject lateinit var sessions: BlobUploadStore
     @Inject lateinit var usage: StorageUsage
     @Inject lateinit var subtreePurge: NodeSubtreePurge
 
@@ -162,7 +165,10 @@ class FilesContentSliceTest {
         // A session for another node, or in another role, would not open here.
         val file = seedNode(scopeId, FilesNodeKinds.FILE, wrappedContentKey = CONTENT_KEY)
         complete(userId, scopeId, file, start(userId, scopeId, folder, TestBlob.SMALL)).statusCode(422).body("code", equalTo("upload_mismatch"))
-        complete(userId, scopeId, file, start(userId, scopeId, file, TestBlob.SMALL, role = "ORIGINAL")).statusCode(422)
+        // Another application's role is not started here at all (inbox #366: Files alone declares only its own) …
+        startRequest(userId, scopeId, file, TestBlob.SMALL, role = "ORIGINAL").statusCode(400).body("code", equalTo("invalid_request"))
+        // … and a session in it — which the composed application starts, for Memories — does not open as a file's blob.
+        complete(userId, scopeId, file, openPastTheStart(userId, scopeId, file, TestBlob.SMALL, role = "ORIGINAL")).statusCode(422)
             .body("code", equalTo("upload_mismatch"))
         complete(userId, scopeId, file, UUID.randomUUID().toString()).statusCode(404).body("code", equalTo("upload_not_found"))
         // control: the right session lands
@@ -232,12 +238,23 @@ class FilesContentSliceTest {
 
     /** Start one upload for [node] in [role] (default: the file role) and stage its chunks at their exact lengths. */
     private fun start(userId: String, scopeId: String, node: String, blob: TestBlob, wrap: String = "d3JhcA==", role: String = FilesBlobRoles.FILE_CONTENT): String {
-        val uploadId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[${blob.declare(wrap, ownerId = node, role = role)}]}""")
-            .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
-            .then().statusCode(200).body("results[0].error", nullValue())
+        val uploadId = startRequest(userId, scopeId, node, blob, wrap, role).statusCode(200).body("results[0].error", nullValue())
             .extract().path<String>("results[0].uploadId")
         blob.stage(fakeStore, sessionKey(uploadId))
+        return uploadId
+    }
+
+    private fun startRequest(userId: String, scopeId: String, node: String, blob: TestBlob, wrap: String = "d3JhcA==", role: String = FilesBlobRoles.FILE_CONTENT): ValidatableResponse =
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+            .body("""{"items":[${blob.declare(wrap, ownerId = node, role = role)}]}""")
+            .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
+            .then()
+
+    /** A member's session for [node] in [role], opened through the store past the start's role check, chunks staged. */
+    private fun openPastTheStart(userId: String, scopeId: String, node: String, blob: TestBlob, role: String): String {
+        val key = UUID.randomUUID().toString().replace("-", "")
+        val uploadId = sessions.createSession(scopeId, UploadOpener.Member(userId), key, blob.upload("d3JhcA==", ownerId = node, role = role))
+        blob.stage(fakeStore, key)
         return uploadId
     }
 

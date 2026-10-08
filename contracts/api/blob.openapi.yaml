@@ -69,7 +69,9 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/BlobUploadsBatchResponse" }
         "400":
-          description: Malformed request (missing/invalid fields).
+          description: >
+            Malformed request (missing/invalid fields), or an item whose `role` no application declares for a member's
+            upload — the whole request is refused and no session is opened.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401":
@@ -229,7 +231,8 @@ components:
         role:
           $ref: "#/components/schemas/BlobRole"
           # The generator inlines the scalar `BlobRole` as a String and emits none of its bounds: the token's shape
-          # holds here, 400 before the handler; which roles the application attaches is its completion's question.
+          # holds here, 400 before the handler; a role no application declares is the handler's `400 invalid_request`
+          # (core's `MemberBlobRoles`), and which roles the application attaches is its completion's question.
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 16) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Z][A-Z0-9_]{0,15}")'
         chunkCount:
           x-veyq-visibility: measure

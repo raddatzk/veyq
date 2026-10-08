@@ -5,11 +5,15 @@ import me.raddatz.veyq.core.blob.AttachmentNodeSubtreeEraser
 import me.raddatz.veyq.core.blob.AttachmentScopeEraser
 import me.raddatz.veyq.core.blob.AttachmentSharedSubtreeContributor
 import me.raddatz.veyq.core.blob.BlobEntity
+import me.raddatz.veyq.core.blob.BlobUploadStore
 import me.raddatz.veyq.core.blob.CompleteItem
 import me.raddatz.veyq.core.blob.CompleteItemResult
+import me.raddatz.veyq.core.blob.CoreTestMemberBlobRoles
+import me.raddatz.veyq.core.blob.MemberBlobRoles
 import me.raddatz.veyq.core.blob.UploadCompletion
 import me.raddatz.veyq.core.blob.UploadCompletions
 import me.raddatz.veyq.core.blob.UploadOpener
+import me.raddatz.veyq.core.blob.UploadSessionEntity
 import me.raddatz.veyq.core.content.NodesStore
 import me.raddatz.veyq.core.crypto.Tokens
 import me.raddatz.veyq.core.node.FolderNodeRules
@@ -36,7 +40,7 @@ import me.raddatz.veyq.core.sharing.ShareWriteProof
 import me.raddatz.veyq.core.sharing.SharedSubtreeContributor
 import me.raddatz.veyq.core.sharing.SharingHandler
 import me.raddatz.veyq.core.sharing.SharingStore
-import me.raddatz.veyq.core.testing.FakePresignProfile
+import me.raddatz.veyq.core.blobstore.FakePresigningBlobStore
 import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
@@ -47,6 +51,7 @@ import io.quarkus.arc.All
 import io.quarkus.arc.ClientProxy
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
+import io.quarkus.test.junit.QuarkusTestProfile
 import io.quarkus.test.junit.TestProfile
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
@@ -73,25 +78,35 @@ import org.junit.jupiter.api.Test
  * 1. **Every seam holds exactly core's own implementations**: `ScopeEraser` core's three (attachments, nodes, shares),
  *    `NodeKindRules` and `ShareRoots` core's `FOLDER` answers, `NodeSubtreeEraser`, `GuestIdentityUsage` and
  *    `SharedSubtreeContributor` core's attachment one each (cr-files-application P3-S3), and every other seam —
- *    `MembershipEraser`, `ShareGuestWrites`, `UploadCompletion`, `UploadAdmission`, `WriteOnlyGuestKinds` — none. The composed application's
+ *    `MembershipEraser`, `ShareGuestWrites`, `UploadCompletion`, `UploadAdmission`, `WriteOnlyGuestKinds`,
+ *    `MemberBlobRoles` — none. The composed application's
  *    sets are the root's `ModuleCompositionTest`. (`GuestIdentityUsage` is therefore never empty: its fail-closed
  *    branch for no usage at all is `GuestIdentityUsageTest`'s, boot-free, and no longer reachable here.)
  * 2. **Every seam fails closed with nobody behind it**: a `FOLDER` is created and a `MEMORY` is `illegal_structure`;
  *    a share of any other kind, or a `WRITE_ONLY` one on a `FOLDER`, is `illegal_scope`; a completion is
  *    `illegal_target` for every kind; a link start on a `READ_WRITE` folder share is refused
- *    (`share_not_contributable`: no application takes uploads into a folder, and core alone none into any kind) and
- *    no kind has an admission.
- * 3. **What core owns works alone**: a blob upload starts and windows, and a seeded blob downloads, through core's
+ *    (`share_not_contributable`: no application takes uploads into a folder, and core alone none into any kind),
+ *    no kind has an admission, and a member's upload start is `400 invalid_request` in every role (inbox #366: no
+ *    application declares one, and nothing could attach it).
+ * 3. **What core owns works alone**: an open upload session windows, and a seeded blob downloads, through core's
  *    `BlobResource`; a `FOLDER` is shared with `READ` or `READ_WRITE` and its guest resolves the subtree under it
  *    (ADR 0080); an unauthenticated core route answers.
  *
  * Each refusal sits beside a positive control through the same path; where core alone has nothing to accept, the
  * control is the composition's (`ModuleCompositionTest` shares a `MEMORY` and completes one through the same bodies).
- * [FakePresignProfile]: the in-memory store cannot presign, and a window is nothing but presigned URLs.
+ * [CoreAloneProfile]: the in-memory store cannot presign, and a window is nothing but presigned URLs; and `:core`'s
+ * test sources hold one application stand-in, [CoreTestMemberBlobRoles], which this class alone excludes.
  */
 @QuarkusTest
-@TestProfile(FakePresignProfile::class)
+@TestProfile(CoreAloneSliceTest.CoreAloneProfile::class)
 class CoreAloneSliceTest {
+
+    /** `FakePresignProfile`'s store, without the member roles `:core`'s other tests declare ([CoreTestMemberBlobRoles]). */
+    class CoreAloneProfile : QuarkusTestProfile {
+        override fun getEnabledAlternatives(): Set<Class<*>> = setOf(FakePresigningBlobStore::class.java)
+        override fun getConfigOverrides(): Map<String, String> =
+            mapOf("quarkus.arc.exclude-types" to CoreTestMemberBlobRoles::class.java.name)
+    }
 
     // `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor).
     @Inject @All lateinit var scopeErasers: MutableList<ScopeEraser>
@@ -105,12 +120,14 @@ class CoreAloneSliceTest {
     @Inject @All lateinit var kindRules: MutableList<NodeKindRules>
     @Inject @All lateinit var shareRoots: MutableList<ShareRoots>
     @Inject @All lateinit var writeOnlyGuestKinds: MutableList<WriteOnlyGuestKinds>
+    @Inject @All lateinit var memberRoles: MutableList<MemberBlobRoles>
 
     @Inject lateinit var nodes: NodesStore
     @Inject lateinit var dispatcher: UploadCompletions
     @Inject lateinit var quota: StorageQuota
     @Inject lateinit var sharing: SharingHandler
     @Inject lateinit var sharingStore: SharingStore
+    @Inject lateinit var uploadStore: BlobUploadStore
 
     /** The kinds a client can send: core's own, the two Memories owns (as the wire spells them), and a forged one. */
     private val kinds = listOf(NodeEntity.FOLDER, "MEMORY", "CHAPTER", "NOT_A_KIND")
@@ -138,7 +155,7 @@ class CoreAloneSliceTest {
         for ((seam, beans) in mapOf(
             "MembershipEraser" to membershipErasers,
             "ShareGuestWrites" to guestWrites, "UploadCompletion" to completions, "UploadAdmission" to admissions,
-            "WriteOnlyGuestKinds" to writeOnlyGuestKinds,
+            "WriteOnlyGuestKinds" to writeOnlyGuestKinds, "MemberBlobRoles" to memberRoles,
         )) {
             assertEquals(emptySet<Class<*>>(), classes(beans), "$seam: core implements none, and no application is here")
         }
@@ -253,15 +270,43 @@ class CoreAloneSliceTest {
         assertEquals(ShareUploadOutcome.NotContributable, outcome, "a link start with no writer and no admission")
     }
 
+    /**
+     * Inbox #366: no application declares a member's role here, so a member's start is refused whole in every role —
+     * the role an application owns as much as a forged one — and no session is opened. The control is the composition's
+     * (`ModuleCompositionTest.aMemberStartTakesTheRolesTheApplicationsDeclare`), and `:core`'s other tests, which boot
+     * [CoreTestMemberBlobRoles]: the same body opens a session there.
+     */
     @Test
-    fun aBlobUploadStartsWindowsAndDownloadsThroughCore() {
+    fun aMemberUploadStartIsRefusedInEveryRole() {
         val (userId, scopeId) = seedMemberScope(ScopeEntity.GROUP)
-        val uploadId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[${TestBlob.ofChunks(WINDOW + 1).declare("d3JhcA==")}]}""")
+        for (role in listOf("ORIGINAL", "COVER", "FILE_CONTENT", "NOT_A_ROLE")) {
+            given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+                .body("""{"items":[${TestBlob.SMALL.declare("d3JhcA==", role = role)}]}""")
+                .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
+                .then().statusCode(400).body("code", equalTo("invalid_request"))
+        }
+        assertEquals(0L, QuarkusTransaction.requiringNew().call { UploadSessionEntity.count("scopeId", scopeId) }, "no session opened")
+        // a non-member still learns nothing but its 404 — the role is asked only past the access check
+        val (stranger, _) = seedMemberScope(ScopeEntity.GROUP)
+        given().header("Authorization", bearer(stranger)).contentType(ContentType.JSON)
+            .body("""{"items":[${TestBlob.SMALL.declare("d3JhcA==", role = "NOT_A_ROLE")}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
+            .then().statusCode(404).body("code", equalTo("scope_not_found"))
+    }
+
+    @Test
+    fun anOpenUploadWindowsAndABlobDownloadsThroughCore() {
+        val (userId, scopeId) = seedMemberScope(ScopeEntity.GROUP)
+        // Opened through the store: core alone starts no member upload (above), and a window is core's alone.
+        val uploadId = uploadStore.createSession(
+            scopeId, UploadOpener.Member(userId), UUID.randomUUID().toString().replace("-", ""),
+            TestBlob.ofChunks(WINDOW + 1).upload("d3JhcA=="),
+        )
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+            .body("""{"items":[{"uploadId":"$uploadId","fromChunk":0}]}""")
+            .`when`().post("/api/scopes/$scopeId/blob-upload-windows")
             .then().statusCode(200).body("results[0].error", nullValue())
             .body("results[0].presignedPuts.size()", equalTo(WINDOW))
-            .extract().path<String>("results[0].uploadId")
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"items":[{"uploadId":"$uploadId","fromChunk":$WINDOW}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-upload-windows")

@@ -34,7 +34,8 @@ names a node kind an application owns (developer-styleguide § 1, ADR 0007's sha
   cannot rot into names that guard nothing. **The blob roles an application owns** (`APPLICATION_BLOB_ROLES`:
   Memories' `ORIGINAL`, `THUMBNAIL`, `PREVIEW`, `COVER`, Files' `FILE_CONTENT`) are read by the same rule since the contract's `BlobRole`
   opened to the same kind of token (cr-files-application P3-S2): core stores a role and compares it
-  (`UploadSessionEntity.boundTo`), and which roles exist is the application's (`MemoryBlobRoles`, `FilesBlobRoles`).
+  (`UploadSessionEntity.boundTo`), and which roles exist is the application's (`MemoryBlobRoles`, `FilesBlobRoles`),
+  declared to core's member start through `MemberBlobRoles` (inbox #366).
   The lists are by hand (a token is a value, not a path): a new application adds its kinds and roles here — Files'
   sat out of them for its whole build until its harvest, and nothing turned red, because a missing entry guards nothing
   silently. Core's
@@ -224,7 +225,7 @@ def main() -> int:
         print("Share the rule through a small interface in the kernel that the slice implements, or move the entity "
               "into the kernel with the slice's store still its only writer. A rule about a Memories node kind or blob role is "
               "Memories' — answer it through a core seam (NodeKindRules, ShareRoots, GuestNodeRules, WriteOnlyGuestKinds, ShareGuestWrites, UploadCompletion, "
-              "UploadAdmission).")
+              "UploadAdmission, MemberBlobRoles).")
         return 1
 
     print(f"kernel imports OK: {len(kernel)} kernel file(s) in {len(KERNEL)} declared package(s), none names one of "
