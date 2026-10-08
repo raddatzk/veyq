@@ -204,6 +204,7 @@ CREATE TABLE veyq_node (
     sealed_drop_private_key TEXT NULL,
     meta_version            BIGINT NOT NULL DEFAULT 0,
     placement_version       BIGINT NOT NULL DEFAULT 0,
+    share_identity_id       VARCHAR(36) NULL,
     CONSTRAINT fk_node_scope FOREIGN KEY (scope_id) REFERENCES veyq_scope (id)
 );
 CREATE UNIQUE INDEX ux_node_parent_slug ON veyq_node (parent_id, slug_token);
@@ -354,6 +355,13 @@ CREATE TABLE veyq_share_identity (
     CONSTRAINT fk_share_identity_share FOREIGN KEY (share_id) REFERENCES veyq_share (id)
 );
 CREATE INDEX ix_share_identity_lookup ON veyq_share_identity (share_id, token_hash);
+
+-- A guest's identity folder (ADR 0080 decision 11): veyq_node.share_identity_id names the WRITE_ONLY identity that
+-- holds the folder in its link's root (a drop box). One per (parent, identity): a NULL never collides, so every other
+-- node is free of it. Declared here, after veyq_share_identity exists. Not cascading: an identity a folder names is
+-- kept by NodeGuestIdentityUsage; the scope erase deletes the nodes (phase 700) before the identities (phase 800).
+ALTER TABLE veyq_node ADD CONSTRAINT fk_node_share_identity FOREIGN KEY (share_identity_id) REFERENCES veyq_share_identity (id);
+CREATE UNIQUE INDEX ux_node_parent_identity ON veyq_node (parent_id, share_identity_id);
 
 -- A sealed file on a node (ADR 0079 Consequences, cr-files-application P3): one blob per (node, slot). slot is a
 -- token the owning application names (Files' FILE_CONTENT, equal to the blob role its wrap is sealed to); core

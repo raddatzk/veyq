@@ -115,6 +115,8 @@ class ContentResource(
         deletedAt = OffsetDateTime.ofInstant(deletedAt, ZoneOffset.UTC),
         purgeAfter = OffsetDateTime.ofInstant(deletedAt.plus(trashRetention), ZoneOffset.UTC),
         parentId = if (parentId == scopeId) null else UUID.fromString(parentId),
+        shareIdentityId = shareIdentityId?.let(UUID::fromString),
+        wrappedIdentityKey = wrappedIdentityKey,
     )
 
     /**
@@ -135,5 +137,7 @@ class ContentResource(
         sealedDropPrivateKey = sealedDropPrivateKey,
         metaVersion = metaVersion,
         placementVersion = placementVersion,
+        shareIdentityId = shareIdentityId?.let(UUID::fromString),
+        wrappedIdentityKey = wrappedIdentityKey,
     )
 }

@@ -40,6 +40,11 @@ data class ShareNodeRow(
     val wrappedMeta: String?,
     /** The shared root's drop private key sealed under its content key — every reader of the subtree opens uploads through it. */
     val sealedDropPrivateKey: String?,
+    /** An identity folder's identity below the root (ADR 0080 decision 11), else null — never at the root, whose entry is
+     *  not served. */
+    val shareIdentityId: String? = null,
+    /** With [shareIdentityId]: the identity's wrapped `K_up`, which the folder's entry opens through. */
+    val wrappedIdentityKey: String? = null,
 )
 
 /**
@@ -413,8 +418,13 @@ class SharingStore(
 
     /** The sealed subtree rooted at [rootNodeId] within [scopeId]: its live nodes, for the content-key chain. Empty
      *  when the shared root itself is trashed. */
-    fun subtree(scopeId: String, rootNodeId: String): List<ShareNodeRow> =
-        liveSubtree(scopeId, rootNodeId).map { n ->
+    fun subtree(scopeId: String, rootNodeId: String): List<ShareNodeRow> {
+        val live = liveSubtree(scopeId, rootNodeId)
+        // An identity folder's entry opens through its identity's K_up (ADR 0080 decision 11): served beside it.
+        val identityKeys = live.mapNotNull { it.shareIdentityId }.takeIf { it.isNotEmpty() }
+            ?.let { ids -> ShareIdentityEntity.find("id in ?1 and wrappedIdentityKey is not null", ids.distinct()).list() }
+            ?.associate { it.id to it.wrappedIdentityKey!! }.orEmpty()
+        return live.map { n ->
             // The root's entry (parent id, name, wrap) is sealed under the parent's key above the share: none of it
             // is served (ADR 0080 Decision 9). Each descendant's is — the guest opens it with the chain it derives.
             val root = n.id == rootNodeId
@@ -429,8 +439,11 @@ class SharingStore(
                 placementVersion = if (root) null else n.placementVersion,
                 wrappedMeta = n.wrappedMeta,
                 sealedDropPrivateKey = n.sealedDropPrivateKey,
+                shareIdentityId = if (root) null else n.shareIdentityId,
+                wrappedIdentityKey = if (root) null else n.shareIdentityId?.let(identityKeys::get),
             )
         }
+    }
 
     /** The ids of [subtree]'s live nodes, by the same predicate — what the view gate hands an application
      *  (`ShareGuestGate.viewGate`). Empty when the shared root itself is trashed. */

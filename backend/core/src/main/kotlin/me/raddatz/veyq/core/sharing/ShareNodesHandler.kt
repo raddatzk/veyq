@@ -66,8 +66,10 @@ sealed interface UpdateShareNodeOutcome {
  * authorship, so "delete your own" cannot be checked, and a contributor could remove anything below the root.
  *
  * Who may do what is the container's owner's ([GuestNodeRules], both sides of a move), on top of where a kind may live
- * at all (`NodeKindRules`, which the node operations ask). A `WRITE_ONLY` guest does none of them (refused by the gate,
- * before its token and the budget). A create spends the per-share upload budget, a placement does not.
+ * at all (`NodeKindRules`, which the node operations ask). A `WRITE_ONLY` guest only creates, and only inside its own
+ * identity folder in the root (ADR 0080 decision 11: the application's own operation made it, `IdentityFolders`), the
+ * folder being its subtree here; it places nothing (refused by the gate, before its token and the budget). A create
+ * spends the per-share upload budget, a placement does not.
  *
  * **Lock order, in ONE transaction:** (1) the scope row ([NodesStore.lockScope]) — the lock every tree writer takes
  * first; (2) the share row ([ShareWriteGate.Admitted.admitted], [SharingStore.admitsGuests]) — the lock a share's
@@ -94,7 +96,8 @@ class ShareNodesHandler(
     ): CreateShareNodeOutcome {
         // A create adds a row, so it spends the upload budget (ADR 0051, `@RateLimit(key = SHARE)`) — after every check
         // of the gate, so an unauthorized caller spends nothing.
-        val gated = when (val g = gate.writeGate(shareId, pwToken, contributorToken, spendUploadBudget = true, onlyRole = ShareEntity.READ_WRITE)) {
+        // READ_WRITE anywhere in the subtree; WRITE_ONLY only inside its own identity folder (ADR 0080 decision 11).
+        val gated = when (val g = gate.writeGate(shareId, pwToken, contributorToken, spendUploadBudget = true)) {
             is ShareWriteGate.Admitted -> g
             ShareWriteGate.NotFound -> return CreateShareNodeOutcome.NotFound
             ShareWriteGate.PasswordIncorrect -> return CreateShareNodeOutcome.PasswordIncorrect
@@ -102,13 +105,18 @@ class ShareNodesHandler(
             ShareWriteGate.NotContributable -> return CreateShareNodeOutcome.NotContributable
         }
         val scopeId = gated.scopeId
-        val root = gated.rootNodeId
+        val writeOnly = gated.role == ShareEntity.WRITE_ONLY
         return createOrConflict(conflict = { nodes.createReplay(scopeId, parentId, slugToken, nodeId)()?.let(::fromNodes) }) {
-            when (underLock(gated, shareId)) {
+            when (underLock(gated, shareId, gated.role)) {
                 Refusal.NOT_FOUND -> return@createOrConflict CreateShareNodeOutcome.NotFound
                 Refusal.NOT_CONTRIBUTABLE -> return@createOrConflict CreateShareNodeOutcome.NotContributable
                 null -> {}
             }
+            // A WRITE_ONLY guest holds no key of the root: its subtree is its own identity folder in the root, live
+            // (ADR 0080 decision 11); none yet, or one a member trashed, takes nothing.
+            val root = if (!writeOnly) gated.rootNodeId else
+                tree.identityFolder(gated.rootNodeId, gated.identityId)?.takeIf { it.deletedAt == null }?.id
+                    ?: return@createOrConflict CreateShareNodeOutcome.NotContributable
             // The boundary first, before anything that answers by what lies outside: a parent outside the subtree is
             // `illegal_structure` whatever its kind, so no guest learns the kind of a node it holds no key of.
             if (!tree.withinSubtree(scopeId, root, parentId)) return@createOrConflict CreateShareNodeOutcome.IllegalStructure
@@ -125,6 +133,7 @@ class ShareNodesHandler(
                 nodes.createInScope(
                     scopeId, nodeId, parentId, kind, encryptedName, slugToken, orderIndex, epoch, wrappedContentKey,
                     wrappedMeta = null, boundary = SubtreeBoundary(root),
+                    identityWriter = if (writeOnly) gated.identityId else null,
                 ),
             )
         }
@@ -145,7 +154,7 @@ class ShareNodesHandler(
         val scopeId = gated.scopeId
         val root = gated.rootNodeId
         return QuarkusTransaction.requiringNew().call {
-            when (underLock(gated, shareId)) {
+            when (underLock(gated, shareId, ShareEntity.READ_WRITE)) {
                 Refusal.NOT_FOUND -> return@call UpdateShareNodeOutcome.NotFound
                 Refusal.NOT_CONTRIBUTABLE -> return@call UpdateShareNodeOutcome.NotContributable
                 null -> {}
@@ -195,10 +204,10 @@ class ShareNodesHandler(
      * committed meanwhile is seen) — then the root live: the gate lets a trashed root through (it names its kind), and
      * a guest writes nothing under a root in the trash.
      */
-    private fun underLock(gated: ShareWriteGate.Admitted, shareId: String): Refusal? {
+    private fun underLock(gated: ShareWriteGate.Admitted, shareId: String, role: String): Refusal? {
         tree.lockScope(gated.scopeId)
         if (!gated.admitted()) return Refusal.NOT_FOUND
-        if (shares.find(shareId)?.role != ShareEntity.READ_WRITE) return Refusal.NOT_CONTRIBUTABLE
+        if (shares.find(shareId)?.role != role) return Refusal.NOT_CONTRIBUTABLE
         if (tree.findInScope(gated.scopeId, gated.rootNodeId) == null) return Refusal.NOT_CONTRIBUTABLE
         return null
     }

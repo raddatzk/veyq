@@ -139,11 +139,16 @@ class NodesHandler(
      * the scope lock ([NodesStore.lockScope]) first and then a row of its own — a guest's share row
      * (`ShareNodesHandler`) — before this runs, all in the one transaction that writes. It must never lock a row of its
      * own BEFORE the scope lock: every tree writer takes the scope first, so that order would invert theirs.
+     *
+     * **Inside an identity folder only its identity creates** (ADR 0080 decision 11: members, and guests of a link
+     * above the drop box, place nothing of their own there): a parent that is, or lies inside, a guest's identity folder
+     * ([NodesStore.identityFolderOwner]) is `illegal_structure` unless [identityWriter] is that folder's identity — a
+     * `WRITE_ONLY` guest creating in its own folder (`ShareNodesHandler`).
      */
     internal fun createInScope(
         scopeId: String, nodeId: String, parentSlotId: String?, kind: String,
         encryptedName: String, slugToken: String, orderIndex: Int, epoch: Int, wrappedContentKey: String, wrappedMeta: String?,
-        boundary: SubtreeBoundary? = null,
+        boundary: SubtreeBoundary? = null, identityWriter: String? = null,
     ): CreateNodeOutcome {
         check(QuarkusTransaction.isActive()) { "createInScope joins its caller's transaction; open one with createOrConflict" }
         // Every decision under the tree's lock (NodesStore.lockScope), taken before ANY node is read. Not only because
@@ -169,6 +174,7 @@ class NodesHandler(
         // The boundary before anything that answers by what lies outside it (a slug taken there).
         if (boundary != null && !store.withinSubtree(scopeId, boundary.rootNodeId, slot)) return CreateNodeOutcome.IllegalStructure
         if (!parentAllows(kind, parent)) return CreateNodeOutcome.IllegalStructure
+        store.identityFolderOwner(scopeId, slot)?.let { owner -> if (owner != identityWriter) return CreateNodeOutcome.IllegalStructure }
         if (store.slugTaken(slot, slugToken)) return CreateNodeOutcome.SlugTaken
         // The client-minted id (ADR 0072): the name, content-key wrap and payload are sealed bound to it, so it is
         // stored verbatim or not at all.
@@ -270,6 +276,11 @@ class NodesHandler(
             // under the tree's lock.
             if (parent is ParentSlot.Missing) return UpdateNodeOutcome.IllegalStructure
             if (!parentAllows(node.kind, parent)) return UpdateNodeOutcome.IllegalStructure
+            // Nothing is placed INTO a guest's identity folder (ADR 0080 decision 11) — a member may only delete or move
+            // out of a drop box, and a guest places nothing (a WRITE_ONLY one does no placement at all). A rename
+            // inside one is a placement to its current parent and is refused too. Stable without the lock: nothing ever
+            // enters an identity folder, so no concurrent write can turn a destination outside into one inside.
+            if (store.identityFolderOwner(scopeId, slot) != null) return UpdateNodeOutcome.IllegalStructure
             if (slot == nodeId || store.wouldCycle(scopeId, nodeId, slot)) return UpdateNodeOutcome.IllegalStructure
             // ADR 0080 Decision 4: an entry at the scope root lives under K_SC, so it is sealed at the CURRENT epoch —
             // a rename at the root and a move into it alike (ADR 0024 Decision 6: an older epoch's key is one a member

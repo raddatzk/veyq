@@ -151,7 +151,8 @@ class ModuleCompositionTest {
     @Test
     fun theRulesOfCoreAndEveryApplicationPartitionTheKinds() {
         val file = "FILE"
-        val kinds = listOf(NodeEntity.FOLDER, "MEMORY", "CHAPTER", file)
+        val dropBox = "FILES_DROPBOX"
+        val kinds = listOf(NodeEntity.FOLDER, "MEMORY", "CHAPTER", file, dropBox)
         for (kind in kinds) {
             val claiming = kindRules.filter { it.handles(kind) }.map(::beanClass)
             assertEquals(1, claiming.size, "node kind $kind must be handled by exactly one NodeKindRules: $claiming")
@@ -159,9 +160,13 @@ class ModuleCompositionTest {
         assertEquals("me.raddatz.veyq.files.FilesNodeKindRules", beanClass(kindRules.single { it.handles(file) }), "FILE is Files'")
         assertTrue(beanClass(kindRules.single { it.handles("MEMORY") }).startsWith("me.raddatz.veyq.memories."), "MEMORY is Memories'")
 
+        assertEquals("me.raddatz.veyq.files.FilesNodeKindRules", beanClass(kindRules.single { it.handles(dropBox) }), "FILES_DROPBOX is Files'")
         for (child in kinds) {
             assertFalse(NodeKindRules.parentAllows(kindRules, child, ParentSlot.Node(file)), "a $child inside a file")
+            // ADR 0080 decision 11: nothing is placed into a drop box — its identity folders are core's own placement
+            assertFalse(NodeKindRules.parentAllows(kindRules, child, ParentSlot.Node(dropBox)), "a $child placed in a drop box")
         }
+        assertTrue(NodeKindRules.parentAllows(kindRules, dropBox, ParentSlot.Node(NodeEntity.FOLDER)), "control: a drop box in a folder")
         // control: a file at the root and in a folder, never in a Memory; a chapter in its Memory
         assertTrue(NodeKindRules.parentAllows(kindRules, file, ParentSlot.Root), "a file at the root")
         assertTrue(NodeKindRules.parentAllows(kindRules, file, ParentSlot.Node(NodeEntity.FOLDER)), "a file in a folder")
