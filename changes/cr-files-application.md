@@ -837,11 +837,107 @@ without touching core except for the platform prerequisites below, which every l
       inside its transport (B0 pins its wire byte for byte) — merging is a later, characterised change.
       **Not verified:** the e2e itself (written, typechecked, discovered — runs from the main checkout), a browser (the
       section's look on the public page, drag-and-drop, the name dialog interplay), the mutation gate.
-- [ ] F3 the drop box ([ADR 0080](../docs/decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
+- [x] F3 the drop box ([ADR 0080](../docs/decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
       decision 11) — kind `FILES_DROPBOX`, `identity_id` unique per (drop box, identity), members only delete or move out,
       `ShareRoots` {`FILES_DROPBOX` → `WRITE_ONLY`}, an own operation to create the identity folder (a `WRITE_ONLY` guest
       holds no key of the drop box) · Done when: two guests get two folders, a second upload of one identity lands in the
       same folder, revoking the link keeps the content.
+      Ticked on the brief's word; its e2e is written and runs from the main checkout after the merge (not run here).
+      **Measured 2026-10-08.** Contract: core `NodeSummary`, `TrashedNodeSummary` and `ShareNode` gain `shareIdentityId` +
+      `wrappedIdentityKey` (nullable); `createShareNode` takes a `WRITE_ONLY` link inside its guest's own identity folder;
+      `startShareBlobUploads`' `nodeId` the same (descriptions); Files' `ensureShareDropFolder` `POST
+      /api/shares/{shareId}/files/drop-folder` `DropFolderRequest {contributorToken, nodeId, encryptedName, slugToken, epoch,
+      wrappedContentKey}` → `200 DropFolder {nodeId, epoch, placementVersion, wrappedContentKey, created}` / 403 / 404 / 409
+      `id_taken|stale_epoch` / 429. **Migration: the core baseline** (`veyq_node.share_identity_id VARCHAR(36) NULL`, `ALTER
+      TABLE … fk_node_share_identity` after `veyq_share_identity` exists, not cascading, `ux_node_parent_identity (parent_id,
+      share_identity_id)`), pin line re-hashed in the same commit — **the owner recreates the dev database** (`docker compose
+      -f infra/docker-compose.yml down -v`). No Files-owned migration (see decision 1). Core: `NodeEntity.shareIdentityId`;
+      `NodesStore` `identityKeys`/`identityFolderOwner`/`identityFolder`/`createIdentityFolder`, the listing and the trash
+      serve the identity and its wrapped `K_up`, a placement sets `shareIdentityId = null`; `NodesHandler.createInScope` refuses
+      a parent in an identity folder unless `identityWriter` is its identity, `updateInScope` any destination in one;
+      `ShareNodesHandler.create` takes `WRITE_ONLY` bounded to the guest's live identity folder (decided under the lock),
+      `update` stays `READ_WRITE`; `ShareGuestGate.target`/`admittedInto` let a `WRITE_ONLY` link name a node inside its
+      guest's identity folder (`writeOnlyBoundary`); `core/sharing/IdentityFolders.kt` (`ensure`: scope lock → share row →
+      root live → existing → epoch → id → insert + flush, `createOrConflict` replaying the existing folder) and
+      `NodeGuestIdentityUsage`; `SharingStore.subtree` serves the identity fields; `NodeSubtreePurge` deletes the node rows
+      BEFORE `dropDeadIdentities` and feeds it their identities. Files: `FilesNodeKinds.DROPBOX`, `FilesNodeKindRules` (also
+      `FILES_DROPBOX` at the root or in a `FOLDER`), `FilesShareRoots` {`FILES_DROPBOX` → `WRITE_ONLY`},
+      `share/DropFolderHandler.kt` (write gate `onlyRole = WRITE_ONLY`, root kind `FILES_DROPBOX`, then core's `ensure`) and
+      the resource method (`@RateLimit(SHARE)`). Web: `core/sharing/dropKey.ts` (the drop-key and identity-key seals, moved
+      out of `features/memory/mediaKey.ts`, which re-exports them; contexts byte-equal, B0 snapshots `shasum`-identical);
+      `core/node/tree.ts` `childEntryKey` in `openEntries`, `contentKeyChain`, `parentContentKey`, `listTrash`; `TreeNode`
+      gains the three optional fields; `shareTree.walkSubtree` the same step; `MemoryHomeView` renders a level inside an
+      identity folder read-only. Files: `dropBox.ts` (`createDropBox`, `mintDropBoxLink`, `nameDropGuest`/`saveDropGuest`/
+      `loadDropGuest`, `ensureDropFolder`, `dropGuestContext`), `DropBoxSection` (order 21), `DropBoxCreateDialog`,
+      `DropBoxDetail`, `DropBoxShareDialog`, `DropBoxShareBody` (`claimShareBody(FILES_DROPBOX)`), i18n `files.dropBox.*` (en +
+      de).
+      **Tests:** `:apps:files` 25 → 33: `DropBoxSliceTest` 5 (two guests two folders, a second call of one identity the same
+      folder and its stored wrap, two uploads in one folder, Ben refused in Anna's folder / beside the folders / on her file,
+      the WRITE_ONLY listing empty, the member's listing serves identity + wrapped key; members create/rename/move nothing
+      in, a READ_WRITE guest of a link above creates nothing in a guest's folder (controls beside each), the move out
+      clears the identity and the next call makes a new folder, deletes, a trashed folder refuses ensure and create; revoke
+      (delete) keeps folders, files, blobs and both identities — one named only by its folder; the purge of a trashed drop
+      box erases box, folder, file, then the identity; only a WRITE_ONLY link on a drop box gets a folder, stale epoch 409,
+      unknown token 403, the API shares a drop box WRITE_ONLY only), `DropFolderRaceSliceTest` 2 × `RACE_ROUNDS` (three
+      concurrent first calls of one identity over HTTP → one folder, one `created`; a guest's create while a member's move
+      out is held uncommitted → 403, nothing lands; control 201), `FilesNodeKindRulesTest` +1. Root: `ModuleCompositionTest`
+      (FILES_DROPBOX Files', nothing placed in a drop box by any rule), `OperatorBlindProbeTest` lists the op token-gated;
+      core `CoreAloneSliceTest` (core's usages: attachments + identity folders). Web: `core/node/tree.identityFolder.test.ts`
+      6 (the chain with real crypto; a garbage guest entry or another identity's wrap leaves the folder out; control: a
+      member-sealed broken entry still fails the tree; the trash; a link guest above walks in), `dropBox.wire.test.ts` 2,
+      `DropBoxDetail.test.ts` 3, `MemoryHomeView.test.ts` +1, `register.test.ts` +1, `applications.test.ts` and the golden
+      control updated. **Golden** updated on purpose (`npx vitest run -u src/views/MemoryHomeView.golden.test.ts`): 5 of 8
+      snapshots gain exactly the drop-box section (11 lines each, `git diff --stat`: 55 insertions, 0 deletions); the three
+      read-only/map ones unchanged (no drop box there, no create action).
+      **Bites, each red then green:** backend — the create's identity-folder check dropped (member create 201), the
+      placement's dropped (move in 204), the placement not clearing the identity, `target` letting WRITE_ONLY name any node in
+      the root (Ben's start into Anna's file 200), `NodeGuestIdentityUsage` false (link delete 500 on the FK, purge
+      rollback), the purge's old order (identity left), `ensure` without the existing check AND without the unique index
+      (race: 3 folders; slice: a second folder), the guest create's boundary read before the lock (race: 201 into the moved
+      folder). Measured GREEN, by design: `ensure` without the existing check (the unique index's replay answers the
+      folder) and without the scope lock (existing check + index) — each of the two holds the race alone. Web — `childEntryKey`
+      ignoring the identity (3 red), the guest-row tolerance dropped (2), `walkSubtree` without the step (1), `listTrash`
+      without the identity (1), the guest opening the wrap it sent instead of the stored one (1), the folder name sealed
+      under `K_share` (1), the host not read-only in an identity folder (1), no name numbering (2), a `features/files`
+      import in `core/sharing/dropKey.ts` (core-import guard red). Not bitten: `admittedInto`'s WRITE_ONLY clause (defence in
+      depth — nothing moves inside a drop box, and a trash or move out already fails its subtree check; no lever makes it
+      the only guard).
+      **Proof:** `./gradlew check` green (core 868, memories 362 with 2 skipped, files 33, root 89); `run_backend_races_on_mariadb.py` green on MariaDB 11.4 (45 → 46 race filters, 3 projects: `:apps:files` `*DropFolderRaceSliceTest *ShareFileCompleteRaceSliceTest`), and with `--tests '*DropBoxSliceTest'` 5/5 there (the unique index over a nullable column and the FK on the production engine);
+      web fresh `generate:api` + `npm run check` green (237 files: 216 passed, 21 skipped; 2052 tests: 2026 passed, 26
+      skipped); 53/53 `validate_*` before and after.
+      **Decisions (reversible, for the owner — please review):** (1) **The identity folder is a core `FOLDER` with a core
+      column** `veyq_node.share_identity_id` (unique per parent), not a Files table: the gate, the guest create and the
+      member's placement rule that read it are core's, a Files table would need its own node/scope erasers and usage, and a
+      folder moved out is then just a folder; core names no kind (the drop box is "a root an application calls
+      `IdentityFolders.ensure` for"). (2) **The mechanism is core's, the decision Files'**: core's `IdentityFolders`,
+      `writeOnlyBoundary`, the bounded guest create; Files' `ensureShareDropFolder` (in Files' contract, as the CR says)
+      checks that the root is a `FILES_DROPBOX` — a Memories `WRITE_ONLY` link gets no folder. (3) **Crypto (ADR 0080
+      decision 11 as written, no new seal purpose, no vector):** the folder's name, slug and content-key wrap are sealed
+      under `K_up` itself with the ordinary `node-name`/`content-key` seals (epoch 0, placement version 0); a reader opens
+      the parent's drop key → `upload-identity-key` → `K_up` → the entry. The guest's slug token is an HMAC under `K_up`;
+      uniqueness in the drop box is by identity, not slug. (4) **A guest-sealed entry that does not open is LEFT OUT** of the
+      member's tree, trash and a link guest's walk, never failing them (a malicious guest could otherwise lock a member out
+      of the whole space); a member-sealed one still fails as before. (5) **Members place nothing in an identity folder by
+      a core rule over data** (`identityFolderOwner`, unlocked fast path, argued stable: nothing ever moves in), the drop
+      box itself by `NodeKindRules` (no rule admits a child of `FILES_DROPBOX`); a READ_WRITE guest of a link above is held
+      by the same rule; such a guest may still move a node OUT (like a member) — ADR says "members"; say if guests should
+      not. (6) A move out clears the identity (`applyUpdate`, unconditionally — the only placement an identity folder can
+      take). (7) **A trashed identity folder takes nothing** (`ensure` and creates 403); the unique index spans trashed rows,
+      so the identity gets no second folder — the guest starts over under a new identity; a member's restore brings it
+      back. (8) Inside its folder a WRITE_ONLY guest's create is asked of the container's `GuestNodeRules` like a
+      READ_WRITE guest's — so a guest may create sub-`FOLDER`s (or any kind a folder admits, a `MEMORY` included) there;
+      the web creates `FILE`s only. (9) `ensure` spends the per-share upload budget and ignores the request when the
+      folder exists (the guest opens the stored wrap). (10) `NodeSubtreePurge` now deletes node rows before
+      `dropDeadIdentities`. (11) The drop-key seals moved to core (`dropKey.ts`) — one copy, Memories re-exports. (12) Web
+      cuts: no move-out control, the level inside an identity folder is read-only (download only; deleting a file there is
+      not offered — a member deletes the whole guest folder from the drop box's detail); the share dialog has no label,
+      note, password, expiry or renew; equal guest names are numbered in node-id order (no creation time is listed);
+      the guest sees only what it sent in this session.
+      **Not verified:** the e2e (`filesDropBox.e2e.test.ts`: two guests, one identity twice, revoke + delete keeps
+      everything, the member opens the folders and bytes, a member create in a guest folder 422, own wire check + canaries —
+      typechecked, discovered, not run), a browser (all five components, the guest page on reload with a stored session, the
+      read-only level), two guests of one name in the URL (`resolveSlugPath` folds both to one segment — which one opens is
+      untested), the mutation gate (no file in its scope changed), the Docker image.
 
 ## Definition of done
 

@@ -207,8 +207,11 @@ stored-format change (ADR 0072).
 
 ## Open questions
 
-- **The drop box node** (decision 11) is decided and not built: it comes with Files, the first application that
-  needs it (inbox #349). Until then a `WRITE_ONLY` link on a `FOLDER` is refused (`ShareRoots`).
+None open from this decision set. **The drop box node** (decision 11) is built with Files (`FILES_DROPBOX`,
+[docs/apps/files.md](../apps/files.md) § The drop box): the identity folder is a core `FOLDER` naming its identity
+(`veyq_node.share_identity_id`, unique per parent), created only by core's `IdentityFolders` behind the application's
+own operation; its entry is under the guest's `K_up`, which the reader opens through the parent's drop key. A
+`WRITE_ONLY` link on a plain `FOLDER` stays refused (`ShareRoots`).
 
 ## Bite tests (each must fail if the rule is wrong)
 
