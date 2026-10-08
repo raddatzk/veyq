@@ -142,6 +142,7 @@ const isLinkFull = () => props.link === true && props.tile.status === 'failed' &
 }
 .upload-tile-delete:hover {
   background: var(--app-danger);
+  color: var(--app-on-fill);
 }
 .upload-tile-delete:disabled {
   opacity: 0.6;

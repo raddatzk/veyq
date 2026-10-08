@@ -56,7 +56,7 @@ const { count } = useMyInvitations()
   padding: 0 0.25rem;
   border-radius: 999px;
   background: var(--app-accent);
-  color: var(--app-on-strong);
+  color: var(--app-on-fill);
   font-size: 0.7rem;
   line-height: 1.1rem;
   text-align: center;

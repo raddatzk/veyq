@@ -318,7 +318,7 @@
 .veyq-date-panel .p-datepicker-month-selected,
 .veyq-date-panel .p-datepicker-year-selected {
   background: var(--app-success);
-  color: var(--app-on-strong);
+  color: var(--app-on-fill);
 }
 
 .veyq-date-panel .p-datepicker-today .p-datepicker-day:not(.p-datepicker-day-selected) {
@@ -473,7 +473,7 @@
 .veyq-dialog-button-danger {
   border-color: var(--app-danger);
   background: var(--app-danger);
-  color: var(--app-on-strong);
+  color: var(--app-on-fill);
 }
 
 .veyq-dialog-button-danger:hover:not(:disabled) {
