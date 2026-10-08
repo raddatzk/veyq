@@ -25,6 +25,13 @@ import DropBoxDetail from './components/DropBoxDetail.vue'
 import DropBoxShareDialog from './components/DropBoxShareDialog.vue'
 import DropBoxShareBody from './components/DropBoxShareBody.vue'
 
+/** What a rename selects of a file's name (core's rename dialog, inbox #385): the name without its extension — up to
+ *  the last dot, unless the name starts with its only dot (`.env` stays whole). */
+export function fileNameStemEnd(name: string): number {
+  const dot = name.lastIndexOf('.')
+  return dot > 0 ? dot : name.length
+}
+
 /** Where Files' section sorts among the level view's sections: after Memories' (10). */
 export const FILES_SECTION_ORDER = 20
 /** The drop boxes' section: right after the files. */
@@ -39,6 +46,7 @@ export function registerFiles(registry: Registry): void {
     icon: 'pi pi-file',
     shareable: false,
     slug: fileNameSlug,
+    renameSelectionEnd: fileNameStemEnd,
     section: { order: FILES_SECTION_ORDER, component: FilesSection },
     shareSection: { order: FILES_SECTION_ORDER, component: ShareFilesSection },
   })

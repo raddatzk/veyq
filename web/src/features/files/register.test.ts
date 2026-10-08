@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { createRegistry } from '../../core/applications/registry'
 import { FOLDER_KIND } from '../../core/node/kind'
 import { fileNameSlug, slugify } from '../../shared/naming'
-import { registerFiles } from './register'
+import { fileNameStemEnd, registerFiles } from './register'
 import { DROPBOX_KIND, FILE_KIND } from './kinds'
 import FilesSection from './components/FilesSection.vue'
 import ShareFilesSection from './components/ShareFilesSection.vue'
@@ -22,6 +22,7 @@ describe('registerFiles', () => {
       icon: 'pi pi-file',
       shareable: false,
       slug: fileNameSlug,
+      renameSelectionEnd: fileNameStemEnd,
       section: { order: 20, component: FilesSection },
       shareSection: { order: 20, component: ShareFilesSection },
     })
@@ -81,5 +82,11 @@ describe('registerFiles', () => {
     const registry = createRegistry()
     registerFiles(registry)
     expect(() => registerFiles(registry)).toThrow(/already registered/)
+  })
+
+  it('a rename selects a file\'s name up to its last dot; a name that only starts with a dot stays whole', () => {
+    expect(fileNameStemEnd('Bericht.final.pdf')).toBe('Bericht.final'.length)
+    expect(fileNameStemEnd('README')).toBe(6)
+    expect(fileNameStemEnd('.env')).toBe(4)
   })
 })

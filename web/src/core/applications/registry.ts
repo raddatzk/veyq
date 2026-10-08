@@ -111,6 +111,10 @@ export interface KindDescriptor {
    *  never a URL segment may fold more strictly (a file: `fileNameSlug`). **Frozen into stored tokens**: the function
    *  a kind registers must never change once a node of the kind is stored, and must be pinned by vectors. */
   slug?: (name: string) => string
+  /** Where core's rename dialog (`core/node/FolderNameDialog.vue`) ends the selection it puts on a node's name when the
+   *  field takes focus: the length of the part a rename usually changes (a file: the name without its extension, inbox
+   *  #385). Omitted: no selection, the caret at the end. */
+  renameSelectionEnd?: (name: string) => number
   /** The section the folder level view renders for this kind's children (see the header): `component` takes
    *  `LevelSectionProps` and emits `LevelSectionEmits`; `order` sorts the sections (ascending). Omitted: a child of the
    *  kind shows in core's fallback section. Kinds naming the same component share ONE section. */
