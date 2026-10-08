@@ -52,9 +52,16 @@ routes stay history-mode.**
 - **One slug function, two uses.** `slugify(name)` is URL-safe (`[a-z0-9-]`, German folding + diacritic strip,
   deterministic non-empty fallback). It **already feeds the blinded `slug_token`** the server enforces
   uniqueness on (`UNIQUE(parentId, slug_token)`, [ADR 0012](0012-content-key-hierarchy.md)) — so the **same**
-  function resolves URL→node, and sibling slugs are **unique by construction** (no client disambiguation). Group
-  slugs are **not** server-enforced (no group slug token) — same-named groups resolve first-match, client-side
-  ([ADR 0014](0014-group-scopes-and-governance.md)).
+  function resolves URL→node. Sibling slugs are no longer unique by construction since
+  [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md): a file folds by its own
+  kind's function (a file `a.b` and a folder `a-b` coexist with one URL segment), and two drop-box guests' identity
+  folders sit under different guest keys, so two guests named "Anna" both slugify to `anna`. So the client
+  disambiguates, by one rule for building and resolving a path (`web/src/core/node/location.ts` `segmentsOf`):
+  among siblings of one plain segment the first in node-id order keeps it, the others get `-2`, `-3`, … skipping a
+  number whose segment a sibling holds as its own name. It is client-side only (nothing stored or sealed), a
+  sibling whose id sorts later never moves an earlier path, and a future folder export names its directories by
+  the same rule. Group slugs are **not** server-enforced (no group slug token) — same-named groups resolve
+  first-match, client-side ([ADR 0014](0014-group-scopes-and-governance.md)).
 - **History-mode for the top level.** `/`, `/login`, `/setup`, … stay real paths; only the content position
   rides the fragment. The shell renders **browse or detail by the resolved node's `kind`** — no per-node route.
 - **Deep links survive a cold start.** Because a fresh load drops the in-memory vault, a bookmarked

@@ -19,6 +19,7 @@ import type { NodeDetailProps } from '../../../core/applications/registry'
 import { deleteNode, type TreeNode } from '../../../core/node/tree'
 import { treeStore, loadTree } from '../../../core/node/treeStore'
 import { FOLDER_KIND } from '../../../core/node/kind'
+import { slugPathOf } from '../../../core/node/location'
 import { confirmRequest, settleConfirm } from '../../../shared/state/useConfirm'
 import { DROPBOX_KIND, FILE_KIND } from '../kinds'
 import { realI18n } from '../../../test/i18n'
@@ -56,6 +57,21 @@ describe('DropBoxDetail', () => {
     const rows = w.findAll('.veyq-row-title').map((e) => e.text())
     expect(rows).toEqual(['Anna', 'Anna (2)', 'Ben'])
     expect(w.findAll('.veyq-row-subtitle').map((e) => e.text())).toEqual(['2 files', 'No files', '1 file'])
+  })
+
+  it('numbers equal names in the order their URL segments are suffixed in: "Anna (2)" opens the folder at `anna-2`', async () => {
+    const w = mountDetail()
+    const pairs: [string, string[]][] = []
+    for (const row of w.findAll('.dropbox-row-open')) {
+      await row.trigger('click')
+      const opened = (w.emitted('openNode') as TreeNode[][]).at(-1)![0]
+      pairs.push([row.find('.veyq-row-title').text(), slugPathOf(treeStore.nodes, opened.id)])
+    }
+    expect(pairs).toEqual([
+      ['Anna', ['einsendungen', 'anna']],
+      ['Anna (2)', ['einsendungen', 'anna-2']],
+      ['Ben', ['einsendungen', 'ben']],
+    ])
   })
 
   it('opens a folder, and hands share and delete of the drop box to the host', async () => {

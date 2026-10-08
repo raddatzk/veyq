@@ -46,28 +46,84 @@ export function buildHash(scope: string, segments: string[]): string {
   return tokens.length ? `#${tokens.map(encodeURIComponent).join('/')}` : ''
 }
 
+/** Node-id order (UTF-16 code units, locale-free): the one order that tells equal names apart, both in the URL
+ *  ({@link segmentsOf}) and where an application numbers equal display names (Files' drop box). No creation time is
+ *  listed, and node ids are client-minted UUIDv4 (ADR 0072), so this order is deterministic but not creation order. */
+export function compareNodeIds(a: { id: string }, b: { id: string }): number {
+  if (a.id === b.id) return 0
+  return a.id < b.id ? -1 : 1
+}
+
+const childrenOfParent = (tree: readonly TreeNode[], parentId: string | null) =>
+  tree.filter((n) => (n.parentId ?? null) === parentId)
+
 /**
- * Resolve a slug path under the scope root to a node id, walking the tree level by level.
- * `null` = the scope root (no segments); a node id = the addressed node; `false` = a segment didn't match.
+ * The URL segment of each of one parent's children, keyed by node id — the **one** rule both directions use, so a
+ * path built here always resolves back to the node it was built for.
+ *
+ * A child's plain segment is `slugify(name)` whatever its kind (the URL folding; a kind's uniqueness folding,
+ * `registry.slugFor`, is not the URL's). Siblings can share a plain segment: two drop-box guests of one display name
+ * (their entries sit under different guest keys, so the server's slug uniqueness never sees the pair, ADR 0080
+ * decision 11), or a file and a folder whose kinds fold differently (`a.b` and `a-b`). Among the siblings of one
+ * plain segment, in {@link compareNodeIds} order, the first keeps it and each further one gets `<slug>-<n>` with the
+ * smallest `n ≥ 2` above the previous one's that no sibling holds as its plain segment — a real sibling named
+ * `Anna 2` keeps `anna-2`, and the second `Anna` becomes `anna-3`. Consequences, all deterministic: a node whose
+ * plain segment is unique among its siblings always keeps it; a sibling whose id sorts after the existing ones never
+ * changes their segments; one whose id sorts before them (ids are random) takes the plain segment and shifts the
+ * others, and a sibling later given the literal name `anna-3` takes that segment over. A suffixed segment can never
+ * equal another group's suffixed segment (`<a>-<n>` = `<b>-<m>` with digits-only n, m forces a = b), so the result
+ * does not depend on the order the groups are visited in.
+ *
+ * **A future folder export** (ADR 0080 names a ZIP export) names its directories by this same rule, so an exported
+ * tree and the in-app paths agree; it is client-side only — nothing here is stored or sealed.
+ */
+export function segmentsOf(siblings: readonly TreeNode[]): Map<string, string> {
+  const byPlain = new Map<string, TreeNode[]>()
+  for (const n of siblings) {
+    const plain = slugify(n.name)
+    const group = byPlain.get(plain)
+    if (group) group.push(n)
+    else byPlain.set(plain, [n])
+  }
+  const segments = new Map<string, string>()
+  for (const [plain, group] of byPlain) {
+    const [first, ...rest] = [...group].sort(compareNodeIds)
+    segments.set(first.id, plain)
+    let suffix = 1
+    for (const n of rest) {
+      do suffix++
+      while (byPlain.has(`${plain}-${suffix}`))
+      segments.set(n.id, `${plain}-${suffix}`)
+    }
+  }
+  return segments
+}
+
+/**
+ * Resolve a slug path under the scope root to a node id, walking the tree level by level, each level by
+ * {@link segmentsOf}. `null` = the scope root (no segments); a node id = the addressed node; `false` = a segment
+ * didn't match.
  */
 export function resolveSlugPath(tree: TreeNode[], segments: string[]): string | null | false {
   let parentId: string | null = null
   for (const seg of segments) {
-    const match = tree.find((n) => (n.parentId ?? null) === parentId && slugify(n.name) === seg)
-    if (!match) return false
-    parentId = match.id
+    let match: string | null = null
+    for (const [id, segment] of segmentsOf(childrenOfParent(tree, parentId))) if (segment === seg) match = id
+    if (match === null) return false
+    parentId = match
   }
   return parentId
 }
 
-/** The slug path from the scope root down to `nodeId` (root = `[]`). */
+/** The slug path from the scope root down to `nodeId` (root = `[]`), each segment by {@link segmentsOf}. */
 export function slugPathOf(tree: TreeNode[], nodeId: string | null): string[] {
   const byId = new Map(tree.map((n) => [n.id, n]))
   const segments: string[] = []
   let cur = nodeId ? byId.get(nodeId) ?? null : null
   while (cur) {
-    segments.unshift(slugify(cur.name))
-    cur = cur.parentId ? byId.get(cur.parentId) ?? null : null
+    const parentId = cur.parentId ?? null
+    segments.unshift(segmentsOf(childrenOfParent(tree, parentId)).get(cur.id) as string)
+    cur = parentId ? byId.get(parentId) ?? null : null
   }
   return segments
 }
