@@ -48,7 +48,7 @@ vi.mock('../../../shared/state/useToast', () => ({
 
 import { mount, flushPromises } from '@vue/test-utils'
 import MediaLightbox from './MediaLightbox.vue'
-import { addMedia, listMedia, unsealMeta, type MediaDeriver, type MediaItem } from '../media'
+import { addMedia, listMedia, unsealMeta, type MediaDeriver, type MediaExif, type MediaItem } from '../media'
 import exifr from 'exifr'
 import { blobApi } from '../../../api/client'
 import { mediaApi } from '../api'
@@ -83,6 +83,16 @@ async function seedTwo(memoryKey: Uint8Array) {
   await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(2) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
   const items = await listMedia(SCOPE_ID, NODE_ID)
   return { store, items }
+}
+
+/** Stub the File System Access picker and collect every name it is offered — the download's name, before any byte. */
+function pickerNames(): string[] {
+  const names: string[] = []
+  vi.stubGlobal('showSaveFilePicker', vi.fn(async (o?: { suggestedName?: string }) => {
+    names.push(o?.suggestedName ?? '')
+    return { createWritable: async () => ({ write: async () => {}, close: async () => {}, abort: async () => {} }) }
+  }))
+  return names
 }
 
 function mountLightbox(
@@ -265,6 +275,78 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
     await flushPromises()
     expect(ended).toBe('close')
     expect(Array.from(written.flatMap((b) => Array.from(b)))).toEqual(Array(8).fill(2))
+  })
+
+  // inbox #395 F10, the owner's repro: two photos, then a third upload shifts the gallery. The download name must not
+  // move with it. Lever: name the download from `props.memoryName` + `current` alone (drop `storedName`).
+  it('downloads an original under its own sealed file name, and the name holds when a newer upload shifts the gallery', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const store = galleryFakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    vi.stubGlobal('fetch', store.fetchStub)
+    const upload = (fill: number, name: string) =>
+      addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(fill) as BlobPart]), mediaType: 'image/jpeg', name }, stubDeriver())
+    const suggested = pickerNames()
+
+    await upload(1, 'IMG_0001.JPG')
+    await upload(2, 'IMG_0002.JPG')
+    const two = await listMedia(SCOPE_ID, NODE_ID)
+    const first = mountLightbox(memoryKey, two, 0)
+    await flushPromises()
+    await first.find(`[aria-label="${t('media.download')}"]`).trigger('click')
+    await flushPromises()
+    first.unmount()
+
+    await upload(3, 'IMG_0003.JPG') // the newer photo goes in front of it: the same photo is now at position 2
+    const three = await listMedia(SCOPE_ID, NODE_ID)
+    const shifted = [three[2], ...three.slice(0, 2)]
+    expect(shifted[1].mediaId).toBe(two[0].mediaId)
+    const second = mountLightbox(memoryKey, shifted, 1)
+    await flushPromises()
+    await second.find(`[aria-label="${t('media.download')}"]`).trigger('click')
+    await flushPromises()
+
+    expect(suggested).toEqual(['IMG_0001.JPG', 'IMG_0001.JPG']) // was 'Rom 2026 1.jpg', then 'Rom 2026 2.jpg'
+  })
+
+  // Only a media that never sealed a name falls back to the Memory name + its position (cr-0049) — `seedTwo` uploads
+  // without a name, as every media without EXIF did before #395 F10.
+  it('a media without a sealed name falls back to the Memory name and its gallery position', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seedTwo(memoryKey)
+    const suggested = pickerNames()
+    const wrapper = mountLightbox(memoryKey, items, 1)
+    await flushPromises()
+    await wrapper.find(`[aria-label="${t('media.download')}"]`).trigger('click')
+    await flushPromises()
+    expect(suggested).toEqual(['Rom 2026 2.jpg'])
+  })
+
+  // The name lives in the lazily loaded EXIF tier and nothing may be awaited before the picker, so the download waits
+  // BEFORE the click: disabled until the tier is in (or known absent). Lever: drop `detailsLoading` from
+  // `downloadBlocked` — a click then saves under the fallback name, the next one under the stored one.
+  it('keeps the download disabled until the details carrying the file name are loaded', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seedTwo(memoryKey)
+    const suggested = pickerNames()
+    let release: (e: MediaExif | null) => void = () => {}
+    const exifLoader = vi.fn(() => new Promise<MediaExif | null>((r) => (release = r)))
+    const wrapper = mountLightbox(memoryKey, items, 0, null, { exifLoader })
+    await flushPromises()
+
+    const button = () => wrapper.find(`[aria-label="${t('media.download')}"]`)
+    expect(button().attributes('disabled')).toBeDefined()
+    ;(button().element as HTMLButtonElement).click() // a click that lands anyway does nothing
+    await flushPromises()
+    expect(suggested).toEqual([])
+
+    release({ v: 1, name: 'Kolosseum.jpg' })
+    await flushPromises()
+    expect(button().attributes('disabled')).toBeUndefined()
+    await button().trigger('click')
+    await flushPromises()
+    expect(suggested).toEqual(['Kolosseum.jpg'])
   })
 
   it('a cancelled picker is silent: no error, no toast, nothing fetched', async () => {
