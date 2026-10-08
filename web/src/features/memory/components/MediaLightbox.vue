@@ -2,8 +2,9 @@
 // The Memory gallery lightbox (cr-0049, uc.memory.gallery). Ported from the design source's MediaLightbox
 // (legacy/frontend-noe2ee) — same markup/classes (media.css) — with the data layer swapped to the operator-
 // blind tiers: the stage shows the **preview** derivative (openLightbox), never the multi-MB original; the
-// explicit download fetches the **original** (openOriginal). Every byte is fetched as ciphertext and decrypted
-// on device; the decrypted preview becomes an object URL that is **revoked** on navigation / close / unmount.
+// explicit download streams the **original** chunk by chunk into a save target (inbox #371). Every byte is
+// fetched as ciphertext and decrypted on device; the decrypted preview becomes an object URL that is **revoked** on
+// navigation / close / unmount.
 // The detail panel (cr-0064) shows the lazily-loaded EXIF tier and lets the user **correct the capture time**
 // (cr-0065, sealed under K_mem). Out of scope (own CRs): highlight, delete, fullscreen-original, sharing.
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
@@ -27,8 +28,9 @@ import {
   type MediaMetaWrite,
 } from '../media'
 import { MetaConflictError, MetaUnreadableError, staleMetaOf, type SealedMetaState } from '../../../core/node/sealedMetaWrite'
-import { derivedDownloadName, sniffMediaType } from '../download'
-import { saveBytes } from '../../../shared/saveBytes'
+import { downloadOriginal } from '../download'
+import { SaveTooLarge, isSaveCancelled } from '../../../shared/saveStream'
+import { useToast } from '../../../shared/state/useToast'
 import type { ChunkProvider } from '../../../sw/protocol'
 import { resolvePlaceName } from '../placeName'
 import { useMapConfig } from '../../../shared/state/useMapConfig'
@@ -49,12 +51,13 @@ const props = defineProps<{
   // the byte/metadata access is injected — the share viewer passes its operator-blind, per-item share loaders.
   readonly?: boolean // hide every write affordance (set-cover, capture-time edit) — the public viewer is view-only
   previewLoader?: (item: MediaItem) => Promise<Uint8Array> // fetch+decrypt the preview tier (default: authed openLightbox)
-  originalLoader?: (item: MediaItem) => Promise<Uint8Array> // fetch+decrypt the original (default: authed openOriginal)
+  originalLoader?: (item: MediaItem) => Promise<Uint8Array> // fetch+decrypt the whole original — the Slice-1 video fallback only (default: authed openOriginal)
   exifLoader?: (item: MediaItem) => Promise<MediaExif | null> // lazy heavy-EXIF (default: authed getMediaExif; skipped when readonly + absent)
   metaResolver?: (item: MediaItem) => MediaMeta | null // unseal the listed date/GPS tier (default: unsealMeta under memoryKey)
-  // Slice 2 (ADR 0047): the per-item key-free chunk source for SW range playback. Default (authed) presigns via
-  // the media API; the share viewer injects its share-scoped provider (per-item K_mem + guest pwToken), so the SW
-  // path covers the anonymous viewer without the SW learning the route. Absent → the authed provider is used.
+  // Slice 2 (ADR 0047): the per-item key-free chunk source over the ORIGINAL, for SW range playback and the streamed
+  // download (inbox #371 S4). Default (authed) presigns via the media API; the share viewer injects its share-scoped
+  // provider (per-item K_mem + guest pwToken), so the SW path and the download cover the anonymous viewer without the
+  // SW learning the route. Absent → the authed provider is used.
   videoChunkProvider?: (item: MediaItem) => ChunkProvider
   suspendKeys?: boolean // pause the global Escape/arrow handler while a modal (the cover cropper) is open over the lightbox
 }>()
@@ -66,14 +69,16 @@ const emit = defineEmits<{
 }>()
 
 const { t, locale } = useI18n()
+const toast = useToast()
 
 // Byte/metadata access, resolved once per item: the injected loader when the host provides one (the share
 // viewer), else the built-in authed media-API path (the internal Memory). Keeps behaviour identical by default.
 const previewOf = (it: MediaItem) => (props.previewLoader ?? ((x: MediaItem) => openLightbox(props.scopeId, props.memoryKey, x)))(it)
+// The whole decrypted original — only the Slice-1 video fallback (no usable SW) still holds it; the download streams.
 const originalOf = (it: MediaItem) => (props.originalLoader ?? ((x: MediaItem) => openOriginal(props.scopeId, props.memoryKey, x)))(it)
-// The Slice-2 chunk provider for the shown item's ORIGINAL (the video streams the pristine original). Injected by
-// the share viewer; else the authed media-API provider. Keys never leave the page — the SW only pulls plaintext.
-const videoProviderOf = (it: MediaItem): ChunkProvider =>
+// The Slice-2 chunk provider for the shown item's ORIGINAL (the video streams the pristine original, and so does the
+// download). Injected by the share viewer; else the authed media-API provider. Keys never leave the page.
+const originalProviderOf = (it: MediaItem): ChunkProvider =>
   (props.videoChunkProvider ?? ((x: MediaItem) => chunkProvider(props.scopeId, props.memoryKey, x)))(it)
 const metaOf = (it: MediaItem) => (props.metaResolver ?? ((x: MediaItem) => unsealMeta(props.scopeId, props.memoryKey, x)))(it)
 const exifOf = (it: MediaItem): Promise<MediaExif | null> =>
@@ -412,7 +417,7 @@ async function playVideo() {
   videoLoading.value = true
   error.value = false
   try {
-    const provider = videoProviderOf(target)
+    const provider = originalProviderOf(target)
     const url = await registerPlayback(
       { chunkCount: provider.chunkCount, byteSize: provider.byteSize, mediaType: type },
       provider,
@@ -443,23 +448,25 @@ async function download() {
   const target = item.value
   const targetMeta = captured.value // the shown tier, only to skip a media that already has a type — the backfill itself re-reads the listed tier
   try {
-    const bytes = await originalOf(target)
-    saveBytes(bytes, derivedDownloadName(props.memoryName, current.value, bytes))
-    await maybeBackfillMediaType(target, targetMeta, bytes)
-  } catch {
-    error.value = true
+    // Streamed (inbox #371 S4): the original's chunk provider — the one playback uses, so the share viewer's injected
+    // provider covers a guest's download too — written chunk by chunk into a picked file, the SW download route or a
+    // capped Blob. Nothing is awaited before this call: the save picker needs the click's activation (download.ts).
+    const sniffed = await downloadOriginal(originalProviderOf(target), props.memoryName, current.value, targetMeta?.mediaType)
+    await maybeBackfillMediaType(target, targetMeta, sniffed)
+  } catch (e) {
+    if (e instanceof SaveTooLarge) toast.error(t('media.downloadTooLarge'))
+    else if (!isSaveCancelled(e)) error.value = true
   } finally {
     downloading.value = false
   }
 }
 
-// Lazy mediaType backfill (ADR 0047 / #105): a pre-field media carries no sealed type, so on the download that
-// already fetched its original we sniff the bytes and write the type back — the NEXT listing then shows the play
-// badge + the <video> branch. Never in the read-only public viewer (no authed write path). Best-effort: a failed
-// sniff/write just means the item stays untyped (no badge yet).
-async function maybeBackfillMediaType(target: MediaItem, targetMeta: MediaMeta | null, bytes: Uint8Array) {
+// Lazy mediaType backfill (ADR 0047 / #105): a pre-field media carries no sealed type, so the download reads its
+// original's first chunk before anything else, sniffs it (`downloadOriginal` returns the type) and writes the type
+// back once the download is through — the NEXT listing then shows the play badge + the <video> branch. Never in the
+// read-only public viewer (no authed write path). Best-effort: a failed sniff/write just means the item stays untyped.
+async function maybeBackfillMediaType(target: MediaItem, targetMeta: MediaMeta | null, sniffed: string | undefined) {
   if (props.readonly || targetMeta?.mediaType) return
-  const sniffed = sniffMediaType(bytes)
   if (!sniffed) return
   try {
     const updated = await backfillMediaType(props.scopeId, target, props.memoryKey, sniffed)

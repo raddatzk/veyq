@@ -188,6 +188,13 @@ failure, a stream that ends short of or runs past the registered size, and an en
 the browser marks the download failed and never keeps a truncated file as if it were whole; a cancelled download
 reaches the page as an abort. The protocol is version 3.
 
+Both applications save through it: Files' download, and Memories' "download original" in the lightbox (S4, the same
+day). A Memories original carries no stored file name, so its name is derived on device, its extension from the sealed
+media type; a media without one (uploaded before the field) has its first chunk read and sniffed **before** the save
+target opens, because the name is the picker's suggestion and the route's `Content-Disposition`. That read can outlast
+the click's activation in Chromium, and the picker then falls through to this route; the chunk is written from what
+was read, never fetched twice.
+
 The download is whole-blob and sequential, so it adds no access pattern beyond what a whole-blob read already shows.
 The page must stay open while it runs, since it holds the key. What only a browser can prove (memory flat at
 gigabyte scale, the SW's lifetime during a long download, Safari and iOS) is still open in inbox #371.

@@ -49,7 +49,10 @@
    [uc.memory.place](uc.memory.place.md) and [ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md)
    § *Request discipline*.
 5. **Download:** an explicit download fetches the **original** (the only pristine, full-resolution copy) and
-   saves it.
+   saves it, streamed chunk by chunk — into a file the user picks, the browser's own download (the Service Worker's
+   download route), or, only up to 512 MiB, an in-memory copy; above that with neither, it is refused with a message
+   (inbox #371). The file is named from the Memory's name, the item's position and an extension from the sealed media
+   type, else from the original's first chunk (its magic bytes), read before the save target opens.
 6. **Pin the Memory:** the header toggle pins / unpins it
    ([en.memory.favorites](../enablers/en.memory.favorites.md)). This pin is **private to the user**.
 7. **Mark an item, and narrow by marks.** A heart on each tile (and in the lightbox) marks that item. Unlike the

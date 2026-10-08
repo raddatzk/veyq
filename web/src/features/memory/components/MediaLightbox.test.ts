@@ -35,6 +35,15 @@ vi.mock('../../../sw/register', () => ({
   registerPlayback: vi.fn(async () => null),
   revokePlayback: vi.fn(),
   handleFromUrl: (url: string) => url.replace('/__media/', ''),
+  // No SW download route either: a download streams into a picked file when a test stubs `showSaveFilePicker`, else
+  // into the capped in-memory Blob (`shared/saveStream.ts`, inbox #371).
+  registerDownload: vi.fn(async () => null),
+}))
+
+// The toast channel (PrimeVue's ToastService is not installed here): the too-large download reports through it.
+const toastError = vi.hoisted(() => vi.fn())
+vi.mock('../../../shared/state/useToast', () => ({
+  useToast: () => ({ success: vi.fn(), error: toastError, showUndo: vi.fn(), dismissUndo: vi.fn() }),
 }))
 
 import { mount, flushPromises } from '@vue/test-utils'
@@ -193,7 +202,7 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
     expect(wrapper.emitted('close')).toHaveLength(2)
   })
 
-  it('download fetches the ORIGINAL and saves it with the derived name', async () => {
+  it('download streams the ORIGINAL, byte for byte, under the name its sealed type derives', async () => {
     const memoryKey = v1.randomBytes(32)
     const { store, items } = await seedTwo(memoryKey)
     const anchors: HTMLAnchorElement[] = []
@@ -204,12 +213,14 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
       return el
     })
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
-    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake')
+    const saved: Blob[] = []
+    vi.spyOn(URL, 'createObjectURL').mockImplementation((b) => (saved.push(b as Blob), 'blob:fake'))
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
 
     const wrapper = mountLightbox(memoryKey, items, 0)
     await flushPromises()
     store.blob.presignBlobDownloads.mockClear()
+    saved.length = 0 // the preview's own object URL
 
     await wrapper.find(`[aria-label="${t('media.download')}"]`).trigger('click')
     await flushPromises()
@@ -219,8 +230,99 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
       (c) => c[0].blobDownloadsBatchRequest.items.map((it) => it.blobId),
     )
     expect(presigned).toEqual([store.blobIdOfUpload('up-0')])
-    // the original decrypts to the stub's 8 bytes filled with 1 → not a known signature → .bin
-    expect(anchors.at(-1)!.getAttribute('download')).toBe('Rom 2026 1.bin')
+    // the name comes from the SEALED type (image/png), so nothing was read before the save target opened; the bytes
+    // themselves (8 × 0x01) would sniff as nothing (.bin) — the sniff is only the fallback for an untyped media
+    expect(anchors.at(-1)!.getAttribute('download')).toBe('Rom 2026 1.png')
+    // no streaming target in this env → the capped Blob, holding exactly the original's bytes
+    expect(saved).toHaveLength(1)
+    expect(new Uint8Array(await saved[0].arrayBuffer())).toEqual(new Uint8Array(8).fill(1))
+    expect(toastError).not.toHaveBeenCalled()
+  })
+
+  it('opens the save picker synchronously in the click when the sealed type names the file — nothing awaited first', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { store, items } = await seedTwo(memoryKey)
+    const written: Uint8Array[] = []
+    let ended = ''
+    const picker = vi.fn(async (_o?: { suggestedName?: string }) => ({
+      createWritable: async () => ({
+        write: async (b: Uint8Array) => void written.push(b.slice()),
+        close: async () => void (ended = 'close'),
+        abort: async () => void (ended = 'abort'),
+      }),
+    }))
+    vi.stubGlobal('showSaveFilePicker', picker)
+    const wrapper = mountLightbox(memoryKey, items, 1)
+    await flushPromises()
+    store.blob.presignBlobDownloads.mockClear()
+
+    // a real DOM click, and the assertion in the SAME task: the picker ran before the handler's first await yielded
+    ;(wrapper.find(`[aria-label="${t('media.download')}"]`).element as HTMLButtonElement).click()
+    expect(picker).toHaveBeenCalledTimes(1)
+    expect(picker.mock.calls[0][0]).toEqual({ suggestedName: 'Rom 2026 2.jpg' })
+    expect(store.blob.presignBlobDownloads).not.toHaveBeenCalled()
+
+    await flushPromises()
+    expect(ended).toBe('close')
+    expect(Array.from(written.flatMap((b) => Array.from(b)))).toEqual(Array(8).fill(2))
+  })
+
+  it('a cancelled picker is silent: no error, no toast, nothing fetched', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { store, items } = await seedTwo(memoryKey)
+    vi.stubGlobal('showSaveFilePicker', vi.fn(async () => { throw new DOMException('dismissed', 'AbortError') }))
+    const wrapper = mountLightbox(memoryKey, items, 0)
+    await flushPromises()
+    store.blob.presignBlobDownloads.mockClear()
+
+    await wrapper.find(`[aria-label="${t('media.download')}"]`).trigger('click')
+    await flushPromises()
+    expect(store.blob.presignBlobDownloads).not.toHaveBeenCalled()
+    expect(toastError).not.toHaveBeenCalled()
+    expect(wrapper.find('.media-lightbox-error').exists()).toBe(false)
+  })
+
+  it('an original above the Blob cap with no streaming target is refused with a toast, and no chunk is read', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seedTwo(memoryKey)
+    // a 1 GiB original (the share viewer's injection point is the same provider seam the authed default fills)
+    const chunks = 4096
+    const huge = { chunkCount: chunks, byteSize: chunks * (256 * 1024 + v1.FRAME_OVERHEAD), getPlaintextChunk: vi.fn(async () => new Uint8Array(1)) }
+    const wrapper = mountLightbox(memoryKey, items, 0, null, { videoChunkProvider: () => huge })
+    await flushPromises()
+    const saveSpy = vi.spyOn(URL, 'createObjectURL') // after the preview minted its own URL
+
+    await wrapper.find(`[aria-label="${t('media.download')}"]`).trigger('click')
+    await flushPromises()
+    expect(toastError.mock.calls).toEqual([[t('media.downloadTooLarge')]])
+    expect(huge.getPlaintextChunk).not.toHaveBeenCalled()
+    expect(saveSpy).not.toHaveBeenCalled()
+    expect(wrapper.find('.media-lightbox-error').exists()).toBe(false) // not the stage's "couldn't load"
+  })
+
+  it('a chunk that fails mid-download aborts the picked file (never closes it) and shows the error', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seedTwo(memoryKey)
+    let ended = ''
+    vi.stubGlobal('showSaveFilePicker', vi.fn(async () => ({
+      createWritable: async () => ({
+        write: async () => {},
+        close: async () => void (ended = 'close'),
+        abort: async () => void (ended = 'abort'),
+      }),
+    })))
+    const failing = {
+      chunkCount: 3, byteSize: 3 * (16 + v1.FRAME_OVERHEAD),
+      getPlaintextChunk: vi.fn(async (i: number) => { if (i === 1) throw new Error('chunk_get_failed:500'); return new Uint8Array(16) }),
+    }
+    const wrapper = mountLightbox(memoryKey, items, 0, null, { videoChunkProvider: () => failing })
+    await flushPromises()
+
+    await wrapper.find(`[aria-label="${t('media.download')}"]`).trigger('click')
+    await flushPromises()
+    expect(ended).toBe('abort')
+    expect(wrapper.find('.media-lightbox-error').exists()).toBe(true)
+    expect(toastError).not.toHaveBeenCalled()
   })
 })
 
@@ -280,6 +382,10 @@ describe('MediaLightbox — video playback + mediaType backfill (cr-inline-video
     const { store, items } = await seedVideoLike(memoryKey, '', FTYP_MP4)
     expect(unsealMeta(SCOPE_ID, memoryKey, items[0])?.mediaType).toBeUndefined() // no signal yet
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    const picker = vi.fn(async (_o?: { suggestedName?: string }) => ({
+      createWritable: async () => ({ write: async () => {}, close: async () => {}, abort: async () => {} }),
+    }))
+    vi.stubGlobal('showSaveFilePicker', picker)
 
     const wrapper = mountLightbox(memoryKey, items, 0)
     await flushPromises()
@@ -292,6 +398,8 @@ describe('MediaLightbox — video playback + mediaType backfill (cr-inline-video
     expect(sent).not.toContain('video/mp4')
     expect(unsealMeta(SCOPE_ID, memoryKey, { mediaId: items[0].mediaId, wrappedMeta: sent } as MediaItem)?.mediaType).toBe('video/mp4')
     expect(wrapper.emitted('updated')?.at(-1)?.[0]).toMatchObject({ mediaId: items[0].mediaId })
+    // with no sealed type the extension comes ONLY from sniffing chunk 0, read before the picker opened
+    expect(picker.mock.calls).toEqual([[{ suggestedName: 'Rom 2026 1.mp4' }]])
   })
 
   it('does NOT back-fill in the read-only public viewer (no authed write path)', async () => {

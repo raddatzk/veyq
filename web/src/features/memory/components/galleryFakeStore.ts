@@ -17,7 +17,7 @@ import type {
   MediaSummary,
 } from '../../../api/generated/media'
 
-type Session = { wrappedBlobKey: string; chunkCount: number; blobId: string }
+type Session = { wrappedBlobKey: string; chunkCount: number; byteSize: number; blobId: string }
 type MediaRecord = {
   mediaId: string
   originalUploadId: string
@@ -37,7 +37,8 @@ export function galleryFakeStore() {
   /** The blob fields a listed media (and each of its derivatives) carries. */
   const blobOf = (uploadId: string): Pick<MediaSummary, 'blobId' | 'chunkCount' | 'byteSize' | 'wrappedBlobKey'> => {
     const s = sessions.get(uploadId)!
-    return { blobId: s.blobId, chunkCount: s.chunkCount, byteSize: 0, wrappedBlobKey: s.wrappedBlobKey }
+    // The declared size, as the real server lists it: a streamed download sizes its save target from it (#371).
+    return { blobId: s.blobId, chunkCount: s.chunkCount, byteSize: s.byteSize, wrappedBlobKey: s.wrappedBlobKey }
   }
   const getsFor = (blobId: string): PresignedUrl[] => {
     const uploadId = uploadOfBlob.get(blobId)!
@@ -49,7 +50,7 @@ export function galleryFakeStore() {
     startBlobUploads: vi.fn<BlobApi['startBlobUploads']>(async ({ blobUploadsBatchRequest }) => ({
       results: blobUploadsBatchRequest.items.map((item): BlobUploadResultItem => {
         const uploadId = `up-${upCounter++}`
-        sessions.set(uploadId, { wrappedBlobKey: item.wrappedBlobKey, chunkCount: item.chunkCount, blobId: item.blobId })
+        sessions.set(uploadId, { wrappedBlobKey: item.wrappedBlobKey, chunkCount: item.chunkCount, byteSize: item.byteSize, blobId: item.blobId })
         uploadOfBlob.set(item.blobId, uploadId)
         return {
           uploadId,
