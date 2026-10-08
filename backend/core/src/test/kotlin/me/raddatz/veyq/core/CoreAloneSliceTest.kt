@@ -29,6 +29,7 @@ import me.raddatz.veyq.core.sharing.ShareGuestWrites
 import me.raddatz.veyq.core.sharing.FolderShareRoots
 import me.raddatz.veyq.core.sharing.ShareIdentityEntity
 import me.raddatz.veyq.core.sharing.ShareRoots
+import me.raddatz.veyq.core.sharing.WriteOnlyGuestKinds
 import me.raddatz.veyq.core.sharing.ShareScopeEraser
 import me.raddatz.veyq.core.sharing.ShareUploadOutcome
 import me.raddatz.veyq.core.sharing.ShareWriteProof
@@ -72,7 +73,7 @@ import org.junit.jupiter.api.Test
  * 1. **Every seam holds exactly core's own implementations**: `ScopeEraser` core's three (attachments, nodes, shares),
  *    `NodeKindRules` and `ShareRoots` core's `FOLDER` answers, `NodeSubtreeEraser`, `GuestIdentityUsage` and
  *    `SharedSubtreeContributor` core's attachment one each (cr-files-application P3-S3), and every other seam —
- *    `MembershipEraser`, `ShareGuestWrites`, `UploadCompletion`, `UploadAdmission` — none. The composed application's
+ *    `MembershipEraser`, `ShareGuestWrites`, `UploadCompletion`, `UploadAdmission`, `WriteOnlyGuestKinds` — none. The composed application's
  *    sets are the root's `ModuleCompositionTest`. (`GuestIdentityUsage` is therefore never empty: its fail-closed
  *    branch for no usage at all is `GuestIdentityUsageTest`'s, boot-free, and no longer reachable here.)
  * 2. **Every seam fails closed with nobody behind it**: a `FOLDER` is created and a `MEMORY` is `illegal_structure`;
@@ -103,6 +104,7 @@ class CoreAloneSliceTest {
     @Inject @All lateinit var admissions: MutableList<UploadAdmission>
     @Inject @All lateinit var kindRules: MutableList<NodeKindRules>
     @Inject @All lateinit var shareRoots: MutableList<ShareRoots>
+    @Inject @All lateinit var writeOnlyGuestKinds: MutableList<WriteOnlyGuestKinds>
 
     @Inject lateinit var nodes: NodesStore
     @Inject lateinit var dispatcher: UploadCompletions
@@ -136,6 +138,7 @@ class CoreAloneSliceTest {
         for ((seam, beans) in mapOf(
             "MembershipEraser" to membershipErasers,
             "ShareGuestWrites" to guestWrites, "UploadCompletion" to completions, "UploadAdmission" to admissions,
+            "WriteOnlyGuestKinds" to writeOnlyGuestKinds,
         )) {
             assertEquals(emptySet<Class<*>>(), classes(beans), "$seam: core implements none, and no application is here")
         }

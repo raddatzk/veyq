@@ -5,6 +5,7 @@ import me.raddatz.veyq.core.node.NodeKindRules
 import me.raddatz.veyq.core.node.ParentSlot
 import me.raddatz.veyq.core.sharing.ShareEntity
 import me.raddatz.veyq.core.sharing.ShareRoots
+import me.raddatz.veyq.core.sharing.WriteOnlyGuestKinds
 import jakarta.enterprise.context.ApplicationScoped
 
 /** The node kinds Files owns (ADR 0079 Decision 3) — the values of `veyq_node.kind` core does not interpret. */
@@ -51,4 +52,15 @@ class FilesNodeKindRules : NodeKindRules {
 class FilesShareRoots : ShareRoots {
     override fun roles(kind: String): Set<String>? =
         if (kind == FilesNodeKinds.DROPBOX) setOf(ShareEntity.WRITE_ONLY) else null
+}
+
+/**
+ * What a drop box's `WRITE_ONLY` guest may create inside its own identity folder (ADR 0080 decision 11, core's
+ * [WriteOnlyGuestKinds]): **`FILE`s only** — no sub-folder, no other kind (owner decision 2026-10-08, inbox #377 (c));
+ * it uploads into those files and does nothing else. A `FILE` is never a share root, so Files handles the drop box only.
+ */
+@ApplicationScoped
+class FilesWriteOnlyGuestKinds : WriteOnlyGuestKinds {
+    override fun creatable(rootKind: String): Set<String>? =
+        if (rootKind == FilesNodeKinds.DROPBOX) setOf(FilesNodeKinds.FILE) else null
 }

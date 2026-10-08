@@ -183,6 +183,27 @@ class DropBoxSliceTest {
         assertNull(tx { ShareIdentityEntity.findById(identity) }, "the identity nothing names any more goes with them")
     }
 
+    /**
+     * Inbox #377 (c), owner decision 2026-10-08: inside its own identity folder a drop-box guest creates `FILE`s only
+     * (Files' `WriteOnlyGuestKinds`) — a sub-folder, a drop box or a kind no application here places (`MEMORY`: this
+     * module boots without Memories) is `422 illegal_scope`, decided before the placement rule, and stores nothing.
+     */
+    @Test
+    fun aDropBoxGuestCreatesOnlyFilesInItsFolder() {
+        val t = tree()
+        val guest = dropLink(t)
+        val folder = ensure(guest).statusCode(200).extract().path<String>("nodeId")
+
+        for (kind in listOf(NodeEntity.FOLDER, FilesNodeKinds.DROPBOX, "MEMORY")) {
+            GuestTreeShare.create(guest, folder, kind).statusCode(422).body("code", equalTo("illegal_scope"))
+        }
+        assertEquals(emptyList<String>(), childrenOf(folder), "a refused create stores nothing")
+        // control: a FILE in the same folder, and its upload
+        val file = guestFile(guest, folder)
+        assertEquals(listOf(file), childrenOf(folder))
+        assertNotNull(tx { NodeAttachmentEntity.find("nodeId", file).firstResult() })
+    }
+
     @Test
     fun onlyAWriteOnlyLinkOnADropBoxGetsAFolder() {
         val t = tree()
