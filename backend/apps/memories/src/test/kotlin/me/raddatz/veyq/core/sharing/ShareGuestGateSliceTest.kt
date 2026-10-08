@@ -119,6 +119,26 @@ class ShareGuestGateSliceTest {
         window(shareId, token).then().statusCode(200)
     }
 
+    /**
+     * Inbox #367: a start refused for its own request — a role the target's application takes from no guest, an unknown
+     * node — opens no session and so spends none of the link's upload budget; the budget is the start's last step.
+     * Three refusals against a budget of 2, then the start and the complete the budget holds both pass.
+     */
+    @Test
+    fun aStartRefusedForItsOwnRequestSpendsNoUploadBudget() {
+        val (userId, scopeId) = seedMemberScope()
+        val shareId = createShare(userId, memory(scopeId), "READ_WRITE")
+        val token = createIdentity(shareId, "READ_WRITE")
+
+        startUpload(shareId, token, role = "COVER").then().statusCode(400).body("code", equalTo("invalid_request"))
+        startUpload(shareId, token, role = "COVER").then().statusCode(400).body("code", equalTo("invalid_request"))
+        startUpload(shareId, token, nodeId = TestIds.uuid()).then().statusCode(404)
+
+        upload(shareId, token) // start + complete: the whole budget of 2, untouched by the refusals above
+        // control: the budget IS spent now, and a start reports it
+        startUpload(shareId, token).then().statusCode(429).body("code", equalTo("rate_limited"))
+    }
+
     @Test
     fun theWriteGateRefusesAReadModeAndAForeignTokenAsNotContributable() {
         val (userId, scopeId) = seedMemberScope()
@@ -275,9 +295,9 @@ class ShareGuestGateSliceTest {
             .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(201).extract().path("contributorToken")
 
-    private fun startUpload(shareId: String, token: String) =
+    private fun startUpload(shareId: String, token: String, role: String = "ORIGINAL", nodeId: String? = null) =
         given().contentType(ContentType.JSON)
-            .body("""{"contributorToken":"$token","items":[${TestBlob.SMALL.declare("Ymxvyi13cmFw")}]}""")
+            .body("""{"contributorToken":"$token"${nodeId?.let { ""","nodeId":"$it"""" } ?: ""},"items":[${TestBlob.SMALL.declare("Ymxvyi13cmFw", role = role)}]}""")
             .`when`().post("/api/shares/$shareId/blob-uploads")
 
     /** start + complete through the link → the media id (spends 2 of the upload budget). */

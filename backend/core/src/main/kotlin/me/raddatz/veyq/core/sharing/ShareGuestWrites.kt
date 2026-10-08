@@ -15,9 +15,11 @@ import me.raddatz.veyq.core.blob.WindowRequest
  * `share-media`): they call [ShareGuestGate.writeGate] themselves (ADR 0079 § Application guest operations).
  *
  * **Core's gate ([ShareGuestGate.writeGate]) runs first and stays in core, in this order:** active share, password,
- * the role's upload capability, the guest identity's token, the per-share rate limit (start only), and only then the
- * call here. Every method is therefore reached by an already-authorized guest; the share is named by [scopeId] and
- * the guest by [identityId], the same two values the gate resolved.
+ * the role's upload capability, the guest identity's token; then the target, this writer, the link's admission and
+ * [admitsGuestRole] for every item; then, for a start only, the per-share upload budget — last, so a start refused for
+ * its own request spends none of it (inbox #367) — and only then the call here. Every method is therefore reached by
+ * an already-authorized guest; the share is named by [scopeId] and the guest by [identityId], the same two values the
+ * gate resolved.
  *
  * Whether a kind may be a share root at all is not this seam's question but [ShareRoots]' (ADR 0080 decision 6), so a
  * target's kind may have no implementation here — a `FOLDER` has none: a folder link's guests upload into the Memories
@@ -32,7 +34,7 @@ interface ShareGuestWrites {
      * Whether a guest may upload a blob in [role] — the contract's open `BlobRole` token — into a node this
      * implementation [supports]. Core names no role: it asks this for every declared item before [start] and refuses
      * the whole request `400 invalid_request` on a single no (as the contract's closed enum did until the role opened,
-     * cr-files-application P3-S2). No default: an application that takes guest uploads says which roles it takes.
+     * cr-files-application P3-S2) — before the share's upload budget is spent, as the enum's 400 was. No default: an application that takes guest uploads says which roles it takes.
      */
     fun admitsGuestRole(role: String): Boolean
 
