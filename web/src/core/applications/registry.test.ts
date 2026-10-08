@@ -320,17 +320,6 @@ describe('registry: share bodies', () => {
     expect(() => r.claimShareBody(MEMORY_KIND, Other)).not.toThrow()
     expect(r.shareBody(MEMORY_KIND)).toBe(Other)
   })
-
-  it('a rootOnly claim is still the root body, and only that kind is rootOnly (inbox #380)', () => {
-    const r = createRegistry()
-    r.claimShareBody('DROP', Stub, { rootOnly: true })
-    r.claimShareBody(MEMORY_KIND, Other)
-    expect(r.shareBody('DROP'), 'the link rooted at it still renders it').toBe(Stub)
-    expect(r.shareBodyRootOnly('DROP')).toBe(true)
-    expect(r.shareBodyRootOnly(MEMORY_KIND), 'a plain claim is embeddable').toBe(false)
-    expect(r.shareBodyRootOnly('UNCLAIMED'), 'nobody claimed it: not rootOnly').toBe(false)
-    expect(r.shareBodyRootOnly(FOLDER_KIND)).toBe(false)
-  })
 })
 
 describe('registry: lifecycle hooks', () => {

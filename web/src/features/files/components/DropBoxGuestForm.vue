@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// The public page of a drop-box link (cr-files-application F3, ADR 0080 decision 11; Files' `claimShareBody` for
-// `FILES_DROPBOX`): a WRITE_ONLY guest names itself once (its own identity key `K_up`, `dropBox.ts`), gets its one
+// The public page of a drop-box link (cr-files-application F3, ADR 0080 decision 11; what Files' share body for
+// `FILES_DROPBOX`, `DropBoxShareBody`, renders on the link rooted at the drop box): a WRITE_ONLY guest names itself once (its own identity key `K_up`, `dropBox.ts`), gets its one
 // folder in the drop box, picks files and uploads them there — one core-queue job per file, the folder contributor's
 // guest job (`shareUpload.ts`) with its folder as the one key it holds. It sees nothing of the drop box or of other
 // guests (the resolve serves no node, `listShareFiles` an empty list): only what it sent in this session. Its session
