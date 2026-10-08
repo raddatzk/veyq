@@ -1,4 +1,4 @@
-// A member's file download (cr-files-application F1b): the file's blob decrypted in the browser and saved under the
+// A file download (cr-files-application F1b; a guest's since F2): the file's blob decrypted in the browser and saved under the
 // file's name (the node name the tree opened). The bytes come straight from the store over presigned GETs (core's
 // `presignAllChunks`, by blob id: the scope READ gate), and each frame is opened under the `K_blob` the file node's key
 // unwraps, bound to (scope, node, blob, `FILE_CONTENT`) — a ref the server moved to another node does not open.
@@ -27,13 +27,20 @@ export function fileBlobRef(nodeId: string, blob: FileBlobRef): BlobRef {
   }
 }
 
+/** Who presigns a file's chunks: the member's scope READ gate (the default), or a guest's link
+ *  (`shareChunkUrls(shareId, blobId, pwToken)`, the share's subtree gate — cr-files-application F2). */
+export type PresignFileChunks = (blobId: string) => Promise<string[]>
+
 /**
  * Decrypt a file's blob into a `Blob`: unwrap `K_blob` under the file node's key, presign every chunk, fetch and open
  * each frame (its position bound into the AAD), in order. Throws `OpenRefused` for a ref that is not this node's.
  */
-export async function fetchFileContent(scopeId: string, nodeKey: Uint8Array, nodeId: string, blob: FileBlobRef): Promise<Blob> {
+export async function fetchFileContent(
+  scopeId: string, nodeKey: Uint8Array, nodeId: string, blob: FileBlobRef,
+  presign: PresignFileChunks = (blobId) => presignAllChunks(scopeId, blobId),
+): Promise<Blob> {
   const ref = fileBlobRef(nodeId, blob)
-  const provider = makeChunkProvider(scopeId, nodeKey, ref, () => presignAllChunks(scopeId, ref.blobId))
+  const provider = makeChunkProvider(scopeId, nodeKey, ref, () => presign(ref.blobId))
   const parts: Uint8Array[] = new Array(ref.chunkCount)
   // Chunk 0 alone first: the provider presigns on its first read, and parallel first reads would each presign.
   parts[0] = await provider.getPlaintextChunk(0)
@@ -47,6 +54,8 @@ export async function fetchFileContent(scopeId: string, nodeKey: Uint8Array, nod
 }
 
 /** Decrypt a file and save it to the member's device under `name` (the decrypted node name). */
-export async function downloadFile(scopeId: string, nodeKey: Uint8Array, nodeId: string, blob: FileBlobRef, name: string): Promise<void> {
-  saveBlob(await fetchFileContent(scopeId, nodeKey, nodeId, blob), name)
+export async function downloadFile(
+  scopeId: string, nodeKey: Uint8Array, nodeId: string, blob: FileBlobRef, name: string, presign?: PresignFileChunks,
+): Promise<void> {
+  saveBlob(await fetchFileContent(scopeId, nodeKey, nodeId, blob, presign), name)
 }

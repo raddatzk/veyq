@@ -703,7 +703,7 @@ class SharingHandler(
      * ([ShareGuestGate.target]: the share root, or a node below it the guest named; ADR 0080 decision 6), never the
      * root's when another node is named — called only after the guest gate has passed. Null (read as "not
      * contributable") for a kind no application registers — a `FOLDER`, the root of a folder link included: [ShareRoots]
-     * lets a folder be shared READ_WRITE, and its guests upload into the Memories below it, never into the folder — or of
+     * lets a folder be shared READ_WRITE, and its guests upload into the Memories and files below it, never into the folder — or of
      * a kind **more than one** claims: exactly one per kind is the contract (`ShareGuestWrites`), and picking the first
      * would rest on CDI bean order. Every case fails closed rather than guessing a writer;
      * `ShareGuestWritesPartitionSliceTest` pins the partition. The start asks [StorageQuota.admissionFor] by the same

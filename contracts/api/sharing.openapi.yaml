@@ -623,8 +623,8 @@ paths:
         `presignShareBlobUploadWindows` for each next window, and then completes through the application's guest
         completion. What an upload becomes is the application's (`ShareGuestWrites`), picked by the kind of the
         **target node**: the share root, or the optional `nodeId` — a live node inside the share's subtree that its
-        application takes guest uploads into (Memories: a MEMORY or CHAPTER; a `WRITE_ONLY` link only its root). The
-        in-memory dev store cannot presign (`503`).
+        application takes guest uploads into (Memories: a MEMORY or CHAPTER; Files: a FILE; a `WRITE_ONLY` link only its
+        root). The in-memory dev store cannot presign (`503`).
         Per-share rate-limited.
         **Storage limit ([ADR 0073](../../docs/decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md)):**
         the link stores at most its tenant's per-link limit. The request's admissible items are reserved together
@@ -1832,8 +1832,8 @@ components:
           description: >
             The node the uploads are for ([ADR 0080](../../docs/decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
             Decision 6: a link's role applies to every node below its root as the application allows it). Absent =
-            the share root (unchanged behaviour); otherwise a live MEMORY or CHAPTER inside the share's subtree — a
-            node that is not one is `404 node_not_found`, a kind no application takes guest uploads into is `403
+            the share root (unchanged behaviour); otherwise a live node inside the share's subtree whose application
+            takes guest uploads (Memories: a MEMORY or CHAPTER; Files: a FILE) — a node that is not one is `404 node_not_found`, a kind no application takes guest uploads into is `403
             share_not_contributable`; a `WRITE_ONLY` link only accepts its root (`403 share_not_contributable`).
             The same node is named again on every window and at the completion.
           example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
@@ -1950,8 +1950,8 @@ components:
           description: >
             The node the uploads are for ([ADR 0080](../../docs/decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
             Decision 6: a link's role applies to every node below its root as the application allows it). Absent =
-            the share root (unchanged behaviour); otherwise a live MEMORY or CHAPTER inside the share's subtree — a
-            node that is not one is `404 node_not_found`, a kind no application takes guest uploads into is `403
+            the share root (unchanged behaviour); otherwise a live node inside the share's subtree whose application
+            takes guest uploads (Memories: a MEMORY or CHAPTER; Files: a FILE) — a node that is not one is `404 node_not_found`, a kind no application takes guest uploads into is `403
             share_not_contributable`; a `WRITE_ONLY` link only accepts its root (`403 share_not_contributable`).
             The same node is named again on every window and at the completion.
           example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d

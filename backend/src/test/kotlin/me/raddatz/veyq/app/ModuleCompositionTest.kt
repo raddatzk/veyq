@@ -170,8 +170,9 @@ class ModuleCompositionTest {
     }
 
     /**
-     * The upload partition across core and every application (cr-files-application F1a): each kind that takes uploads
-     * has exactly one completion and one link admission, the right application's; a `FOLDER` has neither. Two acceptors
+     * The upload partition across core and every application (cr-files-application F1a, F2): each kind that takes
+     * uploads has exactly one completion, one link admission and one guest writer, the right application's; a `FOLDER`
+     * has none of them. Two acceptors
      * of a kind make core's dispatcher refuse it (`illegal_target`) and two admissions refuse its links — only here,
      * where both applications run, would an application claiming another's kind show.
      */
@@ -185,7 +186,11 @@ class ModuleCompositionTest {
             val measuring = admissions.filter { it.supports(kind) }.map(::beanClass)
             assertEquals(1, measuring.size, "a $kind link must have exactly one admission: $measuring")
             assertTrue(measuring.single().startsWith(owner), "$kind's admission is $owner's: $measuring")
+            val writing = guestWrites.filter { it.supports(kind) }.map(::beanClass)
+            assertEquals(1, writing.size, "a guest's upload into a $kind must have exactly one writer: $writing")
+            assertTrue(writing.single().startsWith(owner), "$kind's guest writer is $owner's: $writing")
         }
+        assertTrue(guestWrites.none { it.supports(NodeEntity.FOLDER) }, "a guest uploads into no folder")
         assertTrue(completions.none { it.accepts(NodeEntity.FOLDER) }, "a folder takes no upload")
         assertTrue(admissions.none { it.supports(NodeEntity.FOLDER) }, "a folder link is measured by no application")
     }

@@ -5,9 +5,10 @@ import { fileNameSlug, slugify } from '../../shared/naming'
 import { registerFiles } from './register'
 import { FILE_KIND } from './kinds'
 import FilesSection from './components/FilesSection.vue'
+import ShareFilesSection from './components/ShareFilesSection.vue'
 
 describe('registerFiles', () => {
-  it('registers the FILE kind: not shareable, a file icon, its level section, no detail', () => {
+  it('registers the FILE kind: not shareable, a file icon, its level and share sections, no detail', () => {
     const registry = createRegistry()
     registerFiles(registry)
     expect(registry.kind(FILE_KIND)).toEqual({
@@ -17,6 +18,7 @@ describe('registerFiles', () => {
       shareable: false,
       slug: fileNameSlug,
       section: { order: 20, component: FilesSection },
+      shareSection: { order: 20, component: ShareFilesSection },
     })
   })
 
@@ -41,6 +43,8 @@ describe('registerFiles', () => {
     expect(file.supported && file.createDialog).toBeUndefined() // a file is created by uploading it, never by a name dialog
     expect(file.supported && file.shareDialog).toBeUndefined() // not a share root: no share offered
     expect(registry.sections()).toEqual([{ component: FilesSection, order: 20, kinds: [FILE_KIND] }])
+    // The guest's file list on a shared folder (F2) — a section of core's folder page, never a share body of its own.
+    expect(registry.shareSections()).toEqual([{ component: ShareFilesSection, order: 20, kinds: [FILE_KIND] }])
     for (const slot of ['topbarTray', 'sidebarPins'] as const) expect(registry.slotItems(slot)).toEqual([])
     expect(registry.shareBody(FILE_KIND)).toBeNull()
   })

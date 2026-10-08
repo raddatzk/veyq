@@ -5,7 +5,7 @@
 > Built so far: the Gradle module `:apps:files` with the node kind `FILE` (at the root or in a `FOLDER`, no children,
 > no share root) and its web registration (`web/src/features/files`); a **member's file** end to end: its contract
 > `contracts/api/files/files.openapi.yaml` and the upload completion, replace and listing below (F1a), and the web half
-> (F1b, § The web below). No guests (F2), no drop box (F3).
+> (F1b, § The web below); a **folder share with files** (F2, § Guests below). No drop box (F3).
 
 ## Idea
 
@@ -18,8 +18,8 @@
 - **Web only.** No sync client, no versioning: replacing a file replaces its blob.
 - A **drop box** (write-only) is a node of its own with one guest folder per identity (ADR 0080 decision 11),
   built with Files (inbox #349); a `WRITE_ONLY` link on a plain `FOLDER` is refused until then. Viewer and
-  contributor shares carry over from the platform, and what a `READ_WRITE` guest may do with Files' kinds is the role
-  matrix this page will hold (ADR 0080 decision 6; no declaration allows nothing).
+  contributor shares carry over from the platform; what a guest may do with a `FILE` is the role matrix in § Guests
+  (ADR 0080 decision 6; no declaration allows nothing).
 - Rides on the platform's blobs, quota and trash; names sit under the parent's key, `K_SC` only at the scope root.
 
 ## How a file is stored
@@ -73,6 +73,43 @@ dispatcher to `FilesUploadCompletion` (`UploadCompletion` for `FILE`, maps the i
 - **The download** (`download.ts`) presigns the blob's chunks, opens them under the node key at most four at a time and
   saves one `Blob` under the file's name: a file needs about its own size in tab memory (unverified beyond a few MB; a
   streaming save is not built).
+
+## Guests (a folder share, F2)
+
+A `FILE` is **no share root** (Files declares no `ShareRoots`): a file is shared through a `FOLDER` link above it,
+`READ` or `READ_WRITE`. The role matrix (ADR 0080 decision 6):
+
+| A guest of a … link | may |
+|---|---|
+| `READ` | list the files of the shared subtree, download them |
+| `READ_WRITE` | the above; create a `FILE` under a folder of the subtree (core's `createShareNode`; core's `FolderGuestNodeRules` lets any kind `NodeKindRules` admits into a folder); upload into a file below the root, first or replacing its blob (any file below the root, a member's too); rename or move it (core's `updateShareNode`) |
+| any | **not** delete a file (nodes store no authorship), **not** upload into a `FOLDER` |
+
+- **The contract** (tag `share-files` in `files.openapi.yaml`, no auth, behind core's `ShareGuestGate`):
+  `listShareFiles` — `GET /api/shares/{shareId}/files`: `{items: [{nodeId, fileBlob|null}]}` for every live `FILE` of
+  the live shared subtree (a `WRITE_ONLY` link: empty), names, keys and metas coming from core's `resolveShare`;
+  `completeShareFile` — `POST /api/shares/{shareId}/files/{nodeId}/content`, `{contributorToken, uploadId,
+  expectedBlobId?, wrappedMeta?}`: `completeFile`'s answers, plus `403 share_not_contributable` for a node that is no
+  `FILE` (a folder) and `404 node_not_found` for one outside the live subtree. The upload itself is core's guest
+  transport (`startShareBlobUploads` with `nodeId` = the file, `role: FILE_CONTENT`); the download core's
+  `resolveShareBlob`.
+- **The meta goes with the bytes.** A guest has no door to a node's `wrappedMeta` (core's guest create takes none,
+  `updateNode` is a member's), so `completeShareFile` carries it and `FileContentWrite` writes it in the attach's
+  transaction, under the scope lock, only when the swap happened (a conflict or refusal writes none); the node's
+  `metaVersion` moves by one.
+- **The write is decided again under the lock** (`ShareGuestGate.admittedInto`): a file trashed or moved out of the
+  subtree, or a link revoked, between the guest's start and its completion refuses it (`upload_not_found`).
+- **Trash:** a file in the trash — or under a trashed folder — is not listed, its blob is `404` at `resolveShareBlob`
+  (core's attachment contributor authorizes live nodes only), an upload into it `404 node_not_found`.
+- **Quota:** a guest's attachment names its identity, so the link's usage counts it (core's attachment term; Files'
+  `UploadAdmission` reports 0) against the tenant's per-link limit; core's `AttachmentGuestIdentityUsage` keeps the
+  guest's identity while a file names it (Files stores no row of its own naming a guest, so it ships no usage).
+- **The web:** core's folder page of a public share (`core/sharing/FolderShareBody.vue`) renders a kind's
+  `shareSection` for its children; Files' is `components/ShareFilesSection.vue` — the files with name, size and date
+  opened under the chain's keys, download through the link, and for a contributor an upload button (one core-queue job
+  per file, `shareUpload.ts`: guest create → guest transport → `completeShareFile` with the meta) and a replace per
+  row. The guest names itself once per link through the page's own dialog (`requestGuest`). No rename on the guest
+  page (no kind has one there yet).
 
 ## Operator-visible, beyond the platform's `kind`
 

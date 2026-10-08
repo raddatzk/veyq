@@ -32,6 +32,13 @@
 // not dropped: the level view renders core's fallback section for it (its icon, its name, the explicit unsupported
 // state), never an empty area.
 //
+// **Share sections (`KindDescriptor.shareSection`, cr-files-application F2).** The guest's folder page of a public
+// share is core's too (`core/sharing/FolderShareBody.vue`): at a folder it renders the sub-folders and every other child
+// as a card, and a kind that brings a share section has its children rendered by THAT component instead (props
+// `ShareSectionProps`) — Files' file list with its download and a contributor's upload. The same rules as the level
+// sections: keyed by component, sorted by `order`, rendered at every folder (an empty one too), a contradicting `order`
+// throws. A kind without one keeps its card, which opens the body its application claimed (below).
+//
 // **List slots (`addSlotItem`).** The top-bar tray and the sidebar pins are places where several applications each add
 // their own entry, so they are ordered lists: an item is registered under an id (namespaced by its application, e.g.
 // `memories.pinned`), write-once per (slot, id) — a second registration of the same id in the same list throws. The
@@ -62,6 +69,8 @@ import type { TreeNode } from '../node/tree'
 import type { Level } from '../node/browse'
 import type { EpochKeys } from '../../features/spaces/epochs'
 import type { PublicShareHead } from '../sharing/resolvePublicShare'
+import type { GuestIdentity } from '../sharing/guestIdentity'
+import type { ShareNode } from '../../api/generated/sharing'
 import { slugify } from '../../shared/naming'
 
 // The platform's own share dialog for a FOLDER (cr-node-key-hierarchy 5b.3), FOLDER's `shareDialog` since P4c. LAZY for
@@ -104,6 +113,9 @@ export interface KindDescriptor {
   /** The share management dialog of a node of this kind (props `NodeShareDialogProps`, emits `close`). Omitted: the
    *  kind offers no share, whatever `shareable` says. FOLDER's is core's own `FolderShareDialog`, pre-registered. */
   shareDialog?: Component
+  /** The section the public share's folder page renders for this kind's children (see the header): `component` takes
+   *  `ShareSectionProps`. Omitted: a child of the kind is a card on that page. */
+  shareSection?: KindSection
 }
 
 /** A kind's level section: the component and where it sorts among the sections. */
@@ -229,6 +241,25 @@ export interface ShareBodyEmits {
   unavailable: []
 }
 
+/** What core's folder page of a public share (`core/sharing/FolderShareBody.vue`) hands a kind's `shareSection`: the
+ *  share as the shell resolved it, the folder on screen and the children of every kind that names the section (the
+ *  served rows; their keys and names are what the chain opened — key material), whether the link takes writes, and
+ *  `requestGuest`: the guest's identity for this link, asking the visitor's name first when it has none (null: the
+ *  visitor declined). After a write the section calls `reload` so the new nodes list. */
+export interface ShareSectionProps {
+  shareId: string
+  fragmentKey: string
+  pwToken: string | undefined
+  head: PublicShareHead
+  reload: () => Promise<void>
+  folderId: string
+  nodes: readonly ShareNode[]
+  keys: ReadonlyMap<string, Uint8Array>
+  names: ReadonlyMap<string, string>
+  canWrite: boolean
+  requestGuest: () => Promise<GuestIdentity | null>
+}
+
 /** The list slots: several applications may each add items (see the header). A `topbarTray` item takes no props (the
  *  shell's top bar mounts it after the invitations badge and core's own upload status menu); a `sidebarPins` item
  *  takes `SidebarPinsProps`. */
@@ -290,6 +321,8 @@ export interface Registry {
    *  each section was first named); empty when no kind registered one (the level view still renders the overview, the
    *  fallback and the folders). */
   sections(): readonly LevelSection[]
+  /** The share sections (`KindDescriptor.shareSection`), by the same rules as [sections]. */
+  shareSections(): readonly LevelSection[]
 }
 
 const LIST_SLOTS: readonly string[] = ['topbarTray', 'sidebarPins'] satisfies readonly ListSlotName[]
@@ -303,8 +336,10 @@ export function createRegistry(): Registry {
   ])
   const lists = new Map<ListSlotName, { id: string; component: Component; order: number }[]>()
   const lifecycles = new Map<string, LifecycleHooks>()
-  // One entry per distinct section component, in the order each was first named (the stable sort's tie-break).
+  // One entry per distinct section component, in the order each was first named (the stable sort's tie-break): the
+  // level sections and the share sections, each its own list under the same rules.
   const sections: { component: Component; order: number; kinds: NodeKind[] }[] = []
+  const shareSections: { component: Component; order: number; kinds: NodeKind[] }[] = []
   // The platform's own share body: a link rooted at a FOLDER browses the subtree (cr-node-key-hierarchy 5b.4b). Pre-claimed
   // like FOLDER's kind above, so an application claiming FOLDER throws.
   const shareBodies = new Map<NodeKind, Component>([[FOLDER_KIND, FolderShareBody]])
@@ -346,17 +381,10 @@ export function createRegistry(): Registry {
     },
     registerKind(descriptor) {
       if (kinds.has(descriptor.kind)) throw new Error(`node kind ${descriptor.kind} is already registered`)
-      const section = descriptor.section
-      const shared = section ? sections.find((s) => s.component === section.component) : undefined
-      if (section && shared && shared.order !== section.order) {
-        throw new Error(
-          `node kind ${descriptor.kind} names the section of ${shared.kinds.join(', ')} with order ${section.order}, not ${shared.order}`,
-        )
-      }
+      // Both checked before anything is stored, so a contradiction registers nothing.
+      const add = [sectionJoin(sections, descriptor.kind, descriptor.section), sectionJoin(shareSections, descriptor.kind, descriptor.shareSection)]
       kinds.set(descriptor.kind, { ...descriptor })
-      if (!section) return
-      if (shared) shared.kinds.push(descriptor.kind)
-      else sections.push({ component: section.component, order: section.order, kinds: [descriptor.kind] })
+      for (const f of add) f()
     },
     addSlotItem(slot, id, component, order) {
       if (!LIST_SLOTS.includes(slot)) throw new Error(`slot ${slot} is not a list slot`)
@@ -377,12 +405,31 @@ export function createRegistry(): Registry {
     slugFor(kind, name) {
       return (kinds.get(kind)?.slug ?? slugify)(name)
     },
-    sections() {
-      return [...sections]
-        .sort((a, b) => a.order - b.order) // stable (ES2019): a tie keeps the order each section was first named
-        .map((s) => ({ component: s.component, order: s.order, kinds: [...s.kinds] }))
-    },
+    sections: () => sortedSections(sections),
+    shareSections: () => sortedSections(shareSections),
   }
+}
+
+type SectionEntry = { component: Component; order: number; kinds: NodeKind[] }
+
+/** Check that `kind` may join `list` with `section` (a component already named with another `order` throws) and return
+ *  the join, to run once every check of the registration passed. */
+function sectionJoin(list: SectionEntry[], kind: NodeKind, section: KindSection | undefined): () => void {
+  if (!section) return () => {}
+  const shared = list.find((s) => s.component === section.component)
+  if (shared && shared.order !== section.order) {
+    throw new Error(`node kind ${kind} names the section of ${shared.kinds.join(', ')} with order ${section.order}, not ${shared.order}`)
+  }
+  return () => {
+    if (shared) shared.kinds.push(kind)
+    else list.push({ component: section.component, order: section.order, kinds: [kind] })
+  }
+}
+
+function sortedSections(list: readonly SectionEntry[]): LevelSection[] {
+  return [...list]
+    .sort((a, b) => a.order - b.order) // stable (ES2019): a tie keeps the order each section was first named
+    .map((s) => ({ component: s.component, order: s.order, kinds: [...s.kinds] }))
 }
 
 /** The app's registry, filled once by `registerApplications()` (web/src/applications.ts) before the first route

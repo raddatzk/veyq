@@ -946,6 +946,12 @@ const en = {
       quota_exceeded: '“{name}” was not uploaded: there is no space left. Deleted files only free space once the trash is emptied.',
       failed: '“{name}” could not be uploaded.',
     },
+    // A guest's file list on a shared folder (components/ShareFilesSection.vue, F2): no trash to point at, and a link has
+    // a limit of its own (the code does not say which limit was reached, ADR 0073 §6).
+    guest: {
+      empty: 'No files here.',
+      linkFull: '“{name}” was not uploaded: this link takes no more uploads right now.',
+    },
   },
   media: {
     gallery: 'Memory gallery',
@@ -2084,6 +2090,10 @@ const de: typeof en = {
       stale_file: '„{name}“ wurde nicht hochgeladen: Jemand anderes hat diese Datei inzwischen ersetzt. Ersetze sie trotzdem oder sieh dir zuerst die andere an.',
       quota_exceeded: '„{name}“ wurde nicht hochgeladen: Es ist kein Speicherplatz mehr frei. Gelöschte Dateien geben erst Platz frei, wenn der Papierkorb geleert ist.',
       failed: '„{name}“ konnte nicht hochgeladen werden.',
+    },
+    guest: {
+      empty: 'Hier liegen keine Dateien.',
+      linkFull: '„{name}“ wurde nicht hochgeladen: Dieser Link nimmt gerade keine weiteren Uploads an.',
     },
   },
   media: {

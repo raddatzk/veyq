@@ -767,8 +767,76 @@ without touching core except for the platform prerequisites below, which every l
         of several files, focus/keyboard), a multi-GB download (one `Blob` ≈ the file's size in tab memory; a streaming
         save is not built), the e2e itself (runs from the main checkout after the merge), the assumption that a tenant
         member with a delivered grant has WRITE there, the mutation gate. Files' use cases (`satisfies`) are not written.
-- [ ] F2 a folder share with files — read, then contributor: a guest creates the `FILE` node (`createShareNode`) and uploads
+- [x] F2 a folder share with files — read, then contributor: a guest creates the `FILE` node (`createShareNode`) and uploads
       into it; a file in the trash answers 404; Files' `GuestIdentityUsage` · Done when: e2e, race tests.
+      Ticked on the brief's word; its e2e is written and runs from the main checkout after the merge (not run here).
+      **Measured 2026-10-08:** contract — a second tag `share-files` in `contracts/api/files/files.openapi.yaml` (one spec,
+      two interfaces `FilesApi`/`ShareFilesApi`): `listShareFiles` `GET /api/shares/{shareId}/files` → `ShareFileListing
+      {items: [FileListItem]}` (every live `FILE` of the live subtree, by node id; `WRITE_ONLY` → empty) and
+      `completeShareFile` `POST /api/shares/{shareId}/files/{nodeId}/content` `{contributorToken, uploadId,
+      expectedBlobId?, wrappedMeta?}` → `FileBlobRef` / `409 FileConflict` / `403 share_not_contributable` / `404
+      share_not_found|node_not_found|upload_not_found` / `422 upload_mismatch` / `400` / `429`. Backend
+      (`me.raddatz.veyq.files.share`): `FilesShareGuestWrites` (`supports(FILE)`, `admitsGuestRole(FILE_CONTENT)`,
+      start/window forward to core's `startForLink`/`windowForScope`), `ShareFilesHandler` (view gate → `listFilesAmong`;
+      write gate with the upload budget → `target` → `supports` → core's dispatcher with `admittedInto`), `ShareFilesResource`
+      (`@PermitAll`; list `@RateLimitExempt` like `listShareMedia`, complete `@RateLimit(SHARE)`); `FileContentWrite`
+      (`@Transactional`: `AttachmentStore.attach` + on `Attached` the node's `wrappedMeta` via `NodesStore.applyUpdate` at the
+      version read by scalar query under the attach's scope lock); the member's result mapping and response shared
+      (`completedOutcome`, `FilesResource.respond`). No migration, no core main code (KDoc and contract descriptions only:
+      "Memories and files"). Core's `ShareRoots`/`GuestNodeRules`/`UploadAdmission`/`GuestIdentityUsage` needed nothing.
+      Web: `KindDescriptor.shareSection` + `registry.shareSections()` + `ShareSectionProps` (the level sections' rules, one
+      `sectionJoin` for both lists, both checked before either is stored); `FolderShareBody` renders them at every folder,
+      their kinds' children no longer cards, and hands `requestGuest` (its own naming dialog, resolving null on close);
+      core `core/sharing/guestBlob.ts` (`guestReserve`/`guestWindow`/`shareChunkUrls`); Files: `shareUpload.ts`
+      (`guestFileUploadJob`), `components/ShareFilesSection.vue` (FILE's `shareSection`, order 20), `publicShareFilesApi`,
+      `fetchFileContent`/`downloadFile` take an optional presign, `rethrowCompletion` shared, i18n `files.guest.*` (en+de).
+      **Tests:** `:apps:files` 16 → 25: `ShareFilesSliceTest` 6 (READ lists the subtree's files only — not the one beside
+      the folder — and downloads via `resolveShareBlob`, the outside blob 404, a READ start/complete 403; trash → not
+      listed, blob 404, complete and start 404 `node_not_found`; a contributor creates a FILE, uploads with meta (meta
+      written, `metaVersion` 1, attachment names the identity, the member lists it, link usage = the blob), replaces
+      (meta v2, usage = new size only), stale → 409 + current id and no meta, no meta → meta left, renames via
+      `updateShareNode`, replaces a member's file; FOLDER as root or named → 403, outside → 404, role `ORIGINAL` → 400,
+      another node's session → 422, unknown/member's session → 404, wrong token → 403; the link limit at the exact byte
+      (held + next − 1 refused `quota_exceeded`, held + next admitted); a deleted link keeps the identity while its file
+      names it) and `ShareFileCompleteRaceSliceTest` 3 × `RACE_ROUNDS` (trash / move out / revoke held uncommitted →
+      `upload_not_found`, nothing attached, no meta; control lands). Root: `ModuleCompositionTest` partition +guest writers
+      (MEMORY/CHAPTER Memories', FILE Files', none for FOLDER); `OperatorBlindProbeTest` lists the two ops as token-gated.
+      Web: `FolderShareBody.sections.test.ts` 6, `ShareFilesSection.test.ts` 8, `shareUpload.wire.test.ts` 4,
+      `registry.test.ts` +3, `register.test.ts` updated; `filesShare.e2e.test.ts` (READ download byte-equal, READ write 403,
+      guest create+upload, member reads name/meta/bytes, guest replaces the member's file, stale replace, trashed file:
+      unlisted, blob 404, start 404 `node_not_found`; own wire check + canaries).
+      **Bites, each red then green:** backend — `supports` false (5 of 6 red); the handler's FILE check dropped (1); the
+      listing ignoring the subtree (2); meta never written (1); meta written beside a refusal (1); `admittedInto` replaced
+      by `{ true }` (3 race) and evaluated early (3 race); Files' writer also claiming MEMORY (composition partition red).
+      Web — sectioned kinds kept as cards (2), sections not rendered (5), `requestGuest` skipping the dialog (2),
+      `shareSections` reading the level list (4), the level section joined before the share check (1), the blob sealed
+      under the folder key (1), the upload targeting the folder (1), served meta fields dropped (1), stale not remembered
+      (1), download presigned as a member (1), upload without asking for the guest (2), quota shown with the members'
+      text (1); a `features/memory` import in the Files section and a `features/files` import in `guestBlob.ts` → the
+      core-import guard red (`application`, `import`).
+      **Proof:** `./gradlew check` green (core 868, memories 362 with 2 skipped, files 25, root 89);
+      `run_backend_races_on_mariadb.py` green on MariaDB 11.4 (44 → 45 filters, 2 → 3 projects: `:apps:files`
+      `ShareFileCompleteRaceSliceTest`), and `--tests '*ShareFilesSliceTest'` 6/6 there; web fresh `generate:api` +
+      `npm run check` green (233 files: 213 passed, 20 skipped; 2038 tests: 2013 passed, 25 skipped); 53/53 `validate_*`.
+      **Decisions (reversible, for the owner):** (1) `FILE` stays **no share root** (F0's; a file is shared through its
+      folder; a single-file link would need a share body). (2) No Files `GuestIdentityUsage`: Files stores no row naming
+      a guest; core's `AttachmentGuestIdentityUsage` covers the attachment (pinned by the deleted-link test). No
+      `GuestNodeRules` for FILE: a FILE is no container (`NodeKindRules` admits no child), and creating/renaming a FILE in a
+      FOLDER is core's `FolderGuestNodeRules`. (3) **The guest's meta rides on `completeShareFile`** and is written in the
+      attach's transaction (no `metaVersion` on the wire: the blob CAS decides; under the scope lock the version cannot
+      move) — a guest has no other door to `wrappedMeta`; the member path keeps its separate `updateNode` (F1a decision
+      3), so the two paths differ in atomicity. (4) The guest ops are a second tag in Files' one spec, not a second spec
+      file: a cross-file alias of `FileListPage`/`FileListItem` (share-media's `UploaderKey` pattern) generated anonymous
+      `…FileBlob`/`…Inner` types and broke the MEMBER interface's types (measured). (5) A non-FILE target → `403
+      share_not_contributable` (as the guest transport and Memories answer it), not `422 illegal_target`. (6) The guest
+      page offers no rename and no delete for files (the contract allows rename via `updateShareNode`; the page has no
+      rename for any kind, inbox #358); a picked name a readable sibling takes is refused before sending (no "replace?"
+      question as for a member) — the row's replace is the way. (7) Share sections are a NEW registry list, not
+      `claimShareBody(FILE)`: the folder page embeds a body only for the node on screen, so a per-file body would mean a
+      click per file. (8) Core's guest reserve/window are a new core module (`guestBlob.ts`); Memories keeps its own copy
+      inside its transport (B0 pins its wire byte for byte) — merging is a later, characterised change.
+      **Not verified:** the e2e itself (written, typechecked, discovered — runs from the main checkout), a browser (the
+      section's look on the public page, drag-and-drop, the name dialog interplay), the mutation gate.
 - [ ] F3 the drop box ([ADR 0080](../docs/decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
       decision 11) — kind `FILES_DROPBOX`, `identity_id` unique per (drop box, identity), members only delete or move out,
       `ShareRoots` {`FILES_DROPBOX` → `WRITE_ONLY`}, an own operation to create the identity folder (a `WRITE_ONLY` guest

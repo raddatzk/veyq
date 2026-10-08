@@ -32,19 +32,12 @@ class FilesResource(
 ) : FilesApi {
 
     override fun completeFile(scopeId: UUID, nodeId: UUID, fileCompleteRequest: FileCompleteRequest): Response =
-        when (
-            val o = handler.complete(
+        respond(
+            handler.complete(
                 identity.principal.name, scopeId.toString(), nodeId.toString(),
                 fileCompleteRequest.uploadId.toString(), fileCompleteRequest.expectedBlobId?.toString(),
-            )
-        ) {
-            is CompleteFileOutcome.Ok -> Response.ok(toRef(o.blob)).build()
-            // The one failure body that carries more than its code: the slot's current blob, the client's re-read.
-            is CompleteFileOutcome.Stale -> Response.status(o.status.httpStatus)
-                .entity(FileConflict(code = o.code, currentBlobId = o.currentBlobId?.let(UUID::fromString)))
-                .build()
-            is HttpFailure -> httpError(o)
-        }
+            ),
+        )
 
     override fun listFiles(scopeId: UUID, parentId: UUID?): Response =
         when (val o = handler.list(identity.principal.name, scopeId.toString(), parentId?.toString())) {
@@ -54,11 +47,23 @@ class FilesResource(
             is HttpFailure -> httpError(o)
         }
 
-    private fun toRef(b: FileBlobData) = FileBlobRef(
-        blobId = UUID.fromString(b.blobId),
-        chunkCount = b.chunkCount,
-        byteSize = b.byteSize,
-        wrappedBlobKey = b.wrappedBlobKey,
-        manifest = b.manifest,
-    )
+    companion object {
+        /** A completion's answer on the wire — the member's `completeFile` and the guest's `completeShareFile` alike. */
+        fun respond(o: CompleteFileOutcome): Response = when (o) {
+            is CompleteFileOutcome.Ok -> Response.ok(toRef(o.blob)).build()
+            // The one failure body that carries more than its code: the slot's current blob, the client's re-read.
+            is CompleteFileOutcome.Stale -> Response.status(o.status.httpStatus)
+                .entity(FileConflict(code = o.code, currentBlobId = o.currentBlobId?.let(UUID::fromString)))
+                .build()
+            is HttpFailure -> httpError(o)
+        }
+
+        fun toRef(b: FileBlobData) = FileBlobRef(
+            blobId = UUID.fromString(b.blobId),
+            chunkCount = b.chunkCount,
+            byteSize = b.byteSize,
+            wrappedBlobKey = b.wrappedBlobKey,
+            manifest = b.manifest,
+        )
+    }
 }

@@ -21,7 +21,7 @@ import me.raddatz.veyq.core.blob.WindowRequest
  *
  * Whether a kind may be a share root at all is not this seam's question but [ShareRoots]' (ADR 0080 decision 6), so a
  * target's kind may have no implementation here — a `FOLDER` has none: a folder link's guests upload into the Memories
- * below it, never into a folder. Core then fails closed: a guest's start or window into such a node is
+ * and the files below it, never into a folder. Core then fails closed: a guest's start or window into such a node is
  * `share_not_contributable`, and so is one into a kind more than one implementation [supports] (`SharingHandler.writesFor`).
  */
 interface ShareGuestWrites {

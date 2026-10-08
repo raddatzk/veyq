@@ -95,18 +95,25 @@ export async function completeFileUpload(
       filesApi().completeFile({ scopeId, nodeId, fileCompleteRequest: { uploadId, expectedBlobId: expectedBlobId ?? undefined } }),
     )
   } catch (e) {
-    if (httpStatus(e) === HttpStatus.conflict) {
-      const body = await (e as { response: Response }).response.clone().json().catch(() => null) as
-        { code?: unknown; currentBlobId?: unknown } | null
-      if (body?.code === FileUploadError.staleFile) {
-        throw new StaleFileError(typeof body.currentBlobId === 'string' ? body.currentBlobId : null)
-      }
-    }
-    throw e
+    return rethrowCompletion(e)
   }
 }
 
-const FINAL = new Set<string>(Object.values(FileUploadError))
+/** A refused completion, member's or guest's: a `409 stale_file` becomes [StaleFileError] with the blob the slot holds
+ *  now; anything else is rethrown as it came. */
+export async function rethrowCompletion(e: unknown): Promise<never> {
+  if (httpStatus(e) === HttpStatus.conflict) {
+    const body = await (e as { response: Response }).response.clone().json().catch(() => null) as
+      { code?: unknown; currentBlobId?: unknown } | null
+    if (body?.code === FileUploadError.staleFile) {
+      throw new StaleFileError(typeof body.currentBlobId === 'string' ? body.currentBlobId : null)
+    }
+  }
+  throw e
+}
+
+/** The codes no retry of the same job can change: a job remembers one and rethrows it without a request. */
+export const FINAL = new Set<string>(Object.values(FileUploadError))
 
 /**
  * One queue job for one picked file into `target` (see the header for its four steps). The job's `run` may be called

@@ -266,6 +266,36 @@ describe('registry: level sections', () => {
   })
 })
 
+// cr-files-application F2: the public share's folder page renders a kind's `shareSection` for its children.
+describe('registry: share sections', () => {
+  it('is empty until a kind brings one; a level section is not a share section', () => {
+    const r = createRegistry()
+    r.registerKind({ kind: 'LEAF', icon: 'x', shareable: false, section: { order: 10, component: Stub } })
+    expect(r.shareSections()).toEqual([])
+  })
+
+  it('sorts by order and keys a section by its component, as the level sections', () => {
+    const r = createRegistry()
+    r.registerKind({ kind: 'LATE', icon: 'x', shareable: false, shareSection: { order: 20, component: Other } })
+    r.registerKind({ kind: 'EARLY', icon: 'x', shareable: false, shareSection: { order: 10, component: Stub } })
+    r.registerKind({ kind: 'TWIN', icon: 'x', shareable: false, shareSection: { order: 20, component: Other } })
+    expect(r.shareSections()).toEqual([
+      { component: Stub, order: 10, kinds: ['EARLY'] },
+      { component: Other, order: 20, kinds: ['LATE', 'TWIN'] },
+    ])
+  })
+
+  it('refuses a contradicting order in EITHER list and then registers nothing of the kind', () => {
+    const r = createRegistry()
+    r.registerKind({ kind: 'A', icon: 'x', shareable: false, section: { order: 1, component: Stub }, shareSection: { order: 5, component: Other } })
+    expect(() => r.registerKind({ kind: 'B', icon: 'x', shareable: false, section: { order: 1, component: Stub }, shareSection: { order: 6, component: Other } }))
+      .toThrow(/B names the section of A with order 6, not 5/)
+    expect(r.kind('B').supported).toBe(false)
+    expect(r.sections()).toEqual([{ component: Stub, order: 1, kinds: ['A'] }])
+    expect(r.shareSections()).toEqual([{ component: Other, order: 5, kinds: ['A'] }])
+  })
+})
+
 describe('registry: share bodies', () => {
   it('is empty until claimed: shareBody() is null, not undefined', () => {
     const r = createRegistry()

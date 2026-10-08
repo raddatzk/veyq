@@ -1,5 +1,6 @@
 package me.raddatz.veyq.files.content
 
+import me.raddatz.veyq.core.blob.CompleteItemResult
 import me.raddatz.veyq.core.blob.UploadCompletions
 import me.raddatz.veyq.core.blob.UploadOpener
 import me.raddatz.veyq.core.content.NodesStore
@@ -78,18 +79,7 @@ class FilesHandler(
 
         val item = FilesUploadCompletion.item(nodeId, uploadId, expectedBlobId)
         val result = completions.complete(scopeId, listOf(item), UploadOpener.Member(userId)).single()
-        return when (result.error) {
-            // A peer's replace committed between the attach and this read freed the blob: answer as the conflict would.
-            null -> store.blob(scopeId, checkNotNull(result.blobId))?.let(CompleteFileOutcome::Ok)
-                ?: CompleteFileOutcome.Stale(store.currentBlobId(nodeId))
-            FilesUploadCompletion.STALE_FILE -> CompleteFileOutcome.Stale(store.currentBlobId(nodeId))
-            "node_not_found" -> CompleteFileOutcome.NoNode
-            "illegal_target" -> CompleteFileOutcome.IllegalTarget
-            "upload_not_found" -> CompleteFileOutcome.NoUpload
-            "upload_mismatch" -> CompleteFileOutcome.UploadMismatch
-            "budget_exceeded" -> CompleteFileOutcome.Budget
-            else -> error("FilesUploadCompletion answered a code the Files contract does not name: ${result.error}")
-        }
+        return completedOutcome(store, scopeId, nodeId, result)
     }
 
     /** `listFiles`: the live files directly under [parentId] (null: the scope root), each with its blob or null. */
@@ -100,3 +90,21 @@ class FilesHandler(
         return ListFilesOutcome.Ok(store.listFiles(scopeId, parentSlot))
     }
 }
+
+/**
+ * A completed item as the Files contract answers it — the member's `completeFile` and the guest's `completeShareFile`
+ * alike. A success re-reads the attached blob; a conflict re-reads the slot ("what is there now", ADR 0077).
+ */
+internal fun completedOutcome(store: FilesStore, scopeId: String, nodeId: String, result: CompleteItemResult): CompleteFileOutcome =
+    when (result.error) {
+        // A peer's replace committed between the attach and this read freed the blob: answer as the conflict would.
+        null -> store.blob(scopeId, checkNotNull(result.blobId))?.let(CompleteFileOutcome::Ok)
+            ?: CompleteFileOutcome.Stale(store.currentBlobId(nodeId))
+        FilesUploadCompletion.STALE_FILE -> CompleteFileOutcome.Stale(store.currentBlobId(nodeId))
+        "node_not_found" -> CompleteFileOutcome.NoNode
+        "illegal_target" -> CompleteFileOutcome.IllegalTarget
+        "upload_not_found" -> CompleteFileOutcome.NoUpload
+        "upload_mismatch" -> CompleteFileOutcome.UploadMismatch
+        "budget_exceeded" -> CompleteFileOutcome.Budget
+        else -> error("FilesUploadCompletion answered a code the Files contract does not name: ${result.error}")
+    }
