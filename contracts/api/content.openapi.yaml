@@ -656,8 +656,13 @@ components:
         One soft-deleted subtree **root** in the space's trash. `parentId` is the slot the client recomputes the
         restore's slug token against, and it always names a live parent (or the scope root) — a node whose own
         parent is trashed went down with that parent and is not a root.
-      required: [id, kind, encryptedName, epoch, placementVersion, deletedAt, purgeAfter]
+      required: [id, kind, encryptedName, epoch, placementVersion, deletedAt, purgeAfter, attached]
       properties:
+        attached:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Whether the node itself holds a blob in one of core's attachment slots (`veyq_node_attachment`, kept in the trash until the purge). Core names no slot; an application whose kind keeps its content there tells an empty node apart by it — Files' `FILE` whose upload never finished (inbox #391). A kind whose content lives elsewhere reads `false`. What the server holds anyway.
+          example: true
         shareIdentityId:
           x-veyq-visibility: id
           type: [string, "null"]
