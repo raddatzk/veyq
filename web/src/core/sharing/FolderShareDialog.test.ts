@@ -27,6 +27,7 @@ import { buildShareLink, recoverShareLink } from './shareLink'
 import { ShareRole } from '../../api/generated/sharing'
 import { confirmRequest, settleConfirm } from '../../shared/state/useConfirm'
 import { realI18n, t } from '../../test/i18n'
+import { i18n } from '../../i18n'
 
 const mintShare = vi.mocked(manage.mintShare)
 const listSharesFor = vi.mocked(manage.listSharesFor)
@@ -91,6 +92,16 @@ describe('FolderShareDialog — a new link', () => {
     expect(w.text()).not.toContain(t('share.roleUploader'))
     // The folder wording, not the Memory's photo promise.
     expect(w.text()).toContain(t('share.folder.roleViewerHint'))
+  })
+
+  it('the contributor wording names no application and says a replace is final, in both languages (inbox #383)', () => {
+    for (const locale of ['en', 'de'] as const) {
+      const folder = (i18n.global.getLocaleMessage(locale) as { share: { folder: Record<string, string> } }).share.folder
+      for (const key of ['roleContributorHint', 'contributorBadge']) {
+        expect(folder[key], `${locale} ${key}`).not.toMatch(/memor|erinnerung|photo|foto/i)
+      }
+      expect(folder.roleContributorHint, locale).toMatch(locale === 'en' ? /version history/ : /Versionsverlauf/)
+    }
   })
 
   it.each([

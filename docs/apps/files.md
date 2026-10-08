@@ -117,7 +117,8 @@ A `FILE` is **no share root** (Files declares no `ShareRoots`): a file is shared
   `shareSection` for its children; Files' is `components/ShareFilesSection.vue` — the files with name, size and date
   opened under the chain's keys, download through the link, and for a contributor an upload button (one core-queue job
   per file, `shareUpload.ts`: guest create → guest transport → `completeShareFile` with the meta) and a replace per
-  row. The guest names itself once per link through the page's own dialog (`requestGuest`). No rename on the guest
+  row, above the list the sentence that it can replace any file, the owner's too, and that no version is kept (no
+  confirmation asks yet, inbox #383). The guest names itself once per link through the page's own dialog (`requestGuest`). No rename on the guest
   page (no kind has one there yet, inbox #358).
 
 ## The drop box

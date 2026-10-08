@@ -181,6 +181,8 @@ async function download(row: Row) {
         <Button type="button" :label="t('files.upload')" icon="pi pi-upload" severity="secondary" outlined size="small" @click="picker?.click()" />
       </div>
     </div>
+    <!-- What an upload or a replace does, said before it happens (inbox #383); no confirmation asks yet. -->
+    <p v-if="canWrite" class="veyq-form-copy">{{ t('files.guest.contributorHint') }}</p>
     <template v-if="canWrite">
       <input ref="picker" class="share-files-picker" type="file" multiple hidden @change="onPicked" />
       <input ref="replacePicker" class="share-files-picker" type="file" hidden @change="onReplacePicked" />
