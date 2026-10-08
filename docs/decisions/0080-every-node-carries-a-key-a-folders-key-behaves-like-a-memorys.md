@@ -99,11 +99,13 @@ Memory, an expense and a file side by side).
     to the drop public key whose private half is sealed under the drop box's key (as Memories' guest media is today).
     Anyone holding the drop box's key opens everything below, with no approval step. Below its own folder the guest
     holds the key, computes slug tokens and gets the normal uniqueness check, and learns nothing about other guests'
-    names. Equal display names of two guests' folders are disambiguated by the client at display time (`(1)`,
-    `(2)`, by creation time), never stored. A guest who loses its identity (browser data cleared) cannot manage its folder any more and
+    names. Equal display names of two guests' folders are disambiguated by the client at display time (`Anna`,
+    `Anna (2)`, in node-id order: no creation time is listed), never stored, and their URL segments by the same
+    order (`anna`, `anna-2`; [ADR 0015](0015-operator-blind-readable-urls.md)). A guest who loses its identity (browser data cleared) cannot manage its folder any more and
     starts a new one under a new identity. Members may only delete, move out or copy from a drop box and place
     nothing of their own there (a server placement rule); moving out re-wraps and re-slugs under the target, where
-    the normal index applies, so every other folder stays unique and a ZIP export is unambiguous. Revoking the link
+    the normal index applies, so every other folder stays unique; a ZIP export (not built) names the identity
+    folders it writes by the URL-segment rule above, so it stays unambiguous inside a drop box too. Revoking the link
     keeps the drop box and its content. Memories keeps its uploader share on an existing Memory (its media are not
     nodes); this rule is for nodes guests create, built with the first application that needs it (Files).
 12. **The share's recovery copy is mandatory.** `sealedShareKey`/`sealedShareKeyEpoch` ([ADR 0036](0036-editable-share-note-recoverable-share-key.md))
