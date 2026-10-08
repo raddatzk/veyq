@@ -46,6 +46,8 @@ export function registerFiles(registry: Registry): void {
     icon: 'pi pi-inbox',
     shareable: true,
     detail: DropBoxDetail,
+    // Core's delete dialog (the detail's delete): "Delete drop box", the detail's own button label.
+    deleteTitle: 'files.dropBox.delete',
     section: { order: DROPBOX_SECTION_ORDER, component: DropBoxSection },
     createDialog: DropBoxCreateDialog,
     shareDialog: DropBoxShareDialog,

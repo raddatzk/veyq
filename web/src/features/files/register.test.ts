@@ -50,6 +50,7 @@ describe('registerFiles', () => {
       icon: 'pi pi-inbox',
       shareable: true,
       detail: DropBoxDetail,
+      deleteTitle: 'files.dropBox.delete',
       section: { order: 21, component: DropBoxSection },
       createDialog: DropBoxCreateDialog,
       shareDialog: DropBoxShareDialog,

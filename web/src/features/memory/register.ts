@@ -27,8 +27,12 @@ export function registerMemories(registry: Registry): void {
   // folder level that is the Memories). `order` 10 leaves room on either side for another application's section.
   const section = { order: 10, component: MemoriesSection }
   // One create dialog and one share dialog serve both kinds: the create's `kind` prop picks Memory or chapter, the
-  // share dialog reads `nodeKind` for its wording.
-  const memories = { detail: MemoryDetailHost, icon: 'pi pi-images', shareable: true, section, createDialog: MemoryNodeDialog, shareDialog: ShareDialog }
+  // share dialog reads `nodeKind` for its wording. Core's delete dialog titles both "Delete Memory" (`deleteTitle`), the
+  // wording it had while that string lived in core.
+  const memories = {
+    detail: MemoryDetailHost, icon: 'pi pi-images', shareable: true, section, createDialog: MemoryNodeDialog, shareDialog: ShareDialog,
+    deleteTitle: 'memory.deleteMemoryTitle',
+  }
   registry.registerKind({ kind: MEMORY_KIND, ...memories })
   registry.registerKind({ kind: CHAPTER_KIND, ...memories })
   registry.addSlotItem('sidebarPins', 'memories.pinned', PinnedMemories)

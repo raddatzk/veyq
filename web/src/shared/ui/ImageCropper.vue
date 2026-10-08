@@ -211,7 +211,7 @@ defineExpose({
       <img ref="imageElement" :src="src" :style="displayedImageStyle" draggable="false" alt="" @load="loadImage" />
     </div>
     <label class="memory-cover-zoom">
-      <span>{{ t('memory.zoom') }}</span>
+      <span>{{ t('common.zoom') }}</span>
       <input type="range" min="1" max="3" step="0.01" :value="zoom" :disabled="!imageLoaded" @input="updateZoom" />
     </label>
   </div>

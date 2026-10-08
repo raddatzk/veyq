@@ -1,5 +1,8 @@
 <script setup lang="ts">
-// Delete a folder (and its subtree) or a Memory (cr-0030 P4). Wired to the E2EE tree data layer.
+// Delete a node (a folder with its subtree, or any application's node) (cr-0030 P4). Wired to the E2EE tree data layer.
+// Core serves every application's nodes, so its own strings name none (inbox #375): a folder has its own title and copy,
+// any other node takes its title from its kind's `deleteTitle` in the registry (Memories: "Delete Memory") and falls
+// back to the neutral "Delete" for a kind that registered none, or that nobody registered.
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
@@ -7,6 +10,7 @@ import Dialog from 'primevue/dialog'
 import Message from 'primevue/message'
 import { deleteNode, type TreeNode } from '../tree'
 import { FOLDER_KIND } from '../kind'
+import { registry } from '../../applications/registry'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
 
 // Mounted via v-if while open; closing = the parent unmounting it on `close`.
@@ -16,11 +20,15 @@ const { t } = useI18n()
 
 const error = ref('')
 const isFolder = computed(() => props.node.kind === FOLDER_KIND)
-const header = computed(() => (isFolder.value ? t('memory.deleteFolderTitle') : t('memory.deleteMemoryTitle')))
+const header = computed(() => {
+  if (isFolder.value) return t('node.deleteFolderTitle')
+  const info = registry.kind(props.node.kind)
+  return t(info.supported && info.deleteTitle ? info.deleteTitle : 'node.delete')
+})
 const copy = computed(() =>
   isFolder.value
-    ? t('memory.deleteFolderCopy', { name: props.node.name })
-    : t('memory.deleteMemoryCopy', { name: props.node.name }),
+    ? t('node.deleteFolderCopy', { name: props.node.name })
+    : t('node.deleteCopy', { name: props.node.name }),
 )
 
 const { run: runConfirm, pending: loading } = useAsyncAction(
@@ -29,7 +37,7 @@ const { run: runConfirm, pending: loading } = useAsyncAction(
     emit('done')
     emit('close')
   },
-  { onError: () => { error.value = t('memory.deleteFailed') } },
+  { onError: () => { error.value = t('node.deleteFailed') } },
 )
 
 async function confirm() {

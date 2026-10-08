@@ -95,6 +95,10 @@ export interface KindDescriptor {
   detail?: Component
   /** The PrimeIcons class core draws next to a node of this kind (e.g. the trash list). */
   icon: string
+  /** The i18n key of the title core's delete dialog (`core/node/components/DeleteNodeDialog.vue`) shows for a node of
+   *  this kind, e.g. Memories' "Delete Memory". Omitted: the neutral `node.delete`. Core serves every application's
+   *  nodes and so names none in its own strings (inbox #375): a kind's noun comes from the kind. */
+  deleteTitle?: string
   /** Whether a public share can be created for a node of this kind (the capability check still applies). */
   shareable: boolean
   /** How a name of this kind folds before it is HMAC'd into its blinded slug token (inbox #350; read through
