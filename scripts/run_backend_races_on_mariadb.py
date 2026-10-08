@@ -32,9 +32,11 @@ in a `finally`. Its image is read from `infra/docker-compose.yml`, so the pin ha
 until a run's log shows the race classes executed it admits nothing (ADR 0040), and a hand run stays the proof.
 
 Usage:
-    python3 scripts/run_backend_races_on_mariadb.py [--tests PATTERN ...]   # from the repo root
+    python3 scripts/run_backend_races_on_mariadb.py [--tests PATTERN]...   # from the repo root
 
-With `--tests`, only those Gradle test filters run (e.g. `'*ShareSharedScopeSliceTest'`). Exit code: the first
+With `--tests`, only those Gradle test filters run (e.g. `'*ShareSharedScopeSliceTest'`). Each filter takes its own
+`--tests` (`--tests A --tests B`): a second pattern after one `--tests` is read as nothing and silently skipped, so
+`--tests A B` runs `A` alone. Exit code: the first
 failing project's Gradle exit code, 0 when every project is green.
 `VEYQ_TEST_TIMEOUT_S` caps the Gradle run (default 2400).
 """
