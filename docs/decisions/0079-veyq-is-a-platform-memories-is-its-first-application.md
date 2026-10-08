@@ -201,7 +201,7 @@ on their own.
   2026-10-05, and the rename moved no class between packages. Each module owns its migrations under one global version scheme
   (`V<yyyymmddHHMM>__<module>_<slug>.sql`, the module named by the settings; [backend/CLAUDE.md](../../backend/CLAUDE.md)
   § Migrations): a core migration names no application table, an application's references only core's and its own.
-  Core reaches application code through twelve interfaces — `ScopeEraser`, `NodeSubtreeEraser`, `MembershipEraser`,
+  Core reaches application code through thirteen interfaces — `ScopeEraser`, `NodeSubtreeEraser`, `MembershipEraser`,
   `GuestIdentityUsage`, `SharedSubtreeContributor`, `ShareGuestWrites`, `ShareRoots` (which roles a node of the kind may
   be the root of a share with; core answers for `FOLDER`, Memories for `MEMORY` and `CHAPTER` — [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)),
   `GuestNodeRules` (which tree operations a `READ_WRITE` guest may do inside a container of the kind; core answers for
@@ -215,8 +215,12 @@ on their own.
   `ownerId` back to its `mediaId`, Files carries the blob a replace expects as a payload and calls core's
   `AttachmentStore.attach`), `UploadAdmission` (what a share link's guests contributed to the application's own rows, for its
   per-link limit; their open sessions and node attachments core sums itself, and a kind whose guest uploads are all
-  attachments still needs one, reporting 0) and `NodeKindRules` (where a node of the kind may live; core answers for `FOLDER`, Memories
-  for `MEMORY` and `CHAPTER`) — and `ShareRoots`, `GuestNodeRules`, `WriteOnlyGuestKinds` and the last four fail closed: a kind no application (or two) claims takes no
+  attachments still needs one, reporting 0), `MemberBlobRoles` (which blob roles a member's upload start may carry: Memories
+  its four, Files `FILE_CONTENT`; a union, not a partition, since a member's start names no node to dispatch by —
+  inbox #366) and `NodeKindRules` (where a node of the kind may live; core answers for `FOLDER`, Memories
+  for `MEMORY` and `CHAPTER`) — and `ShareRoots`, `GuestNodeRules`, `WriteOnlyGuestKinds`, `UploadCompletion`,
+  `UploadAdmission`, `MemberBlobRoles` and `NodeKindRules` fail closed: a role no application declares opens no member upload (`400 invalid_request`, before
+  any quota is reserved), and a kind no application (or two) claims takes no
   uploads (`illegal_target`), is placed nowhere (`illegal_structure`), is shared by no one (`illegal_scope`), takes no
   guest tree operation inside it (`illegal_scope`), lets a write-only guest of a link rooted at it create nothing
   (`illegal_scope`), and a link whose usage no single application measures is refused
@@ -224,8 +228,11 @@ on their own.
   different seam from the erasers: nothing of the scope is erased, one user loses access to one scope.) Hand-written
   core code names the node kind `FOLDER` only (`validate_kernel_imports_no_slices.py`). Each module runs its own
   tests; `:core`'s test application is core with no application at all, and `CoreAloneSliceTest` pins what that
-  means — every seam holds exactly core's own implementations, every refusal above holds, and the generic blob
-  upload starts, windows and downloads — while the root's `ModuleCompositionTest` pins the composed sets.
+  means — every seam holds exactly core's own implementations, every refusal above holds (so a member's upload
+  start is refused in every role: nothing could attach it), and an open upload session windows and a blob downloads
+  through core alone — while the root's `ModuleCompositionTest` pins the composed sets. `:core`'s test sources hold
+  one stand-in, `CoreTestMemberBlobRoles` (the roles core's own upload tests start in), which `CoreAloneSliceTest`
+  excludes.
   **What core still knows of Memories**, each a decision a later change takes, not an oversight (the decided
   targets are the bullets above): `veyq_node` carries Memories-flavoured columns in core's baseline (`cover_blob_id`,
   `cover_byte_size`, `media_revision`, `delete_revision` — moving a column is a schema change, not a rename);

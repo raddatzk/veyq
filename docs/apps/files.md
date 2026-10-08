@@ -35,7 +35,10 @@
   new seal purpose exists for Files.
 - **Trash and purge** are core's: deleting the node trashes it with its attachment (the quota still counts it, ADR
   0073 §2); the purge frees the attachment row and the blob through core's eraser.
-- **The quota:** a member's upload counts against the tenant quota through core's start, unchanged. A link's usage
+- **The quota:** a member's upload counts against the tenant quota through core's start, unchanged. That start takes
+  only a role some application declares to core's `MemberBlobRoles` (Files: `FILE_CONTENT`, `FilesMemberBlobRoles`) and
+  refuses any other whole, `400 invalid_request`, before it reserves anything (inbox #366); a `FILE_CONTENT` start
+  names no node, so one for an object that is no `FILE` still opens and ages out unattached. A link's usage
   for a `FILE` is core's attachment term; Files' `UploadAdmission` reports 0 for it (core never admits a link by its
   own terms alone).
 
@@ -96,7 +99,8 @@ A `FILE` is **no share root** (Files declares no `ShareRoots`): a file is shared
   `completeShareFile` — `POST /api/shares/{shareId}/files/{nodeId}/content`, `{contributorToken, uploadId,
   expectedBlobId?, wrappedMeta?}`: `completeFile`'s answers, plus `403 share_not_contributable` for a node that is no
   `FILE` (a folder) and `404 node_not_found` for one outside the live subtree. The upload itself is core's guest
-  transport (`startShareBlobUploads` with `nodeId` = the file, `role: FILE_CONTENT`); the download core's
+  transport (`startShareBlobUploads` with `nodeId` = the file, `role: FILE_CONTENT`; any other role `400
+  invalid_request`, refused before the link's upload budget is spent, inbox #367); the download core's
   `resolveShareBlob`.
 - **The meta goes with the bytes.** A guest has no door to a node's `wrappedMeta` (core's guest create takes none,
   `updateNode` is a member's), so `completeShareFile` carries it and `FileContentWrite` writes it in the attach's
