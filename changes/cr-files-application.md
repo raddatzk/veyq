@@ -574,8 +574,10 @@ without touching core except for the platform prerequisites below, which every l
       **Not verified:** the Docker image build, a cold-home verification-metadata run (the module resolves what Memories'
       identical plugin set does; the warm build verified clean), Flyway at run time (no migration), the `veyq.files`
       config prefix (none added).
-- [ ] F1 a member uploads and downloads a file — `UploadCompletion` for `FILE`, `registerKind`, the file list in the folder level
+- [x] F1 a member uploads and downloads a file — `UploadCompletion` for `FILE`, `registerKind`, the file list in the folder level
       view, the download decrypted in the browser, delete into the trash · Done when: an e2e round trip with identical bytes.
+      Ticked with F1b on the brief's word; its Done-when (the e2e round trip) is written and runs from the main checkout
+      after the merge — until that run is green, this box claims the code, not the proof.
   - [x] F1a backend — Files' contract `contracts/api/files/files.openapi.yaml` + `:apps:files` code (member only; no web, no
         guests) · Done when: slice tests with bite levers, `./gradlew check`, MariaDB races, `validate_*` green.
         **Measured 2026-10-08:** the module opts in (`id("veyq.openapi")`, `veyqOpenApi { generateOwnSpecs() }`) and
@@ -651,8 +653,70 @@ without touching core except for the platform prerequisites below, which every l
         Docs: `docs/apps/files.md` (no longer "concept"; the contract and what is built), `docs/apps/README.md`,
         `backend/CLAUDE.md`, ADR 0079 Consequences (the attachments sentence and "Memories, the only implementation" of
         `UploadCompletion` were false).
-  - [ ] F1b web — the generated client, the file list in the folder level view (Files' section), upload/replace through the
+  - [x] F1b web — the generated client, the file list in the folder level view (Files' section), upload/replace through the
         core queue, the download decrypted in the browser, delete into the trash · Done when: the e2e round trip.
+        **Measured 2026-10-08:** `generate:api` gains the `files` pair (`src/api/generated/files`); `features/files/`:
+        `api.ts` (`filesApi()` on core's `bearerParams`), `kinds.ts` (+ `FILE_CONTENT_ROLE`), `fileMeta.ts` (envelope `{v:
+        1, mime, size, modifiedAt}` sealed with `node-meta` under the FILE node's key; `readFileMeta` best-effort,
+        `openFileMetaForWrite` refuses an unreadable blob, `writeFileMeta` = core's `writeSealedMeta` + `updateNode` with
+        `metaVersion`), `uploadFile.ts` (`fileUploadJob(target, file)`: create node via `createContentNode(…, FILE, name)`
+        unless a replace → `planBlob` under the node's own key, owner = node, role `FILE_CONTENT` → `reserveAndPump` over
+        `authedReserve`/`authedWindow` → `completeFile` with `expectedBlobId` (absent for an empty slot) → meta write;
+        `409 stale_file` → `StaleFileError(currentBlobId)`), `download.ts` (`makeChunkProvider` + `presignAllChunks`,
+        chunk 0 first then at most 4 frames in flight, one `Blob`, `saveBlob`), `components/FilesSection.vue`
+        (registered `section: {order: 20}`). Core: `LevelSectionEmits.rename: [node]`, `LevelView` forwards it as
+        `renameNode`, `MemoryHomeView` opens `FolderNameDialog` in rename mode for it; `sealedMetaWrite.ts` moved
+        `features/memory` → `core/node` (13 importers repointed, body unchanged); `shared/saveBytes.ts` gains `saveBlob`.
+        i18n: `files.*` (en + de). The section: heading "Files" + count, an "Upload files" button (hidden multi-file
+        input; a drop onto the section does the same), `.veyq-empty` "No files yet — upload the first one.", rows
+        (`.veyq-list-row`: `pi pi-file`, name, "120.6 kB · Modified …", the row itself and an icon button download;
+        icon buttons replace / rename / delete with aria-labels naming the file), and one `Message` per file of THIS
+        folder's batches that failed (taken name, illegal place, `stale_file` with "Replace anyway", no space, other) or
+        whose meta is missing, each with "Dismiss". `listFiles` only when the level holds a FILE child.
+        `npm run check` (fresh `generate:api`) 205 files / 1959 tests (18/23 skipped) → 210 / 1992 (19/24 skipped):
+        `fileMeta.test.ts` 4, `fileMeta.wire.test.ts` 3, `uploadFile.wire.test.ts` 9, `download.test.ts` 3,
+        `FilesSection.test.ts` 13, `MemoryHomeView.test.ts` +1 (the FILE fallback case became "Files' section, no
+        fallback" + "a section's rename opens the name dialog"), `LevelView.test.ts` (forward case + `rename`),
+        `register.test.ts`, `applications.test.ts`, the golden control. 53/53 `validate_*` before and after; diff:
+        core-import guard 188 → 189 core files, Memories 62 → 61, Files 2 → 7 (clients: `files: api/generated/files`),
+        e2e discovery/canaries 18 → 19 suites, doc citations 1225 → 1236 files; no stylesheet rule added (the section's
+        five rules are scoped in the `.vue`, which `validate_stylesheet_anchors` does not read; anchors 639 → 639).
+        **Golden:** updated on purpose (`npx vitest run -u src/views/MemoryHomeView.golden.test.ts`): 7 of 8 snapshots
+        gain exactly the Files section (15 lines; 8 when read-only: no upload button, no inputs), `root-map` unchanged; a
+        throwaway script that deletes the `section.files-section` subtree from each new snapshot yields the old one
+        byte-for-byte for all 8 ("ALL IDENTICAL"). B0's four `uploadWire.*.json` byte-identical (`shasum` before/after).
+        **Bites, each red then green:** blob key sealed under the parent's key → 2 wire tests red; `expectedBlobId`
+        dropped → the replace wire test red; the section also listing non-FILE nodes → its FILE-only test red; the
+        sibling folded with `slugify` → the new-name test red (`Report pdf` was taken for `Report.pdf`); the replace
+        confirm skipped → 2 confirm tests red; a `features/memory` import in `fileMeta.ts` → the core-import guard red on
+        `application`.
+        **Decisions taken (owner, please review; each reversible):** (1) `sealedMetaWrite.ts` moved to core: Files may not
+        import Memories, and the loop is generic; Files' envelope uses the same `node-meta` seal context in its own
+        `fileMeta.ts` (Memories' `nodeMeta.ts`, in the mutation scope, changed its import path only — the mutation gate was
+        not run). (2) The smallest generic rename hook: `LevelSectionEmits.rename`. (3) Delete is the section's own
+        `useConfirm` ask ("Delete file") + core `deleteNode`, not core's `DeleteNodeDialog`, whose non-folder header reads
+        "Delete Memory" (its `memory.*` keys are P4d's). (4) A job resolves `{nodeId, metaWritten}`, not the bare id: the
+        missing-meta warning needs it. (5) A job remembers a final refusal (`slug_taken`, `illegal_structure`,
+        `stale_file`) and rethrows it without a request, so the queue's automatic retry never repeats an upload, and
+        reuses a node it created (no second create); the remedy for `stale_file` is the section's "Replace anyway" (a new
+        job expecting the re-read blob). The status menu still offers its retry for these (core's `isRetryable` knows only
+        quota): it fails at once. (6) A picked name a FILE sibling holds (by `fileNameSlug`) asks once per file; a row's
+        replace asks nothing; either way the node keeps its name. (7) Without a meta the size shown is the exact plaintext
+        (`byteSize − FRAME_OVERHEAD × chunkCount`), not a "sealed size" mark. (8) The section steps aside in map mode,
+        like the folders (so `root-map` is unchanged). (9) A meta re-run after `409 stale_version` overwrites a peer's
+        `mime/size/modifiedAt`: the uploader describes the bytes it attached. (10) The download's `Blob` is always
+        `application/octet-stream`. (11) The section words "no space" itself ("Deleted files …"); core's `upload.noSpace`
+        in the status menu still says photos (B3's open point). (12) Batch label = the folder's name ("Files" at the
+        root), key `files:<scope>:<folder>`.
+        **E2E (written, not run here):** `features/files/files.e2e.test.ts` — personal scope: folder, a 3-frame file via the
+        job, listing, download = bytes, replace via `expectedBlobId` (blob id moves, new bytes), a replace still expecting
+        the old blob → `StaleFileError` with the current id, trash (listing empty, trash row kind `FILE`) and restore; an
+        onboarded member without a grant → `listFiles` 403/404; tenant scope: A uploads, delivers M's grant, M replaces;
+        its own `fetch` wrapper asserts the name and the MIME type cross no URL/body/text response, plus `recordCanaries`.
+        Type-checks, lints, discovered (19 suites). **Not verified:** a browser (layout, the hidden inputs, drag and drop
+        of several files, focus/keyboard), a multi-GB download (one `Blob` ≈ the file's size in tab memory; a streaming
+        save is not built), the e2e itself (runs from the main checkout after the merge), the assumption that a tenant
+        member with a delivered grant has WRITE there, the mutation gate. Files' use cases (`satisfies`) are not written.
 - [ ] F2 a folder share with files — read, then contributor: a guest creates the `FILE` node (`createShareNode`) and uploads
       into it; a file in the trash answers 404; Files' `GuestIdentityUsage` · Done when: e2e, race tests.
 - [ ] F3 the drop box ([ADR 0080](../docs/decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
