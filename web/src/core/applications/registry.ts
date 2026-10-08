@@ -51,11 +51,9 @@
 // the application claimed for the share's ROOT node kind (`PublicShare.rootKind`, served for every role — a WRITE_ONLY
 // share too, so its drop page is the body of its kind's application). A kind is claimed once (a second claim throws). A
 // root kind nobody claimed, or none at all, renders the shell's explicit unavailable state. A claim is also what core's
-// folder page EMBEDS for a node of the kind below a shared folder (`subtreeRoot`), unless it is claimed `rootOnly`: a
-// body that serves only a link rooted at its own node (Files' drop box, whose page is a WRITE_ONLY guest's upload form —
-// embedded in a READ folder link it offered that form under the folder's name and failed, inbox #380). Core's folder
-// page then shows no node of that kind and nothing below it, and treats `?node=` naming one as a node it did not open.
-// Hiding is a rendering rule, not a gate: the served subtree still holds those nodes and their keys.
+// folder page EMBEDS for a node of the kind below a shared folder (`subtreeRoot` set): the body then serves a guest of a
+// link ABOVE its node, with that link's role — a body that is a WRITE_ONLY guest's page when it is the root (Files' drop
+// box) renders something else when embedded (Files: the drop box read-only, inbox #380).
 //
 // **Lifecycle hooks (`registerLifecycle`).** What runs when a scope is entered or reset and when the master key
 // rotates. Registered per application id (a second registration of the same id throws); several applications may
@@ -301,16 +299,12 @@ export interface Registry {
   /** Register an application's lifecycle hooks under its id. Throws if the id is already registered, or if
    *  `onMasterKeyRotated` is not a function. */
   registerLifecycle(applicationId: string, hooks: LifecycleHooks): void
-  /** Claim the public-share body for a root kind, whatever the share's role. Throws if that kind is already claimed.
-   *  `rootOnly`: the body serves only a link rooted at a node of the kind and is never embedded below a shared folder
-   *  (see the header). */
-  claimShareBody(kind: NodeKind, component: Component, options?: { rootOnly?: boolean }): void
+  /** Claim the public-share body for a root kind, whatever the share's role — and the body core's folder page embeds
+   *  for a node of the kind below a shared folder (see the header). Throws if that kind is already claimed. */
+  claimShareBody(kind: NodeKind, component: Component): void
   /** The body claimed for a share's root kind, or null when nobody claimed it (the shell renders its unavailable
    *  state — never an empty page). */
   shareBody(kind: NodeKind): Component | null
-  /** Whether the kind's body was claimed `rootOnly`: core's folder page of a share shows no node of the kind. False for
-   *  a kind nobody claimed (its card stays, and opens the explicit unsupported state). */
-  shareBodyRootOnly(kind: NodeKind): boolean
   /** Run every application's `onScopeReset`. */
   scopeReset(): void
   /** Run every application's `onScopeEntered`, in registration order; rejects with the first failure after all ran. */
@@ -360,7 +354,6 @@ export function createRegistry(): Registry {
   // The platform's own share body: a link rooted at a FOLDER browses the subtree (cr-node-key-hierarchy 5b.4b). Pre-claimed
   // like FOLDER's kind above, so an application claiming FOLDER throws.
   const shareBodies = new Map<NodeKind, Component>([[FOLDER_KIND, FolderShareBody]])
-  const rootOnlyBodies = new Set<NodeKind>()
   /** Run `f` on every application, never stopping at the first failure; rethrow the first one at the end. */
   async function eachApplication(f: (h: LifecycleHooks) => Promise<void> | void): Promise<void> {
     let failure: { error: unknown } | null = null
@@ -374,13 +367,11 @@ export function createRegistry(): Registry {
     if (failure) throw failure.error
   }
   return {
-    claimShareBody(kind, component, options) {
+    claimShareBody(kind, component) {
       if (shareBodies.has(kind)) throw new Error(`share body for ${kind} is already claimed`)
       shareBodies.set(kind, component)
-      if (options?.rootOnly) rootOnlyBodies.add(kind)
     },
     shareBody: (kind) => shareBodies.get(kind) ?? null,
-    shareBodyRootOnly: (kind) => rootOnlyBodies.has(kind),
     registerLifecycle(applicationId, hooks) {
       if (lifecycles.has(applicationId)) throw new Error(`lifecycle hooks of ${applicationId} are already registered`)
       if (typeof hooks.onMasterKeyRotated !== 'function') {

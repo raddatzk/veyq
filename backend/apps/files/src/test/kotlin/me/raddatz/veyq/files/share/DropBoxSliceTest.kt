@@ -145,6 +145,34 @@ class DropBoxSliceTest {
         GuestTreeShare.create(guest, again, FilesNodeKinds.FILE).statusCode(403).body("code", equalTo("share_not_contributable"))
     }
 
+    /**
+     * Inbox #377 (a), owner decision 2026-10-08: only a member moves anything out of a drop box. A `READ_WRITE` guest of a
+     * link ABOVE the drop box holds its key and sees its guests' folders, yet places neither an identity folder nor
+     * anything inside one — `422 illegal_structure` (core's identity-folder rule, `ShareNodesHandler`), nothing written.
+     */
+    @Test
+    fun aGuestOfALinkAboveMovesNothingOutOfADropBox() {
+        val t = tree()
+        val guest = dropLink(t)
+        val folder = ensure(guest).statusCode(200).extract().path<String>("nodeId")
+        val file = guestFile(guest, folder)
+        val above = GuestTreeShare.seed(t.userId, t.scopeId, t.folder, ShareEntity.READ_WRITE)
+
+        GuestTreeShare.place(above, folder, parentId = t.folder).statusCode(422).body("code", equalTo("illegal_structure"))
+        GuestTreeShare.place(above, file, parentId = t.folder).statusCode(422).body("code", equalTo("illegal_structure"))
+        assertEquals(t.dropBox to folder, parentOf(folder) to parentOf(file), "nothing moved")
+        assertEquals(identityOf(guest), tx { NodeEntity.findById(folder)!!.shareIdentityId }, "the folder keeps its identity")
+        assertEquals(0L to 0L, tx { NodeEntity.findById(folder)!!.placementVersion to NodeEntity.findById(file)!!.placementVersion })
+
+        // control: the same guest moves a plain file of the subtree, and a member moves the guest's folder out
+        val plain = UUID.randomUUID().toString()
+        GuestTreeShare.create(above, t.folder, FilesNodeKinds.FILE, nodeId = plain).statusCode(201)
+        val sub = UUID.randomUUID().toString()
+        GuestTreeShare.create(above, t.folder, NodeEntity.FOLDER, nodeId = sub).statusCode(201)
+        GuestTreeShare.place(above, plain, parentId = sub).statusCode(204)
+        memberPlace(t, folder, to = t.other, version = 0).statusCode(204)
+    }
+
     @Test
     fun revokingTheLinkKeepsTheFoldersTheFilesAndTheIdentitiesThatOpenThem() {
         val t = tree()

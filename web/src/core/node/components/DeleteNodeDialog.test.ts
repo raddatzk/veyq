@@ -43,10 +43,9 @@ describe('DeleteNodeDialog', () => {
     expect(w.text()).toContain(t('node.deleteFolderCopy', { name: 'Rom 2026' }))
   })
 
-  it('titles a node by its kind\'s registered deleteTitle — Memories keeps "Delete Memory", a drop box is no Memory', () => {
-    for (const kind of ['MEMORY', 'CHAPTER']) {
-      expect(mountDialog(kind).find('.header').text()).toBe('Delete Memory')
-    }
+  it('titles a node by its kind\'s registered deleteTitle — a Memory, a chapter and a drop box each by its own noun', () => {
+    expect(mountDialog('MEMORY').find('.header').text()).toBe('Delete Memory')
+    expect(mountDialog('CHAPTER').find('.header').text()).toBe('Delete chapter')
     expect(mountDialog('FILES_DROPBOX').find('.header').text()).toBe('Delete drop box')
     expect(mountDialog('MEMORY').text()).toContain(t('node.deleteCopy', { name: 'Rom 2026' }))
   })

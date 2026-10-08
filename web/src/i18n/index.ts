@@ -806,6 +806,7 @@ const en = {
     unfavorite: 'Remove favorite',
     // MEMORY's and CHAPTER's `deleteTitle` (registered in `register.ts`, read by core's delete dialog).
     deleteMemoryTitle: 'Delete Memory',
+    deleteChapterTitle: 'Delete chapter',
     // Memories' own create dialog keeps naming what can collide in a folder; core's `node.slugTaken` is neutral.
     slugTaken: 'A folder or Memory with a similar name already exists here.',
     meta: {
@@ -943,7 +944,9 @@ const en = {
     rename: 'Rename {name}',
     delete: 'Delete {name}',
     replaceTitle: 'Replace file',
-    replaceConfirm: 'Replace “{name}”? A file with this name is already here: its content is replaced by the file you picked, and the old content is deleted.',
+    // Every replace of content asks (inbox #383): a same-name upload, and the row's replace with the picked file named.
+    replaceConfirm: 'Replace “{name}”? A file with this name is already here: its content is replaced by the file you picked. The old content cannot be restored: there is no version history.',
+    replaceRowConfirm: 'Replace the content of “{name}” with “{file}”? The name stays. The old content cannot be restored: there is no version history.',
     replaceAccept: 'Replace',
     deleteTitle: 'Delete file',
     deleteConfirm: '“{name}” moves to the trash. You can restore it from there until it is deleted for good.',
@@ -968,6 +971,7 @@ const en = {
       linkFull: '“{name}” was not uploaded: this link takes no more uploads right now.',
       // A contributor's page (inbox #383): what an upload or a replace does, said before it happens.
       contributorHint: 'You can upload files here and replace any file, including the owner’s. A replaced file cannot be brought back: there is no version history.',
+      replaceConfirm: 'Replace the content of “{name}” with “{file}”? It changes for everyone who sees this folder, the owner too. The old content cannot be restored: there is no version history.',
     },
     // The drop box (cr-files-application F3): a member's section, detail, create and share dialogs; a guest's page.
     dropBox: {
@@ -1021,6 +1025,9 @@ const en = {
       guestRetryLabel: 'Send “{name}” again',
       guestGone: 'This link no longer takes files from you. Files marked as sent have arrived.',
       guestFailed: 'Something went wrong. Please try again.',
+      // A drop box inside a shared folder, seen by that folder's guest (inbox #380): read-only.
+      sharedHint: 'Files people sent through this drop box’s links, one folder each. You can open them and download the files; only the owner can delete or move them.',
+      sharedEmpty: 'Nobody has sent anything here yet.',
     },
   },
   media: {
@@ -2020,6 +2027,7 @@ const de: typeof en = {
     favorite: 'Favorit',
     unfavorite: 'Favorit entfernen',
     deleteMemoryTitle: 'Erinnerung löschen',
+    deleteChapterTitle: 'Kapitel löschen',
     slugTaken: 'Ein Ordner oder eine Erinnerung mit ähnlichem Namen existiert hier bereits.',
     meta: {
       conflict: 'Jemand anderes hat das inzwischen geändert. Jetzt steht dort diese Version — speichere erneut, um sie zu ersetzen.',
@@ -2148,7 +2156,8 @@ const de: typeof en = {
     rename: '{name} umbenennen',
     delete: '{name} löschen',
     replaceTitle: 'Datei ersetzen',
-    replaceConfirm: '„{name}“ ersetzen? Eine Datei mit diesem Namen liegt schon hier: Ihr Inhalt wird durch die gewählte Datei ersetzt, der alte Inhalt wird gelöscht.',
+    replaceConfirm: '„{name}“ ersetzen? Eine Datei mit diesem Namen liegt schon hier: Ihr Inhalt wird durch die gewählte Datei ersetzt. Der alte Inhalt lässt sich nicht wiederherstellen: Es gibt keinen Versionsverlauf.',
+    replaceRowConfirm: 'Den Inhalt von „{name}“ durch „{file}“ ersetzen? Der Name bleibt. Der alte Inhalt lässt sich nicht wiederherstellen: Es gibt keinen Versionsverlauf.',
     replaceAccept: 'Ersetzen',
     deleteTitle: 'Datei löschen',
     deleteConfirm: '„{name}“ kommt in den Papierkorb. Dort kannst du sie wiederherstellen, bis sie endgültig gelöscht wird.',
@@ -2170,6 +2179,7 @@ const de: typeof en = {
       empty: 'Hier liegen keine Dateien.',
       linkFull: '„{name}“ wurde nicht hochgeladen: Dieser Link nimmt gerade keine weiteren Uploads an.',
       contributorHint: 'Du kannst hier Dateien hochladen und jede Datei ersetzen, auch die der Person, der der Ordner gehört. Eine ersetzte Datei lässt sich nicht zurückholen: Es gibt keinen Versionsverlauf.',
+      replaceConfirm: 'Den Inhalt von „{name}“ durch „{file}“ ersetzen? Er ändert sich für alle, die diesen Ordner sehen, auch für die Person, der er gehört. Der alte Inhalt lässt sich nicht wiederherstellen: Es gibt keinen Versionsverlauf.',
     },
     dropBox: {
       section: 'Briefkästen',
@@ -2219,6 +2229,8 @@ const de: typeof en = {
       guestRetryLabel: '„{name}“ erneut senden',
       guestGone: 'Dieser Link nimmt von dir keine Dateien mehr an. Dateien, die als gesendet markiert sind, sind angekommen.',
       guestFailed: 'Etwas ist schiefgelaufen. Bitte versuche es erneut.',
+      sharedHint: 'Dateien, die über die Links dieses Briefkastens eingeworfen wurden, ein Ordner pro Person. Du kannst sie öffnen und die Dateien herunterladen; löschen oder verschieben kann sie nur die Person, der der Briefkasten gehört.',
+      sharedEmpty: 'Hier hat noch niemand etwas eingeworfen.',
     },
   },
   media: {

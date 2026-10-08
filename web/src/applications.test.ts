@@ -35,8 +35,9 @@ describe('composition root', () => {
     for (const kind of [MEMORY_KIND, CHAPTER_KIND]) {
       expect(registry.kind(kind)).toMatchObject({ createDialog: MemoryNodeDialog, shareDialog: ShareDialog })
     }
-    // Core's delete dialog names no application (inbox #375): Memories brings its "Delete Memory" with its kinds.
-    for (const kind of [MEMORY_KIND, CHAPTER_KIND]) expect(registry.kind(kind)).toMatchObject({ deleteTitle: 'memory.deleteMemoryTitle' })
+    // Core's delete dialog names no application (inbox #375): Memories brings each kind's own title with it.
+    expect(registry.kind(MEMORY_KIND)).toMatchObject({ deleteTitle: 'memory.deleteMemoryTitle' })
+    expect(registry.kind(CHAPTER_KIND)).toMatchObject({ deleteTitle: 'memory.deleteChapterTitle' })
     const folder = registry.kind(FOLDER_KIND)
     expect(folder.supported && folder.shareDialog).toBeTruthy()
     expect(folder.supported && folder.shareDialog).not.toBe(ShareDialog)

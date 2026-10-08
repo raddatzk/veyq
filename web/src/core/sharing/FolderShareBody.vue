@@ -8,10 +8,10 @@
 // and the current node: a folder's children as cards; any other node EMBEDDED through the body its application claimed
 // (`registry.shareBody(kind)`), handed `subtreeRoot` — that node's id, key and name from the chain. A kind nobody claimed,
 // or an embedded body that reports `unavailable`, is a local empty state here, never the whole page's unavailable state.
-// Core reads no kind but its own `FOLDER_KIND`: what a child IS is the registry's answer. A node whose kind's body is
-// claimed `rootOnly` (Files' drop box: its page is a WRITE_ONLY guest's upload form, inbox #380) is not shown, nor
-// anything below it — no card, no embed, and `?node=` naming one is a node the walk did not open. That is rendering only:
-// the served subtree still holds those nodes (ADR 0080 decision 11 lets a guest of a link above open them).
+// Core reads no kind but its own `FOLDER_KIND`: what a child IS is the registry's answer. Every node the walk opened is
+// shown — a drop box below the root too, embedded through its application's body, and the guests' identity folders
+// in it (ADR 0080 decision 11: a guest of a link above holds the drop box's key and opens them; owner decision
+// 2026-10-08, inbox #380).
 //
 // **Navigation** is the route query `?node=<id>` with the `#k=` fragment KEPT: the shell reads the share key from it on
 // every re-resolve, so a push without it leaves the next reload keyless. An id the walk did not open falls back to the root.
@@ -24,7 +24,10 @@
 // **Writes (READ_WRITE only).** 'New folder' creates under the current folder as the guest
 // (`createShareNodeAsGuest`). The guest names itself once per link, at its first write (`nameShareGuest`, the session
 // one per link — an embedded body reuses it); a returning guest's session is loaded. A READ guest sees no write
-// control. No move or rename here (inbox #358).
+// control. No move or rename here (inbox #358). **Inside a guest's identity folder** (a node that is one, or lies below
+// one: the served `shareIdentityId`, core's own column) the page is read-only for every guest — no 'New folder', and the
+// share sections are told `canWrite: false` — because the server places nothing there but that folder's own identity
+// (`NodesHandler`: `illegal_structure`), so a control would only offer a refusal.
 import { computed, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -73,35 +76,30 @@ const note = computed(() => pickLocaleText(props.head.noteByLocale, locale.value
 const renderedNote = computed(() => (note.value ? renderMarkdown(note.value) : ''))
 const canWrite = computed(() => props.head.role === ShareRole.ReadWrite)
 
-/** The nodes this page does not show: each node of a kind claimed `rootOnly`, and everything below it (bounded walk: a
- *  served cycle ends at the root). */
-const hidden = computed<ReadonlySet<string>>(() => {
-  const p = parts.value
-  const out = new Set<string>()
-  if (!p) return out
-  for (const n of p.nodes.values()) {
-    for (let id: string | null | undefined = n.id, steps = 0; id && id !== p.rootId && steps <= p.nodes.size; id = p.nodes.get(id)?.parentId, steps++) {
-      const at = p.nodes.get(id)
-      if (at && registry.shareBodyRootOnly(at.kind)) {
-        out.add(n.id)
-        break
-      }
-    }
-  }
-  return out
-})
-
-/** The node on screen: `?node=` when the walk opened it (and this page shows it), else the root. */
+/** The node on screen: `?node=` when the walk opened it, else the root. */
 const currentId = computed<string | null>(() => {
   const p = parts.value
   if (!p) return null
   const q = route.query.node
-  return typeof q === 'string' && p.keys.has(q) && !hidden.value.has(q) ? q : p.rootId
+  return typeof q === 'string' && p.keys.has(q) ? q : p.rootId
 })
 const nameOf = (p: GuestTreeParts, id: string) => (id === p.rootId ? props.head.name : (p.names.get(id) ?? ''))
 const currentKind = computed(() => (parts.value && currentId.value ? (parts.value.nodes.get(currentId.value)?.kind ?? null) : null))
 const atFolder = computed(() => currentKind.value === FOLDER_KIND)
 const currentName = computed(() => (parts.value && currentId.value ? nameOf(parts.value, currentId.value) : ''))
+
+/** Whether the node on screen is a guest's identity folder or lies below one, along the served `parentId`s up to the
+ *  root, the root included (bounded: a served cycle stops). */
+const inIdentityFolder = computed(() => {
+  const p = parts.value
+  if (!p) return false
+  for (let id: string | null | undefined = currentId.value, steps = 0; id && steps <= p.nodes.size; id = id === p.rootId ? null : p.nodes.get(id)?.parentId, steps++) {
+    if (p.nodes.get(id)?.shareIdentityId) return true
+  }
+  return false
+})
+/** The link writes, and not here: nobody but its identity places anything in a guest's identity folder. */
+const canWriteHere = computed(() => canWrite.value && !inIdentityFolder.value)
 
 /** Root first, the current node last, along the served `parentId`s (bounded: a served cycle stops at the root). */
 const trail = computed<string[]>(() => {
@@ -148,11 +146,11 @@ const crumbs = computed<MenuItem[]>(() => {
 const shareSections = registry.shareSections()
 const sectionedKinds = new Set(shareSections.flatMap((s) => s.kinds))
 
-/** The current folder's children the walk opened, with a name — every kind this page shows. */
+/** The current folder's children the walk opened, with a name — every kind. */
 const openedChildren = computed(() => {
   const p = parts.value
   if (!p || !currentId.value) return []
-  return [...p.nodes.values()].filter((n) => n.parentId === currentId.value && p.names.has(n.id) && !hidden.value.has(n.id))
+  return [...p.nodes.values()].filter((n) => n.parentId === currentId.value && p.names.has(n.id))
 })
 /** The children of `kinds` (a share section's), as served. */
 const childrenOf = (kinds: readonly string[]) => openedChildren.value.filter((n) => kinds.includes(n.kind))
@@ -247,7 +245,7 @@ function onDialogClose() {
     <template v-if="atFolder">
       <div class="veyq-section-header">
         <h1>{{ currentName }}</h1>
-        <span>{{ canWrite ? t('share.folder.contributorBadge') : t('share.folder.readonly') }}</span>
+        <span>{{ canWriteHere ? t('share.folder.contributorBadge') : t('share.folder.readonly') }}</span>
       </div>
       <div class="veyq-card-grid">
         <p v-if="!openedChildren.length" class="veyq-empty veyq-empty-inline">{{ t('share.folder.empty') }}</p>
@@ -263,7 +261,7 @@ function onDialogClose() {
           <strong>{{ child.name }}</strong>
         </button>
         <button
-          v-if="canWrite"
+          v-if="canWriteHere"
           class="veyq-card veyq-card-interactive veyq-node-card veyq-node-card-create"
           type="button"
           @click="startNewFolder"
@@ -285,7 +283,7 @@ function onDialogClose() {
         :nodes="childrenOf(section.kinds)"
         :keys="parts.keys"
         :names="parts.names"
-        :can-write="canWrite"
+        :can-write="canWriteHere"
         :request-guest="requestGuest"
       />
     </template>

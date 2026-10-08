@@ -3,7 +3,8 @@
 // renders for the FILE children of the folder on screen (`register.ts` names it as FILE's `shareSection`). Every guest
 // of a READ or READ_WRITE link sees the files with their name, size and modified time (opened under the keys of the
 // chain) and downloads them through the link (`resolveShareBlob`: the share's subtree gate — a file in the trash is not
-// served, nor listed). A READ_WRITE guest also uploads into the folder and replaces a file's content; the guest names
+// served, nor listed). A READ_WRITE guest also uploads into the folder and replaces a file's content, once it confirmed
+// the replace (inbox #383; core's folder page hands no write to a guest inside an identity folder); the guest names
 // itself first (`requestGuest`, core's one session per link). No rename or delete here: a guest deletes nothing
 // (ADR 0080 Decision 6), and the guest page offers no rename for any kind yet (inbox #358).
 //
@@ -18,6 +19,7 @@ import type { ShareSectionProps } from '../../../core/applications/registry'
 import { enqueue, removeFile, useUploadQueue, QUOTA_EXCEEDED, type UploadItem } from '../../../core/blob/queue'
 import { guestTreeContext } from '../../../core/sharing/guestTree'
 import { shareChunkUrls } from '../../../core/sharing/guestBlob'
+import { useConfirm } from '../../../shared/state/useConfirm'
 import { useToast } from '../../../shared/state/useToast'
 import { formatBytes } from '../../../shared/formatBytes'
 import type { FileBlobRef } from '../../../api/generated/files'
@@ -34,6 +36,7 @@ const props = defineProps<ShareSectionProps>()
 
 const { t, locale } = useI18n()
 const toast = useToast()
+const { ask } = useConfirm()
 const { batches } = useUploadQueue()
 
 const fileNodes = computed(() => props.nodes.filter((n) => n.kind === FILE_KIND && props.names.has(n.id)))
@@ -56,6 +59,9 @@ watch(() => props.head, () => void loadBlobs(), { immediate: true })
 
 // --- the rows ----------------------------------------------------------------------------------------------------
 
+/** Whether the file is KNOWN to hold no content: listed without a blob (not merely unlisted after a failed read). */
+const isEmpty = (nodeId: string): boolean => blobs.value.has(nodeId) && blobs.value.get(nodeId) === null
+
 const dateFormat = computed(() => new Intl.DateTimeFormat(locale.value === 'de' ? 'de-DE' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' }))
 
 const rows = computed(() =>
@@ -73,7 +79,7 @@ const rows = computed(() =>
         : t('files.notUploaded')
       // Known to hold no content (an upload that never finished; a guest cannot delete it): its row offers an upload
       // into it rather than a replace, since there is nothing to replace (inbox #384).
-      const empty = blobs.value.has(node.id) && blob === null
+      const empty = isEmpty(node.id)
       return { node, key, name, blob, detail, empty }
     })
     .sort((a, b) => a.name.localeCompare(b.name, locale.value)),
@@ -92,9 +98,20 @@ function refresh(): void {
 }
 
 /** Enqueue one guest job per file — into a new FILE under the folder, or into `replaceNode` (the row's replace). A
- *  name a sibling already takes is refused by core's guest create before anything is sent (the notice says so). */
+ *  name a sibling already takes is refused by core's guest create before anything is sent (the notice says so). A
+ *  replace asks first (inbox #383): it changes the file for everyone, the owner too, and no version is kept — unless the
+ *  file is known to hold no content (nothing is lost, #384). */
 async function startUploads(files: File[], replaceNode?: ShareNode): Promise<void> {
   if (!props.canWrite || files.length === 0) return
+  if (replaceNode && !isEmpty(replaceNode.id)) {
+    const accepted = await ask({
+      header: t('files.replaceTitle'),
+      message: t('files.guest.replaceConfirm', { name: props.names.get(replaceNode.id) ?? '', file: files[0].name }),
+      acceptLabel: t('files.replaceAccept'),
+      acceptIcon: 'pi pi-upload',
+    })
+    if (!accepted) return
+  }
   const guest = await props.requestGuest()
   if (!guest) return
   const ctx = guestTreeContext(props.head, { contributorToken: guest.contributorToken, fragmentKey: props.fragmentKey, pwToken: props.pwToken })
@@ -184,7 +201,7 @@ async function download(row: Row) {
         <Button type="button" :label="t('files.upload')" icon="pi pi-upload" severity="secondary" outlined size="small" @click="picker?.click()" />
       </div>
     </div>
-    <!-- What an upload or a replace does, said before it happens (inbox #383); no confirmation asks yet. -->
+    <!-- What an upload or a replace does, said before it happens (inbox #383); a replace asks again when it is picked. -->
     <p v-if="canWrite" class="veyq-form-copy">{{ t('files.guest.contributorHint') }}</p>
     <template v-if="canWrite">
       <input ref="picker" class="share-files-picker" type="file" multiple hidden @change="onPicked" />

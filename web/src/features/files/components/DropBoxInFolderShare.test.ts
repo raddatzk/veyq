@@ -1,10 +1,12 @@
 // @vitest-environment happy-dom
-// A drop box inside a shared folder (inbox #380, found in a real browser, 2026-10-08): a READ guest of folder "Familie"
-// clicked the drop box's tile, got the WRITE_ONLY guest's upload form under the FOLDER's name, and "Something went
-// wrong" after naming itself. Files claims the drop box's body `rootOnly`, so core's folder page shows no drop box and
-// nothing below it. Here the app's real registry (Files and Memories, filled by `src/test/setup.ts`), the real
-// `FolderShareBody`, the real PrimeVue and the real vue-router: every rendered tile is clicked through the DOM, and a
-// typed `?node=` for the drop box or a guest's folder in it lands on the share's root, never on the upload form.
+// A drop box inside a shared folder (inbox #380, owner decision 2026-10-08): a READ or READ_WRITE guest of folder
+// "Familie" was explicitly given that tree, so it SEES the drop box below it — read-only. Its tile opens the drop box's
+// guests' folders (names opened through the drop key the walk holds), a folder opens on core's folder page with its files
+// and their download, and nowhere is there a form to send files, an upload, a replace, a 'New folder' or a delete: the
+// server places nothing in an identity folder but its own identity (`NodesHandler`) and lets no guest move out of one
+// (`ShareNodesHandler`). Here the app's real registry (Files and Memories, filled by `src/test/setup.ts`), the real
+// `FolderShareBody`, the real PrimeVue and the real vue-router: every step is a DOM click on the rendered element, and
+// the `#k=` fragment that carries the share key stays in the URL throughout.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
@@ -14,6 +16,7 @@ import { b64std, b64url } from '@veyq/crypto/base64'
 
 vi.mock('../../../api/client', () => ({ sharesApi: vi.fn(), publicSharesApi: vi.fn(), tokenApi: vi.fn() }))
 vi.mock('../api', () => ({ publicShareFilesApi: vi.fn() }))
+vi.mock('../download', () => ({ downloadFile: vi.fn() }))
 
 import FolderShareBody from '../../../core/sharing/FolderShareBody.vue'
 import { FOLDER_KIND } from '../../../core/node/kind'
@@ -22,11 +25,13 @@ import { dropKeysForShare, mintIdentityKey, openDropKey } from '../../../core/sh
 import { openGuestTreeParts } from '../../../core/sharing/guestTree'
 import type { PublicShareHead } from '../../../core/sharing/resolvePublicShare'
 import { ShareRole, type PublicShare, type ShareNode } from '../../../api/generated/sharing'
-import { realI18n } from '../../../test/i18n'
+import { realI18n, t } from '../../../test/i18n'
 import { stubApi } from '../../../test/apiMock'
 import { publicShareFilesApi } from '../api'
+import { downloadFile } from '../download'
 import { DROPBOX_KIND, FILE_KIND } from '../kinds'
-import DropBoxShareBody from './DropBoxShareBody.vue'
+import DropBoxGuestForm from './DropBoxGuestForm.vue'
+import DropBoxSharedView from './DropBoxSharedView.vue'
 
 const SCOPE_ID = '55555555-5555-4555-8555-555555555555'
 const SHARE_ID = 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_8'
@@ -66,7 +71,7 @@ function head(role: ShareRole): PublicShareHead {
         { ...child(DROP, ROOT, keys.root, keys.drop, 'Postfach', DROPBOX_KIND), sealedDropPrivateKey },
         { ...child(ANNA, DROP, anna.identityKey, keys.anna, 'Anna', FOLDER_KIND), shareIdentityId: IDENTITY, wrappedIdentityKey: anna.wrappedIdentityKey },
         child(ANNA_FILE, ANNA, keys.anna, keys.annaFile, 'steuer.pdf', FILE_KIND),
-        // A folder whose only child is a drop box: to this page, an empty folder.
+        // A drop box nobody sent anything to, in a sub-folder.
         child(INNER_DROP, LETTERS, keys.letters, keys.innerDrop, 'Kasten', DROPBOX_KIND),
       ],
     } as PublicShare,
@@ -76,7 +81,11 @@ function head(role: ShareRole): PublicShareHead {
 let router: Router
 beforeEach(async () => {
   localStorage.clear()
-  stubApi(publicShareFilesApi, { listShareFiles: { items: [] } }) // Files' share section lists the blobs
+  // Files' share section lists the blobs: Anna's file holds one.
+  stubApi(publicShareFilesApi, {
+    listShareFiles: { items: [{ nodeId: ANNA_FILE, fileBlob: { blobId: 'blob-a', chunkCount: 1, byteSize: 100, wrappedBlobKey: 'eA==' } }] },
+  })
+  vi.mocked(downloadFile).mockReset().mockResolvedValue(undefined)
   router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/s/:id', component: { render: () => null } }] })
   await router.push(`/s/${SHARE_ID}${HASH}`)
   await router.isReady()
@@ -85,54 +94,88 @@ beforeEach(async () => {
 async function mountBody(role: ShareRole) {
   const w = mount(FolderShareBody, {
     props: { shareId: SHARE_ID, fragmentKey: b64url(K_SHARE), pwToken: undefined, head: head(role), reload: async () => {} },
-    global: { plugins: [router, realI18n(), PrimeVue] },
+    global: { plugins: [router, realI18n(), PrimeVue], directives: { tooltip: {} } },
   })
   await flushPromises()
   return w
 }
 type Body = Awaited<ReturnType<typeof mountBody>>
-const tiles = (w: Body) => w.findAll('button.veyq-node-card:not(.veyq-node-card-create)')
-const tileNames = (w: Body) => tiles(w).map((c) => c.find('strong').text())
+const tile = (w: Body, name: string) => w.findAll('button.veyq-node-card:not(.veyq-node-card-create)').find((c) => c.find('strong').text() === name)
+const tileNames = (w: Body) => w.findAll('button.veyq-node-card:not(.veyq-node-card-create)').map((c) => c.find('strong').text())
 const heading = (w: Body) => w.find('.veyq-section-header h1').text()
 async function click(el: Element) {
   el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
   await flushPromises()
 }
+/** Nothing on the page writes: no file input, no upload/replace/delete control, no 'New folder', no send form. */
+function expectNoWriteControl(w: Body) {
+  expect(w.findAll('input[type="file"]'), 'no file input').toHaveLength(0)
+  expect(w.find('.veyq-node-card-create').exists(), "no 'New folder'").toBe(false)
+  expect(w.text()).not.toContain(t('files.upload'))
+  expect(w.text()).not.toContain(t('files.dropBox.guestPick'))
+  expect(w.text()).not.toContain(t('files.dropBox.guestTitle'))
+  expect(w.findComponent(DropBoxGuestForm).exists(), 'never the WRITE_ONLY guest form').toBe(false)
+  for (const b of w.findAll('button')) {
+    const label = b.attributes('aria-label') ?? b.text()
+    expect(label, label).not.toMatch(/Replace|Upload|Delete|Move/)
+  }
+}
 
-describe('a drop box inside a folder share is not shown (inbox #380)', () => {
-  it('precondition: the walk DOES open the drop box, the guest folder and its file (hiding is the page\'s rule)', () => {
+describe('a drop box inside a folder share is shown read-only (inbox #380, owner decision 2026-10-08)', () => {
+  it('precondition: the walk opens the drop box, the guest folder (through the drop key) and its file', () => {
     const parts = openGuestTreeParts(head(ShareRole.Read))
     for (const id of [DROP, ANNA, ANNA_FILE, INNER_DROP]) expect(parts.keys.has(id), id).toBe(true)
     expect(parts.names.get(ANNA)).toBe('Anna')
   })
 
   for (const role of [ShareRole.Read, ShareRole.ReadWrite]) {
-    it(`${role}: no drop-box tile; every rendered tile, clicked, opens a folder — never the upload form`, async () => {
+    it(`${role}: the drop box tile opens its guests' folders, a folder its files with their download — nothing writes`, async () => {
       const w = await mountBody(role)
-      expect(heading(w)).toBe('Familie')
-      expect(tileNames(w)).toEqual(['Briefe'])
-      for (const tile of tiles(w)) {
-        await click(tile.element)
-        expect(router.currentRoute.value.query.node).toBe(LETTERS)
-        expect(router.currentRoute.value.hash, 'the share key stays in the URL').toBe(HASH)
-        expect(heading(w)).toBe('Briefe')
-        expect(w.findComponent(DropBoxShareBody).exists()).toBe(false)
-      }
-      // "Briefe" holds only a drop box: this page says the folder is empty and shows no tile for it.
-      expect(tileNames(w)).toEqual([])
-      expect(w.find('.veyq-empty').exists()).toBe(true)
+      expect(tileNames(w).sort()).toEqual(['Briefe', 'Postfach'])
+      // control: at the share root a contributor does get 'New folder' and the upload
+      if (role === ShareRole.ReadWrite) expect(w.find('.veyq-node-card-create').exists()).toBe(true)
+
+      await click(tile(w, 'Postfach')!.element)
+      expect(router.currentRoute.value.query.node).toBe(DROP)
+      expect(router.currentRoute.value.hash, 'the share key stays in the URL').toBe(HASH)
+      const view = w.findComponent(DropBoxSharedView)
+      expect(view.exists()).toBe(true)
+      expect(view.text()).toContain('Postfach')
+      expect(view.text()).toContain(t('files.dropBox.sharedHint'))
+      expect(view.find('.veyq-row-title').text()).toBe('Anna')
+      expect(view.find('.veyq-row-subtitle').text()).toBe('1 file')
+      expectNoWriteControl(w)
+
+      await click(view.find(`button[aria-label="${t('files.dropBox.open', { name: 'Anna' })}"]`).element)
+      expect(router.currentRoute.value.query.node).toBe(ANNA)
+      expect(router.currentRoute.value.hash).toBe(HASH)
+      expect(heading(w)).toBe('Anna')
+      expect(w.find('.veyq-section-header span').text(), 'the badge says view only').toBe(t('share.folder.readonly'))
+      expect(w.find('.veyq-row-title').text()).toBe('steuer.pdf')
+      expectNoWriteControl(w)
+
+      const download = w.find(`button[aria-label="${t('files.download', { name: 'steuer.pdf' })}"]`)
+      await click(download.element)
+      expect(vi.mocked(downloadFile).mock.calls.map((c) => [c[2], c[3].blobId, c[4]])).toEqual([[ANNA_FILE, 'blob-a', 'steuer.pdf']])
     })
   }
 
-  it('a typed ?node= naming the drop box, a guest folder in it or that folder\'s file lands on the share root', async () => {
-    for (const id of [DROP, ANNA, ANNA_FILE, INNER_DROP]) {
-      await router.push(`/s/${SHARE_ID}?node=${id}${HASH}`)
-      const w = await mountBody(ShareRole.Read)
-      expect(heading(w), id).toBe('Familie')
-      expect(w.findComponent(DropBoxShareBody).exists(), id).toBe(false)
-      expect(w.text(), id).not.toContain('Anna')
-      expect(w.text(), id).not.toContain('steuer.pdf')
-      w.unmount()
-    }
+  it('a typed ?node= naming the drop box or a guest folder opens it, read-only', async () => {
+    await router.push(`/s/${SHARE_ID}?node=${DROP}${HASH}`)
+    const atDrop = await mountBody(ShareRole.ReadWrite)
+    expect(atDrop.findComponent(DropBoxSharedView).exists()).toBe(true)
+    expectNoWriteControl(atDrop)
+    atDrop.unmount()
+    await router.push(`/s/${SHARE_ID}?node=${ANNA}${HASH}`)
+    const atAnna = await mountBody(ShareRole.ReadWrite)
+    expect(heading(atAnna)).toBe('Anna')
+    expectNoWriteControl(atAnna)
+  })
+
+  it('an empty drop box in a sub-folder says nobody sent anything', async () => {
+    await router.push(`/s/${SHARE_ID}?node=${INNER_DROP}${HASH}`)
+    const w = await mountBody(ShareRole.Read)
+    expect(w.findComponent(DropBoxSharedView).text()).toContain(t('files.dropBox.sharedEmpty'))
+    expectNoWriteControl(w)
   })
 })

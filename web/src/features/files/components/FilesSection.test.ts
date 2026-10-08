@@ -50,6 +50,7 @@ import { realI18n, t } from '../../../test/i18n'
 import { SaveCancelled, SaveTooLarge } from '../../../shared/saveStream'
 import { stubApi } from '../../../test/apiMock'
 import { treeNode } from '../../../test/models'
+import { mountConfirmDialog } from '../../../test/confirmDialog'
 
 const SCOPE = '5c09e000-0000-4000-8000-0000000000bb'
 const D = '5c09e000-0000-4000-8000-0000000000d0'
@@ -190,6 +191,8 @@ describe('FilesSection', () => {
     const picking = pick(w, 0, [new File(['new'], 'report.PDF', { type: 'application/pdf' })])
     await flushPromises()
     expect(confirmRequest.value).toMatchObject({ header: t('files.replaceTitle'), message: t('files.replaceConfirm', { name: 'Report.pdf' }) })
+    // the question says what is lost (inbox #383): no version history
+    expect(t('files.replaceConfirm', { name: 'x' })).toContain('cannot be restored')
     expect(fileUploadJob).not.toHaveBeenCalled() // nothing before the answer
     settleConfirm(true)
     await picking
@@ -212,13 +215,35 @@ describe('FilesSection', () => {
     expect(useUploadQueue().batches.value).toEqual([])
   })
 
-  it('a row\'s replace takes the picked file into THAT node, whatever its name, without a second question', async () => {
+  // inbox #383 (owner decision 2026-10-08): every replace of content asks — the row's too, naming the file it replaces
+  // and the one picked, and saying the old content cannot be restored. Answered through the real dialog's buttons.
+  it('a row\'s replace asks first, then takes the picked file into THAT node, whatever its name', async () => {
+    const dialog = mountConfirmDialog()
     const w = mountSection({ nodes: [REPORT, NOTES] })
     await flushPromises()
     await byLabel(w, t('files.replace', { name: 'notes.txt' })).trigger('click')
     await pick(w, 1, [new File(['x'], 'other-name.md')])
-    expect(confirmRequest.value).toBeNull()
+    expect(dialog.text()).toContain(t('files.replaceTitle'))
+    expect(dialog.text()).toContain(t('files.replaceRowConfirm', { name: 'notes.txt', file: 'other-name.md' }))
+    expect(t('files.replaceRowConfirm', { name: 'a', file: 'b' })).toContain('cannot be restored')
+    expect(fileUploadJob, 'nothing before the answer').not.toHaveBeenCalled()
+    dialog.click(t('files.replaceAccept'))
+    await flushPromises()
+    expect(dialog.isOpen()).toBe(false)
     expect(targets()).toEqual([{ name: 'other-name.md', target: expect.objectContaining({ replace: expect.objectContaining({ nodeId: N, expectedBlobId: 'blob-notes' }) }) }])
+  })
+
+  it('a row\'s replace cancelled in the dialog uploads nothing', async () => {
+    const dialog = mountConfirmDialog()
+    const w = mountSection({ nodes: [REPORT, NOTES] })
+    await flushPromises()
+    await byLabel(w, t('files.replace', { name: 'notes.txt' })).trigger('click')
+    await pick(w, 1, [new File(['x'], 'other-name.md')])
+    dialog.click(t('common.cancel'))
+    await flushPromises()
+    expect(dialog.isOpen()).toBe(false)
+    expect(fileUploadJob).not.toHaveBeenCalled()
+    expect(useUploadQueue().batches.value).toEqual([])
   })
 
   // inbox #384: a file that holds no content has nothing to replace — its row uploads into it, and a picked file of its

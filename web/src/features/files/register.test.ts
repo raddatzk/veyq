@@ -57,8 +57,6 @@ describe('registerFiles', () => {
       shareDialog: DropBoxShareDialog,
     })
     expect(registry.shareBody(DROPBOX_KIND)).toBe(DropBoxShareBody)
-    // Its WRITE_ONLY link's page only: a folder share above shows no drop box (inbox #380).
-    expect(registry.shareBodyRootOnly(DROPBOX_KIND)).toBe(true)
     expect(registry.slugFor(DROPBOX_KIND, 'Foto.JPG')).toBe(slugify('Foto.JPG')) // a container's folding
   })
 

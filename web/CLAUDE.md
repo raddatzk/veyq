@@ -158,8 +158,10 @@ here; the server is blind.
   application's item, so today no application adds to `topbarTray`); `claimShareBody(rootKind)` for the
   public share page (`PublicShare.rootKind`, served for every role, so one body per kind picks its screens by role;
   core claims `FOLDER` itself and embeds the claimed body for each child, handing it `subtreeRoot` — that node's id,
-  key and name — so the body renders and writes into that node, not the share root; a body claimed `{ rootOnly: true }`
-serves only its own link, and core's folder page then shows no node of that kind nor anything below it — Files' drop box);
+  key and name — so the body renders and writes into that node, not the share root; a body that is a WRITE_ONLY guest's
+  page as the root renders something else when embedded — Files' drop box shows itself read-only there, inbox #380; and
+  inside a guest's identity folder — the served `shareIdentityId`, core's column — the folder page hands no write to any
+  guest);
   `registerLifecycle(id, hooks)` with `onScopeReset` / `onScopeEntered` and the **required**
   `onMasterKeyRotated` — `rotateKeys` refuses to start when none is registered, because material sealed under the
   Master Key (Memories' pins) is otherwise undecryptable after a rotation. A kind or share nobody registered renders
