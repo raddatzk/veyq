@@ -93,10 +93,10 @@ describe.skipIf(!process.env.VEYQ_E2E)('files e2e (live, operator-blind, direct-
 
     // the user's download streams (inbox #371): the same bytes, frame by frame, into the save target — here a picked
     // file that collects its writes — and the file is closed, not aborted
-    const saved = { parts: [] as number[], ended: '' }
+    const saved = { parts: [] as Uint8Array[], ended: '' }
     vi.stubGlobal('showSaveFilePicker', async () => ({
       createWritable: async () => ({
-        write: async (b: Uint8Array) => void saved.parts.push(...b),
+        write: async (b: Uint8Array) => void saved.parts.push(b.slice()),
         close: async () => void (saved.ended = 'close'),
         abort: async () => void (saved.ended = 'abort'),
       }),
@@ -106,7 +106,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('files e2e (live, operator-blind, direct-
     } finally {
       vi.unstubAllGlobals()
     }
-    expect(saved.parts).toEqual(Array.from(first))
+    expect(Buffer.concat(saved.parts)).toEqual(Buffer.from(first))
     expect(saved.ended).toBe('close')
 
     // replace with new bytes, expecting the blob read: the download returns the new bytes, the blob id moved
