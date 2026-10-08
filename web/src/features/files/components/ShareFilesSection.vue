@@ -201,7 +201,7 @@ async function download(row: Row) {
           <span class="veyq-row-title">{{ row.name }}</span>
           <span class="veyq-row-subtitle">{{ row.detail }}</span>
         </span>
-        <span class="veyq-action-group">
+        <span class="veyq-action-group veyq-action-group-icons">
           <Button
             type="button"
             class="veyq-icon-button veyq-prime-icon-button"
@@ -234,6 +234,7 @@ async function download(row: Row) {
 <style scoped>
 .share-files-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
   margin-left: auto;

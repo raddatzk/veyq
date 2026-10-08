@@ -322,7 +322,7 @@ async function remove(node: TreeNode) {
             <span class="veyq-row-subtitle">{{ row.detail }}</span>
           </span>
         </button>
-        <span class="veyq-action-group">
+        <span class="veyq-action-group veyq-action-group-icons">
           <Button
             type="button"
             class="veyq-icon-button veyq-prime-icon-button"
@@ -377,6 +377,7 @@ async function remove(node: TreeNode) {
 <style scoped>
 .files-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
   margin-left: auto;

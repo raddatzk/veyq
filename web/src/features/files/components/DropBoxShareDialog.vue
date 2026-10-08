@@ -80,7 +80,7 @@ async function copy(text: string, id: string) {
           <span class="veyq-row-main">
             <span class="veyq-row-title">{{ row.share.enabled ? row.link ?? row.share.shareId : t('files.dropBox.shareOff') }}</span>
           </span>
-          <span class="veyq-action-group">
+          <span class="veyq-action-group veyq-action-group-icons">
             <Button
               v-if="row.link && row.share.enabled"
               type="button"
