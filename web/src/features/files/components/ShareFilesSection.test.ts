@@ -34,6 +34,8 @@ import type { GuestIdentity } from '../../../core/sharing/guestIdentity'
 import { realI18n, t } from '../../../test/i18n'
 import { SaveCancelled, SaveTooLarge } from '../../../shared/saveStream'
 import { stubApi } from '../../../test/apiMock'
+import { mountConfirmDialog } from '../../../test/confirmDialog'
+import { confirmRequest, settleConfirm } from '../../../shared/state/useConfirm'
 
 const SCOPE = '5c09e000-0000-4000-8000-0000000000cc'
 const SHARE = 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_5'
@@ -66,6 +68,14 @@ function mountSection(over: { canWrite?: boolean; requestGuest?: () => Promise<G
   })
 }
 const rowTitles = (w: ReturnType<typeof mountSection>) => w.findAll('.veyq-row-title').map((r) => r.text())
+/** Click the row's replace of `name`, then pick `picked` in its file input. */
+async function pickReplace(w: ReturnType<typeof mountSection>, name: string, picked: string) {
+  await w.find(`[aria-label="${t('files.replace', { name })}"]`).trigger('click')
+  const single = w.find('input[type="file"]:not([multiple])')
+  Object.defineProperty(single.element, 'files', { value: [new File(['n'], picked)], configurable: true })
+  await single.trigger('change')
+  await flushPromises()
+}
 const fakeJob = (name: string) => ({ name, sizeBytes: 1, run: vi.fn(async () => ({ nodeId: 'n', metaWritten: true })), extra: { file: new File([''], name) } })
 
 beforeEach(() => {
@@ -73,7 +83,10 @@ beforeEach(() => {
   vi.mocked(guestFileUploadJob).mockReset().mockImplementation((_t, file) => fakeJob(file.name))
   vi.mocked(downloadFile).mockReset().mockResolvedValue(undefined)
 })
-afterEach(() => clearUploads())
+afterEach(() => {
+  if (confirmRequest.value) settleConfirm(false)
+  clearUploads()
+})
 
 describe('a guest reads the files of a shared folder', () => {
   it('lists the FILE children by name with their sealed size and date, never another kind; reads the blobs through the link', async () => {
@@ -162,17 +175,37 @@ describe('a contributor uploads into the shared folder', () => {
     expect(guestFileUploadJob).not.toHaveBeenCalled()
   })
 
-  it("a row's replace targets that file with its key, served meta and the blob the guest saw", async () => {
-    const w = mountSection({ canWrite: true })
+  // inbox #383 (owner decision 2026-10-08): a contributor's replace asks first — it changes the file for everyone, the
+  // owner too, and no version is kept. Answered through the real dialog's buttons; nothing is sent, and no guest is
+  // asked for, before the answer.
+  it("a row's replace asks first, then targets that file with its key, served meta and the blob the guest saw", async () => {
+    const dialog = mountConfirmDialog()
+    const requestGuest = vi.fn(async () => GUEST)
+    const w = mountSection({ canWrite: true, requestGuest })
     await flushPromises()
-    await w.find(`[aria-label="${t('files.replace', { name: 'Report.pdf' })}"]`).trigger('click')
-    const single = w.find('input[type="file"]:not([multiple])')
-    Object.defineProperty(single.element, 'files', { value: [new File(['n'], 'new.pdf')], configurable: true })
-    await single.trigger('change')
+    await pickReplace(w, 'Report.pdf', 'new.pdf')
+    expect(dialog.text()).toContain(t('files.guest.replaceConfirm', { name: 'Report.pdf', file: 'new.pdf' }))
+    expect(t('files.guest.replaceConfirm', { name: 'a', file: 'b' })).toMatch(/owner too.*cannot be restored/)
+    expect(guestFileUploadJob, 'nothing before the answer').not.toHaveBeenCalled()
+    expect(requestGuest).not.toHaveBeenCalled()
+    dialog.click(t('files.replaceAccept'))
     await flushPromises()
+    expect(dialog.isOpen()).toBe(false)
     const target = vi.mocked(guestFileUploadJob).mock.calls[0][0] as GuestFileTarget
     expect(target.replace).toMatchObject({ nodeId: R, wrappedMeta: REPORT.wrappedMeta, expectedBlobId: 'blob-r' })
     expect(Array.from(target.replace!.nodeKey)).toEqual(Array.from(KEYS.get(R)!))
+  })
+
+  it("a row's replace cancelled in the dialog sends nothing", async () => {
+    const dialog = mountConfirmDialog()
+    const w = mountSection({ canWrite: true })
+    await flushPromises()
+    await pickReplace(w, 'Report.pdf', 'new.pdf')
+    dialog.click(t('common.cancel'))
+    await flushPromises()
+    expect(dialog.isOpen()).toBe(false)
+    expect(guestFileUploadJob).not.toHaveBeenCalled()
+    expect(useUploadQueue().batches.value).toEqual([])
   })
 
   // inbox #384: a guest cannot delete the content-less file an unfinished upload left; its row uploads into it instead.
@@ -187,6 +220,7 @@ describe('a contributor uploads into the shared folder', () => {
     Object.defineProperty(single.element, 'files', { value: [new File(['n'], 'again.bin')], configurable: true })
     await single.trigger('change')
     await flushPromises()
+    expect(confirmRequest.value, 'nothing to lose: no question').toBeNull()
     const target = vi.mocked(guestFileUploadJob).mock.calls[0][0] as GuestFileTarget
     expect(target.replace).toMatchObject({ nodeId: P, expectedBlobId: null })
   })

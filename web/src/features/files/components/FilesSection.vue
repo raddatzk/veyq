@@ -135,12 +135,14 @@ function refresh(): void {
 }
 
 /**
- * Enqueue one job per file. A file whose name a FILE sibling already holds replaces that file's content — after the
- * member said so (`ask`, once per such file; declined → that file is skipped). `replaceNode`: the member chose
- * "replace" on that row, so the picked file goes into it whatever its name, without a second question. The node keeps
- * its name either way; the blob the member saw is what the replace expects to find (`expectedBlobId`).
+ * Enqueue one job per file. Replacing a file's content always asks first (inbox #383: the old content cannot be
+ * restored, there is no version history) — once per such file; declined → that file is skipped: a file whose name a
+ * FILE sibling already holds, and `replaceNode`, the row the member chose "replace" on, whose picked file goes into it
+ * whatever its name (the question names both). A file that holds no content asks nothing (there is nothing to lose,
+ * #384), nor does `confirmed`: "replace anyway" after a peer's replace, itself the member's explicit answer. The node
+ * keeps its name either way; the blob the member saw is what the replace expects to find (`expectedBlobId`).
  */
-async function startUploads(files: File[], replaceNode?: TreeNode): Promise<void> {
+async function startUploads(files: File[], replaceNode?: TreeNode, confirmed = false): Promise<void> {
   const scopeId = activeSpace.scopeId
   const epochs = props.epochs
   if (!scopeId || !epochs || props.readonly || files.length === 0) return
@@ -149,10 +151,12 @@ async function startUploads(files: File[], replaceNode?: TreeNode): Promise<void
   const jobs = []
   for (const file of files) {
     const existing = replaceNode ?? siblingFile(file.name)
-    if (existing && !replaceNode && !isEmpty(existing)) {
+    if (existing && !confirmed && !isEmpty(existing)) {
       const accepted = await ask({
         header: t('files.replaceTitle'),
-        message: t('files.replaceConfirm', { name: existing.name }),
+        message: replaceNode
+          ? t('files.replaceRowConfirm', { name: existing.name, file: file.name })
+          : t('files.replaceConfirm', { name: existing.name }),
         acceptLabel: t('files.replaceAccept'),
         acceptIcon: 'pi pi-upload',
       })
@@ -230,7 +234,7 @@ async function replaceAnyway(n: Notice) {
   removeFile(n.item.id)
   if (!node) return
   await loadBlobs()
-  await startUploads([n.item.file], node)
+  await startUploads([n.item.file], node, true)
 }
 
 // --- download, rename, delete ----------------------------------------------------------------------------------
