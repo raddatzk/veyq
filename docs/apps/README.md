@@ -12,10 +12,9 @@ the rejected alternatives). German: *Anwendung*. Never "plugin" or "app".
 - **in the background**: tasks, rate limits, the admin channel and operator-blindness.
 
 An application supplies the **meaning**: which node kinds exist, what the plaintext means, which rules apply to
-structure, attachments and guests, and the user interface. This is the decided target, not all of it the code:
-attachments are not yet a core spec (inbox #327) — what a verified upload becomes is application work today
-(`UploadCompletion`). A Files or Storage product is an application on core's attachments, never a dependency of
-another application. What is built and what is open: the ADR's Consequences.
+structure, attachments and guests, and the user interface. Attachments are core's (`veyq_node_attachment`); what a
+verified upload becomes is still each application's (`UploadCompletion`) — Files' is one attachment, Memories' its
+media tables. What is built and what is open: the ADR's Consequences.
 
 **Rules** (each is argued in the ADR, not here):
 
@@ -26,16 +25,18 @@ another application. What is built and what is open: the ADR's Consequences.
 - **Payloads carry a schema version.** Old versions stay readable; migration happens on write.
 - **No per-tenant activation.** Created on demand inside a scope. An operator may gate a node kind through the
   capability mechanism ([ADR 0032](../decisions/0032-capability-discovery-version-gating.md)) as a rollout flag.
-- **Crypto unchanged.** New kinds add seal purposes; a new application derives its keys by HKDF from the scope key
-  with its application id as context. Memories' existing keys are the exemption.
+- **Crypto unchanged.** No application shares a key with another by accident: a node's key is random and wrapped
+  under its parent's ([ADR 0080](../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)),
+  and a blob's key is sealed bound to its node and its application's role token — so Files needed no new seal purpose
+  and no HKDF context (ADR 0079 Decision 9). Memories' existing keys are the exemption.
 - **Every concept doc lists the metadata its kinds make operator-visible** (the platform adds only the node
   `kind`, [security-model](../crosscutting/security-model.md)).
 
 | Application | State |
 |---|---|
-| [Memories](memories.md) | Built. Backend: its own Gradle module (`:apps:memories`, packages `me.raddatz.veyq.memories`), depending on `:core` and never the reverse; web: separated from core by import direction (`web/src/features/memory`, a build-time registry the shell asks) but not by directory name or per-kind slots. What is and is not done: [ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Consequences. |
+| [Memories](memories.md) | Built. Backend: its own Gradle module (`:apps:memories`, packages `me.raddatz.veyq.memories`), depending on `:core` and never the reverse; web: separated from core by import direction (`web/src/features/memory`, a build-time registry the shell asks, per-kind sections and dialogs) but not by directory name. What is and is not done: [ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Consequences. |
 | [Inventory](inventory.md) | Concept only. |
 | [Expenses](expenses.md) | Concept only. |
-| [Files](files.md) | Being built (`cr-files-application`): a skeleton — the Gradle module `:apps:files` (package `me.raddatz.veyq.files`, depending on `:core` only) placing the node kind `FILE` at the root or in a `FOLDER`, its contract `contracts/api/files/` and a member's upload, replace and listing of a file's blob (backend only), and `web/src/features/files` registering the kind; no web upload or UI yet, no guests. |
+| [Files](files.md) | Built. Backend `:apps:files` (`me.raddatz.veyq.files`, depending on `:core` only), contract `contracts/api/files/`, web `web/src/features/files`: a member's files (upload, download, replace, rename, delete), files on a shared folder (read, contribute) and the drop box; use-cases under [features/files](../features/files/_index.md). |
 
 A concept doc is **not** state the code answers to: nothing in it is built, refined into use-cases or planned.

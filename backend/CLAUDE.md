@@ -6,12 +6,17 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
 - `./gradlew check` (compile + slice tests) — runs on **in-memory H2** (`%test`, hermetic + fast). Run from
   `backend/`, it checks every project: `:core` (`backend/core`, the platform — its tests run as `:core:test`),
   `:apps:memories` (`backend/apps/memories`, the Memories application; its tests run as `:apps:memories:test`),
-  `:apps:files` (`backend/apps/files`, the Files application — the `FILE` kind and a member's file blob; its tests boot core plus
+  `:apps:files` (`backend/apps/files`, the Files application — the `FILE` and `FILES_DROPBOX` kinds, a file's blob for members and guests, the drop box; its tests boot core plus
   Files and run as `:apps:files:test`), the root (`:test`, the composition — no main code — and only the whole-app tests: `OperatorBlindProbeTest`, the posture
   and entity sweeps, `ModuleCompositionTest`). A new
   application is one more `:apps:<name>`; what a module must have (an `include`, a `beans.xml`, the `veyq.module` plugin,
   its Dockerfile `COPY`s) and which edges it may declare (`:core`, and `testFixtures(project(":core"))` over a test
-  configuration — never another application) is `scripts/validate_backend_module_graph.py`'s, its docstring the list. `:core`'s tests boot core
+  configuration — never another application) is `scripts/validate_backend_module_graph.py`'s, its docstring the list.
+  **What no guard derives, a new application adds by hand**, and forgetting it turns nothing red: its node kinds and
+  blob roles to `validate_kernel_imports_no_slices.py`'s lists (and its web kinds to
+  `validate_web_core_imports_no_applications.py`'s `KIND`), its generated API package to
+  `OperatorBlindProbeTest.API_PACKAGES` (inbox #368), and its seam anchors to `ModuleCompositionTest` — Files' tokens
+  were missing from the kind lists (all of them on the backend, `FILES_DROPBOX` on the web) until its CR closed. `:core`'s tests boot core
   with **no** application (`CoreAloneSliceTest`). **A test
   lives where what it exercises runs:** in `:core` if it passes with core alone, in `:apps:memories` if it needs
   Memories at runtime — every share of a `MEMORY` or a `CHAPTER` (core alone shares only a `FOLDER`, `ShareRoots`), every

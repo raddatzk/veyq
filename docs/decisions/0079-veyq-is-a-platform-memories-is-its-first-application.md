@@ -121,9 +121,9 @@ on their own.
   Attachments are core's since cr-files-application P3 (`veyq_node_attachment`, written only by
   `AttachmentStore.attach`), and Files is the first application on them (a `FILE` holds one blob in its slot); what a
   verified upload becomes is still each application's (`UploadCompletion`), Memories' media keep their own tables, and
-  Memories' cover and revision columns still sit on `veyq_node`. That "every application needs attachments" is an
-  assumption the second application tests. A Files or Storage product is an application on
-  core's attachments, never a dependency of another application (Decision 4: an application depends on core only).
+  Memories' cover and revision columns still sit on `veyq_node`. Files, the second application, needed them and
+  nothing else of a blob's; whether every application does, the next one shows. Files is an application on core's
+  attachments, never a dependency of another application (Decision 4: an application depends on core only).
 - **Contracts by owner** (decided 2026-10-06, cr-platform-contract-split). A core spec describes what core does.
   Where a value's meaning belongs to an application — a node's sealed payload, a blob role, a kind — its
   description says whose it is and names no application's plaintext, operation or key. An operation whose
@@ -228,11 +228,11 @@ on their own.
   `cover_byte_size`, `media_revision`, `delete_revision` — moving a column is a schema change, not a rename);
   and the upload retention
   and purge keys keep their `veyq.media.*` names though core reads them.
-  **Open prerequisites for the next application** (on inbox #325–#327, where it will be refined): a generic
-  `veyq_node_attachment(node_id, slot, blob_id)` table with real foreign keys, built with the first application that
-  needs a blob (Expenses or Files) and cut on that case — `validate_blob_reference_arity` pins today's three
-  `veyq_blob` arms, so a fourth is red until the reclaim predicates learn it; the generalisation of the cover columns
-  and revision counters above. The blob role is no longer one of them (cr-files-application P3-S1/S2): `BlobRole` is
+  **Open for the next application** (inbox #341): the generalisation of the cover columns and revision counters
+  above. Built with Files (cr-files-application P3): core's `veyq_node_attachment` (one blob per node slot, the slot
+  being the application's role token; foreign keys to scope, node, blob and guest identity, none cascading, so a
+  row goes only through core's erasers and `deleteBlobRow`), written only by `AttachmentStore.attach` and counted as
+  core's own term of a link's usage — `validate_blob_reference_arity` pins its fourth `veyq_blob` arm; and `BlobRole`,
   an open token (`^[A-Z][A-Z0-9_]{0,15}$`, like `NodeKind`) in the contract's `_common` and in the crypto package,
   core stores and compares it and names none (`validate_kernel_imports_no_slices.py` reads Memories' four roles
   as it reads its kinds), and Memories holds its own (`MemoryBlobRoles`, `MemoryBlobRole`) and refuses a guest's
@@ -247,19 +247,20 @@ on their own.
   create and every node's rename are core's own dialog, FOLDER's share dialog is core's), while the top-bar tray and
   the sidebar pins are ordered list slots each application adds its own item to (the upload status in the top bar is
   core's own, listing every application's uploads, so no application adds it); the i18n catalog is one file and `styles/memory.css` is global. The kind is a string token on both
-  sides, so that core never names `MEMORY`/`CHAPTER` is guarded (both kind rules read literals), not typed, and no
-  compiler lists the kinds: the registry's fail-closed answer and its tests carry what a closed enum's exhaustiveness
+  sides, so that core never names an application's kind (`MEMORY`, `CHAPTER`, `FILE`, `FILES_DROPBOX`) is guarded
+  (both kind rules read literals, from lists a new application must extend by hand: a kind missing there is guarded by
+  nothing, and nothing turns red), not typed, and no compiler lists the kinds: the registry's fail-closed answer and its tests carry what a closed enum's exhaustiveness
   did.
   Docs describing the target say which of these they rely on.
 - **Guards move with the code, and the build is one of them.** On the backend, core → application is the
   compiler's (no edge, so no import) and every other direction is `validate_backend_module_graph.py`'s — including
-  application → application, bitten with a forged second application because no real one exists; inside core,
+  application → application, held between Memories and Files and bitten with a forged third application; inside core,
   `validate_kernel_imports_no_slices.py` keeps the kernel → slice rule (a declared kernel list) and the node-kind
   rule, which no import check can see. On the web there is no module boundary, so the direction is a text guard:
-  `validate_web_core_imports_no_applications.py` (core may not import `features/memory` or a client generated from
-  the application's specs — derived from `generate:api`, so the Memories factories live in `features/memory/api.ts`
-  — discover code by glob, or name the Memories node kinds; no allowlist). Application → application has no web guard yet — there is one
-  application. The test trees stay out of the import checks, for the reasons the kernel guard's docstring gives.
+  `validate_web_core_imports_no_applications.py` (core may not import an application's directory —
+  `features/memory`, `features/files` — or a client generated from its specs — derived from `generate:api`, so each
+  application's factories live in its own `api.ts` — discover code by glob, or name an application's node kinds; no
+  allowlist; and no application imports another or its clients). The test trees stay out of the import checks, for the reasons the kernel guard's docstring gives.
 - **Rejected: a generic record store** (core offers "put a sealed record under a key", applications are just
   clients of it). It would make the server a database of blobs with no shape, give up per-kind authorization,
   quota and trash rules, and push every integrity rule into clients that cannot see each other.

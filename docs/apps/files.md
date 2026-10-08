@@ -1,21 +1,21 @@
 # Application: Files
 
-> **Being built** by `changes/cr-files-application.md`. The smallest possible application: a file tree on the
-> platform's node tree ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)).
-> Built so far: the Gradle module `:apps:files` with the node kind `FILE` (at the root or in a `FOLDER`, no children,
-> no share root) and its web registration (`web/src/features/files`); a **member's file** end to end: its contract
-> `contracts/api/files/files.openapi.yaml` and the upload completion, replace and listing below (F1a), and the web half
-> (F1b, § The web below); a **folder share with files** (F2, § Guests below); the **drop box** (F3, § The drop box
-> below).
+> **Built.** The platform's second application: a file tree on the platform's node tree
+> ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)) — the Gradle module
+> `:apps:files` (`me.raddatz.veyq.files`, depending on `:core` only), its contract `contracts/api/files/`, and
+> `web/src/features/files`. What a person does with it, and the tests that hold it, are its use-cases:
+> [uc.files.member-files](../features/files/use-cases/uc.files.member-files.md),
+> [uc.files.share-folder-files](../features/files/use-cases/uc.files.share-folder-files.md),
+> [uc.files.drop-box](../features/files/use-cases/uc.files.drop-box.md). This page is how it works.
 
-## Idea
+## What it is
 
 - A **file** is a node kind that holds **one blob**, with its name and metadata sealed. Directories are the platform's
   `FOLDER`: every node carries a key and a `FOLDER` can be a share root with `READ` or `READ_WRITE`
   ([ADR 0080](../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md), built), so Files needs
   no directory kind of its own, and a directory can be shared whole. A file node carries its own key like every node,
-  so a file can be a share root too, if Files declares it one (`ShareRoots`). One file tree per scope, created on
-  demand.
+  but Files declares it **no share root**: a file is shared through its folder (a single-file link would need a share
+  body of its own). Files live in the scope's one folder tree, beside Memories.
 - **Web only.** No sync client, no versioning: replacing a file replaces its blob.
 - A **drop box** (write-only) is a node of its own with one guest folder per identity (ADR 0080 decision 11,
   § The drop box); a `WRITE_ONLY` link on a plain `FOLDER` stays refused. Viewer and
@@ -72,10 +72,10 @@ dispatcher to `FilesUploadCompletion` (`UploadCompletion` for `FILE`, maps the i
   shows progress; the section says why a file of its folder was not uploaded (a taken name, `stale_file` with
   "replace anyway", no space) or that its meta is missing.
 - **The download** (`download.ts`) presigns the blob's chunks, opens them under the node key at most four at a time and
-  saves one `Blob` under the file's name: a file needs about its own size in tab memory (unverified beyond a few MB; a
-  streaming save is not built).
+  saves one `Blob` under the file's name: a file needs about its own size in tab memory (unverified at gigabyte scale;
+  a streaming save is not built, inbox #371).
 
-## Guests (a folder share, F2)
+## Guests (a folder share)
 
 A `FILE` is **no share root** (Files declares no `ShareRoots`): a file is shared through a `FOLDER` link above it,
 `READ` or `READ_WRITE`. The role matrix (ADR 0080 decision 6):
@@ -110,9 +110,9 @@ A `FILE` is **no share root** (Files declares no `ShareRoots`): a file is shared
   opened under the chain's keys, download through the link, and for a contributor an upload button (one core-queue job
   per file, `shareUpload.ts`: guest create → guest transport → `completeShareFile` with the meta) and a replace per
   row. The guest names itself once per link through the page's own dialog (`requestGuest`). No rename on the guest
-  page (no kind has one there yet).
+  page (no kind has one there yet, inbox #358).
 
-## The drop box (F3)
+## The drop box
 
 A **`FILES_DROPBOX`** is a Files node at the root or in a `FOLDER` (no placement rule admits anything under it), shared
 **`WRITE_ONLY` only** (`FilesShareRoots`). Its guests hold no key of it; what they send lands in **identity folders**,
@@ -141,7 +141,7 @@ one per guest identity, which are core `FOLDER`s carrying `veyq_node.share_ident
   (core's level view, read-only there: download only) and deletes a folder. **Members place nothing** in a drop box or
   a guest's folder (core: no rule places into the drop box; a create, move or rename into an identity folder is
   `illegal_structure`, `NodesHandler`), and only delete or move out — a move out re-wraps and re-slugs under the
-  target and ends the folder's identity link. The server allows the move out; the web offers no move yet.
+  target and ends the folder's identity link. The server allows the move out; the web offers no move yet (inbox #358).
 - **Revoking or deleting a link keeps the drop box and everything in it**: an identity a folder names is kept
   (`NodeGuestIdentityUsage`, `fk_node_share_identity`), so the member still opens it; the purge of a trashed drop box
   erases its folders, then the identities nothing names any more.
@@ -159,5 +159,9 @@ folder and its files, and when.
 - Preview or thumbnail for images: a Files feature (later a derivative through another attachment slot), or out of
   scope?
 - An operator-configurable per-file size cap (the quota only, at first).
-- The metadata write is not atomic with the blob swap: a client that replaces the blob and then fails before its
-  `updateNode` leaves the old MIME type/size beside the new bytes until the next write.
+- The metadata write is not atomic with the blob swap for a member: a client that replaces the blob and then fails
+  before its `updateNode` leaves the old MIME type/size beside the new bytes until the next write (a guest's metadata
+  rides in the attach's transaction). Making it atomic needs a metadata compare-and-set inside core's
+  `AttachmentStore.attach`.
+- Where the drop box as built differs from ADR 0080 decision 11, and the other reversible choices made while building
+  Files, wait for the owner's review: inbox #377, #378.
