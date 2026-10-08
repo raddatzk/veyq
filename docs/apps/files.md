@@ -152,6 +152,11 @@ one per guest identity, which are core `FOLDER`s carrying `veyq_node.share_ident
   a guest's folder (core: no rule places into the drop box; a create, move or rename into an identity folder is
   `illegal_structure`, `NodesHandler`), and only delete or move out — a move out re-wraps and re-slugs under the
   target and ends the folder's identity link. The server allows the move out; the web offers no move yet (inbox #358).
+- **In a folder share above** (`READ`/`READ_WRITE`) the drop box is **not shown**: Files claims its share body
+  `rootOnly` (the body is a `WRITE_ONLY` guest's upload form and serves only its own link), so core's folder page shows
+  no drop box, nothing below it, and treats a `?node=` naming one as a node it did not open (inbox #380). That is a
+  rendering rule, not a gate: the backend still serves the drop box's subtree with its drop key to a guest of a link
+  above (ADR 0080 decision 11), and no backend change was made for it.
 - **Revoking or deleting a link keeps the drop box and everything in it**: an identity a folder names is kept
   (`NodeGuestIdentityUsage`, `fk_node_share_identity`), so the member still opens it; the purge of a trashed drop box
   erases its folders, then the identities nothing names any more.

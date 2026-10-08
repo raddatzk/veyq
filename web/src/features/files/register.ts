@@ -11,7 +11,9 @@
 //
 // The `FILES_DROPBOX` kind (F3, ADR 0080 decision 11): its level section (the drop boxes of a folder, a "New drop box"
 // action), its `createDialog` (a name), its `detail` (its guests' folders), its `shareDialog` (WRITE_ONLY links only)
-// and the share BODY of its links (the guest's page: name yourself, pick files, upload into your own folder).
+// and the share BODY of its links (the guest's page: name yourself, pick files, upload into your own folder) — claimed
+// `rootOnly`: it serves a WRITE_ONLY link rooted at the drop box and nothing else, so core's folder page of a READ or
+// READ_WRITE link above shows no drop box (inbox #380: embedded, it offered the upload form under the folder's name).
 import { DROPBOX_KIND, FILE_KIND } from './kinds'
 import type { Registry } from '../../core/applications/registry'
 import { fileNameSlug } from '../../shared/naming'
@@ -52,5 +54,5 @@ export function registerFiles(registry: Registry): void {
     createDialog: DropBoxCreateDialog,
     shareDialog: DropBoxShareDialog,
   })
-  registry.claimShareBody(DROPBOX_KIND, DropBoxShareBody)
+  registry.claimShareBody(DROPBOX_KIND, DropBoxShareBody, { rootOnly: true })
 }
