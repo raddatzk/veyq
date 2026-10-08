@@ -103,8 +103,10 @@ Memory, an expense and a file side by side).
     `Anna (2)`, in creation order: the server-observed `createdAt` the members' listing carries, then the node id
     for one millisecond), never stored, and their URL segments by the same order (`anna`, `anna-2`;
     [ADR 0015](0015-operator-blind-readable-urls.md)). A guest who loses its identity (browser data cleared) cannot manage its folder any more and
-    starts a new one under a new identity. Members may only delete, move out or copy from a drop box and place
-    nothing of their own there (a server placement rule); moving out re-wraps and re-slugs under the target, where
+    starts a new one under a new identity — so does one whose folder a member trashed (that identity's folder takes
+    nothing again). Members may only delete, move out or copy from a drop box and place
+    nothing of their own there (a server placement rule); a guest — a `READ`/`READ_WRITE` guest of a folder link
+    above the drop box included, which holds its key and reads its guests' folders — moves nothing out of it; moving out re-wraps and re-slugs under the target, where
     the normal index applies, so every other folder stays unique; a ZIP export (not built) names the identity
     folders it writes by the URL-segment rule above, so it stays unambiguous inside a drop box too. Revoking the link
     keeps the drop box and its content. Memories keeps its uploader share on an existing Memory (its media are not
@@ -214,14 +216,19 @@ None open from this decision set. **The drop box node** (decision 11) is built w
 [docs/apps/files.md](../apps/files.md) § The drop box): the identity folder is a core `FOLDER` naming its identity
 (`veyq_node.share_identity_id`, unique per parent), created only by core's `IdentityFolders` behind the application's
 own operation; its entry is under the guest's `K_up`, which the reader opens through the parent's drop key. A
-`WRITE_ONLY` link on a plain `FOLDER` stays refused (`ShareRoots`). **Open for the owner:** where the build differs
-from decision 11 as written — a `READ_WRITE` guest of a link above may move a guest's folder out (the decision says
-members), a trashed identity folder ends that identity's folder for good, and the folder call spends the link's upload
-budget each time — is [inbox #377](../inbox.md); the decision stands as written until the owner rules. Ruled
-2026-10-08: equal names are numbered by creation time as the decision says — the members' listing carries the
-server-observed `createdAt` (to the millisecond), the node id breaks a same-millisecond tie (inbox #377(e), ADR 0015).
-Ruled 2026-10-08: inside its own folder a `WRITE_ONLY` guest creates
-`FILE`s only (the root kind's application declares it, core's `WriteOnlyGuestKinds`; anything else `illegal_scope`).
+`WRITE_ONLY` link on a plain `FOLDER` stays refused (`ShareRoots`). Where the build differed from decision 11 the owner
+ruled on 2026-10-08 ([inbox #377](../inbox.md)): **only members move out** — a guest's placement of an identity folder
+or of anything inside one is `422 illegal_structure` (core's `ShareNodesHandler`, known by `share_identity_id`, whatever
+an application declares for the container); a **trashed identity folder ends that identity's folder for good**
+(owner-accepted: the unique index spans trashed rows, the guest starts over under a new identity, a member's restore
+brings the folder back); the **folder call spends a token of the link's upload rate limit on every call**, also when it
+only answers the existing folder (owner-accepted: a limit with no gap); equal names are numbered by creation time as
+the decision says — the members' listing carries the server-observed `createdAt` (to the millisecond), the node id
+breaks a same-millisecond tie (ADR 0015); inside its own folder a `WRITE_ONLY` guest creates `FILE`s only (the root
+kind's application declares it, core's `WriteOnlyGuestKinds`; anything else `illegal_scope`). And a `READ`/`READ_WRITE`
+guest of a folder link above a drop box **sees it, read-only** (inbox #380): reading is limited by position, never by
+kind (§ Consequences), so the guest opens the identity folders and their files and downloads them; it writes nothing
+there — the placement rule above refuses it, and the web offers no control.
 
 ## Bite tests (each must fail if the rule is wrong)
 

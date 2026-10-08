@@ -70,7 +70,10 @@ dispatcher to `FilesUploadCompletion` (`UploadCompletion` for `FILE`, maps the i
   dialog). An upload button and a drop onto the section; an empty folder says so. Hidden in map mode, like the
   folders. Read-only during a pending deletion: download only.
 - **The upload** is one job of core's upload queue per file (`uploadFile.ts`): create the `FILE` node (or, for a name a
-  FILE sibling already holds by `fileNameSlug`, replace that file after the member confirmed), plan and pump the blob
+  FILE sibling already holds by `fileNameSlug`, replace that file after the member confirmed — the row's replace asks
+  too, naming the file and the picked one, and both questions say the old content cannot be restored, there being no
+  version history (owner decision 2026-10-08, inbox #383); "replace anyway" after a peer's replace is itself the
+  answer and asks nothing), plan and pump the blob
   under the node's own key, `completeFile` with `expectedBlobId`, then write the meta (`fileMeta.ts`). The status menu
   shows progress; the section says why a file of its folder was not uploaded (a taken name, `stale_file` with
   "replace anyway", no space) or that its meta is missing. **A given-up job cleans up** (inbox #384): failed after its
@@ -124,8 +127,12 @@ A `FILE` is **no share root** (Files declares no `ShareRoots`): a file is shared
   opened under the chain's keys, download through the link, and for a contributor an upload button (one core-queue job
   per file, `shareUpload.ts`: guest create → guest transport → `completeShareFile` with the meta) and a replace per
   row (an upload into it, for a file that holds no content), above the list the sentence that it can replace any file,
-  the owner's too, and that no version is kept (no confirmation asks yet, inbox #383). The guest names itself once per link through the page's own dialog (`requestGuest`). No rename on the guest
-  page (no kind has one there yet, inbox #358).
+  the owner's too, and that no version is kept. **Every replace asks first** (owner decision 2026-10-08, inbox #383) —
+  the contributor's row replace, after the file is picked and before the guest is named ("it changes for everyone who
+  sees this folder, the owner too; the old content cannot be restored"), as the member's does (§ The web); a file that
+  holds no content asks nothing. The guest names itself once per link through the page's own dialog (`requestGuest`).
+  No rename on the guest page (no kind has one there yet, inbox #358). Inside a guest's identity folder (§ The drop box)
+  core's folder page hands no write to any guest.
 
 ## The drop box
 
@@ -142,7 +149,8 @@ one per guest identity, which are core `FOLDER`s carrying `veyq_node.share_ident
   guest of a link above the drop box) opens drop box key → drop private key → `K_up` → `K_F` (core's tree,
   `childEntryKey`); no new seal purpose, no vector change. A guest-sealed entry that does not open leaves that folder
   out of the member's tree instead of failing it.
-- **The guest** (`components/DropBoxShareBody.vue`, `dropBox.ts`): names itself once (the session keeps identity,
+- **The guest** (`components/DropBoxGuestForm.vue`, what Files' share body `DropBoxShareBody.vue` renders on the link
+  rooted at the drop box; `dropBox.ts`): names itself once (the session keeps identity,
   token, `K_up` and the name on the device; the page says "Sending as …" with a "Not you?" that forgets the session there
   and asks for a name again — a new identity, the old one's folder untouched; after a gone link the same action starts
   over), then, with its **first file**, **`ensureShareDropFolder`** — `POST /api/shares/{shareId}/files/drop-folder`,
@@ -169,16 +177,32 @@ one per guest identity, which are core `FOLDER`s carrying `veyq_node.share_ident
   a guest's folder (core: no rule places into the drop box; a create, move or rename into an identity folder is
   `illegal_structure`, `NodesHandler`), and only delete or move out — a move out re-wraps and re-slugs under the
   target and ends the folder's identity link. The server allows the move out; the web offers no move yet (inbox #358).
-- **In a folder share above** (`READ`/`READ_WRITE`) the drop box is **not shown**: Files claims its share body
-  `rootOnly` (the body is a `WRITE_ONLY` guest's upload form and serves only its own link), so core's folder page shows
-  no drop box, nothing below it, and treats a `?node=` naming one as a node it did not open (inbox #380). That is a
-  rendering rule, not a gate: the backend still serves the drop box's subtree with its drop key to a guest of a link
-  above (ADR 0080 decision 11), and no backend change was made for it.
+  **Only a member moves out** (owner decision 2026-10-08, inbox #377 (a)): a guest's `updateShareNode` of an identity
+  folder or of anything inside one is `422 illegal_structure` (`ShareNodesHandler`, known by core's
+  `share_identity_id`, before any application's `GuestNodeRules`), held by
+  `DropBoxSliceTest.aGuestOfALinkAboveMovesNothingOutOfADropBox`.
+- **In a folder share above** (`READ`/`READ_WRITE`) the drop box **is shown, read-only** (owner decision 2026-10-08,
+  inbox #380: the guest was given that tree): the backend serves the drop box's subtree with its drop key to a guest of
+  a link above (ADR 0080 decision 11), so core's walk opens the identity folders' names (`childEntryKey`) and their
+  files. Core's folder page embeds Files' share body for the drop box with `subtreeRoot`, and the body then renders
+  `components/DropBoxSharedView.vue` — the guests' folders with their file counts (a repeated name numbered in node-id
+  order: a guest's resolve serves no `createdAt`, so the numbers can differ from the member's) — instead of the
+  `WRITE_ONLY` guest's form; a folder opens on core's folder page, which inside an identity folder hands no write to any
+  guest (no 'New folder', the share sections get `canWrite: false`), so it lists the files with their download only.
+  No send form, no upload, no replace, no delete, no move; the server refuses each anyway (a create inside an identity
+  folder `illegal_structure` for anyone but its identity, a guest move out above). Pinned by
+  `DropBoxInFolderShare.test.ts` (the real registry, router and PrimeVue, DOM clicks; red with the write controls let
+  through or the guest's form embedded).
 - **Revoking or deleting a link keeps the drop box and everything in it**: an identity a folder names is kept
   (`NodeGuestIdentityUsage`, `fk_node_share_identity`), so the member still opens it; the purge of a trashed drop box
   erases its folders, then the identities nothing names any more.
 - **A trashed identity folder** takes nothing: the guest's next `ensureShareDropFolder` and creates there answer
-  `403 share_not_contributable` (it starts over under a new identity); a member restores the folder from the trash.
+  `403 share_not_contributable` for good — the unique index spans trashed rows, so that identity never gets a second
+  folder; the guest starts over under a new identity ("Not you?" / "Start over") — and a member restores the folder from
+  the trash. Owner-accepted as built (2026-10-08, inbox #377 (b)).
+- **The folder call spends upload budget:** every `ensureShareDropFolder` spends a token of the link's upload rate
+  limit (300/min by default), also when it only answers the existing folder — deliberately, so the limit has no gap a
+  caller could loop through. Owner-accepted as built (2026-10-08, inbox #377 (d)).
 
 ## Operator-visible, beyond the platform's `kind`
 
@@ -195,5 +219,5 @@ folder and its files, and when.
   before its `updateNode` leaves the old MIME type/size beside the new bytes until the next write (a guest's metadata
   rides in the attach's transaction). Making it atomic needs a metadata compare-and-set inside core's
   `AttachmentStore.attach`.
-- Where the drop box as built differs from ADR 0080 decision 11, and the other reversible choices made while building
-  Files, wait for the owner's review: inbox #377, #378.
+- The other reversible choices made while building Files wait for the owner's review: inbox #378. (Where the drop box
+  differed from ADR 0080 decision 11, inbox #377, the owner ruled 2026-10-08 — § The drop box.)
