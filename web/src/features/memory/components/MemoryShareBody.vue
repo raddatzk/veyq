@@ -261,8 +261,9 @@ const metaResolver = (item: MediaItem) => {
   const si = shareById.value.get(item.mediaId)!
   return unsealMeta(si.scopeId, si.memoryKey, item)
 }
-// Slice 2 (ADR 0047): the share-scoped key-free chunk provider for the SW range path — the anonymous viewer's
-// per-item K_mem + guest pwToken, over the gated share presign. The SW never learns it is the share route.
+// Slice 2 (ADR 0047): the share-scoped key-free chunk provider over the original, for the SW range path and the
+// lightbox's streamed download (inbox #371) — the anonymous viewer's per-item K_mem + guest pwToken, over the gated
+// share presign. The SW never learns it is the share route.
 const videoChunkProvider = (item: MediaItem) =>
   shareChunkProvider(shareId, shareById.value.get(item.mediaId)!, downloadRef(item), props.pwToken)
 
