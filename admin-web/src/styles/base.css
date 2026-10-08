@@ -208,6 +208,12 @@
   --p-form-field-hover-border-color: var(--app-muted) !important;
   --p-toggleswitch-background: var(--app-control-line) !important;
   --p-toggleswitch-hover-background: var(--app-muted) !important;
+
+  /* Aura's muted text (the breadcrumb) and secondary outlined/text button labels (the level view's trash button) are
+     its surface-500 #64748b: 4.48:1 on --app-bg (inbox #395). On our muted token they follow both modes. */
+  --p-text-muted-color: var(--app-muted) !important;
+  --p-button-outlined-secondary-color: var(--app-muted) !important;
+  --p-button-text-secondary-color: var(--app-muted) !important;
 }
 
 body {

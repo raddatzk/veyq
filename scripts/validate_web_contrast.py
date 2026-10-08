@@ -82,6 +82,14 @@ PAIRS = [
     ("muted text on page background", "var(--app-muted)", "var(--app-bg)", TEXT),
     ("muted text on surface-muted (.veyq-badge)", "var(--app-muted)", "var(--app-surface-muted)", TEXT),
     ("muted text on a hovered row", "var(--app-muted)", "var(--app-hover)", TEXT),
+    # PrimeVue's own muted text and secondary button labels (inbox #395): Aura paints them surface-500 `#64748b`, 4.48:1 on
+    # the page background — the breadcrumb, the level view's trash button, every "Dismiss"/"Not you?". Their outlined
+    # border (surface-200, 1.2:1) has no pair: an icon or label identifies the button, so WCAG 1.4.11 asks no boundary.
+    ("PrimeVue muted text (breadcrumb) on page background", "var(--p-text-muted-color)", "var(--app-bg)", TEXT),
+    ("PrimeVue muted text on surface", "var(--p-text-muted-color)", "var(--app-surface)", TEXT),
+    ("secondary outlined button label on page background", "var(--p-button-outlined-secondary-color)", "var(--app-bg)", TEXT),
+    ("secondary outlined button label on surface", "var(--p-button-outlined-secondary-color)", "var(--app-surface)", TEXT),
+    ("secondary text-button label on surface", "var(--p-button-text-secondary-color)", "var(--app-surface)", TEXT),
     ("accent text / link on surface", "var(--app-accent)", "var(--app-surface)", TEXT),
     ("accent text on accent-soft", "var(--app-accent)", "var(--app-accent-soft)", TEXT),
     ("success badge", "var(--app-success-text)", "var(--app-success-soft)", TEXT),
