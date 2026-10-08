@@ -833,8 +833,9 @@ paths:
         re-sealed under it, and the `placementVersion` it was built on; the wrap and the name are bound to scope,
         node, the node's stored epoch and `placementVersion + 1`. **No `epoch`:** a guest's node never moves into or
         out of the scope root, so it keeps its stored epoch. **Structure only:** the node lies strictly inside the
-        share's subtree — the root is never moved or renamed by a guest (`422 illegal_structure`), a node outside is
-        `404 node_not_found`; the destination is a live node inside the subtree, the root included, not the node
+        share's subtree — the root is never moved or renamed by a guest, nor is a guest's identity folder in a drop box
+        or anything inside one: only a member moves out of a drop box (ADR 0080 Decision 11; `422 illegal_structure`,
+        known by the node's identity column, whatever the kinds), a node outside is `404 node_not_found`; the destination is a live node inside the subtree, the root included, not the node
         and not inside its own subtree (else `422 illegal_structure`); the kind's placement rule admits it there
         (else `422 illegal_structure`); the owners of the containers on both sides allow it (`GuestNodeRules`: a
         move needs the source parent's owner to let a READ_WRITE guest move that kind out and the destination's to
@@ -883,7 +884,8 @@ paths:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_placement } }
         "422":
           description: >
-            Illegal structure (`illegal_structure` — the node is the share's root, the destination is missing, trashed,
+            Illegal structure (`illegal_structure` — the node is the share's root, a guest's identity folder or inside
+            one (only a member moves out of a drop box), the destination is missing, trashed,
             outside the share's subtree, the node itself or inside its subtree, or the kind's placement rule refuses
             it there), or an owner of the containers on either side does not let a READ_WRITE guest move or rename
             that kind (`illegal_scope`).
