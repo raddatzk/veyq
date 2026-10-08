@@ -11,7 +11,10 @@
 // **Pinned.** `crypto.getRandomValues` (so every `K_blob`, nonce and seal) is a seeded generator, `crypto.randomUUID` a
 // counter, `Date.now` a constant — each reset per scenario, so a scenario's bytes do not depend on what ran before.
 // The deriver is a stub returning fixed bytes, and `exifr` finds nothing (as in `media.test.ts`): the derived pixels
-// and the EXIF tier are the deriver's and the parser's business, not the transport's, and are NOT pinned here.
+// and the EXIF tier are the deriver's and the parser's business, not the transport's, and are NOT pinned here. (Since
+// inbox #395 F10 the EXIF tier is sealed even when the parser finds nothing — it carries the source's file name — so its
+// seal draws a nonce before the blobs are planned: that update changed `wrappedExif` from null and, through the pinned
+// stream, every later `K_blob` wrap and PUT digest; no length, path, header, order or count moved.)
 // Every scenario runs twice and must record the same thing both times — the guard against a recording that depends on
 // scheduling rather than on the code.
 //

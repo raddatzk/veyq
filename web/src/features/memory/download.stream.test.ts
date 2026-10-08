@@ -95,7 +95,7 @@ describe('downloadOriginal (streamed, inbox #371 S4)', () => {
     for (const sealedType of [undefined, 'image/jpeg']) {
       const log = fakeStore(ref.blobId, frames)
       const target = collectingTarget(log)
-      await downloadOriginal(provider(), 'Rom 2026', 0, sealedType, target.open)
+      await downloadOriginal(provider(), { memoryName: 'Rom 2026', index: 0, sealedType }, target.open)
       expect(target.file.ended).toBe('close')
       expect(target.bytes()).toEqual(old)
       expect(target.bytes()).toEqual(plain)
@@ -111,7 +111,7 @@ describe('downloadOriginal (streamed, inbox #371 S4)', () => {
     const log = fakeStore(ref.blobId, frames)
     const target = collectingTarget(log)
 
-    const sniffed = await downloadOriginal(provider(), 'Trip/2026', 2, undefined, target.open)
+    const sniffed = await downloadOriginal(provider(), { memoryName: 'Trip/2026', index: 2, sealedType: undefined }, target.open)
     expect(sniffed).toBe('image/jpeg') // what the lightbox back-fills the sealed type with
     expect(target.file.name).toBe('Trip 2026 3.jpg')
     expect(target.file.getsBeforeOpen).toBe(1) // chunk 0, and nothing else, before the target
@@ -122,12 +122,12 @@ describe('downloadOriginal (streamed, inbox #371 S4)', () => {
     const key = v1.randomBytes(32)
     const { ref, frames, provider } = stored(key, original(100, [0x89, 0x50, 0x4e, 0x47]))
     const target = collectingTarget(fakeStore(ref.blobId, frames))
-    expect(await downloadOriginal(provider(), 'Rom', 0, 'image/tiff', target.open)).toBe('image/png')
+    expect(await downloadOriginal(provider(), { memoryName: 'Rom', index: 0, sealedType: 'image/tiff' }, target.open)).toBe('image/png')
     expect(target.file.name).toBe('Rom 1.png')
 
     const other = stored(key, original(100, [0x00, 0x01]))
     const target2 = collectingTarget(fakeStore(other.ref.blobId, other.frames))
-    expect(await downloadOriginal(other.provider(), 'Rom', 0, undefined, target2.open)).toBeUndefined()
+    expect(await downloadOriginal(other.provider(), { memoryName: 'Rom', index: 0, sealedType: undefined }, target2.open)).toBeUndefined()
     expect(target2.file.name).toBe('Rom 1.bin')
   })
 
@@ -137,9 +137,44 @@ describe('downloadOriginal (streamed, inbox #371 S4)', () => {
     const log = fakeStore(ref.blobId, frames)
     const target = collectingTarget(log)
 
-    const sniffed = await downloadOriginal(provider(), 'Rom 2026', 0, 'video/mp4', target.open)
+    const sniffed = await downloadOriginal(provider(), { memoryName: 'Rom 2026', index: 0, sealedType: 'video/mp4' }, target.open)
     expect(target.file).toMatchObject({ name: 'Rom 2026 1.mp4', getsBeforeOpen: 0, presignsBeforeOpen: 0 })
     expect(sniffed).toBeUndefined() // nothing was sniffed: there is nothing to back-fill
+  })
+
+  // inbox #395 F10 — the stored name. Lever: drop `stored ??` from the name in `downloadOriginal`.
+  it('a stored file name names the file verbatim — not the Memory name, not the position, not the sealed type', async () => {
+    const key = v1.randomBytes(32)
+    const { ref, frames, provider } = stored(key, original(CHUNK_SIZE + 10, JPEG_HEAD))
+    const target = collectingTarget(fakeStore(ref.blobId, frames))
+
+    await downloadOriginal(provider(), { storedName: '  IMG_0042 Urlaub.HEIC ', memoryName: 'Rom', index: 4, sealedType: 'image/jpeg' }, target.open)
+    expect(target.file.name).toBe('IMG_0042 Urlaub.HEIC') // trimmed, case and extension kept: the uploader's own name
+  })
+
+  // Lever: gate the pre-open read on `!known` alone (the old condition) — the untyped named media then reads first.
+  it('a stored name opens the save target before ANY request even without a sealed type, and sniffs chunk 0 in passing', async () => {
+    const key = v1.randomBytes(32)
+    const { ref, frames, provider } = stored(key, original(2 * CHUNK_SIZE + 10, JPEG_HEAD))
+    const log = fakeStore(ref.blobId, frames)
+    const target = collectingTarget(log)
+
+    const sniffed = await downloadOriginal(provider(), { storedName: 'clip.jpg', memoryName: 'Rom', index: 0, sealedType: undefined }, target.open)
+    expect(target.file).toMatchObject({ name: 'clip.jpg', getsBeforeOpen: 0, presignsBeforeOpen: 0 })
+    // the type back-fill still gets its sniff (lever: return undefined from the named path) — from the streamed chunk 0
+    expect(sniffed).toBe('image/jpeg')
+    expect([...log.gets].sort()).toEqual([0, 1, 2])
+    expect(target.bytes()).toEqual(original(2 * CHUNK_SIZE + 10, JPEG_HEAD))
+  })
+
+  it('a blank or non-string stored name is no name: the fallback names the file', async () => {
+    const key = v1.randomBytes(32)
+    const { ref, frames, provider } = stored(key, original(100, JPEG_HEAD))
+    for (const storedName of ['   ', 42, null, undefined]) {
+      const target = collectingTarget(fakeStore(ref.blobId, frames))
+      await downloadOriginal(provider(), { storedName, memoryName: 'Rom', index: 1, sealedType: 'image/jpeg' }, target.open)
+      expect(target.file.name, String(storedName)).toBe('Rom 2.jpg')
+    }
   })
 
   it('above the Blob cap with no streaming target it is refused before a single chunk is fetched', async () => {
@@ -151,7 +186,7 @@ describe('downloadOriginal (streamed, inbox #371 S4)', () => {
     const noStream: OpenSaveTarget = (name, size) => openSaveTarget(name, size, { picker: null, registerDownload: async () => null })
 
     const log = fakeStore(ref.blobId, frames)
-    await expect(downloadOriginal(huge(), 'Rom', 0, 'image/jpeg', noStream)).rejects.toBeInstanceOf(SaveTooLarge)
+    await expect(downloadOriginal(huge(), { memoryName: 'Rom', index: 0, sealedType: 'image/jpeg' }, noStream)).rejects.toBeInstanceOf(SaveTooLarge)
     expect(log.gets).toEqual([])
   })
 
@@ -161,7 +196,7 @@ describe('downloadOriginal (streamed, inbox #371 S4)', () => {
     const log = fakeStore(ref.blobId, frames, 2)
     const target = collectingTarget(log)
 
-    await expect(downloadOriginal(provider(), 'Rom', 0, undefined, target.open)).rejects.toThrow('chunk_get_failed:500')
+    await expect(downloadOriginal(provider(), { memoryName: 'Rom', index: 0, sealedType: undefined }, target.open)).rejects.toThrow('chunk_get_failed:500')
     expect(target.file.ended).toBe('abort')
   })
 })

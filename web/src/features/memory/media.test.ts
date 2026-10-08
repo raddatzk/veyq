@@ -669,6 +669,57 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     expect(exif.title).toMatch(/^x\u0001+$/)
   })
 
+  // inbox #395 F10 — the file name is what the original downloads under, so the drop step never sheds it: an escaped
+  // name a character longer than the title would otherwise be the field that goes. Lever: drop the `k !== 'name'`
+  // filter in `sealExifTier`.
+  it('never sheds the file name to fit the cap — the next-longest free text goes instead', async () => {
+    const store = fakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    vi.stubGlobal('fetch', store.fetchStub)
+    const escaped = '\u0001'.repeat(5_000)
+    vi.mocked(exifr.parse).mockResolvedValue({
+      Make: 'Canon', FNumber: 1.8, ISO: 200,
+      Artist: escaped, Copyright: escaped, title: { lang: 'x-default', value: 'x' + escaped },
+    })
+    const memoryKey = v1.randomBytes(32)
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(12).fill(4) as BlobPart]), mediaType: 'image/jpeg', name: escaped }, stubDeriver())
+
+    const sealed = store.captured.completeItem.wrappedExif as string
+    expect(sealed.length).toBeLessThanOrEqual(EXIF_TIER_MAX_B64)
+    const exif = openJson(exifCtx(store.captured.completeItem.mediaId), memoryKey, sealed)
+    expect(exif.name).toBe('\u0001'.repeat(EXIF_TEXT_MAX_BYTES)) // clamped like every text field, but kept
+    expect(exif.title).toBeUndefined()
+    expect(exif).toMatchObject({ make: 'Canon', fNumber: 1.8, iso: 200 })
+  })
+
+  // inbox #395 F10 — every upload seals its file name, not only an image whose EXIF parsed: the lightbox downloads the
+  // original under it. Lever: seal `meta.exif` as-is in `sealMetadata` (the name then rides only a parsed EXIF bundle).
+  it('seals the file name into the EXIF tier for a video, an image without EXIF and a PDF — never into the listed tier', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const cases: { mediaType: string; name: string; exifr: 'none' | 'throws' }[] = [
+      { mediaType: 'video/mp4', name: 'VID_2026.mp4', exifr: 'none' },
+      { mediaType: 'image/png', name: ' Screenshot 2026-10-09.png ', exifr: 'none' },
+      { mediaType: 'image/jpeg', name: 'broken.jpg', exifr: 'throws' },
+      { mediaType: 'application/pdf', name: 'Tickets.pdf', exifr: 'none' },
+    ]
+    for (const c of cases) {
+      const store = fakeStore()
+      fakeApi(mediaApi, store.api)
+      fakeApi(blobApi, store.blob)
+      vi.stubGlobal('fetch', store.fetchStub)
+      if (c.exifr === 'throws') vi.mocked(exifr.parse).mockRejectedValueOnce(new Error('corrupt'))
+      await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(12).fill(4) as BlobPart]), mediaType: c.mediaType, name: c.name }, stubDeriver())
+
+      const { mediaId, wrappedExif, wrappedMeta } = store.captured.completeItem
+      expect(openJson(exifCtx(mediaId), memoryKey, wrappedExif as string), c.mediaType).toEqual({ v: 1, name: c.name.trim() })
+      // the listed tier, capped at 512 base64, carries no name (B1.5's allow-list, held for every kind)
+      if (wrappedMeta) expect(Object.keys(openJson(metaCtx(mediaId), memoryKey, wrappedMeta)), c.mediaType).not.toContain('name')
+      // and nothing sent carries it (B1.6)
+      expect(JSON.stringify(store.captured), c.mediaType).not.toContain(c.name.trim())
+    }
+  })
+
   it('falls back to the file creation date when the source carries no EXIF date', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)

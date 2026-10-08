@@ -43,8 +43,11 @@
   metadata under `K_mem` — capture time, GPS and the resolved place name in the listed tier (written whole by
   any member, so every write carries the tier's `metaVersion` and a stale one answers `409 stale_version` —
   [ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md)), and the original
-  **filename** in the lazy panel bundle. **The filename slice has landed:** the name is sealed at upload and
-  shown in the detail panel, and it is never sent — the server's view of a media is still no pixel and no name. One blob can be
+  **filename** in the lazy panel bundle. **The filename slice has landed:** the name is sealed at upload — for every
+  media that has one, not only an image whose EXIF parsed — shown in the detail panel and used as the original's
+  download name (inbox #395 F10), and it is never sent — the server's view of a media is still no pixel and no name.
+  It lives in the lazy tier, not the listed one, because the listed tier is capped at 512 base64 and a fully
+  populated one leaves no room for it (measured: 336 of 344 plaintext bytes). One blob can be
   attached by more than one media record (e.g. cover + in-body) **within the owner circle** — that is a
   metadata reference the members already see, not content dedup. Each media record also carries its **bucket
   linkage** — a **`bucket_id`** (nullable; `null` = the uploader's primary) and a denormalized **`created_by`** =

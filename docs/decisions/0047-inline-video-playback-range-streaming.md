@@ -189,11 +189,14 @@ the browser marks the download failed and never keeps a truncated file as if it 
 reaches the page as an abort. The protocol is version 3.
 
 Both applications save through it: Files' download, and Memories' "download original" in the lightbox (S4, the same
-day). A Memories original carries no stored file name, so its name is derived on device, its extension from the sealed
-media type; a media without one (uploaded before the field) has its first chunk read and sniffed **before** the save
-target opens, because the name is the picker's suggestion and the route's `Content-Disposition`. That read can outlast
-the click's activation in Chromium, and the picker then falls through to this route; the chunk is written from what
-was read, never fetched twice.
+day). A Memories original is saved under its own file name, sealed into the media's EXIF tier at upload and loaded
+with the lightbox's details before the download button enables (inbox #395 F10, 2026-10-09); a media that never
+sealed one has its name derived on device — the Memory name and its gallery position — its extension from the sealed
+media type; a media without that either (uploaded before the field) has its first chunk read and sniffed **before**
+the save target opens, because the name is the picker's suggestion and the route's `Content-Disposition`. That read
+can outlast the click's activation in Chromium, and the picker then falls through to this route; the chunk is written
+from what was read, never fetched twice. A named media never reads first: a missing type is sniffed from chunk 0 as
+it streams past.
 
 The download is whole-blob and sequential, so it adds no access pattern beyond what a whole-blob read already shows.
 The page must stay open while it runs, since it holds the key. What only a browser can prove (memory flat at

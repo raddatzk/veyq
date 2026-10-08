@@ -126,7 +126,9 @@ export type MediaMeta = {
  */
 export type MediaExif = {
   v: number
-  /** The original's filename, sealed here and nowhere else — it never reaches the server (uc.memory.gallery). */
+  /** The original's filename, sealed here and nowhere else — it never reaches the server (uc.memory.gallery). Set
+   *  at upload for every media that had a name, not only an image with EXIF, because the lightbox downloads the
+   *  original under it ([withOriginalName], inbox #395 F10); never shed to fit the tier's cap. */
   name?: string
   make?: string
   model?: string
@@ -425,7 +427,6 @@ async function readExif(source: AddMediaSource): Promise<{ capturedAt?: number; 
     if (!raw) return { exif: null }
     const exif: MediaExif = {
       v: 1,
-      name: cleanStr(source.name),
       make: cleanStr(raw.Make),
       model: cleanStr(raw.Model),
       lens: cleanStr(raw.LensModel ?? raw.LensMake),
@@ -464,8 +465,8 @@ async function readExif(source: AddMediaSource): Promise<{ capturedAt?: number; 
 /**
  * Seal the two metadata tiers under `K_mem` (best-effort, operator-blind): the always-listed **metadata** tier
  * (`{v,w,h,capturedAt,capturedAtSource,gpsLat,gpsLng}` — geometry + the EXIF date, else the file's creation date,
- * + GPS + a resolved place name) and the lazy, panel-only **EXIF** tier ([MediaExif]). Each tier is null when
- * its source is absent.
+ * + GPS + a resolved place name) and the lazy **EXIF** tier ([MediaExif]: the panel bundle and the original's file
+ * name). Each tier is null when its source is absent.
  */
 async function sealMetadata(
   source: AddMediaSource,
@@ -493,8 +494,23 @@ async function sealMetadata(
     metaTier.w !== undefined || metaTier.capturedAt !== undefined || metaTier.gpsLat !== undefined ||
     metaTier.gpsLng !== undefined || metaTier.mediaType !== undefined
   const wrappedMeta = hasMeta ? sealJson(memoryKey, prune(metaTier), mediaMetaContext(media.scopeId, media.mediaId)) : null
-  const wrappedExif = meta.exif ? sealExifTier(memoryKey, mediaExifContext(media.scopeId, media.mediaId), meta.exif) : null
+  const exifTier = withOriginalName(meta.exif, source.name)
+  const wrappedExif = exifTier ? sealExifTier(memoryKey, mediaExifContext(media.scopeId, media.mediaId), exifTier) : null
   return { wrappedMeta, wrappedExif }
+}
+
+/**
+ * The EXIF tier with the original's own file name in it — for EVERY media that has a name, not only an image whose
+ * EXIF parsed: the name is what the lightbox downloads the original under (a stable name, inbox #395 F10), so a
+ * video, a PNG screenshot or a PDF carries it too, in a tier that then holds nothing else. Trimmed and otherwise
+ * verbatim, as Files keeps a picked file's name. It rides the lazy tier and not the listed one because the listed
+ * tier is capped at 512 base64 and a fully populated one leaves no room for a name (measured: 336 of 344 plaintext
+ * bytes, see [PLACE_NAME_MAX_BYTES]). Null when there is neither EXIF nor a name.
+ */
+function withOriginalName(exif: MediaExif | null, name: string | undefined): MediaExif | null {
+  const clean = cleanStr(name)
+  if (clean === undefined) return exif
+  return { ...(exif ?? { v: 1 }), name: clean }
 }
 
 /**
@@ -514,7 +530,7 @@ export const EXIF_TEXT_MAX_BYTES = 1024
 /**
  * Seal the EXIF tier so it always fits [EXIF_TIER_MAX_B64] — the upload never fails for its metadata. Every
  * string field is clamped to [EXIF_TEXT_MAX_BYTES]; a tier that still does not fit drops its longest free-text
- * field, one at a time, until it does. Numbers are never dropped: they are bounded by their type, so a tier of
+ * field other than the file name, one at a time, until it does. Numbers are never dropped: they are bounded by their type, so a tier of
  * numbers alone is a few hundred bytes. The string set is read off the value, not listed, so a text field added
  * to [MediaExif] later is clamped without anyone remembering to add it here.
  */
@@ -524,7 +540,9 @@ function sealExifTier(memoryKey: Uint8Array, context: v1.SealContext, exif: Medi
   for (const k of textKeys()) tier[k] = clampUtf8(tier[k] as string, EXIF_TEXT_MAX_BYTES)
   let sealed = sealJson(memoryKey, tier, context)
   while (sealed.length > EXIF_TIER_MAX_B64) {
-    const keys = textKeys()
+    // The file name is never the one shed: it is what the original downloads under (inbox #395 F10), and a clamped
+    // name alone cannot reach the cap — at most 1 KiB, six-fold under JSON escaping, beside a few hundred bytes of numbers.
+    const keys = textKeys().filter((k) => k !== 'name')
     if (!keys.length) break // unreachable: see the doc above — numbers alone cannot reach the cap
     const longest = keys.reduce((a, b) => (JSON.stringify(tier[b]).length > JSON.stringify(tier[a]).length ? b : a))
     delete tier[longest]

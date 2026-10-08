@@ -15,7 +15,7 @@
             "chunkCount": 7,
             "ownerId": "00000000-0000-4000-8000-000000000001",
             "role": "ORIGINAL",
-            "wrappedBlobKey": "AiIDXDRM85pwTKr3g4ctRJzCNUg7CM6JSMb4yGO6JaQ0OXIP2cMKRexzWF9mrBbK6r0rd42J14Nkq9fl+Q=="
+            "wrappedBlobKey": "AmB5kfnNj3zCJjCCVn9IcV6w4raSbJ5EmUeQ+Q2v3Te5zftiwJLKF40Ds2FJRdjMMonpab7ruISb5NsY9g=="
           },
           {
             "blobId": "00000000-0000-4000-8000-000000000003",
@@ -23,7 +23,7 @@
             "chunkCount": 1,
             "ownerId": "00000000-0000-4000-8000-000000000001",
             "role": "THUMBNAIL",
-            "wrappedBlobKey": "Au+OWLf/skBCTUg9x5uSD/vWEldVZhPWjmUBsR0Soki7KGPB+3LT5D/sPR2Yd1jxNCV8CULzjxhaMWYSgQ=="
+            "wrappedBlobKey": "Ar8r7USBVwqQxxGtCGdZrrl/3qADMhxdFFJ3UbDv03IsSaZ8gtYj+4gbdWWDU7lp+Qlm5l5eaFk84VavMg=="
           },
           {
             "blobId": "00000000-0000-4000-8000-000000000004",
@@ -31,7 +31,7 @@
             "chunkCount": 1,
             "ownerId": "00000000-0000-4000-8000-000000000001",
             "role": "PREVIEW",
-            "wrappedBlobKey": "Ajpr3UJ6eReeLjam0kTpRa3P3N998c065RupZOgM6NPd7D8wbOTb+RmFv4vvlq7mNyrBY/SNz00wYCnFZQ=="
+            "wrappedBlobKey": "AhkIqGT4ohfO/K7FJYQVsD7tYOw26BHr6rsCffXENjftnkZ1BUQ+yMxpVJx+WfEJq0xfxAXovci64TuLSg=="
           }
         ]
       }
@@ -44,7 +44,7 @@
       },
       "bytes": {
         "length": 262172,
-        "sha256": "ffe5088cd8aa57c402210dd5fccb5b5737e7d6762359cbb056dd623529c03b63"
+        "sha256": "1e375b5fa58974472e16578ebad73b5763ead805cd2350bea3061540f494b7c0"
       }
     },
     {
@@ -55,7 +55,7 @@
       },
       "bytes": {
         "length": 262172,
-        "sha256": "f7ffaba17321583e876a58286681e2b730bc1856165e90b29d9a09aff2d56c28"
+        "sha256": "0379ae6900bec99e64b3368fb7da2750b7368fbe8a86d3b0eb13926867d7f62f"
       }
     },
     {
@@ -66,7 +66,7 @@
       },
       "bytes": {
         "length": 262172,
-        "sha256": "8f090d9aba4a84da0eaf5ae51a539daf9da599fc982da4d781d81e75d7117ba0"
+        "sha256": "64a226ab93b5d14dedf364559b24229f4068fd6b9e21b870108c60a7e7aa681d"
       }
     },
     {
@@ -93,7 +93,7 @@
       },
       "bytes": {
         "length": 262172,
-        "sha256": "91161b8ca76dda8f996bce5ff821ce5376fcd2e4379ae6295fc43035cf1a1d5b"
+        "sha256": "9ea11b9bab8d6c23e15643795ff3bc2a06b1477242496c1babeafb4ac6c8d1a9"
       }
     },
     {
@@ -104,7 +104,7 @@
       },
       "bytes": {
         "length": 262172,
-        "sha256": "b08009000f93260566f7686378d418d083f635d3cd24129bc81164852bf5adb0"
+        "sha256": "b45f567db8b760a4fe2d718ef2804af2b3f00de9baaea0fb2ac8f05f32768179"
       }
     },
     {
@@ -131,7 +131,7 @@
       },
       "bytes": {
         "length": 262172,
-        "sha256": "2506b844dc6497ad2ae0d77c37b30bd65554f581899ba57b8ac427c70a786518"
+        "sha256": "656fdd81f8be15360cc8154387b9d70988323346ff6e6bf7c4dc998f3416304e"
       }
     },
     {
@@ -142,7 +142,7 @@
       },
       "bytes": {
         "length": 1262,
-        "sha256": "93447bba1d58645f4f0341c4d1b441f0f83960c97b0e98fd915f1e4373f7e5bf"
+        "sha256": "637faf5770bb70c0e815e38a1dd2f8bc21c3d911474b96f96370f3c6d14324ec"
       }
     },
     {
@@ -153,7 +153,7 @@
       },
       "bytes": {
         "length": 228,
-        "sha256": "75b8f4cc47eaad98688b359c49414413aecf153a8bfaef17fd88e4a839f9395c"
+        "sha256": "ed058af16e80ef4d883e095c9e547c754ddead890c770a7412addc1e7d8aa7ed"
       }
     },
     {
@@ -164,7 +164,7 @@
       },
       "bytes": {
         "length": 928,
-        "sha256": "9b45d4c924d76313e3b482610324a6e2a4aba3ef6bc4beda4ebd4578f99ca527"
+        "sha256": "0fcaeabfb47127a0c342c0bc59c901f957afeee4032ef62064d7a9674c77356a"
       }
     },
     {
@@ -190,7 +190,7 @@
             "mediaId": "00000000-0000-4000-8000-000000000001",
             "nodeId": "6e5a0000-0000-4000-8000-0000000000b1",
             "originalUploadId": "upload-1",
-            "wrappedExif": null,
+            "wrappedExif": "AgkkPv6//zWbiOiKmTdKaGKgby+pd9prHBZW9V3Afgy20gvhafR+W9vYLXLjj91/rHveuOVQ+NQ5tw==",
             "wrappedMeta": "AkICggYaI1m2KjvKPfm05b2ynptCQOt4MyaVT+ZqUhrwJkzcrdm6gVvG0yTuH03yTUF1MxGQ8NecJs39lQm9kzFdB0PFepEObc7imtwEArJFeFslXZ82H9cB5Qoaviy3UDzYBEp090Hs1ZGEGvljnwFx5RohA4lC+D3bG9YfIfG6NQf8"
           }
         ]

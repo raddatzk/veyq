@@ -104,6 +104,11 @@ const captured = ref<MediaMeta | null>(null)
 // via the exif endpoint. What is in it is [MediaExif]'s business, not this comment's. Null = none/undecoded.
 const exif = ref<MediaExif | null>(null)
 const detailsLoading = ref(false)
+// The download waits for the details, not in the click but before it: the original's own file name is in the EXIF
+// tier, and nothing may be awaited before the save picker (download.ts), so the button is enabled once that tier is
+// in or known absent. Otherwise a quick click would save under the fallback name and the next one under the stored
+// name — the very instability inbox #395 F10 removed. A failed load ends the wait too; the fallback then names it.
+const downloadBlocked = computed(() => downloading.value || detailsLoading.value)
 const isDetailsOpen = ref(false) // mobile bottom-sheet toggle (the design's swipe handle)
 // capturedAt override editor (cr-0065/0066)
 const isEditingCapturedAt = ref(false)
@@ -443,7 +448,7 @@ async function playVideo() {
 }
 
 async function download() {
-  if (!item.value || downloading.value) return
+  if (!item.value || downloadBlocked.value) return
   downloading.value = true
   const target = item.value
   const targetMeta = captured.value // the shown tier, only to skip a media that already has a type — the backfill itself re-reads the listed tier
@@ -451,7 +456,14 @@ async function download() {
     // Streamed (inbox #371 S4): the original's chunk provider — the one playback uses, so the share viewer's injected
     // provider covers a guest's download too — written chunk by chunk into a picked file, the SW download route or a
     // capped Blob. Nothing is awaited before this call: the save picker needs the click's activation (download.ts).
-    const sniffed = await downloadOriginal(originalProviderOf(target), props.memoryName, current.value, targetMeta?.mediaType)
+    // Named by the original's own sealed file name, already loaded with the details (#395 F10); the Memory name and
+    // the gallery position only name a media that never sealed one.
+    const sniffed = await downloadOriginal(originalProviderOf(target), {
+      storedName: exif.value?.name,
+      memoryName: props.memoryName,
+      index: current.value,
+      sealedType: targetMeta?.mediaType,
+    })
     await maybeBackfillMediaType(target, targetMeta, sniffed)
   } catch (e) {
     if (e instanceof SaveTooLarge) toast.error(t('media.downloadTooLarge'))
@@ -516,7 +528,7 @@ onBeforeUnmount(() => {
           type="button"
           :aria-label="t('media.download')"
           :title="t('media.download')"
-          :disabled="downloading"
+          :disabled="downloadBlocked"
           @click="download"
         >
           <span class="pi" :class="downloading ? 'pi-spin pi-spinner' : 'pi-download'" />
@@ -594,7 +606,7 @@ onBeforeUnmount(() => {
             v-else
             type="button"
             class="media-lightbox-file-fallback"
-            :disabled="downloading"
+            :disabled="downloadBlocked"
             @click="download"
           >
             <span class="pi pi-file" />

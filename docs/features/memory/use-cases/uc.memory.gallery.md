@@ -51,8 +51,12 @@
 5. **Download:** an explicit download fetches the **original** (the only pristine, full-resolution copy) and
    saves it, streamed chunk by chunk — into a file the user picks, the browser's own download (the Service Worker's
    download route), or, only up to 512 MiB, an in-memory copy; above that with neither, it is refused with a message
-   (inbox #371). The file is named from the Memory's name, the item's position and an extension from the sealed media
-   type, else from the original's first chunk (its magic bytes), read before the save target opens.
+   (inbox #371). The file is saved under **the item's own file name** — the name the uploader's device gave it, sealed
+   at upload and loaded with the item's details (the download is offered once they are in) — so the same photo always
+   downloads under the same name, however many items are added after it. Only an item that never sealed a name
+   (uploaded before every upload did: a video, a screenshot, anything without EXIF) is named from the Memory's name and
+   its position, which moves when the gallery does, with an extension from the sealed media type, else from the
+   original's first chunk (its magic bytes), read before the save target opens.
 6. **Pin the Memory:** the header toggle pins / unpins it
    ([en.memory.favorites](../enablers/en.memory.favorites.md)). This pin is **private to the user**.
 7. **Mark an item, and narrow by marks.** A heart on each tile (and in the lightbox) marks that item. Unlike the
