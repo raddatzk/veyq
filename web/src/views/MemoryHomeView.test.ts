@@ -7,6 +7,7 @@
 // registry-variant cases (an unregistered detail, no section at all) are in `MemoryHomeView.registry.test.ts`, which
 // stubs the registry itself.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { breadcrumb } from '../app/breadcrumb'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 
@@ -72,9 +73,9 @@ vi.mock('../features/files/components/FilesSection.vue', async () => {
   return {
     default: defineComponent({
       name: 'FilesSectionStub',
-      props: ['folder', 'nodes', 'epochs', 'readonly'],
+      props: ['folder', 'nodes', 'epochs', 'readonly', 'deletable'],
       emits: ['openNode', 'create', 'rename'],
-      setup: (p) => () => h('section', { class: 'files-stub' }, `files=${p.nodes.map((n: { name: string }) => n.name).join(',')}`),
+      setup: (p) => () => h('section', { class: 'files-stub', 'data-deletable': String(p.deletable) }, `files=${p.nodes.map((n: { name: string }) => n.name).join(',')}`),
     }),
   }
 })
@@ -196,6 +197,8 @@ describe('MemoryHomeView over the real registry', () => {
     const anna = await mountAt('#~me/trips/anna')
     expect(anna.find('.section-stub').exists(), 'no empty Memories section').toBe(false)
     expect(anna.find('.files-stub').text()).toBe('files=scan.pdf')
+    // …but a member deletes what a guest sent there, file by file (inbox #391)
+    expect(anna.find('.files-stub').attributes('data-deletable')).toBe('true')
     expect(folderCards(anna)).toEqual(['Deep'])
     expect(share(anna).exists()).toBe(false)
     expect(anna.find('.veyq-level-toolbar').exists(), 'no trash where nothing is written').toBe(false)
@@ -206,6 +209,21 @@ describe('MemoryHomeView over the real registry', () => {
     const trips = await mountAt('#~me/trips')
     expect(trips.find('.section-stub').attributes('data-readonly')).toBe('false')
     expect(share(trips).exists()).toBe(true)
+  })
+
+  // Inbox #393 (b): two guests of one name — the folder at `anna-2` is headed, and its crumb named, "Anna (2)", as the
+  // drop box lists it (creation order), the first one plain "Anna".
+  it('heads an identity folder and its crumb with its numbered name', async () => {
+    treeStore.nodes = [
+      ...TREE.map((n) => ({ ...n })),
+      node({ id: 'anna-late', kind: FOLDER_KIND, name: 'Anna', parentId: 'trips', shareIdentityId: 'identity-2', createdAt: 2000 }),
+      node({ id: 'anna-early', kind: FOLDER_KIND, name: 'Anna', parentId: 'trips', shareIdentityId: 'identity-1', createdAt: 1000 }),
+    ]
+    const second = await mountAt('#~me/trips/anna-2')
+    expect(second.find('.veyq-folder-overview-card h2').text()).toBe('Anna (2)')
+    expect(breadcrumb.trail.at(-1)).toMatchObject({ id: 'anna-late', name: 'Anna (2)' })
+    const first = await mountAt('#~me/trips/anna')
+    expect(first.find('.veyq-folder-overview-card h2').text()).toBe('Anna')
   })
 
   // Files registers FILE with its own section (F1b): a file in a folder is listed there, after Memories' section, and no

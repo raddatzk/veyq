@@ -437,6 +437,9 @@ export type TrashedNode = {
   deletedAt: Date
   /** When the scheduled job erases it for good — derived server-side from the operator's window, not stored. */
   purgeAfter: Date
+  /** Whether the node itself holds a blob in one of core's attachment slots (the server's `attached`): what tells an
+   *  empty node of a kind whose content is its attachment apart (`KindDescriptor.emptyInTrash`, inbox #391). */
+  attached: boolean
 } & IdentityChild
 
 /** The space's node trash: the ROOT of each deleted subtree (the descendants went with it and return with it — except
@@ -470,6 +473,7 @@ export async function listTrash(scopeId: string, epochs: EpochKeys, tree: TreeNo
       name,
       deletedAt: r.deletedAt,
       purgeAfter: r.purgeAfter,
+      attached: r.attached,
     }]
   })
 }

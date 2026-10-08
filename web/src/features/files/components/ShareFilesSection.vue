@@ -15,7 +15,7 @@ import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
 import * as v1 from '@veyq/crypto/v1'
-import type { ShareSectionProps } from '../../../core/applications/registry'
+import { registry, type ShareSectionProps } from '../../../core/applications/registry'
 import { enqueue, removeFile, useUploadQueue, QUOTA_EXCEEDED, type UploadItem } from '../../../core/blob/queue'
 import { guestTreeContext } from '../../../core/sharing/guestTree'
 import { shareChunkUrls } from '../../../core/sharing/guestBlob'
@@ -27,7 +27,7 @@ import type { ShareNode } from '../../../api/generated/sharing'
 import { publicShareFilesApi } from '../api'
 import { FILE_KIND } from '../kinds'
 import { readFileMeta } from '../fileMeta'
-import { FileUploadError, type FileJobExtra, type FileUploadResult } from '../uploadFile'
+import { deliveredSince, FileUploadError, type FileJobExtra, type FileUploadResult } from '../uploadFile'
 import { guestFileUploadJob } from '../shareUpload'
 import { downloadFile } from '../download'
 import { isSaveCancelled, SaveTooLarge } from '../../../shared/saveStream'
@@ -159,20 +159,30 @@ function onDrop(e: DragEvent) {
 // --- what the status menu cannot explain -------------------------------------------------------------------------
 
 type Notice = { item: UploadItem<FileUploadResult, FileJobExtra>; text: string }
+/** A file of this folder whose name folds like `name` (the kind's own folding, as the server's slug does): a
+ *  contributor's upload of it is refused `409 slug_taken` — the owner kept that (inbox #392, no replace by upload for a
+ *  guest), and the notice says what happened and where the replace is, not the generic "a similar name". */
+const fileNamed = (name: string): boolean => {
+  const slug = registry.slugFor(FILE_KIND, name)
+  return fileNodes.value.some((n) => registry.slugFor(FILE_KIND, props.names.get(n.id) ?? '') === slug)
+}
 const KNOWN_ERRORS = new Set<string>(Object.values(FileUploadError))
-const notices = computed<Notice[]>(() =>
-  batches.value
-    .filter((b) => b.key === batchKey.value)
+const notices = computed<Notice[]>(() => {
+  const mine = batches.value.filter((b) => b.key === batchKey.value)
+  const madeGood = deliveredSince(mine) // the same file uploaded since: nothing left to explain (inbox #395)
+  return mine
     .flatMap((b) => b.files as UploadItem<FileUploadResult, FileJobExtra>[])
-    .filter((item) => item.status === 'failed')
+    .filter((item) => item.status === 'failed' && !madeGood.has(item.id))
     .map((item) => {
       const error = item.error ?? ''
       const text = error === QUOTA_EXCEEDED
         ? t('files.guest.linkFull', { name: item.name })
-        : t(`files.errors.${KNOWN_ERRORS.has(error) ? error : 'failed'}`, { name: item.name })
+        : error === FileUploadError.slugTaken && fileNamed(item.name)
+          ? t('files.guest.fileExists', { name: item.name })
+          : t(`files.errors.${KNOWN_ERRORS.has(error) ? error : 'failed'}`, { name: item.name })
       return { item, text }
-    }),
-)
+    })
+})
 
 // --- download ----------------------------------------------------------------------------------------------------
 

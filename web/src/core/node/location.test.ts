@@ -6,6 +6,8 @@ import {
   slugPathOf,
   hashForNode,
   compareByCreation,
+  compareById,
+  displayNamesOf,
   TENANT_SCOPE,
 } from './location'
 import { breadcrumbOf } from './browse'
@@ -235,5 +237,29 @@ describe('equal sibling slugs', () => {
       '#uploads/anna-2',
       '#uploads/anna-2/fotos',
     ])
+  })
+
+  // Inbox #393 (b): the crumbs NAME the folder as its link addresses it — `Anna (2)` for the one at `anna-2`.
+  it('names the crumbs as the list numbers them: the second Anna reads "Anna (2)"', () => {
+    const t = [...dropTree, node('c2000000-0000-4000-8000-000000000000', 'Fotos', ANNA_2)]
+    expect(breadcrumbOf(t, 'c2000000-0000-4000-8000-000000000000', 'Root', TENANT_SCOPE).map((c) => c.name)).toEqual([
+      'Root', 'Uploads', 'Anna (2)', 'Fotos',
+    ])
+    expect(breadcrumbOf(t, ANNA_1, 'Root', TENANT_SCOPE).at(-1)!.name).toBe('Anna')
+  })
+})
+
+// The one numbering of equal sibling names (inbox #393): display only, in the order the caller gives.
+describe('displayNamesOf', () => {
+  const s = (id: string, name: string, createdAt: number) => ({ id, name, createdAt })
+  it('keeps a unique name, and numbers a repeated one from (2) in the given order', () => {
+    const siblings = [s('c', 'Anna', 3), s('a', 'Anna', 1), s('b', 'Ben', 2), s('d', 'Anna', 2)]
+    expect(Object.fromEntries(displayNamesOf(siblings, (n) => n.name, compareByCreation))).toEqual({
+      a: 'Anna', d: 'Anna (2)', c: 'Anna (3)', b: 'Ben',
+    })
+    // a guest's view has no creation time: node-id order
+    expect(Object.fromEntries(displayNamesOf(siblings, (n) => n.name, compareById))).toEqual({
+      a: 'Anna', c: 'Anna (2)', d: 'Anna (3)', b: 'Ben',
+    })
   })
 })

@@ -81,7 +81,7 @@ const BLOBS: FileListPage = {
 }
 let listFiles: ReturnType<typeof stubApi<typeof filesApi, 'listFiles'>>['listFiles']
 
-function mountSection(props: { nodes: TreeNode[]; readonly?: boolean; folder?: TreeNode | null }) {
+function mountSection(props: { nodes: TreeNode[]; readonly?: boolean; deletable?: boolean; folder?: TreeNode | null }) {
   return mount(FilesSection, {
     props: { folder: DOCS, epochs: epochsOf(v1.randomBytes(32)), readonly: false, ...props },
     global: { plugins: [realI18n()], directives: { tooltip: {} } },
@@ -163,6 +163,27 @@ describe('FilesSection', () => {
     for (const action of ['files.replace', 'files.rename', 'files.delete']) {
       expect(byLabel(w, t(action, { name: 'notes.txt' })).exists()).toBe(false)
     }
+  })
+
+  // Inbox #391: a guest's identity folder takes no write, but a member removes what a guest sent — file by file, a
+  // content-less one too (a guest's upload that never finished: 'not uploaded yet', nothing to download). Through the
+  // section's own delete confirmation (trash semantics); still no upload, replace or rename there.
+  it('read-only but deletable (a guest\'s identity folder): delete per file, a content-less one too, and nothing else', async () => {
+    const w = mountSection({ nodes: [NOTES, PENDING], readonly: true, deletable: true })
+    await flushPromises()
+    expect(w.find('.files-toolbar').exists()).toBe(false)
+    expect(w.findAll('input[type="file"]')).toHaveLength(0)
+    const pending = w.findAll('li.files-row')[1]
+    expect(pending.find('.veyq-row-subtitle').text()).toBe(t('files.notUploaded'))
+    for (const action of ['files.replace', 'files.uploadInto', 'files.rename']) {
+      expect(byLabel(w, t(action, { name: 'pending.bin' })).exists()).toBe(false)
+    }
+    await byLabel(w, t('files.delete', { name: 'pending.bin' })).trigger('click')
+    expect(confirmRequest.value).toMatchObject({ header: t('files.deleteTitle'), message: t('files.deleteConfirm', { name: 'pending.bin' }) })
+    settleConfirm(true)
+    await flushPromises()
+    expect(deleteNode).toHaveBeenCalledWith(SCOPE, P)
+    expect(byLabel(w, t('files.delete', { name: 'notes.txt' })).exists()).toBe(true)
   })
 
   it('steps aside in map mode', async () => {
@@ -348,6 +369,24 @@ describe('FilesSection', () => {
     expect(confirmRequest.value).toBeNull()
     expect(targets()).toEqual([{ name: 'Report.pdf', target: expect.objectContaining({ replace: expect.objectContaining({ nodeId: R, expectedBlobId: 'blob-peer' }) }) }])
     expect(w.findAll('.files-notice').map((n) => n.text()).join()).not.toContain(t('files.errors.stale_file', { name: 'Report.pdf' }))
+  })
+
+  // Inbox #395 (F9): a failure the member made good — the same file uploaded since — is no longer explained; another
+  // file's success leaves it.
+  it('a failure is no longer shown once the same file has been uploaded since', async () => {
+    const w = mountSection({ nodes: [] })
+    const file = new File(['a'], 'x.txt')
+    const key = `files:${SCOPE}:${D}`
+    enqueue([{ name: 'x.txt', sizeBytes: 1, run: async () => { throw new Error('upload_failed') }, extra: { file } }], { label: 'Docs', key })
+    enqueue([{ name: 'other.txt', sizeBytes: 1, run: async () => ({ nodeId: 'o', metaWritten: true }), extra: { file } }], { label: 'Docs', key })
+    await vi.waitFor(() => expect(useUploadQueue().batches.value.every((b) => b.finishedAt !== null)).toBe(true))
+    await flushPromises()
+    expect(w.findAll('.files-notice').map((n) => n.text()).join()).toContain(t('files.errors.failed', { name: 'x.txt' }))
+
+    enqueue([{ name: 'x.txt', sizeBytes: 1, run: async () => ({ nodeId: 'x', metaWritten: true }), extra: { file } }], { label: 'Docs', key })
+    await vi.waitFor(() => expect(useUploadQueue().batches.value.every((b) => b.finishedAt !== null)).toBe(true))
+    await flushPromises()
+    expect(w.findAll('.files-notice')).toHaveLength(0)
   })
 
   it('names a create refusal and a missing meta in their own words', async () => {

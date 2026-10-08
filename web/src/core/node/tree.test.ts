@@ -229,8 +229,8 @@ describe('listTrash', () => {
     const NEW = '5c09e000-0000-4000-8000-0000000000a2'
     mockContent({
       listTrashedNodes: vi.fn<ContentApi['listTrashedNodes']>().mockResolvedValue([
-        { id: OLD, parentId: null, kind: 'MEMORY', epoch: 0, placementVersion: 0, encryptedName: sealUnder(e0, OLD, 0, 'Rom 2024'), deletedAt, purgeAfter },
-        { id: NEW, parentId: F1, kind: 'FOLDER', epoch: 1, placementVersion: 0, encryptedName: sealUnder(folderKey, NEW, 1, 'Sommer'), deletedAt, purgeAfter },
+        { id: OLD, parentId: null, kind: 'MEMORY', epoch: 0, placementVersion: 0, encryptedName: sealUnder(e0, OLD, 0, 'Rom 2024'), deletedAt, purgeAfter, attached: false },
+        { id: NEW, parentId: F1, kind: 'FOLDER', epoch: 1, placementVersion: 0, encryptedName: sealUnder(folderKey, NEW, 1, 'Sommer'), deletedAt, purgeAfter, attached: false },
       ]),
     })
 

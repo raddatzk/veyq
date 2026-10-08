@@ -91,9 +91,9 @@ beforeEach(async () => {
   await router.isReady()
 })
 
-async function mountBody(role: ShareRole) {
+async function mountBody(role: ShareRole, served: PublicShareHead = head(role)) {
   const w = mount(FolderShareBody, {
-    props: { shareId: SHARE_ID, fragmentKey: b64url(K_SHARE), pwToken: undefined, head: head(role), reload: async () => {} },
+    props: { shareId: SHARE_ID, fragmentKey: b64url(K_SHARE), pwToken: undefined, head: served, reload: async () => {} },
     global: { plugins: [router, realI18n(), PrimeVue], directives: { tooltip: {} } },
   })
   await flushPromises()
@@ -170,6 +170,30 @@ describe('a drop box inside a folder share is shown read-only (inbox #380, owner
     const atAnna = await mountBody(ShareRole.ReadWrite)
     expect(heading(atAnna)).toBe('Anna')
     expectNoWriteControl(atAnna)
+  })
+
+  // Inbox #393 (b): a second guest named Anna — the list numbers it "Anna (2)" (node-id order: a guest's resolve serves no
+  // creation time), and the folder it opens is headed and crumbed the same, not a second plain "Anna".
+  it('two guests of one name: the second folder is "Anna (2)" in the list, its heading and its breadcrumb', async () => {
+    const ANNA_2 = '6e5a0000-0000-4000-8000-000000000386'
+    const IDENTITY_2 = '6e5a0000-0000-4000-8000-0000000003a1'
+    const second = mintIdentityKey(SCOPE_ID, DROP, IDENTITY_2, dropPublic)
+    const served = head(ShareRole.Read)
+    served.share.nodes.push({
+      ...child(ANNA_2, DROP, second.identityKey, v1.randomBytes(32), 'Anna', FOLDER_KIND),
+      shareIdentityId: IDENTITY_2, wrappedIdentityKey: second.wrappedIdentityKey,
+    })
+    await router.push(`/s/${SHARE_ID}?node=${DROP}${HASH}`)
+    const atDrop = await mountBody(ShareRole.Read, served)
+    expect(atDrop.findComponent(DropBoxSharedView).findAll('.veyq-row-title').map((r) => r.text())).toEqual(['Anna', 'Anna (2)'])
+    atDrop.unmount()
+    await router.push(`/s/${SHARE_ID}?node=${ANNA_2}${HASH}`)
+    const atSecond = await mountBody(ShareRole.Read, served)
+    expect(heading(atSecond)).toBe('Anna (2)')
+    expect(atSecond.find('.app-breadcrumb').text()).toContain('Anna (2)')
+    atSecond.unmount()
+    await router.push(`/s/${SHARE_ID}?node=${ANNA}${HASH}`)
+    expect(heading(await mountBody(ShareRole.Read, served))).toBe('Anna')
   })
 
   it('an empty drop box in a sub-folder says nobody sent anything', async () => {

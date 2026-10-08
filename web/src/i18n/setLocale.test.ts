@@ -19,6 +19,22 @@ beforeEach(() => {
 })
 
 describe('language preference', () => {
+  it('the document\'s <html lang> follows the UI language: at start and on every switch (inbox #395)', async () => {
+    document.documentElement.lang = 'xx'
+    setLocalePreference('de')
+    expect(document.documentElement.lang).toBe('de')
+    setLocalePreference('en')
+    expect(document.documentElement.lang).toBe('en')
+
+    // At start: a fresh module sets it from the stored preference, before anything switches.
+    localStorage.setItem('veyq:locale', 'de')
+    document.documentElement.lang = 'en'
+    vi.resetModules()
+    const fresh = await import('./index')
+    expect(fresh.i18n.global.locale.value).toBe('de')
+    expect(document.documentElement.lang).toBe('de')
+  })
+
   it('switches to a concrete language + persists it', () => {
     setLocalePreference('de')
     expect(i18n.global.locale.value).toBe('de')

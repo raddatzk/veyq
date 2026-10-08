@@ -15,7 +15,7 @@ import { activeSpace, activeEpochKeys, enterScope } from '../app/activeSpace'
 import { suspensionSignals } from '../app/tenantSuspension'
 import { setBreadcrumb } from '../app/breadcrumb'
 import { treeStore, loadTree } from '../core/node/treeStore'
-import { childrenOf, breadcrumbOf, nodeById } from '../core/node/browse'
+import { childrenOf, breadcrumbOf, displayNameOf, nodeById } from '../core/node/browse'
 import { nodeContentKey } from '../core/node/tree'
 import { parseHash, resolveSlugPath, hashForNode, TENANT_SCOPE } from '../core/node/location'
 import { listMyTenants } from '../features/spaces/scopes'
@@ -41,8 +41,9 @@ const { hasCapability } = useCapabilities()
 // its create affordances (every write is server-rejected during the grace window anyway, uc.spaces.scope-access).
 const isPendingDeletion = computed(() => activeSpace.deletedAt !== null)
 // A guest's identity folder in a drop box, or a folder below one (ADR 0080 decision 11, `TreeNode.shareIdentityId`): a
-// member places nothing there (the server refuses it), so its level is read-only — download only; a member deletes a
-// guest's folder from its drop box (the application's detail; a move out is the server's, not offered here yet). It
+// member places nothing there (the server refuses it), so its level is read-only — download, and delete (`deletable`: a
+// member removes a guest's file singly, inbox #391, or its whole folder from the drop box, the application's detail; a
+// move out is the server's, not offered here yet, inbox #358). It
 // offers no share and leaves out its empty sections (inbox #385): a guest's folder is looked at, not built on.
 const inIdentityFolder = computed(() => {
   for (let n = currentNode.value; n; n = nodeById(treeStore.nodes, n.parentId)) if (n.shareIdentityId) return true
@@ -71,6 +72,8 @@ const currentFolder = computed(() =>
   currentNode.value && currentNode.value.kind === FOLDER_KIND ? currentNode.value : null,
 )
 const level = computed(() => childrenOf(treeStore.nodes, currentNodeId.value))
+// The folder's heading as the breadcrumb and the list it was picked from call it (a guest's `Anna (2)`, inbox #393).
+const currentFolderName = computed(() => (currentFolder.value ? displayNameOf(treeStore.nodes, currentFolder.value) : undefined))
 // The full **epoch key set** (ADR 0024) — a read opens each node under its own epoch, new content seals under the
 // write epoch. Threaded through the browse + mutation children in place of a single scope key. `activeEpochKeys()`
 // isn't reactive, so depend on BOTH `status` (keys set on scope entry) and `epoch` (keys swapped on a rotation
@@ -246,6 +249,8 @@ async function onDeleteDone() {
         :level="level"
         :epochs="epochs"
         :readonly="isPendingDeletion || inIdentityFolder"
+        :deletable="!isPendingDeletion"
+        :folder-name="currentFolderName"
         :shareable="shareable && !inIdentityFolder"
         :hide-empty-sections="inIdentityFolder"
         @open-node="openNode"

@@ -42,6 +42,7 @@ const ROW: TrashedNode = {
   name: 'Rom 2026',
   deletedAt: new Date('2026-08-17T10:15:30Z'),
   purgeAfter: new Date('2026-09-16T10:15:30Z'),
+  attached: false,
 }
 
 function mountDialog() {
@@ -93,6 +94,24 @@ describe('SpaceTrashDialog', () => {
     expect(iconOf('AMem')).toBe('pi pi-images')
     expect(iconOf('BFolder')).toBe('pi pi-folder')
     expect(iconOf('CFuture')).toBe('pi pi-file')
+  })
+
+  // Inbox #391: a node of a kind whose content IS its attachment (Files' FILE, `emptyInTrash` through the real registry)
+  // that holds none says so — restorable still, but not like any other file. One that holds content, and a kind that
+  // registered no note (a Memory holds no attachment and is not empty for it), carry no note.
+  it('marks a trashed node its kind calls empty without an attachment, and only that one', async () => {
+    vi.mocked(listTrash).mockResolvedValue([
+      { ...ROW, id: 'a', name: 'empty.txt', kind: 'FILE', attached: false },
+      { ...ROW, id: 'b', name: 'full.txt', kind: 'FILE', attached: true },
+      { ...ROW, id: 'c', name: 'Rom', kind: 'MEMORY', attached: false },
+    ])
+    const wrapper = mountDialog()
+    await settle(wrapper)
+    const row = (name: string) => wrapper.findAll('.trash-row').find((r) => r.text().includes(name))!
+    expect(row('empty.txt').find('.trash-row-empty').text()).toBe(t('files.trashEmpty'))
+    expect(row('empty.txt').text()).toContain(t('node.trash.restore'))
+    expect(row('full.txt').find('.trash-row-empty').exists()).toBe(false)
+    expect(row('Rom').find('.trash-row-empty').exists()).toBe(false)
   })
 
   it('shows the empty state when nothing was deleted', async () => {

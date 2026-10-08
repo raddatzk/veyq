@@ -2,7 +2,7 @@
 // so the current level + the breadcrumb are derived here from the locally-decrypted tree (`listTree`).
 import type { TreeNode } from './tree'
 import type { Crumb } from '../../app/breadcrumb'
-import { hashForNode } from './location'
+import { compareByCreation, displayNamesOf, hashForNode } from './location'
 import { FOLDER_KIND, type NodeKind } from './kind'
 
 const byOrder = (a: TreeNode, b: TreeNode): number => a.orderIndex - b.orderIndex || a.name.localeCompare(b.name)
@@ -35,14 +35,22 @@ export function childrenOf(tree: TreeNode[], parentId: string | null): Level {
   return { folders, byKind }
 }
 
+/** A node's name as its siblings tell it apart (`displayNamesOf` in creation order: a drop box's second guest folder
+ *  `Anna` reads `Anna (2)`, inbox #393) — what the heading and the breadcrumb call it, as the list it was picked from. */
+export function displayNameOf(tree: readonly TreeNode[], node: TreeNode): string {
+  const parentId = node.parentId ?? null
+  const siblings = tree.filter((n) => (n.parentId ?? null) === parentId)
+  return displayNamesOf(siblings, (n) => n.name, compareByCreation).get(node.id) ?? node.name
+}
+
 /** The breadcrumb from the root down to `nodeId` (null = root): `[root, …ancestors, node]`, each crumb
- *  carrying its `#fragment` in the active `scope` so the topbar can link to it. */
+ *  carrying its `#fragment` in the active `scope` so the topbar can link to it, and its name as {@link displayNameOf}. */
 export function breadcrumbOf(tree: TreeNode[], nodeId: string | null, rootName: string, scope: string): Crumb[] {
   const byId = new Map(tree.map((n) => [n.id, n]))
   const trail: Crumb[] = []
   let cur = nodeId ? byId.get(nodeId) ?? null : null
   while (cur) {
-    trail.unshift({ id: cur.id, name: cur.name, hash: hashForNode(tree, cur.id, scope) })
+    trail.unshift({ id: cur.id, name: displayNameOf(tree, cur), hash: hashForNode(tree, cur.id, scope) })
     cur = cur.parentId ? byId.get(cur.parentId) ?? null : null
   }
   trail.unshift({ id: null, name: rootName, hash: hashForNode(tree, null, scope) })

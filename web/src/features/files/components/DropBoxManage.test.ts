@@ -8,13 +8,16 @@ import { mount, flushPromises } from '@vue/test-utils'
 import PrimeVue from 'primevue/config'
 
 vi.mock('../dropBox', () => ({ createDropBox: vi.fn(), mintDropBoxLink: vi.fn() }))
-vi.mock('../../../core/sharing/manageShares', () => ({ listSharesFor: vi.fn(), deleteShare: vi.fn(), revokeShare: vi.fn() }))
+vi.mock('../../../core/sharing/manageShares', async (importOriginal) => ({
+  isReissueRequired: (await importOriginal<typeof import('../../../core/sharing/manageShares')>()).isReissueRequired,
+  listSharesFor: vi.fn(), deleteShare: vi.fn(), revokeShare: vi.fn(), reactivateShare: vi.fn(),
+}))
 vi.mock('../../../core/sharing/shareLink', () => ({ buildShareLink: vi.fn(), recoverShareLink: vi.fn(() => 'https://x/s/1#k=a') }))
 
 import DropBoxCreateDialog from './DropBoxCreateDialog.vue'
 import DropBoxSection from './DropBoxSection.vue'
 import DropBoxShareDialog from './DropBoxShareDialog.vue'
-import { deleteShare, listSharesFor, type ManagedShare } from '../../../core/sharing/manageShares'
+import { deleteShare, listSharesFor, reactivateShare, revokeShare, type ManagedShare } from '../../../core/sharing/manageShares'
 import { confirmRequest, settleConfirm } from '../../../shared/state/useConfirm'
 import { ShareRole } from '../../../api/generated/sharing'
 import type { TreeNode } from '../../../core/node/tree'
@@ -78,5 +81,45 @@ describe('the drop box share dialog', () => {
     settleConfirm(true)
     await flushPromises()
     expect(deleteShare).toHaveBeenCalledWith('link-1')
+  })
+
+  // Inbox #394: switching off asks first, and an off link is switched on again (core's reactivate), as on a folder.
+  const mountDialog = async () => {
+    const w = mount(DropBoxShareDialog, {
+      props: { scopeId: SCOPE, nodeId: 'b1', nodeKey: new Uint8Array(32), epochs: EPOCHS, nodeName: 'Einsendungen', nodeKind: DROPBOX_KIND },
+      global,
+    })
+    await flushPromises()
+    return w
+  }
+  it('switches a link off only after the member confirmed', async () => {
+    vi.mocked(listSharesFor).mockResolvedValue([link])
+    const w = await mountDialog()
+    const off = () => w.find(`button[aria-label="${t('files.dropBox.shareRevoke')}"]`)
+    await off().trigger('click')
+    expect(confirmRequest.value?.message).toBe(t('files.dropBox.shareRevokeConfirm'))
+    settleConfirm(false)
+    await flushPromises()
+    expect(revokeShare).not.toHaveBeenCalled()
+    await off().trigger('click')
+    settleConfirm(true)
+    await flushPromises()
+    expect(revokeShare).toHaveBeenCalledWith('link-1')
+  })
+
+  it('an off link shows its link marked off and switches on again; one a departed member may hold says to make a new one', async () => {
+    vi.mocked(listSharesFor).mockResolvedValue([{ ...link, enabled: false }, { ...link, shareId: 'link-2', enabled: false, reissueRequired: true }])
+    const w = await mountDialog()
+    const rows = w.findAll('li.veyq-list-row')
+    expect(rows[0].text()).toContain('https://x/s/1#k=a')
+    expect(rows[0].find('.dropbox-link-off').text()).toBe(t('files.dropBox.shareOff'))
+    expect(rows[0].find(`button[aria-label="${t('files.dropBox.shareRevoke')}"]`).exists()).toBe(false)
+    expect(rows[1].text()).toContain(t('files.dropBox.shareReissueHint'))
+    expect(rows[1].find(`button[aria-label="${t('files.dropBox.shareReactivate')}"]`).exists()).toBe(false)
+    await rows[0].find(`button[aria-label="${t('files.dropBox.shareReactivate')}"]`).trigger('click')
+    await flushPromises()
+    expect(confirmRequest.value, 'switching on asks nothing').toBeNull()
+    expect(reactivateShare).toHaveBeenCalledWith('link-1')
+    expect(listSharesFor).toHaveBeenCalledTimes(2)
   })
 })

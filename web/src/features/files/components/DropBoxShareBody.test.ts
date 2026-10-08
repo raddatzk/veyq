@@ -31,6 +31,8 @@ import { GuestTreeError, type GuestTreeContext } from '../../../core/sharing/gue
 import type { PublicShareHead } from '../../../core/sharing/resolvePublicShare'
 import { realI18n } from '../../../test/i18n'
 import { formatBytes } from '../../../shared/formatBytes'
+import { mountConfirmDialog } from '../../../test/confirmDialog'
+import { confirmRequest, settleConfirm } from '../../../shared/state/useConfirm'
 
 const { t } = realI18n().global
 const SHARE = 'Dr0pIdDr0pIdDr0pIdDr0pIdDr0pIdDr0pIdDr0p-_1'
@@ -59,6 +61,7 @@ function fakeJob(file: File) {
 }
 
 beforeEach(() => {
+  if (confirmRequest.value) settleConfirm(false)
   clearUploads()
   runs.clear()
   outcome = async () => ({ nodeId: 'n', metaWritten: true })
@@ -71,9 +74,9 @@ beforeEach(() => {
   vi.mocked(guestFileUploadJob).mockReset().mockImplementation((_t, file) => fakeJob(file))
 })
 
-function mountPage() {
+function mountPage(reload: () => Promise<void> = async () => {}) {
   return mount(DropBoxShareBody, {
-    props: { shareId: SHARE, fragmentKey: 'frag', pwToken: undefined, head: HEAD, reload: async () => {} },
+    props: { shareId: SHARE, fragmentKey: 'frag', pwToken: undefined, head: HEAD, reload },
     global: { plugins: [realI18n(), PrimeVue] },
   })
 }
@@ -227,7 +230,19 @@ describe('DropBoxShareBody: whose session this is (inbox #385 a)', () => {
     expect(vi.mocked(ensureDropFolder).mock.calls[0][2], 'after a reload the folder is named from the session').toBe('Anna')
     expect(notYou(w).text()).toBe(t('files.dropBox.guestNotYou'))
 
+    // It asks first (inbox #395), through the app's real dialog: declined, nothing is forgotten.
+    const dialog = mountConfirmDialog()
     await notYou(w).trigger('click')
+    await flushPromises()
+    expect(dialog.text()).toContain(t('files.dropBox.guestNotYouConfirm', { name: 'Anna' }))
+    dialog.click(t('common.cancel'))
+    await flushPromises()
+    expect(forgetDropGuest).not.toHaveBeenCalled()
+    expect(w.text()).toContain(t('files.dropBox.guestAs', { name: 'Anna' }))
+    await notYou(w).trigger('click')
+    await flushPromises()
+    dialog.click(t('files.dropBox.guestNotYouAccept'))
+    await flushPromises()
     expect(forgetDropGuest).toHaveBeenCalledWith(SHARE)
     expect(w.find('form').exists(), 'the name form again').toBe(true)
     expect(w.text()).not.toContain('Anna')
@@ -253,13 +268,20 @@ describe('DropBoxShareBody: whose session this is (inbox #385 a)', () => {
     expect(notYou(w).attributes('disabled')).toBeUndefined()
   })
 
-  it('a link gone for this guest (its folder trashed) offers to start over under a new name', async () => {
+  // Inbox #393 (a): starting over after a gone link reads the link again first (the shell's `reload`): a revoked link
+  // turns the whole page to "not available" there; one that still resolves (this folder trashed) asks for a new name.
+  // Nothing is asked — the session takes nothing any more.
+  it('a link gone for this guest (its folder trashed) offers to start over under a new name, re-reading the link first', async () => {
     vi.mocked(ensureDropFolder).mockRejectedValue(http(403, 'share_not_contributable'))
-    const w = mountPage()
+    const reload = vi.fn(async () => {})
+    const w = mountPage(reload)
     await pick(w, 'a.pdf')
     expect(w.text()).toContain(t('files.dropBox.guestGone'))
     expect(notYou(w).text()).toBe(t('files.dropBox.guestStartOver'))
     await notYou(w).trigger('click')
+    await flushPromises()
+    expect(reload).toHaveBeenCalledOnce()
+    expect(confirmRequest.value, 'no question after a gone link').toBeNull()
     expect(forgetDropGuest).toHaveBeenCalledWith(SHARE)
     expect(w.find('form').exists()).toBe(true)
     expect(w.text()).not.toContain(t('files.dropBox.guestGone'))

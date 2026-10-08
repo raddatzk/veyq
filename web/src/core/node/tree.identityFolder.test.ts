@@ -92,7 +92,7 @@ describe('a guest identity folder in the member tree', () => {
     const w = world()
     serve([w.rows[0]], [{
       id: FOLDER, parentId: BOX, kind: 'FOLDER', encryptedName: w.rows[1].encryptedName, epoch: 0, placementVersion: 0,
-      deletedAt: new Date(), purgeAfter: new Date(), shareIdentityId: IDENTITY, wrappedIdentityKey: w.wrappedIdentityKey,
+      deletedAt: new Date(), purgeAfter: new Date(), attached: false, shareIdentityId: IDENTITY, wrappedIdentityKey: w.wrappedIdentityKey,
     }])
     const tree = await listTree(SCOPE, epochs)
     expect((await listTrash(SCOPE, epochs, tree)).map((t) => t.name)).toEqual(['Adelgunde'])

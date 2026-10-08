@@ -102,6 +102,15 @@ export interface KindDescriptor {
    *  this kind, e.g. Memories' "Delete Memory". Omitted: the neutral `node.delete`. Core serves every application's
    *  nodes and so names none in its own strings (inbox #375): a kind's noun comes from the kind. */
   deleteTitle?: string
+  /** The i18n key (one `{name}` parameter) of the sentence core's delete dialog says for a node of this kind, where
+   *  the neutral `node.deleteCopy` would leave out what goes with it (Files' drop box: its guests' folders and its
+   *  links, inbox #395). Omitted: `node.deleteCopy`. */
+  deleteCopy?: string
+  /** The i18n key of the note core's trash shows on a trashed node of this kind that holds no attachment (the trash
+   *  listing's `attached`): for a kind whose content IS its attachment, such a node is empty — Files' `FILE` whose
+   *  upload never finished (inbox #391). Its restore stays offered, the row says what comes back. Omitted: no note (a
+   *  kind whose content lives elsewhere, e.g. a Memory, holds no attachment and is not empty for it). */
+  emptyInTrash?: string
   /** Whether a public share can be created for a node of this kind (the capability check still applies). */
   shareable: boolean
   /** How a name of this kind folds before it is HMAC'd into its blinded slug token (inbox #350; read through
@@ -178,6 +187,9 @@ export interface LevelSectionProps {
   nodes: readonly TreeNode[]
   epochs: EpochKeys | null
   readonly: boolean
+  /** A child may still be deleted into the trash where nothing is placed (`readonly` true): inside a guest's identity
+   *  folder, where a member only looks, downloads and deletes (inbox #391). Omitted: `!readonly`. */
+  deletable?: boolean
 }
 /** Events a section emits to the level view: `openNode` (a child), `create` (the KIND to create at this level, e.g.
  *  Memories' MEMORY: the host mounts that kind's `createDialog`), `rename` (a child renamed in place, for a kind that

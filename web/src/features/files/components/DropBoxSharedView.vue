@@ -15,6 +15,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import type { ShareBodyProps } from '../../../core/applications/registry'
 import { FOLDER_KIND } from '../../../core/node/kind'
+import { compareById, displayNamesOf } from '../../../core/node/location'
 import { openGuestTreeParts, type GuestTreeParts } from '../../../core/sharing/guestTree'
 import { FILE_KIND } from '../kinds'
 
@@ -45,14 +46,12 @@ const folders = computed(() => {
   const all = [...p.nodes.values()]
   const own = all
     .filter((n) => n.parentId === props.subtreeRoot.nodeId && n.kind === FOLDER_KIND && p.names.has(n.id))
-    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-  const seen = new Map<string, number>()
+    .sort(compareById)
+  // Core's one numbering, which core's folder page heads the opened folder with too (inbox #393).
+  const labels = displayNamesOf(own, (n) => p.names.get(n.id) ?? '', compareById)
   return own.map((folder) => {
-    const name = p.names.get(folder.id) ?? ''
-    const n = (seen.get(name) ?? 0) + 1
-    seen.set(name, n)
     const files = all.filter((c) => c.parentId === folder.id && c.kind === FILE_KIND && p.names.has(c.id)).length
-    return { id: folder.id, label: n === 1 ? name : `${name} (${n})`, files }
+    return { id: folder.id, label: labels.get(folder.id) ?? '', files }
   })
 })
 

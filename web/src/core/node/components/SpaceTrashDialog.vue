@@ -71,6 +71,14 @@ function icon(kind: NodeKind): string {
   return info.supported ? info.icon : 'pi pi-file'
 }
 
+/** The note a row carries when its kind's content is its attachment and it holds none (inbox #391): restoring brings back
+ *  an empty node, and the row says so instead of offering it like any other. The kind's own words (core names none). */
+function emptyNote(row: TrashedNode): string | null {
+  if (row.attached) return null
+  const info = registry.kind(row.kind)
+  return info.supported && info.emptyInTrash ? t(info.emptyInTrash) : null
+}
+
 function startRetry(row: TrashedNode) {
   renaming.value = row.id
   retryName.value = row.name
@@ -123,6 +131,7 @@ onMounted(() => void load())
             {{ t('node.trash.deletedOn', { day: day(row.deletedAt) }) }} ·
             {{ t('node.trash.purgeOn', { day: day(row.purgeAfter) }) }}
           </span>
+          <span v-if="emptyNote(row)" class="veyq-row-subtitle trash-row-empty">{{ emptyNote(row) }}</span>
           <Message
             v-if="rowError && rowError.id === row.id"
             severity="error"

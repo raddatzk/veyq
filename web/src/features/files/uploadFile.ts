@@ -27,7 +27,7 @@
 // it. A replace never trashes anything — the node was there before the job.
 import { createContentNode, deleteNode, type NodeParent } from '../../core/node/tree'
 import { planBlob, reserveAndPump, authedReserve, authedWindow, throwIfAborted } from '../../core/blob/transport'
-import type { UploadJob, UploadJobContext } from '../../core/blob/queue'
+import type { UploadBatch, UploadJob, UploadJobContext } from '../../core/blob/queue'
 import type { SealedMetaState } from '../../core/node/sealedMetaWrite'
 import { expectMintedId } from '../../core/node/mintedId'
 import type { EpochKeys } from '../spaces/epochs'
@@ -120,6 +120,18 @@ export async function rethrowCompletion(e: unknown): Promise<never> {
 
 /** The codes no retry of the same job can change: a job remembers one and rethrows it without a request. */
 export const FINAL = new Set<string>(Object.values(FileUploadError))
+
+/** The failed items of one view's `batches` that a LATER item of the same name has since delivered (`done`): the
+ *  section stops explaining a failure the member or guest already made good by uploading the file again (inbox #395).
+ *  "Later" is queue order — the batches by `seq`, each batch's items as queued; an earlier success fixes nothing. */
+export function deliveredSince(batches: readonly UploadBatch[]): Set<string> {
+  const items = [...batches].sort((a, b) => a.seq - b.seq).flatMap((b) => b.files)
+  const out = new Set<string>()
+  items.forEach((item, i) => {
+    if (item.status === 'failed' && items.slice(i + 1).some((later) => later.name === item.name && later.status === 'done')) out.add(item.id)
+  })
+  return out
+}
 
 /**
  * One queue job for one picked file into `target` (see the header for its four steps). The job's `run` may be called

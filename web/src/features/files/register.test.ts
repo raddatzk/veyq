@@ -23,6 +23,7 @@ describe('registerFiles', () => {
       shareable: false,
       slug: fileNameSlug,
       renameSelectionEnd: fileNameStemEnd,
+      emptyInTrash: 'files.trashEmpty',
       section: { order: 20, component: FilesSection },
       shareSection: { order: 20, component: ShareFilesSection },
     })
@@ -52,6 +53,7 @@ describe('registerFiles', () => {
       shareable: true,
       detail: DropBoxDetail,
       deleteTitle: 'files.dropBox.delete',
+      deleteCopy: 'files.dropBox.deleteConfirm',
       section: { order: 21, component: DropBoxSection },
       createDialog: DropBoxCreateDialog,
       shareDialog: DropBoxShareDialog,
