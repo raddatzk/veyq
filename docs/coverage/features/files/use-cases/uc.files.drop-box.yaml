@@ -17,6 +17,12 @@ acceptanceCriteria:
     coverage:
       backend: { integration: [DropBoxSliceTest.twoGuestsGetTwoFoldersAndASecondUploadOfOneIdentityLandsInTheSameFolder, DropFolderRaceSliceTest.aGuestsCreateWhileAMemberMovesItsFolderOutIsRefused] }
       web: { e2e: [src/features/files/filesDropBox.e2e.test.ts] }
+  - id: a-guest-creates-only-files
+    text: Inside its own identity folder a drop-box guest creates FILE nodes only (and uploads into them); a sub-folder, a drop box or any other kind is refused with 422 illegal_scope and stores nothing (owner decision 2026-10-08, inbox #377 (c)).
+    coverage:
+      backend:
+        unit: [FilesNodeKindRulesTest.aDropBoxGuestCreatesFilesOnly, WriteOnlyGuestKindsPartitionTest.aRootKindNobodyHandlesAllowsNothing]
+        integration: [DropBoxSliceTest.aDropBoxGuestCreatesOnlyFilesInItsFolder]
   - id: members-place-nothing-and-only-delete-or-move-out
     text: No member, and no READ_WRITE guest of a link above, creates, renames or moves anything into a drop box or a guest's folder; a member deletes a guest's folder or moves it out, which clears its identity so the next call of that identity makes a new folder; the web shows a level inside an identity folder read-only.
     coverage:

@@ -201,11 +201,13 @@ on their own.
   2026-10-05, and the rename moved no class between packages. Each module owns its migrations under one global version scheme
   (`V<yyyymmddHHMM>__<module>_<slug>.sql`, the module named by the settings; [backend/CLAUDE.md](../../backend/CLAUDE.md)
   § Migrations): a core migration names no application table, an application's references only core's and its own.
-  Core reaches application code through eleven interfaces — `ScopeEraser`, `NodeSubtreeEraser`, `MembershipEraser`,
+  Core reaches application code through twelve interfaces — `ScopeEraser`, `NodeSubtreeEraser`, `MembershipEraser`,
   `GuestIdentityUsage`, `SharedSubtreeContributor`, `ShareGuestWrites`, `ShareRoots` (which roles a node of the kind may
   be the root of a share with; core answers for `FOLDER`, Memories for `MEMORY` and `CHAPTER` — [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)),
   `GuestNodeRules` (which tree operations a `READ_WRITE` guest may do inside a container of the kind; core answers for
-  `FOLDER`, Memories declares none, so a guest creates, moves and renames nothing inside a Memory or a chapter — ADR 0080), `UploadCompletion` (what a verified upload
+  `FOLDER`, Memories declares none, so a guest creates, moves and renames nothing inside a Memory or a chapter — ADR 0080),
+  `WriteOnlyGuestKinds` (which kinds a `WRITE_ONLY` guest may create inside its own identity folder, asked of the link's
+  root kind; Files answers `FILE` for its drop box, core and Memories declare none), `UploadCompletion` (what a verified upload
   becomes on a node of the kind: Memories' media, Files' one attachment of a `FILE`; the seam stays core's, and its item is generic — an
   `ownerId`, role-tagged derivatives and the application's sealed payloads as opaque values, which core carries to
   the one implementation that accepts the kind and never reads (2026-10-06, cr-platform-contract-split;
@@ -214,9 +216,10 @@ on their own.
   `AttachmentStore.attach`), `UploadAdmission` (what a share link's guests contributed to the application's own rows, for its
   per-link limit; their open sessions and node attachments core sums itself, and a kind whose guest uploads are all
   attachments still needs one, reporting 0) and `NodeKindRules` (where a node of the kind may live; core answers for `FOLDER`, Memories
-  for `MEMORY` and `CHAPTER`) — and `ShareRoots`, `GuestNodeRules` and the last four fail closed: a kind no application (or two) claims takes no
+  for `MEMORY` and `CHAPTER`) — and `ShareRoots`, `GuestNodeRules`, `WriteOnlyGuestKinds` and the last four fail closed: a kind no application (or two) claims takes no
   uploads (`illegal_target`), is placed nowhere (`illegal_structure`), is shared by no one (`illegal_scope`), takes no
-  guest tree operation inside it (`illegal_scope`), and a link whose usage no single application measures is refused
+  guest tree operation inside it (`illegal_scope`), lets a write-only guest of a link rooted at it create nothing
+  (`illegal_scope`), and a link whose usage no single application measures is refused
   (`share_not_contributable`). (`MembershipEraser` is a
   different seam from the erasers: nothing of the scope is erased, one user loses access to one scope.) Hand-written
   core code names the node kind `FOLDER` only (`validate_kernel_imports_no_slices.py`). Each module runs its own

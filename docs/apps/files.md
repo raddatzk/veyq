@@ -131,7 +131,9 @@ one per guest identity, which are core `FOLDER`s carrying `veyq_node.share_ident
   token and `K_up` on the device), then **`ensureShareDropFolder`** — `POST /api/shares/{shareId}/files/drop-folder`,
   Files' operation over core's `IdentityFolders`: the first call creates the folder from the guest's ciphertext, every
   later call (a reload, a second tab, a concurrent first upload) answers the same folder with its stored wrap. Then per
-  file core's guest create **inside its own folder** (`createShareNode`: a `WRITE_ONLY` link creates only there), core's
+  file core's guest create **inside its own folder** (`createShareNode`: a `WRITE_ONLY` link creates only there, and
+  **only `FILE`s** — a sub-folder or any other kind is `422 illegal_scope`; Files declares it through core's
+  `WriteOnlyGuestKinds`, keyed on the link's root kind, owner decision 2026-10-08), core's
   guest transport and `completeShareFile` (core's `ShareGuestGate.target`: a `WRITE_ONLY` link names nothing else below
   its root). It sees nothing of the drop box or of others (no node served, `listShareFiles` empty) — only what it sent
   in this session.
