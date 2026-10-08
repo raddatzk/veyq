@@ -209,6 +209,9 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   77 the root build no longer composing `:apps:files` (its `implementation(project(…))` line gone) — rejected:
      `validate_backend_module_graph` rule (a) requires every included module to ship. Before F0 this passed every
      guard; the module compiled and its tests ran green while the fast-jar held none of it
+  78 a `core/node/` dialog reading Memories' message key `'memory.deleteMemoryTitle'` — rejected:
+     `validate_web_core_imports_no_applications`' i18n rule. The catalog is one file, so the key resolves and every test
+     is green; core's delete dialog did exactly this and titled a Files drop box "Delete Memory" (inbox #375)
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
 (a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
 which the Gradle module split retired: `:core` has no edge to an application, so either shape fails
@@ -1021,6 +1024,12 @@ def forge_web_core_names_file_kind(root: pathlib.Path) -> str:
     return "a core/node file naming the Files node kind 'FILE' (must be REJECTED — the shell asks the registry)"
 
 
+def forge_web_core_reads_application_i18n(root: pathlib.Path) -> str:
+    _plant_web(root, "core/node/guardGapProbe.ts",
+               "export const title = (t: (k: string) => string) => t('memory.deleteMemoryTitle')\n")
+    return "a core/node file reading Memories' i18n key 'memory.deleteMemoryTitle' (must be REJECTED — core names no application)"
+
+
 FILES_BUILD = "backend/apps/files/build.gradle.kts"
 
 
@@ -1391,6 +1400,7 @@ CASES = [
     ("75", WEB_GUARD, forge_web_core_names_file_kind, False),
     ("76", "validate_backend_module_graph.py", forge_files_depends_on_memories, False),
     ("77", "validate_backend_module_graph.py", forge_root_drops_files_module, False),
+    ("78", WEB_GUARD, forge_web_core_reads_application_i18n, False),
 ]
 
 

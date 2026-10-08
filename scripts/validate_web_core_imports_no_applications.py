@@ -12,7 +12,7 @@ the day it appears. The client half is **derived**, never listed: each `openapi-
 whose spec lies in an application's directory is that application's (today `api/generated/favorites`,
 `api/generated/media` and `api/generated/share-media`, all Memories'), so a new application client is covered the day
 its line lands. Core's own clients (`blob`, `content`, …) stay core's: importing them is the point of generating them.
-Dependencies run application → core, never back, and never application → application. Four rules:
+Dependencies run application → core, never back, and never application → application. Five rules:
 - **import** (core): no core file names an application by an import specifier — `from '…'` (so also
   `export … from '…'`), `import('…')`, or a bare `import '…'`. A relative specifier is resolved against the importing
   file and tested for landing inside an application or one of its generated clients, so `'../../memory/memoryNodes'`
@@ -33,6 +33,14 @@ Dependencies run application → core, never back, and never application → app
   matched for a client generated from an older contract. Each application's constants live in the application
   (`features/memory/kinds.ts`, `features/files/kinds.ts`), which the import rule already keeps from core. The kinds
   are listed here by hand (a kind is a value, not a path): a new application adds its kinds to `KIND`.
+- **i18n** (core): no file names a message key of an application's i18n namespace — a quoted `'memory.…'`,
+  `'media.…'` (Memories') or `'files.…'` (Files') — `I18N_NAMESPACES`, by hand like `KIND`. The catalog is one file
+  (`i18n/index.ts`), so nothing but this rule keeps core's strings from borrowing an application's: core serves every
+  application's nodes, and a core dialog that read `memory.deleteMemoryTitle` titled a Files drop box "Delete Memory"
+  (inbox #375). A kind's own noun reaches core through the registry (`KindDescriptor.deleteTitle`, a key the
+  application names), never as a literal in core. Each namespace must be a top-level block of the catalog's `en`, and
+  every application of `APPLICATIONS` must have an entry, or the guard is red: a renamed namespace would otherwise
+  leave this rule matching nothing.
 Every rule reads the non-test `.ts`/`.vue` files. Exempt by exact path: `web/src/applications.ts`, the one
 composition root that may import the applications (a sibling file importing one is red; an absent root is not an
 error). Exempt by location: `web/src/test/**` and `*.test.ts` — and the generated API client, which is untracked and
@@ -59,7 +67,9 @@ that core cannot import is what makes a second one possible. The application rul
 
 **Its limit.** Regex over source, not an AST: a commented-out import is read as an import (conservative), and a
 specifier built at runtime (`import(base + name)`) is not seen — the glob rule and the review of the composition
-root are what stand against discovery by computation. The glob and kind rules read core only: an application naming
+root are what stand against discovery by computation. The i18n rule reads a key spelled whole in quotes: a key in a
+template literal or put together at runtime (`t(ns + '.x')`) is not seen, and a quoted file name that happens to read
+as a key (`'media.ts'`) is red (conservative). The glob, kind and i18n rules read core only: an application naming
 another's kind or globbing is not seen (an application → application edge by import still is). Tests and `src/test/`
 are not read (a test is a consumer of both sides, as in the backend guard). `shared/ui/SecretKeyField` →
 `features/account/` is a different edge (shared → a core feature, not core → application), named in the ui-web
@@ -91,7 +101,7 @@ CONTRACTS_API = ("contracts", "api")  # relative to the repo root; a spec direct
 COMPOSITION_ROOT = "applications.ts"  # relative to web/src; exact path, never a directory
 GENERATED = ("api", "generated")  # untracked client; defines the kinds, so it names them
 
-RULE_IMPORT, RULE_APPLICATION, RULE_GLOB, RULE_KIND = "import", "application", "glob", "kind"
+RULE_IMPORT, RULE_APPLICATION, RULE_GLOB, RULE_KIND, RULE_I18N = "import", "application", "glob", "kind", "i18n"
 
 # `from '…'` covers import/export-from, also across lines; `import('…')` and a bare `import '…'` the others.
 SPECIFIER = re.compile(r"""(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)(['"])([^'"\n]+)\1""")
@@ -99,6 +109,15 @@ GLOB = re.compile(r"\bimport\.meta\.glob(?:Eager)?\b")
 # The applications' kinds — Memories' MEMORY and CHAPTER, Files' FILE. Built from parts so this file never spells a
 # kind literal it forbids.
 KIND = re.compile(r"\bNodeKind\.(?:Memory|Chapter|File)\b|['\"](?:" + "MEMO" + "RY|" + "CHAP" + "TER|" + "FI" + "LE|" + "FILES_DROP" + "BOX)['\"]")
+# Each application's top-level namespaces in the one i18n catalog (`CATALOG`), keyed like `APPLICATIONS`.
+I18N_NAMESPACES: dict[str, tuple[str, ...]] = {
+    "memories": ("memory", "media"),
+    "files": ("files",),
+}
+CATALOG = ("i18n", "index.ts")  # relative to web/src
+# A message key of one of those namespaces in a '…' or "…" literal: `t('memory.deleteMemoryTitle')`, `{ key: 'files.x' }`.
+I18N_KEY = re.compile(r"(['\"])(?:" + "|".join(n for ns in I18N_NAMESPACES.values() for n in ns)
+                      + r")(?:\.[A-Za-z_][A-Za-z0-9_]*)+\1")
 
 
 def application_of(rel: pathlib.PurePosixPath) -> str | None:
@@ -207,6 +226,8 @@ def violations(rel: pathlib.PurePosixPath, text: str,
         found.add(RULE_GLOB)
     if KIND.search(text):
         found.add(RULE_KIND)
+    if I18N_KEY.search(text):
+        found.add(RULE_I18N)
     return found
 
 
@@ -218,7 +239,15 @@ MESSAGES = {
     RULE_GLOB: "`import.meta.glob` hides edges from this guard; register applications by a static import in "
                "web/src/applications.ts",
     RULE_KIND: "it names an application's node kind; ask the registry what to render for a kind",
+    RULE_I18N: "it reads an application's i18n namespace; core's strings name no application — use a core key (e.g. "
+               "`node.*`), or let the kind bring its wording through the registry",
 }
+
+
+def missing_namespaces(catalog_text: str) -> list[str]:
+    """The namespaces of `I18N_NAMESPACES` that are no top-level block of the catalog's `en` messages."""
+    en = catalog_text.split("\nconst de", 1)[0]
+    return [n for ns in I18N_NAMESPACES.values() for n in ns if not re.search(r"^  " + n + r": \{", en, re.M)]
 
 
 def main() -> int:
@@ -236,6 +265,14 @@ def main() -> int:
     except ParseError as e:
         print(f"WEB-CORE-IMPORTS FAILED — cannot derive the applications' generated clients: {e}. Fix the "
               f"`{GENERATE_SCRIPT}` script or move this guard's anchors with it.")
+        return 1
+
+    catalog = SRC.joinpath(*CATALOG)
+    gone = missing_namespaces(catalog.read_text(encoding="utf-8")) if catalog.is_file() else ["(no catalog)"]
+    if gone or set(I18N_NAMESPACES) != set(APPLICATIONS):
+        print(f"WEB-CORE-IMPORTS FAILED — the i18n rule would match nothing: {', '.join(gone) or 'none'} is no "
+              f"top-level namespace of web/src/{'/'.join(CATALOG)}, or I18N_NAMESPACES does not name every "
+              "application of APPLICATIONS. Move I18N_NAMESPACES with the catalog.")
         return 1
 
     errors: list[str] = []

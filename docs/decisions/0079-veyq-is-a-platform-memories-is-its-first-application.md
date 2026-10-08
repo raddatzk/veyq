@@ -262,7 +262,8 @@ on their own.
   rule, which no import check can see. On the web there is no module boundary, so the direction is a text guard:
   `validate_web_core_imports_no_applications.py` (core may not import an application's directory —
   `features/memory`, `features/files` — or a client generated from its specs — derived from `generate:api`, so each
-  application's factories live in its own `api.ts` — discover code by glob, or name an application's node kinds; no
+  application's factories live in its own `api.ts` — discover code by glob, name an application's node kinds, or read
+  an application's i18n namespace (a kind's own wording reaches core through its registry descriptor); no
   allowlist; and no application imports another or its clients). The test trees stay out of the import checks, for the reasons the kernel guard's docstring gives.
 - **Rejected: a generic record store** (core offers "put a sealed record under a key", applications are just
   clients of it). It would make the server a database of blobs with no shape, give up per-kind authorization,
