@@ -70,8 +70,8 @@ function blocks(w: ReturnType<typeof mountLevel>): string[] {
   return [...w.element.children].map((el) => {
     if (el.classList.contains('stub-section')) return `section:${el.getAttribute('data-name')}`
     if (el.classList.contains('veyq-level-fallback')) return `fallback:${el.querySelector('h2')?.textContent}`
-    if (el.querySelector('.memory-folder-overview-card')) return 'overview'
-    if (el.querySelector('h2')?.textContent === t('memory.folders')) return 'folders'
+    if (el.querySelector('.veyq-folder-overview-card')) return 'overview'
+    if (el.querySelector('h2')?.textContent === t('node.folders')) return 'folders'
     return `?${el.className}`
   })
 }
@@ -156,27 +156,27 @@ describe('LevelView: the folders section', () => {
   it('lists the sub-folders, opens one, and offers the new-folder card that asks for create-folder', async () => {
     const rome = node('Rome', FOLDER_KIND, 'Trips')
     const w = mountLevel([TRIPS, rome], { folder: TRIPS })
-    const card = w.findAll('button.memory-folder-card').find((b) => b.text() === 'Rome')!
+    const card = w.findAll('button.veyq-folder-card').find((b) => b.text() === 'Rome')!
     await card.trigger('click')
     expect(w.emitted('openNode')).toEqual([[rome]])
-    await w.find('.memory-create-card').trigger('click')
+    await w.find('.veyq-create-card').trigger('click')
     expect(w.emitted('create')).toEqual([[FOLDER_KIND]])
   })
 
   it('shows its empty state when the level has no folder', () => {
-    expect(mountLevel([]).text()).toContain(t('memory.folderEmpty'))
+    expect(mountLevel([]).text()).toContain(t('node.folderEmpty'))
   })
 
   it('steps aside in map mode (the map spans the subtree) and takes the list variant in list mode', () => {
     setViewMode('list')
-    expect(mountLevel([]).find('.memory-card-grid').classes()).toContain('is-list')
+    expect(mountLevel([]).find('.veyq-level-grid').classes()).toContain('is-list')
     setViewMode('map')
     expect(blocks(mountLevel([]))).toEqual([])
   })
 
   it('read-only: no new-folder card, the folder cards stay', () => {
     const w = mountLevel([TRIPS, node('Rome', FOLDER_KIND, 'Trips')], { folder: TRIPS, readonly: true })
-    expect(w.find('.memory-create-card').exists()).toBe(false)
+    expect(w.find('.veyq-create-card').exists()).toBe(false)
     expect(w.text()).toContain('Rome')
   })
 })
@@ -202,13 +202,13 @@ describe('LevelView: the folder overview card', () => {
   it('shows none when the host says the folder is not shareable', () => {
     const w = mountLevel([TRIPS], { folder: TRIPS, shareable: false })
     expect(shareButton(w).exists()).toBe(false)
-    expect(w.find(`button[aria-label="${t('memory.rename')}"]`).exists(), 'control: the card actions render').toBe(true)
+    expect(w.find(`button[aria-label="${t('node.rename')}"]`).exists(), 'control: the card actions render').toBe(true)
   })
 
   it('emits renameFolder and deleteFolder from its actions', async () => {
     const w = mountLevel([TRIPS], { folder: TRIPS })
-    await w.find(`button[aria-label="${t('memory.rename')}"]`).trigger('click')
-    await w.find(`button[aria-label="${t('memory.delete')}"]`).trigger('click')
+    await w.find(`button[aria-label="${t('node.rename')}"]`).trigger('click')
+    await w.find(`button[aria-label="${t('node.delete')}"]`).trigger('click')
     expect(w.emitted('renameFolder')).toHaveLength(1)
     expect(w.emitted('deleteFolder')).toHaveLength(1)
   })
@@ -218,8 +218,8 @@ describe('LevelView: the folder overview card', () => {
   // layout, so the contract pinned is the DOM one: no width-hiding class on any of them.
   it('keeps share, rename and delete free of any width-hiding class (the card has no overflow menu)', () => {
     const w = mountLevel([TRIPS], { folder: TRIPS, shareable: true })
-    const actions = w.findAll('.memory-folder-overview-actions button')
-    expect(actions.map((b) => b.attributes('aria-label'))).toEqual([t('share.share'), t('memory.rename'), t('memory.delete')])
+    const actions = w.findAll('.veyq-folder-overview-actions button')
+    expect(actions.map((b) => b.attributes('aria-label'))).toEqual([t('share.share'), t('node.rename'), t('node.delete')])
     for (const b of actions) {
       expect(b.classes()).not.toContain('memory-action-collapsible')
       expect(b.classes()).not.toContain('memory-action-inline')
@@ -229,6 +229,6 @@ describe('LevelView: the folder overview card', () => {
   it('keeps the share (a read of the links) but no rename/delete during a pending deletion', () => {
     const w = mountLevel([TRIPS], { folder: TRIPS, shareable: true, readonly: true })
     expect(shareButton(w).exists()).toBe(true)
-    expect(w.find(`button[aria-label="${t('memory.rename')}"]`).exists()).toBe(false)
+    expect(w.find(`button[aria-label="${t('node.rename')}"]`).exists()).toBe(false)
   })
 })

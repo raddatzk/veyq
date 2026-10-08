@@ -398,18 +398,18 @@ watch(
           @click="$emit('toggleFavorite')"
         />
         <Button
-          v-tooltip.bottom="t('memory.rename')"
+          v-tooltip.bottom="t('node.rename')"
           type="button"
-          :aria-label="t('memory.rename')"
+          :aria-label="t('node.rename')"
           icon="pi pi-pencil"
           severity="secondary"
           text
           @click="$emit('rename')"
         />
         <Button
-          v-tooltip.bottom="t('memory.delete')"
+          v-tooltip.bottom="t('node.delete')"
           type="button"
-          :aria-label="t('memory.delete')"
+          :aria-label="t('node.delete')"
           icon="pi pi-trash"
           severity="danger"
           text

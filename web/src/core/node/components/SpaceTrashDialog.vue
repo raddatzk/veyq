@@ -88,7 +88,7 @@ async function restore(row: TrashedNode, newName?: string) {
     // A `slug_taken` is the ONLY recoverable one, and it is recovered the way a create is — the row turns into
     // a name field. `scope_deleting` and everything else are a plain failure: the remedy is not a new name.
     if (await isCodedError(e, HttpStatus.conflict, 'slug_taken')) {
-      rowError.value = { id: row.id, message: t('memory.slugTaken') }
+      rowError.value = { id: row.id, message: t('node.slugTaken') }
       startRetry(row)
     } else {
       rowError.value = { id: row.id, message: t('memory.spaceTrash.restoreFailed') }

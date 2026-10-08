@@ -157,7 +157,7 @@ describe('SpaceTrashDialog', () => {
     await restoreButton(wrapper).trigger('click')
     await settle(wrapper)
 
-    expect(wrapper.text()).toContain(t('memory.slugTaken'))
+    expect(wrapper.text()).toContain(t('node.slugTaken'))
     const field = wrapper.find('input.retry-name')
     expect(field.exists()).toBe(true)
     // the field is pre-filled with the current name, so the user edits rather than retypes

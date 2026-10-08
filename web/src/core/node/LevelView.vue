@@ -7,9 +7,10 @@
 // unsupported state — never a child silently dropped), then the sub-FOLDERS section (heading, folder cards, the
 // new-folder card).
 //
-// **Transitional class names.** The overview card, the folders section and their create card were Memories'
-// `MemoryBrowse.vue` markup and keep its `memory-*` classes verbatim, so the Memories level a member meets is
-// byte-identical (the P4-0 golden, `views/MemoryHomeView.golden.test.ts`, pins it). P4d moves them to `veyq-*` twins.
+// **Core's class names and keys.** The overview card, the folders section and their create card were Memories'
+// `MemoryBrowse.vue` markup; since cr-files-application P4d they carry core `veyq-*` classes (`styles/ui.css`, end of
+// sheet, with their dark twins in `dark.css`: the same declarations the `memory-*` rules had) and read core's `node.*`
+// keys. The P4-0 golden (`views/MemoryHomeView.golden.test.ts`) pins the DOM: P4d changed it in class names only.
 //
 // **The view mode is the shared one** (`shared/state/useViewMode`): the folders grid takes its list variant from it,
 // and the folders section steps aside while the map is shown (Memories' section draws the map, whose pins span the
@@ -77,23 +78,23 @@ const fallbacks = computed(() =>
 </script>
 
 <template>
-  <div class="memory-route-surface">
-    <section v-if="folder" class="veyq-section memory-section">
+  <div class="veyq-level-view">
+    <section v-if="folder" class="veyq-section">
       <div class="veyq-section-header">
-        <div class="veyq-card memory-folder-card memory-folder-overview-card">
+        <div class="veyq-card veyq-folder-card veyq-folder-overview-card">
           <span class="pi pi-folder" />
           <h2>{{ folder.name }}</h2>
           <!-- Visible at EVERY width: the card has no overflow menu, so a width-hidden button is a lost action. They
                carried the Memory header's collapse classes, which hid all three at 721–1120 px and ≤ 720 px (found in the
-               browser, 2026-10-07); three small icon buttons fit, and ≤ 520 px they take their own row (memory.css). -->
-          <div v-if="!readonly || shareable" class="memory-folder-overview-actions">
+               browser, 2026-10-07); three small icon buttons fit, and ≤ 520 px they take their own row (ui.css). -->
+          <div v-if="!readonly || shareable" class="veyq-folder-overview-actions">
             <!-- The same affordance as a Memory's share button (icon, label, tooltip); listing and copying links is a
                  read, so it stays during a pending deletion, where a new link is refused server-side anyway. -->
             <Button
               v-if="shareable"
               v-tooltip.bottom="t('share.share')"
               type="button"
-              class="veyq-icon-button veyq-prime-icon-button memory-folder-overview-action"
+              class="veyq-icon-button veyq-prime-icon-button veyq-folder-overview-action"
               icon="pi pi-share-alt"
               :aria-label="t('share.share')"
               severity="secondary"
@@ -104,9 +105,9 @@ const fallbacks = computed(() =>
             <Button
               v-if="!readonly"
               type="button"
-              class="veyq-icon-button veyq-prime-icon-button memory-folder-overview-action"
+              class="veyq-icon-button veyq-prime-icon-button veyq-folder-overview-action"
               icon="pi pi-pencil"
-              :aria-label="t('memory.rename')"
+              :aria-label="t('node.rename')"
               severity="secondary"
               outlined
               size="small"
@@ -115,9 +116,9 @@ const fallbacks = computed(() =>
             <Button
               v-if="!readonly"
               type="button"
-              class="veyq-icon-button veyq-prime-icon-button memory-folder-overview-action memory-danger-action"
+              class="veyq-icon-button veyq-prime-icon-button veyq-folder-overview-action veyq-danger-action"
               icon="pi pi-trash"
-              :aria-label="t('memory.delete')"
+              :aria-label="t('node.delete')"
               severity="danger"
               outlined
               size="small"
@@ -159,19 +160,19 @@ const fallbacks = computed(() =>
       </div>
     </section>
 
-    <section v-if="viewMode !== 'map'" class="veyq-section memory-section">
-      <div class="veyq-section-header memory-section-header">
-        <h2>{{ t('memory.folders') }}</h2>
+    <section v-if="viewMode !== 'map'" class="veyq-section">
+      <div class="veyq-section-header veyq-level-section-header">
+        <h2>{{ t('node.folders') }}</h2>
         <span>{{ level.folders.length }}</span>
       </div>
-      <div class="memory-card-grid" :class="{ 'is-list': viewMode === 'list' }">
+      <div class="veyq-card-grid veyq-level-grid" :class="{ 'is-list': viewMode === 'list' }">
         <p v-if="!level.folders.length" class="veyq-empty veyq-empty-inline">
-          {{ t('memory.folderEmpty') }}
+          {{ t('node.folderEmpty') }}
         </p>
         <button
           v-for="child in level.folders"
           :key="child.id"
-          class="veyq-card veyq-card-interactive memory-folder-card"
+          class="veyq-card veyq-card-interactive veyq-folder-card"
           type="button"
           @click="emit('openNode', child)"
         >
@@ -180,12 +181,12 @@ const fallbacks = computed(() =>
         </button>
         <button
           v-if="!readonly"
-          class="veyq-card veyq-card-interactive memory-create-card"
+          class="veyq-card veyq-card-interactive veyq-create-card"
           type="button"
           @click="emit('create', FOLDER_KIND)"
         >
           <span class="pi pi-plus" />
-          <strong>{{ t('memory.folderCreate') }}</strong>
+          <strong>{{ t('node.folderCreate') }}</strong>
         </button>
       </div>
     </section>

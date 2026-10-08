@@ -68,7 +68,7 @@ describe('FolderNameDialog', () => {
   it('create calls createFolder with the parent and ITS key + closes + emits done', async () => {
     const parentKey = new Uint8Array(32).fill(7)
     const wrapper = mountDialog({ mode: 'create', parentId: 'parent-1', parentKey })
-    expect(wrapper.find('.hdr').text()).toBe(t('memory.createFolderTitle'))
+    expect(wrapper.find('.hdr').text()).toBe(t('node.createFolderTitle'))
     expect(wrapper.find('button[type="submit"]').text()).toBe(t('common.create'))
     await wrapper.find('input').setValue('Trips')
     await wrapper.find('form').trigger('submit')
@@ -95,8 +95,8 @@ describe('FolderNameDialog', () => {
 
   it('rename calls renameNode with the node id (a placement to its own parent)', async () => {
     const wrapper = mountDialog({ mode: 'rename', node: nodeOf('FOLDER') })
-    expect(wrapper.find('.hdr').text()).toBe(t('memory.renameTitle'))
-    expect(wrapper.find('button[type="submit"]').text()).toBe(t('memory.save'))
+    expect(wrapper.find('.hdr').text()).toBe(t('node.renameTitle'))
+    expect(wrapper.find('button[type="submit"]').text()).toBe(t('common.save'))
     expect((wrapper.find('input').element as HTMLInputElement).value).toBe('Old') // prefilled
     await wrapper.find('input').setValue('New')
     await wrapper.find('form').trigger('submit')
@@ -134,7 +134,7 @@ describe('FolderNameDialog', () => {
     await settle()
 
     expect(toastError).toHaveBeenCalledWith(t('share.nameResealFailed'))
-    expect(wrapper.text()).not.toContain(t('memory.saveFailed'))
+    expect(wrapper.text()).not.toContain(t('node.saveFailed'))
     expect(wrapper.emitted('done')).toBeTruthy()
   })
 
@@ -157,13 +157,13 @@ describe('FolderNameDialog', () => {
     await settle()
 
     expect(resealShareNames).not.toHaveBeenCalled()
-    expect(wrapper.text()).toContain(t('memory.slugTaken'))
+    expect(wrapper.text()).toContain(t('node.slugTaken'))
   })
 
   it.each([
-    [409, 'memory.slugTaken'],
-    [422, 'memory.illegalStructure'],
-    [500, 'memory.saveFailed'],
+    [409, 'node.slugTaken'],
+    [422, 'node.illegalStructure'],
+    [500, 'node.saveFailed'],
   ])('maps a %i on create to %s and stays open', async (status, key) => {
     vi.mocked(createFolder).mockRejectedValueOnce(httpError(status))
     const wrapper = mountDialog({ mode: 'create', parentId: null })

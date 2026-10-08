@@ -271,8 +271,9 @@
   gap: 0.85rem;
 }
 
-/* One track definition for every card grid — Memories and Folders sit in columns of the same width, so they
-   keep scaling together as the viewport narrows (a `1fr` track here would let the Folders grow past them). */
+/* The same track definition as core's `.veyq-card-grid` (ui.css), which the level view's Folders grid uses — Memories
+   and Folders sit in columns of the same width, so they keep scaling together as the viewport narrows (a `1fr`
+   track here would let the Folders grow past them). Change one, change both. */
 .memory-card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 260px));
@@ -325,7 +326,6 @@
 .memory-card-grid.is-list .memory-card-text {
   padding: 0;
 }
-.memory-card-grid.is-list .memory-folder-card,
 .memory-card-grid.is-list .memory-create-card {
   min-height: 0;
   padding: 0.6rem 0.75rem;
@@ -343,7 +343,6 @@
   padding: 0;
 }
 
-.memory-folder-card,
 .memory-create-card {
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr);
@@ -371,7 +370,6 @@
   transform: none;
 }
 
-.memory-folder-card > .pi,
 .memory-create-card .pi {
   display: grid;
   place-items: center;
@@ -425,63 +423,9 @@
   height: 100%;
 }
 
-.memory-folder-card > .pi,
 .memory-create-card .pi {
   width: 42px;
   height: 42px;
-}
-
-.memory-folder-card > .pi {
-  background: var(--app-info-soft);
-  color: var(--app-info-text);
-}
-
-.memory-folder-overview-card {
-  grid-template-columns: 42px minmax(0, 1fr) auto;
-  cursor: default;
-}
-
-.memory-folder-overview-card h2 {
-  margin: 0;
-  overflow: hidden;
-  color: var(--app-text);
-  font-size: 1.05rem;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.memory-folder-overview-actions {
-  display: inline-flex;
-  flex-wrap: nowrap;
-  gap: 0.45rem;
-  align-items: center;
-  justify-self: end;
-  min-width: max-content;
-}
-
-.memory-folder-overview-actions .p-button,
-.memory-folder-overview-actions button {
-  flex: 0 0 auto;
-}
-
-.memory-danger-action.p-button,
-.memory-danger-action.p-button.p-button-outlined {
-  border-color: var(--app-danger);
-  background: transparent !important;
-  color: var(--app-danger);
-}
-
-.memory-danger-action.p-button .p-button-icon {
-  background: transparent !important;
-  color: inherit;
-}
-
-.memory-danger-action.p-button:hover:not(:disabled),
-.memory-danger-action.p-button:focus-visible {
-  border-color: var(--app-danger-strong);
-  background: transparent !important;
-  color: var(--app-danger-strong);
 }
 
 .memory-create-card {
@@ -533,7 +477,6 @@
   padding: 0.8rem 0.85rem 0.9rem;
 }
 
-.memory-folder-card strong,
 .memory-create-card strong {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -690,16 +633,6 @@
   .memory-card-grid {
     grid-template-columns: 1fr;
     max-width: none;
-  }
-
-  .memory-folder-overview-card {
-    grid-template-columns: 42px minmax(0, 1fr);
-  }
-
-  .memory-folder-overview-actions {
-    grid-column: 1 / -1;
-    justify-self: start;
-    padding-top: 0.15rem;
   }
 
   .memory-card-main {

@@ -1,5 +1,5 @@
 div.memory-home
-  div.memory-route-surface
+  div.veyq-level-view
     section.memory-section.veyq-section
       div.memory-section-header.veyq-section-header
         h2
@@ -63,22 +63,22 @@ div.memory-home
           span.pi.pi-plus
           strong
             "New Memory"
-    section.memory-section.veyq-section
-      div.memory-section-header.veyq-section-header
+    section.veyq-section
+      div.veyq-level-section-header.veyq-section-header
         h2
           "Folders"
         span
           "2"
-      div.is-list.memory-card-grid
-        button.memory-folder-card.veyq-card.veyq-card-interactive
+      div.is-list.veyq-card-grid.veyq-level-grid
+        button.veyq-card.veyq-card-interactive.veyq-folder-card
           span.pi.pi-folder
           strong
             "Trips"
-        button.memory-folder-card.veyq-card.veyq-card-interactive
+        button.veyq-card.veyq-card-interactive.veyq-folder-card
           span.pi.pi-folder
           strong
             "Empty"
-        button.memory-create-card.veyq-card.veyq-card-interactive
+        button.veyq-card.veyq-card-interactive.veyq-create-card
           span.pi.pi-plus
           strong
             "New folder"

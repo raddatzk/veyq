@@ -44,7 +44,7 @@ async function confirm() {
     <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
     <div class="veyq-dialog-action-row">
       <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined :disabled="loading" @click="emit('close')" />
-      <Button type="button" :label="t('memory.delete')" icon="pi pi-trash" severity="danger" :loading="loading" @click="confirm" />
+      <Button type="button" :label="t('node.delete')" icon="pi pi-trash" severity="danger" :loading="loading" @click="confirm" />
     </div>
   </Dialog>
 </template>

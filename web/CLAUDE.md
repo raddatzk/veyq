@@ -155,8 +155,9 @@ here; the server is blind.
   Master Key (Memories' pins) is otherwise undecryptable after a rotation. A kind or share nobody registered renders
   an explicit unsupported/unavailable state, never an empty region. **Limits, stated:** no slot is single-claim any
   more (the dialogs are per kind since cr-files-application P4c; the two slots `topbarTray`, `sidebarPins` are ordered
-  lists), but the level view's moved markup and core's `FolderNameDialog` still carry Memories' `memory-*` class names
-  and `memory.*` i18n keys (cr-files-application P4d); the kind is an open string token (the generated client has no `NodeKind` enum), so core names its one
+  lists); the level view and core's `FolderNameDialog` carry core `veyq-*` classes (`styles/ui.css`, dark twins in
+  `dark.css`) and core `node.*` i18n keys since cr-files-application P4d, which Memories' own dialogs and detail read
+  too for the shared labels; the kind is an open string token (the generated client has no `NodeKind` enum), so core names its one
   `FOLDER_KIND` (`core/node/kind.ts`), Memories its own two (`features/memory/kinds.ts`), and no compiler lists the
   kinds — the registry's `{ supported: false }` answer and its tests do; the directory is still `features/memory`, the i18n catalog
   is one file and `styles/memory.css` is global.

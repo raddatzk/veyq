@@ -5,7 +5,7 @@
 found by walking the repo root — a third one is in scope the day it lands), every **anchor compound** in
 those sheets plus the package's `src/style.css` names at least one class that the package's own markup
 applies. The anchor compound is a selector's first compound, the part before any descendant/child/sibling
-combinator: in `.memory-card .p-card-body` it is `.memory-card`, in `.memory-danger-action.p-button` it is
+combinator: in `.memory-card .p-card-body` it is `.memory-card`, in `.veyq-danger-action.p-button` it is
 both classes together. It is the element the rule is *written for*. A rule whose anchor names only classes
 no markup ever applies cannot match anything, in any state, on any surface.
 

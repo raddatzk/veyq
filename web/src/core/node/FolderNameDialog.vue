@@ -5,7 +5,7 @@
 // derived through `registry.slugFor(node.kind, name)` (`core/node/tree.ts` `slugTokenFor`), so a Files node folds by
 // ITS kind's function, never by the folder's. The create dialogs of the application kinds are the kinds' own
 // (`KindDescriptor.createDialog`). Moved from Memories' former `NodeMutationDialog.vue` with the same markup, labels,
-// validation and error mapping; the `memory.*` keys it reads are generic and move to a core namespace in P4d.
+// validation and error mapping; it reads core's `node.*` keys (and `common.save`) since P4d, values unchanged.
 // Inline slug_taken (409) / illegal_structure (422) errors.
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -37,8 +37,8 @@ const toast = useToast()
 const name = ref(props.mode === 'rename' ? (props.node?.name ?? '') : '')
 const error = ref('')
 
-const header = computed(() => (props.mode === 'rename' ? t('memory.renameTitle') : t('memory.createFolderTitle')))
-const confirmLabel = computed(() => (props.mode === 'rename' ? t('memory.save') : t('common.create')))
+const header = computed(() => (props.mode === 'rename' ? t('node.renameTitle') : t('node.createFolderTitle')))
+const confirmLabel = computed(() => (props.mode === 'rename' ? t('common.save') : t('common.create')))
 
 /** Where a create lands: the scope root (wrapped under the write key), or under the parent with ITS key (ADR 0080
  *  Decision 1: a node inside a folder wraps under the folder's key, never `K_SC`). A parent whose key is missing
@@ -66,7 +66,7 @@ const { run: runSubmit, pending: loading } = useAsyncAction(
   {
     onError: (e) => {
       const status = httpStatus(e)
-      error.value = status === HttpStatus.conflict ? t('memory.slugTaken') : status === HttpStatus.unprocessable ? t('memory.illegalStructure') : t('memory.saveFailed')
+      error.value = status === HttpStatus.conflict ? t('node.slugTaken') : status === HttpStatus.unprocessable ? t('node.illegalStructure') : t('node.saveFailed')
     },
   },
 )
@@ -94,7 +94,7 @@ async function submit() {
   <Dialog :visible="true" :header="header" modal :closable="!loading" :close-on-escape="!loading" @update:visible="emit('close')">
     <form class="veyq-form" @submit.prevent="submit">
       <label>
-        {{ t('memory.nameLabel') }}
+        {{ t('node.nameLabel') }}
         <InputText v-model="name" autocomplete="off" required autofocus :disabled="loading" />
       </label>
 
