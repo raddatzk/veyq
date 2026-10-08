@@ -108,9 +108,10 @@ it cannot be pinned by `scripts/validate_guard_gaps.py` — see the `trust-chain
 Endpoints that carry `@RateLimitExempt` because **no available axis fits**, not because nobody looked. Recorded
 here because the code's `reason` strings point at this section rather than each restating the argument.
 
-- **The four anonymous guest reads** — core's `resolveShare`, `resolveShareBlob`, `getShareTerms`, and the
+- **The five anonymous guest reads** — core's `resolveShare`, `resolveShareBlob`, `getShareTerms`, the
   Memories application's `listShareMedia` (the media a share lists, `ShareMediaResource`; it was part of
-  `resolveShare`'s body until cr-platform-contract-split slice 6.3 and keeps that posture). Both keys are
+  `resolveShare`'s body until cr-platform-contract-split slice 6.3 and keeps that posture), and the Files
+  application's `listShareFiles` (the file blobs a share lists, `ShareFilesResource`, the same read for files). Both keys are
   wrong here: `key = SHARE` caps a share's whole audience *collectively* (a Memory sent to 200 guests is the
   normal case, not the abuse case), and `key = IP` shares the single per-IP bucket with login, so one gallery
   view — dozens of blob presigns — would trip it. What **does** bind them: `SharePasswordAttemptLimiter` on the
@@ -213,7 +214,8 @@ exhausted budget does not block another (the per-share axis); and a guest **writ
 Two further per-share budgets on the anonymous contributor path (`ShareRateLimiter`, ADR 0030), kept
 **separate** so one abusive axis cannot take the other down with it:
 
-- **Uploads** — `startShareBlobUploads` + `completeShareMedia` (the start and attach halves of one flow).
+- **Uploads** — `startShareBlobUploads` + `completeShareMedia` / `completeShareFile` (the start and attach halves
+  of one flow; core's guest `createShareNode` spends the same budget).
   Generous by intent: a legitimate bulk contributor uploading an evening's photos is the normal case.
   `veyq.share.upload.rate.*` (default 300 / 60 s).
 - **Identity creation** — `createShareIdentity`, the one guest call that writes a row **before any upload
