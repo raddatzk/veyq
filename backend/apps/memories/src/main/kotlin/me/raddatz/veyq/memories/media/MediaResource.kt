@@ -162,6 +162,7 @@ class MediaResource(
                     byteSize = o.ref.byteSize,
                     wrappedBlobKey = o.ref.wrappedBlobKey,
                     manifest = o.ref.manifest,
+                    wrappedBlobMeta = o.ref.wrappedBlobMeta,
                 ),
             ).build()
             is HttpFailure -> httpError(o)
@@ -188,6 +189,7 @@ class MediaResource(
         ownerKey = row.ownerKey, // cr-0113: the uploader's opaque owner_key (the buckets attribution)
         bucketId = row.bucketId?.let(UUID::fromString), // cr-0113: the media's bucket (null = the uploader's primary)
         metaVersion = row.metaVersion,
+        wrappedBlobMeta = row.wrappedBlobMeta,
     )
 
     private fun toDerivativeSummary(d: DerivativeRow) = MediaDerivativeSummary(
@@ -197,5 +199,6 @@ class MediaResource(
         byteSize = d.byteSize,
         wrappedBlobKey = d.wrappedBlobKey,
         manifest = d.manifest,
+        wrappedBlobMeta = d.wrappedBlobMeta,
     )
 }

@@ -64,6 +64,7 @@ class FilesResource(
             byteSize = b.byteSize,
             wrappedBlobKey = b.wrappedBlobKey,
             manifest = b.manifest,
+            wrappedBlobMeta = b.wrappedBlobMeta,
         )
     }
 }

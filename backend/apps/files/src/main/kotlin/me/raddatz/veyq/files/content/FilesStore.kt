@@ -7,13 +7,15 @@ import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.files.FilesNodeKinds
 import jakarta.enterprise.context.ApplicationScoped
 
-/** A file's blob as the wire lists it: ids and opaque sizes, the `K_blob` wrap — never a byte of content. */
+/** A file's blob as the wire lists it: ids and opaque sizes, the `K_blob` wrap, its sealed meta — never a byte of content. */
 data class FileBlobData(
     val blobId: String,
     val chunkCount: Int,
     val byteSize: Long,
     val wrappedBlobKey: String,
     val manifest: List<Long>?,
+    /** The blob's sealed metadata as its upload declared it (opaque; null when none was declared). */
+    val wrappedBlobMeta: String?,
 )
 
 /** One live file under a parent and its blob (null: no upload of it has completed yet). */
@@ -78,5 +80,5 @@ class FilesStore(private val blobs: BlobUploadStore) {
     /** The blob [blobId] of [scopeId], as the completion's answer lists it. */
     fun blob(scopeId: String, blobId: String): FileBlobData? = blobs.findBlob(scopeId, blobId)?.let(::toData)
 
-    private fun toData(b: BlobEntity) = FileBlobData(b.id, b.chunkCount, b.byteSize, b.wrappedBlobKey, blobs.decodeManifest(b.manifest))
+    private fun toData(b: BlobEntity) = FileBlobData(b.id, b.chunkCount, b.byteSize, b.wrappedBlobKey, blobs.decodeManifest(b.manifest), b.wrappedBlobMeta)
 }

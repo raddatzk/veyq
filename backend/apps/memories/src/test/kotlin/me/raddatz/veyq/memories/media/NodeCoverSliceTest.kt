@@ -22,6 +22,7 @@ import jakarta.inject.Inject
 import java.util.UUID
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.notNullValue
+import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -59,7 +60,7 @@ class NodeCoverSliceTest {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         val blob = TestBlob.ofPlaintext(4096)
-        val uploadId = startOne(userId, scopeId, blob, wrap = "Y292ZXItd3JhcA==", ownerId = memory, role = "COVER")
+        val uploadId = startOne(userId, scopeId, blob, wrap = "Y292ZXItd3JhcA==", ownerId = memory, role = "COVER", meta = "Y292ZXItbWV0YQ==")
 
         // commit the upload as the node's standalone cover — the ref echoes the declared shape + wrap verbatim
         val blobId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
@@ -70,6 +71,7 @@ class NodeCoverSliceTest {
             .body("chunkCount", equalTo(1))
             .body("byteSize", equalTo(blob.byteSize.toInt()))
             .body("wrappedBlobKey", equalTo("Y292ZXItd3JhcA==")) // operator-blind: the K_blob wrap round-trips
+            .body("wrappedBlobMeta", equalTo("Y292ZXItbWV0YQ==")) // and so does the sealed blob meta the upload declared
             .extract().path<String>("blobId")
 
         // NO media row — a cover blob never appears in the gallery list; and cr-0107: a cover change bumps
@@ -90,6 +92,12 @@ class NodeCoverSliceTest {
             assertEquals(blobId, node.coverBlobId)
             assertEquals(blob.byteSize, node.coverByteSize)
         }
+
+        // a cover upload that declared no meta answers null in the same slot
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+            .body("""{"uploadId":"${startOne(userId, scopeId, TestBlob.SMALL, wrap = "c2Vjb25k", ownerId = memory, role = "COVER")}"}""")
+            .`when`().post("/api/scopes/$scopeId/nodes/$memory/cover-blob")
+            .then().statusCode(200).body("wrappedBlobMeta", nullValue())
     }
 
     @Test
@@ -395,10 +403,10 @@ class NodeCoverSliceTest {
 
     private fun startOne(
         userId: String, scopeId: String, blob: TestBlob, wrap: String,
-        ownerId: String = UUID.randomUUID().toString(), role: String = "ORIGINAL",
+        ownerId: String = UUID.randomUUID().toString(), role: String = "ORIGINAL", meta: String? = null,
     ): String =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[${blob.declare(wrap, ownerId = ownerId, role = role)}]}""")
+            .body("""{"items":[${blob.declare(wrap, ownerId = ownerId, role = role, meta = meta)}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
             .then().statusCode(200).body("results[0].uploadId", notNullValue())
             .extract().path("results[0].uploadId")

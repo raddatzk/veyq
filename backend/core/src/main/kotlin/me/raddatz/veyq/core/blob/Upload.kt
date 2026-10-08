@@ -24,7 +24,10 @@ sealed interface UploadOpener {
     }
 }
 
-/** One blob to start: its shape, its `K_blob` wrap, and the ids that wrap is sealed bound to (ADR 0072). */
+/**
+ * One blob to start: its shape, its `K_blob` wrap, the ids that wrap is sealed bound to (ADR 0072), and — optional,
+ * opaque — its metadata sealed under that `K_blob`, which the session carries to the blob row unchanged.
+ */
 data class UploadDeclare(
     val chunkCount: Int,
     val byteSize: Long,
@@ -32,6 +35,7 @@ data class UploadDeclare(
     val blobId: String,
     val ownerId: String,
     val role: String,
+    val wrappedBlobMeta: String?,
 )
 
 /** Per-item result of `start`: success carries the session + presigned PUTs (null when the store can't presign). */

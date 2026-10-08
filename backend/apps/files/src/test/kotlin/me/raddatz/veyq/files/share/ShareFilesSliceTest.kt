@@ -142,6 +142,38 @@ class ShareFilesSliceTest {
         completeShare(link, t.file, guestStartStaged(link, t.file), expected = blobOf(t.file)).statusCode(200)
     }
 
+    /**
+     * A blob's sealed metadata on the guest path: a contributor's declared `wrappedBlobMeta` rides the guest start and is
+     * served back unchanged on the guest completion and the share listing; a member's file's meta is listed to the
+     * guest too; absent stays null; over the cap the guest start is 400, at the cap 200.
+     */
+    @Test
+    fun aGuestsAndAMembersBlobMetaAreServedToTheGuestUnchanged() {
+        val (userId, scopeId) = seedMemberScope()
+        val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
+        val membersFile = seedNode(scopeId, FilesNodeKinds.FILE, parentId = folder, wrappedContentKey = CONTENT_KEY)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+            .body("""{"uploadId":"${memberStart(userId, scopeId, membersFile, meta = MEMBER_META)}"}""")
+            .`when`().post("/api/scopes/$scopeId/files/$membersFile/content").then().statusCode(200)
+        val link = GuestTreeShare.seed(userId, scopeId, folder, ShareEntity.READ_WRITE)
+        val guestsFile = UUID.randomUUID().toString()
+        GuestTreeShare.create(link, folder, FilesNodeKinds.FILE, nodeId = guestsFile).statusCode(201)
+        val bare = UUID.randomUUID().toString()
+        GuestTreeShare.create(link, folder, FilesNodeKinds.FILE, nodeId = bare).statusCode(201)
+
+        completeShare(link, guestsFile, guestStartStaged(link, guestsFile, meta = GUEST_META)).statusCode(200)
+            .body("wrappedBlobMeta", equalTo(GUEST_META))
+        completeShare(link, bare, guestStartStaged(link, bare)).statusCode(200).body("wrappedBlobMeta", nullValue())
+
+        listShare(link).statusCode(200)
+            .body("items.find { it.nodeId == '$membersFile' }.fileBlob.wrappedBlobMeta", equalTo(MEMBER_META))
+            .body("items.find { it.nodeId == '$guestsFile' }.fileBlob.wrappedBlobMeta", equalTo(GUEST_META))
+            .body("items.find { it.nodeId == '$bare' }.fileBlob.wrappedBlobMeta", nullValue())
+
+        guestStart(link, bare, meta = "A".repeat(2049)).statusCode(400)
+        guestStart(link, bare, meta = "A".repeat(2048)).statusCode(200).body("results[0].error", nullValue()) // control
+    }
+
     @Test
     fun aGuestUploadsOnlyIntoAFileOfItsSubtreeInTheFileRole() {
         val t = tree()
@@ -209,9 +241,15 @@ class ShareFilesSliceTest {
 
     // --- the wire ------------------------------------------------------------------------------------------------
 
-    private fun memberStart(userId: String, scopeId: String, node: String, blob: TestBlob = TestBlob.SMALL): String {
+    private companion object {
+        /** Opaque stand-ins for two clients' `blob-meta` seals. */
+        const val MEMBER_META = "bWVtYmVyLWJsb2ItbWV0YQ=="
+        const val GUEST_META = "Z3Vlc3QtYmxvYi1tZXRh"
+    }
+
+    private fun memberStart(userId: String, scopeId: String, node: String, blob: TestBlob = TestBlob.SMALL, meta: String? = null): String {
         val uploadId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[${blob.declare("d3JhcA==", ownerId = node, role = FilesBlobRoles.FILE_CONTENT)}]}""")
+            .body("""{"items":[${blob.declare("d3JhcA==", ownerId = node, role = FilesBlobRoles.FILE_CONTENT, meta = meta)}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
             .then().statusCode(200).body("results[0].error", nullValue())
             .extract().path<String>("results[0].uploadId")
@@ -227,15 +265,17 @@ class ShareFilesSliceTest {
 
     private fun guestStart(
         link: GuestTreeShare.Link, node: String?, blob: TestBlob = TestBlob.SMALL, role: String = FilesBlobRoles.FILE_CONTENT,
+        meta: String? = null,
     ): ValidatableResponse {
         val target = node?.let { ""","nodeId":"$it"""" } ?: ""
+        val item = blob.declare("d3JhcA==", ownerId = node ?: UUID.randomUUID().toString(), role = role, meta = meta)
         return given().contentType(ContentType.JSON)
-            .body("""{"contributorToken":"${link.token}"$target,"items":[${blob.declare("d3JhcA==", ownerId = node ?: UUID.randomUUID().toString(), role = role)}]}""")
+            .body("""{"contributorToken":"${link.token}"$target,"items":[$item]}""")
             .`when`().post("/api/shares/${link.shareId}/blob-uploads").then()
     }
 
-    private fun guestStartStaged(link: GuestTreeShare.Link, node: String, blob: TestBlob = TestBlob.SMALL): String {
-        val uploadId = guestStart(link, node, blob).statusCode(200).body("results[0].error", nullValue())
+    private fun guestStartStaged(link: GuestTreeShare.Link, node: String, blob: TestBlob = TestBlob.SMALL, meta: String? = null): String {
+        val uploadId = guestStart(link, node, blob, meta = meta).statusCode(200).body("results[0].error", nullValue())
             .extract().path<String>("results[0].uploadId")
         blob.stage(fakeStore, sessionKey(uploadId))
         return uploadId

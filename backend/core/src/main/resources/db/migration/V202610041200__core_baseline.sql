@@ -222,6 +222,7 @@ CREATE TABLE veyq_upload_session (
     chunk_count              INT NOT NULL,
     byte_size                BIGINT NOT NULL,
     wrapped_blob_key         TEXT NOT NULL,
+    wrapped_meta             TEXT NULL,
     created_at               TIMESTAMP NOT NULL,
     opener_user_id           VARCHAR(36) NULL,
     opener_share_identity_id VARCHAR(36) NULL,
@@ -235,7 +236,8 @@ CREATE INDEX ix_upload_scope ON veyq_upload_session (scope_id);
 CREATE UNIQUE INDEX ux_upload_session_blob_id ON veyq_upload_session (blob_id);
 
 -- A completed blob: the chunk manifest and the K_blob wrap; the bytes stay in the object store under
--- storage_key/<index>.
+-- storage_key/<index>. wrapped_meta is the blob's metadata sealed under its own K_blob (the blob-meta seal),
+-- copied from its upload session and written once: no statement updates it.
 CREATE TABLE veyq_blob (
     id               VARCHAR(36) NOT NULL PRIMARY KEY,
     scope_id         VARCHAR(36) NOT NULL,
@@ -243,6 +245,7 @@ CREATE TABLE veyq_blob (
     chunk_count      INT NOT NULL,
     byte_size        BIGINT NOT NULL,
     wrapped_blob_key TEXT NOT NULL,
+    wrapped_meta     TEXT NULL,
     manifest         TEXT,
     created_at       TIMESTAMP NOT NULL,
     CONSTRAINT fk_blob_scope FOREIGN KEY (scope_id) REFERENCES veyq_scope (id)

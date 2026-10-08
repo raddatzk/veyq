@@ -192,9 +192,9 @@ class MediaSliceTest {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         // three independent uploads: original + thumbnail + preview, each its own K_blob wrap
-        val original = startOne(userId, scopeId, TestBlob.ofChunks(3), wrap = "b3JpZw==")
+        val original = startOne(userId, scopeId, TestBlob.ofChunks(3), wrap = "b3JpZw==", meta = "b3JpZy1tZXRh")
         val mediaId = TestBlob.ownerOf(original)
-        val thumb = startOne(userId, scopeId, TestBlob.SMALL, wrap = "dGh1bWI=", ownerId = mediaId, role = "THUMBNAIL")
+        val thumb = startOne(userId, scopeId, TestBlob.SMALL, wrap = "dGh1bWI=", ownerId = mediaId, role = "THUMBNAIL", meta = "dGh1bWItbWV0YQ==")
         val preview = startOne(userId, scopeId, TestBlob.ofChunks(2), wrap = "cHJldg==", ownerId = mediaId, role = "PREVIEW")
 
         // complete: one logical media = original + two role-tagged derivatives
@@ -220,6 +220,10 @@ class MediaSliceTest {
             .body("media[0].derivatives.find { it.kind == 'THUMBNAIL' }.chunkCount", equalTo(1))
             .body("media[0].derivatives.find { it.kind == 'PREVIEW' }.wrappedBlobKey", equalTo("cHJldg=="))
             .body("media[0].derivatives.find { it.kind == 'PREVIEW' }.chunkCount", equalTo(2))
+            // each tier's sealed blob meta, as its own upload declared it; the preview declared none
+            .body("media[0].wrappedBlobMeta", equalTo("b3JpZy1tZXRh"))
+            .body("media[0].derivatives.find { it.kind == 'THUMBNAIL' }.wrappedBlobMeta", equalTo("dGh1bWItbWV0YQ=="))
+            .body("media[0].derivatives.find { it.kind == 'PREVIEW' }.wrappedBlobMeta", nullValue())
     }
 
     @Test
@@ -473,10 +477,10 @@ class MediaSliceTest {
 
     private fun startOne(
         userId: String, scopeId: String, blob: TestBlob, wrap: String,
-        ownerId: String = UUID.randomUUID().toString(), role: String = "ORIGINAL",
+        ownerId: String = UUID.randomUUID().toString(), role: String = "ORIGINAL", meta: String? = null,
     ): String =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[${blob.declare(wrap, ownerId = ownerId, role = role)}]}""")
+            .body("""{"items":[${blob.declare(wrap, ownerId = ownerId, role = role, meta = meta)}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
             .then().statusCode(200)
             .body("results[0].uploadId", notNullValue())

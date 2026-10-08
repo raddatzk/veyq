@@ -22,15 +22,19 @@ data class TestBlob(val byteSize: Long) {
 
     /**
      * The item a `…blob-uploads-batch` request carries: the client-minted [blobId], the [ownerId] its wrap is sealed
-     * bound to — the media id the completion will carry, or the node for a COVER — and its [role] (ADR 0072).
+     * bound to — the media id the completion will carry, or the node for a COVER — and its [role] (ADR 0072), plus
+     * the optional sealed [meta] (`wrappedBlobMeta`, left out of the body when null).
      */
     fun declare(
         wrap: String,
         ownerId: String = UUID.randomUUID().toString(),
         role: String = "ORIGINAL",
         blobId: String = UUID.randomUUID().toString(),
-    ): String =
-        """{"blobId":"$blobId","ownerId":"$ownerId","role":"$role","chunkCount":$chunkCount,"byteSize":$byteSize,"wrappedBlobKey":"$wrap"}"""
+        meta: String? = null,
+    ): String {
+        val metaField = meta?.let { ""","wrappedBlobMeta":"$it"""" } ?: ""
+        return """{"blobId":"$blobId","ownerId":"$ownerId","role":"$role","chunkCount":$chunkCount,"byteSize":$byteSize,"wrappedBlobKey":"$wrap"$metaField}"""
+    }
 
     /** The same declaration as the handler sees it — for a test that opens a session through the store directly. */
     fun upload(
@@ -38,7 +42,8 @@ data class TestBlob(val byteSize: Long) {
         ownerId: String = UUID.randomUUID().toString(),
         role: String = "ORIGINAL",
         blobId: String = UUID.randomUUID().toString(),
-    ): UploadDeclare = UploadDeclare(chunkCount, byteSize, wrap, blobId, ownerId, role)
+        meta: String? = null,
+    ): UploadDeclare = UploadDeclare(chunkCount, byteSize, wrap, blobId, ownerId, role, meta)
 
     /** Stage every chunk under [storageKey] at exactly its derived length — the objects an honest upload leaves. */
     fun stage(store: FakePresigningBlobStore, storageKey: String) =

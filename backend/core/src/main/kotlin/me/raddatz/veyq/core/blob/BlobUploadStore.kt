@@ -35,6 +35,7 @@ class BlobUploadStore(private val reclaim: StoreReclaimStore) {
             chunkCount = d.chunkCount
             byteSize = d.byteSize
             wrappedBlobKey = d.wrappedBlobKey
+            wrappedBlobMeta = d.wrappedBlobMeta
             blobId = d.blobId
             ownerId = d.ownerId
             blobRole = d.role
@@ -76,6 +77,7 @@ class BlobUploadStore(private val reclaim: StoreReclaimStore) {
             chunkCount = session.chunkCount
             byteSize = session.byteSize
             wrappedBlobKey = session.wrappedBlobKey
+            wrappedBlobMeta = session.wrappedBlobMeta
             this.manifest = manifest?.let { encodeManifest(it) }
             createdAt = Instant.now()
         }.persist()
