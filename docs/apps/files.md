@@ -143,8 +143,12 @@ one per guest identity, which are core `FOLDER`s carrying `veyq_node.share_ident
   **only `FILE`s** — a sub-folder or any other kind is `422 illegal_scope`; Files declares it through core's
   `WriteOnlyGuestKinds`, keyed on the link's root kind, owner decision 2026-10-08), core's
   guest transport and `completeShareFile` (core's `ShareGuestGate.target`: a `WRITE_ONLY` link names nothing else below
-  its root). It sees nothing of the drop box or of others (no node served, `listShareFiles` empty) — only what it sent
-  in this session.
+  its root). It sees nothing of the drop box or of others (no node served, `listShareFiles` empty) — only its files of
+  this session: being sent, sent (with the size), or not sent with the reason and, where a retry can help, a retry (the
+  page has no upload menu, so this list is the only place a guest learns what failed, inbox #381). A gone link — any
+  `404`, or `share_not_contributable`/`share_password_incorrect` at any door — turns the page into "this link no longer
+  takes files from you" without a picker, and `dropGuestJob` stops the rest of the batch without a request; a store's own
+  refusal (`chunk_put_failed:403`) is a failed file, not a gone link.
 - **The member** (`components/DropBoxSection.vue`, `DropBoxDetail.vue`, `DropBoxCreateDialog.vue`,
   `DropBoxShareDialog.vue`): creates a drop box from a folder level, mints, copies, switches off and deletes its links,
   opens it to its guests' folders (a repeated guest name numbered at display time, never stored), opens a folder

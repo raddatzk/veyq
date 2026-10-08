@@ -18,8 +18,9 @@ import { mintShare, type MintedShare } from '../../core/sharing/manageShares'
 import { dropKeysForShare, mintIdentityKey, openDropPublicKey } from '../../core/sharing/dropKey'
 import { identityNameContext, loadGuestSession, saveGuestSession, type GuestIdentity } from '../../core/sharing/guestIdentity'
 import type { PublicShareHead } from '../../core/sharing/resolvePublicShare'
-import type { GuestTreeContext } from '../../core/sharing/guestTree'
-import { HttpStatus, isCodedError } from '../../shared/httpError'
+import { GuestTreeError, type GuestTreeContext } from '../../core/sharing/guestTree'
+import type { UploadJob } from '../../core/blob/queue'
+import { decodeHttpError, HttpStatus, isCodedError } from '../../shared/httpError'
 import { ShareRole, type ShareNode } from '../../api/generated/sharing'
 import { publicShareFilesApi } from './api'
 import { DROPBOX_KIND } from './kinds'
@@ -154,5 +155,51 @@ export function dropGuestContext(head: PublicShareHead, session: DropGuestSessio
     pwToken,
     contributorToken: session.contributorToken,
     reresolve: async () => parts,
+  }
+}
+
+/**
+ * The failure code a drop-box guest's upload ends on once the link no longer takes files from this guest (inbox #381):
+ * revoked or deleted (`404`), switched to another password, or this guest's folder trashed (`403
+ * share_not_contributable`). The guest page shows it as such — not as a generic failure, and never not at all.
+ */
+export const DROP_LINK_GONE = 'link_gone'
+
+/** The server codes that mean the link is gone for this guest, at any of its doors (create, ensure, start, window,
+ *  complete): a revoke between start and completion answers `upload_not_found`. */
+const GONE_CODES: ReadonlySet<string> = new Set([
+  'share_not_found', 'node_not_found', 'upload_not_found', 'share_not_contributable', 'share_password_incorrect',
+])
+
+/** Whether a failed drop-box call means the link is gone for this guest: one of {@link GONE_CODES} (as a guest tree
+ *  refusal or a response body), or any `404`. A store's own refusal (`chunk_put_failed:403`) carries no response and
+ *  is not that: the link may be fine, the upload failed. */
+export async function isDropLinkGone(e: unknown): Promise<boolean> {
+  if (e instanceof Error && e.message === DROP_LINK_GONE) return true
+  if (e instanceof GuestTreeError) return GONE_CODES.has(e.code)
+  const { status, code } = await decodeHttpError(e)
+  return status === HttpStatus.notFound || (code !== null && GONE_CODES.has(code))
+}
+
+/**
+ * A drop-box guest's queue job: `job`, ending on {@link DROP_LINK_GONE} when the link is gone, and remembering that in
+ * `link` — every later run (the queue's automatic retry, the guest's other files) fails at once, with no request.
+ * An abort stays an abort.
+ */
+export function dropGuestJob<R, X extends object>(job: UploadJob<R, X>, link: { gone: boolean }): UploadJob<R, X> {
+  return {
+    ...job,
+    async run(ctx) {
+      if (link.gone) throw new Error(DROP_LINK_GONE)
+      try {
+        return await job.run(ctx)
+      } catch (e) {
+        if (!ctx.signal.aborted && (await isDropLinkGone(e))) {
+          link.gone = true
+          throw new Error(DROP_LINK_GONE)
+        }
+        throw e
+      }
+    },
   }
 }
