@@ -213,9 +213,10 @@ None open from this decision set. **The drop box node** (decision 11) is built w
 own operation; its entry is under the guest's `K_up`, which the reader opens through the parent's drop key. A
 `WRITE_ONLY` link on a plain `FOLDER` stays refused (`ShareRoots`). **Open for the owner:** where the build differs
 from decision 11 as written — a `READ_WRITE` guest of a link above may move a guest's folder out (the decision says
-members), a trashed identity folder ends that identity's folder for good, a `WRITE_ONLY` guest may create any kind a
-folder admits inside its own, the folder call spends the link's upload budget each time, and equal names are numbered
-by node id, not creation time — is [inbox #377](../inbox.md); the decision stands as written until the owner rules.
+members), a trashed identity folder ends that identity's folder for good, the folder call spends the link's upload
+budget each time, and equal names are numbered by node id, not creation time — is [inbox #377](../inbox.md); the
+decision stands as written until the owner rules. Ruled 2026-10-08: inside its own folder a `WRITE_ONLY` guest creates
+`FILE`s only (the root kind's application declares it, core's `WriteOnlyGuestKinds`; anything else `illegal_scope`).
 
 ## Bite tests (each must fail if the rule is wrong)
 

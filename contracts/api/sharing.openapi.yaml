@@ -739,7 +739,9 @@ paths:
         password → the access mode → the `X-Contributor-Token` identity → the per-share upload budget, which a create
         spends). A **READ_WRITE** link takes it anywhere in its subtree; a **WRITE_ONLY** link only inside its guest's
         own identity folder (ADR 0080 decision 11: the folder the application's own operation created for this
-        identity in the link's root, e.g. Files' `ensureShareDropFolder`) — a parent anywhere else is `422
+        identity in the link's root, e.g. Files' `ensureShareDropFolder`), and only the kinds the application owning
+        the root's kind declares (`WriteOnlyGuestKinds`: a drop box's guest creates `FILE`s only; any other kind, or a
+        root kind no application declares, is `422 illegal_scope`) — a parent anywhere else is `422
         illegal_structure`, and no live identity folder is `403 share_not_contributable`; a READ link is `403
         share_not_contributable`. Inside an identity folder nobody else creates: a READ_WRITE guest of a link above it
         (and a member, `createNode`) is `422 illegal_structure` there.
@@ -802,7 +804,8 @@ paths:
           description: >
             Illegal structure (`illegal_structure` — the parent is missing, trashed, or outside the share's subtree, or
             the kind's placement rule refuses it there), or the owner of the parent's kind does not let a READ_WRITE
-            guest create that kind in it (`illegal_scope`).
+            guest create that kind in it, or — for a WRITE_ONLY link — the owner of the root's kind does not let its
+            guest create that kind (`illegal_scope`).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_structure } }
         "429":

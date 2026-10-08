@@ -24,7 +24,8 @@ sealed interface GuestNodeOp {
  * out, the destination's lets it in; a rename asks the parent's owner, a create the parent's. It is asked in addition
  * to `NodeKindRules` (where a kind may live at all), never instead of it, for a `READ_WRITE` guest — and for a
  * `WRITE_ONLY` one's only tree operation, a create inside its own identity folder (ADR 0080 decision 11), asked as
- * a `READ_WRITE` guest's there; a `WRITE_ONLY` guest places nothing.
+ * a `READ_WRITE` guest's there and, on top, of the root kind's owner ([WriteOnlyGuestKinds]: which kinds that guest may
+ * create at all); a `WRITE_ONLY` guest places nothing.
  *
  * **Exactly one implementation per kind, and none is the default** — the partition of `NodeKindRules` and
  * [ShareRoots]. A container kind no implementation handles, or one two implementations claim, allows a guest nothing

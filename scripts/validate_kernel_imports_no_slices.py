@@ -20,8 +20,9 @@ names a node kind an application owns (developer-styleguide § 1, ADR 0007's sha
   names that guard nothing, and a run in which no file is kernel is red.
 - **Node-kind rule (ADR 0079).** Core knows the node kind `FOLDER` only; the kinds an application owns
   (`APPLICATION_KINDS`: Memories' `MEMORY` and `CHAPTER`, Files' `FILE` and `FILES_DROPBOX`) are named only by that application's code, which answers
-  for them through core's `NodeKindRules`, `ShareRoots`, `GuestNodeRules`, `ShareGuestWrites`, `UploadCompletion` and
-  `UploadAdmission` (`GuestNodeRules` by declaring nothing: a kind no one declares allows a guest no tree operation). A
+  for them through core's `NodeKindRules`, `ShareRoots`, `GuestNodeRules`, `WriteOnlyGuestKinds`, `ShareGuestWrites`,
+  `UploadCompletion` and `UploadAdmission` (`GuestNodeRules` and `WriteOnlyGuestKinds` by declaring nothing: a kind no
+  one declares allows a guest no tree operation). A
   **platform** file is every main file outside an application module (a project `:apps:<name>`, read by
   `backend_tree.project_of`), an **application** file one inside. So no platform main file names one of them as a
   whole word **in code**
@@ -222,7 +223,7 @@ def main() -> int:
         print("\n".join(hits[k] for k in sorted(hits)))
         print("Share the rule through a small interface in the kernel that the slice implements, or move the entity "
               "into the kernel with the slice's store still its only writer. A rule about a Memories node kind or blob role is "
-              "Memories' — answer it through a core seam (NodeKindRules, ShareRoots, GuestNodeRules, ShareGuestWrites, UploadCompletion, "
+              "Memories' — answer it through a core seam (NodeKindRules, ShareRoots, GuestNodeRules, WriteOnlyGuestKinds, ShareGuestWrites, UploadCompletion, "
               "UploadAdmission).")
         return 1
 

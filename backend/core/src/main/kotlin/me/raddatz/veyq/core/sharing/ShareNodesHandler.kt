@@ -28,8 +28,9 @@ sealed interface CreateShareNodeOutcome {
     object RateLimited : CreateShareNodeOutcome, HttpFailure by Failures.rateLimited
     /** The parent is missing, trashed or outside the share's subtree, or `NodeKindRules` refuses the kind there. */
     object IllegalStructure : CreateShareNodeOutcome, HttpFailure by Failures.illegalStructure
-    /** The owner of the parent's kind lets no READ_WRITE guest create that kind in it ([GuestNodeRules]) — a 422, the
-     *  code a share's refused kind-and-role pair answers on create (`illegal_scope`). */
+    /** The owner of the parent's kind lets no READ_WRITE guest create that kind in it ([GuestNodeRules]), or the owner
+     *  of the root's kind lets no WRITE_ONLY guest create it ([WriteOnlyGuestKinds]) — a 422, the code a share's refused
+     *  kind-and-role pair answers on create (`illegal_scope`). */
     object IllegalScope : CreateShareNodeOutcome, HttpFailure by httpFailure("illegal_scope", UNPROCESSABLE)
     object SlugTaken : CreateShareNodeOutcome, HttpFailure by Failures.slugTaken
     object IdTaken : CreateShareNodeOutcome, HttpFailure by Failures.idTaken
@@ -68,7 +69,8 @@ sealed interface UpdateShareNodeOutcome {
  * Who may do what is the container's owner's ([GuestNodeRules], both sides of a move), on top of where a kind may live
  * at all (`NodeKindRules`, which the node operations ask). A `WRITE_ONLY` guest only creates, and only inside its own
  * identity folder in the root (ADR 0080 decision 11: the application's own operation made it, `IdentityFolders`), the
- * folder being its subtree here; it places nothing (refused by the gate, before its token and the budget). A create
+ * folder being its subtree here, and only the kinds its root's application declares ([WriteOnlyGuestKinds]: a drop
+ * box's guests create `FILE`s only); it places nothing (refused by the gate, before its token and the budget). A create
  * spends the per-share upload budget, a placement does not.
  *
  * **Lock order, in ONE transaction:** (1) the scope row ([NodesStore.lockScope]) — the lock every tree writer takes
@@ -88,6 +90,7 @@ class ShareNodesHandler(
     private val shares: SharingStore,
     /** `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor). */
     @All private val rules: MutableList<GuestNodeRules>,
+    @All private val writeOnlyKinds: MutableList<WriteOnlyGuestKinds>,
 ) {
 
     fun create(
@@ -123,6 +126,11 @@ class ShareNodesHandler(
             // The kind only (a node never changes it); whether the parent is live is the create's own question.
             val parentKind = kindOf(scopeId, parentId) ?: return@createOrConflict CreateShareNodeOutcome.IllegalStructure
             if (!GuestNodeRules.readWriteAllows(rules, parentKind, GuestNodeOp.CreateChild(kind))) {
+                return@createOrConflict CreateShareNodeOutcome.IllegalScope
+            }
+            // A WRITE_ONLY guest creates only the kinds its root's application lets it (Files' drop box: `FILE`s only,
+            // inbox #377 (c)) — kinds never change, so this needs no lock of its own.
+            if (writeOnly && !WriteOnlyGuestKinds.allows(writeOnlyKinds, gated.rootKind, kind)) {
                 return@createOrConflict CreateShareNodeOutcome.IllegalScope
             }
             // ADR 0080 decision 6: the epoch the guest sealed with, stored as sent — its name and wrap bind it, so the

@@ -17,6 +17,7 @@ import me.raddatz.veyq.core.sharing.ShareGuestWrites
 import me.raddatz.veyq.core.sharing.ShareRoots
 import me.raddatz.veyq.core.sharing.ShareWriteProof
 import me.raddatz.veyq.core.sharing.SharedSubtreeContributor
+import me.raddatz.veyq.core.sharing.WriteOnlyGuestKinds
 import me.raddatz.veyq.core.testing.MainOutputs
 import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
@@ -80,6 +81,7 @@ class ModuleCompositionTest {
     @Inject @All lateinit var kindRules: MutableList<NodeKindRules>
     @Inject @All lateinit var shareRoots: MutableList<ShareRoots>
     @Inject @All lateinit var guestNodeRules: MutableList<GuestNodeRules>
+    @Inject @All lateinit var writeOnlyGuestKinds: MutableList<WriteOnlyGuestKinds>
 
     @Inject lateinit var quota: StorageQuota
 
@@ -96,6 +98,7 @@ class ModuleCompositionTest {
         NodeKindRules::class.java to kindRules,
         ShareRoots::class.java to shareRoots,
         GuestNodeRules::class.java to guestNodeRules,
+        WriteOnlyGuestKinds::class.java to writeOnlyGuestKinds,
     )
 
     private val compiled: List<Class<*>> by lazy {
@@ -244,6 +247,12 @@ class ModuleCompositionTest {
         assertFalse(GuestNodeRules.readWriteAllows(guestNodeRules, unclaimed, create), "a guest creates in an unclaimed kind")
         assertFalse(GuestNodeRules.readWriteAllows(guestNodeRules, memory, create), "a guest creates inside a Memory")
         assertTrue(GuestNodeRules.readWriteAllows(guestNodeRules, NodeEntity.FOLDER, create), "control: inside a folder")
+        // A WRITE_ONLY guest's create: a root kind no application declares lets it create nothing — a Memory root
+        // neither (its guests' uploads are media, not nodes); Files' drop box takes FILEs (wire tokens, as this test
+        // spells Files' kinds).
+        assertFalse(WriteOnlyGuestKinds.allows(writeOnlyGuestKinds, unclaimed, NodeEntity.FOLDER), "a write-only guest creates under an unclaimed root")
+        assertFalse(WriteOnlyGuestKinds.allows(writeOnlyGuestKinds, memory, NodeEntity.FOLDER), "a write-only guest creates under a Memory link")
+        assertTrue(WriteOnlyGuestKinds.allows(writeOnlyGuestKinds, "FILES_DROPBOX", "FILE"), "control: a FILE in a drop box")
 
         // A link's usage: no admission measures it, so the link start is refused.
         assertNull(quota.admissionFor(unclaimed), "an unclaimed kind's link is measured")

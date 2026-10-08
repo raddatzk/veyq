@@ -30,6 +30,8 @@
 ## Alternate / exception flows
 
 - **E1 — a guest names a node outside its own folder** (beside the folders, another guest's folder or file): refused.
+- **E1a — a guest creates anything but a `FILE` in its own folder** (a sub-folder, any other kind): refused
+  (`illegal_scope`) — a drop-box guest sends files, nothing else.
 - **E2 — a member (or a `READ_WRITE` guest of a link above) creates, moves or renames into a guest's folder or the drop
   box:** refused (`illegal_structure`).
 - **E3 — the link is revoked or deleted:** the drop box, its folders, files and the identities that open them stay.

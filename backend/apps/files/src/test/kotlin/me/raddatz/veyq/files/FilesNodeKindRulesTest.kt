@@ -4,6 +4,7 @@ import me.raddatz.veyq.core.node.FolderNodeRules
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.node.NodeKindRules
 import me.raddatz.veyq.core.node.ParentSlot
+import me.raddatz.veyq.core.sharing.WriteOnlyGuestKinds
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -49,6 +50,19 @@ class FilesNodeKindRulesTest {
         // and it is shared WRITE_ONLY only
         assertEquals(setOf("WRITE_ONLY"), FilesShareRoots().roles(dropBox))
         assertEquals(null, FilesShareRoots().roles(file), "a file is no share root")
+    }
+
+    @Test
+    fun aDropBoxGuestCreatesFilesOnly() {
+        // inbox #377 (c), owner decision 2026-10-08: inside its identity folder a WRITE_ONLY guest creates FILEs only
+        val kinds = listOf(FilesWriteOnlyGuestKinds())
+        assertEquals(setOf(file), FilesWriteOnlyGuestKinds().creatable(FilesNodeKinds.DROPBOX))
+        assertTrue(WriteOnlyGuestKinds.allows(kinds, FilesNodeKinds.DROPBOX, file))
+        for (kind in listOf(NodeEntity.FOLDER, FilesNodeKinds.DROPBOX, "MEMORY", "CHAPTER", "NOT_A_KIND")) {
+            assertFalse(WriteOnlyGuestKinds.allows(kinds, FilesNodeKinds.DROPBOX, kind), "a drop-box guest creates a $kind")
+        }
+        // Files answers for its drop box only: no other root kind is its question
+        for (root in listOf(NodeEntity.FOLDER, file, "MEMORY")) assertEquals(null, FilesWriteOnlyGuestKinds().creatable(root), root)
     }
 
     @Test

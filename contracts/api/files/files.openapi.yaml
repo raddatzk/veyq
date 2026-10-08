@@ -291,7 +291,8 @@ paths:
         node id, a content key, a name and a slug token the guest minted and sealed under its own identity key
         `K_up` (the key it handed over wrapped to the drop box's drop public key in `createShareIdentity`) — and every
         later call by the same identity, concurrent ones included, answers that same folder with its stored wrap and
-        ignores the request's. Below it the guest creates its files with `createShareNode` and uploads into them
+        ignores the request's. Below it the guest creates its files with `createShareNode` — `FILE`s only, any other
+        kind is `422 illegal_scope` (Files' `WriteOnlyGuestKinds`) — and uploads into them
         (`startShareBlobUploads` with `nodeId`, `completeShareFile`), all decided again by core's guest gate: a
         `WRITE_ONLY` guest writes only inside its own identity folder. Core's guest gate runs first (`ShareGuestGate`:
         an active share → the password → the mode → the contributor token → the per-share upload budget, which a
