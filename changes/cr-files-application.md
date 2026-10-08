@@ -1,8 +1,8 @@
 ---
 id: cr-files-application
 title: Files, the second application — platform prerequisites, the skeleton, files for members, shares, the drop box
-status: planned          # planned → in-progress → done (then harvest what binds, and delete the file)
-satisfies: []            # use-case ids this fulfills (trust-chain link); Files' use cases are written with F1
+status: done             # planned → in-progress → done (then harvest what binds, and delete the file)
+satisfies: [uc.files.member-files, uc.files.share-folder-files, uc.files.drop-box]  # written at the harvest
 adrs: ["0072", "0077", "0079", "0080"]
 invariants: [operator-blind E2EE everywhere, API-first, self-hostable by default]
 ---
@@ -946,4 +946,19 @@ the e2e suites; `docs/apps/files.md` is the application's description (no longer
 use cases; what the work taught is harvested into ADRs, rules and comments, then this file is deleted.
 
 ## Retrospective
-(Filled at close.)
+- **Planning — the use-cases came last.** `satisfies: []` rode through fourteen phases on "written with F1"; F1, F2
+  and F3 each closed saying they were not written, and the harvest wrote them from the tests. Root cause: the
+  refine-before-CR rule was waived for a new application (no use-case could be named before its concept settled) and
+  nothing put the waiver on a phase. Next time: an application CR's first user-facing phase writes its use-cases as
+  `status: planned` coverage, and each later phase turns its gaps into refs.
+- **Execution — hand lists outside every guard.** The two kind guards' lists and `OperatorBlindProbeTest.API_PACKAGES`
+  are maintained by hand; F0 extended the web one for `FILE` only, F3 added `FILES_DROPBOX` to neither, and the
+  backend list never learned Files at all — all green, because a missing entry guards nothing. F1a found the probe's
+  list by reading it, which is luck, not process. Root cause: no list of "what a new application adds by hand"
+  existed. Fixed at close (the lists, and the rule in `backend/CLAUDE.md`).
+- **Process — an agreed rule was skipped on every UI slice.** P4a–P4d, B3, F1b, F2 and F3 each wrote "not verified
+  in a browser", although `docs/ai` says a UI slice is not done before it was clicked; the CR's done-when never asked
+  for it, so each phase could tick without it (inbox #372 now carries the pass). The worktree waves made it worse: a
+  phase's notes went stale under a later phase (F1b reported `upload.noSpace` still photo-worded after P4d had
+  reworded it). Next time: a UI phase's done-when names its browser pass, and a phase re-reads the notes of the
+  phases merged before it rather than its brief.
