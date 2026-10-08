@@ -142,7 +142,10 @@ here; the server is blind.
   different `order`s throws; its `createDialog` — props `NodeCreateDialogProps` `{kind, scopeId, epochs, parentId,
   parentKey}`, mounted by the shell when a section emits `create` or a detail `createChild` with that KIND; and its
   `shareDialog` — props `NodeShareDialogProps` `{scopeId, nodeId, nodeKey, epochs, nodeName, nodeKind, uploader?}`; a
-  kind without one offers no share. Core owns the rest: a folder's create and every node's rename are
+  kind without one offers no share; and its `shareSection` — `{ order, component }`, props `ShareSectionProps`
+  (the share, the folder on screen, the kind's children with the chain's keys and names, `canWrite`, `requestGuest`):
+  core's folder page of a public share (`core/sharing/FolderShareBody.vue`) renders it at every folder instead of
+  cards for those children, by the level sections' rules (Files' file list for guests). Core owns the rest: a folder's create and every node's rename are
   `core/node/FolderNameDialog.vue`, which derives the slug by the renamed node's kind, and FOLDER's share dialog
   `core/sharing/FolderShareDialog.vue` is pre-registered); `addSlotItem(slot, id, component, order?)` for the two list slots `topbarTray`
   and `sidebarPins` (an id namespaced by the application, e.g. `memories.pinned`; write-once per (slot, id); the shell
