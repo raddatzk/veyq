@@ -770,8 +770,9 @@ const en = {
     // The delete dialog (core's `DeleteNodeDialog`): a folder's own title and copy; any other node's title is its kind's
     // `deleteTitle` from the registry (Memories: `memory.deleteMemoryTitle`), else the neutral `node.delete`.
     deleteFolderTitle: 'Delete folder',
-    deleteFolderCopy: 'Delete “{name}” and everything inside it? This can’t be undone.',
-    deleteCopy: 'Delete “{name}”? This can’t be undone.',
+    // Every node delete is a move to the space's trash (`deleteNode`, ADR 0061): the copy says so (inbox #385).
+    deleteFolderCopy: '“{name}” and everything inside it move to the trash. You can restore them from there until they are removed for good.',
+    deleteCopy: '“{name}” moves to the trash. You can restore it from there until it is removed for good.',
     deleteFailed: 'Could not delete it. Please try again.',
     // The space's node trash (core's `SpaceTrashDialog`): it holds every application's nodes, so it names none.
     trash: {
@@ -779,7 +780,7 @@ const en = {
       // The level view's own toolbar button (core's: the trash holds every application's nodes).
       open: 'Trash',
       hint: 'Deleted items wait here — with everything inside them — until the date shown. Restore one and it comes back complete.',
-      empty: 'Nothing has been deleted here.',
+      empty: 'The trash is empty.',
       loadFailed: 'Could not open the trash. Please try again.',
       restore: 'Restore',
       restoreFailed: 'Could not restore this. Please try again.',
@@ -1987,14 +1988,14 @@ const de: typeof en = {
     illegalStructure: 'Das ist hier nicht erlaubt.',
     saveFailed: 'Das hat nicht geklappt. Bitte versuche es erneut.',
     deleteFolderTitle: 'Ordner löschen',
-    deleteFolderCopy: '„{name}" und alles darin löschen? Das lässt sich nicht rückgängig machen.',
-    deleteCopy: '„{name}" löschen? Das lässt sich nicht rückgängig machen.',
+    deleteFolderCopy: '„{name}“ und alles darin kommen in den Papierkorb. Dort lässt sich alles wiederherstellen, bis es endgültig entfernt wird.',
+    deleteCopy: '„{name}“ kommt in den Papierkorb. Dort lässt es sich wiederherstellen, bis es endgültig entfernt wird.',
     deleteFailed: 'Konnte nicht gelöscht werden. Bitte versuche es erneut.',
     trash: {
       title: 'Papierkorb',
       open: 'Papierkorb',
       hint: 'Gelöschte Einträge warten hier — mit allem, was darin ist — bis zum angezeigten Datum. Stellst du etwas wieder her, kommt es vollständig zurück.',
-      empty: 'Hier wurde noch nichts gelöscht.',
+      empty: 'Der Papierkorb ist leer.',
       loadFailed: 'Der Papierkorb konnte nicht geöffnet werden. Bitte erneut versuchen.',
       restore: 'Wiederherstellen',
       restoreFailed: 'Konnte nicht wiederhergestellt werden. Bitte erneut versuchen.',

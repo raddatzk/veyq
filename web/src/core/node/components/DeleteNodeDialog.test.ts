@@ -69,4 +69,25 @@ describe('DeleteNodeDialog', () => {
     expect(w.find('.msg').text()).toBe(t('node.deleteFailed'))
     expect(w.emitted('done')).toBeUndefined()
   })
+
+  // inbox #385 (d): every node delete is a move to the space's trash (`deleteNode`), so the copy says that — not that it
+  // cannot be undone — in both languages, with the name in the language's own quotes.
+  it('says the node moves to the trash, never that the delete cannot be undone, in both languages', async () => {
+    const { i18n } = await import('../../../i18n')
+    for (const [locale, trash, quoted, never] of [
+      ['en', 'trash', '“Rom 2026”', 'undone'],
+      ['de', 'Papierkorb', '„Rom 2026“', 'rückgängig'],
+    ] as const) {
+      for (const kind of [FOLDER_KIND, 'MEMORY']) {
+        const w = mountDialog(kind)
+        i18n.global.locale.value = locale
+        await w.vm.$nextTick()
+        const copy = w.find('.dialog-copy').text()
+        expect(copy, `${locale} ${kind}`).toContain(trash)
+        expect(copy).toContain(quoted)
+        expect(copy).not.toContain(never)
+      }
+    }
+    i18n.global.locale.value = 'en'
+  })
 })

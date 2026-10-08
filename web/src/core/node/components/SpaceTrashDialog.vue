@@ -186,6 +186,10 @@ onMounted(() => void load())
   align-items: flex-start;
   gap: 0.75rem;
 }
+/* Both dates in full: the list row's subtitle is one cut line, which cut the purge date off (inbox #385). */
+.trash-row .veyq-row-subtitle {
+  white-space: normal;
+}
 .trash-actions {
   display: flex;
   align-items: center;
