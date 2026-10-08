@@ -51,6 +51,7 @@ const boxes = computed(() => props.nodes.filter((n) => n.kind === DROPBOX_KIND))
 <style scoped>
 .dropbox-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
   margin-left: auto;

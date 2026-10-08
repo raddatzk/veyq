@@ -117,7 +117,8 @@ A `FILE` is **no share root** (Files declares no `ShareRoots`): a file is shared
   `shareSection` for its children; Files' is `components/ShareFilesSection.vue` — the files with name, size and date
   opened under the chain's keys, download through the link, and for a contributor an upload button (one core-queue job
   per file, `shareUpload.ts`: guest create → guest transport → `completeShareFile` with the meta) and a replace per
-  row. The guest names itself once per link through the page's own dialog (`requestGuest`). No rename on the guest
+  row, above the list the sentence that it can replace any file, the owner's too, and that no version is kept (no
+  confirmation asks yet, inbox #383). The guest names itself once per link through the page's own dialog (`requestGuest`). No rename on the guest
   page (no kind has one there yet, inbox #358).
 
 ## The drop box
@@ -143,8 +144,12 @@ one per guest identity, which are core `FOLDER`s carrying `veyq_node.share_ident
   **only `FILE`s** — a sub-folder or any other kind is `422 illegal_scope`; Files declares it through core's
   `WriteOnlyGuestKinds`, keyed on the link's root kind, owner decision 2026-10-08), core's
   guest transport and `completeShareFile` (core's `ShareGuestGate.target`: a `WRITE_ONLY` link names nothing else below
-  its root). It sees nothing of the drop box or of others (no node served, `listShareFiles` empty) — only what it sent
-  in this session.
+  its root). It sees nothing of the drop box or of others (no node served, `listShareFiles` empty) — only its files of
+  this session: being sent, sent (with the size), or not sent with the reason and, where a retry can help, a retry (the
+  page has no upload menu, so this list is the only place a guest learns what failed, inbox #381). A gone link — any
+  `404`, or `share_not_contributable`/`share_password_incorrect` at any door — turns the page into "this link no longer
+  takes files from you" without a picker, and `dropGuestJob` stops the rest of the batch without a request; a store's own
+  refusal (`chunk_put_failed:403`) is a failed file, not a gone link.
 - **The member** (`components/DropBoxSection.vue`, `DropBoxDetail.vue`, `DropBoxCreateDialog.vue`,
   `DropBoxShareDialog.vue`): creates a drop box from a folder level, mints, copies, switches off and deletes its links,
   opens it to its guests' folders (a repeated guest name numbered at display time, never stored), opens a folder
@@ -152,6 +157,11 @@ one per guest identity, which are core `FOLDER`s carrying `veyq_node.share_ident
   a guest's folder (core: no rule places into the drop box; a create, move or rename into an identity folder is
   `illegal_structure`, `NodesHandler`), and only delete or move out — a move out re-wraps and re-slugs under the
   target and ends the folder's identity link. The server allows the move out; the web offers no move yet (inbox #358).
+- **In a folder share above** (`READ`/`READ_WRITE`) the drop box is **not shown**: Files claims its share body
+  `rootOnly` (the body is a `WRITE_ONLY` guest's upload form and serves only its own link), so core's folder page shows
+  no drop box, nothing below it, and treats a `?node=` naming one as a node it did not open (inbox #380). That is a
+  rendering rule, not a gate: the backend still serves the drop box's subtree with its drop key to a guest of a link
+  above (ADR 0080 decision 11), and no backend change was made for it.
 - **Revoking or deleting a link keeps the drop box and everything in it**: an identity a folder names is kept
   (`NodeGuestIdentityUsage`, `fk_node_share_identity`), so the member still opens it; the purge of a trashed drop box
   erases its folders, then the identities nothing names any more.

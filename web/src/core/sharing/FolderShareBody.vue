@@ -8,7 +8,10 @@
 // and the current node: a folder's children as cards; any other node EMBEDDED through the body its application claimed
 // (`registry.shareBody(kind)`), handed `subtreeRoot` — that node's id, key and name from the chain. A kind nobody claimed,
 // or an embedded body that reports `unavailable`, is a local empty state here, never the whole page's unavailable state.
-// Core reads no kind but its own `FOLDER_KIND`: what a child IS is the registry's answer.
+// Core reads no kind but its own `FOLDER_KIND`: what a child IS is the registry's answer. A node whose kind's body is
+// claimed `rootOnly` (Files' drop box: its page is a WRITE_ONLY guest's upload form, inbox #380) is not shown, nor
+// anything below it — no card, no embed, and `?node=` naming one is a node the walk did not open. That is rendering only:
+// the served subtree still holds those nodes (ADR 0080 decision 11 lets a guest of a link above open them).
 //
 // **Navigation** is the route query `?node=<id>` with the `#k=` fragment KEPT: the shell reads the share key from it on
 // every re-resolve, so a push without it leaves the next reload keyless. An id the walk did not open falls back to the root.
@@ -70,12 +73,30 @@ const note = computed(() => pickLocaleText(props.head.noteByLocale, locale.value
 const renderedNote = computed(() => (note.value ? renderMarkdown(note.value) : ''))
 const canWrite = computed(() => props.head.role === ShareRole.ReadWrite)
 
-/** The node on screen: `?node=` when the walk opened it, else the root. */
+/** The nodes this page does not show: each node of a kind claimed `rootOnly`, and everything below it (bounded walk: a
+ *  served cycle ends at the root). */
+const hidden = computed<ReadonlySet<string>>(() => {
+  const p = parts.value
+  const out = new Set<string>()
+  if (!p) return out
+  for (const n of p.nodes.values()) {
+    for (let id: string | null | undefined = n.id, steps = 0; id && id !== p.rootId && steps <= p.nodes.size; id = p.nodes.get(id)?.parentId, steps++) {
+      const at = p.nodes.get(id)
+      if (at && registry.shareBodyRootOnly(at.kind)) {
+        out.add(n.id)
+        break
+      }
+    }
+  }
+  return out
+})
+
+/** The node on screen: `?node=` when the walk opened it (and this page shows it), else the root. */
 const currentId = computed<string | null>(() => {
   const p = parts.value
   if (!p) return null
   const q = route.query.node
-  return typeof q === 'string' && p.keys.has(q) ? q : p.rootId
+  return typeof q === 'string' && p.keys.has(q) && !hidden.value.has(q) ? q : p.rootId
 })
 const nameOf = (p: GuestTreeParts, id: string) => (id === p.rootId ? props.head.name : (p.names.get(id) ?? ''))
 const currentKind = computed(() => (parts.value && currentId.value ? (parts.value.nodes.get(currentId.value)?.kind ?? null) : null))
@@ -127,11 +148,11 @@ const crumbs = computed<MenuItem[]>(() => {
 const shareSections = registry.shareSections()
 const sectionedKinds = new Set(shareSections.flatMap((s) => s.kinds))
 
-/** The current folder's children the walk opened, with a name — every kind. */
+/** The current folder's children the walk opened, with a name — every kind this page shows. */
 const openedChildren = computed(() => {
   const p = parts.value
   if (!p || !currentId.value) return []
-  return [...p.nodes.values()].filter((n) => n.parentId === currentId.value && p.names.has(n.id))
+  return [...p.nodes.values()].filter((n) => n.parentId === currentId.value && p.names.has(n.id) && !hidden.value.has(n.id))
 })
 /** The children of `kinds` (a share section's), as served. */
 const childrenOf = (kinds: readonly string[]) => openedChildren.value.filter((n) => kinds.includes(n.kind))

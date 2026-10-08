@@ -435,7 +435,7 @@ function onDialogVisible(visible: boolean) {
 
       <p v-if="loadError" class="veyq-form-error">{{ t('share.loadFailed') }}</p>
       <p v-else-if="!folderShares.length" class="veyq-empty veyq-empty-inline">{{ t('share.none') }}</p>
-      <ul v-else class="veyq-list folder-share-list">
+      <ul v-else class="veyq-list">
         <template v-for="section in sections" :key="section.key">
           <li v-if="section.foldable && section.shares.length">
             <Button
@@ -544,11 +544,6 @@ function onDialogVisible(visible: boolean) {
 <style scoped>
 /* Only what no shared class expresses: the toggle-led section head, the link/password row, the row's trailing
    actions. Spacing and colours are the shared form/list classes' and the `--app-*` tokens'. */
-.folder-share-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
 .folder-share-row {
   grid-template-columns: minmax(0, 1fr) auto;
 }

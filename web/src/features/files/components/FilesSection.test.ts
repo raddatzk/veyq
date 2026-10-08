@@ -132,6 +132,8 @@ describe('FilesSection', () => {
     // no blob yet: said so, and nothing to download
     expect(rows[2].find('.veyq-row-subtitle').text()).toBe(t('files.notUploaded'))
     expect(byLabel(w, t('files.download', { name: 'pending.bin' })).attributes('disabled')).toBeDefined()
+    // A row's icon buttons are an icon group: one row on a phone, not the text buttons' one-column grid (inbox #382).
+    expect(rows.every((r) => r.find('.veyq-action-group').classes('veyq-action-group-icons'))).toBe(true)
   })
 
   it('shows only FILE nodes, whatever else the level hands it', async () => {

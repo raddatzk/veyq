@@ -205,7 +205,7 @@ async function onDeleteDone() {
 </script>
 
 <template>
-  <div class="memory-home">
+  <div class="veyq-node-host">
     <p v-if="activeSpace.status === 'loading' || activeSpace.status === 'idle'" class="home-loading">
       {{ t('home.loading') }}
     </p>
@@ -322,12 +322,6 @@ async function onDeleteDone() {
 </template>
 
 <style scoped>
-/* Fill the full workspace width — the outer .content already applies the page padding, and the gallery's
-   justified layout / the browse card grid both reflow to whatever width they're given (no readable-line-length
-   concern here, unlike prose). */
-.memory-home {
-  width: 100%;
-}
 .home-loading {
   color: var(--app-muted);
 }

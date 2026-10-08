@@ -74,7 +74,7 @@ async function removeFolder(folder: TreeNode, label: string) {
             <span class="veyq-row-subtitle">{{ t('files.dropBox.guestFiles', row.files) }}</span>
           </span>
         </button>
-        <span class="veyq-action-group">
+        <span class="veyq-action-group veyq-action-group-icons">
           <Button
             type="button"
             class="veyq-icon-button veyq-prime-icon-button"
@@ -94,6 +94,7 @@ async function removeFolder(folder: TreeNode, label: string) {
 <style scoped>
 .dropbox-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
   margin-left: auto;

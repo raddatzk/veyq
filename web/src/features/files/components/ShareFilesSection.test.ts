@@ -90,6 +90,13 @@ describe('a guest reads the files of a shared folder', () => {
     await flushPromises()
     expect(w.find('input[type="file"]').exists()).toBe(false)
     expect(w.findAll('button').map((b) => b.attributes('aria-label'))).toEqual([t('files.download', { name: 'aaa.bin' }), t('files.download', { name: 'Report.pdf' })])
+    expect(w.text()).not.toContain(t('files.guest.contributorHint'))
+  })
+
+  it('a contributor is told before uploading that it may replace any file, the owner\'s too, with no version kept (inbox #383)', async () => {
+    const w = mountSection({ canWrite: true })
+    await flushPromises()
+    expect(w.text()).toContain(t('files.guest.contributorHint'))
   })
 
   it('downloads through the link: the presign is the share\'s, with the password token', async () => {

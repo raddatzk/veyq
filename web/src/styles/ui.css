@@ -6,14 +6,25 @@
   margin-inline: auto;
 }
 
+/* The shell's host of whatever node is open (views/MemoryHomeView.vue: a kind's detail or core's level view). It fills
+   the workspace width (the outer `.content` applies the page padding; the gallery and the card grids reflow to it), and
+   `min-width: 0` keeps a child's min-content width from widening the page (inbox #382). */
+.veyq-node-host {
+  width: 100%;
+  min-width: 0;
+}
+
 .veyq-section {
   display: grid;
   min-width: 0;
   gap: 0.85rem;
 }
 
+/* A section header wraps when its heading, count and toolbar do not fit (inbox #382: on a phone the drop box's header
+   set the section's width to ~400 px and cut everything below it); a long name breaks rather than widens it. */
 .veyq-section-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-start;
   gap: 1rem;
@@ -22,7 +33,9 @@
 .veyq-section-header h1,
 .veyq-section-header h2,
 .veyq-section-header h3 {
+  min-width: 0;
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .veyq-section-header h2 {
@@ -313,9 +326,13 @@
   background: var(--app-success-soft);
 }
 
+/* A list of rows, an `ul` as often as a `div`: no bullets and no indent (inbox #382). */
 .veyq-list {
   display: grid;
   gap: 0.55rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .veyq-list-row {
@@ -489,6 +506,16 @@
 
   .veyq-action-group {
     margin-left: 0;
+  }
+
+  /* A group of icon buttons (a row's download, replace, rename, delete) stays one row at its own width, at the row's
+     end: the full-width one-column grid above is for text buttons — stacked icons made a file row ~300 px tall, and
+     in a flex row the full width squeezed the name (inbox #382). */
+  .veyq-action-group.veyq-action-group-icons {
+    display: flex;
+    flex-shrink: 0;
+    width: auto;
+    margin-left: auto;
   }
 }
 

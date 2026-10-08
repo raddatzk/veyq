@@ -961,6 +961,8 @@ const en = {
     guest: {
       empty: 'No files here.',
       linkFull: '“{name}” was not uploaded: this link takes no more uploads right now.',
+      // A contributor's page (inbox #383): what an upload or a replace does, said before it happens.
+      contributorHint: 'You can upload files here and replace any file, including the owner’s. A replaced file cannot be brought back: there is no version history.',
     },
     // The drop box (cr-files-application F3): a member's section, detail, create and share dialogs; a guest's page.
     dropBox: {
@@ -993,8 +995,17 @@ const en = {
       guestNameHint: 'The owner sees your files under this name.',
       guestStart: 'Continue',
       guestPick: 'Choose files',
-      guestSent: 'Sent in this session',
-      guestGone: 'This link no longer takes files from you. Clear your session to start again.',
+      // The guest's files of this session (inbox #381): what is being sent, what arrived, what did not and why.
+      guestSession: 'Your files in this session',
+      guestSending: 'Sending…',
+      guestDone: 'Sent · {size}',
+      guestErrorGone: 'Not sent: this link no longer takes files from you.',
+      guestErrorFull: 'Not sent: this link takes no more files right now.',
+      guestErrorNameTaken: 'Not sent: you already sent a file with this name.',
+      guestErrorFailed: 'Not sent: something went wrong. You can try again.',
+      guestRetry: 'Try again',
+      guestRetryLabel: 'Send “{name}” again',
+      guestGone: 'This link no longer takes files from you. Files marked as sent have arrived.',
       guestFailed: 'Something went wrong. Please try again.',
     },
   },
@@ -1195,14 +1206,15 @@ const en = {
     // after a member renamed a shared node (core's FolderNameDialog → resealShareNames, ADR 0080 decision 14)
     nameResealFailed: 'Renamed. Some links to it could not be updated and still show the old name to their guests.',
     // core's folder share dialog (cr-node-key-hierarchy 5b.3) and folder page (5b.4b): only where a Memory sentence
-    // would be wrong for a folder. READ_WRITE on a folder = add folders, rename and move inside it, and add photos to
-    // the Memories below it (5a.5, docs/apps/memories.md).
+    // would be wrong for a folder. READ_WRITE on a folder = add folders, rename and move inside it, add photos to the
+    // Memories below it (5a.5, docs/apps/memories.md) and upload or replace files (docs/apps/files.md). Core serves every
+    // application's nodes, so these strings name none of them; a replaced file is gone (no versioning, inbox #383).
     folder: {
       title: 'Share this folder',
       intro: 'Create a link anyone can open in a browser — no account, no install. It shows this folder and everything in it, and you can switch it off anytime.',
       roleContributor: 'View + contribute',
       roleViewerHint: 'Anyone with the link can look at this folder and everything in it, read-only.',
-      roleContributorHint: 'Anyone with the link can look, add folders, rename or move things inside this folder, and add photos to the Memories in it.',
+      roleContributorHint: 'Anyone with the link can look, add folders and content, rename or move things inside this folder, and upload files — also over any file already in it, yours included. A replaced file cannot be brought back: there is no version history.',
       deleteConfirm: 'Delete this link for good? It can never be switched on or renewed again. What guests added stays in this folder.',
       reissueWarning: 'This makes a new link and deletes the old one. Hand out the new link.',
       // A guest's tree operations on a folder link (core/sharing/guestTree.ts, guestTreeErrorMessageKey).
@@ -1218,7 +1230,7 @@ const en = {
       loading: 'Opening this folder…',
       empty: 'This folder is empty.',
       readonly: 'Shared with you · read-only',
-      contributorBadge: 'Shared with you · you can add folders and photos',
+      contributorBadge: 'Shared with you · you can add and change things here',
       newFolder: 'New folder',
       newFolderTitle: 'Create a folder',
       nameLabel: 'Name',
@@ -2143,6 +2155,7 @@ const de: typeof en = {
     guest: {
       empty: 'Hier liegen keine Dateien.',
       linkFull: '„{name}“ wurde nicht hochgeladen: Dieser Link nimmt gerade keine weiteren Uploads an.',
+      contributorHint: 'Du kannst hier Dateien hochladen und jede Datei ersetzen, auch die der Person, der der Ordner gehört. Eine ersetzte Datei lässt sich nicht zurückholen: Es gibt keinen Versionsverlauf.',
     },
     dropBox: {
       section: 'Briefkästen',
@@ -2174,8 +2187,16 @@ const de: typeof en = {
       guestNameHint: 'Unter diesem Namen sieht die Person, die den Link geteilt hat, deine Dateien.',
       guestStart: 'Weiter',
       guestPick: 'Dateien auswählen',
-      guestSent: 'In dieser Sitzung gesendet',
-      guestGone: 'Dieser Link nimmt von dir keine Dateien mehr an. Beende deine Sitzung, um neu zu beginnen.',
+      guestSession: 'Deine Dateien in dieser Sitzung',
+      guestSending: 'Wird gesendet…',
+      guestDone: 'Gesendet · {size}',
+      guestErrorGone: 'Nicht gesendet: Dieser Link nimmt von dir keine Dateien mehr an.',
+      guestErrorFull: 'Nicht gesendet: Dieser Link nimmt gerade keine weiteren Dateien an.',
+      guestErrorNameTaken: 'Nicht gesendet: Du hast schon eine Datei mit diesem Namen gesendet.',
+      guestErrorFailed: 'Nicht gesendet: Etwas ist schiefgelaufen. Du kannst es erneut versuchen.',
+      guestRetry: 'Erneut versuchen',
+      guestRetryLabel: '„{name}“ erneut senden',
+      guestGone: 'Dieser Link nimmt von dir keine Dateien mehr an. Dateien, die als gesendet markiert sind, sind angekommen.',
       guestFailed: 'Etwas ist schiefgelaufen. Bitte versuche es erneut.',
     },
   },
@@ -2370,7 +2391,7 @@ const de: typeof en = {
       intro: 'Erstelle einen Link, den jede:r im Browser öffnen kann — ohne Konto, ohne Installation. Er zeigt diesen Ordner mit allem, was darin liegt, und du kannst ihn jederzeit abschalten.',
       roleContributor: 'Ansehen + mitwirken',
       roleViewerHint: 'Wer den Link hat, kann diesen Ordner mit allem darin ansehen — schreibgeschützt.',
-      roleContributorHint: 'Wer den Link hat, kann ansehen, Ordner anlegen, darin umbenennen oder verschieben und den Erinnerungen darin Fotos hinzufügen.',
+      roleContributorHint: 'Wer den Link hat, kann ansehen, Ordner und Inhalte hinzufügen, darin umbenennen oder verschieben und Dateien hochladen — auch über jede Datei, die schon darin liegt, deine eingeschlossen. Eine ersetzte Datei lässt sich nicht zurückholen: Es gibt keinen Versionsverlauf.',
       deleteConfirm: 'Diesen Link endgültig löschen? Er lässt sich danach nie wieder einschalten oder erneuern. Was Gäste angelegt haben, bleibt in diesem Ordner.',
       reissueWarning: 'Dadurch entsteht ein neuer Link, und der alte wird gelöscht. Gib den neuen Link weiter.',
       nameTaken: 'Hier gibt es schon „{name}“. Wähle einen anderen Namen.',
@@ -2384,7 +2405,7 @@ const de: typeof en = {
       loading: 'Dieser Ordner wird geöffnet …',
       empty: 'Dieser Ordner ist leer.',
       readonly: 'Mit dir geteilt · schreibgeschützt',
-      contributorBadge: 'Mit dir geteilt · du kannst Ordner und Fotos hinzufügen',
+      contributorBadge: 'Mit dir geteilt · du kannst hier hinzufügen und ändern',
       newFolder: 'Neuer Ordner',
       newFolderTitle: 'Ordner anlegen',
       nameLabel: 'Name',
