@@ -253,7 +253,7 @@ without touching core except for the platform prerequisites below, which every l
         class added — the term is a read inside the existing tenant-locked reservation), and with `--tests` the two new
         classes there 6/6 and 1/1 (the new statement runs on the production engine). Runner quirk: `--tests A B` ran only
         `A`; one `--tests` per run.
-- [ ] P4 web re-cut — planned 2026-10-07; two strands. Owner decision: the toolbar (trash, grid/list) stays in Memories'
+- [x] P4 web re-cut — planned 2026-10-07; two strands. Owner decision: the toolbar (trash, grid/list) stays in Memories'
       section until Files needs it (the visible change P4e is deferred). Every e2e suite is API-level, so only golden and
       characterisation tests prove 'no user-visible change'.
   - [x] B0 characterisation test of the upload pipeline — `randomBytes`/`randomUUID` and `fetch` stubbed; per frame method, path,
@@ -512,9 +512,59 @@ without touching core except for the platform prerequisites below, which every l
         `illegalStructure`/`saveFailed`/`renameTitle`/`createFolderTitle`/`nameLabel`/`save` stay where they are for P4d.
         **Not verified:** no browser — the dialogs' look, focus and Escape behaviour after the move, and the lazy FOLDER
         share dialog's first open (one async tick) in a real build.
-  - [ ] P4d CSS and i18n neutral — the `memory-folder-*`/`memory-create-card` rules move to `veyq-*` twins (dark tokens), the dead
+  - [x] P4d CSS and i18n neutral — the `memory-folder-*`/`memory-create-card` rules move to `veyq-*` twins (dark tokens), the dead
         rules are deleted (`validate_stylesheet_anchors`), the generic `memory.*` keys move to a core namespace (en + de) ·
         Done when: the golden test is updated deliberately (class names only).
+        **Measured 2026-10-08:** `LevelView.vue` classes old → new: `memory-route-surface` → `veyq-level-view`;
+        `memory-folder-card` → `veyq-folder-card`; `memory-folder-overview-card/-actions/-action` → `veyq-folder-overview-
+        card/-actions/-action`; `memory-danger-action` → `veyq-danger-action` (core-only since P4b); the folders grid
+        `memory-card-grid` → `veyq-card-grid veyq-level-grid`; the new-folder card `memory-create-card` →
+        `veyq-create-card`; the folders header `memory-section-header` → `veyq-level-section-header`; `memory-section`
+        dropped from core's two sections (its final `gap: 0.85rem` is `.veyq-section`'s own). `FolderNameDialog` had no
+        `memory-*` class. CSS: the 23 rules that matched those elements (HEAD `memory.css`, incl. the 520 px block) are
+        appended to the END of `ui.css` renamed, same declarations, same order — a throwaway script (not committed)
+        compared HEAD's rule sequence with the appended one: equal, and `.memory-card-grid`'s base equals
+        `.veyq-card-grid`'s. End of `ui.css` = the old cascade position: in `memory.css` they came after `ui.css`,
+        `layout.css`, `forms.css`, and nothing in the latter two matches these elements. `memory.css` only loses
+        selectors (`.memory-folder-*`, `.memory-danger-action`, the folder half of the shared lists). `dark.css`, in
+        place so the dark order holds: `.memory-folder-card > .pi` ×2 and `:hover` renamed; `.veyq-create-card`,
+        `.veyq-create-card .pi`, `.veyq-create-card:hover` and `.veyq-level-section-header span` added beside the
+        `memory-*` selector Memories keeps (script over HEAD vs now: same rule count, every rule's declarations equal).
+        i18n: a core `node.*` namespace (en + de, values byte-equal) — `folders`, `folderEmpty`, `folderCreate`,
+        `createFolderTitle`, `renameTitle`, `nameLabel`, `rename`, `delete`, `slugTaken`, `illegalStructure`,
+        `saveFailed`; the `memory.*` twins deleted (grep, both blocks: readers were LevelView, FolderNameDialog,
+        DeleteNodeDialog, SpaceTrashDialog, MemoryNodeDialog, MemoryDetail and their tests — all on `node.*` now);
+        `memory.save` deleted, FolderNameDialog reads `common.save` (same 'Save'/'Speichern'). `memory.spaceTrash.open`
+        stays (only Memories' section reads it). `upload.noSpace` reworded: en 'No space left. Items in a trash still
+        take up space until they are removed for good.', de 'Kein Speicherplatz mehr frei. Einträge im Papierkorb
+        belegen weiter Platz, bis sie endgültig entfernt sind.'; `media.uploadNoSpace` keeps the photo wording
+        (MemoryDetail's cover). Golden: `npx vitest run -u src/views/MemoryHomeView.golden.test.ts` (it ran the whole
+        suite under `-u`: only the 8 P4-0 files changed, the 4 B0 files `shasum`-identical): 65 changed lines over 8
+        files, each with the same indent, tag, attributes and text; a throwaway script mapping the old tokens to the new
+        ones (Memories' section kept unmapped) finds old ≡ new. `npm run check` (fresh `generate:api`) 205 files / 1959
+        tests before and after (renames only); 53/53 validators green before and after, the only diff stylesheet
+        anchors 639 → 656. Levers, each red then restored green: `veyq-danger-action` removed from the template
+        (anchor guard red, 5 rules named); `veyq-create-card` renamed in the template only (golden 5 red); dead
+        `.memory-folder-card > .pi` / `.memory-folder-overview-actions .p-button` kept in `memory.css` (guard red, both
+        named); a dark `.memory-folder-card:hover` left unrenamed (guard red: it reads the nested `dark.css` rules too).
+        **Unproven by any test:** a DROPPED dark twin — `.veyq-dark .veyq-folder-card > .pi` deleted kept guard (655),
+        golden and `LevelView.test.ts` green; only the HEAD-vs-now script above shows the dark set is complete. Guard
+        limit (b) seen live: removing `veyq-folder-overview-actions` from the template stays green, because
+        `LevelView.test.ts` holds that selector as a string. Docs: styleguide (Components: the node-card classes; the
+        anchor rule's example), `validate_stylesheet_anchors.py` docstring example, `web/CLAUDE.md` Limits sentence;
+        ADR 0079 still true as written.
+        **Decisions taken (owner, please review; each reversible):** (1) new `veyq-folder-*`/`veyq-create-card` rules,
+        not `.veyq-node-card`: that twin differs (`font: inherit`, accent instead of info icon, no `overflow`), and the
+        public folder page uses it. (2) Memories' New Memory / Add chapter cards keep `.memory-create-card` and its rules
+        (a twin of `.veyq-create-card`), rather than adopting the core class: moving the shared rules ahead of
+        `memory.css` would let `.memory-create-card-memory strong { white-space: normal }` win, which the later
+        `nowrap` rule overrides today — a visible change. Merging them is a separate, visible decision. (3) The two
+        classes outside the brief's list (`memory-route-surface`, `memory-danger-action`) moved too, so core's markup
+        carries no `memory-*` class; MemoryDetail keeps `memory-route-surface`. (4) Namespace `node.*` (core's
+        `core/node/`). **Open for the owner:** `node.slugTaken` still names "Memory" (moved byte-equal); core's
+        DeleteNodeDialog still reads `memory.deleteFolder*/deleteMemory*/deleteFailed`, and SpaceTrashDialog
+        `memory.spaceTrash.*` (whose hint names memories and chapters) — a per-kind wording question, not a rename.
+        **Not verified:** no browser — the look in light and dark is shown equal only by the rule comparison above.
 - [x] P5 ADR 0079 §9 says key derivation takes the application id (HKDF); random node keys under the parent's key satisfy it:
       say so once, in place · Done when: `validate_doc_citations` green. Done 2026-10-07 with P3-S2: §9 no longer says a new
       kind adds seal purposes and names the random node key + `ownerId`/`role` in `blob-key` as meeting both rules.
