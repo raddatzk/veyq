@@ -627,7 +627,7 @@ without touching core except for the platform prerequisites below, which every l
 - [x] F1 a member uploads and downloads a file — `UploadCompletion` for `FILE`, `registerKind`, the file list in the folder level
       view, the download decrypted in the browser, delete into the trash · Done when: an e2e round trip with identical bytes.
       Ticked with F1b on the brief's word; its Done-when (the e2e round trip) is written and runs from the main checkout
-      after the merge — until that run is green, this box claims the code, not the proof.
+      after the merge — **run 2026-10-08 on main after the merge: e2e 19/19 incl. `files.e2e.test.ts` (fresh jar; a stale jar fails it at `completeFile`).**
   - [x] F1a backend — Files' contract `contracts/api/files/files.openapi.yaml` + `:apps:files` code (member only; no web, no
         guests) · Done when: slice tests with bite levers, `./gradlew check`, MariaDB races, `validate_*` green.
         **Measured 2026-10-08:** the module opts in (`id("veyq.openapi")`, `veyqOpenApi { generateOwnSpecs() }`) and
