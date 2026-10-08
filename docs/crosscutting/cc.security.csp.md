@@ -154,7 +154,7 @@ every header of the admin origin.
   - `AppShellTest` compares the appended store origin, per signing mode, with the origin of a URL the signer
     produced in that mode, and pins the fail-closed refusals (no policy, a CSP `<meta>`);
   - `AppShellSliceTest` runs over a fixture shell. It covers the fallback, with a positive control for every
-    negative (not HTML, a missing chunk, `/api`, `/__media`), the `no-cache`/`immutable` split, the policy on
+    negative (not HTML, a missing chunk, `/api`, `/__media`, `/__download`), the `no-cache`/`immutable` split, the policy on
     shell responses and `sw.js` but not on `/api`, and the plain headers on both;
   - `AppShellStoreOriginSliceTest` shows the store origin reaching a real response in `store-origin` mode;
     `AppShellHstsOffSliceTest` the HSTS switch; `AppShellAbsentSliceTest` the no-shell branch.

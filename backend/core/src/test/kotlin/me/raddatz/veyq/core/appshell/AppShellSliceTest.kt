@@ -71,6 +71,7 @@ class AppShellSliceTest {
     @Test
     fun theServiceWorkersNamespaceIsNeverTheShell() {
         html("/__media/x").then().statusCode(404).body(not(containsString(FIXTURE_MARKER)))
+        html("/__download/x").then().statusCode(404).body(not(containsString(FIXTURE_MARKER)))
         html("/recover").then().statusCode(200) // control: identical headers, a path outside it
     }
 

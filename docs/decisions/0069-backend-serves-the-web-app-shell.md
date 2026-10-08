@@ -37,7 +37,7 @@ because the backend is the one component every deployment has in common. The rul
 inert lives in the signer for the same reason ([ADR 0013](0013-blob-storage-presigned-direct-to-store.md) §6).
 
 1. **SPA fallback.** A `GET` or `HEAD` that asks for HTML (`Accept` names `text/html`) is answered with
-   `index.html` (200) when it is outside `/api/` and `/__media/` and nothing else answers it. Nothing else here
+   `index.html` (200) when it is outside `/api/`, `/__media/` and `/__download/` and nothing else answers it. Nothing else here
    includes a real file or a route the backend serves. Every other request keeps the answer it gets today:
    - an unknown `/api` path stays a 404;
    - a missing hashed chunk stays a 404 instead of HTML parsed as script, because a script fetch does not ask

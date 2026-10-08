@@ -90,7 +90,7 @@ class AppShellRoutes(
         val path = ctx.normalizedPath()
         // A script or fetch never asks for HTML, so a missing chunk stays a 404 instead of HTML parsed as script.
         // The router's own catch-all sends an unknown path to sign-in, so the paths are not listed here.
-        if (isUnder(path, API_PREFIX) || isUnder(path, MEDIA_PREFIX) || !acceptsHtml(ctx)) {
+        if (isUnder(path, API_PREFIX) || isUnder(path, MEDIA_PREFIX) || isUnder(path, DOWNLOAD_PREFIX) || !acceptsHtml(ctx)) {
             ctx.next()
             return
         }
@@ -109,6 +109,9 @@ class AppShellRoutes(
 
         /** The playback Service Worker's own namespace (ADR 0047): a request it did not intercept is not a page. */
         const val MEDIA_PREFIX = "/__media"
+
+        /** The download route of the same Service Worker (ADR 0047 addendum): one-shot, so a second open is no page either. */
+        const val DOWNLOAD_PREFIX = "/__download"
         const val ASSETS_PREFIX = "/assets/"
 
         const val CSP_HEADER = "Content-Security-Policy"
