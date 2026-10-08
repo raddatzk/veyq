@@ -30,6 +30,18 @@
   --app-focus: #2563eb;
   --app-focus-ring: color-mix(in srgb, var(--app-focus) 34%, transparent);
   --app-on-strong: #fff;
+  /* Text/icons on a filled role colour (primary, accent, success, danger). White on the light twin's dark fills;
+     the dark twin's fills are light, so it turns dark there (web's inbox #388, ported by #390). Not --app-on-strong,
+     which stays white in both modes. */
+  --app-on-fill: var(--app-on-strong);
+  /* The submit/confirm green (PrimeVue's primary). Aura's emerald-500 (#10b981) gave white text 2.54:1; emerald-700
+     keeps the hue and white text at 5.48:1, and a darker hover/active (inbox #388/#390). */
+  --app-primary: #047857;
+  --app-primary-hover: #065f46;
+  --app-primary-active: #064e3b;
+  /* A form control's boundary (input, checkbox, switch track): 3:1 against every surface it sits on (WCAG 1.4.11),
+     where --app-line stays a decorative divider. */
+  --app-control-line: #848e9e;
   --app-control-bg: #f8fafc;
   --app-control-text: #334155;
   --app-backdrop-strong: #0f172a;
@@ -88,6 +100,11 @@
   --app-focus: #93c5fd;
   --app-focus-ring: color-mix(in srgb, var(--app-focus) 42%, transparent);
   --app-on-strong: #fff;
+  --app-on-fill: var(--app-backdrop-strong);
+  --app-primary: #34d399;
+  --app-primary-hover: #6ee7b7;
+  --app-primary-active: #a7f3d0;
+  --app-control-line: #68737f;
   --app-control-bg: #20262e;
   --app-control-text: #eef3f8;
   --app-backdrop-strong: #0b0f14;
@@ -126,6 +143,71 @@
   --p-button-help-focus-ring-color: var(--app-focus) !important;
   --p-button-danger-focus-ring-color: var(--app-focus) !important;
   --p-button-contrast-focus-ring-color: var(--app-focus) !important;
+
+  /* PrimeVue's colours that carry text or a control's boundary, routed onto our role tokens — web's #388 decision,
+     carried over to this copy by inbox #390 (ADR 0065: a copy, never an import). Aura's defaults gave white on
+     #10b981 2.54:1, its warn/success/error messages 2.8–4.4:1 and its input borders 1.5:1. One place, both modes —
+     each var resolves against :root, where :root.veyq-dark swaps the twin. Pinned by
+     scripts/validate_web_contrast.py, which reads this block and the tokens above, for web and this package alike. */
+  --p-primary-color: var(--app-primary) !important;
+  --p-primary-hover-color: var(--app-primary-hover) !important;
+  --p-primary-active-color: var(--app-primary-active) !important;
+  --p-primary-contrast-color: var(--app-on-fill) !important;
+
+  --p-button-danger-background: var(--app-danger) !important;
+  --p-button-danger-border-color: var(--app-danger) !important;
+  --p-button-danger-hover-background: var(--app-danger-strong) !important;
+  --p-button-danger-hover-border-color: var(--app-danger-strong) !important;
+  --p-button-danger-active-background: var(--app-danger-strong) !important;
+  --p-button-danger-active-border-color: var(--app-danger-strong) !important;
+  --p-button-danger-color: var(--app-on-fill) !important;
+  --p-button-danger-hover-color: var(--app-on-fill) !important;
+  --p-button-danger-active-color: var(--app-on-fill) !important;
+  --p-button-outlined-danger-color: var(--app-danger) !important;
+  --p-button-text-danger-color: var(--app-danger) !important;
+
+  --p-button-warn-background: var(--app-warning) !important;
+  --p-button-warn-border-color: var(--app-warning) !important;
+  --p-button-warn-hover-background: color-mix(in srgb, var(--app-warning) 86%, var(--app-backdrop-strong)) !important;
+  --p-button-warn-hover-border-color: color-mix(in srgb, var(--app-warning) 86%, var(--app-backdrop-strong)) !important;
+  --p-button-warn-active-background: color-mix(in srgb, var(--app-warning) 76%, var(--app-backdrop-strong)) !important;
+  --p-button-warn-active-border-color: color-mix(in srgb, var(--app-warning) 76%, var(--app-backdrop-strong)) !important;
+  --p-button-warn-color: var(--app-backdrop-strong) !important;
+  --p-button-warn-hover-color: var(--app-backdrop-strong) !important;
+  --p-button-warn-active-color: var(--app-backdrop-strong) !important;
+  --p-button-outlined-warn-color: var(--app-warning-text) !important;
+  --p-button-text-warn-color: var(--app-warning-text) !important;
+
+  --p-message-error-background: var(--app-danger-soft) !important;
+  --p-message-error-border-color: var(--app-danger-line) !important;
+  --p-message-error-color: var(--app-danger) !important;
+  --p-message-warn-background: var(--app-warning-soft) !important;
+  --p-message-warn-border-color: var(--app-warning-line) !important;
+  --p-message-warn-color: var(--app-warning-text) !important;
+  --p-message-success-background: var(--app-success-soft) !important;
+  --p-message-success-border-color: var(--app-success-line) !important;
+  --p-message-success-color: var(--app-success-text) !important;
+  --p-message-info-background: var(--app-info-soft) !important;
+  --p-message-info-border-color: var(--app-info-line) !important;
+  --p-message-info-color: var(--app-info) !important;
+
+  --p-toast-error-background: var(--app-danger-soft) !important;
+  --p-toast-error-border-color: var(--app-danger-line) !important;
+  --p-toast-error-color: var(--app-danger) !important;
+  --p-toast-warn-background: var(--app-warning-soft) !important;
+  --p-toast-warn-border-color: var(--app-warning-line) !important;
+  --p-toast-warn-color: var(--app-warning-text) !important;
+  --p-toast-success-background: var(--app-success-soft) !important;
+  --p-toast-success-border-color: var(--app-success-line) !important;
+  --p-toast-success-color: var(--app-success-text) !important;
+  --p-toast-info-background: var(--app-info-soft) !important;
+  --p-toast-info-border-color: var(--app-info-line) !important;
+  --p-toast-info-color: var(--app-info) !important;
+
+  --p-form-field-border-color: var(--app-control-line) !important;
+  --p-form-field-hover-border-color: var(--app-muted) !important;
+  --p-toggleswitch-background: var(--app-control-line) !important;
+  --p-toggleswitch-hover-background: var(--app-muted) !important;
 }
 
 body {
