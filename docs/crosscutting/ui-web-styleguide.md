@@ -99,6 +99,10 @@ or a one-off `1rem` label sitting in them.
 - **Rows vs cards:** rows (`.veyq-list`, `.veyq-list-row`, `.veyq-row-main/-title/-subtitle/-meta`) for
   management/dense data; cards for repeated content objects (Memories, media, tracks). Rows collapse to
   one column on mobile — don't hide essential content in trailing action columns.
+- **Node cards (core):** `.veyq-card-grid` is the one track rule for a grid of node cards; the folder level view
+  (`core/node/LevelView.vue`) adds `.veyq-level-grid` (list variant, narrow column), `.veyq-folder-card`,
+  `.veyq-folder-overview-card`, `.veyq-create-card` and `.veyq-danger-action` (`styles/ui.css`, end of sheet; dark
+  twins in `dark.css`). Memories' `.memory-card-grid` / `.memory-create-card` are its own twins of the same look.
 - **Badges:** `.veyq-badge.success|.warning|.muted` for status; no one-off pills.
 - **Forms:** `.veyq-form`, `.veyq-form-grid`, `.veyq-form-copy`; full-width inputs; concise labels;
   muted helper text that explains *consequences*, not the label.
@@ -216,7 +220,7 @@ before component-specific media queries.
 
 - Reused a `.veyq-*` class and `--app-*` token before adding local styles / raw colors.
 - Defined light **and** dark for any new semantic color — both in `styles/base.css` (`:root` and `:root.veyq-dark`).
-- **Every rule is anchored on a class the markup applies** — enforced, not advice: `scripts/validate_stylesheet_anchors.py` fails the build on a rule whose *first* compound names only classes nothing renders. Landing a stylesheet ahead of its markup turns CI red, and that is the point (inbox #140: a shipped feature's only signal of missing its surface was CSS nobody had matched). Overriding a PrimeVue class is unaffected as long as it stays scoped by one of ours (`.memory-card .p-card-body`, `.memory-danger-action.p-button`) — which is the house style anyway, and is what lets that guard need no list of vendor class names.
+- **Every rule is anchored on a class the markup applies** — enforced, not advice: `scripts/validate_stylesheet_anchors.py` fails the build on a rule whose *first* compound names only classes nothing renders. Landing a stylesheet ahead of its markup turns CI red, and that is the point (inbox #140: a shipped feature's only signal of missing its surface was CSS nobody had matched). Overriding a PrimeVue class is unaffected as long as it stays scoped by one of ours (`.memory-card .p-card-body`, `.veyq-danger-action.p-button`) — which is the house style anyway, and is what lets that guard need no list of vendor class names.
 - Memory/Chapter language; folders secondary; no Album/Explorer.
 - Rows for management data, cards for content; no nested cards.
 - Dialog actions ordered + in-progress-safe; icon-only actions labelled.

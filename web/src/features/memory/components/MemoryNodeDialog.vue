@@ -65,7 +65,7 @@ const { run: runSubmit, pending: loading } = useAsyncAction(
   {
     onError: (e) => {
       const status = httpStatus(e)
-      error.value = status === HttpStatus.conflict ? t('memory.slugTaken') : status === HttpStatus.unprocessable ? t('memory.illegalStructure') : t('memory.saveFailed')
+      error.value = status === HttpStatus.conflict ? t('node.slugTaken') : status === HttpStatus.unprocessable ? t('node.illegalStructure') : t('node.saveFailed')
     },
   },
 )
@@ -82,7 +82,7 @@ async function submit() {
   <Dialog :visible="true" :header="header" modal :closable="!loading" :close-on-escape="!loading" @update:visible="emit('close')">
     <form class="veyq-form" @submit.prevent="submit">
       <label>
-        {{ t('memory.nameLabel') }}
+        {{ t('node.nameLabel') }}
         <InputText v-model="name" autocomplete="off" required autofocus :disabled="loading" />
       </label>
 

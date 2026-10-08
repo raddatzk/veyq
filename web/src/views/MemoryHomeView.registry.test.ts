@@ -133,7 +133,7 @@ describe('MemoryHomeView fail-closed rules', () => {
     ]
     const root = await mountAt('#~me')
     expect(root.find('.level').exists()).toBe(false)
-    const folder = root.findAll('button.memory-folder-card').find((b) => b.text() === 'Trips')
+    const folder = root.findAll('button.veyq-folder-card').find((b) => b.text() === 'Trips')
     expect(folder, 'the folder card renders without any application section').toBeDefined()
     await folder!.trigger('click')
     await flushPromises()

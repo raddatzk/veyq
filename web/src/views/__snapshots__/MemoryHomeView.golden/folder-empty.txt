@@ -1,17 +1,17 @@
 div.memory-home
-  div.memory-route-surface
-    section.memory-section.veyq-section
+  div.veyq-level-view
+    section.veyq-section
       div.veyq-section-header
-        div.memory-folder-card.memory-folder-overview-card.veyq-card
+        div.veyq-card.veyq-folder-card.veyq-folder-overview-card
           span.pi.pi-folder
           h2
             "Empty"
-          div.memory-folder-overview-actions
-            button.memory-folder-overview-action.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-prime-icon-button [aria-label="Share"]
+          div.veyq-folder-overview-actions
+            button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-folder-overview-action.veyq-icon-button.veyq-prime-icon-button [aria-label="Share"]
               span.p-button-icon.pi.pi-share-alt
-            button.memory-folder-overview-action.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-prime-icon-button [aria-label="Rename"]
+            button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-folder-overview-action.veyq-icon-button.veyq-prime-icon-button [aria-label="Rename"]
               span.p-button-icon.pi.pi-pencil
-            button.memory-danger-action.memory-folder-overview-action.p-button.p-button-danger.p-button-icon-only.p-button-outlined.p-button-sm.p-component.veyq-icon-button.veyq-prime-icon-button [aria-label="Delete"]
+            button.p-button.p-button-danger.p-button-icon-only.p-button-outlined.p-button-sm.p-component.veyq-danger-action.veyq-folder-overview-action.veyq-icon-button.veyq-prime-icon-button [aria-label="Delete"]
               span.p-button-icon.pi.pi-trash
     section.memory-section.veyq-section
       div.memory-section-header.veyq-section-header
@@ -38,16 +38,16 @@ div.memory-home
           span.pi.pi-plus
           strong
             "New Memory"
-    section.memory-section.veyq-section
-      div.memory-section-header.veyq-section-header
+    section.veyq-section
+      div.veyq-level-section-header.veyq-section-header
         h2
           "Folders"
         span
           "0"
-      div.memory-card-grid
+      div.veyq-card-grid.veyq-level-grid
         p.veyq-empty.veyq-empty-inline
           "No folders here yet."
-        button.memory-create-card.veyq-card.veyq-card-interactive
+        button.veyq-card.veyq-card-interactive.veyq-create-card
           span.pi.pi-plus
           strong
             "New folder"

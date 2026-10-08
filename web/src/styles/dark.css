@@ -47,7 +47,8 @@
     color: var(--app-text);
   }
 
-  .memory-create-card {
+  .memory-create-card,
+  .veyq-create-card {
     background: color-mix(in srgb, var(--app-surface) 72%, transparent);
   }
 
@@ -61,7 +62,8 @@
   .sidebar-scope-icon,
   .memory-card-cover,
   .memory-card-icon,
-  .memory-folder-card > .pi,
+  .veyq-folder-card > .pi,
+  .veyq-create-card .pi,
   .memory-create-card .pi {
     background: var(--app-accent-soft);
     color: var(--app-accent);
@@ -87,12 +89,13 @@
     color: var(--app-accent);
   }
 
-  .memory-folder-card > .pi {
+  .veyq-folder-card > .pi {
     background: var(--app-info-soft);
     color: var(--app-info-text);
   }
 
   .memory-section-header span,
+  .veyq-level-section-header span,
   .memory-card-main small,
   .memory-cover-zoom {
     color: var(--app-muted);
@@ -136,7 +139,8 @@
   }
 
   .memory-card:hover,
-  .memory-folder-card:hover,
+  .veyq-folder-card:hover,
+  .veyq-create-card:hover,
   .memory-create-card:hover {
     border-color: var(--app-line);
   }

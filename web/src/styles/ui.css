@@ -66,8 +66,9 @@
   transform: translateY(-1px);
 }
 
-/* The card grid of a node list outside an application — core's twin of Memories' `.memory-card-grid` /
-   `.memory-folder-card` (the public folder page, core/sharing/FolderShareBody.vue): an icon tile and a name per node. */
+/* The card grid of a node list outside an application — the same track rule as Memories' `.memory-card-grid`: the
+   public folder page (core/sharing/FolderShareBody.vue, its `.veyq-node-card` tiles) and the level view's sub-folders
+   (core/node/LevelView.vue, with `.veyq-level-grid` and `.veyq-folder-card` at the end of this sheet). */
 .veyq-card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 260px));
@@ -500,5 +501,174 @@
   .veyq-dialog-action-row .p-button,
   .veyq-dialog-action-row button {
     width: 100%;
+  }
+}
+
+/* The folder level view (core/node/LevelView.vue, cr-files-application P4d): the folder's overview card, the
+   sub-folders section, its folder cards and its new-folder card. Moved from Memories' `memory.css`, where this
+   markup's `memory-folder-*`/`memory-create-card`/`memory-card-grid` rules lived, with the same declarations in
+   the same order. They sit at the END of this sheet on purpose: in `memory.css` they came after every rule of
+   `ui.css`, `layout.css` and `forms.css`, and some of those tie with them on specificity and lose by source order
+   (`.veyq-section-header h2`/`span` against the overview card's `h2`; `.veyq-card` against the cards' own
+   declarations). Nothing in `layout.css`/`forms.css` matches these elements, so the end of `ui.css` is the same
+   cascade position. Memories' own create cards (`.memory-create-card`: New Memory, Add chapter) keep their twin
+   rules in `memory.css`. The grid is `.veyq-card-grid` (the identical track rule) plus `.veyq-level-grid` for the
+   list variant and the narrow-screen column. The dark counterparts are in `dark.css`. */
+.veyq-level-section-header h2 {
+  font-size: 1rem;
+}
+
+.veyq-level-section-header span {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.75rem;
+  min-height: 1.55rem;
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--app-muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.veyq-level-view {
+  display: grid;
+  min-width: 0;
+  gap: 1.45rem;
+}
+
+.veyq-level-grid.is-list {
+  grid-template-columns: 1fr;
+  gap: 0.4rem;
+}
+
+.veyq-level-grid.is-list .veyq-folder-card,
+.veyq-level-grid.is-list .veyq-create-card {
+  min-height: 0;
+  padding: 0.6rem 0.75rem;
+}
+
+.veyq-folder-card,
+.veyq-create-card {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 0.8rem;
+  width: 100%;
+  min-height: 82px;
+  padding: 1rem;
+  color: var(--app-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.veyq-folder-card > .pi,
+.veyq-create-card .pi {
+  display: grid;
+  place-items: center;
+  width: 84px;
+  height: 84px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--app-accent-soft);
+  color: var(--app-accent);
+  font-size: 1.25rem;
+}
+
+.veyq-folder-card > .pi,
+.veyq-create-card .pi {
+  width: 42px;
+  height: 42px;
+}
+
+.veyq-folder-card > .pi {
+  background: var(--app-info-soft);
+  color: var(--app-info-text);
+}
+
+.veyq-folder-overview-card {
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  cursor: default;
+}
+
+.veyq-folder-overview-card h2 {
+  margin: 0;
+  overflow: hidden;
+  color: var(--app-text);
+  font-size: 1.05rem;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.veyq-folder-overview-actions {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  gap: 0.45rem;
+  align-items: center;
+  justify-self: end;
+  min-width: max-content;
+}
+
+.veyq-folder-overview-actions .p-button,
+.veyq-folder-overview-actions button {
+  flex: 0 0 auto;
+}
+
+.veyq-danger-action.p-button,
+.veyq-danger-action.p-button.p-button-outlined {
+  border-color: var(--app-danger);
+  background: transparent !important;
+  color: var(--app-danger);
+}
+
+.veyq-danger-action.p-button .p-button-icon {
+  background: transparent !important;
+  color: inherit;
+}
+
+.veyq-danger-action.p-button:hover:not(:disabled),
+.veyq-danger-action.p-button:focus-visible {
+  border-color: var(--app-danger-strong);
+  background: transparent !important;
+  color: var(--app-danger-strong);
+}
+
+.veyq-create-card {
+  border-style: dashed;
+  background: color-mix(in srgb, var(--app-surface) 66%, transparent);
+  color: var(--app-muted);
+}
+
+.veyq-create-card .pi {
+  background: var(--app-accent-soft);
+  color: var(--app-accent);
+}
+
+.veyq-create-card strong {
+  color: var(--app-control-text);
+}
+
+.veyq-folder-card strong,
+.veyq-create-card strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+  .veyq-level-grid {
+    grid-template-columns: 1fr;
+    max-width: none;
+  }
+
+  .veyq-folder-overview-card {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  .veyq-folder-overview-actions {
+    grid-column: 1 / -1;
+    justify-self: start;
+    padding-top: 0.15rem;
   }
 }

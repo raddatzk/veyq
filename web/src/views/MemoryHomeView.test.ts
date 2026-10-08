@@ -144,7 +144,7 @@ async function mountAt(hash: string) {
   return wrapper
 }
 type Mounted = Awaited<ReturnType<typeof mountAt>>
-const folderCards = (w: Mounted) => w.findAll('button.memory-folder-card').map((b) => b.text())
+const folderCards = (w: Mounted) => w.findAll('button.veyq-folder-card').map((b) => b.text())
 
 beforeEach(() => {
   vi.mocked(listMyTenants).mockResolvedValue([])
@@ -165,7 +165,7 @@ describe('MemoryHomeView over the real registry', () => {
     const w = await mountAt('#~me/trips')
     expect(w.find('.section-stub').text()).toBe('folder=Trips|memories=Italy')
     expect(folderCards(w)).toEqual([])
-    expect(w.find('.memory-folder-overview-card h2').text()).toBe('Trips')
+    expect(w.find('.veyq-folder-overview-card h2').text()).toBe('Trips')
     expect(w.find('.section-stub').attributes('data-readonly')).toBe('false')
   })
 
@@ -252,7 +252,7 @@ describe('MemoryHomeView over the real registry', () => {
     await flushPromises()
     expect(w.find('.create-stub').text()).toBe('MEMORY|-')
     expect(w.find('.name-stub').exists()).toBe(false)
-    await w.find('.memory-create-card').trigger('click')
+    await w.find('.veyq-create-card').trigger('click')
     await flushPromises()
     expect(w.find('.name-stub').text()).toBe('create|-|-')
     expect(w.find('.create-stub').exists(), 'the Memory dialog gives way').toBe(false)
@@ -283,15 +283,15 @@ describe('MemoryHomeView over the real registry', () => {
 
   it('wires the folder overview card (rename, delete for the folder) and a folder card navigates', async () => {
     const w = await mountAt('#~me/trips')
-    await w.find(`button[aria-label="${t('memory.rename')}"]`).trigger('click')
+    await w.find(`button[aria-label="${t('node.rename')}"]`).trigger('click')
     await flushPromises()
     expect(w.find('.name-stub').text()).toBe('rename|trips|Trips')
-    await w.find(`button[aria-label="${t('memory.delete')}"]`).trigger('click')
+    await w.find(`button[aria-label="${t('node.delete')}"]`).trigger('click')
     await flushPromises()
     expect(w.find('.delete-stub').text()).toBe('Trips')
 
     const root = await mountAt('#~me')
-    await root.findAll('button.memory-folder-card').find((b) => b.text() === 'Trips')!.trigger('click')
+    await root.findAll('button.veyq-folder-card').find((b) => b.text() === 'Trips')!.trigger('click')
     await flushPromises()
     expect(root.find('.section-stub').text()).toBe('folder=Trips|memories=Italy')
   })
@@ -301,7 +301,7 @@ describe('MemoryHomeView over the real registry', () => {
 // exactly as a Memory's detail does — descriptor AND capability — and the share opens FOLDER's share dialog (core's,
 // pre-registered by the registry, P4c) with the folder's own key from the chain, never Memories' dialog.
 describe('MemoryHomeView sharing a folder', () => {
-  const shareButton = (w: Mounted) => w.find(`.memory-folder-overview-card button[aria-label="${t('share.share')}"]`)
+  const shareButton = (w: Mounted) => w.find(`.veyq-folder-overview-card button[aria-label="${t('share.share')}"]`)
 
   it("offers the share on the folder overview card, and it opens core's dialog for the folder itself", async () => {
     const w = await mountAt('#~me/trips')
@@ -320,7 +320,7 @@ describe('MemoryHomeView sharing a folder', () => {
 
   it('offers no share at the scope root (no node to share, no overview card)', async () => {
     const w = await mountAt('#~me')
-    expect(w.find('.memory-folder-overview-card').exists()).toBe(false)
+    expect(w.find('.veyq-folder-overview-card').exists()).toBe(false)
     expect(w.find(`button[aria-label="${t('share.share')}"]`).exists()).toBe(false)
   })
 
@@ -328,7 +328,7 @@ describe('MemoryHomeView sharing a folder', () => {
     capabilityState.ids = []
     const w = await mountAt('#~me/trips')
     expect(shareButton(w).exists()).toBe(false)
-    expect(w.find(`.memory-folder-overview-card button[aria-label="${t('memory.rename')}"]`).exists(), 'control: the card renders').toBe(true)
+    expect(w.find(`.veyq-folder-overview-card button[aria-label="${t('node.rename')}"]`).exists(), 'control: the card renders').toBe(true)
   })
 })
 
