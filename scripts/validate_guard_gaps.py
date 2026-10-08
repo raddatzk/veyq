@@ -212,6 +212,9 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   78 a `core/node/` dialog reading Memories' message key `'memory.deleteMemoryTitle'` — rejected:
      `validate_web_core_imports_no_applications`' i18n rule. The catalog is one file, so the key resolves and every test
      is green; core's delete dialog did exactly this and titled a Files drop box "Delete Memory" (inbox #375)
+  79 admin-web's light `--app-primary` set back to Aura's emerald-500 (`#10b981`, white label 2.54:1) — rejected:
+     `validate_web_contrast` reads `admin-web/src/styles/base.css` as well as web's (inbox #390). Until then that
+     guard's limit (e) said admin-web was not covered, and the copy ADR 0065 keeps failed 34 pairs unseen
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
 (a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
 which the Gradle module split retired: `:core` has no edge to an application, so either shape fails
@@ -1141,6 +1144,20 @@ def forge_dead_class_inside_a_selector(root: pathlib.Path) -> str:
             "(the anchor-only open gap)")
 
 
+def forge_admin_web_primary_lightened(root: pathlib.Path) -> str:
+    # The defect that bought the guard, put back on the copy it did not read at first: admin-web's light primary
+    # set to Aura's emerald-500 under white text (2.54:1). The token's current value is matched, not spelled, so
+    # a palette tweak that stays at AA does not turn this case red.
+    sheet = root / "admin-web" / "src" / "styles" / "base.css"
+    if not sheet.is_file():
+        raise ForgeError("admin-web/src/styles/base.css is missing — the admin surface's token sheet moved")
+    src, n = re.subn(r"(--app-primary:\s*)#[0-9a-fA-F]{3,6};", r"\g<1>#10b981;", sheet.read_text(), count=1)
+    if not n:
+        raise ForgeError("no --app-primary hex in admin-web's base.css — re-anchor this forgery")
+    sheet.write_text(src)
+    return "admin-web's light --app-primary back on Aura's emerald-500 under white text (2.54:1)"
+
+
 def _web_comment_citing(root: pathlib.Path, feature: str) -> None:
     # A new file rather than an edit: the probe needs no anchor in existing source, so it cannot drift. The id is
     # assembled, not written, so this guard's own source carries no dangling id for anyone to copy.
@@ -1401,6 +1418,7 @@ CASES = [
     ("76", "validate_backend_module_graph.py", forge_files_depends_on_memories, False),
     ("77", "validate_backend_module_graph.py", forge_root_drops_files_module, False),
     ("78", WEB_GUARD, forge_web_core_reads_application_i18n, False),
+    ("79", "validate_web_contrast.py", forge_admin_web_primary_lightened, False),
 ]
 
 

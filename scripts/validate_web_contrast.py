@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-"""Guard that the web client's key colour pairs meet WCAG AA, in light and in dark, computed from the tokens.
+"""Guard that the browser surfaces' key colour pairs meet WCAG AA, in light and in dark, computed from the tokens.
 
-**What it asserts.** `web/src/styles/base.css` is read the way the browser cascades it: every `:root { … }` block
+**What it asserts.** Each sheet in `SHEETS` — `web/src/styles/base.css` and `admin-web/src/styles/base.css`, the
+deliberate copy ADR 0065 keeps (inbox #390) — is read the way the browser cascades it: every `:root { … }` block
 gives the light values, `:root.veyq-dark { … }` overrides them for dark, and the `--p-*` declarations in `:root`
 (the block that routes PrimeVue's colours onto our role tokens) are resolved per mode through those tokens —
 `var()`, `color-mix(in srgb, …)`, hex and `rgb()/rgba()`, with alpha composited over the surface. For each pair in
 `PAIRS` and each mode, the WCAG 2.x contrast ratio (relative luminance, `(L1+0.05)/(L2+0.05)`) must reach its floor:
 **4.5:1** for text, **3:1** for a UI component's boundary or fill (WCAG 1.4.3 / 1.4.11). A pair that reads a
 `--p-*` variable base.css does not set is **red, not skipped**: it means that colour falls back to the PrimeVue
-preset (Aura), which this buildless job cannot see — the routing was deleted, so nothing pins the pair any more.
+preset (Aura), which this buildless job cannot see — the routing was deleted, so nothing pins the pair any more. Both sheets answer to the same `PAIRS`: they carry the
+same role vocabulary, so a role pair one surface does not paint today is still the pair its next component would.
+A missing sheet is red, never a silent skip.
 
 **The defect that bought it.** inbox #388 (from #385 (g)): the green primary button — Aura's emerald-500 `#10b981`
 under white text — measured **2.54:1**, app-wide, on every Save/Create/Confirm, for as long as the app had used
@@ -30,8 +33,10 @@ button, the date picker's selected day: 1.9–2.8:1). Nothing failed a build: co
       `linear-gradient(…)` has no single background (the styleguide's "rendered content" exception).
   (d) **Disabled controls are exempt** (WCAG 1.4.3 "inactive user interface component"): PrimeVue paints them at
       `opacity: .6`, and no pair here measures that.
-  (e) **`admin-web/` is not covered.** Its `src/styles/base.css` is a deliberate copy (ADR 0065), still on Aura's
-      defaults; it fails the same pairs and is its own decision (inbox).
+  (e) **Two sheets, one list — not one palette.** The copies may drift apart (that is the point of ADR 0065), and
+      each is held to the floor on its own values; nothing here says they must agree. A third browser surface is
+      a row in `SHEETS`, and nothing forces one. (Before inbox #390 `admin-web/` was not covered and failed the
+      same pairs on Aura's defaults: 23 light, 11 dark, measured on the rendered harness.)
 """
 from __future__ import annotations
 
@@ -40,7 +45,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-BASE = ROOT / "web" / "src" / "styles" / "base.css"
+SHEETS = [ROOT / "web" / "src" / "styles" / "base.css", ROOT / "admin-web" / "src" / "styles" / "base.css"]
 
 TEXT, UI = 4.5, 3.0
 # (label, foreground, background, floor). Expressions are CSS as the stylesheets write them.
@@ -181,11 +186,11 @@ def modes(css: str) -> dict[str, dict[str, str]]:
     return {"light": light, "dark": {**light, **blocks(css, ":root.veyq-dark")}}
 
 
-def check(css: str) -> tuple[list[str], int]:
+def check(css: str, name: str = "base.css") -> tuple[list[str], int]:
     failures, checked = [], 0
     for mode, tokens in modes(css).items():
         if "--app-surface" not in tokens:
-            return [f"{mode}: --app-surface is not defined in {BASE.relative_to(ROOT)} — nothing to measure on"], 0
+            return [f"{mode}: --app-surface is not defined in {name} — nothing to measure on"], 0
         surface = resolve("var(--app-surface)", tokens)
         for label, fg, bg, floor in PAIRS:
             try:
@@ -204,16 +209,22 @@ def check(css: str) -> tuple[list[str], int]:
 
 
 def main() -> int:
-    if not BASE.is_file():
-        print(f"FAIL web-contrast: {BASE.relative_to(ROOT)} is missing — nothing was checked")
-        return 1
-    failures, checked = check(BASE.read_text(encoding="utf-8"))
+    failures, checked = [], 0
+    for sheet in SHEETS:
+        name = str(sheet.relative_to(ROOT))
+        if not sheet.is_file():
+            failures.append(f"{name} is missing — nothing was checked there")
+            continue
+        found, n = check(sheet.read_text(encoding="utf-8"), name)
+        failures += [f"{name}: {msg}" for msg in found]
+        checked += n
     if failures:
         print("FAIL web-contrast (WCAG AA, see docs/crosscutting/ui-web-styleguide.md § Contrast):")
         for msg in failures:
             print(f"  {msg}")
         return 1
-    print(f"web-contrast OK: {checked} colour pair(s) at WCAG AA across light and dark ({len(PAIRS)} per mode)")
+    print(f"web-contrast OK: {checked} colour pair(s) at WCAG AA across light and dark "
+          f"({len(PAIRS)} per mode, {len(SHEETS)} sheets)")
     return 0
 
 
