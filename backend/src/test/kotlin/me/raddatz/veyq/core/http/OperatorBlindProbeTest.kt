@@ -33,8 +33,8 @@ import java.util.jar.JarFile
  * The **enforcement guard** for the scope-access gate (uc.spaces.scope-access, ADR 0042): every operation in the
  * contract is either **probed** here against each state the gate tells apart, or named on a **reasoned exclusion
  * list**. The operation set is not listed — it is **derived** from the generated API interfaces of every owner
- * (`API_PACKAGES`: core's, Memories', Files'), i.e. from `contracts/api/`, so an operation
- * nobody classified is red on the day it is added.
+ * (core and each application, as `buildSrc` derives them from `contracts/api/` — [apiPackages]), so an operation
+ * nobody classified is red on the day it is added, an application's included.
  *
  * Each probe runs on its own [ScopeAccessWorld] (a probe the gate lets through may mutate) with five personas:
  *  1. **Stranger** — the real id and an invented one answer identically, with the membership 404. A difference is
@@ -417,20 +417,12 @@ class OperatorBlindProbeTest {
     }
 
     /**
-     * Every method of every interface in [API_PACKAGES] carrying an HTTP verb — the method name is the operationId.
+     * Every method of every interface in [apiPackages] carrying an HTTP verb — the method name is the operationId.
      * Found on the test classpath rather than listed, which is the point: a listed set is exactly what the hand-kept
-     * probe rows were, and they missed `restoreNode` and `listTrashedNodes`. Each owner's package must yield its
-     * anchor interface, so a package that went missing (renamed, or its module not on the classpath) is red here
-     * rather than a smaller set that passes.
+     * probe rows were, and they missed `restoreNode` and `listTrashedNodes`.
      */
     private fun contractOperations(): List<Operation> {
-        val names = API_PACKAGES.flatMap(::generatedApiClassNames)
-        for (anchor in listOf(
-            "me.raddatz.veyq.core.generated.api.ContentApi", "me.raddatz.veyq.core.generated.api.BlobApi",
-            "me.raddatz.veyq.memories.generated.api.MediaApi", "me.raddatz.veyq.files.generated.api.FilesApi",
-        )) {
-            check(anchor in names) { "found no $anchor among the generated API interfaces on the classpath: $names" }
-        }
+        val names = apiPackages().flatMap(::generatedApiClassNames)
         return names.flatMap { name ->
             val type = Class.forName(name, false, javaClass.classLoader)
             val base = type.getAnnotation(Path::class.java)?.value.orEmpty()
@@ -441,9 +433,42 @@ class OperatorBlindProbeTest {
         }
     }
 
+    /**
+     * One generated API package per owner — never listed here (a hand list let a new application's operations go
+     * unprobed until someone remembered it, inbox #368). The build hands over `buildSrc`'s own derivation from
+     * `contracts/api/` (`SpecSets`: core plus every `<app>/`, root `build.gradle.kts`), and the classpath is read
+     * against it both ways: a derived package that yields no interface (its module not composed, a package renamed)
+     * is red, and so is a generated API package on the classpath the derivation does not name — its operations would
+     * otherwise pass unclassified.
+     */
+    private fun apiPackages(): List<String> {
+        val derived = System.getProperty(PACKAGES_PROPERTY)?.split(',')?.filter { it.isNotBlank() }.orEmpty()
+        check(CORE_API_PACKAGE in derived) {
+            "the build handed over no generated API packages with core's ($PACKAGES_PROPERTY=$derived) — run the test through Gradle (`./gradlew :test`), whose root build derives them"
+        }
+        val empty = derived.filter { generatedApiClassNames(it).isEmpty() }
+        check(empty.isEmpty()) { "derived generated API packages with no interface on the classpath (is the module composed into the root?): $empty" }
+        val onClasspath = classpathEntries().flatMap { entry ->
+            when {
+                entry.isDirectory -> File(entry, VEYQ_ROOT).listFiles().orEmpty()
+                    .filter { File(it, "generated/api").listFiles().orEmpty().any { f -> f.name.endsWith(".class") } }
+                    .map { it.name }
+                entry.isFile && entry.name.endsWith(".jar") -> JarFile(entry).use { jar ->
+                    jar.entries().asSequence().mapNotNull { GENERATED_API_CLASS.matchEntire(it.name)?.groupValues?.get(1) }.toList()
+                }
+                else -> emptyList()
+            }
+        }.map { "${VEYQ_ROOT.replace('/', '.')}.$it.generated.api" }.toSet()
+        val uncovered = onClasspath - derived.toSet()
+        check(uncovered.isEmpty()) { "generated API packages on the classpath the build's derivation does not name — their operations would go unprobed: ${uncovered.sorted()}" }
+        return derived
+    }
+
+    private fun classpathEntries() = System.getProperty("java.class.path").split(File.pathSeparator).map(::File)
+
     private fun generatedApiClassNames(apiPackage: String): List<String> {
         val dir = apiPackage.replace('.', '/')
-        return System.getProperty("java.class.path").split(File.pathSeparator).map(::File).flatMap { entry ->
+        return classpathEntries().flatMap { entry ->
             when {
                 entry.isDirectory -> File(entry, dir).listFiles().orEmpty().map { it.name }
                 entry.isFile && entry.name.endsWith(".jar") -> JarFile(entry).use { jar ->
@@ -456,14 +481,12 @@ class OperatorBlindProbeTest {
     }
 
     private companion object {
-        /**
-         * One generated API package per owner (contracts/api/ → core, contracts/api/<app>/ → that application). A new
-         * application's package is added here with its first spec: until then its operations are not in the set
-         * (Files' were missing for a moment in cr-files-application F1a, caught by reading this list).
-         */
-        val API_PACKAGES = listOf(
-            "me.raddatz.veyq.core.generated.api", "me.raddatz.veyq.memories.generated.api", "me.raddatz.veyq.files.generated.api",
-        )
+        /** Set by the root `build.gradle.kts` from `buildSrc`'s `SpecSets`. */
+        const val PACKAGES_PROPERTY = "operatorBlindProbe.apiPackages"
+        const val CORE_API_PACKAGE = "me.raddatz.veyq.core.generated.api"
+        const val VEYQ_ROOT = "me/raddatz/veyq"
+        /** A class directly in some `me.raddatz.veyq.<owner>.generated.api` — the shape `SpecSets.packageRootOf` generates. */
+        val GENERATED_API_CLASS = Regex("^$VEYQ_ROOT/([^/]+)/generated/api/[^/]+\\.class$")
         val VERBS = linkedMapOf(
             "GET" to GET::class.java, "POST" to POST::class.java, "PUT" to PUT::class.java,
             "PATCH" to PATCH::class.java, "DELETE" to DELETE::class.java,

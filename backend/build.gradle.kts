@@ -56,6 +56,20 @@ tasks.withType<Test>().configureEach {
     maxHeapSize = "2g"
 }
 
+// `OperatorBlindProbeTest` probes every owner's generated API. Which packages those are is `buildSrc`'s own derivation
+// (`SpecSets`: core plus every `contracts/api/<app>/`), handed over here rather than listed in the test, so a new
+// application's operations are in its set the day its spec directory exists (inbox #368). The test also scans its
+// classpath for generated API packages and is red when the two disagree either way. The key stays outside `veyq.`:
+// Quarkus refuses to start on a system property under a config mapping's prefix that maps to nothing (SRCFG00050).
+tasks.named<Test>("test") {
+    val sets = me.raddatz.veyq.buildlogic.SpecSets(
+        rootDir.resolve("../contracts/api"),
+        me.raddatz.veyq.buildlogic.SpecSets.applicationModules(allprojects.map { it.path }),
+    )
+    val owners = listOf(me.raddatz.veyq.buildlogic.SpecSets.coreOwner) + sets.applications
+    systemProperty("operatorBlindProbe.apiPackages", owners.joinToString(",") { sets.of(it).apiPackage })
+}
+
 kotlin {
     compilerOptions {
         javaParameters = true
