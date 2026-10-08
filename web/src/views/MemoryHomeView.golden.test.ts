@@ -53,6 +53,8 @@ vi.mock('../core/node/treeStore', async () => {
 
 import MemoryHomeView from './MemoryHomeView.vue'
 import MemoriesSection from '../features/memory/components/MemoriesSection.vue'
+import FilesSection from '../features/files/components/FilesSection.vue'
+import { FILE_KIND } from '../features/files/kinds'
 import { registry } from '../core/applications/registry'
 import { activeSpace } from '../app/activeSpace'
 import { treeStore } from '../core/node/treeStore'
@@ -159,8 +161,13 @@ function pendingDeletion() {
 describe('the Memories level view (golden)', () => {
   // The control every snapshot rests on: the level's one application section is the real Memories one, as `main.ts`
   // registers it (MEMORY and CHAPTER naming it) — a golden of a stub would pin nothing about what a user sees.
-  it('control: the level view renders the real Memories section registration', () => {
-    expect(registry.sections()).toEqual([{ component: MemoriesSection, order: 10, kinds: [MEMORY_KIND, CHAPTER_KIND] }])
+  // Since cr-files-application F1b Files' section follows it: it renders in every folder (its heading, the upload
+  // action, its empty state — no FILE child in these fixtures, so it asks the server nothing) and steps aside in map mode.
+  it('control: the level view renders the real Memories section registration, then Files\'', () => {
+    expect(registry.sections()).toEqual([
+      { component: MemoriesSection, order: 10, kinds: [MEMORY_KIND, CHAPTER_KIND] },
+      { component: FilesSection, order: 20, kinds: [FILE_KIND] },
+    ])
   })
 
   it('space root, grid: Memories section with dated cards and the create card, folders with the new-folder card', async () => {

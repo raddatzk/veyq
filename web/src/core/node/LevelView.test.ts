@@ -39,13 +39,14 @@ function sectionStub(name: string) {
       epochs: { type: Object, default: null },
       readonly: { type: Boolean, required: true },
     },
-    emits: ['openNode', 'create', 'openTrash'],
+    emits: ['openNode', 'create', 'openTrash', 'rename'],
     setup: (p, { emit }) => () =>
       h('section', { class: 'stub-section', 'data-name': name, 'data-readonly': String(p.readonly), 'data-folder': p.folder?.name ?? '-' }, [
         h('span', { class: 'stub-nodes' }, p.nodes.map((n) => n.name).join(',')),
         h('button', { class: 'stub-open', onClick: () => emit('openNode', p.nodes[0]) }),
         h('button', { class: 'stub-create', onClick: () => emit('create', `create-${name}`) }),
         h('button', { class: 'stub-trash', onClick: () => emit('openTrash') }),
+        h('button', { class: 'stub-rename', onClick: () => emit('rename', p.nodes[0]) }),
       ]),
   })
 }
@@ -107,7 +108,7 @@ describe('LevelView: application sections', () => {
     expect(w.find('.stub-nodes').text()).toBe('')
   })
 
-  it('hands each section the folder, the read-only flag, and forwards its openNode, create and openTrash', async () => {
+  it('hands each section the folder, the read-only flag, and forwards its openNode, create, openTrash and rename', async () => {
     reg().registerKind({ kind: 'ALPHA', icon: 'pi pi-a', shareable: false, section: { order: 10, component: A } })
     const a1 = node('a1', 'ALPHA', 'Trips')
     const w = mountLevel([TRIPS, a1], { folder: TRIPS, readonly: true })
@@ -116,9 +117,13 @@ describe('LevelView: application sections', () => {
     await w.find('.stub-open').trigger('click')
     await w.find('.stub-create').trigger('click')
     await w.find('.stub-trash').trigger('click')
+    await w.find('.stub-rename').trigger('click')
     expect(w.emitted('openNode')).toEqual([[a1]])
     expect(w.emitted('create')).toEqual([['create-a']])
     expect(w.emitted('openTrash')).toHaveLength(1)
+    // a section's child renamed in place reaches the host as `renameNode` with that node (never as the folder's rename)
+    expect(w.emitted('renameNode')).toEqual([[a1]])
+    expect(w.emitted('renameFolder')).toBeUndefined()
   })
 })
 

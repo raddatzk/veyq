@@ -67,6 +67,17 @@ vi.mock('../features/memory/components/MemoriesSection.vue', async () => {
     }),
   }
 })
+vi.mock('../features/files/components/FilesSection.vue', async () => {
+  const { defineComponent, h } = await import('vue')
+  return {
+    default: defineComponent({
+      name: 'FilesSectionStub',
+      props: ['folder', 'nodes', 'epochs', 'readonly'],
+      emits: ['openNode', 'create', 'openTrash', 'rename'],
+      setup: (p) => () => h('section', { class: 'files-stub' }, `files=${p.nodes.map((n: { name: string }) => n.name).join(',')}`),
+    }),
+  }
+})
 // Core's name dialog (folder create, rename of any kind) and Memories' create dialog (its kinds' `createDialog`).
 vi.mock('../core/node/FolderNameDialog.vue', async () => {
   const { defineComponent, h } = await import('vue')
@@ -169,19 +180,29 @@ describe('MemoryHomeView over the real registry', () => {
     expect(w.find('.section-stub').attributes('data-readonly')).toBe('false')
   })
 
-  // Files registers FILE with no section yet (F0): a file in a folder is listed in core's fallback section — its icon,
-  // its name, the unsupported state — never dropped, while the Memory beside it stays in Memories' section. F1 replaces
-  // this with Files' own section.
-  it('lists a FILE child in the fallback section, with the Files icon and the unsupported state', async () => {
+  // Files registers FILE with its own section (F1b): a file in a folder is listed there, after Memories' section, and no
+  // longer in core's fallback; the Memory beside it stays in Memories' section.
+  it('hands a FILE child to Files\' section, after Memories\', and leaves no fallback', async () => {
     treeStore.nodes = [...TREE.map((n) => ({ ...n })), node({ id: 'report', kind: FILE_KIND, name: 'report.pdf', parentId: 'trips' })]
     const w = await mountAt('#~me/trips')
     expect(w.find('.section-stub').text()).toBe('folder=Trips|memories=Italy')
-    const fallback = w.find('.veyq-level-fallback')
-    expect(fallback.find('h2').text()).toBe(FILE_KIND)
-    const row = fallback.find('.veyq-node-card')
-    expect(row.find('strong').text()).toBe('report.pdf')
-    expect(row.find('.pi-file').exists()).toBe(true)
-    expect(row.text()).toContain(t('home.unsupportedKind'))
+    expect(w.find('.files-stub').text()).toBe('files=report.pdf')
+    expect(w.findAll('section').map((s) => s.classes()).findIndex((c) => c.includes('files-stub')))
+      .toBeGreaterThan(w.findAll('section').map((s) => s.classes()).findIndex((c) => c.includes('section-stub')))
+    expect(w.find('.veyq-level-fallback').exists()).toBe(false)
+    expect(w.text()).not.toContain(t('home.unsupportedKind'))
+  })
+
+  // A section's `rename` (F1b: a file is renamed from its row, it never opens) reaches the host through core's level
+  // view: core's name dialog opens in rename mode for THAT node, at its level.
+  it('a section\'s rename opens core\'s name dialog in rename mode for the node it names', async () => {
+    const report = node({ id: 'report', kind: FILE_KIND, name: 'report.pdf', parentId: 'trips' })
+    treeStore.nodes = [...TREE.map((n) => ({ ...n })), report]
+    const w = await mountAt('#~me/trips')
+    expect(w.find('.name-stub').exists()).toBe(false)
+    w.findComponent({ name: 'FilesSectionStub' }).vm.$emit('rename', report)
+    await flushPromises()
+    expect(w.find('.name-stub').text()).toBe('rename|trips|report.pdf')
   })
 
   it('opens a Memory to the registered detail: content key, ordered chapters bucket, shareable', async () => {
