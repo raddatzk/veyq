@@ -15,7 +15,7 @@
             "chunkCount": 1,
             "ownerId": "00000000-0000-4000-8000-000000000001",
             "role": "ORIGINAL",
-            "wrappedBlobKey": "ArfpRVSthTuzzNW01Cm+Z2slw7ULl2QK/vVgFim7XeVL9PHkpfBFh3TCjBisfl6jO0tsA2YUotuQvG73Qw=="
+            "wrappedBlobKey": "AtRU041tJgDHYLDUSrD4DUO2EsWBOn6kX3KZgqZGQge/guimduQYfwUFHkv277sFiVk97r9hGtL26gdZlg=="
           },
           {
             "blobId": "00000000-0000-4000-8000-000000000003",
@@ -23,7 +23,7 @@
             "chunkCount": 1,
             "ownerId": "00000000-0000-4000-8000-000000000001",
             "role": "THUMBNAIL",
-            "wrappedBlobKey": "Ajl7OF2/ycDam+GQ98WGoSTggesjVr83W3HG35rNjdaRuDnH2IQfM+jIDl4RcgKqNENRQTRdid2yWpEMMw=="
+            "wrappedBlobKey": "ArygSAq70+qhcBhlDTUmAoddDhbit/uz87vKom7jqsaV4EAQ1/HndYiIhyU8d7PdRrY6/ZVbKG6hAI51Ug=="
           },
           {
             "blobId": "00000000-0000-4000-8000-000000000004",
@@ -31,7 +31,7 @@
             "chunkCount": 1,
             "ownerId": "00000000-0000-4000-8000-000000000001",
             "role": "PREVIEW",
-            "wrappedBlobKey": "AmjsYAsv7pKUvG5Lbj4ErKBdScjkNNdmpiihDT8hJt4tlZHu+DlMAs8jUjY+wmfiWVp/p+O7ZxaFr+xjUQ=="
+            "wrappedBlobKey": "ArbVAgr5/e5d4JHIlHCNQVXOI9deJ8iK/Gje3l/5TjgqeWo4a1VutT876qrC5QmJWjrSL7F15l3ePfHrKQ=="
           }
         ]
       }
@@ -44,7 +44,7 @@
       },
       "bytes": {
         "length": 1028,
-        "sha256": "fd157d6612a907dba99804a8658ac9b2df88132c9f0a257856e8f1714893f65f"
+        "sha256": "f1eaf61f7de98e85fdedb7b8512a64f64c8426f750787a574c15ad6e6adf2194"
       }
     },
     {
@@ -55,7 +55,7 @@
       },
       "bytes": {
         "length": 328,
-        "sha256": "4597fc0ab48962188ee638d7e73997160d794b5674611c0bd8faaacf02ae7dc8"
+        "sha256": "3886ecfe758310180ab975c4d442b3f37f5d75fa105aa920a256d4a2021e6177"
       }
     },
     {
@@ -66,7 +66,7 @@
       },
       "bytes": {
         "length": 728,
-        "sha256": "5076360089d69c0a512a17539e41153a3091d1095b64c596dbae4f7293a620bc"
+        "sha256": "77a1e44cc84f6be886b877cea355b8b931aa1783ee33101d174b4d527c87db20"
       }
     },
     {
@@ -92,7 +92,7 @@
             "mediaId": "00000000-0000-4000-8000-000000000001",
             "nodeId": "6e5a0000-0000-4000-8000-0000000000b1",
             "originalUploadId": "upload-1",
-            "wrappedExif": null,
+            "wrappedExif": "Aoqu9bEICJEZM7nrTyr0LyeDBY7EhwHAZMvudMADg0JtJAMojmqmGpOKmcQzuxqqKWc6y8OvyCLrlw==",
             "wrappedMeta": "AiEBxU/R0BqyJXTLNxGxbVf+5WZzFrp4N+8zYjzQZk2w2P97YDDr5Kc/DWG0MCeEOrHn/88e+RK34zWJk2uKPiOdJW7Asms3gd2P4XizsQDzw4X4ZBW96cUKN3mZwvvqrMscfGZEh/cMOvcFyZbd4ONGI/B3jZ5Yx9BmEue5lHXeXdme"
           }
         ]
