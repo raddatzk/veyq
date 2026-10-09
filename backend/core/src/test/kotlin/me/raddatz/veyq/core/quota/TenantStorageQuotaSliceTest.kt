@@ -1,7 +1,12 @@
 package me.raddatz.veyq.core.quota
 
 import me.raddatz.veyq.core.testing.TestBlob
+import me.raddatz.veyq.core.blob.BlobUploadStore
+import me.raddatz.veyq.core.blob.UploadDeclare
+import me.raddatz.veyq.core.blob.UploadOpener
 import me.raddatz.veyq.core.blob.UploadSessionEntity
+import me.raddatz.veyq.core.testing.RACE_ROUNDS
+import me.raddatz.veyq.core.testing.whileUncommitted
 import me.raddatz.veyq.core.sharing.ShareWriteProof
 import me.raddatz.veyq.core.TestIds
 import me.raddatz.veyq.core.adminchannel.givenAdminChannel
@@ -18,6 +23,7 @@ import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
 import io.restassured.response.Response
+import jakarta.inject.Inject
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
@@ -47,6 +53,10 @@ import org.junit.jupiter.api.Test
 class TenantStorageQuotaSliceTest {
 
     private val s = TestBlob.SMALL
+
+    @Inject lateinit var quota: StorageQuota
+
+    @Inject lateinit var uploads: BlobUploadStore
 
     private val d = TestBlob.ofPlaintext(100) // a size no probe blob has, so its bytes are visible in the pin
 
@@ -134,6 +144,33 @@ class TenantStorageQuotaSliceTest {
             assertEquals(1, sessionCount(f.scopeA))
         } finally {
             pool.shutdownNow()
+        }
+    }
+
+    /**
+     * The deterministic form of [parallelMemberStartsCannotOvershoot] (inbox #330): one reservation holds its commit
+     * back — the tenant lock taken, its session inserted, as `BlobUploadHandler.reserveAndOpen`'s transaction does — and a
+     * start runs inside that window. Its own tenant lock waits for the held commit, and its sum then counts that
+     * session: `quota_exceeded`. Without its lock it summed the committed sessions only and was admitted, every round,
+     * on H2 and on MariaDB alike — where the eight-thread race above admitted the overshoot only on some runs.
+     */
+    @Test
+    fun aStartWhileAnotherReservationIsUncommittedCountsIt() {
+        repeat(RACE_ROUNDS) { round ->
+            val f = fixture()
+            setQuota(f.tenantId, s.byteSize)
+            val answer = whileUncommitted(
+                change = {
+                    checkNotNull(quota.lockTenant(f.tenantId))
+                    uploads.createSession(
+                        f.scopeA, UploadOpener.Member(f.userId), UUID.randomUUID().toString(),
+                        UploadDeclare(s.chunkCount, s.byteSize, "b3JpZw==", UUID.randomUUID().toString(), UUID.randomUUID().toString(), "ORIGINAL", null),
+                    )
+                },
+                overlapping = { memberStart(f, f.scopeA, s).then().statusCode(200).extract().path<String?>("results[0].error") },
+            )
+            assertEquals("quota_exceeded", answer, "round $round")
+            assertEquals(1, sessionCount(f.scopeA), "round $round: a start overshot the quota past an uncommitted reservation")
         }
     }
 

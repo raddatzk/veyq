@@ -104,7 +104,9 @@ class BlobUploadHandler(
     /**
      * Every start into the store — a member's upload, a cover, a link upload — reserved against what the tenant may
      * hold (ADR 0073 §5). Bytes never flow through here. One transaction:
-     *  1. lock the tenant row, so concurrent starts into the tenant serialize (uc.admin.tenant-storage-quota A5);
+     *  1. lock the tenant row, so concurrent starts into the tenant serialize (uc.admin.tenant-storage-quota A5;
+     *     `TenantStorageQuotaSliceTest.aStartWhileAnotherReservationIsUncommittedCountsIt` reddens without it on
+     *     every run and both engines, inbox #330);
      *  2. check each item on its own ([admissibility]);
      *  3. ask [StorageQuota] whether the admissible items fit **together**: the tenant quota always, and the per-link
      *     limit too when [link] names a link. The two are independent, and either one refuses the whole
