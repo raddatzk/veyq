@@ -789,7 +789,7 @@ describe('shareChunkProvider (Slice 2 SW range seam for the anonymous viewer, AD
     const wrappedBlobKey = b64std(v1.seal({ purpose: 'blob-key', scopeId: SCOPE_ID, ...BLOB }, memoryKey, blobKey))
     const byteSize = frames.reduce((n, f) => n + f.length, 0)
     const ref = { ...BLOB, chunkCount: chunks.length, byteSize, wrappedBlobKey }
-    const si = { item: { mediaId: MEDIA_1, original: ref, derivatives: [] }, memoryKey, scopeId: SCOPE_ID, chapterName: null }
+    const si = { item: { mediaId: MEDIA_1, original: ref, derivatives: [] }, memoryKey, scopeId: SCOPE_ID, nodeId: 'n-1', chapterName: null }
 
     const { resolveShareBlob } = stubApi(publicSharesApi, {
       resolveShareBlob: { presignedGets: frames.map((_, i) => ({ index: i, url: `u/${i}` })) },

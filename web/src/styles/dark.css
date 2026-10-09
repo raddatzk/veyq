@@ -55,11 +55,6 @@
     background: color-mix(in srgb, var(--app-surface) 72%, transparent);
   }
 
-  .media-grid-tile {
-    background: var(--app-surface-muted);
-    color: var(--app-muted);
-  }
-
   .sidebar-tenant-avatar,
   .sidebar-nav-link > .pi,
   .sidebar-scope-icon,

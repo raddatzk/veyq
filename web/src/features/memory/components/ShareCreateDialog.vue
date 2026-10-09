@@ -41,6 +41,8 @@ const props = defineProps<{
   reissueFrom?: ManagedShare | null
   /** The uploader (drop-box) variant: role fixed to WRITE_ONLY, no switcher. Identical otherwise. */
   uploader?: boolean
+  /** The shared node is a chapter: the hints say "chapter", not "Memory" (inbox #363; the parent decides by `nodeKind`). */
+  chapter?: boolean
 }>()
 // `reissue`: the edit asks its parent to renew this share instead (#303) — the renew is the parent's own dialog.
 const emit = defineEmits<{ close: []; saved: []; reissue: [share: ManagedShare] }>()
@@ -113,7 +115,9 @@ const roleOptions = computed(() => [
   { label: t('share.roleContributor'), value: ShareRole.ReadWrite },
 ])
 const roleHint = computed(() =>
-  role.value === ShareRole.ReadWrite ? t('share.roleContributorHint') : t('share.roleViewerHint'),
+  role.value === ShareRole.ReadWrite
+    ? t('share.roleContributorHint')
+    : props.chapter ? t('share.chapterRoleViewerHint') : t('share.roleViewerHint'),
 )
 // #303 (ADR 0076 point 5): a link minted before the write verifier refuses every new guest as a READ_WRITE, and an
 // edit never adds a verifier (point 2) — only a renew stores one. So such a link, graded READ_WRITE, warns and offers
@@ -260,7 +264,7 @@ function endOfDay(d: Date): Date {
           />
         </div>
       </div>
-      <p v-else-if="uploader && !isEdit && !isReissue" class="share-hint share-uploader-desc">{{ t('share.roleUploaderHint') }}</p>
+      <p v-else-if="uploader && !isEdit && !isReissue" class="share-hint share-uploader-desc">{{ chapter ? t('share.chapterRoleUploaderHint') : t('share.roleUploaderHint') }}</p>
       <p v-if="isReissue" class="share-hint share-reissue-warning">{{ t('share.reissueWarning') }}</p>
 
       <!-- The optional note, grouped in a card behind a toggle (like the password). On → the per-locale editor. -->

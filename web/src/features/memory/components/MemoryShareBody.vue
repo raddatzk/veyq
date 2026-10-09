@@ -6,7 +6,8 @@
 // **read-only** with the SAME components as the internal Memory — the shared [MediaGrid] (justified layout) +
 // [MediaLightbox] (in `readonly` mode, with the operator-blind per-item share byte-loaders injected) — so a share looks
 // exactly like the Memory it mirrors, minus the curator-only affordances. It also owns what only Memories has: the
-// contributor/uploader name pre-screen, the photo picker and the upload tiles. Operator-blind: media bytes are fetched
+// contributor/uploader name pre-screen, the photo picker and the upload tiles, the grouping of the media by chapter
+// (#356) and a contributor's delete of its own photos (#361). Operator-blind: media bytes are fetched
 // direct-from-store via gated presigned GETs, so the operator never learns which media a viewer opens.
 //
 // Claimed by `register.ts` for both Memories root kinds — a Memory and a chapter, whose share opens the same way: the
@@ -21,6 +22,7 @@
 // no pre-screen in front of a node it browsed into; a session the folder body already saved is reused.
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useConfirm } from '../../../shared/state/useConfirm'
 import {
   listShareMedia,
   openSharedMemory,
@@ -45,9 +47,11 @@ import { useOptimisticTiles, type OptimisticTileVM } from '../useOptimisticTiles
 import { byCaptureTime } from '../optimisticUpload'
 import { useThumbnailPipeline } from '../useThumbnailPipeline'
 import { galleryDisplayAspectRatio } from '../mediaGridLayout'
+import { loadOwnShareMedia, rememberOwnShareMedia, forgetOwnShareMedia } from '../ownShareMedia'
 import { renderMarkdown } from '../../../shared/markdown'
 import { ShareRole } from '../../../api/generated/sharing'
 import MediaGrid from './MediaGrid.vue'
+import MediaTile from './MediaTile.vue'
 import OptimisticTile from './OptimisticTile.vue'
 import MediaLightbox from './MediaLightbox.vue'
 
@@ -64,6 +68,7 @@ const props = defineProps<{
 const emit = defineEmits<{ unavailable: [] }>()
 
 const { t, locale } = useI18n()
+const { ask } = useConfirm()
 
 // A share's id never changes under a mounted body (the shell re-mounts per route).
 const shareId = props.shareId
@@ -101,30 +106,55 @@ const thumbs = pipeline.thumbs // mediaId → thumbnail object URL
 // Newest-first by effective capture time (undated last) — mirrors the curator gallery's default order, through
 // the SAME comparator, so the two surfaces cannot drift into two orderings.
 const capturedAtOf = (si: ShareItem) => effectiveCapturedAt(unsealMeta(si.scopeId, si.memoryKey, si.item))
-// The LISTED media in grid order — the lightbox's world: the tile's `openLightboxAt(sortedItems.indexOf(…))`
-// is a position in THIS list, never in the merged one, so an in-flight tile cannot shift which photo opens.
 const sortedItems = computed(() => byCaptureTime(items.value, capturedAtOf, -1))
 const FALLBACK_ASPECT = galleryDisplayAspectRatio(undefined, undefined)
 type ShareTileItem =
   | { id: string; aspectRatio: number; kind: 'optimistic'; optimistic: OptimisticTileVM }
   | { id: string; aspectRatio: number; kind: 'media'; si: ShareItem }
-// ONE order over both kinds of tile (uc.memory.gallery § "One order for every tile") — a contributor's
+const mediaTile = (si: ShareItem): ShareTileItem => {
+  const dims = unsealMeta(si.scopeId, si.memoryKey, si.item)
+  return { id: si.item.mediaId, aspectRatio: galleryDisplayAspectRatio(dims?.w, dims?.h) || FALLBACK_ASPECT, kind: 'media', si }
+}
+// Grouped by chapter (inbox #356; ADR 0080 Decision 2 lets a guest read every chapter title): the shared node's own
+// media first, under the page's heading, then one section per chapter titled as the member's sections are
+// (`veyq-section`, its header and count), each a grid of its own. A chapter is keyed by its node — two may share a
+// title — and the chapters come in the order of their newest media, so the grouping partitions the one newest-first
+// order rather than inventing a second one. Nested chapters each get their own section. The guest's uploads land on the
+// shared node itself, as they always did (no target picker is offered), so the in-flight tiles join its group.
+// ONE order over both kinds of tile in that group (uc.memory.gallery § "One order for every tile") — a contributor's
 // in-flight upload sorts on the capture time it will be sealed with, so settling changes its content, not its
 // place. Optimistic tiles go in first so an equal key resolves in their favour: that is how a settling tile
 // hands its own slot to the media it becomes.
-const layoutItems = computed<ShareTileItem[]>(() =>
-  byCaptureTime<ShareTileItem>(
+type ShareGroup = { key: string; title: string | null; media: ShareItem[]; tiles: ShareTileItem[] }
+const groups = computed<ShareGroup[]>(() => {
+  const own: ShareItem[] = []
+  const chapters = new Map<string, { title: string; media: ShareItem[] }>()
+  for (const si of sortedItems.value) {
+    if (si.chapterName === null) {
+      own.push(si)
+      continue
+    }
+    const group = chapters.get(si.nodeId) ?? { title: si.chapterName, media: [] }
+    group.media.push(si)
+    chapters.set(si.nodeId, group)
+  }
+  const ownTiles = byCaptureTime<ShareTileItem>(
     [
       ...optimisticTiles.value.map((t) => ({ id: t.layoutId, aspectRatio: t.aspectRatio, kind: 'optimistic' as const, optimistic: t })),
-      ...sortedItems.value.map((si) => {
-        const dims = unsealMeta(si.scopeId, si.memoryKey, si.item)
-        return { id: si.item.mediaId, aspectRatio: galleryDisplayAspectRatio(dims?.w, dims?.h) || FALLBACK_ASPECT, kind: 'media' as const, si }
-      }),
+      ...own.map(mediaTile),
     ],
     (tile) => (tile.kind === 'optimistic' ? tile.optimistic.capturedAt : capturedAtOf(tile.si)),
     -1,
-  ),
-)
+  )
+  return [
+    ...(ownTiles.length ? [{ key: 'own', title: null, media: own, tiles: ownTiles }] : []),
+    ...[...chapters].map(([nodeId, g]) => ({ key: nodeId, title: g.title, media: g.media, tiles: g.media.map(mediaTile) })),
+  ]
+})
+// The LISTED media in the order the page shows them — the lightbox's world: a tile's `openLightboxAt(displayOrder
+// .indexOf(…))` is a position in THIS list, never in a merged one, so an in-flight tile cannot shift which photo opens,
+// and the lightbox steps through the groups as the page lays them out.
+const displayOrder = computed(() => groups.value.flatMap((g) => g.media))
 // Show the grid when there's anything to render — listed media OR an in-flight optimistic upload.
 const hasContent = computed(() => items.value.length > 0 || optimisticTiles.value.length > 0)
 
@@ -173,6 +203,22 @@ async function submitName() {
   }
 }
 
+// Delete-your-own (READ_WRITE, inbox #361): the listed media this device added under the link's identity — the server
+// tells no guest which uploads are whose (ADR 0030 point 8), so the device remembers its own (`ownShareMedia.ts`). Each
+// of those tiles carries a delete, asked first; the server deletes it only when its identity is the token's, wherever
+// below the share it lies, so the record can offer no more than the server grants. A WRITE_ONLY guest keeps its
+// session-only delete on the in-flight tiles below — it is served no listed media to carry one.
+const ownMediaIds = ref<Set<string>>(new Set())
+watch(
+  session,
+  (s) => {
+    ownMediaIds.value = s && isContributor.value ? loadOwnShareMedia(shareId, s.identityId) : new Set()
+  },
+  { immediate: true },
+)
+const isOwn = (si: ShareItem) => ownMediaIds.value.has(si.item.mediaId)
+const deletingMediaIds = ref<Set<string>>(new Set())
+
 // Add photos (contributor): enqueue the picked files on the SHARED upload queue with a share-scoped transport —
 // they render as optimistic tiles (progress/retry) immediately and reconcile into the gallery on completion.
 // The pick runs through `collectPickedFiles`, the same uc.memory.upload E3 window the curator's picker uses: a
@@ -205,8 +251,16 @@ function enqueueBatch(picked: File[]) {
     {
       key: uploadGroup,
       // Embedded: the target is this node (5a.5); at the root no target is named, as before.
-      upload: (source, opts) =>
-        addSharePhoto({ shareId, scopeId, sealKey: key, ...s, pwToken: props.pwToken, ...(embeddedRoot ? { nodeId: embeddedRoot.nodeId } : {}) }, source, undefined, opts),
+      upload: async (source, opts) => {
+        const added = await addSharePhoto(
+          { shareId, scopeId, sealKey: key, ...s, pwToken: props.pwToken, ...(embeddedRoot ? { nodeId: embeddedRoot.nodeId } : {}) }, source, undefined, opts,
+        )
+        if (isContributor.value) {
+          rememberOwnShareMedia(shareId, s.identityId, added.mediaId) // the device's record of what it may delete (#361)
+          ownMediaIds.value = new Set(ownMediaIds.value).add(added.mediaId)
+        }
+        return added
+      },
     },
     picked.map((file) => ({ file, mediaType: inferMediaType(file) })),
     // READ_WRITE: re-resolve so the contributed photo lists. WRITE_ONLY: never re-resolve (the resolve serves the
@@ -242,12 +296,45 @@ async function onDeleteUpload(fileId: string) {
   }
 }
 
+// A READ_WRITE guest's own listed photo (#361): asked first — the delete is for everyone and keeps no copy — then gone
+// from the page at once (the listing would agree; no re-resolve is needed for a removal).
+async function onDeleteOwn(si: ShareItem) {
+  const s = session.value
+  const mediaId = si.item.mediaId
+  if (!s || deletingMediaIds.value.has(mediaId)) return
+  const confirmed = await ask({
+    header: t('share.deletePhoto'),
+    message: t('share.deleteOwnConfirm'),
+    acceptLabel: t('share.deleteOwnAccept'),
+    acceptIcon: 'pi pi-trash',
+  })
+  if (!confirmed) return
+  deleteError.value = false
+  deletingMediaIds.value = new Set(deletingMediaIds.value).add(mediaId)
+  try {
+    await deleteSharePhoto(shareId, s.contributorToken, mediaId, props.pwToken)
+    forgetOwnShareMedia(shareId, s.identityId, mediaId)
+    const own = new Set(ownMediaIds.value)
+    own.delete(mediaId)
+    ownMediaIds.value = own
+    const rest = items.value.filter((x) => x.item.mediaId !== mediaId)
+    pipeline.reconcile(rest) // drops the removed tile's thumbnail
+    items.value = rest
+  } catch {
+    deleteError.value = true // the tile stays, so the guest can try again
+  } finally {
+    const next = new Set(deletingMediaIds.value)
+    next.delete(mediaId)
+    deletingMediaIds.value = next
+  }
+}
+
 // --- lightbox (the SHARED MediaLightbox in readonly mode, share loaders injected) ---------------------------
 const lightboxIndex = ref<number | null>(null)
 const lightboxItems = ref<ShareItem[]>([])
 const lightboxMediaItems = computed(() => lightboxItems.value.map((s) => s.item))
 function openLightboxAt(index: number) {
-  lightboxItems.value = sortedItems.value.slice()
+  lightboxItems.value = displayOrder.value.slice()
   lightboxIndex.value = index
 }
 // Injected operator-blind loaders — each resolves the media's ShareItem (its own K_mem) then goes through the
@@ -392,51 +479,69 @@ onBeforeUnmount(() => {
     <p v-if="!hasContent && (listed || isUploader)" class="veyq-empty">
       {{ isUploader ? t('share.uploaderEmpty') : isContributor ? t('share.emptyContribute') : t('share.empty') }}
     </p>
-    <MediaGrid v-else-if="hasContent" :items="layoutItems" :aria-label="memoryName">
-      <template #tile="{ tile, item }">
-        <!-- optimistic in-grid upload tile (cr-0074): the SAME shared OptimisticTile as the internal gallery.
-             For a WRITE_ONLY share the settled tile persists as the session-only own-view + carries a per-tile delete. -->
-        <OptimisticTile
-          v-if="item.kind === 'optimistic'"
-          :tile="item.optimistic"
-          :deletable="isUploader"
-          :deleting="deletingIds.has(item.optimistic.fileId)"
-          link
-          :style="{
-            transform: `translate(${tile.left}px, ${tile.top}px)`,
-            width: `${tile.renderedWidth}px`,
-            height: `${tile.renderedHeight}px`,
-          }"
-          @retry="retryFile"
-          @delete="onDeleteUpload"
-        />
-        <button
-          v-else
-          class="media-grid-tile"
-          type="button"
-          :data-media-id="item.si.item.mediaId"
-          :style="{
-            transform: `translate(${tile.left}px, ${tile.top}px)`,
-            width: `${tile.renderedWidth}px`,
-            height: `${tile.renderedHeight}px`,
-          }"
-          :aria-label="t('media.openItem', { index: sortedItems.indexOf(item.si) + 1 })"
-          :title="item.si.chapterName ?? undefined"
-          @click="openLightboxAt(sortedItems.indexOf(item.si))"
-        >
-          <!-- A media in a chapter is labelled by the chapter's title (ADR 0080 Decision 2: a guest of the Memory reads
-               its chapter titles) — the tile's tooltip and its image's alt text, no new UI. -->
-          <img
-            v-if="thumbs.get(item.si.item.mediaId)"
-            class="media-grid-tile-media media-grid-tile-media-loaded"
-            :src="thumbs.get(item.si.item.mediaId)"
-            :alt="item.si.chapterName ?? memoryName"
-          />
-          <span v-else-if="!hasDerivatives(item.si.item)" class="media-grid-icon pi pi-file" />
-          <span v-else class="media-grid-tile-placeholder" />
-        </button>
-      </template>
-    </MediaGrid>
+    <template v-else-if="hasContent">
+      <!-- One grid per group (#356): the shared node's own media under the page heading, then each chapter as a section
+           titled like the member's sections. -->
+      <section
+        v-for="group in groups"
+        :key="group.key"
+        class="share-media-group"
+        :class="{ 'veyq-section': group.title !== null }"
+        :data-chapter-id="group.title !== null ? group.key : undefined"
+      >
+        <div v-if="group.title !== null" class="veyq-section-header">
+          <h2>{{ group.title }}</h2>
+          <span>{{ group.media.length }}</span>
+        </div>
+        <MediaGrid :items="group.tiles" :aria-label="group.title ?? memoryName">
+          <template #tile="{ tile, item }">
+            <!-- optimistic in-grid upload tile (cr-0074): the SAME shared OptimisticTile as the internal gallery.
+                 For a WRITE_ONLY share the settled tile persists as the session-only own-view + carries a per-tile delete. -->
+            <OptimisticTile
+              v-if="item.kind === 'optimistic'"
+              :tile="item.optimistic"
+              :deletable="isUploader"
+              :deleting="deletingIds.has(item.optimistic.fileId)"
+              link
+              :style="{
+                transform: `translate(${tile.left}px, ${tile.top}px)`,
+                width: `${tile.renderedWidth}px`,
+                height: `${tile.renderedHeight}px`,
+              }"
+              @retry="retryFile"
+              @delete="onDeleteUpload"
+            />
+            <!-- The member gallery's tile (#361): one open button, and on a photo this guest added, a delete beside it. -->
+            <MediaTile
+              v-else
+              :data-media-id="item.si.item.mediaId"
+              :style="{
+                transform: `translate(${tile.left}px, ${tile.top}px)`,
+                width: `${tile.renderedWidth}px`,
+                height: `${tile.renderedHeight}px`,
+              }"
+              :src="thumbs.get(item.si.item.mediaId)"
+              :has-derivatives="hasDerivatives(item.si.item)"
+              :open-label="t('media.openItem', { index: displayOrder.indexOf(item.si) + 1 })"
+              @open="openLightboxAt(displayOrder.indexOf(item.si))"
+            >
+              <template v-if="isOwn(item.si)" #overlay>
+                <button
+                  type="button"
+                  class="share-own-delete"
+                  :disabled="deletingMediaIds.has(item.si.item.mediaId)"
+                  :aria-label="t('share.deletePhoto')"
+                  :title="t('share.deletePhoto')"
+                  @click.stop="onDeleteOwn(item.si)"
+                >
+                  <span :class="deletingMediaIds.has(item.si.item.mediaId) ? 'pi pi-spin pi-spinner' : 'pi pi-trash'" aria-hidden="true" />
+                </button>
+              </template>
+            </MediaTile>
+          </template>
+        </MediaGrid>
+      </section>
+    </template>
   </template>
 
   <!-- The SAME lightbox component as the internal Memory, driven read-only with the anonymous share loaders. -->
@@ -587,6 +692,40 @@ onBeforeUnmount(() => {
 .share-note :deep(a) {
   color: var(--app-accent);
 }
-/* The tile (.media-grid-tile) + its inner classes are fully styled by the GLOBAL design-source stylesheet
-   (styles/memory.css) — the same skin the internal gallery uses — so no per-view tile CSS is needed here. */
+/* The tiles are the member gallery's MediaTile and OptimisticTile, styled by themselves. Between the groups (the shared
+   node's own media, then one section per chapter, #356) the page's section rhythm. */
+.share-media-group + .share-media-group {
+  margin-top: 1.6rem;
+}
+/* A guest's delete on its own photo (#361): the tile's mark toggle's look (MediaTile), at the opposite corner — a
+   surface scrim legible over any photo in either theme; the danger tone on hover, as the uploader tile's delete. */
+.share-own-delete {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-surface) 70%, transparent);
+  color: var(--app-text);
+  font-size: 0.85rem;
+  cursor: pointer;
+  backdrop-filter: blur(2px);
+}
+.share-own-delete:hover {
+  background: var(--app-danger);
+  color: var(--app-on-fill);
+}
+.share-own-delete:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.share-own-delete:focus-visible {
+  outline: 2px solid var(--app-focus);
+  outline-offset: 2px;
+}
 </style>

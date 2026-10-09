@@ -35,40 +35,15 @@
   color: var(--app-muted);
 }
 
-.media-grid-tile {
-  position: absolute;
-  top: 0;
-  left: 0;
-  display: block;
-  overflow: hidden;
-  padding: 0;
-  border: 0;
-  border-radius: var(--app-radius-sm);
-  background: var(--app-control-bg);
-  color: var(--app-muted);
-  cursor: pointer;
-}
-
-.media-grid-tile img,
-.media-grid-tile video,
 .media-grid-tile-placeholder {
   display: block;
   width: 100%;
   height: 100%;
 }
 
-.media-grid-tile img,
-.media-grid-tile video {
-  object-fit: cover;
-}
-
 .media-grid-tile-media {
   opacity: 0;
   transition: opacity 160ms ease-out;
-}
-
-.media-grid-tile-media-loaded {
-  opacity: 1;
 }
 
 .media-grid-tile-placeholder {

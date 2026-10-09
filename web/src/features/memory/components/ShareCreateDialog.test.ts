@@ -85,6 +85,19 @@ describe('ShareCreateDialog (cr-0116)', () => {
     expect(w.find('.select-button').exists()).toBe(false)
   })
 
+  // inbox #363: on a chapter the hints that name the node say "chapter" (the parent passes `chapter` by `nodeKind`).
+  it.each([
+    [{ uploader: true }, 'share.chapterRoleUploaderHint', 'share.roleUploaderHint'],
+    [{}, 'share.chapterRoleViewerHint', 'share.roleViewerHint'],
+  ])('a chapter link (%o) is described as a chapter', (flow, chapterKey, memoryKey) => {
+    const onChapter = mountDialog({ ...flow, chapter: true })
+    expect(onChapter.text()).toContain(t(chapterKey))
+    expect(onChapter.text()).not.toContain(t(memoryKey))
+    const onMemory = mountDialog(flow) // the control: a Memory keeps its wording
+    expect(onMemory.text()).toContain(t(memoryKey))
+    expect(onMemory.text()).not.toContain(t(chapterKey))
+  })
+
   it('edit flow (normal): shows the switcher so the role can be re-graded in place (cr-0119)', () => {
     const w = mountDialog({ editShare: editShareWith({}) })
     expect(w.find('.select-button').exists()).toBe(true)

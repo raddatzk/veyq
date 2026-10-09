@@ -1130,6 +1130,11 @@ const en = {
     // the same dialog on a chapter (a chapter is a share root of its own, ADR 0080 decision 13)
     chapterTitle: 'Share this chapter',
     chapterIntro: 'Create a link anyone can open in a browser — no account, no install. It shows only this chapter, and you can switch it off anytime.',
+    // every other sentence of the member's dialogs that names the shared node, on a chapter (inbox #363)
+    chapterRoleViewerHint: 'Anyone with the link can look at this chapter, read-only.',
+    chapterRoleUploaderHint: 'A drop-box: anyone with the link can add photos but cannot see this chapter or what others added. Their uploads are visible to them only until they reload.',
+    chapterDeleteConfirm: 'Delete this link for good? It can never be switched on or renewed again. Photos guests added stay in this chapter.',
+    chapterUploaderDialogCopy: 'Create an upload link for people who should only add photos to this chapter — they won’t see the chapter or others’ contributions.',
     roleLabel: 'What can people do?',
     roleViewer: 'View only',
     roleContributor: 'View + add photos',
@@ -1198,6 +1203,7 @@ const en = {
     createNew: 'New share',
     create: 'Create link',
     editTitle: 'Edit share',
+    editFailed: 'The changes could not be saved.',
     name: 'Name',
     nameOptional: 'Optional label (only you see it)',
     linkReady: 'Your link is ready — copy it:',
@@ -1237,6 +1243,9 @@ const en = {
     uploaderEmpty: 'No photos in this session. Photos you add appear here and stay visible until you reload — after that they’re gone from your view, but safely saved for the owner.',
     deletePhoto: 'Delete this photo',
     deleteFailed: 'The photo could not be deleted — please try again.',
+    // a READ_WRITE guest deletes a listed photo it added (inbox #361): for everyone, no trash, no copy kept
+    deleteOwnConfirm: 'Delete this photo you added? It is removed for everyone who can see it here and cannot be brought back.',
+    deleteOwnAccept: 'Delete photo',
     // after a member renamed a shared node (core's FolderNameDialog → resealShareNames, ADR 0080 decision 14)
     nameResealFailed: 'Renamed. Some links to it could not be updated and still show the old name to their guests.',
     // core's folder share dialog (cr-node-key-hierarchy 5b.3) and folder page (5b.4b): only where a Memory sentence
@@ -2337,6 +2346,10 @@ const de: typeof en = {
     intro: 'Erstelle einen Link, den jede:r im Browser öffnen kann — ohne Konto, ohne Installation. Er zeigt nur diese eine Erinnerung, und du kannst ihn jederzeit abschalten.',
     chapterTitle: 'Dieses Kapitel teilen',
     chapterIntro: 'Erstelle einen Link, den jede:r im Browser öffnen kann — ohne Konto, ohne Installation. Er zeigt nur dieses Kapitel, und du kannst ihn jederzeit abschalten.',
+    chapterRoleViewerHint: 'Wer den Link hat, kann dieses Kapitel ansehen — schreibgeschützt.',
+    chapterRoleUploaderHint: 'Ein Briefkasten: Wer den Link hat, kann Fotos hinzufügen, aber dieses Kapitel und die Beiträge anderer NICHT sehen. Die eigenen Uploads sind nur bis zum nächsten Neuladen sichtbar.',
+    chapterDeleteConfirm: 'Diesen Link endgültig löschen? Er lässt sich danach nie wieder einschalten oder erneuern. Fotos, die Gäste hinzugefügt haben, bleiben in diesem Kapitel.',
+    chapterUploaderDialogCopy: 'Erstelle einen Upload-Link für Menschen, die diesem Kapitel nur Fotos hinzufügen sollen — sie sehen weder das Kapitel noch die Beiträge anderer.',
     roleLabel: 'Was dürfen andere?',
     roleViewer: 'Nur ansehen',
     roleContributor: 'Ansehen + Fotos hinzufügen',
@@ -2401,6 +2414,7 @@ const de: typeof en = {
     createNew: 'Neuer Link',
     create: 'Link erstellen',
     editTitle: 'Link bearbeiten',
+    editFailed: 'Die Änderungen konnten nicht gespeichert werden.',
     name: 'Name',
     nameOptional: 'Optionaler Name (nur du siehst ihn)',
     linkReady: 'Dein Link ist bereit — kopiere ihn:',
@@ -2439,6 +2453,8 @@ const de: typeof en = {
     uploaderEmpty: 'Keine Fotos in dieser Sitzung. Hinzugefügte Fotos erscheinen hier und bleiben bis zum Neuladen sichtbar — danach sind sie aus deiner Ansicht verschwunden, aber sicher für die Person gespeichert, der die Erinnerung gehört.',
     deletePhoto: 'Dieses Foto löschen',
     deleteFailed: 'Das Foto konnte nicht gelöscht werden — bitte erneut versuchen.',
+    deleteOwnConfirm: 'Dieses Foto, das du hinzugefügt hast, löschen? Es verschwindet für alle, die es hier sehen können, und lässt sich nicht zurückholen.',
+    deleteOwnAccept: 'Foto löschen',
     nameResealFailed: 'Umbenannt. Einige Links darauf konnten nicht aktualisiert werden und zeigen ihren Gästen noch den alten Namen.',
     folder: {
       title: 'Diesen Ordner teilen',

@@ -85,12 +85,37 @@ describe('ShareDialog — the wording follows the shared node\'s kind', () => {
     expect(w.html()).not.toContain(t('share.chapterTitle'))
   })
 
-  it('the uploader variant on a chapter keeps its own copy', async () => {
+  // inbox #363: the uploader variant's copy names the node too — "chapter" on a chapter, by the same `nodeKind`.
+  it('the uploader variant on a chapter says "chapter" in its copy and hands the create form the chapter wording', async () => {
     listSharesFor.mockResolvedValue([])
     const w = mountKind('CHAPTER', true)
     await flushPromises()
+    expect(w.text()).toContain(t('share.chapterUploaderDialogCopy'))
+    expect(w.text()).not.toContain(t('share.uploaderDialogCopy'))
+    expect(w.html(), 'the uploader title names no node').not.toContain(t('share.chapterTitle'))
+    await w.findAll('button').find((b) => b.text() === t('share.uploaderCreate'))!.trigger('click')
+    expect(w.findComponent({ name: 'ShareCreateDialog' }).props('chapter')).toBe(true)
+  })
+
+  it('control: the uploader variant on a Memory keeps the Memory copy', async () => {
+    listSharesFor.mockResolvedValue([])
+    const w = mountKind('MEMORY', true)
+    await flushPromises()
     expect(w.text()).toContain(t('share.uploaderDialogCopy'))
-    expect(w.html()).not.toContain(t('share.chapterTitle'))
+    expect(w.text()).not.toContain(t('share.chapterUploaderDialogCopy'))
+    await w.findAll('button').find((b) => b.text() === t('share.uploaderCreate'))!.trigger('click')
+    expect(w.findComponent({ name: 'ShareCreateDialog' }).props('chapter')).toBe(false)
+  })
+
+  it("a chapter's link delete says the guests' photos stay in the chapter", async () => {
+    listSharesFor.mockResolvedValue([share({ enabled: false })])
+    const w = mountKind('CHAPTER')
+    await flushPromises()
+    await w.find('.share-fold-toggle').trigger('click')
+    await w.findAll('button').find((b) => b.attributes('aria-label') === t('share.delete'))!.trigger('click')
+    const asked = confirmRequest.value?.message
+    settleConfirm(false) // before asserting, so a red here leaves no confirm pending for the next test
+    expect(asked).toBe(t('share.chapterDeleteConfirm'))
   })
 })
 

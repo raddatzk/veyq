@@ -9,9 +9,11 @@
 // and rename between them (core), and contribute photos to any Memory or chapter below (Memories) — never upload into
 // a folder itself.
 //
-// One dialog, three views: the list, the create form, and the freshly-minted link (after a create or a renew). Not
-// built: editing a link's label, note, password, expiry or role in place (Memories' `updateShare` form) — a member
-// renews or deletes the link instead.
+// One dialog, four views: the list, the create form, the same form editing a link in place (inbox #364), and the
+// freshly-minted link (after a create or a renew). The edit is Memories' share edit on core's form: label, role, note,
+// password and expiry, saved with `updateShare` on the same link — its key and its guests untouched — and offered on
+// the caller's own links only, as the server lets only a link's owner edit it (ADR 0036 point 3) and its recovery copy
+// is what re-opens `K_share` to re-seal them.
 // Operator-blind throughout: the folder's key is wrapped under a fresh `K_share` that rides only the link's fragment;
 // name, note and password are sealed under `K_share`; the list re-opens `K_share` through the recovery copy under the
 // scope key, which no link carries (ADR 0036 point 4). Strings are the Memory dialog's wherever the meaning is the
@@ -36,8 +38,10 @@ import {
   deleteShare,
   isReissueRequired,
   isShareDeleted,
+  updateShare,
   readShareName,
   readShareNoteMap,
+  readSharePassword,
   hasLocaleText,
   type LocaleMap,
   type ManagedShare,
@@ -60,7 +64,7 @@ const emit = defineEmits<{ close: [] }>()
 const { t, locale } = useI18n()
 const { ask } = useConfirm()
 
-type View = 'list' | 'create' | 'link'
+type View = 'list' | 'create' | 'edit' | 'link'
 const view = ref<View>('list')
 
 // --- the list ---------------------------------------------------------------------------------------------------
@@ -228,7 +232,75 @@ const roleHint = computed(() =>
 )
 const passwordTooShort = computed(() => passwordEnabled.value && password.value.trim().length < MIN_PW)
 
+// --- the edit (inbox #364): the create form, pre-filled from the link and saved in place ------------------------
+/** The link being edited, and the password its recovery copy opened (to tell untouched / changed / removed apart). */
+const editing = ref<ManagedShare | null>(null)
+const currentPassword = ref('')
+const editError = ref(false)
+/** Edit: the caller's own link, whose recovery copy re-opens `K_share` — the Memory dialog's rule. */
+const canEdit = (s: ManagedShare) => s.mine && !!s.sealedShareKey
+// ADR 0076 point 5 (#303): a link without a write verifier refuses every new guest as READ_WRITE, and an edit cannot add
+// one — only a renew stores it. So graded READ_WRITE, such a link warns and offers that renew.
+const roleNeedsReissue = computed(
+  () => view.value === 'edit' && !!editing.value?.writeVerifierMissing && role.value === ShareRole.ReadWrite,
+)
+
+function openEdit(s: ManagedShare) {
+  const address = addressOf(s)
+  name.value = readShareName(props.epochs, address, s, s.sealedShareName)
+  role.value = s.role
+  note.value = readShareNoteMap(props.epochs, address, s, s.sealedNote)
+  noteEnabled.value = hasLocaleText(note.value)
+  currentPassword.value = readSharePassword(props.epochs, address, s, s.sealedPassword)
+  password.value = currentPassword.value
+  // A password the copy cannot open leaves the toggle on with an empty field: the save then waits for a new one
+  // rather than quietly dropping the link's protection.
+  passwordEnabled.value = s.passwordRequired || currentPassword.value.length > 0
+  revealPw.value = false
+  expiryEnabled.value = !!s.expiresAt
+  expiresAt.value = s.expiresAt
+  editError.value = false
+  editing.value = s
+  view.value = 'edit'
+}
+
+const { run: runSave, pending: saving } = useAsyncAction(
+  async () => {
+    const s = editing.value!
+    const hadPassword = s.passwordRequired
+    // The password tri-state: off removes one that was set, a changed value sets it, an unchanged one is left alone.
+    const passwordChange = !passwordEnabled.value
+      ? hadPassword ? ({ remove: true } as const) : undefined
+      : password.value === currentPassword.value ? undefined : ({ set: password.value } as const)
+    // Note, label and expiry are full replaces: the pre-filled values are always re-sent, so an unrelated edit keeps them.
+    await updateShare(
+      addressOf(s), props.epochs, s, noteEnabled.value ? note.value : {}, name.value,
+      expiryEnabled.value && expiresAt.value ? endOfDay(expiresAt.value) : null, role.value, passwordChange,
+    )
+    editing.value = null
+    view.value = 'list'
+    await loadShares()
+  },
+  { onError: () => void (editError.value = true) },
+)
+
+async function onSave() {
+  if (passwordTooShort.value) return
+  editError.value = false
+  await runSave()
+}
+
+/** The edit hands over to a renew (#303): back to the list, then the renew's own question. */
+async function reissueFromEdit() {
+  const s = editing.value
+  if (!s) return
+  editing.value = null
+  view.value = 'list'
+  await onReissue(s)
+}
+
 function openCreate() {
+  editing.value = null
   name.value = ''
   role.value = ShareRole.Read
   noteEnabled.value = false
@@ -248,7 +320,7 @@ function endOfDay(d: Date): Date {
   return e
 }
 
-const { run: runCreate, pending: creating } = useAsyncAction(
+const { run: runCreate, pending: minting } = useAsyncAction(
   async () => {
     const minted = await mintShare(
       props.scopeId, props.nodeId, props.nodeKey, props.epochs, props.nodeName, role.value,
@@ -267,9 +339,11 @@ async function onCreate() {
   createError.value = false
   await runCreate()
 }
+/** A create or an edit is in flight: the form and the dialog's close wait for it. */
+const creating = computed(() => minting.value || saving.value)
 
 const header = computed(() =>
-  view.value === 'create' ? t('share.createNew') : t('share.folder.title'),
+  view.value === 'create' ? t('share.createNew') : view.value === 'edit' ? t('share.editTitle') : t('share.folder.title'),
 )
 function onDialogVisible(visible: boolean) {
   if (!visible && !creating.value) emit('close')
@@ -311,8 +385,8 @@ function onDialogVisible(visible: boolean) {
       </div>
     </div>
 
-    <!-- The create form. -->
-    <div v-else-if="view === 'create'" class="veyq-form">
+    <!-- The create form, and the same form editing a link in place (#364). -->
+    <div v-else-if="view === 'create' || view === 'edit'" class="veyq-form">
       <div class="veyq-form-field">
         <label for="folder-share-name">{{ t('share.name') }}</label>
         <InputText id="folder-share-name" v-model="name" :placeholder="t('share.nameOptional')" :disabled="creating" />
@@ -330,6 +404,19 @@ function onDialogVisible(visible: boolean) {
           class="folder-share-roles"
         />
         <p class="veyq-form-copy folder-share-hint">{{ roleHint }}</p>
+        <template v-if="roleNeedsReissue">
+          <p class="veyq-form-copy folder-share-hint">{{ t('share.roleNeedsReissue') }}</p>
+          <Button
+            type="button"
+            :label="t('share.reissue')"
+            icon="pi pi-replay"
+            severity="secondary"
+            outlined
+            size="small"
+            :disabled="creating"
+            @click="reissueFromEdit"
+          />
+        </template>
       </div>
 
       <div class="veyq-form-field">
@@ -406,7 +493,8 @@ function onDialogVisible(visible: boolean) {
         </template>
       </div>
 
-      <p v-if="createError" class="veyq-form-error">{{ t('share.createFailed') }}</p>
+      <p v-if="view === 'create' && createError" class="veyq-form-error">{{ t('share.createFailed') }}</p>
+      <p v-if="view === 'edit' && editError" class="veyq-form-error">{{ t('share.editFailed') }}</p>
       <div class="veyq-dialog-action-row">
         <Button
           type="button"
@@ -418,6 +506,16 @@ function onDialogVisible(visible: boolean) {
           @click="view = 'list'"
         />
         <Button
+          v-if="view === 'edit'"
+          class="folder-share-save"
+          :label="saving ? t('share.noteSaving') : t('common.save')"
+          icon="pi pi-check"
+          :loading="saving"
+          :disabled="creating || passwordTooShort"
+          @click="onSave"
+        />
+        <Button
+          v-else
           class="folder-share-create"
           :label="creating ? t('share.creating') : t('share.create')"
           icon="pi pi-link"
@@ -481,6 +579,18 @@ function onDialogVisible(visible: boolean) {
                   severity="secondary"
                   text
                   @click="copy(decoded.get(share.shareId)!.link!, share.shareId)"
+                />
+                <Button
+                  v-if="canEdit(share)"
+                  type="button"
+                  class="veyq-icon-button folder-share-edit"
+                  icon="pi pi-pencil"
+                  :aria-label="t('share.edit')"
+                  :title="t('share.edit')"
+                  severity="secondary"
+                  text
+                  :disabled="busyId === share.shareId"
+                  @click="openEdit(share)"
                 />
                 <Button
                   v-if="canReissue(share)"
