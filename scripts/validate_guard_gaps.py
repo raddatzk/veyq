@@ -215,6 +215,10 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   79 admin-web's light `--app-primary` set back to Aura's emerald-500 (`#10b981`, white label 2.54:1) — rejected:
      `validate_web_contrast` reads `admin-web/src/styles/base.css` as well as web's (inbox #390). Until then that
      guard's limit (e) said admin-web was not covered, and the copy ADR 0065 keeps failed 34 pairs unseen
+  80 `ClaimRequest.capabilityTags` loses its `EachElement`, its `items` `$ref` to the bounded `CapabilityTag` left
+     standing — rejected: `validate_request_bounds` rule 6 reads a list of scalars' element bounds and requires the
+     list to carry them. Until then that guard documented element bounds as beyond it, and the claim took any string
+     as a tag (measured: `NOT-HEX` answered 204, inbox #354)
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
 (a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
 which the Gradle module split retired: `:core` has no edge to an application, so either shape fails
@@ -609,6 +613,12 @@ def forge_request_scalar_ref_unannotated(root: pathlib.Path) -> str:
     _in_request_property(root, "tasks.openapi.yaml", "EnqueueRequest", "capabilityTag",
                          " @field:jakarta.validation.constraints.Pattern(regexp = \"[0-9a-f]+\")", "")
     return "EnqueueRequest.capabilityTag's @Pattern removed, its $ref'd scalar's pattern kept (must be REJECTED)"
+
+
+def forge_request_list_elements_unbounded(root: pathlib.Path) -> str:
+    _in_request_property(root, "tasks.openapi.yaml", "ClaimRequest", "capabilityTags",
+                         " @field:me.raddatz.veyq.core.http.EachElement(maxLength = 64, pattern = \"[0-9a-f]+\")", "")
+    return "ClaimRequest.capabilityTags' EachElement removed, its items' $ref'd scalar bounds kept (must be REJECTED)"
 
 
 def forge_ratelimit_state_under_another_name(root: pathlib.Path) -> str:
@@ -1419,6 +1429,7 @@ CASES = [
     ("77", "validate_backend_module_graph.py", forge_root_drops_files_module, False),
     ("78", WEB_GUARD, forge_web_core_reads_application_i18n, False),
     ("79", "validate_web_contrast.py", forge_admin_web_primary_lightened, False),
+    ("80", "validate_request_bounds.py", forge_request_list_elements_unbounded, False),
 ]
 
 
