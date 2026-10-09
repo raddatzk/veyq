@@ -167,7 +167,17 @@ here; the server is blind.
   `registerLifecycle(id, hooks)` with `onScopeReset` / `onScopeEntered` and the **required**
   `onMasterKeyRotated` — `rotateKeys` refuses to start when none is registered, because material sealed under the
   Master Key (Memories' pins) is otherwise undecryptable after a rotation. A kind or share nobody registered renders
-  an explicit unsupported/unavailable state, never an empty region. **Limits, stated:** no slot is single-claim any
+  an explicit unsupported/unavailable state, never an empty region. **Who looks** (inbox #401, `core/access.ts`): a
+  `detail` (`NodeDetailProps`) and a `section` (`LevelSectionProps`) are handed `access` — `Access`, a member
+  (`scopeId`, `epochs`, `readonly` = pending deletion, the instance's `publicLinks`/`uploaderLinks`) or a share guest
+  (`shareId`, `role`, `head`, `pwToken`, `requestGuest`; built from S2 on) — and `tree`, a `TreeSource` (`node`,
+  `children`, `keyOf`, `nameOf`, `inIdentityFolder`, `linkTo`: every navigation goes through it, so a guest's link keeps
+  `#k=`); the member's come from `memberAccess`/`memberTreeSource`, built by the host. What a view offers is its
+  application's pure, fail-closed capability function over `access` and `targetOf(tree, node)` — `memoryCapabilities`
+  (`features/memory/capabilities.ts`), `filesCapabilities` (`features/files/capabilities.ts`), core's
+  `folderCapabilities` for the level view; each matrix is its `docs/apps/<app>.md` table — never a `readonly`,
+  `shareable` or `hasCapability` read inline; `targetOf` carries the kind's descriptor (`shareable` AND a `shareDialog`),
+  so no share button appears whose dialog the host cannot mount. **Limits, stated:** no slot is single-claim any
   more (the dialogs are per kind since cr-files-application P4c; the two slots `topbarTray`, `sidebarPins` are ordered
   lists); the level view and core's `FolderNameDialog` carry core `veyq-*` classes (`styles/ui.css`, dark twins in
   `dark.css`) and core `node.*` i18n keys since cr-files-application P4d, which Memories' own dialogs and detail read
