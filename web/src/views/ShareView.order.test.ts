@@ -11,7 +11,7 @@
 //
 // The share is resolved as a READ share, although in-flight uploads belong to a contributor: joining as one needs
 // a network round-trip (the display-name gate seals a name under the root K_mem and posts it) that this bite
-// has no interest in, and the grid does not branch on role — `layoutItems` and `sortedItems` read neither
+// has no interest in, and the grid does not branch on role — `groups` and `sortedItems` read neither
 // `role` nor `isUploader`/`isContributor`; only OptimisticTile's `:deletable` does. The optimistic tiles come
 // from the upload queue keyed by shareId, which is role-blind, so the merge under test is the same one.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -70,6 +70,7 @@ function sharedItem(mediaId: string, capturedAt: number): ShareItem {
   return {
     memoryKey,
     scopeId: SCOPE_ID,
+    nodeId: 'root',
     chapterName: null,
     item: {
       mediaId,

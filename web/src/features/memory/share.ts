@@ -278,8 +278,9 @@ export async function deleteSharePhoto(shareId: string, contributorToken: string
 /** One shared media resolved for the read-only viewer: the media + the `K_mem` of the node it sits on + the shared
  *  Memory's scope, which every one of its seals is bound to (ADR 0072). A media a WRITE_ONLY guest added carries its
  *  origin, so [mediaKey] opens it through that node's drop key instead (ADR 0031 point 7). `chapterName` is the title
- *  of the chapter it sits in (ADR 0080 Decision 2), null for a media on the shared root itself. */
-export type ShareItem = { item: MediaItem; memoryKey: Uint8Array; scopeId: string; chapterName: string | null }
+ *  of the chapter it sits in (ADR 0080 Decision 2), null for a media on the shared root itself; `nodeId` is the node it
+ *  sits on, which the share page groups the chapters' media by (inbox #356: two chapters may share a title). */
+export type ShareItem = { item: MediaItem; memoryKey: Uint8Array; scopeId: string; nodeId: string; chapterName: string | null }
 
 /**
  * What a resolved link lets its guest do with keys (ADR 0031 point 7):
@@ -402,7 +403,7 @@ export function openSharedMemory(head: PublicShareHead, listing: ShareMediaListi
     const uploader = uploaderOriginOf(owner, m.nodeId, dropKeyOf.get(m.nodeId), wrapped)
     // The embedded root's own media carry no chapter title: its name is the body's heading, not a chapter's.
     const chapterName = m.nodeId === rootId ? null : (names.get(m.nodeId) ?? null)
-    items.push({ item: shareMediaToItem(m, uploader), memoryKey, scopeId, chapterName })
+    items.push({ item: shareMediaToItem(m, uploader), memoryKey, scopeId, nodeId: m.nodeId, chapterName })
   }
   const chapterNames = within ? new Map([...names].filter(([id]) => within.has(id) && id !== rootId)) : names
   return { access: { kind: 'read', memoryKey: rootKmem }, items, chapterNames }

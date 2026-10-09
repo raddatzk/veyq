@@ -54,7 +54,10 @@ exactly as a viewer does, then seals new media under it. **v1 is deliberately na
    (`POST /api/shares/{shareId}/blob-uploads`, presenting the `contributorToken`), then completes + attaches
    (`POST /api/shares/{shareId}/media`) to the shared Memory root — stamped with the contributor's `identityId`.
 5. **Appears immediately.** The contributed photo is now part of the shared Memory (direct-append); every viewer
-   (and the curator) sees it. The curator can delete it or **revoke** the link.
+   (and the curator) sees it. The curator can delete it or **revoke** the link; the contributor can delete a photo
+   **it added itself** (asked first; `deleteShareMedia`, which the server allows only for the token's own identity).
+   The server tells no guest which photos are whose, so the guest's device remembers what it uploaded under that
+   identity, beside its session — the same store as the token, so it offers no more than the token may do (inbox #361).
 
 ```mermaid
 ---
@@ -133,7 +136,7 @@ sequenceDiagram
   *their* subsequent uploads to *that* identity but does not authenticate the person (accountless, operator-blind).
 - **Revocation is soft (L1); already-uploaded is not retractable.** Revoke/expiry stop *new* views and every
   upload not yet completed; photos already contributed stay in the Memory (the curator deletes them
-  individually if unwanted).
+  individually if unwanted; a contributor deletes its own only through the live link, on the device it uploaded from).
 - **Client-integrity trust tier ([ADR 0026](../../../decisions/0026-client-trust-tiers.md)).** Same as the viewer:
   the no-install page is passive-operator-safe, not operator-proof against an active foreign operator; surfaced by
   the **footer link** to the security docs. For the self-hosted case (operator = curator) the gap is moot.

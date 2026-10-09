@@ -35,7 +35,8 @@ slices. The crypto is the per-Memory second-wrap of [ADR 0012](../../../decision
    resolve answers the locked challenge and the media read a `404`.
    The client **unwraps `K_mem` with the fragment key**, derives each chapter's key and opens its title down the
    chain, decrypts layout/metadata **locally**, and renders the Memory **read-only** (the guest reads the chapter
-   titles; the Memory's own title is the share's `sealedName`).
+   titles; the Memory's own title is the share's `sealedName`): the Memory's own media first, then one section per
+   chapter under its title, as the member's sections look (inbox #356).
 4. **View media.** For each blob the client calls the **share-scoped, gated** blob endpoint; the server authorizes
    it **iff the blob is attached under the shared subtree**, returns a **presigned store URL**, and the client
    fetches the bytes **directly from the object store** and decrypts them locally.
