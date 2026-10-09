@@ -18,7 +18,7 @@ acceptanceCriteria:
       backend: { integration: [TenantTermsSliceTest.memberAcceptsThenABumpReStalesAndAStaleAcceptIs409] }
       web: { unit: [src/features/tenant/tenantTerms.test.ts] }
   - id: accept-recorded-server-side
-    text: Accepting records the member's accepted_terms_version = the current terms_version (+ accepted_at) server-side, keyed by (user_id, tenant_id). The gate then clears and the shell renders.
+    text: Accepting records the member's accepted_terms_version = the current terms_version server-side (no acceptance time), keyed by (user_id, tenant_id). The gate then clears and the shell renders.
     coverage:
       backend: { integration: [TenantTermsSliceTest.memberAcceptsThenABumpReStalesAndAStaleAcceptIs409] }
       web: { unit: [src/features/tenant/tenantTerms.test.ts] }

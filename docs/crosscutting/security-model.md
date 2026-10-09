@@ -91,7 +91,8 @@ request the **user** turned on, straight to the chosen provider.
   track and playlist details; GPS and capture time (sealed client-side, never read off the file); a blob's
   **type, upload name and modification time** (the `blob-meta` seal under the blob's own `K_blob`, declared once at
   the upload and never rewritten — padded to a 256-byte bucket, so its length tells the operator one of four sizes,
-  never how long a name is; the plaintext size and upload time are left out because the server already holds both;
+  never how long a name is; the plaintext size and upload time are left out because the server already observes
+  both — the size on the blob row, the upload time live and in the object store's own write time of each chunk;
   a Memories original's file name and media type — photo, video or PDF — live there, so the operator learns neither).
 - **Server-visible (low-sensitivity operational metadata):** existence and IDs of memories, media and
   shares; scope and membership (who belongs to which tenant/group); a member's **per-tenant username,
@@ -99,7 +100,18 @@ request the **user** turned on, straight to the chosen provider.
   fellow tenant member (anyone can create a group to run the member-resolve, [ADR 0014](../decisions/0014-group-scopes-and-governance.md) §5);
   server timestamps (created, changed, trashed, last rotated) for ordering — stored as written, to the second (a
   medium's change time and a node's creation time to the millisecond — the latter served to members on the node
-  listing, `NodeSummary.createdAt`, as the order equal-named siblings are told apart by, [ADR 0015](../decisions/0015-operator-blind-readable-urls.md)); nothing rounds them, so they tell *when*, never *what*; sizes; job-queue and op-log offsets; presence facts; a media
+  listing, `NodeSummary.createdAt`, as the order equal-named siblings are told apart by, [ADR 0015](../decisions/0015-operator-blind-readable-urls.md)); nothing rounds them, so they tell *when*, never *what*.
+  **A time is stored only where something reads it** — a sort, a purge or expiry cutoff, a served field (inbox
+  #318; the root test `EveryStoredTimeHasAReaderTest` names each stored time's reader and turns red on one without).
+  So the database does **not** hold when an account, tenant, tenant profile, scope, blob, upload session, attachment
+  or medium's derivative was created, when a scope's key epoch rotated, when a member accepted terms, re-sealed
+  their favorites, device register or identity pins, when a share guest joined, when a job was declined, or when
+  first-run setup completed; the request time the server observes live is not kept for them. What it does hold, by
+  reader: session family creation + last refresh (served), token/challenge/invite/share/recovery/pairing/
+  confirmation expiries, a recovery/pairing/confirmation/invite/job/reclaim row's creation (purge or order), a
+  membership's creation (the orphan rule's successor), a node's creation (served) and trash time, a group's and a
+  medium's trash time and a medium's change time (cursor + purge), a bucket's creation (order), a share's creation
+  (served) and tombstone time, and `email_confirmed_at`; sizes; job-queue and op-log offsets; presence facts; a media
   item's **trash state** (a trashed flag + who trashed it + when, until the scheduled purge); a media item's
   **uploader attribution + bucket structure** (an opaque `owner_key` per medium — `user:{id}` / `share:{id}` —
   plus its `bucket_id` and the bucket rows' shape: node, parentage, `is_primary`, per-bucket counts; the
@@ -110,8 +122,8 @@ request the **user** turned on, straight to the chosen provider.
   subtree, and two links into one space are therefore linkable by anyone holding both (the ids of the shared
   node and its media already made the subtree linkable; the scope id extends that to sibling Memories of one
   space); the tenant's **terms text + `terms_version`** (the operator's *public* policy,
-  served to everyone incl. pre-auth) and a member's **`accepted_terms_version`** and when they accepted it
-  (acceptance metadata, like membership — never content, [ADR 0035](../decisions/0035-server-terms-of-service.md)); the **account email**
+  served to everyone incl. pre-auth) and a member's **`accepted_terms_version`** — not when they accepted it, which
+  nothing read (inbox #318) — (acceptance metadata, like membership — never content, [ADR 0035](../decisions/0035-server-terms-of-service.md)); the **account email**
   (plaintext — the login identifier and the source of the deterministic auth salt,
   [ADR 0003](../decisions/0003-operator-blind-password-auth.md); named here to close a prior inventory gap); a
   tenant's **per-tenant SMTP config** (host/port/from/username/TLS + the owner-authored invite **template text** —

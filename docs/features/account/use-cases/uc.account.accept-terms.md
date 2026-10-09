@@ -16,8 +16,8 @@
 A **hard gate**. When a member's `accepted_terms_version` is **below** the tenant's current `terms_version` (or
 absent), the web **router guard** redirects them to a `/terms` accept route — **after** the session/unlock check
 (it needs a session, not an unlocked vault). The route shows the tenant's terms (the current locale, DE/EN
-fallback) and an **Accept** action; accepting records **`(user_id, tenant_id, accepted_version, accepted_at)`**
-server-side (operational metadata, [ADR 0035](../../../decisions/0035-server-terms-of-service.md)). No entry until
+fallback) and an **Accept** action; accepting records **`(user_id, tenant_id, accepted_version)`**
+server-side — no acceptance time, nothing reads one (inbox #318) — (operational metadata, [ADR 0035](../../../decisions/0035-server-terms-of-service.md)). No entry until
 accepted. **Anonymous public-share visitors are out of scope** — they have no account, so their acceptance is
 **client-side** (localStorage) on the share page, a later slice ([sharing](../../sharing/_index.md)).
 
@@ -27,7 +27,7 @@ accepted. **Anonymous public-share visitors are out of scope** — they have no 
 2. The router guard compares their `accepted_terms_version` to the tenant's `terms_version`; **stale/absent** →
    redirect to `/terms`.
 3. They read the terms (current locale) and press **Accept**.
-4. The server records `accepted_terms_version = terms_version` (+ `accepted_at`); the guard now passes → the shell
+4. The server records `accepted_terms_version = terms_version`; the guard now passes → the shell
    renders (honouring the remembered post-unlock route).
 
 ## Alternate / exception flows
