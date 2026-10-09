@@ -19,6 +19,15 @@ describe('slugify', () => {
     expect(slugify('naïve')).toBe('naive')
   })
 
+  it('normalizes to NFC first: a decomposed umlaut folds like the composed one (inbox #365)', () => {
+    // Written with escapes on purpose: an editor or a copy can silently compose a literal decomposed letter.
+    expect(slugify('Müller')).toBe('mueller')
+    expect(slugify('MÜLLER')).toBe('mueller')
+    expect(slugify('Müller')).toBe(slugify('Müller'))
+    // The hash fallback hashes the NFC name too: a Hangul syllable and its jamo are one slug.
+    expect(slugify('한')).toBe(slugify('한'))
+  })
+
   it('keeps slugs to [a-z0-9-] — reserved URL chars never survive', () => {
     expect(slugify('A/B')).toBe('a-b')
     expect(slugify('a#b?c')).toBe('a-b-c')

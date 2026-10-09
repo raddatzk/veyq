@@ -34,6 +34,11 @@ describe('name_folding vectors', () => {
     expect(slugOf(V.slugify, 'Day1.md')).toBe(slugOf(V.slugify, 'Day1 md'))
   })
 
+  it('containers: a decomposed and a composed spelling are one name (inbox #365)', () => {
+    expect(slugOf(V.slugify, 'Müller')).toBe(slugOf(V.slugify, 'Müller'))
+    expect(slugOf(V.slugify, '한')).toBe(slugOf(V.slugify, '한'))
+  })
+
   it('files: case collides, punctuation does not, composed and decomposed ä are one name', () => {
     expect(slugOf(V.fileNameSlug, 'Foto.JPG')).toBe(slugOf(V.fileNameSlug, 'foto.jpg'))
     expect(slugOf(V.fileNameSlug, 'README')).toBe(slugOf(V.fileNameSlug, 'readme'))

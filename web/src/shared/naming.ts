@@ -21,16 +21,21 @@ const GERMAN_FOLDING: Record<string, string> = { ä: 'ae', ö: 'oe', ü: 'ue', �
  * blinded `slugToken`) AND it's safe as a `#fragment` path segment (cr-0031). German folding + diacritic
  * stripping keep Latin names readable ("Müller" → "mueller", "Café" → "cafe"); a name that reduces to nothing
  * (e.g. emoji/CJK-only) falls back to a deterministic short token so siblings stay distinct and addressable.
+ * A composed and a decomposed spelling of one name are one slug (NFC first, inbox #365).
  */
 export function slugify(name: string): string {
-  const slug = name
+  // NFC FIRST (inbox #365): the German table matches the COMPOSED letters only, and a name typed or pasted in
+  // decomposed form (`u` + U+0308, as macOS file names often are) would otherwise miss it and fold to `u`, not `ue`.
+  // The hash fallback hashes the same NFC form, so a decomposed and a composed non-Latin name are one slug too.
+  const composed = name.normalize('NFC')
+  const slug = composed
     .toLowerCase()
     .replace(/[äöüß]/g, (c) => GERMAN_FOLDING[c])
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '') // drop combining diacritical marks (é → e)
     .replace(/[^a-z0-9]+/g, '-') // any run of non-alphanumerics → a single dash
     .replace(/^-|-$/g, '') // trim leading/trailing dashes
-  return slug || `n${fnv1a(name)}`
+  return slug || `n${fnv1a(composed)}`
 }
 
 /**

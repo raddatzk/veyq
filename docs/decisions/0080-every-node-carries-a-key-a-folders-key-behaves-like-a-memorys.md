@@ -192,7 +192,7 @@ and no guest move control is invented in the web yet (inbox #358).
 
 **A name's slug is folded by its node's kind** (inbox #350, decided and built, cr-files-application P1). The slug is
 what the token HMACs, so the folding is frozen into every stored token. **Containers (folders, Memories, chapters) keep
-`slugify`** (`web/src/shared/naming.ts`: lowercase, `ä`→`ae`, accents dropped, non-alphanumerics → `-`, a 32-bit hash
+`slugify`** (`web/src/shared/naming.ts`: NFC, lowercase, `ä`→`ae`, accents dropped, non-alphanumerics → `-`, a 32-bit hash
 when nothing is left): it is the URL segment and the uniqueness at once (`Müller` and `Mueller` collide, accepted: rare). **Files** are not in the URL and use **`fileNameSlug`**: NFC, then
 `toLowerCase()` (no locale rules), punctuation and spaces kept, no trim (the UI trims before folding): `Foto.JPG` =
 `foto.jpg`, as on OneDrive, Dropbox, macOS and Windows, while `Day1.md` ≠ `Day1 md`. The stored and displayed name
