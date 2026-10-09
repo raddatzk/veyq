@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.account.pairing
 
 import jakarta.enterprise.context.ApplicationScoped
+import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional
 import java.time.Instant
 import java.util.UUID
@@ -86,12 +87,17 @@ class PairingStore {
      * on the same channel impossible, and that matters: a second one would mint a second family and orphan the
      * first, leaving a live refresh token no sweep could find. The `and userId is null` is what decides that, not
      * the caller's earlier read: two delegations that both read the channel unclaimed reach this line together.
+     *
+     * **And only a channel still inside its TTL at [now]** (inbox #321): the caller's liveness read ([isLive]) came
+     * before the account lock, and a channel that expired in between is as dead as one the sweep already flipped — a
+     * claim on it would mint a family for a ceremony nobody can finish (`seal` reads the expiry too). The sweep's other
+     * half of that window is [expireOverdue]'s lock.
      */
     @Transactional
-    fun claimDelegation(id: String, userId: String): Boolean =
+    fun claimDelegation(id: String, userId: String, now: Instant = Instant.now()): Boolean =
         DevicePairingEntity.update(
-            "userId = ?1 where id = ?2 and status = ?3 and userId is null",
-            userId, id, DevicePairingEntity.ANSWERED,
+            "userId = ?1 where id = ?2 and status = ?3 and userId is null and expiresAt > ?4",
+            userId, id, DevicePairingEntity.ANSWERED, now,
         ) == 1
 
     /** Record the family the claimed channel minted — a plain update on a row this transaction already claimed with
@@ -157,12 +163,19 @@ class PairingStore {
      * The ids are read **before** the update, not after: once the rows are EXPIRED they are indistinguishable
      * from ones an earlier sweep already handled, and revoking is not idempotent in cost — it would re-scan the
      * whole retention window on every tick.
+     *
+     * **The read is the rows' lock** (developer-styleguide §12; inbox #321). A delegation claims its channel and binds
+     * the family it minted in one transaction ([claimDelegation], [bindDelegation]); read plainly while that was
+     * uncommitted, the sweep saw the channel without a family, waited at its update for the delegation's commit,
+     * flipped it to EXPIRED and revoked nothing — a live family whose token only the delegating device ever held, and
+     * no sweep would look at the row again. Locked, the read waits for that commit and reads the family it bound. A
+     * claim that comes after finds the channel EXPIRED, or past its TTL ([claimDelegation]'s `now`).
      */
     @Transactional
     fun expireOverdue(now: Instant): List<DelegatedFamilyRef> {
         val overdue = DevicePairingEntity.find(
-            "status not in ?1 and expiresAt < ?2", DevicePairingEntity.TERMINAL, now,
-        ).list()
+            "status not in ?1 and expiresAt < ?2 order by id", DevicePairingEntity.TERMINAL, now,
+        ).withLock(LockModeType.PESSIMISTIC_WRITE).list()
         if (overdue.isEmpty()) return emptyList()
         DevicePairingEntity.update(
             "status = ?1 where id in ?2", DevicePairingEntity.EXPIRED, overdue.map { it.id },
