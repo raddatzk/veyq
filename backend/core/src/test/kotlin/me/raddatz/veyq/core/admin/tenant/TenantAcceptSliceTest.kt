@@ -199,7 +199,7 @@ class TenantAcceptSliceTest {
         QuarkusTransaction.requiringNew().run {
             TenantProfileEntity().apply {
                 id = UUID.randomUUID().toString(); userId = holder; this.tenantId = tenantId
-                username = "accowner"; createdAt = Instant.now()
+                username = "accowner"
             }.persist()
         }
         assertEquals(409 to "username_taken", ownerAccept(auth, tag))

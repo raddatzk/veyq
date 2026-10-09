@@ -173,9 +173,6 @@ class ShareIdentityEntity : PanacheEntityBase {
     @Column(name = "token_hash", nullable = false, length = 64)
     lateinit var tokenHash: String
 
-    @Column(name = "created_at", nullable = false)
-    lateinit var createdAt: Instant
-
     companion object : PanacheCompanionBase<ShareIdentityEntity, String>
 }
 

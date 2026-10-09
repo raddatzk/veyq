@@ -199,11 +199,11 @@ class TenantStorageQuotaMemoriesSliceTest {
         QuarkusTransaction.requiringNew().run {
             TenantEntity().apply {
                 id = tenantId; name = "Fam"; domain = "q-$tenantId.example.com"
-                ownerEmail = "o-$tenantId@example.com"; status = TenantEntity.ACTIVE; createdAt = Instant.now()
+                ownerEmail = "o-$tenantId@example.com"; status = TenantEntity.ACTIVE
             }.persist()
             for (scopeId in listOf(scopeA, scopeB)) {
                 ScopeEntity().apply {
-                    id = scopeId; this.tenantId = tenantId; kind = ScopeEntity.PERSONAL; createdAt = Instant.now()
+                    id = scopeId; this.tenantId = tenantId; kind = ScopeEntity.PERSONAL
                 }.persist()
                 MembershipEntity().apply {
                     id = UUID.randomUUID().toString(); this.userId = userId; this.tenantId = tenantId

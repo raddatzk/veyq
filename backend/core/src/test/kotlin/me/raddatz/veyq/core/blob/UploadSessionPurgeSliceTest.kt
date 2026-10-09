@@ -186,10 +186,14 @@ class UploadSessionPurgeSliceTest {
      */
     private fun clearReclaim() = QuarkusTransaction.requiringNew().run { StoreReclaimEntity.deleteAll() }
 
-    /** Move a session's start to [startedAt] and its last issued window to [lastWindowAt] (default: the start). */
+    /**
+     * Move a session's last issued window to [lastWindowAt] (default: [startedAt]). The start itself is no column — a
+     * session keeps no creation time (inbox #318), so a purge on the start cannot even be written; [startedAt] stays
+     * as the scenario's name for "a window as old as the start".
+     */
     private fun backdate(sessionId: String, startedAt: Instant, lastWindowAt: Instant = startedAt) {
         QuarkusTransaction.requiringNew().run {
-            UploadSessionEntity.findById(sessionId)!!.apply { createdAt = startedAt; this.lastWindowAt = lastWindowAt }.persist()
+            UploadSessionEntity.findById(sessionId)!!.apply { this.lastWindowAt = lastWindowAt }.persist()
         }
     }
 

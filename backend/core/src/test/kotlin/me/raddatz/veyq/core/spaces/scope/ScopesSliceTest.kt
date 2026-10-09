@@ -176,7 +176,7 @@ class ScopesSliceTest {
         addToGroup(owner, domain, groupId, "partner")
         QuarkusTransaction.requiringNew().run {
             ScopeEpochEntity().apply {
-                id = UUID.randomUUID().toString(); scopeId = groupId; epoch = 1; wrappedPrev = rotPrev; createdAt = Instant.now()
+                id = UUID.randomUUID().toString(); scopeId = groupId; epoch = 1; wrappedPrev = rotPrev
             }.persist()
         }
 
@@ -772,7 +772,7 @@ class ScopesSliceTest {
         QuarkusTransaction.requiringNew().run {
             val personalId = UUID.randomUUID().toString()
             ScopeEntity().apply {
-                id = personalId; this.tenantId = tenantId; kind = ScopeEntity.PERSONAL; createdAt = Instant.now()
+                id = personalId; this.tenantId = tenantId; kind = ScopeEntity.PERSONAL
             }.persist()
             MembershipEntity().apply {
                 id = UUID.randomUUID().toString(); this.userId = member; this.tenantId = tenantId
@@ -1182,7 +1182,6 @@ class ScopesSliceTest {
                 id = personalId
                 this.tenantId = tenantId
                 kind = ScopeEntity.PERSONAL
-                createdAt = Instant.now()
             }.persist()
             MembershipEntity().apply {
                 id = UUID.randomUUID().toString()
@@ -1387,7 +1386,7 @@ class ScopesSliceTest {
         QuarkusTransaction.requiringNew().run {
             BlobEntity().apply {
                 id = UUID.randomUUID().toString(); scopeId = poisoned; storageKey = marker
-                chunkCount = TestBlob.SMALL.chunkCount; byteSize = TestBlob.SMALL.byteSize; wrappedBlobKey = "Ymxvyi13cmFw"; createdAt = Instant.now()
+                chunkCount = TestBlob.SMALL.chunkCount; byteSize = TestBlob.SMALL.byteSize; wrappedBlobKey = "Ymxvyi13cmFw"
             }.persist()
         }
         // `clean`'s own blob — unmarked, so the refusing store passes it straight to the real `record`. Proves
@@ -1396,7 +1395,7 @@ class ScopesSliceTest {
         QuarkusTransaction.requiringNew().run {
             BlobEntity().apply {
                 id = UUID.randomUUID().toString(); scopeId = clean; storageKey = cleanKey
-                chunkCount = TestBlob.SMALL.chunkCount; byteSize = TestBlob.SMALL.byteSize; wrappedBlobKey = "Y2xlYW4="; createdAt = Instant.now()
+                chunkCount = TestBlob.SMALL.chunkCount; byteSize = TestBlob.SMALL.byteSize; wrappedBlobKey = "Y2xlYW4="
             }.persist()
         }
         listOf(poisoned, clean).forEach {
@@ -1457,7 +1456,6 @@ class ScopesSliceTest {
             ShareIdentityEntity().apply {
                 id = UUID.randomUUID().toString(); this.shareId = shareId
                 sealedDisplayName = "c2VhbGVkLW5hbWU="; tokenHash = UUID.randomUUID().toString().replace("-", "")
-                createdAt = Instant.now()
             }.persist()
         }
 
@@ -1575,7 +1573,6 @@ class ScopesSliceTest {
                 this.userId = userId
                 this.tenantId = tenantId
                 this.username = username
-                createdAt = Instant.now()
             }.persist()
         }
         return userId
@@ -1594,13 +1591,11 @@ class ScopesSliceTest {
                 this.domain = domain
                 ownerEmail = "owner-$tenantId@example.com"
                 status = TenantEntity.ACTIVE
-                createdAt = Instant.now()
             }.persist()
             ScopeEntity().apply {
                 id = tenantId
                 this.tenantId = tenantId
                 kind = ScopeEntity.TENANT
-                createdAt = Instant.now()
             }.persist()
             MembershipEntity().apply {
                 id = UUID.randomUUID().toString()

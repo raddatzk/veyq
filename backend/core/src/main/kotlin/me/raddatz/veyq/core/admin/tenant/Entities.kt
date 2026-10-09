@@ -11,9 +11,12 @@ import org.hibernate.annotations.DynamicUpdate
 
 /**
  * A member's acceptance of a tenant's terms (cr-0114, ADR 0035). Keyed logically by (user_id, tenant_id) — a
- * surrogate id + a UNIQUE — it records the highest terms version the member accepted. **Coarse operational
- * metadata** (like membership), never content. When `acceptedVersion < tenant.termsVersion` the member accept
- * gate re-fires (uc.account.accept-terms); accepting upserts this row to the current version.
+ * surrogate id + a UNIQUE — it records the highest terms version the member accepted. **Operational metadata**
+ * (like membership), never content. When `acceptedVersion < tenant.termsVersion` the member accept gate re-fires
+ * (uc.account.accept-terms); accepting upserts this row to the current version.
+ *
+ * It holds no acceptance time: the version is what the gate reads and what says which text was accepted, and
+ * nothing read the `accepted_at` this row once carried (inbox #318).
  */
 @Entity
 @Table(name = "veyq_tenant_terms_acceptance")
@@ -31,9 +34,6 @@ class TenantTermsAcceptanceEntity : PanacheEntityBase {
 
     @Column(name = "accepted_version", nullable = false)
     var acceptedVersion: Int = 0
-
-    @Column(name = "accepted_at", nullable = false)
-    lateinit var acceptedAt: Instant
 
     companion object : PanacheCompanionBase<TenantTermsAcceptanceEntity, String>
 }

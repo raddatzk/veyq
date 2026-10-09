@@ -86,9 +86,6 @@ class ScopeEntity : PanacheEntityBase {
     @Column(name = "deleted_at")
     var deletedAt: Instant? = null
 
-    @Column(name = "created_at", nullable = false)
-    lateinit var createdAt: Instant
-
     companion object : PanacheCompanionBase<ScopeEntity, String> {
         const val TENANT = "TENANT"
         const val GROUP = "GROUP"

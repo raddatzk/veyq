@@ -2,7 +2,6 @@ package me.raddatz.veyq.memories.favorites
 
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
-import java.time.Instant
 
 /**
  * Persistence for per-(user, scope) favorites (cr-0031). Operator-blind: stores the sealed ciphertext only.
@@ -25,7 +24,6 @@ class FavoritesStore {
             this.scopeId = scopeId
         }
         row.ciphertext = ciphertext
-        row.updatedAt = Instant.now()
         row.persist()
     }
 }

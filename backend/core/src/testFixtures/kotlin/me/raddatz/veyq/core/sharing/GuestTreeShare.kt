@@ -32,7 +32,7 @@ object GuestTreeShare {
             }.persist()
             ShareIdentityEntity().apply {
                 id = UUID.randomUUID().toString(); this.shareId = shareId; sealedDisplayName = "bmFtZQ=="
-                tokenHash = Tokens.hash(token); createdAt = Instant.now()
+                tokenHash = Tokens.hash(token)
             }.persist()
         }
         return Link(shareId, token)

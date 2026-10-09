@@ -3,7 +3,6 @@ package me.raddatz.veyq.core.identity
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional
-import java.time.Instant
 import java.util.UUID
 
 /** One Master Key wrap to persist with a new account (opaque ciphertext + KDF params). */
@@ -64,7 +63,6 @@ class AccountStore {
             this.wrappedIdentityPrivateKey = wrappedIdentityPrivateKey
             this.authPublicKey = authPublicKey
             this.secretKeyProofPublicKey = secretKeyProofPublicKey
-            createdAt = Instant.now()
         }.persist()
 
         wraps.forEach { wrap ->

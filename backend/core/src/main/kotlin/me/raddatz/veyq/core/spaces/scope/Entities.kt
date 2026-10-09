@@ -6,7 +6,6 @@ import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
-import java.time.Instant
 import org.hibernate.annotations.DynamicUpdate
 
 /**
@@ -30,9 +29,6 @@ class ScopeEpochEntity : PanacheEntityBase {
 
     @Column(name = "wrapped_prev", nullable = false)
     lateinit var wrappedPrev: String
-
-    @Column(name = "created_at", nullable = false)
-    lateinit var createdAt: Instant
 
     companion object : PanacheCompanionBase<ScopeEpochEntity, String>
 }

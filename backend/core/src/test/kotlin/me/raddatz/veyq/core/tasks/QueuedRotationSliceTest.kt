@@ -327,7 +327,7 @@ class QueuedRotationSliceTest {
             QuarkusTransaction.requiringNew().run {
                 ScopeEntity().apply {
                     this.id = scopeId; tenantId = this@Tenant.id; kind = ScopeEntity.GROUP
-                    encryptedName = "bmFtZQ=="; createdAt = Instant.now()
+                    encryptedName = "bmFtZQ=="
                 }.persist()
             }
             membership(ownerId, scopeId, MembershipEntity.OWNER)

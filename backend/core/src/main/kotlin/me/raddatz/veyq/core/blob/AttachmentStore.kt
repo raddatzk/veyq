@@ -5,7 +5,6 @@ import me.raddatz.veyq.core.node.NodeEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
-import java.time.Instant
 import java.util.UUID
 
 /** What [AttachmentStore.attach] did. Every outcome but [Attached] and [Conflict] wrote nothing. */
@@ -124,7 +123,6 @@ class AttachmentStore(private val nodes: NodesStore, private val blobs: BlobUplo
             this.slot = slot
             this.blobId = blobId
             this.shareIdentityId = shareIdentityId
-            createdAt = Instant.now()
         }.persist()
         return true
     }

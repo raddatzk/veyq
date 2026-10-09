@@ -831,7 +831,7 @@ class ShareSharedScopeSliceTest {
         QuarkusTransaction.requiringNew().run {
             ScopeEntity().apply {
                 id = scopeId; this.tenantId = tenantId; kind = ScopeEntity.GROUP
-                encryptedName = "bmFtZQ=="; createdAt = Instant.now()
+                encryptedName = "bmFtZQ=="
             }.persist()
             membership(ownerId, tenantId, scopeId, MembershipEntity.OWNER)
         }

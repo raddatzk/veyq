@@ -6,7 +6,6 @@ import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
-import java.time.Instant
 import org.hibernate.annotations.DynamicUpdate
 
 /**
@@ -31,9 +30,6 @@ class FavoritesEntity : PanacheEntityBase {
 
     @Column(name = "ciphertext", nullable = false)
     lateinit var ciphertext: String
-
-    @Column(name = "updated_at", nullable = false)
-    lateinit var updatedAt: Instant
 
     companion object : PanacheCompanionBase<FavoritesEntity, String> {
         fun key(userId: String, scopeId: String): String = "$userId|$scopeId"

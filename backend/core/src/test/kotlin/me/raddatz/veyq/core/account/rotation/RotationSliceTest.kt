@@ -732,10 +732,10 @@ class RotationSliceTest {
         QuarkusTransaction.requiringNew().run {
             TenantEntity().apply {
                 id = tenantId; name = "Fam"; domain = SeededScope(scopeId, tenantId).domain
-                ownerEmail = "o-$tenantId@example.com"; status = TenantEntity.ACTIVE; createdAt = Instant.now()
+                ownerEmail = "o-$tenantId@example.com"; status = TenantEntity.ACTIVE
             }.persist()
             ScopeEntity().apply {
-                id = scopeId; this.tenantId = tenantId; this.kind = kind; createdAt = Instant.now()
+                id = scopeId; this.tenantId = tenantId; this.kind = kind
             }.persist()
         }
         return SeededScope(scopeId, tenantId)
@@ -814,7 +814,7 @@ class RotationSliceTest {
         QuarkusTransaction.requiringNew().run {
             ScopeEntity().apply {
                 id = group.scopeId; tenantId = tenant.tenantId; kind = ScopeEntity.GROUP
-                encryptedName = "bmFtZQ=="; createdAt = Instant.now()
+                encryptedName = "bmFtZQ=="
             }.persist()
         }
         owners.forEach { seedMembership(it, group, MembershipEntity.OWNER) }
@@ -838,13 +838,13 @@ class RotationSliceTest {
 
     private fun seedPins(userId: String, blob: String, version: Long) = QuarkusTransaction.requiringNew().run {
         IdentityPinsEntity().apply {
-            accountId = userId; sealedBlob = blob; this.version = version; updatedAt = Instant.now()
+            accountId = userId; sealedBlob = blob; this.version = version
         }.persist()
     }
 
     private fun seedRegister(userId: String, blob: String, version: Long) = QuarkusTransaction.requiringNew().run {
         DeviceRegisterEntity().apply {
-            accountId = userId; sealedBlob = blob; this.version = version; updatedAt = Instant.now()
+            accountId = userId; sealedBlob = blob; this.version = version
         }.persist()
     }
 

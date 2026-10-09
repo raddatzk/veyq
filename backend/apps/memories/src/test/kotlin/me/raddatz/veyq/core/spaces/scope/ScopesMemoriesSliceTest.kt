@@ -126,13 +126,11 @@ class ScopesMemoriesSliceTest {
                 this.domain = domain
                 ownerEmail = "owner-$tenantId@example.com"
                 status = TenantEntity.ACTIVE
-                createdAt = Instant.now()
             }.persist()
             ScopeEntity().apply {
                 id = tenantId
                 this.tenantId = tenantId
                 kind = ScopeEntity.TENANT
-                createdAt = Instant.now()
             }.persist()
             MembershipEntity().apply {
                 id = UUID.randomUUID().toString()

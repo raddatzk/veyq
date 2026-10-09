@@ -56,12 +56,14 @@ class VeyqUser : PanacheEntityBase {
 
     /** When the account holder last showed they read mail sent to [email] (ADR 0074 Decision 1) — a fact about the
      *  address, not a permission: nothing is gated on it (Decision 3). Null until one of the three events in
-     *  [confirmAddress]'s callers. Server-visible operational metadata, like the address itself. */
+     *  [confirmAddress]'s callers. Server-visible operational metadata, like the address itself.
+     *
+     *  Only its presence is read today ([me.raddatz.veyq.core.account.email.EmailConfirmationHandler] surfaces
+     *  "confirmed"); the time is kept because ADR 0074 Decision 1 decides the record is *when* the holder showed
+     *  control, not merely *that* they did (inbox #318 kept it on that ground — narrowing it to a flag is an ADR
+     *  change, not a cleanup). The account's birth time is not stored at all: nothing read it (#318). */
     @Column(name = "email_confirmed_at")
     var emailConfirmedAt: Instant? = null
-
-    @Column(name = "created_at", nullable = false)
-    lateinit var createdAt: Instant
 
     /**
      * Record address control, **iff** [address] — the address the proof was mailed to — is still this account's

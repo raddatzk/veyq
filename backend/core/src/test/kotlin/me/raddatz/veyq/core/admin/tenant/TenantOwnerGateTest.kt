@@ -122,7 +122,6 @@ class TenantOwnerGateTest {
             ScopeEntity().apply {
                 id = scopeId; this.tenantId = tenantId; this.kind = kind
                 if (kind == ScopeEntity.GROUP) encryptedName = "bmFtZQ=="
-                createdAt = Instant.now()
             }.persist()
         }
         return scopeId

@@ -5,7 +5,6 @@ import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpFailure
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
-import java.time.Instant
 
 /** The caller's sealed pin store + its version. `blob` is null for a born-empty (never-written) store. */
 data class IdentityPinsView(val blob: String?, val version: Long)
@@ -50,14 +49,13 @@ class IdentityPinsStore {
                 this.accountId = accountId
                 this.sealedBlob = blob
                 this.version = 1
-                this.updatedAt = Instant.now()
             }.persist()
             return PutResult.Written(1)
         }
         val newVersion = expectedVersion + 1
         val rows = IdentityPinsEntity.update(
-            "sealedBlob = ?1, version = ?2, updatedAt = ?3 where accountId = ?4 and version = ?5",
-            blob, newVersion, Instant.now(), accountId, expectedVersion,
+            "sealedBlob = ?1, version = ?2 where accountId = ?3 and version = ?4",
+            blob, newVersion, accountId, expectedVersion,
         )
         return if (rows == 1) PutResult.Written(newVersion) else PutResult.Stale
     }

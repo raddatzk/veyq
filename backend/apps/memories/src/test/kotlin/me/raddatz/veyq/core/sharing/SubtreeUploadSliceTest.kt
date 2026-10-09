@@ -265,7 +265,7 @@ class SubtreeUploadSliceTest {
         QuarkusTransaction.requiringNew().run {
             BlobEntity().apply {
                 id = blobId; this.scopeId = scopeId; storageKey = UUID.randomUUID().toString()
-                chunkCount = s.chunkCount; byteSize = s.byteSize; wrappedBlobKey = "Ymxvyi13cmFw"; createdAt = Instant.now()
+                chunkCount = s.chunkCount; byteSize = s.byteSize; wrappedBlobKey = "Ymxvyi13cmFw"
             }.persist()
             MediaEntity().apply {
                 id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; this.blobId = blobId; createdAt = Instant.now()

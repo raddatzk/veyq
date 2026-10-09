@@ -76,12 +76,12 @@ class NodeSubtreeEraserOrderSliceTest {
                 enabled = false; createdAt = Instant.now(); deletedAt = Instant.now().minusSeconds(7200)
             }.persist()
             ShareIdentityEntity().apply {
-                id = guestId; this.shareId = shareId; sealedDisplayName = "Z3Vlc3Q="; tokenHash = "hash-$guestId"; createdAt = Instant.now()
+                id = guestId; this.shareId = shareId; sealedDisplayName = "Z3Vlc3Q="; tokenHash = "hash-$guestId"
             }.persist()
             val blobId = UUID.randomUUID().toString()
             BlobEntity().apply {
                 id = blobId; this.scopeId = scopeId; storageKey = UUID.randomUUID().toString()
-                chunkCount = TestBlob.SMALL.chunkCount; byteSize = TestBlob.SMALL.byteSize; wrappedBlobKey = "b3JkZXI="; createdAt = Instant.now()
+                chunkCount = TestBlob.SMALL.chunkCount; byteSize = TestBlob.SMALL.byteSize; wrappedBlobKey = "b3JkZXI="
             }.persist()
             MediaEntity().apply {
                 id = mediaId; this.scopeId = scopeId; nodeId = memory; this.blobId = blobId

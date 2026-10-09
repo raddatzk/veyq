@@ -6,7 +6,6 @@ import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
-import java.time.Instant
 import org.hibernate.annotations.DynamicUpdate
 
 /**
@@ -34,9 +33,6 @@ class TenantProfileEntity : PanacheEntityBase {
 
     @Column(name = "sealed_name")
     var sealedName: String? = null
-
-    @Column(name = "created_at", nullable = false)
-    lateinit var createdAt: Instant
 
     companion object : PanacheCompanionBase<TenantProfileEntity, String>
 }

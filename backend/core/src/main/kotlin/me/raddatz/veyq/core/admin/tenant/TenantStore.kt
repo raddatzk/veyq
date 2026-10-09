@@ -140,7 +140,6 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
             id = tenantId
             this.tenantId = tenantId
             kind = ScopeEntity.TENANT
-            createdAt = Instant.now()
         }.persist()
         MembershipEntity().apply {
             id = UUID.randomUUID().toString()
@@ -285,7 +284,6 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
             this.domain = domain
             this.ownerEmail = ownerEmail
             status = TenantEntity.PENDING
-            createdAt = now
         }.persist()
         mintInvite(tenantId, ownerEmail, tokenHash, expiresAt, now)
         return tenantId to expiresAt
@@ -435,7 +433,6 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
             .find("userId = ?1 and tenantId = ?2", userId, tenantId).firstResult()
         if (existing != null) {
             existing.acceptedVersion = version
-            existing.acceptedAt = Instant.now()
             existing.persist()
         } else {
             TenantTermsAcceptanceEntity().apply {
@@ -443,7 +440,6 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
                 this.userId = userId
                 this.tenantId = tenantId
                 acceptedVersion = version
-                acceptedAt = Instant.now()
             }.persist()
         }
     }

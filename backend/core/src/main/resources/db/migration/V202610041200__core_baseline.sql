@@ -10,8 +10,7 @@
 
 -- First-run setup: the single-owner lock.
 CREATE TABLE veyq_server_setup (
-    id           INT NOT NULL PRIMARY KEY,
-    completed_at TIMESTAMP NOT NULL
+    id           INT NOT NULL PRIMARY KEY
 );
 
 -- An account. Its keys are public keys or ciphertext; the password never reaches the server (ADR 0003).
@@ -25,7 +24,6 @@ CREATE TABLE veyq_user (
     identity_public_key          TEXT NOT NULL,
     wrapped_identity_private_key TEXT NOT NULL,
     auth_public_key              TEXT NOT NULL,
-    created_at                   TIMESTAMP NOT NULL,
     email                        VARCHAR(254) NOT NULL,
     require_group_add_consent    BOOLEAN NOT NULL DEFAULT FALSE,
     secret_key_proof_public_key  TEXT NULL,
@@ -75,7 +73,6 @@ CREATE TABLE veyq_refresh_token (
     token_hash VARCHAR(64) NOT NULL,
     generation INT NOT NULL,
     status     VARCHAR(16) NOT NULL,
-    created_at TIMESTAMP NOT NULL,
     expires_at TIMESTAMP NOT NULL,
     CONSTRAINT fk_refresh_token_family FOREIGN KEY (family_id) REFERENCES veyq_session_family (id)
 );
@@ -89,7 +86,6 @@ CREATE TABLE veyq_access_token (
     id         VARCHAR(36) NOT NULL PRIMARY KEY,
     family_id  VARCHAR(36) NOT NULL,
     token_hash VARCHAR(64) NOT NULL,
-    created_at TIMESTAMP NOT NULL,
     expires_at TIMESTAMP NOT NULL,
     CONSTRAINT fk_access_token_family FOREIGN KEY (family_id) REFERENCES veyq_session_family (id)
 );
@@ -105,7 +101,6 @@ CREATE TABLE veyq_tenant (
     domain                   VARCHAR(253) NOT NULL,
     owner_email              VARCHAR(254) NOT NULL,
     status                   VARCHAR(16) NOT NULL,
-    created_at               TIMESTAMP NOT NULL,
     terms_markdown_by_locale MEDIUMTEXT,
     terms_version            INT NOT NULL DEFAULT 0,
     share_link_limit_bytes   BIGINT NOT NULL DEFAULT 10737418240,
@@ -139,7 +134,6 @@ CREATE TABLE veyq_scope (
     id              VARCHAR(36) NOT NULL PRIMARY KEY,
     tenant_id       VARCHAR(36) NOT NULL,
     kind            VARCHAR(16) NOT NULL,
-    created_at      TIMESTAMP   NOT NULL,
     encrypted_name  TEXT NULL,
     current_epoch   INT NOT NULL DEFAULT 0,
     deleted_at      TIMESTAMP NULL,
@@ -223,7 +217,6 @@ CREATE TABLE veyq_upload_session (
     byte_size                BIGINT NOT NULL,
     wrapped_blob_key         TEXT NOT NULL,
     wrapped_meta             TEXT NULL,
-    created_at               TIMESTAMP NOT NULL,
     opener_user_id           VARCHAR(36) NULL,
     opener_share_identity_id VARCHAR(36) NULL,
     last_window_at           TIMESTAMP NOT NULL,
@@ -247,7 +240,6 @@ CREATE TABLE veyq_blob (
     wrapped_blob_key TEXT NOT NULL,
     wrapped_meta     TEXT NULL,
     manifest         TEXT,
-    created_at       TIMESTAMP NOT NULL,
     CONSTRAINT fk_blob_scope FOREIGN KEY (scope_id) REFERENCES veyq_scope (id)
 );
 CREATE INDEX ix_blob_scope ON veyq_blob (scope_id);
@@ -278,7 +270,6 @@ CREATE TABLE veyq_tenant_profile (
     tenant_id   VARCHAR(36) NOT NULL,
     username    VARCHAR(32) NOT NULL,
     sealed_name TEXT,
-    created_at  TIMESTAMP   NOT NULL,
     CONSTRAINT fk_tp_user   FOREIGN KEY (user_id)   REFERENCES veyq_user (id),
     CONSTRAINT fk_tp_tenant FOREIGN KEY (tenant_id) REFERENCES veyq_tenant (id)
 );
@@ -291,7 +282,6 @@ CREATE TABLE veyq_scope_epoch (
     scope_id     VARCHAR(36) NOT NULL,
     epoch        INT         NOT NULL,
     wrapped_prev TEXT        NOT NULL,
-    created_at   TIMESTAMP   NOT NULL,
     CONSTRAINT fk_scope_epoch_scope FOREIGN KEY (scope_id) REFERENCES veyq_scope (id)
 );
 CREATE UNIQUE INDEX ux_scope_epoch ON veyq_scope_epoch (scope_id, epoch);
@@ -301,7 +291,6 @@ CREATE TABLE veyq_identity_pins (
     account_id  VARCHAR(36) NOT NULL PRIMARY KEY,
     sealed_blob MEDIUMTEXT,
     version     BIGINT      NOT NULL DEFAULT 0,
-    updated_at  TIMESTAMP   NOT NULL,
     CONSTRAINT fk_identity_pins_user FOREIGN KEY (account_id) REFERENCES veyq_user (id)
 );
 
@@ -312,7 +301,6 @@ CREATE TABLE veyq_job_decline (
     job_id      VARCHAR(36) NOT NULL,
     worker_id   VARCHAR(36) NOT NULL,
     reason      VARCHAR(256),
-    declined_at TIMESTAMP   NOT NULL,
     CONSTRAINT fk_job_decline_job FOREIGN KEY (job_id) REFERENCES veyq_job (id)
 );
 CREATE UNIQUE INDEX ux_job_decline ON veyq_job_decline (job_id, worker_id);
@@ -355,7 +343,6 @@ CREATE TABLE veyq_share_identity (
     share_id             VARCHAR(64) NOT NULL,
     sealed_display_name  TEXT        NOT NULL,
     token_hash           VARCHAR(64) NOT NULL,
-    created_at           TIMESTAMP   NOT NULL,
     wrapped_identity_key TEXT NULL,
     CONSTRAINT fk_share_identity_share FOREIGN KEY (share_id) REFERENCES veyq_share (id)
 );
@@ -384,7 +371,6 @@ CREATE TABLE veyq_node_attachment (
     slot              VARCHAR(16) NOT NULL,
     blob_id           VARCHAR(36) NOT NULL,
     share_identity_id VARCHAR(36) NULL,
-    created_at        TIMESTAMP   NOT NULL,
     CONSTRAINT ux_attachment_node_slot UNIQUE (node_id, slot),
     CONSTRAINT ux_attachment_blob UNIQUE (blob_id),
     CONSTRAINT fk_attachment_scope FOREIGN KEY (scope_id) REFERENCES veyq_scope (id),
@@ -401,7 +387,6 @@ CREATE TABLE veyq_tenant_terms_acceptance (
     user_id          VARCHAR(36) NOT NULL,
     tenant_id        VARCHAR(36) NOT NULL,
     accepted_version INT         NOT NULL,
-    accepted_at      TIMESTAMP   NOT NULL,
     CONSTRAINT ux_terms_acceptance UNIQUE (user_id, tenant_id),
     CONSTRAINT fk_terms_acceptance_tenant FOREIGN KEY (tenant_id) REFERENCES veyq_tenant (id) ON DELETE CASCADE
 );
@@ -442,7 +427,6 @@ CREATE TABLE veyq_device_register (
     account_id  VARCHAR(36) NOT NULL PRIMARY KEY,
     sealed_blob TEXT,
     version     BIGINT      NOT NULL DEFAULT 0,
-    updated_at  TIMESTAMP   NOT NULL,
     CONSTRAINT fk_device_register_user FOREIGN KEY (account_id) REFERENCES veyq_user (id)
 );
 

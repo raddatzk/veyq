@@ -258,7 +258,7 @@ class CoreAloneSliceTest {
             }.persist()
             ShareIdentityEntity().apply {
                 id = UUID.randomUUID().toString(); this.shareId = shareId; sealedDisplayName = "bmFtZQ=="
-                tokenHash = Tokens.hash(token); createdAt = Instant.now()
+                tokenHash = Tokens.hash(token)
             }.persist()
         }
         // control: every gate before the writer's passes — the link is live and the guest's token resolves
@@ -317,7 +317,7 @@ class CoreAloneSliceTest {
         QuarkusTransaction.requiringNew().run {
             BlobEntity().apply {
                 id = blobId; this.scopeId = scopeId; storageKey = UUID.randomUUID().toString().replace("-", "")
-                chunkCount = 1; byteSize = TestBlob.SMALL.byteSize; wrappedBlobKey = "d3JhcA=="; createdAt = Instant.now()
+                chunkCount = 1; byteSize = TestBlob.SMALL.byteSize; wrappedBlobKey = "d3JhcA=="
             }.persist()
         }
         download(userId, scopeId, blobId).body("results[0].error", nullValue())
@@ -350,7 +350,7 @@ class CoreAloneSliceTest {
         QuarkusTransaction.requiringNew().run {
             BlobEntity().apply {
                 id = blobId; this.scopeId = scopeId; storageKey = UUID.randomUUID().toString().replace("-", "")
-                chunkCount = 1; byteSize = TestBlob.SMALL.byteSize; wrappedBlobKey = "d3JhcA=="; createdAt = Instant.now()
+                chunkCount = 1; byteSize = TestBlob.SMALL.byteSize; wrappedBlobKey = "d3JhcA=="
             }.persist()
             NodeEntity.findById(nodeId)!!.coverBlobId = blobId
         }

@@ -254,7 +254,7 @@ class MemberRemoveSliceTest {
         QuarkusTransaction.requiringNew().run {
             ScopeEntity().apply {
                 id = scopeId; this.tenantId = tenantId; kind = ScopeEntity.GROUP
-                encryptedName = "bmFtZQ=="; createdAt = Instant.now()
+                encryptedName = "bmFtZQ=="
             }.persist()
             membership(ownerId, tenantId, scopeId, MembershipEntity.OWNER)
         }
@@ -266,7 +266,7 @@ class MemberRemoveSliceTest {
         val scopeId = UUID.randomUUID().toString()
         QuarkusTransaction.requiringNew().run {
             ScopeEntity().apply {
-                id = scopeId; this.tenantId = tenantId; kind = ScopeEntity.PERSONAL; createdAt = Instant.now()
+                id = scopeId; this.tenantId = tenantId; kind = ScopeEntity.PERSONAL
             }.persist()
             membership(userId, tenantId, scopeId, MembershipEntity.OWNER)
         }

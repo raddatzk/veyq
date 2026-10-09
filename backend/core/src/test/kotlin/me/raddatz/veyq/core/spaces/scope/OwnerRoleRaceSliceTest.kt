@@ -112,7 +112,7 @@ class OwnerRoleRaceSliceTest {
             QuarkusTransaction.requiringNew().run {
                 ScopeEntity().apply {
                     this.id = scopeId; tenantId = this@Tenant.id; kind = ScopeEntity.GROUP
-                    encryptedName = "bmFtZQ=="; createdAt = Instant.now()
+                    encryptedName = "bmFtZQ=="
                 }.persist()
                 members.forEachIndexed { i, (userId, role) ->
                     MembershipEntity().apply {

@@ -45,7 +45,7 @@ class LinkUsageTermsSliceTest {
                 wrap = "d3JhcA=="; sealedName = "c2VhbGVk"; createdAt = Instant.now()
             }.persist()
             ShareIdentityEntity().apply {
-                id = guestId; this.shareId = shareId; sealedDisplayName = "Z3Vlc3Q="; tokenHash = "hash-$guestId"; createdAt = Instant.now()
+                id = guestId; this.shareId = shareId; sealedDisplayName = "Z3Vlc3Q="; tokenHash = "hash-$guestId"
             }.persist()
         }
         seedGuestMedium(scopeId, memory, guestId)
@@ -65,7 +65,7 @@ class LinkUsageTermsSliceTest {
         QuarkusTransaction.requiringNew().run {
             BlobEntity().apply {
                 id = blobId; this.scopeId = scopeId; storageKey = UUID.randomUUID().toString().replace("-", "")
-                chunkCount = media.chunkCount; byteSize = media.byteSize; wrappedBlobKey = "Ymxvyi13cmFw"; createdAt = Instant.now()
+                chunkCount = media.chunkCount; byteSize = media.byteSize; wrappedBlobKey = "Ymxvyi13cmFw"
             }.persist()
             val bucket = BucketEntity().apply {
                 id = UUID.randomUUID().toString(); this.scopeId = scopeId; this.nodeId = nodeId

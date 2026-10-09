@@ -6,7 +6,6 @@ import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
-import java.time.Instant
 import org.hibernate.annotations.DynamicUpdate
 
 /**
@@ -45,9 +44,6 @@ class NodeAttachmentEntity : PanacheEntityBase {
 
     @Column(name = "share_identity_id", length = 36)
     var shareIdentityId: String? = null
-
-    @Column(name = "created_at", nullable = false)
-    lateinit var createdAt: Instant
 
     companion object : PanacheCompanionBase<NodeAttachmentEntity, String>
 }

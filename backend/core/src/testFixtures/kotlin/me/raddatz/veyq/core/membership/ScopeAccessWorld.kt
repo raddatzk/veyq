@@ -112,7 +112,7 @@ class ScopeAccessWorld(
         val nodeId = UUID.randomUUID().toString()
         QuarkusTransaction.requiringNew().run {
             ScopeEntity().apply {
-                id = scopeId; tenantId = tenant.first; kind = ScopeEntity.GROUP; encryptedName = B64; createdAt = Instant.now()
+                id = scopeId; tenantId = tenant.first; kind = ScopeEntity.GROUP; encryptedName = B64
             }.persist()
             NodeEntity().apply {
                 id = nodeId; this.scopeId = scopeId; parentId = scopeId; kind = "MEMORY"
