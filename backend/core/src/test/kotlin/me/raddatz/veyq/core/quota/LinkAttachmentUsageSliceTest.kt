@@ -88,7 +88,7 @@ class LinkAttachmentUsageSliceTest {
         QuarkusTransaction.requiringNew().run {
             BlobEntity().apply {
                 id = cover; scopeId = f.scopeId; storageKey = UUID.randomUUID().toString().replace("-", "")
-                chunkCount = big.chunkCount; byteSize = big.byteSize; wrappedBlobKey = "Y292ZXI="; createdAt = Instant.now()
+                chunkCount = big.chunkCount; byteSize = big.byteSize; wrappedBlobKey = "Y292ZXI="
             }.persist()
             NodeEntity.findById(target)!!.coverBlobId = cover
         }
@@ -190,7 +190,7 @@ class LinkAttachmentUsageSliceTest {
         val guestId = UUID.randomUUID().toString()
         QuarkusTransaction.requiringNew().run {
             ShareIdentityEntity().apply {
-                id = guestId; this.shareId = shareId; sealedDisplayName = "Z3Vlc3Q="; tokenHash = "hash-$guestId"; createdAt = Instant.now()
+                id = guestId; this.shareId = shareId; sealedDisplayName = "Z3Vlc3Q="; tokenHash = "hash-$guestId"
             }.persist()
         }
         return guestId

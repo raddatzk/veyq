@@ -3,7 +3,6 @@ package me.raddatz.veyq.memories.itemfavorites
 import me.raddatz.veyq.core.scope.ScopeEntity
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
-import java.time.Instant
 
 /**
  * One member's sealed item-mark blob for a node, as the read hands it out. [own] is the only identity that
@@ -49,7 +48,6 @@ class ItemFavoritesStore {
             this.nodeId = nodeId
         }
         row.ciphertext = ciphertext
-        row.updatedAt = Instant.now()
         row.persist()
     }
 }

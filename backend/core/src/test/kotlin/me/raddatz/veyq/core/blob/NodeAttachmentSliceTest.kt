@@ -209,7 +209,7 @@ class NodeAttachmentSliceTest {
         QuarkusTransaction.requiringNew().run {
             NodeAttachmentEntity().apply {
                 id = UUID.randomUUID().toString(); this.scopeId = scopeId; this.nodeId = nodeId; this.slot = slot
-                this.blobId = blobId; createdAt = Instant.now()
+                this.blobId = blobId
             }.persist()
         }
 
@@ -229,7 +229,7 @@ class NodeAttachmentSliceTest {
         val guestId = UUID.randomUUID().toString()
         QuarkusTransaction.requiringNew().run {
             ShareIdentityEntity().apply {
-                id = guestId; this.shareId = shareId; sealedDisplayName = "Z3Vlc3Q="; tokenHash = "hash-$guestId"; createdAt = Instant.now()
+                id = guestId; this.shareId = shareId; sealedDisplayName = "Z3Vlc3Q="; tokenHash = "hash-$guestId"
             }.persist()
         }
         return guestId

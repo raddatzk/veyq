@@ -17,7 +17,7 @@ object TenantRoots {
     fun join(userId: String, tenantId: String, role: String = MembershipEntity.MEMBER) {
         if (ScopeEntity.findById(tenantId) == null) {
             ScopeEntity().apply {
-                id = tenantId; this.tenantId = tenantId; kind = ScopeEntity.TENANT; createdAt = Instant.now()
+                id = tenantId; this.tenantId = tenantId; kind = ScopeEntity.TENANT
             }.persist()
         }
         if (MembershipEntity.count("userId = ?1 and scopeId = ?2", userId, tenantId) == 0L) {

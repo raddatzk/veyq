@@ -2,7 +2,6 @@ package me.raddatz.veyq.core.identity
 
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
-import java.time.Instant
 import java.util.UUID
 
 /** A member's per-tenant identity (username + sealed real name), for the directory + profile reads. */
@@ -41,7 +40,6 @@ class TenantProfileStore {
             this.tenantId = tenantId
             this.username = norm(username)
             this.sealedName = sealedName
-            createdAt = Instant.now()
         }.persist()
         return id
     }

@@ -109,9 +109,6 @@ class MediaDerivativeEntity : PanacheEntityBase {
     @Column(name = "blob_id", nullable = false, length = 36)
     lateinit var blobId: String
 
-    @Column(name = "created_at", nullable = false)
-    lateinit var createdAt: Instant
-
     companion object : PanacheCompanionBase<MediaDerivativeEntity, String>
 }
 

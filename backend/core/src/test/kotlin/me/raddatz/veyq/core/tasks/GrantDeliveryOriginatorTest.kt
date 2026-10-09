@@ -81,7 +81,7 @@ class GrantDeliveryOriginatorTest {
         val id = UUID.randomUUID().toString()
         QuarkusTransaction.requiringNew().run {
             ScopeEntity().apply {
-                this.id = id; this.tenantId = tenantId; kind = ScopeEntity.GROUP; currentEpoch = epoch; createdAt = Instant.now()
+                this.id = id; this.tenantId = tenantId; kind = ScopeEntity.GROUP; currentEpoch = epoch
             }.persist()
         }
         return id

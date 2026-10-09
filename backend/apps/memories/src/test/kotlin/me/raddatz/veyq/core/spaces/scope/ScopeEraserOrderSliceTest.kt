@@ -80,14 +80,14 @@ class ScopeEraserOrderSliceTest {
                 BlobEntity().apply {
                     id = blobId; this.scopeId = scopeId; storageKey = "order-$blobId".take(64)
                     chunkCount = TestBlob.SMALL.chunkCount; byteSize = TestBlob.SMALL.byteSize
-                    wrappedBlobKey = "b3JkZXI="; createdAt = Instant.now()
+                    wrappedBlobKey = "b3JkZXI="
                 }.persist()
             }
             MediaEntity().apply {
                 id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; blobId = blobIds[0]; createdAt = Instant.now()
             }.persist()
             MediaDerivativeEntity().apply {
-                id = UUID.randomUUID().toString(); this.mediaId = mediaId; kind = "thumb"; blobId = blobIds[1]; createdAt = Instant.now()
+                id = UUID.randomUUID().toString(); this.mediaId = mediaId; kind = "thumb"; blobId = blobIds[1]
             }.persist()
         }
 

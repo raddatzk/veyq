@@ -355,7 +355,7 @@ class RecoverySliceTest {
             TenantEntity.find("domain", domain).firstResult()?.id ?: java.util.UUID.randomUUID().toString().also { id ->
                 TenantEntity().apply {
                     this.id = id; name = "Fam"; this.domain = domain; ownerEmail = "owner@$domain"
-                    status = TenantEntity.ACTIVE; createdAt = Instant.now()
+                    status = TenantEntity.ACTIVE
                 }.persist()
             }
         }
@@ -368,7 +368,7 @@ class RecoverySliceTest {
     private fun grantMembership(userId: String, tenantId: String) = QuarkusTransaction.requiringNew().run {
         if (ScopeEntity.findById(tenantId) == null) {
             ScopeEntity().apply {
-                id = tenantId; this.tenantId = tenantId; kind = ScopeEntity.TENANT; createdAt = Instant.now()
+                id = tenantId; this.tenantId = tenantId; kind = ScopeEntity.TENANT
             }.persist()
         }
         if (MembershipEntity.count("userId = ?1 and tenantId = ?2", userId, tenantId) == 0L) {

@@ -328,7 +328,7 @@ class DropBoxSliceTest {
         tx {
             ShareIdentityEntity().apply {
                 id = UUID.randomUUID().toString(); shareId = link.shareId; sealedDisplayName = "YmVu"
-                wrappedIdentityKey = IDENTITY_KEY; tokenHash = Tokens.hash(token); createdAt = Instant.now()
+                wrappedIdentityKey = IDENTITY_KEY; tokenHash = Tokens.hash(token)
             }.persist()
         }
         return GuestTreeShare.Link(link.shareId, token)

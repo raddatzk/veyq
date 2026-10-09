@@ -514,7 +514,7 @@ class TasksSliceTest {
     private fun seedDecline(jobId: String, workerId: String, reason: String) = QuarkusTransaction.requiringNew().run {
         JobDeclineEntity().apply {
             id = UUID.randomUUID().toString(); this.jobId = jobId; this.workerId = workerId
-            this.reason = reason; declinedAt = Instant.now()
+            this.reason = reason
         }.persist()
     }
 

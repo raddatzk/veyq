@@ -118,10 +118,10 @@ class ObjectKeyCarriesNoStructureSliceTest {
             newUser(id = seed.userId, email = seed.email).persist()
             TenantEntity().apply {
                 id = seed.tenantId; name = seed.tenantName; domain = "t-${seed.tenantId}.example.com"
-                ownerEmail = seed.email; status = TenantEntity.ACTIVE; createdAt = Instant.now()
+                ownerEmail = seed.email; status = TenantEntity.ACTIVE
             }.persist()
             ScopeEntity().apply {
-                id = seed.scopeId; tenantId = seed.tenantId; kind = ScopeEntity.PERSONAL; createdAt = Instant.now()
+                id = seed.scopeId; tenantId = seed.tenantId; kind = ScopeEntity.PERSONAL
             }.persist()
             MembershipEntity().apply {
                 id = UUID.randomUUID().toString(); userId = seed.userId; tenantId = seed.tenantId

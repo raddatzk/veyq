@@ -53,9 +53,6 @@ class UploadSessionEntity : PanacheEntityBase {
     @Column(name = "wrapped_meta", updatable = false)
     var wrappedBlobMeta: String? = null
 
-    @Column(name = "created_at", nullable = false)
-    lateinit var createdAt: Instant
-
     @Column(name = "opener_user_id", length = 36)
     var openerUserId: String? = null
 
@@ -122,9 +119,6 @@ class BlobEntity : PanacheEntityBase {
 
     @Column(name = "manifest")
     var manifest: String? = null
-
-    @Column(name = "created_at", nullable = false)
-    lateinit var createdAt: Instant
 
     companion object : PanacheCompanionBase<BlobEntity, String>
 }

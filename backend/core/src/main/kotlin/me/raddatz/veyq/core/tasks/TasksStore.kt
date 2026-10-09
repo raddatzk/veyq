@@ -340,7 +340,6 @@ class TasksStore {
                 this.jobId = jobId
                 this.workerId = userId
                 this.reason = reason
-                declinedAt = Instant.now()
             }.persist()
         }
         return DeclineResult.Released(JobEntity.PENDING, job.attempts - 1)
@@ -466,7 +465,6 @@ class TasksStore {
             this.jobId = jobId
             this.workerId = workerId
             reason = ROTATION_ORIGINATOR
-            declinedAt = Instant.now()
         }.persist()
     }
 

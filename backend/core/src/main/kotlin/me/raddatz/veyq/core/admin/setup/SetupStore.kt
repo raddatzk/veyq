@@ -5,7 +5,6 @@ import me.raddatz.veyq.core.identity.ServerRoles
 import me.raddatz.veyq.core.identity.WrapData
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
-import java.time.Instant
 
 /** Persistence for first-run setup. Reads the setup lock and stores the owner — the account itself is born
  *  the shared operator-blind way via [AccountStore]; setup adds only the single-owner lock. */
@@ -29,7 +28,6 @@ class SetupStore(private val accounts: AccountStore) {
 
         ServerSetup().apply {
             id = ServerSetup.SINGLETON_ID
-            completedAt = Instant.now()
         }.persist()
 
         return userId

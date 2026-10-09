@@ -80,7 +80,6 @@ class MediaRowLockRaceSliceTest {
             BlobEntity().apply {
                 id = blobId; this.scopeId = scopeId; storageKey = UUID.randomUUID().toString()
                 chunkCount = TestBlob.SMALL.chunkCount; byteSize = TestBlob.SMALL.byteSize; wrappedBlobKey = "Ymxvyi13cmFw"
-                createdAt = Instant.now()
             }.persist()
             val bucket = BucketEntity().apply {
                 id = UUID.randomUUID().toString(); this.scopeId = scopeId; this.nodeId = nodeId

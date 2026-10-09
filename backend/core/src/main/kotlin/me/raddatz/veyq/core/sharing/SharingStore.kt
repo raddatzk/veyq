@@ -405,7 +405,6 @@ class SharingStore(
             this.sealedDisplayName = sealedDisplayName
             this.wrappedIdentityKey = wrappedIdentityKey
             this.tokenHash = Tokens.hash(token)
-            createdAt = Instant.now()
         }.persist()
         return token
     }

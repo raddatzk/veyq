@@ -64,7 +64,6 @@ object TestFixtures {
         this.authPublicKey = authPublicKey
         this.secretKeyProofPublicKey = secretKeyProofPublicKey
         this.requireGroupAddConsent = requireGroupAddConsent
-        createdAt = Instant.now()
     }
 
     /** Persist an account in its own transaction and return its id. */
@@ -115,11 +114,11 @@ object TestFixtures {
         QuarkusTransaction.requiringNew().run {
             TenantEntity().apply {
                 this.id = id; name = "Fam"; this.domain = domain; this.ownerEmail = ownerEmail
-                this.status = status; createdAt = Instant.now()
+                this.status = status
             }.persist()
             if (tenantScope) {
                 ScopeEntity().apply {
-                    this.id = id; tenantId = id; kind = ScopeEntity.TENANT; createdAt = Instant.now()
+                    this.id = id; tenantId = id; kind = ScopeEntity.TENANT
                 }.persist()
             }
             if (owner != null) persistMembership(owner, id, id, MembershipEntity.OWNER)
@@ -142,7 +141,7 @@ object TestFixtures {
         val scopeId = UUID.randomUUID().toString()
         QuarkusTransaction.requiringNew().run {
             ScopeEntity().apply {
-                id = scopeId; this.tenantId = tenantId; kind = scopeKind; createdAt = Instant.now()
+                id = scopeId; this.tenantId = tenantId; kind = scopeKind
             }.persist()
             persistMembership(userId, tenantId, scopeId, MembershipEntity.OWNER)
             TenantRoots.join(userId, tenantId)
@@ -199,11 +198,11 @@ object TestFixtures {
             BlobEntity().apply {
                 id = seeded.blobId; this.scopeId = scopeId; storageKey = seeded.storageKey
                 chunkCount = TestBlob.SMALL.chunkCount; byteSize = TestBlob.SMALL.byteSize
-                wrappedBlobKey = "YXR0YWNobWVudA=="; createdAt = Instant.now()
+                wrappedBlobKey = "YXR0YWNobWVudA=="
             }.persist()
             NodeAttachmentEntity().apply {
                 id = seeded.attachmentId; this.scopeId = scopeId; this.nodeId = nodeId; this.slot = slot
-                blobId = seeded.blobId; this.shareIdentityId = shareIdentityId; createdAt = Instant.now()
+                blobId = seeded.blobId; this.shareIdentityId = shareIdentityId
             }.persist()
         }
         return seeded

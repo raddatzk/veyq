@@ -6,7 +6,6 @@ import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
-import java.time.Instant
 import org.hibernate.annotations.DynamicUpdate
 
 /**
@@ -40,9 +39,6 @@ class TenantEntity : PanacheEntityBase {
 
     @Column(name = "status", nullable = false, length = 16)
     lateinit var status: String
-
-    @Column(name = "created_at", nullable = false)
-    lateinit var createdAt: Instant
 
     /** cr-0114 (ADR 0035): the operator's per-locale terms markdown, serialized as a locale→markdown JSON map
      *  (opaque TEXT). Null until the owner first publishes. Public operational content, never a key. */

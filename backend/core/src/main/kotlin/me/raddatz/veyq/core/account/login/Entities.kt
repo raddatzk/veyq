@@ -80,9 +80,7 @@ class RefreshTokenEntity : PanacheEntityBase {
     @Column(name = "status", nullable = false, length = 16)
     lateinit var status: String
 
-    @Column(name = "created_at", nullable = false)
-    lateinit var createdAt: Instant
-
+    /** The one time a refresh token keeps: when it stops working. No issue time — nothing read one (inbox #318). */
     @Column(name = "expires_at", nullable = false)
     lateinit var expiresAt: Instant
 
@@ -107,9 +105,7 @@ class AccessTokenEntity : PanacheEntityBase {
     @Column(name = "token_hash", nullable = false, length = 64)
     lateinit var tokenHash: String
 
-    @Column(name = "created_at", nullable = false)
-    lateinit var createdAt: Instant
-
+    /** The one time an access token keeps: when it stops working. No issue time — nothing read one (inbox #318). */
     @Column(name = "expires_at", nullable = false)
     lateinit var expiresAt: Instant
 

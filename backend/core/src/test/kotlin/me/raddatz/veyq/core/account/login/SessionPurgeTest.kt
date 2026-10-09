@@ -128,7 +128,6 @@ class SessionPurgeTest {
             this.id = id
             this.familyId = familyId
             tokenHash = "h-$id"
-            createdAt = Instant.now()
             this.expiresAt = expiresAt
         }.persist()
     }
@@ -140,7 +139,6 @@ class SessionPurgeTest {
             tokenHash = "h-$id"
             generation = 1
             this.status = status
-            createdAt = Instant.now()
             this.expiresAt = expiresAt
         }.persist()
     }

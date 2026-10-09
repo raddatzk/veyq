@@ -342,7 +342,6 @@ class SessionService(private val accounts: AccountStore) : AccessTokenResolver {
             id = UUID.randomUUID().toString()
             this.familyId = familyId
             tokenHash = Tokens.hash(access)
-            createdAt = now
             expiresAt = now.plus(ACCESS_TTL_MINUTES, ChronoUnit.MINUTES)
         }.persist()
 
@@ -353,7 +352,6 @@ class SessionService(private val accounts: AccountStore) : AccessTokenResolver {
             tokenHash = Tokens.hash(refresh)
             this.generation = generation
             status = RefreshTokenEntity.CURRENT
-            createdAt = now
             expiresAt = now.plus(REFRESH_TTL_DAYS, ChronoUnit.DAYS)
         }.persist()
 

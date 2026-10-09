@@ -98,7 +98,7 @@ class PurgeRaceCoreSliceTest {
             UploadSessionEntity().apply {
                 this.id = id; this.scopeId = scopeId; storageKey = UUID.randomUUID().toString()
                 chunkCount = TestBlob.SMALL.chunkCount; byteSize = TestBlob.SMALL.byteSize; wrappedBlobKey = "Ymxvyi13cmFw"
-                openerUserId = userId; createdAt = Instant.now().minus(Duration.ofDays(2))
+                openerUserId = userId
                 lastWindowAt = Instant.now().minus(Duration.ofDays(2))
             }.persist()
         }

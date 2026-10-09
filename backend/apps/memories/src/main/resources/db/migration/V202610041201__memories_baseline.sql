@@ -11,7 +11,6 @@ CREATE TABLE veyq_scope_favorites (
     user_id    VARCHAR(36)  NOT NULL,
     scope_id   VARCHAR(36)  NOT NULL,
     ciphertext MEDIUMTEXT   NOT NULL,
-    updated_at TIMESTAMP    NOT NULL,
     PRIMARY KEY (id)
 );
 
@@ -69,7 +68,6 @@ CREATE TABLE veyq_media_derivative (
     media_id    VARCHAR(36) NOT NULL,
     kind        VARCHAR(16) NOT NULL,
     blob_id     VARCHAR(36) NOT NULL,
-    created_at  TIMESTAMP NOT NULL,
     CONSTRAINT fk_derivative_media FOREIGN KEY (media_id) REFERENCES veyq_media (id),
     CONSTRAINT fk_derivative_blob FOREIGN KEY (blob_id) REFERENCES veyq_blob (id)
 );
@@ -84,7 +82,6 @@ CREATE TABLE veyq_scope_item_favorites (
     scope_id   VARCHAR(36)  NOT NULL,
     node_id    VARCHAR(36)  NOT NULL,
     ciphertext MEDIUMTEXT   NOT NULL,
-    updated_at TIMESTAMP    NOT NULL,
     PRIMARY KEY (id),
     CONSTRAINT fk_item_favorites_scope FOREIGN KEY (scope_id) REFERENCES veyq_scope (id)
 );

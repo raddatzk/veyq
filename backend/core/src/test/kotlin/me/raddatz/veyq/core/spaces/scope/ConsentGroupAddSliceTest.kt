@@ -338,7 +338,6 @@ class ConsentGroupAddSliceTest {
                 this.userId = userId
                 this.tenantId = tenantId
                 this.username = username
-                createdAt = Instant.now()
             }.persist()
         }
         return userId
@@ -373,13 +372,11 @@ class ConsentGroupAddSliceTest {
                 this.domain = domain
                 ownerEmail = "owner-$tenantId@example.com"
                 status = TenantEntity.ACTIVE
-                createdAt = Instant.now()
             }.persist()
             ScopeEntity().apply {
                 id = tenantId
                 this.tenantId = tenantId
                 kind = ScopeEntity.TENANT
-                createdAt = Instant.now()
             }.persist()
             MembershipEntity().apply {
                 id = UUID.randomUUID().toString()
@@ -395,7 +392,6 @@ class ConsentGroupAddSliceTest {
                 this.userId = userId
                 this.tenantId = tenantId
                 username = "owner"
-                createdAt = Instant.now()
             }.persist()
         }
         return userId to domain

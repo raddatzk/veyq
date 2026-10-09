@@ -149,7 +149,6 @@ class ScopesStore(
             this.tenantId = tenantId
             kind = ScopeEntity.PERSONAL
             personalOwner = userId // the unique key a second personal create of this member collides on
-            createdAt = now
         }.persist()
         MembershipEntity().apply {
             id = UUID.randomUUID().toString()
@@ -180,7 +179,6 @@ class ScopesStore(
             this.tenantId = tenantId
             kind = ScopeEntity.GROUP
             this.encryptedName = encryptedName
-            createdAt = now
         }.persist()
         MembershipEntity().apply {
             id = UUID.randomUUID().toString()
@@ -436,7 +434,6 @@ class ScopesStore(
             this.scopeId = scopeId
             this.epoch = plan.newEpoch
             this.wrappedPrev = wrappedPrev
-            createdAt = Instant.now()
         }.persist()
         plan.grants.forEach { g ->
             rows.firstOrNull { it.userId == g.userId }?.let {

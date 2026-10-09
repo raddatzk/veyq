@@ -110,8 +110,5 @@ class JobDeclineEntity : PanacheEntityBase {
     @Column(name = "reason", length = 256)
     var reason: String? = null
 
-    @Column(name = "declined_at", nullable = false)
-    lateinit var declinedAt: Instant
-
     companion object : PanacheCompanionBase<JobDeclineEntity, String>
 }

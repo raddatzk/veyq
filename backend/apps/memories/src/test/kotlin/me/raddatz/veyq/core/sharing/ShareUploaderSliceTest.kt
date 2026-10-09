@@ -417,7 +417,7 @@ class ShareUploaderSliceTest {
         QuarkusTransaction.requiringNew().run {
             BlobEntity().apply {
                 id = blobId; this.scopeId = scopeId; storageKey = UUID.randomUUID().toString()
-                chunkCount = TestBlob.SMALL.chunkCount; byteSize = TestBlob.SMALL.byteSize; wrappedBlobKey = "Ymxvyi13cmFw"; createdAt = Instant.now()
+                chunkCount = TestBlob.SMALL.chunkCount; byteSize = TestBlob.SMALL.byteSize; wrappedBlobKey = "Ymxvyi13cmFw"
             }.persist()
             if (identityId == null) {
                 MediaEntity().apply {

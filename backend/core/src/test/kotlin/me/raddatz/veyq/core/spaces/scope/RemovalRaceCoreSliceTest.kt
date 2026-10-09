@@ -53,7 +53,7 @@ class RemovalRaceCoreSliceTest {
                 username?.let {
                     TenantProfileEntity().apply {
                         this.id = UUID.randomUUID().toString(); this.userId = userId; tenantId = this@Tenant.id
-                        this.username = it; createdAt = Instant.now()
+                        this.username = it
                     }.persist()
                 }
             }
@@ -65,7 +65,7 @@ class RemovalRaceCoreSliceTest {
             QuarkusTransaction.requiringNew().run {
                 ScopeEntity().apply {
                     this.id = scopeId; tenantId = this@Tenant.id; kind = ScopeEntity.GROUP
-                    encryptedName = NAME; createdAt = Instant.now()
+                    encryptedName = NAME
                 }.persist()
                 (listOf(owner to MembershipEntity.OWNER) + members.map { it to MembershipEntity.MEMBER }).forEach { (userId, role) ->
                     MembershipEntity().apply {

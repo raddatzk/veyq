@@ -39,7 +39,6 @@ class BlobUploadStore(private val reclaim: StoreReclaimStore) {
             blobId = d.blobId
             ownerId = d.ownerId
             blobRole = d.role
-            createdAt = now
             lastWindowAt = now
         }.persist()
         return id
@@ -79,7 +78,6 @@ class BlobUploadStore(private val reclaim: StoreReclaimStore) {
             wrappedBlobKey = session.wrappedBlobKey
             wrappedBlobMeta = session.wrappedBlobMeta
             this.manifest = manifest?.let { encodeManifest(it) }
-            createdAt = Instant.now()
         }.persist()
         return blobId
     }

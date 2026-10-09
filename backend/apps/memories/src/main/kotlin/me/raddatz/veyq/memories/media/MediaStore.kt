@@ -167,7 +167,6 @@ class MediaStore(private val blobs: BlobUploadStore) {
                 this.mediaId = mediaId
                 kind = d.kind
                 blobId = derivBlobId
-                createdAt = Instant.now()
             }.persist()
         }
         bumpMediaRevision(nodeId) // cr-0107: an add moves media_revision (the live-updates change signal), not delete_revision
