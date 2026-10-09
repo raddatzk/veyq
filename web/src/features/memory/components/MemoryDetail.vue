@@ -5,7 +5,15 @@
 // view (MemoryHomeView) owns the rename/delete dialogs + the favorites store and unwraps K_mem from the tree.
 // Ported presentation from the design source (legacy/frontend-noe2ee); only the data layer is ours. Decrypted
 // thumbnails become object URLs that are **revoked** on reload / unmount (no lingering plaintext blob URLs).
-// Out of scope (own CRs): journal, chapters + chapter-nested media, map/tracks, playlists, buckets, sharing.
+// Tabs: the Gallery, the Chapters (each opens to the same detail under its own `K_mem`), the Contributions organizer
+// (buckets) and the media Trash; the header carries upload, the share actions, the pin, rename and delete, the cover,
+// date and place. Journal, tracks and playlists are not built.
+//
+// **What it offers is `caps`** (inbox #401): Memories' fail-closed capability matrix (`../capabilities.ts`) for whoever
+// looks at this node, computed by the host adapter (`MemoryDetailHost`). Every control, tab and member-only effect —
+// the item marks' load, the automatic date/place reconcile that writes the node's meta — reads it; nothing here checks a
+// role, a pending deletion or an instance capability itself. The lightbox's own write gates (`readonly`) follow in the
+// Memories UI merge (S5 of #401).
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
@@ -44,9 +52,8 @@ import ViewModeToggle from './ViewModeToggle.vue'
 import Dialog from 'primevue/dialog'
 import Menu from 'primevue/menu'
 import { useViewMode } from '../../../shared/state/useViewMode'
-import { useCapabilities } from '../../../shared/state/useCapabilities'
-import { SHARING_UPLOADER_LINKS } from '../../platform/capabilities'
 import type { NodeMetaUpdate } from '../useMetaWriteFeedback'
+import type { MemoryCapabilities } from '../capabilities'
 
 const props = defineProps<{
   node: TreeNode
@@ -60,7 +67,8 @@ const props = defineProps<{
   // filter is HIDDEN rather than rendered disabled (uc.memory.gallery E4).
   personalScope?: boolean
   chapters?: TreeNode[] // child CHAPTER nodes of this Memory/chapter (cr-0060)
-  shareable?: boolean // the host offers the public-share affordances for this node (a Memory or a chapter; cr-0100)
+  /** What this view offers whoever looks (see the header). Required: there is no default that grants anything. */
+  caps: MemoryCapabilities
 }>()
 const emit = defineEmits<{
   toggleFavorite: []
@@ -75,10 +83,6 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const { viewMode } = useViewMode()
-const { hasCapability } = useCapabilities()
-// The uploader (drop-box) link is its OWN memory action (a separate dialog), offered only when the instance keeps
-// the uploader-links capability (ADR 0032) — the server also 422-rejects createShare(WRITE_ONLY) when it is off.
-const canUploadShare = computed(() => !!props.shareable && hasCapability(SHARING_UPLOADER_LINKS))
 
 // --- item favorites (ADR 0068) ---
 // The marks inside this Memory, shared with the scope. The filter is declared BEFORE the gallery core because
@@ -96,7 +100,7 @@ const markFilterPredicate = computed<((mediaId: string) => boolean) | null>(() =
 /** Load every member's marks for this Memory — re-runs when the Memory or the scope key changes. */
 async function loadMarks() {
   const key = props.scopeKey
-  if (!key) return
+  if (!key || !props.caps.mark) return // marks are the scope members' (ADR 0068): no other session reads them
   try {
     await loadItemFavoritesFor(props.scopeId, props.node.id, key)
   } catch {
@@ -106,12 +110,12 @@ async function loadMarks() {
 
 async function onToggleMark(mediaId: string) {
   const key = props.scopeKey
-  if (!key) return
+  if (!key || !props.caps.mark) return
   await toggleItemFavorite(mediaId, props.scopeId, props.node.id, key)
 }
 
 watch(
-  () => [props.node.id, props.scopeKey] as const,
+  () => [props.node.id, props.scopeKey, props.caps.mark] as const,
   () => {
     clearItemFavorites()
     markFilter.value = 'all' // a filter is about the Memory you are in, not a mode you carry into the next
@@ -253,16 +257,18 @@ const {
 })
 
 /** The reconcile settle point `useMediaGalleryLive` calls after each list refresh: auto-date first, then
- *  auto-location (which reads the date-reconciled wrappedMeta patched in place → read-modify-write safe). */
+ *  auto-location (which reads the date-reconciled wrappedMeta patched in place → read-modify-write safe). Both WRITE the
+ *  node's sealed meta, so they run only where the meta may be edited (`caps.editMeta`). */
 async function settle() {
+  if (!props.caps.editMeta) return
   await reconcileAuto()
   await reconcileAutoLocation()
 }
 
-// The Beiträge tab (the media organizer, MemoryBuckets.vue) is ALWAYS available — it's where you create sub-buckets
-// and file your own uploads (cr-0113). Its own state/loading live in that component; here we only host it + wire the
-// lightbox/upload/reload it emits.
-const showBeitraege = computed(() => true)
+// The Beiträge tab (the media organizer, MemoryBuckets.vue) — where a member creates sub-buckets and files their own
+// uploads (cr-0113); a member's only (`caps.buckets`: it reads the scope's members and the bucket API). Its own
+// state/loading live in that component; here we only host it + wire the lightbox/upload/reload it emits.
+const showBeitraege = computed(() => props.caps.buckets)
 
 /** The organizer changed buckets/media (create/rename/delete/move) — re-list so each item's ownerKey/bucketId refresh. */
 function onBucketChanged() { void load() }
@@ -292,7 +298,7 @@ onBeforeUnmount(() => cancelPickWindow?.())
 
 function enqueueBatch(picked: File[]) {
   const key = props.memoryKey
-  if (!key) return
+  if (!key || !props.caps.upload) return
   const targetNodeId = props.node.id
   enqueueUploads(
     { scopeId: props.scopeId, nodeId: targetNodeId, memoryKey: key },
@@ -329,7 +335,7 @@ watch(
         type="button"
         class="memory-cover-preview"
         :class="{ 'is-empty': !coverSrc }"
-        :disabled="!memoryKey"
+        :disabled="!memoryKey || !caps.setCover"
         :aria-label="storedCover ? t('memory.cover.edit') : t('memory.cover.set')"
         :title="storedCover ? t('memory.cover.edit') : t('memory.cover.set')"
         @click="openCoverEditor"
@@ -348,6 +354,7 @@ watch(
           <h1 class="gallery-title">{{ node.name }}</h1>
           <div class="gallery-header-actions">
         <Button
+          v-if="caps.upload"
           v-tooltip.bottom="t('media.upload')"
           type="button"
           :aria-label="t('media.upload')"
@@ -356,6 +363,7 @@ watch(
           @click="triggerUpload"
         />
         <input
+          v-if="caps.upload"
           ref="fileInput"
           type="file"
           multiple
@@ -364,7 +372,7 @@ watch(
           @change="onFilesPicked"
         />
         <Button
-          v-if="shareable"
+          v-if="caps.share"
           v-tooltip.bottom="t('share.share')"
           type="button"
           :aria-label="t('share.share')"
@@ -376,7 +384,7 @@ watch(
         />
         <!-- The uploader (drop-box) link is its own action + own dialog (no role switcher) — capability-gated. -->
         <Button
-          v-if="canUploadShare"
+          v-if="caps.shareUpload"
           v-tooltip.bottom="t('share.uploadRequest')"
           type="button"
           :aria-label="t('share.uploadRequest')"
@@ -387,6 +395,7 @@ watch(
           @click="$emit('shareUpload')"
         />
         <Button
+          v-if="caps.favorite"
           v-tooltip.bottom="favorite ? t('memory.unfavorite') : t('memory.favorite')"
           type="button"
           class="memory-detail-fav"
@@ -398,6 +407,7 @@ watch(
           @click="$emit('toggleFavorite')"
         />
         <Button
+          v-if="caps.rename"
           v-tooltip.bottom="t('node.rename')"
           type="button"
           :aria-label="t('node.rename')"
@@ -407,6 +417,7 @@ watch(
           @click="$emit('rename')"
         />
         <Button
+          v-if="caps.deleteNode"
           v-tooltip.bottom="t('node.delete')"
           type="button"
           :aria-label="t('node.delete')"
@@ -423,7 +434,7 @@ watch(
             type="button"
             class="memory-date-chip"
             :class="{ 'is-empty': !dateLabel }"
-            :disabled="!memoryKey"
+            :disabled="!memoryKey || !caps.editMeta"
             :aria-label="t('memory.date.edit')"
             :title="t('memory.date.edit')"
             @click="dateEditorOpen = true"
@@ -435,7 +446,7 @@ watch(
             type="button"
             class="memory-date-chip memory-location-chip"
             :class="{ 'is-empty': !locationResolved }"
-            :disabled="!memoryKey"
+            :disabled="!memoryKey || !caps.editMeta"
             :aria-label="locationResolved ? t('memory.place.edit') : t('memory.place.set')"
             :title="locationResolved ? t('memory.place.edit') : t('memory.place.set')"
             @click="openLocationEditor"
@@ -452,11 +463,11 @@ watch(
     <Tabs v-model:value="activeTab" class="memory-tabs">
       <TabList>
         <Tab value="gallery">{{ t('memory.gallery') }}</Tab>
-        <Tab value="chapters">
+        <Tab v-if="caps.navigate" value="chapters">
           {{ t('memory.chapters') }}<span v-if="chapters && chapters.length" class="tab-count">{{ chapters.length }}</span>
         </Tab>
         <Tab v-if="showBeitraege" value="beitraege">{{ t('memory.buckets.title') }}</Tab>
-        <Tab value="trash">{{ t('memory.trash.title') }}</Tab>
+        <Tab v-if="caps.mediaTrash" value="trash">{{ t('memory.trash.title') }}</Tab>
       </TabList>
       <TabPanels>
         <TabPanel value="gallery">
@@ -482,7 +493,7 @@ watch(
                    rather than disabled (uc.memory.gallery E4) — a greyed-out control invites the question
                    "how do I enable this?", which has no answer. Its presence is also half of what tells the
                    user that marks here are seen by the others (ADR 0068). -->
-              <div v-if="!personalScope" class="gallery-mark-filter" role="group" :aria-label="t('media.marks.filterLabel')">
+              <div v-if="caps.mark && !personalScope" class="gallery-mark-filter" role="group" :aria-label="t('media.marks.filterLabel')">
                 <button
                   v-for="opt in (['all', 'everyone', 'mine'] as const)"
                   :key="opt"
@@ -525,7 +536,7 @@ watch(
                   :has-derivatives="hasDerivatives(item.media)"
                   :is-video="galleryVideoIds.has(item.media.mediaId)"
                   :open-label="t('media.openItem', { index: item.index + 1 })"
-                  :markable="!!scopeKey"
+                  :markable="caps.mark && !!scopeKey"
                   :mark-count="personalScope ? 0 : markCount(item.media.mediaId)"
                   :marked-by-me="isMarkedByMe(item.media.mediaId)"
                   :mark-label="isMarkedByMe(item.media.mediaId) ? t('media.marks.unmark') : t('media.marks.mark')"
@@ -537,7 +548,7 @@ watch(
           </template>
         </TabPanel>
 
-        <TabPanel value="chapters">
+        <TabPanel v-if="caps.navigate" value="chapters">
           <!-- Chapters as a MemoryCard grid + a create card, like the browse Memories section (design source).
                Each chapter opens to its own gallery; its media is sealed under the chapter's own K_mem. -->
           <div class="chapters-toolbar">
@@ -557,6 +568,7 @@ watch(
               @open="$emit('openChapter', $event)"
             />
             <button
+              v-if="caps.createChapter"
               class="veyq-card veyq-card-interactive veyq-create-card memory-create-card-memory"
               type="button"
               :disabled="!memoryKey"
@@ -586,7 +598,7 @@ watch(
 
         <!-- Trash tab (uc.memory.delete-media, cr-0110/0111): the Memory's soft-deleted media in the SAME justified
              MediaGrid, with a per-tile checkbox (batch select) + a 3-dot menu (restore / purge). Lazy on open. -->
-        <TabPanel value="trash">
+        <TabPanel v-if="caps.mediaTrash" value="trash">
           <div v-if="trashStatus === 'loading'" class="media-grid-placeholder">
             <span class="pi pi-spin pi-spinner" />
             <span>{{ t('media.loading') }}</span>

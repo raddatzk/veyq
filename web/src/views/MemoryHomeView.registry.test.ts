@@ -59,8 +59,15 @@ import { capabilityState } from '../shared/state/capabilities'
 import { SHARING_PUBLIC_LINKS } from '../features/platform/capabilities'
 import { realI18n, t } from '../test/i18n'
 import { treeNode } from '../test/models'
+import { targetOf, type Access, type TreeSource } from '../core/access'
 
-const Detail = defineComponent({ props: ['node', 'shareable'], setup: (p) => () => h('div', { class: 'detail' }, `${p.node.name}|${p.shareable}`) })
+// A detail renders whether a share is POSSIBLE for it, from what the host handed it: the instance's public links (the
+// access) AND its kind's descriptor (the capability target core builds from the registry) — every application's
+// capability function needs both for a share.
+const Detail = defineComponent({
+  props: ['node', 'access', 'tree'],
+  setup: (p) => () => h('div', { class: 'detail' }, `${p.node.name}|${(p.access as Access).mode === 'member' && (p.access as Access & { mode: 'member' }).publicLinks && targetOf(p.tree as TreeSource, p.node).shareable}`),
+})
 const Section = defineComponent({ props: ['nodes'], setup: (p) => () => h('section', { class: 'level' }, `memories=${p.nodes.length}`) })
 const Share = defineComponent({ props: ['nodeId'], setup: (p) => () => h('div', { class: 'share' }, p.nodeId) })
 
@@ -148,11 +155,18 @@ describe('MemoryHomeView fail-closed rules', () => {
 
   it('shareable comes from the descriptor AND the capability: a descriptor that says no wins over the capability', async () => {
     const r = createRegistry()
-    r.registerKind({ kind: MEMORY_KIND, detail: Detail, icon: 'x', shareable: false })
+    r.registerKind({ kind: MEMORY_KIND, detail: Detail, icon: 'x', shareable: false, shareDialog: Share })
     holder.reg = r
-    expect((await mountAt('#~me/mem')).find('.detail').text()).toBe('Mem|false')
+    const w = await mountAt('#~me/mem')
+    expect(w.find('.detail').text()).toBe('Mem|false')
+    // …and the host mounts no share dialog for it, whatever a detail emits
+    w.findComponent(Detail).vm.$emit('share')
+    await flushPromises()
+    expect(w.find('.share').exists()).toBe(false)
     holder.reg = fullRegistry()
     expect((await mountAt('#~me/mem')).find('.detail').text()).toBe('Mem|true')
+    capabilityState.ids = [] // control: the instance's switch alone takes it away too
+    expect((await mountAt('#~me/mem')).find('.detail').text()).toBe('Mem|false')
   })
 
   // cr-files-application P4c: the share dialog is the kind's. A kind that says `shareable` but brings no `shareDialog`

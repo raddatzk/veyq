@@ -51,7 +51,7 @@ import { epochsOf } from '../../spaces/epochsTestUtil'
 import { realI18n, t } from '../../../test/i18n'
 import { SaveCancelled, SaveTooLarge } from '../../../shared/saveStream'
 import { stubApi } from '../../../test/apiMock'
-import { treeNode } from '../../../test/models'
+import { treeNode, memberAccessOf, memberTreeOf } from '../../../test/models'
 import { mountConfirmDialog } from '../../../test/confirmDialog'
 
 const SCOPE = '5c09e000-0000-4000-8000-0000000000bb'
@@ -92,9 +92,16 @@ const BLOBS: FileListPage = {
 }
 let listFiles: ReturnType<typeof stubApi<typeof filesApi, 'listFiles'>>['listFiles']
 
-function mountSection(props: { nodes: TreeNode[]; readonly?: boolean; deletable?: boolean; folder?: TreeNode | null }) {
+/** `pending`: the scope is pending deletion (the member's `access.readonly`); `identityFolder`: the level is a guest's
+ *  identity folder in a drop box (what the member's tree answers for it). */
+function mountSection({ pending = false, identityFolder = false, ...props }: { nodes: TreeNode[]; pending?: boolean; identityFolder?: boolean; folder?: TreeNode | null }) {
+  const epochs = epochsOf(v1.randomBytes(32))
+  const tree = memberTreeOf(() => [], { scopeId: SCOPE, epochs })
   return mount(FilesSection, {
-    props: { folder: DOCS, epochs: epochsOf(v1.randomBytes(32)), readonly: false, ...props },
+    props: {
+      folder: DOCS, epochs, access: memberAccessOf({ scopeId: SCOPE, epochs, readonly: pending }),
+      tree: { ...tree, inIdentityFolder: () => identityFolder }, ...props,
+    },
     global: { plugins: [realI18n()], directives: { tooltip: {} } },
   })
 }
@@ -166,7 +173,7 @@ describe('FilesSection', () => {
   })
 
   it('read-only (pending deletion): download stays, no upload, replace, rename or delete', async () => {
-    const w = mountSection({ nodes: [NOTES], readonly: true })
+    const w = mountSection({ nodes: [NOTES], pending: true })
     await flushPromises()
     expect(w.find('.files-toolbar').exists()).toBe(false)
     expect(w.findAll('input[type="file"]')).toHaveLength(0)
@@ -179,8 +186,8 @@ describe('FilesSection', () => {
   // Inbox #391: a guest's identity folder takes no write, but a member removes what a guest sent — file by file, a
   // content-less one too (a guest's upload that never finished: 'not uploaded yet', nothing to download). Through the
   // section's own delete confirmation (trash semantics); still no upload, replace or rename there.
-  it('read-only but deletable (a guest\'s identity folder): delete per file, a content-less one too, and nothing else', async () => {
-    const w = mountSection({ nodes: [NOTES, PENDING], readonly: true, deletable: true })
+  it('a guest\'s identity folder: delete per file, a content-less one too, and nothing else', async () => {
+    const w = mountSection({ nodes: [NOTES, PENDING], identityFolder: true })
     await flushPromises()
     expect(w.find('.files-toolbar').exists()).toBe(false)
     expect(w.findAll('input[type="file"]')).toHaveLength(0)

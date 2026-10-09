@@ -1,10 +1,11 @@
 <script setup lang="ts">
 // An opened drop box (cr-files-application F3, ADR 0080 decision 11): its guests' identity folders — one per guest
 // identity, each named by its guest (its entry opened through the drop box's drop key, core's tree) — with how many
-// files each holds. A folder opens to core's level view, read-only there (a member places nothing in a drop box: the
-// host's `readonly` for a node inside an identity folder) but for a delete per file (`deletable`, inbox #391); a member
-// deletes a folder here, or the drop box, and shares
-// it (`DropBoxShareDialog`). Two guests of one name are told apart at display time, never stored ("Anna", "Anna (2)",
+// files each holds. A folder opens to core's level view, read-only there (a member places nothing in a guest's identity
+// folder) but for a delete per file (inbox #391); a member deletes a folder here, or the drop box, and shares it
+// (`DropBoxShareDialog`) — each where Files' capability matrix says so (`../capabilities.ts`, inbox #401: the share with
+// the instance's public links, the deletes not during a pending deletion). Two guests of one name are told apart at
+// display time, never stored ("Anna", "Anna (2)",
 // in the order the server made their folders, a same-millisecond pair by id) — core's `displayNamesOf` in
 // `compareByCreation` order, the order the URL segments `anna`, `anna-2` of the same two folders come from
 // (`core/node/location.ts` `segmentsOf`), and the label the folder's own heading and breadcrumb show (inbox #393).
@@ -19,12 +20,16 @@ import { compareByCreation, displayNamesOf } from '../../../core/node/location'
 import { useConfirm } from '../../../shared/state/useConfirm'
 import { useToast } from '../../../shared/state/useToast'
 import { FILE_KIND } from '../kinds'
+import { filesCapabilities } from '../capabilities'
+import { targetOf } from '../../../core/access'
 
 const props = defineProps<NodeDetailProps>()
 const emit = defineEmits<NodeDetailEmits>()
 const { t } = useI18n()
 const { ask } = useConfirm()
 const toast = useToast()
+
+const caps = computed(() => filesCapabilities(props.access, targetOf(props.tree, props.node)))
 
 /** The guests' folders, each with its display name (a repeated name numbered) and its file count. */
 const folders = computed(() => {
@@ -40,6 +45,7 @@ const folders = computed(() => {
 })
 
 async function removeFolder(folder: TreeNode, label: string) {
+  if (!caps.value.deleteFile) return
   const accepted = await ask({
     header: t('files.dropBox.deleteFolder', { name: label }),
     message: t('files.dropBox.deleteFolderConfirm', { name: label }),
@@ -62,8 +68,8 @@ async function removeFolder(folder: TreeNode, label: string) {
       <h2><span class="pi pi-inbox" aria-hidden="true" /> {{ node.name }}</h2>
       <span>{{ folders.length }}</span>
       <div class="dropbox-toolbar">
-        <Button v-if="shareable" type="button" :label="t('files.dropBox.share')" icon="pi pi-share-alt" size="small" @click="emit('share')" />
-        <Button type="button" :label="t('files.dropBox.delete')" icon="pi pi-trash" severity="danger" outlined size="small" @click="emit('delete')" />
+        <Button v-if="caps.share" type="button" :label="t('files.dropBox.share')" icon="pi pi-share-alt" size="small" @click="emit('share')" />
+        <Button v-if="caps.deleteNode" type="button" :label="t('files.dropBox.delete')" icon="pi pi-trash" severity="danger" outlined size="small" @click="emit('delete')" />
       </div>
     </div>
     <p>{{ t('files.dropBox.readOnlyHint') }}</p>
@@ -79,6 +85,7 @@ async function removeFolder(folder: TreeNode, label: string) {
         </button>
         <span class="veyq-action-group veyq-action-group-icons">
           <Button
+            v-if="caps.deleteFile"
             type="button"
             class="veyq-icon-button veyq-prime-icon-button"
             icon="pi pi-trash"

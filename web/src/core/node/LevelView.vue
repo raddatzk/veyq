@@ -18,34 +18,31 @@
 // whole subtree, folders included). The grid/list/map toggle is still Memories' section's (its map is Memories'; inbox
 // #370).
 //
-// `hideEmptySections` (a guest's folder in a drop box, inbox #385): a section, or the folders section, with nothing to
-// show is left out instead of saying "none yet" — nobody can add anything there, so an empty heading only says that
-// this kind exists. When nothing is left, the level says so once.
+// **Who looks** (inbox #401): the host hands the level its `access` and its `tree` (`core/access.ts`), and the level hands
+// both on to every section; what the level's own controls offer is core's `folderCapabilities` for the folder on screen
+// — no write during a pending deletion, none in a guest's identity folder, a share only of a folder.
+//
+// In a guest's identity folder (a drop box's, inbox #385) a section, or the folders section, with nothing to show is
+// left out instead of saying "none yet" — nobody can add anything there, so an empty heading only says that this kind
+// exists. When nothing is left, the level says so once.
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import type { TreeNode } from './tree'
 import type { Level } from './browse'
 import { FOLDER_KIND, type NodeKind } from './kind'
-import type { EpochKeys } from '../../features/spaces/epochs'
 import { registry } from '../applications/registry'
+import { folderCapabilities, targetOf, type Access, type TreeSource } from '../access'
 import { useViewMode } from '../../shared/state/useViewMode'
 import { compareByCreation, displayNamesOf } from './location'
 
-// `readonly` (cr-0090): the scope is being deleted → no create/rename/delete affordance (every write is server-rejected
-// during the grace window, uc.spaces.scope-access; view, share listing and download stay open).
-// `shareable`: the host offers a public share of this folder (FOLDER's descriptor AND the instance capability) — the
-// button opens core's folder share dialog through the `share` event. Always false at the scope root.
 const props = defineProps<{
   folder: TreeNode | null
   level: Level
-  epochs: EpochKeys | null
-  readonly: boolean
-  shareable: boolean
-  hideEmptySections?: boolean
-  /** A child may still be deleted (into the trash) while `readonly`: a guest's identity folder, where a member places
-   *  nothing but removes what a guest sent, file by file (inbox #391). Handed to every section as `deletable`. */
-  deletable?: boolean
+  /** Who looks (`core/access.ts`): what the level offers, and what every section is handed. */
+  access: Access
+  /** The tree as that session reads it; handed to every section. */
+  tree: TreeSource
   /** The folder's name as its siblings tell it apart (`displayNamesOf`: a guest's folder `Anna (2)` beside `Anna`,
    *  inbox #393), when the host knows the siblings. Omitted: the folder's own name. */
   folderName?: string
@@ -66,6 +63,12 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const { viewMode } = useViewMode()
 
+const inIdentityFolder = computed(() => props.tree.inIdentityFolder(props.folder?.id ?? null))
+const caps = computed(() => folderCapabilities(props.access, targetOf(props.tree, props.folder)))
+const hideEmptySections = computed(() => inIdentityFolder.value)
+// The member's epoch keys, for the sections' sealed reads; a guest's keys come through the tree.
+const epochs = computed(() => (props.access.mode === 'member' ? props.access.epochs : null))
+
 // Read once per mount, like the host's slots: the registry is filled before the first route resolves and never changes.
 const sections = registry.sections()
 const sectioned = new Set<NodeKind>(sections.flatMap((s) => s.kinds))
@@ -79,12 +82,12 @@ const sectionViews = computed(() =>
       component: s.component,
       nodes: s.kinds.length === 1 ? (props.level.byKind.get(s.kinds[0]) ?? []) : s.kinds.flatMap((k) => props.level.byKind.get(k) ?? []),
     }))
-    .filter((s) => !props.hideEmptySections || s.nodes.length > 0),
+    .filter((s) => !hideEmptySections.value || s.nodes.length > 0),
 )
-const showFolders = computed(() => !props.hideEmptySections || props.level.folders.length > 0)
+const showFolders = computed(() => !hideEmptySections.value || props.level.folders.length > 0)
 // The sub-folders' card labels: a repeated name numbered, in creation order — the rule the URL segments follow too.
 const folderLabels = computed(() => displayNamesOf(props.level.folders, (n) => n.name, compareByCreation))
-const nothingShown = computed(() => props.hideEmptySections && !sectionViews.value.length && !fallbacks.value.length && !showFolders.value)
+const nothingShown = computed(() => hideEmptySections.value && !sectionViews.value.length && !fallbacks.value.length && !showFolders.value)
 
 // The children no section serves, one bucket per kind, sorted by kind so the order is stable. A kind the registry
 // does not know at all still shows (with a generic icon): the server stores any kind.
@@ -103,7 +106,7 @@ const fallbacks = computed(() =>
   <div class="veyq-level-view">
     <!-- The space's node trash (uc.memory.delete-node): every application's deleted nodes, so the level view's own, not
          a section's. Hidden where nothing is written (a pending deletion: a restore is a write; a guest's folder). -->
-    <div v-if="!readonly" class="veyq-level-toolbar">
+    <div v-if="caps.nodeTrash" class="veyq-level-toolbar">
       <Button
         type="button"
         :label="t('node.trash.open')"
@@ -122,11 +125,11 @@ const fallbacks = computed(() =>
           <!-- Visible at EVERY width: the card has no overflow menu, so a width-hidden button is a lost action. They
                carried the Memory header's collapse classes, which hid all three at 721–1120 px and ≤ 720 px (found in the
                browser, 2026-10-07); three small icon buttons fit, and ≤ 520 px they take their own row (ui.css). -->
-          <div v-if="!readonly || shareable" class="veyq-folder-overview-actions">
+          <div v-if="caps.share || caps.rename || caps.deleteNode" class="veyq-folder-overview-actions">
             <!-- The same affordance as a Memory's share button (icon, label, tooltip); listing and copying links is a
                  read, so it stays during a pending deletion, where a new link is refused server-side anyway. -->
             <Button
-              v-if="shareable"
+              v-if="caps.share"
               v-tooltip.bottom="t('share.share')"
               type="button"
               class="veyq-icon-button veyq-prime-icon-button veyq-folder-overview-action"
@@ -138,7 +141,7 @@ const fallbacks = computed(() =>
               @click="emit('share')"
             />
             <Button
-              v-if="!readonly"
+              v-if="caps.rename"
               type="button"
               class="veyq-icon-button veyq-prime-icon-button veyq-folder-overview-action"
               icon="pi pi-pencil"
@@ -149,7 +152,7 @@ const fallbacks = computed(() =>
               @click="emit('renameFolder')"
             />
             <Button
-              v-if="!readonly"
+              v-if="caps.deleteNode"
               type="button"
               class="veyq-icon-button veyq-prime-icon-button veyq-folder-overview-action veyq-danger-action"
               icon="pi pi-trash"
@@ -171,8 +174,8 @@ const fallbacks = computed(() =>
       :folder="folder"
       :nodes="s.nodes"
       :epochs="epochs"
-      :readonly="readonly"
-      :deletable="!readonly || deletable"
+      :access="access"
+      :tree="tree"
       @open-node="emit('openNode', $event)"
       @create="emit('create', $event)"
       @rename="emit('renameNode', $event)"
@@ -218,7 +221,7 @@ const fallbacks = computed(() =>
           <strong>{{ folderLabels.get(child.id) ?? child.name }}</strong>
         </button>
         <button
-          v-if="!readonly"
+          v-if="caps.createFolder"
           class="veyq-card veyq-card-interactive veyq-create-card"
           type="button"
           :aria-label="t('node.folderCreate')"

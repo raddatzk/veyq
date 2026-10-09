@@ -23,18 +23,25 @@ import { covers, ensureCovers } from '../coverStore'
 import { activeSpace } from '../../../app/activeSpace'
 import { isFavorite, toggleFavorite } from '../favoritesStore'
 import { useViewMode } from '../../../shared/state/useViewMode'
+import { memoryCapabilities } from '../capabilities'
+import { targetOf } from '../../../core/access'
 import MemoryCard from './MemoryCard.vue'
 import ViewModeToggle from './ViewModeToggle.vue'
 import SpaceMap from './SpaceMap.vue'
 
 // `epochs` (the scope's epoch key set, ADR 0024) unseals each Memory's sealed date/cover/pins under its own epoch's
 // K_SC — a rotated scope mixes epochs across the grid; null (locked) ⇒ no dates/covers/pins.
-// `readonly` (cr-0090): the scope is being deleted → no create card.
+// What the section offers is Memories' capability matrix for the level (`../capabilities.ts`, inbox #401): the create card
+// only where a Memory may be created (not during a pending deletion, cr-0090; not in a guest's identity folder), the
+// pin only for a member.
 const props = defineProps<LevelSectionProps>()
 const emit = defineEmits<LevelSectionEmits>()
 
 const { t } = useI18n()
 const { viewMode } = useViewMode()
+const caps = computed(() =>
+  memoryCapabilities(props.access, targetOf(props.tree, props.folder)),
+)
 
 // Memories ordered by their sealed start date (newest first, undated last) — each K_mem opened under its parent's
 // key: E_{node.epoch} at the scope root, the folder's key inside a folder (ADR 0080 Decision 1); read from
@@ -61,7 +68,7 @@ function onPinOpen(nodeId: string) {
 
 /** The heart on a card: the member's own pin set for this scope (sealed under the Master Key, `favoritesStore`). */
 function onToggleFavorite(node: TreeNode) {
-  if (activeSpace.scopeId) void toggleFavorite(node.id, activeSpace.scopeId)
+  if (caps.value.favorite && activeSpace.scopeId) void toggleFavorite(node.id, activeSpace.scopeId)
 }
 
 // The chosen covers come from the shared `coverStore` (cr-0072 + the sidebar rail): one decrypt per Memory per
@@ -106,13 +113,14 @@ watch(
         :memory="memory"
         :date="date"
         :favorite="isFavorite(memory.id)"
+        :favoritable="caps.favorite"
         :cover-src="covers.get(memory.id)?.url ?? null"
         :cover-crop="covers.get(memory.id)?.crop ?? null"
         @open="emit('openNode', $event)"
         @toggle-favorite="onToggleFavorite"
       />
       <button
-        v-if="!readonly"
+        v-if="caps.createMemory"
         class="veyq-card veyq-card-interactive veyq-create-card memory-create-card-memory"
         type="button"
         :aria-label="t('memory.create')"

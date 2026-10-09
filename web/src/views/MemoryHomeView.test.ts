@@ -3,7 +3,9 @@
 // and Files), core's real level view (`core/node/LevelView.vue`) and the real Memories detail adapter
 // (`MemoryDetailHost`), with only the heavy Memories views (`MemoryDetail`, `MemoriesSection`) and the dialogs stubbed
 // to prop recorders. What this pins: which component the host renders for which node kind, and that the generic
-// context (buckets by kind, shareable, content key) arrives in the props the Memories components take. The
+// context (buckets by kind, the member's access and tree, content key) arrives in the props the Memories components
+// take. The section recorders record what the REAL capability functions answer for the access and the tree they were
+// handed — what the real section would offer. The
 // registry-variant cases (an unregistered detail, no section at all) are in `MemoryHomeView.registry.test.ts`, which
 // stubs the registry itself.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -49,33 +51,44 @@ vi.mock('../features/memory/components/MemoryDetail.vue', async () => {
   return {
     default: defineComponent({
       name: 'MemoryDetailStub',
-      props: ['node', 'scopeId', 'memoryKey', 'scopeKey', 'personalScope', 'favorite', 'chapters', 'shareable'],
+      props: ['node', 'scopeId', 'memoryKey', 'scopeKey', 'personalScope', 'favorite', 'chapters', 'caps'],
       emits: ['toggleFavorite', 'rename', 'delete', 'openChapter', 'createChapter', 'share', 'shareUpload', 'metaUpdated'],
-      setup: (p) => () => h('div', { class: 'detail-stub', 'data-shareable': String(p.shareable), 'data-key': String(p.memoryKey?.[0]) },
+      setup: (p) => () => h('div', {
+        class: 'detail-stub', 'data-shareable': String(p.caps.share), 'data-share-upload': String(p.caps.shareUpload),
+        'data-upload': String(p.caps.upload), 'data-key': String(p.memoryKey?.[0]),
+      },
         `${p.node.name}|${(p.chapters ?? []).map((c: { name: string }) => c.name).join(',')}`),
     }),
   }
 })
 vi.mock('../features/memory/components/MemoriesSection.vue', async () => {
   const { defineComponent, h } = await import('vue')
+  const { memoryCapabilities } = await import('../features/memory/capabilities')
+  const { targetOf } = await import('../core/access')
   return {
     default: defineComponent({
       name: 'MemoriesSectionStub',
-      props: ['folder', 'nodes', 'epochs', 'readonly'],
+      props: ['folder', 'nodes', 'epochs', 'access', 'tree'],
       emits: ['openNode', 'create'],
-      setup: (p) => () => h('section', { class: 'section-stub', 'data-readonly': String(p.readonly) },
+      setup: (p) => () => h('section', {
+        class: 'section-stub', 'data-readonly': String(!memoryCapabilities(p.access, targetOf(p.tree, p.folder)).createMemory),
+      },
         `folder=${p.folder?.name ?? '-'}|memories=${p.nodes.map((n: { name: string }) => n.name).join(',')}`),
     }),
   }
 })
 vi.mock('../features/files/components/FilesSection.vue', async () => {
   const { defineComponent, h } = await import('vue')
+  const { filesCapabilities } = await import('../features/files/capabilities')
+  const { targetOf } = await import('../core/access')
   return {
     default: defineComponent({
       name: 'FilesSectionStub',
-      props: ['folder', 'nodes', 'epochs', 'readonly', 'deletable'],
+      props: ['folder', 'nodes', 'epochs', 'access', 'tree'],
       emits: ['openNode', 'create', 'rename'],
-      setup: (p) => () => h('section', { class: 'files-stub', 'data-deletable': String(p.deletable) }, `files=${p.nodes.map((n: { name: string }) => n.name).join(',')}`),
+      setup: (p) => () => h('section', {
+        class: 'files-stub', 'data-deletable': String(filesCapabilities(p.access, targetOf(p.tree, p.folder)).deleteFile),
+      }, `files=${p.nodes.map((n: { name: string }) => n.name).join(',')}`),
     }),
   }
 })
