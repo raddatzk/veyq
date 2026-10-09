@@ -109,8 +109,11 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
 - **Validation + sanitization belong in the spec** via `x-field-extra-annotation` (bean-validation
   `@NotBlank`/`@Size`/`@Pattern` + a Jackson trim deserializer) → enforced by `@Valid` at the boundary,
   **400 before the handler** — but only one level deep: a nested object or list needs its own
-  `@field:jakarta.validation.Valid`, and every request bound needs its annotation
-  ([styleguide](../docs/crosscutting/developer-styleguide.md)). Don't re-validate field shape in the handler.
+  `@field:jakarta.validation.Valid`, a list of scalars carries its elements' bounds as core's `EachElement`, and
+  every request bound needs its annotation ([styleguide](../docs/crosscutting/developer-styleguide.md)). Don't
+  re-validate field shape in the handler. Every such refusal — and Jackson's own, below — answers the contract's
+  `400 invalid_request` with nothing of the request in it, through core's `core/http/RequestRejectionMappers.kt`
+  (styleguide §7); an application writes no mapper of its own.
   **Match the annotation to the GENERATED type, not to the wire type.** A property with `format: uuid`
   generates as `java.util.UUID`, and a String validator on it is not a stricter check — it is a
   `UnexpectedTypeException` at request time, i.e. a **500 on a well-formed request** instead of the 400 the

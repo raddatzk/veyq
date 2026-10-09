@@ -137,29 +137,29 @@ class LoginSliceTest {
     @Test
     fun malformedRequestsRejectedAtTheBoundary() {
         // The spec's x-field-extra-annotation makes @Valid reject malformed input with 400 BEFORE the handler;
-        // these are shape violations, so the response is the container's 400 (no veyq {code}, matching the
-        // .http boundary surface this replaces — cr-0159/ADR 0040 drops http as a coverage surface).
+        // these are shape violations, answered as the contract's `400 invalid_request` by core's boundary mappers
+        // (inbox #355) — the same body a handler's refusal carries, and nothing of the refused email or key.
         // Missing email on the challenge → @NotBlank.
         given().contentType(ContentType.JSON).body("{}")
             .`when`().post("/api/login/challenge")
-            .then().statusCode(400)
+            .then().statusCode(400).body("code", equalTo("invalid_request"))
         // Malformed email on the challenge → @Email.
         given().contentType(ContentType.JSON).body("""{"email":"not-an-email"}""")
             .`when`().post("/api/login/challenge")
-            .then().statusCode(400)
+            .then().statusCode(400).body("code", equalTo("invalid_request"))
         // Non-base64 signature on verify → @Pattern, rejected before any nonce lookup.
         given().contentType(ContentType.JSON).body("""{"email":"$EMAIL","nonce":"AA==","signature":"not base64!!"}""")
             .`when`().post("/api/login/verify")
-            .then().statusCode(400)
+            .then().statusCode(400).body("code", equalTo("invalid_request"))
         // A verify that names no nonce → @NotBlank. There is no "take the newest challenge" fallback: that
         // would keep a challenge displaceable for every client that omits the field (uc.account.login E4).
         given().contentType(ContentType.JSON).body("""{"email":"$EMAIL","signature":"AA=="}""")
             .`when`().post("/api/login/verify")
-            .then().statusCode(400)
+            .then().statusCode(400).body("code", equalTo("invalid_request"))
         // Non-base64 nonce on verify → @Pattern.
         given().contentType(ContentType.JSON).body("""{"email":"$EMAIL","nonce":"not base64!!","signature":"AA=="}""")
             .`when`().post("/api/login/verify")
-            .then().statusCode(400)
+            .then().statusCode(400).body("code", equalTo("invalid_request"))
     }
 
     // --- token rotation + reuse detection ---

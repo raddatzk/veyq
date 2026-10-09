@@ -11,7 +11,6 @@ import me.raddatz.veyq.memories.media.ShareMediaRead
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
-import org.hamcrest.CoreMatchers.endsWith
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.hasItem
 import org.hamcrest.CoreMatchers.not
@@ -129,7 +128,7 @@ class ShareContributorSliceTest {
             .body("media.find { it.mediaId == '$membersMedia' }.derivatives.find { it.kind == 'PREVIEW' }.wrappedBlobMeta", nullValue())
             .body("media.find { it.mediaId == '$guestsMedia' }.wrappedBlobMeta", equalTo("Z3Vlc3QtbWV0YQ=="))
 
-        guestStart("A".repeat(2049)).statusCode(400).body("title", equalTo("Constraint Violation"))
+        guestStart("A".repeat(2049)).statusCode(400).body("code", equalTo("invalid_request"))
         guestStart("A".repeat(2048)).statusCode(200).body("results[0].uploadId", notNullValue()) // control
     }
 
@@ -196,8 +195,7 @@ class ShareContributorSliceTest {
         // control: exactly `maxItems` (256) is accepted — so the negative is the bound, not the share
         start(256).then().statusCode(200).body("results.size()", equalTo(256))
         start(257).then().statusCode(400)
-            .body("title", equalTo("Constraint Violation"))
-            .body("violations.field", hasItem(endsWith(".items")))
+            .body("code", equalTo("invalid_request"))
     }
 
     // The contract's role is an open token (cr-files-application P3-S2); the closed enum that once kept a guest's COVER
@@ -224,7 +222,7 @@ class ShareContributorSliceTest {
         // a well-formed token Memories names no role in
         start("FILE_CONTENT").then().statusCode(400).body("code", equalTo("invalid_request"))
         // a malformed token is the contract's own 400, before the handler
-        start("cover").then().statusCode(400).body("title", equalTo("Constraint Violation"))
+        start("cover").then().statusCode(400).body("code", equalTo("invalid_request"))
     }
 
     // --- helpers ---

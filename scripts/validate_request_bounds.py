@@ -36,6 +36,14 @@ beside the `$ref`, or else the target's own `x-field-extra-annotation`, which th
      bound it, so that meaning gets an operation of its own — `setTenantStorageQuota` read null as "no quota", so
      a request without the field cleared the quota, until `clearTenantStorageQuota` took that meaning (inbox #304).
 
+  6. **a list of scalars bounds its elements.** The `kotlin` generator types such a list `List<String>` and cannot
+     annotate the type argument, so the bounds its `items` declare (`maxLength`/`minLength`/`pattern`, read through
+     a `$ref`'d scalar like `CapabilityTag`) ride on the list as `@field:me.raddatz.veyq.core.http.EachElement(...)`
+     — value for value, both ways, as rules 1 and 2 hold a field (inbox #354: `ClaimRequest.capabilityTags` took any
+     string as a tag). An element bound with no `EachElement` argument to carry it (`format`, `contentEncoding`, a
+     number's range) is named too, rather than passed unseen, and so is an `EachElement` on anything but such a list.
+     A type-changing element `format` (a list of `uuid`s) needs no carrier: the element's type refuses the rest.
+
 The failure names the list — spec, schema, property, rule — never a count.
 
 **The defect that bought it.** `BlobUploadsBatchRequest.items` declared `maxItems: 256` with no `@Size` and no
@@ -49,11 +57,11 @@ spot until cr-platform-contract-split slice 4 opened `NodeKind` to a patterned t
 **effect**: that the generator emits it verbatim onto the field, that Quarkus validates the body, and that the
 `@Valid` cascade descends are proven by the slice tests `MediaCoreSliceTest.startBlobUploadsOverItsItemBoundIs400`,
 `MediaCoreSliceTest.startBlobUploadsValidatesInsideEachItem` and
-`ShareContributorSliceTest.shareUploadOverItsItemBoundIs400` — one per mechanism, not per field. It does not see
+`ShareContributorSliceTest.shareUploadOverItsItemBoundIs400` — one per mechanism, not per field; `EachElement`'s by
+`MalformedRequestSliceTest.aListElementOutsideItsBoundsIsInvalidRequest`. It does not see
 path/query/header **parameters** (the `jaxrs-spec` generator derives their annotations itself, and no test sends
 an out-of-range one), **response** schemas, **presence** beyond rule 5 (a missing object, enum or uuid field is
-refused by deserialization on its own; `@NotBlank` beyond N = 1), nor a bound on the **elements** of a scalar array (`items.maxLength`),
-which a field annotation cannot express. And it ties the annotation to the schema only — never either to the
+refused by deserialization on its own; `@NotBlank` beyond N = 1). And it ties the annotation to the schema only — never either to the
 DB column (`validate_maxlength_storage.py` does that for base64 caps) or to what a client sends, so a bound that
 is the *wrong value* is green here.
 """
@@ -83,6 +91,9 @@ MAX_RE = re.compile(CONSTRAINT + r"Max\((-?\d+)\)")
 # `regexp = "<Kotlin string literal>"` — the literal may contain `\"`, so match escapes explicitly.
 PATTERN_RE = re.compile(CONSTRAINT + r'Pattern\(regexp\s*=\s*"((?:[^"\\]|\\.)*)"\)')
 EMAIL_RE = re.compile(CONSTRAINT + r"Email\b")
+# Rule 6: the elements' bounds of a list of scalars, carried on the list (core's own constraint, `core/http/EachElement.kt`).
+EACH_RE = re.compile(r'@field:me\.raddatz\.veyq\.core\.http\.EachElement\(((?:[^()"]|"(?:[^"\\]|\\.)*")*)\)')
+EACH_ARG_RE = re.compile(r'(minLength|maxLength)\s*=\s*(\d+)|pattern\s*=\s*"((?:[^"\\]|\\.)*)"')
 PRESENCE_MIN1_RE = re.compile(CONSTRAINT + r"(?:NotBlank|NotEmpty)\b")
 NOT_NULL_RE = re.compile(CONSTRAINT + r"NotNull\b")
 # The schema types the generator turns into a Kotlin primitive, with the default Jackson binds a missing one to.
@@ -170,6 +181,14 @@ class Walker:
             merged["type"] = sorted(types_of(target) | {"null"})
         return merged
 
+    def scalar_element(self, prop: dict, file: str) -> dict | None:
+        """The element schema of a list of scalars (a `$ref`'d scalar read as that scalar), else None."""
+        s = unwrap_nullable(prop)
+        items = s.get("items")
+        if not isinstance(items, dict) or self.object_target(prop, file, "") is not None:
+            return None
+        return unwrap_nullable(self.scalar_ref(items, file))
+
     def constrained(self, file: str, label: str, schema: dict) -> bool:
         """Whether an object schema carries any constraint at any depth (so `@Valid` into it is load-bearing)."""
         key = (file, label)
@@ -212,6 +231,12 @@ class Walker:
             where = f"{file}:{label}.{pname}"
             effective = self.scalar_ref(prop, file)
             check_property(where, effective)
+            element = self.scalar_element(prop, file)
+            if element is not None:
+                check_elements(where, prop, element)
+            elif EACH_RE.search(annotation_of(prop)):
+                errors.append(f"{where} [elements] — `EachElement` on a property that is no list of scalars: it "
+                              f"enforces element bounds nothing declares (and fails on a non-collection at request time).")
             if required:
                 check_presence(where, effective)
             target = self.object_target(prop, file, f"{label}.{pname}")
@@ -345,6 +370,39 @@ def check_property(where: str, prop: dict) -> None:
         fail("annotation→bound", "`@Email` enforces a format the schema does not declare (`format: email`).")
 
 
+def check_elements(where: str, prop: dict, element: dict) -> None:
+    """Rule 6 — a list of scalars carries its elements' bounds as one `EachElement`, value for value, both ways."""
+    eaches = EACH_RE.findall(annotation_of(prop))
+    declared: dict[str, object] = {k: element[k] for k in ("minLength", "maxLength") if k in element}
+    if "pattern" in element:
+        declared["pattern"] = normalise_regexp(element["pattern"])
+    # A type-changing `format` (`uuid`) needs no carrier: the element's generated type refuses what it cannot bind.
+    unsupported = [k for k in ("minimum", "maximum", "contentEncoding") if k in element]
+    if "format" in element and element["format"] not in TYPE_CHANGING_FORMATS:
+        unsupported.append(f"format: {element['format']}")
+    if unsupported:
+        errors.append(f"{where} [elements] — its items declare {', '.join(unsupported)}, which `EachElement` cannot "
+                      f"carry: widen it (and this rule) before declaring such an element bound.")
+    if len(eaches) > 1:
+        errors.append(f"{where} [elements] — {len(eaches)} `EachElement` annotations; one carries every bound.")
+        return
+    annotated: dict[str, object] = {}
+    for args in eaches:
+        for key, num, rx in EACH_ARG_RE.findall(args):
+            if key:
+                annotated[key] = int(num)
+            else:
+                annotated["pattern"] = normalise_regexp(kotlin_unescape(rx))
+    if declared == annotated:
+        return
+    if not eaches:
+        errors.append(f"{where} [elements] — its items declare {declared}, but the list has no "
+                      f"`@field:me.raddatz.veyq.core.http.EachElement(...)`, so no element bound is enforced.")
+        return
+    errors.append(f"{where} [elements] — `EachElement` carries {annotated}, its items declare {declared}: the two "
+                  f"must agree value for value.")
+
+
 def check_presence(where: str, prop: dict) -> None:
     """Rule 5 — a required primitive whose absence would bind to the type's default must be refused."""
     s = unwrap_nullable(prop)
@@ -394,7 +452,8 @@ def main() -> int:
     print(
         f"request bounds OK: {n_bodies} request bodies · {len(walker.visited)} reachable object schemas · "
         f"{walker.n_props} properties — every bound annotated value for value, nothing annotated beyond the "
-        f"schema, every constrained nested object cascaded with @Valid, every required primitive refusing its absence.")
+        f"schema, every constrained nested object cascaded with @Valid, every required primitive refusing its absence, every "
+        f"bounded list element carried by EachElement.")
     print("  scope: annotation PRESENT and equal to its schema. NOT its effect, parameters, responses — see the "
           "docstring.")
     return 0

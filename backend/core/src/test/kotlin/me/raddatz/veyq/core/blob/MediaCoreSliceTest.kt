@@ -9,9 +9,7 @@ import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
 import java.util.UUID
-import org.hamcrest.CoreMatchers.endsWith
 import org.hamcrest.CoreMatchers.equalTo
-import org.hamcrest.CoreMatchers.hasItem
 import org.hamcrest.CoreMatchers.notNullValue
 import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.Test
@@ -90,8 +88,7 @@ class MediaCoreSliceTest {
         // control: exactly `maxItems` (256) is accepted — so the negative below is the bound, not the endpoint
         startBatch(userId, scopeId, uploadItems(256)).then().statusCode(200).body("results.size()", equalTo(256))
         startBatch(userId, scopeId, uploadItems(257)).then().statusCode(400)
-            .body("title", equalTo("Constraint Violation"))
-            .body("violations.field", hasItem(endsWith(".items")))
+            .body("code", equalTo("invalid_request"))
     }
 
     @Test
@@ -100,8 +97,7 @@ class MediaCoreSliceTest {
         // control: the same one-item batch with a well-formed wrap is accepted
         startBatch(userId, scopeId, uploadItems(1)).then().statusCode(200)
         startBatch(userId, scopeId, """[${TestBlob.SMALL.declare("")}]""").then().statusCode(400)
-            .body("title", equalTo("Constraint Violation"))
-            .body("violations.field", hasItem(endsWith("wrappedBlobKey")))
+            .body("code", equalTo("invalid_request"))
     }
 
     // --- live media updates (uc.memory.live-updates, cr-0107, ADR 0033) ---
@@ -109,10 +105,11 @@ class MediaCoreSliceTest {
     // --- helpers ---
 
     /** Start one blob upload (in-memory store: presignedPuts come back null) and return its uploadId. */
-    // The request-body bounds are enforced at the boundary, not in the handler: a violation is Quarkus's own
-    // `ResteasyReactiveViolationExceptionMapper` answer (400, `title` "Constraint Violation", the failing path in
-    // `violations[].field`), never a veyq `code`. `validate_request_bounds.py` proves each annotation is PRESENT;
-    // these prove the two mechanisms it relies on have an EFFECT — a top-level bound, and the `@Valid` cascade.
+    // The request-body bounds are enforced at the boundary, not in the handler: a violation answers core's
+    // `ConstraintViolationExceptionMapper` (400 `invalid_request`, nothing of the failing field — inbox #355), so each
+    // refusal is paired with a control that differs only in the bound. `validate_request_bounds.py` proves each
+    // annotation is PRESENT; these prove the two mechanisms it relies on have an EFFECT — a top-level bound, and the
+    // `@Valid` cascade.
 
     private fun uploadItems(n: Int) = (1..n).joinToString(",", "[", "]") { TestBlob.SMALL.declare("d3JhcA==") }
 

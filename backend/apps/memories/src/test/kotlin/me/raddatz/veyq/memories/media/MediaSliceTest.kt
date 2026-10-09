@@ -470,10 +470,11 @@ class MediaSliceTest {
     }
 
     /** Start one blob upload (in-memory store: presignedPuts come back null) and return its uploadId. */
-    // The request-body bounds are enforced at the boundary, not in the handler: a violation is Quarkus's own
-    // `ResteasyReactiveViolationExceptionMapper` answer (400, `title` "Constraint Violation", the failing path in
-    // `violations[].field`), never a veyq `code`. `validate_request_bounds.py` proves each annotation is PRESENT;
-    // these prove the two mechanisms it relies on have an EFFECT — a top-level bound, and the `@Valid` cascade.
+    // The request-body bounds are enforced at the boundary, not in the handler: a violation answers core's
+    // `ConstraintViolationExceptionMapper` (400 `invalid_request`, nothing of the failing field — inbox #355), so each
+    // refusal is paired with a control that differs only in the bound. `validate_request_bounds.py` proves each
+    // annotation is PRESENT; these prove the two mechanisms it relies on have an EFFECT — a top-level bound, and the
+    // `@Valid` cascade.
 
     private fun startOne(
         userId: String, scopeId: String, blob: TestBlob, wrap: String,

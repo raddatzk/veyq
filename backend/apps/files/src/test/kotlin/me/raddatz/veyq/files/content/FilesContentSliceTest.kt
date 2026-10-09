@@ -32,6 +32,7 @@ import java.util.UUID
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 
@@ -173,6 +174,28 @@ class FilesContentSliceTest {
         complete(userId, scopeId, file, UUID.randomUUID().toString()).statusCode(404).body("code", equalTo("upload_not_found"))
         // control: the right session lands
         complete(userId, scopeId, file, start(userId, scopeId, file, TestBlob.SMALL)).statusCode(200)
+    }
+
+    /**
+     * Files' own generated resource answers a malformed body as core's does (inbox #339, #355): core's boundary mappers
+     * reach an application's `…Api` with no code of Files' own. A missing `uploadId` (the constructor's null check), a
+     * non-uuid one (Jackson's type refusal), unparseable JSON — each the contract's `400 invalid_request`, the value
+     * not echoed; the control is the same route with a well-formed body, refused by the handler instead.
+     */
+    @Test
+    fun aMalformedCompletionIsTheContractsInvalidRequest() {
+        val (userId, scopeId) = seedMemberScope()
+        val file = seedNode(scopeId, FilesNodeKinds.FILE, wrappedContentKey = CONTENT_KEY)
+        fun post(body: String) = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+            .body(body).`when`().post("/api/scopes/$scopeId/files/$file/content").then()
+
+        for (body in listOf("{}", """{"uploadId":"c2VjcmV0LWNpcGhlcnRleHQ"}""", """{"uploadId":""")) {
+            val refused = post(body).statusCode(400).contentType(ContentType.JSON)
+                .body("code", equalTo("invalid_request")).body("message", nullValue()).extract().asString()
+            assertFalse(refused.contains("c2VjcmV0") || refused.contains("uploadId"), "nothing echoed: $refused")
+        }
+        // control: a well-formed body reaches the handler, which finds no such upload
+        post("""{"uploadId":"${UUID.randomUUID()}"}""").statusCode(404).body("code", equalTo("upload_not_found"))
     }
 
     @Test

@@ -492,7 +492,9 @@ components:
           maxItems: 64
           items: { $ref: "#/components/schemas/CapabilityTag" }
           example: ["02f271ff"]
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotEmpty @field:jakarta.validation.constraints.Size(max = 64)'
+          # The generator types the list `List<String>` and cannot annotate its type argument, so the elements' bounds
+          # (`CapabilityTag`'s) ride on the list as `EachElement` (inbox #354; `validate_request_bounds.py` holds them).
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotEmpty @field:jakarta.validation.constraints.Size(max = 64) @field:me.raddatz.veyq.core.http.EachElement(maxLength = 64, pattern = "[0-9a-f]+")'
         scopeId:
           x-veyq-visibility: id
           type: [string, "null"]
