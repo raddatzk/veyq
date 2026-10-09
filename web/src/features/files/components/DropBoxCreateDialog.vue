@@ -1,7 +1,9 @@
 <script setup lang="ts">
 // The drop box's `createDialog` (cr-files-application F3): a name, then core's node create with Files' kind. The markup
 // is core's `FolderNameDialog` (its form classes and labels, its "Create"); a drop box takes guests once a link is made
-// for it, which the dialog says before the name is asked (inbox #385).
+// for it, which the dialog says before the name is asked (inbox #385). A name that collides with a sibling in the loaded
+// tree is refused before sending, naming that sibling (core's `siblingCollision.ts`, inbox #389); the server's 409 is the
+// race backstop, said as core's neutral `node.slugTaken`.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Dialog from 'primevue/dialog'
@@ -10,6 +12,10 @@ import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import type { NodeCreateDialogEmits, NodeCreateDialogProps } from '../../../core/applications/registry'
 import { createDropBox } from '../dropBox'
+import { DROPBOX_KIND } from '../kinds'
+import { treeStore } from '../../../core/node/treeStore'
+import { collidingSibling, nameTakenMessage } from '../../../core/node/siblingCollision'
+import { httpStatus, HttpStatus } from '../../../shared/httpError'
 
 const props = defineProps<NodeCreateDialogProps>()
 const emit = defineEmits<NodeCreateDialogEmits>()
@@ -22,15 +28,20 @@ const canSubmit = computed(() => !loading.value && name.value.trim().length > 0)
 
 async function submit() {
   if (!canSubmit.value) return
-  loading.value = true
   error.value = null
+  const sibling = collidingSibling(treeStore.nodes, props.parentId ?? null, DROPBOX_KIND, name.value.trim())
+  if (sibling) {
+    error.value = nameTakenMessage(t, sibling)
+    return
+  }
+  loading.value = true
   try {
     const parent = props.parentId && props.parentKey ? { id: props.parentId, key: props.parentKey } : null
     await createDropBox(props.scopeId, props.epochs, parent, name.value.trim())
     emit('done')
     emit('close')
-  } catch {
-    error.value = t('files.dropBox.createFailed')
+  } catch (e) {
+    error.value = httpStatus(e) === HttpStatus.conflict ? t('node.slugTaken') : t('files.dropBox.createFailed')
   } finally {
     loading.value = false
   }

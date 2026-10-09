@@ -3,7 +3,8 @@
 // its kinds (cr-files-application P4c; the folder create and every rename are core's `core/node/FolderNameDialog.vue`,
 // with this dialog's markup). Ported dialog shape; wired to the E2EE tree data layer (names sealed client-side under
 // the parent's key, K_SC at the scope root — ADR 0080). The kind to create picks the mode. Inline slug_taken (409) /
-// illegal_structure (422) errors.
+// illegal_structure (422) errors. Before sending, a name that collides with a sibling in the loaded tree is refused
+// naming that sibling (core's `siblingCollision.ts`, inbox #389); the 409 stays the race backstop.
 //
 // A Memory's create can **pre-arm a location** (cr-0069) behind the personal maps opt-in — but at creation there are
 // no photos yet, so the heavy map/name belong later (on the open Memory, via the shared editor). Here it is a
@@ -20,6 +21,8 @@ import type { NodeParent } from '../../../core/node/tree'
 import type { NodeCreateDialogProps, NodeCreateDialogEmits } from '../../../core/applications/registry'
 import { createMemory, createChapter } from '../memoryNodes'
 import { CHAPTER_KIND } from '../kinds'
+import { treeStore } from '../../../core/node/treeStore'
+import { collidingSibling, nameTakenMessage } from '../../../core/node/siblingCollision'
 import { useMapConfig } from '../../../shared/state/useMapConfig'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
 import { httpStatus, HttpStatus } from '../../../shared/httpError'
@@ -74,6 +77,11 @@ const canSubmit = computed(() => name.value.trim().length > 0 && !loading.value)
 async function submit() {
   if (!canSubmit.value) return
   error.value = ''
+  const sibling = collidingSibling(treeStore.nodes, props.parentId ?? null, props.kind, name.value.trim())
+  if (sibling) {
+    error.value = nameTakenMessage(t, sibling)
+    return
+  }
   await runSubmit()
 }
 </script>

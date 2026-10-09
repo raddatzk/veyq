@@ -49,6 +49,8 @@ export function registerFiles(registry: Registry): void {
     renameSelectionEnd: fileNameStemEnd,
     // A trashed file that holds no blob is one whose upload never finished (inbox #391): core's trash says so.
     emptyInTrash: 'files.trashEmpty',
+    // Core's create and rename dialogs name a colliding file with it: "There is already a file named …" (#389).
+    nounWithArticle: 'files.aFile',
     section: { order: FILES_SECTION_ORDER, component: FilesSection },
     shareSection: { order: FILES_SECTION_ORDER, component: ShareFilesSection },
   })
@@ -62,6 +64,7 @@ export function registerFiles(registry: Registry): void {
     deleteTitle: 'files.dropBox.delete',
     // …and its sentence names what goes with it: the guests' folders, and the links that stop taking files (#395).
     deleteCopy: 'files.dropBox.deleteConfirm',
+    nounWithArticle: 'files.dropBox.aDropBox',
     section: { order: DROPBOX_SECTION_ORDER, component: DropBoxSection },
     createDialog: DropBoxCreateDialog,
     shareDialog: DropBoxShareDialog,
