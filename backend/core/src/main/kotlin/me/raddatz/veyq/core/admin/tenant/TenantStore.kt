@@ -426,13 +426,17 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
         return tenant.termsVersion
     }
 
-    /** Upsert [userId]'s acceptance of [version] for [tenantId] (keyed by the (user, tenant) UNIQUE). */
+    /** Upsert [userId]'s acceptance of [version] for [tenantId] (keyed by the (user, tenant) UNIQUE), stamped with the
+     *  server's own time. The time is audit evidence, so it is written once per version: re-accepting the version
+     *  already recorded changes nothing — the first time stands. */
     @Transactional
     fun recordAcceptance(userId: String, tenantId: String, version: Int) {
         val existing = TenantTermsAcceptanceEntity
             .find("userId = ?1 and tenantId = ?2", userId, tenantId).firstResult()
         if (existing != null) {
+            if (existing.acceptedVersion == version) return
             existing.acceptedVersion = version
+            existing.acceptedAt = Instant.now()
             existing.persist()
         } else {
             TenantTermsAcceptanceEntity().apply {
@@ -440,6 +444,7 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
                 this.userId = userId
                 this.tenantId = tenantId
                 acceptedVersion = version
+                acceptedAt = Instant.now()
             }.persist()
         }
     }
