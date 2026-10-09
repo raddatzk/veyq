@@ -1,5 +1,6 @@
 package me.raddatz.veyq.files.share
 
+import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.blob.NodeAttachmentEntity
 import me.raddatz.veyq.core.blob.UploadSessionEntity
 import me.raddatz.veyq.core.blobstore.FakePresigningBlobStore
@@ -29,6 +30,7 @@ import jakarta.inject.Inject
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.util.UUID
 
 /**
  * A guest's `completeShareFile` decides its file again in the attach's own transaction, under the scope lock and then the
@@ -87,30 +89,44 @@ class ShareFileCompleteRaceSliceTest {
             val answer = whileUncommitted(change = { change(t) }, overlapping = { complete(t, uploadId) })
             assertEquals(CompleteFileOutcome.NoUpload, answer, "round $round: a completion while the $what commits")
             assertEquals(0L, tx { NodeAttachmentEntity.count("nodeId", t.file) }, "round $round: nothing landed after the $what")
-            assertEquals(0L, tx { NodeEntity.findById(t.file)!!.metaVersion }, "round $round: no meta written after the $what")
+            assertEquals(0L, tx { BlobEntity.count("id", blobOf(uploadId)) }, "round $round: no blob (and so no meta) after the $what")
 
-            val kept = tree() // control: the same completion with nothing overlapping lands on the file
-            assertTrue(complete(kept, startStaged(kept)) is CompleteFileOutcome.Ok, "round $round: control")
-            assertEquals(1L, tx { NodeEntity.findById(kept.file)!!.metaVersion }, "round $round: control meta")
+            val kept = tree() // control: the same completion with nothing overlapping lands on the file, its meta with it
+            val keptUpload = startStaged(kept)
+            assertTrue(complete(kept, keptUpload) is CompleteFileOutcome.Ok, "round $round: control")
+            assertEquals(META, tx { BlobEntity.findById(blobOf(keptUpload))!!.wrappedBlobMeta }, "round $round: control meta")
+            assertEquals(0L, tx { NodeEntity.findById(kept.file)!!.metaVersion }, "round $round: the node's payload untouched")
         }
     }
 
-    /** Start one upload into the file and stage its chunks at their exact lengths, so its verify passes. */
+    /** The client-minted blob id each upload [startStaged] opened declared (a session read after the race may be gone). */
+    private val declaredBlobs = mutableMapOf<String, String>()
+    private fun blobOf(uploadId: String): String = declaredBlobs.getValue(uploadId)
+
+    /** Start one upload into the file, its blob meta declared, and stage its chunks at their exact lengths, so its
+     *  verify passes. */
     private fun startStaged(t: Tree): String {
-        val declare = TestBlob.SMALL.declare("d3JhcA==", ownerId = t.file, role = FilesBlobRoles.FILE_CONTENT)
+        val blobId = UUID.randomUUID().toString()
+        val declare = TestBlob.SMALL.declare("d3JhcA==", ownerId = t.file, role = FilesBlobRoles.FILE_CONTENT, blobId = blobId, meta = META)
         val uploadId: String = given().contentType(ContentType.JSON)
             .body("""{"contributorToken":"${t.link.token}","nodeId":"${t.file}","items":[$declare]}""")
             .`when`().post("/api/shares/${t.link.shareId}/blob-uploads")
             .then().statusCode(200).extract().path("results[0].uploadId")
         TestBlob.SMALL.stage(fakeStore, tx { UploadSessionEntity.findById(uploadId)!!.storageKey })
+        declaredBlobs[uploadId] = blobId
         return uploadId
     }
 
-    /** The guest's completion into the file with a meta, as the completion's answer. */
+    /** The guest's completion into the file, as the completion's answer. */
     private fun complete(t: Tree, uploadId: String): CompleteFileOutcome {
-        val o = files.complete(t.link.shareId, null, t.link.token, t.file, uploadId, null, "bWV0YQ==")
+        val o = files.complete(t.link.shareId, null, t.link.token, t.file, uploadId, null)
         return (o as ShareFileCompleteOutcome.Completed).outcome
     }
 
     private fun <T> tx(body: () -> T): T = QuarkusTransaction.requiringNew().call(body)
+
+    private companion object {
+        /** An opaque stand-in for a client's `blob-meta` seal, declared with every start. */
+        const val META = "c2VhbGVkLWJsb2ItbWV0YQ=="
+    }
 }

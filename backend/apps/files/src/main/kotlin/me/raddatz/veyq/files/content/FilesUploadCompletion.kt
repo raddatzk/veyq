@@ -1,6 +1,7 @@
 package me.raddatz.veyq.files.content
 
 import me.raddatz.veyq.core.blob.AttachOutcome
+import me.raddatz.veyq.core.blob.AttachmentStore
 import me.raddatz.veyq.core.blob.BlobUploadHandler
 import me.raddatz.veyq.core.blob.BlobUploadHandler.BlobVerify
 import me.raddatz.veyq.core.blob.BlobUploadStore
@@ -28,11 +29,14 @@ object FilesBlobRoles {
  * the whole write in one transaction (scope lock, gate, session spent, liveness by query, compare-and-set on the
  * expected blob, the replaced blob freed). Core's dispatcher (`UploadCompletions`) picked this implementation by the
  * node's kind; the member path (`FilesHandler.complete`) and a guest's (`ShareFilesHandler.complete`, F2) reach it the
- * same way. The write itself, with the guest's sealed metadata when the item carries it, is [FileContentWrite]'s.
+ * same way. The attach is the whole write: a file's type, uploaded name and modified time are the blob's own sealed
+ * meta (`wrappedBlobMeta`, declared at the upload's start and copied session → blob by core's `persistBlob`, inbox
+ * #397), so they change with the bytes in this one transaction and nothing is written beside it — the node's
+ * `wrappedMeta` is not Files' any more (a guest's complete used to write it here, a member's in a second request).
  *
  * Core's item is generic: Files reads its [CompleteItem.ownerId] as nothing (the session's binding to the node is the
- * store's check), its derivatives as none, the payload [EXPECTED] as the blob a replace expects (a plain id, not a
- * seal) and [META] as the file's sealed metadata to write with the swap (opaque). On [AttachOutcome.Conflict] the item's error is [STALE_FILE]; the conflict's current blob is not carried
+ * store's check), its derivatives as none and the payload [EXPECTED] as the blob a replace expects (a plain id, not a
+ * seal). On [AttachOutcome.Conflict] the item's error is [STALE_FILE]; the conflict's current blob is not carried
  * here ([CompleteItemResult] has no field for it) — the member path re-reads the slot after the transaction, which is
  * "what the slot holds now" as much as the conflict's own read was (ADR 0077: the answer is the current state).
  */
@@ -40,7 +44,7 @@ object FilesBlobRoles {
 class FilesUploadCompletion(
     private val blobs: BlobUploadStore,
     private val uploads: BlobUploadHandler,
-    private val write: FileContentWrite,
+    private val attachments: AttachmentStore,
 ) : UploadCompletion {
 
     override fun accepts(nodeKind: String): Boolean = nodeKind == FilesNodeKinds.FILE
@@ -57,7 +61,9 @@ class FilesUploadCompletion(
                 return failed("budget_exceeded")
             }
         }
-        val outcome = write.attach(scopeId, node.id, session, manifest, item.payloads[EXPECTED], item.payloads[META], admitted)
+        val outcome = attachments.attach(
+            scopeId, node.id, setOf(FilesNodeKinds.FILE), FilesBlobRoles.FILE_CONTENT, session, manifest, item.payloads[EXPECTED], admitted,
+        )
         return when (outcome) {
             is AttachOutcome.Attached -> CompleteItemResult(outcome.blobId, node.id, null)
             is AttachOutcome.Conflict -> failed(STALE_FILE)
@@ -75,17 +81,13 @@ class FilesUploadCompletion(
         /** The [CompleteItem.payloads] key of the blob a replace expects in the slot (absent: the first upload). */
         const val EXPECTED = "expectedBlobId"
 
-        /** The [CompleteItem.payloads] key of the file's sealed metadata written with the swap (absent: left as it is;
-         *  a guest's complete sends it, a member writes it with `updateNode` — [FileContentWrite]). */
-        const val META = "wrappedMeta"
-
         /** The item's error when the slot did not hold the expected blob ([AttachOutcome.Conflict]). */
         const val STALE_FILE = "stale_file"
 
         /** Core's generic item for one upload into the file [nodeId]: the node is the `ownerId` the wrap is bound to. */
-        fun item(nodeId: String, uploadId: String, expectedBlobId: String?, wrappedMeta: String? = null): CompleteItem = CompleteItem(
+        fun item(nodeId: String, uploadId: String, expectedBlobId: String?): CompleteItem = CompleteItem(
             ownerId = nodeId, nodeId = nodeId, originalUploadId = uploadId, derivatives = emptyList(),
-            payloads = listOfNotNull(expectedBlobId?.let { EXPECTED to it }, wrappedMeta?.let { META to it }).toMap(),
+            payloads = listOfNotNull(expectedBlobId?.let { EXPECTED to it }).toMap(),
         )
     }
 }

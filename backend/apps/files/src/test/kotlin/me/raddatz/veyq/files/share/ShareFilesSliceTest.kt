@@ -108,12 +108,15 @@ class ShareFilesSliceTest {
         val file = UUID.randomUUID().toString()
         GuestTreeShare.create(link, t.folder, FilesNodeKinds.FILE, nodeId = file).statusCode(201)
 
+        // The file's metadata is its blob's (inbox #397): declared at the start, served with the blob, and the node's own
+        // payload is never written by a completion.
         val first = TestBlob.ofChunks(2)
-        val firstBlob = completeShare(link, file, guestStartStaged(link, file, first), meta = "bWV0YS0x").statusCode(200)
+        val firstBlob = completeShare(link, file, guestStartStaged(link, file, first, meta = "bWV0YS0x")).statusCode(200)
             .body("chunkCount", equalTo(2)).body("byteSize", equalTo(first.byteSize.toInt()))
+            .body("wrappedBlobMeta", equalTo("bWV0YS0x"))
             .extract().path<String>("blobId")
         assertEquals(firstBlob, blobOf(file))
-        assertEquals("bWV0YS0x" to 1L, metaOf(file), "the meta lands with the bytes")
+        assertEquals(null to 0L, metaOf(file), "the meta lands with the bytes, as the blob's - the node's payload untouched")
         assertEquals(identityOf(link), attachmentIdentity(file), "the attachment names the guest's identity")
 
         // The member sees the guest's file in the folder; the link's usage counts it (the attachment term, Files' 0).
@@ -122,19 +125,20 @@ class ShareFilesSliceTest {
             .body("items.find { it.nodeId == '$file' }.fileBlob.blobId", equalTo(firstBlob))
         assertEquals(first.byteSize, linkUsage(link))
 
-        // A replace with the read blob swaps it and its meta; a stale one is refused and leaves both.
+        // A replace with the read blob swaps it and, being a new blob, its meta; a stale one is refused and leaves both.
         val second = TestBlob.ofChunks(1)
-        val secondBlob = completeShare(link, file, guestStartStaged(link, file, second), expected = firstBlob, meta = "bWV0YS0y")
-            .statusCode(200).extract().path<String>("blobId")
-        assertEquals("bWV0YS0y" to 2L, metaOf(file))
+        val secondBlob = completeShare(link, file, guestStartStaged(link, file, second, meta = "bWV0YS0y"), expected = firstBlob)
+            .statusCode(200).body("wrappedBlobMeta", equalTo("bWV0YS0y")).extract().path<String>("blobId")
         assertEquals(second.byteSize, linkUsage(link), "only the new blob counts")
-        completeShare(link, file, guestStartStaged(link, file), expected = firstBlob, meta = "bWV0YS0z").statusCode(409)
+        completeShare(link, file, guestStartStaged(link, file, meta = "bWV0YS0z"), expected = firstBlob).statusCode(409)
             .body("code", equalTo("stale_file")).body("currentBlobId", equalTo(secondBlob))
         assertEquals(secondBlob, blobOf(file))
-        assertEquals("bWV0YS0y" to 2L, metaOf(file), "a refused swap writes no meta")
-        // Without a meta the node's is left as it is.
-        completeShare(link, file, guestStartStaged(link, file), expected = secondBlob).statusCode(200)
-        assertEquals("bWV0YS0y" to 2L, metaOf(file))
+        listShare(link).statusCode(200)
+            .body("items.find { it.nodeId == '$file' }.fileBlob.wrappedBlobMeta", equalTo("bWV0YS0y"))
+        // A body that still sends the retired `wrappedMeta` writes nothing with it: the completion has no such door.
+        completeShare(link, file, guestStartStaged(link, file), expected = secondBlob, legacyMeta = "bWV0YQ==").statusCode(200)
+            .body("wrappedBlobMeta", nullValue())
+        assertEquals(null to 0L, metaOf(file), "no completion writes the node's payload")
 
         // The guest renames its file (core's placement; a FOLDER lets a READ_WRITE guest rename any kind).
         GuestTreeShare.place(link, file, t.folder, placementVersion = 0).statusCode(204)
@@ -282,9 +286,10 @@ class ShareFilesSliceTest {
     }
 
     private fun completeShare(
-        link: GuestTreeShare.Link, node: String, uploadId: String, expected: String? = null, meta: String? = null,
+        link: GuestTreeShare.Link, node: String, uploadId: String, expected: String? = null, legacyMeta: String? = null,
     ): ValidatableResponse {
-        val extra = (expected?.let { ""","expectedBlobId":"$it"""" } ?: "") + (meta?.let { ""","wrappedMeta":"$it"""" } ?: "")
+        // `legacyMeta`: the field the contract dropped (inbox #397), sent anyway to prove nothing reads it.
+        val extra = (expected?.let { ""","expectedBlobId":"$it"""" } ?: "") + (legacyMeta?.let { ""","wrappedMeta":"$it"""" } ?: "")
         return given().contentType(ContentType.JSON)
             .body("""{"contributorToken":"${link.token}","uploadId":"$uploadId"$extra}""")
             .`when`().post("/api/shares/${link.shareId}/files/$node/content").then()

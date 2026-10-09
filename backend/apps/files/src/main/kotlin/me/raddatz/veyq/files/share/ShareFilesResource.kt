@@ -77,7 +77,7 @@ class ShareFilesResource(
         return when (
             val o = handler.complete(
                 shareId, xSharePassword, r.contributorToken, nodeId.toString(), r.uploadId.toString(),
-                r.expectedBlobId?.toString(), r.wrappedMeta,
+                r.expectedBlobId?.toString(),
             )
         ) {
             is ShareFileCompleteOutcome.Completed -> FilesResource.respond(o.outcome)
