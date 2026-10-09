@@ -17,9 +17,10 @@ import {
   loadMediaExif,
   unsealMeta,
   setMediaMeta,
-  backfillMediaType,
   backfillPlaceName,
   isVideoMediaType,
+  originalBlobMeta,
+  mediaTypeOf,
   effectiveCapturedAt,
   plaintextSize,
   type MediaItem,
@@ -28,7 +29,8 @@ import {
   type MediaMetaWrite,
 } from '../media'
 import { MetaConflictError, MetaUnreadableError, staleMetaOf, type SealedMetaState } from '../../../core/node/sealedMetaWrite'
-import { downloadOriginal } from '../download'
+import { downloadOriginal, originalDownloadName } from '../download'
+import type { OpenedBlobMeta } from '../../../core/blob/meta'
 import { SaveTooLarge, isSaveCancelled } from '../../../shared/saveStream'
 import { useToast } from '../../../shared/state/useToast'
 import type { ChunkProvider } from '../../../sw/protocol'
@@ -54,6 +56,9 @@ const props = defineProps<{
   originalLoader?: (item: MediaItem) => Promise<Uint8Array> // fetch+decrypt the whole original — the Slice-1 video fallback only (default: authed openOriginal)
   exifLoader?: (item: MediaItem) => Promise<MediaExif | null> // lazy heavy-EXIF (default: authed getMediaExif; skipped when readonly + absent)
   metaResolver?: (item: MediaItem) => MediaMeta | null // unseal the listed date/GPS tier (default: unsealMeta under memoryKey)
+  // the original's sealed blob meta — its type, file name, modified time (inbox #397); default: originalBlobMeta under
+  // memoryKey. The share viewer opens it under each item's own K_mem.
+  blobMetaResolver?: (item: MediaItem) => OpenedBlobMeta | null
   // Slice 2 (ADR 0047): the per-item key-free chunk source over the ORIGINAL, for SW range playback and the streamed
   // download (inbox #371 S4). Default (authed) presigns via the media API; the share viewer injects its share-scoped
   // provider (per-item K_mem + guest pwToken), so the SW path and the download cover the anonymous viewer without the
@@ -81,6 +86,8 @@ const originalOf = (it: MediaItem) => (props.originalLoader ?? ((x: MediaItem) =
 const originalProviderOf = (it: MediaItem): ChunkProvider =>
   (props.videoChunkProvider ?? ((x: MediaItem) => chunkProvider(props.scopeId, props.memoryKey, x)))(it)
 const metaOf = (it: MediaItem) => (props.metaResolver ?? ((x: MediaItem) => unsealMeta(props.scopeId, props.memoryKey, x)))(it)
+const blobMetaOf = (it: MediaItem) =>
+  (props.blobMetaResolver ?? ((x: MediaItem) => originalBlobMeta(props.scopeId, props.memoryKey, x)))(it)
 const exifOf = (it: MediaItem): Promise<MediaExif | null> =>
   props.exifLoader ? props.exifLoader(it) : props.readonly ? Promise.resolve(null) : loadMediaExif(props.scopeId, it, props.memoryKey)
 
@@ -103,12 +110,6 @@ const captured = ref<MediaMeta | null>(null)
 // The panel bundle (cr-0064): everything the detail panel shows beyond the listed tier, lazy-loaded per item
 // via the exif endpoint. What is in it is [MediaExif]'s business, not this comment's. Null = none/undecoded.
 const exif = ref<MediaExif | null>(null)
-const detailsLoading = ref(false)
-// The download waits for the details, not in the click but before it: the original's own file name is in the EXIF
-// tier, and nothing may be awaited before the save picker (download.ts), so the button is enabled once that tier is
-// in or known absent. Otherwise a quick click would save under the fallback name and the next one under the stored
-// name — the very instability inbox #395 F10 removed. A failed load ends the wait too; the fallback then names it.
-const downloadBlocked = computed(() => downloading.value || detailsLoading.value)
 const isDetailsOpen = ref(false) // mobile bottom-sheet toggle (the design's swipe handle)
 // capturedAt override editor (cr-0065/0066)
 const isEditingCapturedAt = ref(false)
@@ -123,10 +124,14 @@ const isCover = computed(() => !!item.value && item.value.mediaId === props.cove
 const canPrev = computed(() => current.value > 0)
 const canNext = computed(() => current.value < props.items.length - 1)
 const previewable = computed(() => (item.value ? hasDerivatives(item.value) : false))
-// The persisted video signal (#104): the sealed mediaType of the shown item, when it names a video. Drives the
-// <video> branch + the play affordance. Undefined for images and for pre-field media (no sealed type yet — those
-// stay a poster image until a download back-fills the type, ADR 0047).
-const videoType = computed(() => (isVideoMediaType(captured.value?.mediaType) ? captured.value!.mediaType : undefined))
+// The original's sealed blob meta (inbox #397): its type, the file name it was uploaded under, its modified time —
+// opened synchronously from the listed item (it rides the listing beside the K_blob wrap), so the download name and
+// the video signal are known the moment the item shows; nothing waits for the lazy EXIF tier. Null = none / unopenable.
+const blobMeta = computed(() => (item.value ? blobMetaOf(item.value) : null))
+const mediaType = computed(() => mediaTypeOf(blobMeta.value))
+// The persisted video signal (#104): the original's sealed type, when it names a video. Drives the <video> branch +
+// the play affordance. Undefined for images and for a media whose original carries no meta (a poster image only).
+const videoType = computed(() => (isVideoMediaType(mediaType.value) ? mediaType.value : undefined))
 
 // Load the current item's preview tier (operator-blind: ciphertext → decrypt → object URL). A non-derivable
 // item (E1) carries no preview tier, so the stage shows a download fallback instead of fetching its original.
@@ -164,14 +169,11 @@ async function loadDetails() {
   const target = item.value
   if (!target) return
   captured.value = metaOf(target)
-  detailsLoading.value = true
   try {
     const loaded = await exifOf(target)
     if (item.value === target) exif.value = loaded // ignore a result for an item we've navigated away from
   } catch {
     if (item.value === target) exif.value = null
-  } finally {
-    if (item.value === target) detailsLoading.value = false
   }
   void resolvePlaceForCurrent() // fire-and-forget: the panel is already rendered with the coordinate
 }
@@ -349,14 +351,17 @@ async function resolvePlaceForCurrent() {
 // shows three rows and a raw file from a camera shows twenty — without either shape being a special case.
 const metadataRows = computed(() => {
   const e = exif.value
-  // The capture date comes from the always-listed capture-time tier (independent of the lazy EXIF); everything
-  // below it comes from the EXIF tier once it loads.
-  const rows = [{ label: t('media.captured'), value: formatCaptured(effectiveCaptured.value) }]
+  // The capture date comes from the always-listed capture-time tier, the file's name and format from the original's
+  // blob meta, its size from the listed ref — all independent of the lazy EXIF; everything below them comes from the
+  // EXIF tier once it loads.
+  const rows = [
+    { label: t('media.captured'), value: formatCaptured(effectiveCaptured.value) },
+    { label: t('media.fileName'), value: blobMeta.value?.name ?? '' },
+    { label: t('media.fileSize'), value: fileSize(item.value ? plaintextSize(item.value.original) : undefined) },
+    { label: t('media.fileFormat'), value: mediaType.value ?? '' },
+  ]
   if (e) {
     rows.push(
-      { label: t('media.fileName'), value: e.name ?? '' },
-      { label: t('media.fileSize'), value: fileSize(item.value ? plaintextSize(item.value.original) : undefined) },
-      { label: t('media.fileFormat'), value: captured.value?.mediaType ?? '' },
       { label: t('media.camera'), value: [e.make, e.model].filter(Boolean).join(' ').trim() },
       { label: t('media.lens'), value: e.lens ?? '' },
       { label: t('media.focalLength'), value: formatFocal(e.focalLength) },
@@ -448,44 +453,22 @@ async function playVideo() {
 }
 
 async function download() {
-  if (!item.value || downloadBlocked.value) return
+  if (!item.value || downloading.value) return
   downloading.value = true
   const target = item.value
-  const targetMeta = captured.value // the shown tier, only to skip a media that already has a type — the backfill itself re-reads the listed tier
   try {
     // Streamed (inbox #371 S4): the original's chunk provider — the one playback uses, so the share viewer's injected
     // provider covers a guest's download too — written chunk by chunk into a picked file, the SW download route or a
     // capped Blob. Nothing is awaited before this call: the save picker needs the click's activation (download.ts).
-    // Named by the original's own sealed file name, already loaded with the details (#395 F10); the Memory name and
-    // the gallery position only name a media that never sealed one.
-    const sniffed = await downloadOriginal(originalProviderOf(target), {
-      storedName: exif.value?.name,
-      memoryName: props.memoryName,
-      index: current.value,
-      sealedType: targetMeta?.mediaType,
-    })
-    await maybeBackfillMediaType(target, targetMeta, sniffed)
+    // Named by the original's own file name from its blob meta (inbox #397), known with the listing — the Memory name
+    // and the gallery position only name a media whose original carries none.
+    const name = originalDownloadName(blobMetaOf(target), props.memoryName, current.value)
+    await downloadOriginal(originalProviderOf(target), name)
   } catch (e) {
     if (e instanceof SaveTooLarge) toast.error(t('media.downloadTooLarge'))
     else if (!isSaveCancelled(e)) error.value = true
   } finally {
     downloading.value = false
-  }
-}
-
-// Lazy mediaType backfill (ADR 0047 / #105): a pre-field media carries no sealed type, so the download reads its
-// original's first chunk before anything else, sniffs it (`downloadOriginal` returns the type) and writes the type
-// back once the download is through — the NEXT listing then shows the play badge + the <video> branch. Never in the
-// read-only public viewer (no authed write path). Best-effort: a failed sniff/write just means the item stays untyped.
-async function maybeBackfillMediaType(target: MediaItem, targetMeta: MediaMeta | null, sniffed: string | undefined) {
-  if (props.readonly || targetMeta?.mediaType) return
-  if (!sniffed) return
-  try {
-    const updated = await backfillMediaType(props.scopeId, target, props.memoryKey, sniffed)
-    applyMetaState(target, updated, updated.tier) // let the grid re-list with the badge
-  } catch (e) {
-    /* best-effort — a failed backfill just means no badge yet */
-    await backfillFailed(target, e)
   }
 }
 
@@ -528,7 +511,7 @@ onBeforeUnmount(() => {
           type="button"
           :aria-label="t('media.download')"
           :title="t('media.download')"
-          :disabled="downloadBlocked"
+          :disabled="downloading"
           @click="download"
         >
           <span class="pi" :class="downloading ? 'pi-spin pi-spinner' : 'pi-download'" />
@@ -606,7 +589,7 @@ onBeforeUnmount(() => {
             v-else
             type="button"
             class="media-lightbox-file-fallback"
-            :disabled="downloadBlocked"
+            :disabled="downloading"
             @click="download"
           >
             <span class="pi pi-file" />
@@ -720,7 +703,9 @@ onBeforeUnmount(() => {
               <span class="pi pi-arrow-up" aria-hidden="true" />
             </span>
           </div>
-          <p v-else class="media-lightbox-no-detail">{{ t('media.noDetail') }}</p>
+          <!-- Only when nothing at all is known: it hung off the map's v-if before, so every photo without a coordinate
+               showed its rows AND "no details" (seen once inbox #397 listed a file's own facts for every media). -->
+          <p v-if="!hasDetail" class="media-lightbox-no-detail">{{ t('media.noDetail') }}</p>
         </template>
       </aside>
     </main>

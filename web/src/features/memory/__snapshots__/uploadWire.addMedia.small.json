@@ -15,7 +15,8 @@
             "chunkCount": 1,
             "ownerId": "00000000-0000-4000-8000-000000000001",
             "role": "ORIGINAL",
-            "wrappedBlobKey": "AtRU041tJgDHYLDUSrD4DUO2EsWBOn6kX3KZgqZGQge/guimduQYfwUFHkv277sFiVk97r9hGtL26gdZlg=="
+            "wrappedBlobKey": "ArfpRVSthTuzzNW01Cm+Z2slw7ULl2QK/vVgFim7XeVL9PHkpfBFh3TCjBisfl6jO0tsA2YUotuQvG73Qw==",
+            "wrappedBlobMeta": "AtRU041tJgDHYLDUSp4CdLPDmDTRg/B0Rxo+bgVRcWz1Jg2ctj1g/CrqU0lgXhKyn0xzosZTG+eh+egXvF6z643lf1lG1kzAlbJxgkOgrDOSJUTHycxQKwBvGm52tLIoG+sqXQEvPuzELaHQyWTgg7rCtOTHPB0T+qYWibBKOTZTbunvYD55DY7hmNrSN8C4CLC6RROVU+4FjDjXJlawXDRxzmkhf2zsJdDZ1zqDEvAliCN7UvGaRyw6ghppWp7giq9pU/1KFxbMf7umDPQ9m29lzVJGviONxhBkzgqfpLotccTfLSY6Fhrtev6ef5ckPCAdSlSwWev7msbzJ+KMHpR6MbfGel1jbMJ+rVRpzuEiONQbcJY0JMo4X2MY"
           },
           {
             "blobId": "00000000-0000-4000-8000-000000000003",
@@ -23,7 +24,8 @@
             "chunkCount": 1,
             "ownerId": "00000000-0000-4000-8000-000000000001",
             "role": "THUMBNAIL",
-            "wrappedBlobKey": "ArygSAq70+qhcBhlDTUmAoddDhbit/uz87vKom7jqsaV4EAQ1/HndYiIhyU8d7PdRrY6/ZVbKG6hAI51Ug=="
+            "wrappedBlobKey": "ArygSAq70+qhcBhlDTUmAoddDhbit/uz87vKom7jqsaV4EAQ1/HndYiIhyU8d7PdRrY6/ZVbKG6hAI51Ug==",
+            "wrappedBlobMeta": "AnkRcZAYWlemqsadQFHngh08GxP1/OM4Xe9gOIGt7xJTv1d8DJX+WfKbcI0Gj0ThWz7p5foLUAS0L50Tz0sLV1Rygr94/heT0HFpbx8Ht4P8zGiPbghfixvkWAEiiNHnXn0Cqtk6X+z3bBg3x9KVJ9JpnJU9E3brv7enXEH7BcMAfUmv/y6JIcByvRIeGqY41pfMCEl0kxjmfWjsUNBPFloEPoKHZPlQTtZmuZkh0wxG4s/kz4uTnNZ1Ze70G0eO+2j3DGvRHEbW+Dc1SIAA9QKdvA6xdXAyYNoM0rbQEYFwC+qUCGjdOsj6bdrGJAHHCBlugGBjfsnGo1JI5x26tshSIiHvDG5xiDBpt6BpF+SQNrBZ+sh8wSPFZmU8"
           },
           {
             "blobId": "00000000-0000-4000-8000-000000000004",
@@ -31,7 +33,8 @@
             "chunkCount": 1,
             "ownerId": "00000000-0000-4000-8000-000000000001",
             "role": "PREVIEW",
-            "wrappedBlobKey": "ArbVAgr5/e5d4JHIlHCNQVXOI9deJ8iK/Gje3l/5TjgqeWo4a1VutT876qrC5QmJWjrSL7F15l3ePfHrKQ=="
+            "wrappedBlobKey": "At/3LlmoIqT/o8rGMuquWJRRyJmWOxmbxG0dnkeWBMuAmWcof/y7u1QFUJ/Awuy6GF+ndoQIitcF6LW1NQ==",
+            "wrappedBlobMeta": "AudllBYVmE/YrkWeuPcd3/+LcqO5wN8/xb766BDJcwDjZ40SBibpc4tKfauydWFP3Rn7fw85Kh3M6EuQfk+fd/ECFed+raf9G97Gy4wfias3ValnocccYBLpQeOzKFXS6O/GIphTPt59AunDwxJ2Inz3Na1IaEpTf1L0XDqQ28AiM+OM0INrmZdX9xP8aYGYmqmS1zUgGrBX59P4FB7qm9dxU3gtWJ2YN+/p4NbOv58IKi7TPWwv2cU+XVEaWMmYucQEiQq/WdA550DMpNlO/5w6CAyZ260eB8CXKbGyAx0wNfUYex81uS+cCkm5Y6m72U3BDCgtUH1ct7Ar7nHh68VKHWZTf++LXrcwT2MSWFt0fRDiAkFRnvQR/dem"
           }
         ]
       }
@@ -44,7 +47,7 @@
       },
       "bytes": {
         "length": 1028,
-        "sha256": "f1eaf61f7de98e85fdedb7b8512a64f64c8426f750787a574c15ad6e6adf2194"
+        "sha256": "84acac888e1f8358fd14ef5adbaab6c670236bc423d24c8064bec280f1cd7d39"
       }
     },
     {
@@ -55,7 +58,7 @@
       },
       "bytes": {
         "length": 328,
-        "sha256": "3886ecfe758310180ab975c4d442b3f37f5d75fa105aa920a256d4a2021e6177"
+        "sha256": "7fe725879f3c3b8c1e05274786e088b1482318c54d486db6b6918e20eeaba0ce"
       }
     },
     {
@@ -66,7 +69,7 @@
       },
       "bytes": {
         "length": 728,
-        "sha256": "77a1e44cc84f6be886b877cea355b8b931aa1783ee33101d174b4d527c87db20"
+        "sha256": "10894f60a48e05c3970dfe9ef85a2e2ab76855736ac7eb96d0f6c1998a6103fd"
       }
     },
     {
@@ -92,8 +95,8 @@
             "mediaId": "00000000-0000-4000-8000-000000000001",
             "nodeId": "6e5a0000-0000-4000-8000-0000000000b1",
             "originalUploadId": "upload-1",
-            "wrappedExif": "Aoqu9bEICJEZM7nrTyr0LyeDBY7EhwHAZMvudMADg0JtJAMojmqmGpOKmcQzuxqqKWc6y8OvyCLrlw==",
-            "wrappedMeta": "AiEBxU/R0BqyJXTLNxGxbVf+5WZzFrp4N+8zYjzQZk2w2P97YDDr5Kc/DWG0MCeEOrHn/88e+RK34zWJk2uKPiOdJW7Asms3gd2P4XizsQDzw4X4ZBW96cUKN3mZwvvqrMscfGZEh/cMOvcFyZbd4ONGI/B3jZ5Yx9BmEue5lHXeXdme"
+            "wrappedExif": null,
+            "wrappedMeta": "AiEBxU/R0BqyJXTLNxGxbVf+5WZzFrp4N+8zYjzQZk2w2P97YDDr5Kc/DWG0MCeEOrHn/88e+RK34zWJk2uKPiOdJW7Asms3gd2P4XizsQDzw4X4ZBW96cUKZoELII/qEzqHl+5M/vnfG4o="
           }
         ]
       }

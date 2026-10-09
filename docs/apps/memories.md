@@ -38,6 +38,7 @@ Gradle module of its own; the web half is separated by import direction only (se
 | Public shares (viewer, contributor, uploader) | [`docs/features/sharing/`](../features/sharing/_index.md) |
 | Blobs, direct-to-store upload, storage quota | [ADR 0013](../decisions/0013-blob-storage-presigned-direct-to-store.md), [ADR 0073](../decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md) |
 | Seals bound to their object | [ADR 0072](../decisions/0072-a-seal-binds-its-object.md) |
+| A blob's sealed meta (`blob-meta`): a media original's type, file name and modified time; a derivative's type | [ADR 0072](../decisions/0072-a-seal-binds-its-object.md) Decision 2, [en.memory.media](../features/memory/enablers/en.memory.media.md) (inbox #397) |
 | Concurrent writes to a sealed blob | [ADR 0077](../decisions/0077-a-write-carries-the-version-it-read.md) |
 
 ## What a guest may do — the role matrix

@@ -13,7 +13,8 @@ scope, and each holds several fields that different members, and different autom
   `auto` date range and the `auto` place medoid) all unseal the blob, change one field and re-seal the rest.
 - **A media's `wrappedMeta`** ([en.memory.media](../features/memory/enablers/en.memory.media.md)): the
   capture-time correction, the resolved place name and the sniffed media type. The lightbox's date editor and
-  two **backfills** do the same read-modify-write.
+  two **backfills** do the same read-modify-write. (*2026-10-09, inbox #397:* the media type left this tier for the
+  original's write-once blob meta, and its backfill with it; the place-name backfill remains.)
 
 Every one of those writers re-sends fields it did not edit, from whatever copy it holds. The tree is loaded at
 space entry and reloaded only after a create, rename or delete, and the self-heals run whenever a Memory opens or

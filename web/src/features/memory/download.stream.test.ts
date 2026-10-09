@@ -1,8 +1,9 @@
 // The streamed original download (`downloadOriginal`, inbox #371 S4) through the REAL transport — core's
 // `makeChunkProvider` and `presignAllChunks`, the generated blob client — against a fake control plane and a fake store
 // serving frames sealed the way the pump seals them. It saves the same bytes the old whole-original path (`openBlob`)
-// returned, names the file from the sealed type or else from chunk 0's sniff, opens the save target before reading
-// anything when it can, reads chunk 0 only once when it must read it first, and aborts (never closes) on a failure.
+// returned, under the name it is handed, opens the save target before reading anything (the name is the original's blob
+// meta, known with the listing — inbox #397), and aborts (never closes) on a failure. `originalDownloadName` — the
+// name rule over the blob meta — is pinned at the bottom.
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { CHUNK_SIZE, makeChunkProvider, openBlob, planBlob, presignAllChunks } from '../../core/blob/transport'
@@ -10,7 +11,7 @@ import type { BlobRef } from '../../core/blob/types'
 import type { ByteSink } from '../../core/blob/stream'
 import { openSaveTarget, SaveTooLarge } from '../../shared/saveStream'
 import { session } from '../../app/session'
-import { downloadOriginal, type OpenSaveTarget } from './download'
+import { downloadOriginal, originalDownloadName, type OpenSaveTarget } from './download'
 
 const SCOPE = '33333333-3333-4333-8333-333333333333'
 const MEDIA = '5c09e000-0000-4000-8000-0000000000a1'
@@ -84,7 +85,7 @@ function collectingTarget(log: { presign: number; gets: number[] }) {
 describe('downloadOriginal (streamed, inbox #371 S4)', () => {
   session.accessToken = 'access-token'
 
-  it('saves exactly the bytes the old whole-original path returned — untyped (sniffed) and typed alike', async () => {
+  it('saves exactly the bytes the old whole-original path returned, under the name it is handed', async () => {
     const key = v1.randomBytes(32)
     const plain = original(2 * CHUNK_SIZE + 4321, JPEG_HEAD)
     const { ref, frames, provider } = stored(key, plain)
@@ -92,89 +93,28 @@ describe('downloadOriginal (streamed, inbox #371 S4)', () => {
     fakeStore(ref.blobId, frames)
     const old = await openBlob(SCOPE, key, ref) // the path the lightbox used to save from
 
-    for (const sealedType of [undefined, 'image/jpeg']) {
-      const log = fakeStore(ref.blobId, frames)
-      const target = collectingTarget(log)
-      await downloadOriginal(provider(), { memoryName: 'Rom 2026', index: 0, sealedType }, target.open)
-      expect(target.file.ended).toBe('close')
-      expect(target.bytes()).toEqual(old)
-      expect(target.bytes()).toEqual(plain)
-      expect(target.file.size).toBe(plain.length) // the plaintext size, not the framed one
-      expect([...log.gets].sort()).toEqual([0, 1, 2]) // every chunk fetched once — chunk 0 too, even when sniffed first
-      expect(log.presign).toBe(1)
-    }
-  })
-
-  it('names an untyped original from chunk 0 alone, read BEFORE the save target opens, and returns the sniffed type', async () => {
-    const key = v1.randomBytes(32)
-    const { ref, frames, provider } = stored(key, original(CHUNK_SIZE + 10, JPEG_HEAD)) // the extension is ONLY in the bytes
     const log = fakeStore(ref.blobId, frames)
     const target = collectingTarget(log)
-
-    const sniffed = await downloadOriginal(provider(), { memoryName: 'Trip/2026', index: 2, sealedType: undefined }, target.open)
-    expect(sniffed).toBe('image/jpeg') // what the lightbox back-fills the sealed type with
-    expect(target.file.name).toBe('Trip 2026 3.jpg')
-    expect(target.file.getsBeforeOpen).toBe(1) // chunk 0, and nothing else, before the target
-    expect(log.gets.filter((i) => i === 0)).toHaveLength(1) // …and not fetched again for the write
+    await downloadOriginal(provider(), 'IMG_0001.JPG', target.open)
+    expect(target.file.name).toBe('IMG_0001.JPG')
+    expect(target.file.ended).toBe('close')
+    expect(target.bytes()).toEqual(old)
+    expect(target.bytes()).toEqual(plain)
+    expect(target.file.size).toBe(plain.length) // the plaintext size, not the framed one
+    expect([...log.gets].sort()).toEqual([0, 1, 2]) // every chunk fetched once
+    expect(log.presign).toBe(1)
   })
 
-  it('a type this client cannot name is sniffed like an untyped one; an unsniffable original is .bin', async () => {
-    const key = v1.randomBytes(32)
-    const { ref, frames, provider } = stored(key, original(100, [0x89, 0x50, 0x4e, 0x47]))
-    const target = collectingTarget(fakeStore(ref.blobId, frames))
-    expect(await downloadOriginal(provider(), { memoryName: 'Rom', index: 0, sealedType: 'image/tiff' }, target.open)).toBe('image/png')
-    expect(target.file.name).toBe('Rom 1.png')
-
-    const other = stored(key, original(100, [0x00, 0x01]))
-    const target2 = collectingTarget(fakeStore(other.ref.blobId, other.frames))
-    expect(await downloadOriginal(other.provider(), { memoryName: 'Rom', index: 0, sealedType: undefined }, target2.open)).toBeUndefined()
-    expect(target2.file.name).toBe('Rom 1.bin')
-  })
-
-  it('a sealed type that names the file opens the save target before ANY request — the picker keeps the click', async () => {
+  // inbox #397: the name is the blob meta's, known with the listing — nothing is read to name the file. Lever: read
+  // chunk 0 before `open` (the pre-#397 untyped path).
+  it('opens the save target before ANY request — the picker keeps the click', async () => {
     const key = v1.randomBytes(32)
     const { ref, frames, provider } = stored(key, original(CHUNK_SIZE + 10, JPEG_HEAD))
     const log = fakeStore(ref.blobId, frames)
     const target = collectingTarget(log)
 
-    const sniffed = await downloadOriginal(provider(), { memoryName: 'Rom 2026', index: 0, sealedType: 'video/mp4' }, target.open)
-    expect(target.file).toMatchObject({ name: 'Rom 2026 1.mp4', getsBeforeOpen: 0, presignsBeforeOpen: 0 })
-    expect(sniffed).toBeUndefined() // nothing was sniffed: there is nothing to back-fill
-  })
-
-  // inbox #395 F10 — the stored name. Lever: drop `stored ??` from the name in `downloadOriginal`.
-  it('a stored file name names the file verbatim — not the Memory name, not the position, not the sealed type', async () => {
-    const key = v1.randomBytes(32)
-    const { ref, frames, provider } = stored(key, original(CHUNK_SIZE + 10, JPEG_HEAD))
-    const target = collectingTarget(fakeStore(ref.blobId, frames))
-
-    await downloadOriginal(provider(), { storedName: '  IMG_0042 Urlaub.HEIC ', memoryName: 'Rom', index: 4, sealedType: 'image/jpeg' }, target.open)
-    expect(target.file.name).toBe('IMG_0042 Urlaub.HEIC') // trimmed, case and extension kept: the uploader's own name
-  })
-
-  // Lever: gate the pre-open read on `!known` alone (the old condition) — the untyped named media then reads first.
-  it('a stored name opens the save target before ANY request even without a sealed type, and sniffs chunk 0 in passing', async () => {
-    const key = v1.randomBytes(32)
-    const { ref, frames, provider } = stored(key, original(2 * CHUNK_SIZE + 10, JPEG_HEAD))
-    const log = fakeStore(ref.blobId, frames)
-    const target = collectingTarget(log)
-
-    const sniffed = await downloadOriginal(provider(), { storedName: 'clip.jpg', memoryName: 'Rom', index: 0, sealedType: undefined }, target.open)
-    expect(target.file).toMatchObject({ name: 'clip.jpg', getsBeforeOpen: 0, presignsBeforeOpen: 0 })
-    // the type back-fill still gets its sniff (lever: return undefined from the named path) — from the streamed chunk 0
-    expect(sniffed).toBe('image/jpeg')
-    expect([...log.gets].sort()).toEqual([0, 1, 2])
-    expect(target.bytes()).toEqual(original(2 * CHUNK_SIZE + 10, JPEG_HEAD))
-  })
-
-  it('a blank or non-string stored name is no name: the fallback names the file', async () => {
-    const key = v1.randomBytes(32)
-    const { ref, frames, provider } = stored(key, original(100, JPEG_HEAD))
-    for (const storedName of ['   ', 42, null, undefined]) {
-      const target = collectingTarget(fakeStore(ref.blobId, frames))
-      await downloadOriginal(provider(), { storedName, memoryName: 'Rom', index: 1, sealedType: 'image/jpeg' }, target.open)
-      expect(target.file.name, String(storedName)).toBe('Rom 2.jpg')
-    }
+    await downloadOriginal(provider(), 'clip', target.open)
+    expect(target.file).toMatchObject({ name: 'clip', getsBeforeOpen: 0, presignsBeforeOpen: 0 })
   })
 
   it('above the Blob cap with no streaming target it is refused before a single chunk is fetched', async () => {
@@ -186,7 +126,7 @@ describe('downloadOriginal (streamed, inbox #371 S4)', () => {
     const noStream: OpenSaveTarget = (name, size) => openSaveTarget(name, size, { picker: null, registerDownload: async () => null })
 
     const log = fakeStore(ref.blobId, frames)
-    await expect(downloadOriginal(huge(), { memoryName: 'Rom', index: 0, sealedType: 'image/jpeg' }, noStream)).rejects.toBeInstanceOf(SaveTooLarge)
+    await expect(downloadOriginal(huge(), 'Rom 1.jpg', noStream)).rejects.toBeInstanceOf(SaveTooLarge)
     expect(log.gets).toEqual([])
   })
 
@@ -196,7 +136,29 @@ describe('downloadOriginal (streamed, inbox #371 S4)', () => {
     const log = fakeStore(ref.blobId, frames, 2)
     const target = collectingTarget(log)
 
-    await expect(downloadOriginal(provider(), { memoryName: 'Rom', index: 0, sealedType: undefined }, target.open)).rejects.toThrow('chunk_get_failed:500')
+    await expect(downloadOriginal(provider(), 'Rom 1.jpg', target.open)).rejects.toThrow('chunk_get_failed:500')
     expect(target.file.ended).toBe('abort')
+  })
+})
+
+describe('originalDownloadName (the original\'s blob meta, inbox #397)', () => {
+  const meta = (m: { type: string; name?: string }) => ({ v: 1, ...m })
+
+  // Lever: drop the sealed name (pass null as the meta to `downloadName`) — every named case goes red.
+  it('names the original by its sealed file name verbatim — not the Memory name, not the position, not the type', () => {
+    expect(originalDownloadName(meta({ type: 'image/jpeg', name: '  IMG_0042 Urlaub.HEIC ' }), 'Rom', 4)).toBe('IMG_0042 Urlaub.HEIC')
+  })
+
+  it('a sealed name without an extension gains the one its type names; an unnamed type adds none', () => {
+    expect(originalDownloadName(meta({ type: 'video/mp4', name: 'clip' }), 'Rom', 0)).toBe('clip.mp4')
+    expect(originalDownloadName(meta({ type: 'image/tiff', name: 'scan' }), 'Rom', 0)).toBe('scan')
+  })
+
+  it('without a sealed name: the Memory name + position, the extension from the sealed type, else .bin', () => {
+    expect(originalDownloadName(meta({ type: 'image/jpeg' }), 'Trip/2026', 2)).toBe('Trip 2026 3.jpg')
+    expect(originalDownloadName(meta({ type: 'application/octet-stream' }), 'Rom', 0)).toBe('Rom 1.bin')
+    expect(originalDownloadName(meta({ type: 'toString' }), 'Rom', 0)).toBe('Rom 1.bin') // own rows only
+    expect(originalDownloadName(null, 'Rom', 1)).toBe('Rom 2.bin') // no meta at all (a foreign ref opens to null)
+    expect(originalDownloadName(null, '   ', 0)).toBe('memory 1.bin')
   })
 })

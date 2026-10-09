@@ -38,16 +38,22 @@
   ([ADR 0013 §3](../../../decisions/0013-blob-storage-presigned-direct-to-store.md#3-anti-abuse-is-declare-then-verify-and-the-frame-size-fixes-what-can-be-declared)).
   Small media = one frame; large media = many.
 - **blob** — the unit of stored bytes: an id, `chunkCount`, `byteSize`, the chunk manifest (per-chunk size),
-  and the `K_blob` wrap. Lives in a scope.
+  the `K_blob` wrap and its **blob meta** — what the upload declared about these bytes, sealed under the blob's own
+  `K_blob` (core's `blob-meta` seal, [ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md) Decision 2, inbox
+  #397), written once at the declare and served back on every listing beside the wrap. A media's **original** declares
+  `{type, name, modifiedAt}` — the picked file's type (else sniffed from its first bytes, else
+  `application/octet-stream`), its file name and modified time; a THUMBNAIL/PREVIEW tier and a derived cover declare
+  `{type: image/jpeg}`. Lives in a scope.
 - **media** — the link record attaching a blob to a **node** (a Memory or a Chapter), carrying any per-use
   metadata under `K_mem` — capture time, GPS and the resolved place name in the listed tier (written whole by
   any member, so every write carries the tier's `metaVersion` and a stale one answers `409 stale_version` —
-  [ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md)), and the original
-  **filename** in the lazy panel bundle. **The filename slice has landed:** the name is sealed at upload — for every
-  media that has one, not only an image whose EXIF parsed — shown in the detail panel and used as the original's
-  download name (inbox #395 F10), and it is never sent — the server's view of a media is still no pixel and no name.
-  It lives in the lazy tier, not the listed one, because the listed tier is capped at 512 base64 and a fully
-  populated one leaves no room for it (measured: 336 of 344 plaintext bytes). One blob can be
+  [ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md)), and the camera/editor bundle in the
+  lazy EXIF tier. The original's **filename and media type** are not in either tier: they are the original's blob
+  meta (above), read synchronously from the listing — the name is shown in the detail panel and is the original's
+  download name, the type draws the video badge and the lightbox's `<video>` branch — and neither is ever sent in the
+  clear: the server's view of a media is still no pixel, no name and no type. (Before inbox #397 the name rode the
+  EXIF tier, #395 F10, and the type the listed tier with a lazy backfill on the first download; both copies are gone,
+  and the listed tier shrank by the type.) One blob can be
   attached by more than one media record (e.g. cover + in-body) **within the owner circle** — that is a
   metadata reference the members already see, not content dedup. Each media record also carries its **bucket
   linkage** — a **`bucket_id`** (nullable; `null` = the uploader's primary) and a denormalized **`created_by`** =
@@ -67,7 +73,8 @@
    [ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)), generate a random **`K_blob`** and seal it
    under `K_mem` bound to the scope, the media, the blob and its role. The blob's `byteSize` and `chunkCount`
    are known from the plaintext length alone, before any frame is sealed.
-3. **Start:** POST a blob-start declaring the ids, `byteSize` + `chunkCount` (+ the `K_blob` wrap); the server checks
+3. **Start:** POST a blob-start declaring the ids, `byteSize` + `chunkCount` (+ the `K_blob` wrap and the blob meta
+   sealed under `K_blob`, `wrappedBlobMeta`); the server checks
    the pair against the frame size, opens an upload session **bound to the caller**, and returns presigned
    `PUT` URLs for the **first window** of chunks, each signed for its chunk's exact size.
 4. **Transfer, streaming:** the client reads the plaintext one chunk at a time, `sealFrame(K_blob, index,
@@ -93,7 +100,8 @@ sequenceDiagram
   U->>C: add photo
   C->>C: mediaId, blobId = random UUIDs#59; K_blob = random(32)
   C->>C: wrappedBlobKey = seal(K_mem, blob-key of scope, mediaId, blobId, role, K_blob)
-  C->>S: start blob { mediaId, blobId, chunkCount:n, byteSize, wrappedBlobKey }
+  C->>C: wrappedBlobMeta = sealBlobMeta(K_blob, {type, name, modifiedAt})
+  C->>S: start blob { mediaId, blobId, chunkCount:n, byteSize, wrappedBlobKey, wrappedBlobMeta }
   S-->>C: { uploadId, presignedPut[first window] }
   loop each window
     C->>C: frame_i = sealFrame(K_blob, i, n, chunk_i, nonce_i)
@@ -139,8 +147,8 @@ sequenceDiagram
 ## Quality notes
 
 - **Operator-blind.** Server + object store only ever hold AEAD ciphertext chunks + opaque metadata (ids,
-  sizes, manifest, the `K_blob` wrap, the node link). Never a plaintext byte, never a content key, never a
-  filename in clear.
+  sizes, manifest, the `K_blob` wrap and the sealed blob meta, the node link). Never a plaintext byte, never a
+  content key, never a filename or a media type in clear (both are the original's sealed blob meta).
 - **No content dedup — by decision.** Duplicate media is stored once per blob; the operator never learns
   blob-equality. The savings dedup would buy aren't worth the scope-internal equality leak on an operator-blind,
   self-hostable app ([ADR 0013 §5](../../../decisions/0013-blob-storage-presigned-direct-to-store.md#5-no-content-dedup)).

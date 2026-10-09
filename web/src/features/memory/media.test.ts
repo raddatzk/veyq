@@ -27,8 +27,9 @@ import {
   scaleToMaxEdge,
   unsealMeta,
   setMediaMeta,
-  backfillMediaType,
   isVideoMediaType,
+  originalBlobMeta,
+  originalMediaType,
   effectiveCapturedAt,
   readCaptureTime,
   backfillPlaceName,
@@ -69,6 +70,7 @@ import {
 import { fakeApi, stubApi } from '../../test/apiMock'
 import { mediaItem } from '../../test/models'
 import { MetaConflictError, MetaUnreadableError } from '../../core/node/sealedMetaWrite'
+import { readBlobMeta } from '../../core/blob/transport'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 
@@ -108,7 +110,7 @@ const openJson = (ctx: v1.SealContext, key: Uint8Array, sealed: string) =>
 function fakeStore(opts: { window?: number; forbidFirstPut?: number[]; putDelayMs?: number } = {}) {
   const window = opts.window ?? Number.POSITIVE_INFINITY
   const objects = new Map<string, Uint8Array>()
-  const sessions = new Map<string, { wrappedBlobKey: string; chunkCount: number; blobId: string }>()
+  const sessions = new Map<string, { wrappedBlobKey: string; wrappedBlobMeta?: string | null; chunkCount: number; blobId: string }>()
   // The client mints each blob id and binds its K_blob wrap to it (ADR 0072); the store keys by upload session.
   const uploadOfBlob = new Map<string, string>()
   const events: string[] = []
@@ -132,7 +134,8 @@ function fakeStore(opts: { window?: number; forbidFirstPut?: number[]; putDelayM
 
   const blobOf = (uploadId: string): BlobRef => {
     const s = sessions.get(uploadId)!
-    return { blobId: s.blobId, chunkCount: s.chunkCount, byteSize: 0, wrappedBlobKey: s.wrappedBlobKey }
+    // the blob's sealed meta is served back unchanged beside its wrap, as the backend does (inbox #397)
+    return { blobId: s.blobId, chunkCount: s.chunkCount, byteSize: 0, wrappedBlobKey: s.wrappedBlobKey, wrappedBlobMeta: s.wrappedBlobMeta ?? null }
   }
 
   // Core's generic blob transfer (the `blob` tag) — installed as `blobApi`; the media operations below as `mediaApi`.
@@ -140,7 +143,7 @@ function fakeStore(opts: { window?: number; forbidFirstPut?: number[]; putDelayM
     startBlobUploads: vi.fn<BlobApi['startBlobUploads']>(async ({ blobUploadsBatchRequest }): Promise<BlobUploadsBatchResponse> => {
       const results = blobUploadsBatchRequest.items.map((item): BlobUploadResultItem => {
         const uploadId = `up-${upCounter++}`
-        sessions.set(uploadId, { wrappedBlobKey: item.wrappedBlobKey, chunkCount: item.chunkCount, blobId: item.blobId })
+        sessions.set(uploadId, { wrappedBlobKey: item.wrappedBlobKey, wrappedBlobMeta: item.wrappedBlobMeta, chunkCount: item.chunkCount, blobId: item.blobId })
         uploadOfBlob.set(item.blobId, uploadId)
         captured.startItems.push(item)
         return { uploadId, presignedPuts: putsOf(uploadId, 0, item.chunkCount), error: null }
@@ -550,10 +553,10 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     const FILENAME = 'IMG_0042_holiday.HEIC'
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(12).fill(4) as BlobPart]), mediaType: 'image/jpeg', name: FILENAME }, deriver)
 
-    // B1.1 + B1.3 — the lazy tier carries every new field, the filename included
+    // B1.1 + B1.3 — the lazy tier carries every new field; the filename is the original's blob meta (inbox #397)
     const exif = openJson(exifCtx(store.captured.completeItem.mediaId), memoryKey, store.captured.completeItem.wrappedExif!)
+    expect(exif.name).toBeUndefined()
     expect(exif).toMatchObject({
-      name: FILENAME,
       focalLength35: 75, exposureCompensation: -0.7, flash: 9, orientation: 6,
       software: 'veyq fixture 1.0', artist: 'A. Photographer', rating: 4,
       title: 'Marienplatz', description: 'Marienplatz at golden hour',
@@ -569,8 +572,9 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     const [item] = await listMedia(SCOPE_ID, NODE_ID)
     const sealedMeta = openJson(metaCtx(item.mediaId), memoryKey, item.wrappedMeta!)
     expect(Object.keys(sealedMeta).sort()).toEqual(
-      ['capturedAt', 'capturedAtSource', 'gpsLat', 'gpsLng', 'h', 'mediaType', 'v', 'w'].sort(),
+      ['capturedAt', 'capturedAtSource', 'gpsLat', 'gpsLng', 'h', 'v', 'w'].sort(),
     )
+    expect(originalBlobMeta(SCOPE_ID, memoryKey, item)).toMatchObject({ type: 'image/jpeg', name: FILENAME })
 
     // B1.6 — nothing the client SENT carries the filename. uc.memory.gallery's "no pixel, no filename" is a
     // claim about the server's view, and this is what keeps it true now that the name exists at all.
@@ -612,7 +616,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     // an overflowing name breaks that write too. Worst case: every field populated plus a maximal name.
     // Lever: remove the clamp in `backfillPlaceName`.
     const maximal = await backfillPlaceName(
-      SCOPE_ID, target(item.mediaId, memoryKey, { ...withOverride, mediaType: 'image/jpeg', capturedAtSource: 'exif' }), memoryKey,
+      SCOPE_ID, target(item.mediaId, memoryKey, { ...withOverride, capturedAtSource: 'exif' }), memoryKey,
       'Sant Francesc de Formentera i les Illes Balears de la Mediterrània Occidental'.repeat(4),
       'country',
     )
@@ -669,33 +673,10 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     expect(exif.title).toMatch(/^x\u0001+$/)
   })
 
-  // inbox #395 F10 — the file name is what the original downloads under, so the drop step never sheds it: an escaped
-  // name a character longer than the title would otherwise be the field that goes. Lever: drop the `k !== 'name'`
-  // filter in `sealExifTier`.
-  it('never sheds the file name to fit the cap — the next-longest free text goes instead', async () => {
-    const store = fakeStore()
-    fakeApi(mediaApi, store.api)
-    fakeApi(blobApi, store.blob)
-    vi.stubGlobal('fetch', store.fetchStub)
-    const escaped = '\u0001'.repeat(5_000)
-    vi.mocked(exifr.parse).mockResolvedValue({
-      Make: 'Canon', FNumber: 1.8, ISO: 200,
-      Artist: escaped, Copyright: escaped, title: { lang: 'x-default', value: 'x' + escaped },
-    })
-    const memoryKey = v1.randomBytes(32)
-    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(12).fill(4) as BlobPart]), mediaType: 'image/jpeg', name: escaped }, stubDeriver())
-
-    const sealed = store.captured.completeItem.wrappedExif as string
-    expect(sealed.length).toBeLessThanOrEqual(EXIF_TIER_MAX_B64)
-    const exif = openJson(exifCtx(store.captured.completeItem.mediaId), memoryKey, sealed)
-    expect(exif.name).toBe('\u0001'.repeat(EXIF_TEXT_MAX_BYTES)) // clamped like every text field, but kept
-    expect(exif.title).toBeUndefined()
-    expect(exif).toMatchObject({ make: 'Canon', fNumber: 1.8, iso: 200 })
-  })
-
-  // inbox #395 F10 — every upload seals its file name, not only an image whose EXIF parsed: the lightbox downloads the
-  // original under it. Lever: seal `meta.exif` as-is in `sealMetadata` (the name then rides only a parsed EXIF bundle).
-  it('seals the file name into the EXIF tier for a video, an image without EXIF and a PDF — never into the listed tier', async () => {
+  // inbox #397 — every upload seals the original's name, type and modified time into the ORIGINAL's blob meta, under its
+  // own K_blob — a video, an image without EXIF and a PDF alike — and into neither metadata tier. Lever: drop the meta
+  // from the ORIGINAL's `planBlob` in `uploadMediaVia` (every case reddens).
+  it('seals the file name, type and modified time into the original\'s blob meta — never into a tier, never in the clear', async () => {
     const memoryKey = v1.randomBytes(32)
     const cases: { mediaType: string; name: string; exifr: 'none' | 'throws' }[] = [
       { mediaType: 'video/mp4', name: 'VID_2026.mp4', exifr: 'none' },
@@ -709,15 +690,62 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
       fakeApi(blobApi, store.blob)
       vi.stubGlobal('fetch', store.fetchStub)
       if (c.exifr === 'throws') vi.mocked(exifr.parse).mockRejectedValueOnce(new Error('corrupt'))
-      await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(12).fill(4) as BlobPart]), mediaType: c.mediaType, name: c.name }, stubDeriver())
+      await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(12).fill(4) as BlobPart]), mediaType: c.mediaType, name: c.name, lastModified: 1_700_000_000_000 }, stubDeriver())
 
       const { mediaId, wrappedExif, wrappedMeta } = store.captured.completeItem
-      expect(openJson(exifCtx(mediaId), memoryKey, wrappedExif as string), c.mediaType).toEqual({ v: 1, name: c.name.trim() })
-      // the listed tier, capped at 512 base64, carries no name (B1.5's allow-list, held for every kind)
-      if (wrappedMeta) expect(Object.keys(openJson(metaCtx(mediaId), memoryKey, wrappedMeta)), c.mediaType).not.toContain('name')
-      // and nothing sent carries it (B1.6)
+      const [item] = await listMedia(SCOPE_ID, NODE_ID)
+      expect(originalBlobMeta(SCOPE_ID, memoryKey, item), c.mediaType).toEqual({ v: 1, type: c.mediaType, name: c.name.trim(), modifiedAt: 1_700_000_000_000 })
+      expect(originalMediaType(SCOPE_ID, memoryKey, item), c.mediaType).toBe(c.mediaType)
+      // the derivative tiers declare their own type (the deriver's JPEG) and nothing about the file
+      for (const d of item.derivatives) {
+        expect(readBlobMeta(SCOPE_ID, memoryKey, d.ref), `${c.mediaType} ${d.kind}`).toEqual({ v: 1, type: 'image/jpeg' })
+      }
+      // the EXIF tier no longer carries a name (none parsed here, so none sealed), the listed tier neither name nor type
+      expect(wrappedExif ?? null, c.mediaType).toBeNull()
+      if (wrappedMeta) {
+        const keys = Object.keys(openJson(metaCtx(mediaId), memoryKey, wrappedMeta))
+        expect(keys, c.mediaType).not.toContain('name')
+        expect(keys, c.mediaType).not.toContain('mediaType')
+      }
+      // and nothing sent carries either in the clear — the declares included
       expect(JSON.stringify(store.captured), c.mediaType).not.toContain(c.name.trim())
+      expect(JSON.stringify(store.captured), c.mediaType).not.toContain(c.mediaType)
     }
+  })
+
+  // An empty `File.type` (Safari's Photos import) with an extension nothing maps: the type is sniffed from the bytes at
+  // upload, sealed in the blob meta, and drives the derivation. Lever: return `given ?? UNKNOWN_TYPE` without sniffing.
+  it('sniffs an untyped original\'s type from its first bytes and declares it in the blob meta', async () => {
+    const store = fakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    vi.stubGlobal('fetch', store.fetchStub)
+    const deriver = stubDeriver()
+    const memoryKey = v1.randomBytes(32)
+    const jpeg = new Uint8Array(40).fill(9)
+    jpeg.set([0xff, 0xd8, 0xff, 0xe0])
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([jpeg as BlobPart]), mediaType: 'application/octet-stream', name: 'IMG' }, deriver)
+
+    const [item] = await listMedia(SCOPE_ID, NODE_ID)
+    expect(originalBlobMeta(SCOPE_ID, memoryKey, item)).toMatchObject({ type: 'image/jpeg', name: 'IMG' })
+    expect(deriver.images).toBeGreaterThan(0) // derived as the image it is
+  })
+
+  // A foreign ref: another blob's meta served in the original's slot does not open under the original's K_blob — the
+  // reader gets null (the lightbox then falls back), never another blob's name. Lever: drop the catch in core's
+  // `openBlobMetaOf` (the swap then throws OpenRefused instead of answering null).
+  it('a foreign blob meta in the original\'s slot opens to null, never to that blob\'s facts', async () => {
+    const store = fakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    vi.stubGlobal('fetch', store.fetchStub)
+    const memoryKey = v1.randomBytes(32)
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(12).fill(4) as BlobPart]), mediaType: 'video/mp4', name: 'a.mp4' }, stubDeriver())
+    const [item] = await listMedia(SCOPE_ID, NODE_ID)
+    const swapped: MediaItem = { ...item, original: { ...item.original, wrappedBlobMeta: item.derivatives[0].ref.wrappedBlobMeta } }
+    expect(originalBlobMeta(SCOPE_ID, memoryKey, swapped)).toBeNull()
+    expect(originalBlobMeta(SCOPE_ID, v1.randomBytes(32), item)).toBeNull() // another key: the wrap does not open
+    expect(originalBlobMeta(SCOPE_ID, memoryKey, { ...item, original: { ...item.original, wrappedBlobMeta: undefined } })).toBeNull()
   })
 
   it('falls back to the file creation date when the source carries no EXIF date', async () => {
@@ -794,7 +822,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     expect(meta).toMatchObject({ w: 640, h: 480 }) // geometry still rides the tier
   })
 
-  it('seals only the mediaType when the source is undecodable (probe returns null) — no geometry/date/gps', async () => {
+  it('seals no listed tier for an undecodable, undated source — its type rides the blob meta alone', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
     fakeApi(blobApi, store.blob)
@@ -803,19 +831,18 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     deriver.probeDimensions = vi.fn(async () => null) // e.g. a non-image / undecodable codec
 
     const memoryKey = v1.randomBytes(32)
-    // The tier still seals — the persisted mediaType signal (#104/#105) rides it even with no derivable metadata.
+    // No geometry, no date, no GPS: nothing for the listed tier. The type (the video signal, #104/#105) is the
+    // original's blob meta since inbox #397, so it no longer keeps an otherwise empty tier alive.
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array([1, 2, 3]) as BlobPart]), mediaType: 'application/pdf' }, deriver)
 
     expect(store.captured.completeItem.wrappedExif ?? null).toBeNull()
+    expect(store.captured.completeItem.wrappedMeta ?? null).toBeNull()
     const [item] = await listMedia(SCOPE_ID, NODE_ID)
-    const meta = unsealMeta(SCOPE_ID, memoryKey, item)
-    expect(meta).toMatchObject({ mediaType: 'application/pdf' })
-    expect(meta?.w).toBeUndefined()
-    expect(meta?.capturedAt).toBeUndefined()
-    expect(meta?.gpsLat).toBeUndefined()
+    expect(unsealMeta(SCOPE_ID, memoryKey, item)).toBeNull()
+    expect(originalMediaType(SCOPE_ID, memoryKey, item)).toBe('application/pdf')
   })
 
-  it('a deriver with no probeDimensions still seals the mediaType (best-effort — probe optional)', async () => {
+  it('a deriver with no probeDimensions still declares the type (best-effort — probe optional)', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
     fakeApi(blobApi, store.blob)
@@ -824,7 +851,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     const memoryKey = v1.randomBytes(32)
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array([1]) as BlobPart]), mediaType: 'image/png' }, stubDeriver())
     const [item] = await listMedia(SCOPE_ID, NODE_ID)
-    expect(unsealMeta(SCOPE_ID, memoryKey, item)).toMatchObject({ mediaType: 'image/png' })
+    expect(originalMediaType(SCOPE_ID, memoryKey, item)).toBe('image/png')
   })
 
   it('seals NO metadata tier when there is truly nothing — an empty MIME + no derivable metadata', async () => {
@@ -958,7 +985,7 @@ describe('setMediaMeta — sealed capturedAt override in the listed-metadata tie
   })
 })
 
-describe('mediaType — the persisted video signal (cr-inline-video-playback, #104/#105)', () => {
+describe('the media type — the persisted video signal (cr-inline-video-playback, #104/#105; blob meta since inbox #397)', () => {
   const MEDIA_ID = '5c09e000-0000-4000-8000-000000000a01'
   function decodeMeta(memoryKey: Uint8Array, sealed: string): MediaMeta {
     return openJson(metaCtx(MEDIA_ID), memoryKey, sealed)
@@ -1006,7 +1033,7 @@ describe('mediaType — the persisted video signal (cr-inline-video-playback, #1
     }
   })
 
-  it('seals the video mediaType at upload and round-trips it through unsealMeta', async () => {
+  it('seals the video type into the original\'s blob meta at upload — not into the listed tier', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
     fakeApi(blobApi, store.blob)
@@ -1016,55 +1043,28 @@ describe('mediaType — the persisted video signal (cr-inline-video-playback, #1
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array([1, 2, 3]) as BlobPart]), mediaType: 'video/mp4' }, stubDeriver())
 
     // the wire is opaque ciphertext — the MIME never crosses in the clear
-    expect(store.captured.completeItem.wrappedMeta).not.toContain('video/mp4')
+    expect(JSON.stringify(store.captured)).not.toContain('video/mp4')
     const [item] = await listMedia(SCOPE_ID, NODE_ID)
-    const meta = unsealMeta(SCOPE_ID, memoryKey, item)
-    expect(meta?.mediaType).toBe('video/mp4')
-    expect(isVideoMediaType(meta?.mediaType)).toBe(true)
+    expect(originalMediaType(SCOPE_ID, memoryKey, item)).toBe('video/mp4')
+    expect(isVideoMediaType(originalMediaType(SCOPE_ID, memoryKey, item))).toBe(true)
+    // the listed tier carries no type any more (inbox #397)
+    if (item.wrappedMeta) expect(Object.keys(openJson(metaCtx(item.mediaId), memoryKey, item.wrappedMeta))).not.toContain('mediaType')
   })
 
-  it('backfillMediaType merges the sniffed type into the tier, leaving every other field untouched', async () => {
-    const store = fakeStore()
-    fakeApi(mediaApi, store.api)
-    fakeApi(blobApi, store.blob)
-    const memoryKey = v1.randomBytes(32)
-    // a pre-field media that already carries geometry + a capture date, but no sealed type
-    const existing: MediaMeta = { v: 1, w: 1920, h: 1080, capturedAt: Date.UTC(2020, 0, 1) }
-
-    const updated = await backfillMediaType(SCOPE_ID, target(MEDIA_ID, memoryKey, existing), memoryKey, 'video/webm')
-
-    // the re-sealed tier carries the new type AND the untouched originals — operator-blind (opaque on the wire)
-    expect(store.captured.updatedMeta).not.toContain('video/webm')
-    expect(decodeMeta(memoryKey, store.captured.updatedMeta!)).toEqual({ v: 1, w: 1920, h: 1080, capturedAt: Date.UTC(2020, 0, 1), mediaType: 'video/webm' })
-    expect(updated.tier?.mediaType).toBe('video/webm')
-  })
-
-  it('backfillMediaType seals a fresh tier for a media that had no metadata at all', async () => {
-    const store = fakeStore()
-    fakeApi(mediaApi, store.api)
-    fakeApi(blobApi, store.blob)
-    const memoryKey = v1.randomBytes(32)
-
-    const updated = await backfillMediaType(SCOPE_ID, target(MEDIA_ID, memoryKey, null), memoryKey, 'video/quicktime')
-
-    expect(decodeMeta(memoryKey, store.captured.updatedMeta!)).toEqual({ v: 1, mediaType: 'video/quicktime' })
-    expect(updated.tier?.mediaType).toBe('video/quicktime')
-  })
-
-  /** W7 (#273, live defect): a backfill over a tier that does not open makes no PUT. Before, it PUT a tier holding
-   *  only the sniffed type, and the capture time and GPS sealed in the unopenable one were gone. */
-  it('W7: a backfill over a tier that does not open makes no PUT, for the type and for the place name', async () => {
+  /** W7 (#273, live defect): a backfill over a tier that does not open makes no PUT. Before, the (since removed,
+   *  inbox #397) type backfill PUT a tier holding only the sniffed type, and the capture time and GPS sealed in the
+   *  unopenable one were gone; the place-name backfill shares that write path. */
+  it('W7: a backfill over a tier that does not open makes no PUT', async () => {
     const store = fakeStore()
     fakeApi(mediaApi, store.api)
     fakeApi(blobApi, store.blob)
     const memoryKey = v1.randomBytes(32)
     const elsewhere = target(MEDIA_ID, v1.randomBytes(32), { v: 1, capturedAt: 1, gpsLat: 1, gpsLng: 2 })
 
-    await expect(backfillMediaType(SCOPE_ID, elsewhere, memoryKey, 'video/mp4')).rejects.toBeInstanceOf(MetaUnreadableError)
     await expect(backfillPlaceName(SCOPE_ID, elsewhere, memoryKey, 'Lisboa')).rejects.toBeInstanceOf(MetaUnreadableError)
     expect(store.api.updateMediaMeta).not.toHaveBeenCalled()
     // control: the same backfill over a tier that opens does PUT
-    await backfillMediaType(SCOPE_ID, target(MEDIA_ID, memoryKey, { v: 1, capturedAt: 1 }), memoryKey, 'video/mp4')
+    await backfillPlaceName(SCOPE_ID, target(MEDIA_ID, memoryKey, { v: 1, capturedAt: 1 }), memoryKey, 'Lisboa')
     expect(store.api.updateMediaMeta).toHaveBeenCalledTimes(1)
   })
 
@@ -1185,6 +1185,8 @@ describe('uploadCoverBlob / deleteCoverBlob — standalone cover blob (cr-0073)'
     // the committed ref opens back to the downscaled cover bytes (2048-tagged by the stub) under K_mem
     const opened = await openBlob(SCOPE_ID, memoryKey, ref)
     expect(Array.from(opened)).toEqual([0xff, 0xd8, 2048 & 0xff, 2048 >> 8])
+    // its blob meta is its type alone — the JPEG it was derived into, not the PNG it came from (inbox #397)
+    expect(readBlobMeta(SCOPE_ID, memoryKey, { ...ref, wrappedBlobMeta: store.captured.startItems[0].wrappedBlobMeta })).toEqual({ v: 1, type: 'image/jpeg' })
   })
 
   it('seals the pristine bytes for a non-image source (no downscale)', async () => {

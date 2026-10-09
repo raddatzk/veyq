@@ -14,6 +14,7 @@ vi.mock('../media', () => ({
   restoreMedia: vi.fn(),
   openBucketName: vi.fn(),
   unsealMeta: vi.fn(),
+  originalMediaType: vi.fn(),
   isVideoMediaType: vi.fn(),
   hasDerivatives: vi.fn(),
 }))

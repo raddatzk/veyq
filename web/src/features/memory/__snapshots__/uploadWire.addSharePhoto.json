@@ -16,7 +16,8 @@
             "chunkCount": 5,
             "ownerId": "00000000-0000-4000-8000-000000000001",
             "role": "ORIGINAL",
-            "wrappedBlobKey": "AhZAvSrjMqNoYztGfpDnU1CNl1vnbdhxfStyGjV7wsnlfhHYcwcj02Z4gF661btLgos53DMXLtyjg+7bGg=="
+            "wrappedBlobKey": "AmpnKrZh0NicShCXeuhfLLyYXelR6N+Z7d5q/J6ZjxtnAkD/+krh+e937LGGbnSgW3c/3/vtGOtw6iGcbQ==",
+            "wrappedBlobMeta": "AhZAvSrjMqNoYztGfqyVW6HYZda5htgMC+3JVpbCRD93lLiAeS+0pOW+EuvOHwYcKhqi7GOjcU9ZqpnJqXS21WwPB2pvapNLXPeQ48Ses37MU17+GJ9IEfTq2/N88iy6stFczDQlAll/b/S+a7RE8jmUF5vq4I+R9mSPLYx6WnRUaZyvOrzSfASqL9dgSDBvHuPmEHELB8DyKIQNQgZA1WIfJvu4hjVbehXbaRoxwTyTGWrHzAZbxzL5nrqE6IQbJFaOsbu6tFHEoVu2I8XXDB2a4rIdKD23xVg1vNgTDn9rbUmSysyqxYc5j0+qsc/lgI6IaFZ+IbwfPAZpO5Mwy6LResuwl3ej5DDC16BpDSJu5yqKMwWm2j7D3+ze"
           },
           {
             "blobId": "00000000-0000-4000-8000-000000000003",
@@ -24,7 +25,8 @@
             "chunkCount": 1,
             "ownerId": "00000000-0000-4000-8000-000000000001",
             "role": "THUMBNAIL",
-            "wrappedBlobKey": "AsWfhngjAKOZ7TrEFaW96S3mEuE9IVLI0cbYBIV1kjSf7rwGZYp5p4wImui9Zq90IQE1uptf14YI4aB40w=="
+            "wrappedBlobKey": "AsWfhngjAKOZ7TrEFaW96S3mEuE9IVLI0cbYBIV1kjSf7rwGZYp5p4wImui9Zq90IQE1uptf14YI4aB40w==",
+            "wrappedBlobMeta": "AgfSq7y1q9WyvzLPbO1qhUd1y/M4FC6av39XSeMLoSmBkiKkA5Q4/PHCs/hYXXs9LutyvGgvit/ACxoXW9pkTAJ7tmi+BTEz/Kkom7Dl02ewjk0DsJZyyzpPv09fLOjF1ECqc95YVR1YWPLiGO0Vfqf27AfbjdJNihMV25lQaPXyZZpEZAFAAkwxAs+Jc7nmERTH1HK1MT0JCVu38CetsoSv24PkTj1Ccy3zgoInapeDTchXE3LN6mBXe+Ptwv141YJgl6KeAYveFV3/IjhowCVpmdR7qyzil6/W0CLtG/aHIAv4q40V0eI3E4orjWz63tOb/ial5rl8M8q1zjGMpa+tkB2kkUHCTfvu4XUNqTqhL4ASAYmOUC7PsX7R"
           },
           {
             "blobId": "00000000-0000-4000-8000-000000000004",
@@ -32,7 +34,8 @@
             "chunkCount": 1,
             "ownerId": "00000000-0000-4000-8000-000000000001",
             "role": "PREVIEW",
-            "wrappedBlobKey": "AoUkKLrtTqXs5VemPKmj2VTPsZ0XIZReOxJeuKjy2RDxBsILwjnMfkRmFCYQ3H2viyhUVH+M2OL4j6D71A=="
+            "wrappedBlobKey": "ArR9MDeUZdZ3u9Lc8rFNm0G0UyrOoO/RnZmlZRc46wj/r023NBnwwq3bGpMvUvKaVcNU5oAwao6A9ordsw==",
+            "wrappedBlobMeta": "AjdLx7EfmUoi3dkwmsqXK0cTQrRFJvPJ4p9SMFVbSRFM25kVei0v5gemTDTtB9AUR1gyY5AzaCA6Z+DKO4XUgXMDYsvpNKEjWNp41CaQSUnhRVrSZm41S4CmZ7J1TNfoxVw+m2zrKNJXZ2y9DTmbisU89y/wIbrabDFSkuIq4aNHBrXfl2tm2bzTuu7bw/FeOUr+O62uywOJUN+v729JQEzZUKV/vwabsWLFsuFIpHIR9pQyE8B2rDaoZ1uNN3biWjjKo4PJ9AtnO8yz3ZZ34ekh0p7SaV6zkJlR9WcNAKglENGBXnnQIuwl4vuFysVnl+7eO4g5/Q/iitZXtb7+rD87o8d7B+LFectmrjA+aDna96wFRaKgp9/Ibo3G"
           }
         ],
         "nodeId": "6e5a0000-0000-4000-8000-0000000000b1"
@@ -64,7 +67,7 @@
       },
       "bytes": {
         "length": 262172,
-        "sha256": "0d733889a17d0028b7a117a622b27fe6ae19542e219817aa64bdc5fd7816c7f6"
+        "sha256": "3e42430221d48ad1bc14e1b23ab81db23a235ba8b02682ea9f23af75740f37c3"
       }
     },
     {
@@ -75,7 +78,7 @@
       },
       "bytes": {
         "length": 262172,
-        "sha256": "661e73ddf018793680d70bfeecc355545f7d910b5efddf6e9290c48bdffdb97d"
+        "sha256": "11abb86eec8dc9c573e1ae585a71e633c9954c1eb9bd18163dbf63b8e5823888"
       }
     },
     {
@@ -86,7 +89,7 @@
       },
       "bytes": {
         "length": 262172,
-        "sha256": "676643b19e6e34d9054579fc592a47d560d956b854b01f80a15f7119cf00223e"
+        "sha256": "f770410afe9bd19ec25c0bfad320f0a21109c8292adcecf1cb47e73c4442070b"
       }
     },
     {
@@ -97,7 +100,7 @@
       },
       "bytes": {
         "length": 262172,
-        "sha256": "c0e61bfab8aa1179f6353eada93a6fee5878f14687d952e3c12f7042cacb174b"
+        "sha256": "0a0a2af2500687a142ffc749c6e7cbb7ba27d1b6f11982c419655bf1ba5f5b85"
       }
     },
     {
@@ -108,7 +111,7 @@
       },
       "bytes": {
         "length": 45,
-        "sha256": "19c1db8f90a266e786228a71f8df8ad38ca540174c58390babbf5cf6df07382f"
+        "sha256": "cc65ae1ef213cc802a7e4012ab889d6f24a68c3f22678a87ad6162dc716e8ef1"
       }
     },
     {
@@ -119,7 +122,7 @@
       },
       "bytes": {
         "length": 278,
-        "sha256": "8edbed40693cb88233fdcb50b8a45aa6f1874b89d277b3beb99cee21212a0970"
+        "sha256": "75f3089498e10ffb937e7d4d0959a294a23cdc0a96918f12b12e1c3d6b161fc2"
       }
     },
     {
@@ -130,7 +133,7 @@
       },
       "bytes": {
         "length": 828,
-        "sha256": "08a39638e65f94e23cb26db3a9c7c4a2475f6a8d5a3915513f595caa7763f7b4"
+        "sha256": "e91ede35e18e31344869d9280cbb96f2d63f7bb3d2b1fe8e8b6d56e352784712"
       }
     },
     {
@@ -156,8 +159,8 @@
             ],
             "mediaId": "00000000-0000-4000-8000-000000000001",
             "originalUploadId": "upload-1",
-            "wrappedExif": "Ait0jnpaLZipiyEyDtGO4p0q3La4/LphCDIRxJ9AreXTwZMJJHleKruJPgPSUjGkaoxoovVzZ+kwPw==",
-            "wrappedMeta": "AoQEBAw0Z/lToEX87oXWBN9RrKK+z/e33EbVJIZk80m4Pl+L5LQ+l+laVyOpGq07qX9PX9QIc/Ekj1pX8D0iJffgwQVIdBQ+OTuL3pKaROA3Ry6qnv+McLdytSgEUnbRFHRWO2JBC7Tanw2vJdmTWRy05EzHg76jRkOJwJnAMj3PGVZc"
+            "wrappedExif": null,
+            "wrappedMeta": "AoQEBAw0Z/lToEX87oXWBN9RrKK+z/e33EbVJIZk80m4Pl+L5LQ+l+laVyOpGq07qX9PX9QIc/Ekj1pX8D0iJffgwQVIdBQ+OTuL3pKaROA3Ry6qnv+McLdy5FexvMgtARIsquZkb06XmdQ="
           }
         ],
         "nodeId": "6e5a0000-0000-4000-8000-0000000000b1"

@@ -14,7 +14,7 @@ defineProps<{
   openLabel: string
   /** Draw the selection outline. */
   selected?: boolean
-  /** Draw the play badge over the poster — the media is a video (#105, from the sealed mediaType). */
+  /** Draw the play badge over the poster — the media is a video (#105, from the original's sealed blob meta type, inbox #397). */
   isVideo?: boolean
   /**
    * Show the item-favorite heart (ADR 0068). Gallery only — the trash and contributions grids pass nothing, as

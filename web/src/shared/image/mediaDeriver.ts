@@ -38,8 +38,9 @@ export type AddMediaSource = {
   blob: Blob
   mediaType: string
   lastModified?: number
-  /** The original's filename. Sealed into the lazy EXIF tier and **never sent** — the server's view of a media
-   *  is still "no pixel, no filename" (uc.memory.gallery). Absent for a source that has no name of its own. */
+  /** The original's filename. Sealed into the original's blob meta (inbox #397) and **never sent** in the clear —
+   *  the server's view of a media is still "no pixel, no filename" (uc.memory.gallery). Absent for a source that has
+   *  no name of its own. */
   name?: string
 }
 

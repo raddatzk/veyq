@@ -15,7 +15,7 @@ vi.mock('../../api/client', () => ({
 vi.mock('./api', () => ({ mediaApi: vi.fn(), bucketsApi: vi.fn(), publicShareMediaApi: vi.fn() }))
 
 import { resolveShare, createContributorIdentity, sessionSealKey, addSharePhoto, openShareOriginal } from './share'
-import { listMediaPage, openOriginal, unsealMeta, setMediaMeta, listBuckets, openBucketName, type MediaDeriver } from './media'
+import { listMediaPage, openOriginal, originalBlobMeta, unsealMeta, setMediaMeta, listBuckets, openBucketName, type MediaDeriver } from './media'
 import { publicSharesApi, blobApi } from '../../api/client'
 import { mediaApi, bucketsApi, publicShareMediaApi } from './api'
 import {
@@ -112,7 +112,7 @@ async function guestUploads(kShare: Uint8Array, api: ReturnType<typeof guestApi>
   const sealKey = sessionSealKey(session, resolved.access)!
   await addSharePhoto(
     { ...session, shareId: UPLOADER_SHARE, scopeId: resolved.scopeId, sealKey },
-    { blob: new Blob([PHOTO as BlobPart]), mediaType: 'application/pdf' },
+    { blob: new Blob([PHOTO as BlobPart]), mediaType: 'application/pdf', name: 'Gast-Scan.pdf' },
     noTiers,
   )
   const identity = api.createShareIdentity.mock.calls[0][0].createShareIdentityRequest
@@ -177,7 +177,7 @@ describe('a WRITE_ONLY guest never holds K_mem (ADR 0031 point 7)', () => {
     const identityId: string = identity.identityId
     const row = {
       mediaId: declared.ownerId, blobId: declared.blobId, chunkCount: declared.chunkCount, byteSize: declared.byteSize,
-      wrappedBlobKey: declared.wrappedBlobKey, derivatives: [], wrappedMeta: completed.wrappedMeta,
+      wrappedBlobKey: declared.wrappedBlobKey, wrappedBlobMeta: declared.wrappedBlobMeta, derivatives: [], wrappedMeta: completed.wrappedMeta,
     }
     const presignedGets: PresignedUrl[] = [{ index: 0, url: 'mem://up-0/0' }]
 
@@ -197,8 +197,9 @@ describe('a WRITE_ONLY guest never holds K_mem (ADR 0031 point 7)', () => {
     if (page.notModified) throw new Error('unreachable')
     const [item] = page.items
     expect(await openOriginal(SCOPE_ID, kMem, item)).toEqual(PHOTO)
-    const meta = unsealMeta(SCOPE_ID, kMem, item)
-    expect(meta).not.toBeNull()
+    // the guest's upload carries its blob meta (inbox #397), opened through the same chain as its K_blob — the guest's
+    // key, never K_mem directly
+    expect(originalBlobMeta(SCOPE_ID, kMem, item)).toMatchObject({ type: 'application/pdf', name: 'Gast-Scan.pdf' })
 
     // a member edits its capture time: the re-seal is under the guest's key, never K_mem — no media changes path
     const edited = await setMediaMeta(SCOPE_ID, item, kMem, 1_700_000_000_000)
@@ -238,6 +239,6 @@ describe('a WRITE_ONLY guest never holds K_mem (ADR 0031 point 7)', () => {
     const viewer = await resolveShare(VIEWER_SHARE, b64url(kViewer))
     expect(viewer.items).toHaveLength(1)
     expect(await openShareOriginal(VIEWER_SHARE, viewer.items[0])).toEqual(PHOTO)
-    expect(unsealMeta(SCOPE_ID, viewer.items[0].memoryKey, viewer.items[0].item)).not.toBeNull()
+    expect(originalBlobMeta(SCOPE_ID, viewer.items[0].memoryKey, viewer.items[0].item)).toMatchObject({ name: 'Gast-Scan.pdf' })
   })
 })

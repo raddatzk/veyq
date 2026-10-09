@@ -181,7 +181,7 @@ describe('MemoryDetail (gallery grid + header)', () => {
     expect(store.blob.presignBlobDownloads).toHaveBeenCalled()
   })
 
-  it('draws a play badge only on a video tile — from the sealed mediaType (#104/#105)', async () => {
+  it('draws a play badge only on a video tile — from the original\'s blob meta type (#104/#105, inbox #397)', async () => {
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
     fakeApi(blobApi, store.blob)

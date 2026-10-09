@@ -48,7 +48,7 @@ vi.mock('../../../shared/state/useToast', () => ({
 
 import { mount, flushPromises } from '@vue/test-utils'
 import MediaLightbox from './MediaLightbox.vue'
-import { addMedia, listMedia, unsealMeta, type MediaDeriver, type MediaExif, type MediaItem } from '../media'
+import { addMedia, listMedia, type MediaDeriver, type MediaExif, type MediaItem } from '../media'
 import exifr from 'exifr'
 import { blobApi } from '../../../api/client'
 import { mediaApi } from '../api'
@@ -212,7 +212,7 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
     expect(wrapper.emitted('close')).toHaveLength(2)
   })
 
-  it('download streams the ORIGINAL, byte for byte, under the name its sealed type derives', async () => {
+  it('download streams the ORIGINAL, byte for byte, under the name its blob meta type derives', async () => {
     const memoryKey = v1.randomBytes(32)
     const { store, items } = await seedTwo(memoryKey)
     const anchors: HTMLAnchorElement[] = []
@@ -240,8 +240,8 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
       (c) => c[0].blobDownloadsBatchRequest.items.map((it) => it.blobId),
     )
     expect(presigned).toEqual([store.blobIdOfUpload('up-0')])
-    // the name comes from the SEALED type (image/png), so nothing was read before the save target opened; the bytes
-    // themselves (8 × 0x01) would sniff as nothing (.bin) — the sniff is only the fallback for an untyped media
+    // seedTwo uploads without a file name, so the fallback names it — its extension from the type sealed in the
+    // original's blob meta (image/png); the bytes themselves (8 × 0x01) would sniff as nothing
     expect(anchors.at(-1)!.getAttribute('download')).toBe('Rom 2026 1.png')
     // no streaming target in this env → the capped Blob, holding exactly the original's bytes
     expect(saved).toHaveLength(1)
@@ -278,7 +278,8 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
   })
 
   // inbox #395 F10, the owner's repro: two photos, then a third upload shifts the gallery. The download name must not
-  // move with it. Lever: name the download from `props.memoryName` + `current` alone (drop `storedName`).
+  // move with it. Since inbox #397 the name is the original's blob meta (the EXIF tier carries none — exifr finds
+  // nothing here). Lever: hand `originalDownloadName` null instead of the blob meta (the Memory name + position again).
   it('downloads an original under its own sealed file name, and the name holds when a newer upload shifts the gallery', async () => {
     const memoryKey = v1.randomBytes(32)
     const store = galleryFakeStore()
@@ -310,8 +311,8 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
     expect(suggested).toEqual(['IMG_0001.JPG', 'IMG_0001.JPG']) // was 'Rom 2026 1.jpg', then 'Rom 2026 2.jpg'
   })
 
-  // Only a media that never sealed a name falls back to the Memory name + its position (cr-0049) — `seedTwo` uploads
-  // without a name, as every media without EXIF did before #395 F10.
+  // Only a media whose original carries no name falls back to the Memory name + its position (cr-0049) — `seedTwo`
+  // uploads without a name.
   it('a media without a sealed name falls back to the Memory name and its gallery position', async () => {
     const memoryKey = v1.randomBytes(32)
     const { items } = await seedTwo(memoryKey)
@@ -323,30 +324,47 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
     expect(suggested).toEqual(['Rom 2026 2.jpg'])
   })
 
-  // The name lives in the lazily loaded EXIF tier and nothing may be awaited before the picker, so the download waits
-  // BEFORE the click: disabled until the tier is in (or known absent). Lever: drop `detailsLoading` from
-  // `downloadBlocked` — a click then saves under the fallback name, the next one under the stored one.
-  it('keeps the download disabled until the details carrying the file name are loaded', async () => {
+  // Since inbox #397 the name rides the listing (the original's blob meta), so the download no longer waits for the lazy
+  // EXIF tier (#395 F10 disabled it until that tier was in). Lever: disable the button while the details load.
+  it('is enabled at once and names the file from the listing while the EXIF tier is still loading', async () => {
     const memoryKey = v1.randomBytes(32)
-    const { items } = await seedTwo(memoryKey)
+    const store = galleryFakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    vi.stubGlobal('fetch', store.fetchStub)
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg', name: 'Kolosseum.jpg' }, stubDeriver())
+    const items = await listMedia(SCOPE_ID, NODE_ID)
     const suggested = pickerNames()
-    let release: (e: MediaExif | null) => void = () => {}
-    const exifLoader = vi.fn(() => new Promise<MediaExif | null>((r) => (release = r)))
+    const exifLoader = vi.fn(() => new Promise<MediaExif | null>(() => {})) // never settles
     const wrapper = mountLightbox(memoryKey, items, 0, null, { exifLoader })
     await flushPromises()
 
-    const button = () => wrapper.find(`[aria-label="${t('media.download')}"]`)
-    expect(button().attributes('disabled')).toBeDefined()
-    ;(button().element as HTMLButtonElement).click() // a click that lands anyway does nothing
-    await flushPromises()
-    expect(suggested).toEqual([])
-
-    release({ v: 1, name: 'Kolosseum.jpg' })
-    await flushPromises()
-    expect(button().attributes('disabled')).toBeUndefined()
-    await button().trigger('click')
+    const button = wrapper.find(`[aria-label="${t('media.download')}"]`)
+    expect(button.attributes('disabled')).toBeUndefined()
+    await button.trigger('click')
     await flushPromises()
     expect(suggested).toEqual(['Kolosseum.jpg'])
+  })
+
+  // A foreign ref: the server serves a derivative's meta in the original's slot. It does not open under the original's
+  // K_blob, so the reader gets null and the fallback names the file — never the other blob's facts. Lever: open the
+  // original's meta under the derivative's key.
+  it('a blob meta that does not open for the original names the file by the fallback', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const store = galleryFakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    vi.stubGlobal('fetch', store.fetchStub)
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'video/mp4', name: 'clip.mp4' }, stubDeriver())
+    const [item] = await listMedia(SCOPE_ID, NODE_ID)
+    const foreign: MediaItem = { ...item, original: { ...item.original, wrappedBlobMeta: item.derivatives[0].ref.wrappedBlobMeta } }
+    const suggested = pickerNames()
+    const wrapper = mountLightbox(memoryKey, [foreign], 0)
+    await flushPromises()
+    expect(wrapper.find(`[aria-label="${t('media.playVideo')}"]`).exists()).toBe(false) // no type → no video branch
+    await wrapper.find(`[aria-label="${t('media.download')}"]`).trigger('click')
+    await flushPromises()
+    expect(suggested).toEqual(['Rom 2026 1.bin'])
   })
 
   it('a cancelled picker is silent: no error, no toast, nothing fetched', async () => {
@@ -408,7 +426,7 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
   })
 })
 
-describe('MediaLightbox — video playback + mediaType backfill (cr-inline-video-playback, #104/#105)', () => {
+describe('MediaLightbox — video playback from the blob meta type (cr-inline-video-playback, #104/#105; inbox #397)', () => {
   const FTYP_MP4 = new Uint8Array([0, 0, 0, 0, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]) // "....ftypisom"
 
   /** Seed one media with an explicit source type + original bytes. */
@@ -458,12 +476,12 @@ describe('MediaLightbox — video playback + mediaType backfill (cr-inline-video
     expect(wrapper.find('.media-lightbox-stage img').exists()).toBe(true)
   })
 
-  it('lazily back-fills the sealed mediaType on the download of a pre-field media, then emits updated', async () => {
+  // An empty source type (Safari's Photos import): the upload sniffs the original's type and seals it in the blob meta,
+  // so the lightbox knows the video at once and the download names it with nothing read first. The download writes
+  // nothing back — the lazy mediaType backfill is gone (inbox #397). Lever: skip the upload-time sniff.
+  it('an untyped upload is a video from its sniffed blob meta type — play affordance, .mp4 name, no write-back', async () => {
     const memoryKey = v1.randomBytes(32)
-    // pre-field: an EMPTY source type → nothing sealed at upload, but the original sniffs as mp4
     const { store, items } = await seedVideoLike(memoryKey, '', FTYP_MP4)
-    expect(unsealMeta(SCOPE_ID, memoryKey, items[0])?.mediaType).toBeUndefined() // no signal yet
-    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
     const picker = vi.fn(async (_o?: { suggestedName?: string }) => ({
       createWritable: async () => ({ write: async () => {}, close: async () => {}, abort: async () => {} }),
     }))
@@ -471,33 +489,15 @@ describe('MediaLightbox — video playback + mediaType backfill (cr-inline-video
 
     const wrapper = mountLightbox(memoryKey, items, 0)
     await flushPromises()
-    await wrapper.find(`[aria-label="${t('media.download')}"]`).trigger('click')
-    await flushPromises()
-
-    // the download sniffed the original and wrote the type back — opaque on the wire, video/mp4 once unsealed
-    const sent = store.api.updateMediaMeta.mock.calls.at(-1)![0].mediaMetaUpdate.wrappedMeta
-    expect(typeof sent).toBe('string')
-    expect(sent).not.toContain('video/mp4')
-    expect(unsealMeta(SCOPE_ID, memoryKey, { mediaId: items[0].mediaId, wrappedMeta: sent } as MediaItem)?.mediaType).toBe('video/mp4')
-    expect(wrapper.emitted('updated')?.at(-1)?.[0]).toMatchObject({ mediaId: items[0].mediaId })
-    // with no sealed type the extension comes ONLY from sniffing chunk 0, read before the picker opened
-    expect(picker.mock.calls).toEqual([[{ suggestedName: 'Rom 2026 1.mp4' }]])
-  })
-
-  it('does NOT back-fill in the read-only public viewer (no authed write path)', async () => {
-    const memoryKey = v1.randomBytes(32)
-    const { store, items } = await seedVideoLike(memoryKey, '', FTYP_MP4)
-    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
-
-    const wrapper = mount(MediaLightbox, {
-      props: { scopeId: SCOPE_ID, memoryKey, items, startIndex: 0, memoryName: 'Rom 2026', coverMediaId: null, readonly: true },
-      global: { plugins: [realI18n()] },
-    })
-    await flushPromises()
-    await wrapper.find(`[aria-label="${t('media.download')}"]`).trigger('click')
+    expect(wrapper.find(`[aria-label="${t('media.playVideo')}"]`).exists()).toBe(true)
+    store.blob.presignBlobDownloads.mockClear()
+    ;(wrapper.find(`[aria-label="${t('media.download')}"]`).element as HTMLButtonElement).click()
+    expect(picker.mock.calls).toEqual([[{ suggestedName: 'Rom 2026 1.mp4' }]]) // in the click, before any read
+    expect(store.blob.presignBlobDownloads).not.toHaveBeenCalled()
     await flushPromises()
 
     expect(store.api.updateMediaMeta).not.toHaveBeenCalled()
+    expect(wrapper.emitted('updated')).toBeFalsy()
   })
 })
 
@@ -662,7 +662,7 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
     await flushPromises()
     const dds = wrapper.findAll('.media-lightbox-metadata dd').map((d) => d.text())
 
-    expect(dds).toContain('IMG_0042.HEIC') // the filename, sealed at upload and nowhere else
+    expect(dds).toContain('IMG_0042.HEIC') // the filename, from the original's blob meta (inbox #397) and nowhere else
     expect(dds).toContain('image/jpeg')
     expect(dds).toContain('75 mm') // the 35 mm equivalent, beside the native 50 mm
     expect(dds).toContain('-0.7 EV')
@@ -822,7 +822,9 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
     expect(needle.attributes('style')).toContain('215.3deg')
   })
 
-  it('shows the no-detail message when the item carries no sealed EXIF', async () => {
+  // Since inbox #397 the file's own facts — name, size, format — come from the listing (the original's blob meta and
+  // its ref), so a media without EXIF still lists them; only the camera rows are missing.
+  it('lists the file\'s own facts, and no camera rows, when the item carries no sealed EXIF', async () => {
     const memoryKey = v1.randomBytes(32)
     vi.mocked(exifr.parse).mockResolvedValue(undefined) // no readable EXIF → nothing sealed
 
@@ -830,14 +832,18 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
     fakeApi(mediaApi, store.api)
     fakeApi(blobApi, store.blob)
     vi.stubGlobal('fetch', store.fetchStub)
-    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(4) as BlobPart]), mediaType: 'image/png' }, stubDeriver())
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(4) as BlobPart]), mediaType: 'image/png', name: 'Screenshot.png' }, stubDeriver())
     const items = await listMedia(SCOPE_ID, NODE_ID)
 
     const wrapper = mountLightbox(memoryKey, items, 0)
     await flushPromises()
 
-    expect(wrapper.find('.media-lightbox-metadata').exists()).toBe(false)
-    expect(wrapper.find('.media-lightbox-no-detail').text()).toBe(t('media.noDetail'))
+    expect(wrapper.find('.media-lightbox-no-detail').exists()).toBe(false)
+    const dts = wrapper.findAll('.media-lightbox-metadata dt').map((d) => d.text())
+    expect(dts).toEqual([t('media.fileName'), t('media.fileSize'), t('media.fileFormat')])
+    const dds = wrapper.findAll('.media-lightbox-metadata dd').map((d) => d.text())
+    expect(dds[0]).toBe('Screenshot.png')
+    expect(dds[2]).toBe('image/png')
   })
 })
 
@@ -889,8 +895,9 @@ describe('MediaLightbox — correct the capture time (cr-0065/0066)', () => {
 
     const wrapper = mountLightbox(memoryKey, items, 0)
     await flushPromises()
-    // the panel has no detail, but the edit affordance is still there (set a fresh date)
-    expect(wrapper.find('.media-lightbox-no-detail').exists()).toBe(true)
+    // no capture date and no EXIF — the panel lists only the file's own facts (inbox #397) — but the edit affordance is
+    // still there (set a fresh date)
+    expect(wrapper.findAll('.media-lightbox-metadata dt').map((d) => d.text())).not.toContain(t('media.captured'))
 
     await wrapper.find(`[aria-label="${t('media.editCapturedAt')}"]`).trigger('click')
     await wrapper.find('#captured-at-input').setValue('2019-08-15T08:30')

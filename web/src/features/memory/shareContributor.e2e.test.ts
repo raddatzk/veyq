@@ -192,7 +192,8 @@ describe.skipIf(!process.env.VEYQ_E2E)('contributor share e2e (live, real crypto
     //
     // MEASURED: this records exactly 5 canaries — the Memory name, the note's two locales, the contributor name,
     // the share name. `unsealMeta` contributes ZERO here and is passed anyway: an original-only upload with
-    // `mediaType: ''` seals a metadata tier of numbers and the empty string, all dropped by type in `canaries.ts`.
+    // `mediaType: ''` seals at most a metadata tier of numbers, all dropped by type in `canaries.ts` (its type and name
+    // are the original's blob meta since inbox #397, which `media.e2e` records).
     // It stays because the recorder is derivation-shaped — the day that tier grows a string field, this sweeps it
     // with no edit here. Don't mistake it for load-bearing in this suite's current shape.
     recordCanaries(

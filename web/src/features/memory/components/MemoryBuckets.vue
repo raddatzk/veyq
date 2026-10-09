@@ -18,7 +18,7 @@ import MediaTile from './MediaTile.vue'
 import { galleryDisplayAspectRatio } from '../mediaGridLayout'
 import {
   listBuckets, createBucket, renameBucket, deleteBucket, moveBucketMedia, openBucketName, deleteMedia, restoreMedia,
-  unsealMeta, isVideoMediaType, hasDerivatives, type MediaItem, type BucketItem,
+  unsealMeta, originalMediaType, isVideoMediaType, hasDerivatives, type MediaItem, type BucketItem,
 } from '../media'
 import { listScopeMembers } from '../../spaces/members'
 import { contentKeyChain } from '../../../core/node/tree'
@@ -192,8 +192,8 @@ const filteredMedia = computed<MediaItem[]>(() => {
   return props.media.filter((m) => m.bucketId === b.id)
 })
 
-// Unseal each tile's listed metadata once (operator-blind, under K_mem): the aspect ratio (cr-0059) AND the video
-// signal (#105, from the sealed mediaType) both come from it — one unwrap, not two.
+// Unseal each tile's listed metadata once (operator-blind, under K_mem) for the aspect ratio (cr-0059), and its
+// original's blob meta for the video signal (#105, the sealed type, inbox #397).
 const layoutItems = computed(() =>
   filteredMedia.value.map((m, index) => {
     const meta = props.memoryKey ? unsealMeta(props.scopeId, props.memoryKey, m) : null
@@ -202,7 +202,7 @@ const layoutItems = computed(() =>
       aspectRatio: galleryDisplayAspectRatio(meta?.w, meta?.h),
       media: m,
       index,
-      isVideo: isVideoMediaType(meta?.mediaType),
+      isVideo: props.memoryKey ? isVideoMediaType(originalMediaType(props.scopeId, props.memoryKey, m)) : false,
     }
   }),
 )
