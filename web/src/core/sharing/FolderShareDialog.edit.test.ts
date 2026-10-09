@@ -1,0 +1,210 @@
+// @vitest-environment happy-dom
+// inbox #364: a member edits an existing folder link in place — label, role, note, password, expiry — with
+// `updateShare` on the same link, offered on its own links only (the server lets only a link's owner edit it, ADR 0036
+// point 3). The real PrimeVue buttons, inputs and switches are mounted and clicked with real DOM clicks (web/CLAUDE.md:
+// a test that asserts what a handler calls has not clicked anything); only the Dialog (it teleports), the date picker
+// and the note editor are stubbed. The data layer is stubbed as in `FolderShareDialog.test.ts`.
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { mount, flushPromises } from '@vue/test-utils'
+import PrimeVue from 'primevue/config'
+
+vi.mock('./shareLink', () => ({ buildShareLink: vi.fn(), recoverShareLink: vi.fn() }))
+vi.mock('./manageShares', () => ({
+  mintShare: vi.fn(),
+  remintShare: vi.fn(),
+  updateShare: vi.fn(),
+  listSharesFor: vi.fn(),
+  revokeShare: vi.fn(),
+  reactivateShare: vi.fn(),
+  deleteShare: vi.fn(),
+  isReissueRequired: vi.fn(),
+  isShareDeleted: vi.fn(),
+  readShareName: vi.fn(),
+  readShareNoteMap: vi.fn(),
+  readSharePassword: vi.fn(),
+  hasLocaleText: vi.fn(),
+}))
+
+import FolderShareDialog from './FolderShareDialog.vue'
+import * as manage from './manageShares'
+import { recoverShareLink } from './shareLink'
+import { ShareRole } from '../../api/generated/sharing'
+import { confirmRequest, settleConfirm } from '../../shared/state/useConfirm'
+import { realI18n, t } from '../../test/i18n'
+
+const updateShare = vi.mocked(manage.updateShare)
+const listSharesFor = vi.mocked(manage.listSharesFor)
+
+const SCOPE_ID = '5c09e000-0000-4000-8000-0000000000dd'
+const FOLDER_ID = '5c09e000-0000-4000-8000-0000000000f0'
+const EPOCHS = { current: 0, keys: new Map([[0, new Uint8Array(32)]]) }
+const EXPIRES = new Date('2027-03-01T22:59:59.999Z')
+
+const row = (over: Partial<manage.ManagedShare>): manage.ManagedShare => ({
+  shareId: 's-own', scopeId: SCOPE_ID, nodeId: FOLDER_ID, role: ShareRole.Read, enabled: true, mine: true,
+  createdAt: new Date('2026-01-01T00:00:00Z'), expiresAt: null, sealedNote: null, sealedShareName: 'sealed',
+  sealedShareKey: 'k', sealedShareKeyEpoch: 0, passwordRequired: false, sealedPassword: null,
+  reissueRequired: false, deletable: true, newGuestsRefused: false, writeVerifierMissing: false,
+  ...over,
+})
+
+function mountDialog() {
+  return mount(FolderShareDialog, {
+    attachTo: document.body,
+    props: { scopeId: SCOPE_ID, nodeId: FOLDER_ID, nodeKey: new Uint8Array(32), epochs: EPOCHS, nodeName: 'Trips', nodeKind: 'FOLDER' },
+    global: {
+      plugins: [realI18n(), PrimeVue],
+      stubs: {
+        Dialog: { props: ['visible', 'header'], template: '<div v-if="visible"><h1 class="header">{{ header }}</h1><slot /></div>' },
+        DatePicker: { props: ['modelValue'], template: '<input class="datepicker" :value="modelValue ? modelValue.toISOString() : \'\'" />' },
+        LocaleMarkdownEditor: true,
+      },
+    },
+  })
+}
+type W = ReturnType<typeof mountDialog>
+const click = (el: Element) => el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
+const byLabel = (w: W, label: string) => w.findAll(`button[aria-label="${label}"]`)
+const byText = (w: W, text: string) => w.findAll('button').find((b) => b.text() === text)
+/** A PrimeVue ToggleSwitch is a checkbox input carrying the switch's aria-label. */
+const toggle = (w: W, label: string) => w.find(`input[role="switch"][aria-label="${label}"]`)
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  settleConfirm(false)
+  vi.mocked(recoverShareLink).mockImplementation((a) => `https://x/s/${a.shareId}#k=rec`)
+  vi.mocked(manage.readShareName).mockImplementation((_e, _a, _copy, sealed) => (sealed ? 'Family' : ''))
+  vi.mocked(manage.readShareNoteMap).mockReturnValue({ en: 'Hello' })
+  vi.mocked(manage.hasLocaleText).mockImplementation((m) => Object.values(m).some((v) => !!v))
+  vi.mocked(manage.readSharePassword).mockReturnValue('')
+  updateShare.mockResolvedValue(undefined)
+})
+
+describe('FolderShareDialog — edit a link in place (#364)', () => {
+  it("offers the edit on the caller's own links only — not on a co-member's, nor on one without a recovery copy", async () => {
+    listSharesFor.mockResolvedValue([
+      row({ shareId: 's-own' }),
+      row({ shareId: 's-other', mine: false, sealedShareName: null }),
+      row({ shareId: 's-nocopy', sealedShareKey: null, sealedShareName: null }),
+    ])
+    const w = mountDialog()
+    await flushPromises()
+    const rows = w.findAll('.folder-share-row')
+    expect(rows.map((r) => r.find(`button[aria-label="${t('share.edit')}"]`).exists())).toEqual([true, false, false])
+  })
+
+  it('opens the form pre-filled from the link and saves it with updateShare on the same link — no new link', async () => {
+    const share = row({ expiresAt: EXPIRES })
+    listSharesFor.mockResolvedValue([share])
+    const w = mountDialog()
+    await flushPromises()
+
+    click(byLabel(w, t('share.edit'))[0].element)
+    await flushPromises()
+    expect(w.find('.header').text()).toBe(t('share.editTitle'))
+    expect((w.find('#folder-share-name').element as HTMLInputElement).value).toBe('Family')
+    expect((toggle(w, t('share.noteSection')).element as HTMLInputElement).checked, 'the note is on').toBe(true)
+    expect((toggle(w, t('share.expirySection')).element as HTMLInputElement).checked, 'the expiry is on').toBe(true)
+    expect((toggle(w, t('share.passwordSection')).element as HTMLInputElement).checked, 'no password').toBe(false)
+
+    await w.find('#folder-share-name').setValue('Grandparents')
+    click(w.findAll('.folder-share-roles button').find((b) => b.text() === t('share.folder.roleContributor'))!.element)
+    await flushPromises()
+    expect(w.text()).toContain(t('share.folder.roleContributorHint'))
+    click(byText(w, t('common.save'))!.element)
+    await flushPromises()
+
+    expect(updateShare).toHaveBeenCalledTimes(1)
+    const [address, epochs, copy, note, name, expiresAt, role, passwordChange] = updateShare.mock.calls[0]
+    expect(address, 'the link and the folder this dialog was opened for').toEqual({ scopeId: SCOPE_ID, nodeId: FOLDER_ID, shareId: 's-own' })
+    expect(epochs).toEqual(EPOCHS)
+    expect(copy, 'its recovery copy re-opens K_share').toEqual(share)
+    expect(note, 'the note is re-sent').toEqual({ en: 'Hello' })
+    expect(name).toBe('Grandparents')
+    expect(expiresAt?.getTime(), 'the expiry is re-sent, so an unrelated edit keeps it').toBe(new Date(new Date(EXPIRES).setHours(23, 59, 59, 999)).getTime())
+    expect(role).toBe(ShareRole.ReadWrite)
+    expect(passwordChange, 'no password was touched').toBeUndefined()
+    expect(manage.mintShare).not.toHaveBeenCalled()
+    expect(manage.remintShare).not.toHaveBeenCalled()
+    expect(w.find('.header').text(), 'back on the list').toBe(t('share.folder.title'))
+    expect(listSharesFor, 'which is re-read').toHaveBeenCalledTimes(2)
+  })
+
+  it('switching the password off removes it; switching the note off clears it', async () => {
+    vi.mocked(manage.readSharePassword).mockReturnValue('correct horse battery')
+    listSharesFor.mockResolvedValue([row({ passwordRequired: true, sealedPassword: 'p' })])
+    const w = mountDialog()
+    await flushPromises()
+    click(byLabel(w, t('share.edit'))[0].element)
+    await flushPromises()
+    expect((w.find('#folder-share-password').element as HTMLInputElement).value, 'the password is pre-filled').toBe('correct horse battery')
+
+    click(toggle(w, t('share.passwordSection')).element)
+    click(toggle(w, t('share.noteSection')).element)
+    await flushPromises()
+    click(byText(w, t('common.save'))!.element)
+    await flushPromises()
+    const [, , , note, , , , passwordChange] = updateShare.mock.calls[0]
+    expect(passwordChange).toEqual({ remove: true })
+    expect(note).toEqual({})
+  })
+
+  it('a changed password is set; a password the copy cannot open blocks the save until one is typed', async () => {
+    listSharesFor.mockResolvedValue([row({ passwordRequired: true, sealedPassword: null })])
+    const w = mountDialog()
+    await flushPromises()
+    click(byLabel(w, t('share.edit'))[0].element)
+    await flushPromises()
+    expect((toggle(w, t('share.passwordSection')).element as HTMLInputElement).checked, 'the protection stays on').toBe(true)
+    expect(byText(w, t('common.save'))!.attributes('disabled'), 'never quietly drops it').toBeDefined()
+
+    await w.find('#folder-share-password').setValue('a brand new password')
+    click(byText(w, t('common.save'))!.element)
+    await flushPromises()
+    expect(updateShare.mock.calls[0][7]).toEqual({ set: 'a brand new password' })
+  })
+
+  it('a refused save says so and stays on the form', async () => {
+    updateShare.mockRejectedValue(new Error('404'))
+    listSharesFor.mockResolvedValue([row({})])
+    const w = mountDialog()
+    await flushPromises()
+    click(byLabel(w, t('share.edit'))[0].element)
+    await flushPromises()
+    click(byText(w, t('common.save'))!.element)
+    await flushPromises()
+    expect(w.text()).toContain(t('share.editFailed'))
+    expect(w.find('.header').text()).toBe(t('share.editTitle'))
+  })
+
+  it('cancel goes back to the list and saves nothing', async () => {
+    listSharesFor.mockResolvedValue([row({})])
+    const w = mountDialog()
+    await flushPromises()
+    click(byLabel(w, t('share.edit'))[0].element)
+    await flushPromises()
+    click(byText(w, t('common.cancel'))!.element)
+    await flushPromises()
+    expect(updateShare).not.toHaveBeenCalled()
+    expect(w.find('.header').text()).toBe(t('share.folder.title'))
+  })
+
+  // #303 (ADR 0076 point 5): an edit cannot add a write verifier, so such a link graded READ_WRITE offers the renew.
+  it('a link without a write verifier, switched to contribute, warns and hands over to the renew', async () => {
+    listSharesFor.mockResolvedValue([row({ writeVerifierMissing: true })])
+    const w = mountDialog()
+    await flushPromises()
+    click(byLabel(w, t('share.edit'))[0].element)
+    await flushPromises()
+    expect(w.text()).not.toContain(t('share.roleNeedsReissue'))
+    click(w.findAll('.folder-share-roles button').find((b) => b.text() === t('share.folder.roleContributor'))!.element)
+    await flushPromises()
+    expect(w.text()).toContain(t('share.roleNeedsReissue'))
+    click(byText(w, t('share.reissue'))!.element)
+    await flushPromises()
+    const asked = confirmRequest.value?.header
+    settleConfirm(false)
+    expect(asked).toBe(t('share.reissueTitle'))
+    expect(updateShare).not.toHaveBeenCalled()
+  })
+})
