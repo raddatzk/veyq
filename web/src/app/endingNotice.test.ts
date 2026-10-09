@@ -50,11 +50,21 @@ describe('a session refused mid-grant tells the sign-in page (uc.account.onboard
     expect(tab.takeEndingNotice()).toBeNull()
   })
 
-  it('the same refusal outside a grant ends the session and explains nothing', async () => {
-    // The control: the notice comes from the explanation, not from the refusal.
+  it('the same refusal outside a grant ends the session and says only that it was refused (inbox #322)', async () => {
+    // The control: the grant's notice comes from the explanation, not from the refusal; the refusal's own is `refused`.
     const tab = await freshTab({ holdsSession: true })
 
     await expect(tab.refusedCall()).rejects.toThrow('http 401')
+
+    expect(replace).toHaveBeenCalledExactlyOnceWith('/login')
+    expect(tab.takeEndingNotice()).toBe('refused')
+    expect(tab.takeEndingNotice()).toBeNull()
+  })
+
+  it('a step that explains with null ends silently (the sign-out sequence, whose refusal is what it wanted)', async () => {
+    const tab = await freshTab({ holdsSession: true })
+
+    await expect(tab.explainEnding(null, tab.refusedCall)).rejects.toThrow('http 401')
 
     expect(replace).toHaveBeenCalledExactlyOnceWith('/login')
     expect(tab.takeEndingNotice()).toBeNull()
@@ -74,8 +84,8 @@ describe('a session refused mid-grant tells the sign-in page (uc.account.onboard
 
     await tab.explainEnding('grantInterrupted', async () => expect(tab.endingExplanation()).toBe('grantInterrupted'))
 
-    expect(tab.endingExplanation()).toBeNull()
+    expect(tab.endingExplanation()).toBe('refused')
     await expect(tab.refusedCall()).rejects.toThrow('http 401')
-    expect(tab.takeEndingNotice()).toBeNull()
+    expect(tab.takeEndingNotice()).toBe('refused')
   })
 })

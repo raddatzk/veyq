@@ -13,7 +13,7 @@ import { isSessionRefusal, withRefresh } from '../../../app/sessionRefresh'
 import { endSession } from '../../../app/sessionEnd'
 import { clearDeviceKey } from '../rememberMe/deviceKeyWrap'
 import { clearSessionVault } from '../rememberMe/sessionVault'
-import { leaveEndingNotice, takeEndingNotice, type EndingNotice } from '../../../app/endingNotice'
+import { explainEnding, leaveEndingNotice, takeEndingNotice, type EndingNotice } from '../../../app/endingNotice'
 
 /** What the sign-in page says after an ending, carried across the new document as one word — never account data.
  *  The words and their storage live in `app/endingNotice.ts`, because a refused refresh leaves one too. */
@@ -31,7 +31,9 @@ export async function signOut(opts: { everywhere?: boolean } = {}): Promise<void
   await clearDeviceKey().catch(() => {})
   let reached = true
   try {
-    await withRefresh(() => sessionApi().logout())
+    // A refresh refused under the logout starts the ending itself; it says nothing (`null`), not `refused`: a session
+    // that was already over is what signing out wanted, and the notice below is this sequence's own.
+    await explainEnding(null, () => withRefresh(() => sessionApi().logout()))
   } catch (e) {
     // A refusal of the session is the server answering that it is not live any more — revoked or expired — which
     // is what signing out wanted. Any other failure (offline, 5xx, a suspended tenant) leaves the cookie standing.

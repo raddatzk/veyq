@@ -59,6 +59,8 @@ export function listenForSessionEnd(): () => void {
   channel.onmessage = (e: MessageEvent) => {
     if ((e.data as SessionAnnouncement | null)?.type !== 'ended') return
     if (ending || !holdsSession()) return
+    // The sign-in page says why this tab's session ended (inbox #322): another tab ended it.
+    leaveEndingNotice('otherTab')
     ending = runEnding(false)
   }
   return () => channel.close()

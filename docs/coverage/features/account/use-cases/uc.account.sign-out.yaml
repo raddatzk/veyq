@@ -55,6 +55,20 @@ acceptanceCriteria:
       other tab that holds a session runs the ending without calling the server, and none re-announces it.
     coverage:
       web: { unit: [src/app/sessionEnd.test.ts] }
+  - id: ending-says-why
+    text: An ending this tab did not ask for has the sign-in page say so — a refused refresh that the session ended
+      (expired, or ended elsewhere; the server does not say which), another tab's announcement that it ended there —
+      while the sign-out sequence's own refusal says nothing beyond its own notice; one word in this tab's
+      sessionStorage, read once.
+    coverage:
+      # inbox #322. The refresh, the ending and the notice run for real in endingNotice.test.ts and
+      # signOut.refused.test.ts; sessionEnd.test.ts reads the other-tab notice back; LoginView.test.ts renders both.
+      web:
+        unit:
+          - src/app/endingNotice.test.ts
+          - src/features/account/login/signOut.refused.test.ts
+          - src/app/sessionEnd.test.ts
+          - src/views/LoginView.test.ts
   - id: no-session-no-ending
     text: A tab that holds no session (the sign-in page at boot, a public share, a pairing ceremony) ignores the
       announcement, and a refresh rejected at boot does not run the ending.

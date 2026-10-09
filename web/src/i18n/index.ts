@@ -555,6 +555,12 @@ const en = {
     signOut: 'Sign out',
     signOutUnconfirmed:
       'Your sign-out did not reach the server, so this browser may still be signed in. Once you are back online, use “Sign out” here.',
+    // A session the server refused ended this tab (uc.account.sign-out E1, inbox #322). The refusal does not say why
+    // (a plain 401 for expired, revoked or unknown alike), so the copy names the causes rather than guessing one.
+    sessionEnded:
+      'Your session has ended. It expired, or it was ended elsewhere: by a sign-out on another device, a password change or reset, or replacing your keys. Sign in again to continue.',
+    // Another tab of this browser ended the session (uc.account.sign-out E3).
+    sessionEndedOtherTab: 'Your session was ended in another tab of this browser. Sign in again to continue.',
   },
   unlock: {
     secretKey: 'Secret Key',
@@ -1814,6 +1820,9 @@ const de: typeof en = {
     signOut: 'Abmelden',
     signOutUnconfirmed:
       'Die Abmeldung hat den Server nicht erreicht, deshalb kann dieser Browser noch angemeldet sein. Sobald du wieder online bist, nutze hier „Abmelden“.',
+    sessionEnded:
+      'Deine Sitzung ist beendet. Sie ist abgelaufen oder wurde anderswo beendet: durch eine Abmeldung auf einem anderen Gerät, eine Passwortänderung oder -zurücksetzung oder das Ersetzen deiner Schlüssel. Melde dich erneut an, um weiterzumachen.',
+    sessionEndedOtherTab: 'Deine Sitzung wurde in einem anderen Tab dieses Browsers beendet. Melde dich erneut an, um weiterzumachen.',
   },
   unlock: {
     secretKey: 'Secret Key',

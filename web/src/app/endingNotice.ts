@@ -12,12 +12,16 @@
  * - `grantInterrupted`: this device's session was refused while it was giving a new device access
  *   (uc.account.onboard-device E6) — a reset, a password change, a rotation or a sign-out on another device ended
  *   it, and the server let no device in.
+ * - `refused`: the server refused this tab's session on a refresh, outside any step that explains it (uc.account.sign-out
+ *   E1, inbox #322). Its plain 401 does not say whether the session expired or was ended elsewhere, so neither does the
+ *   page: it names the causes. Only a tab that held a session gets here, so it says nothing about any account.
+ * - `otherTab`: another tab of this browser ended the session and this one followed (uc.account.sign-out E3).
  */
-export type EndingNotice = 'unconfirmed' | 'everywhere' | 'everywhereUnconfirmed' | 'grantInterrupted'
+export type EndingNotice = 'unconfirmed' | 'everywhere' | 'everywhereUnconfirmed' | 'grantInterrupted' | 'refused' | 'otherTab'
 
 // This tab's `sessionStorage`: it survives the document load in the same tab and nowhere else.
 const NOTICE_KEY = 'veyq.sign-out-notice'
-const NOTICES: readonly EndingNotice[] = ['unconfirmed', 'everywhere', 'everywhereUnconfirmed', 'grantInterrupted']
+const NOTICES: readonly EndingNotice[] = ['unconfirmed', 'everywhere', 'everywhereUnconfirmed', 'grantInterrupted', 'refused', 'otherTab']
 
 /** Leave [notice] for the sign-in page the coming ending loads. `null` leaves nothing. */
 export function leaveEndingNotice(notice: EndingNotice | null): void {
@@ -40,15 +44,17 @@ export function takeEndingNotice(): EndingNotice | null {
   }
 }
 
-/** What a refused refresh's ending should say, while a caller that asked for one is running. */
-let explanation: EndingNotice | null = null
+/** What a refused refresh's ending should say, while a caller that asked for one is running; `undefined` while none
+ *  is, when the ending says `refused`. */
+let explanation: EndingNotice | null | undefined = undefined
 
 /**
  * Run [call]; should the server refuse this tab's session while it runs, the ending that refusal triggers leaves
- * [notice] for the sign-in page. For a step whose interruption the person must hear about: the ending is a document
- * load, so an error the screen showed would be gone before anyone read it.
+ * [notice] for the sign-in page instead of the default `refused`. For a step whose interruption the person must hear
+ * about: the ending is a document load, so an error the screen showed would be gone before anyone read it. `null`
+ * says nothing — the sign-out sequence, whose refusal is what signing out wanted.
  */
-export async function explainEnding<T>(notice: EndingNotice, call: () => Promise<T>): Promise<T> {
+export async function explainEnding<T>(notice: EndingNotice | null, call: () => Promise<T>): Promise<T> {
   const outer = explanation
   explanation = notice
   try {
@@ -58,7 +64,7 @@ export async function explainEnding<T>(notice: EndingNotice, call: () => Promise
   }
 }
 
-/** The notice a refused refresh's ending leaves right now, or null (see {@link explainEnding}). */
+/** The notice a refused refresh's ending leaves right now: the running {@link explainEnding}'s, else `refused`. */
 export function endingExplanation(): EndingNotice | null {
-  return explanation
+  return explanation === undefined ? 'refused' : explanation
 }
