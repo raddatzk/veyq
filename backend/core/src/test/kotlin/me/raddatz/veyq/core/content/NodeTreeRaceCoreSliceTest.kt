@@ -144,6 +144,40 @@ class NodeTreeRaceCoreSliceTest {
         }
     }
 
+    /**
+     * Two renames onto ONE name under one parent (inbox #320): the loser answers `slug_taken` (409), never a 500. The
+     * scope lock orders them, and the second's [NodesStore.slugTaken] reads the first's committed token (READ
+     * COMMITTED, ADR 0078). Without that lock both pass the check, and the second's UPDATE waits on
+     * `ux_node_parent_slug` for the first and dies on it once that commits — a 500, since an update has no
+     * `createOrConflict` to re-ask it.
+     */
+    @Test
+    fun aRenameOntoANameAConcurrentRenameIsTakingAnswersSlugTaken() {
+        repeat(RACE_ROUNDS) { round ->
+            val (userId, scopeId) = seedMemberScope()
+            val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
+            val first = seedNode(scopeId, NodeEntity.FOLDER, parentId = folder, wrappedContentKey = CONTENT_KEY)
+            val second = seedNode(scopeId, NodeEntity.FOLDER, parentId = folder, wrappedContentKey = CONTENT_KEY)
+            val name = slug()
+            val answer = whileUncommitted(
+                change = {
+                    assertEquals(
+                        NodesStore.ApplyResult.Applied,
+                        store.applyUpdate(scopeId, first, NodesStore.Placement(folder, "bmV3", name, CONTENT_KEY, null, 0), null, null, null),
+                    )
+                },
+                overlapping = { runCatching { handler.update(userId, scopeId, second, placementTo(folder, slugToken = name), null, null, null) } },
+            )
+            assertEquals(Result.success(UpdateNodeOutcome.SlugTaken), answer, "round $round: the loser of two renames onto one name")
+            assertEquals(listOf(name, null), tx { listOf(first, second).map { NodeEntity.findById(it)!!.slugToken.takeIf { s -> s == name } } }, "round $round: only the winner holds the name")
+        }
+        // control: the same rename with nothing holding the name lands
+        val (userId, scopeId) = seedMemberScope()
+        val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = CONTENT_KEY)
+        val node = seedNode(scopeId, NodeEntity.FOLDER, parentId = folder, wrappedContentKey = CONTENT_KEY)
+        assertEquals(UpdateNodeOutcome.Updated, handler.update(userId, scopeId, node, placementTo(folder), null, null, null), "control")
+    }
+
     @Inject lateinit var handler: NodesHandler
 
     @Inject lateinit var store: NodesStore
