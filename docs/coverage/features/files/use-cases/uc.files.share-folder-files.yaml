@@ -21,11 +21,11 @@ acceptanceCriteria:
         unit: [src/features/files/components/ShareFilesSection.test.ts]
         e2e: [src/features/files/filesShare.e2e.test.ts]
   - id: a-contributor-adds-and-replaces-files
-    text: A READ_WRITE guest creates a FILE under a folder of the subtree, uploads into it and replaces any file of the subtree (a member's too) with the blob it saw; its sealed metadata rides on completeShareFile and is written in the attach's transaction only when the swap happened; a stale replace is 409 stale_file with no metadata written.
+    text: A READ_WRITE guest creates a FILE under a folder of the subtree, uploads into it and replaces any file of the subtree (a member's too) with the blob it saw; its metadata is the uploaded blob's own (sealed under its K_blob, declared at the guest start), so it lands with the bytes and only with them; completeShareFile writes no node payload; a stale replace is 409 stale_file and the slot keeps its blob and that blob's metadata.
     coverage:
-      backend: { integration: [ShareFilesSliceTest.aContributorCreatesAFileUploadsReplacesAndRenamesIt] }
+      backend: { integration: [ShareFilesSliceTest.aContributorCreatesAFileUploadsReplacesAndRenamesIt, ShareFilesSliceTest.aGuestsAndAMembersBlobMetaAreServedToTheGuestUnchanged] }
       web:
-        unit: [src/features/files/shareUpload.wire.test.ts, src/features/files/components/ShareFilesSection.test.ts]
+        unit: [src/features/files/shareUpload.wire.test.ts, src/features/files/dropBox.wire.test.ts, src/features/files/components/ShareFilesSection.test.ts]
         e2e: [src/features/files/filesShare.e2e.test.ts]
   - id: a-guest-writes-only-a-file-of-its-subtree
     text: A guest's completion targets only a FILE of its subtree in the FILE_CONTENT role; a folder (root or named) is share_not_contributable, a node outside the subtree is not found, another role is invalid_request, another node's session is upload_mismatch, a wrong token is refused.
@@ -33,7 +33,7 @@ acceptanceCriteria:
       backend: { integration: [ShareFilesSliceTest.aGuestUploadsOnlyIntoAFileOfItsSubtreeInTheFileRole] }
       web: { unit: [src/features/files/shareUpload.wire.test.ts] }
   - id: the-write-is-decided-again-under-the-lock
-    text: A file trashed or moved out of the subtree, or a link revoked, between a guest's start and its completion refuses the completion; nothing is attached and no metadata written.
+    text: A file trashed or moved out of the subtree, or a link revoked, between a guest's start and its completion refuses the completion; nothing is attached, so no blob and no metadata lands.
     coverage:
       backend: { integration: [ShareFileCompleteRaceSliceTest.aCompletionIntoAFileAMemberTrashesMeanwhileIsRefused, ShareFileCompleteRaceSliceTest.aCompletionIntoAFileAMemberMovesOutOfTheSubtreeMeanwhileIsRefused, ShareFileCompleteRaceSliceTest.aCompletionOnALinkRevokedMeanwhileIsRefused] }
   - id: a-trashed-file-is-gone-for-guests

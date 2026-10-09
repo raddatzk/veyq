@@ -42,10 +42,13 @@ acceptanceCriteria:
     text: A file's slug folds by fileNameSlug (NFC, lower case, punctuation kept), so a picked name a file of the folder already holds asks to replace it, a rename folds by the renamed node's kind, and a folder keeps slugify.
     coverage:
       web: { unit: [src/features/files/register.test.ts, src/features/files/components/FilesSection.test.ts, src/core/node/FolderNameDialog.slug.test.ts] }
-  - id: metadata-is-sealed-on-the-node
-    text: The file's MIME type, plaintext size and modified time are a v1 envelope sealed under the file node's key and written on the node with core's updateNode at the version it read; a field the client does not know is kept, and a failed metadata write leaves the upload done and says the metadata is missing.
+  - id: metadata-is-the-blobs-own
+    text: A file's type, the name it was uploaded under and its modified time are its blob's metadata, sealed under the blob's own K_blob (blob-meta) and declared with the upload, served back unchanged on every blob reference and never rewritten; nothing about the file is written beside the blob, so a replace brings its own metadata atomically with its bytes. The list shows the size the blob's sealed size gives exactly and the sealed modified time — whatever the node's own payload holds — and a blob reference listed for another node shows no metadata. A download is saved under the node name (a rename wins), else the sealed name, with the sealed type's extension when the name has none.
     coverage:
-      web: { unit: [src/features/files/fileMeta.test.ts, src/features/files/fileMeta.wire.test.ts, src/features/files/uploadFile.wire.test.ts] }
+      backend: { integration: [FilesContentSliceTest.theDeclaredBlobMetaIsServedBackUnchangedAndAbsentStaysNull, FilesContentSliceTest.aBlobMetaOverItsCapOrEmptyIsRefused400, FilesContentSliceTest.theBlobMetaIsWriteOnce] }
+      web:
+        unit: [src/features/files/uploadFile.wire.test.ts, src/features/files/components/FilesSection.test.ts, src/features/files/download.test.ts, src/core/blob/meta.test.ts, src/core/blob/blobMeta.wire.test.ts]
+        e2e: [src/features/files/files.e2e.test.ts]
   - id: only-a-live-file-of-the-scope-takes-an-upload
     text: completeFile attaches only into a live FILE of the caller's scope that the caller may write; a folder, a Memory, a trashed file, another scope's node, a session started for another node or role, and a caller without write access are refused with nothing attached, and a listing never reaches into another scope.
     coverage:
