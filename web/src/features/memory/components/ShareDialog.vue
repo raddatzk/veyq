@@ -72,7 +72,12 @@ const sections = computed(() => [
 ])
 const isChapter = computed(() => props.nodeKind === CHAPTER_KIND)
 const headerTitle = computed(() => (props.uploader ? t('share.uploaderTitle') : isChapter.value ? t('share.chapterTitle') : t('share.title')))
-const introText = computed(() => (props.uploader ? t('share.uploaderDialogCopy') : isChapter.value ? t('share.chapterIntro') : t('share.intro')))
+// The uploader variant names the node too (inbox #363): its title "Request upload" names none, its copy does.
+const introText = computed(() =>
+  props.uploader
+    ? isChapter.value ? t('share.chapterUploaderDialogCopy') : t('share.uploaderDialogCopy')
+    : isChapter.value ? t('share.chapterIntro') : t('share.intro'),
+)
 const createLabel = computed(() => (props.uploader ? t('share.uploaderCreate') : t('share.createNew')))
 const emptyLabel = computed(() => (props.uploader ? t('share.uploaderNone') : t('share.none')))
 
@@ -188,7 +193,7 @@ async function onReactivate(share: ManagedShare) {
 async function onDelete(share: ManagedShare) {
   const confirmed = await ask({
     header: t('share.deleteTitle'),
-    message: t('share.deleteConfirm'),
+    message: isChapter.value ? t('share.chapterDeleteConfirm') : t('share.deleteConfirm'),
     acceptLabel: t('share.delete'),
     acceptIcon: 'pi pi-trash',
   })
@@ -336,6 +341,7 @@ function fmtDate(d: Date): string {
       :edit-share="editShare"
       :reissue-from="reissueFrom"
       :uploader="uploader"
+      :chapter="isChapter"
       @saved="onSaved"
       @close="onDialogClose"
       @reissue="openReissue"

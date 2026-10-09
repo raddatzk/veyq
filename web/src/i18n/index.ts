@@ -1130,6 +1130,11 @@ const en = {
     // the same dialog on a chapter (a chapter is a share root of its own, ADR 0080 decision 13)
     chapterTitle: 'Share this chapter',
     chapterIntro: 'Create a link anyone can open in a browser — no account, no install. It shows only this chapter, and you can switch it off anytime.',
+    // every other sentence of the member's dialogs that names the shared node, on a chapter (inbox #363)
+    chapterRoleViewerHint: 'Anyone with the link can look at this chapter, read-only.',
+    chapterRoleUploaderHint: 'A drop-box: anyone with the link can add photos but cannot see this chapter or what others added. Their uploads are visible to them only until they reload.',
+    chapterDeleteConfirm: 'Delete this link for good? It can never be switched on or renewed again. Photos guests added stay in this chapter.',
+    chapterUploaderDialogCopy: 'Create an upload link for people who should only add photos to this chapter — they won’t see the chapter or others’ contributions.',
     roleLabel: 'What can people do?',
     roleViewer: 'View only',
     roleContributor: 'View + add photos',
@@ -2337,6 +2342,10 @@ const de: typeof en = {
     intro: 'Erstelle einen Link, den jede:r im Browser öffnen kann — ohne Konto, ohne Installation. Er zeigt nur diese eine Erinnerung, und du kannst ihn jederzeit abschalten.',
     chapterTitle: 'Dieses Kapitel teilen',
     chapterIntro: 'Erstelle einen Link, den jede:r im Browser öffnen kann — ohne Konto, ohne Installation. Er zeigt nur dieses Kapitel, und du kannst ihn jederzeit abschalten.',
+    chapterRoleViewerHint: 'Wer den Link hat, kann dieses Kapitel ansehen — schreibgeschützt.',
+    chapterRoleUploaderHint: 'Ein Briefkasten: Wer den Link hat, kann Fotos hinzufügen, aber dieses Kapitel und die Beiträge anderer NICHT sehen. Die eigenen Uploads sind nur bis zum nächsten Neuladen sichtbar.',
+    chapterDeleteConfirm: 'Diesen Link endgültig löschen? Er lässt sich danach nie wieder einschalten oder erneuern. Fotos, die Gäste hinzugefügt haben, bleiben in diesem Kapitel.',
+    chapterUploaderDialogCopy: 'Erstelle einen Upload-Link für Menschen, die diesem Kapitel nur Fotos hinzufügen sollen — sie sehen weder das Kapitel noch die Beiträge anderer.',
     roleLabel: 'Was dürfen andere?',
     roleViewer: 'Nur ansehen',
     roleContributor: 'Ansehen + Fotos hinzufügen',
