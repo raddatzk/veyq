@@ -305,18 +305,19 @@ export type ResolvedShare = {
 }
 
 function shareMediaToItem(m: ShareMedia, uploader: MediaItem['uploader']): MediaItem {
-  // Each ref is owned by THIS row's media, in the role the row lists it in (ADR 0072), exactly as the authed list.
+  // Each ref is owned by THIS row's media, in the role the row lists it in (ADR 0072), exactly as the authed list —
+  // with its blob's sealed meta as served (inbox #397).
   return {
     mediaId: m.mediaId,
     original: {
       blobId: m.blobId, chunkCount: m.chunkCount, byteSize: m.byteSize, wrappedBlobKey: m.wrappedBlobKey,
-      ownerId: m.mediaId, role: 'ORIGINAL',
+      wrappedBlobMeta: m.wrappedBlobMeta ?? undefined, ownerId: m.mediaId, role: 'ORIGINAL',
     },
     derivatives: (m.derivatives ?? []).map((d) => ({
       kind: d.kind as MediaDerivativeKind,
       ref: {
         blobId: d.blobId, chunkCount: d.chunkCount, byteSize: d.byteSize, wrappedBlobKey: d.wrappedBlobKey,
-        ownerId: m.mediaId, role: d.kind as MediaDerivativeKind,
+        wrappedBlobMeta: d.wrappedBlobMeta ?? undefined, ownerId: m.mediaId, role: d.kind as MediaDerivativeKind,
       },
     })),
     wrappedMeta: m.wrappedMeta ?? undefined,

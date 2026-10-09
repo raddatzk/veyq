@@ -17,7 +17,7 @@ import type {
   MediaSummary,
 } from '../../../api/generated/media'
 
-type Session = { wrappedBlobKey: string; chunkCount: number; byteSize: number; blobId: string }
+type Session = { wrappedBlobKey: string; wrappedBlobMeta?: string | null; chunkCount: number; byteSize: number; blobId: string }
 type MediaRecord = {
   mediaId: string
   originalUploadId: string
@@ -35,10 +35,11 @@ export function galleryFakeStore() {
   let upCounter = 0
 
   /** The blob fields a listed media (and each of its derivatives) carries. */
-  const blobOf = (uploadId: string): Pick<MediaSummary, 'blobId' | 'chunkCount' | 'byteSize' | 'wrappedBlobKey'> => {
+  const blobOf = (uploadId: string): Pick<MediaSummary, 'blobId' | 'chunkCount' | 'byteSize' | 'wrappedBlobKey' | 'wrappedBlobMeta'> => {
     const s = sessions.get(uploadId)!
     // The declared size, as the real server lists it: a streamed download sizes its save target from it (#371).
-    return { blobId: s.blobId, chunkCount: s.chunkCount, byteSize: s.byteSize, wrappedBlobKey: s.wrappedBlobKey }
+    // the blob's sealed meta is served back unchanged beside its wrap, as the backend does (inbox #397)
+    return { blobId: s.blobId, chunkCount: s.chunkCount, byteSize: s.byteSize, wrappedBlobKey: s.wrappedBlobKey, wrappedBlobMeta: s.wrappedBlobMeta ?? null }
   }
   const getsFor = (blobId: string): PresignedUrl[] => {
     const uploadId = uploadOfBlob.get(blobId)!
@@ -50,7 +51,7 @@ export function galleryFakeStore() {
     startBlobUploads: vi.fn<BlobApi['startBlobUploads']>(async ({ blobUploadsBatchRequest }) => ({
       results: blobUploadsBatchRequest.items.map((item): BlobUploadResultItem => {
         const uploadId = `up-${upCounter++}`
-        sessions.set(uploadId, { wrappedBlobKey: item.wrappedBlobKey, chunkCount: item.chunkCount, byteSize: item.byteSize, blobId: item.blobId })
+        sessions.set(uploadId, { wrappedBlobKey: item.wrappedBlobKey, wrappedBlobMeta: item.wrappedBlobMeta, chunkCount: item.chunkCount, byteSize: item.byteSize, blobId: item.blobId })
         uploadOfBlob.set(item.blobId, uploadId)
         return {
           uploadId,

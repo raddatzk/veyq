@@ -25,10 +25,13 @@ import {
   openBlob,
   planBlob,
   presignAllChunks,
+  readBlobMeta,
   reserveAndPump,
   throwIfAborted,
 } from '../../core/blob/transport'
 import type { BlobDeclare, BlobRef, ReservedUpload, WindowFn } from '../../core/blob/types'
+import type { BlobMeta, OpenedBlobMeta } from '../../core/blob/meta'
+import { sniffMediaType } from './download'
 import { mediaKey, uploaderOriginOf, type UploaderOrigin } from './mediaKey'
 import { MetaConflictError, MetaUnreadableError, writeSealedMeta, type MetaEditContext } from '../../core/node/sealedMetaWrite'
 import type { ChunkProvider } from '../../sw/protocol'
@@ -87,12 +90,11 @@ export type MediaDerivative = { kind: MediaDerivativeKind; ref: BlobRef }
  *   file's modification date, a fallback that must NOT feed a Memory's `auto` date range — an edited photo's
  *   file date would wrongly stretch it);
  * - **GPS** `gpsLat,gpsLng` (decimal degrees) — the source of a Memory's place medoid (cr-0068, uc.memory.place).
- * - **media type** `mediaType` — the original's full MIME (cr-inline-video-playback, #104/#105). Sealed here
- *   rather than exposed as a contract field precisely because a server-visible one would leak photo-vs-video-vs-PDF
- *   for every medium ([ADR 0044](../../../docs/decisions/0044-field-visibility-declared-at-the-field.md)). It is
- *   the persisted video signal: `video/*` draws the tile's play badge and the lightbox's `<video>` branch without
- *   fetching the original. Set at upload from the file's own type; back-filled for pre-field media on first
- *   original-fetch ([sniffMediaType]).
+ *
+ * Not here: the original's **type** and **file name**. They are what the upload declared about the original's bytes,
+ * so they are its blob's sealed meta (core's `blob-meta` seal under the original's `K_blob`, inbox #397), served on the
+ * same listing beside the `K_blob` wrap — [originalBlobMeta]. The tier carried a `mediaType` until then (with a lazy
+ * back-fill on the first download), the EXIF tier the name (#395 F10); both copies are gone.
  *
  * Every field is optional (best-effort). Versioned `v`, opaque — grows without a contract change.
  */
@@ -105,7 +107,6 @@ export type MediaMeta = {
   capturedAtSource?: 'exif' | 'file'
   gpsLat?: number
   gpsLng?: number
-  mediaType?: string
   /**
    * The resolved place name for this photo's own coordinate, and the hierarchy level it was taken from
    * (`city`, `country`, …). Sealed once, then read from the tier forever — the provider is asked once per
@@ -122,14 +123,10 @@ export type MediaMeta = {
  * The heavy **EXIF bundle** sealed under `K_mem`, lazy-loaded per item for the lightbox (cr-0064). A client-only,
  * versioned shape (never a contract field), so it can grow without the operator ever learning a field. Every
  * field is optional (best-effort extraction). The listed essentials — capture time (cr-0066) and GPS (cr-0068) —
- * live in the [MediaMeta] tier, not here.
+ * live in the [MediaMeta] tier, not here; the original's file name and type in its blob's meta ([originalBlobMeta]).
  */
 export type MediaExif = {
   v: number
-  /** The original's filename, sealed here and nowhere else — it never reaches the server (uc.memory.gallery). Set
-   *  at upload for every media that had a name, not only an image with EXIF, because the lightbox downloads the
-   *  original under it ([withOriginalName], inbox #395 F10); never shed to fit the tier's cap. */
-  name?: string
   make?: string
   model?: string
   lens?: string
@@ -197,18 +194,19 @@ export type MediaRef = Pick<MediaItem, 'mediaId' | 'uploader'>
 
 /** A media list row as the UI holds it — exported so a test can feed the read path a row the server shaped. */
 export function summaryToItem(s: MediaSummary, uploader?: UploaderOrigin): MediaItem {
-  // Each ref is owned by THIS row's media, in the role the row lists it in (ADR 0072).
+  // Each ref is owned by THIS row's media, in the role the row lists it in (ADR 0072); each carries its blob's sealed
+  // meta as served (inbox #397), opened only under that blob's own key ([originalBlobMeta]).
   return {
     mediaId: s.mediaId,
     original: {
       blobId: s.blobId, chunkCount: s.chunkCount, byteSize: s.byteSize, wrappedBlobKey: s.wrappedBlobKey,
-      ownerId: s.mediaId, role: 'ORIGINAL',
+      wrappedBlobMeta: s.wrappedBlobMeta ?? undefined, ownerId: s.mediaId, role: 'ORIGINAL',
     },
     derivatives: (s.derivatives ?? []).map((d) => ({
       kind: d.kind,
       ref: {
         blobId: d.blobId, chunkCount: d.chunkCount, byteSize: d.byteSize, wrappedBlobKey: d.wrappedBlobKey,
-        ownerId: s.mediaId, role: d.kind,
+        wrappedBlobMeta: d.wrappedBlobMeta ?? undefined, ownerId: s.mediaId, role: d.kind,
       },
     })),
     wrappedMeta: s.wrappedMeta ?? undefined,
@@ -270,7 +268,6 @@ function normalizeMediaMeta(m: RawMediaMeta): MediaMeta {
     capturedAtSource: source,
     gpsLat: finiteNum(m.gpsLat),
     gpsLng: finiteNum(m.gpsLng),
-    mediaType: cleanStr(m.mediaType),
     placeName: cleanStr(m.placeName),
     placeLevel: cleanStr(m.placeLevel),
   }
@@ -465,8 +462,8 @@ async function readExif(source: AddMediaSource): Promise<{ capturedAt?: number; 
 /**
  * Seal the two metadata tiers under `K_mem` (best-effort, operator-blind): the always-listed **metadata** tier
  * (`{v,w,h,capturedAt,capturedAtSource,gpsLat,gpsLng}` — geometry + the EXIF date, else the file's creation date,
- * + GPS + a resolved place name) and the lazy **EXIF** tier ([MediaExif]: the panel bundle and the original's file
- * name). Each tier is null when its source is absent.
+ * + GPS + a resolved place name) and the lazy **EXIF** tier ([MediaExif]: the panel bundle). Each tier is null when
+ * its source is absent — a video, a screenshot or a PDF seals no EXIF tier; its name and type ride its blob's meta.
  */
 async function sealMetadata(
   source: AddMediaSource,
@@ -488,29 +485,13 @@ async function sealMetadata(
     capturedAtSource,
     gpsLat: meta.gpsLat,
     gpsLng: meta.gpsLng,
-    mediaType: cleanStr(source.mediaType), // the persisted video signal (#104/#105); the file's own type, sealed
   }
   const hasMeta =
     metaTier.w !== undefined || metaTier.capturedAt !== undefined || metaTier.gpsLat !== undefined ||
-    metaTier.gpsLng !== undefined || metaTier.mediaType !== undefined
+    metaTier.gpsLng !== undefined
   const wrappedMeta = hasMeta ? sealJson(memoryKey, prune(metaTier), mediaMetaContext(media.scopeId, media.mediaId)) : null
-  const exifTier = withOriginalName(meta.exif, source.name)
-  const wrappedExif = exifTier ? sealExifTier(memoryKey, mediaExifContext(media.scopeId, media.mediaId), exifTier) : null
+  const wrappedExif = meta.exif ? sealExifTier(memoryKey, mediaExifContext(media.scopeId, media.mediaId), meta.exif) : null
   return { wrappedMeta, wrappedExif }
-}
-
-/**
- * The EXIF tier with the original's own file name in it — for EVERY media that has a name, not only an image whose
- * EXIF parsed: the name is what the lightbox downloads the original under (a stable name, inbox #395 F10), so a
- * video, a PNG screenshot or a PDF carries it too, in a tier that then holds nothing else. Trimmed and otherwise
- * verbatim, as Files keeps a picked file's name. It rides the lazy tier and not the listed one because the listed
- * tier is capped at 512 base64 and a fully populated one leaves no room for a name (measured: 336 of 344 plaintext
- * bytes, see [PLACE_NAME_MAX_BYTES]). Null when there is neither EXIF nor a name.
- */
-function withOriginalName(exif: MediaExif | null, name: string | undefined): MediaExif | null {
-  const clean = cleanStr(name)
-  if (clean === undefined) return exif
-  return { ...(exif ?? { v: 1 }), name: clean }
 }
 
 /**
@@ -530,7 +511,7 @@ export const EXIF_TEXT_MAX_BYTES = 1024
 /**
  * Seal the EXIF tier so it always fits [EXIF_TIER_MAX_B64] — the upload never fails for its metadata. Every
  * string field is clamped to [EXIF_TEXT_MAX_BYTES]; a tier that still does not fit drops its longest free-text
- * field other than the file name, one at a time, until it does. Numbers are never dropped: they are bounded by their type, so a tier of
+ * field, one at a time, until it does. Numbers are never dropped: they are bounded by their type, so a tier of
  * numbers alone is a few hundred bytes. The string set is read off the value, not listed, so a text field added
  * to [MediaExif] later is clamped without anyone remembering to add it here.
  */
@@ -540,9 +521,7 @@ function sealExifTier(memoryKey: Uint8Array, context: v1.SealContext, exif: Medi
   for (const k of textKeys()) tier[k] = clampUtf8(tier[k] as string, EXIF_TEXT_MAX_BYTES)
   let sealed = sealJson(memoryKey, tier, context)
   while (sealed.length > EXIF_TIER_MAX_B64) {
-    // The file name is never the one shed: it is what the original downloads under (inbox #395 F10), and a clamped
-    // name alone cannot reach the cap — at most 1 KiB, six-fold under JSON escaping, beside a few hundred bytes of numbers.
-    const keys = textKeys().filter((k) => k !== 'name')
+    const keys = textKeys()
     if (!keys.length) break // unreachable: see the doc above — numbers alone cannot reach the cap
     const longest = keys.reduce((a, b) => (JSON.stringify(tier[b]).length > JSON.stringify(tier[a]).length ? b : a))
     delete tier[longest]
@@ -555,6 +534,41 @@ function sealExifTier(memoryKey: Uint8Array, context: v1.SealContext, exif: Medi
 function prune<T extends object>(obj: T): Partial<T> {
   return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined)) as Partial<T>
 }
+
+/** The type a media's original is declared under when nothing names it. */
+const UNKNOWN_TYPE = 'application/octet-stream'
+/** How much of an untyped original is read to sniff its type — every signature [sniffMediaType] knows lies in it. */
+const SNIFF_BYTES = 1024
+
+/**
+ * The original's media type, decided ONCE per upload, before anything is derived or sealed: the source's own (the
+ * picked file's `type`, or the one its extension names — `inferMediaType`), else sniffed from its first bytes
+ * ([sniffMediaType]: an empty `File.type` is what Safari's Photos import hands over), else
+ * `application/octet-stream`. The same type then drives the derivation, the EXIF read and the original's blob meta,
+ * so they cannot disagree. Best-effort: a read that fails sniffs nothing.
+ */
+export async function resolveMediaType(source: AddMediaSource): Promise<string> {
+  const given = cleanStr(source.mediaType)
+  if (given !== undefined && given !== UNKNOWN_TYPE) return given
+  try {
+    const head = new Uint8Array(await source.blob.slice(0, SNIFF_BYTES).arrayBuffer())
+    return sniffMediaType(head) ?? UNKNOWN_TYPE
+  } catch {
+    return UNKNOWN_TYPE
+  }
+}
+
+/**
+ * What each blob of a media declares about its bytes (core's `blob-meta`, sealed under that blob's own `K_blob`,
+ * inbox #397): the ORIGINAL its type, the file name it was picked under and the file's modified time — the facts the
+ * lightbox names, types and badges it by ([originalBlobMeta]); a derivative tier only its type (the deriver always
+ * writes a JPEG). Never sent in the clear: the declare carries the seal only.
+ */
+function originalBlobMetaOf(source: AddMediaSource): BlobMeta {
+  return { type: source.mediaType, name: source.name, modifiedAt: source.lastModified }
+}
+/** A derivative tier's and a derived cover's type — `shared/image/mediaDeriver` re-encodes every one as a JPEG. */
+const DERIVED_META: BlobMeta = { type: 'image/jpeg' }
 
 /** Upload progress (0..1) + cancellation hooks for [addMedia], used by the upload queue (uc.memory.upload). */
 export type AddMediaOptions = { onProgress?: (fraction: number) => void; signal?: AbortSignal }
@@ -602,17 +616,18 @@ export async function uploadMediaVia(
 ): Promise<{ blobId: string; mediaId: string }> {
   const { onProgress, signal } = opts
   throwIfAborted(signal)
+  const typed: AddMediaSource = { ...source, mediaType: await resolveMediaType(source) }
   // The client mints the media's id (ADR 0072): every blob wrap and both metadata tiers are sealed bound to it.
   const mediaId = crypto.randomUUID()
   // ONE decode of the original: `deriveTiers` produces both tiers from it and hands back the geometry it
   // already measured, so `sealMetadata` has nothing left to probe for an image.
-  const { derivatives: tiers, dimensions } = await deriveTiers(source, deriver)
-  const { wrappedMeta, wrappedExif } = await sealMetadata(source, deriver, memoryKey, { scopeId, mediaId }, dimensions)
+  const { derivatives: tiers, dimensions } = await deriveTiers(typed, deriver)
+  const { wrappedMeta, wrappedExif } = await sealMetadata(typed, deriver, memoryKey, { scopeId, mediaId }, dimensions)
   // index 0 = original, streamed from the source; the rest are the role-tagged derivatives — small, already in
-  // memory from the derivation — in order
+  // memory from the derivation — in order. Each blob's meta is sealed under its own K_blob as it is planned.
   const plans = [
-    planBlob(scopeId, { ownerId: mediaId, role: 'ORIGINAL' }, memoryKey, source.blob),
-    ...tiers.map((t) => planBlob(scopeId, { ownerId: mediaId, role: t.kind }, memoryKey, new Blob([t.bytes as BlobPart]))),
+    planBlob(scopeId, { ownerId: mediaId, role: 'ORIGINAL' }, memoryKey, typed.blob, originalBlobMetaOf(typed)),
+    ...tiers.map((t) => planBlob(scopeId, { ownerId: mediaId, role: t.kind }, memoryKey, new Blob([t.bytes as BlobPart]), DERIVED_META)),
   ]
 
   // reserve one upload session per blob, then read → seal → PUT each chunk straight to the store (no base64, no
@@ -696,16 +711,19 @@ export async function uploadCoverBlob(
   deriver: MediaDeriver = createBrowserDeriver(),
 ): Promise<BlobRef> {
   let blob = source.blob
+  // The cover blob's meta is its type alone (inbox #397): the JPEG it was derived into, else the pristine source's.
+  let meta: BlobMeta = { type: cleanStr(source.mediaType) ?? UNKNOWN_TYPE }
   if (source.mediaType.startsWith('image/')) {
     try {
       blob = new Blob([(await deriver.deriveImage(source.blob, COVER_SPEC)).bytes as BlobPart])
+      meta = DERIVED_META
     } catch {
       /* undecodable codec → seal the pristine bytes (still a valid, if larger, cover) */
     }
   }
   // A cover's owner is its node, in the COVER role (ADR 0072) — the server commits only an upload started so.
   const cover = { ownerId: nodeId, role: 'COVER' } as const
-  const plan = planBlob(scopeId, cover, memoryKey, blob)
+  const plan = planBlob(scopeId, cover, memoryKey, blob, meta)
   const [uploadId] = await reserveAndPump([plan], (d) => authedReserve(scopeId, d), authedWindow(scopeId))
 
   const committed = await withRefresh(() =>
@@ -913,7 +931,7 @@ function clampUtf8(s: string, maxBytes: number): string {
 
 /**
  * Seal a media's resolved **place name** into the listed tier (read-modify-write from the RAW tier, exactly as the
- * capture-time override and the mediaType back-fill do — every other field rides along verbatim). A backfill: if
+ * capture-time override does — every other field rides along verbatim). A backfill: if
  * the tier it re-bases on after a `409` already carries a name, nothing is written. Operator-blind: the name is
  * resolved client-direct from a bare coordinate and the server only ever sees the re-sealed ciphertext.
  */
@@ -933,29 +951,6 @@ export async function backfillPlaceName(
   })
 }
 
-/**
- * Lazily back-fill a pre-field media's sealed **`mediaType`** (cr-inline-video-playback, #104/#105). Called on the
- * first original-fetch (download or play) of an item that carries no sealed type: re-seal the listed tier with the
- * sniffed MIME merged in — every other field untouched — and PUT it, so the **next** listing carries the video
- * signal (the tile play badge + the lightbox `<video>` branch). Nothing is written when the tier it re-bases on
- * already has a type. Operator-blind: the MIME is sniffed on device from plaintext the client already holds
- * ([sniffMediaType]); the server only ever sees the re-sealed ciphertext. The accepted boundary (ADR 0047 / #105):
- * a pre-field video that is never fetched stays without a signal — there is **no** eager original-fetch just to
- * back-fill.
- */
-export async function backfillMediaType(
-  scopeId: string,
-  media: MediaMetaTarget,
-  memoryKey: Uint8Array,
-  mediaType: string,
-): Promise<MediaMetaWrite> {
-  return persistMeta(scopeId, media, memoryKey, (raw) => {
-    if (cleanStr(raw.mediaType) !== undefined) return null
-    raw.mediaType = mediaType
-    return raw
-  })
-}
-
 /** Whether a metadata tier carries anything worth sealing (else it drops to null on a re-seal). Any field but `v`
  *  counts — a known one (a tier whose only content is a resolved name is still content: sealing `null` would have
  *  the name resolved again on every open) or one a newer client wrote that this one does not know. */
@@ -965,8 +960,8 @@ function metaHasContent(m: RawMediaMeta): boolean {
 
 /**
  * Re-seal a metadata tier under the media's key and PUT it with the `metaVersion` it was built from
- * (`updateMediaMeta`, ADR 0077) — the one write path behind the capturedAt edit ([setMediaMeta]) and the two
- * backfills. `edit` gets the RAW tier (every field verbatim, never [unsealMeta]'s projection) and returns the next
+ * (`updateMediaMeta`, ADR 0077) — the one write path behind the capturedAt edit ([setMediaMeta]) and the place
+ * backfill ([backfillPlaceName]). `edit` gets the RAW tier (every field verbatim, never [unsealMeta]'s projection) and returns the next
  * one, or null for no write; on a `409 stale_version` it re-runs on the tier the conflict handed back. A present
  * tier that does not open is refused (`MetaUnreadableError`), never rebuilt from empty (#273). The key is the one
  * the media's origin fixes ([mediaKey]): a member editing what a WRITE_ONLY guest added re-seals under that guest's
@@ -1002,15 +997,43 @@ function tierRef(item: MediaItem, kind: MediaDerivativeKind): BlobRef | undefine
 /**
  * Whether a media carries derivative tiers — i.e. it had a derivable frame (an image or video, cr-0045). A
  * gallery renders these as a thumbnail/preview; one **without** derivatives is a non-image/video (E1) shown as
- * an icon tile. (No media type is stored — operator-blind — so presence of a tier is the only signal.)
+ * an icon tile. (Its type is sealed in its original's blob meta, [originalMediaType] — the server never sees it.)
  */
 export function hasDerivatives(item: MediaItem): boolean {
   return item.derivatives.length > 0
 }
 
-/** Whether a sealed `mediaType` names a video (#104/#105) — defined beside the playback shim, which applies the
- *  same predicate. Pure; the caller unseals the tier ([unsealMeta]) and passes `meta.mediaType`. */
+/** Whether a sealed media type names a video (#104/#105) — defined beside the playback shim, which applies the
+ *  same predicate. Pure; the caller passes [originalMediaType]. */
 export { isVideoMediaType } from '../../sw/protocol'
+
+/**
+ * The original's sealed blob meta (inbox #397) — its type, the file name it was uploaded under and the file's modified
+ * time, opened under the original's `K_blob`, which is unwrapped under the key the media's origin fixes ([mediaKey]).
+ * Synchronous: the meta rides the listing (`MediaSummary`/`ShareMedia`), no fetch. Null for a media whose original
+ * carries none or whose meta does not open (a ref the server moved, another blob's meta in its place) — the caller
+ * then falls back as if nothing was known; never a throw.
+ */
+export function originalBlobMeta(scopeId: string, memoryKey: Uint8Array, item: MediaItem): OpenedBlobMeta | null {
+  let key: Uint8Array
+  try {
+    key = mediaKey(scopeId, memoryKey, item)
+  } catch {
+    return null
+  }
+  return readBlobMeta(scopeId, key, item.original)
+}
+
+/** The original's media type from its blob meta — the persisted video signal (`video/*` draws the tile's play badge
+ *  and the lightbox's `<video>` branch, #104/#105) — or undefined when it carries none. */
+export function originalMediaType(scopeId: string, memoryKey: Uint8Array, item: MediaItem): string | undefined {
+  return mediaTypeOf(originalBlobMeta(scopeId, memoryKey, item))
+}
+
+/** The type a blob meta names, or undefined for none (a meta written with an empty or over-long type). */
+export function mediaTypeOf(meta: OpenedBlobMeta | null | undefined): string | undefined {
+  return cleanStr(meta?.type)
+}
 
 /** Grid tier (small): the thumbnail derivative, or the original when a media has no derivatives. */
 export function gridRef(item: MediaItem): BlobRef {

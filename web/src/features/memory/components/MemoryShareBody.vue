@@ -39,7 +39,7 @@ import {
 import { pickLocaleText, type PublicShareHead } from '../../../core/sharing/resolvePublicShare'
 import { loadGuestSession, saveGuestSession, nameShareGuest } from '../../../core/sharing/guestIdentity'
 import ShareNameDialog from '../../../core/sharing/ShareNameDialog.vue'
-import { unsealMeta, effectiveCapturedAt, hasDerivatives, downloadRef, type MediaItem } from '../media'
+import { unsealMeta, originalBlobMeta, effectiveCapturedAt, hasDerivatives, downloadRef, type MediaItem } from '../media'
 import { collectPickedFiles, inferMediaType, enqueueUploads, retryFile, removeFile } from '../uploadQueue'
 import { useOptimisticTiles, type OptimisticTileVM } from '../useOptimisticTiles'
 import { byCaptureTime } from '../optimisticUpload'
@@ -261,6 +261,11 @@ const metaResolver = (item: MediaItem) => {
   const si = shareById.value.get(item.mediaId)!
   return unsealMeta(si.scopeId, si.memoryKey, item)
 }
+// The original's sealed blob meta (inbox #397) — its name and type — under the item's own K_mem, as the tier above.
+const blobMetaResolver = (item: MediaItem) => {
+  const si = shareById.value.get(item.mediaId)!
+  return originalBlobMeta(si.scopeId, si.memoryKey, item)
+}
 // Slice 2 (ADR 0047): the share-scoped key-free chunk provider over the original, for the SW range path and the
 // lightbox's streamed download (inbox #371) — the anonymous viewer's per-item K_mem + guest pwToken, over the gated
 // share presign. The SW never learns it is the share route.
@@ -446,6 +451,7 @@ onBeforeUnmount(() => {
     :preview-loader="previewLoader"
     :original-loader="originalLoader"
     :meta-resolver="metaResolver"
+    :blob-meta-resolver="blobMetaResolver"
     :video-chunk-provider="videoChunkProvider"
     @close="lightboxIndex = null"
   />

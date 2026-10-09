@@ -15,6 +15,13 @@
 // inbox #395 F10 the EXIF tier is sealed even when the parser finds nothing — it carries the source's file name — so its
 // seal draws a nonce before the blobs are planned: that update changed `wrappedExif` from null and, through the pinned
 // stream, every later `K_blob` wrap and PUT digest; no length, path, header, order or count moved.)
+// (Re-blessed again for inbox #397, the blob meta. Every declare item gained `wrappedBlobMeta` (380 base64: one 256-byte
+// bucket sealed — ORIGINAL `{type,name,modifiedAt}`, THUMBNAIL/PREVIEW/COVER `{type:'image/jpeg'}`); `wrappedExif` went
+// back to null (the name left the EXIF tier, and exifr finds nothing here); `wrappedMeta` shrank 176 → 144 base64 (the
+// listed tier dropped `mediaType`). Through the pinned stream: the EXIF nonce is no longer drawn and each plan draws a
+// meta nonce after its wrap, so the ORIGINAL's and PREVIEW's `K_blob` wraps and every PUT digest changed, while the
+// THUMBNAIL's and the cover's wraps came out byte-identical (the stream realigns behind the ORIGINAL; the cover had no
+// EXIF to lose). No length of anything else, no path, header, order or count moved.)
 // Every scenario runs twice and must record the same thing both times — the guard against a recording that depends on
 // scheduling rather than on the code.
 //

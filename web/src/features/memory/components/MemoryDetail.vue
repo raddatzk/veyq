@@ -15,7 +15,7 @@ import Tab from 'primevue/tab'
 import TabPanels from 'primevue/tabpanels'
 import TabPanel from 'primevue/tabpanel'
 import type { TreeNode } from '../../../core/node/tree'
-import { hasDerivatives, unsealMeta, isVideoMediaType, type MediaItem } from '../media'
+import { hasDerivatives, originalMediaType, isVideoMediaType, type MediaItem } from '../media'
 import { useMemoryDate } from '../useMemoryDate'
 import { useMemoryLocation } from '../useMemoryLocation'
 import { useMemoryCover } from '../useMemoryCover'
@@ -175,14 +175,14 @@ const {
   reloadGallery: () => void load(),
   liftTombstone,
 })
-// The persisted video signal (#104/#105): a media is a video iff its sealed `mediaType` (in the listed tier) is
-// `video/*`. Unseal once per item on a list change (not per render), so the tile draws its play badge with no
-// extra fetch. Pre-field media carry no type → no badge until the lazy backfill lands one (accepted, ADR 0047).
+// The persisted video signal (#104/#105): a media is a video iff its original's sealed type (its blob meta, inbox
+// #397, served on the listing) is `video/*`. Opened once per item on a list change (not per render), so the tile
+// draws its play badge with no extra fetch. A media whose original carries no meta gets no badge.
 function videoIdSet(list: readonly MediaItem[]): Set<string> {
   const key = props.memoryKey
   const set = new Set<string>()
   if (!key) return set
-  for (const it of list) if (isVideoMediaType(unsealMeta(props.scopeId, key, it)?.mediaType)) set.add(it.mediaId)
+  for (const it of list) if (isVideoMediaType(originalMediaType(props.scopeId, key, it))) set.add(it.mediaId)
   return set
 }
 const galleryVideoIds = computed(() => videoIdSet(items.value))
