@@ -18,8 +18,9 @@
 1. A writer starts from its copy of the blob and its `metaVersion`. The writers are the three Memory editors
    (date, place, cover — [uc.memory.date](uc.memory.date.md), [uc.memory.place](uc.memory.place.md),
    [uc.memory.cover](uc.memory.cover.md)), the two self-heals that run when a Memory opens or its media list
-   refreshes (the `auto` date range and the `auto` place medoid), the lightbox's capture-time editor, and the two
-   photo backfills (the resolved place name and the sniffed media type).
+   refreshes (the `auto` date range and the `auto` place medoid), the lightbox's capture-time editor, and the
+   photo backfill of the resolved place name. (A second backfill, of a sniffed media type, is gone: the type is the
+   original's write-once blob meta since inbox #397.)
 2. It opens the blob, applies its one change, re-seals the whole blob and sends it with the `metaVersion` it
    started from ([ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md)).
 3. If nobody wrote in between, the server stores it at `metaVersion + 1`, and the client updates its copy to the

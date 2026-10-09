@@ -76,7 +76,7 @@ A new seal purpose would be additive ([ADR 0072](0072-a-seal-binds-its-object.md
 variant plus its vector is backward-compatible). Core has added one such purpose, `blob-meta`: a blob's type, upload
 name and modification time, sealed under the blob's own `K_blob`, declared with the upload and stored write-once on
 the blob row. It is the platform's, carried by every application's blobs alike (Files' name of what was uploaded,
-Memories' original file name), so it is no exception to the rule below that an application needs no purpose of its
+Memories' original file name and the media type its gallery badges a video by), so it is no exception to the rule below that an application needs no purpose of its
 own. For a **new** application, its keys are derived from the scope
 key by HKDF with the application id as context (`veyq/v1/<application id>:…`, the form the existing derivations
 use in `packages/crypto/src/v1.ts`), so two applications never share a key by accident; the seals' associated

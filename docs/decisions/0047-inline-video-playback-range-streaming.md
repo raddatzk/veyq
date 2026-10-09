@@ -129,6 +129,13 @@ The mechanics (which field, backfill of pre-field media) belong in the CR, not h
 keys on an **opaque per-playback handle** (not `blobId`) plus range offsets; the "exposes nothing new about *what*
 a blob is" reasoning holds a fortiori — a random handle reveals even less than the `id`-class `blobId`.
 
+*Amended 2026-10-09 (inbox #397):* the type moved out of `wrappedMeta` into the original's **blob meta** — core's
+`blob-meta` seal under the original's own `K_blob`, declared with the upload and served on the listing beside the
+`K_blob` wrap ([ADR 0072](0072-a-seal-binds-its-object.md) Decision 2). Same reasoning, same reader: still sealed,
+still written by the uploader's client, still read without fetching the original. Every upload now declares a type
+(the file's own, else sniffed from its first bytes, else `application/octet-stream`), so the lazy backfill of
+pre-field media is gone.
+
 ### The shim serves inert responses — ADR 0013 §6 applied
 
 Sealed is not trusted: `mediaType` is written by the **uploader's** client, and the shim hands it back as the
@@ -159,7 +166,8 @@ therefore applies [ADR 0013 §6](0013-blob-storage-presigned-direct-to-store.md)
   it now is: the per-chunk fetch pattern of a *playing* medium is observable — an accepted intra-media
   access-pattern leak, scoped to range-streamed playback.
 - **No new crypto and no contract change for the field.** Playback reuses `K_blob`/`openFrame` verbatim; the
-  `mediaType` rides the already-opaque `wrappedMeta`. The SW slice adds presign plumbing but no new key.
+  `mediaType` rode the already-opaque `wrappedMeta` (since inbox #397 it is the original's `wrappedBlobMeta`, a core
+  seal every application's blobs carry). The SW slice adds presign plumbing but no new key.
 - **Native surfaces.** A Service Worker is a web-only mechanism; a future native client feeds its own player the
   same decrypted ranges through the platform equivalent. This ADR governs the **web** playback path (the current
   V1 priority); it does not bind native to a SW.
@@ -189,14 +197,13 @@ the browser marks the download failed and never keeps a truncated file as if it 
 reaches the page as an abort. The protocol is version 3.
 
 Both applications save through it: Files' download, and Memories' "download original" in the lightbox (S4, the same
-day). A Memories original is saved under its own file name, sealed into the media's EXIF tier at upload and loaded
-with the lightbox's details before the download button enables (inbox #395 F10, 2026-10-09); a media that never
-sealed one has its name derived on device — the Memory name and its gallery position — its extension from the sealed
-media type; a media without that either (uploaded before the field) has its first chunk read and sniffed **before**
-the save target opens, because the name is the picker's suggestion and the route's `Content-Disposition`. That read
-can outlast the click's activation in Chromium, and the picker then falls through to this route; the chunk is written
-from what was read, never fetched twice. A named media never reads first: a missing type is sniffed from chunk 0 as
-it streams past.
+day). A Memories original is saved under its own file name, the one sealed in its original's blob meta at upload and
+served on the listing (inbox #397, 2026-10-09; for a day before that it rode the lazy EXIF tier and the download
+button waited for it, #395 F10); a media whose original carries no name has its name derived on device — the Memory
+name and its gallery position — its extension from the blob meta's type, else `.bin`. Both applications name a file
+by core's one rule (`core/blob/meta.ts` `downloadName`). The name is known synchronously, so nothing is read before
+the save target opens: the picker is always the click's first await (the chunk-0 read and sniff that once named an
+untyped media are gone with the backfill).
 
 The download is whole-blob and sequential, so it adds no access pattern beyond what a whole-blob read already shows.
 The page must stay open while it runs, since it holds the key. What only a browser can prove (memory flat at

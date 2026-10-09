@@ -28,16 +28,19 @@
    order is exact on device (cr-0066).
 3. **Lightbox:** clicking an item opens it full-view; the client fetches that item's **preview**, decrypts, and
    displays it; **prev/next** page through the grid order. (The preview — not the multi-MB original — keeps the
-   lightbox fast.) A **video** (known from its sealed `mediaType`, [ADR 0047](../../../decisions/0047-inline-video-playback-range-streaming.md))
+   lightbox fast.) A **video** (known from the media type sealed in its original's blob meta, which rides the
+   listing — inbox #397, [ADR 0047](../../../decisions/0047-inline-video-playback-range-streaming.md))
    shows its poster with a **play** control; playing it **streams** the **original** on device — a key-free Service
    Worker answers the `<video>` demuxer's byte-range requests, pulling + decrypting only the covering chunks from
    the page as the demuxer needs them (no whole-blob wait). Where no Service Worker is available it falls back to
    fetching + decrypting the whole original into a typed blob URL. A **play badge** marks a video's grid tile
    (#104/#105).
 4. **The detail panel — what the photo itself knows.** Opening an item also opens a panel beside it, filled
-   from **two** sealed sources: the **listed tier**, already in hand from the listing (capture time, GPS and a
-   resolved place name), and the **panel bundle**, fetched lazily for this one item. Between them the panel
-   shows the file (its original name, its plaintext size, its format), the camera and lens, the exposure
+   from **three** sealed sources: two already in hand from the listing — the **listed tier** (capture time, GPS and
+   a resolved place name) and the original's **blob meta** (its file name and format; the size is the original's
+   own) — and the **panel bundle**, fetched lazily for this one item. Between them the panel
+   shows the file (its original name, its plaintext size, its format — for every item, EXIF or not), the camera
+   and lens, the exposure
    (focal length and its 35 mm equivalent, aperture, shutter, ISO, exposure compensation, whether the flash
    fired), the provenance an editor wrote in (software, author, copyright, rating, title, description) and the
    geo block (altitude, the direction the camera faced, the fix's own accuracy). **Every row is present only
@@ -52,11 +55,11 @@
    saves it, streamed chunk by chunk — into a file the user picks, the browser's own download (the Service Worker's
    download route), or, only up to 512 MiB, an in-memory copy; above that with neither, it is refused with a message
    (inbox #371). The file is saved under **the item's own file name** — the name the uploader's device gave it, sealed
-   at upload and loaded with the item's details (the download is offered once they are in) — so the same photo always
-   downloads under the same name, however many items are added after it. Only an item that never sealed a name
-   (uploaded before every upload did: a video, a screenshot, anything without EXIF) is named from the Memory's name and
-   its position, which moves when the gallery does, with an extension from the sealed media type, else from the
-   original's first chunk (its magic bytes), read before the save target opens.
+   into the original's blob meta at upload and known from the listing, so the download is offered at once and nothing
+   is read before the save target opens (inbox #397) — so the same photo always downloads under the same name, however
+   many items are added after it. A name without an extension gains the one its sealed media type names. Only an item
+   whose original carries no name (or no meta that opens) is named from the Memory's name and its position, which
+   moves when the gallery does, with an extension from the sealed media type, else `.bin`.
 6. **Pin the Memory:** the header toggle pins / unpins it
    ([en.memory.favorites](../enablers/en.memory.favorites.md)). This pin is **private to the user**.
 7. **Mark an item, and narrow by marks.** A heart on each tile (and in the lightbox) marks that item. Unlike the
@@ -84,7 +87,7 @@
 ## Quality notes
 
 - **Operator-blind.** Every tier is fetched as **ciphertext** and decrypted on device; the server never sees a
-  pixel, a filename, or a content key. The lightbox shows the **preview**, not the original — the original
+  pixel, a filename, a media type or a content key. The lightbox shows the **preview**, not the original — the original
   leaves the store only on explicit download.
 - **One order for every tile — including one that is still uploading.** The grid has a single ordering rule
   and no privileged front. A picked file takes its capture-time place the moment its tile appears — *before* it

@@ -46,7 +46,9 @@
   Safari **populates `input.files` late / across repeated picks**. The picker therefore (a) accepts a
   file by **extension** when its `type` is empty, (b) **re-reads** the input over a short retry window and
   **merges** (never replaces) by a `name:size:lastModified:type` signature, and (c) infers a `mediaType` from
-  the extension so derivation can still run (HEIC/MOV). **The window never delays the files already in hand** —
+  the extension so derivation can still run (HEIC/MOV); a file whose extension names nothing either has its type
+  sniffed from its first bytes at upload. That type is what the original's sealed blob meta declares, beside the
+  file's name and modified time (inbox #397). **The window never delays the files already in hand** —
   each re-read enqueues only what is genuinely new, as an additional batch; gating the first enqueue on it made
   every browser pay for the one this workaround exists for. Underivable bytes upload **original-only** (the
   gallery shows an icon).
