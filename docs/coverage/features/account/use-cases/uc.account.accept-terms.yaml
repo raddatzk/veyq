@@ -18,9 +18,9 @@ acceptanceCriteria:
       backend: { integration: [TenantTermsSliceTest.memberAcceptsThenABumpReStalesAndAStaleAcceptIs409] }
       web: { unit: [src/features/tenant/tenantTerms.test.ts] }
   - id: accept-recorded-server-side
-    text: Accepting records the member's accepted_terms_version = the current terms_version server-side (no acceptance time), keyed by (user_id, tenant_id). The gate then clears and the shell renders.
+    text: Accepting records the member's accepted_terms_version = the current terms_version (+ accepted_at, the server's own time — audit evidence, written once per version, never client-supplied) server-side, keyed by (user_id, tenant_id). The gate then clears and the shell renders.
     coverage:
-      backend: { integration: [TenantTermsSliceTest.memberAcceptsThenABumpReStalesAndAStaleAcceptIs409] }
+      backend: { integration: [TenantTermsSliceTest.memberAcceptsThenABumpReStalesAndAStaleAcceptIs409, TenantTermsSliceTest.anAcceptanceStoresTheServerTimeOncePerVersion, TenantTermsSliceTest.aClientSentAcceptanceTimeHasNoEffect] }
       web: { unit: [src/features/tenant/tenantTerms.test.ts] }
   - id: re-accept-on-version-bump
     text: When the operator bumps terms_version, the member's stored acceptance is now stale, so the gate re-appears; accepting the now-stale version is refused (409 terms_version_changed) until they re-read and re-accept the current one.

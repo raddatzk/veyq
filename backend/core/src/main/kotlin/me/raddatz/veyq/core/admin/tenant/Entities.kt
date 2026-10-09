@@ -15,8 +15,12 @@ import org.hibernate.annotations.DynamicUpdate
  * (like membership), never content. When `acceptedVersion < tenant.termsVersion` the member accept gate re-fires
  * (uc.account.accept-terms); accepting upserts this row to the current version.
  *
- * It holds no acceptance time: the version is what the gate reads and what says which text was accepted, and
- * nothing read the `accepted_at` this row once carried (inbox #318).
+ * [acceptedAt] is the server-observed time the member accepted [acceptedVersion] — audit evidence of *when* which
+ * terms version was accepted, should a violation or dispute arise. No code path reads it and no API serves it:
+ * operators and support read it from the database (owner decision 2026-10-09, after inbox #318 had dropped it as
+ * unread; `EveryStoredTimeHasAReaderTest` names that reader). It is written once per version: a re-acceptance of
+ * the version already recorded keeps the first time, an acceptance of a newer version replaces both. The client
+ * never supplies it.
  */
 @Entity
 @Table(name = "veyq_tenant_terms_acceptance")
@@ -34,6 +38,9 @@ class TenantTermsAcceptanceEntity : PanacheEntityBase {
 
     @Column(name = "accepted_version", nullable = false)
     var acceptedVersion: Int = 0
+
+    @Column(name = "accepted_at", nullable = false)
+    lateinit var acceptedAt: Instant
 
     companion object : PanacheCompanionBase<TenantTermsAcceptanceEntity, String>
 }

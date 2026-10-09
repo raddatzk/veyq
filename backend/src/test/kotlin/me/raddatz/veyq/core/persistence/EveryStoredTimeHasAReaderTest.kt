@@ -14,7 +14,9 @@ import org.junit.jupiter.api.Test
  * Every time the server stores names what reads it (inbox #318). A server time is exact and tells a database reader
  * *when* a member did something — accepted terms, re-sealed a preference, renamed a device. Data the server neither
  * needs nor serves is not stored, so a time column earns its place by a reader: a sort, a purge cutoff, an expiry
- * check, a served field. #318 measured nineteen written-never-read times and dropped them; the trap is the default
+ * check, a served field — or, named as such, a person reading the database (the terms acceptance time: audit
+ * evidence). #318 measured nineteen written-never-read times and dropped them (the owner brought the terms
+ * acceptance time back on 2026-10-09 as that evidence); the trap is the default
  * (`created_at TIMESTAMP NOT NULL` on every new table), so this reads Hibernate's own mapping of every entity, in any
  * module on the classpath, and holds the set of `Instant` columns to [READERS] both ways: a new time column with no
  * entry is red until someone names its reader, and an entry whose column is gone is red until it is struck.
@@ -67,6 +69,8 @@ class EveryStoredTimeHasAReaderTest {
             "veyq_tenant_invite.created_at" to "TenantStore.currentInvite: the newest invite of a tenant",
             "veyq_scope.deleted_at" to "ScopePurge's grace cutoff; served as deletedAt/purgeAfter of a pending group",
             "veyq_membership.created_at" to "ScopesStore.oldestOtherMember: the orphan rule's successor (ADR 0014 §6)",
+            "veyq_tenant_terms_acceptance.accepted_at" to "audit evidence of acceptance (when, which version); read " +
+                "by operators/support from the database, deliberately not served by an API (owner decision 2026-10-09)",
             // --- content + blobs
             "veyq_node.created_at" to "served: NodeSummary.createdAt, the order equal-named siblings take (ADR 0015)",
             "veyq_node.deleted_at" to "NodeSubtreePurge's cutoff; the trash list's order",

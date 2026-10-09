@@ -67,10 +67,14 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    transient terms-fetch error leaves the visitor viewing (a gate is operational, not enforcement; locking someone
    out on a network blip is worse than none), mirroring the member path's fail-open terms refresh.
 
-4. **Operator-blind boundary.** The terms text is public; a member's `accepted_terms_version` is operational
-   metadata (like membership/role) — the `accepted_at` it once carried was never read and is no longer stored
-   (inbox #318: the version alone is what the gate reads and what says which text was accepted); the anonymous
-   acceptance is client-only. **No
+4. **Operator-blind boundary.** The terms text is public; a member's acceptance row records the
+   `accepted_terms_version` and its `accepted_at` — operational metadata (like membership/role). The version is
+   what the gate reads; the time is **audit evidence** of *when* a member accepted *which* version, should a
+   violation or dispute arise: the server's own clock at the acceptance, never client-supplied, written once per
+   version (re-accepting the recorded version keeps the first time; accepting a newer version replaces version and
+   time together, so the row holds the latest acceptance only). No API serves it; operators and support read it
+   from the database. (Inbox #318 dropped it as unread on 2026-10-09; the owner restored it the same day as that
+   evidence.) The anonymous acceptance is client-only. **No
    user content, no new blindness cost** — recorded in the [security model](../crosscutting/security-model.md).
 
 5. **Two acceptance tiers, one login surface still deferred.** The operator sets/edits terms (admin UI, versioned).

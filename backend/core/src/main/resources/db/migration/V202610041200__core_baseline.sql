@@ -387,6 +387,7 @@ CREATE TABLE veyq_tenant_terms_acceptance (
     user_id          VARCHAR(36) NOT NULL,
     tenant_id        VARCHAR(36) NOT NULL,
     accepted_version INT         NOT NULL,
+    accepted_at      TIMESTAMP   NOT NULL,
     CONSTRAINT ux_terms_acceptance UNIQUE (user_id, tenant_id),
     CONSTRAINT fk_terms_acceptance_tenant FOREIGN KEY (tenant_id) REFERENCES veyq_tenant (id) ON DELETE CASCADE
 );
