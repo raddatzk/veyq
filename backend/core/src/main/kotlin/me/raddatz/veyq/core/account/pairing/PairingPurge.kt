@@ -34,8 +34,11 @@ class PairingPurge(
     // cr-0053).
     @Transactional
     @Scheduled(every = "{veyq.pairing.purge.every}")
-    fun run() {
-        val now = Instant.now()
+    fun run() = sweep(Instant.now())
+
+    /** [run] at the clock [now] — a test's way to sweep a channel as overdue without waiting out its TTL. */
+    @Transactional
+    fun sweep(now: Instant) {
         store.expireOverdue(now).forEach { sessions.revokeFamilyForUser(it.userId, it.familyId) }
         store.purgeTerminal(now.minus(retention))
     }

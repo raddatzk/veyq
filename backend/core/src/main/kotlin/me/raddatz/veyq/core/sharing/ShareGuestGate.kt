@@ -178,6 +178,14 @@ class ShareGuestGate(
      * (3) for a named target, the root live and the target live and inside the subtree (its kind never changes; the
      * caller checked it). The root taken by default passes the same two locks and nothing more, so its answers stay
      * what they were. Never the share row first: a re-activation holds the scope and waits for the share row.
+     *
+     * **The scope lock also when no node is named** (inbox #360, decided 2026-10-09): skipping it there would order
+     * nothing wrongly, but it would buy no parallelism where it is wanted. Many guests uploading through one link name
+     * no node, so they all complete into its root, and every such attach locks that root's node row anyway (Memories'
+     * primary-bucket resolve and revision bump, in the same transaction) — they run one after another with or
+     * without the scope lock. What the lock adds is waiting for tree writes and for completes into other nodes of the
+     * scope, one short transaction each; Files names its node on every complete, so it takes the lock regardless. One
+     * lock order for every complete is worth more than that.
      */
     fun admittedInto(gated: ShareWriteGate.Admitted, target: ShareWriteTarget.Node): () -> Boolean = {
         nodes.lockScope(gated.scopeId)

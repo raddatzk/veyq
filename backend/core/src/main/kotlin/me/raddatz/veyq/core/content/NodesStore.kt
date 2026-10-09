@@ -278,7 +278,10 @@ class NodesStore {
      * node's own subtree, and must not already hold the slug — so it serializes on the parent of every row it reads,
      * the scope (developer-styleguide §12). Two moves that would each be legal alone but form a cycle together (A
      * into B while B into A) thus run one after the other, and the second's [wouldCycle] reads the first's committed
-     * parent (READ COMMITTED, ADR 0078). No writer takes a node row and then the scope: the media writes that lock a
+     * parent (READ COMMITTED, ADR 0078). So do two renames onto one name: the second's [slugTaken] reads the first's
+     * committed token and answers [ApplyResult.SlugTaken] — unlocked, its UPDATE died on `ux_node_parent_slug` with a
+     * 500, which no `createOrConflict` re-asks here, since every slug writer holds this lock (inbox #320,
+     * `NodeTreeRaceCoreSliceTest`). No writer takes a node row and then the scope: the media writes that lock a
      * node row (`MediaStore.commitCover`, a primary bucket) never take the scope lock, and every tree write here
      * takes the scope first, so there is no inversion.
      *

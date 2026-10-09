@@ -52,12 +52,18 @@ class MediaShareGuestWrites(
      * deleted as before. Deletes the media row + its derivative rows + all blob rows, and puts their store objects
      * (original + every derivative) on the reclaim list in the same transaction.
      *
-     * The subtree is read under the media row's lock only, not the scope's: a member's move racing the delete of the
-     * guest's own upload is decided either way without harm (the medium is the guest's either way), and taking the
-     * scope row here would put a new lock order onto every guest delete.
+     * **Lock order: the scope row, then the media row, then the node row** — a guest's complete takes the scope first
+     * too (`ShareGuestGate.admittedInto`), and so does the trash purge before it locks the media it erases. The subtree
+     * is a tree read, so it is decided under the tree's lock ([NodesStore.lockScope]): a member's move that takes the
+     * medium's node out of the share's subtree has either committed and is seen (READ COMMITTED, ADR 0078) — the
+     * delete answers 404, the medium is no longer the link's to touch — or waits until the delete is done. Read under
+     * the media row's lock only, the delete read the subtree as it was before such a move and deleted a medium the link
+     * no longer reached (inbox #359, `MediaRowLockRaceSliceTest`). The cost: a guest's delete waits for a tree write in
+     * its scope, as its complete already does — one short transaction each.
      */
     @Transactional
     fun deleteOwn(scopeId: String, rootNodeId: String, mediaId: String, identityId: String): Boolean {
+        tree.lockScope(scopeId) // before any row of this transaction is read or locked
         // The read is the row's lock (as `MediaStore.purgeMedia`): a second delete of the same upload, or a purge,
         // that holds it finishes first, and this then finds nothing — the 404 a replay gets. Read plainly, it deleted
         // rows already gone and answered 500.

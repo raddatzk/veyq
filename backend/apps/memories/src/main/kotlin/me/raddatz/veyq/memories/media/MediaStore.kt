@@ -490,7 +490,8 @@ class MediaStore(private val blobs: BlobUploadStore) {
      * (`MediaCreateRaceSliceTest.concurrentFirstUploadsOfOneUploaderShareOnePrimary`). The lock is only taken —
      * nothing here reads the node, so a copy this transaction already holds does not matter. A caller that also locks
      * a bucket or media rows takes those first (bucket → media → node: [deleteBucketReparent], [moveMedia]), the order
-     * a trash or a guest's delete (media → node) agrees with.
+     * a trash or a guest's delete (media → node) agrees with; `MediaLockOrderRaceSliceTest` deadlocks on either
+     * writer's pair swapped (inbox #319).
      */
     private fun ensurePrimaryBucket(scopeId: String, nodeId: String, ownerKey: String, sealedName: String?): BucketEntity {
         NodeEntity.find("id", nodeId).withLock(LockModeType.PESSIMISTIC_WRITE).firstResult()
