@@ -12,6 +12,12 @@ import type { InvitePreview } from '../api/generated/tenants'
 import { MEMORY_KIND } from '../features/memory/kinds'
 import type { MediaItem } from '../features/memory/media'
 import type { TreeNode } from '../core/node/tree'
+import type { NodeKind } from '../core/node/kind'
+import type { EpochKeys } from '../features/spaces/epochs'
+import { memberAccess, memberTreeSource, type GuestAccess, type MemberAccess, type TreeSource } from '../core/access'
+import type { ShareRole } from '../api/generated/sharing'
+import type { PublicShareHead } from '../core/sharing/resolvePublicShare'
+import { memoryCapabilities, type MemoryCapabilities } from '../features/memory/capabilities'
 
 export const setupStatus = (o: Partial<SetupStatus> = {}): SetupStatus => ({
   setupRequired: false,
@@ -80,3 +86,30 @@ export const treeNode = (o: Partial<TreeNode> = {}): TreeNode => ({
   createdAt: 0,
   ...o,
 })
+
+/** A member's `Access` (core/access.ts): an unlocked scope, not pending deletion, public and uploader links on — a test
+ *  passes only what it is about. */
+export const memberAccessOf = (o: Partial<Omit<MemberAccess, 'mode'>> = {}): MemberAccess =>
+  memberAccess({ scopeId: 'scope-1', epochs: null, readonly: false, publicLinks: true, uploaderLinks: true, ...o })
+
+/** A share guest's `Access` with `role` (an unknown token too, as a server could send one): the head is a stub — a
+ *  capability reads the role alone. */
+export const guestAccessOf = (role: string, o: Partial<Omit<GuestAccess, 'mode' | 'role'>> = {}): GuestAccess => ({
+  mode: 'guest',
+  shareId: 's1',
+  role: role as ShareRole,
+  head: {} as PublicShareHead,
+  requestGuest: async () => null,
+  ...o,
+})
+
+/** A member's `TreeSource` over `nodes` (a getter, so a test's reactive store is read anew), keys opened under `epochs`. */
+export const memberTreeOf = (
+  nodes: () => TreeNode[],
+  o: { scopeId?: string | null; epochs?: EpochKeys | null; scope?: string } = {},
+): TreeSource<TreeNode> =>
+  memberTreeSource({ nodes, scopeId: () => o.scopeId ?? 'scope-1', epochs: () => o.epochs ?? null, scope: () => o.scope ?? '~me' })
+
+/** A member's Memories capabilities on an opened node of `kind` (MEMORY by default) — what `MemoryDetailHost` computes. */
+export const memberMemoryCaps = (o: Partial<Omit<MemberAccess, 'mode'>> = {}, kind: NodeKind = MEMORY_KIND): MemoryCapabilities =>
+  memoryCapabilities(memberAccessOf(o), { kind, inIdentityFolder: false, shareable: true })
