@@ -3,6 +3,7 @@
 // calling the server, and that the last step is a document load. What they cannot — that the new document really
 // takes every decrypted store with it, in a real browser with a real service worker — is the CR's live check.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { memoryStorage } from '../test/memoryStorage'
 
 const { dropConvenienceTiers, endAllPlaybacks } = vi.hoisted(() => ({
   dropConvenienceTiers: vi.fn(),
@@ -55,6 +56,7 @@ beforeEach(() => {
   vi.stubGlobal('BroadcastChannel', FakeChannel)
   vi.stubGlobal('location', { replace })
   vi.stubGlobal('fetch', fetchSpy)
+  vi.stubGlobal('sessionStorage', memoryStorage())
   dropConvenienceTiers.mockImplementation(async () => void order.push('tiers'))
   endAllPlaybacks.mockImplementation(async () => void order.push('service-worker'))
   replace.mockImplementation(() => void order.push('document-load'))
@@ -148,6 +150,9 @@ describe('the session ending (uc.account.sign-out, ADR 0070)', () => {
     expect(endAllPlaybacks).toHaveBeenCalledTimes(1)
     expect(FakeChannel.posted.filter((p) => p.from !== otherTab)).toEqual([])
     expect(fetchSpy).not.toHaveBeenCalled()
+    // …and the sign-in page it loads says why (inbox #322): read the way the sign-in page reads it.
+    const { takeEndingNotice } = await import('./endingNotice')
+    expect(takeEndingNotice()).toBe('otherTab')
     stopListening()
   })
 
@@ -165,6 +170,11 @@ describe('the session ending (uc.account.sign-out, ADR 0070)', () => {
 
     expect(replace).toHaveBeenCalledTimes(1)
     expect(dropConvenienceTiers).toHaveBeenCalledTimes(1)
+    // One notice, the signed-in tab's: `sessionStorage` is one stub here, so a notice the signed-out tab left would
+    // still be there after the first read.
+    const { takeEndingNotice } = await import('./endingNotice')
+    expect(takeEndingNotice()).toBe('otherTab')
+    expect(takeEndingNotice()).toBeNull()
     stopSignedOut()
     stopSignedIn()
   })

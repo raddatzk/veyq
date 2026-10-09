@@ -138,7 +138,8 @@ here; the server is blind.
   `import()`, no loading after the fact (ADR 0079 Decision 5, ADR 0026) — registered code runs with every unlocked key.
   **What an application registers** (its `register.ts`; the registry is write-once, a second registration throws):
   `registerKind` per node kind (detail component, icon, shareable, `deleteTitle` — the i18n key core's delete dialog
-  titles a node of the kind with, else a neutral "Delete", and `deleteCopy`, its sentence — `emptyInTrash`, the note core's
+  titles a node of the kind with, else a neutral "Delete", and `deleteCopy`, its sentence — `nounWithArticle`, the noun core's
+  create and rename dialogs name a colliding sibling of the kind with ("There is already a file named …", else "an item") — `emptyInTrash`, the note core's
   trash shows on a node of the kind that holds no attachment — `renameSelectionEnd`, where core's rename dialog ends the
   selection on a name, e.g. a file's before its extension — and its `section` of the folder level view —
   `{ order, component }`; the level view is core's, `core/node/LevelView.vue`: its toolbar (the space's trash), the folder's overview card, the

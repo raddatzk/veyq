@@ -106,6 +106,10 @@ export interface KindDescriptor {
    *  the neutral `node.deleteCopy` would leave out what goes with it (Files' drop box: its guests' folders and its
    *  links, inbox #395). Omitted: `node.deleteCopy`. */
   deleteCopy?: string
+  /** The i18n key of the kind's noun with its indefinite article, as the object of a sentence (en "a file", de "eine
+   *  Datei"): core's create and rename dialogs name a colliding sibling with it — "There is already a file named …"
+   *  (`node.nameTakenBy`, inbox #389). Omitted: the neutral `node.anItem`. */
+  nounWithArticle?: string
   /** The i18n key of the note core's trash shows on a trashed node of this kind that holds no attachment (the trash
    *  listing's `attached`): for a kind whose content IS its attachment, such a node is empty — Files' `FILE` whose
    *  upload never finished (inbox #391). Its restore stays offered, the row says what comes back. Omitted: no note (a
@@ -355,7 +359,7 @@ const LIST_SLOTS: readonly string[] = ['topbarTray', 'sidebarPins'] satisfies re
  *  The app uses the single `registry` below; tests build their own to prove the rules on an untouched instance. */
 export function createRegistry(): Registry {
   const kinds = new Map<NodeKind, KindDescriptor>([
-    [FOLDER_KIND, { kind: FOLDER_KIND, icon: 'pi pi-folder', shareable: true, shareDialog: FolderShareDialog }],
+    [FOLDER_KIND, { kind: FOLDER_KIND, icon: 'pi pi-folder', shareable: true, shareDialog: FolderShareDialog, nounWithArticle: 'node.aFolder' }],
   ])
   const lists = new Map<ListSlotName, { id: string; component: Component; order: number }[]>()
   const lifecycles = new Map<string, LifecycleHooks>()

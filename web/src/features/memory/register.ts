@@ -32,8 +32,8 @@ export function registerMemories(registry: Registry): void {
   const memories = {
     detail: MemoryDetailHost, icon: 'pi pi-images', shareable: true, section, createDialog: MemoryNodeDialog, shareDialog: ShareDialog,
   }
-  registry.registerKind({ kind: MEMORY_KIND, ...memories, deleteTitle: 'memory.deleteMemoryTitle' })
-  registry.registerKind({ kind: CHAPTER_KIND, ...memories, deleteTitle: 'memory.deleteChapterTitle' })
+  registry.registerKind({ kind: MEMORY_KIND, ...memories, deleteTitle: 'memory.deleteMemoryTitle', nounWithArticle: 'memory.aMemory' })
+  registry.registerKind({ kind: CHAPTER_KIND, ...memories, deleteTitle: 'memory.deleteChapterTitle', nounWithArticle: 'memory.aChapter' })
   registry.addSlotItem('sidebarPins', 'memories.pinned', PinnedMemories)
   // The public share page: every Memories share — viewer, contributor and the WRITE_ONLY drop — is rooted at a MEMORY
   // or a CHAPTER node (`PublicShare.rootKind`); the one body renders either root and picks its screens by the role.

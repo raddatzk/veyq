@@ -474,6 +474,17 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
     expect(wrapper.text()).toContain(t('pairing.grantInterrupted'))
   })
 
+  it.each([
+    ['refused', 'login.sessionEnded'],
+    ['otherTab', 'login.sessionEndedOtherTab'],
+  ] as const)('says why the session ended when this tab did not ask: %s → %s (inbox #322)', async (left, key) => {
+    vi.mocked(takeSignOutNotice).mockReturnValue(left)
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(t(key))
+  })
+
   it('says a sign-out did not reach the server, and offers the retry (uc.account.sign-out E4)', async () => {
     vi.mocked(takeSignOutNotice).mockReturnValue('unconfirmed')
     session.accessToken = 'restored'

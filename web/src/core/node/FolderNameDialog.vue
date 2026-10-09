@@ -6,7 +6,8 @@
 // ITS kind's function, never by the folder's. The create dialogs of the application kinds are the kinds' own
 // (`KindDescriptor.createDialog`). Moved from Memories' former `NodeMutationDialog.vue` with the same markup, labels,
 // validation and error mapping; it reads core's `node.*` keys (and `common.save`) since P4d, values unchanged.
-// Inline slug_taken (409) / illegal_structure (422) errors.
+// Inline slug_taken (409) / illegal_structure (422) errors. Before sending, a name that collides with a sibling in the
+// loaded tree is refused naming that sibling (`siblingCollision.ts`, inbox #389); the 409 stays the race backstop.
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
@@ -15,6 +16,8 @@ import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import { createFolder, renameNode, type NodeParent, type TreeNode } from './tree'
 import { treeStore } from './treeStore'
+import { FOLDER_KIND } from './kind'
+import { collidingSibling, nameTakenMessage } from './siblingCollision'
 import { registry } from '../applications/registry'
 import { resealShareNames } from '../sharing/manageShares'
 import { useToast } from '../../shared/state/useToast'
@@ -98,9 +101,23 @@ function selectForRename() {
   if (end !== undefined && input) input.setSelectionRange(0, end)
 }
 
+/** The loaded sibling the name collides with, folded by each node's own kind: a create is a FOLDER under the parent, a
+ *  rename is the node's own kind under its own parent, never colliding with itself. */
+function takenBy(): TreeNode | null {
+  const trimmed = name.value.trim()
+  if (props.mode === 'create') return collidingSibling(treeStore.nodes, props.parentId ?? null, FOLDER_KIND, trimmed)
+  if (props.node) return collidingSibling(treeStore.nodes, props.node.parentId, props.node.kind, trimmed, props.node.id)
+  return null
+}
+
 async function submit() {
   if (!canSubmit.value) return
   error.value = ''
+  const sibling = takenBy()
+  if (sibling) {
+    error.value = nameTakenMessage(t, sibling)
+    return
+  }
   await runSubmit()
 }
 </script>

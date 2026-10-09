@@ -555,6 +555,12 @@ const en = {
     signOut: 'Sign out',
     signOutUnconfirmed:
       'Your sign-out did not reach the server, so this browser may still be signed in. Once you are back online, use “Sign out” here.',
+    // A session the server refused ended this tab (uc.account.sign-out E1, inbox #322). The refusal does not say why
+    // (a plain 401 for expired, revoked or unknown alike), so the copy names the causes rather than guessing one.
+    sessionEnded:
+      'Your session has ended. It expired, or it was ended elsewhere: by a sign-out on another device, a password change or reset, or replacing your keys. Sign in again to continue.',
+    // Another tab of this browser ended the session (uc.account.sign-out E3).
+    sessionEndedOtherTab: 'Your session was ended in another tab of this browser. Sign in again to continue.',
   },
   unlock: {
     secretKey: 'Secret Key',
@@ -765,6 +771,11 @@ const en = {
     rename: 'Rename',
     delete: 'Delete',
     slugTaken: 'Something with a similar name already exists here.',
+    // A member's create or rename refused before it is sent (inbox #389): `{kind}` is the colliding sibling's noun with
+    // its indefinite article, from its kind's `nounWithArticle` (else `node.anItem`); `{name}` is its decrypted name.
+    nameTakenBy: 'There is already {kind} named “{name}” here. Choose another name.',
+    aFolder: 'a folder',
+    anItem: 'an item',
     illegalStructure: 'That isn’t allowed here.',
     saveFailed: 'That didn’t work. Please try again.',
     // The delete dialog (core's `DeleteNodeDialog`): a folder's own title and copy; any other node's title is its kind's
@@ -795,6 +806,9 @@ const en = {
     create: 'New Memory',
     createMemoryTitle: 'Create a Memory',
     createChapterTitle: 'Create a chapter',
+    // The kinds' nouns with their article, for core's `node.nameTakenBy` (the registry's `nounWithArticle`).
+    aMemory: 'a Memory',
+    aChapter: 'a chapter',
     addChapter: 'Add chapter',
     chapters: 'Chapters',
     gallery: 'Gallery',
@@ -935,6 +949,8 @@ const en = {
     upload: 'Upload files',
     empty: 'No files yet — upload the first one.',
     notUploaded: 'Not uploaded yet',
+    // A file's noun with its article, for core's `node.nameTakenBy` (the registry's `nounWithArticle`).
+    aFile: 'a file',
     modified: 'Modified {date}',
     download: 'Download {name}',
     // The row's replace keeps the file's name: the picked file's content goes into it (inbox #385).
@@ -981,6 +997,7 @@ const en = {
       section: 'Drop boxes',
       create: 'New drop box',
       createTitle: 'New drop box',
+      aDropBox: 'a drop box',
       createHint: 'A drop box collects files from people without an account. Share a link: everyone who uses it gets a folder of their own here, and nobody sees what others sent.',
       sectionEmpty: 'No drop boxes yet. A drop box collects files from people without an account.',
       createFailed: 'The drop box could not be created. Please try again.',
@@ -1812,6 +1829,9 @@ const de: typeof en = {
     signOut: 'Abmelden',
     signOutUnconfirmed:
       'Die Abmeldung hat den Server nicht erreicht, deshalb kann dieser Browser noch angemeldet sein. Sobald du wieder online bist, nutze hier „Abmelden“.',
+    sessionEnded:
+      'Deine Sitzung ist beendet. Sie ist abgelaufen oder wurde anderswo beendet: durch eine Abmeldung auf einem anderen Gerät, eine Passwortänderung oder -zurücksetzung oder das Ersetzen deiner Schlüssel. Melde dich erneut an, um weiterzumachen.',
+    sessionEndedOtherTab: 'Deine Sitzung wurde in einem anderen Tab dieses Browsers beendet. Melde dich erneut an, um weiterzumachen.',
   },
   unlock: {
     secretKey: 'Secret Key',
@@ -2014,6 +2034,9 @@ const de: typeof en = {
     rename: 'Umbenennen',
     delete: 'Löschen',
     slugTaken: 'Hier gibt es bereits etwas mit ähnlichem Namen.',
+    nameTakenBy: 'Hier gibt es schon {kind} namens „{name}“. Wähle einen anderen Namen.',
+    aFolder: 'einen Ordner',
+    anItem: 'einen Eintrag',
     illegalStructure: 'Das ist hier nicht erlaubt.',
     saveFailed: 'Das hat nicht geklappt. Bitte versuche es erneut.',
     deleteFolderTitle: 'Ordner löschen',
@@ -2039,6 +2062,8 @@ const de: typeof en = {
     create: 'Neue Erinnerung',
     createMemoryTitle: 'Erinnerung anlegen',
     createChapterTitle: 'Kapitel anlegen',
+    aMemory: 'eine Erinnerung',
+    aChapter: 'ein Kapitel',
     addChapter: 'Kapitel hinzufügen',
     chapters: 'Kapitel',
     gallery: 'Galerie',
@@ -2170,6 +2195,7 @@ const de: typeof en = {
     title: 'Dateien',
     upload: 'Dateien hochladen',
     empty: 'Noch keine Dateien — lade die erste hoch.',
+    aFile: 'eine Datei',
     notUploaded: 'Noch nicht hochgeladen',
     modified: 'Geändert {date}',
     download: '{name} herunterladen',
@@ -2208,6 +2234,7 @@ const de: typeof en = {
       section: 'Briefkästen',
       create: 'Neuer Briefkasten',
       createTitle: 'Neuer Briefkasten',
+      aDropBox: 'einen Briefkasten',
       createHint: 'Ein Briefkasten sammelt Dateien von Personen ohne Konto. Teile einen Link: Wer ihn nutzt, bekommt hier einen eigenen Ordner, und niemand sieht, was andere eingeworfen haben.',
       sectionEmpty: 'Noch keine Briefkästen. Ein Briefkasten sammelt Dateien von Personen ohne Konto.',
       createFailed: 'Der Briefkasten konnte nicht angelegt werden. Bitte versuche es erneut.',

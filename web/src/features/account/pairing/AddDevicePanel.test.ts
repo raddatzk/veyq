@@ -227,13 +227,14 @@ describe('AddDevicePanel — the trusted half (uc.account.onboard-device, ADR 00
     const w = mountPanel()
     await showCode(w)
     await answerArrives(w)
-    // Control: nothing explains an ending before the grant — the comparison screen's own refusals are not E6.
-    expect(endingExplanation()).toBeNull()
+    // Control: nothing explains an ending before the grant — the comparison screen's own refusals are not E6; an ending
+    // then says only the default `refused` (inbox #322).
+    expect(endingExplanation()).toBe('refused')
 
     await nameAndSlide(w)
 
     expect(seen).toEqual(['grantInterrupted', 'grantInterrupted'])
-    expect(endingExplanation()).toBeNull()
+    expect(endingExplanation()).toBe('refused')
   })
 
   it('a refused grant leaves the explanation behind it, not in force', async () => {
@@ -247,7 +248,7 @@ describe('AddDevicePanel — the trusted half (uc.account.onboard-device, ADR 00
     await nameAndSlide(w)
 
     expect(w.text()).toContain(t('pairing.grantFailed'))
-    expect(endingExplanation()).toBeNull()
+    expect(endingExplanation()).toBe('refused')
   })
 
   it('seals the account’s Master Key, the delegated token, the typed name and this device’s marks to the answering key', async () => {

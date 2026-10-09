@@ -59,14 +59,20 @@ This is a property with several triggers, so it lives here and not under any one
   every call without looking at the session ([uc.spaces.scope-access](../../spaces/use-cases/uc.spaces.scope-access.md)
   A7). The same line decides E4: a sign-out refused that way did not revoke the family. A rejection that cuts off
   a pairing grant has the sign-in page say so, with the same one-word notice E4 uses
-  ([uc.account.onboard-device](uc.account.onboard-device.md) E6); any other rejection's ending says nothing.
+  ([uc.account.onboard-device](uc.account.onboard-device.md) E6). Any other rejection's ending has the sign-in page
+  say the session ended and name the possible causes — it expired, or it was ended elsewhere (a sign-out on another
+  device, a password change or reset, replaced keys) — because the server's plain 401 does not say which (inbox
+  #322). The one exception is the sign-out sequence itself: a session that was already over is what it wanted, and
+  its own notice (E4, or none) is the one that stands. Only a tab that held a session gets this far, so the notice
+  tells nothing about whether any account exists.
 - **E2 — the tab holds no session.** The sign-in page at boot, a public share, a device waiting in a pairing
   ceremony: such a tab ignores the other-tab message, and a refresh rejected at boot is the ordinary *not
   signed in* path, not an ending. Without this, an ending on the sign-in page would load the sign-in page
   again, forever. At boot the same line decides the local convenience tiers: a refusal drops them, and a boot
   that got no answer keeps them and shows the instance as unreachable.
 - **E3 — another tab ended the session.** This tab runs the ending and asks the server nothing. Its tabs share
-  one family through the refresh cookie, so that family is already revoked or dead.
+  one family through the refresh cookie, so that family is already revoked or dead. Its sign-in page says the
+  session was ended in another tab of this browser (inbox #322).
 - **E4 — the revoke did not reach the server** (offline, 5xx). The ending still runs, and the sign-in page says
   that the sign-out did not reach the server. The refresh cookie is then still live, so this browser can come
   back signed in, though locked. The sign-in card's own sign-out is the retry, the same fallback

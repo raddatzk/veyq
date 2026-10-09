@@ -238,6 +238,9 @@ function showSignOutNotice(left: SignOutNotice | null) {
   else if (left === 'unconfirmed') warning.value = t('login.signOutUnconfirmed')
   // uc.account.onboard-device E6: the session ended under a grant, so the panel that would have said so is gone.
   else if (left === 'grantInterrupted') warning.value = t('pairing.grantInterrupted')
+  // inbox #322: any other ending this tab did not ask for — a refused refresh, or another tab's ending.
+  else if (left === 'refused') warning.value = t('login.sessionEnded')
+  else if (left === 'otherTab') warning.value = t('login.sessionEndedOtherTab')
 }
 
 /** The way back: reveal the Secret-Key field again on the still-live session, persisting nothing. */
