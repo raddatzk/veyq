@@ -89,7 +89,8 @@
 - **The OpenAPI schema is the source of truth for input shape and limits.** Declare constraints on
   request fields (`maxLength`/`minLength`, `pattern`, `format`, `minimum`/`maximum`, `required`).
   Required-field + structural validation is enforced by generated bean validation → a malformed body is
-  rejected **before the handler** (400).
+  rejected **before the handler** (400) — with the contract's `ErrorResponse{code: invalid_request}`, the same
+  body a handler's refusal carries (§7).
 - **Field-level validation AND sanitization are declared in the spec via `x-field-extra-annotation`.**
   The `kotlin` model generator ignores standard `maxLength`/`pattern`, but emits whatever
   `x-field-extra-annotation` holds onto the field. Use it to attach (a) **bean-validation** constraints
@@ -108,7 +109,12 @@
   `wrappedBlobKey` checks. **A property that `$ref`s a scalar component schema** (`NodeKind`, `CapabilityTag`) gets
   the scalar inlined as a `String` with none of its bounds, so an annotation carries the target's bounds: beside the
   `$ref` for one request field, or on the target, which the generator copies onto every field `$ref`ing it that has
-  none of its own (a sibling annotation replaces the target's, it does not add to it). Parameters are exempt: the `jaxrs-spec` API generator derives their annotations
+  none of its own (a sibling annotation replaces the target's, it does not add to it). **A list of scalars bounds
+  its elements on the list:** the generator types it `List<String>` and cannot annotate the type argument, so what
+  its `items` declare (`maxLength`/`minLength`/`pattern`, through a `$ref`'d scalar too) is written as core's
+  `@field:me.raddatz.veyq.core.http.EachElement(maxLength = …, pattern = "…")` beside the list's own `@Size` —
+  `ClaimRequest.capabilityTags` took any string as a tag until it did (inbox #354). A list of `uuid`s needs none:
+  the element type refuses the rest. Parameters are exempt: the `jaxrs-spec` API generator derives their annotations
   itself (`useBeanValidation`). Enforced by `scripts/validate_request_bounds.py`. On a list, Hibernate
   Validator logs `HV000271` (a container-level `@Valid` is deprecated in favour of the type argument) — which
   the `kotlin` generator cannot place, so the field form stays; `MediaCoreSliceTest.startBlobUploadsValidatesInsideEachItem`
@@ -143,6 +149,19 @@ restating the code. Avoid `// loop over the items` and comments that drift from 
 
 - **Backend:** return a stable **error code** (the client localizes). Never put content, keys or secrets
   in an error body — the operator-blind boundary applies to errors too.
+- **A request the boundary refuses for its shape answers `400 ErrorResponse{code: invalid_request}`** — whichever
+  layer refused it: Jackson while binding (an unknown enum value, a wrong type, a missing or null required field,
+  unparseable JSON) or bean validation after it (an empty field, a bound, a pattern, an element). Core's
+  `core/http/RequestRejectionMappers.kt` holds one mapper per exception type plus one response filter for the empty
+  400 Quarkus' body reader answers, so every generated resource — each application's too — answers alike with no
+  code of its own; a new refusal path gets its mapper there, never a per-resource catch. **Never an
+  `ExceptionMapper` for `WebApplicationException`** (or any supertype of `NotFoundException`): Quarkus REST then
+  answers an unmatched route itself instead of passing it on, and the app shell's SPA fallback and the admin
+  channel's unknown-route refusal both stop working. The body carries the code alone: never the refused value (often ciphertext or an opaque id),
+  the field's name or path, the rule, an enum's accepted values or a class name — the contract already says what
+  is accepted. A violation that names no method parameter (an entity, a return value) is the server's own defect:
+  `500 internal_error`, no report. `MalformedRequestSliceTest` holds the shape, `FilesContentSliceTest` an
+  application's resource (inbox #339, #355).
 - **Frontend:** build errors through a shared helper with a stable `"<label> failed: <status>"` message;
   append the response body **only in dev builds**. Don't couple UI text to whatever the server echoes.
 
