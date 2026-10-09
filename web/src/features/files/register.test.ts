@@ -24,6 +24,7 @@ describe('registerFiles', () => {
       slug: fileNameSlug,
       renameSelectionEnd: fileNameStemEnd,
       emptyInTrash: 'files.trashEmpty',
+      nounWithArticle: 'files.aFile',
       section: { order: 20, component: FilesSection },
       shareSection: { order: 20, component: ShareFilesSection },
     })
@@ -54,6 +55,7 @@ describe('registerFiles', () => {
       detail: DropBoxDetail,
       deleteTitle: 'files.dropBox.delete',
       deleteCopy: 'files.dropBox.deleteConfirm',
+      nounWithArticle: 'files.dropBox.aDropBox',
       section: { order: 21, component: DropBoxSection },
       createDialog: DropBoxCreateDialog,
       shareDialog: DropBoxShareDialog,
