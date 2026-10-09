@@ -4,8 +4,8 @@
 // Memories'). A section renders in every folder, with or without files (P4b), so an empty one shows its empty state
 // and its upload action.
 //
-// Per file: its icon, its decrypted name (the tree opened it), its size and modified time from the file's sealed
-// metadata (`fileMeta.ts`; before a meta is written, the plaintext size the blob's sealed size gives exactly), and the
+// Per file: its icon, its decrypted name (the tree opened it), its size (exact, from the blob's sealed size) and its
+// modified time from the blob's own sealed meta (`wrappedBlobMeta`, `download.ts` `fileFacts`, inbox #397), and the
 // actions download, replace, rename (core's `FolderNameDialog`, asked for through the section's `rename` event) and
 // delete (into the scope's trash, core's `deleteNode`; restored from core's trash dialog like any node). Uploading
 // enqueues one core-queue job per picked or dropped file (`uploadFile.ts`): the top bar's status menu shows its
@@ -22,7 +22,6 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
-import * as v1 from '@veyq/crypto/v1'
 import type { LevelSectionProps, LevelSectionEmits } from '../../../core/applications/registry'
 import { registry } from '../../../core/applications/registry'
 import { deleteNode, nodeContentKey, type NodeParent, type TreeNode } from '../../../core/node/tree'
@@ -37,9 +36,9 @@ import { useViewMode } from '../../../shared/state/useViewMode'
 import type { FileBlobRef } from '../../../api/generated/files'
 import { filesApi } from '../api'
 import { FILE_KIND } from '../kinds'
-import { readFileMeta } from '../fileMeta'
 import { deliveredSince, fileUploadJob, FileUploadError, type FileJobExtra, type FileUploadResult } from '../uploadFile'
-import { downloadFile } from '../download'
+import { downloadFile, fileFacts } from '../download'
+import { plaintextTotal } from '../../../sw/range'
 import { isSaveCancelled, SaveTooLarge } from '../../../shared/saveStream'
 
 const props = defineProps<LevelSectionProps>()
@@ -95,19 +94,25 @@ const dateFormat = computed(() => new Intl.DateTimeFormat(locale.value === 'de' 
 /** Whether the file is KNOWN to hold no content: listed without a blob (not merely unlisted after a failed read). */
 const isEmpty = (node: TreeNode): boolean => blobs.value.has(node.id) && blobs.value.get(node.id) === null
 
+/** A row's second line from its BLOB alone (inbox #397): the plaintext size (exact, from the sealed size) and the
+ *  modified time sealed in the blob's meta — present or not, the node's own payload is never read for it, so a file
+ *  shows its facts whatever its node meta holds, and a replace shows the new blob's at once. No blob: not uploaded. */
+function rowDetail(key: Uint8Array | null, nodeId: string, blob: FileBlobRef | null): string {
+  if (!blob) return t('files.notUploaded')
+  const scopeId = activeSpace.scopeId
+  const facts = key && scopeId ? fileFacts(scopeId, key, nodeId, blob) : null
+  const size = facts?.size ?? Math.max(0, plaintextTotal(blob.byteSize, blob.chunkCount))
+  const modifiedAt = facts?.meta?.modifiedAt
+  return [formatBytes(size, locale.value), modifiedAt === undefined ? null : t('files.modified', { date: dateFormat.value.format(modifiedAt) })]
+    .filter((s): s is string => s !== null)
+    .join(' · ')
+}
+
 const rows = computed(() =>
   fileNodes.value.map((node) => {
     const key = keyOf(node)
-    const meta = key && activeSpace.scopeId ? readFileMeta(key, { scopeId: activeSpace.scopeId, nodeId: node.id }, node.wrappedMeta) : null
     const blob = blobs.value.get(node.id) ?? null
-    // Without a meta yet, the blob's sealed size gives the plaintext size exactly: every frame adds FRAME_OVERHEAD.
-    const size = meta?.size ?? (blob ? Math.max(0, blob.byteSize - v1.FRAME_OVERHEAD * blob.chunkCount) : null)
-    const detail = blob
-      ? [size === null ? null : formatBytes(size, locale.value), meta ? t('files.modified', { date: dateFormat.value.format(meta.modifiedAt) }) : null]
-          .filter((s): s is string => s !== null)
-          .join(' · ')
-      : t('files.notUploaded')
-    return { node, key, blob, detail, empty: isEmpty(node) }
+    return { node, key, blob, detail: rowDetail(key, node.id, blob), empty: isEmpty(node) }
   }),
 )
 type Row = (typeof rows.value)[number]
@@ -173,11 +178,7 @@ async function startUploads(files: File[], replaceNode?: TreeNode, confirmed = f
       existing && nodeKey
         ? fileUploadJob({
             scopeId, epochs, parent,
-            replace: {
-              nodeId: existing.id, nodeKey,
-              meta: { wrappedMeta: existing.wrappedMeta, metaVersion: existing.metaVersion },
-              expectedBlobId: blobs.value.get(existing.id)?.blobId ?? null,
-            },
+            replace: { nodeId: existing.id, nodeKey, expectedBlobId: blobs.value.get(existing.id)?.blobId ?? null },
           }, file)
         : fileUploadJob({ scopeId, epochs, parent }, file),
     )
@@ -215,7 +216,7 @@ function onDrop(e: DragEvent) {
 
 // --- what the status menu cannot explain: this level's files that were not (fully) uploaded ----------------------
 
-type Notice = { item: UploadItem<FileUploadResult, FileJobExtra>; severity: 'error' | 'warn'; text: string; replaceAnyway: boolean }
+type Notice = { item: UploadItem<FileUploadResult, FileJobExtra>; severity: 'error'; text: string; replaceAnyway: boolean }
 const KNOWN_ERRORS = new Set<string>([...Object.values(FileUploadError), QUOTA_EXCEEDED])
 const notices = computed<Notice[]>(() => {
   const mine = batches.value.filter((b) => b.key === batchKey.value)
@@ -227,9 +228,6 @@ const notices = computed<Notice[]>(() => {
       if (item.status === 'failed') {
         const code = item.error && KNOWN_ERRORS.has(item.error) ? item.error : 'failed'
         return [{ item, severity: 'error', text: t(`files.errors.${code}`, { name: item.name }), replaceAnyway: code === FileUploadError.staleFile }]
-      }
-      if (item.status === 'done' && item.result && !item.result.metaWritten) {
-        return [{ item, severity: 'warn', text: t('files.metaWarning', { name: item.name }), replaceAnyway: false }]
       }
       return []
     })

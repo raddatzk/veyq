@@ -15,6 +15,7 @@ import { withRefresh } from '../../app/sessionRefresh'
 import type { PresignedUrl } from '../../api/generated/blob'
 import type { ChunkProvider } from '../../sw/protocol'
 import type { BlobDeclare, BlobPlan, BlobRef, BlobRole, ChunkPut, ReservedUpload, WindowFn } from './types'
+import { openBlobMetaOf, type BlobMeta, type OpenedBlobMeta } from './meta'
 
 /**
  * Every `K_blob` wrap is bound to the object it is stored as (ADR 0072): (scope, owner, blob, role). A server that
@@ -24,6 +25,28 @@ import type { BlobDeclare, BlobPlan, BlobRef, BlobRole, ChunkPut, ReservedUpload
 const blobKeyContext = (scopeId: string, ref: { blobId: string; ownerId: string; role: BlobRole }) =>
   ({ purpose: 'blob-key', scopeId, ownerId: ref.ownerId, blobId: ref.blobId, role: ref.role }) as const
 
+/** Unwrap a ref's `K_blob` under `key`, bound to the ref's (scope, owner, blob, role): `OpenRefused` for a ref the
+ *  server moved to another owner or slot. */
+const unwrapBlobKey = (scopeId: string, key: Uint8Array, ref: BlobRef): Uint8Array =>
+  v1.open(blobKeyContext(scopeId, ref), key, fromB64std(ref.wrappedBlobKey))
+
+/**
+ * A listed blob's sealed metadata, **for display** (inbox #397): its `K_blob` unwrapped under `key`, then its
+ * `wrappedBlobMeta` opened (`meta.ts` `openBlobMetaOf`). Null when the ref carries none, or when either the wrap or the
+ * meta does not open — a ref moved to another owner, another blob's meta in its place. Never throws. For a blob about
+ * to be read, the chunk provider's `meta()` reuses the key it already unwrapped.
+ */
+export function readBlobMeta(scopeId: string, key: Uint8Array, ref: BlobRef): OpenedBlobMeta | null {
+  if (!ref.wrappedBlobMeta) return null
+  let blobKey: Uint8Array
+  try {
+    blobKey = unwrapBlobKey(scopeId, key, ref)
+  } catch {
+    return null
+  }
+  return openBlobMetaOf(ref, blobKey)
+}
+
 /** Plaintext bytes per full chunk before sealing — the contract's frame size (ADR 0013 §3), not a choice made here:
  *  the server derives `chunkCount` from `byteSize` on exactly this and refuses any other. */
 export const CHUNK_SIZE = v1.CHUNK_FRAME_SIZE.plaintextBytes
@@ -32,13 +55,19 @@ export const CHUNK_SIZE = v1.CHUNK_FRAME_SIZE.plaintextBytes
 
 /** Plan `source` as a blob under a fresh random `K_blob`, wrapped under `key` bound to where it will live — the
  *  client-minted blob id, its owner and its role (ADR 0072). Its shape follows from its size alone: every frame
- *  but the last carries [CHUNK_SIZE] plaintext bytes, and an empty source is one empty frame. */
-export function planBlob(scopeId: string, owner: { ownerId: string; role: BlobRole }, key: Uint8Array, source: Blob): BlobPlan {
+ *  but the last carries [CHUNK_SIZE] plaintext bytes, and an empty source is one empty frame. `meta`, when given, is
+ *  sealed under that same `K_blob` (`blob-meta`, inbox #397) and declared with the blob — write-once, so it describes
+ *  exactly these bytes; without it the plan, and so the declare, is what it was before the field (no randomness drawn). */
+export function planBlob(
+  scopeId: string, owner: { ownerId: string; role: BlobRole }, key: Uint8Array, source: Blob, meta?: BlobMeta,
+): BlobPlan {
   const blobKey = v1.randomBytes(32)
   const blobId = crypto.randomUUID()
   const wrappedBlobKey = b64std(v1.seal(blobKeyContext(scopeId, { blobId, ...owner }), key, blobKey))
   const chunkCount = Math.max(1, Math.ceil(source.size / CHUNK_SIZE))
-  return { source, blobKey, wrappedBlobKey, chunkCount, byteSize: source.size + chunkCount * v1.FRAME_OVERHEAD, blobId, ...owner }
+  const plan: BlobPlan = { source, blobKey, wrappedBlobKey, chunkCount, byteSize: source.size + chunkCount * v1.FRAME_OVERHEAD, blobId, ...owner }
+  if (meta) plan.wrappedBlobMeta = b64std(v1.sealBlobMeta(blobKey, meta))
+  return plan
 }
 
 /** Read and seal frame `index` of a planned blob — one [CHUNK_SIZE] slice of the source, never more. */
@@ -133,6 +162,7 @@ export async function reserveAndPump(
   const reserved = await reserve(plans.map((p) => ({
     blobId: p.blobId, ownerId: p.ownerId, role: p.role,
     chunkCount: p.chunkCount, byteSize: p.byteSize, wrappedBlobKey: p.wrappedBlobKey,
+    ...(p.wrappedBlobMeta ? { wrappedBlobMeta: p.wrappedBlobMeta } : {}),
   })))
   if (reserved.length !== plans.length) throw new Error('upload_failed')
   const totalChunks = plans.reduce((n, p) => n + p.chunkCount, 0)
@@ -186,7 +216,7 @@ export function windowPuts(r: { presignedPuts?: PresignedUrl[] | null; error?: s
  * cr-0100) — the decrypt is identical; only who presigns differs.
  */
 export async function openBlobFromUrls(scopeId: string, key: Uint8Array, ref: BlobRef, getUrls: string[]): Promise<Uint8Array> {
-  const blobKey = v1.open(blobKeyContext(scopeId, ref), key, fromB64std(ref.wrappedBlobKey))
+  const blobKey = unwrapBlobKey(scopeId, key, ref)
   const frames = await Promise.all(getUrls.map((url) => getChunk(url)))
   const chunks = frames.map((frame, i) => v1.openFrame(blobKey, i, frames.length, frame))
   return v1.concat(...chunks)
@@ -229,19 +259,28 @@ function chunkGetStatus(e: unknown): number | undefined {
   return m ? Number(m[1]) : undefined
 }
 
+/** A page-side chunk provider that also opens its blob's sealed metadata under the `K_blob` it already holds. The
+ *  Service Worker sees only the {@link ChunkProvider} half: the key never leaves the page. */
+export type BlobChunkProvider = ChunkProvider & {
+  /** The blob's sealed metadata (`meta.ts` `openBlobMetaOf`): null when the ref carries none or it does not open. */
+  meta(): OpenedBlobMeta | null
+}
+
 /**
  * Build a {@link ChunkProvider} over a `presignAll` that yields the whole blob's per-chunk GET URLs (ordered by
  * index). The auth contexts — the authed app and an anonymous share — differ ONLY in that function; the unwrap +
  * `openFrame` core here is identical, so the SW never learns which route served the bytes. `K_blob` is unwrapped
- * once; the presigned URLs are cached with their issue time and re-presigned on TTL/expiry or a store `403`.
+ * once (synchronously: a ref that is not this owner's throws `OpenRefused` here) and also opens the blob's meta
+ * ([BlobChunkProvider.meta]); the presigned URLs are cached with their issue time and re-presigned on TTL/expiry or a
+ * store `403`.
  */
 export function makeChunkProvider(
   scopeId: string,
   key: Uint8Array,
   ref: BlobRef,
   presignAll: () => Promise<string[]>,
-): ChunkProvider {
-  const blobKey = v1.open(blobKeyContext(scopeId, ref), key, fromB64std(ref.wrappedBlobKey))
+): BlobChunkProvider {
+  const blobKey = unwrapBlobKey(scopeId, key, ref)
   let urls: string[] | undefined
   let issuedAt = 0
   async function freshUrls(force: boolean): Promise<string[]> {
@@ -254,6 +293,7 @@ export function makeChunkProvider(
   return {
     chunkCount: ref.chunkCount,
     byteSize: ref.byteSize,
+    meta: () => openBlobMetaOf(ref, blobKey),
     async getPlaintextChunk(index: number): Promise<Uint8Array> {
       if (!Number.isInteger(index) || index < 0 || index >= ref.chunkCount) {
         throw new Error(`chunk_out_of_range:${index}/${ref.chunkCount}`)

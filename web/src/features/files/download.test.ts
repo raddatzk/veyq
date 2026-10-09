@@ -2,11 +2,13 @@
 // the generated blob client — against a fake control plane and a fake store serving frames sealed the way the pump
 // seals them. It decrypts to the original bytes, presigns once, keeps a bounded number of frames in flight, and refuses
 // a ref the server served for another node. The user's download streams (inbox #371) into the save target — here a
-// picked file whose writes are collected — and opens the picker before it awaits anything.
+// picked file whose writes are collected — and opens the picker before it awaits anything, under core's one download
+// name: the node name, else the blob's sealed name, the sealed type's extension added when the name has none (#397).
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { CHUNK_SIZE, planBlob } from '../../core/blob/transport'
-import { downloadFile, fetchFileContent, DOWNLOAD_IN_FLIGHT } from './download'
+import { downloadFile, fetchFileContent, fileFacts, DOWNLOAD_IN_FLIGHT } from './download'
+import type { BlobMeta } from '../../core/blob/meta'
 import { session } from '../../app/session'
 
 const SCOPE = '33333333-3333-4333-8333-333333333333'
@@ -33,11 +35,11 @@ function collectingPicker() {
 const bytesOf = (n: number) => new Uint8Array(n).map((_, i) => (i * 7 + 3) % 253)
 
 /** A blob stored as the upload pump stores it: planned under the node key, every frame sealed under its K_blob. */
-async function storedFile(nodeKey: Uint8Array, plain: Uint8Array) {
-  const plan = planBlob(SCOPE, { ownerId: NODE, role: 'FILE_CONTENT' }, nodeKey, new Blob([plain as BlobPart]))
+async function storedFile(nodeKey: Uint8Array, plain: Uint8Array, meta?: BlobMeta) {
+  const plan = planBlob(SCOPE, { ownerId: NODE, role: 'FILE_CONTENT' }, nodeKey, new Blob([plain as BlobPart]), meta)
   const frames = Array.from({ length: plan.chunkCount }, (_, i) =>
     v1.sealFrame(plan.blobKey, i, plan.chunkCount, plain.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE), v1.randomBytes(12)))
-  const ref = { blobId: plan.blobId, chunkCount: plan.chunkCount, byteSize: plan.byteSize, wrappedBlobKey: plan.wrappedBlobKey }
+  const ref = { blobId: plan.blobId, chunkCount: plan.chunkCount, byteSize: plan.byteSize, wrappedBlobKey: plan.wrappedBlobKey, wrappedBlobMeta: plan.wrappedBlobMeta }
   return { ref, frames }
 }
 
@@ -145,5 +147,43 @@ describe('a file download', () => {
     const { picker } = collectingPicker()
     await expect(downloadFile(SCOPE, nodeKey, OTHER, ref, 'a.txt')).rejects.toThrow(v1.OpenRefused)
     expect(picker).not.toHaveBeenCalled()
+  })
+
+  describe('the name it saves under (inbox #397: the blob\'s sealed meta, core\'s downloadName)', () => {
+    const META: BlobMeta = { type: 'image/png', name: 'IMG_0042.png', modifiedAt: 1_700_000_000_000 }
+    async function savedAs(nodeName: string, meta?: BlobMeta, nodeId = NODE) {
+      const nodeKey = v1.randomBytes(32)
+      const { ref, frames } = await storedFile(nodeKey, bytesOf(10), meta)
+      fakeStore(ref.blobId, frames)
+      const { picker } = collectingPicker()
+      await downloadFile(SCOPE, nodeKey, nodeId, ref, nodeName)
+      return (picker.mock.calls[0] as unknown as [{ suggestedName: string }])[0].suggestedName
+    }
+
+    it('the node name wins — a rename is the node\'s — and keeps an extension it has', async () => {
+      expect(await savedAs('Urlaub.jpeg', META)).toBe('Urlaub.jpeg')
+    })
+    it('a node name without an extension gains the one the blob\'s sealed type names', async () => {
+      expect(await savedAs('Urlaub', META)).toBe('Urlaub.png')
+    })
+    it('a blank node name falls back to the name the blob was uploaded under, then to a neutral one', async () => {
+      expect(await savedAs('  ', META)).toBe('IMG_0042.png')
+      expect(await savedAs('', { type: 'application/pdf' })).toBe('file.pdf')
+      expect(await savedAs('')).toBe('file')
+    })
+    it('a blob without meta saves under the node name as it is', async () => {
+      expect(await savedAs('Urlaub')).toBe('Urlaub')
+    })
+  })
+
+  describe('fileFacts (a row\'s size and meta from its blob)', () => {
+    it('the exact plaintext size and the opened meta; a ref listed for another node has its size but no meta', async () => {
+      const nodeKey = v1.randomBytes(32)
+      const meta: BlobMeta = { type: 'text/plain', name: 'a.txt', modifiedAt: 5 }
+      const { ref } = await storedFile(nodeKey, bytesOf(2 * CHUNK_SIZE + 3), meta)
+      expect(fileFacts(SCOPE, nodeKey, NODE, ref)).toEqual({ size: 2 * CHUNK_SIZE + 3, meta: { v: 1, ...meta } })
+      expect(fileFacts(SCOPE, nodeKey, OTHER, ref)).toEqual({ size: 2 * CHUNK_SIZE + 3, meta: null })
+      expect(fileFacts(SCOPE, nodeKey, NODE, { ...ref, wrappedBlobMeta: null })).toEqual({ size: 2 * CHUNK_SIZE + 3, meta: null })
+    })
   })
 })

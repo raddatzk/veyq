@@ -3,8 +3,10 @@
 //   - a READ link: the guest lists the folder's files (`listShareFiles`) and downloads the member's file through the
 //     link (`resolveShareBlob`), decrypted under the key from the chain, byte for byte; a write on it is refused;
 //   - a READ_WRITE link: a named guest creates a FILE with core's `createShareNode` and uploads into it (the share
-//     section's own job, `guestFileUploadJob`), its meta written with the swap; the member lists it, reads its name,
-//     meta and bytes; the guest replaces the member's file (compare-and-set), a stale replace is refused;
+//     section's own job, `guestFileUploadJob`), its meta sealed into the blob it uploads (`wrappedBlobMeta`, inbox #397);
+//     the member lists it, reads its name, its blob's meta and its bytes, and the node's own payload is never written;
+//     the guest replaces the member's file (compare-and-set), the new blob bringing its own meta; a stale replace is
+//     refused;
 //   - a file the member trashed is gone for the guest: not listed, its blob `404`, an upload into it `404`.
 // Run against a FRESH instance: `python3 scripts/run_web_e2e.py web/src/features/files/filesShare.e2e.test.ts`.
 //
@@ -34,8 +36,7 @@ import { filesApi, publicShareFilesApi } from './api'
 import { FILE_CONTENT_ROLE, FILE_KIND } from './kinds'
 import { fileUploadJob, StaleFileError } from './uploadFile'
 import { guestFileUploadJob } from './shareUpload'
-import { fetchFileContent } from './download'
-import { readFileMeta } from './fileMeta'
+import { fetchFileContent, fileFacts } from './download'
 
 const FOLDER_NAME = 'Vereinsablage Kranichfeld'
 const MEMBER_FILE = 'Satzung Kranichfeld 1987.pdf'
@@ -100,7 +101,6 @@ describe.skipIf(!process.env.VEYQ_E2E)('files share e2e (live, real crypto, a fo
     const guestCtx = () => guestTreeContext(rwHead, { contributorToken: guest.contributorToken, fragmentKey: rwFragment })
     const guestBytes = bytesOf(2 * CHUNK_SIZE + 99, 2)
     const created = await guestFileUploadJob({ ctx: guestCtx(), parentId: folderId }, fileOf(guestBytes, GUEST_FILE)).run(ctx())
-    expect(created.metaWritten).toBe(true)
     const guestFile = created.nodeId
 
     // a READ link refuses the same write: its token names no identity there, and its role takes none
@@ -109,32 +109,37 @@ describe.skipIf(!process.env.VEYQ_E2E)('files share e2e (live, real crypto, a fo
     }))
     expect(httpStatus(readWrite)).toBe(403)
 
-    // the member sees the guest's file: its name, its meta (written with the swap), its bytes
+    // the member sees the guest's file: its name, its blob's meta (declared with the upload), its bytes
     const tree = await listTree(scopeId, epochs)
     const guestNode = tree.find((n) => n.id === guestFile)!
-    expect(guestNode).toMatchObject({ kind: FILE_KIND, parentId: folderId, name: GUEST_FILE, metaVersion: 1 })
+    expect(guestNode).toMatchObject({ kind: FILE_KIND, parentId: folderId, name: GUEST_FILE, metaVersion: 0 })
     const guestKey = nodeContentKey(scopeId, epochs, tree, guestFile)!
-    expect(readFileMeta(guestKey, { scopeId, nodeId: guestFile }, guestNode.wrappedMeta)).toEqual({ mime: MIME, size: guestBytes.length, modifiedAt: 1_700_000_000_000 })
     const memberListing = (await filesApi().listFiles({ scopeId, parentId: folderId })).items
     const guestBlob = memberListing.find((i) => i.nodeId === guestFile)!.fileBlob!
+    expect(fileFacts(scopeId, guestKey, guestFile, guestBlob)).toEqual({
+      size: guestBytes.length, meta: { v: 1, type: MIME, name: GUEST_FILE, modifiedAt: 1_700_000_000_000 },
+    })
     expect(await contentOf(await fetchFileContent(scopeId, guestKey, guestFile, guestBlob))).toEqual(Array.from(guestBytes))
 
     // --- the guest replaces the member's file with the blob it read; a replace still expecting it is stale ---------
     rwHead = await resolvePublicShare(rw.shareId, rwFragment)
     const rwKeys = openGuestTreeParts(rwHead).keys
     const replacement = bytesOf(777, 3)
-    const served = rwHead.share.nodes.find((n) => n.id === memberFile)!
     await guestFileUploadJob({
       ctx: guestCtx(), parentId: folderId,
-      replace: { nodeId: memberFile, nodeKey: rwKeys.get(memberFile)!, wrappedMeta: served.wrappedMeta ?? null, expectedBlobId: memberBlob.blobId },
+      replace: { nodeId: memberFile, nodeKey: rwKeys.get(memberFile)!, expectedBlobId: memberBlob.blobId },
     }, fileOf(replacement, MEMBER_FILE)).run(ctx())
     const replacedBlob = (await filesApi().listFiles({ scopeId, parentId: folderId })).items.find((i) => i.nodeId === memberFile)!.fileBlob!
     expect(replacedBlob.blobId).not.toBe(memberBlob.blobId)
     const memberKey = nodeContentKey(scopeId, epochs, await listTree(scopeId, epochs), memberFile)!
     expect(await contentOf(await fetchFileContent(scopeId, memberKey, memberFile, replacedBlob))).toEqual(Array.from(replacement))
+    expect(fileFacts(scopeId, memberKey, memberFile, replacedBlob).size).toBe(replacement.length)
+    // a guest of the link reads the same meta through the chain's key, from the link's listing
+    const guestListed = (await publicShareFilesApi().listShareFiles({ shareId: rw.shareId })).items.find((i) => i.nodeId === memberFile)!.fileBlob!
+    expect(fileFacts(scopeId, rwKeys.get(memberFile)!, memberFile, guestListed).meta).toMatchObject({ type: MIME, name: MEMBER_FILE })
     const stale = await failure(guestFileUploadJob({
       ctx: guestCtx(), parentId: folderId,
-      replace: { nodeId: memberFile, nodeKey: rwKeys.get(memberFile)!, wrappedMeta: null, expectedBlobId: memberBlob.blobId },
+      replace: { nodeId: memberFile, nodeKey: rwKeys.get(memberFile)!, expectedBlobId: memberBlob.blobId },
     }, fileOf(bytesOf(5, 4), MEMBER_FILE)).run(ctx()))
     expect(stale).toBeInstanceOf(StaleFileError)
     expect((stale as StaleFileError).currentBlobId).toBe(replacedBlob.blobId)

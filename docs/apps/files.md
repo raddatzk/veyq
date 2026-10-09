@@ -25,16 +25,24 @@
 
 ## How a file is stored
 
-- **The node** is core's: a `FILE` node with its sealed name and slug (`fileNameSlug`, case-folded), its random key
-  wrapped under its parent's, and its sealed metadata — MIME type, plaintext size, modified time — in the node's
-  generic `wrappedMeta` under the file node's key, written with core's `updateNode` and its `metaVersion`
-  ([ADR 0077](../decisions/0077-a-write-carries-the-version-it-read.md)). Files adds no column and no table.
+- **The node** is core's: a `FILE` node with its sealed name and slug (`fileNameSlug`, case-folded) and its random key
+  wrapped under its parent's. Its NAME is the file's name — a rename changes it, a replace keeps it. Files writes
+  nothing into the node's generic `wrappedMeta` (inbox #397; it used to hold the file's type, size and date). Files
+  adds no column and no table.
 - **The blob** is a core attachment: the slot `FILE_CONTENT` of `veyq_node_attachment` (one blob per slot), its
   role the same token. Its `K_blob` is wrapped under the file node's key and sealed bound to the blob id, the node id
   (`ownerId`) and the role ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md), ADR 0080 Decision 13), so no
-  new seal purpose exists for Files. Core's blob can also carry its own sealed metadata (`wrappedBlobMeta`, the
-  `blob-meta` seal under `K_blob`: type, upload name, modification time; write-once, served on `FileBlobRef`); the
-  contract and the store hold it, and Files does not write or read it yet (inbox #397).
+  new seal purpose exists for Files.
+- **The metadata is the blob's** (inbox #397): the picked file's type, its name and its modified time
+  (`{type, name, modifiedAt}`, `uploadFile.ts` `fileBlobMeta`) are sealed under the blob's own `K_blob` with core's
+  `blob-meta` seal at the upload's declare (`planBlob`'s `meta`, `wrappedBlobMeta` on the start — member and guest
+  alike), stored write-once beside the blob and served back on every `FileBlobRef`. So the metadata changes exactly
+  when the bytes do, in the one attach transaction: a replace is a new blob with its own metadata, and no state shows
+  new bytes beside old metadata. The **size** is not in it: the plaintext size is the blob's sealed size less 28 bytes
+  per chunk (`plaintextTotal`), exact. The sealed name is the name the file was *uploaded* under; what a member sees and
+  downloads under is the node name (`core/blob/meta.ts` `downloadName`: the node name, else the sealed name, plus the
+  sealed type's extension when the name has none). A blob uploaded before the field carries no metadata and lists
+  with its size alone.
 - **Trash and purge** are core's: deleting the node trashes it with its attachment (the quota still counts it, ADR
   0073 §2); the purge frees the attachment row and the blob through core's eraser.
 - **The quota:** a member's upload counts against the tenant quota through core's start, unchanged. That start takes
@@ -54,20 +62,23 @@
   scope's), `404 upload_not_found`, `422 illegal_target` (not a `FILE`), `422 upload_mismatch` (started for another
   node or role), `400 budget_exceeded`.
 - `listFiles` — `GET /api/scopes/{scopeId}/files?parentId=` (absent: the scope root): `{items: [{nodeId, fileBlob|null}]}`
-  for every live `FILE` directly under the parent, ordered by node id. Names, keys and metadata come from core's node
-  listing; the client joins by `nodeId`. `404 node_not_found` for a parent that is no live node of the scope.
+  for every live `FILE` directly under the parent, ordered by node id, each `fileBlob` with its `wrappedBlobMeta`. Names
+  and keys come from core's node listing; the client joins by `nodeId`. `404 node_not_found` for a parent that is no live node of the scope.
 - **A download** is core's `presignBlobDownloads` with the blob id (scope READ). **Delete** is core's node delete
   (trash). **Replace** is another `completeFile` with the blob the client read.
 
 Backend: `me.raddatz.veyq.files.content` — `FilesResource`/`FilesHandler` (the scope-access gate first), core's
 dispatcher to `FilesUploadCompletion` (`UploadCompletion` for `FILE`, maps the item's `expectedBlobId` payload onto
-`AttachmentStore.attach`), `FilesUploadAdmission`, `FilesStore` (the listing's reads).
+`AttachmentStore.attach` — the whole write, nothing beside it), `FilesUploadAdmission`, `FilesStore` (the listing's
+reads).
 
 ## The web (`web/src/features/files`)
 
 - **Files' section** of core's folder level view (`components/FilesSection.vue`, `section` order 20, after Memories'):
-  in every folder and at the scope root, its FILE children as rows (icon, name, size and modified time from the
-  sealed meta, else the plaintext size the blob's sealed size gives), with download, replace, rename (core's
+  in every folder and at the scope root, its FILE children as rows (icon, the node name, the plaintext size the blob's
+  sealed size gives and the modified time from the blob's sealed meta — `download.ts` `fileFacts`; a blob without
+  meta, or one whose meta does not open under this node's key, shows its size alone; a file listed without a blob says
+  "not uploaded yet" — none of it reads the node's own payload), with download, replace, rename (core's
   `FolderNameDialog`, through the section's `rename` event) and delete (into core's trash, restored from core's trash
   dialog). An upload button and a drop onto the section; an empty folder says so. Hidden in map mode, like the
   folders. Read-only during a pending deletion: download only.
@@ -76,9 +87,10 @@ dispatcher to `FilesUploadCompletion` (`UploadCompletion` for `FILE`, maps the i
   too, naming the file and the picked one, and both questions say the old content cannot be restored, there being no
   version history (owner decision 2026-10-08, inbox #383); "replace anyway" after a peer's replace is itself the
   answer and asks nothing), plan and pump the blob
-  under the node's own key, `completeFile` with `expectedBlobId`, then write the meta (`fileMeta.ts`). The status menu
-  shows progress; the section says why a file of its folder was not uploaded (a taken name, `stale_file` with
-  "replace anyway", no space) or that its meta is missing. **A given-up job cleans up** (inbox #384): failed after its
+  under the node's own key with the file's metadata sealed under its `K_blob`, then `completeFile` with
+  `expectedBlobId` — nothing is written after it. The status menu shows progress; the section says why a file of its
+  folder was not uploaded (a taken name, `stale_file` with "replace anyway", no space). **A given-up job cleans up**
+  (inbox #384): failed after its
   retry or cancelled (core's queue calls the job's `abandon`), a job moves a node it created to the trash once
   `listFiles` shows it still holds no content — best effort; a node it cannot trash stays and its retry fills it. A file
   that holds no content anyway (an upload cut off, e.g. a closed tab; a guest's, which a guest cannot delete) offers an
@@ -87,8 +99,10 @@ dispatcher to `FilesUploadCompletion` (`UploadCompletion` for `FILE`, maps the i
   restore stays offered (inbox #391). A failure the same file has since been uploaded over is no longer shown. The row's
   replace keeps the file's name (its tooltip says so); a rename selects the name without its extension (`register.ts`
   `renameSelectionEnd`).
-- **The download** (`download.ts`) presigns the blob's chunks, opens them under the node key at most four at a time and
-  streams them in order (`core/blob/stream.ts`) into the save target `shared/saveStream.ts` opens: a file the member
+- **The download** (`download.ts`) saves under core's `downloadName` (the node name, else the blob's sealed name, plus
+  the sealed type's extension when the name has none — the save target itself stays `application/octet-stream`, so a
+  peer's sealed type never decides how a browser renders the bytes), presigns the blob's chunks, opens them under the
+  node key at most four at a time and streams them in order (`core/blob/stream.ts`) into the save target `shared/saveStream.ts` opens: a file the member
   picks (File System Access, where the browser has it), else the Service Worker's download route
   ([ADR 0047 § Addendum](../decisions/0047-inline-video-playback-range-streaming.md#addendum-the-download-route)),
   else an in-memory `Blob` up to 512 MiB — above that, with no streaming target, the download is refused with a
@@ -108,17 +122,17 @@ A `FILE` is **no share root** (Files declares no `ShareRoots`): a file is shared
 
 - **The contract** (tag `share-files` in `files.openapi.yaml`, no auth, behind core's `ShareGuestGate`):
   `listShareFiles` — `GET /api/shares/{shareId}/files`: `{items: [{nodeId, fileBlob|null}]}` for every live `FILE` of
-  the live shared subtree (a `WRITE_ONLY` link: empty), names, keys and metas coming from core's `resolveShare`;
-  `completeShareFile` — `POST /api/shares/{shareId}/files/{nodeId}/content`, `{contributorToken, uploadId,
-  expectedBlobId?, wrappedMeta?}`: `completeFile`'s answers, plus `403 share_not_contributable` for a node that is no
+  the live shared subtree (a `WRITE_ONLY` link: empty), each blob with its `wrappedBlobMeta`, names and keys coming
+  from core's `resolveShare`; `completeShareFile` — `POST /api/shares/{shareId}/files/{nodeId}/content`,
+  `{contributorToken, uploadId, expectedBlobId?}`: `completeFile`'s answers, plus `403 share_not_contributable` for a node that is no
   `FILE` (a folder) and `404 node_not_found` for one outside the live subtree. The upload itself is core's guest
   transport (`startShareBlobUploads` with `nodeId` = the file, `role: FILE_CONTENT`; any other role `400
   invalid_request`, refused before the link's upload budget is spent, inbox #367); the download core's
   `resolveShareBlob`.
-- **The meta goes with the bytes.** A guest has no door to a node's `wrappedMeta` (core's guest create takes none,
-  `updateNode` is a member's), so `completeShareFile` carries it and `FileContentWrite` writes it in the attach's
-  transaction, under the scope lock, only when the swap happened (a conflict or refusal writes none); the node's
-  `metaVersion` moves by one.
+- **The meta goes with the bytes.** A guest's file metadata is its blob's, as a member's (§ How a file is stored):
+  sealed under `K_blob` and declared at `startShareBlobUploads`, so it lands only when the swap happens, and the guest
+  writes no node payload at all (it has no door to one: core's guest create takes none, `updateNode` is a member's).
+  `completeShareFile` used to carry a node meta that a Files-side write put in the attach's transaction; both are gone.
 - **The write is decided again under the lock** (`ShareGuestGate.admittedInto`): a file trashed or moved out of the
   subtree, or a link revoked, between the guest's start and its completion refuses it (`upload_not_found`).
 - **Trash:** a file in the trash — or under a trashed folder — is not listed, its blob is `404` at `resolveShareBlob`
@@ -129,7 +143,7 @@ A `FILE` is **no share root** (Files declares no `ShareRoots`): a file is shared
 - **The web:** core's folder page of a public share (`core/sharing/FolderShareBody.vue`) renders a kind's
   `shareSection` for its children; Files' is `components/ShareFilesSection.vue` — the files with name, size and date
   opened under the chain's keys, download through the link, and for a contributor an upload button (one core-queue job
-  per file, `shareUpload.ts`: guest create → guest transport → `completeShareFile` with the meta) and a replace per
+  per file, `shareUpload.ts`: guest create → guest transport with the blob meta → `completeShareFile`) and a replace per
   row (an upload into it, for a file that holds no content), above the list the sentence that it can replace any file,
   the owner's too, and that no version is kept. An upload of a name a file there already holds stays refused (`409
   slug_taken`, no replace by upload for a guest, owner decision 2026-10-08, inbox #392); its notice says a file of that
@@ -214,7 +228,8 @@ one per guest identity, which are core `FOLDER`s carrying `veyq_node.share_ident
 ## Operator-visible, beyond the platform's `kind`
 
 File sizes (exact sealed sizes, unless padded), upload and change timestamps, the tree's shape, and when a file's blob
-was replaced. For a drop box: how many guests sent something (one folder per identity), which identity holds which
+was replaced; of a blob's sealed metadata only its length, padded to one of four 256-byte buckets (a name's rough length
+class, not the name). For a drop box: how many guests sent something (one folder per identity), which identity holds which
 folder and its files, and when.
 
 ## Open questions
@@ -222,9 +237,5 @@ folder and its files, and when.
 - Preview or thumbnail for images: a Files feature (later a derivative through another attachment slot), or out of
   scope?
 - An operator-configurable per-file size cap (the quota only, at first).
-- The metadata write is not atomic with the blob swap for a member: a client that replaces the blob and then fails
-  before its `updateNode` leaves the old MIME type/size beside the new bytes until the next write (a guest's metadata
-  rides in the attach's transaction). Making it atomic needs a metadata compare-and-set inside core's
-  `AttachmentStore.attach`.
 - The other reversible choices made while building Files wait for the owner's review: inbox #378. (Where the drop box
   differed from ADR 0080 decision 11, inbox #377, the owner ruled 2026-10-08 — § The drop box.)

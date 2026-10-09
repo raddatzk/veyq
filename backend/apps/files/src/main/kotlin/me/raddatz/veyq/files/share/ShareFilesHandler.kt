@@ -69,8 +69,8 @@ class ShareFilesHandler(
 
     /**
      * Complete a guest's upload [uploadId] as the blob of the file [nodeId] below the share's root, replacing
-     * [expectedBlobId] (null: the first upload), with the file's sealed [wrappedMeta] written in the same transaction
-     * when sent. The target is the gate's ([ShareGuestGate.target]: a live node inside the subtree; a `WRITE_ONLY` link
+     * [expectedBlobId] (null: the first upload) — the attach alone: the file's metadata is the blob's own, declared at
+     * the upload's start (inbox #397). The target is the gate's ([ShareGuestGate.target]: a live node inside the subtree; a `WRITE_ONLY` link
      * none but its root, which is never a `FILE`), its kind must be Files' — the check that keeps this route from
      * handing an upload to another application's completion, as the member route's is — and the write re-decides link
      * and target under the scope lock ([ShareGuestGate.admittedInto], handed on unevaluated: asked here, a revoke or a
@@ -78,7 +78,7 @@ class ShareFilesHandler(
      */
     fun complete(
         shareId: String, pwToken: String?, contributorToken: String, nodeId: String, uploadId: String,
-        expectedBlobId: String?, wrappedMeta: String?,
+        expectedBlobId: String?,
     ): ShareFileCompleteOutcome {
         // Attaching creates the attachment row, so it spends the per-share upload budget the start spends (ADR 0051).
         val gated = when (val g = gate.writeGate(shareId, pwToken, contributorToken, spendUploadBudget = true)) {
@@ -94,7 +94,7 @@ class ShareFilesHandler(
             ShareWriteTarget.NotContributable -> return ShareFileCompleteOutcome.NotContributable
         }
         if (!guestWrites.supports(target.kind)) return ShareFileCompleteOutcome.NotContributable
-        val item = FilesUploadCompletion.item(target.nodeId, uploadId, expectedBlobId, wrappedMeta)
+        val item = FilesUploadCompletion.item(target.nodeId, uploadId, expectedBlobId)
         val result = completions.complete(
             gated.scopeId, listOf(item), UploadOpener.Contributor(gated.identityId), gate.admittedInto(gated, target),
         ).single()

@@ -290,7 +290,7 @@ class DropBoxSliceTest {
         val uploadId = guestStart(link, file, blob).statusCode(200).body("results[0].error", nullValue())
             .extract().path<String>("results[0].uploadId")
         blob.stage(fakeStore, tx { UploadSessionEntity.findById(uploadId)!!.storageKey })
-        given().contentType(ContentType.JSON).body("""{"contributorToken":"${link.token}","uploadId":"$uploadId","wrappedMeta":"bWV0YQ=="}""")
+        given().contentType(ContentType.JSON).body("""{"contributorToken":"${link.token}","uploadId":"$uploadId"}""")
             .`when`().post("/api/shares/${link.shareId}/files/$file/content").then().statusCode(200)
         return file
     }

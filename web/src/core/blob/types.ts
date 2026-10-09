@@ -19,6 +19,9 @@ export type BlobRef = {
   wrappedBlobKey: string
   ownerId: string
   role: BlobRole
+  /** The blob's sealed metadata as served (`blob-meta` under its `K_blob`, inbox #397): absent or null for a blob
+   *  uploaded without one. Opened by `meta.ts` `openBlobMetaOf`, never by the server. */
+  wrappedBlobMeta?: string | null
 }
 
 /**
@@ -35,6 +38,8 @@ export type BlobPlan = {
   blobId: string
   ownerId: string
   role: BlobRole
+  /** The blob's metadata sealed under `blobKey` (base64), when the caller handed `planBlob` one. */
+  wrappedBlobMeta?: string
 }
 
 /** One blob to reserve: its declared shape + the K_blob wrap + the ids that wrap is bound to. */
@@ -45,6 +50,8 @@ export type BlobDeclare = {
   chunkCount: number
   byteSize: number
   wrappedBlobKey: string
+  /** Present only when the plan carries one: a declare without meta is byte-identical to one before the field. */
+  wrappedBlobMeta?: string
 }
 /** One presigned PUT: the chunk it is for + its URL. */
 export type ChunkPut = { index: number; url: string }

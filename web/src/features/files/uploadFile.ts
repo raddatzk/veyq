@@ -1,6 +1,6 @@
 // A member's file upload (cr-files-application F1b; docs/apps/files.md): one picked `File` becomes one job of core's
 // upload queue (`core/blob/queue.ts`), which runs it, shows it in the top bar's status menu and retries a transient
-// failure once. What the job does, in this order:
+// failure once. What the job does, in this order — three steps, and nothing about the file written beside them:
 //
 //  1. the NODE: for a new file, core's `createContentNode` births a `FILE` node — a fresh random node key wrapped under
 //     the parent's key (the folder's, `E_current` at the scope root; ADR 0080 Decision 1), its name sealed and its slug
@@ -8,13 +8,14 @@
 //     replace targets the existing node the member confirmed, with its own key.
 //  2. the BLOB: core's `planBlob` under the file node's OWN key (role and owner `FILE_CONTENT` / the node id, so the
 //     `K_blob` wrap opens only there, ADR 0072 / ADR 0080 Decision 13) and `reserveAndPump` through core's authed blob
-//     control plane — read, seal and PUT one frame at a time, never the whole file in memory.
+//     control plane — read, seal and PUT one frame at a time, never the whole file in memory. The file's METADATA —
+//     its type, the name it was picked under and its modified time ([fileBlobMeta]) — is sealed under the blob's own
+//     `K_blob` and declared with it (`wrappedBlobMeta`, inbox #397): it is the blob's, written once, so it describes
+//     exactly these bytes. Its size is not in it: the blob's sealed size gives it exactly.
 //  3. the COMPLETION: Files' `completeFile` attaches the verified upload to the node's slot, a compare-and-set on
 //     `expectedBlobId` (absent for a new file; the blob the member saw for a replace): a peer's replace in between
-//     answers `409 stale_file`, and nothing is overwritten.
-//  4. the METADATA: MIME type, plaintext size and modified time sealed into the node's `wrappedMeta` (`fileMeta.ts`)
-//     AFTER the blob is attached, so a failed upload leaves no meta that describes bytes that are not there. A failed
-//     meta write does not undo the stored file: the job still succeeds and says `metaWritten: false`.
+//     answers `409 stale_file`, and nothing is overwritten. The bytes and their metadata change together, in that one
+//     transaction — there is no second write that could fail after it (a node-meta write used to, inbox #397).
 //
 // The queue retries a failure once by running the job again, so the job keeps what it already did: a node it created
 // is reused (a second create would collide with its own name), and a refusal no retry can change — a taken name, an
@@ -28,7 +29,7 @@
 import { createContentNode, deleteNode, type NodeParent } from '../../core/node/tree'
 import { planBlob, reserveAndPump, authedReserve, authedWindow, throwIfAborted } from '../../core/blob/transport'
 import type { UploadBatch, UploadJob, UploadJobContext } from '../../core/blob/queue'
-import type { SealedMetaState } from '../../core/node/sealedMetaWrite'
+import type { BlobMeta } from '../../core/blob/meta'
 import { expectMintedId } from '../../core/node/mintedId'
 import type { EpochKeys } from '../spaces/epochs'
 import { withRefresh } from '../../app/sessionRefresh'
@@ -36,7 +37,6 @@ import { HttpStatus, decodeHttpError, httpStatus } from '../../shared/httpError'
 import type { FileBlobRef } from '../../api/generated/files'
 import { filesApi } from './api'
 import { FILE_CONTENT_ROLE, FILE_KIND } from './kinds'
-import { fileMetaOf, writeFileMeta } from './fileMeta'
 
 /** The failure codes a file upload ends on beyond the transport's own (`quota_exceeded`, `upload_failed`, …). Each is
  *  final: no retry of the same job can change it. */
@@ -58,9 +58,15 @@ export class StaleFileError extends Error {
   }
 }
 
-/** A replace: the existing file node, its own key, its meta as the tree listed it, and the blob the member saw in it
- *  (null when the node holds none yet — a file whose first upload never completed). */
-export type FileReplace = { nodeId: string; nodeKey: Uint8Array; meta: SealedMetaState; expectedBlobId: string | null }
+/** The blob meta a picked file is uploaded with: its type as the browser reports it (may be ''), its name and its
+ *  modified time (`File.lastModified`). Sealed under the blob's `K_blob` by core's `planBlob`, member and guest alike. */
+export function fileBlobMeta(file: File): BlobMeta {
+  return { type: file.type, name: file.name, modifiedAt: file.lastModified }
+}
+
+/** A replace: the existing file node, its own key, and the blob the member saw in it (null when the node holds none
+ *  yet — a file whose first upload never completed). The node keeps its name; the new blob brings its own meta. */
+export type FileReplace = { nodeId: string; nodeKey: Uint8Array; expectedBlobId: string | null }
 
 /** Where one upload goes: the scope, its epoch keys (a new node seals under the write epoch) and either the parent a
  *  new file is created under (`null` = the scope root) or the file it replaces. */
@@ -71,9 +77,8 @@ export type FileUploadTarget = {
   replace?: FileReplace
 }
 
-/** A finished upload: the file node's id, and whether its metadata was written (false: the file is stored, its
- *  type/size/date are not — the section says so). */
-export type FileUploadResult = { nodeId: string; metaWritten: boolean }
+/** A finished upload: the file node's id. */
+export type FileUploadResult = { nodeId: string }
 
 /** What a Files job keeps on its queue item: the picked file (for a retry by the member) and, for a replace, the node. */
 export type FileJobExtra = { file: File; replaceNodeId?: string }
@@ -134,13 +139,13 @@ export function deliveredSince(batches: readonly UploadBatch[]): Set<string> {
 }
 
 /**
- * One queue job for one picked file into `target` (see the header for its four steps). The job's `run` may be called
+ * One queue job for one picked file into `target` (see the header for its three steps). The job's `run` may be called
  * again by the queue's automatic retry and by the member's retry: it reuses a node it created and rethrows a final
  * refusal without touching the network.
  */
 export function fileUploadJob(target: FileUploadTarget, file: File): UploadJob<FileUploadResult, FileJobExtra> {
   const { scopeId } = target
-  let node: { nodeId: string; nodeKey: Uint8Array; meta: SealedMetaState; expectedBlobId: string | null } | null =
+  let node: { nodeId: string; nodeKey: Uint8Array; expectedBlobId: string | null } | null =
     target.replace ? { ...target.replace } : null
   let final: Error | null = null
   /** The node this job created and that holds nothing of it yet — what {@link abandon} trashes. */
@@ -149,31 +154,22 @@ export function fileUploadJob(target: FileUploadTarget, file: File): UploadJob<F
   async function run({ onProgress, signal }: UploadJobContext): Promise<FileUploadResult> {
     if (final) throw final
     throwIfAborted(signal)
-    let attached: FileBlobRef
     try {
       if (!node) {
-        // A new node's meta is empty at version 0: the first meta write is built on it.
-        node = { ...(await createFileNode(target, file.name)), meta: { wrappedMeta: null, metaVersion: 0 }, expectedBlobId: null }
+        node = { ...(await createFileNode(target, file.name)), expectedBlobId: null }
         created = node.nodeId
       }
-      const plan = planBlob(scopeId, { ownerId: node.nodeId, role: FILE_CONTENT_ROLE }, node.nodeKey, file)
+      const plan = planBlob(scopeId, { ownerId: node.nodeId, role: FILE_CONTENT_ROLE }, node.nodeKey, file, fileBlobMeta(file))
       const [uploadId] = await reserveAndPump([plan], (d) => authedReserve(scopeId, d), authedWindow(scopeId), onProgress, signal)
       throwIfAborted(signal)
-      attached = await completeFileUpload(scopeId, node.nodeId, uploadId, node.expectedBlobId)
+      const attached = await completeFileUpload(scopeId, node.nodeId, uploadId, node.expectedBlobId)
       created = null // the node holds the file now: nothing to undo, whatever fails after
       expectMintedId(plan.blobId, attached.blobId)
+      return { nodeId: node.nodeId }
     } catch (e) {
       if (e instanceof Error && FINAL.has(e.message)) final = e
       throw e
     }
-    // The blob is stored: from here on nothing fails the job. The meta describes the bytes just attached.
-    let metaWritten = true
-    try {
-      await writeFileMeta(scopeId, node.nodeId, node.nodeKey, node.meta, fileMetaOf(file))
-    } catch {
-      metaWritten = false
-    }
-    return { nodeId: node.nodeId, metaWritten }
   }
 
   /** Given up: trash the node this job created if it is still empty, and forget it, so the member's retry creates the

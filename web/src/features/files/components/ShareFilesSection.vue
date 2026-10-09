@@ -8,13 +8,12 @@
 // itself first (`requestGuest`, core's one session per link). No rename or delete here: a guest deletes nothing
 // (ADR 0080 Decision 6), and the guest page offers no rename for any kind yet (inbox #358).
 //
-// Operator-blind: the names, sizes, types and dates are opened here; Files' only call is `listShareFiles` (ids and
-// sealed sizes) and, to write, `completeShareFile` (ids and the sealed meta).
+// Operator-blind: the names, sizes and dates are opened here; Files' only call is `listShareFiles` (ids, sealed sizes and
+// each blob's sealed meta) and, to write, `completeShareFile` (ids only — the meta rode the upload's declare).
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
-import * as v1 from '@veyq/crypto/v1'
 import { registry, type ShareSectionProps } from '../../../core/applications/registry'
 import { enqueue, removeFile, useUploadQueue, QUOTA_EXCEEDED, type UploadItem } from '../../../core/blob/queue'
 import { guestTreeContext } from '../../../core/sharing/guestTree'
@@ -26,10 +25,10 @@ import type { FileBlobRef } from '../../../api/generated/files'
 import type { ShareNode } from '../../../api/generated/sharing'
 import { publicShareFilesApi } from '../api'
 import { FILE_KIND } from '../kinds'
-import { readFileMeta } from '../fileMeta'
 import { deliveredSince, FileUploadError, type FileJobExtra, type FileUploadResult } from '../uploadFile'
 import { guestFileUploadJob } from '../shareUpload'
-import { downloadFile } from '../download'
+import { downloadFile, fileFacts } from '../download'
+import { plaintextTotal } from '../../../sw/range'
 import { isSaveCancelled, SaveTooLarge } from '../../../shared/saveStream'
 
 const props = defineProps<ShareSectionProps>()
@@ -64,19 +63,25 @@ const isEmpty = (nodeId: string): boolean => blobs.value.has(nodeId) && blobs.va
 
 const dateFormat = computed(() => new Intl.DateTimeFormat(locale.value === 'de' ? 'de-DE' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' }))
 
+/** A row's second line from its BLOB alone (inbox #397), as the member's section: the exact plaintext size and the
+ *  modified time sealed in the blob's meta, opened under the file's key from the chain; no blob: not uploaded. */
+function rowDetail(key: Uint8Array | null, nodeId: string, blob: FileBlobRef | null): string {
+  if (!blob) return t('files.notUploaded')
+  const facts = key ? fileFacts(props.head.scopeId, key, nodeId, blob) : null
+  const size = facts?.size ?? Math.max(0, plaintextTotal(blob.byteSize, blob.chunkCount))
+  const modifiedAt = facts?.meta?.modifiedAt
+  return [formatBytes(size, locale.value), modifiedAt === undefined ? null : t('files.modified', { date: dateFormat.value.format(modifiedAt) })]
+    .filter((s): s is string => s !== null)
+    .join(' · ')
+}
+
 const rows = computed(() =>
   fileNodes.value
     .map((node) => {
       const key = props.keys.get(node.id) ?? null
       const name = props.names.get(node.id) ?? ''
-      const meta = key ? readFileMeta(key, { scopeId: props.head.scopeId, nodeId: node.id }, node.wrappedMeta) : null
       const blob = blobs.value.get(node.id) ?? null
-      const size = meta?.size ?? (blob ? Math.max(0, blob.byteSize - v1.FRAME_OVERHEAD * blob.chunkCount) : null)
-      const detail = blob
-        ? [size === null ? null : formatBytes(size, locale.value), meta ? t('files.modified', { date: dateFormat.value.format(meta.modifiedAt) }) : null]
-            .filter((s): s is string => s !== null)
-            .join(' · ')
-        : t('files.notUploaded')
+      const detail = rowDetail(key, node.id, blob)
       // Known to hold no content (an upload that never finished; a guest cannot delete it): its row offers an upload
       // into it rather than a replace, since there is nothing to replace (inbox #384).
       const empty = isEmpty(node.id)
@@ -121,7 +126,7 @@ async function startUploads(files: File[], replaceNode?: ShareNode): Promise<voi
     replaceNode && nodeKey
       ? guestFileUploadJob({
           ctx, parentId: props.folderId,
-          replace: { nodeId: replaceNode.id, nodeKey, wrappedMeta: replaceNode.wrappedMeta ?? null, expectedBlobId: blobs.value.get(replaceNode.id)?.blobId ?? null },
+          replace: { nodeId: replaceNode.id, nodeKey, expectedBlobId: blobs.value.get(replaceNode.id)?.blobId ?? null },
         }, file)
       : guestFileUploadJob({ ctx, parentId: props.folderId }, file),
   )
