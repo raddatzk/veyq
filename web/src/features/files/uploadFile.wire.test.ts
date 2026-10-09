@@ -1,16 +1,16 @@
 // A file upload on the wire (cr-files-application F1b): every request one Files job sends, recorded at `fetch` — the
 // JSON the real generated clients serialize and the frames the real pump PUTs — against a fake control plane and store.
 // No module of ours is mocked: core's `createContentNode`, `planBlob`, `reserveAndPump`, `authedReserve`/`authedWindow`,
-// Files' `completeFile` client and the meta write all run. What it pins:
-//   - a NEW file: create node → start → PUTs (several windows) → `completeFile` → meta write, in that order; the node's
-//     key wrap and name open under the PARENT's key (ADR 0080 Decision 1/2) and its slug token is the FILE folding's;
-//     the `blob-key` wrap is bound to (scope, owner = the node, blob, `FILE_CONTENT`) and opens under the NODE's key —
-//     never the parent's; the frames decrypt to the file; `completeFile` carries the upload id and no `expectedBlobId`;
-//     the meta write is at version 0 and opens under the node key;
-//   - a REPLACE: no create, `expectedBlobId` = the blob the member saw, the meta write at the node's version;
-//   - a `409 stale_file`: the job fails with the conflict (the current blob named), writes no meta, and a rerun sends
-//     nothing; a create's `slug_taken`/`illegal_structure` likewise; a failed meta write does not fail the upload; the
-//     queue's retry reuses the node it created.
+// and Files' `completeFile` client all run. What it pins:
+//   - a NEW file: create node → start → PUTs (several windows) → `completeFile`, in that order, and NOTHING after —
+//     no node-meta write (inbox #397); the node's key wrap and name open under the PARENT's key (ADR 0080 Decision 1/2)
+//     and its slug token is the FILE folding's; the `blob-key` wrap is bound to (scope, owner = the node, blob,
+//     `FILE_CONTENT`) and opens under the NODE's key — never the parent's; the declare carries the file's type, name and
+//     modified time sealed under the blob's own K_blob (`wrappedBlobMeta`); the frames decrypt to the file;
+//     `completeFile` carries the upload id and no `expectedBlobId`; no body names the file or its type in plaintext;
+//   - a REPLACE: no create, `expectedBlobId` = the blob the member saw, the NEW file's meta on the new blob's declare;
+//   - a `409 stale_file`: the job fails with the conflict (the current blob named), and a rerun sends nothing; a
+//     create's `slug_taken`/`illegal_structure` likewise; the queue's retry reuses the node it created.
 // The keys are recovered the way a member's client would: the node key by opening the create's wrap under the parent's.
 import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
@@ -52,7 +52,6 @@ type Req = { method: string; path: string; json?: Record<string, unknown>; bytes
 type Answers = {
   create?: () => Response
   complete?: (body: Record<string, unknown>) => Response | undefined
-  patch?: () => Response
   put?: (n: number) => Response | undefined
   /** `listFiles` of the parent: by default every node created here, none holding a blob. */
   list?: (created: string[]) => Response
@@ -109,7 +108,6 @@ function fakeServer(answers: Answers = {}) {
       const u = uploads.get(body!.uploadId as string)!
       return json({ blobId: u.blobId, chunkCount: u.chunkCount, byteSize: u.byteSize, wrappedBlobKey: u.wrappedBlobKey })
     }
-    if (method === 'PATCH' && path.startsWith(`/api/scopes/${SCOPE}/nodes/`)) return answers.patch?.() ?? new Response(null, { status: 204 })
     throw new Error(`unexpected request ${method} ${url}`)
   }))
   return requests
@@ -120,12 +118,20 @@ const shape = (rs: Req[]) => rs.map((r) => `${r.method} ${r.path.replace(/\/b\/[
 const blobKeyCtx = (ownerId: string, blobId: string) =>
   ({ purpose: 'blob-key', scopeId: SCOPE, ownerId, blobId, role: 'FILE_CONTENT' }) as const
 const newTarget = (): FileUploadTarget => ({ scopeId: SCOPE, epochs: epochsOf(scopeKey), parent: { id: FOLDER, key: folderKey } })
-const replaceTarget = (expectedBlobId: string | null, metaVersion = 3): FileUploadTarget => ({
-  ...newTarget(), replace: { nodeId: EXISTING, nodeKey: existingKey, meta: { wrappedMeta: null, metaVersion }, expectedBlobId },
+const replaceTarget = (expectedBlobId: string | null): FileUploadTarget => ({
+  ...newTarget(), replace: { nodeId: EXISTING, nodeKey: existingKey, expectedBlobId },
 })
+/** No JSON body that left the client names the file or its type in plaintext (the create seals the name). */
+const expectNoPlaintextName = (rs: Req[]) => {
+  for (const r of rs.filter((x) => x.json)) {
+    const text = JSON.stringify(r.json)
+    expect(text, `${r.method} ${r.path}`).not.toContain(NAME)
+    expect(text, `${r.method} ${r.path}`).not.toContain('application/pdf')
+  }
+}
 
 describe('a new file on the wire', () => {
-  it('creates the node under the parent\'s key, pumps a blob sealed under the NODE key, completes without expectedBlobId, then writes the meta', async () => {
+  it('creates the node under the parent\'s key, pumps a blob sealed under the NODE key with its meta under K_blob, completes without expectedBlobId — and writes nothing after', async () => {
     const requests = fakeServer()
     const size = 2 * CHUNK_SIZE + 5 // three frames, two windows
     const file = fileOf(size)
@@ -140,13 +146,12 @@ describe('a new file on the wire', () => {
       `POST /api/scopes/${SCOPE}/blob-uploads-batch`,
       `POST /api/scopes/${SCOPE}/blob-upload-windows`,
       `POST /api/scopes/${SCOPE}/files/${result.nodeId}/content`,
-      `PATCH /api/scopes/${SCOPE}/nodes/${result.nodeId}`,
     ])
     const putAt = shape(requests).flatMap((s, i) => (s.startsWith('PUT') ? [i] : []))
     expect(putAt).toHaveLength(3)
     expect(Math.min(...putAt)).toBeGreaterThan(1)
     expect(Math.max(...putAt)).toBeLessThan(shape(requests).indexOf(control[3]))
-    expect(result.metaWritten).toBe(true)
+    expect(result).toEqual({ nodeId: result.nodeId })
 
     // the node: kind FILE under the folder, its key wrap and name under the PARENT's key at version 0, the FILE folding
     const create = requests[0].json!
@@ -159,7 +164,7 @@ describe('a new file on the wire', () => {
     expect(create.slugToken).not.toBe(b64std(v1.slugToken(folderKey, FOLDER, slugify(NAME))))
 
     // the blob: owned by the node in the role FILE_CONTENT, its K_blob wrap opening under the node's key only
-    const [start] = requests[1].json!.items as { blobId: string; ownerId: string; role: string; chunkCount: number; byteSize: number; wrappedBlobKey: string }[]
+    const [start] = requests[1].json!.items as { blobId: string; ownerId: string; role: string; chunkCount: number; byteSize: number; wrappedBlobKey: string; wrappedBlobMeta: string }[]
     expect(start).toMatchObject({ ownerId: result.nodeId, role: 'FILE_CONTENT', chunkCount: 3, byteSize: size + 3 * v1.FRAME_OVERHEAD })
     const wrap = fromB64std(start.wrappedBlobKey)
     const blobKey = v1.open(blobKeyCtx(result.nodeId, start.blobId), nodeKey, wrap)
@@ -169,17 +174,15 @@ describe('a new file on the wire', () => {
     const frames = requests.filter((r) => r.method === 'PUT').map((r, i, all) => v1.openFrame(blobKey, i, all.length, r.bytes!))
     expect(Array.from(v1.concat(...frames))).toEqual(Array.from(bytesOf(size, 1)))
 
+    // the meta: the blob's own, under its K_blob with the blob-meta seal — never under the node's or the parent's key
+    const sealedMeta = fromB64std(start.wrappedBlobMeta)
+    expect(v1.openBlobMeta(blobKey, sealedMeta)).toEqual({ v: 1, type: 'application/pdf', name: NAME, modifiedAt: MODIFIED })
+    expect(() => v1.openBlobMeta(nodeKey, sealedMeta)).toThrow(v1.OpenRefused)
+
     // the completion: the started upload, no expectedBlobId at all (an empty slot)
     expect(requests.find((r) => r.path.endsWith('/content'))!.json).toEqual({ uploadId: '00000000-0000-4000-8000-000000000001' })
-
-    // the meta: at version 0, under the node's key with the node-meta seal
-    const patch = requests.find((r) => r.method === 'PATCH')!.json!
-    expect(Object.keys(patch).sort()).toEqual(['metaVersion', 'wrappedMeta'])
-    expect(patch.metaVersion).toBe(0)
-    const meta = JSON.parse(new TextDecoder().decode(
-      v1.open({ purpose: 'node-meta', scopeId: SCOPE, nodeId: result.nodeId }, nodeKey, fromB64std(patch.wrappedMeta as string)),
-    ))
-    expect(meta).toEqual({ v: 1, mime: 'application/pdf', size, modifiedAt: MODIFIED })
+    expect(requests.some((r) => r.method === 'PATCH'), 'no node-meta write').toBe(false)
+    expectNoPlaintextName(requests)
   })
 
   it('at the scope root the node wraps under the write key E_current', async () => {
@@ -194,22 +197,23 @@ describe('a new file on the wire', () => {
 })
 
 describe('a replace on the wire', () => {
-  it('creates nothing, completes with expectedBlobId = the blob the member saw, writes the meta at the node\'s version', async () => {
+  it('creates nothing, completes with expectedBlobId = the blob the member saw, the NEW file\'s meta on the new blob', async () => {
     const requests = fakeServer()
-    const result = await fileUploadJob(replaceTarget('9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a'), fileOf(100)).run(ctx())
+    const picked = new File([new Uint8Array(100)], 'Andere Datei', { type: 'image/png', lastModified: MODIFIED + 1 })
+    const result = await fileUploadJob(replaceTarget('9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a'), picked).run(ctx())
 
     expect(result.nodeId).toBe(EXISTING)
     expect(shape(requests)).toEqual([
       `POST /api/scopes/${SCOPE}/blob-uploads-batch`,
       'PUT /b/…',
       `POST /api/scopes/${SCOPE}/files/${EXISTING}/content`,
-      `PATCH /api/scopes/${SCOPE}/nodes/${EXISTING}`,
     ])
-    const [start] = requests[0].json!.items as { blobId: string; ownerId: string; wrappedBlobKey: string }[]
+    const [start] = requests[0].json!.items as { blobId: string; ownerId: string; wrappedBlobKey: string; wrappedBlobMeta: string }[]
     expect(start.ownerId).toBe(EXISTING)
-    expect(() => v1.open(blobKeyCtx(EXISTING, start.blobId), existingKey, fromB64std(start.wrappedBlobKey))).not.toThrow()
+    const blobKey = v1.open(blobKeyCtx(EXISTING, start.blobId), existingKey, fromB64std(start.wrappedBlobKey))
+    // the replace's meta describes the bytes it brings — the picked file's type and name; the node keeps its own name
+    expect(v1.openBlobMeta(blobKey, fromB64std(start.wrappedBlobMeta))).toEqual({ v: 1, type: 'image/png', name: 'Andere Datei', modifiedAt: MODIFIED + 1 })
     expect(requests[2].json).toEqual({ uploadId: '00000000-0000-4000-8000-000000000001', expectedBlobId: '9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a' })
-    expect(requests[3].json!.metaVersion).toBe(3)
   })
 
   it('a node that holds no blob yet is filled like a new one: no expectedBlobId', async () => {
@@ -218,7 +222,7 @@ describe('a replace on the wire', () => {
     expect(requests[2].json).toEqual({ uploadId: '00000000-0000-4000-8000-000000000001' })
   })
 
-  it('a 409 stale_file fails with the conflict and the current blob, writes no meta, and a rerun sends nothing', async () => {
+  it('a 409 stale_file fails with the conflict and the current blob, and a rerun sends nothing', async () => {
     const requests = fakeServer({
       complete: () => json({ code: 'stale_file', currentBlobId: '8b2c1f2d-3e4a-5b6c-7c3f-0e2a9b1d4a6e' }, 409),
     })
@@ -228,7 +232,6 @@ describe('a replace on the wire', () => {
     expect(failure).toBeInstanceOf(StaleFileError)
     expect((failure as StaleFileError).message).toBe('stale_file')
     expect((failure as StaleFileError).currentBlobId).toBe('8b2c1f2d-3e4a-5b6c-7c3f-0e2a9b1d4a6e')
-    expect(requests.some((r) => r.method === 'PATCH')).toBe(false)
 
     const sent = requests.length
     await expect(job.run(ctx())).rejects.toThrow('stale_file')
@@ -257,12 +260,6 @@ describe('a file upload\'s other outcomes', () => {
       expect(shape(requests)).toEqual([`POST /api/scopes/${SCOPE}/nodes`])
       vi.unstubAllGlobals()
     }
-  })
-
-  it('a failed meta write leaves the upload done, saying the meta is missing', async () => {
-    fakeServer({ patch: () => new Response(null, { status: 500 }) })
-    const result = await fileUploadJob(newTarget(), fileOf(10)).run(ctx())
-    expect(result.metaWritten).toBe(false)
   })
 
   it('the retry after a transient failure reuses the node it created: one create, a second upload into it', async () => {

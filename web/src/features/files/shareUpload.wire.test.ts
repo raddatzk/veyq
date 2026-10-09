@@ -3,16 +3,16 @@
 // `reserveAndPump`, `guestReserve`/`guestWindow` and Files' `completeShareFile` client all run. What it pins:
 //   - a NEW file: guest create → guest start → PUTs → `completeShareFile`, every call to the link's paths with the
 //     guest's token and the password token, the upload's target the NEW node; the node's key wrap opens under the
-//     FOLDER's key, the `blob-key` wrap under the NODE's key (owner = the node, role `FILE_CONTENT`), the meta (sent
-//     with the completion — no separate write) under the node key, describing the picked file;
-//   - a REPLACE: no create, `expectedBlobId` = the blob the guest saw, an unknown field of the served meta kept;
+//     FOLDER's key, the `blob-key` wrap under the NODE's key (owner = the node, role `FILE_CONTENT`), the meta on the
+//     declare under the blob's own K_blob describing the picked file (inbox #397), and the completion carrying ids only
+//     — no body names the file or its type in plaintext;
+//   - a REPLACE: no create, `expectedBlobId` = the blob the guest saw, the new file's meta on the new blob;
 //   - a `409 stale_file`: `StaleFileError` with the current blob, and a rerun sends nothing.
 import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { fromB64std } from '@veyq/crypto/base64'
 import { guestFileUploadJob } from './shareUpload'
 import { StaleFileError } from './uploadFile'
-import { sealFileMeta } from './fileMeta'
 import { FILE_KIND } from './kinds'
 import { FOLDER_KIND } from '../../core/node/kind'
 import { registry } from '../../core/applications/registry'
@@ -89,11 +89,23 @@ function fakeServer(complete?: (body: Record<string, unknown>) => Response | und
 
 const ctx = () => ({ onProgress: vi.fn(), signal: new AbortController().signal })
 const control = (rs: Req[]) => rs.map((r) => `${r.method} ${r.path}`)
-const openMeta = (key: Uint8Array, nodeId: string, sealed: string) =>
-  JSON.parse(new TextDecoder().decode(v1.open({ purpose: 'node-meta', scopeId: SCOPE, nodeId }, key, fromB64std(sealed))))
+/** The declared blob of a start, its meta opened under the K_blob its wrap unwraps to under `nodeKey`. */
+const declaredMeta = (start: Record<string, unknown>, nodeId: string, nodeKey: Uint8Array) => {
+  const [item] = start.items as { blobId: string; wrappedBlobKey: string; wrappedBlobMeta: string }[]
+  const blobKey = v1.open(
+    { purpose: 'blob-key', scopeId: SCOPE, ownerId: nodeId, blobId: item.blobId, role: 'FILE_CONTENT' }, nodeKey, fromB64std(item.wrappedBlobKey),
+  )
+  return v1.openBlobMeta(blobKey, fromB64std(item.wrappedBlobMeta))
+}
+const expectNoPlaintextName = (rs: Req[], name: string) => {
+  for (const r of rs) {
+    expect(JSON.stringify(r.json ?? {}), `${r.method} ${r.path}`).not.toContain(name)
+    expect(JSON.stringify(r.json ?? {}), `${r.method} ${r.path}`).not.toContain('application/pdf')
+  }
+}
 
 describe("a guest's new file on the wire", () => {
-  it('creates the FILE under the folder, uploads into THAT node, completes with the meta — the link\'s token and password on every call', async () => {
+  it('creates the FILE under the folder, uploads into THAT node with the meta on the declare — the link\'s token and password on every call', async () => {
     const requests = fakeServer()
     const result = await guestFileUploadJob({ ctx: context(), parentId: ROOT }, fileOf(40)).run(ctx())
     const node = result.nodeId
@@ -103,7 +115,7 @@ describe("a guest's new file on the wire", () => {
       `POST /api/shares/${SHARE}/blob-uploads`,
       `POST /api/shares/${SHARE}/files/${node}/content`,
     ])
-    expect(result.metaWritten).toBe(true)
+    expect(result).toEqual({ nodeId: node })
     for (const r of requests) expect(r.headers['x-share-password'], `${r.path} carries the password token`).toBe(PW)
     expect(requests[0].headers['x-contributor-token']).toBe(TOKEN)
     expect(requests[1].json!.contributorToken).toBe(TOKEN)
@@ -125,10 +137,11 @@ describe("a guest's new file on the wire", () => {
     expect(() => v1.open(blobCtx, nodeKey, fromB64std(item.wrappedBlobKey))).not.toThrow()
     expect(() => v1.open(blobCtx, rootKey, fromB64std(item.wrappedBlobKey)), 'never under the folder key').toThrow()
 
-    // The completion: the upload, no expected blob, the meta sealed under the node key describing the picked file.
+    // The meta: the blob's own, declared with it, describing the picked file; the completion: ids only.
+    expect(declaredMeta(start, node, nodeKey)).toEqual({ v: 1, type: 'application/pdf', name: NAME, modifiedAt: MODIFIED })
     const done = requests[2].json!
-    expect(done.expectedBlobId).toBeUndefined()
-    expect(openMeta(nodeKey, node, done.wrappedMeta as string)).toEqual({ v: 1, mime: 'application/pdf', size: 40, modifiedAt: MODIFIED })
+    expect(Object.keys(done).sort()).toEqual(['contributorToken', 'uploadId'])
+    expectNoPlaintextName(requests, NAME)
   })
 
   it('a name a readable sibling folds to is refused before anything is sent (slug_taken)', async () => {
@@ -140,21 +153,21 @@ describe("a guest's new file on the wire", () => {
 })
 
 describe("a guest's replace on the wire", () => {
-  it('sends no create, expects the blob it saw, and keeps a field of the served meta it does not know', async () => {
+  it('sends no create, expects the blob it saw, and declares the NEW file\'s meta on the new blob', async () => {
     const requests = fakeServer()
-    const served = sealFileMeta(existingKey, { scopeId: SCOPE, nodeId: EXISTING }, { v: 1, mime: 'text/plain', size: 3, modifiedAt: 1, note: 'kept' })
-    const target = { ctx: context(), parentId: ROOT, replace: { nodeId: EXISTING, nodeKey: existingKey, wrappedMeta: served, expectedBlobId: 'b0b0b0b0-0000-4000-8000-000000000001' } }
+    const target = { ctx: context(), parentId: ROOT, replace: { nodeId: EXISTING, nodeKey: existingKey, expectedBlobId: 'b0b0b0b0-0000-4000-8000-000000000001' } }
     await guestFileUploadJob(target, fileOf(7)).run(ctx())
 
     expect(control(requests)).toEqual([`POST /api/shares/${SHARE}/blob-uploads`, `POST /api/shares/${SHARE}/files/${EXISTING}/content`])
+    expect(declaredMeta(requests[0].json!, EXISTING, existingKey)).toEqual({ v: 1, type: 'application/pdf', name: NAME, modifiedAt: MODIFIED })
     const done = requests[1].json!
     expect(done.expectedBlobId).toBe('b0b0b0b0-0000-4000-8000-000000000001')
-    expect(openMeta(existingKey, EXISTING, done.wrappedMeta as string)).toEqual({ v: 1, mime: 'application/pdf', size: 7, modifiedAt: MODIFIED, note: 'kept' })
+    expect('wrappedMeta' in done).toBe(false)
   })
 
   it('a 409 stale_file is StaleFileError with the current blob, and a rerun sends nothing', async () => {
     const requests = fakeServer(() => json({ code: 'stale_file', currentBlobId: 'c0c0c0c0-0000-4000-8000-000000000002' }, 409))
-    const target = { ctx: context(), parentId: ROOT, replace: { nodeId: EXISTING, nodeKey: existingKey, wrappedMeta: null, expectedBlobId: null } }
+    const target = { ctx: context(), parentId: ROOT, replace: { nodeId: EXISTING, nodeKey: existingKey, expectedBlobId: null } }
     const job = guestFileUploadJob(target, fileOf(7))
     const err = await job.run(ctx()).catch((e: unknown) => e)
     expect(err).toBeInstanceOf(StaleFileError)

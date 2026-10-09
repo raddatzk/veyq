@@ -2,8 +2,9 @@
 // Files' section of the folder level view, mounted with the real catalog, the real core upload queue and the real
 // confirm channel (`useConfirm`, answered through `settleConfirm` as the mounted `ConfirmDialog` would). Stubbed by
 // path: Files' client (`listFiles`, typed by the contract), the job factory (so the TARGET each pick produces is
-// visible — its wire is `uploadFile.wire.test.ts`'s), the download, core's `deleteNode`/`nodeContentKey` (a fixed key
-// per node instead of a key chain) and `loadTree`.
+// visible — its wire is `uploadFile.wire.test.ts`'s), the download (its `fileFacts` stays real: a row's size and date
+// are opened from the listed blob with the real crypto), core's `deleteNode`/`nodeContentKey` (a fixed key per node
+// instead of a key chain) and `loadTree`.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import * as v1 from '@veyq/crypto/v1'
@@ -11,7 +12,7 @@ import type { FileListPage } from '../../../api/generated/files'
 
 const keys = vi.hoisted(() => new Map<string, Uint8Array>())
 vi.mock('../api', () => ({ filesApi: vi.fn() }))
-vi.mock('../download', () => ({ downloadFile: vi.fn() }))
+vi.mock('../download', async (importOriginal) => ({ ...(await importOriginal<typeof import('../download')>()), downloadFile: vi.fn() }))
 const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }))
 vi.mock('../../../shared/state/useToast', () => ({
   useToast: () => ({ success: vi.fn(), error: toastError, showUndo: vi.fn(), dismissUndo: vi.fn() }),
@@ -34,7 +35,8 @@ import FilesSection from './FilesSection.vue'
 import { filesApi } from '../api'
 import { downloadFile } from '../download'
 import { fileUploadJob, type FileUploadTarget } from '../uploadFile'
-import { sealFileMeta } from '../fileMeta'
+import { planBlob } from '../../../core/blob/transport'
+import type { BlobMeta } from '../../../core/blob/meta'
 import { FILE_KIND } from '../kinds'
 import { MEMORY_KIND } from '../../memory/kinds'
 import { FOLDER_KIND } from '../../../core/node/kind'
@@ -65,17 +67,26 @@ const keyFor = (id: string) => {
   if (!keys.has(id)) keys.set(id, v1.randomBytes(32))
   return keys.get(id)!
 }
-const META = { mime: 'application/pdf', size: 123_456, modifiedAt: Date.UTC(2026, 9, 1, 12) }
+const MODIFIED = Date.UTC(2026, 9, 1, 12)
+const META: BlobMeta = { type: 'application/pdf', name: 'Report.pdf', modifiedAt: MODIFIED }
 const DOCS = node(D, FOLDER_KIND, 'Docs', { parentId: null })
-const REPORT = node(R, FILE_KIND, 'Report.pdf', { wrappedMeta: sealFileMeta(keyFor(R), { scopeId: SCOPE, nodeId: R }, { v: 1, ...META }), metaVersion: 2 })
+// The node's own payload is EMPTY: since inbox #397 a file's facts are its blob's, and the list reads nothing else.
+const REPORT = node(R, FILE_KIND, 'Report.pdf')
 const NOTES = node(N, FILE_KIND, 'notes.txt')
 const PENDING = node(P, FILE_KIND, 'pending.bin')
 const MEMORY = node(M, MEMORY_KIND, 'A Memory')
-const blob = (blobId: string, byteSize: number, chunkCount = 1) => ({ blobId, chunkCount, byteSize, wrappedBlobKey: 'eA==' })
+/** A file's blob as `listFiles` serves it: planned for the node `ownerId` under its key, with `meta` sealed under its
+ *  K_blob when given — the real seal, so the row opens it as it would a server's answer. */
+const sealedBlob = (ownerId: string, size: number, meta?: BlobMeta) => {
+  const plan = planBlob(SCOPE, { ownerId, role: 'FILE_CONTENT' }, keyFor(ownerId), new Blob([new Uint8Array(size)]), meta)
+  return { blobId: plan.blobId, chunkCount: plan.chunkCount, byteSize: plan.byteSize, wrappedBlobKey: plan.wrappedBlobKey, wrappedBlobMeta: plan.wrappedBlobMeta ?? null }
+}
+const REPORT_BLOB = sealedBlob(R, 123_456, META)
+const NOTES_BLOB = sealedBlob(N, 3000 + 256 * 1024) // two frames, no meta
 const BLOBS: FileListPage = {
   items: [
-    { nodeId: R, fileBlob: blob('blob-report', 123_456 + v1.FRAME_OVERHEAD) },
-    { nodeId: N, fileBlob: blob('blob-notes', 3000 + 2 * v1.FRAME_OVERHEAD, 2) },
+    { nodeId: R, fileBlob: REPORT_BLOB },
+    { nodeId: N, fileBlob: NOTES_BLOB },
     { nodeId: P, fileBlob: null },
   ],
 }
@@ -95,6 +106,7 @@ async function pick(w: Wrapper, index: number, files: File[]) {
   await input.trigger('change')
   await flushPromises()
 }
+const dateOf = (ms: number) => new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(ms)
 const targets = () => vi.mocked(fileUploadJob).mock.calls.map(([target, file]) => ({ target: target as FileUploadTarget, name: file.name }))
 
 beforeEach(() => {
@@ -106,7 +118,7 @@ beforeEach(() => {
   listFiles = stubApi(filesApi, { listFiles: BLOBS }).listFiles
   vi.mocked(downloadFile).mockResolvedValue(undefined)
   vi.mocked(fileUploadJob).mockClear().mockImplementation((_target, file) => ({
-    name: file.name, sizeBytes: file.size, run: async () => ({ nodeId: R, metaWritten: true }), extra: { file },
+    name: file.name, sizeBytes: file.size, run: async () => ({ nodeId: R }), extra: { file },
   }))
   vi.mocked(deleteNode).mockClear()
   vi.mocked(loadTree).mockClear()
@@ -118,7 +130,7 @@ afterEach(() => {
 })
 
 describe('FilesSection', () => {
-  it('lists this level\'s files with name, size and modified time, from their sealed meta or their blob', async () => {
+  it('lists this level\'s files with name, size and modified time — from their BLOB, the node\'s own meta empty', async () => {
     const w = mountSection({ nodes: [REPORT, NOTES, PENDING] })
     await flushPromises()
     expect(listFiles).toHaveBeenCalledWith({ scopeId: SCOPE, parentId: D })
@@ -126,11 +138,10 @@ describe('FilesSection', () => {
     expect(rows.map((r) => r.find('.veyq-row-title').text())).toEqual(['Report.pdf', 'notes.txt', 'pending.bin'])
     expect(rows.every((r) => r.find('.pi-file').exists())).toBe(true)
     expect(w.find('.veyq-section-header span').text()).toBe('3')
-    // from the meta: its size and its date
-    expect(rows[0].find('.veyq-row-subtitle').text()).toContain(formatBytes(123_456, 'en'))
-    expect(rows[0].find('.veyq-row-subtitle').text()).toContain('Modified')
-    // no meta yet: the plaintext size the sealed size gives exactly (2 frames of overhead off), no date
-    expect(rows[1].find('.veyq-row-subtitle').text()).toBe(formatBytes(3000, 'en'))
+    // the size from the blob's sealed size, the date from the blob's sealed meta
+    expect(rows[0].find('.veyq-row-subtitle').text()).toBe(`${formatBytes(123_456, 'en')} · ${t('files.modified', { date: dateOf(MODIFIED) })}`)
+    // a blob without meta: the plaintext size the sealed size gives exactly (2 frames of overhead off), no date
+    expect(rows[1].find('.veyq-row-subtitle').text()).toBe(formatBytes(3000 + 256 * 1024, 'en'))
     // no blob yet: said so, and nothing to download
     expect(rows[2].find('.veyq-row-subtitle').text()).toBe(t('files.notUploaded'))
     expect(byLabel(w, t('files.download', { name: 'pending.bin' })).attributes('disabled')).toBeDefined()
@@ -220,7 +231,7 @@ describe('FilesSection', () => {
     expect(targets()).toEqual([{
       name: 'report.PDF',
       target: expect.objectContaining({
-        replace: { nodeId: R, nodeKey: keyFor(R), meta: { wrappedMeta: REPORT.wrappedMeta, metaVersion: 2 }, expectedBlobId: 'blob-report' },
+        replace: { nodeId: R, nodeKey: keyFor(R), expectedBlobId: REPORT_BLOB.blobId },
       }),
     }])
   })
@@ -251,7 +262,7 @@ describe('FilesSection', () => {
     dialog.click(t('files.replaceAccept'))
     await flushPromises()
     expect(dialog.isOpen()).toBe(false)
-    expect(targets()).toEqual([{ name: 'other-name.md', target: expect.objectContaining({ replace: expect.objectContaining({ nodeId: N, expectedBlobId: 'blob-notes' }) }) }])
+    expect(targets()).toEqual([{ name: 'other-name.md', target: expect.objectContaining({ replace: expect.objectContaining({ nodeId: N, expectedBlobId: NOTES_BLOB.blobId }) }) }])
   })
 
   it('a row\'s replace cancelled in the dialog uploads nothing', async () => {
@@ -363,7 +374,7 @@ describe('FilesSection', () => {
     expect(notices).toHaveLength(1)
     expect(notices[0].text()).toContain(t('files.errors.stale_file', { name: 'Report.pdf' }))
 
-    listFiles.mockResolvedValue({ items: [{ nodeId: R, fileBlob: blob('blob-peer', 10) }] })
+    listFiles.mockResolvedValue({ items: [{ nodeId: R, fileBlob: { ...sealedBlob(R, 10), blobId: 'blob-peer' } }] })
     await notices[0].findAll('button').find((b) => b.text() === t('files.replaceAnyway'))!.trigger('click')
     await flushPromises()
     expect(confirmRequest.value).toBeNull()
@@ -378,32 +389,61 @@ describe('FilesSection', () => {
     const file = new File(['a'], 'x.txt')
     const key = `files:${SCOPE}:${D}`
     enqueue([{ name: 'x.txt', sizeBytes: 1, run: async () => { throw new Error('upload_failed') }, extra: { file } }], { label: 'Docs', key })
-    enqueue([{ name: 'other.txt', sizeBytes: 1, run: async () => ({ nodeId: 'o', metaWritten: true }), extra: { file } }], { label: 'Docs', key })
+    enqueue([{ name: 'other.txt', sizeBytes: 1, run: async () => ({ nodeId: 'o' }), extra: { file } }], { label: 'Docs', key })
     await vi.waitFor(() => expect(useUploadQueue().batches.value.every((b) => b.finishedAt !== null)).toBe(true))
     await flushPromises()
     expect(w.findAll('.files-notice').map((n) => n.text()).join()).toContain(t('files.errors.failed', { name: 'x.txt' }))
 
-    enqueue([{ name: 'x.txt', sizeBytes: 1, run: async () => ({ nodeId: 'x', metaWritten: true }), extra: { file } }], { label: 'Docs', key })
+    enqueue([{ name: 'x.txt', sizeBytes: 1, run: async () => ({ nodeId: 'x' }), extra: { file } }], { label: 'Docs', key })
     await vi.waitFor(() => expect(useUploadQueue().batches.value.every((b) => b.finishedAt !== null)).toBe(true))
     await flushPromises()
     expect(w.findAll('.files-notice')).toHaveLength(0)
   })
 
-  it('names a create refusal and a missing meta in their own words', async () => {
+  it('names a create refusal in its own words, and a finished upload explains nothing (no meta can be missing)', async () => {
     const w = mountSection({ nodes: [] })
     const file = new File(['a'], 'a.txt')
     enqueue([
       { name: 'Taken.txt', sizeBytes: 1, run: async () => { throw new Error('slug_taken') }, extra: { file } },
-      { name: 'NoMeta.txt', sizeBytes: 1, run: async () => ({ nodeId: 'm', metaWritten: false }), extra: { file } },
+      { name: 'Done.txt', sizeBytes: 1, run: async () => ({ nodeId: 'm' }), extra: { file } },
       { name: 'Weird.txt', sizeBytes: 1, run: async () => { throw new Error('something_else') }, extra: { file } },
     ], { label: 'Docs', key: `files:${SCOPE}:${D}` })
     await vi.waitFor(() => expect(useUploadQueue().batches.value[0].finishedAt).not.toBeNull())
     await flushPromises()
     expect(w.findAll('.files-notice').map((n) => n.find('.files-notice-body > span').text())).toEqual([
       t('files.errors.slug_taken', { name: 'Taken.txt' }),
-      t('files.metaWarning', { name: 'NoMeta.txt' }),
       t('files.errors.failed', { name: 'Weird.txt' }),
     ])
-    expect(w.findAll('.files-notice button').map((b) => b.text())).toEqual([t('files.dismiss'), t('files.dismiss'), t('files.dismiss')])
+    expect(w.findAll('.files-notice button').map((b) => b.text())).toEqual([t('files.dismiss'), t('files.dismiss')])
+  })
+
+  // Inbox #397: a file's facts are its blob's and nothing else's.
+  describe('a row\'s facts come from its blob', () => {
+    it('a stale node meta is not read: the blob\'s date shows, not what the node payload says', async () => {
+      const legacy = node(R, FILE_KIND, 'Report.pdf', { wrappedMeta: 'bm90IGEgbWV0YQ==', metaVersion: 7 })
+      const w = mountSection({ nodes: [legacy] })
+      await flushPromises()
+      expect(w.find('li.files-row .veyq-row-subtitle').text()).toBe(`${formatBytes(123_456, 'en')} · ${t('files.modified', { date: dateOf(MODIFIED) })}`)
+    })
+
+    it('a replace shows the new blob\'s facts at once — with the listing that names the new blob, never the old meta beside it', async () => {
+      const w = mountSection({ nodes: [REPORT] })
+      await flushPromises()
+      const later = Date.UTC(2026, 9, 5, 9)
+      listFiles.mockResolvedValue({ items: [{ nodeId: R, fileBlob: sealedBlob(R, 10, { type: 'image/png', name: 'x.png', modifiedAt: later }) }] })
+      await pick(w, 0, [new File(['new'], 'Report.pdf')])
+      settleConfirm(true)
+      await vi.waitFor(() => expect(useUploadQueue().batches.value[0]?.finishedAt).not.toBeNull())
+      await flushPromises()
+      expect(w.find('li.files-row .veyq-row-subtitle').text()).toBe(`${formatBytes(10, 'en')} · ${t('files.modified', { date: dateOf(later) })}`)
+      expect(w.find('li.files-row .veyq-row-title').text(), 'the node keeps its name').toBe('Report.pdf')
+    })
+
+    it('a blob ref listed for another node shows its size but no date — the meta does not open there', async () => {
+      listFiles.mockResolvedValue({ items: [{ nodeId: R, fileBlob: sealedBlob(N, 50, META) }] })
+      const w = mountSection({ nodes: [REPORT] })
+      await flushPromises()
+      expect(w.find('li.files-row .veyq-row-subtitle').text()).toBe(formatBytes(50, 'en'))
+    })
   })
 })

@@ -64,7 +64,7 @@ beforeEach(() => {
   if (confirmRequest.value) settleConfirm(false)
   clearUploads()
   runs.clear()
-  outcome = async () => ({ nodeId: 'n', metaWritten: true })
+  outcome = async () => ({ nodeId: 'n' })
   vi.mocked(loadDropGuest).mockReset().mockReturnValue(SESSION)
   vi.mocked(nameDropGuest).mockReset()
   vi.mocked(saveDropGuest).mockReset()
@@ -156,7 +156,7 @@ describe('DropBoxShareBody: what became of every file (inbox #381)', () => {
   it('a store\'s 403 is a failed file with a retry, not a gone link; the retry sends it again', async () => {
     outcome = async (_name, attempt) => {
       if (attempt <= 2) throw new Error('chunk_put_failed:403')
-      return { nodeId: 'n', metaWritten: true }
+      return { nodeId: 'n' }
     }
     const w = mountPage()
     await pick(w, 'a.pdf')
@@ -259,7 +259,7 @@ describe('DropBoxShareBody: whose session this is (inbox #385 a)', () => {
 
   it('"Not you?" waits while a file is still being sent', async () => {
     let finish: () => void = () => {}
-    outcome = () => new Promise((resolve) => { finish = () => resolve({ nodeId: 'n', metaWritten: true }) })
+    outcome = () => new Promise((resolve) => { finish = () => resolve({ nodeId: 'n' }) })
     const w = mountPage()
     await pick(w, 'a.pdf')
     await vi.waitFor(() => expect(notYou(w).attributes('disabled')).toBeDefined())

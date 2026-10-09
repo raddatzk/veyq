@@ -956,7 +956,6 @@ const en = {
     trashEmpty: 'No content — its upload did not finish. Restoring brings back an empty file you can upload into.',
     downloadFailed: 'The file could not be downloaded. Please try again.',
     downloadTooLarge: 'This file is too large to download in this browser.',
-    metaWarning: '“{name}” was uploaded, but its type, size and date could not be saved.',
     replaceAnyway: 'Replace anyway',
     dismiss: 'Dismiss',
     errors: {
@@ -2180,7 +2179,6 @@ const de: typeof en = {
     trashEmpty: 'Ohne Inhalt — das Hochladen wurde nicht abgeschlossen. Wiederherstellen bringt eine leere Datei zurück, in die du hochladen kannst.',
     downloadFailed: 'Die Datei konnte nicht heruntergeladen werden. Bitte versuche es erneut.',
     downloadTooLarge: 'Diese Datei ist zu groß, um sie in diesem Browser herunterzuladen.',
-    metaWarning: '„{name}“ wurde hochgeladen, aber Typ, Größe und Datum konnten nicht gespeichert werden.',
     replaceAnyway: 'Trotzdem ersetzen',
     dismiss: 'Ausblenden',
     errors: {

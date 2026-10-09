@@ -4,11 +4,11 @@
 //  1. the NODE: core's guest tree operation `createShareNodeAsGuest` births the `FILE` under the folder on screen — a
 //     fresh node key wrapped under the folder's key from the chain, name and slug sealed under it (the server checks the
 //     place: `NodeKindRules`, core's `FolderGuestNodeRules`). A replace targets the existing file with its own key.
-//  2. the BLOB: core's `planBlob` under the file node's own key (role `FILE_CONTENT`, owner = the node) and
+//  2. the BLOB with its METADATA: core's `planBlob` under the file node's own key (role `FILE_CONTENT`, owner = the
+//     node), the picked file's type, name and modified time sealed under its `K_blob` (`fileBlobMeta`, inbox #397), and
 //     `reserveAndPump` through core's guest transport (`core/sharing/guestBlob.ts`), the upload's target the node.
-//  3. the COMPLETION with the METADATA: Files' `completeShareFile` attaches the upload, a compare-and-set on
-//     `expectedBlobId`, and writes the file's sealed meta in the SAME transaction — a guest has no other door to a
-//     node's payload, and so the meta goes with the bytes it describes (`metaWritten` is always true on success).
+//  3. the COMPLETION: Files' `completeShareFile` attaches the upload, a compare-and-set on `expectedBlobId` — the meta
+//     is the blob's, so it goes with the bytes it describes, and the guest writes no node payload at all.
 //
 // As the member's job: a node it created is reused by a retry, a final refusal (taken name, illegal place, a peer's
 // replace) is remembered and rethrown without a request.
@@ -20,12 +20,10 @@ import { guestReserve, guestWindow, type GuestUploadTarget } from '../../core/sh
 import type { FileBlobRef } from '../../api/generated/files'
 import { publicShareFilesApi } from './api'
 import { FILE_CONTENT_ROLE, FILE_KIND } from './kinds'
-import { fileMetaOf, openFileMetaForWrite, sealFileMeta, type RawFileMeta } from './fileMeta'
-import { FINAL, FileUploadError, rethrowCompletion, type FileJobExtra, type FileUploadResult } from './uploadFile'
+import { FINAL, FileUploadError, fileBlobMeta, rethrowCompletion, type FileJobExtra, type FileUploadResult } from './uploadFile'
 
-/** A guest's replace: the file node, its key from the chain, its sealed meta as served (kept fields survive) and the
- *  blob the guest saw in it (null: none yet). */
-export type GuestFileReplace = { nodeId: string; nodeKey: Uint8Array; wrappedMeta: string | null; expectedBlobId: string | null }
+/** A guest's replace: the file node, its key from the chain and the blob the guest saw in it (null: none yet). */
+export type GuestFileReplace = { nodeId: string; nodeKey: Uint8Array; expectedBlobId: string | null }
 
 /** Where a guest's upload goes: the link's context (identity, password token, keys) and the folder a new file is
  *  created under, or the file it replaces. */
@@ -46,28 +44,15 @@ async function createGuestFileNode(target: GuestFileTarget, name: string): Promi
   }
 }
 
-/** The file's sealed meta for the swap: the served envelope's unknown fields kept (an unreadable one is not rebuilt
- *  from it — a fresh envelope then, since the guest replaces the bytes it describes), the picked file's facts set. */
-function guestMeta(nodeKey: Uint8Array, address: { scopeId: string; nodeId: string }, served: string | null, file: File): string {
-  let raw: RawFileMeta
-  try {
-    raw = openFileMetaForWrite(nodeKey, address, served)
-  } catch {
-    raw = { v: 1 }
-  }
-  const meta = fileMetaOf(file)
-  return sealFileMeta(nodeKey, address, { ...raw, mime: meta.mime, size: meta.size, modifiedAt: meta.modifiedAt })
-}
-
-/** Files' `completeShareFile`: the upload becomes the file's blob, its meta written with it. */
+/** Files' `completeShareFile`: the upload becomes the file's blob (its meta is the blob's own). */
 async function completeGuestFile(
-  ctx: GuestTreeContext, nodeId: string, uploadId: string, expectedBlobId: string | null, wrappedMeta: string,
+  ctx: GuestTreeContext, nodeId: string, uploadId: string, expectedBlobId: string | null,
 ): Promise<FileBlobRef> {
   try {
     return await publicShareFilesApi().completeShareFile({
       shareId: ctx.shareId,
       nodeId,
-      shareFileCompleteRequest: { contributorToken: ctx.contributorToken, uploadId, expectedBlobId: expectedBlobId ?? undefined, wrappedMeta },
+      shareFileCompleteRequest: { contributorToken: ctx.contributorToken, uploadId, expectedBlobId: expectedBlobId ?? undefined },
       xSharePassword: ctx.pwToken,
     })
   } catch (e) {
@@ -78,7 +63,7 @@ async function completeGuestFile(
 /** One queue job for one file a guest picked (see the header). */
 export function guestFileUploadJob(target: GuestFileTarget, file: File): UploadJob<FileUploadResult, FileJobExtra> {
   const { ctx } = target
-  let node: { nodeId: string; nodeKey: Uint8Array; wrappedMeta: string | null; expectedBlobId: string | null } | null =
+  let node: { nodeId: string; nodeKey: Uint8Array; expectedBlobId: string | null } | null =
     target.replace ? { ...target.replace } : null
   let final: Error | null = null
 
@@ -86,15 +71,14 @@ export function guestFileUploadJob(target: GuestFileTarget, file: File): UploadJ
     if (final) throw final
     throwIfAborted(signal)
     try {
-      node ??= { ...(await createGuestFileNode(target, file.name)), wrappedMeta: null, expectedBlobId: null }
+      node ??= { ...(await createGuestFileNode(target, file.name)), expectedBlobId: null }
       const to: GuestUploadTarget = { shareId: ctx.shareId, contributorToken: ctx.contributorToken, pwToken: ctx.pwToken, nodeId: node.nodeId }
-      const plan = planBlob(ctx.scopeId, { ownerId: node.nodeId, role: FILE_CONTENT_ROLE }, node.nodeKey, file)
+      const plan = planBlob(ctx.scopeId, { ownerId: node.nodeId, role: FILE_CONTENT_ROLE }, node.nodeKey, file, fileBlobMeta(file))
       const [uploadId] = await reserveAndPump([plan], (d) => guestReserve(to, d), guestWindow(to), onProgress, signal)
       throwIfAborted(signal)
-      const meta = guestMeta(node.nodeKey, { scopeId: ctx.scopeId, nodeId: node.nodeId }, node.wrappedMeta, file)
-      const attached = await completeGuestFile(ctx, node.nodeId, uploadId, node.expectedBlobId, meta)
+      const attached = await completeGuestFile(ctx, node.nodeId, uploadId, node.expectedBlobId)
       expectMintedId(plan.blobId, attached.blobId)
-      return { nodeId: node.nodeId, metaWritten: true }
+      return { nodeId: node.nodeId }
     } catch (e) {
       if (e instanceof Error && FINAL.has(e.message)) final = e
       throw e

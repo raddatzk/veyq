@@ -4,8 +4,8 @@
 //   - two guests name themselves (each its own K_up) and each gets ONE folder; a second upload of one identity — a new
 //     `ensureShareDropFolder` call, as after a reload — lands in the same folder; neither guest sees anything (the
 //     resolve serves no node, `listShareFiles` nothing);
-//   - the member opens both folders through the drop box's key (core's tree: drop key → K_up → K_F), reads names and
-//     bytes; a member's create inside a guest's folder is refused;
+//   - the member opens both folders through the drop box's key (core's tree: drop key → K_up → K_F), reads names,
+//     bytes and each file's blob meta (type, modified time — inbox #397); a member's create inside a guest's folder is refused;
 //   - revoking the link (switch off, then delete) keeps the folders and the files, which the member still opens.
 // Run against a FRESH instance: `python3 scripts/run_web_e2e.py web/src/features/files/filesDropBox.e2e.test.ts`.
 //
@@ -30,7 +30,7 @@ import { filesApi, publicShareFilesApi } from './api'
 import { DROPBOX_KIND, FILE_KIND } from './kinds'
 import { createDropBox, dropGuestContext, ensureDropFolder, mintDropBoxLink, nameDropGuest } from './dropBox'
 import { guestFileUploadJob } from './shareUpload'
-import { fetchFileContent } from './download'
+import { fetchFileContent, fileFacts } from './download'
 
 const FOLDER_NAME = 'Vereinsablage Kranichfeld'
 const BOX_NAME = 'Einsendungen Sommerfest'
@@ -113,7 +113,10 @@ describe.skipIf(!process.env.VEYQ_E2E)('files drop box e2e (live, real crypto, a
       expect(tree.filter((n) => n.parentId === annaFolder.nodeId).map((n) => n.name).sort()).toEqual([ANNA_FILE_1, ANNA_FILE_2].sort())
       for (const [file, folder, bytes] of [[annaFile1, annaFolder.nodeId, anna1], [annaFile2, annaFolder.nodeId, anna2], [benFile, benFolder.nodeId, benBytes]] as const) {
         const blob = (await filesApi().listFiles({ scopeId, parentId: folder })).items.find((i) => i.nodeId === file)!.fileBlob!
-        expect(await contentOf(await fetchFileContent(scopeId, nodeContentKey(scopeId, epochs, tree, file)!, file, blob))).toEqual(Array.from(bytes))
+        const fileKey = nodeContentKey(scopeId, epochs, tree, file)!
+        expect(await contentOf(await fetchFileContent(scopeId, fileKey, file, blob))).toEqual(Array.from(bytes))
+        // the guest's type and modified time ride its blob (inbox #397), opened down the same chain
+        expect(fileFacts(scopeId, fileKey, file, blob)).toMatchObject({ size: bytes.length, meta: { type: MIME, modifiedAt: 1_700_000_000_000 } })
       }
       return tree
     }

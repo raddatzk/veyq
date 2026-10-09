@@ -16,7 +16,7 @@ import { b64std, b64url } from '@veyq/crypto/base64'
 
 vi.mock('../../../api/client', () => ({ sharesApi: vi.fn(), publicSharesApi: vi.fn(), tokenApi: vi.fn() }))
 vi.mock('../api', () => ({ publicShareFilesApi: vi.fn() }))
-vi.mock('../download', () => ({ downloadFile: vi.fn() }))
+vi.mock('../download', async (importOriginal) => ({ ...(await importOriginal<typeof import('../download')>()), downloadFile: vi.fn() }))
 
 import FolderShareBody from '../../../core/sharing/FolderShareBody.vue'
 import { FOLDER_KIND } from '../../../core/node/kind'

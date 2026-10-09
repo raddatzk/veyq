@@ -9,6 +9,10 @@
 //   docker compose -f infra/docker-compose.yml --profile s3 up -d
 //   VEYQ_E2E=1 npx vitest run files.e2e
 //
+// A file's type, uploaded name and modified time are its BLOB's sealed meta (`wrappedBlobMeta` under `K_blob`, declared
+// with the upload — inbox #397): the suite reads them back from the listed blob, sees the replace bring its own, and
+// asserts the node's own payload is never written (`metaVersion` stays 0).
+//
 // The raw-wire check is two-fold, as in the neighbouring suites: every plaintext this flow sealed (the file's name, its
 // MIME type, its meta) is handed to `recordCanaries`, which the orchestrator sweeps for in the database, the bucket and
 // the HTTP recording (ADR 0053); and this suite itself wraps `fetch` and asserts that neither the name nor the MIME
@@ -28,8 +32,7 @@ import { httpStatus } from '../../shared/httpError'
 import { filesApi } from './api'
 import { FILE_CONTENT_ROLE, FILE_KIND } from './kinds'
 import { fileUploadJob, completeFileUpload, StaleFileError } from './uploadFile'
-import { downloadFile, fetchFileContent } from './download'
-import { readFileMeta } from './fileMeta'
+import { downloadFile, fetchFileContent, fileFacts } from './download'
 
 const NAME = 'Quartalsbericht Ü-e2e.pdf'
 const MIME = 'application/x-veyq-files-e2e'
@@ -73,20 +76,22 @@ describe.skipIf(!process.env.VEYQ_E2E)('files e2e (live, operator-blind, direct-
     const folderKey = nodeContentKey(scopeId, epochs, tree, folderId)!
     const first = bytesOf(2 * CHUNK_SIZE + 1234, 1)
     const uploaded = await fileUploadJob({ scopeId, epochs, parent: { id: folderId, key: folderKey } }, fileOf(first)).run(ctx())
-    expect(uploaded.metaWritten).toBe(true)
     const nodeId = uploaded.nodeId
 
-    // the tree lists it as a FILE named as picked, with its sealed meta; listFiles pairs it with its blob
+    // the tree lists it as a FILE named as picked, its own payload untouched; listFiles pairs it with its blob, whose
+    // sealed meta says what the file is and whose sealed size says how big
     tree = await listTree(scopeId, epochs)
     const fileNode = tree.find((n) => n.id === nodeId)!
-    expect(fileNode).toMatchObject({ kind: FILE_KIND, parentId: folderId, name: NAME, metaVersion: 1 })
+    expect(fileNode).toMatchObject({ kind: FILE_KIND, parentId: folderId, name: NAME, metaVersion: 0 })
+    expect(fileNode.wrappedMeta ?? null, 'no node-meta write').toBeNull()
     const nodeKey = nodeContentKey(scopeId, epochs, tree, nodeId)!
-    const meta = readFileMeta(nodeKey, { scopeId, nodeId }, fileNode.wrappedMeta)
-    expect(meta).toEqual({ mime: MIME, size: first.length, modifiedAt: 1_700_000_000_000 })
     const listed = (await filesApi().listFiles({ scopeId, parentId: folderId })).items
     expect(listed.map((i) => i.nodeId)).toEqual([nodeId])
     const blob1 = listed[0].fileBlob!
     expect(blob1.chunkCount).toBe(3)
+    const facts1 = fileFacts(scopeId, nodeKey, nodeId, blob1)
+    expect(facts1).toEqual({ size: first.length, meta: { v: 1, type: MIME, name: NAME, modifiedAt: 1_700_000_000_000 } })
+    expect(fileFacts(scopeId, nodeKey, folderId, blob1).meta, 'a ref moved to another node opens no meta').toBeNull()
 
     // download: the real presigned GETs, decrypted under the node key — the original bytes
     expect(await contentOf(await fetchFileContent(scopeId, nodeKey, nodeId, blob1))).toEqual(Array.from(first))
@@ -113,11 +118,16 @@ describe.skipIf(!process.env.VEYQ_E2E)('files e2e (live, operator-blind, direct-
     const second = bytesOf(CHUNK_SIZE + 7, 2)
     const replaced = await fileUploadJob({
       scopeId, epochs, parent: { id: folderId, key: folderKey },
-      replace: { nodeId, nodeKey, meta: { wrappedMeta: fileNode.wrappedMeta, metaVersion: fileNode.metaVersion }, expectedBlobId: blob1.blobId },
-    }, fileOf(second)).run(ctx())
-    expect(replaced).toEqual({ nodeId, metaWritten: true })
+      replace: { nodeId, nodeKey, expectedBlobId: blob1.blobId },
+    }, new File([second as BlobPart], 'ersetzt-e2e.bin', { type: `${MIME}-2`, lastModified: 1_700_000_100_000 })).run(ctx())
+    expect(replaced).toEqual({ nodeId })
     const blob2 = (await filesApi().listFiles({ scopeId, parentId: folderId })).items[0].fileBlob!
     expect(blob2.blobId).not.toBe(blob1.blobId)
+    // the replace brought its own meta with its bytes; the node kept its name and its (empty) payload
+    expect(fileFacts(scopeId, nodeKey, nodeId, blob2)).toEqual({
+      size: second.length, meta: { v: 1, type: `${MIME}-2`, name: 'ersetzt-e2e.bin', modifiedAt: 1_700_000_100_000 },
+    })
+    expect((await listTree(scopeId, epochs)).find((n) => n.id === nodeId)).toMatchObject({ name: NAME, metaVersion: 0 })
     expect(await contentOf(await fetchFileContent(scopeId, nodeKey, nodeId, blob2))).toEqual(Array.from(second))
 
     // a replace that still expects the OLD blob: 409 stale_file naming the current one, and nothing changes
@@ -157,22 +167,22 @@ describe.skipIf(!process.env.VEYQ_E2E)('files e2e (live, operator-blind, direct-
     const third = bytesOf(500, 5)
     await fileUploadJob({
       scopeId: sharedM.scopeId, epochs: sharedM.epochs, parent: null,
-      replace: { nodeId: sharedNode.id, nodeKey: sharedKeyM, meta: { wrappedMeta: sharedNode.wrappedMeta, metaVersion: sharedNode.metaVersion }, expectedBlobId: sharedBlob.blobId },
+      replace: { nodeId: sharedNode.id, nodeKey: sharedKeyM, expectedBlobId: sharedBlob.blobId },
     }, fileOf(third, 'shared-e2e.txt')).run(ctx())
     const sharedBlob2 = (await filesApi().listFiles({ scopeId: sharedM.scopeId })).items.find((i) => i.nodeId === sharedNode.id)!.fileBlob!
     expect(sharedBlob2.blobId).not.toBe(sharedBlob.blobId)
     expect(await contentOf(await fetchFileContent(sharedM.scopeId, sharedKeyM, sharedNode.id, sharedBlob2))).toEqual(Array.from(third))
 
     // the wire: neither the name nor the MIME type ever crossed it in the clear
-    for (const secret of [NAME, MIME, 'shared-e2e.txt']) {
+    for (const secret of [NAME, MIME, 'shared-e2e.txt', 'ersetzt-e2e.bin']) {
       expect(wire.filter((w) => w.includes(secret)), `"${secret}" on the wire`).toEqual([])
     }
     // the canaries the orchestrator sweeps for: what the server's own responses unseal to
     recordCanaries(
       (await listTree(sharedM.scopeId, sharedM.epochs)).map((n) => n.name),
-      readFileMeta(sharedKeyM, { scopeId: sharedM.scopeId, nodeId: sharedNode.id }, (await listTree(sharedM.scopeId, sharedM.epochs)).find((n) => n.id === sharedNode.id)!.wrappedMeta),
+      fileFacts(sharedM.scopeId, sharedKeyM, sharedNode.id, sharedBlob2).meta,
     )
     await become(A)
-    recordCanaries((await listTree(scopeId, epochs)).map((n) => n.name), meta)
+    recordCanaries((await listTree(scopeId, epochs)).map((n) => n.name), facts1.meta, fileFacts(scopeId, nodeKey, nodeId, blob2).meta)
   }, 240_000)
 })
