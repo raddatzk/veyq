@@ -25,7 +25,7 @@ import org.hamcrest.CoreMatchers.hasItem
 import org.hamcrest.CoreMatchers.not
 import org.hamcrest.CoreMatchers.notNullValue
 import org.hamcrest.CoreMatchers.nullValue
-import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Test
 
 /**
@@ -196,9 +196,10 @@ class ShareSliceTest {
     /**
      * The access modes' wire values are `READ`/`READ_WRITE`/`WRITE_ONLY` (cr-platform-contract-split D2): a create
      * with a pre-rename value is refused at the boundary. The control is the same body with `READ`, from the same
-     * caller on the same Memory. Measured 2026-10-06: an enum value outside the spec is refused by deserialization,
-     * before any handler, as a bare `400` with an empty body — no `ErrorResponse` code to anchor on, so the empty
-     * body is pinned instead; a handler-side `400 invalid_request` would carry a JSON body.
+     * caller on the same Memory. An enum value outside the spec is refused by deserialization, before any handler —
+     * a bare `400` with an empty body until core's `MismatchedInputExceptionMapper` (inbox #339); now the contract's
+     * `ErrorResponse{code: invalid_request}`, naming neither the refused value nor the accepted ones. This is also the
+     * composition's proof that the mapper reaches a resource with an application booted beside core.
      */
     @Test
     fun aPreRenameRoleValueIsRefused() {
@@ -209,8 +210,10 @@ class ShareSliceTest {
             .`when`().post("/api/shares")
 
         for (old in listOf("VIEWER", "CONTRIBUTOR", "UPLOADER")) {
-            val refused = create(old).then().statusCode(400).extract()
-            assertEquals("", refused.asString(), "$old is refused by deserialization, before the handler")
+            val refused = create(old).then().statusCode(400).body("code", equalTo("invalid_request")).extract().asString()
+            for (named in listOf(old, "READ_WRITE", "WRITE_ONLY")) {
+                assertFalse(refused.contains(named), "$old's refusal names no role value: $refused")
+            }
         }
         create("READ").then().statusCode(201)
     }
