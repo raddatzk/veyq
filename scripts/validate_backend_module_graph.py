@@ -49,8 +49,13 @@ module's `java-test-fixtures` source set (`src/testFixtures`, today `:core`'s), 
   rule before any build. Kotlin compiles a split package and Quarkus indexes both halves, so nothing fails; but the package no
   longer says its owner, and the platform/application boundary the names carry (`me.raddatz.veyq.core.*`,
   `me.raddatz.veyq.<application>.*`) is a lie for the half that sits elsewhere. Test code (`src/test`, `src/testFixtures`)
-  is not judged: core's fixtures declare their helpers inside core's packages on purpose
-  (`me.raddatz.veyq.core.blobstore.RecordingBlobStore`).
+  is judged by owner, not by split: core's fixtures declare their helpers inside core's packages on purpose
+  (`me.raddatz.veyq.core.blobstore.RecordingBlobStore`), and the root's whole-app tests may sit in any package — but
+  every test and fixtures file of an application declares a package under that application's own root
+  (`:apps:memories` → `me.raddatz.veyq.memories.*`). An application test in `…core.*` is a split package Quarkus'
+  bootstrap warns about on every boot ("found in multiple archives"), says the wrong owner, and would collide with a
+  later per-module `internal` cut (inbox #337: 47 Memories tests sat in `…core.*` until 2026-10-10). Its bite: one
+  moved back (`package me.raddatz.veyq.core.sharing` in `ShareSliceTest`) → red.
 - **(e) The image builds every module.** The Dockerfile's `backend-build-base` stage copies each included project's
   `build.gradle.kts` — its warm-up `gradlew help` configures every included project and dies on one with no
   directory (measured: "Configuring project ':core' without an existing directory is not allowed") — and some stage
@@ -144,6 +149,8 @@ SPEC_SETS = BUILD_SRC / "src" / "main" / "kotlin" / "me" / "raddatz" / "veyq" / 
 APPLIES_MODULE_PLUGIN = re.compile(r'\bid\s*\(\s*"veyq\.module"\s*\)')
 CORE = ":core"
 APPLICATION = re.compile(r"^:apps:[\w-]+$")
+# An application's package root is this plus its name (`:apps:memories` → `me.raddatz.veyq.memories`, ADR 0079).
+APPLICATION_PACKAGE_PREFIX = "me.raddatz.veyq."
 # Any project reference in a dependencies block, with the configuration around it and the wrapper, if any —
 # `testImplementation(testFixtures(project(":core")))` is a `testImplementation` edge to `:core`'s fixtures, and
 # `"api"(project(…))` (a string-named configuration) is an `api` one.
@@ -494,6 +501,22 @@ def rule_d() -> list[str]:
             homes[m.group(1)].add(backend_tree.project_of(f) or f"<no project: {rel(f.parent)}>")
     if not homes:
         errors.append("(d) no main Kotlin file declares a package — the split-package rule read nothing.")
+    judged = 0
+    for f in backend_tree.kotlin_files(backend_tree.test_roots() + backend_tree.fixture_roots()):
+        project = backend_tree.project_of(f)
+        if project is None or not APPLICATION.match(project):
+            continue
+        m = PACKAGE_LINE.search(mask(f.read_text(encoding="utf-8")))
+        root = f"{APPLICATION_PACKAGE_PREFIX}{owner_of(project)}"
+        judged += 1
+        if m is None or not (m.group(1) == root or m.group(1).startswith(root + ".")):
+            errors.append(f"(d) {rel(f)} is {project}'s test code but declares package "
+                          f"{m.group(1) if m else '<none>'} — an application's tests and fixtures live under its own "
+                          f"package root {root}.*, never in core's or another application's (a split package Quarkus warns about on every boot, "
+                          f"and a test whose package no longer says which project holds it).")
+    if not judged:
+        errors.append("(d) no application test file was read — the test-package rule read nothing. If the "
+                      "applications' tests moved, re-point it.")
     for pkg, projects in sorted(homes.items()):
         if len(projects) > 1:
             errors.append(f"(d) package {pkg} is declared by {len(projects)} modules ({', '.join(sorted(projects))}) — "
