@@ -17,35 +17,58 @@
 // folder a member downloads and deletes per file (inbox #391), a content-less one ('not uploaded yet', a guest's upload
 // that never finished) too, and places nothing; during a pending deletion it only downloads.
 //
-// Operator-blind: the names, sizes, types and dates shown are opened here under keys the server never sees; the only
-// call of Files' own is `listFiles`, which returns ids and sealed sizes.
+// **A member and a share guest see this one section (inbox #401 S3).** Core's folder page of a READ or READ_WRITE link
+// renders it like the member's level does, handed the guest's `access` and `tree`; every read and write goes through
+// Files' data source (`../source.ts`) — the member's (`listFiles`, core's node operations, `treeStore`) or the guest's
+// (`listShareFiles`, the link's chunk presign, core's guest create and transport) — and a write shows only where the
+// matrix grants it AND the source carries it. A guest gets: the download (every role), and for a contributor the upload
+// and a row's replace (not in an identity folder), the replace after a question that says it changes the file for
+// everyone, the owner too (inbox #383), the guest named first through the page's one flow (`requestGuest`). A
+// contributor's upload of a name a file here holds is NOT a replace — the server refuses it (`409 slug_taken`, owner
+// decision 2026-10-08, inbox #392) and the notice points at the row's replace. No rename, no delete for any guest.
+//
+// Operator-blind: the names, sizes, types and dates shown are opened here under keys the server never sees; Files' calls
+// are the listing (ids, sealed sizes and each blob's sealed meta) and the completion (ids only).
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
 import type { LevelSectionProps, LevelSectionEmits } from '../../../core/applications/registry'
 import { registry } from '../../../core/applications/registry'
-import { deleteNode, type NodeParent, type TreeNode } from '../../../core/node/tree'
-import { loadTree } from '../../../core/node/treeStore'
+import type { TreeNode } from '../../../core/node/tree'
 import { enqueue, removeFile, useUploadQueue, QUOTA_EXCEEDED, type UploadItem } from '../../../core/blob/queue'
 import { activeSpace } from '../../../app/activeSpace'
-import { withRefresh } from '../../../app/sessionRefresh'
 import { useConfirm } from '../../../shared/state/useConfirm'
 import { useToast } from '../../../shared/state/useToast'
 import { formatBytes } from '../../../shared/formatBytes'
 import { useViewMode } from '../../../shared/state/useViewMode'
 import type { FileBlobRef } from '../../../api/generated/files'
-import { filesApi } from '../api'
 import { FILE_KIND } from '../kinds'
-import { deliveredSince, fileUploadJob, FileUploadError, type FileJobExtra, type FileUploadResult } from '../uploadFile'
-import { downloadFile, fileFacts } from '../download'
+import { deliveredSince, FileUploadError, type FileJobExtra, type FileUploadResult } from '../uploadFile'
+import { fileFacts } from '../download'
 import { plaintextTotal } from '../../../sw/range'
 import { isSaveCancelled, SaveTooLarge } from '../../../shared/saveStream'
 import { filesCapabilities } from '../capabilities'
-import { targetOf } from '../../../core/access'
+import { targetOf, type GuestAccess } from '../../../core/access'
+import { guestFilesSource, memberFilesSource, sourceCapabilities, type FileUploadEntry, type FilesSource } from '../source'
 
 const props = defineProps<LevelSectionProps>()
 const emit = defineEmits<LevelSectionEmits>()
+
+// One session for the section's life: a member's level or a link's page, never both — so the source is fixed at mount.
+const guest = props.access.mode === 'guest'
+const source: FilesSource = guest
+  ? guestFilesSource((): GuestAccess => {
+      const a = props.access
+      if (a.mode !== 'guest') throw new Error('a guest section was handed a member access')
+      return a
+    })
+  : memberFilesSource({
+      scopeId: () => activeSpace.scopeId,
+      epochs: () => props.epochs,
+      keyOf: (id) => props.tree.keyOf(id),
+      rename: (node) => emit('rename', node),
+    })
 
 const { t, locale } = useI18n()
 const { ask } = useConfirm()
@@ -56,13 +79,13 @@ const { viewMode } = useViewMode()
 
 // Only FILE nodes, whatever the level hands in: the section speaks for its own kind alone.
 const fileNodes = computed(() => props.nodes.filter((n) => n.kind === FILE_KIND))
-const caps = computed(() =>
-  filesCapabilities(props.access, targetOf(props.tree, props.folder)),
-)
+const caps = computed(() => sourceCapabilities(filesCapabilities(props.access, targetOf(props.tree, props.folder)), source))
+/** The session can write now (a member's epoch keys are unlocked). */
+const writeReady = computed(() => source.upload?.ready() ?? false)
 
 const keyOf = (node: TreeNode): Uint8Array | null => props.tree.keyOf(node.id)
 
-// --- the blobs of this level's files (`listFiles`) -------------------------------------------------------------
+// --- the blobs of this level's files (the source's listing) -----------------------------------------------------
 
 const blobs = ref(new Map<string, FileBlobRef | null>())
 let loads = 0
@@ -70,21 +93,20 @@ let loads = 0
  *  later load wins over an earlier one still in flight. */
 async function loadBlobs(): Promise<void> {
   const mine = ++loads
-  const scopeId = activeSpace.scopeId
-  if (!scopeId || fileNodes.value.length === 0) {
+  if (!source.scopeId() || fileNodes.value.length === 0) {
     blobs.value = new Map()
     return
   }
   try {
-    const page = await withRefresh(() => filesApi().listFiles({ scopeId, parentId: props.folder?.id }))
-    if (mine === loads) blobs.value = new Map(page.items.map((i) => [i.nodeId, i.fileBlob ?? null]))
+    const listed = await source.listBlobs(props.folder?.id ?? null)
+    if (mine === loads) blobs.value = listed
   } catch {
     // The rows still show names; size falls back to nothing and download is unavailable until the next load.
     if (mine === loads) blobs.value = new Map()
   }
 }
 watch(
-  () => [activeSpace.scopeId, props.folder?.id ?? null, fileNodes.value.map((n) => n.id).join(',')],
+  () => [source.listKey(), props.folder?.id ?? null, fileNodes.value.map((n) => n.id).join(',')],
   () => void loadBlobs(),
   { immediate: true },
 )
@@ -101,7 +123,7 @@ const isEmpty = (node: TreeNode): boolean => blobs.value.has(node.id) && blobs.v
  *  shows its facts whatever its node meta holds, and a replace shows the new blob's at once. No blob: not uploaded. */
 function rowDetail(key: Uint8Array | null, nodeId: string, blob: FileBlobRef | null): string {
   if (!blob) return t('files.notUploaded')
-  const scopeId = activeSpace.scopeId
+  const scopeId = source.scopeId()
   const facts = key && scopeId ? fileFacts(scopeId, key, nodeId, blob) : null
   const size = facts?.size ?? Math.max(0, plaintextTotal(blob.byteSize, blob.chunkCount))
   const modifiedAt = facts?.meta?.modifiedAt
@@ -125,15 +147,7 @@ const picker = ref<HTMLInputElement | null>(null)
 const replacePicker = ref<HTMLInputElement | null>(null)
 const replaceTarget = ref<TreeNode | null>(null)
 
-const batchKey = computed(() => `files:${activeSpace.scopeId ?? ''}:${props.folder?.id ?? ''}`)
-
-/** Where a new file of this level is created: under the folder with ITS key (ADR 0080 Decision 1), or the scope root.
- *  `undefined` when the folder's key does not open — nothing is created then, rather than a node nobody can read. */
-function newFileParent(): NodeParent | undefined {
-  if (!props.folder) return null
-  const key = keyOf(props.folder)
-  return key ? { id: props.folder.id, key } : undefined
-}
+const batchKey = computed(() => source.batchKey(props.folder?.id ?? null))
 
 /** The FILE sibling a picked name collides with: the same name folded by the kind's own function (`fileNameSlug`
  *  through the registry, so `Foto.JPG` meets `foto.jpg`), or none. */
@@ -143,31 +157,32 @@ function siblingFile(name: string): TreeNode | undefined {
 }
 
 function refresh(): void {
-  void loadTree().then(loadBlobs)
+  source.refresh(loadBlobs)
 }
 
 /**
  * Enqueue one job per file. Replacing a file's content always asks first (inbox #383: the old content cannot be
  * restored, there is no version history) — once per such file; declined → that file is skipped: a file whose name a
- * FILE sibling already holds, and `replaceNode`, the row the member chose "replace" on, whose picked file goes into it
- * whatever its name (the question names both). A file that holds no content asks nothing (there is nothing to lose,
- * #384), nor does `confirmed`: "replace anyway" after a peer's replace, itself the member's explicit answer. The node
- * keeps its name either way; the blob the member saw is what the replace expects to find (`expectedBlobId`).
+ * FILE sibling already holds (a member's upload only: a guest's is refused by the server, inbox #392), and
+ * `replaceNode`, the row the visitor chose "replace" on, whose picked file goes into it whatever its name (the question
+ * names both; a guest's says it changes for everyone, the owner too). A file that holds no content asks nothing (there
+ * is nothing to lose, #384), nor does `confirmed`: "replace anyway" after a peer's replace, itself the explicit answer.
+ * The node keeps its name either way; the blob the visitor saw is what the replace expects to find (`expectedBlobId`).
+ * A guest is named (the page's one flow) only after every question, and a declined name sends nothing.
  */
 async function startUploads(files: File[], replaceNode?: TreeNode, confirmed = false): Promise<void> {
-  const scopeId = activeSpace.scopeId
-  const epochs = props.epochs
-  if (!scopeId || !epochs || !(replaceNode ? caps.value.replace : caps.value.upload) || files.length === 0) return
-  const parent = newFileParent()
-  if (parent === undefined) return
-  const jobs = []
+  const upload = source.upload
+  if (!upload || !upload.ready() || !(replaceNode ? caps.value.replace : caps.value.upload) || files.length === 0) return
+  const batch = upload.begin(props.folder)
+  if (!batch) return
+  const entries: FileUploadEntry[] = []
   for (const file of files) {
-    const existing = replaceNode ?? siblingFile(file.name)
+    const existing = replaceNode ?? (upload.sameNameReplaces ? siblingFile(file.name) : undefined)
     if (existing && !confirmed && !isEmpty(existing)) {
       const accepted = await ask({
         header: t('files.replaceTitle'),
         message: replaceNode
-          ? t('files.replaceRowConfirm', { name: existing.name, file: file.name })
+          ? t(guest ? 'files.guest.replaceConfirm' : 'files.replaceRowConfirm', { name: existing.name, file: file.name })
           : t('files.replaceConfirm', { name: existing.name }),
         acceptLabel: t('files.replaceAccept'),
         acceptIcon: 'pi pi-upload',
@@ -176,15 +191,15 @@ async function startUploads(files: File[], replaceNode?: TreeNode, confirmed = f
     }
     const nodeKey = existing ? keyOf(existing) : null
     if (existing && !nodeKey) continue
-    jobs.push(
+    entries.push(
       existing && nodeKey
-        ? fileUploadJob({
-            scopeId, epochs, parent,
-            replace: { nodeId: existing.id, nodeKey, expectedBlobId: blobs.value.get(existing.id)?.blobId ?? null },
-          }, file)
-        : fileUploadJob({ scopeId, epochs, parent }, file),
+        ? { file, replace: { nodeId: existing.id, nodeKey, expectedBlobId: blobs.value.get(existing.id)?.blobId ?? null } }
+        : { file },
     )
   }
+  if (entries.length === 0) return
+  const jobs = await batch.jobs(entries)
+  if (jobs.length === 0) return
   enqueue<FileUploadResult, FileJobExtra>(jobs, {
     label: props.folder?.name ?? t('files.title'),
     key: batchKey.value,
@@ -220,6 +235,14 @@ function onDrop(e: DragEvent) {
 
 type Notice = { item: UploadItem<FileUploadResult, FileJobExtra>; severity: 'error'; text: string; replaceAnyway: boolean }
 const KNOWN_ERRORS = new Set<string>([...Object.values(FileUploadError), QUOTA_EXCEEDED])
+/** Why a file was not uploaded, in this session's words: a guest's link has a limit of its own and no trash to point at,
+ *  and a guest's upload of a name a file here holds was refused on purpose (inbox #392) — the notice says where the
+ *  replace is, not the generic "a similar name". */
+function noticeText(code: string, name: string): string {
+  if (guest && code === QUOTA_EXCEEDED) return t('files.guest.linkFull', { name })
+  if (guest && code === FileUploadError.slugTaken && siblingFile(name)) return t('files.guest.fileExists', { name })
+  return t(`files.errors.${code}`, { name })
+}
 const notices = computed<Notice[]>(() => {
   const mine = batches.value.filter((b) => b.key === batchKey.value)
   const madeGood = deliveredSince(mine) // the same file uploaded since: nothing left to explain (inbox #395)
@@ -229,7 +252,7 @@ const notices = computed<Notice[]>(() => {
       if (item.status === 'failed' && madeGood.has(item.id)) return []
       if (item.status === 'failed') {
         const code = item.error && KNOWN_ERRORS.has(item.error) ? item.error : 'failed'
-        return [{ item, severity: 'error', text: t(`files.errors.${code}`, { name: item.name }), replaceAnyway: code === FileUploadError.staleFile }]
+        return [{ item, severity: 'error', text: noticeText(code, item.name), replaceAnyway: code === FileUploadError.staleFile }]
       }
       return []
     })
@@ -248,12 +271,11 @@ async function replaceAnyway(n: Notice) {
 
 const downloading = ref<string | null>(null)
 async function download(row: Row) {
-  const scopeId = activeSpace.scopeId
-  if (!scopeId || !row.key || !row.blob || downloading.value) return
+  if (!source.scopeId() || !row.key || !row.blob || downloading.value) return
   downloading.value = row.node.id
   try {
     // Nothing awaited before it: the save-file picker needs this click's activation (`openSaveTarget`).
-    await downloadFile(scopeId, row.key, row.node.id, row.blob, row.node.name)
+    await source.download(row.key, row.node.id, row.blob, row.node.name)
   } catch (e) {
     if (e instanceof SaveTooLarge) toast.error(t('files.downloadTooLarge'))
     else if (!isSaveCancelled(e)) toast.error(t('files.downloadFailed'))
@@ -263,8 +285,8 @@ async function download(row: Row) {
 }
 
 async function remove(node: TreeNode) {
-  const scopeId = activeSpace.scopeId
-  if (!scopeId || !caps.value.deleteFile) return
+  const deleteFile = source.deleteFile
+  if (!deleteFile || !caps.value.deleteFile) return
   const accepted = await ask({
     header: t('files.deleteTitle'),
     message: t('files.deleteConfirm', { name: node.name }),
@@ -273,8 +295,7 @@ async function remove(node: TreeNode) {
   })
   if (!accepted) return
   try {
-    await deleteNode(scopeId, node.id)
-    await loadTree()
+    await deleteFile(node.id)
   } catch {
     toast.error(t('files.deleteFailed'))
   }
@@ -294,11 +315,14 @@ async function remove(node: TreeNode) {
           severity="secondary"
           outlined
           size="small"
-          :disabled="!epochs"
+          :disabled="!writeReady"
           @click="picker?.click()"
         />
       </div>
     </div>
+    <!-- A contributor guest is told what an upload or a replace does before it happens (inbox #383); a replace asks
+         again when it is picked. -->
+    <p v-if="guest && caps.upload" class="veyq-form-copy">{{ t('files.guest.contributorHint') }}</p>
     <input v-if="caps.upload" ref="picker" class="files-picker" type="file" multiple hidden @change="onPicked" />
     <input v-if="caps.replace" ref="replacePicker" class="files-picker" type="file" hidden @change="onReplacePicked" />
 
@@ -320,7 +344,7 @@ async function remove(node: TreeNode) {
       </span>
     </Message>
 
-    <p v-if="!fileNodes.length" class="veyq-empty veyq-empty-inline">{{ t('files.empty') }}</p>
+    <p v-if="!fileNodes.length" class="veyq-empty veyq-empty-inline">{{ guest && !caps.upload ? t('files.guest.empty') : t('files.empty') }}</p>
     <ul v-else class="veyq-list files-list">
       <li v-for="row in rows" :key="row.node.id" class="veyq-list-row files-row">
         <button
@@ -360,7 +384,7 @@ async function remove(node: TreeNode) {
             severity="secondary"
             outlined
             size="small"
-            :disabled="!epochs"
+            :disabled="!writeReady"
             @click="startReplace(row.node)"
           />
           <Button
@@ -372,7 +396,7 @@ async function remove(node: TreeNode) {
             severity="secondary"
             outlined
             size="small"
-            @click="emit('rename', row.node)"
+            @click="source.rename?.(row.node)"
           />
           <!-- Delete also where nothing is placed: a guest's identity folder, where a member removes what a guest sent file
                by file — a content-less one too, a guest's upload that never finished (inbox #391). -->

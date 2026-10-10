@@ -101,17 +101,22 @@ export const guestAccessOf = (role: string, o: Partial<Omit<GuestAccess, 'mode' 
   shareId: 's1',
   role: role as ShareRole,
   head: {} as PublicShareHead,
+  fragmentKey: 'frag',
   requestGuest: async () => null,
+  reload: async () => {},
   ...o,
 })
 
 /** The guest `Access` the share shell hands a body for `head` (`guestAccess`, core/sharing/guestAccess.ts): its role and
  *  password token from the head, and a naming flow — by default one that is never answered (a test that names a guest
- *  passes its own). */
+ *  passes its own) — and a re-resolve that does nothing unless the test passes one. */
 export const guestAccessFor = (
   head: PublicShareHead,
-  o: { pwToken?: string; requestGuest?: () => Promise<GuestIdentity | null> } = {},
-): GuestAccess => guestAccess({ head, pwToken: o.pwToken, requestGuest: o.requestGuest ?? (() => new Promise(() => {})) })
+  o: { pwToken?: string; fragmentKey?: string; requestGuest?: () => Promise<GuestIdentity | null>; reload?: () => Promise<void> } = {},
+): GuestAccess => guestAccess({
+  head, pwToken: o.pwToken, fragmentKey: o.fragmentKey ?? 'frag',
+  requestGuest: o.requestGuest ?? (() => new Promise(() => {})), reload: o.reload ?? (async () => {}),
+})
 
 /** A member's `TreeSource` over `nodes` (a getter, so a test's reactive store is read anew), keys opened under `epochs`. */
 export const memberTreeOf = (

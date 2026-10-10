@@ -140,7 +140,9 @@ function onNamingClose() {
   waiting = []
   for (const w of all) w(session.value)
 }
-const access = computed(() => (head.value ? guestAccess({ head: head.value, pwToken: pwToken.value, requestGuest }) : null))
+const access = computed(() =>
+  head.value ? guestAccess({ head: head.value, pwToken: pwToken.value, fragmentKey: fragmentKey.value, requestGuest, reload: load }) : null,
+)
 /** The line that says whose session this is: a READ_WRITE link's (a drop page shows its own). */
 const showsIdentity = computed(() => head.value?.role === ShareRole.ReadWrite && !!session.value)
 

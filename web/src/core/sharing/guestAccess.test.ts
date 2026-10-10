@@ -2,7 +2,7 @@
 // names and keys open through the chain, a guest's identity folder through the drop key — and the four promises a view
 // relies on: a link keeps the `#k=` fragment, nothing outside the opened subtree is served, equal names are numbered by
 // node id, and the identity-folder flag holds for the folder and everything below it.
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { reactive } from 'vue'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url } from '@veyq/crypto/base64'
@@ -126,11 +126,14 @@ describe('guestTreeSource', () => {
 })
 
 describe('guestAccess', () => {
-  it("is a guest's access: the link's id and role, its password token, its head and the page's naming flow", async () => {
+  it("is a guest's access: the link's id and role, its password token, its head, the fragment key, the page's naming flow and re-resolve", async () => {
     const h = { ...head(), role: ShareRole.ReadWrite }
     const requestGuest = async () => ({ identityId: 'i', contributorToken: 't' })
-    const access = guestAccess({ head: h, pwToken: 'pw', requestGuest })
-    expect(access).toMatchObject({ mode: 'guest', shareId: SHARE_ID, role: ShareRole.ReadWrite, pwToken: 'pw', head: h })
+    const reload = vi.fn(async () => {})
+    const access = guestAccess({ head: h, pwToken: 'pw', fragmentKey: 'frag', requestGuest, reload })
+    expect(access).toMatchObject({ mode: 'guest', shareId: SHARE_ID, role: ShareRole.ReadWrite, pwToken: 'pw', head: h, fragmentKey: 'frag' })
     expect(await access.requestGuest()).toEqual({ identityId: 'i', contributorToken: 't' })
+    await access.reload()
+    expect(reload).toHaveBeenCalledOnce()
   })
 })

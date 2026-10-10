@@ -6,19 +6,19 @@
 // download, rename and delete. No `detail` — a file is not opened, it is downloaded from its row (an opened FILE, e.g.
 // by a typed URL, renders the host's explicit unsupported state, `home.unsupportedKind`), no `createDialog` (a file is
 // created by uploading it, never by naming an empty one) and no `shareDialog` (a file is shared through its folder).
-// Its SHARE SECTION (F2): the file list of a shared folder on the public page, the download for every guest, the upload
-// and replace for a contributor (`components/ShareFilesSection.vue`); no share body — a file is never a share root.
+// The same section is a shared folder's file list on the public page (inbox #401 S3): core's folder page mounts it with
+// the guest's access and tree, the download for every guest, the upload and replace for a contributor. No share body —
+// a file is never a share root.
 //
 // The `FILES_DROPBOX` kind (F3, ADR 0080 decision 11): its level section (the drop boxes of a folder, a "New drop box"
-// action), its `createDialog` (a name), its `detail` (its guests' folders), its `shareDialog` (WRITE_ONLY links only)
-// and the share BODY: on its own WRITE_ONLY link the guest's page (name yourself, pick files, upload into your own
-// folder); embedded by core's folder page of a READ or READ_WRITE link above, the drop box read-only — its guests'
-// folders to open and download from, nothing to send (`DropBoxShareBody`, inbox #380, owner decision 2026-10-08).
+// action), its `createDialog` (a name), its `detail` (its guests' folders — for a member, and read-only for a READ or
+// READ_WRITE guest of a folder link above it, inbox #380 and #401 S3), its `shareDialog` (WRITE_ONLY links only) and the
+// share BODY: on its own WRITE_ONLY link the guest's page (name yourself, pick files, upload into your own folder) —
+// claimed without `embedBelowFolder`, so core's folder page never embeds it below a shared folder.
 import { DROPBOX_KIND, FILE_KIND } from './kinds'
 import type { Registry } from '../../core/applications/registry'
 import { fileNameSlug } from '../../shared/naming'
 import FilesSection from './components/FilesSection.vue'
-import ShareFilesSection from './components/ShareFilesSection.vue'
 import DropBoxSection from './components/DropBoxSection.vue'
 import DropBoxCreateDialog from './components/DropBoxCreateDialog.vue'
 import DropBoxDetail from './components/DropBoxDetail.vue'
@@ -52,7 +52,6 @@ export function registerFiles(registry: Registry): void {
     // Core's create and rename dialogs name a colliding file with it: "There is already a file named …" (#389).
     nounWithArticle: 'files.aFile',
     section: { order: FILES_SECTION_ORDER, component: FilesSection },
-    shareSection: { order: FILES_SECTION_ORDER, component: ShareFilesSection },
   })
   // Shared WRITE_ONLY only (the backend's `FilesShareRoots`); its name folds as a container's (`slugify`, the default).
   registry.registerKind({

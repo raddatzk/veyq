@@ -981,7 +981,7 @@ const en = {
       quota_exceeded: '“{name}” was not uploaded: there is no space left. Deleted files only free space once the trash is emptied.',
       failed: '“{name}” could not be uploaded.',
     },
-    // A guest's file list on a shared folder (components/ShareFilesSection.vue, F2): no trash to point at, and a link has
+    // A guest's words in Files' section on a shared folder (components/FilesSection.vue, F2): no trash to point at, a link has
     // a limit of its own (the code does not say which limit was reached, ADR 0073 §6).
     guest: {
       empty: 'No files here.',

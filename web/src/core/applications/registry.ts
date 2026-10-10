@@ -32,17 +32,11 @@
 // not dropped: the level view renders core's fallback section for it (its icon, its name, the explicit unsupported
 // state), never an empty area.
 //
-// **Share sections (`KindDescriptor.shareSection`, cr-files-application F2).** The guest's folder page of a public
-// share is core's too (`core/sharing/FolderShareBody.vue`), and a kind that brings a share section has its children
-// rendered by THAT component (props `ShareSectionProps`) — Files' file list with its download and a contributor's
-// upload. The same rules as the level sections: keyed by component, sorted by `order`, a contradicting `order`
-// throws. Since inbox #401 S2 the folder page IS core's level view (`LevelView`, handed the guest's access and tree):
-// every kind's level `section` renders there as for a member, and a kind that brings a share section has that drawn in
-// the level's `host-section` slot instead of its level section. Being retired (ADR 0079 Consequences, inbox #401 S3).
-//
 // **Who looks (`core/access.ts`).** A `detail` and a `section` are handed `access` (a member, or a share guest)
 // and `tree` (the tree as that session reads it), and offer what their application's fail-closed capability function
-// answers for them — one view per kind in both modes, never a flag the host decides.
+// answers for them — one view per kind in both modes, never a flag the host decides. The guest's folder page of a public
+// share is core's level view (`core/sharing/FolderShareBody.vue`, inbox #401 S2), so a kind's `section` serves it as it
+// serves a member; a guest-only list per kind (the retired `shareSection`, inbox #401 S3) no longer exists.
 //
 // **List slots (`addSlotItem`).** The top-bar tray and the sidebar pins are places where several applications each add
 // their own entry, so they are ordered lists: an item is registered under an id (namespaced by its application, e.g.
@@ -55,10 +49,11 @@
 // kind-independent half (core/sharing/resolvePublicShare.ts), runs the password and terms gates, then renders the body
 // the application claimed for the share's ROOT node kind (`PublicShare.rootKind`, served for every role — a WRITE_ONLY
 // share too, so its drop page is the body of its kind's application). A kind is claimed once (a second claim throws). A
-// root kind nobody claimed, or none at all, renders the shell's explicit unavailable state. A claim is also what core's
-// folder page EMBEDS for a node of the kind below a shared folder (`subtreeRoot` set): the body then serves a guest of a
-// link ABOVE its node, with that link's role — a body that is a WRITE_ONLY guest's page when it is the root (Files' drop
-// box) renders something else when embedded (Files: the drop box read-only, inbox #380).
+// root kind nobody claimed, or none at all, renders the shell's explicit unavailable state. The target (ADR 0079
+// Consequences, inbox #401) narrows a claim to the one page with no member equivalent, a `WRITE_ONLY` link's drop: below
+// a shared folder core's folder page renders the kind's `detail`, handed the guest's `access` and `tree` (Files' drop box
+// since S3). Transitional until inbox #401 S5: a claim made with `embedBelowFolder` (Memories') is still what the folder
+// page EMBEDS for a node of the kind below it (`subtreeRoot` set), serving a guest of the link above with that link's role.
 //
 // **Lifecycle hooks (`registerLifecycle`).** What runs when a scope is entered or reset and when the master key
 // rotates. Registered per application id (a second registration of the same id throws); several applications may
@@ -77,8 +72,6 @@ import type { TreeNode } from '../node/tree'
 import type { Level } from '../node/browse'
 import type { EpochKeys } from '../../features/spaces/epochs'
 import type { PublicShareHead } from '../sharing/resolvePublicShare'
-import type { GuestIdentity } from '../sharing/guestIdentity'
-import type { ShareNode } from '../../api/generated/sharing'
 import type { Access, GuestAccess, TreeSource } from '../access'
 import { slugify } from '../../shared/naming'
 
@@ -143,9 +136,6 @@ export interface KindDescriptor {
   /** The share management dialog of a node of this kind (props `NodeShareDialogProps`, emits `close`). Omitted: the
    *  kind offers no share, whatever `shareable` says. FOLDER's is core's own `FolderShareDialog`, pre-registered. */
   shareDialog?: Component
-  /** The section the public share's folder page renders for this kind's children (see the header): `component` takes
-   *  `ShareSectionProps`. Omitted: a child of the kind is a card on that page. */
-  shareSection?: KindSection
 }
 
 /** A kind's level section: the component and where it sorts among the sections. */
@@ -175,11 +165,13 @@ export interface NodeDetailProps {
   contentKey: Uint8Array | null
   /** The opened node's children, bucketed by kind (`byKind`). */
   children: Level
-  /** Who looks: a member of the scope (its pending deletion, the instance's sharing capabilities) — a share guest once
-   *  the share page mounts details (inbox #401 S5; its folder level does since S2). */
+  /** Who looks: a member of the scope (its pending deletion, the instance's sharing capabilities), or a share guest —
+   *  core's folder page of a link mounts the detail of a node below the root for a kind it does not embed a claimed body
+   *  for (inbox #401 S3: Files' drop box; a guest's `scopeId` is the link's, its `epochs` null, its keys the tree's). */
   access: Access
-  /** The tree as that session reads it: keys, names, the identity-folder test and the links every navigation takes. */
-  tree: TreeSource
+  /** The tree as that session reads it: keys, names, the identity-folder test and the links every navigation takes. Its
+   *  nodes are `TreeNode`s in both modes (the member's tree, the guest's served rows as `TreeNode`s). */
+  tree: TreeSource<TreeNode>
 }
 /** Events a `detail` component emits to the host: `rename` (core's `FolderNameDialog`, any kind), `delete`,
  *  `createChild` (the KIND of the child to create: the host mounts that kind's `createDialog` under the opened node),
@@ -281,25 +273,6 @@ export interface ShareBodyEmits {
   unavailable: []
 }
 
-/** What core's folder page of a public share (`core/sharing/FolderShareBody.vue`) hands a kind's `shareSection`: the
- *  share as the shell resolved it, the folder on screen and the children of every kind that names the section (the
- *  served rows; their keys and names are what the chain opened — key material), whether the link takes writes, and
- *  `requestGuest`: the guest's identity for this link, asking the visitor's name first when it has none (null: the
- *  visitor declined). After a write the section calls `reload` so the new nodes list. */
-export interface ShareSectionProps {
-  shareId: string
-  fragmentKey: string
-  pwToken: string | undefined
-  head: PublicShareHead
-  reload: () => Promise<void>
-  folderId: string
-  nodes: readonly ShareNode[]
-  keys: ReadonlyMap<string, Uint8Array>
-  names: ReadonlyMap<string, string>
-  canWrite: boolean
-  requestGuest: () => Promise<GuestIdentity | null>
-}
-
 /** The list slots: several applications may each add items (see the header). A `topbarTray` item takes no props (the
  *  shell's top bar mounts it after the invitations badge and core's own upload status menu); a `sidebarPins` item
  *  takes `SidebarPinsProps`. */
@@ -329,12 +302,16 @@ export interface Registry {
   /** Register an application's lifecycle hooks under its id. Throws if the id is already registered, or if
    *  `onMasterKeyRotated` is not a function. */
   registerLifecycle(applicationId: string, hooks: LifecycleHooks): void
-  /** Claim the public-share body for a root kind, whatever the share's role — and the body core's folder page embeds
-   *  for a node of the kind below a shared folder (see the header). Throws if that kind is already claimed. */
-  claimShareBody(kind: NodeKind, component: Component): void
+  /** Claim the public-share body for a root kind, whatever the share's role. `embedBelowFolder` (transitional, inbox #401
+   *  until S5): core's folder page also embeds it for a node of the kind below a shared folder, instead of the kind's
+   *  `detail` (see the header). Throws if that kind is already claimed. */
+  claimShareBody(kind: NodeKind, component: Component, options?: { embedBelowFolder?: boolean }): void
   /** The body claimed for a share's root kind, or null when nobody claimed it (the shell renders its unavailable
    *  state — never an empty page). */
   shareBody(kind: NodeKind): Component | null
+  /** The body core's folder page embeds for a node of `kind` below the share root: the claim made with
+   *  `embedBelowFolder`, else null (the page renders the kind's `detail`). */
+  embeddedShareBody(kind: NodeKind): Component | null
   /** Run every application's `onScopeReset`. */
   scopeReset(): void
   /** Run every application's `onScopeEntered`, in registration order; rejects with the first failure after all ran. */
@@ -362,8 +339,6 @@ export interface Registry {
    *  each section was first named); empty when no kind registered one (the level view still renders the overview, the
    *  fallback and the folders). */
   sections(): readonly LevelSection[]
-  /** The share sections (`KindDescriptor.shareSection`), by the same rules as [sections]. */
-  shareSections(): readonly LevelSection[]
 }
 
 const LIST_SLOTS: readonly string[] = ['topbarTray', 'sidebarPins'] satisfies readonly ListSlotName[]
@@ -377,13 +352,13 @@ export function createRegistry(): Registry {
   ])
   const lists = new Map<ListSlotName, { id: string; component: Component; order: number }[]>()
   const lifecycles = new Map<string, LifecycleHooks>()
-  // One entry per distinct section component, in the order each was first named (the stable sort's tie-break): the
-  // level sections and the share sections, each its own list under the same rules.
+  // One entry per distinct section component, in the order each was first named (the stable sort's tie-break).
   const sections: { component: Component; order: number; kinds: NodeKind[] }[] = []
-  const shareSections: { component: Component; order: number; kinds: NodeKind[] }[] = []
   // The platform's own share body: a link rooted at a FOLDER browses the subtree (cr-node-key-hierarchy 5b.4b). Pre-claimed
   // like FOLDER's kind above, so an application claiming FOLDER throws.
   const shareBodies = new Map<NodeKind, Component>([[FOLDER_KIND, FolderShareBody]])
+  // The claims core's folder page still embeds below the root (transitional, inbox #401 until S5).
+  const embeddedBodies = new Set<NodeKind>()
   /** Run `f` on every application, never stopping at the first failure; rethrow the first one at the end. */
   async function eachApplication(f: (h: LifecycleHooks) => Promise<void> | void): Promise<void> {
     let failure: { error: unknown } | null = null
@@ -397,11 +372,13 @@ export function createRegistry(): Registry {
     if (failure) throw failure.error
   }
   return {
-    claimShareBody(kind, component) {
+    claimShareBody(kind, component, options) {
       if (shareBodies.has(kind)) throw new Error(`share body for ${kind} is already claimed`)
       shareBodies.set(kind, component)
+      if (options?.embedBelowFolder) embeddedBodies.add(kind)
     },
     shareBody: (kind) => shareBodies.get(kind) ?? null,
+    embeddedShareBody: (kind) => (embeddedBodies.has(kind) ? (shareBodies.get(kind) ?? null) : null),
     registerLifecycle(applicationId, hooks) {
       if (lifecycles.has(applicationId)) throw new Error(`lifecycle hooks of ${applicationId} are already registered`)
       if (typeof hooks.onMasterKeyRotated !== 'function') {
@@ -422,10 +399,10 @@ export function createRegistry(): Registry {
     },
     registerKind(descriptor) {
       if (kinds.has(descriptor.kind)) throw new Error(`node kind ${descriptor.kind} is already registered`)
-      // Both checked before anything is stored, so a contradiction registers nothing.
-      const add = [sectionJoin(sections, descriptor.kind, descriptor.section), sectionJoin(shareSections, descriptor.kind, descriptor.shareSection)]
+      // Checked before anything is stored, so a contradiction registers nothing.
+      const join = sectionJoin(sections, descriptor.kind, descriptor.section)
       kinds.set(descriptor.kind, { ...descriptor })
-      for (const f of add) f()
+      join()
     },
     addSlotItem(slot, id, component, order) {
       if (!LIST_SLOTS.includes(slot)) throw new Error(`slot ${slot} is not a list slot`)
@@ -447,7 +424,6 @@ export function createRegistry(): Registry {
       return (kinds.get(kind)?.slug ?? slugify)(name)
     },
     sections: () => sortedSections(sections),
-    shareSections: () => sortedSections(shareSections),
   }
 }
 

@@ -5,18 +5,19 @@
 // naming flow); this body builds the guest's TREE from the head (`guestTreeSource`: the root's key from the share's
 // `wrap`, every key and name below through the chain) and browses it.
 //
-// **The member's page, with functions removed (inbox #401 S2).** At a folder it renders core's `LevelView` — the very
+// **The member's page, with functions removed (inbox #401).** At a folder it renders core's `LevelView` — the very
 // view a member browses with: the folder's overview card, every application's level section through the registry
-// (Memories' cards with their covers and dates, Files' drop boxes), the fallback section for a kind no section serves,
-// the sub-folders — handed the guest's `access` and `tree`, so every control is the capability functions' answer for a
-// guest (`folderCapabilities`, `memoryCapabilities`, `filesCapabilities`). What stays this body's own is what only a
-// guest's page has: the breadcrumb up to the share root, the share's note (once), the role badge.
+// (Memories' cards with their covers and dates, Files' files and drop boxes), the fallback section for a kind no section
+// serves, the sub-folders — handed the guest's `access` and `tree`, so every control is the capability functions' answer
+// for a guest (`folderCapabilities`, `memoryCapabilities`, `filesCapabilities`) and the sections' data sources. At any
+// other node it renders that kind's `detail` (`NodeDetailProps`, the guest's access and tree; Files' drop box since S3),
+// as the member's host does. What stays this body's own is what only a guest's page has: the breadcrumb up to the share
+// root, the share's note (once), the role badge.
 //
-// **Until their steps (S3 Files, S5 Memories)** two kinds keep their separate guest views, embedded where they were: a
-// kind with a `shareSection` (Files' file list) is drawn in the level's `host-section` slot at its section's place,
-// handed `ShareSectionProps`; any other node (a Memory, a chapter, a drop box) is EMBEDDED through the body its
-// application claimed (`registry.shareBody(kind)`), handed `subtreeRoot` — its id, key and name from the chain. A kind
-// nobody claimed, or an embedded body that reports `unavailable`, is a local empty state here, never the page's.
+// **Until S5 (Memories)** a kind whose application claimed its share body `embedBelowFolder` (a Memory, a chapter) is
+// EMBEDDED through that body (`registry.embeddedShareBody(kind)`) instead of its detail, handed `subtreeRoot` — its id,
+// key and name from the chain. A kind with neither, or an embedded body that reports `unavailable`, is a local empty
+// state here, never the page's.
 //
 // **Navigation** is the tree's `linkTo`: `?node=<id>` with the `#k=` fragment KEPT (the shell re-reads the share key
 // from it on every re-resolve), and every breadcrumb a real link (web/CLAUDE.md, the breadcrumb trap). An id the walk
@@ -25,7 +26,7 @@
 // **Writes (READ_WRITE only)** are what the capabilities grant at the folder on screen: a new folder, or a node of a
 // section's kind (a Memory), created as the guest under the current folder (`createShareNodeAsGuest`) after the shell
 // named it (`access.requestGuest`). Inside a guest's identity folder nothing is placed but by its own identity, so no
-// create is offered there (the server refuses it: `illegal_structure`), and a share section is told `canWrite: false`.
+// create is offered there (the server refuses it: `illegal_structure`), nor any section's write (the capabilities).
 import { computed, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -36,7 +37,7 @@ import type { GuestAccess } from '../access'
 import { FOLDER_KIND, type NodeKind } from '../node/kind'
 import { childrenOf, type Level } from '../node/browse'
 import LevelView from '../node/LevelView.vue'
-import { ShareRole, type ShareNode } from '../../api/generated/sharing'
+import { ShareRole } from '../../api/generated/sharing'
 import { pickLocaleText, type PublicShareHead } from './resolvePublicShare'
 import { guestTreeContext, createShareNodeAsGuest, guestTreeErrorMessageKey } from './guestTree'
 import { guestTreeSource, type GuestTreeSource } from './guestAccess'
@@ -126,16 +127,13 @@ const crumbs = computed<MenuItem[]>(() => {
   return tr ? trail.value.slice(1).map((id) => crumb(tr, id)) : []
 })
 
-// --- Files' list until S3: a kind's `shareSection`, drawn in the level's host slot --------------------------------
-const shareSections = registry.shareSections()
-const shareSectionFor = (kinds: readonly NodeKind[]) => shareSections.find((s) => s.kinds.some((k) => kinds.includes(k)))?.component ?? null
-const hostSection = (kinds: readonly NodeKind[]) => shareSectionFor(kinds) !== null
-/** The served rows of `nodes` (what a share section is handed), keys and names beside them in `parts`. */
-const servedRows = (nodes: readonly { id: string }[]) =>
-  nodes.map((n) => tree.value?.parts.nodes.get(n.id)).filter((n): n is ShareNode => !!n)
-
-// --- a node that is not a folder: the body its application claimed, embedded (until S5) ---------------------------
-const embedded = computed(() => (current.value && !atFolder.value ? registry.shareBody(current.value.kind) : null))
+// --- a node that is not a folder: its kind's detail, or (until S5) the body its application claimed, embedded --------
+const embedded = computed(() => (current.value && !atFolder.value ? registry.embeddedShareBody(current.value.kind) : null))
+const detail = computed(() => {
+  if (!current.value || atFolder.value || embedded.value) return null
+  const info = registry.kind(current.value.kind)
+  return info.supported ? (info.detail ?? null) : null
+})
 const subtreeRoot = computed(() => {
   const tr = tree.value
   const id = currentId.value
@@ -192,27 +190,23 @@ function createError(e: unknown): string {
       :access="access"
       :tree="tree"
       :folder-name="tree.nameOf(current.id)"
-      :host-section="hostSection"
       @open-node="go($event.id)"
       @create="startCreate"
-    >
-      <template #host-section="{ kinds, nodes }">
-        <component
-          :is="shareSectionFor(kinds)"
-          :share-id="shareId"
-          :fragment-key="fragmentKey"
-          :pw-token="pwToken"
-          :head="head"
-          :reload="reload"
-          :folder-id="current.id"
-          :nodes="servedRows(nodes)"
-          :keys="tree.parts.keys"
-          :names="tree.parts.names"
-          :can-write="canWriteHere"
-          :request-guest="access.requestGuest"
-        />
-      </template>
-    </LevelView>
+    />
+    <!-- The member's detail of the node's kind, for a guest: what it offers is its capabilities and its data source. -->
+    <component
+      :is="detail"
+      v-else-if="detail && current"
+      :key="current.id"
+      :node="current"
+      :scope-id="head.scopeId"
+      :epochs="null"
+      :content-key="tree.keyOf(current.id)"
+      :children="level"
+      :access="access"
+      :tree="tree"
+      @open-node="go($event.id)"
+    />
     <p v-else-if="!embedded || !subtreeRoot" class="veyq-empty">{{ t('share.folder.unsupportedKind') }}</p>
     <p v-else-if="currentId && unusable.has(currentId)" class="veyq-empty">{{ t('share.folder.gone') }}</p>
     <component

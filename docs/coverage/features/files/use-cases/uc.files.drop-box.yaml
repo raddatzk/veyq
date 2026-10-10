@@ -37,6 +37,11 @@ acceptanceCriteria:
       web:
         unit: [src/core/node/tree.identityFolder.test.ts, src/features/files/components/DropBoxDetail.test.ts]
         e2e: [src/features/files/filesDropBox.e2e.test.ts]
+  - id: a-guest-of-a-link-above-sees-it-read-only
+    text: A READ or READ_WRITE guest of a folder link above a drop box sees it in the member's own drop-box view — its guests' folders (a repeated name numbered in node-id order) and their files with the download — and no send form, upload, replace, share, delete or move; the server lets no guest move anything out of it.
+    coverage:
+      backend: { integration: [DropBoxSliceTest.aGuestOfALinkAboveMovesNothingOutOfADropBox] }
+      web: { unit: [src/features/files/components/DropBoxDetail.guest.test.ts] }
   - id: revoking-the-link-keeps-everything
     text: Revoking or deleting a drop-box link keeps the drop box, its folders, files and blobs, and every identity a folder names.
     coverage:

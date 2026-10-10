@@ -9,19 +9,28 @@
 // in the order the server made their folders, a same-millisecond pair by id) — core's `displayNamesOf` in
 // `compareByCreation` order, the order the URL segments `anna`, `anna-2` of the same two folders come from
 // (`core/node/location.ts` `segmentsOf`), and the label the folder's own heading and breadcrumb show (inbox #393).
+//
+// **A guest of a folder link above the drop box sees this one view too** (inbox #401 S3; owner decision 2026-10-08,
+// inbox #380: it was given that tree): core's folder page renders it as the drop box's `detail`, handed the guest's
+// `access` and `tree`, whose walk opened the guests' folders through the drop key (`childEntryKey`). The guest's tree
+// serves no creation time (`createdAt` 0), so `compareByCreation` falls to its node-id tie-break: a guest numbers equal
+// names in node-id order, which can differ from the member's creation order (documented in docs/apps/files.md). A
+// guest's Files source carries no delete, and the matrix grants a guest no share and no delete either: it opens a
+// folder (core's folder page, read-only inside an identity folder) and downloads there — no send form (that is the
+// WRITE_ONLY guest's own page, `DropBoxGuestForm`), nothing deleted or moved; the server refuses each to every guest.
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import type { NodeDetailEmits, NodeDetailProps } from '../../../core/applications/registry'
-import { deleteNode, type TreeNode } from '../../../core/node/tree'
-import { treeStore, loadTree } from '../../../core/node/treeStore'
+import type { TreeNode } from '../../../core/node/tree'
 import { FOLDER_KIND } from '../../../core/node/kind'
 import { compareByCreation, displayNamesOf } from '../../../core/node/location'
 import { useConfirm } from '../../../shared/state/useConfirm'
 import { useToast } from '../../../shared/state/useToast'
 import { FILE_KIND } from '../kinds'
 import { filesCapabilities } from '../capabilities'
-import { targetOf } from '../../../core/access'
+import { targetOf, type GuestAccess } from '../../../core/access'
+import { guestFilesSource, memberFilesSource, sourceCapabilities, type FilesSource } from '../source'
 
 const props = defineProps<NodeDetailProps>()
 const emit = defineEmits<NodeDetailEmits>()
@@ -29,23 +38,34 @@ const { t } = useI18n()
 const { ask } = useConfirm()
 const toast = useToast()
 
-const caps = computed(() => filesCapabilities(props.access, targetOf(props.tree, props.node)))
+// One session for the view's life (see FilesSection): the member's source or the link's.
+const guest = props.access.mode === 'guest'
+const source: FilesSource = guest
+  ? guestFilesSource((): GuestAccess => {
+      const a = props.access
+      if (a.mode !== 'guest') throw new Error('a guest view was handed a member access')
+      return a
+    })
+  : memberFilesSource({ scopeId: () => props.scopeId, epochs: () => props.epochs, keyOf: (id) => props.tree.keyOf(id) })
+const caps = computed(() => sourceCapabilities(filesCapabilities(props.access, targetOf(props.tree, props.node)), source))
 
 /** The guests' folders, each with its display name (a repeated name numbered) and its file count. */
 const folders = computed(() => {
-  const own = treeStore.nodes
-    .filter((n) => n.parentId === props.node.id && n.kind === FOLDER_KIND)
+  const own = props.tree
+    .children(props.node.id)
+    .filter((n) => n.kind === FOLDER_KIND)
     .sort(compareByCreation)
   // Core's one numbering (the folder's heading and breadcrumb say the same, inbox #393).
   const labels = displayNamesOf(own, (n) => n.name, compareByCreation)
   return own.map((folder) => {
-    const files = treeStore.nodes.filter((c) => c.parentId === folder.id && c.kind === FILE_KIND).length
+    const files = props.tree.children(folder.id).filter((c) => c.kind === FILE_KIND).length
     return { folder, label: labels.get(folder.id) ?? folder.name, files }
   })
 })
 
 async function removeFolder(folder: TreeNode, label: string) {
-  if (!caps.value.deleteFile) return
+  const deleteFile = source.deleteFile
+  if (!deleteFile || !caps.value.deleteFile) return
   const accepted = await ask({
     header: t('files.dropBox.deleteFolder', { name: label }),
     message: t('files.dropBox.deleteFolderConfirm', { name: label }),
@@ -54,8 +74,7 @@ async function removeFolder(folder: TreeNode, label: string) {
   })
   if (!accepted) return
   try {
-    await deleteNode(props.scopeId, folder.id)
-    await loadTree()
+    await deleteFile(folder.id)
   } catch {
     toast.error(t('files.deleteFailed'))
   }
@@ -72,8 +91,9 @@ async function removeFolder(folder: TreeNode, label: string) {
         <Button v-if="caps.deleteNode" type="button" :label="t('files.dropBox.delete')" icon="pi pi-trash" severity="danger" outlined size="small" @click="emit('delete')" />
       </div>
     </div>
-    <p>{{ t('files.dropBox.readOnlyHint') }}</p>
-    <p v-if="!folders.length" class="veyq-empty veyq-empty-inline">{{ t('files.dropBox.empty') }}</p>
+    <!-- A guest's words: it opens and downloads, only the owner deletes or moves; nobody sent anything (no link to share). -->
+    <p>{{ guest ? t('files.dropBox.sharedHint') : t('files.dropBox.readOnlyHint') }}</p>
+    <p v-if="!folders.length" class="veyq-empty veyq-empty-inline">{{ guest ? t('files.dropBox.sharedEmpty') : t('files.dropBox.empty') }}</p>
     <ul v-else class="veyq-list">
       <li v-for="row in folders" :key="row.folder.id" class="veyq-list-row">
         <button type="button" class="dropbox-row-open" :aria-label="t('files.dropBox.open', { name: row.label })" @click="emit('openNode', row.folder)">

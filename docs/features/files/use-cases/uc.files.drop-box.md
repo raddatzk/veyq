@@ -44,6 +44,10 @@
 - **E5 — a guest-sealed folder entry does not open:** that folder is left out of the member's tree; the rest opens.
 - **E6 — a `WRITE_ONLY` link on a plain folder, or another role on a drop box:** refused (`ShareRoots`).
 - **A7 — the trashed drop box is purged:** its folders and files go, then the identities nothing names any more.
+- **A8 — a guest of a `READ` or `READ_WRITE` folder link above the drop box opens it:** it sees what a member sees —
+  the guests' folders and their files, with the download — read-only: nothing to send, replace, share, delete or move
+  (owner decision 2026-10-08, inbox #380; one view for both, inbox #401). Two folders of one name may be numbered
+  differently than for a member (the link serves no creation time).
 
 ## Quality notes
 

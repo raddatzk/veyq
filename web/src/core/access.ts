@@ -14,8 +14,8 @@
 // `filesCapabilities` (features/files/capabilities.ts), and core's own `folderCapabilities` here for the one kind core
 // owns. Every right defaults to false; an unknown mode, role or kind grants nothing. The role matrix each one encodes is
 // written down in its `docs/apps/<application>.md` (ADR 0080 decision 6). A capability is the matrix's half; the other
-// half — that the data source implements the operation at all — arrives with the sources (S3 Files, S4 Memories): a
-// control is shown only where both say yes.
+// half — that the data source implements the operation at all — is the application's source (Files' `source.ts` since
+// inbox #401 S3; Memories' arrives with S4): a control is shown only where both say yes.
 //
 // Core imports no application here (`validate_web_core_imports_no_applications.py`).
 import type { RouteLocationRaw } from 'vue-router'
@@ -58,9 +58,15 @@ export interface GuestAccess {
   readonly pwToken?: string
   /** The platform half of the resolve: the share, `K_share` (key material), its scope, name and note. */
   readonly head: PublicShareHead
+  /** The URL fragment's key (`#k=`, key material): what a guest's tree operation re-reads the link with when a placement
+   *  lost a race (`guestTreeContext`). */
+  readonly fragmentKey: string
   /** The guest's identity for this link, asking the visitor's name first when it has none; null: the visitor declined.
    *  The ONE naming flow of the page (core's), so no view asks for a name itself. */
   requestGuest(): Promise<GuestIdentity | null>
+  /** Re-resolve the link after a guest's write, so what it created lists with its key and name; resolves once `head`
+   *  has been replaced (the shell's). */
+  reload(): Promise<void>
 }
 
 export type Access = MemberAccess | GuestAccess

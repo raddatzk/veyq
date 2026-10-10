@@ -123,7 +123,7 @@ here; the server is blind.
   edit) against the tree while a mutation run is live; wait for it to finish and restore.
 - **Core and application ([ADR 0079](../docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)).**
   The applications are `src/features/memory/` (Memories) and `src/features/files/` (Files: the `FILE` and `FILES_DROPBOX` kinds, their level
-  and share sections, upload, download, the drop box — [docs/apps/files.md](../docs/apps/files.md)) — the guard's `APPLICATIONS`, keyed by owner;
+  sections, upload, download, the drop box — [docs/apps/files.md](../docs/apps/files.md)) — the guard's `APPLICATIONS`, keyed by owner;
   **core is everything else** under `src/` —
   `app/`, `shared/`, `sw/`, `views/`, `components/app/`, every other `features/*`, and `core/`: `core/node/` (the
   node tree: `tree`, `treeStore`, `location`, `browse`, the delete/trash dialogs, the sealed-meta write loop
@@ -153,38 +153,41 @@ here; the server is blind.
   different `order`s throws; its `createDialog` — props `NodeCreateDialogProps` `{kind, scopeId, epochs, parentId,
   parentKey}`, mounted by the shell when a section emits `create` or a detail `createChild` with that KIND; and its
   `shareDialog` — props `NodeShareDialogProps` `{scopeId, nodeId, nodeKey, epochs, nodeName, nodeKind, uploader?}`; a
-  kind without one offers no share; and its `shareSection` — `{ order, component }`, props `ShareSectionProps`
-  (the share, the folder on screen, the kind's children with the chain's keys and names, `canWrite`, `requestGuest`):
-  core's folder page of a public share (`core/sharing/FolderShareBody.vue`, which is core's `LevelView` handed the
-  guest's access and tree since inbox #401 S2) draws it in the level's `host-section` slot instead of that kind's level
-  section (Files' file list for guests; retired in S3). Core owns the rest: a folder's create and every node's rename are
+  kind without one offers no share. There is no guest-only section: core's folder page of a public share
+  (`core/sharing/FolderShareBody.vue`) is core's `LevelView` handed the guest's access and tree, so a kind's `section`
+  serves guests too, and a non-folder node there renders its kind's `detail` (inbox #401; the `shareSection` that drew a
+  guest list instead was retired in S3). Core owns the rest: a folder's create and every node's rename are
   `core/node/FolderNameDialog.vue`, which derives the slug by the renamed node's kind, and FOLDER's share dialog
   `core/sharing/FolderShareDialog.vue` is pre-registered); `addSlotItem(slot, id, component, order?)` for the two list slots `topbarTray`
   and `sidebarPins` (an id namespaced by the application, e.g. `memories.pinned`; write-once per (slot, id); the shell
   renders `slotItems(slot)` sorted by `order`, ties in registration order — the top bar after core's own upload status
   menu, `core/blob/UploadStatusMenu.vue`, which lists every application's batches of the one core queue and is no
-  application's item, so today no application adds to `topbarTray`); `claimShareBody(rootKind)` for the
-  public share page (`PublicShare.rootKind`, served for every role, so one body per kind picks its screens by role;
-  core claims `FOLDER` itself and embeds the claimed body for each child, handing it `subtreeRoot` — that node's id,
-  key and name — so the body renders and writes into that node, not the share root; a body that is a WRITE_ONLY guest's
-  page as the root renders something else when embedded — Files' drop box shows itself read-only there, inbox #380; and
-  inside a guest's identity folder — the served `shareIdentityId`, core's column — the folder page hands no write to any
-  guest);
+  application's item, so today no application adds to `topbarTray`); `claimShareBody(rootKind, body, options?)`
+  for the public share page (`PublicShare.rootKind`, served for every role, so one body per kind picks its screens by
+  role; core claims `FOLDER` itself). The target narrows a claim to the `WRITE_ONLY` drop page (Files' drop box claims
+  only that): below a shared folder core renders the kind's `detail` with the guest's access and tree — Files' drop box
+  is the member's `DropBoxDetail` there, read-only, inbox #380. Transitional until inbox #401 S5: a claim made
+  `{ embedBelowFolder: true }` (Memories') is still embedded for each such child instead (`registry.embeddedShareBody`),
+  handed `subtreeRoot` — that node's id, key and name — so the body renders and writes into that node, not the share
+  root. Inside a guest's identity folder — the served `shareIdentityId`, core's column — no view offers any guest a
+  write;
   `registerLifecycle(id, hooks)` with `onScopeReset` / `onScopeEntered` and the **required**
   `onMasterKeyRotated` — `rotateKeys` refuses to start when none is registered, because material sealed under the
   Master Key (Memories' pins) is otherwise undecryptable after a rotation. A kind or share nobody registered renders
   an explicit unsupported/unavailable state, never an empty region. **Who looks** (inbox #401, `core/access.ts`): a
   `detail` (`NodeDetailProps`) and a `section` (`LevelSectionProps`) are handed `access` — `Access`, a member
   (`scopeId`, `epochs`, `readonly` = pending deletion, the instance's `publicLinks`/`uploaderLinks`) or a share guest
-  (`shareId`, `role`, `head`, `pwToken`, `requestGuest` — `guestAccess`, built by `views/ShareView.vue`, which owns the
-  page's one naming flow, core's `core/sharing/GuestNaming.vue` with its "Not you?"; every naming place uses that one
+  (`shareId`, `role`, `head`, `pwToken`, `fragmentKey`, `requestGuest`, `reload` — `guestAccess`, built by
+  `views/ShareView.vue`, which owns the re-resolve after a guest's write and the page's one naming flow, core's `core/sharing/GuestNaming.vue` with its "Not you?"; every naming place uses that one
   component) — and `tree`, a `TreeSource` (`node`,
   `children`, `keyOf`, `nameOf`, `inIdentityFolder`, `linkTo`: every navigation goes through it, so a guest's link keeps
   `#k=`); the member's come from `memberAccess`/`memberTreeSource`, built by the host, the guest's tree from
   `guestTreeSource` (`core/sharing/guestAccess.ts`: a served `ShareNode` as a `TreeNode` — `createdAt` 0, so equal
   names number by node id; `metaVersion` 0; `wrappedMeta` as served). A section mounted for a guest reads nothing of
   the member's world (`treeStore`, `activeSpace`, the cover and pin stores) — Memories' section reads its dates, covers
-  and map from the guest's tree (`features/memory/guestCover.ts`). A share body (`ShareBodyProps`) is handed the
+  and map from the guest's tree (`features/memory/guestCover.ts`), Files' views read and write through Files' data
+  source (`features/files/source.ts`: the member's or the guest's, fixed at mount; a write is offered where the matrix
+  grants it AND the source carries it — `sourceCapabilities` — and the guest's source has no delete, no rename). A share body (`ShareBodyProps`) is handed the
   guest's `access` too, and a body embedded below a folder asks `access.requestGuest` instead of naming on its own. What a view offers is its
   application's pure, fail-closed capability function over `access` and `targetOf(tree, node)` — `memoryCapabilities`
   (`features/memory/capabilities.ts`), `filesCapabilities` (`features/files/capabilities.ts`), core's

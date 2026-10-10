@@ -5,7 +5,6 @@ import { fileNameSlug, slugify } from '../../shared/naming'
 import { fileNameStemEnd, registerFiles } from './register'
 import { DROPBOX_KIND, FILE_KIND } from './kinds'
 import FilesSection from './components/FilesSection.vue'
-import ShareFilesSection from './components/ShareFilesSection.vue'
 import DropBoxSection from './components/DropBoxSection.vue'
 import DropBoxCreateDialog from './components/DropBoxCreateDialog.vue'
 import DropBoxDetail from './components/DropBoxDetail.vue'
@@ -13,7 +12,7 @@ import DropBoxShareDialog from './components/DropBoxShareDialog.vue'
 import DropBoxShareBody from './components/DropBoxShareBody.vue'
 
 describe('registerFiles', () => {
-  it('registers the FILE kind: not shareable, a file icon, its level and share sections, no detail', () => {
+  it('registers the FILE kind: not shareable, a file icon, its level section (a guest\'s too), no detail', () => {
     const registry = createRegistry()
     registerFiles(registry)
     expect(registry.kind(FILE_KIND)).toEqual({
@@ -26,7 +25,6 @@ describe('registerFiles', () => {
       emptyInTrash: 'files.trashEmpty',
       nounWithArticle: 'files.aFile',
       section: { order: 20, component: FilesSection },
-      shareSection: { order: 20, component: ShareFilesSection },
     })
   })
 
@@ -61,6 +59,8 @@ describe('registerFiles', () => {
       shareDialog: DropBoxShareDialog,
     })
     expect(registry.shareBody(DROPBOX_KIND)).toBe(DropBoxShareBody)
+    // The WRITE_ONLY drop page only: below a shared folder core renders the drop box's detail, never this body (#401 S3).
+    expect(registry.embeddedShareBody(DROPBOX_KIND)).toBeNull()
     expect(registry.slugFor(DROPBOX_KIND, 'Foto.JPG')).toBe(slugify('Foto.JPG')) // a container's folding
   })
 
@@ -74,8 +74,6 @@ describe('registerFiles', () => {
       { component: FilesSection, order: 20, kinds: [FILE_KIND] },
       { component: DropBoxSection, order: 21, kinds: [DROPBOX_KIND] },
     ])
-    // The guest's file list on a shared folder (F2) — a section of core's folder page, never a share body of its own.
-    expect(registry.shareSections()).toEqual([{ component: ShareFilesSection, order: 20, kinds: [FILE_KIND] }])
     for (const slot of ['topbarTray', 'sidebarPins'] as const) expect(registry.slotItems(slot)).toEqual([])
     expect(registry.shareBody(FILE_KIND)).toBeNull()
   })

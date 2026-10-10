@@ -98,6 +98,18 @@ const StubBody = defineComponent({
   emits: ['unavailable'],
   setup: (p) => () => h('div', { class: 'embedded-stub' }, `${p.subtreeRoot?.nodeId}|${p.subtreeRoot?.name}|${p.shareId}`),
 })
+/** A kind's detail, as an application's: what it was handed, and an open button per child. */
+const StubDetail = defineComponent({
+  name: 'StubDetail',
+  props: ['node', 'scopeId', 'epochs', 'contentKey', 'children', 'access', 'tree'],
+  emits: ['openNode', 'rename', 'delete', 'createChild', 'share', 'shareUpload'],
+  setup: (p, { emit }) => () =>
+    h('div', { class: 'detail-stub' }, [
+      h('span', { class: 'detail-of' }, `${p.node.id}|${p.tree.nameOf(p.node.id)}|${p.scopeId}`),
+      ...[...(p.children as { folders: { id: string; name: string }[] }).folders].map((n) =>
+        h('button', { class: 'detail-open', 'data-node-id': n.id, onClick: () => emit('openNode', n) }, n.name)),
+    ]),
+})
 /** A body that finds its node unusable as soon as it mounts. */
 const BrokenBody = defineComponent({
   name: 'BrokenBody',
@@ -152,8 +164,9 @@ beforeEach(async () => {
   const section = { order: 10, component: StubSection }
   r.registerKind({ kind: NOTE_KIND, icon: 'pi pi-file', shareable: true, section })
   r.registerKind({ kind: BROKEN_KIND, icon: 'pi pi-file', shareable: true, section })
-  r.claimShareBody(NOTE_KIND, StubBody)
-  r.claimShareBody(BROKEN_KIND, BrokenBody)
+  // Claimed to be embedded below a folder, as Memories' are until inbox #401 S5.
+  r.claimShareBody(NOTE_KIND, StubBody, { embedBelowFolder: true })
+  r.claimShareBody(BROKEN_KIND, BrokenBody, { embedBelowFolder: true })
   holder.reg = r
   router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/s/:id', component: { render: () => null } }] })
   await at()
@@ -230,7 +243,48 @@ describe("FolderShareBody browses the shared folder with core's level view", () 
   })
 })
 
-describe('FolderShareBody embeds what is not a folder (until its application mounts its detail, inbox #401 S5)', () => {
+// inbox #401 S3: a node that is not a folder renders its kind's DETAIL, exactly as the member's host mounts it — handed the
+// guest's access and tree — unless its application still claims its body `embedBelowFolder` (Memories, until S5). A plain
+// claim is the root page only (Files' WRITE_ONLY drop): never embedded.
+describe("FolderShareBody renders a node's detail for the guest", () => {
+  const BOX_KIND = 'BOX'
+  const BOX = '6e5a0000-0000-4000-8000-0000000000d6'
+  const INNER = '6e5a0000-0000-4000-8000-0000000000d7'
+  const box = { key: v1.randomBytes(32), inner: v1.randomBytes(32) }
+  function boxHead() {
+    const h0 = head()
+    h0.share.nodes.push(child(BOX, ROOT, keys.root, box.key, 'Postfach', BOX_KIND), child(INNER, BOX, box.key, box.inner, 'Anna', FOLDER_KIND))
+    return h0
+  }
+  beforeEach(() => {
+    holder.reg!.registerKind({ kind: BOX_KIND, icon: 'pi pi-inbox', shareable: true, detail: StubDetail })
+    holder.reg!.claimShareBody(BOX_KIND, StubBody) // the root page alone
+  })
+
+  it("mounts the kind's detail with the node, the link's scope, no epochs, the chain's key, its children, the guest's access and tree", async () => {
+    await at(BOX)
+    const w = await mountBody(boxHead())
+    expect(w.find('.embedded-stub').exists(), 'a plain claim is never embedded').toBe(false)
+    expect(w.find('.detail-of').text()).toBe(`${BOX}|Postfach|${SCOPE_ID}`)
+    const d = w.findComponent(StubDetail)
+    expect(d.props('epochs')).toBeNull()
+    expect(Array.from(d.props('contentKey') as Uint8Array), "the node's key from the chain").toEqual(Array.from(box.key))
+    expect((d.props('access') as { mode: string }).mode).toBe('guest')
+    expect(w.findAll('a.p-breadcrumb-item-link').map((a) => a.text())).toEqual(['Familie', 'Postfach'])
+    expect(authenticatedCalls).toEqual([])
+  })
+
+  it("a detail's open is a real navigation through the tree's link: ?node= with the #k= fragment kept", async () => {
+    await at(BOX)
+    const w = await mountBody(boxHead())
+    await click(w.find(`.detail-open[data-node-id="${INNER}"]`).element)
+    expect(router.currentRoute.value.query.node).toBe(INNER)
+    expect(router.currentRoute.value.hash).toBe(HASH)
+    expect(heading(w)).toBe('Anna')
+  })
+})
+
+describe('FolderShareBody embeds a claimed body (until its application mounts its detail, inbox #401 S5)', () => {
   it("embeds the body claimed for the node's kind, handing it the node's id, key and name from the chain and the access", async () => {
     const w = await mountBody(head())
     await click(w.find(`.stub-open[data-node-id="${NOTE}"]`).element)
