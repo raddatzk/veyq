@@ -75,7 +75,7 @@ class NodeSubtreeEraserOrderSliceTest {
         QuarkusTransaction.requiringNew().run {
             ShareEntity().apply {
                 id = shareId; ownerAccount = userId; this.scopeId = scopeId; nodeId = memory; role = ShareEntity.WRITE_ONLY
-                enabled = false; createdAt = Instant.now(); deletedAt = Instant.now().minusSeconds(7200)
+                enabled = false; createdAt = Instant.now(); deleted = true
             }.persist()
             ShareIdentityEntity().apply {
                 id = guestId; this.shareId = shareId; sealedDisplayName = "Z3Vlc3Q="; tokenHash = "hash-$guestId"
@@ -87,7 +87,7 @@ class NodeSubtreeEraserOrderSliceTest {
             }.persist()
             MediaEntity().apply {
                 id = mediaId; this.scopeId = scopeId; nodeId = memory; this.blobId = blobId
-                shareIdentityId = guestId; createdAt = Instant.now()
+                shareIdentityId = guestId; updatedAt = Instant.now()
             }.persist()
             BucketEntity().apply {
                 id = UUID.randomUUID().toString(); this.scopeId = scopeId; nodeId = memory; ownerKey = "share:$guestId"
@@ -104,7 +104,7 @@ class NodeSubtreeEraserOrderSliceTest {
         QuarkusTransaction.requiringNew().run {
             assertNull(MediaEntity.findById(mediaId), "the media eraser ran")
             assertEquals(0L, BucketEntity.count("ownerKey", "share:$guestId"), "the guest's bucket went")
-            assertNotNull(ShareEntity.findById(shareId)!!.deletedAt, "the link was and stays a tombstone")
+            assertTrue(ShareEntity.findById(shareId)!!.deleted, "the link was and stays a tombstone")
             assertNull(ShareIdentityEntity.findById(guestId), "nothing of the guest's remains and the link is gone: dropped")
             assertNull(NodeEntity.findById(memory), "the node itself went")
         }

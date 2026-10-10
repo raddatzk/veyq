@@ -26,6 +26,7 @@ import jakarta.inject.Inject
 import java.time.Instant
 import java.util.UUID
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -91,7 +92,7 @@ class RemovalRaceSliceTest {
             )
             assertEquals(404, status, "round $round: a removed member re-issued a link")
             assertNull(tx { ShareEntity.findById(fresh) }, "round $round: no new link")
-            assertNull(tx { ShareEntity.findById(old)!!.deletedAt }, "round $round: the old link is not spent")
+            assertFalse(tx { ShareEntity.findById(old)!!.deleted }, "round $round: the old link is not spent")
             // Control: a member who stays re-issues it (the removal moved the epoch to 1).
             assertEquals(201, reissue(t.owner, old, TestIds.shareId(), epoch = 1), "round $round: control")
         }

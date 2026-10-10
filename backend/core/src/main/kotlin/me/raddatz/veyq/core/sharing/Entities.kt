@@ -16,7 +16,7 @@ import org.hibernate.annotations.DynamicUpdate
  * and the shared `nodeId` — never `K_share`, a content key, a name, or the viewer. `K_share` rides the URL fragment
  * (ADR 0015) and never reaches the server. Soft (L1) revoke: `enabled = false` / a passed `expiresAt` makes the
  * guest resolve + blob GET `404` (ADR 0029 §7 — already-downloaded ciphertext is not retractable). A deleted share is
- * a tombstone ([deletedAt], `SharingStore.tombstone`): its ciphertext columns are null, and every reader goes through
+ * a tombstone ([deleted], `SharingStore.tombstone`): its ciphertext columns are null, and every reader goes through
  * `SharingStore`'s lookups, which never return one.
  */
 @Entity
@@ -129,10 +129,11 @@ class ShareEntity : PanacheEntityBase {
     @Column(name = "created_at", nullable = false)
     lateinit var createdAt: Instant
 
-    /** Set when the share was deleted (ADR 0029 §7): the row is a tombstone that only holds its id — so no new share
-     *  is ever minted under it — and the foreign key its guest identities need. */
-    @Column(name = "deleted_at")
-    var deletedAt: Instant? = null
+    /** True once the share was deleted (ADR 0029 §7): the row is a tombstone that only holds its id — so no new share
+     *  is ever minted under it — and the foreign key its guest identities need. A flag, not a time (inbox #398): every
+     *  reader asks only *whether* a link is deleted, so *when* is not stored. */
+    @Column(name = "deleted", nullable = false)
+    var deleted: Boolean = false
 
     companion object : PanacheCompanionBase<ShareEntity, String> {
         const val READ = "READ"

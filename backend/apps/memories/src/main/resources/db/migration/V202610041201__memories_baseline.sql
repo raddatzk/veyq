@@ -34,19 +34,19 @@ CREATE INDEX ix_bucket_parent ON veyq_bucket (parent_bucket_id);
 -- A medium: its original blob attached to a node. node_id carries no foreign key (nodes are soft-deleted; the
 -- media are reclaimed by code). updated_at is the keyset cursor's sort key and TIMESTAMP(3) on purpose: the
 -- cursor round-trips through a JS Date, which holds milliseconds, so a finer stored value would read as later
--- than the echoed cursor and be re-fetched forever. meta_version is wrapped_meta's compare-and-set counter
--- (ADR 0077) and deliberately not the node's veyq_media_revision. ix_media_share_identity keeps a link's usage sum,
--- taken under the tenant lock, off a table scan (ADR 0073).
+-- than the echoed cursor and be re-fetched forever. It is set at attach, so it is the medium's only time besides
+-- deleted_at: no separate created_at, which nothing read but as its fallback (#398). meta_version is wrapped_meta's
+-- compare-and-set counter (ADR 0077) and deliberately not the node's veyq_media_revision. ix_media_share_identity
+-- keeps a link's usage sum, taken under the tenant lock, off a table scan (ADR 0073).
 CREATE TABLE veyq_media (
     id                VARCHAR(36) NOT NULL PRIMARY KEY,
     scope_id          VARCHAR(36) NOT NULL,
     node_id           VARCHAR(36) NOT NULL,
     blob_id           VARCHAR(36) NOT NULL,
-    created_at        TIMESTAMP NOT NULL,
     wrapped_meta      TEXT NULL,
     wrapped_exif      TEXT NULL,
     share_identity_id VARCHAR(36),
-    updated_at        TIMESTAMP(3),
+    updated_at        TIMESTAMP(3) NOT NULL,
     deleted_at        TIMESTAMP(3),
     deleted_by        VARCHAR(36),
     bucket_id         VARCHAR(36),

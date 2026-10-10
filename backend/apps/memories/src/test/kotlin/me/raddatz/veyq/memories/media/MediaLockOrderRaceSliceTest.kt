@@ -148,7 +148,7 @@ class MediaLockOrderRaceSliceTest {
             }.persist()
             MediaEntity().apply {
                 id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; this.blobId = blobId
-                createdBy = ownerKey; bucketId = sub; createdAt = Instant.now(); updatedAt = Instant.now()
+                createdBy = ownerKey; bucketId = sub; updatedAt = Instant.now()
             }.persist()
         }
         return Fixture(scopeId, nodeId, primary, sub, mediaId)

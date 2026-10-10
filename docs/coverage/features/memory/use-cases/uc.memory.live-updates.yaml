@@ -21,7 +21,7 @@ acceptanceCriteria:
           - src/features/memory/media.test.ts
           - src/features/memory/mediaRevisionPolling.test.ts
   - id: keyset-delta-on-change
-    text: On a revision change the server returns only media with updated_at past the client's (updatedAt, mediaId) cursor — a keyset delta, not the whole list — so an active upload by another member streams the few new items each poll. The client upserts by mediaId and advances the cursor. Requires a new veyq_media.updated_at (= created_at at attach, bumped on meta edit).
+    text: On a revision change the server returns only media with updated_at past the client's (updatedAt, mediaId) cursor — a keyset delta, not the whole list — so an active upload by another member streams the few new items each poll. The client upserts by mediaId and advances the cursor. Requires a new veyq_media.updated_at (the attach time at attach, bumped on meta edit; the medium's only creation time since #398).
     coverage:
       backend:
         integration:

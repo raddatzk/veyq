@@ -96,7 +96,7 @@ class PurgeRaceSliceTest {
             }.persist()
             MediaEntity().apply {
                 id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; this.blobId = blobId
-                createdAt = Instant.now(); deletedAt = Instant.now().minus(Duration.ofDays(1))
+                updatedAt = Instant.now(); deletedAt = Instant.now().minus(Duration.ofDays(1))
             }.persist()
         }
         return scopeId to mediaId

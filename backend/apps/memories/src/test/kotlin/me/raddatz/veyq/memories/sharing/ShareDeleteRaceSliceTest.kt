@@ -53,7 +53,7 @@ class ShareDeleteRaceSliceTest {
             assertEquals(SharingStore.UpdateResult.NOT_FOUND, outcome, "round $round")
             QuarkusTransaction.requiringNew().run {
                 val row = ShareEntity.findById(shareId)!!
-                assertNotNull(row.deletedAt, "round $round")
+                assertTrue(row.deleted, "round $round")
                 assertNull(row.sealedNote, "round $round: the edit wrote its ciphertext onto the tombstone")
             }
         }
@@ -77,7 +77,7 @@ class ShareDeleteRaceSliceTest {
             assertFalse(outcome, "round $round")
             QuarkusTransaction.requiringNew().run {
                 val row = ShareEntity.findById(shareId)!!
-                assertNotNull(row.deletedAt, "round $round")
+                assertTrue(row.deleted, "round $round")
                 assertFalse(row.enabled, "round $round: the re-activation switched the deleted link back on")
             }
         }

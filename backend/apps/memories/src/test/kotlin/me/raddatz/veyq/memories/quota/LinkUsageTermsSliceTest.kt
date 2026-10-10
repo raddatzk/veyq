@@ -74,7 +74,7 @@ class LinkUsageTermsSliceTest {
             }.also { it.persist() }
             MediaEntity().apply {
                 id = UUID.randomUUID().toString(); this.scopeId = scopeId; this.nodeId = nodeId; this.blobId = blobId
-                shareIdentityId = identityId; createdBy = bucket.ownerKey; bucketId = bucket.id; createdAt = Instant.now()
+                shareIdentityId = identityId; createdBy = bucket.ownerKey; bucketId = bucket.id; updatedAt = Instant.now()
             }.persist()
         }
     }

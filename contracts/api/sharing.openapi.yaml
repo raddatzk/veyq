@@ -449,7 +449,7 @@ paths:
       summary: Delete a share link — its ciphertext goes, its id and its guests' uploads stay.
       description: >
         Deletes the link for good ([ADR 0029](../../docs/decisions/0029-public-viewer-share.md) §7). The row becomes
-        a **tombstone**: it keeps its id, scope, shared node, role and dates, and every ciphertext it held — the wrap or
+        a **tombstone**: it keeps its id, scope, shared node, role and creation time, and every ciphertext it held — the wrap or
         drop public key, the sealed name, note, label, recovery copy and password fields — and its expiry are
         cleared. The link then `404`s exactly as a revoked one, and the share is gone from both listings and from
         `revokeShare`, `updateShare`, `reactivateShare` and `reissueShare` (each a `404`). Its id is never minted

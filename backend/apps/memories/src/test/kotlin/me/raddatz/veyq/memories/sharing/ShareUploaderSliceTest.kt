@@ -423,7 +423,7 @@ class ShareUploaderSliceTest {
             }.persist()
             if (identityId == null) {
                 MediaEntity().apply {
-                    id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; this.blobId = blobId; createdAt = Instant.now()
+                    id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; this.blobId = blobId; updatedAt = Instant.now()
                 }.persist()
                 return@run
             }
@@ -435,7 +435,7 @@ class ShareUploaderSliceTest {
             }.also { it.persist() }
             MediaEntity().apply {
                 id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; this.blobId = blobId
-                shareIdentityId = identityId; createdBy = bucket.ownerKey; bucketId = bucket.id; createdAt = Instant.now()
+                shareIdentityId = identityId; createdBy = bucket.ownerKey; bucketId = bucket.id; updatedAt = Instant.now()
             }.persist()
         }
         return mediaId

@@ -34,6 +34,7 @@ import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import me.raddatz.veyq.core.sharing.ShareWriteProof
 
@@ -208,7 +209,7 @@ class ShareDeletedNodeSliceTest {
             { assertNull(row!!.sealedName) },
             { assertNull(row!!.sealedShareKey) },
             { assertNull(row!!.sealedNote) },
-            { assertNotNull(row!!.deletedAt) },
+            { assertTrue(row!!.deleted) },
         )
     }
 
@@ -333,7 +334,7 @@ class ShareDeletedNodeSliceTest {
             }.persist()
             MediaEntity().apply {
                 id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; this.blobId = blobId
-                shareIdentityId = identityId; createdAt = Instant.now()
+                shareIdentityId = identityId; updatedAt = Instant.now()
             }.persist()
         }
         return mediaId to blobId
