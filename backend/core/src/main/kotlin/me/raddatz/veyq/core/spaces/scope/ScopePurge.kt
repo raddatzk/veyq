@@ -34,9 +34,8 @@ import org.jboss.logging.Logger
  * skew the read path does not handle. Writing reclaim rows in that same transaction has no such mirror: a
  * rollback takes the reclaim entries with it, exactly as it takes the row deletes.
  *
- * Deliberately **not** routed through `MediaStore.purgeMediaRows` (the shared FK-ordered per-media purge,
- * cr-0135): that helper erases one media's rows, while this erases set-based by scope. It is the wrong shape
- * here, not a fourth copy of it.
+ * Set-based by scope, never per row: an application's [ScopeEraser] erases its own rows the same way (Memories'
+ * `MediaScopeEraser` says why its per-media purge is the wrong shape there).
  */
 @ApplicationScoped
 class ScopePurge(
@@ -84,7 +83,7 @@ class ScopePurge(
      * Erase one scope and everything under it, FK-safe: each blob's and each open upload session's store objects
      * are recorded for reclaim while their rows still name the storage keys, then the DB rows go child-first —
      * epoch links before the scope row that owns the FK. Most child tables carry `scope_id`;
-     * `veyq_job_decline` is deleted by its job ids. The media, favorites, node and share rows are the
+     * `veyq_job_decline` is deleted by its job ids. The application, node and share rows are the
      * [ScopeEraser] implementations' (their owning packages), run in `phase` order around core's blob delete.
      *
      * The read-before-delete order survives; only what it feeds changed. The objects themselves are
@@ -111,7 +110,7 @@ class ScopePurge(
         val sessions = UploadSessionEntity.find("scopeId", scopeId).list()
         reclaim.record(sessions.map { StoreObjectRef(it.storageKey, it.chunkCount) })
 
-        // Phases below BLOB_ROWS_PHASE: rows that reference veyq_blob (media, derivatives) go first.
+        // Phases below BLOB_ROWS_PHASE: rows that reference veyq_blob (an application's, e.g. Memories' media) go first.
         beforeBlobRows.forEach { it.eraseScope(scopeId) }
         BlobEntity.delete("scopeId", scopeId)
         UploadSessionEntity.delete("scopeId", scopeId)

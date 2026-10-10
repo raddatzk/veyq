@@ -54,9 +54,9 @@ sealed interface CreateShareOutcome {
     object InvalidRequest : CreateShareOutcome, HttpFailure by Failures.invalidRequest
     /** The recovery copy's epoch is not the scope's current one (ADR 0024 Decision 6) — a 409, nothing written. */
     object StaleEpoch : CreateShareOutcome, HttpFailure by Failures.staleEpoch
-    /** A WRITE_ONLY share brought a drop private key, but the Memory already has one — a 409, nothing written. */
+    /** A WRITE_ONLY share brought a drop private key, but the node already has one — a 409, nothing written. */
     object DropKeyExists : CreateShareOutcome, HttpFailure by httpFailure("drop_key_exists", CONFLICT)
-    /** A WRITE_ONLY share brought no drop private key, and the Memory has none — a 409, nothing written. */
+    /** A WRITE_ONLY share brought no drop private key, and the node has none — a 409, nothing written. */
     object DropKeyMissing : CreateShareOutcome, HttpFailure by httpFailure("drop_key_missing", CONFLICT)
 }
 
@@ -202,7 +202,7 @@ data class ListedShare(
     val share: ShareEntity, val reissueRequired: Boolean, val deletable: Boolean, val newGuestsRefused: Boolean,
 )
 
-/** The shares on one Memory node (cr-0104) — `[]` for a non-member or an unknown node, a refusal only for a member. */
+/** The shares on one node (cr-0104) — `[]` for a non-member or an unknown node, a refusal only for a member. */
 sealed interface NodeSharesOutcome {
     data class Shares(val rows: List<ListedShare>) : NodeSharesOutcome
     object Suspended : NodeSharesOutcome, HttpFailure by Failures.tenantSuspended
@@ -223,7 +223,7 @@ sealed interface ShareTermsOutcome {
  *  - **Guest** (resolve/blob): unauthenticated, keyed only on share state (`enabled` + `expiresAt` + a live space) — a
  *    parallel authz path, never a relaxed scope filter. The blob GET is authorized structurally (the blob is
  *    attached under the shared subtree), and bytes go **direct-from-store** so the operator never learns which
- *    media a viewer opens. A disabled/expired/unknown share is a non-enumerable 404 in every case.
+ *    blob a viewer opens. A disabled/expired/unknown share is a non-enumerable 404 in every case.
  */
 @ApplicationScoped
 class SharingHandler(
@@ -289,7 +289,7 @@ class SharingHandler(
             }
         }
         refused?.let { return it }
-        // A double-submitted Memory's FIRST WRITE_ONLY link loses at the guarded drop-key update, not at the commit: both
+        // A double-submitted node's FIRST WRITE_ONLY link loses at the guarded drop-key update, not at the commit: both
         // carry the private key, and the loser's update waits for the winner's and finds the key set. Its replay meets
         // the id check first and answers `id_taken` — `drop_key_exists` would send the client to re-seal and retry the
         // id the winner holds. So that refusal re-asks the replay question, in a fresh transaction once the loser's
@@ -330,7 +330,7 @@ class SharingHandler(
     fun list(userId: String): List<ListedShare> =
         listed(userId, store.listByOwner(userId).filter { access.check(userId, it.scopeId, READ) == Access.Ok })
 
-    /** Every public share on a Memory node, for the shared-scope manage panel (cr-0104): visible to any **member**
+    /** Every public share on a node, for the shared-scope manage panel (cr-0104): visible to any **member**
      *  of the node's scope, not only the shares' owners — so a member can see + adopt an orphaned (disabled) share.
      *  Empty when the node is unknown or the caller is not a member (no reveal); a member of a suspended tenant is
      *  told so. The resource tags each row `mine`. */
@@ -475,7 +475,7 @@ class SharingHandler(
 
     /**
      * Re-issue a share (ADR 0075): a new share under the client-minted [newShareId] with a fresh `K_share`, and the
-     * old one deleted (ADR 0029 §7), in one transaction ([SharingStore.reissue]). The Memory, the scope and the role come from
+     * old one deleted (ADR 0029 §7), in one transaction ([SharingStore.reissue]). The node, the scope and the role come from
      * the old row, so a re-issue can neither move a link nor flip it into or out of WRITE_ONLY. An enabled share is
      * the owner's to re-issue (as revoke); a disabled one any member's, who owns the new share (as re-activation
      * adopts). A share is re-issued at most once: a deleted one — tombstoned by an earlier or a concurrent re-issue,
@@ -491,7 +491,7 @@ class SharingHandler(
         val old = store.findIncludingDeleted(shareId) ?: return ReissueShareOutcome.NotFound
         reissueRefusal(userId, old.scopeId, old.deletedAt != null, old.enabled, old.ownerAccount)?.let { return it }
         if (!capabilities.isActive(capabilityFor(old.role))) return ReissueShareOutcome.CapabilityDisabled
-        // No drop private key: the old WRITE_ONLY share proves the Memory already holds one (it is set once and
+        // No drop private key: the old WRITE_ONLY share proves the node already holds one (it is set once and
         // never cleared), and every upload so far is sealed to it (ADR 0031 point 7).
         val keys = shareKeys(old.role, wrap, sealedDropPublicKey, null) ?: return ReissueShareOutcome.InvalidRequest
         if (sealedShareKeyEpoch != scopes.currentEpoch(old.scopeId)) return ReissueShareOutcome.StaleEpoch
@@ -553,7 +553,7 @@ class SharingHandler(
             return ResolveShareOutcome.Found(share, store.subtree(share.scopeId, share.nodeId), rootKind)
         }
         // WRITE_ONLY: the minimal capability — no nodes; only the root's kind. The client seals its uploads under its own
-        // identity key, wrapped to the Memory's drop public key (served sealed under `K_share` in place of the wrap, ADR
+        // identity key, wrapped to the root node's drop public key (served sealed under `K_share` in place of the wrap, ADR
         // 0031 point 7), and shows the title (from `sealedName`); it needs nothing from the subtree.
         return ResolveShareOutcome.Found(share, emptyList(), rootKind)
     }

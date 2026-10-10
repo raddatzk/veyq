@@ -61,7 +61,7 @@ class TenantEntity : PanacheEntityBase {
     var storageQuotaBytes: Long? = null
 
     companion object : PanacheCompanionBase<TenantEntity, String> {
-        /** 10 GiB — enough for an event's photos, too little for a leaked link to eat a disk (ADR 0073 §4). The
+        /** 10 GiB — enough for an event's uploads, too little for a leaked link to eat a disk (ADR 0073 §4). The
          *  `share_link_limit_bytes` column default is the same number. */
         const val DEFAULT_SHARE_LINK_LIMIT_BYTES: Long = 10L * 1024 * 1024 * 1024
 

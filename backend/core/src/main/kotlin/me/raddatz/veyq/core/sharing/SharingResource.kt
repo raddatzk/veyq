@@ -76,7 +76,7 @@ class SharingResource(
             role = createShareRequest.role.value, // READ | READ_WRITE (cr-0101) | WRITE_ONLY (cr-0102)
             wrap = createShareRequest.wrap,
             sealedDropPublicKey = createShareRequest.sealedDropPublicKey, // WRITE_ONLY: instead of the wrap (ADR 0031 point 7)
-            sealedDropPrivateKey = createShareRequest.sealedDropPrivateKey, // the Memory's first WRITE_ONLY share only
+            sealedDropPrivateKey = createShareRequest.sealedDropPrivateKey, // the node's first WRITE_ONLY share only
             sealedName = createShareRequest.sealedName,
             expiresAt = createShareRequest.expiresAt?.toInstant(),
             sealedNote = createShareRequest.sealedNote, // cr-0115: optional curator note under K_share
@@ -96,7 +96,7 @@ class SharingResource(
 
     override fun listShares(nodeId: UUID?): Response {
         val me = identity.principal.name
-        // Without nodeId: the caller's own shares. With nodeId: every share on that Memory visible to a scope
+        // Without nodeId: the caller's own shares. With nodeId: every share on that node visible to a scope
         // member (cr-0104) — `mine` tells the UI which the caller may revoke vs merely see / adopt.
         val shares = if (nodeId == null) {
             handler.list(me)

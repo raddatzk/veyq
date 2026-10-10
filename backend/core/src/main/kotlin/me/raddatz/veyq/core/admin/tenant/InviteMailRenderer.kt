@@ -14,7 +14,7 @@ data class MailContext(val link: String, val domain: String, val expiry: String)
  * Renders an invite mail's subject + body from an owner-authored (or default) template via a minimal, logic-less
  * `{{variable}}` substitution over a **closed, non-secret variable set** — `{{link}}`, `{{domain}}`, `{{expiry}}`
  * only (ADR 0048 §6, ADR 0049). No sections, partials, lambdas or reflection: the only values that can enter a
- * mail are the three in [MailContext], so veyq's machinery can never inject a sealed field (scope/group/memory
+ * mail are the three in [MailContext], so veyq's machinery can never inject a sealed field (scope/group/node
  * name, member list, real name, content). An owner's literal prose *between* the variables is a consented,
  * operator/provider-visible disclosure (ADR 0049 §2) — outside this mechanical guarantee by decision, not oversight.
  *

@@ -96,7 +96,7 @@ object Failures {
     /** A required capability is disabled for the tenant → 422. */
     val capabilityDisabled: HttpFailure = httpFailure("capability_disabled", UNPROCESSABLE)
 
-    /** Request violates the Memory-tree structural rules → 422. */
+    /** Request violates the node tree's structural rules → 422. */
     val illegalStructure: HttpFailure = httpFailure("illegal_structure", UNPROCESSABLE)
 
     /** The subject's username collides with an existing one → 409. */

@@ -21,7 +21,7 @@ import java.time.Instant
  * user-facing depends on the object being absent at the instant the row is — every one of those paths already
  * removed the item from every read.
  *
- * **Not gated on [BlobStore.canPresign].** The reason is the media `UploadSessionPurge`'s: a
+ * **Not gated on [BlobStore.canPresign].** The reason is [me.raddatz.veyq.core.blob.UploadSessionPurge]'s: a
  * store that cannot presign still has to be told, and gating here would make the half this sweep exists for
  * unobservable in the hermetic suite — which runs on the store whose `delete` is a no-op.
  *

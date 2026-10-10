@@ -82,9 +82,9 @@ class SharingStore(
 
     /** Persist a share under the client-minted [id] — 256 random bits, base64url, the unguessable half of the
      *  capability (ADR 0072 keeps its form). `ID_TAKEN`, nothing written, if the id was ever used ([idTaken]). A WRITE_ONLY
-     *  share's drop private key is set on the Memory **once**, by a conditional update in this transaction: a
-     *  second one would orphan every upload sealed to the first, so a Memory that already has one is
-     *  `DROP_KEY_EXISTS` (the client re-reads the node), and a request with none for a Memory with none is
+     *  share's drop private key is set on the shared node **once**, by a conditional update in this transaction: a
+     *  second one would orphan every upload sealed to the first, so a node that already has one is
+     *  `DROP_KEY_EXISTS` (the client re-reads the node), and a request with none for a node with none is
      *  `DROP_KEY_MISSING` — nothing written in either case. */
     @Transactional
     fun create(
@@ -128,7 +128,7 @@ class SharingStore(
      *  row lock that update holds, so a concurrent edit cannot slip a role change between the read and the
      *  tombstone. `ID_TAKEN`, nothing written, when [newId] was ever used — checked before the spend on purpose: a
      *  re-issue that deleted the old link and then failed would leave the curator with no link at all, believing
-     *  they had a new one. Never touches the Memory's drop key — a WRITE_ONLY re-issue seals to the one it already
+     *  they had a new one. Never touches the node's drop key — a WRITE_ONLY re-issue seals to the one it already
      *  has. */
     @Transactional
     fun reissue(
@@ -257,7 +257,7 @@ class SharingStore(
      * Whether the share still takes a guest's write — live and enabled — read under the row lock a delete takes
      * first ([delete]), refreshed in case this transaction already holds a copy. A guest's write calls it first in
      * the transaction that writes: a delete drops each identity nothing references any more ([dropDeadIdentities]),
-     * counting when it runs, so a write gated only before it committed landed after the count — a photo whose
+     * counting when it runs, so a write gated only before it committed landed after the count — an upload whose
      * identity was gone, or an identity on a dead link nothing would drop (`GuestWriteRaceSliceTest`).
      */
     fun admitsGuests(shareId: String): Boolean {
@@ -310,11 +310,11 @@ class SharingStore(
     }
 
     /**
-     * The ONE body of every share deletion (ADR 0029 §7) — a delete, a re-issue's old link, the purge of the Memory
+     * The ONE body of every share deletion (ADR 0029 §7) — a delete, a re-issue's old link, the purge of the node
      * it is on. Off, `deleted_at` set, and every ciphertext column and the expiry cleared: what stays is the id (so
      * nothing is ever minted under it again), the scope, node, role and dates, and the foreign key the link's guest
-     * identities hang off. Never touches the identities' wrapped keys, the Memory's media and buckets, or its drop
-     * key: an uploader guest's photos open only through them, and they belong to the Memory, not to the link — an
+     * identities hang off. Never touches the identities' wrapped keys, the application rows under the node (Memories' media and
+     * buckets), or its drop key: an uploader guest's uploads open only through them, and they belong to the node, not to the link — an
      * identity goes only once nothing of the guest's remains ([dropDeadIdentities]). Runs inside its caller's
      * transaction.
      */
@@ -337,8 +337,8 @@ class SharingStore(
         dropDeadIdentities(ShareIdentityEntity.find("shareId", share.id).list().map { it.id })
     }
 
-    /** Delete every share on the erased nodes ([tombstone] each, ADR 0029 §7) — the Memory purge's call: a link on a
-     *  Memory that no longer exists has nothing left to serve. Runs inside the purge's transaction. */
+    /** Delete every share on the erased nodes ([tombstone] each, ADR 0029 §7) — the node purge's call: a link on a
+     *  node that no longer exists has nothing left to serve. Runs inside the purge's transaction. */
     fun tombstoneAllOn(nodeIds: Collection<String>) {
         if (nodeIds.isEmpty()) return
         ShareEntity.find("nodeId in ?1 and deletedAt is null", nodeIds).withLock(LockModeType.PESSIMISTIC_WRITE).list()
@@ -348,8 +348,8 @@ class SharingStore(
     /**
      * Delete each of the guest identities [candidateIds] that nothing can use or open any more (inbox #229, ADR 0029
      * §7) — all three at once: its link is a tombstone, so its token is no session (every guest write starts at the
-     * active share); no media row references it, live or trashed (a trashed one can be restored, and its wrapped key
-     * is the only way to open an uploader guest's photo); and no bucket does (the bucket list shows its name). An
+     * active share); and no [GuestIdentityUsage] still names it — core's attachments, and an application's rows (Memories:
+     * a medium, live or trashed, whose wrapped key is the only way to open an uploader guest's upload, or a bucket). An
      * open upload session does not hold it: it can never complete once the link is gone, and the stale-session sweep
      * reclaims its objects by storage key alone. Candidates are passed in — the caller knows which identities it
      * just orphaned; this never scans the table. Runs inside its caller's transaction.
@@ -453,7 +453,7 @@ class SharingStore(
         val subtreeIds = collectSubtreeIds(scopeId, rootNodeId)
         // `deletedAt is null` — a soft-deleted node (uc.memory.delete-node, ADR 0061) keeps its ROW, unlike the
         // hard delete this replaced, so without this predicate the guest resolve serves the full sealed subtree
-        // of a Memory the user deleted. Its sibling in [subtreeBlobIds] authorizes the blob GET and carries the
+        // of a node the user deleted. Its sibling in [subtreeBlobIds] authorizes the blob GET and carries the
         // predicate SEPARATELY on purpose: either one covering for the other is how a later change to the other
         // reopens the hole silently. `ShareDeletedNodeSliceTest` bites each on its own.
         val nodeById = NodeEntity.find("scopeId = ?1 and deletedAt is null", scopeId).list().associateBy { it.id }
@@ -462,8 +462,8 @@ class SharingStore(
 
     /**
      * The blob (object-store prefix + chunk count) to presign for a viewer — **iff** [blobId] is attached under
-     * the shared subtree (an original/derivative media blob on a subtree node, or a subtree node's standalone
-     * cover blob). Null otherwise (→ a non-enumerable 404). A structural id check; no name or content is read.
+     * the shared subtree (a blob a [SharedSubtreeContributor] attaches to a subtree node, or a subtree node's
+     * standalone cover blob). Null otherwise (→ a non-enumerable 404). A structural id check; no name or content is read.
      */
     fun authorizedBlob(scopeId: String, rootNodeId: String, blobId: String): ShareBlobRef? {
         if (blobId !in subtreeBlobIds(scopeId, rootNodeId)) return null
@@ -471,17 +471,17 @@ class SharingStore(
         return ShareBlobRef(blob.storageKey, blob.chunkCount)
     }
 
-    /** Every blob id attached under the subtree: the contributors' (attachments, live media originals + derivatives) + node cover blobs. */
+    /** Every blob id attached under the subtree: the contributors' (core's attachments, an application's live rows) + node cover blobs. */
     private fun subtreeBlobIds(scopeId: String, rootNodeId: String): Set<String> {
         val subtreeIds = collectSubtreeIds(scopeId, rootNodeId)
         // `deletedAt is null` — the sibling of [subtree]'s predicate, deliberately its OWN read (ADR 0061).
-        // Filtering only the listing leaves a Memory invisible in the share and still fully downloadable by
+        // Filtering only the listing leaves a node invisible in the share and still fully downloadable by
         // anyone holding a blobId, unauthenticated, for the whole retention window.
         val liveNodes = NodeEntity.find("scopeId = ?1 and deletedAt is null", scopeId).list().filter { it.id in subtreeIds }
         if (liveNodes.isEmpty()) return emptySet() // the shared root itself is trashed
         val liveIds = liveNodes.map { it.id }
         val ids = HashSet<String>()
-        // The media + derivative arms are the contributors' (each with its own trashed-media predicate).
+        // Every other arm is a contributor's (each with its own trashed-row predicate).
         contributors.forEach { ids.addAll(it.authorizedBlobIds(scopeId, liveIds)) }
         liveNodes.mapNotNull { it.coverBlobId }.forEach { ids.add(it) }
         return ids

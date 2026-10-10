@@ -10,7 +10,7 @@ import java.util.Optional
 
 /**
  * Fail-loud guard (ADR 0013 §1, cr-0105): a byte-path object store is a **hard requirement** of any real instance.
- * Outside the hermetic `%test` profile a blank `veyq.blob-store.endpoint` **aborts startup** — media is not an
+ * Outside the hermetic `%test` profile a blank `veyq.blob-store.endpoint` **aborts startup** — blob storage is not an
  * optional feature, so an instance without a store is misconfigured, not gracefully degraded (there is no
  * client-facing `directTransport` flag to soft-gate on any more). `%test` keeps the metadata-only in-memory stub.
  *

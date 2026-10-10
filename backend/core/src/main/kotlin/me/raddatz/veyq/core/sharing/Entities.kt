@@ -36,7 +36,7 @@ class ShareEntity : PanacheEntityBase {
     @Column(name = "scope_id", nullable = false, length = 36)
     lateinit var scopeId: String
 
-    /** The shared Memory (the subtree root). */
+    /** The shared node (the subtree root). */
     @Column(name = "node_id", nullable = false, length = 36)
     lateinit var nodeId: String
 
@@ -48,11 +48,11 @@ class ShareEntity : PanacheEntityBase {
     @Column(name = "wrap")
     var wrap: String? = null
 
-    /** WRITE_ONLY only: the Memory's drop public key sealed under `K_share` (opaque base64) — served instead of [wrap]. */
+    /** WRITE_ONLY only: the node's drop public key sealed under `K_share` (opaque base64) — served instead of [wrap]. */
     @Column(name = "sealed_drop_public_key")
     var sealedDropPublicKey: String? = null
 
-    /** The Memory name re-sealed under `K_share` (opaque base64) — a viewer with only the fragment key shows the title.
+    /** The node's name re-sealed under `K_share` (opaque base64) — a viewer with only the fragment key shows the title.
      *  Null only on a tombstone. */
     @Column(name = "sealed_name")
     var sealedName: String? = null
@@ -138,7 +138,7 @@ class ShareEntity : PanacheEntityBase {
         const val READ = "READ"
         const val READ_WRITE = "READ_WRITE"
 
-        /** A write-only drop-box (cr-0102, ADR 0031): add photos but the guest reads serve nothing of the subtree (`canView` = false). */
+        /** A write-only drop-box (cr-0102, ADR 0031): add uploads but the guest reads serve nothing of the subtree (`canView` = false). */
         const val WRITE_ONLY = "WRITE_ONLY"
     }
 }
@@ -165,7 +165,7 @@ class ShareIdentityEntity : PanacheEntityBase {
     @Column(name = "sealed_display_name", nullable = false)
     lateinit var sealedDisplayName: String
 
-    /** WRITE_ONLY identities only: the identity's own key wrapped to the Memory's drop public key (opaque base64). */
+    /** WRITE_ONLY identities only: the identity's own key wrapped to the node's drop public key (opaque base64). */
     @Column(name = "wrapped_identity_key")
     var wrappedIdentityKey: String? = null
 
@@ -179,7 +179,7 @@ class ShareIdentityEntity : PanacheEntityBase {
 /**
  * The id of a share row the scope purge erased (ADR 0029 §7). The purge must remove share rows — the scope's foreign
  * key requires it — and a freed id could be minted again by anyone holding the dead link's id and `K_share`, serving
- * every other holder of that link their own Memory. The id is 256 random bits and names nothing once its row is gone.
+ * every other holder of that link their own node. The id is 256 random bits and names nothing once its row is gone.
  */
 @Entity
 @Table(name = "veyq_share_retired_id")

@@ -12,7 +12,7 @@ import jakarta.enterprise.context.ApplicationScoped
  * **It exists because provisioning deliberately cannot fail the boot.** ADR 0067 Decision 3 runs the bring-up
  * in the background so an unreachable store can never restart-loop the stack the way ADR 0063's projector once
  * did — which means an instance with a broken store *starts, and looks healthy*. Without this read the
- * operator's first notice would be a photo that will not upload. A log line reaches whoever is already reading
+ * operator's first notice would be a file that will not upload. A log line reaches whoever is already reading
  * logs; this reaches whoever is looking at the instance.
  *
  * The mapping is a total function over [StoreProvisioningState] rather than an `if succeeded … else FAILED`:
