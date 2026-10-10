@@ -187,7 +187,11 @@ here; the server is blind.
   the member's world (`treeStore`, `activeSpace`, the cover and pin stores) — Memories' section reads its dates, covers
   and map from the guest's tree (`features/memory/guestCover.ts`), Files' views read and write through Files' data
   source (`features/files/source.ts`: the member's or the guest's, fixed at mount; a write is offered where the matrix
-  grants it AND the source carries it — `sourceCapabilities` — and the guest's source has no delete, no rename). A share body (`ShareBodyProps`) is handed the
+  grants it AND the source carries it — `sourceCapabilities` — and the guest's source has no delete, no rename), and so
+  does Memories' detail (`features/memory/source.ts`, picked by `MemoryDetailHost`: the detail, its composables, the
+  lightbox's loaders and — by injection, `useMemoryView`, which throws outside a detail — the organizer touch no API but
+  through it; the guest's has no trash, node meta, cover, marks, buckets, live poll or EXIF, and its delete is a purge of
+  its own). A share body (`ShareBodyProps`) is handed the
   guest's `access` too, and a body embedded below a folder asks `access.requestGuest` instead of naming on its own. What a view offers is its
   application's pure, fail-closed capability function over `access` and `targetOf(tree, node)` — `memoryCapabilities`
   (`features/memory/capabilities.ts`), `filesCapabilities` (`features/files/capabilities.ts`), core's
