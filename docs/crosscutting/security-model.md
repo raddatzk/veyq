@@ -112,8 +112,8 @@ request the **user** turned on, straight to the chosen provider.
   confirmation expiries, a recovery/pairing/confirmation/invite/job/reclaim row's creation (purge or order), a
   membership's creation (the orphan rule's successor), a node's creation (served) and trash time, a group's and a
   medium's trash time and a medium's change time (cursor + purge), a bucket's creation (order), a share's creation
-  (served) and tombstone time, `email_confirmed_at`, and when a member accepted the terms version they last
-  accepted (audit evidence, served by no API — below); sizes; job-queue and op-log offsets; presence facts; a media
+  (served) and tombstone time, `email_confirmed_at`, and when a member accepted each terms version they
+  accepted (a history, one row per version — audit evidence, served by no API — below); sizes; job-queue and op-log offsets; presence facts; a media
   item's **trash state** (a trashed flag + who trashed it + when, until the scheduled purge); a media item's
   **uploader attribution + bucket structure** (an opaque `owner_key` per medium — `user:{id}` / `share:{id}` —
   plus its `bucket_id` and the bucket rows' shape: node, parentage, `is_primary`, per-bucket counts; the
@@ -124,9 +124,10 @@ request the **user** turned on, straight to the chosen provider.
   subtree, and two links into one space are therefore linkable by anyone holding both (the ids of the shared
   node and its media already made the subtree linkable; the scope id extends that to sibling Memories of one
   space); the tenant's **terms text + `terms_version`** (the operator's *public* policy,
-  served to everyone incl. pre-auth) and a member's **`accepted_terms_version`** and **when they accepted it**
-  (`accepted_at`, the server's own clock, written once per version — audit evidence for a dispute, restored by owner
-  decision 2026-10-09 after #318 had dropped it) (acceptance metadata, like membership — never content, [ADR 0035](../decisions/0035-server-terms-of-service.md)); the **account email**
+  served to everyone incl. pre-auth) and a member's **accepted terms versions** and **when they accepted each**
+  (one row per version, never overwritten; `accepted_at`, the server's own clock, written once per version — audit
+  evidence for a dispute, also about a superseded version; restored by owner decision 2026-10-09 after #318 had
+  dropped it, kept as a history since #402) (acceptance metadata, like membership — never content, [ADR 0035](../decisions/0035-server-terms-of-service.md)); the **account email**
   (plaintext — the login identifier and the source of the deterministic auth salt,
   [ADR 0003](../decisions/0003-operator-blind-password-auth.md); named here to close a prior inventory gap); a
   tenant's **per-tenant SMTP config** (host/port/from/username/TLS + the owner-authored invite **template text** —

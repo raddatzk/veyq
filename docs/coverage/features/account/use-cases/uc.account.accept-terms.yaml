@@ -2,7 +2,7 @@ useCase: uc.account.accept-terms
 feature: account
 title: Accept terms — a member accepts the tenant's current terms to enter (re-accept on change)
 # cr-0114 (ADR 0035) delivers the member half end-to-end: contracts (getTenantTerms + acceptTenantTerms) →
-# backend (veyq_tenant_terms_acceptance keyed (user_id, tenant_id), membership-gated read/accept, a stale-version
+# backend (veyq_tenant_terms_acceptance keyed (user_id, tenant_id, accepted_version) since #402, membership-gated read/accept, a stale-version
 # accept → 409 terms_version_changed, TenantTermsHandler) → web (a router accept-gate: activeSpace.termsStale()
 # refreshed on every enterScope + a cold-boot watcher → the /terms TermsAcceptView; accepting records server-side
 # and returns the member to the remembered route). accepted_terms_version is coarse operational metadata (never
@@ -18,9 +18,9 @@ acceptanceCriteria:
       backend: { integration: [TenantTermsSliceTest.memberAcceptsThenABumpReStalesAndAStaleAcceptIs409] }
       web: { unit: [src/features/tenant/tenantTerms.test.ts] }
   - id: accept-recorded-server-side
-    text: Accepting records the member's accepted_terms_version = the current terms_version (+ accepted_at, the server's own time — audit evidence, written once per version, never client-supplied) server-side, keyed by (user_id, tenant_id). The gate then clears and the shell renders.
+    text: Accepting records the member's accepted_terms_version = the current terms_version (+ accepted_at, the server's own time — audit evidence, written once per version, never client-supplied) server-side, one row per (user_id, tenant_id, accepted_version) — a newer version adds a row and leaves the older ones and their times as evidence; the rows go with their tenant. The gate reads the highest accepted version, then clears and the shell renders.
     coverage:
-      backend: { integration: [TenantTermsSliceTest.memberAcceptsThenABumpReStalesAndAStaleAcceptIs409, TenantTermsSliceTest.anAcceptanceStoresTheServerTimeOncePerVersion, TenantTermsSliceTest.aClientSentAcceptanceTimeHasNoEffect] }
+      backend: { integration: [TenantTermsSliceTest.memberAcceptsThenABumpReStalesAndAStaleAcceptIs409, TenantTermsSliceTest.eachAcceptedVersionKeepsItsOwnRowAndFirstTime, TenantTermsSliceTest.anOlderAcceptanceDoesNotClearTheGateForTheCurrentVersion, TenantTermsSliceTest.aClientSentAcceptanceTimeHasNoEffect, TenantTermsSliceTest.deletingATenantErasesEveryAcceptanceRow] }
       web: { unit: [src/features/tenant/tenantTerms.test.ts] }
   - id: re-accept-on-version-bump
     text: When the operator bumps terms_version, the member's stored acceptance is now stale, so the gate re-appears; accepting the now-stale version is refused (409 terms_version_changed) until they re-read and re-accept the current one.

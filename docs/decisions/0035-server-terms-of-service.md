@@ -67,14 +67,19 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    transient terms-fetch error leaves the visitor viewing (a gate is operational, not enforcement; locking someone
    out on a network blip is worse than none), mirroring the member path's fail-open terms refresh.
 
-4. **Operator-blind boundary.** The terms text is public; a member's acceptance row records the
-   `accepted_terms_version` and its `accepted_at` — operational metadata (like membership/role). The version is
-   what the gate reads; the time is **audit evidence** of *when* a member accepted *which* version, should a
-   violation or dispute arise: the server's own clock at the acceptance, never client-supplied, written once per
-   version (re-accepting the recorded version keeps the first time; accepting a newer version replaces version and
-   time together, so the row holds the latest acceptance only). No API serves it; operators and support read it
-   from the database. (Inbox #318 dropped it as unread on 2026-10-09; the owner restored it the same day as that
-   evidence.) The anonymous acceptance is client-only. **No
+4. **Operator-blind boundary.** The terms text is public; a member's acceptances are kept as a **history** — one
+   row per (member, tenant, accepted version), each with its `accepted_at` — operational metadata (like
+   membership/role). The highest accepted version is what the gate reads (an accept names the current version or
+   is refused, and the version only grows, so "highest = current" is "accepted the current version"); the rows and
+   their times are **audit evidence** of *when* a member accepted *which* version, should a violation or dispute
+   arise — including one about a version since superseded. Each time is the server's own clock at the acceptance,
+   never client-supplied, written once per version (re-accepting a recorded version keeps its first time; accepting
+   a newer version adds a row and leaves the older ones untouched). No API serves the history; operators and support
+   read it from the database. The rows go with their tenant (`ON DELETE CASCADE`); the user reference has no
+   cascade, like the tenant profile's, so an account erasure, when it exists, must name the table. (Inbox #318
+   dropped the time as unread on 2026-10-09; the owner restored it the same day as that evidence; #402 on
+   2026-10-10 turned the single latest row into the history — a coordinator decision on the owner's behalf, to be
+   reviewed.) The anonymous acceptance is client-only. **No
    user content, no new blindness cost** — recorded in the [security model](../crosscutting/security-model.md).
 
 5. **Two acceptance tiers, one login surface still deferred.** The operator sets/edits terms (admin UI, versioned).

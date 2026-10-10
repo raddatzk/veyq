@@ -8,8 +8,8 @@
 - **Preconditions:** An authenticated **session** — acceptance is **operational metadata**, so it needs a session,
   **not** an unlocked vault (parallels the operational Server-Owner settings). The tenant has terms set
   (`terms_version > 0`).
-- **Postconditions (success):** the member's **`accepted_terms_version`** = the tenant's current `terms_version`;
-  the gate clears and the shell renders. A later version bump makes it stale → the gate re-appears.
+- **Postconditions (success):** the member's **`accepted_terms_version`** = the tenant's current `terms_version`
+  (a row for that version joins their earlier ones); the gate clears and the shell renders. A later version bump makes it stale → the gate re-appears.
 
 ## The gate here
 
@@ -17,10 +17,11 @@ A **hard gate**. When a member's `accepted_terms_version` is **below** the tenan
 absent), the web **router guard** redirects them to a `/terms` accept route — **after** the session/unlock check
 (it needs a session, not an unlocked vault). The route shows the tenant's terms (the current locale, DE/EN
 fallback) and an **Accept** action; accepting records **`(user_id, tenant_id, accepted_version, accepted_at)`**
-server-side (operational metadata, [ADR 0035](../../../decisions/0035-server-terms-of-service.md) §4). `accepted_at` is the
-server's own time of the acceptance — audit evidence of when which version was accepted, read by operators from the
-database and served by no API; re-accepting the recorded version keeps the first time. No entry until
-accepted. **Anonymous public-share visitors are out of scope** — they have no account, so their acceptance is
+server-side (operational metadata, [ADR 0035](../../../decisions/0035-server-terms-of-service.md) §4) — one row per
+accepted version, so the earlier acceptances stay beside it. `accepted_at` is the server's own time of the
+acceptance — audit evidence of when which version was accepted, also for a dispute about a superseded version; read
+by operators from the database and served by no API; re-accepting a recorded version keeps its first time. The
+gate reads the highest version accepted. No entry until accepted. **Anonymous public-share visitors are out of scope** — they have no account, so their acceptance is
 **client-side** (localStorage) on the share page, a later slice ([sharing](../../sharing/_index.md)).
 
 ## Main flow
@@ -29,7 +30,7 @@ accepted. **Anonymous public-share visitors are out of scope** — they have no 
 2. The router guard compares their `accepted_terms_version` to the tenant's `terms_version`; **stale/absent** →
    redirect to `/terms`.
 3. They read the terms (current locale) and press **Accept**.
-4. The server records `accepted_terms_version = terms_version` (+ `accepted_at`, its own clock); the guard now passes → the shell
+4. The server adds a row for `accepted_terms_version = terms_version` (+ `accepted_at`, its own clock); the guard now passes → the shell
    renders (honouring the remembered post-unlock route).
 
 ## Alternate / exception flows
