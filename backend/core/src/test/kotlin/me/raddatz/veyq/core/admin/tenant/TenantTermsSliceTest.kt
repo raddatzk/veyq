@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.admin.tenant
 
 import me.raddatz.veyq.core.membership.MembershipEntity
+import me.raddatz.veyq.core.tenant.TenantEntity
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
@@ -8,6 +9,7 @@ import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
+import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -25,6 +27,9 @@ import java.util.UUID
  */
 @QuarkusTest
 class TenantTermsSliceTest {
+
+    @Inject
+    lateinit var store: TenantStore
 
     private fun termsBody(de: String?, en: String?): String {
         val fields = buildList {
@@ -115,9 +120,10 @@ class TenantTermsSliceTest {
     }
 
     @Test
-    fun anAcceptanceStoresTheServerTimeOncePerVersion() {
-        // The acceptance time is audit evidence of WHEN which version was accepted (ADR 0035 §4): the server's own
-        // clock, written once per version — a re-acceptance of the recorded version must not move it, a newer one does.
+    fun eachAcceptedVersionKeepsItsOwnRowAndFirstTime() {
+        // Acceptance is evidence of WHEN which version was accepted (ADR 0035 §4, inbox #402): one row per version,
+        // the server's own clock, written once — a re-acceptance must not move it, a newer version must not erase
+        // the older one's row.
         val (tenantId, owner) = seedActiveTenant("terms-time.example.com", "owner@terms-time.example.com")
         val member = seedUser(email = "member@terms-time.example.com")
         seedMembership(tenantId, member, MembershipEntity.MEMBER)
@@ -125,22 +131,64 @@ class TenantTermsSliceTest {
 
         val before = Instant.now().truncatedTo(ChronoUnit.SECONDS)
         accept(member, tenantId, 1)
-        val (version, first) = storedAcceptance(member, tenantId)
-        assertEquals(1, version)
+        val first = storedAcceptances(member, tenantId).getValue(1)
         assertTrue(!first.isBefore(before) && !first.isAfter(Instant.now()), "accepted_at $first is not the server's now")
 
         // Move the stored time far into the past, so "kept" cannot be confused with "rewritten within the second".
         val past = Instant.parse("2020-01-01T00:00:00Z")
-        setStoredAcceptedAt(member, tenantId, past)
+        setStoredAcceptedAt(member, tenantId, 1, past)
         accept(member, tenantId, 1)
-        assertEquals(1 to past, storedAcceptance(member, tenantId), "a re-acceptance of the same version moved the time")
+        assertEquals(mapOf(1 to past), storedAcceptances(member, tenantId), "a re-acceptance of the same version moved the time")
 
         publish(owner, tenantId, "Regeln v2", "Rules v2")
         val beforeBump = Instant.now().truncatedTo(ChronoUnit.SECONDS)
         accept(member, tenantId, 2)
-        val (bumped, second) = storedAcceptance(member, tenantId)
-        assertEquals(2, bumped)
-        assertTrue(!second.isBefore(beforeBump), "accepting a newer version kept the old time $second")
+        val rows = storedAcceptances(member, tenantId)
+        assertEquals(setOf(1, 2), rows.keys, "accepting v2 must add a row, not replace v1's")
+        assertEquals(past, rows.getValue(1), "accepting v2 moved v1's time")
+        assertTrue(!rows.getValue(2).isBefore(beforeBump), "v2's time ${rows.getValue(2)} is not the server's now")
+
+        // A stale re-read of the gate: the current version's acceptance is what clears it, the history aside.
+        given().header("Authorization", bearer(member))
+            .`when`().get("/api/tenants/$tenantId/terms")
+            .then().statusCode(200).body("termsVersion", equalTo(2)).body("acceptedVersion", equalTo(2))
+    }
+
+    @Test
+    fun anOlderAcceptanceDoesNotClearTheGateForTheCurrentVersion() {
+        // The history holds v1 after a bump to v2; the gate must still report the member as stale until v2 is accepted.
+        val (tenantId, owner) = seedActiveTenant("terms-gate.example.com", "owner@terms-gate.example.com")
+        val member = seedUser(email = "member@terms-gate.example.com")
+        seedMembership(tenantId, member, MembershipEntity.MEMBER)
+        publish(owner, tenantId, "Regeln", "Rules")
+        accept(member, tenantId, 1)
+        publish(owner, tenantId, "Regeln v2", "Rules v2")
+        publish(owner, tenantId, "Regeln v3", "Rules v3")
+        accept(member, tenantId, 3)
+        publish(owner, tenantId, "Regeln v4", "Rules v4")
+
+        given().header("Authorization", bearer(member))
+            .`when`().get("/api/tenants/$tenantId/terms")
+            .then().statusCode(200).body("termsVersion", equalTo(4)).body("acceptedVersion", equalTo(3))
+        assertEquals(setOf(1, 3), storedAcceptances(member, tenantId).keys)
+    }
+
+    @Test
+    fun deletingATenantErasesEveryAcceptanceRow() {
+        // The tenant's erasure takes the whole history with it (ON DELETE CASCADE): no orphaned evidence rows.
+        val tenantId = seedTenant(status = TenantEntity.PENDING, tenantScope = false)
+        val member = seedUser(email = "member@terms-erase.example.com")
+        QuarkusTransaction.requiringNew().run {
+            for (v in 1..3) {
+                TenantTermsAcceptanceEntity().apply {
+                    id = UUID.randomUUID().toString(); userId = member; this.tenantId = tenantId
+                    acceptedVersion = v; acceptedAt = Instant.now()
+                }.persist()
+            }
+        }
+        assertEquals(3, storedAcceptances(member, tenantId).size)
+        store.deleteTenant(tenantId)
+        assertEquals(emptyMap<Int, Instant>(), storedAcceptances(member, tenantId), "acceptance rows outlived their tenant")
     }
 
     @Test
@@ -156,7 +204,7 @@ class TenantTermsSliceTest {
             .body("""{"version":1,"acceptedAt":"2000-01-01T00:00:00Z","accepted_at":"2000-01-01T00:00:00Z"}""")
             .`when`().post("/api/tenants/$tenantId/terms/accept")
             .then().statusCode(200).body("acceptedVersion", equalTo(1))
-        val (_, stored) = storedAcceptance(member, tenantId)
+        val stored = storedAcceptances(member, tenantId).getValue(1)
         assertTrue(!stored.isBefore(before), "accepted_at $stored came from the client, not the server")
     }
 
@@ -203,16 +251,18 @@ class TenantTermsSliceTest {
             .then().statusCode(200).body("acceptedVersion", equalTo(version))
     }
 
-    private fun storedAcceptance(userId: String, tenantId: String): Pair<Int, Instant> =
+    /** Every stored acceptance of [userId] for [tenantId], version → server time. */
+    private fun storedAcceptances(userId: String, tenantId: String): Map<Int, Instant> =
         QuarkusTransaction.requiringNew().call {
-            val row = TenantTermsAcceptanceEntity.find("userId = ?1 and tenantId = ?2", userId, tenantId).firstResult()!!
-            row.acceptedVersion to row.acceptedAt
+            TenantTermsAcceptanceEntity.list("userId = ?1 and tenantId = ?2", userId, tenantId)
+                .associate { it.acceptedVersion to it.acceptedAt }
         }
 
-    private fun setStoredAcceptedAt(userId: String, tenantId: String, at: Instant) =
+    private fun setStoredAcceptedAt(userId: String, tenantId: String, version: Int, at: Instant) =
         QuarkusTransaction.requiringNew().run {
-            TenantTermsAcceptanceEntity.find("userId = ?1 and tenantId = ?2", userId, tenantId).firstResult()!!
-                .acceptedAt = at
+            TenantTermsAcceptanceEntity
+                .find("userId = ?1 and tenantId = ?2 and acceptedVersion = ?3", userId, tenantId, version)
+                .firstResult()!!.acceptedAt = at
         }
 
     /** An ACTIVE tenant + its TENANT scope + a granted OWNER membership. Returns (tenantId, ownerUserId). */

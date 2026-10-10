@@ -398,11 +398,14 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
 
     // --- terms of service (cr-0114, ADR 0035) ---
 
-    /** The tenant's current terms + [userId]'s accepted version (0 if never accepted). Null if no such tenant. */
+    /** The tenant's current terms + the highest version [userId] accepted (0 if never). Null if no such tenant.
+     *  The highest is the gate's answer: an accept is refused unless it names the current version and a version only
+     *  ever grows, so "highest == current" is exactly "has a row for the current version". */
     fun termsFor(tenantId: String, userId: String): TenantTermsRow? {
         val tenant = TenantEntity.findById(tenantId) ?: return null
         val accepted = TenantTermsAcceptanceEntity
-            .find("userId = ?1 and tenantId = ?2", userId, tenantId).firstResult()?.acceptedVersion ?: 0
+            .find("userId = ?1 and tenantId = ?2 order by acceptedVersion desc", userId, tenantId)
+            .firstResult()?.acceptedVersion ?: 0
         return TenantTermsRow(tenant.termsVersion, accepted, tenant.termsMarkdownByLocale)
     }
 
@@ -426,27 +429,23 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
         return tenant.termsVersion
     }
 
-    /** Upsert [userId]'s acceptance of [version] for [tenantId] (keyed by the (user, tenant) UNIQUE), stamped with the
-     *  server's own time. The time is audit evidence, so it is written once per version: re-accepting the version
-     *  already recorded changes nothing — the first time stands. */
+    /** Record [userId]'s acceptance of [version] for [tenantId], stamped with the server's own time — one row per
+     *  version (keyed by the (user, tenant, version) UNIQUE), so an older version's row and time stay as evidence
+     *  (ADR 0035 §4). Written once per version: re-accepting a version already recorded changes nothing — the first
+     *  time stands. */
     @Transactional
     fun recordAcceptance(userId: String, tenantId: String, version: Int) {
-        val existing = TenantTermsAcceptanceEntity
-            .find("userId = ?1 and tenantId = ?2", userId, tenantId).firstResult()
-        if (existing != null) {
-            if (existing.acceptedVersion == version) return
-            existing.acceptedVersion = version
-            existing.acceptedAt = Instant.now()
-            existing.persist()
-        } else {
-            TenantTermsAcceptanceEntity().apply {
-                id = UUID.randomUUID().toString()
-                this.userId = userId
-                this.tenantId = tenantId
-                acceptedVersion = version
-                acceptedAt = Instant.now()
-            }.persist()
-        }
+        val recorded = TenantTermsAcceptanceEntity.count(
+            "userId = ?1 and tenantId = ?2 and acceptedVersion = ?3", userId, tenantId, version,
+        ) > 0
+        if (recorded) return
+        TenantTermsAcceptanceEntity().apply {
+            id = UUID.randomUUID().toString()
+            this.userId = userId
+            this.tenantId = tenantId
+            acceptedVersion = version
+            acceptedAt = Instant.now()
+        }.persist()
     }
 
     // --- per-tenant mail settings (cr-email-smtp-transport, ADR 0048/0049/0050) ---
