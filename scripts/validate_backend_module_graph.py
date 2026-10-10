@@ -90,6 +90,12 @@ module's `java-test-fixtures` source set (`src/testFixtures`, today `:core`'s), 
   `:core`'s, `:apps:memories`' and the root's `@QuarkusTest`s) — a second source on every consumer's test classpath,
   beside the base at its ordinal, which the classpaths above do not model. A module's `%test` keys go beside its
   tests, in `src/test/resources`.
+  (g5) Every *test* classpath sets the `%test` keys of `REQUIRED_TEST_KEYS`, once, to the value named there — today
+  `quarkus.scheduler.start-mode=halted`. Each project holds its own copy (test config ships in no jar), and only
+  `:core`'s is pinned by a test (`ScheduledJobsHaltedInTestTest`): a copy deleted from another module lets every
+  `@Scheduled` purge fire after each of that module's app starts and race its fixtures, with nothing red (inbox
+  #331). Derived from the classpaths above, so a new application's tests are held to it the day they exist. Its
+  bite: the key deleted from `apps/files`' `application-test.properties` → red on `test of :apps:files` (2026-10-10).
 
 **The defect that bought it.** None: built with cr-platform-gradle-modules (steps 6 and 8b), which split the
 backend into `:core`, `:apps:memories` and a `:test-support` project that `:core`'s test fixtures later replaced.
@@ -164,6 +170,16 @@ BUILD_BASE_STAGE = "backend-build-base"
 BASE_NAME = "application.properties"
 PROFILE_FILE = re.compile(r"^application-([\w.-]+)\.properties$")
 PROFILED_KEY = re.compile(r"^%([^.]+)\.(.+)$")
+TEST_CLASSPATH = "test of "
+# (g5) The `%test` keys every test classpath must set, and to what: a test JVM without one runs green and wrong.
+REQUIRED_TEST_KEYS = {"quarkus.scheduler.start-mode": "halted"}
+REQUIRED_TEST_KEYS_WHY = {
+    "quarkus.scheduler.start-mode": (
+        "unless it is halted, every @Scheduled job (the purges, the reclaim sweep) fires about a second after each of the "
+        "module's app starts and races its tests' fixtures on the shared H2 (inbox #182, #331); the reasons are in "
+        "backend/src/test/resources/application-test.properties, ScheduledJobsHaltedInTestTest pins the effect in "
+        ":core"),
+}
 RUNTIME_CONFIGS = {"implementation", "api", "runtimeOnly"}
 TEST_CONFIGS = {"testImplementation", "testRuntimeOnly"}
 
@@ -175,17 +191,34 @@ def rel(path: pathlib.Path) -> str:
         return str(path)
 
 
-def keys_of(path: pathlib.Path) -> list[str]:
-    """The keys a `.properties` file defines, in order; comments, blank lines and continuations skipped."""
-    keys: list[str] = []
+def entries_of(path: pathlib.Path) -> list[tuple[str, str]]:
+    """The `(key, value)` pairs a `.properties` file defines, in order; comments and blank lines skipped, a
+    continued value read up to its first line only (enough for the single-token values rule (g5) compares)."""
+    entries: list[tuple[str, str]] = []
     continued = False
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         was_continued, continued = continued, line.endswith("\\") and not line.endswith("\\\\")
         if was_continued or not line or line[0] in "#!":
             continue
-        keys.append(re.split(r"\s*[=:\s]", line, maxsplit=1)[0])
-    return keys
+        parts = re.split(r"\s*[=:\s]\s*", line, maxsplit=1)
+        entries.append((parts[0], parts[1].rstrip("\\").strip() if len(parts) > 1 else ""))
+    return entries
+
+
+def keys_of(path: pathlib.Path) -> list[str]:
+    """The keys a `.properties` file defines, in order; comments, blank lines and continuations skipped."""
+    return [k for k, _ in entries_of(path)]
+
+
+def profile_and_key(f: pathlib.Path, key: str) -> tuple[str, str]:
+    """`(profile, key)` of a key as written in `f`: `%p.k` is `(p, k)` anywhere, a plain key is `(p, k)` in an
+    `application-<p>.properties` and `("", k)` in an `application.properties`."""
+    pk = PROFILED_KEY.match(key)
+    if pk:
+        return pk.group(1), pk.group(2)
+    m = PROFILE_FILE.match(f.name)
+    return (m.group(1) if m else ""), key
 
 
 def config_files() -> list[pathlib.Path]:
@@ -251,7 +284,7 @@ def classpaths(files: list[pathlib.Path]) -> dict[str, list[pathlib.Path]]:
             continue
         runtime, test = edges(p)
         reach = runtime_closure({p}) | runtime_closure(test)
-        out[f"test of {p}"] = sorted([f for q in reach for f in main_of.get(q, [])] + test_of.get(p, []))
+        out[f"{TEST_CLASSPATH}{p}"] = sorted([f for q in reach for f in main_of.get(q, [])] + test_of.get(p, []))
     return out
 
 
@@ -271,18 +304,22 @@ def rule_g(files: list[pathlib.Path]) -> list[str]:
         homes: dict[tuple[str, str], list[pathlib.Path]] = defaultdict(list)
         keyed_bases = []
         for f in cp:
-            m = PROFILE_FILE.match(f.name)
             keys = keys_of(f)
-            if m is None and keys:
+            if PROFILE_FILE.match(f.name) is None and keys:
                 keyed_bases.append(f)
             for k in keys:
-                pk = PROFILED_KEY.match(k)
-                profile, key = (pk.group(1), pk.group(2)) if pk else (m.group(1) if m else "", k)
-                homes[(profile, key)].append(f)
+                homes[profile_and_key(f, k)].append(f)
         for (profile, key), where in sorted(homes.items()):
             if len(where) > 1:
                 errors.append(f"(g1) on the {name} classpath, ({profile!r}, {key!r}) is defined in {len(where)} files: "
                               f"{', '.join(rel(p) for p in where)} — two sources at one ordinal have no defined winner.")
+        if name.startswith(TEST_CLASSPATH):
+            for key, want in sorted(REQUIRED_TEST_KEYS.items()):
+                values = [v for f in cp for k, v in entries_of(f) for p, kk in [profile_and_key(f, k)]
+                          if kk == key and p == "test"]
+                if values != [want]:
+                    errors.append(f"(g5) the {name} classpath sets `%test` {key} to {values or 'nothing'}, not "
+                                  f"[{want!r}] — {REQUIRED_TEST_KEYS_WHY[key]}")
         if not keyed_bases:
             errors.append(f"(g2) no {BASE_NAME} on the {name} classpath holds a key — the base config (every "
                           f"profile's ground truth) was not found; a moved tree must be re-pointed, not passed.")
