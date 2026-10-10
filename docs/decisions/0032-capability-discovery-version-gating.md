@@ -20,8 +20,8 @@ The previous implementation had a **thin** server-advertised `CapabilityRegistry
 `/api/client-capabilities`, used mostly for a settings display + "new feature" notices) and a **much richer,
 never-built** target-picture design (a `major.build` hard gate + an append-only capability manifest + a
 deprecation lifecycle). The fresh state already has the **seams**: the pre-auth `GET /api/setup` response
-advertises `suites: ["v1"]` (crypto-suite negotiation the owner-registration picks from) and `directTransport`
-(a runtime-detected capability the client degrades on) — but there is **no version field and no generic
+advertises `suites: ["v1"]` (crypto-suite negotiation the owner-registration picks from) and, at the time,
+`directTransport` (a runtime-detected capability the client degraded on — since removed, §5) — but there is **no version field and no generic
 capability manifest**. Worker↔queue capability tags (`CapabilityTags`, ADR 0021) already realize the
 operator-blind "worker advertises what it can do" direction.
 
@@ -101,7 +101,7 @@ machinery; their endpoint-`422` enforcement lands at each feature's own create/e
 one-line pattern), advertised **active** only once that feature is built (§6).
 
 The **infra-detected** category (a capability computed by a preflight, not a policy toggle, with no operator
-off-switch or `422`) was originally illustrated by `directTransport` on `/api/setup`. That flag is now being
+off-switch or `422`) was originally illustrated by `directTransport` on `/api/setup`. That flag has been
 **removed** — a byte-path store became a hard instance requirement ([ADR 0013](0013-blob-storage-presigned-direct-to-store.md)),
 so there is nothing to soft-gate — leaving a future worker-gated `memory.derivatives` as the standing example of
 an infra-detected capability that could fold into the manifest (see Consequences).
@@ -146,7 +146,7 @@ Two rules follow, so the catalog stays honest instead of being invented in paral
 - **Operators get a real off-switch** for optional features, enforced server-side, hidden client-side — without
   per-feature bespoke plumbing (one registry, one gate).
 - **`/api/setup` grows into the pre-auth manifest** it was already becoming (`suites` + `directTransport` were
-  the precedent). `suites` **stays as-is** for now; `directTransport` is being **removed** (S3 is a hard
+  the precedent). `suites` **stays as-is** for now; `directTransport` was **removed** (S3 is a hard
   requirement, [ADR 0013](0013-blob-storage-presigned-direct-to-store.md)) rather than folded in.
 - **Deferred (each a later slice, none blocking this):** the **deprecation lifecycle** (`state`, `sunsetAt`,
   `supersededBy`, the ~4-month sunset + non-dismissable warning); **per-user "new feature" notices/acks**;
