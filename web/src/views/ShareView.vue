@@ -2,24 +2,26 @@
 // The anonymous public share page (uc.sharing.share-public-viewer, cr-0100, ADR 0029) — a SHELL. Mounted at the
 // no-session route `/s/:shareId`; the share key `K_share` rides the URL **#fragment** (`#k=<base64url>`) and is read
 // on device — it never reaches the server. The shell resolves the kind-independent half of the share
-// (`resolvePublicShare`), runs the gates every share has — password, then the accountless terms — and renders the body
-// the registry holds for the share's ROOT node kind, which the server names for every role (a kind nobody claimed, or
-// none, is the explicit unavailable state, never a blank page). What a body is —
-// the name pre-screen, the content, the lightbox — belongs to the application (Memories: `MemoryShareBody`). A footer
-// links to veyq's security docs (the client-integrity trust tier, ADR 0026).
+// (`resolvePublicShare`), runs the gates every share has — password, then the accountless terms — and then renders:
+//  - for a `READ` or `READ_WRITE` link, core's page (`core/sharing/ShareTreePage.vue`): the MEMBER's views handed the
+//    guest's access and tree — core's level view at a folder, the kind's registered `detail` at any other node, the
+//    link's root included — so a share looks exactly like the member view and the role only removes functions (inbox
+//    #401, the owner principle of 2026-10-09). The root kind must be one the app can render (FOLDER, or a kind with a
+//    `detail`);
+//  - for a `WRITE_ONLY` link, the drop page its root kind's application claimed (`registry.shareBody`): its guest holds
+//    no key, so there is nothing to render the member's way (Memories' photo drop, Files' drop box).
+// Anything else — a root kind nobody can render, or none named — is the explicit unavailable state, never a blank page.
+// A footer links to veyq's security docs (the client-integrity trust tier, ADR 0026).
 //
-// The order is password -> terms -> name -> content: the first two are here, "name" is the body's first screen.
-// So a share whose application half cannot be opened (a server that served no wrap) is discovered when the body
-// mounts — after the terms gate, not before it as when this page was one component — and the body answers with
-// `unavailable`. The password and unlock flow, and the "no body registered" check, still run before any gate.
+// The order is password -> terms -> content. A share whose keys cannot be opened (a server that served no wrap) is
+// discovered when the page mounts — after the terms gate — and the page answers with `unavailable`.
 //
 // **Who looks (inbox #401 S2).** Behind the gates the shell builds the guest's `access` (`core/sharing/guestAccess.ts`:
-// the link's role and head, the password token) and hands it to the body, which hands it on to every view it mounts —
-// core's level view at a folder, a section, an embedded body. The access carries the page's ONE naming flow,
-// `requestGuest`: a READ_WRITE guest names itself in the shell's dialog (core's `GuestNaming`, under the share ROOT's
-// key, `nameShareGuest`) whichever view first writes, and the shell shows whose session this device holds with its
-// "Not you?" (`forgetGuestSession`, asked first). A WRITE_ONLY drop page names its guest on the page itself (its own
-// identity key, the application's), so the shell's line is a READ_WRITE link's.
+// the link's role and head, the password token) and hands it to the page, which hands it on to every view it mounts.
+// The access carries the page's ONE naming flow, `requestGuest`: a READ_WRITE guest names itself in the shell's dialog
+// (core's `GuestNaming`, under the share ROOT's key, `nameShareGuest`) whichever view first writes, and the shell shows
+// whose session this device holds with its "Not you?" (`forgetGuestSession`, asked first). A WRITE_ONLY drop page names
+// its guest on the page itself (its own identity key, the application's), so the shell's line is a READ_WRITE link's.
 import { ref, shallowRef, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -35,6 +37,8 @@ import {
   type PublicShareHead,
 } from '../core/sharing/resolvePublicShare'
 import { registry } from '../core/applications/registry'
+import { FOLDER_KIND } from '../core/node/kind'
+import ShareTreePage from '../core/sharing/ShareTreePage.vue'
 import { guestAccess } from '../core/sharing/guestAccess'
 import { forgetGuestSession, nameShareGuest, useGuestSession, type GuestIdentity } from '../core/sharing/guestIdentity'
 import { ShareRole } from '../api/generated/sharing'
@@ -110,10 +114,14 @@ const securityDocUrl = computed(() =>
     : 'https://github.com/raddatzk/veyq/wiki/is-my-data-safe',
 )
 
-/** The body the registry holds for this share's root kind, whatever its role, or null (the explicit unavailable
- *  state) when nobody claimed the kind or the server named none. */
+/** What renders this share behind the gates, or null (the explicit unavailable state): a `WRITE_ONLY` link's drop page
+ *  claimed for its root kind, else core's page — for a root kind the app can render as a member would (see the header). */
 function bodyFor(h: PublicShareHead) {
-  return h.rootKind ? registry.shareBody(h.rootKind) : null
+  const kind = h.rootKind
+  if (!kind) return null
+  if (h.role === ShareRole.WriteOnly) return registry.shareBody(kind)
+  const info = registry.kind(kind)
+  return kind === FOLDER_KIND || (info.supported && info.detail) ? ShareTreePage : null
 }
 const body = computed(() => (head.value ? bodyFor(head.value) : null))
 
@@ -247,7 +255,7 @@ onMounted(() => {
 
     <template v-else-if="head && body && access">
       <GuestNaming v-if="showsIdentity" class="share-view-identity" :current="session" :forget="() => forgetGuestSession(shareId)" />
-      <!-- The application's body for this share: its content and lightbox (a drop page's naming too). -->
+      <!-- Core's page of the link's tree (the member's views), or a WRITE_ONLY link's drop page (its naming too). -->
       <component
         :is="body"
         :share-id="shareId"
@@ -277,9 +285,9 @@ onMounted(() => {
 <style scoped src="../shared/ui/shareGate.css"></style>
 
 <style scoped>
-/* The share page fills the full viewport (rendered outside the app shell, in the 'plain' layout). The application's
-   body brings its own look (gallery grid + lightbox skin come from the GLOBAL design-source stylesheets); the state
-   cards (loading, unavailable, password, terms) come from the shared gate sheet above. */
+/* The share page fills the full viewport (rendered outside the app shell, in the 'plain' layout). The page below the
+   gates brings its own look (the member's views and their GLOBAL design-source stylesheets); the state cards (loading,
+   unavailable, password, terms) come from the shared gate sheet above. */
 .share-view {
   display: flex;
   flex-direction: column;

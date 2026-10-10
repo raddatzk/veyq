@@ -59,8 +59,6 @@ describe('registerFiles', () => {
       shareDialog: DropBoxShareDialog,
     })
     expect(registry.shareBody(DROPBOX_KIND)).toBe(DropBoxShareBody)
-    // The WRITE_ONLY drop page only: below a shared folder core renders the drop box's detail, never this body (#401 S3).
-    expect(registry.embeddedShareBody(DROPBOX_KIND)).toBeNull()
     expect(registry.slugFor(DROPBOX_KIND, 'Foto.JPG')).toBe(slugify('Foto.JPG')) // a container's folding
   })
 

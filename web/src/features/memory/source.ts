@@ -339,7 +339,7 @@ export function guestMemorySource(access: () => GuestAccess, tree: { readonly ro
   const contributes = a0.role === ShareRole.ReadWrite
   const scope = () => access().head.scopeId
   // A served media as the share helpers take it: opened under `key` (the node's, from the chain), its origin on the item.
-  const shareItem = (item: MediaItem, key: Uint8Array): ShareItem => ({ item, memoryKey: key, scopeId: scope(), nodeId: '', chapterName: null })
+  const shareItem = (item: MediaItem, key: Uint8Array): ShareItem => ({ item, memoryKey: key, scopeId: scope(), nodeId: '' })
 
   return {
     scopeId: scope,

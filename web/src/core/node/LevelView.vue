@@ -22,7 +22,7 @@
 // both on to every section; what the level's own controls offer is core's `folderCapabilities` for the folder on screen
 // — no write during a pending deletion, none in a guest's identity folder, a share only of a folder.
 //
-// The share guest's folder page renders this very level (`core/sharing/FolderShareBody.vue`, inbox #401): every
+// The share guest's folder page renders this very level (`core/sharing/ShareTreePage.vue`, inbox #401): every
 // section, fallback and the folders are this view's for a member and a guest alike, the guest's functions removed by the
 // capability functions and the sections' data sources.
 //

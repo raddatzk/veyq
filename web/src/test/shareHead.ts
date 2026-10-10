@@ -26,5 +26,5 @@ export function headOf(r: ResolvedShare, shareId = 's1', rootKind: NodeKind = ME
 
 /** The Memories half of the same resolved share. */
 export function openedOf(r: ResolvedShare): OpenedMemory {
-  return { access: r.access, items: r.items, chapterNames: new Map() }
+  return { access: r.access, items: r.items }
 }

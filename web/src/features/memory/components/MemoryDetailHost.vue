@@ -9,8 +9,8 @@
 // share guest's over its link — by `access.mode`, which does not change while the detail is mounted (a page mounts it
 // per node and session). For a guest nothing of the member's world is read: no `activeSpace` (the item-mark key, the
 // scope kind), no pin store, no `treeStore` patch — the guest's capabilities grant none of them, and the guest's source
-// carries no door to them. Production mounts it for a guest only from S5 on; until then core's folder page embeds
-// Memories' share body below a folder (`embedBelowFolder`).
+// carries no door to them. A guest gets it from core's share page (`core/sharing/ShareTreePage.vue`) for every Memory and
+// chapter of a `READ` or `READ_WRITE` link, the link's root included (inbox #401 S5).
 import { computed } from 'vue'
 import type { NodeDetailProps, NodeDetailEmits } from '../../../core/applications/registry'
 import { CHAPTER_KIND } from '../kinds'

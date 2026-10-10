@@ -1,32 +1,29 @@
 <script setup lang="ts">
-// Core's body of the public share page for a share rooted at a FOLDER (cr-node-key-hierarchy 5b.4b, ADR 0080 Decisions
-// 6, 9 and 13; the shell is `views/ShareView.vue`, which pre-registers this body for `FOLDER` in `createRegistry`). The
-// shell has resolved the head, run the password and terms gates and built the guest's `access` (its role, the page's one
-// naming flow); this body builds the guest's TREE from the head (`guestTreeSource`: the root's key from the share's
-// `wrap`, every key and name below through the chain) and browses it.
+// Core's page of a `READ` or `READ_WRITE` public share, whatever its root kind (a folder, a Memory, a chapter, …; inbox
+// #401, cr-node-key-hierarchy 5b.4b; the shell is `views/ShareView.vue`, which mounts this page behind its gates and a
+// `WRITE_ONLY` link's drop page instead). The shell has resolved the head, run the password and terms gates and built
+// the guest's `access` (its role, the page's one naming flow); this page builds the guest's TREE from the head
+// (`guestTreeSource`: the root's key from the share's `wrap`, every key and name below through the chain) and browses it.
 //
-// **The member's page, with functions removed (inbox #401).** At a folder it renders core's `LevelView` — the very
-// view a member browses with: the folder's overview card, every application's level section through the registry
-// (Memories' cards with their covers and dates, Files' files and drop boxes), the fallback section for a kind no section
-// serves, the sub-folders — handed the guest's `access` and `tree`, so every control is the capability functions' answer
-// for a guest (`folderCapabilities`, `memoryCapabilities`, `filesCapabilities`) and the sections' data sources. At any
-// other node it renders that kind's `detail` (`NodeDetailProps`, the guest's access and tree; Files' drop box since S3),
-// as the member's host does. What stays this body's own is what only a guest's page has: the breadcrumb up to the share
-// root, the share's note (once), the role badge.
-//
-// **Until S5 (Memories)** a kind whose application claimed its share body `embedBelowFolder` (a Memory, a chapter) is
-// EMBEDDED through that body (`registry.embeddedShareBody(kind)`) instead of its detail, handed `subtreeRoot` — its id,
-// key and name from the chain. A kind with neither, or an embedded body that reports `unavailable`, is a local empty
-// state here, never the page's.
+// **The member's page, with functions removed (inbox #401).** At a folder it renders core's `LevelView` — the very view
+// a member browses with: the folder's overview card, every application's level section through the registry (Memories'
+// cards with their covers and dates, Files' files and drop boxes), the fallback section for a kind no section serves, the
+// sub-folders. At any other node — the link's root included — it renders that kind's registered `detail`
+// (`NodeDetailProps`: Memories' `MemoryDetail`, Files' `DropBoxDetail`), as the member's host does. Both are handed the
+// guest's `access` and `tree`, so every control is the capability functions' answer for a guest (`folderCapabilities`,
+// `memoryCapabilities`, `filesCapabilities`) and every byte the applications' guest data sources'. What stays this
+// page's own is what only a guest's page has: the breadcrumb up to the share root, the share's note (once), the role
+// badge. A kind without a detail is a local empty state here, never the page's.
 //
 // **Navigation** is the tree's `linkTo`: `?node=<id>` with the `#k=` fragment KEPT (the shell re-reads the share key
 // from it on every re-resolve), and every breadcrumb a real link (web/CLAUDE.md, the breadcrumb trap). An id the walk
 // did not open falls back to the root.
 //
-// **Writes (READ_WRITE only)** are what the capabilities grant at the folder on screen: a new folder, or a node of a
+// **Writes (READ_WRITE only)** are what the capabilities grant on screen: at a folder a new folder or a node of a
 // section's kind (a Memory), created as the guest under the current folder (`createShareNodeAsGuest`) after the shell
-// named it (`access.requestGuest`). Inside a guest's identity folder nothing is placed but by its own identity, so no
-// create is offered there (the server refuses it: `illegal_structure`), nor any section's write (the capabilities).
+// named it (`access.requestGuest`); inside a detail what its application offers (Memories: an upload into the Memory or
+// chapter on screen, the delete of the guest's own media). Inside a guest's identity folder nothing is placed but by its
+// own identity, so no create is offered there (the server refuses it: `illegal_structure`), nor any section's write.
 import { computed, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -45,9 +42,8 @@ import { useGuestSession } from './guestIdentity'
 import { renderMarkdown } from '../../shared/markdown'
 import ShareNameDialog from './ShareNameDialog.vue'
 
-// The props are the registry's `ShareBodyProps` (core/applications/registry.ts), spelled out because the SFC compiler
-// reads them statically. A folder body is never embedded itself (a folder below the root is browsed here), so it
-// takes no `subtreeRoot`.
+// The props are the shell's, the registry's `ShareBodyProps` (core/applications/registry.ts), spelled out because the
+// SFC compiler reads them statically.
 const props = defineProps<{
   shareId: string
   fragmentKey: string
@@ -91,7 +87,8 @@ const atFolder = computed(() => current.value?.kind === FOLDER_KIND)
 const NO_LEVEL: Level = { folders: [], byKind: new Map() }
 const level = computed<Level>(() => (tree.value && currentId.value ? childrenOf([...tree.value.nodes], currentId.value) : NO_LEVEL))
 
-/** The link writes, and not here: nobody but its identity places anything in a guest's identity folder. */
+/** The link writes, and not here: nobody but its identity places anything in a guest's identity folder. The badge says
+ *  so too, so it reads the same everywhere a guest can write. */
 const canWriteHere = computed(() => props.head.role === ShareRole.ReadWrite && !(tree.value?.inIdentityFolder(currentId.value) ?? false))
 
 /** Root first, the current node last, along the served `parentId`s (bounded: a served cycle stops at the root). */
@@ -127,24 +124,18 @@ const crumbs = computed<MenuItem[]>(() => {
   return tr ? trail.value.slice(1).map((id) => crumb(tr, id)) : []
 })
 
-// --- a node that is not a folder: its kind's detail, or (until S5) the body its application claimed, embedded --------
-const embedded = computed(() => (current.value && !atFolder.value ? registry.embeddedShareBody(current.value.kind) : null))
+// --- a node that is not a folder: its kind's detail ------------------------------------------------------------------
 const detail = computed(() => {
-  if (!current.value || atFolder.value || embedded.value) return null
+  if (!current.value || atFolder.value) return null
   const info = registry.kind(current.value.kind)
   return info.supported ? (info.detail ?? null) : null
 })
-const subtreeRoot = computed(() => {
-  const tr = tree.value
-  const id = currentId.value
-  const key = tr && id ? tr.keyOf(id) : null
-  return tr && id && key ? { nodeId: id, key, name: tr.nameOf(id) } : null
+/** The role badge: what this link lets the guest do here — at a folder in the folder's words (add, rename, move), at any
+ *  other node the role's. */
+const badge = computed(() => {
+  if (!canWriteHere.value) return t('share.readonly')
+  return atFolder.value ? t('share.folder.contributorBadge') : t('share.contributorBadge')
 })
-// Embedded bodies that reported their node unusable: a local empty state, never the page's.
-const unusable = ref<Set<string>>(new Set())
-function markUnusable(id: string) {
-  unusable.value = new Set(unusable.value).add(id)
-}
 
 // --- writes (READ_WRITE): a node created under the current folder --------------------------------------------------
 const session = useGuestSession(props.shareId)
@@ -176,10 +167,9 @@ function createError(e: unknown): string {
   <section v-else class="veyq-section">
     <div class="share-folder-bar">
       <Breadcrumb :home="home" :model="crumbs" class="app-breadcrumb" :aria-label="t('share.folder.breadcrumbRoot')" />
-      <span v-if="atFolder" class="share-folder-badge">{{ canWriteHere ? t('share.folder.contributorBadge') : t('share.folder.readonly') }}</span>
+      <span class="share-folder-badge">{{ badge }}</span>
     </div>
-    <!-- The share's note, once for the whole page (an embedded body does not repeat it). Safe markdown (escape-first),
-         so v-html is safe. -->
+    <!-- The share's note (the curator's), once for the whole page. Safe markdown (escape-first), so v-html is safe. -->
     <!-- eslint-disable-next-line vue/no-v-html -->
     <div v-if="renderedNote" class="veyq-surface markdown-body" v-html="renderedNote"></div>
 
@@ -207,21 +197,7 @@ function createError(e: unknown): string {
       :tree="tree"
       @open-node="go($event.id)"
     />
-    <p v-else-if="!embedded || !subtreeRoot" class="veyq-empty">{{ t('share.folder.unsupportedKind') }}</p>
-    <p v-else-if="currentId && unusable.has(currentId)" class="veyq-empty">{{ t('share.folder.gone') }}</p>
-    <component
-      :is="embedded"
-      v-else
-      :key="subtreeRoot.nodeId"
-      :share-id="shareId"
-      :fragment-key="fragmentKey"
-      :pw-token="pwToken"
-      :head="head"
-      :reload="reload"
-      :access="access"
-      :subtree-root="subtreeRoot"
-      @unavailable="markUnusable(subtreeRoot.nodeId)"
-    />
+    <p v-else class="veyq-empty">{{ t('share.folder.unsupportedKind') }}</p>
   </section>
 
   <ShareNameDialog

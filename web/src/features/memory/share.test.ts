@@ -19,6 +19,7 @@ vi.mock('../spaces/scopes', async (importOriginal) => ({
 
 import { createShare, reissueShare, isShareDeleted, type ReissuableShare, resolveShare, createContributorIdentity, addSharePhoto, deleteSharePhoto, listSharesFor, reactivateShare, updateShare, readShareNoteMap, readShareName, readSharePassword, shareChunkProvider, openSharedMemory } from './share'
 import { pickLocaleText, derivePasswordToken, resolvePublicShare, ShareUnavailableError, SharePasswordRequiredError } from '../../core/sharing/resolvePublicShare'
+import { openGuestTreeParts } from '../../core/sharing/guestTree'
 // The link builders live in `shareLink.ts` (the UI edge, the only part that needs `window`) — see its header.
 import { buildShareLink, recoverShareLink } from './shareLink'
 import { unsealMeta, CHUNK_SIZE, type MediaDeriver } from './media'
@@ -220,8 +221,8 @@ describe('resolveShare (anonymous viewer)', () => {
     expect(resolved.items).toHaveLength(1)
     // the chapter media's meta unseals only if the viewer walked wrappedContentKey → the chapter's K_mem
     expect(unsealMeta(SCOPE_ID, resolved.items[0].memoryKey, resolved.items[0].item)).toMatchObject({ w: 800, h: 600 })
-    // …and it carries the title of the chapter it sits in, opened under the Memory's K_mem (ADR 0080 Decision 2)
-    expect(resolved.items[0].chapterName).toBe('Day 1')
+    // …and it carries the node it sits on, by which the guest's data source lists each node's own media
+    expect(resolved.items[0].nodeId).toBe(CHAPTER_ID)
   })
 
   // Bite test (b): a Memory-share guest opens every chapter title it is served — nested ones through the chain it
@@ -250,7 +251,7 @@ describe('resolveShare (anonymous viewer)', () => {
     const head = await resolvePublicShare(minted.shareId, b64url(minted.kShare))
     expect(head.share.nodes.find((n) => n.id === NODE_ID)?.encryptedName).toBeUndefined()
 
-    const { chapterNames } = openSharedMemory(head)
+    const { names: chapterNames } = openGuestTreeParts(head) // what the guest's tree names its chapters with
     expect(Object.fromEntries(chapterNames)).toEqual({ [CHAPTER_ID]: 'Day 1', [NESTED]: 'Morning' })
   })
 
@@ -275,7 +276,7 @@ describe('resolveShare (anonymous viewer)', () => {
           { id: CHAPTER_ID, parentId: NODE_ID, kind: 'CHAPTER', epoch: 0, placementVersion, ...entry },
         ],
       })
-      return openSharedMemory(await resolvePublicShare(minted.shareId, b64url(minted.kShare))).chapterNames
+      return openGuestTreeParts(await resolvePublicShare(minted.shareId, b64url(minted.kShare))).names
     }
 
     expect(Object.fromEntries(await servedAt(2))).toEqual({ [CHAPTER_ID]: 'Tag 2' }) // control
@@ -854,9 +855,9 @@ describe('a chapter share (ADR 0080 Decision 13)', () => {
     const own = byId.get(MEDIA_1)!
     const nested = byId.get(MEDIA_2)!
     expect(unsealMeta(SCOPE_ID, own.memoryKey, own.item), "the chapter's own media opens").toMatchObject({ w: 1600 })
-    expect(own.chapterName, 'a media on the shared root carries no chapter title').toBeNull()
+    expect(own.nodeId, 'a media on the shared root sits on the root').toBe(CHAPTER_ID)
     expect(unsealMeta(SCOPE_ID, nested.memoryKey, nested.item), 'a nested chapter opens down the chain').toMatchObject({ w: 800 })
-    expect(nested.chapterName).toBe('Morning')
+    expect(nested.nodeId).toBe(NESTED)
   })
 
   it("an uploader link seals the chapter's drop key under the chapter's K_mem, bound to the chapter", async () => {
@@ -890,7 +891,7 @@ describe('a chapter share (ADR 0080 Decision 13)', () => {
   })
 })
 
-describe('openSharedMemory embedded below a shared folder (cr-node-key-hierarchy 5b.4b)', () => {
+describe('openSharedMemory on a folder link (cr-node-key-hierarchy 5b.4b)', () => {
   const FOLDER = '5c09e000-0000-4000-8000-0000000f0001'
   const SIBLING = '5c09e000-0000-4000-8000-0000000f0002'
   const MEDIA_3 = '5c09e000-0000-4000-8000-00000000ae03'
@@ -925,28 +926,12 @@ describe('openSharedMemory embedded below a shared folder (cr-node-key-hierarchy
     identities: [],
   }
 
-  it("lists the embedded Memory and its chapters only, under the chain's keys, with the Memory's key as access", () => {
-    const opened = openSharedMemory(head, listing, { nodeId: NODE_ID, key: memoryKey })
-    expect(opened.access).toEqual({ kind: 'read', memoryKey })
-    const byId = new Map(opened.items.map((i) => [i.item.mediaId, i]))
-    expect([...byId.keys()].sort(), "the sibling Memory's media are not this body's").toEqual([MEDIA_1, MEDIA_2].sort())
-    const own = byId.get(MEDIA_1)!
-    expect(unsealMeta(SCOPE_ID, own.memoryKey, own.item)).toMatchObject({ w: 1600 })
-    expect(own.chapterName, "a media on the embedded Memory itself carries no chapter title (not the Memory's name)").toBeNull()
-    const inChapter = byId.get(MEDIA_2)!
-    expect(unsealMeta(SCOPE_ID, inChapter.memoryKey, inChapter.item)).toMatchObject({ w: 800 })
-    expect(inChapter.chapterName).toBe('Day 1')
-    expect(Object.fromEntries(opened.chapterNames), 'only the chapters below the embedded Memory').toEqual({ [CHAPTER_ID]: 'Day 1' })
-  })
-
-  it('at the share root (no embedded node) every media of the subtree lists, as before', () => {
+  it('every media of the subtree lists, each under its own node\'s key from the chain', () => {
     const opened = openSharedMemory(head, listing)
     expect(opened.access).toEqual({ kind: 'read', memoryKey: folderKey })
     expect(opened.items.map((i) => i.item.mediaId).sort()).toEqual([MEDIA_1, MEDIA_2, MEDIA_3].sort())
-    expect(opened.items.find((i) => i.item.mediaId === MEDIA_1)!.chapterName).toBe('Trip')
-  })
-
-  it('an embedded node the walk did not open is a share this body cannot open', () => {
-    expect(() => openSharedMemory(head, listing, { nodeId: '5c09e000-0000-4000-8000-0000000f0009', key: memoryKey })).toThrow(ShareUnavailableError)
+    const inChapter = opened.items.find((i) => i.item.mediaId === MEDIA_2)!
+    expect(inChapter.nodeId).toBe(CHAPTER_ID)
+    expect(unsealMeta(SCOPE_ID, inChapter.memoryKey, inChapter.item)).toMatchObject({ w: 800 })
   })
 })

@@ -1,11 +1,11 @@
 // @vitest-environment happy-dom
-// The guest's folder page as it ships (inbox #401 S2): core's `FolderShareBody` with the app's REAL registry (Memories
+// The guest's folder page as it ships (inbox #401 S2): core's `ShareTreePage` with the app's REAL registry (Memories
 // and Files, filled by `src/test/setup.ts`), the real PrimeVue and the real vue-router, every step a DOM click on the
 // rendered element. The folder level is core's member `LevelView`: a Memory is the member's MemoryCard, the sub-folder
 // a folder card, the files Files' list — and nothing a member alone may do is on the page (pins, marks, the trash,
 // share, rename, delete, a cover, a chapter), while every authenticated client throws (`test/guestMode.ts`). A card
-// click keeps the `#k=` fragment that carries the share key, and the Memory opens in its (still separate, until S5)
-// guest body.
+// click keeps the `#k=` fragment that carries the share key, and the Memory opens in the member's detail (inbox #401
+// S5; what that detail offers a guest is `MemoryDetail.guest.test.ts`).
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
@@ -21,7 +21,7 @@ vi.mock('../useThumbnailPipeline', () => ({
   useThumbnailPipeline: () => ({ thumbs: new Map(), reconcile: vi.fn(), decrypt: vi.fn().mockResolvedValue(undefined), revokeAll: vi.fn() }),
 }))
 
-import FolderShareBody from '../../../core/sharing/FolderShareBody.vue'
+import ShareTreePage from '../../../core/sharing/ShareTreePage.vue'
 import { FOLDER_KIND } from '../../../core/node/kind'
 import { sealName, wrapContentKey } from '../../../core/node/tree'
 import type { PublicShareHead } from '../../../core/sharing/resolvePublicShare'
@@ -79,7 +79,7 @@ beforeEach(async () => {
 
 async function mountPage(role: ShareRole) {
   const h = head(role)
-  const w = mount(FolderShareBody, {
+  const w = mount(ShareTreePage, {
     props: { shareId: SHARE_ID, fragmentKey: b64url(K_SHARE), pwToken: undefined, head: h, reload: async () => {}, access: guestAccessFor(h) },
     global: { plugins: [router, realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { MediaGrid: true, OptimisticTile: true, MediaLightbox: true } },
   })
@@ -125,6 +125,7 @@ describe("a folder link's guest page is the member's level (inbox #401 S2)", () 
     expect(router.currentRoute.value.hash, 'the share key stays in the URL').toBe(HASH)
     await vi.waitFor(() => expect(w.find('.gallery-title').exists()).toBe(true))
     expect(w.find('.gallery-title').text()).toBe('Rom 2026')
+    expect(w.find('.memory-detail').exists(), "the member's Memory detail, not a guest body").toBe(true)
     expect(w.findAll('a.p-breadcrumb-item-link').map((a) => a.text())).toEqual(['Familie', 'Rom 2026'])
     expect(authenticatedCalls).toEqual([])
   })

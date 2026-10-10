@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
-// uc.memory.upload E3 at the READ_WRITE guest's picker (uc.sharing.share-contributor / uc.sharing.share-uploader,
-// step 4 of each). E3 is a property of **the picker**, not of one screen: a visitor adding photos from Safari's
+// uc.memory.upload E3 at the WRITE_ONLY guest's picker, on Memories' drop page (uc.sharing.share-uploader step 4).
+// A READ_WRITE guest picks in the member's `MemoryDetail` (inbox #401 S5), whose window `MemoryDetail.optimistic.test.ts`
+// covers. E3 is a property of **the picker**, not of one screen: a visitor adding photos from Safari's
 // Photos gallery hits the same late/repeated `input.files` population the curator does, and a picker that reads
 // the input once loses whatever the browser had not populated yet — silently, which is the worst way to lose a
 // contributed photo.
@@ -11,33 +12,26 @@
 //   3. the input is cleared AFTER the window       — reddened by clearing inside the pick, which also reddens 1
 // Without 2 and 3 a green 1 cannot say which half of the change is load-bearing.
 //
-// `MemoryDetail.optimistic.test.ts` covers the same window on the curator's side and is the reference for the
-// module-mock shape: `mergeFiles` / `isSupportedMediaFile` stay REAL through `...actual`, only `enqueueUploads`
+// `MemoryDetail.optimistic.test.ts` is the reference for the module-mock shape: `mergeFiles` / `isSupportedMediaFile` stay REAL through `...actual`, only `enqueueUploads`
 // is a spy, so what is exercised is the picker's own de-dupe rather than a stub of it.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import PrimeVue from 'primevue/config'
 
 const SHARE_ID = 's1'
 const SESSION_KEY = `veyq:share-contributor:${SHARE_ID}`
+// The uploader's own key K_up (standard base64 of 32 bytes): a WRITE_ONLY session seals under it.
+const UPLOADER_KEY = 'A'.repeat(43) + '='
 
-// The two heavy media composables → inert stubs (no crypto, no object URLs, no timers of their own).
+// The heavy media composable → an inert stub (no crypto, no object URLs, no timers of its own).
 vi.mock('../features/memory/useOptimisticTiles', () => ({
   useOptimisticTiles: () => ({ optimisticTiles: { value: [] }, donorPreviewFor: () => undefined }),
-}))
-vi.mock('../features/memory/useThumbnailPipeline', () => ({
-  useThumbnailPipeline: () => ({
-    thumbs: new Map(),
-    reconcile: vi.fn(),
-    decrypt: vi.fn().mockResolvedValue(undefined),
-    revokeAll: vi.fn(),
-  }),
 }))
 
 vi.mock('../api/client', () => ({ sharesApi: vi.fn(), publicSharesApi: vi.fn(), tokenApi: vi.fn() }))
 vi.mock('vue-router', () => ({ useRoute: () => ({ params: { shareId: SHARE_ID }, hash: '#k=AAAA' }) }))
 
-// The shell resolves the platform half and fetches the terms; the Memories body opens the rest. Only those three
-// reads are stubbed — the shell, the registry, the body and the helpers it uses are real.
+// The shell resolves the platform half and fetches the terms; the drop page opens the drop key. Only those reads are
+// stubbed — the shell, the registry, the page and the helpers it uses are real.
 vi.mock('../core/sharing/resolvePublicShare', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../core/sharing/resolvePublicShare')>()
   return { ...actual, resolvePublicShare: vi.fn(), fetchShareTerms: vi.fn() }
@@ -63,7 +57,7 @@ import { realI18n } from '../test/i18n'
 
 function mountShareView() {
   return mount(ShareView, {
-    global: { plugins: [realI18n(), PrimeVue], stubs: { MediaGrid: true, OptimisticTile: true, MediaLightbox: true } },
+    global: { plugins: [realI18n(), PrimeVue], stubs: { MediaGrid: true, OptimisticTile: true } },
   })
 }
 
@@ -99,33 +93,33 @@ function enqueuedNames(): string[] {
   return vi.mocked(enqueueUploads).mock.calls.flatMap((call) => call[1].map((s) => s.file.name))
 }
 
-/** Serve one resolved share to the shell (head) and the Memories body (the rest), as production splits it. */
+/** Serve one resolved share to the shell (head) and the drop page (the drop key), as production splits it. */
 function serve(r: ResolvedShare) {
   vi.mocked(resolvePublicShare).mockReset().mockResolvedValue(headOf(r))
   vi.mocked(openSharedMemory).mockReset().mockReturnValue(openedOf(r))
   vi.mocked(listShareMedia).mockReset().mockResolvedValue(NO_SHARE_MEDIA) // the items come from openSharedMemory's stub
 }
 
-describe('ShareView — the contributor picker inherits E3s re-read window', () => {
+describe("ShareView — the uploader's picker inherits E3s re-read window", () => {
   beforeEach(() => {
     localStorage.clear()
-    localStorage.setItem(SESSION_KEY, JSON.stringify({ identityId: 'i-1', contributorToken: 'tok' }))
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ identityId: 'i-1', contributorToken: 'tok', uploaderKey: UPLOADER_KEY }))
     vi.mocked(enqueueUploads).mockReset()
     // No terms → no gate in front of the content (ShareView fails open on a terms-fetch error).
     vi.mocked(fetchShareTerms).mockReset().mockRejectedValue(new Error('no terms in this test'))
     serve({
       memoryName: 'Rom 2026',
       noteByLocale: {},
-      role: ShareRole.ReadWrite,
-      // the shared Memory's scope: a contributor's uploads are sealed bound to it, so without one nothing enqueues
+      role: ShareRole.WriteOnly,
+      // the shared Memory's scope: an uploader's photos are sealed bound to it
       scopeId: '5c09e000-0000-4000-8000-0000000000df',
-      access: { kind: 'read', memoryKey: new Uint8Array(32) },
+      access: { kind: 'drop', nodeId: '5c09e000-0000-4000-8000-0000000000d0', dropPublicKey: { x: new Uint8Array(), m: new Uint8Array() } },
       items: [],
     })
   })
   afterEach(() => { vi.useRealTimers() })
 
-  /** Mount a named-in READ_WRITE share and return its wrapper + a Safari-shaped driver for its file input. */
+  /** Mount a named-in WRITE_ONLY share and return its wrapper + a Safari-shaped driver for its file input. */
   async function mountWithPicker() {
     const wrapper = mountShareView()
     await flushPromises()

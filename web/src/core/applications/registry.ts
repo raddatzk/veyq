@@ -9,14 +9,14 @@
 // discovering one by glob.
 //
 // **Write-once.** Registered code runs with every unlocked key, so the registry is a trust surface and not a
-// convenience: registering a kind twice, claiming a share body twice, or adding a list-slot item under a taken id THROWS —
+// convenience: registering a kind twice, claiming a drop page twice, or adding a list-slot item under a taken id THROWS —
 // it never overwrites and never merges. Nothing here is exported as mutable state; `registry` exposes only the two register doors and read-only lookups.
 //
 // **Dialogs per kind (cr-files-application P4c).** A kind brings its dialogs with its descriptor: `createDialog` (the
 // dialog that creates a node of the kind, mounted by the shell when a section or a detail asks for a create of that
 // kind; props `NodeCreateDialogProps`) and `shareDialog` (the share management dialog of a node of the kind; props
-// `NodeShareDialogProps`). The platform pre-registers FOLDER's share dialog (`core/sharing/FolderShareDialog.vue`) the
-// way it pre-claims FOLDER's share body; a folder's create and every node's rename are core's own `FolderNameDialog`
+// `NodeShareDialogProps`). The platform pre-registers FOLDER's share dialog (`core/sharing/FolderShareDialog.vue`); a
+// folder's create and every node's rename are core's own `FolderNameDialog`
 // (`core/node/FolderNameDialog.vue`), which the shell mounts itself — a rename re-seals the name and derives the slug
 // token by the node's kind (`slugFor`), whatever application it belongs to. A kind with no `shareDialog` offers no
 // share; a create for a kind with no `createDialog` opens nothing. Every shell slot is a list slot (below).
@@ -34,9 +34,10 @@
 //
 // **Who looks (`core/access.ts`).** A `detail` and a `section` are handed `access` (a member, or a share guest)
 // and `tree` (the tree as that session reads it), and offer what their application's fail-closed capability function
-// answers for them — one view per kind in both modes, never a flag the host decides. The guest's folder page of a public
-// share is core's level view (`core/sharing/FolderShareBody.vue`, inbox #401 S2), so a kind's `section` serves it as it
-// serves a member; a guest-only list per kind (the retired `shareSection`, inbox #401 S3) no longer exists.
+// answers for them — one view per kind in both modes, never a flag the host decides. The guest's page of a public share
+// (`core/sharing/ShareTreePage.vue`, inbox #401) is core's level view at a folder and the kind's `detail` at any other
+// node, whatever the link's root kind, so a kind's `section` and `detail` serve it as they serve a member; no guest-only
+// list or body per kind exists (`shareSection` was retired in S3, the embedded Memories body in S5).
 //
 // **List slots (`addSlotItem`).** The top-bar tray and the sidebar pins are places where several applications each add
 // their own entry, so they are ordered lists: an item is registered under an id (namespaced by its application, e.g.
@@ -45,15 +46,14 @@
 // refuses a name that is no list slot at runtime too, so a caller outside the type checker gets an error, never a
 // silent no-op.
 //
-// **Share bodies (`claimShareBody`).** The public share page (`views/ShareView.vue`) is a shell: it resolves the
-// kind-independent half (core/sharing/resolvePublicShare.ts), runs the password and terms gates, then renders the body
-// the application claimed for the share's ROOT node kind (`PublicShare.rootKind`, served for every role — a WRITE_ONLY
-// share too, so its drop page is the body of its kind's application). A kind is claimed once (a second claim throws). A
-// root kind nobody claimed, or none at all, renders the shell's explicit unavailable state. The target (ADR 0079
-// Consequences, inbox #401) narrows a claim to the one page with no member equivalent, a `WRITE_ONLY` link's drop: below
-// a shared folder core's folder page renders the kind's `detail`, handed the guest's `access` and `tree` (Files' drop box
-// since S3). Transitional until inbox #401 S5: a claim made with `embedBelowFolder` (Memories') is still what the folder
-// page EMBEDS for a node of the kind below it (`subtreeRoot` set), serving a guest of the link above with that link's role.
+// **Drop pages (`claimShareBody`).** The public share page (`views/ShareView.vue`) is a shell: it resolves the
+// kind-independent half (core/sharing/resolvePublicShare.ts) and runs the password and terms gates. A `READ` or
+// `READ_WRITE` link then gets core's page (`core/sharing/ShareTreePage.vue`, the member's views with the guest's access and
+// tree); a `WRITE_ONLY` link gets the one page with no member equivalent — its guest holds no key, so there is nothing to
+// render the member's way — the drop page the application claimed for the share's ROOT kind (`PublicShare.rootKind`,
+// served for every role): Memories' photo drop, Files' drop box (ADR 0079 Consequences, inbox #401). A kind is claimed
+// once (a second claim throws), FOLDER by nobody (no `WRITE_ONLY` link roots at a folder, ADR 0080 decision 11). A
+// `WRITE_ONLY` root kind nobody claimed, or none at all, renders the shell's explicit unavailable state.
 //
 // **Lifecycle hooks (`registerLifecycle`).** What runs when a scope is entered or reset and when the master key
 // rotates. Registered per application id (a second registration of the same id throws); several applications may
@@ -76,18 +76,10 @@ import type { Access, GuestAccess, TreeSource } from '../access'
 import { slugify } from '../../shared/naming'
 
 // The platform's own share dialog for a FOLDER (cr-node-key-hierarchy 5b.3), FOLDER's `shareDialog` since P4c. LAZY for
-// the reason the share body below is: the dialog's module graph reaches this registry again (measured: `shareLink` →
+// a reason: the dialog's module graph reaches this registry again (measured: `shareLink` →
 // `manageShares` → `shareTree` → `core/node/tree`, which asks `registry.slugFor`), so a static import is a cycle.
 // `.default` explicitly: a test's `vi.mock` of the module is no ES-module namespace Vue would unwrap on its own.
 const FolderShareDialog = defineAsyncComponent(() => import('../sharing/FolderShareDialog.vue').then((m) => m.default))
-
-// The platform's own share body for a link rooted at a FOLDER (cr-node-key-hierarchy 5b.4b). LAZY, and on purpose: the
-// body reads this registry (`registry.kind`, `registry.shareBody` for what it embeds), so a static import here is a
-// cycle — measured: with `FolderShareBody.vue` evaluated first, the app's `registry` below was built while the body's
-// module was still mid-evaluation and answered null for FOLDER (`createRegistry()` called later answered it). A literal
-// `import()` is still build-time code (bundled and reviewed like every other module, ADR 0079 Decision 5): nothing here
-// is computed or discovered.
-const FolderShareBody = defineAsyncComponent(() => import('../sharing/FolderShareBody.vue'))
 
 /** What core needs to know about a node kind. `detail` is the component the host renders when a node of the kind is
  *  opened. Only the platform's FOLDER has none (a folder browses, it does not open): an application kind that
@@ -166,8 +158,8 @@ export interface NodeDetailProps {
   /** The opened node's children, bucketed by kind (`byKind`). */
   children: Level
   /** Who looks: a member of the scope (its pending deletion, the instance's sharing capabilities), or a share guest —
-   *  core's folder page of a link mounts the detail of a node below the root for a kind it does not embed a claimed body
-   *  for (inbox #401 S3: Files' drop box; a guest's `scopeId` is the link's, its `epochs` null, its keys the tree's). */
+   *  core's page of a `READ` or `READ_WRITE` link mounts the detail of every non-folder node, the link's root included
+   *  (inbox #401; a guest's `scopeId` is the link's, its `epochs` null, its keys the tree's). */
   access: Access
   /** The tree as that session reads it: keys, names, the identity-folder test and the links every navigation takes. Its
    *  nodes are `TreeNode`s in both modes (the member's tree, the guest's served rows as `TreeNode`s). */
@@ -248,9 +240,9 @@ export interface SidebarPinsEmits {
   navigate: []
 }
 
-/** What the shell hands a share body (event: `unavailable` — the body found the share unusable after the shell had
- *  already shown it). The body renders everything below the password and terms gates: its own name pre-screen, its
- *  content, and any overlay. */
+/** What the shell hands a `WRITE_ONLY` link's drop page, the one share body (event: `unavailable` — the page found the
+ *  share unusable after the shell had already shown it). The page renders everything below the password and terms
+ *  gates: its own naming (the guest's identity key is the application's), the drop, and the session's own tiles. */
 export interface ShareBodyProps {
   shareId: string
   /** The URL-fragment key (`#k=`), for the application's own key-proof calls. Key material. */
@@ -259,15 +251,10 @@ export interface ShareBodyProps {
   pwToken: string | undefined
   /** The platform half of the resolve. A new object after `reload()`. */
   head: PublicShareHead
-  /** Re-resolve the share (after a contribution, so the new media lists); resolves once `head` has been replaced. */
+  /** Re-resolve the share; resolves once `head` has been replaced. */
   reload: () => Promise<void>
-  /** Who looks: the guest of this link (`core/sharing/guestAccess.ts`), built by the shell — its role, and the page's
-   *  ONE naming flow (`requestGuest`, the shell's dialog), so no body asks for a name on its own behind a container. */
+  /** Who looks: the guest of this link (`core/sharing/guestAccess.ts`), built by the shell. */
   access: GuestAccess
-  /** Set only when a container's body embeds this one for a node BELOW the share root (core's folder body for a Memory
-   *  in a shared folder, cr-node-key-hierarchy 5b.4b): that node's id, its key and its name as the chain opened them.
-   *  The body renders that node, not the root; the share's note is the container's to show. The shell never sets it. */
-  subtreeRoot?: { nodeId: string; key: Uint8Array; name: string }
 }
 export interface ShareBodyEmits {
   unavailable: []
@@ -302,16 +289,12 @@ export interface Registry {
   /** Register an application's lifecycle hooks under its id. Throws if the id is already registered, or if
    *  `onMasterKeyRotated` is not a function. */
   registerLifecycle(applicationId: string, hooks: LifecycleHooks): void
-  /** Claim the public-share body for a root kind, whatever the share's role. `embedBelowFolder` (transitional, inbox #401
-   *  until S5): core's folder page also embeds it for a node of the kind below a shared folder, instead of the kind's
-   *  `detail` (see the header). Throws if that kind is already claimed. */
-  claimShareBody(kind: NodeKind, component: Component, options?: { embedBelowFolder?: boolean }): void
-  /** The body claimed for a share's root kind, or null when nobody claimed it (the shell renders its unavailable
-   *  state — never an empty page). */
+  /** Claim the drop page of a `WRITE_ONLY` link rooted at `kind` (see the header). Throws if that kind is already
+   *  claimed, and for FOLDER (the platform's: no `WRITE_ONLY` link roots at a folder). */
+  claimShareBody(kind: NodeKind, component: Component): void
+  /** The drop page claimed for a `WRITE_ONLY` link's root kind, or null when nobody claimed it (the shell renders its
+   *  unavailable state — never an empty page). */
   shareBody(kind: NodeKind): Component | null
-  /** The body core's folder page embeds for a node of `kind` below the share root: the claim made with
-   *  `embedBelowFolder`, else null (the page renders the kind's `detail`). */
-  embeddedShareBody(kind: NodeKind): Component | null
   /** Run every application's `onScopeReset`. */
   scopeReset(): void
   /** Run every application's `onScopeEntered`, in registration order; rejects with the first failure after all ran. */
@@ -354,11 +337,7 @@ export function createRegistry(): Registry {
   const lifecycles = new Map<string, LifecycleHooks>()
   // One entry per distinct section component, in the order each was first named (the stable sort's tie-break).
   const sections: { component: Component; order: number; kinds: NodeKind[] }[] = []
-  // The platform's own share body: a link rooted at a FOLDER browses the subtree (cr-node-key-hierarchy 5b.4b). Pre-claimed
-  // like FOLDER's kind above, so an application claiming FOLDER throws.
-  const shareBodies = new Map<NodeKind, Component>([[FOLDER_KIND, FolderShareBody]])
-  // The claims core's folder page still embeds below the root (transitional, inbox #401 until S5).
-  const embeddedBodies = new Set<NodeKind>()
+  const shareBodies = new Map<NodeKind, Component>()
   /** Run `f` on every application, never stopping at the first failure; rethrow the first one at the end. */
   async function eachApplication(f: (h: LifecycleHooks) => Promise<void> | void): Promise<void> {
     let failure: { error: unknown } | null = null
@@ -372,13 +351,11 @@ export function createRegistry(): Registry {
     if (failure) throw failure.error
   }
   return {
-    claimShareBody(kind, component, options) {
-      if (shareBodies.has(kind)) throw new Error(`share body for ${kind} is already claimed`)
+    claimShareBody(kind, component) {
+      if (kind === FOLDER_KIND || shareBodies.has(kind)) throw new Error(`share body for ${kind} is already claimed`)
       shareBodies.set(kind, component)
-      if (options?.embedBelowFolder) embeddedBodies.add(kind)
     },
     shareBody: (kind) => shareBodies.get(kind) ?? null,
-    embeddedShareBody: (kind) => (embeddedBodies.has(kind) ? (shareBodies.get(kind) ?? null) : null),
     registerLifecycle(applicationId, hooks) {
       if (lifecycles.has(applicationId)) throw new Error(`lifecycle hooks of ${applicationId} are already registered`)
       if (typeof hooks.onMasterKeyRotated !== 'function') {

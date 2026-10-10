@@ -275,12 +275,11 @@ export async function deleteSharePhoto(shareId: string, contributorToken: string
 
 // --- viewer (anonymous, no session) ----------------------------------------
 
-/** One shared media resolved for the read-only viewer: the media + the `K_mem` of the node it sits on + the shared
- *  Memory's scope, which every one of its seals is bound to (ADR 0072). A media a WRITE_ONLY guest added carries its
- *  origin, so [mediaKey] opens it through that node's drop key instead (ADR 0031 point 7). `chapterName` is the title
- *  of the chapter it sits in (ADR 0080 Decision 2), null for a media on the shared root itself; `nodeId` is the node it
- *  sits on, which the share page groups the chapters' media by (inbox #356: two chapters may share a title). */
-export type ShareItem = { item: MediaItem; memoryKey: Uint8Array; scopeId: string; nodeId: string; chapterName: string | null }
+/** One shared media resolved for a guest: the media + the `K_mem` of the node it sits on + the shared Memory's scope,
+ *  which every one of its seals is bound to (ADR 0072). A media a WRITE_ONLY guest added carries its origin, so
+ *  [mediaKey] opens it through that node's drop key instead (ADR 0031 point 7). `nodeId` is the node it sits on — the
+ *  guest's data source lists each node's own media by it (`source.ts`). */
+export type ShareItem = { item: MediaItem; memoryKey: Uint8Array; scopeId: string; nodeId: string }
 
 /**
  * What a resolved link lets its guest do with keys (ADR 0031 point 7):
@@ -326,14 +325,9 @@ function shareMediaToItem(m: ShareMedia, uploader: MediaItem['uploader']): Media
   }
 }
 
-/** The Memories half of a resolved share: what its link lets the guest do with keys, every media (each with its
- *  own node's `K_mem` — none for a WRITE_ONLY link, which is served no media), and the title of every chapter below
- *  the shared root it could open (ADR 0080 Decision 2; empty for a WRITE_ONLY link, which holds no key to open one). */
-export type OpenedMemory = { access: ShareAccess; items: ShareItem[]; chapterNames: Map<string, string> }
-
-/** The node a container's body embeds this one for (`ShareBodyProps.subtreeRoot`): a Memory or chapter below the share
- *  root, and its key as the chain opened it. */
-export type SubtreeRoot = { nodeId: string; key: Uint8Array }
+/** The Memories half of a resolved share: what its link lets the guest do with keys and every media (each with its own
+ *  node's `K_mem` — none for a WRITE_ONLY link, which is served no media). */
+export type OpenedMemory = { access: ShareAccess; items: ShareItem[] }
 
 /** No media and no uploader key: what a WRITE_ONLY link is served, and the listing before it is read. */
 export const NO_SHARE_MEDIA: ShareMediaListing = { media: [], identities: [] }
@@ -358,15 +352,11 @@ export async function listShareMedia(shareId: string, role: ShareRole, pwToken?:
  * `K_mem`, and return a flat, read-only list of the [listing]'s media (each tagged with the exact `K_mem` its blobs open
  * under). The platform half (fetch, password, name, note, root kind) is `resolvePublicShare` (core/sharing); the shell
  * calls it and hands this its head, and the media are Memories' own read ([listShareMedia]). Without a listing it opens
- * the keys alone — what the body needs before the listing lands (a contributor's name gate reads the access). Throws
- * [ShareUnavailableError] when the response cannot be opened (a server that served a share without the wrap or drop key
- * the role needs, or one that does not open under the fragment key).
- *
- * With a [root] (a container's body embeds this one below its share root — a folder link's Memory, cr-node-key-hierarchy
- * 5b.4b), the chain is still walked from the share root, but only that node and its descendants are listed: its media
- * open under the keys of the chain, its own carry no chapter title, and `access.memoryKey` is the root's key.
+ * the keys alone — what the drop page needs (its name gate reads the access). Throws [ShareUnavailableError] when the
+ * response cannot be opened (a server that served a share without the wrap or drop key the role needs, or one that does
+ * not open under the fragment key).
  */
-export function openSharedMemory(head: PublicShareHead, listing: ShareMediaListing = NO_SHARE_MEDIA, root?: SubtreeRoot): OpenedMemory {
+export function openSharedMemory(head: PublicShareHead, listing: ShareMediaListing = NO_SHARE_MEDIA): OpenedMemory {
   const { share, kShare, scopeId } = head
   // ADR 0031 point 7: a WRITE_ONLY link opens the drop public key and nothing else. It never unwraps `K_mem`, even
   // from a row that still carries a wrap, and it is served no media to key.
@@ -378,17 +368,11 @@ export function openSharedMemory(head: PublicShareHead, listing: ShareMediaListi
     } catch {
       throw new ShareUnavailableError('bad_fragment_key')
     }
-    return { access: { kind: 'drop', nodeId: share.nodeId, dropPublicKey }, items: [], chapterNames: new Map() }
+    return { access: { kind: 'drop', nodeId: share.nodeId, dropPublicKey }, items: [] }
   }
 
   const shareRootKey = openShareRoot(head).key // READ / READ_WRITE only (guarded above)
-  const { keys, names, nodes } = walkSubtree(scopeId, share.nodes, shareRootKey)
-  // Embedded below a container's share (a folder link's Memory): only that node and what hangs below it, keyed by the
-  // chain the walk opened. A root the walk did not reach is a share this body cannot open.
-  const within = root ? subtreeOf(nodes, root.nodeId) : null
-  if (root && !keys.has(root.nodeId)) throw new ShareUnavailableError('not_found')
-  const rootId = root?.nodeId
-  const rootKmem = root?.key ?? shareRootKey
+  const { keys } = walkSubtree(scopeId, share.nodes, shareRootKey)
   // A media a WRITE_ONLY guest added opens through its node's drop key and its identity's wrapped key: the resolve's
   // node carries the one, the listing's identities the other (ADR 0031 point 7). That list is all a guest is told
   // about any identity — never a name, which is for the Memory's members (ADR 0030 point 8).
@@ -396,38 +380,19 @@ export function openSharedMemory(head: PublicShareHead, listing: ShareMediaListi
   const wrapped = new Map(listing.identities.map((i) => [i.identityId, i.wrappedIdentityKey]))
   const items: ShareItem[] = []
   for (const m of listing.media) {
-    if (within && !within.has(m.nodeId)) continue // a media of another node of the container's share
     const memoryKey = keys.get(m.nodeId)
     if (!memoryKey) continue // a media under a chapter whose K_mem didn't open — skip
     const owner = m.identityId ? `share:${m.identityId}` : undefined
     const uploader = uploaderOriginOf(owner, m.nodeId, dropKeyOf.get(m.nodeId), wrapped)
-    // The embedded root's own media carry no chapter title: its name is the body's heading, not a chapter's.
-    const chapterName = m.nodeId === rootId ? null : (names.get(m.nodeId) ?? null)
-    items.push({ item: shareMediaToItem(m, uploader), memoryKey, scopeId, nodeId: m.nodeId, chapterName })
+    items.push({ item: shareMediaToItem(m, uploader), memoryKey, scopeId, nodeId: m.nodeId })
   }
-  const chapterNames = within ? new Map([...names].filter(([id]) => within.has(id) && id !== rootId)) : names
-  return { access: { kind: 'read', memoryKey: rootKmem }, items, chapterNames }
-}
-
-/** `rootId` and every node the walk opened below it, through the served `parentId`s. */
-function subtreeOf(nodes: ReadonlyMap<string, { parentId?: string | null }>, rootId: string): Set<string> {
-  const within = new Set([rootId])
-  for (let grew = true; grew; ) {
-    grew = false
-    for (const [id, n] of nodes) {
-      if (!within.has(id) && n.parentId != null && within.has(n.parentId)) {
-        within.add(id)
-        grew = true
-      }
-    }
-  }
-  return within
+  return { access: { kind: 'read', memoryKey: shareRootKey }, items }
 }
 
 /**
  * Resolve + decrypt a public share in one call: the platform half (`resolvePublicShare`), then the Memories half — its
  * media read ([listShareMedia]) and `openSharedMemory`. The share page does NOT use this — its shell resolves the head,
- * gates on password and terms, and only then lets the Memories body open the rest. It is the headless entry the unit
+ * gates on password and terms, and only then lets the views open the rest. It is the headless entry the unit
  * and e2e suites drive. The media read follows the resolve rather than racing it: it needs the role (a WRITE_ONLY link
  * is not asked) and a locked link would refuse it.
  */

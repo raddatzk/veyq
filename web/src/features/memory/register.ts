@@ -5,7 +5,8 @@
 // Memories' section of the folder level view (`MemoriesSection`) rides on its two kinds' descriptors: core's level view
 // renders it once, between the folder's overview card and the sub-folders (cr-files-application P4b). So do its dialogs
 // (P4c): `MemoryNodeDialog` creates a Memory or a chapter (the kind picks which), `ShareDialog` manages a Memory's or a
-// chapter's links (its uploader variant included); a rename of either is core's `FolderNameDialog`. The pinned rail in the sidebar is a list slot: Memories adds one item
+// chapter's links (its uploader variant included); a rename of either is core's `FolderNameDialog`. The same detail
+// serves a member and a share guest (inbox #401): the host picks the data source by `access.mode`. The pinned rail in the sidebar is a list slot: Memories adds one item
 // to it, under an id namespaced by the application. The top bar's upload status is core's (`core/blob/UploadStatusMenu.vue`,
 // cr-files-application B3) and lists Memories' batches with every other application's, so Memories adds nothing to the
 // `topbarTray` list.
@@ -35,11 +36,10 @@ export function registerMemories(registry: Registry): void {
   registry.registerKind({ kind: MEMORY_KIND, ...memories, deleteTitle: 'memory.deleteMemoryTitle', nounWithArticle: 'memory.aMemory' })
   registry.registerKind({ kind: CHAPTER_KIND, ...memories, deleteTitle: 'memory.deleteChapterTitle', nounWithArticle: 'memory.aChapter' })
   registry.addSlotItem('sidebarPins', 'memories.pinned', PinnedMemories)
-  // The public share page: every Memories share — viewer, contributor and the WRITE_ONLY drop — is rooted at a MEMORY
-  // or a CHAPTER node (`PublicShare.rootKind`); the one body renders either root and picks its screens by the role.
-  // Below a shared folder core's page still embeds it (`embedBelowFolder`) until the guest gets `MemoryDetail` (inbox
-  // #401 S5).
-  registry.claimShareBody(MEMORY_KIND, MemoryShareBody, { embedBelowFolder: true })
-  registry.claimShareBody(CHAPTER_KIND, MemoryShareBody, { embedBelowFolder: true })
+  // The drop page of a WRITE_ONLY link rooted at a MEMORY or a CHAPTER (`PublicShare.rootKind`): its guest holds no key,
+  // so it is the one page Memories draws for a guest alone. A viewer's or contributor's link is the detail above, for a
+  // guest through core's share page (inbox #401).
+  registry.claimShareBody(MEMORY_KIND, MemoryShareBody)
+  registry.claimShareBody(CHAPTER_KIND, MemoryShareBody)
   registry.registerLifecycle('memories', memoriesLifecycle)
 }

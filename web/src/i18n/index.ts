@@ -1224,14 +1224,13 @@ const en = {
     uploaderDialogCopy: 'Create an upload link for people who should only add photos to this Memory — they won’t see the Memory or others’ contributions.',
     uploaderCreate: 'New upload link',
     uploaderNone: 'No upload links yet.',
-    // the anonymous /s/ viewer
-    loading: 'Opening this Memory…',
+    // the anonymous /s/ page (views/ShareView.vue, core/sharing/ShareTreePage.vue)
+    loading: 'Opening this link…',
     unavailable: 'This link isn’t available',
     unavailableHint: 'It may have been switched off, expired, or the link is incomplete. Ask the person who shared it for a fresh link.',
-    empty: 'This Memory has no photos.',
-    emptyContribute: 'No photos yet — be the first to add one.',
+    // the role badge of core's page (any kind; a folder's own wording is `folder.contributorBadge`)
     readonly: 'Shared with you · read-only',
-    contributorBadge: 'Shared with you · you can add photos',
+    contributorBadge: 'Shared with you · you can contribute',
     securityFooter: 'How safe is this?',
     // core's one guest-naming component (core/sharing/GuestNaming.vue, inbox #401): whose session this device holds on a
     // link and its "Not you?" — every application's page, so the words name none of them.
@@ -1248,10 +1247,8 @@ const en = {
       nameTitle: 'What is your name?',
       nameHint: 'Before you add something, tell us your name. Only the people this belongs to see it.',
     },
-    // contributor pre-screen + add-photos (cr-0101)
-    contributeIntro: 'You can add your own photos to this memory. First, tell us your name.',
     // ADR 0030 point 8: no share link is served a guest's name — only the Memory's members read it
-    nameVisibility: 'Only the people this memory belongs to see your name.',
+    nameVisibility: 'Only the people this belongs to see your name.',
     yourName: 'Your name',
     yourNamePlaceholder: 'e.g. Grandma',
     join: 'Continue',
@@ -1259,7 +1256,7 @@ const en = {
     addPhotos: 'Add photos',
     // uploader drop-box (cr-0102, ADR 0031) — write-only, session-only own-view
     uploaderBadge: 'Add photos only · visible in this session',
-    uploaderIntro: 'You can add your own photos to this memory. You won’t see the memory itself or what others added. First, tell us your name.',
+    uploaderIntro: 'You can add your own photos here. You won’t see what is already here or what others added. First, tell us your name.',
     uploaderEphemeralWarning: 'The photos you add stay visible to you here only until you reload or leave this page — after that they’re gone from your view (but safely kept for the owner).',
     uploaderSessionNote: 'These photos are visible only to you, and only in this session — a reload clears them from view. You can delete your own here while they’re shown.',
     uploaderEmpty: 'No photos in this session. Photos you add appear here and stay visible until you reload — after that they’re gone from your view, but safely saved for the owner.',
@@ -1291,9 +1288,8 @@ const en = {
       placementConflict: 'Someone else just changed this. Reload the page and try again.',
       gone: 'This is no longer here. Reload the page.',
       createFailed: 'That did not work — please try again.',
-      // the anonymous /s/ page of a folder link (core/sharing/FolderShareBody.vue)
+      // the anonymous /s/ page (core/sharing/ShareTreePage.vue) at a folder
       loading: 'Opening this folder…',
-      readonly: 'Shared with you · read-only',
       contributorBadge: 'Shared with you · you can add and change things here',
       newFolderTitle: 'Create a folder',
       nameLabel: 'Name',
@@ -2449,13 +2445,11 @@ const de: typeof en = {
     uploaderCreate: 'Neuer Upload-Link',
     uploaderNone: 'Noch keine Upload-Links.',
     // the anonymous /s/ viewer
-    loading: 'Erinnerung wird geöffnet …',
+    loading: 'Link wird geöffnet …',
     unavailable: 'Dieser Link ist nicht verfügbar',
     unavailableHint: 'Er wurde vielleicht abgeschaltet, ist abgelaufen, oder der Link ist unvollständig. Bitte die Person, die ihn geteilt hat, um einen neuen Link.',
-    empty: 'Diese Erinnerung enthält keine Fotos.',
-    emptyContribute: 'Noch keine Fotos — füge das erste hinzu.',
     readonly: 'Mit dir geteilt · schreibgeschützt',
-    contributorBadge: 'Mit dir geteilt · du kannst Fotos hinzufügen',
+    contributorBadge: 'Mit dir geteilt · du kannst beitragen',
     securityFooter: 'Wie sicher ist das?',
     guest: {
       as: 'Du bist hier als {name}.',
@@ -2468,9 +2462,7 @@ const de: typeof en = {
       nameTitle: 'Wie heißt du?',
       nameHint: 'Bevor du etwas hinzufügst, sag uns deinen Namen. Ihn sehen nur die Personen, denen das hier gehört.',
     },
-    // contributor pre-screen + add-photos (cr-0101)
-    contributeIntro: 'Du kannst eigene Fotos zu dieser Erinnerung hinzufügen. Sag uns zuerst deinen Namen.',
-    nameVisibility: 'Deinen Namen sehen nur die Personen, denen diese Erinnerung gehört.',
+    nameVisibility: 'Deinen Namen sehen nur die Personen, denen das hier gehört.',
     yourName: 'Dein Name',
     yourNamePlaceholder: 'z. B. Oma',
     join: 'Weiter',
@@ -2478,7 +2470,7 @@ const de: typeof en = {
     addPhotos: 'Fotos hinzufügen',
     // uploader drop-box (cr-0102, ADR 0031) — schreibgeschützt für andere, eigene Ansicht nur diese Sitzung
     uploaderBadge: 'Nur Fotos hinzufügen · sichtbar in dieser Sitzung',
-    uploaderIntro: 'Du kannst eigene Fotos zu dieser Erinnerung hinzufügen. Die Erinnerung selbst und die Beiträge anderer siehst du nicht. Sag uns zuerst deinen Namen.',
+    uploaderIntro: 'Du kannst hier eigene Fotos hinzufügen. Was schon hier ist und was andere hinzugefügt haben, siehst du nicht. Sag uns zuerst deinen Namen.',
     uploaderEphemeralWarning: 'Die Fotos, die du hinzufügst, sind für dich nur hier sichtbar — bis du die Seite neu lädst oder verlässt. Danach sind sie aus deiner Ansicht verschwunden (aber sicher für die Person gespeichert, der die Erinnerung gehört).',
     uploaderSessionNote: 'Diese Fotos sind nur für dich sichtbar und nur in dieser Sitzung — ein Neuladen entfernt sie aus der Ansicht. Solange sie angezeigt werden, kannst du eigene hier löschen.',
     uploaderEmpty: 'Keine Fotos in dieser Sitzung. Hinzugefügte Fotos erscheinen hier und bleiben bis zum Neuladen sichtbar — danach sind sie aus deiner Ansicht verschwunden, aber sicher für die Person gespeichert, der die Erinnerung gehört.',
@@ -2504,7 +2496,6 @@ const de: typeof en = {
       gone: 'Das gibt es hier nicht mehr. Lade die Seite neu.',
       createFailed: 'Das hat nicht geklappt — bitte erneut versuchen.',
       loading: 'Dieser Ordner wird geöffnet …',
-      readonly: 'Mit dir geteilt · schreibgeschützt',
       contributorBadge: 'Mit dir geteilt · du kannst hier hinzufügen und ändern',
       newFolderTitle: 'Ordner anlegen',
       nameLabel: 'Name',

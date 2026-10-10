@@ -1,103 +1,108 @@
 // @vitest-environment happy-dom
-// The Memories body of the public share page with the REAL `openSharedMemory` (the shell tests stub it): the body is
-// what turns the shell's head into a rendering, and it is the one that reports a share it cannot open. Mounted bare —
-// the password/terms gates and the registry dispatch are the shell's (views/ShareView*.test.ts).
-import { describe, it, expect, vi } from 'vitest'
+// Memories' drop page — the page of a WRITE_ONLY link, the one guest-only page Memories keeps (inbox #401 S5) — with the
+// REAL `openSharedMemory`: it opens the drop PUBLIC key from the shell's head and nothing else, reads no media (an
+// uploader is served none, ADR 0031) and calls no authenticated client (`test/guestMode.ts`). Mounted bare — the
+// password/terms gates and the role dispatch are the shell's (views/ShareView*.test.ts). Its picker's E3 window is
+// `views/ShareView.picker.test.ts`'s.
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import PrimeVue from 'primevue/config'
-import { guestAccessFor } from '../../../test/models'
 import { mount, flushPromises } from '@vue/test-utils'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 
-vi.mock('../../../api/client', () => ({ sharesApi: vi.fn(), publicSharesApi: vi.fn(), tokenApi: vi.fn() }))
-// The media are Memories' own guest read (`share-media`), built in `../api`.
-vi.mock('../api', () => ({ publicShareMediaApi: vi.fn() }))
-vi.mock('../useThumbnailPipeline', () => ({
-  useThumbnailPipeline: () => ({ thumbs: new Map(), reconcile: vi.fn(), decrypt: vi.fn().mockResolvedValue(undefined), revokeAll: vi.fn() }),
-}))
+vi.mock('../../../api/client', async (orig) => (await import('../../../test/guestMode')).guardedClients(await orig<object>()))
+vi.mock('../api', async (orig) => (await import('../../../test/guestMode')).guardedClients(await orig<object>()))
 
 import MemoryShareBody from './MemoryShareBody.vue'
 import type { PublicShareHead } from '../../../core/sharing/resolvePublicShare'
+import { saveGuestSession, forgetGuestSession } from '../../../core/sharing/guestIdentity'
 import { MEMORY_KIND } from '../kinds'
+import type { ContributorSession } from '../share'
 import { ShareRole, type PublicShare } from '../../../api/generated/sharing'
-import { realI18n } from '../../../test/i18n'
 import { publicShareMediaApi } from '../api'
-import { fakeApi, stubApi } from '../../../test/apiMock'
-import type { ShareMediaApi } from '../../../api/generated/share-media'
+import { guestAccessFor } from '../../../test/models'
+import { authenticatedCalls } from '../../../test/guestMode'
+import { realI18n, t } from '../../../test/i18n'
 
 const K_SHARE = v1.randomBytes(32)
+const DROP_NODE = '5c09e000-0000-4000-8000-0000000000d0'
+const sealedDropPublicKey = b64std(v1.seal({ purpose: 'drop-public-key' }, K_SHARE, v1.serializeHybridPublic(v1.dropKeyPublic(v1.generateDropKey()))))
 
-function head(share: Partial<PublicShare>, role: ShareRole = ShareRole.Read): PublicShareHead {
+function head(share: Partial<PublicShare>, role: ShareRole = ShareRole.WriteOnly): PublicShareHead {
   return {
     shareId: 's1', share: { role, scopeId: 'scope-1', rootKind: MEMORY_KIND, nodes: [], ...share } as PublicShare, kShare: K_SHARE,
-    scopeId: 'scope-1', name: 'Rom 2026', noteByLocale: {}, role, rootKind: MEMORY_KIND,
+    scopeId: 'scope-1', name: 'Rom 2026', noteByLocale: { en: 'Bitte hier hochladen' }, role, rootKind: MEMORY_KIND,
   }
 }
+const DROP = { nodeId: DROP_NODE, sealedDropPublicKey }
 
-function mountBody(h: PublicShareHead) {
+function mountPage(h: PublicShareHead) {
   return mount(MemoryShareBody, {
     props: { shareId: 's1', fragmentKey: 'AAAA', pwToken: undefined, head: h, reload: async () => {}, access: guestAccessFor(h) },
-    global: { plugins: [realI18n(), PrimeVue], stubs: { MediaGrid: true, OptimisticTile: true, MediaLightbox: true } },
+    global: { plugins: [realI18n(), PrimeVue], stubs: { MediaGrid: true, OptimisticTile: true } },
   })
 }
 
-const ROOT_NODES = [{ id: 'root', parentId: null, kind: MEMORY_KIND, epoch: 0 }] as PublicShare['nodes']
-const ROW = { nodeId: 'root', mediaId: 'm-1', blobId: 'b-1', chunkCount: 1, byteSize: 10, wrappedBlobKey: 'aa==', wrappedMeta: null }
-const openWrap = () => b64std(v1.seal({ purpose: 'share-key' }, K_SHARE, v1.randomBytes(32)))
+beforeEach(() => {
+  localStorage.clear()
+  forgetGuestSession('s1')
+  authenticatedCalls.length = 0
+})
 
-describe('MemoryShareBody opens the Memory from the shell\'s head', () => {
-  it('renders the read-only Memory when the wrap opens under the fragment key', async () => {
-    stubApi(publicShareMediaApi, { listShareMedia: { media: [], identities: [] } })
-    const w = mountBody(head({ wrap: openWrap(), nodes: ROOT_NODES }))
+describe("Memories' drop page (a WRITE_ONLY link)", () => {
+  it('an unnamed uploader sees the name screen — the warning and the curator\'s note — and no media is read', async () => {
+    const w = mountPage(head(DROP))
     await flushPromises()
     expect(w.emitted('unavailable')).toBeUndefined()
-    expect(w.find('.gallery-title').text()).toBe('Rom 2026')
+    expect(w.find('.share-name-card h1').text()).toBe('Rom 2026')
+    expect(w.text()).toContain(t('share.uploaderIntro'))
+    expect(w.text()).toContain(t('share.uploaderEphemeralWarning'))
+    expect(w.find('.share-note').text()).toContain('Bitte hier hochladen')
+    expect(publicShareMediaApi).not.toHaveBeenCalled()
+    expect(authenticatedCalls).toEqual([])
   })
 
-  it('lists the media from Memories\' own read, asked with the guest\'s token', async () => {
-    const { listShareMedia } = stubApi(publicShareMediaApi, { listShareMedia: { media: [ROW], identities: [] } })
-    const w = mount(MemoryShareBody, {
-      props: { shareId: 's1', fragmentKey: 'AAAA', pwToken: 'tok', head: head({ wrap: openWrap(), nodes: ROOT_NODES }), reload: async () => {}, access: guestAccessFor(head({ wrap: openWrap(), nodes: ROOT_NODES }), { pwToken: 'tok' }) },
-      global: { plugins: [realI18n(), PrimeVue], stubs: { MediaGrid: true, OptimisticTile: true, MediaLightbox: true } },
-    })
-    await flushPromises()
-    expect(listShareMedia).toHaveBeenCalledWith({ shareId: 's1', xSharePassword: 'tok' })
-    expect(w.find('.gallery-count').text()).toContain('1')
-    expect(w.find('.veyq-empty').exists()).toBe(false)
-  })
-
-  it('shows no count and no empty state while the media read is in flight', async () => {
-    fakeApi(publicShareMediaApi, { listShareMedia: vi.fn<ShareMediaApi['listShareMedia']>(() => new Promise(() => {})) })
-    const w = mountBody(head({ wrap: openWrap(), nodes: ROOT_NODES }))
+  it('named, the drop: the badge, "Not you?", add photos and the empty session — no gallery of the member\'s', async () => {
+    const uploader: ContributorSession = { identityId: 'i-1', contributorToken: 'tok', uploaderKey: b64std(v1.randomBytes(32)) }
+    saveGuestSession('s1', uploader)
+    const w = mountPage(head(DROP))
     await flushPromises()
     expect(w.find('.gallery-title').text()).toBe('Rom 2026')
-    expect(w.find('.gallery-count').exists()).toBe(false)
-    expect(w.find('.veyq-empty').exists()).toBe(false) // an empty Memory and one still loading are not the same
+    expect(w.find('.share-view-badge').text()).toBe(t('share.uploaderBadge'))
+    expect(w.text()).toContain(t('share.guest.notYou'))
+    expect(w.find('.share-add-button').text()).toBe(t('share.addPhotos'))
+    expect(w.find('.veyq-empty').text()).toBe(t('share.uploaderEmpty'))
+    expect(w.find('.media-lightbox').exists()).toBe(false)
+    expect(publicShareMediaApi).not.toHaveBeenCalled()
+    expect(authenticatedCalls).toEqual([])
   })
 
-  it('reports the share unavailable when the media read is refused (the link went away after its resolve)', async () => {
-    fakeApi(publicShareMediaApi, { listShareMedia: vi.fn<ShareMediaApi['listShareMedia']>().mockRejectedValue(new Error('404')) })
-    const w = mountBody(head({ wrap: openWrap(), nodes: ROOT_NODES }))
+  it('a session saved without its own key names itself again rather than seal under a key it does not hold', async () => {
+    saveGuestSession('s1', { identityId: 'i-1', contributorToken: 'tok' })
+    const w = mountPage(head(DROP))
+    await flushPromises()
+    expect(w.find('.share-name-card').exists()).toBe(true)
+  })
+
+  it('reports an uploader response without the drop key it needs unusable', async () => {
+    const w = mountPage(head({ nodeId: DROP_NODE, sealedDropPublicKey: undefined }))
     await flushPromises()
     expect(w.emitted('unavailable')).toHaveLength(1)
   })
 
-  it('reports an unusable share instead of rendering one: a viewer response without the wrap it needs', async () => {
-    const w = mountBody(head({ wrap: undefined }))
+  it('…and a drop key sealed under another key', async () => {
+    const other = b64std(v1.seal({ purpose: 'drop-public-key' }, v1.randomBytes(32), v1.serializeHybridPublic(v1.dropKeyPublic(v1.generateDropKey()))))
+    const w = mountPage(head({ nodeId: DROP_NODE, sealedDropPublicKey: other }))
     await flushPromises()
     expect(w.emitted('unavailable')).toHaveLength(1)
   })
 
-  it('…and a wrap sealed under another key', async () => {
-    const wrap = b64std(v1.seal({ purpose: 'share-key' }, v1.randomBytes(32), v1.randomBytes(32)))
-    const w = mountBody(head({ wrap }))
-    await flushPromises()
-    expect(w.emitted('unavailable')).toHaveLength(1)
-  })
-
-  it('…and an uploader response without the drop key it needs', async () => {
-    const w = mountBody(head({ nodeId: 'drop-node', sealedDropPublicKey: undefined }, ShareRole.WriteOnly))
-    await flushPromises()
-    expect(w.emitted('unavailable')).toHaveLength(1)
+  it('is a drop only: a viewer\'s or contributor\'s head is unusable here (the shell gives those the member\'s views)', async () => {
+    for (const role of [ShareRole.Read, ShareRole.ReadWrite]) {
+      const wrap = b64std(v1.seal({ purpose: 'share-key' }, K_SHARE, v1.randomBytes(32)))
+      const w = mountPage(head({ wrap, nodes: [{ id: 'root', parentId: null, kind: MEMORY_KIND, epoch: 0 }] as PublicShare['nodes'] }, role))
+      await flushPromises()
+      expect(w.emitted('unavailable'), role).toHaveLength(1)
+    }
   })
 })
