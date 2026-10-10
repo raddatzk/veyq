@@ -45,6 +45,11 @@ the owner email (`x-veyq-visibility: pii`) and the tenant name (`public`, operat
 unsealed from anything, so they are never canaries. A sensor that flagged them is a sensor that gets switched
 off — measured on the spike that preceded ADR 0053, where a suite's sealed values appeared **0** times in its
 instance database while `e2e.test` appeared 3×, all of it declared.
+The one carve-out is an envelope's **closed enum values** (`auto`, `range`, `city` — fixed by the repo's source,
+like the object keys that are never canaries either), and it is paired with a refusal rather than a drop: a leaf
+shorter than 10 characters and spelled only in the base64/hex alphabet matches random ciphertext by chance (`city`
+and `auto` did, inside sealed bytes, twice in a week), so the recorder throws on one and the suite's test data
+changes (`web/src/test/canaries.ts`, inbox #323). The sweep itself stays a plain substring match.
 
 **Two sensors, disjoint surfaces, one seam.** The e2e *suite* makes the calls, so only it sees path params,
 query strings, capability headers, presigned URLs and error bodies. The *orchestrator*

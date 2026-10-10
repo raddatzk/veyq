@@ -40,8 +40,8 @@ const collected = new Set<string>()
  *   never user plaintext — the same argument that lets the sweep ignore DDL.
  * - **The empty string.** Not a value: it is a substring of every row in the dump, so recording it would make
  *   the sweep fire on everything. This is the one length-based drop, and it is total (`''` alone) — a *short*
- *   canary is kept, and a noisy one is resolved in the test data, per ADR 0053's rule that the sensor fails
- *   toward noise and never toward silence.
+ *   canary is never dropped: [recordCanaries] refuses it (below), so the noise is resolved in the test data,
+ *   per ADR 0053's rule that the sensor fails toward noise and never toward silence.
  *
  * Only arrays and plain objects are walked; a `Map`/`Set` leaf contributes nothing (no envelope uses one today,
  * and a silent nothing here would be worse than a loud hit, so this is stated rather than handled).
@@ -61,14 +61,64 @@ function walk(value: unknown, into: Set<string>): void {
 }
 
 /**
+ * The shortest canary the sweep can tell from chance, when it is spelled only in the base64/base64url/hex alphabet
+ * (inbox #323). The sweep matches a plain substring (`scripts/run_web_e2e.py` `occurrences`) over every statement
+ * the database received, most of it base64 ciphertext, so such a canary of length L lands in random bytes at
+ * 64^-L per position: the 4-character `city` and `auto` did, twice in a week (`…jicityF8…`, `…WZWautoqvJLM…`), and
+ * each time the run went red on nothing. At 10 it is 64^-10 ≈ 9·10^-19 — under 10^-6 per run even for 10^9
+ * swept characters and a thousand canaries — and an ISO day (`2026-05-01`, user plaintext with no longer
+ * spelling) is exactly 10. A canary with ANY other character (a space, `.`, an umlaut) cannot occur inside
+ * base64 or hex at all, so it is exempt at every length.
+ */
+export const MIN_CANARY_LENGTH = 10
+const ENCODING_ALPHABET = /^[A-Za-z0-9+/=_-]+$/
+
+/**
+ * The closed enum values an unsealed envelope carries — `MemoryDate.mode`, `MemoryLocation.nameSource` /
+ * `derivedMode` / `nameAnchor.level`, `MemoryCoverSource.kind`, `MediaMeta.capturedAtSource`. They are not
+ * recorded, by the argument that already keeps object keys out: each is fixed by this repo's own source, never user
+ * plaintext, and every one is shorter than [MIN_CANARY_LENGTH]. What that leaves unsensed is one of them leaking
+ * ALONE; a leaking envelope carries its name or day too, which stay canaries. A new enum value is not silently
+ * dropped: until it is listed here, [recordCanaries] refuses it, loudly, the first time a suite records it.
+ */
+export const ENVELOPE_VOCABULARY: ReadonlySet<string> = new Set([
+  'auto', 'single', 'range', 'ongoing',
+  'geocoded', 'manual', 'fixed',
+  'road', 'suburb', 'city', 'county', 'island', 'state', 'country',
+  'media', 'upload',
+  'exif', 'file',
+])
+
+/** Whether the sweep could find [canary] inside random encoded bytes by chance. */
+export function collidesWithCiphertext(canary: string): boolean {
+  return canary.length < MIN_CANARY_LENGTH && ENCODING_ALPHABET.test(canary)
+}
+
+/**
  * Record every string leaf of one or more **unsealed** values as canaries for the database sweep.
+ *
+ * **Refuses** — throws, recording nothing of the call — a leaf the sweep could match by chance
+ * ([collidesWithCiphertext]) unless it is [ENVELOPE_VOCABULARY]: a flaky gate is a gate that gets waved through,
+ * and the fix belongs in the test data (a longer name, or one with a space or an umlaut), never in a quieter sweep.
  *
  * Rewrites the whole accumulated set on every call rather than appending, so a suite that dies mid-way still
  * leaves on disk exactly what it had recovered up to that point. A no-op when `VEYQ_CANARY_FILE` is unset,
  * which is what keeps a hand-run `VEYQ_E2E=1 npx vitest run memoryCover.e2e` working with no orchestrator.
  */
 export function recordCanaries(...values: unknown[]): void {
-  for (const value of values) walk(value, collected)
+  const found = new Set<string>()
+  for (const value of values) walk(value, found)
+  const kept = [...found].filter((canary) => !ENVELOPE_VOCABULARY.has(canary))
+  const noisy = kept.filter(collidesWithCiphertext)
+  if (noisy.length > 0) {
+    throw new Error(
+      `recordCanaries: ${noisy.map((c) => JSON.stringify(c)).join(', ')} — shorter than ${MIN_CANARY_LENGTH} `
+        + 'characters and spelled only in the base64/hex alphabet, so the statement-log sweep can find it inside '
+        + 'random ciphertext (inbox #323). Use longer test data, or a value with a space or an umlaut; a closed '
+        + 'enum value of an envelope belongs in ENVELOPE_VOCABULARY.',
+    )
+  }
+  for (const canary of kept) collected.add(canary)
   const path = process.env.VEYQ_CANARY_FILE
   if (!path) return
   mkdirSync(dirname(path), { recursive: true })

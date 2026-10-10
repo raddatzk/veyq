@@ -45,7 +45,8 @@ describe.skipIf(!process.env.VEYQ_E2E)('memory cover e2e (live, operator-blind r
     // Build up the shared blob one sub-object at a time (each is a real updateNode; each chains the prior blob AND
     // the version it is at, exactly as the UI's read-modify-write does — ADR 0077).
     const date = { mode: 'range' as const, from: '2026-05-01', to: '2026-05-09' }
-    const location = { name: 'Teneriffa', nameSource: 'manual' as const, derivedMode: 'fixed' as const }
+    // Not plain 'Teneriffa': nine base64-alphabet letters are a canary random ciphertext can contain (inbox #323)
+    const location = { name: 'Teneriffa Süd', nameSource: 'manual' as const, derivedMode: 'fixed' as const }
     const cover: MemoryCover = { source: { kind: 'media', mediaId: 'smoke-media-id' }, crop: { x: 0.1, y: 0.2, width: 0.5, height: 0.28125 } }
 
     let meta = await setMemoryDate(scopeId, nodeId, memoryKey, date, { wrappedMeta: null, metaVersion: 0 })
@@ -72,7 +73,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('memory cover e2e (live, operator-blind r
     recordCanaries(envelope, (await listTree(scopeId, epochsOf(scopeKey))).map((n) => n.name))
 
     expect(unsealMemoryDate(scopeId, memoryKey, withCover)).toEqual(date)
-    expect(unsealMemoryLocation(scopeId, memoryKey, withCover)).toMatchObject({ name: 'Teneriffa', derivedMode: 'fixed' })
+    expect(unsealMemoryLocation(scopeId, memoryKey, withCover)).toMatchObject({ name: 'Teneriffa Süd', derivedMode: 'fixed' })
     expect(unsealMemoryCover(scopeId, memoryKey, withCover)).toEqual(cover)
 
     // Remove the cover (read-modify-write against the live blob) — only the cover drops; date + location remain.
@@ -82,6 +83,6 @@ describe.skipIf(!process.env.VEYQ_E2E)('memory cover e2e (live, operator-blind r
     const withoutCover = await readBack()
     expect(unsealMemoryCover(scopeId, memoryKey, withoutCover)).toBeNull()
     expect(unsealMemoryDate(scopeId, memoryKey, withoutCover)).toEqual(date)
-    expect(unsealMemoryLocation(scopeId, memoryKey, withoutCover)).toMatchObject({ name: 'Teneriffa' })
+    expect(unsealMemoryLocation(scopeId, memoryKey, withoutCover)).toMatchObject({ name: 'Teneriffa Süd' })
   })
 })
