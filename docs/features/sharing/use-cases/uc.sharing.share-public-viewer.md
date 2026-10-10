@@ -11,9 +11,11 @@
   ([ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) decisions 9 and 13); it shows that node and what lies below it, never what is beside or above
   it. This use-case walks the Memory case; the other roots take the same steps with that node's own key. What each
   role may do per root kind is the [role matrix](../../../apps/memories.md#what-a-guest-may-do--the-role-matrix).
-  A **folder** link's guest browses the folder exactly as a member does (inbox #401): the same level view — its
-  sub-folders, its Memories as cards with their dates and covers, its files, the map — read from what the link
-  opened, with every member-only function absent; every link it follows keeps the `#k=` key in the address.
+  **Whatever the root, the guest sees exactly what a member sees** (inbox #401): a folder in the member's level view
+  — its sub-folders, its Memories as cards with their dates and covers, its files, the map — and a Memory or a chapter
+  in the member's Memory view — the gallery, the lightbox, the Chapters tab to navigate into — read from what the link
+  opened, with every member-only function absent; every link it follows keeps the `#k=` key in the address. What only
+  a guest's page adds: the breadcrumb up to the link's root, the curator's note, the role badge.
 - **Postconditions (success):** a share record exists server-side (opaque), and a link `/s/{shareId}#k=<K_share>` opens
   the Memory subtree read-only for any anonymous visitor — until the curator revokes it or it expires. Operator-blind
   throughout: the server never sees `K_share`, `K_mem`, any name, the viewer, or which media the viewer opens.
@@ -37,9 +39,11 @@ slices. The crypto is the per-Memory second-wrap of [ADR 0012](../../../decision
    whose media it holds (Memories' `listShareMedia`). Both pass the same password gate; without a token the
    resolve answers the locked challenge and the media read a `404`.
    The client **unwraps `K_mem` with the fragment key**, derives each chapter's key and opens its title down the
-   chain, decrypts layout/metadata **locally**, and renders the Memory **read-only** (the guest reads the chapter
-   titles; the Memory's own title is the share's `sealedName`): the Memory's own media first, then one section per
-   chapter under its title, as the member's sections look (inbox #356).
+   chain, decrypts layout/metadata **locally**, and renders the Memory **read-only** in the member's Memory view (the
+   guest reads the chapter titles; the Memory's own title is the share's `sealedName`): the Memory's own media in the
+   gallery, its date and place as the members sealed them, and the Chapters tab; a chapter opens like a member's — its
+   own gallery under its own key, the address carrying `?node=` and the `#k=` key. The guest never writes the
+   Memory's date, place or cover (a member's view settles them automatically; a guest's does not).
 4. **View media.** For each blob the client calls the **share-scoped, gated** blob endpoint; the server authorizes
    it **iff the blob is attached under the shared subtree**, returns a **presigned store URL**, and the client
    fetches the bytes **directly from the object store** and decrypts them locally.

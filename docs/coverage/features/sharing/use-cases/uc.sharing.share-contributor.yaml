@@ -38,7 +38,7 @@ acceptanceCriteria:
         unit: [src/features/memory/share.test.ts, src/features/memory/components/ShareDialog.test.ts, src/features/memory/components/ShareCreateDialog.test.ts]
         e2e: [src/features/memory/shareContributor.e2e.test.ts]
   - id: sealed-name-anonymous-identity
-    text: Before contributing, the visitor must enter a display name (mandatory). The client seals it under K_mem and creates an anonymous share identity under a client-minted id via POST /api/shares/{shareId}/identities { identityId, sealedDisplayName } -> { identityId, contributorToken }. The server stores only the K_mem-sealed name (ciphertext) + the token hash + shareId; it never sees the name. The sealed name -> identity is the forward-compat hook for buckets (a later slice).
+    text: Before contributing, the visitor must enter a display name (mandatory) — asked at its first write in the share page's one naming dialog, never on a screen in front of the content. The client seals it under K_mem and creates an anonymous share identity under a client-minted id via POST /api/shares/{shareId}/identities { identityId, sealedDisplayName } -> { identityId, contributorToken }. The server stores only the K_mem-sealed name (ciphertext) + the token hash + shareId; it never sees the name. The sealed name -> identity is the forward-compat hook for buckets (a later slice).
     coverage:
       # The e2e proves the CROSS-ACTOR half no other layer reaches: an anonymous stranger seals a display name
       # under K_mem, the server relays it as ciphertext onto the contributor's primary bucket, and the curator —
@@ -54,11 +54,12 @@ acceptanceCriteria:
     text: >-
       Named, the page says whose session this device holds on the link, with a "Not you?" that asks first and then
       forgets the session on the device only — the next visitor names itself afresh, nothing on the server changes.
-      One core component names every guest: a Memory link's pre-screen, a folder link's first-write dialog (the
-      shell's one naming flow, under the share root's key), Files' drop page.
+      One core component names every guest: the shell's dialog at a READ_WRITE guest's first write on any link (its
+      one naming flow, under the share root's key — a Memory link's as a folder link's), and the two drop pages of a
+      WRITE_ONLY link (Memories', Files').
     coverage:
       web:
-        unit: [src/views/ShareView.naming.test.ts, src/views/ShareView.test.ts, src/features/files/components/DropBoxShareBody.test.ts, src/features/memory/components/MemoryShareBody.embedded.test.ts]
+        unit: [src/views/ShareView.naming.test.ts, src/views/ShareView.memory.test.ts, src/views/ShareView.test.ts, src/features/files/components/DropBoxShareBody.test.ts, src/features/memory/source.test.ts]
   - id: share-scoped-upload
     text: Three share-scoped UNAUTHENTICATED endpoints mirror the media control plane, gated only on share state (role READ_WRITE + enabled + a valid contributor token) — POST /api/shares/{shareId}/blob-uploads opens sessions and presigns their first window of PUTs, POST /api/shares/{shareId}/blob-upload-windows presigns each next window, POST /api/shares/{shareId}/media completes + attaches. The contributor seals K_blob + derivatives + metadata under K_mem and PUTs ciphertext direct-to-store; bytes never flow through the backend. A parallel authz path keyed on share state, never a relaxed member filter.
     coverage:
@@ -68,8 +69,19 @@ acceptanceCriteria:
         integration: [ShareContributorSliceTest.contributeFlowAttachesStampsIdentityAndSurfacesInResolve, ShareContributorSliceTest.badTokenRejectedOnUpload]
       web:
         e2e: [src/features/memory/shareContributor.e2e.test.ts]
+  - id: contributes-in-the-member-view
+    text: >-
+      A READ_WRITE link's page is the member's Memory view with a contributor's rights (inbox #401): the gallery and
+      the Chapters tab — the guest navigates into a chapter as a member does, through the tree's link with the #k=
+      fragment kept — and Upload, which adds photos to the Memory or chapter on screen: into a chapter the upload
+      names the chapter as its target and seals under the chapter's own key (the server creates the guest's own
+      bucket there), into the link's root it names none. Its own photos carry a delete on the tile and in the
+      lightbox, asked first, then purged for good; nobody else's does, and no member-only control is offered.
+    coverage:
+      web:
+        unit: [src/views/ShareView.memory.test.ts, src/features/memory/components/MemoryDetail.guest.test.ts, src/features/memory/source.test.ts, src/features/memory/components/MediaLightbox.test.ts]
   - id: direct-append-attribution
-    text: Contributed media attaches to the shared Memory root node (share.nodeId), stamped with the contributor's share_identity_id, and appears immediately (direct-append, no review gate). The anonymous media read serves it with no identityId, and neither the resolve nor the media read serves a contributor identity or name; the stamp and the sealed name reach the Memory's members through their bucket list, which groups by it (ADR 0030 point 8). A guest's page renders all contributed media inline.
+    text: Contributed media attaches to the node the guest uploaded into (the shared root, share.nodeId, or a Memory or chapter below it), stamped with the contributor's share_identity_id, and appears immediately (direct-append, no review gate). The anonymous media read serves it with no identityId, and neither the resolve nor the media read serves a contributor identity or name; the stamp and the sealed name reach the Memory's members through their bucket list, which groups by it (ADR 0030 point 8). A guest's page renders all contributed media inline.
     coverage:
       # The web e2e proves it on the live wire: the contribution attaches to the share's root node, surfaces
       # immediately in BOTH the anonymous media read and the curator's own listMedia, the raw media read carries no
@@ -122,10 +134,11 @@ acceptanceCriteria:
       is the outcome on the share page: the files already in hand are enqueued before any re-read runs, a file
       the browser delivers late is enqueued afterwards as its own additional batch, the input is released only
       once the window has closed (an early clear would discard those late arrivals), and the window is torn
-      down if the visitor leaves mid-pick.
+      down if the visitor leaves mid-pick. A contributor picks in the member's Memory view, whose picker is the
+      curator's own (inbox #401).
     coverage:
       web:
-        unit: [src/views/ShareView.picker.test.ts]
+        unit: [src/features/memory/components/MemoryDetail.optimistic.test.ts]
   - id: contributor-root-kinds
     text: >-
       A contributor link may be rooted at a Memory, a chapter or a folder (ADR 0080 decisions 6 and 13). A chapter
@@ -150,13 +163,8 @@ acceptanceCriteria:
       backend:
         integration: [SubtreeUploadSliceTest.aFolderContributorUploadsIntoAMemoryAndAChapterBelow, SubtreeUploadSliceTest.aFolderContributorDeletesOnlyItsOwnAndOnlyInsideTheSubtree, SubtreeUploadSliceTest.aTargetTheLinkDoesNotReachIsRefused, SubtreeUploadSliceTest.aReadGuestIsRefusedForEveryTarget, SubtreeUploadSliceTest.anUploaderNamesNothingButItsRoot, SubtreeUploadSliceTest.aMemoryContributorUploadsIntoAChapterBelow, SubtreeUploadSliceTest.theLinkLimitCountsMediaInEveryNodeOfTheSubtree, ShareRootsSliceTest.aGuestOfAReadWriteFolderShareUploadsNothing, GuestCompleteTargetRaceSliceTest.aCompletionIntoAMemoryAMemberTrashesMeanwhileIsRefused, GuestCompleteTargetRaceSliceTest.aCompletionIntoAMemoryAMemberMovesOutOfTheSubtreeMeanwhileIsRefused, GuestCompleteTargetRaceSliceTest.aCompletionOnALinkRevokedMeanwhileIsRefused]
       web:
-        unit: [src/features/memory/shareTarget.wire.test.ts, src/features/memory/components/MemoryShareBody.embedded.test.ts]
+        unit: [src/features/memory/shareTarget.wire.test.ts, src/features/memory/components/MemoryDetail.guest.test.ts, src/views/ShareView.memory.test.ts]
         e2e: [src/features/memory/folderShareUpload.e2e.test.ts]
-    gaps:
-      - surface: web
-        reason: >-
-          The web offers no delete control for a guest's own photo (inbox #361); the right exists server-side, and
-          the web side of an own delete below the folder is asserted by no test that drives a screen.
   - id: folder-guest-tree-operations
     text: >-
       A READ_WRITE folder link's guest creates folders (and Memories) inside the shared subtree and moves or renames
@@ -169,7 +177,7 @@ acceptanceCriteria:
       backend:
         integration: [ShareNodesCoreSliceTest.aGuestCreatesAFolderAndANestedNodeAndAMemberListsThem, ShareNodesCoreSliceTest.aGuestMovesAndRenamesInsideTheSubtree, ShareNodesCoreSliceTest.aStalePlacementVersionIsAConflictAndWritesNothing, ShareNodesCoreSliceTest.anEpochAboveTheCurrentIsStaleAndStoresNothing, ShareNodesCoreSliceTest.anEpochBelowTheCurrentIsStoredAsSentWithNoPayload, ShareNodesCoreSliceTest.aTakenSlugIsAConflictOnCreateAndOnMove, ShareNodesCoreSliceTest.aGuestNeverMovesANodeOutOfTheSubtreeTheRootOrIntoACycle, ShareNodesCoreSliceTest.aGuestCreatesNothingOutsideTheSubtree, ShareNodesCoreSliceTest.aGuestNeverRenamesTheShareRoot, ShareNodesCoreSliceTest.aTrashedShareRootTakesNoTreeOperation, ShareNodesSliceTest.aGuestMovesAMemoryBetweenTwoSubfoldersOfASharedFolder, ShareNodeRaceCoreSliceTest.aGuestMoveIntoAFolderAMemberMovesOutOfTheSubtreeMeanwhileIsRefused, ShareNodeRaceCoreSliceTest.aGuestCreateUnderAParentAMemberTrashesMeanwhileIsRefused, ShareNodeRaceCoreSliceTest.aRevokedOrDeletedLinkNeverAcceptsAGuestWriteMeanwhile, ShareNodeRaceCoreSliceTest.aGuestWriteAndAReactivationOfTheLinkBothLandWithoutADeadlock]
       web:
-        unit: [src/core/sharing/guestTree.wire.test.ts, src/core/sharing/FolderShareBody.test.ts, src/views/ShareView.naming.test.ts, src/features/memory/components/MemoriesSection.guest.test.ts]
+        unit: [src/core/sharing/guestTree.wire.test.ts, src/core/sharing/ShareTreePage.test.ts, src/views/ShareView.naming.test.ts, src/features/memory/components/MemoriesSection.guest.test.ts]
         e2e: [src/features/memory/folderShareGuest.e2e.test.ts]
     gaps:
       - surface: web

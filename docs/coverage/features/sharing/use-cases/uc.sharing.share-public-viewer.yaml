@@ -34,8 +34,22 @@ acceptanceCriteria:
       backend:
         integration: [ShareSliceTest.createThenAnonymousResolveReturnsSealedSubtree, ShareGuestNamesSliceTest.aViewerLinkIsServedTheUploadersKeyButNoName, SharePasswordSliceTest.theMediaReadRequiresThePasswordToken]
       web:
-        unit: [src/features/memory/share.test.ts, src/features/memory/components/MemoryShareBody.test.ts]
+        unit: [src/features/memory/share.test.ts, src/features/memory/source.test.ts]
         e2e: [src/features/memory/shareContributor.e2e.test.ts]
+  - id: guest-sees-the-member-view
+    text: >-
+      A READ link's page is the member's view with every member-only function absent (inbox #401): behind the shell's
+      gates, core's page renders the member's level view at a folder and the kind's member detail at any other node,
+      the link's root included — a Memory or a chapter link is the member's Memory detail (its gallery, the lightbox
+      with the download, the Chapters tab), never a guest-only body. A chapter opens through the tree's link with the
+      #k= fragment kept; a breadcrumb leads back to the root; the curator's note shows once and a role badge says
+      read-only. Nothing of the member's world is read (the active scope, the node tree, the pins, the item marks, the
+      covers), no authenticated client is called, no member-only control is offered (rename, delete, share, pin,
+      marks, the cover, date and place editors, the contributions organizer, the media trash), and the node's date
+      and place are never written back. A WRITE_ONLY link alone gets its application's drop page.
+    coverage:
+      web:
+        unit: [src/views/ShareView.memory.test.ts, src/views/ShareView.registry.test.ts, src/core/sharing/ShareTreePage.test.ts, src/features/memory/components/MemoryDetail.guest.test.ts, src/features/memory/components/MediaLightbox.test.ts]
   - id: gated-blob-read
     text: A share-scoped blob endpoint authorizes a read iff the blob is attached under the shared subtree (a structural check on opaque ids), returns a presigned store URL, and the viewer fetches bytes directly from the object store. The operator never learns which media a viewer opens. A cross-share/out-of-subtree blob id is 404.
     coverage:
@@ -86,12 +100,13 @@ acceptanceCriteria:
       level view handed the guest's access and tree (inbox #401 S2): a Memory is the member's card with its sealed date
       and cover, a sub-folder a folder card, nothing a member alone may do is offered and no authenticated client is
       called — a breadcrumb along the parent chain and every card keeping the #k= fragment on a real click; a node that
-      is not a folder embeds the body claimed for its kind, handed that node as its subtree root.
+      is not a folder renders its kind's member detail (a Memory the member's Memory detail), handed the guest's access
+      and tree.
     coverage:
       backend:
         integration: [CoreAloneSliceTest.aFolderIsSharedToReadOrContributeAndNothingElseIs, CoreAloneSliceTest.aGuestOfAFolderShareResolvesTheSubtreeUnderIt]
       web:
-        unit: [src/core/sharing/folderShare.wire.test.ts, src/core/sharing/FolderShareDialog.test.ts, src/core/sharing/FolderShareBody.test.ts, src/core/sharing/FolderShareBody.breadcrumb.test.ts, src/core/sharing/FolderShareBody.registration.test.ts, src/core/sharing/guestAccess.test.ts, src/features/memory/components/FolderShareGuest.test.ts, src/features/memory/components/MemoriesSection.guest.test.ts, src/features/memory/components/MemoryShareBody.embedded.test.ts]
+        unit: [src/core/sharing/folderShare.wire.test.ts, src/core/sharing/FolderShareDialog.test.ts, src/core/sharing/ShareTreePage.test.ts, src/core/sharing/ShareTreePage.breadcrumb.test.ts, src/core/sharing/guestAccess.test.ts, src/features/memory/components/FolderShareGuest.test.ts, src/features/memory/components/MemoriesSection.guest.test.ts, src/features/memory/components/MemoryDetail.guest.test.ts, src/views/ShareView.folder.test.ts]
         e2e: [src/features/memory/folderShare.e2e.test.ts]
   - id: chapter-share-root
     text: >-
@@ -102,7 +117,7 @@ acceptanceCriteria:
       backend:
         integration: [ChapterShareSliceTest.aChapterGuestReadsTheChapterAndNothingOfItsMemory, ShareRootsSliceTest.aChapterIsAShareRootForEveryRole]
       web:
-        unit: [src/views/MemoryHomeView.test.ts, src/features/memory/share.test.ts, src/views/ShareView.test.ts, src/features/memory/components/ShareDialog.test.ts]
+        unit: [src/views/MemoryHomeView.test.ts, src/features/memory/share.test.ts, src/views/ShareView.test.ts, src/views/ShareView.memory.test.ts, src/features/memory/components/ShareDialog.test.ts]
         e2e: [src/features/memory/chapterShare.e2e.test.ts]
   - id: root-rename-reseals-share-names
     text: >-

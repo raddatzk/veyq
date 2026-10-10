@@ -157,8 +157,8 @@ unless the link is `READ_WRITE`), so the guest's columns are the most a guest pa
 - **Quota:** a guest's attachment names its identity, so the link's usage counts it (core's attachment term; Files'
   `UploadAdmission` reports 0) against the tenant's per-link limit; core's `AttachmentGuestIdentityUsage` keeps the
   guest's identity while a file names it (Files stores no row of its own naming a guest, so it ships no usage).
-- **The web:** one view per kind for a member and a guest (inbox #401 S3). Core's folder page of a public share
-  (`core/sharing/FolderShareBody.vue`) is core's member `LevelView` handed the guest's access and tree, so the files are
+- **The web:** one view per kind for a member and a guest (inbox #401 S3). Core's page of a public share
+  (`core/sharing/ShareTreePage.vue`) is core's member `LevelView` handed the guest's access and tree, so the files are
   the member's `components/FilesSection.vue` and the drop boxes `DropBoxSection`'s rows; a drop box below the link opens
   the member's `DropBoxDetail.vue` (§ The drop box). Every read and write of those views goes through Files' data source
   (`source.ts`): the guest's lists through `listShareFiles`, downloads through the link's presign (`shareChunkUrls`)
@@ -232,8 +232,8 @@ one per guest identity, which are core `FOLDER`s carrying `veyq_node.share_ident
   inbox #380: the guest was given that tree): the backend serves the drop box's subtree with its drop key to a guest of
   a link above (ADR 0080 decision 11), so core's walk opens the identity folders' names (`childEntryKey`) and their
   files. Core's folder page renders the drop box's `detail` — the member's `DropBoxDetail.vue`, handed the guest's
-  access and tree (inbox #401 S3) — never the `WRITE_ONLY` guest's form (Files claims its share body without
-  `embedBelowFolder`): the guests' folders with their file counts, a repeated name numbered in node-id order (the
+  access and tree (inbox #401 S3) — never the `WRITE_ONLY` guest's form (Files' claimed share body, which the shell
+  mounts for the drop box's own `WRITE_ONLY` link only): the guests' folders with their file counts, a repeated name numbered in node-id order (the
   guest's tree serves no `createdAt`, so `compareByCreation` falls to its id tie-break and the numbers can differ from the
   member's creation order), in the guest's words (`files.dropBox.sharedHint`: only the owner deletes or moves); a folder
   opens on core's folder page, which inside an identity folder offers no guest a write (no 'New folder', Files' section

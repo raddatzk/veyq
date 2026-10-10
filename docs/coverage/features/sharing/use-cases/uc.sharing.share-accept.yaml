@@ -26,7 +26,7 @@ acceptanceCriteria:
   - id: accept-persists-client-side
     text: >
       Accepting writes the accepted termsVersion to localStorage keyed by tenantId; the gate then clears and the
-      content (or, for READ_WRITE/WRITE_ONLY, the display-name pre-screen) shows. A reload does not re-prompt for the
+      content (or, for WRITE_ONLY, the display-name pre-screen) shows. A reload does not re-prompt for the
       same version. Accepting on one share of a tenant clears the gate on every share of that tenant.
     # Client-only by design (acceptance is localStorage, keyed per tenant — the server keeps no record for the
     # accountless visitor, so there is no backend behaviour to cover): ShareView.test.ts drives accept → clears +
@@ -43,8 +43,9 @@ acceptanceCriteria:
         unit: [src/views/ShareView.test.ts]
   - id: ordering-password-terms-name
     text: >
-      On the share page the terms gate sits after the password shell (cr-0118) and before the display-name
-      pre-screen (cr-0101/0102): password → terms → name → content. On a transient terms-fetch error the gate fails
+      On the share page the terms gate sits after the password shell (cr-0118) and before any naming — a WRITE_ONLY
+      link's display-name pre-screen (cr-0102), a READ_WRITE guest's dialog at its first contribution: password →
+      terms → name → content. On a transient terms-fetch error the gate fails
       open (treated as no gate) — a network blip never locks the visitor out.
     # The fail-open runtime behaviour is directly tested (ShareView.test.ts: a rejected fetchShareTerms → content,
     # no gate). The ordering itself is a static template guarantee — the v-else-if chain locked → needsTerms →

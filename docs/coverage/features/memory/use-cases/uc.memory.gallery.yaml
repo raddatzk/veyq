@@ -92,7 +92,7 @@ acceptanceCriteria:
           - src/features/memory/media.test.ts
           - src/features/memory/components/MediaLightbox.test.ts
   - id: date-sorted-grid
-    text: The gallery sorts tiles by effective capture time (newest first by default, a header toggle for oldest first; undated media last). Each media's capturedAt is sealed under K_mem in the always-listed metadata tier (wrappedMeta — geometry + capture time + GPS; cr-0066/0068) — the derived original is the EXIF DateTimeOriginal or the file's creation date, so the blind server never sees a timestamp yet the grid can order client-side. A lightbox correction re-sorts without a refetch. The rule covers EVERY tile, including one still uploading — an in-flight tile takes its capture-time place from the same EXIF-else-file-date rule the sealed tier will carry, derived on device before a byte is uploaded, so finishing an upload changes a tile's content and never its place. There is no privileged front block, on either surface, since the Memory gallery and the share viewer sort through one comparator.
+    text: The gallery sorts tiles by effective capture time (newest first by default, a header toggle for oldest first; undated media last). Each media's capturedAt is sealed under K_mem in the always-listed metadata tier (wrappedMeta — geometry + capture time + GPS; cr-0066/0068) — the derived original is the EXIF DateTimeOriginal or the file's creation date, so the blind server never sees a timestamp yet the grid can order client-side. A lightbox correction re-sorts without a refetch. The rule covers EVERY tile, including one still uploading — an in-flight tile takes its capture-time place from the same EXIF-else-file-date rule the sealed tier will carry, derived on device before a byte is uploaded, so finishing an upload changes a tile's content and never its place. There is no privileged front block, and one surface — a share guest's gallery is the member's (inbox #401), and the drop page's own tiles sort through the same comparator.
     coverage:
       # Sorting is client-side; cite the tests that assert the ORDER. MemoryDetail.test.ts asserts newest-first
       # default + the oldest-first toggle re-sorting already-listed tiles with no refetch (and a lightbox date
@@ -100,17 +100,16 @@ acceptanceCriteria:
       # undefined key that sorts last). The backend's role — relaying the sealed capturedAt tier the server can't
       # read — is not sorting and is already proven under lightbox-exif-detail / lightbox-correct-capturedat, so
       # the two MediaSliceTest refs (round-trip + meta-overwrite) are dropped here rather than mis-cited as sort proof.
-      # The in-flight half needs DOM-level refs: useMediaGalleryLive.test.ts and ShareView.test.ts both stub the
-      # optimistic tiles away, so neither can see tile order. MemoryDetail.optimistic.test.ts and
-      # ShareView.order.test.ts mount the real grid and read the settling tile's slot before and after the
-      # reconcile; media.test.ts pins that the tile's key IS the key the tier seals, which is what makes the
-      # slot stable rather than coincidentally equal.
+      # The in-flight half needs DOM-level refs: useMediaGalleryLive.test.ts stubs the optimistic tiles away, so it
+      # cannot see tile order. MemoryDetail.optimistic.test.ts mounts the real grid and reads the settling tile's
+      # slot before and after the reconcile — the guest's gallery is that same component since inbox #401 S5, so the
+      # share viewer's own copy of the order (and its test) is gone; media.test.ts pins that the tile's key IS the key
+      # the tier seals, which is what makes the slot stable rather than coincidentally equal.
       web:
         unit:
           - src/features/memory/media.test.ts
           - src/features/memory/components/MemoryDetail.test.ts
           - src/features/memory/components/MemoryDetail.optimistic.test.ts
-          - src/views/ShareView.order.test.ts
   - id: lightbox-correct-capturedat
     text: From the lightbox a user can correct (or set) a media's capture time; the correction is sealed under K_mem inside the listed metadata tier (wrappedMeta) as capturedAtOverride alongside the immutable extracted original (geometry + GPS ride along unchanged), re-sealed client-side and PUT verbatim (updateMediaMeta) — the blind server never sees the date. The panel shows the effective time (override ?? original) with a "corrected" indicator and can reset to the original; a media with no EXIF can have a date set (cr-0065/0068).
     coverage:

@@ -34,28 +34,35 @@ exactly as a viewer does, then seals new media under it. **v1 is deliberately na
 2. **Hand off.** The client shows the link **`/s/{shareId}#k=<base64url(K_share)>`** to copy. `K_share` rides the
    fragment — never sent. The curator passes it out-of-band.
 3. **Open + name yourself (anonymous).** A visitor opens the link. The client `GET`s `/api/shares/{shareId}` (**no
-   auth**) → the record + the sealed subtree; because the `role` is READ_WRITE, the client shows a **mandatory
-   name pre-screen**. The visitor enters a display name; the client **seals it under `K_mem`** and creates an
+   auth**) → the record + the sealed subtree, and renders the Memory exactly as a member sees it (inbox #401) — the
+   same view, with the functions a contributor lacks removed. At the visitor's **first write** the page asks for a
+   **mandatory display name** in its one naming dialog (core's `GuestNaming`; nothing is sent before it). The
+   visitor enters a display name; the client **seals it under `K_mem`** and creates an
    **anonymous share identity** under an `identityId` it mints (`POST /api/shares/{shareId}/identities
    { identityId, sealedDisplayName }` → `{ identityId, contributorToken }`, held on device). The request proves the
    visitor holds the whole link: `X-Share-Write` carries the token derived from the fragment key, and the server
    checks its hash against the share's `writeVerifier` — the id alone, from a database copy or a log, names no guest
    ([ADR 0076](../../../decisions/0076-a-guest-write-proves-it-holds-the-links-key.md)). The server stores
    only the ciphertext name + opaque ids, and serves the name back only to the Memory's members — never on a
-   link's resolve, and the pre-screen says so ([ADR 0030](../../../decisions/0030-contributor-public-share.md)
+   link's resolve, and the naming dialog says so ([ADR 0030](../../../decisions/0030-contributor-public-share.md)
    point 8).
-4. **View + contribute.** The Memory renders read-only (the shared viewer). An **Add photos** affordance lets the
-   contributor pick images — through the **same picker** the curator's own gallery uses, so
+4. **View + contribute.** The Memory renders in the member's Memory view: its gallery, the lightbox with the
+   download, and the **Chapters** tab, through which the contributor navigates into a chapter as a member does (the
+   address keeps `?node=` and the `#k=` key). **Upload** adds photos to the Memory or chapter **on screen** — through
+   the **same picker** the curator's own gallery uses, so
    [uc.memory.upload](../../memory/use-cases/uc.memory.upload.md) § E3 (Safari's Photos gallery populates
    `input.files` late) holds here unchanged; it is a property of the picker, not of the screen, and a visitor
    is exactly the person who cannot be told to retry. The client then seals each under a fresh `K_blob`
    (wrapped under `K_mem`) with its
    derivatives + metadata, uploads the ciphertext chunks **direct-to-store** via the **share-scoped** presign
    (`POST /api/shares/{shareId}/blob-uploads`, presenting the `contributorToken`), then completes + attaches
-   (`POST /api/shares/{shareId}/media`) to the shared Memory root — stamped with the contributor's `identityId`.
+   (`POST /api/shares/{shareId}/media`) — stamped with the contributor's `identityId` — to the shared Memory root, or,
+   inside a chapter, to that chapter: the upload names it as its target (`nodeId`) and seals under the chapter's own
+   key, and the server creates the contributor's own bucket there.
 5. **Appears immediately.** The contributed photo is now part of the shared Memory (direct-append); every viewer
    (and the curator) sees it. The curator can delete it or **revoke** the link; the contributor can delete a photo
-   **it added itself** (asked first; `deleteShareMedia`, which the server allows only for the token's own identity).
+   **it added itself**, on its tile or in the lightbox (asked first — for good, a guest has no trash;
+   `deleteShareMedia`, which the server allows only for the token's own identity).
    The server tells no guest which photos are whose, so the guest's device remembers what it uploaded under that
    identity, beside its session — the same store as the token, so it offers no more than the token may do (inbox #361).
 
@@ -86,9 +93,9 @@ sequenceDiagram
 
 ## Alternate / exception flows
 
-- **A1 — viewer on a contributor share:** a visitor who only wants to look still names themselves (the name is
-  mandatory for a READ_WRITE share, ADR 0030); they then view read-only and may add nothing. (A no-name **viewer**
-  experience is the separate READ share.)
+- **A1 — viewer on a contributor share:** a visitor who only wants to look is never asked a name; the name is
+  mandatory for a contribution (ADR 0030) and asked at the first one (inbox #401 S5 — it used to be a pre-screen in
+  front of the Memory).
 - **A2 — revoked / expired:** `enabled = false` or a passed `expiresAt` → the resolve **and** the upload
   endpoints `404`/`403`. An upload in flight stops at its next window or at its complete, whichever comes first
   (every window is authorized again, [ADR 0013 §2](../../../decisions/0013-blob-storage-presigned-direct-to-store.md));
@@ -103,9 +110,9 @@ sequenceDiagram
 - **A4 — someone else uses the same device ("Not you?", inbox #401 S2):** once named, the page says whose session
   this device holds ("You are here as Anna") with a "Not you?" that asks first, then forgets the session on the device;
   the next visitor names itself afresh, a new identity. Nothing on the server changes — what the first one added stays,
-  under its name. The same core component (`GuestNaming`) names every guest of every link: a Memory link's pre-screen,
-  the dialog a folder link's guest gets at its first write, Files' drop page.
-- **E1 — blank name:** the pre-screen blocks submission until a non-blank name is entered (mandatory).
+  under its name. The same core component (`GuestNaming`) names every guest of every link: the dialog a READ_WRITE
+  guest gets at its first write (a Memory link's as a folder link's), and the two drop pages of a WRITE_ONLY link.
+- **E1 — blank name:** the naming form blocks submission until a non-blank name is entered (mandatory).
 - **E2 — over budget / full / rate-limited:** an oversized upload fails the per-blob byte budget; an upload that
   would take the link over its storage limit, or the tenant over its quota, is refused whole with the visitor told
   only that the link takes no more uploads right now
