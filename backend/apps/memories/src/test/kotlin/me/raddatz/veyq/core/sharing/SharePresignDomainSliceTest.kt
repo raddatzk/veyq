@@ -3,7 +3,7 @@ package me.raddatz.veyq.core.sharing
 import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.memories.media.MediaEntity
 import me.raddatz.veyq.core.testing.TestBlob
-import me.raddatz.veyq.core.blobstore.FakePresigningBlobStore
+import me.raddatz.veyq.core.testing.FakePresignProfile
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
@@ -12,7 +12,6 @@ import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
-import io.quarkus.test.junit.QuarkusTestProfile
 import io.quarkus.test.junit.TestProfile
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
@@ -35,12 +34,8 @@ import org.junit.jupiter.api.Test
  * holds per domain or not at all.
  */
 @QuarkusTest
-@TestProfile(SharePresignDomainSliceTest.FakePresignProfile::class)
+@TestProfile(FakePresignProfile::class)
 class SharePresignDomainSliceTest {
-
-    class FakePresignProfile : QuarkusTestProfile {
-        override fun getEnabledAlternatives(): Set<Class<*>> = setOf(FakePresigningBlobStore::class.java)
-    }
 
     @Test
     fun aGuestsShareBlobIsSignedForTheDomainTheGuestIsOn() {
