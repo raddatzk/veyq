@@ -3,6 +3,7 @@ package me.raddatz.veyq.memories.media
 import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.blob.UploadSessionEntity
 import me.raddatz.veyq.core.blobstore.FakePresigningBlobStore
+import me.raddatz.veyq.core.testing.FakePresignProfile
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
@@ -11,7 +12,6 @@ import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
-import io.quarkus.test.junit.QuarkusTestProfile
 import io.quarkus.test.junit.TestProfile
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
@@ -39,12 +39,8 @@ import org.junit.jupiter.api.Test
  * `:apps:memories`; the rest of the class is `MediaPresignDomainSliceTest` in `:core`. The bodies moved verbatim.
  */
 @QuarkusTest
-@TestProfile(MediaPresignDomainMemoriesSliceTest.FakePresignProfile::class)
+@TestProfile(FakePresignProfile::class)
 class MediaPresignDomainMemoriesSliceTest {
-
-    class FakePresignProfile : QuarkusTestProfile {
-        override fun getEnabledAlternatives(): Set<Class<*>> = setOf(FakePresigningBlobStore::class.java)
-    }
 
     @Inject
     lateinit var fakeStore: FakePresigningBlobStore

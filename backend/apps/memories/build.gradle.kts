@@ -13,6 +13,11 @@ plugins {
     // Only for this module's own `@QuarkusTest`s: a library `@QuarkusTest` fails without the plugin. Its application
     // tasks are disabled by `veyq.module` — the one fast-jar is the root's.
     id("io.quarkus")
+    // Memories' own test helpers that another project's tests need (`src/testFixtures`): its content in the
+    // scope-access world (`MemoriesWorldContent`, a CDI bean beside its own `META-INF/beans.xml`), consumed by this
+    // module's tests and the root's `OperatorBlindProbeTest` as `testImplementation(testFixtures(project(":apps:memories")))`
+    // (inbox #335). Like `:core`'s, they work from a fixtures jar only while no jar is renamed.
+    `java-test-fixtures`
 }
 
 veyqOpenApi { generateOwnSpecs() } // `contracts/api/memories/`, by its path `:apps:memories`
@@ -22,6 +27,9 @@ dependencies {
 
     // The shared test helpers: `:core`'s test fixtures (`core/build.gradle.kts` says why they work from there).
     testImplementation(testFixtures(project(":core")))
+    // The fixtures' public types are core's fixtures' (`WorldContent`, `ScopeAccessWorld.Space`): `api`, so a consumer
+    // compiles against them.
+    testFixturesApi(testFixtures(project(":core")))
     testImplementation("io.quarkus:quarkus-junit")
     testImplementation("io.rest-assured:rest-assured")
     testImplementation(kotlin("test"))

@@ -8,7 +8,7 @@ cr-platform-gradle-modules). Buildless: it reads the build files, the config fil
 `testImplementation`/`testRuntimeOnly` test edges, `compileOnly` neither (it is still an edge for rule (b)); a
 `testFixtures(project(":x"))` inside any of them is an edge to `:x` as well. A module the root reaches over runtime
 edges **ships** (its jar is in the fast-jar's `quarkus-app/lib/main`). The test helpers the modules share are a
-module's `java-test-fixtures` source set (`src/testFixtures`, today `:core`'s), test code that ships nothing.
+module's `java-test-fixtures` source set (`src/testFixtures`, today `:core`'s and `:apps:memories`'), test code that ships nothing.
 
 - **(a) The settings name every module, and only the two kinds there are.** The included projects equal the
   directories below `backend/` holding a `build.gradle.kts` (build output excluded). A module directory the settings
@@ -49,8 +49,13 @@ module's `java-test-fixtures` source set (`src/testFixtures`, today `:core`'s), 
   rule before any build. Kotlin compiles a split package and Quarkus indexes both halves, so nothing fails; but the package no
   longer says its owner, and the platform/application boundary the names carry (`me.raddatz.veyq.core.*`,
   `me.raddatz.veyq.<application>.*`) is a lie for the half that sits elsewhere. Test code (`src/test`, `src/testFixtures`)
-  is not judged: core's fixtures declare their helpers inside core's packages on purpose
-  (`me.raddatz.veyq.core.blobstore.RecordingBlobStore`).
+  is judged by owner, not by split: core's fixtures declare their helpers inside core's packages on purpose
+  (`me.raddatz.veyq.core.blobstore.RecordingBlobStore`), and the root's whole-app tests may sit in any package — but
+  every test and fixtures file of an application declares a package under that application's own root
+  (`:apps:memories` → `me.raddatz.veyq.memories.*`). An application test in `…core.*` is a split package Quarkus'
+  bootstrap warns about on every boot ("found in multiple archives"), says the wrong owner, and would collide with a
+  later per-module `internal` cut (inbox #337: 47 Memories tests sat in `…core.*` until 2026-10-10). Its bite: one
+  moved back (`package me.raddatz.veyq.core.sharing` in `ShareSliceTest`) → red.
 - **(e) The image builds every module.** The Dockerfile's `backend-build-base` stage copies each included project's
   `build.gradle.kts` — its warm-up `gradlew help` configures every included project and dies on one with no
   directory (measured: "Configuring project ':core' without an existing directory is not allowed") — and some stage
@@ -90,6 +95,12 @@ module's `java-test-fixtures` source set (`src/testFixtures`, today `:core`'s), 
   `:core`'s, `:apps:memories`' and the root's `@QuarkusTest`s) — a second source on every consumer's test classpath,
   beside the base at its ordinal, which the classpaths above do not model. A module's `%test` keys go beside its
   tests, in `src/test/resources`.
+  (g5) Every *test* classpath sets the `%test` keys of `REQUIRED_TEST_KEYS`, once, to the value named there — today
+  `quarkus.scheduler.start-mode=halted`. Each project holds its own copy (test config ships in no jar), and only
+  `:core`'s is pinned by a test (`ScheduledJobsHaltedInTestTest`): a copy deleted from another module lets every
+  `@Scheduled` purge fire after each of that module's app starts and race its fixtures, with nothing red (inbox
+  #331). Derived from the classpaths above, so a new application's tests are held to it the day they exist. Its
+  bite: the key deleted from `apps/files`' `application-test.properties` → red on `test of :apps:files` (2026-10-10).
 
 **The defect that bought it.** None: built with cr-platform-gradle-modules (steps 6 and 8b), which split the
 backend into `:core`, `:apps:memories` and a `:test-support` project that `:core`'s test fixtures later replaced.
@@ -138,6 +149,8 @@ SPEC_SETS = BUILD_SRC / "src" / "main" / "kotlin" / "me" / "raddatz" / "veyq" / 
 APPLIES_MODULE_PLUGIN = re.compile(r'\bid\s*\(\s*"veyq\.module"\s*\)')
 CORE = ":core"
 APPLICATION = re.compile(r"^:apps:[\w-]+$")
+# An application's package root is this plus its name (`:apps:memories` → `me.raddatz.veyq.memories`, ADR 0079).
+APPLICATION_PACKAGE_PREFIX = "me.raddatz.veyq."
 # Any project reference in a dependencies block, with the configuration around it and the wrapper, if any —
 # `testImplementation(testFixtures(project(":core")))` is a `testImplementation` edge to `:core`'s fixtures, and
 # `"api"(project(…))` (a string-named configuration) is an `api` one.
@@ -164,6 +177,16 @@ BUILD_BASE_STAGE = "backend-build-base"
 BASE_NAME = "application.properties"
 PROFILE_FILE = re.compile(r"^application-([\w.-]+)\.properties$")
 PROFILED_KEY = re.compile(r"^%([^.]+)\.(.+)$")
+TEST_CLASSPATH = "test of "
+# (g5) The `%test` keys every test classpath must set, and to what: a test JVM without one runs green and wrong.
+REQUIRED_TEST_KEYS = {"quarkus.scheduler.start-mode": "halted"}
+REQUIRED_TEST_KEYS_WHY = {
+    "quarkus.scheduler.start-mode": (
+        "unless it is halted, every @Scheduled job (the purges, the reclaim sweep) fires about a second after each of the "
+        "module's app starts and races its tests' fixtures on the shared H2 (inbox #182, #331); the reasons are in "
+        "backend/src/test/resources/application-test.properties, ScheduledJobsHaltedInTestTest pins the effect in "
+        ":core"),
+}
 RUNTIME_CONFIGS = {"implementation", "api", "runtimeOnly"}
 TEST_CONFIGS = {"testImplementation", "testRuntimeOnly"}
 
@@ -175,17 +198,34 @@ def rel(path: pathlib.Path) -> str:
         return str(path)
 
 
-def keys_of(path: pathlib.Path) -> list[str]:
-    """The keys a `.properties` file defines, in order; comments, blank lines and continuations skipped."""
-    keys: list[str] = []
+def entries_of(path: pathlib.Path) -> list[tuple[str, str]]:
+    """The `(key, value)` pairs a `.properties` file defines, in order; comments and blank lines skipped, a
+    continued value read up to its first line only (enough for the single-token values rule (g5) compares)."""
+    entries: list[tuple[str, str]] = []
     continued = False
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         was_continued, continued = continued, line.endswith("\\") and not line.endswith("\\\\")
         if was_continued or not line or line[0] in "#!":
             continue
-        keys.append(re.split(r"\s*[=:\s]", line, maxsplit=1)[0])
-    return keys
+        parts = re.split(r"\s*[=:\s]\s*", line, maxsplit=1)
+        entries.append((parts[0], parts[1].rstrip("\\").strip() if len(parts) > 1 else ""))
+    return entries
+
+
+def keys_of(path: pathlib.Path) -> list[str]:
+    """The keys a `.properties` file defines, in order; comments, blank lines and continuations skipped."""
+    return [k for k, _ in entries_of(path)]
+
+
+def profile_and_key(f: pathlib.Path, key: str) -> tuple[str, str]:
+    """`(profile, key)` of a key as written in `f`: `%p.k` is `(p, k)` anywhere, a plain key is `(p, k)` in an
+    `application-<p>.properties` and `("", k)` in an `application.properties`."""
+    pk = PROFILED_KEY.match(key)
+    if pk:
+        return pk.group(1), pk.group(2)
+    m = PROFILE_FILE.match(f.name)
+    return (m.group(1) if m else ""), key
 
 
 def config_files() -> list[pathlib.Path]:
@@ -251,7 +291,7 @@ def classpaths(files: list[pathlib.Path]) -> dict[str, list[pathlib.Path]]:
             continue
         runtime, test = edges(p)
         reach = runtime_closure({p}) | runtime_closure(test)
-        out[f"test of {p}"] = sorted([f for q in reach for f in main_of.get(q, [])] + test_of.get(p, []))
+        out[f"{TEST_CLASSPATH}{p}"] = sorted([f for q in reach for f in main_of.get(q, [])] + test_of.get(p, []))
     return out
 
 
@@ -271,18 +311,22 @@ def rule_g(files: list[pathlib.Path]) -> list[str]:
         homes: dict[tuple[str, str], list[pathlib.Path]] = defaultdict(list)
         keyed_bases = []
         for f in cp:
-            m = PROFILE_FILE.match(f.name)
             keys = keys_of(f)
-            if m is None and keys:
+            if PROFILE_FILE.match(f.name) is None and keys:
                 keyed_bases.append(f)
             for k in keys:
-                pk = PROFILED_KEY.match(k)
-                profile, key = (pk.group(1), pk.group(2)) if pk else (m.group(1) if m else "", k)
-                homes[(profile, key)].append(f)
+                homes[profile_and_key(f, k)].append(f)
         for (profile, key), where in sorted(homes.items()):
             if len(where) > 1:
                 errors.append(f"(g1) on the {name} classpath, ({profile!r}, {key!r}) is defined in {len(where)} files: "
                               f"{', '.join(rel(p) for p in where)} — two sources at one ordinal have no defined winner.")
+        if name.startswith(TEST_CLASSPATH):
+            for key, want in sorted(REQUIRED_TEST_KEYS.items()):
+                values = [v for f in cp for k, v in entries_of(f) for p, kk in [profile_and_key(f, k)]
+                          if kk == key and p == "test"]
+                if values != [want]:
+                    errors.append(f"(g5) the {name} classpath sets `%test` {key} to {values or 'nothing'}, not "
+                                  f"[{want!r}] — {REQUIRED_TEST_KEYS_WHY[key]}")
         if not keyed_bases:
             errors.append(f"(g2) no {BASE_NAME} on the {name} classpath holds a key — the base config (every "
                           f"profile's ground truth) was not found; a moved tree must be re-pointed, not passed.")
@@ -457,6 +501,22 @@ def rule_d() -> list[str]:
             homes[m.group(1)].add(backend_tree.project_of(f) or f"<no project: {rel(f.parent)}>")
     if not homes:
         errors.append("(d) no main Kotlin file declares a package — the split-package rule read nothing.")
+    judged = 0
+    for f in backend_tree.kotlin_files(backend_tree.test_roots() + backend_tree.fixture_roots()):
+        project = backend_tree.project_of(f)
+        if project is None or not APPLICATION.match(project):
+            continue
+        m = PACKAGE_LINE.search(mask(f.read_text(encoding="utf-8")))
+        root = f"{APPLICATION_PACKAGE_PREFIX}{owner_of(project)}"
+        judged += 1
+        if m is None or not (m.group(1) == root or m.group(1).startswith(root + ".")):
+            errors.append(f"(d) {rel(f)} is {project}'s test code but declares package "
+                          f"{m.group(1) if m else '<none>'} — an application's tests and fixtures live under its own "
+                          f"package root {root}.*, never in core's or another application's (a split package Quarkus warns about on every boot, "
+                          f"and a test whose package no longer says which project holds it).")
+    if not judged:
+        errors.append("(d) no application test file was read — the test-package rule read nothing. If the "
+                      "applications' tests moved, re-point it.")
     for pkg, projects in sorted(homes.items()):
         if len(projects) > 1:
             errors.append(f"(d) package {pkg} is declared by {len(projects)} modules ({', '.join(sorted(projects))}) — "

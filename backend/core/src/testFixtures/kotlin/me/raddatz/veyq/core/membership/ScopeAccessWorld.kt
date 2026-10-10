@@ -1,28 +1,26 @@
 package me.raddatz.veyq.core.membership
 
-import me.raddatz.veyq.core.node.NodeEntity
+import io.quarkus.arc.Arc
 import me.raddatz.veyq.core.testing.TestBlob
-import me.raddatz.veyq.core.sharing.ShareWriteProof
 import me.raddatz.veyq.core.TestIds
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.tenant.TenantEntity
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
-import me.raddatz.veyq.core.testing.TestFixtures.shareKeysJson
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
 import java.time.Instant
 import java.util.UUID
-import org.hamcrest.Matchers.notNullValue
 
 /**
  * One seeded instance holding a space in every state the scope-access gate tells apart
- * (uc.spaces.scope-access), each with real content in it — a node, a medium and its blob, a sub-bucket, a spare
- * upload session, a share and a job leased to the space's owner. The content is what lets a probe's **control**
- * mean something: a call by a member that is refused by a missing node answers 404 exactly like the gate's own
- * refusal would, so a space without content would make every control indistinguishable from a refusal.
+ * (uc.spaces.scope-access), each with real content in it — core's (a spare upload session and a job leased to the
+ * space's owner) and every application's under test ([WorldContent]: Memories' node, medium and its blob, bucket and
+ * share). The content is what lets a probe's **control** mean something: a call by a member that is refused by a
+ * missing node answers 404 exactly like the gate's own refusal would, so a space without content would make every
+ * control indistinguishable from a refusal.
  *
  * The content is written through the API while every space is still live, and only then are the states flipped
  * (the tenant suspended, the group put into its deletion grace) — so every row is one the product itself could
@@ -38,15 +36,15 @@ import org.hamcrest.Matchers.notNullValue
  *   [proposalOnly]: the same proposal and no other row in A — what the retired `tenantId`-only belonging check
  *   counted as a tenant member.
  *
- * **It needs Memories at runtime.** Every space holds a `MEMORY` node with a medium, a bucket and a share, so it is
- * built only where Memories is part of the application under test — `:apps:memories`' tests and the root's
- * whole-app `OperatorBlindProbeTest` — never by a `:core` test (core alone refuses the medium and the share). It lives
- * in `:core`'s test fixtures because both of those use them; it names the kind as the wire literal, since those
- * compile against `:core` only (cr-platform-gradle-modules step 8a).
+ * **Core's world names no application** (inbox #335). It builds with core alone (`ScopeAccessWorldCoreSliceTest`,
+ * `:core`); an application's content comes from the [WorldContent] beans of the application under test, found
+ * through `Arc` unless [contents] are handed in, and lands in [Space.content] — read through the application's typed
+ * accessors (Memories' `space.nodeId`, `space.mediaId`, … in its own test fixtures), so a `:core` test that expects
+ * Memories content does not compile.
  */
 class ScopeAccessWorld(
-    /** The role of each space's seeded share — a profile that switches READ links off seeds WRITE_ONLY ones. */
-    private val shareRole: String = "READ",
+    /** Every application's content; by default each [WorldContent] bean of the application under test. */
+    private val contents: List<WorldContent> = discovered(),
 ) {
 
     data class Space(
@@ -54,14 +52,18 @@ class ScopeAccessWorld(
         val domain: String,
         val scopeId: String,
         val ownerId: String,
-        val nodeId: String,
-        val mediaId: String,
-        val blobId: String,
-        val bucketId: String,
         val uploadId: String,
-        val shareId: String,
         val jobId: String,
-    )
+        /** The applications' content ids by name ([WorldContent.seed]). */
+        val content: Map<String, String> = emptyMap(),
+    ) {
+        /** The content id an application seeded under [name] — red, naming it, when none did. */
+        operator fun get(name: String): String = content[name]
+            ?: error("no WorldContent seeded '$name' (seeded: ${content.keys.sorted()}) — is its application under test?")
+
+        /** This space with the content id [name] replaced (a probe's invented id). */
+        fun withContent(name: String, value: String): Space = copy(content = content + (name to value))
+    }
 
     lateinit var live: Space
     lateinit var control: Space
@@ -106,37 +108,17 @@ class ScopeAccessWorld(
         return seedTenant(domain = domain) to domain
     }
 
-    /** A GROUP owned by [ownerId], with content written through the API as its owner. */
+    /** A GROUP owned by [ownerId], with core's content and then every application's, written through the API as its owner. */
     private fun seedSpace(tenant: Pair<String, String>, ownerId: String): Space {
         val scopeId = UUID.randomUUID().toString()
-        val nodeId = UUID.randomUUID().toString()
         QuarkusTransaction.requiringNew().run {
             ScopeEntity().apply {
                 id = scopeId; tenantId = tenant.first; kind = ScopeEntity.GROUP; encryptedName = B64
-            }.persist()
-            NodeEntity().apply {
-                id = nodeId; this.scopeId = scopeId; parentId = scopeId; kind = "MEMORY"
-                encryptedName = B64; slugToken = "c2x1Zw$nodeId".take(120); orderIndex = 0
-                wrappedContentKey = B64; createdAt = Instant.now()
             }.persist()
         }
         member(ownerId, tenant.first, scopeId, MembershipEntity.OWNER)
         val auth = bearer(ownerId)
 
-        val mediaId = TestIds.uuid()
-        val completed = start(auth, scopeId, mediaId)
-        val done = given().header("Authorization", auth).contentType(ContentType.JSON)
-            .body("""{"items":[{"mediaId":"$mediaId","originalUploadId":"$completed","nodeId":"$nodeId"}]}""")
-            .`when`().post("/api/scopes/$scopeId/media-batch")
-            .then().statusCode(200).body("results[0].mediaId", notNullValue()).extract()
-        val bucketId = given().header("Authorization", auth).contentType(ContentType.JSON)
-            .body("""{"bucketId":"${TestIds.uuid()}","sealedName":"$B64"}""")
-            .`when`().post("/api/scopes/$scopeId/nodes/$nodeId/buckets")
-            .then().statusCode(200).extract().path<String>("bucketId")
-        val shareId = given().header("Authorization", auth).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"$shareRole",${shareKeysJson(shareRole, nodeId, B64)},"sealedName":"$B64",${ShareWriteProof.recovery()}}""")
-            .`when`().post("/api/shares")
-            .then().statusCode(201).extract().path<String>("shareId")
         given().header("Authorization", auth).contentType(ContentType.JSON)
             .body("""{"scopeId":"$scopeId","capabilityTag":"$JOB_TAG","sealedBody":"$B64"}""")
             .`when`().post("/api/tasks/enqueue").then().statusCode(201)
@@ -145,18 +127,19 @@ class ScopeAccessWorld(
             .`when`().post("/api/tasks/claim")
             .then().statusCode(200).extract().path<String>("jobId")
 
-        return Space(
-            tenantId = tenant.first, domain = tenant.second, scopeId = scopeId, ownerId = ownerId, nodeId = nodeId,
-            mediaId = done.path("results[0].mediaId"), blobId = done.path("results[0].blobId"), bucketId = bucketId,
-            uploadId = start(auth, scopeId, TestIds.uuid()), shareId = shareId, jobId = jobId,
+        val core = Space(
+            tenantId = tenant.first, domain = tenant.second, scopeId = scopeId, ownerId = ownerId,
+            uploadId = startUpload(auth, scopeId, TestIds.uuid()), jobId = jobId,
         )
+        val content = mutableMapOf<String, String>()
+        for (c in contents) {
+            val seeded = c.seed(core, auth)
+            val clash = seeded.keys intersect content.keys
+            check(clash.isEmpty()) { "${c::class.simpleName} seeds content names another WorldContent already did: $clash" }
+            content += seeded
+        }
+        return core.copy(content = content)
     }
-
-    private fun start(auth: String, scopeId: String, mediaId: String): String =
-        given().header("Authorization", auth).contentType(ContentType.JSON)
-            .body("""{"items":[${TestBlob.SMALL.declare(B64, ownerId = mediaId)}]}""")
-            .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
-            .then().statusCode(200).extract().path("results[0].uploadId")
 
     /** An accepted, granted membership. */
     private fun member(userId: String, tenantId: String, scopeId: String, role: String) =
@@ -182,5 +165,16 @@ class ScopeAccessWorld(
 
         /** A client-originated (non-structural) capability tag — any value but grant-delivery's may be enqueued. */
         const val JOB_TAG = "9f3a1c04"
+
+        /** Every [WorldContent] bean of the application under test, in a stable order. */
+        fun discovered(): List<WorldContent> =
+            Arc.container().select(WorldContent::class.java).toList().sortedBy { it::class.java.name }
+
+        /** A declared upload session in [scopeId] for the owner id [ownerId] (a medium's, or any), as [auth]; its id. */
+        fun startUpload(auth: String, scopeId: String, ownerId: String): String =
+            given().header("Authorization", auth).contentType(ContentType.JSON)
+                .body("""{"items":[${TestBlob.SMALL.declare(B64, ownerId = ownerId)}]}""")
+                .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
+                .then().statusCode(200).extract().path("results[0].uploadId")
     }
 }

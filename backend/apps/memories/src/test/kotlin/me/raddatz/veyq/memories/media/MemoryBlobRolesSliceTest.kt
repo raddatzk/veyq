@@ -21,6 +21,8 @@ import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import me.raddatz.veyq.memories.testing.nodeId
+import me.raddatz.veyq.memories.testing.mediaId
 
 /**
  * The blob role is an open token on the wire since cr-files-application P3-S2. Core's member start takes only a role

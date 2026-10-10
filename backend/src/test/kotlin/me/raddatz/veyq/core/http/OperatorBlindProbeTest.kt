@@ -28,6 +28,12 @@ import org.junit.jupiter.api.function.Executable
 import java.io.File
 import java.util.UUID
 import java.util.jar.JarFile
+import me.raddatz.veyq.memories.testing.nodeId
+import me.raddatz.veyq.memories.testing.mediaId
+import me.raddatz.veyq.memories.testing.blobId
+import me.raddatz.veyq.memories.testing.bucketId
+import me.raddatz.veyq.memories.testing.shareId
+import me.raddatz.veyq.memories.testing.MemoriesWorldContent
 
 /**
  * The **enforcement guard** for the scope-access gate (uc.spaces.scope-access, ADR 0042): every operation in the
@@ -298,7 +304,7 @@ class OperatorBlindProbeTest {
         // A probe must fire the route its label names — else a probe could guard some other operation under this
         // one's name. The placeholder space never reaches the server; only the shape is compared.
         val routes = operations.associateBy { it.id }
-        val dummy = ScopeAccessWorld.Space(someId, "d.example.com", someId, someId, someId, someId, someId, someId, someId, someId, someId)
+        val dummy = ScopeAccessWorld.Space(someId, "d.example.com", someId, someId, someId, someId, MemoriesWorldContent.NAMES.associateWith { someId })
         probes.forEach { (id, probe) ->
             val call = probe.call(dummy)
             val route = routes[id] ?: return@forEach
@@ -373,8 +379,8 @@ class OperatorBlindProbeTest {
         val fresh = UUID.randomUUID().toString()
         return when (address) {
             Address.SCOPE -> s.copy(scopeId = fresh)
-            Address.NODE -> s.copy(nodeId = fresh)
-            Address.SHARE -> s.copy(shareId = Tokens.random()) // a share id is 43 base64url chars, not a uuid
+            Address.NODE -> s.withContent(MemoriesWorldContent.NODE_ID, fresh)
+            Address.SHARE -> s.withContent(MemoriesWorldContent.SHARE_ID, Tokens.random()) // a share id is 43 base64url chars, not a uuid
             Address.JOB -> s.copy(jobId = fresh)
             Address.TENANT -> s.copy(tenantId = fresh)
             Address.HOST -> s.copy(domain = "unclaimed-$fresh.invalid")

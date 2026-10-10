@@ -34,6 +34,8 @@ dependencies {
 
     // The test helpers every module's tests use: `:core`'s test fixtures (`core/build.gradle.kts`).
     testImplementation(testFixtures(project(":core")))
+    // Memories' content in the scope-access world the probe builds (`MemoriesWorldContent`, inbox #335).
+    testImplementation(testFixtures(project(":apps:memories")))
     testImplementation("io.quarkus:quarkus-junit")
     testImplementation("io.rest-assured:rest-assured")
     testImplementation(kotlin("test"))

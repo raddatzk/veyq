@@ -7,7 +7,7 @@ the module split adds it, `backend/apps/memories/src` — every guard sees a new
 Gradle caches, `node_modules` and `buildSrc` (the build's convention plugins) are not sources and are skipped by path
 segment.
 
-**The shared test helpers are a `java-test-fixtures` source set** (`src/testFixtures/kotlin`, today only `:core`'s):
+**The shared test helpers are a `java-test-fixtures` source set** (`src/testFixtures/kotlin`, today `:core`'s and `:apps:memories`'):
 test code, consumed as `testImplementation(testFixtures(project(":core")))` and never shipped. They are a **fixture
 root**, never a main root — a guard over production code must not read `TestFixtures`, and a guard over test code
 must — and their resources are test-side.

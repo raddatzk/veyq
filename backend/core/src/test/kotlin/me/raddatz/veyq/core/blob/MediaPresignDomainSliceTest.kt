@@ -2,13 +2,13 @@ package me.raddatz.veyq.core.blob
 
 import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.blobstore.FakePresigningBlobStore
+import me.raddatz.veyq.core.testing.FakePresignProfile
 import me.raddatz.veyq.core.tenant.TenantEntity
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
-import io.quarkus.test.junit.QuarkusTestProfile
 import io.quarkus.test.junit.TestProfile
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
@@ -35,12 +35,8 @@ import org.junit.jupiter.api.Test
  * **Split** (cr-platform-gradle-modules step 8a): the methods that need Memories in the application at runtime are `MediaPresignDomainMemoriesSliceTest` in `:apps:memories`.
  */
 @QuarkusTest
-@TestProfile(MediaPresignDomainSliceTest.FakePresignProfile::class)
+@TestProfile(FakePresignProfile::class)
 class MediaPresignDomainSliceTest {
-
-    class FakePresignProfile : QuarkusTestProfile {
-        override fun getEnabledAlternatives(): Set<Class<*>> = setOf(FakePresigningBlobStore::class.java)
-    }
 
     @Test
     fun twoTenantDomainsSignTheSameScopesUploadsForTwoDifferentOrigins() {

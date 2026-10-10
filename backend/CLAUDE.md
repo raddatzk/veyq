@@ -22,7 +22,9 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   with **no** application (`CoreAloneSliceTest`). **A test
   lives where what it exercises runs:** in `:core` if it passes with core alone, in `:apps:memories` if it needs
   Memories at runtime — every share of a `MEMORY` or a `CHAPTER` (core alone shares only a `FOLDER`, `ShareRoots`), every
-  `MEMORY`/`CHAPTER` placement, a seam's registered partition — even when its package is core's. **A `--tests`
+  `MEMORY`/`CHAPTER` placement, a seam's registered partition — even when the code it exercises is core's; its
+  package is then the application's (`me.raddatz.veyq.memories.sharing`, never `…core.sharing`:
+  `validate_backend_module_graph.py` rule (d)). **A `--tests`
   filter must name the project that holds the class** — `./gradlew :core:test --tests '*SessionPurgeTest'`,
   `./gradlew :apps:memories:test --tests '*ShareSliceTest'`: a bare `test --tests X` fails "No tests found" in every
   project without a match. **Each project with `@QuarkusTest`s holds
@@ -34,7 +36,12 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   helper on `Arc.container()` and the CDI fakes all work from there in `:core`'s, `:apps:memories`' and the root's
   tests (measured 2026-10-05, inbox #333) — as long as no jar is renamed (`archivesName`, `buildSrc`'s `veyq.module`
   says why). The fixtures need their own `META-INF/beans.xml`, carry no config file (`%test` keys go in a module's
-  `src/test/resources`), and never depend on an application.
+  `src/test/resources`), and never depend on an application. **An application's helpers another project's tests
+  need** go in that application's own fixtures, never core's: `:apps:memories`' `src/testFixtures` holds
+  `MemoriesWorldContent`, its content in core's `ScopeAccessWorld` (a `WorldContent` CDI bean, `@Unremovable`, found
+  through `Arc` in whatever application is under test), consumed by the root as
+  `testImplementation(testFixtures(project(":apps:memories")))` (inbox #335). So core's world builds with core alone,
+  and a second application covers its routes in the gate probes by contributing a `WorldContent` the same way.
 - **Run the app (`quarkusDev`) on a persistent MariaDB** (`%dev`): `docker compose -f infra/docker-compose.yml
   up -d` starts it; data survives restarts (Flyway migrates once, then "up to date"). `docker compose -f
   infra/docker-compose.yml down -v` wipes it for a fresh instance. The H2 fallback is only the test default now.
