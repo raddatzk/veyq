@@ -15,6 +15,7 @@ vi.mock('./media', async (orig) => ({
 import { defineComponent, h, type UnwrapRef } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import { useMediaTrash } from './useMediaTrash'
+import { memberMemorySource } from './source'
 import { listTrash, restoreMedia, purgeMedia, openGrid, hasDerivatives, unsealMeta, type MediaItem } from './media'
 import { realI18n, t } from '../../test/i18n'
 import { mediaItem, treeNode } from '../../test/models'
@@ -30,6 +31,7 @@ function setup() {
     defineComponent({
       setup(_, { expose }) {
         const api = useMediaTrash({
+          source: memberMemorySource({ scopeId: () => 'scope-1' }),
           scopeId: () => 'scope-1',
           node: () => treeNode(),
           memoryKey: () => KEY,

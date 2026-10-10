@@ -7,17 +7,8 @@ import { useI18n } from 'vue-i18n'
 import { useToast } from '../../shared/state/useToast'
 import { useUndo } from '../../shared/state/useUndo'
 import type { TreeNode } from '../../core/node/tree'
-import {
-  openGrid,
-  hasDerivatives,
-  unsealMeta,
-  effectiveCapturedAt,
-  listMediaPage,
-  newestCursor,
-  deleteMedia,
-  restoreMedia,
-  type MediaItem,
-} from './media'
+import { hasDerivatives, unsealMeta, effectiveCapturedAt, newestCursor, type MediaItem } from './media'
+import type { MemorySource } from './source'
 import { startMediaRevisionPolling, stopMediaRevisionPolling } from './mediaRevisionPolling'
 import { galleryDisplayAspectRatio } from './mediaGridLayout'
 import { useThumbnailPipeline } from './useThumbnailPipeline'
@@ -27,6 +18,9 @@ import { byCaptureTime } from './optimisticUpload'
 /** The reactive context MemoryDetail hands the gallery core — getters so props stay reactive, plus the reconcile
  *  settle callback (auto-date + auto-location self-heal) run after every list refresh. */
 export interface MediaGalleryLiveCtx {
+  /** The session's data source (`./source.ts`): the list, the tiles' bytes, the live poll and the delete — each only
+   *  where the source carries it (a guest's has no poll and no trash). */
+  source: MemorySource
   scopeId: () => string
   node: () => TreeNode
   memoryKey: () => Uint8Array | null
@@ -53,7 +47,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   // node (grouping key = the node id) as instant preview tiles, reconciled into the real thumbnail by mediaId.
   // `donorPreviewFor` feeds the thumbnail pipeline the preview to hand off.
   const listedMediaIds = computed(() => new Set(items.value.map((it) => it.mediaId)))
-  const { optimisticTiles, donorPreviewFor } = useOptimisticTiles(computed(() => ctx.node().id), listedMediaIds)
+  const { optimisticTiles, donorPreviewFor } = useOptimisticTiles(computed(() => ctx.source.batchKey(ctx.node().id)), listedMediaIds)
   // The gallery thumbnail pipeline (cr-0150) — decrypt-per-tile → object-URL map, the single revoke owner of every
   // thumbnail (incl. a donated optimistic preview). Decrypt = the grid tier under K_mem (operator-blind).
   const pipeline = useThumbnailPipeline<MediaItem>({
@@ -61,7 +55,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     isDerivable: hasDerivatives,
     decryptTile: (m) => {
       const key = ctx.memoryKey()
-      return key ? openGrid(ctx.scopeId(), key, m) : Promise.resolve(null)
+      return key ? ctx.source.loaders.grid(m, key) : Promise.resolve(null)
     },
     donorPreviewFor,
   })
@@ -141,12 +135,13 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   /** Trash the current lightbox photo: optimistic grid/lightbox removal, the server soft-delete, and a transient
    *  undo-toast. The live poll would also drop it; the optimistic removal is instant. */
   async function onDeleteFromLightbox(payload: { mediaId: string }) {
-    if (!ctx.memoryKey()) return
+    const del = ctx.source.deleteMedia
+    if (!ctx.memoryKey() || del?.reach !== 'any') return // only a trash has an undo; a guest's purge is asked first
     removeFromGrid(payload.mediaId)
     undo.arm({ mediaId: payload.mediaId })
     toast.showUndo({ summary: t('memory.trash.movedToTrash'), onUndo: onUndoDelete, life: 6000 })
     try {
-      await deleteMedia(ctx.scopeId(), payload.mediaId)
+      await del.trash(payload.mediaId)
     } catch {
       undo.cancel() // the trash failed → drop the stale undo-toast, re-list to restore the true state
       toast.dismissUndo()
@@ -165,10 +160,11 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   /** Undo the just-trashed media: restore it server-side, then re-list so it re-appears in the grid. */
   async function onUndoDelete() {
     const u = undo.cancel()
-    if (!u) return
+    const del = ctx.source.deleteMedia
+    if (!u || del?.reach !== 'any') return
     pendingDelete.delete(u.mediaId) // cr-0111: a genuine restore lifts the tombstone so the media can re-list
     try {
-      await restoreMedia(ctx.scopeId(), u.mediaId)
+      await del.restore(u.mediaId)
     } finally {
       void load()
     }
@@ -228,11 +224,11 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     }
     status.value = items.value.length ? 'ready' : 'loading'
     try {
-      const page = await listMediaPage(ctx.scopeId(), nodeId) // full list — no ETag/cursor, so never a 304
-      if (ctx.node().id !== nodeId || page.notModified) return // navigated away while listing / (unreachable) 304
+      const page = await ctx.source.listMedia(nodeId) // the full list
+      if (ctx.node().id !== nodeId) return // navigated away while listing
       mergeItems(page.items)
-      mediaRevision.value = page.mediaRevision // cache the ETag + delete gate for the live poll
-      deleteRevision.value = page.deleteRevision
+      mediaRevision.value = page.revision?.media ?? null // cache the ETag + delete gate for the live poll (none: no poll)
+      deleteRevision.value = page.revision?.delete ?? 0
       status.value = 'ready'
       await pipeline.decrypt(page.items, () => ctx.node().id === nodeId)
       if (ctx.node().id === nodeId) await ctx.onSettle() // settle: auto-date, then auto-location (RMW-safe)
@@ -249,12 +245,13 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   async function pollMedia(signal?: AbortSignal) {
     const key = ctx.memoryKey()
     const nodeId = ctx.node().id
-    if (!key || mediaRevision.value === null) return // not an open, loaded gallery
+    const poll = ctx.source.poll
+    if (!poll || !key || mediaRevision.value === null) return // no live poll here / not an open, loaded gallery
     try {
-      const page = await listMediaPage(ctx.scopeId(), nodeId, {
-        ifNoneMatch: String(mediaRevision.value),
+      const page = await poll(nodeId, {
+        mediaRevision: mediaRevision.value,
         since: newestCursor(items.value),
-        sinceDelete: deleteRevision.value,
+        deleteRevision: deleteRevision.value,
       })
       if (signal?.aborted || ctx.node().id !== nodeId || page.notModified) return // stopped / navigated away / nothing changed (304)
       upsertItems(page.items, page.mediaIds)
@@ -307,7 +304,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
       toast.dismissUndo()
       stopMediaRevisionPolling()
       void load({ reset: true }).then(() => {
-        if (ctx.memoryKey()) startMediaRevisionPolling((signal) => pollMedia(signal))
+        if (ctx.memoryKey() && ctx.source.poll) startMediaRevisionPolling((signal) => pollMedia(signal))
       })
     },
     { immediate: true },
@@ -335,5 +332,6 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     load,
     pollMedia,
     liftTombstone,
+    removeMedia: removeFromGrid,
   }
 }

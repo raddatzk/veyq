@@ -15,7 +15,7 @@
 // owns. Every right defaults to false; an unknown mode, role or kind grants nothing. The role matrix each one encodes is
 // written down in its `docs/apps/<application>.md` (ADR 0080 decision 6). A capability is the matrix's half; the other
 // half — that the data source implements the operation at all — is the application's source (Files' `source.ts` since
-// inbox #401 S3; Memories' arrives with S4): a control is shown only where both say yes.
+// inbox #401 S3, Memories' `source.ts` since S4): a control is shown only where both say yes.
 //
 // Core imports no application here (`validate_web_core_imports_no_applications.py`).
 import type { RouteLocationRaw } from 'vue-router'

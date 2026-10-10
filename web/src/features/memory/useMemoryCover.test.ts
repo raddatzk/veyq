@@ -19,6 +19,7 @@ vi.mock('./memoryCover', () => ({
 import { deleteCoverBlob, uploadCoverBlob, type BlobRef } from './media'
 import { setMemoryCover, unsealMemoryCover, type MemoryCover } from './memoryCover'
 import { useMemoryCover } from './useMemoryCover'
+import { memberMemorySource } from './source'
 import { MetaConflictError, MetaUnreadableError } from '../../core/node/sealedMetaWrite'
 import { i18n } from '../../i18n'
 import type { TreeNode } from '../../core/node/tree'
@@ -36,6 +37,8 @@ function harness(onMetaUpdated = vi.fn()) {
             scopeId: () => 's',
             node: () => ({ id: 'n', wrappedMeta: null, metaVersion: 4 }) as TreeNode,
             memoryKey: () => new Uint8Array(32),
+            loaders: memberMemorySource({ scopeId: () => 's' }).loaders,
+            write: () => memberMemorySource({ scopeId: () => 's' }).cover ?? null,
             thumbs: ref(new Map()),
             onMetaUpdated,
             noSpaceMessage: () => 'No space left.',

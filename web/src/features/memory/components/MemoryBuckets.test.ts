@@ -51,7 +51,9 @@ import { epochsOf } from '../../spaces/epochsTestUtil'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 import { realI18n } from '../../../test/i18n'
-import { mediaItem, treeNode } from '../../../test/models'
+import { mediaItem, treeNode, memberMemoryCaps } from '../../../test/models'
+import { computed } from 'vue'
+import { MEMORY_VIEW, memberMemorySource } from '../source'
 
 // Stub the PrimeVue Select + Menu (not under test) and MediaGrid (renders the tile slot per item so the tile chrome
 // — checkbox + 3-dot — is exercised).
@@ -72,10 +74,15 @@ const media = (id: string, ownerKey: string, bucketId: string): MediaItem => med
 const bucket = (bucketId: string, ownerKey: string, mediaCount: number, sealedName?: string, isPrimary = true, parentBucketId?: string): BucketItem =>
   ({ bucketId, ownerKey, isPrimary, mediaCount, sealedName, parentBucketId }) as BucketItem
 
+/** The member's Memory view the organizer reads its doors from (`useMemoryView`), as `MemoryDetail` provides it. */
+const memberView = (scopeId: string) => ({
+  [MEMORY_VIEW as symbol]: { source: memberMemorySource({ scopeId: () => scopeId }), caps: computed(() => memberMemoryCaps()) },
+})
+
 function mountBuckets(mediaItems: MediaItem[]) {
   return mount(MemoryBuckets, {
     props: { scopeId: 's-1', nodeId: 'n-1', memoryKey: new Uint8Array(32), media: mediaItems, thumbs: new Map() },
-    global: { plugins: [realI18n()], stubs: { Select: SelectStub, Menu: MenuStub, MediaGrid: MediaGridStub } },
+    global: { plugins: [realI18n()], stubs: { Select: SelectStub, Menu: MenuStub, MediaGrid: MediaGridStub }, provide: memberView('s-1') },
   })
 }
 
@@ -113,7 +120,7 @@ describe('MemoryBuckets — a guest named above this node (cr-node-key-hierarchy
     try {
       mount(MemoryBuckets, {
         props: { scopeId: SCOPE, nodeId: MEMORY, memoryKey, media: [media('m3', 'share:x', 'b-share')], thumbs: new Map() },
-        global: { plugins: [realI18n()], stubs: { Select: SelectStub, Menu: MenuStub, MediaGrid: MediaGridStub } },
+        global: { plugins: [realI18n()], stubs: { Select: SelectStub, Menu: MenuStub, MediaGrid: MediaGridStub }, provide: memberView(SCOPE) },
       })
       await flushPromises()
       const [, , , row, above] = vi.mocked(openBucketName).mock.calls[0]

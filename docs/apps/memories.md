@@ -139,7 +139,13 @@ At a folder level (Memories' section): a member creates a Memory (not during a p
 identity folder) and pins; a `READ_WRITE` guest of a folder link creates a Memory there; every role that reads opens
 one. A share right also needs the kind's descriptor to bring a share dialog (`targetOf`, core's). These are the matrix
 half; a right shows only where the session's data source also implements it (ADR 0079), so the guest's columns are the
-most a guest page can ever offer.
+most a guest page can ever offer. Memories' source is `web/src/features/memory/source.ts` (inbox #401 S4): the
+member's wraps the scope's calls; the guest's reads the link's media listing (each node's own media from the subtree's),
+opens every tier through the share presign, and — for `READ_WRITE` only — uploads into the node on screen, naming it
+(the root names none) and sealing under that node's key from the chain, and purges what this device sent
+(`ownShareMedia.ts`). It has no door for the media trash, the node's date, place and cover, a medium's meta, the item
+marks, the organizer, the live poll or the heavy EXIF; a `WRITE_ONLY` link uploads and deletes through its drop page,
+never this source.
 
 **The guest's folder page (since inbox #401 S2)** renders this section as a member's: `MemoriesSection` handed a
 guest's access and tree shows the Memories of a shared folder as MemoryCards, each date and place unsealed under the
@@ -147,7 +153,8 @@ node's key the link's chain opened, each cover through the link's own reads (`gu
 thumbnail from `listShareMedia`, read once and only when a cover needs it; an uploaded cover blob through
 `resolveShareBlob`, which serves a node's cover blob below the share), the map over the opened subtree — no heart, no
 member store (`treeStore`, `activeSpace`, `coverStore`, `favoritesStore`) read. A Memory opened from there is still
-Memories' guest body, embedded (`MemoryShareBody`, until S5). A link's guest names itself through core's one naming
+Memories' guest body, embedded (`MemoryShareBody`, until S5), though the member's detail already renders for a guest
+over that source (its tests mount it under core's folder page). A link's guest names itself through core's one naming
 component (`core/sharing/GuestNaming.vue`): on a Memory link the pre-screen's form, and "Not you?" — the shell's line
 for a contributor, the drop page's own for an uploader — which asks, then forgets the device's session.
 

@@ -310,9 +310,16 @@ on their own.
   page renders a non-folder node's `detail` for the guest. `GuestAccess` gained the link's fragment key and the shell's
   re-resolve (`reload`), what a guest's write needs. One transitional seam until S5: a claim made `embedBelowFolder`
   (Memories') is still embedded below a folder instead of the kind's detail; Files' drop-box claim is the `WRITE_ONLY`
-  page alone. **Open, in this order, each green before the next:** S4 Memories' data source, the member's and the
-  guest's; S5 `MemoryDetail` for guests (`MemoryShareBody` reduced to the drop; a contributor uploads into the chapter it
-  navigated to; `embedBelowFolder` removed).
+  page alone. **Built** (S4): Memories' data source (`web/src/features/memory/source.ts`): `MemoryDetail`, its
+  composables, its lightbox's loaders and the contributions organizer read and write only through it, the member's
+  wrapping the calls they made before unchanged and the guest's the link's (its media listing, the share presign, the
+  upload naming the node on screen under that node's key, the delete of what the device sent); every write and
+  member-only read is an optional door the guest's lacks, and the detail shows a right where the matrix grants it AND
+  the source carries the door (`sourceCapabilities`), the organizer taking the source by injection and refusing to
+  mount without its door. `MemoryDetailHost` picks the source by `access.mode` and reads nothing of the member's world
+  for a guest, so the detail already renders for a guest under core's folder page — mounted in its tests, not yet in
+  production. **Open:** S5 `MemoryDetail` for guests (`MemoryShareBody` reduced to the drop; `embedBelowFolder`
+  removed; the lightbox's one `readonly` split per capability).
 - **Guards move with the code, and the build is one of them.** On the backend, core → application is the
   compiler's (no edge, so no import) and every other direction is `validate_backend_module_graph.py`'s — including
   application → application, held between Memories and Files and bitten with a forged third application; inside core,

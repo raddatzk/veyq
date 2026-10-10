@@ -8,7 +8,6 @@ import { computed, ref, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   unsealMemoryLocation,
-  setMemoryLocation,
   computeMedoid,
   mediaGpsPoints,
   sameMemoryLocation,
@@ -17,12 +16,12 @@ import {
   type MemoryLocation,
 } from './memoryLocation'
 import { nodeMetaState } from './nodeMeta'
-import { writeNodeMeta } from './nodeMetaWrite'
 import { useMetaWriteFeedback, type NodeMetaUpdate } from './useMetaWriteFeedback'
 import { reverseGeocode, defaultLevel, nameAtLevel } from './geocode'
 import { useMapConfig, setMapsConsent } from '../../shared/state/useMapConfig'
 import type { MediaItem } from './media'
 import type { TreeNode } from '../../core/node/tree'
+import type { NodeMetaDoor } from './source'
 
 /** The reactive context MemoryDetail hands the location slice — getters so props stay reactive, plus the live
  *  media list (the medoid materializes from it) and the host's `metaUpdated` emit. */
@@ -30,6 +29,9 @@ export interface MemoryLocationContext {
   scopeId: () => string
   node: () => TreeNode
   memoryKey: () => Uint8Array | null
+  /** The node-meta writes this view may make — the source's door where the capabilities grant `editMeta`, else null:
+   *  then the save and the `auto` self-heal write nothing (a guest, a scope pending deletion). */
+  write: () => NodeMetaDoor | null
   items: Ref<MediaItem[]>
   onMetaUpdated: (payload: NodeMetaUpdate) => void
 }
@@ -80,10 +82,11 @@ export function useMemoryLocation(ctx: MemoryLocationContext) {
   /** Save (or, for null, remove) the location: read-modify-write under K_mem — the date is preserved either way. */
   async function onLocationSave(location: MemoryLocation | null) {
     const key = ctx.memoryKey()
-    if (!key) return
+    const write = ctx.write()
+    if (!key || !write) return
     const nodeId = ctx.node().id
     try {
-      const state = await setMemoryLocation(ctx.scopeId(), nodeId, key, location, nodeMetaState(ctx.node()))
+      const state = await write.setLocation(nodeId, key, location, nodeMetaState(ctx.node()))
       ctx.onMetaUpdated({ nodeId, ...state })
     } catch (e) {
       // a peer's place written meanwhile re-opens the editor on it (ADR 0077); other failures stay best-effort
@@ -111,12 +114,13 @@ export function useMemoryLocation(ctx: MemoryLocationContext) {
    *  decided on the server's current blob, so a place a peer pinned meanwhile is not moved (ADR 0077). */
   async function reconcileAutoLocation() {
     const key = ctx.memoryKey()
-    if (!key) return
+    const write = ctx.write()
+    if (!key || !write) return
     const point = computeMedoid(mediaGpsPoints(ctx.scopeId(), ctx.items.value, key))
     if (!point) return // no GPS yet (e.g. an `auto` pre-armed at creation) — nothing to derive from
     const nodeId = ctx.node().id
     try {
-      const { state } = await writeNodeMeta(ctx.scopeId(), nodeId, key, nodeMetaState(ctx.node()), async (meta) => {
+      const { state } = await write.write(nodeId, key, nodeMetaState(ctx.node()), async (meta) => {
         const stored = normalizeLocation(meta.location)
         if (!stored || stored.derivedMode !== 'auto') return null // no location / a `fixed` place is the user's
         const next = await nextAutoLocation(stored, point)

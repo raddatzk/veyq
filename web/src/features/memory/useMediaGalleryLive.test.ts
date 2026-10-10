@@ -33,6 +33,7 @@ vi.mock('../../shared/state/useToast', () => ({
 import { defineComponent, h, type UnwrapRef } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import { useMediaGalleryLive } from './useMediaGalleryLive'
+import { memberMemorySource } from './source'
 import {
   listMediaPage,
   deleteMedia,
@@ -72,6 +73,7 @@ function setup() {
     defineComponent({
       setup(_, { expose }) {
         const api = useMediaGalleryLive({
+          source: memberMemorySource({ scopeId: () => 'scope-1' }),
           scopeId: () => 'scope-1',
           node: () => treeNode(),
           memoryKey: () => KEY,

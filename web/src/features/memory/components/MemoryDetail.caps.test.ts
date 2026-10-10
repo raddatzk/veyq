@@ -14,6 +14,7 @@ import exifr from 'exifr'
 import PrimeVue from 'primevue/config'
 import * as v1 from '@veyq/crypto/v1'
 import MemoryDetail from './MemoryDetail.vue'
+import { memberMemorySource } from '../source'
 import { addMedia, type MediaDeriver } from '../media'
 import { NO_MEMORY_CAPABILITIES, type MemoryCapabilities } from '../capabilities'
 import { MEMORY_KIND, CHAPTER_KIND } from '../kinds'
@@ -62,7 +63,7 @@ async function seedDated(memoryKey: Uint8Array) {
 
 async function mountDetail(caps: MemoryCapabilities, kind = MEMORY_KIND) {
   const w = mount(MemoryDetail, {
-    props: { node: node(kind), scopeId: SCOPE_ID, memoryKey: v1.randomBytes(32), scopeKey: v1.randomBytes(32), personalScope: false, favorite: false, chapters: [chapter], caps },
+    props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(kind), scopeId: SCOPE_ID, memoryKey: v1.randomBytes(32), scopeKey: v1.randomBytes(32), personalScope: false, favorite: false, chapters: [chapter], caps },
     global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
   })
   await flushPromises()
@@ -106,7 +107,7 @@ describe('MemoryDetail follows caps', () => {
     const memoryKey = v1.randomBytes(32)
     await seedDated(memoryKey)
     mount(MemoryDetail, {
-      props: { node: node(), scopeId: SCOPE_ID, memoryKey, favorite: false, caps: { ...memberMemoryCaps(), editMeta: false } },
+      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(), scopeId: SCOPE_ID, memoryKey, favorite: false, caps: { ...memberMemoryCaps(), editMeta: false } },
       global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
     })
     await flushPromises()
@@ -114,12 +115,40 @@ describe('MemoryDetail follows caps', () => {
     expect(updateNode).not.toHaveBeenCalled()
     // control: the same Memory with editMeta self-heals its date on open
     mount(MemoryDetail, {
-      props: { node: node(), scopeId: SCOPE_ID, memoryKey, favorite: false, caps: memberMemoryCaps() },
+      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(), scopeId: SCOPE_ID, memoryKey, favorite: false, caps: memberMemoryCaps() },
       global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
     })
     await flushPromises()
     await flushPromises()
     expect(updateNode).toHaveBeenCalled()
+  })
+
+  // The cover's save writes only through the door the capabilities open (inbox #401 S4): the lightbox's "set as cover" is
+  // still offered during a pending deletion (its one `readonly` gate is S5's to split), and without `setCover` what it
+  // picks must reach no write.
+  it('a cover picked in the lightbox is written only with setCover', async () => {
+    const memoryKey = v1.randomBytes(32)
+    await seedDated(memoryKey)
+    const LightboxStub = { emits: ['setCover'], template: `<button class="stub-set-cover" @click="$emit('setCover', { mediaId: 'x' })" />` }
+    const CoverStub = {
+      emits: ['save', 'close'],
+      template: `<button class="stub-cover-save" @click="$emit('save', { kind: 'media', mediaId: 'x', crop: { x: 0, y: 0, width: 1, height: 1 } })" />`,
+    }
+    for (const setCover of [false, true]) {
+      updateNode.mockClear()
+      const w = mount(MemoryDetail, {
+        props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(), scopeId: SCOPE_ID, memoryKey, favorite: false, caps: { ...memberMemoryCaps(), editMeta: false, setCover } },
+        global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { MediaLightbox: LightboxStub, MemoryCoverDialog: CoverStub } },
+      })
+      await vi.waitFor(() => expect(w.find('[data-media-id] button').exists()).toBe(true))
+      await w.find('[data-media-id] button').trigger('click')
+      await w.find('.stub-set-cover').trigger('click')
+      await flushPromises()
+      if (w.find('.stub-cover-save').exists()) await w.find('.stub-cover-save').trigger('click')
+      await flushPromises()
+      expect(updateNode.mock.calls.length > 0, `setCover ${setCover}`).toBe(setCover)
+      w.unmount()
+    }
   })
 
   it('a pending deletion: share and the pin stay, every write goes', async () => {
