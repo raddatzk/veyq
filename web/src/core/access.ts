@@ -7,7 +7,7 @@
 //   role, the resolved head, the password token, the naming flow). It carries no position: what is possible HERE is a
 //   capability function's answer for a node (below).
 // - `TreeSource` is the tree as that session reads it: the member's decrypted scope tree (`treeStore`) or the guest's
-//   opened subtree (`walkSubtree`, from S2). Navigation always goes through `linkTo`, so a guest's link keeps its `#k=`
+//   opened subtree (`core/sharing/guestAccess.ts`, over `walkSubtree`). Navigation always goes through `linkTo`, so a guest's link keeps its `#k=`
 //   fragment (web/CLAUDE.md, the breadcrumb trap) and a member's stays a slug path in the fragment.
 //
 // **Capabilities are the applications'**, pure and FAIL-CLOSED: `memoryCapabilities` (features/memory/capabilities.ts),
@@ -47,7 +47,8 @@ export interface MemberAccess {
   readonly uploaderLinks: boolean
 }
 
-/** A guest of a public share link. Built by the share page after its gates (S2); no member state is reachable from it. */
+/** A guest of a public share link. Built by the share page after its gates (`guestAccess`, core/sharing/guestAccess.ts);
+ *  no member state is reachable from it. */
 export interface GuestAccess {
   readonly mode: 'guest'
   readonly shareId: string

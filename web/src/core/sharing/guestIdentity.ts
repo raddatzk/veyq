@@ -3,6 +3,7 @@
 // the session the guest's device keeps. Core's, because a folder link's guest names itself exactly as a Memory link's
 // does; an application adds only what is its own (Memories: the WRITE_ONLY uploader, whose name is sealed under a key
 // of its own wrapped to the drop key — ADR 0031 point 7 — and which therefore stays in `features/memory/share.ts`).
+import { computed, ref, type ComputedRef } from 'vue'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64url } from '@veyq/crypto/base64'
 import { publicSharesApi } from '../../api/client'
@@ -14,8 +15,10 @@ import { openShareRoot } from './shareTree'
 export const identityNameContext = (scopeId: string, shareId: string, identityId: string) =>
   ({ purpose: 'share-identity-name', scopeId, shareId, identityId }) as const
 
-/** What creating an identity yields: the client-minted id and the capability token every guest write presents. */
-export type GuestIdentity = { identityId: string; contributorToken: string }
+/** What creating an identity yields: the client-minted id and the capability token every guest write presents — and,
+ *  once saved, the name the guest gave (`displayName`, kept on its device only: the server holds it sealed, and the
+ *  page's "Not you?" line says whose session it is). A session saved before names were kept carries none. */
+export type GuestIdentity = { identityId: string; contributorToken: string; displayName?: string }
 
 /**
  * Name yourself on a READ_WRITE link (operator-blind): the display name sealed under the shared root's key `rootKey`,
@@ -50,7 +53,7 @@ export async function createGuestIdentity(
 export async function nameShareGuest(
   head: PublicShareHead, { name, fragmentKey, pwToken }: { name: string; fragmentKey: string; pwToken?: string },
 ): Promise<GuestIdentity> {
-  const identity = await createGuestIdentity(head, openShareRoot(head).key, { name, fragmentKey, pwToken })
+  const identity: GuestIdentity = { ...(await createGuestIdentity(head, openShareRoot(head).key, { name, fragmentKey, pwToken })), displayName: name }
   saveGuestSession(head.shareId, identity)
   return identity
 }
@@ -58,6 +61,9 @@ export async function nameShareGuest(
 // --- the guest's session on its device -------------------------------------------------------------------------------
 
 const sessionKey = (shareId: string) => `veyq:share-contributor:${shareId}`
+// Bumped on every save and forget, so {@link useGuestSession} re-reads the store: whichever body or section of the page
+// named the guest, or forgot it ("Not you?"), every other one sees it at once — no copy of the session to fall stale.
+const sessionVersion = ref(0)
 
 /** The guest's saved session for `shareId` — its identity and token, plus whatever an application keeps beside them
  *  (`S`; Memories' uploader keeps its `K_up`) — or null when there is none or the store is unreadable. One per link,
@@ -74,15 +80,26 @@ export function loadGuestSession<S extends GuestIdentity = GuestIdentity>(shareI
 /** Save the guest's session for `shareId`. Throws when the store refuses the write, as the caller's naming step reports. */
 export function saveGuestSession(shareId: string, session: GuestIdentity): void {
   localStorage.setItem(sessionKey(shareId), JSON.stringify(session))
+  sessionVersion.value++
 }
 
-/** Forget the guest's session for `shareId` on this device (the drop-box page's "Not you?"): the next visitor names
- *  itself afresh. The identity, and whatever it left on the server, stay as they are. A store that refuses is ignored —
- *  the caller drops the session from its own state either way. */
+/** The guest's saved session for `shareId`, reactive: it changes when any part of the page saves or forgets it
+ *  ({@link saveGuestSession}, {@link forgetGuestSession}). Read-only — write through those two. */
+export function useGuestSession<S extends GuestIdentity = GuestIdentity>(shareId: string): ComputedRef<S | null> {
+  return computed(() => {
+    void sessionVersion.value
+    return loadGuestSession<S>(shareId)
+  })
+}
+
+/** Forget the guest's session for `shareId` on this device (core's "Not you?", `GuestNaming.vue`): the next visitor
+ *  names itself afresh. The identity, and whatever it left on the server, stay as they are. A store that refuses is
+ *  ignored — every reader drops the session either way. */
 export function forgetGuestSession(shareId: string): void {
   try {
     localStorage.removeItem(sessionKey(shareId))
   } catch {
     /* unreadable store: nothing was kept there either */
   }
+  sessionVersion.value++
 }

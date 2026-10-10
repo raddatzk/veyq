@@ -81,6 +81,19 @@ export function collectLocatedPins(
   tree: TreeNode[],
   rootFolderId: string | null,
 ): LocatedPin[] {
+  return collectLocatedPinsBy(scopeId, (id) => nodeContentKey(scopeId, epochs, tree, id), tree, rootFolderId)
+}
+
+/**
+ * {@link collectLocatedPins} with each node's key from `keyOf` — the member's chain from `K_SC`, or a share guest's
+ * opened subtree (`TreeSource.keyOf`, inbox #401 S2: a guest's map is the member's, over what its link opens).
+ */
+export function collectLocatedPinsBy(
+  scopeId: string,
+  keyOf: (id: string) => Uint8Array | null,
+  tree: readonly TreeNode[],
+  rootFolderId: string | null,
+): LocatedPin[] {
   const byId = new Map(tree.map((n) => [n.id, n]))
   const pins: LocatedPin[] = []
   for (const node of tree) {
@@ -91,7 +104,7 @@ export function collectLocatedPins(
     let location: MemoryLocation | null
     let date: MemoryDate | null = null
     try {
-      const nodeKey = nodeContentKey(scopeId, epochs, tree, node.id)
+      const nodeKey = keyOf(node.id)
       if (!nodeKey) continue // unchainable key — skip, never break the map
       location = unsealMemoryLocation(scopeId, nodeKey, node)
       date = unsealMemoryDate(scopeId, nodeKey, node) // same K_mem, same blob — free alongside the location
