@@ -1,10 +1,12 @@
 // @vitest-environment happy-dom
-// Core's folder page of a public share renders the SHARE SECTIONS kinds registered (cr-files-application F2): a kind
-// with a `shareSection` has its children rendered by that component, not as cards; the section gets the folder on
-// screen, those children with the chain's keys and names, whether the link writes, and `requestGuest` — the body's own
-// naming flow. Harness as `FolderShareBody.test.ts`: a stubbed registry (a fresh `createRegistry()` behind a Proxy),
-// real crypto for the subtree, a stub section that records its props.
+// Core's folder page of a public share renders the SHARE SECTIONS kinds registered (cr-files-application F2; until
+// inbox #401 S3 retires them): the page is core's level view (S2), and a kind with a `shareSection` has its level
+// section drawn by that component instead, in the level's host slot; the section gets the folder on screen, those
+// children with the chain's keys and names, whether the link writes, and `requestGuest` — the page's one naming flow,
+// the shell's (`GuestAccess.requestGuest`). Harness: a stubbed registry (a fresh `createRegistry()` behind a Proxy), real
+// crypto for the subtree, a stub share section that records its props, a stub level section that lists its nodes.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { guestAccessFor } from '../../test/models'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h, reactive } from 'vue'
 import * as v1 from '@veyq/crypto/v1'
@@ -26,15 +28,11 @@ const nav = vi.hoisted(() => ({ route: null as null | { query: Record<string, st
 vi.mock('vue-router', () => ({ useRoute: () => nav.route, useRouter: () => ({ push: vi.fn(), resolve: () => ({ href: '/s/stub' }) }) }))
 
 import FolderShareBody from './FolderShareBody.vue'
-import ShareNameDialog from './ShareNameDialog.vue'
 import { createRegistry, type ShareSectionProps } from '../applications/registry'
 import { FOLDER_KIND } from '../node/kind'
 import { sealName, wrapContentKey } from '../node/tree'
-import { saveGuestSession, type GuestIdentity } from './guestIdentity'
 import type { PublicShareHead } from './resolvePublicShare'
 import { ShareRole, type PublicShare, type ShareNode } from '../../api/generated/sharing'
-import { publicSharesApi } from '../../api/client'
-import { stubApi } from '../../test/apiMock'
 import { realI18n } from '../../test/i18n'
 
 const SCOPE_ID = '55555555-5555-4555-8555-555555555555'
@@ -78,6 +76,13 @@ const StubSection = defineComponent({
   },
 })
 
+/** A kind's level section (what a member sees): lists its nodes. */
+const LevelStub = defineComponent({
+  name: 'LevelStub',
+  props: ['folder', 'nodes', 'epochs', 'access', 'tree'],
+  setup: (p) => () => h('div', { class: 'level-stub' }, (p.nodes as { id: string }[]).map((n) => n.id).join(',')),
+})
+
 const stubs = {
   Breadcrumb: { props: ['home', 'model'], template: '<nav />' },
   Dialog: { props: ['visible', 'header'], template: '<div v-if="visible" class="dialog-stub"><h1 class="header">{{ header }}</h1><slot /></div>' },
@@ -86,19 +91,19 @@ const stubs = {
   Message: { template: '<p class="message"><slot /></p>' },
 }
 
-function mountBody(h0: PublicShareHead) {
+function mountBody(h0: PublicShareHead, access = guestAccessFor(h0)) {
   return mount(FolderShareBody, {
-    props: { shareId: SHARE_ID, fragmentKey: b64url(K_SHARE), pwToken: undefined, head: h0, reload: async () => {} },
+    props: { shareId: SHARE_ID, fragmentKey: b64url(K_SHARE), pwToken: undefined, head: h0, reload: async () => {}, access },
     global: { plugins: [realI18n()], stubs },
   })
 }
-const cardNames = (w: ReturnType<typeof mountBody>) => w.findAll('.veyq-node-card:not(.veyq-node-card-create) strong').map((c) => c.text())
+const cardNames = (w: ReturnType<typeof mountBody>) => w.findAll('.veyq-folder-card:not(.veyq-folder-overview-card) strong').map((c) => c.text())
 
 beforeEach(() => {
   localStorage.clear()
   seen.props = null
   const r = createRegistry()
-  r.registerKind({ kind: DOC_KIND, icon: 'pi pi-file', shareable: false, shareSection: { order: 20, component: StubSection } })
+  r.registerKind({ kind: DOC_KIND, icon: 'pi pi-file', shareable: false, section: { order: 20, component: LevelStub }, shareSection: { order: 20, component: StubSection } })
   holder.reg = r
   nav.route = reactive({ query: {} as Record<string, string>, hash: `#k=${b64url(K_SHARE)}` })
 })
@@ -107,8 +112,9 @@ describe('FolderShareBody renders the share sections of the registered kinds', (
   it("hands a section its kind's children at the folder on screen — never as cards — with their keys and names", async () => {
     const w = mountBody(head(ShareRole.Read))
     await flushPromises()
-    expect(cardNames(w), 'the DOC child is the section\'s, not a card').toEqual(['Briefe'])
+    expect(cardNames(w), 'the DOC child is the section\'s, not a folder card').toEqual(['Briefe'])
     expect(w.find('.section-stub').text()).toBe(DOC)
+    expect(w.find('.level-stub').exists(), 'drawn by the share section, not the level section').toBe(false)
     const p = seen.props!
     expect(p.folderId).toBe(ROOT)
     expect(p.canWrite).toBe(false)
@@ -126,50 +132,26 @@ describe('FolderShareBody renders the share sections of the registered kinds', (
     expect(cardNames(w)).toEqual([])
   })
 
-  it("a kind without a share section stays a card (the control)", async () => {
+  it('a kind without a share section is drawn by its level section, as for a member (the control)', async () => {
     const r = createRegistry()
-    r.registerKind({ kind: DOC_KIND, icon: 'pi pi-file', shareable: false })
+    r.registerKind({ kind: DOC_KIND, icon: 'pi pi-file', shareable: false, section: { order: 20, component: LevelStub } })
     holder.reg = r
     const w = mountBody(head(ShareRole.Read))
     await flushPromises()
-    expect(cardNames(w)).toEqual(['Briefe', 'Rezept.pdf'])
+    expect(cardNames(w)).toEqual(['Briefe'])
+    expect(w.find('.level-stub').text()).toBe(DOC)
     expect(w.find('.section-stub').exists()).toBe(false)
   })
 })
 
-describe('FolderShareBody: requestGuest is the body\'s naming flow', () => {
-  it('a returning guest gets its session without a dialog', async () => {
-    saveGuestSession(SHARE_ID, { identityId: 'id-0', contributorToken: 'tok-0' })
-    const w = mountBody(head(ShareRole.ReadWrite))
+describe("FolderShareBody: a share section's requestGuest is the page's one naming flow", () => {
+  it("hands the section the shell's flow (GuestAccess.requestGuest) — no dialog of the body's own", async () => {
+    const requestGuest = vi.fn(async () => ({ identityId: 'id-0', contributorToken: 'tok-0' }))
+    const h0 = head(ShareRole.ReadWrite)
+    const w = mountBody(h0, guestAccessFor(h0, { requestGuest }))
     await flushPromises()
     await expect(seen.props!.requestGuest()).resolves.toEqual({ identityId: 'id-0', contributorToken: 'tok-0' })
-    expect(w.findComponent(ShareNameDialog).exists()).toBe(false)
-  })
-
-  it('a new visitor names itself first; the section then gets the identity, and the new-folder dialog does not open', async () => {
-    const api = stubApi(publicSharesApi, { createShareIdentity: { identityId: 'x', contributorToken: 'tok-1' } })
-    api.createShareIdentity.mockImplementation(async (r) => ({ identityId: r.createShareIdentityRequest.identityId, contributorToken: 'tok-1' }))
-    const w = mountBody(head(ShareRole.ReadWrite))
-    await flushPromises()
-    let got: GuestIdentity | null | undefined
-    void seen.props!.requestGuest().then((g) => (got = g))
-    await flushPromises()
-    await w.find('.dialog-stub .name-input').setValue('Oma')
-    await w.find('.dialog-stub form').trigger('submit')
-    await flushPromises()
-    expect(got?.contributorToken).toBe('tok-1')
-    expect(w.findComponent(ShareNameDialog).exists(), 'nothing else opens after the name').toBe(false)
-  })
-
-  it('a visitor who closes the name dialog gets null', async () => {
-    const w = mountBody(head(ShareRole.ReadWrite))
-    await flushPromises()
-    let got: GuestIdentity | null | undefined
-    void seen.props!.requestGuest().then((g) => (got = g))
-    await flushPromises()
-    w.findComponent(ShareNameDialog).vm.$emit('close')
-    await flushPromises()
-    expect(got).toBeNull()
-    expect(w.findComponent(ShareNameDialog).exists()).toBe(false)
+    expect(requestGuest).toHaveBeenCalledOnce()
+    expect(w.find('.dialog-stub').exists(), 'the body opens no name dialog').toBe(false)
   })
 })

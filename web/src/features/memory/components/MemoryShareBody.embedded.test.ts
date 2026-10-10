@@ -2,13 +2,15 @@
 // The Memories body EMBEDDED by core's folder body (cr-node-key-hierarchy 5b.4b): `subtreeRoot` names a Memory below a
 // shared folder. With the REAL `openSharedMemory`: the body shows that Memory (its name from the chain, its media only),
 // not the folder link's note; a READ_WRITE link lets the guest add photos there — every upload naming the Memory as its
-// target — and names the guest once, under the SHARE ROOT's key; a READ link only looks. The root-level controls (no
+// target — and asks the page's ONE naming flow for the guest (`access.requestGuest`, the shell's; inbox #401 S2: how the
+// shell names it, under the SHARE ROOT's key, is `views/ShareView.naming.test.ts`); a READ link only looks. The root-level controls (no
 // `subtreeRoot`) are the same body on a Memory link, unchanged. The upload queue's pick window and enqueue are stubbed,
 // so the test reads what the body hands `addSharePhoto`.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { guestAccessFor } from '../../../test/models'
 import { mount, flushPromises } from '@vue/test-utils'
 import * as v1 from '@veyq/crypto/v1'
-import { b64std, b64url, fromB64std } from '@veyq/crypto/base64'
+import { b64std, b64url } from '@veyq/crypto/base64'
 
 vi.mock('../../../api/client', () => ({ sharesApi: vi.fn(), publicSharesApi: vi.fn(), tokenApi: vi.fn() }))
 vi.mock('../api', () => ({ publicShareMediaApi: vi.fn() }))
@@ -23,19 +25,20 @@ vi.mock('../uploadQueue', async (importOriginal) => ({
 }))
 
 import MemoryShareBody from './MemoryShareBody.vue'
-import ShareNameDialog from '../../../core/sharing/ShareNameDialog.vue'
 import type { PublicShareHead } from '../../../core/sharing/resolvePublicShare'
-import { identityNameContext, saveGuestSession } from '../../../core/sharing/guestIdentity'
+import { forgetGuestSession, saveGuestSession, type GuestIdentity } from '../../../core/sharing/guestIdentity'
 import { FOLDER_KIND } from '../../../core/node/kind'
 import { sealName, wrapContentKey } from '../../../core/node/tree'
 import { MEMORY_KIND } from '../kinds'
 import { addSharePhoto } from '../share'
 import { collectPickedFiles, enqueueUploads } from '../uploadQueue'
 import { ShareRole, type PublicShare } from '../../../api/generated/sharing'
-import { publicSharesApi } from '../../../api/client'
 import { publicShareMediaApi } from '../api'
 import { stubApi } from '../../../test/apiMock'
 import { realI18n } from '../../../test/i18n'
+
+/** The page's naming flow, as the shell hands it (`access.requestGuest`). */
+const requestGuest = vi.fn<() => Promise<GuestIdentity | null>>()
 
 const SCOPE_ID = '44444444-4444-4444-8444-444444444444'
 const SHARE_ID = 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_1' // a 43-char base64url id: seals are bound to it
@@ -84,7 +87,7 @@ const dialogStubs = {
 function mountBody(head: PublicShareHead, embedded: boolean) {
   return mount(MemoryShareBody, {
     props: {
-      shareId: SHARE_ID, fragmentKey: b64url(K_SHARE), pwToken: undefined, head, reload: async () => {},
+      shareId: SHARE_ID, fragmentKey: b64url(K_SHARE), pwToken: undefined, head, reload: async () => {}, access: guestAccessFor(head, { requestGuest }),
       ...(embedded ? { subtreeRoot: { nodeId: MEMORY, key: MEMORY_KEY, name: 'Rom 2026' } } : {}),
     },
     global: { plugins: [realI18n()], stubs: { MediaGrid: true, OptimisticTile: true, MediaLightbox: true, ...dialogStubs } },
@@ -102,6 +105,7 @@ async function uploadOne(w: ReturnType<typeof mountBody>) {
 beforeEach(() => {
   vi.clearAllMocks()
   localStorage.clear()
+  requestGuest.mockImplementation(() => new Promise(() => {}))
   stubApi(publicShareMediaApi, { listShareMedia: { media: [row(MEMORY, 'm-own'), row(SIBLING, 'm-sibling')], identities: [] } })
   vi.mocked(addSharePhoto).mockResolvedValue({ blobId: 'b', mediaId: 'm' })
   // the pick window settles at once with one file; the enqueue is recorded
@@ -146,7 +150,7 @@ describe('MemoryShareBody embedded below a shared folder', () => {
     const w = mountBody(folderHead(ShareRole.ReadWrite), true)
     await flushPromises()
     await w.find('.share-add-button').trigger('click')
-    expect(w.findComponent(ShareNameDialog).exists(), 'a named guest is not asked again').toBe(false)
+    expect(requestGuest, 'a named guest is not asked again').not.toHaveBeenCalled()
     const sent = await uploadOne(w)
     expect(sent).toMatchObject({ shareId: SHARE_ID, scopeId: SCOPE_ID, contributorToken: 'tok-1', nodeId: MEMORY })
     expect(Array.from(sent.sealKey), "sealed under the Memory's key").toEqual(Array.from(MEMORY_KEY))
@@ -161,26 +165,32 @@ describe('MemoryShareBody embedded below a shared folder', () => {
     expect(Array.from(sent.sealKey)).toEqual(Array.from(MEMORY_KEY))
   })
 
-  it("an unnamed guest is asked once, at its first photo, and named under the FOLDER's key", async () => {
-    const { createShareIdentity } = stubApi(publicSharesApi, { createShareIdentity: { identityId: 'x', contributorToken: 'tok-new' } })
-    createShareIdentity.mockImplementation(async (r) => ({ identityId: r.createShareIdentityRequest.identityId, contributorToken: 'tok-new' }))
+  it("an unnamed guest asks the page's naming flow at its first photo; named, its photos go out as that guest", async () => {
+    requestGuest.mockImplementation(async () => {
+      const g = { identityId: 'id-2', contributorToken: 'tok-new', displayName: 'Oma' }
+      saveGuestSession(SHARE_ID, g) // the shell's flow keeps the session it named
+      return g
+    })
     const w = mountBody(folderHead(ShareRole.ReadWrite), true)
     await flushPromises()
     await w.find('.share-add-button').trigger('click')
-    expect(w.findComponent(ShareNameDialog).exists()).toBe(true)
-    await w.find('.name-input').setValue('Oma')
-    await w.find('.dialog-stub form').trigger('submit')
     await flushPromises()
+    expect(requestGuest).toHaveBeenCalledOnce()
+    expect(w.find('.dialog-stub').exists(), 'the body opens no name dialog of its own').toBe(false)
 
-    const req = createShareIdentity.mock.calls[0][0].createShareIdentityRequest
-    const ctx = identityNameContext(SCOPE_ID, SHARE_ID, req.identityId)
-    expect(new TextDecoder().decode(v1.open(ctx, FOLDER_KEY, fromB64std(req.sealedDisplayName))), "under the share root's key").toBe('Oma')
-    expect(() => v1.open(ctx, MEMORY_KEY, fromB64std(req.sealedDisplayName)), "not the Memory's").toThrow(v1.OpenRefused)
-    expect(w.findComponent(ShareNameDialog).exists()).toBe(false)
-    expect(JSON.parse(localStorage.getItem(`veyq:share-contributor:${SHARE_ID}`)!), 'one session per link').toMatchObject({ contributorToken: 'tok-new' })
+    const sent = await uploadOne(w) // the session the page saved is the body's at once
+    expect(sent).toMatchObject({ contributorToken: 'tok-new', nodeId: MEMORY })
+    await w.find('.share-add-button').trigger('click') // named now: the picker, no second ask
+    expect(requestGuest).toHaveBeenCalledOnce()
+  })
 
-    await w.find('.share-add-button').trigger('click') // named now: the picker, no second prompt
-    expect(w.findComponent(ShareNameDialog).exists()).toBe(false)
-    expect(createShareIdentity).toHaveBeenCalledOnce()
+  it('forgotten elsewhere on the page ("Not you?"), the body holds no session any more', async () => {
+    saveGuestSession(SHARE_ID, { identityId: 'id-1', contributorToken: 'tok-1' })
+    const w = mountBody(folderHead(ShareRole.ReadWrite), true)
+    await flushPromises()
+    forgetGuestSession(SHARE_ID)
+    await flushPromises()
+    await w.find('.share-add-button').trigger('click')
+    expect(requestGuest, 'asked afresh, never the forgotten token').toHaveBeenCalledOnce()
   })
 })

@@ -8,6 +8,7 @@
 // `FolderShareBody`, the real PrimeVue and the real vue-router: every step is a DOM click on the rendered element, and
 // the `#k=` fragment that carries the share key stays in the URL throughout.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { guestAccessFor } from '../../../test/models'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
 import PrimeVue from 'primevue/config'
@@ -93,16 +94,21 @@ beforeEach(async () => {
 
 async function mountBody(role: ShareRole, served: PublicShareHead = head(role)) {
   const w = mount(FolderShareBody, {
-    props: { shareId: SHARE_ID, fragmentKey: b64url(K_SHARE), pwToken: undefined, head: served, reload: async () => {} },
+    props: { shareId: SHARE_ID, fragmentKey: b64url(K_SHARE), pwToken: undefined, head: served, reload: async () => {}, access: guestAccessFor(served) },
     global: { plugins: [router, realI18n(), PrimeVue], directives: { tooltip: {} } },
   })
   await flushPromises()
   return w
 }
 type Body = Awaited<ReturnType<typeof mountBody>>
-const tile = (w: Body, name: string) => w.findAll('button.veyq-node-card:not(.veyq-node-card-create)').find((c) => c.find('strong').text() === name)
-const tileNames = (w: Body) => w.findAll('button.veyq-node-card:not(.veyq-node-card-create)').map((c) => c.find('strong').text())
-const heading = (w: Body) => w.find('.veyq-section-header h1').text()
+// The level is core's member view (inbox #401 S2): sub-folders are its folder cards, drop boxes Files' drop-box rows.
+const tiles = (w: Body) => [
+  ...w.findAll('button.veyq-folder-card').map((c) => ({ name: c.find('strong').text(), el: c })),
+  ...w.findAll('button.dropbox-row-open').map((c) => ({ name: c.find('.veyq-row-title').text(), el: c })),
+]
+const tile = (w: Body, name: string) => tiles(w).find((c) => c.name === name)?.el
+const tileNames = (w: Body) => tiles(w).map((c) => c.name)
+const heading = (w: Body) => w.find('.veyq-folder-overview-card h2').text()
 async function click(el: Element) {
   el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
   await flushPromises()
@@ -110,7 +116,7 @@ async function click(el: Element) {
 /** Nothing on the page writes: no file input, no upload/replace/delete control, no 'New folder', no send form. */
 function expectNoWriteControl(w: Body) {
   expect(w.findAll('input[type="file"]'), 'no file input').toHaveLength(0)
-  expect(w.find('.veyq-node-card-create').exists(), "no 'New folder'").toBe(false)
+  expect(w.find('.veyq-create-card').exists(), "no 'New folder', no new Memory").toBe(false)
   expect(w.text()).not.toContain(t('files.upload'))
   expect(w.text()).not.toContain(t('files.dropBox.guestPick'))
   expect(w.text()).not.toContain(t('files.dropBox.guestTitle'))
@@ -133,7 +139,7 @@ describe('a drop box inside a folder share is shown read-only (inbox #380, owner
       const w = await mountBody(role)
       expect(tileNames(w).sort()).toEqual(['Briefe', 'Postfach'])
       // control: at the share root a contributor does get 'New folder' and the upload
-      if (role === ShareRole.ReadWrite) expect(w.find('.veyq-node-card-create').exists()).toBe(true)
+      if (role === ShareRole.ReadWrite) expect(w.find(`.veyq-create-card[aria-label="${t('node.folderCreate')}"]`).exists()).toBe(true)
 
       await click(tile(w, 'Postfach')!.element)
       expect(router.currentRoute.value.query.node).toBe(DROP)
@@ -150,7 +156,7 @@ describe('a drop box inside a folder share is shown read-only (inbox #380, owner
       expect(router.currentRoute.value.query.node).toBe(ANNA)
       expect(router.currentRoute.value.hash).toBe(HASH)
       expect(heading(w)).toBe('Anna')
-      expect(w.find('.veyq-section-header span').text(), 'the badge says view only').toBe(t('share.folder.readonly'))
+      expect(w.find('.share-folder-badge').text(), 'the badge says view only').toBe(t('share.folder.readonly'))
       expect(w.find('.veyq-row-title').text()).toBe('steuer.pdf')
       expectNoWriteControl(w)
 

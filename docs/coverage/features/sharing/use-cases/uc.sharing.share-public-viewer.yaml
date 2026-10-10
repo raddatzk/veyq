@@ -82,14 +82,16 @@ acceptanceCriteria:
       A member shares a folder READ through core's own dialog: the link wraps the folder's own key under K_share and
       seals its name under K_share. The guest's resolve has rootKind FOLDER and the descendants' names and key wraps,
       each under its parent's key, and nothing of the root's own entry nor of anything beside or above it; a blob
-      under the subtree is served, one beside it is 404. The guest page browses the folder (a breadcrumb along the
-      parent chain and child folders, both keeping the #k= fragment) and embeds the body claimed for each child's
-      kind, handed that node as its subtree root.
+      under the subtree is served, one beside it is 404. The guest page browses the folder as a member does — core's
+      level view handed the guest's access and tree (inbox #401 S2): a Memory is the member's card with its sealed date
+      and cover, a sub-folder a folder card, nothing a member alone may do is offered and no authenticated client is
+      called — a breadcrumb along the parent chain and every card keeping the #k= fragment on a real click; a node that
+      is not a folder embeds the body claimed for its kind, handed that node as its subtree root.
     coverage:
       backend:
         integration: [CoreAloneSliceTest.aFolderIsSharedToReadOrContributeAndNothingElseIs, CoreAloneSliceTest.aGuestOfAFolderShareResolvesTheSubtreeUnderIt]
       web:
-        unit: [src/core/sharing/folderShare.wire.test.ts, src/core/sharing/FolderShareDialog.test.ts, src/core/sharing/FolderShareBody.test.ts, src/core/sharing/FolderShareBody.breadcrumb.test.ts, src/core/sharing/FolderShareBody.registration.test.ts, src/features/memory/components/MemoryShareBody.embedded.test.ts]
+        unit: [src/core/sharing/folderShare.wire.test.ts, src/core/sharing/FolderShareDialog.test.ts, src/core/sharing/FolderShareBody.test.ts, src/core/sharing/FolderShareBody.breadcrumb.test.ts, src/core/sharing/FolderShareBody.registration.test.ts, src/core/sharing/guestAccess.test.ts, src/features/memory/components/FolderShareGuest.test.ts, src/features/memory/components/MemoriesSection.guest.test.ts, src/features/memory/components/MemoryShareBody.embedded.test.ts]
         e2e: [src/features/memory/folderShare.e2e.test.ts]
   - id: chapter-share-root
     text: >-

@@ -11,7 +11,7 @@ acceptanceCriteria:
     coverage:
       backend: { integration: [ShareFilesSliceTest.aReadGuestListsAndDownloadsTheFilesOfTheSubtreeOnly] }
       web:
-        unit: [src/features/files/components/ShareFilesSection.test.ts, src/core/sharing/FolderShareBody.sections.test.ts]
+        unit: [src/features/files/components/ShareFilesSection.test.ts, src/core/sharing/FolderShareBody.sections.test.ts, src/features/memory/components/FolderShareGuest.test.ts]
         e2e: [src/features/files/filesShare.e2e.test.ts]
   - id: a-read-guest-writes-nothing
     text: A READ guest's upload start and completion are refused, and its page offers no upload or replace.

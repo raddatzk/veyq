@@ -15,6 +15,7 @@
 // `role` nor `isUploader`/`isContributor`; only OptimisticTile's `:deletable` does. The optimistic tiles come
 // from the upload queue keyed by shareId, which is role-blind, so the merge under test is the same one.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import PrimeVue from 'primevue/config'
 import { mount, flushPromises } from '@vue/test-utils'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
@@ -134,7 +135,7 @@ describe('ShareView — one order for every grid tile', () => {
       memoryName: 'My Memory', noteByLocale: {}, role: ShareRole.Read, scopeId: SCOPE_ID,
       access: { kind: 'read', memoryKey: v1.randomBytes(32) }, items: [sharedItem(MEDIA_0, OLD)],
     })
-    const wrapper = mount(ShareView, { global: { plugins: [realI18n()], stubs: { MediaLightbox: true } } })
+    const wrapper = mount(ShareView, { global: { plugins: [realI18n(), PrimeVue], stubs: { MediaLightbox: true } } })
     await flushPromises()
     await flushPromises()
 

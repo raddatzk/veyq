@@ -11,6 +11,9 @@
   ([ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) decisions 9 and 13); it shows that node and what lies below it, never what is beside or above
   it. This use-case walks the Memory case; the other roots take the same steps with that node's own key. What each
   role may do per root kind is the [role matrix](../../../apps/memories.md#what-a-guest-may-do--the-role-matrix).
+  A **folder** link's guest browses the folder exactly as a member does (inbox #401): the same level view — its
+  sub-folders, its Memories as cards with their dates and covers, its files, the map — read from what the link
+  opened, with every member-only function absent; every link it follows keeps the `#k=` key in the address.
 - **Postconditions (success):** a share record exists server-side (opaque), and a link `/s/{shareId}#k=<K_share>` opens
   the Memory subtree read-only for any anonymous visitor — until the curator revokes it or it expires. Operator-blind
   throughout: the server never sees `K_share`, `K_mem`, any name, the viewer, or which media the viewer opens.

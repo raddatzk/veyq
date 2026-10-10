@@ -10,6 +10,13 @@
 // mounted in map mode (the map is its body instead of the grid), which keeps the toggle reachable there without a
 // second copy of it. The space's trash button was here too until Files needed it: it is core's level view's now
 // (inbox #370, #385; the toggle stays, its map being Memories').
+//
+// **A share guest's level too (inbox #401 S2).** Core's guest folder page renders this section with a guest's `access`
+// and its `tree` (`core/sharing/guestAccess.ts`): the same cards, dates, covers and map, read from what the link opened —
+// each date and place unsealed under the node's key the chain opened (`tree.keyOf`), each cover through the link's own
+// reads (`../guestCover.ts`), the map's pins from the opened subtree — and none of the member's state is touched: no
+// `treeStore`, no `activeSpace`, no `coverStore`, no pins (`favoritesStore`, sealed under the member's Master Key).
+// What it offers is the same capability matrix: a guest gets no heart, and a create card only where its role creates.
 import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { parentContentKey, type TreeNode } from '../../../core/node/tree'
@@ -18,13 +25,14 @@ import { sortNodesByDate } from '../memoryDate'
 import { MEMORY_KIND } from '../kinds'
 import { nodeById } from '../../../core/node/browse'
 import { treeStore } from '../../../core/node/treeStore'
-import { collectLocatedPins } from '../spaceMap'
+import { collectLocatedPins, collectLocatedPinsBy } from '../spaceMap'
 import { covers, ensureCovers } from '../coverStore'
 import { activeSpace } from '../../../app/activeSpace'
 import { isFavorite, toggleFavorite } from '../favoritesStore'
 import { useViewMode } from '../../../shared/state/useViewMode'
 import { memoryCapabilities } from '../capabilities'
-import { targetOf } from '../../../core/access'
+import { targetOf, type TreeSource } from '../../../core/access'
+import { useGuestCovers } from '../guestCover'
 import MemoryCard from './MemoryCard.vue'
 import ViewModeToggle from './ViewModeToggle.vue'
 import SpaceMap from './SpaceMap.vue'
@@ -42,11 +50,35 @@ const { viewMode } = useViewMode()
 const caps = computed(() =>
   memoryCapabilities(props.access, targetOf(props.tree, props.folder)),
 )
+// The guest's own cover reads, for this section's lifetime; a member's come from the shared `coverStore`. Who looks does
+// not change while the section is mounted (a host mounts its level for one session).
+const guestAccess = props.access.mode === 'guest' ? props.access : null
+const guestCovers = guestAccess ? useGuestCovers(guestAccess) : null
+const guestTree = computed(() => props.tree as TreeSource<TreeNode>)
+
+/** Every node of `tree` in the subtree of `rootId`, `rootId`'s own included — what a guest's map spans. */
+function subtreeNodes(tree: TreeSource<TreeNode>, rootId: string | null): TreeNode[] {
+  const out: TreeNode[] = []
+  const root = rootId ? tree.node(rootId) : null
+  if (root) out.push(root)
+  const queue: (string | null)[] = [rootId]
+  for (let i = 0; i < queue.length; i++) {
+    for (const child of tree.children(queue[i])) {
+      out.push(child)
+      queue.push(child.id)
+    }
+  }
+  return out
+}
 
 // Memories ordered by their sealed start date (newest first, undated last) — each K_mem opened under its parent's
 // key: E_{node.epoch} at the scope root, the folder's key inside a folder (ADR 0080 Decision 1); read from
 // wrappedMeta, no media load.
 const datedMemories = computed(() => {
+  if (guestAccess) {
+    const tree = props.tree
+    return sortNodesByDate(guestAccess.head.scopeId, (node) => (node.parentId ? tree.keyOf(node.parentId) : null), [...props.nodes])
+  }
   const scopeId = activeSpace.scopeId
   const epochs = props.epochs
   return sortNodesByDate(scopeId ?? '', (node) => (epochs && scopeId ? parentContentKey(scopeId, epochs, treeStore.nodes, node) : null), [...props.nodes])
@@ -55,14 +87,16 @@ const datedMemories = computed(() => {
 // The Karte pins: every located node in this folder's subtree (or the whole space at root), unsealed on device
 // from the wrappedMeta `listNodes` already returned (operator-blind — no locations API). Locked ⇒ no pins.
 const pins = computed(() =>
-  props.epochs && activeSpace.scopeId
+  guestAccess
+    ? collectLocatedPinsBy(guestAccess.head.scopeId, (id) => props.tree.keyOf(id), subtreeNodes(guestTree.value, props.folder?.id ?? null), props.folder?.id ?? null)
+    : props.epochs && activeSpace.scopeId
     ? collectLocatedPins(activeSpace.scopeId, props.epochs, treeStore.nodes, props.folder?.id ?? null)
     : [],
 )
 
 /** A pin click carries a node id — resolve it to the TreeNode and open it, exactly like a card click. */
 function onPinOpen(nodeId: string) {
-  const node = nodeById(treeStore.nodes, nodeId)
+  const node = guestAccess ? guestTree.value.node(nodeId) : nodeById(treeStore.nodes, nodeId)
   if (node) emit('openNode', node)
 }
 
@@ -77,8 +111,12 @@ function onToggleFavorite(node: TreeNode) {
 // same `Map<string, LoadedCover>` they always did.
 function syncCovers() {
   const nodes = viewMode.value === 'map' ? pins.value.map((pin) => pin.node) : props.nodes
-  ensureCovers(nodes.map((n) => n.id))
+  if (guestCovers) guestCovers.ensure(nodes, (id) => props.tree.keyOf(id))
+  else ensureCovers(nodes.map((n) => n.id))
 }
+const coverMap = computed(() => (guestCovers ? guestCovers.covers.value : covers.value))
+/** A member's own pin of a Memory; never a guest's (pins are sealed under the member's Master Key). */
+const favorite = (id: string) => caps.value.favorite && isFavorite(id)
 
 // The sealed meta is part of the key for the same reason it is in the rail: a cover edit patches `wrappedMeta`
 // in place, so watching the array (whose identity does not change) would leave a stale cover on the very card
@@ -102,7 +140,7 @@ watch(
         <ViewModeToggle show-map />
       </div>
     </div>
-    <SpaceMap v-if="viewMode === 'map'" :pins="pins" :covers="covers" @open="onPinOpen" />
+    <SpaceMap v-if="viewMode === 'map'" :pins="pins" :covers="coverMap" @open="onPinOpen" />
     <div v-else class="memory-card-grid" :class="{ 'is-list': viewMode === 'list' }">
       <p v-if="!nodes.length" class="veyq-empty veyq-empty-inline">
         {{ t('memory.memoryEmpty') }}
@@ -112,10 +150,10 @@ watch(
         :key="memory.id"
         :memory="memory"
         :date="date"
-        :favorite="isFavorite(memory.id)"
+        :favorite="favorite(memory.id)"
         :favoritable="caps.favorite"
-        :cover-src="covers.get(memory.id)?.url ?? null"
-        :cover-crop="covers.get(memory.id)?.crop ?? null"
+        :cover-src="coverMap.get(memory.id)?.url ?? null"
+        :cover-crop="coverMap.get(memory.id)?.crop ?? null"
         @open="emit('openNode', $event)"
         @toggle-favorite="onToggleFavorite"
       />

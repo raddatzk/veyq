@@ -100,6 +100,11 @@ sequenceDiagram
   photos stay). Restricted to **READ ↔ READ_WRITE** — a **WRITE_ONLY** drop-box is its own separate action and its
   write-only promise is never flipped in place (a `422 invalid_role_change` rejects setting WRITE_ONLY or editing a
   WRITE_ONLY share's role). Owner-gated via `updateShare` ([ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md)).
+- **A4 — someone else uses the same device ("Not you?", inbox #401 S2):** once named, the page says whose session
+  this device holds ("You are here as Anna") with a "Not you?" that asks first, then forgets the session on the device;
+  the next visitor names itself afresh, a new identity. Nothing on the server changes — what the first one added stays,
+  under its name. The same core component (`GuestNaming`) names every guest of every link: a Memory link's pre-screen,
+  the dialog a folder link's guest gets at its first write, Files' drop page.
 - **E1 — blank name:** the pre-screen blocks submission until a non-blank name is entered (mandatory).
 - **E2 — over budget / full / rate-limited:** an oversized upload fails the per-blob byte budget; an upload that
   would take the link over its storage limit, or the tenant over its quota, is refused whole with the visitor told

@@ -1,0 +1,131 @@
+// @vitest-environment happy-dom
+// The guest's folder page as it ships (inbox #401 S2): core's `FolderShareBody` with the app's REAL registry (Memories
+// and Files, filled by `src/test/setup.ts`), the real PrimeVue and the real vue-router, every step a DOM click on the
+// rendered element. The folder level is core's member `LevelView`: a Memory is the member's MemoryCard, the sub-folder
+// a folder card, the files Files' list — and nothing a member alone may do is on the page (pins, marks, the trash,
+// share, rename, delete, a cover, a chapter), while every authenticated client throws (`test/guestMode.ts`). A card
+// click keeps the `#k=` fragment that carries the share key, and the Memory opens in its (still separate, until S5)
+// guest body.
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { mount, flushPromises } from '@vue/test-utils'
+import { createRouter, createMemoryHistory, type Router } from 'vue-router'
+import PrimeVue from 'primevue/config'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, b64url } from '@veyq/crypto/base64'
+
+vi.mock('leaflet', () => ({ default: {} }))
+vi.mock('../../../api/client', async (orig) => (await import('../../../test/guestMode')).guardedClients(await orig<object>()))
+vi.mock('../api', async (orig) => (await import('../../../test/guestMode')).guardedClients(await orig<object>()))
+vi.mock('../../files/api', async (orig) => (await import('../../../test/guestMode')).guardedClients(await orig<object>()))
+vi.mock('../useThumbnailPipeline', () => ({
+  useThumbnailPipeline: () => ({ thumbs: new Map(), reconcile: vi.fn(), decrypt: vi.fn().mockResolvedValue(undefined), revokeAll: vi.fn() }),
+}))
+
+import FolderShareBody from '../../../core/sharing/FolderShareBody.vue'
+import { FOLDER_KIND } from '../../../core/node/kind'
+import { sealName, wrapContentKey } from '../../../core/node/tree'
+import type { PublicShareHead } from '../../../core/sharing/resolvePublicShare'
+import { ShareRole, type PublicShare, type ShareNode } from '../../../api/generated/sharing'
+import { FILE_KIND } from '../../files/kinds'
+import { publicShareFilesApi } from '../../files/api'
+import { MEMORY_KIND } from '../kinds'
+import { publicShareMediaApi } from '../api'
+import { stubApi } from '../../../test/apiMock'
+import { realI18n, t } from '../../../test/i18n'
+import { guestAccessFor } from '../../../test/models'
+import { authenticatedCalls } from '../../../test/guestMode'
+import { setViewMode } from '../../../shared/state/useViewMode'
+
+const SCOPE_ID = '88888888-8888-4888-8888-888888888888'
+const SHARE_ID = 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_f'
+const ROOT = '6e5a0000-0000-4000-8000-000000000600'
+const SUB = '6e5a0000-0000-4000-8000-000000000601'
+const MEMORY = '6e5a0000-0000-4000-8000-000000000602'
+const FILE = '6e5a0000-0000-4000-8000-000000000603'
+const K_SHARE = v1.randomBytes(32)
+const keys = { root: v1.randomBytes(32), sub: v1.randomBytes(32), memory: v1.randomBytes(32), file: v1.randomBytes(32) }
+const HASH = `#k=${b64url(K_SHARE)}`
+
+function child(id: string, parentId: string, parentKey: Uint8Array, key: Uint8Array, name: string, kind: string): ShareNode {
+  const address = { scopeId: SCOPE_ID, nodeId: id, epoch: 0, placementVersion: 0 }
+  return { id, parentId, kind, epoch: 0, placementVersion: 0, encryptedName: sealName(parentKey, address, name), wrappedContentKey: wrapContentKey(parentKey, address, key) }
+}
+function head(role: ShareRole): PublicShareHead {
+  return {
+    shareId: SHARE_ID, kShare: K_SHARE, scopeId: SCOPE_ID, name: 'Familie', noteByLocale: {}, role, rootKind: FOLDER_KIND,
+    share: {
+      role, scopeId: SCOPE_ID, rootKind: FOLDER_KIND, wrap: b64std(v1.seal({ purpose: 'share-key' }, K_SHARE, keys.root)),
+      nodes: [
+        { id: ROOT, parentId: null, kind: FOLDER_KIND, epoch: 0 },
+        child(SUB, ROOT, keys.root, keys.sub, 'Briefe', FOLDER_KIND),
+        child(MEMORY, ROOT, keys.root, keys.memory, 'Rom 2026', MEMORY_KIND),
+        child(FILE, ROOT, keys.root, keys.file, 'rezept.pdf', FILE_KIND),
+      ],
+    } as PublicShare,
+  }
+}
+
+let router: Router
+beforeEach(async () => {
+  localStorage.clear()
+  authenticatedCalls.length = 0
+  setViewMode('grid')
+  stubApi(publicShareMediaApi, { listShareMedia: { media: [], identities: [] } })
+  stubApi(publicShareFilesApi, { listShareFiles: { items: [{ nodeId: FILE, fileBlob: { blobId: 'b-1', chunkCount: 1, byteSize: 100, wrappedBlobKey: 'eA==' } }] } })
+  router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/s/:id', component: { render: () => null } }] })
+  await router.push(`/s/${SHARE_ID}${HASH}`)
+  await router.isReady()
+})
+
+async function mountPage(role: ShareRole) {
+  const h = head(role)
+  const w = mount(FolderShareBody, {
+    props: { shareId: SHARE_ID, fragmentKey: b64url(K_SHARE), pwToken: undefined, head: h, reload: async () => {}, access: guestAccessFor(h) },
+    global: { plugins: [router, realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { MediaGrid: true, OptimisticTile: true, MediaLightbox: true } },
+  })
+  await flushPromises()
+  return w
+}
+type Page = Awaited<ReturnType<typeof mountPage>>
+
+/** No control only a member has: pins and marks, the trash, share, rename, delete, a cover, a chapter. */
+function expectNoMemberControl(w: Page) {
+  expect(w.find('.memory-card-pin').exists(), 'pin').toBe(false)
+  expect(w.find('.veyq-level-toolbar').exists(), "the space's trash").toBe(false)
+  expect(w.find('.veyq-folder-overview-actions').exists(), 'share, rename, delete of the folder').toBe(false)
+  for (const label of [
+    t('memory.favorite'), t('memory.unfavorite'), t('media.marks.mark'), t('share.share'), t('share.uploadRequest'), t('node.rename'),
+    t('node.delete'), t('node.trash.open'), t('memory.cover.set'), t('memory.cover.edit'), t('memory.createChapterTitle'),
+  ]) {
+    expect(w.find(`[aria-label="${label}"]`).exists(), label).toBe(false)
+    expect(w.findAll('button').some((b) => b.text() === label), label).toBe(false)
+  }
+}
+
+describe("a folder link's guest page is the member's level (inbox #401 S2)", () => {
+  for (const role of [ShareRole.Read, ShareRole.ReadWrite]) {
+    it(`${role}: the Memory is a MemoryCard, the sub-folder a folder card, the file Files' row — nothing of a member's`, async () => {
+      const w = await mountPage(role)
+      expect(w.find('.veyq-folder-overview-card h2').text()).toBe('Familie')
+      expect(w.find('.memory-card strong').text()).toBe('Rom 2026')
+      expect(w.findAll('button.veyq-folder-card').map((c) => c.find('strong').text())).toEqual(['Briefe'])
+      expect(w.find('.veyq-row-title').text()).toBe('rezept.pdf')
+      expectNoMemberControl(w)
+      expect(authenticatedCalls).toEqual([])
+    })
+  }
+
+  it('a click on the MemoryCard opens the Memory with the real router, the #k= fragment kept', async () => {
+    const w = await mountPage(ShareRole.Read)
+    const open = w.find('.memory-card .memory-card-main')
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })
+    open.element.dispatchEvent(click)
+    await flushPromises()
+    expect(router.currentRoute.value.query.node).toBe(MEMORY)
+    expect(router.currentRoute.value.hash, 'the share key stays in the URL').toBe(HASH)
+    await vi.waitFor(() => expect(w.find('.gallery-title').exists()).toBe(true))
+    expect(w.find('.gallery-title').text()).toBe('Rom 2026')
+    expect(w.findAll('a.p-breadcrumb-item-link').map((a) => a.text())).toEqual(['Familie', 'Rom 2026'])
+    expect(authenticatedCalls).toEqual([])
+  })
+})

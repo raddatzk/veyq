@@ -12,6 +12,14 @@
 // So a share whose application half cannot be opened (a server that served no wrap) is discovered when the body
 // mounts — after the terms gate, not before it as when this page was one component — and the body answers with
 // `unavailable`. The password and unlock flow, and the "no body registered" check, still run before any gate.
+//
+// **Who looks (inbox #401 S2).** Behind the gates the shell builds the guest's `access` (`core/sharing/guestAccess.ts`:
+// the link's role and head, the password token) and hands it to the body, which hands it on to every view it mounts —
+// core's level view at a folder, a section, an embedded body. The access carries the page's ONE naming flow,
+// `requestGuest`: a READ_WRITE guest names itself in the shell's dialog (core's `GuestNaming`, under the share ROOT's
+// key, `nameShareGuest`) whichever view first writes, and the shell shows whose session this device holds with its
+// "Not you?" (`forgetGuestSession`, asked first). A WRITE_ONLY drop page names its guest on the page itself (its own
+// identity key, the application's), so the shell's line is a READ_WRITE link's.
 import { ref, shallowRef, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -27,6 +35,10 @@ import {
   type PublicShareHead,
 } from '../core/sharing/resolvePublicShare'
 import { registry } from '../core/applications/registry'
+import { guestAccess } from '../core/sharing/guestAccess'
+import { forgetGuestSession, nameShareGuest, useGuestSession, type GuestIdentity } from '../core/sharing/guestIdentity'
+import { ShareRole } from '../api/generated/sharing'
+import GuestNaming from '../core/sharing/GuestNaming.vue'
 import { renderMarkdown } from '../shared/markdown'
 
 const route = useRoute()
@@ -104,6 +116,33 @@ function bodyFor(h: PublicShareHead) {
   return h.rootKind ? registry.shareBody(h.rootKind) : null
 }
 const body = computed(() => (head.value ? bodyFor(head.value) : null))
+
+// --- the guest: its access, and the page's one naming flow ------------------------------------------------------------
+const session = useGuestSession(shareId)
+const naming = ref(false)
+// The views waiting for the guest's identity: resolved once it is named, or with null when the dialog closes unnamed.
+let waiting: ((g: GuestIdentity | null) => void)[] = []
+/** The guest's identity for this link: the device's session, else the visitor names itself first (null: it closed the
+ *  dialog without a name). */
+function requestGuest(): Promise<GuestIdentity | null> {
+  if (session.value) return Promise.resolve(session.value)
+  naming.value = true
+  return new Promise((resolve) => waiting.push(resolve))
+}
+async function nameGuest(name: string) {
+  const h = head.value
+  if (!h) throw new Error('share_not_ready')
+  await nameShareGuest(h, { name, fragmentKey: fragmentKey.value, pwToken: pwToken.value })
+}
+function onNamingClose() {
+  naming.value = false
+  const all = waiting
+  waiting = []
+  for (const w of all) w(session.value)
+}
+const access = computed(() => (head.value ? guestAccess({ head: head.value, pwToken: pwToken.value, requestGuest }) : null))
+/** The line that says whose session this is: a READ_WRITE link's (a drop page shows its own). */
+const showsIdentity = computed(() => head.value?.role === ShareRole.ReadWrite && !!session.value)
 
 // --- resolve (on mount, after the password, and after a contribution) --------
 async function load() {
@@ -204,17 +243,28 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- The application's body for this share: its name pre-screen, content and lightbox. -->
-    <component
-      :is="body"
-      v-else-if="head && body"
-      :share-id="shareId"
-      :fragment-key="fragmentKey"
-      :pw-token="pwToken"
-      :head="head"
-      :reload="load"
-      @unavailable="status = 'unavailable'"
-    />
+    <template v-else-if="head && body && access">
+      <GuestNaming v-if="showsIdentity" class="share-view-identity" :current="session" :forget="() => forgetGuestSession(shareId)" />
+      <!-- The application's body for this share: its content and lightbox (a drop page's naming too). -->
+      <component
+        :is="body"
+        :share-id="shareId"
+        :fragment-key="fragmentKey"
+        :pw-token="pwToken"
+        :head="head"
+        :reload="load"
+        :access="access"
+        @unavailable="status = 'unavailable'"
+      />
+      <GuestNaming
+        v-if="naming"
+        dialog
+        :title="t('share.guest.nameTitle')"
+        :hint="t('share.guest.nameHint')"
+        :action="nameGuest"
+        @close="onNamingClose"
+      />
+    </template>
 
     <footer class="share-view-footer">
       <a :href="securityDocUrl" target="_blank" rel="noopener noreferrer">{{ t('share.securityFooter') }}</a>
@@ -236,6 +286,9 @@ onMounted(() => {
   margin: 0 auto;
   padding: 1.5rem 1.25rem 2rem;
   box-sizing: border-box;
+}
+.share-view-identity {
+  margin-bottom: 0.75rem;
 }
 .share-view-unavailable .pi {
   font-size: 2rem;

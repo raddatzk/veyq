@@ -18,8 +18,11 @@
 // BELOW a shared folder. It then shows that node — its name and key from the chain, its media and chapters only — and
 // not the share's note (the folder body shows it once). The rights follow the link's role down (ADR 0080 Decision 6,
 // 5a.5): a READ_WRITE guest adds photos here, every upload naming this node as its target; a READ guest only looks.
-// The guest is named once per link, under the share ROOT's key (`nameShareGuest`) and only when it first adds a photo —
-// no pre-screen in front of a node it browsed into; a session the folder body already saved is reused.
+// The guest is named once per link, under the share ROOT's key, by the page's one naming flow (`access.requestGuest`,
+// the shell's dialog — inbox #401 S2) and only when it first adds a photo — no pre-screen in front of a node it browsed
+// into. The session is the page's (`useGuestSession`): named or forgotten ("Not you?") anywhere on the page, this body
+// sees it at once. At a Memory link's root the pre-screen's form is core's one naming component (`GuestNaming`), and an
+// uploader's drop page carries its own "Not you?" (a contributor's is the shell's).
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useConfirm } from '../../../shared/state/useConfirm'
@@ -39,8 +42,9 @@ import {
   type ContributorSession,
 } from '../share'
 import { pickLocaleText, type PublicShareHead } from '../../../core/sharing/resolvePublicShare'
-import { loadGuestSession, saveGuestSession, nameShareGuest } from '../../../core/sharing/guestIdentity'
-import ShareNameDialog from '../../../core/sharing/ShareNameDialog.vue'
+import { forgetGuestSession, saveGuestSession, useGuestSession } from '../../../core/sharing/guestIdentity'
+import type { GuestAccess } from '../../../core/access'
+import GuestNaming from '../../../core/sharing/GuestNaming.vue'
 import { unsealMeta, originalBlobMeta, effectiveCapturedAt, hasDerivatives, downloadRef, type MediaItem } from '../media'
 import { collectPickedFiles, inferMediaType, enqueueUploads, retryFile, removeFile } from '../uploadQueue'
 import { useOptimisticTiles, type OptimisticTileVM } from '../useOptimisticTiles'
@@ -63,6 +67,7 @@ const props = defineProps<{
   pwToken: string | undefined
   head: PublicShareHead
   reload: () => Promise<void>
+  access: GuestAccess
   subtreeRoot?: { nodeId: string; key: Uint8Array; name: string }
 }>()
 const emit = defineEmits<{ unavailable: [] }>()
@@ -162,7 +167,7 @@ const hasContent = computed(() => items.value.length > 0 || optimisticTiles.valu
 // The share role + what its link lets this guest hold (ADR 0031 point 7): the root Memory's K_mem for a viewer or
 // contributor, only the Memory's drop public key for an uploader — which never holds K_mem.
 const role = computed<ShareRole>(() => props.head.role)
-const access = ref<ShareAccess | null>(null)
+const keyAccess = ref<ShareAccess | null>(null)
 // The shared Memory's scope — a contributor's name and uploads are sealed bound to it (ADR 0072).
 const shareScopeId = computed(() => props.head.scopeId)
 const isContributor = computed(() => role.value === ShareRole.ReadWrite)
@@ -172,35 +177,26 @@ const isUploader = computed(() => role.value === ShareRole.WriteOnly)
 // Either contributing role names itself once, then may add photos (the backend accepts both on the upload path).
 const canContribute = computed(() => isContributor.value || isUploader.value)
 // The named contributor session, persisted per-share so a reload keeps the name (never leaves the device).
-// The platform keeps it (`core/sharing/guestIdentity.ts`), one per link whichever body named the guest.
-const session = ref<ContributorSession | null>(loadGuestSession<ContributorSession>(shareId)) // before the first render: the shell mounts this body once the share is ready, so no name-gate flash
+// The platform keeps it (`core/sharing/guestIdentity.ts`), one per link whichever view named the guest, and reactive:
+// read before the first render (no name-gate flash), and gone at once when the page's "Not you?" forgets it.
+const session = useGuestSession<ContributorSession>(shareId)
 // The key this session's uploads seal under — K_mem for a contributor, the uploader's own key for an uploader.
-const sealKey = computed(() => (session.value && access.value ? sessionSealKey(session.value, access.value) : null))
+const sealKey = computed(() => (session.value && keyAccess.value ? sessionSealKey(session.value, keyAccess.value) : null))
 // A READ_WRITE or WRITE_ONLY share shows a mandatory name pre-screen until the visitor has named themselves — and
 // again for an uploader session saved without its own key, which has nothing to seal with.
-// Embedded, the guest is asked at its first photo instead (`askName`), never by a pre-screen.
+// Embedded, the guest is asked at its first photo instead, by the page's one naming flow (`access.requestGuest`, the
+// shell's dialog), never by a pre-screen.
 const needsName = computed(() => !embeddedRoot && canContribute.value && !sealKey.value)
-const askName = ref(false)
-async function nameEmbeddedGuest(name: string) {
-  session.value = await nameShareGuest(props.head, { name, fragmentKey: props.fragmentKey, pwToken: props.pwToken })
+/** The pre-screen's naming (core's `GuestNaming` renders the form): the identity, its name kept on the device. */
+async function submitName(name: string) {
+  if (!keyAccess.value) throw new Error('share_not_open')
+  const created = await createContributorIdentity(shareId, shareScopeId.value, keyAccess.value, name, props.fragmentKey, props.pwToken)
+  saveGuestSession(shareId, { ...created, displayName: name })
 }
-const displayName = ref('')
-const naming = ref(false)
-const nameError = ref(false)
-async function submitName() {
-  const name = displayName.value.trim()
-  if (!name || naming.value || !access.value) return
-  naming.value = true
-  nameError.value = false
-  try {
-    const created = await createContributorIdentity(shareId, shareScopeId.value, access.value, name, props.fragmentKey, props.pwToken)
-    saveGuestSession(shareId, created)
-    session.value = created
-  } catch {
-    nameError.value = true
-  } finally {
-    naming.value = false
-  }
+/** "Not you?" on the drop page (an uploader's own line; a contributor's is the shell's): forget this device's session —
+ *  the next visitor names itself afresh. What was sent stays with the owner. */
+function forgetUploader() {
+  forgetGuestSession(shareId)
 }
 
 // Delete-your-own (READ_WRITE, inbox #361): the listed media this device added under the link's identity — the server
@@ -228,11 +224,10 @@ const fileInput = ref<HTMLInputElement | null>(null)
 let cancelPickWindow: (() => void) | null = null
 function triggerAddPhotos() {
   if (embeddedRoot && !sealKey.value) {
-    session.value ??= loadGuestSession<ContributorSession>(shareId) // the folder body may have named the guest since
-    if (!sealKey.value) {
-      askName.value = true
-      return
-    }
+    // Named by the page's one flow; once named, the next click opens the picker (a picker opened after an awaited
+    // dialog would no longer count as the visitor's own click).
+    void props.access.requestGuest()
+    return
   }
   fileInput.value?.click()
 }
@@ -377,7 +372,7 @@ watch(
       emit('unavailable') // a response the fragment key does not open: the shell shows its honest unavailable state
       return
     }
-    access.value = opened.access
+    keyAccess.value = opened.access
     let withMedia
     try {
       withMedia = openSharedMemory(head, await listing, embeddedRoot)
@@ -403,7 +398,7 @@ onBeforeUnmount(() => {
 <template>
   <!-- READ_WRITE / WRITE_ONLY share: a mandatory display-name pre-screen before contributing (ADR 0030 / 0031) -->
   <div v-if="needsName" class="share-view-state share-name-gate">
-    <form class="veyq-surface share-name-card" @submit.prevent="submitName">
+    <div class="veyq-surface share-name-card">
       <h1>{{ memoryName }}</h1>
       <p class="share-name-intro">{{ isUploader ? t('share.uploaderIntro') : t('share.contributeIntro') }}</p>
       <!-- cr-0115: the curator's note = the drop-box instruction ("please upload here"). renderMarkdown escapes
@@ -415,23 +410,9 @@ onBeforeUnmount(() => {
         <span class="pi pi-info-circle" />
         <span>{{ t('share.uploaderEphemeralWarning') }}</span>
       </p>
-      <label for="share-name-input">{{ t('share.yourName') }}</label>
-      <input
-        id="share-name-input"
-        v-model="displayName"
-        type="text"
-        name="display-name"
-        autocomplete="name"
-        :placeholder="t('share.yourNamePlaceholder')"
-        :disabled="naming"
-      />
-      <!-- who reads the name: the Memory's members, never another link holder (ADR 0030 point 8) -->
-      <p class="share-name-intro">{{ t('share.nameVisibility') }}</p>
-      <button class="share-name-submit" type="submit" :disabled="naming || !displayName.trim()">
-        {{ naming ? t('share.joining') : t('share.join') }}
-      </button>
-      <p v-if="nameError" class="share-error">{{ t('share.joinFailed') }}</p>
-    </form>
+      <!-- core's one naming form; who reads the name: the Memory's members, never another link holder (ADR 0030 point 8) -->
+      <GuestNaming :action="submitName" :hint="t('share.nameVisibility')" />
+    </div>
   </div>
 
   <template v-else>
@@ -446,6 +427,8 @@ onBeforeUnmount(() => {
           <span :class="isUploader ? 'pi pi-cloud-upload' : 'pi pi-share-alt'" />
           {{ isUploader ? t('share.uploaderBadge') : isContributor ? t('share.contributorBadge') : t('share.readonly') }}
         </span>
+        <!-- the drop page's own "Not you?" (a contributor's is the shell's, for the whole page) -->
+        <GuestNaming v-if="isUploader && session && !embeddedRoot" :current="session" :forget="forgetUploader" />
       </div>
       <div v-if="canContribute" class="share-view-actions">
         <button type="button" class="share-add-button" @click="triggerAddPhotos">
@@ -561,17 +544,6 @@ onBeforeUnmount(() => {
     @close="lightboxIndex = null"
   />
 
-  <!-- Embedded: the guest names itself once per link, at its first photo (the folder body's dialog). -->
-  <ShareNameDialog
-    v-if="askName"
-    :title="t('share.folder.guestNameTitle')"
-    :label="t('share.yourName')"
-    :submit-label="t('share.join')"
-    :hint="t('share.folder.guestNameHint')"
-    :action="nameEmbeddedGuest"
-    :error-text="() => t('share.joinFailed')"
-    @close="askName = false"
-  />
 </template>
 
 <style scoped src="../../../shared/ui/shareGate.css"></style>

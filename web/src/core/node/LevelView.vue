@@ -22,6 +22,11 @@
 // both on to every section; what the level's own controls offer is core's `folderCapabilities` for the folder on screen
 // — no write during a pending deletion, none in a guest's identity folder, a share only of a folder.
 //
+// **A section the host renders itself (`hostSection`, transitional — inbox #401 S2 until S3).** The share guest's folder
+// page renders this level too (`core/sharing/FolderShareBody.vue`), and a kind whose application still has a separate
+// guest list (Files' `shareSection`) is drawn by that host in the `host-section` slot, at the section's place in the
+// order, with the same `kinds` and `nodes` — everything else (sections, fallbacks, folders) is this view's for both.
+//
 // In a guest's identity folder (a drop box's, inbox #385) a section, or the folders section, with nothing to show is
 // left out instead of saying "none yet" — nobody can add anything there, so an empty heading only says that this kind
 // exists. When nothing is left, the level says so once.
@@ -46,6 +51,8 @@ const props = defineProps<{
   /** The folder's name as its siblings tell it apart (`displayNamesOf`: a guest's folder `Anna (2)` beside `Anna`,
    *  inbox #393), when the host knows the siblings. Omitted: the folder's own name. */
   folderName?: string
+  /** Transitional (inbox #401 S2–S3): the sections whose kinds the host draws in the `host-section` slot instead. */
+  hostSection?: (kinds: readonly NodeKind[]) => boolean
 }>()
 const emit = defineEmits<{
   openNode: [node: TreeNode]
@@ -79,6 +86,7 @@ const sectionViews = computed(() =>
   sections
     .map((s) => ({
       key: s.kinds[0],
+      kinds: s.kinds,
       component: s.component,
       nodes: s.kinds.length === 1 ? (props.level.byKind.get(s.kinds[0]) ?? []) : s.kinds.flatMap((k) => props.level.byKind.get(k) ?? []),
     }))
@@ -167,19 +175,21 @@ const fallbacks = computed(() =>
       </div>
     </section>
 
-    <component
-      :is="s.component"
-      v-for="s in sectionViews"
-      :key="s.key"
-      :folder="folder"
-      :nodes="s.nodes"
-      :epochs="epochs"
-      :access="access"
-      :tree="tree"
-      @open-node="emit('openNode', $event)"
-      @create="emit('create', $event)"
-      @rename="emit('renameNode', $event)"
-    />
+    <template v-for="s in sectionViews" :key="s.key">
+      <slot v-if="hostSection?.(s.kinds)" name="host-section" :kinds="s.kinds" :nodes="s.nodes" />
+      <component
+        :is="s.component"
+        v-else
+        :folder="folder"
+        :nodes="s.nodes"
+        :epochs="epochs"
+        :access="access"
+        :tree="tree"
+        @open-node="emit('openNode', $event)"
+        @create="emit('create', $event)"
+        @rename="emit('renameNode', $event)"
+      />
+    </template>
 
     <!-- A kind no section serves: listed, never dropped, and said plainly that this client cannot show it. Not
          clickable — opening one lands on the host's same unsupported state. -->

@@ -8,6 +8,8 @@
 //  - inbox #361: a READ_WRITE guest deletes a photo it added — offered only on its own (the device remembers what it
 //    uploaded under the link's identity; the server tells no guest whose a photo is, ADR 0030 point 8), asked first.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import PrimeVue from 'primevue/config'
+import { guestAccessFor } from '../../../test/models'
 import { mount, flushPromises } from '@vue/test-utils'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url } from '@veyq/crypto/base64'
@@ -93,8 +95,8 @@ const LISTING = [row(DAY1, M_DAY1_OLD, 9), row(MEMORY, M_ROOT, 5), row(DAY2, M_D
 function mountBody(h: PublicShareHead) {
   return mount(MemoryShareBody, {
     attachTo: document.body,
-    props: { shareId: SHARE_ID, fragmentKey: b64url(K_SHARE), pwToken: 'pw-tok', head: h, reload: async () => {} },
-    global: { plugins: [realI18n()], stubs: { OptimisticTile: true, MediaLightbox: true } },
+    props: { shareId: SHARE_ID, fragmentKey: b64url(K_SHARE), pwToken: 'pw-tok', head: h, reload: async () => {}, access: guestAccessFor(h, { pwToken: 'pw-tok' }) },
+    global: { plugins: [realI18n(), PrimeVue], stubs: { OptimisticTile: true, MediaLightbox: true } },
   })
 }
 

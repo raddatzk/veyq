@@ -33,6 +33,7 @@ import { resolvePublicShare } from '../../core/sharing/resolvePublicShare'
 import { openShareRoot } from '../../core/sharing/shareTree'
 import { createGuestIdentity } from '../../core/sharing/guestIdentity'
 import { createShareNodeAsGuest, guestTreeContext, placeShareNodeAsGuest, GuestTreeError } from '../../core/sharing/guestTree'
+import { guestTreeSource } from '../../core/sharing/guestAccess'
 import { ScopeKind } from '../../api/generated/scopes'
 import { ShareRole } from '../../api/generated/sharing'
 
@@ -46,6 +47,7 @@ const CHAPTER_NAME = 'Polterabend Scheune'
 const GUEST_NAME = 'Cousine Agnieszka'
 const CREATED_NAME = 'Fundstuecke Ostpreussen'
 const NESTED_NAME = 'Feldpostbriefe Opa'
+const GUEST_MEMORY_NAME = 'Sommerfest Gartenlaube Zoppot'
 
 /** Deterministic bytes, a different fill per photo. */
 function bytes(fill: number, size = 200 * 1024): Uint8Array {
@@ -121,6 +123,21 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share guest e2e (live, real crypt
     expect(media, "the Memory's photo is still listed").toBeDefined()
     expect(Array.from(await openOriginal(scopeId, memory.memoryKey, media!)), 'and opens').toEqual(Array.from(bytes(1)))
 
+    // --- the guest's page reads that tree (inbox #401 S2): the guest tree source over the real resolve ---------------
+    const hash = `#k=${fragmentKey}`
+    const pageTree = guestTreeSource(await resolvePublicShare(shareId, fragmentKey), { hash })
+    expect(pageTree.rootId).toBe(folderId)
+    expect(pageTree.node(memory.nodeId), 'the Memory under its new parent, named through the chain').toMatchObject({ parentId: rightId, name: MEMORY_NAME, kind: MEMORY_KIND })
+    expect(pageTree.children(rightId).map((n) => n.id)).toContain(memory.nodeId)
+    expect(Array.from(pageTree.keyOf(memory.nodeId) ?? []), "the Memory's key, as the member's").toEqual(Array.from(memory.memoryKey))
+    expect(pageTree.nameOf(createdId)).toBe(CREATED_NAME)
+    expect(pageTree.linkTo(memory.nodeId), 'a link keeps the share key').toEqual({ query: { node: memory.nodeId }, hash })
+    // The level's Memories section offers a READ_WRITE guest a new Memory in a folder (`memoryCapabilities`): core
+    // creates it as the guest, and the server takes it (core's `FolderGuestNodeRules`).
+    const guestMemoryId = (await createShareNodeAsGuest(await contextNow(), { parentId: createdId, kind: MEMORY_KIND, name: GUEST_MEMORY_NAME })).nodeId
+    const guestMemory = (await listTree(scopeId, epochs)).find((n) => n.id === guestMemoryId)
+    expect(guestMemory, "the guest's Memory, in its folder").toMatchObject({ parentId: createdId, kind: MEMORY_KIND, name: GUEST_MEMORY_NAME })
+
     // --- (c) refusals, by code -------------------------------------------------------------------------------------
     const ctx = await contextNow()
     // Inside a Memory, Memories decides, and it declares nothing for a guest: a create there is illegal_scope.
@@ -168,6 +185,6 @@ describe.skipIf(!process.env.VEYQ_E2E)('folder share guest e2e (live, real crypt
     expect(onRead instanceof GuestTreeError && onRead.code, 'a READ link').toBe('share_not_contributable')
 
     // Every value recovered by UNSEALING what the server returned (ADR 0053).
-    recordCanaries(byId(afterCreate, createdId)?.name, byId(afterCreate, nestedId)?.name, byId(afterMove, memory.nodeId)?.name)
+    recordCanaries(byId(afterCreate, createdId)?.name, byId(afterCreate, nestedId)?.name, byId(afterMove, memory.nodeId)?.name, guestMemory?.name)
   }, 240_000)
 })

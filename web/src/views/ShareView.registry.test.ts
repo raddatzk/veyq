@@ -5,6 +5,7 @@
 // the real Memories body are covered in ShareView.test.ts / .order.test.ts / .picker.test.ts. Every negative has its
 // live control: the same share with the body claimed renders.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import PrimeVue from 'primevue/config'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 
@@ -66,7 +67,7 @@ function registryWith(claims: NodeKind[]): Registry {
 }
 
 function mountShare() {
-  return mount(ShareView, { global: { plugins: [realI18n()] } })
+  return mount(ShareView, { global: { plugins: [realI18n(), PrimeVue] } })
 }
 
 beforeEach(() => {

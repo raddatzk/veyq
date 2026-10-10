@@ -17,6 +17,8 @@ import type { EpochKeys } from '../features/spaces/epochs'
 import { memberAccess, memberTreeSource, type GuestAccess, type MemberAccess, type TreeSource } from '../core/access'
 import type { ShareRole } from '../api/generated/sharing'
 import type { PublicShareHead } from '../core/sharing/resolvePublicShare'
+import type { GuestIdentity } from '../core/sharing/guestIdentity'
+import { guestAccess } from '../core/sharing/guestAccess'
 import { memoryCapabilities, type MemoryCapabilities } from '../features/memory/capabilities'
 
 export const setupStatus = (o: Partial<SetupStatus> = {}): SetupStatus => ({
@@ -102,6 +104,14 @@ export const guestAccessOf = (role: string, o: Partial<Omit<GuestAccess, 'mode' 
   requestGuest: async () => null,
   ...o,
 })
+
+/** The guest `Access` the share shell hands a body for `head` (`guestAccess`, core/sharing/guestAccess.ts): its role and
+ *  password token from the head, and a naming flow — by default one that is never answered (a test that names a guest
+ *  passes its own). */
+export const guestAccessFor = (
+  head: PublicShareHead,
+  o: { pwToken?: string; requestGuest?: () => Promise<GuestIdentity | null> } = {},
+): GuestAccess => guestAccess({ head, pwToken: o.pwToken, requestGuest: o.requestGuest ?? (() => new Promise(() => {})) })
 
 /** A member's `TreeSource` over `nodes` (a getter, so a test's reactive store is read anew), keys opened under `epochs`. */
 export const memberTreeOf = (
