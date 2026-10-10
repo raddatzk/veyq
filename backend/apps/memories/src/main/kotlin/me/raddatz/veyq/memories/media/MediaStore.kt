@@ -26,7 +26,7 @@ data class MediaRow(
     val manifest: List<Long>?,
     val derivatives: List<DerivativeRow>,
     val wrappedMeta: String?,
-    /** When this media last changed (cr-0107): `= createdAt` at attach, `now` on a meta edit — the keyset cursor sort key. */
+    /** When this media last changed (cr-0107): the attach time at attach, `now` on a meta edit or restore — the keyset cursor sort key. */
     val updatedAt: Instant,
     /** When this media was trashed (cr-0110), or null for a live media; populated only in the trashed listing. */
     val deletedAt: Instant? = null,
@@ -166,8 +166,7 @@ class MediaStore(
             this.shareIdentityId = shareIdentityId
             this.createdBy = ownerKey // cr-0113: the buckets attribution (denormalized owner_key)
             this.bucketId = bucket.id // cr-0113: the uploader's primary; a move files it elsewhere
-            createdAt = now
-            updatedAt = now // cr-0107: the keyset cursor starts at creation time
+            updatedAt = now // cr-0107: the keyset cursor starts at the attach time
         }.persist()
         for (d in derivatives) {
             val derivBlobId = blobs.persistBlob(d.session, d.manifest)
@@ -350,7 +349,7 @@ class MediaStore(
         }
         return MediaRow(
             m.id, blob.id, blob.chunkCount, blob.byteSize, blob.wrappedBlobKey, blobs.decodeManifest(blob.manifest),
-            derivatives, m.wrappedMeta, m.updatedAt ?: m.createdAt, // cr-0107: coalesce for pre-backfill safety
+            derivatives, m.wrappedMeta, m.updatedAt,
             m.deletedAt, m.deletedBy, // cr-0110: null for live media, populated in the trashed listing
             m.createdBy, m.bucketId, // cr-0113: `attach` stamps both
             m.metaVersion,

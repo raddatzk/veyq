@@ -314,7 +314,7 @@ class ShareSliceTest {
             }.persist()
             MediaEntity().apply {
                 id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; this.blobId = blobId
-                createdAt = Instant.now()
+                updatedAt = Instant.now()
             }.persist()
         }
         return mediaId to blobId

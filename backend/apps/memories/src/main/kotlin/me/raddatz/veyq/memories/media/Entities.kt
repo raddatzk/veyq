@@ -64,12 +64,13 @@ class MediaEntity : PanacheEntityBase {
     @Column(name = "created_by", length = 64)
     var createdBy: String? = null
 
-    /** When this media last changed — set `= createdAt` at attach, bumped to `now` on a meta edit (cr-0068). The
-     *  `(updatedAt, mediaId)` pair is the gallery's keyset cursor for the live-updates delta (cr-0107, ADR 0033):
-     *  a poll pulls only media past its cursor. Nullable in the DB; always set by
-     *  the write paths, and the read path coalesces `updatedAt ?: createdAt` defensively. */
-    @Column(name = "updated_at")
-    var updatedAt: Instant? = null
+    /** When this media last changed — the attach time at attach, bumped to `now` on a meta edit (cr-0068) and a
+     *  restore (cr-0110). The `(updatedAt, mediaId)` pair is the gallery's keyset cursor for the live-updates delta
+     *  (cr-0107, ADR 0033): a poll pulls only media past its cursor. The medium's only stored time besides
+     *  [deletedAt]: a separate creation time was read only as this column's fallback, so it is not stored
+     *  (inbox #398). */
+    @Column(name = "updated_at", nullable = false)
+    lateinit var updatedAt: Instant
 
     /** When this media was trashed (soft-deleted), or null for a live media (uc.memory.delete-media, cr-0110). A
      *  trashed row is excluded from listNodeMedia (the active delta + the id-set); the MediaTrashPurge job
@@ -80,9 +81,6 @@ class MediaEntity : PanacheEntityBase {
     /** Who trashed this media — the member's user id (the deletion audit), or null for a live media (cr-0110). */
     @Column(name = "deleted_by", length = 36)
     var deletedBy: String? = null
-
-    @Column(name = "created_at", nullable = false)
-    lateinit var createdAt: Instant
 
     companion object : PanacheCompanionBase<MediaEntity, String>
 }

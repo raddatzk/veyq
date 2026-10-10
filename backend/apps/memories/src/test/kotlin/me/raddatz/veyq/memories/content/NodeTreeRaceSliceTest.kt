@@ -127,7 +127,7 @@ class NodeTreeRaceSliceTest {
             }.persist()
             MediaEntity().apply {
                 id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; this.blobId = blobId
-                createdAt = Instant.now(); deletedAt = Instant.now()
+                updatedAt = Instant.now(); deletedAt = Instant.now()
             }.persist()
         }
         return mediaId

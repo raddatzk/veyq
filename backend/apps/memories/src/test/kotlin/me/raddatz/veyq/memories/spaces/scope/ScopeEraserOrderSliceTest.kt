@@ -86,7 +86,7 @@ class ScopeEraserOrderSliceTest {
                 }.persist()
             }
             MediaEntity().apply {
-                id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; blobId = blobIds[0]; createdAt = Instant.now()
+                id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; blobId = blobIds[0]; updatedAt = Instant.now()
             }.persist()
             MediaDerivativeEntity().apply {
                 id = UUID.randomUUID().toString(); this.mediaId = mediaId; kind = "thumb"; blobId = blobIds[1]

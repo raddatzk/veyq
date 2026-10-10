@@ -489,7 +489,7 @@ class SharingHandler(
         writeVerifier: String,
     ): ReissueShareOutcome {
         val old = store.findIncludingDeleted(shareId) ?: return ReissueShareOutcome.NotFound
-        reissueRefusal(userId, old.scopeId, old.deletedAt != null, old.enabled, old.ownerAccount)?.let { return it }
+        reissueRefusal(userId, old.scopeId, old.deleted, old.enabled, old.ownerAccount)?.let { return it }
         if (!capabilities.isActive(capabilityFor(old.role))) return ReissueShareOutcome.CapabilityDisabled
         // No drop private key: the old WRITE_ONLY share proves the node already holds one (it is set once and
         // never cleared), and every upload so far is sealed to it (ADR 0031 point 7).

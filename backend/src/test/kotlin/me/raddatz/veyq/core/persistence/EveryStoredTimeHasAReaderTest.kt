@@ -16,7 +16,8 @@ import org.junit.jupiter.api.Test
  * needs nor serves is not stored, so a time column earns its place by a reader: a sort, a purge cutoff, an expiry
  * check, a served field — or, named as such, a person reading the database (the terms acceptance time: audit
  * evidence). #318 measured nineteen written-never-read times and dropped them (the owner brought the terms
- * acceptance time back on 2026-10-09 as that evidence); the trap is the default
+ * acceptance time back on 2026-10-09 as that evidence); #398 turned the share tombstone's time into a flag and dropped
+ * the medium's creation time, which was only `updated_at`'s fallback. The trap is the default
  * (`created_at TIMESTAMP NOT NULL` on every new table), so this reads Hibernate's own mapping of every entity, in any
  * module on the classpath, and holds the set of `Instant` columns to [READERS] both ways: a new time column with no
  * entry is red until someone names its reader, and an entry whose column is gone is red until it is struck.
@@ -52,7 +53,7 @@ class EveryStoredTimeHasAReaderTest {
         val READERS: Map<String, String> = mapOf(
             // --- account + sessions
             "veyq_user.email_confirmed_at" to "EmailConfirmationHandler surfaces 'confirmed' (presence); the time is " +
-                "ADR 0074 Decision 1's record of when control was shown — narrowing it to a flag is an ADR change",
+                "ADR 0074 Decision 1's record of when control of the address was shown — kept by decision (#398)",
             "veyq_login_challenge.expires_at" to "LoginHandler refuses an expired challenge; SessionService purges on it",
             "veyq_session_family.created_at" to "served: SessionFamily.createdAt on the sessions list",
             "veyq_session_family.last_used_at" to "served + sorted: the sessions list",
@@ -85,12 +86,10 @@ class EveryStoredTimeHasAReaderTest {
             // --- sharing
             "veyq_share.created_at" to "served: ShareSummary.createdAt on the manage list",
             "veyq_share.expires_at" to "ShareGuestGate refuses an expired link; served on the manage list",
-            "veyq_share.deleted_at" to "the tombstone: every live read filters on its presence (the time itself is " +
-                "unread — a flag would do, inbox #318's follow-up)",
             // --- Memories
             "veyq_bucket.created_at" to "MediaStore lists a node's buckets oldest first",
-            "veyq_media.created_at" to "MediaStore's fallback for a null updated_at (the write paths set both)",
-            "veyq_media.updated_at" to "the gallery's keyset cursor (cr-0107); served as MediaView.updatedAt",
+            "veyq_media.updated_at" to "the gallery's keyset cursor (cr-0107); served as MediaView.updatedAt — set " +
+                "at attach, so it is also the medium's only creation time (#398 dropped created_at)",
             "veyq_media.deleted_at" to "the media purge's cutoff; the trash list's order",
         )
     }

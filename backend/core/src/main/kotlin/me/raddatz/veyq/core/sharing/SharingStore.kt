@@ -122,7 +122,7 @@ class SharingStore(
      *  **one** transaction: a replaced link has nothing left to come back for.
      *
      *  A share is re-issued **at most once** (inbox #252), spent by a checked compare-and-set (developer-styleguide
-     *  §12): the first write is `deletedAt` set where it is still null, and its row count decides. Of two concurrent
+     *  §12): the first write is `deleted` set where it is still false, and its row count decides. Of two concurrent
      *  re-issues the second's update waits on the first's row lock, then matches nothing — `DELETED`, nothing
      *  written, exactly what a later re-issue of it gets. The old row is read only **after** the spend, under the
      *  row lock that update holds, so a concurrent edit cannot slip a role change between the read and the
@@ -137,7 +137,7 @@ class SharingStore(
         passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?, writeVerifier: String,
     ): ReissueResult {
         if (idTaken(newId)) return ReissueResult.ID_TAKEN
-        val spent = ShareEntity.update("deletedAt = ?1 where id = ?2 and deletedAt is null", Instant.now(), oldId)
+        val spent = ShareEntity.update("deleted = true where id = ?1 and deleted = false", oldId)
         if (spent != 1) return if (ShareEntity.findById(oldId) == null) ReissueResult.NOT_FOUND else ReissueResult.DELETED
         val old = ShareEntity.findById(oldId)!! // the spent row, read under the update's lock
         tombstone(old)
@@ -230,7 +230,7 @@ class SharingStore(
 
     /** A share that exists and is not deleted — every reader's lookup (ADR 0029 §7): a tombstone is not found,
      *  to the guest and to every curator operation alike. */
-    fun find(shareId: String): ShareEntity? = ShareEntity.findById(shareId)?.takeIf { it.deletedAt == null }
+    fun find(shareId: String): ShareEntity? = ShareEntity.findById(shareId)?.takeIf { !it.deleted }
 
     /** A share row, a tombstone included — for the ONE reader that answers a deleted share differently from an
      *  unknown one: a re-issue, whose member caller gets `share_deleted` and re-reads the list (inbox #252). Its
@@ -251,7 +251,7 @@ class SharingStore(
      *  own ciphertext onto the tombstone, and a re-activation would turn it back on; locked, it waits for the delete
      *  and then finds no share (`ShareDeleteRaceSliceTest`, red without the lock). */
     fun liveForUpdate(shareId: String): ShareEntity? =
-        ShareEntity.findById(shareId, LockModeType.PESSIMISTIC_WRITE)?.takeIf { it.deletedAt == null }
+        ShareEntity.findById(shareId, LockModeType.PESSIMISTIC_WRITE)?.takeIf { !it.deleted }
 
     /**
      * Whether the share still takes a guest's write — live and enabled — read under the row lock a delete takes
@@ -263,23 +263,23 @@ class SharingStore(
     fun admitsGuests(shareId: String): Boolean {
         val share = ShareEntity.find("id", shareId).withLock(LockModeType.PESSIMISTIC_WRITE).firstResult()
             ?.also { ShareEntity.getEntityManager().refresh(it) } ?: return false
-        return share.deletedAt == null && share.enabled
+        return !share.deleted && share.enabled
     }
 
     /** The scope of a live share, by a scalar read that loads no entity — for a caller that must lock the scope
      *  before it loads the share ([liveForUpdate] on an entity already loaded would hand back that unrefreshed copy). */
     fun liveScopeOf(shareId: String): String? =
         ShareEntity.getEntityManager()
-            .createQuery("select s.scopeId from ShareEntity s where s.id = :id and s.deletedAt is null", String::class.java)
+            .createQuery("select s.scopeId from ShareEntity s where s.id = :id and s.deleted = false", String::class.java)
             .setParameter("id", shareId).resultList.firstOrNull()
 
     fun listByOwner(ownerAccount: String): List<ShareEntity> =
-        ShareEntity.find("ownerAccount = ?1 and deletedAt is null", ownerAccount).list()
+        ShareEntity.find("ownerAccount = ?1 and deleted = false", ownerAccount).list()
 
     /** Every share on a node, any owner — for the shared-scope manage panel (cr-0104). The handler gates it on
      *  scope membership; the store just reads the node's shares. A deleted one is in no listing. */
     fun listByNode(nodeId: String): List<ShareEntity> =
-        ShareEntity.find("nodeId = ?1 and deletedAt is null", nodeId).list()
+        ShareEntity.find("nodeId = ?1 and deleted = false", nodeId).list()
 
     /** Soft-revoke a share the caller owns (idempotent). Returns false when no such share is owned by the caller. */
     @Transactional
@@ -311,8 +311,8 @@ class SharingStore(
 
     /**
      * The ONE body of every share deletion (ADR 0029 §7) — a delete, a re-issue's old link, the purge of the node
-     * it is on. Off, `deleted_at` set, and every ciphertext column and the expiry cleared: what stays is the id (so
-     * nothing is ever minted under it again), the scope, node, role and dates, and the foreign key the link's guest
+     * it is on. Off, `deleted` set, and every ciphertext column and the expiry cleared: what stays is the id (so
+     * nothing is ever minted under it again), the scope, node, role and creation time, and the foreign key the link's guest
      * identities hang off. Never touches the identities' wrapped keys, the application rows under the node (Memories' media and
      * buckets), or its drop key: an uploader guest's uploads open only through them, and they belong to the node, not to the link — an
      * identity goes only once nothing of the guest's remains ([dropDeadIdentities]). Runs inside its caller's
@@ -320,7 +320,7 @@ class SharingStore(
      */
     fun tombstone(share: ShareEntity) {
         share.enabled = false
-        share.deletedAt = Instant.now()
+        share.deleted = true
         share.wrap = null
         share.sealedDropPublicKey = null
         share.sealedName = null
@@ -341,7 +341,7 @@ class SharingStore(
      *  node that no longer exists has nothing left to serve. Runs inside the purge's transaction. */
     fun tombstoneAllOn(nodeIds: Collection<String>) {
         if (nodeIds.isEmpty()) return
-        ShareEntity.find("nodeId in ?1 and deletedAt is null", nodeIds).withLock(LockModeType.PESSIMISTIC_WRITE).list()
+        ShareEntity.find("nodeId in ?1 and deleted = false", nodeIds).withLock(LockModeType.PESSIMISTIC_WRITE).list()
             .forEach { tombstone(it) }
     }
 
@@ -357,7 +357,7 @@ class SharingStore(
     fun dropDeadIdentities(candidateIds: Collection<String>) {
         for (id in candidateIds.toSet()) {
             val identity = ShareIdentityEntity.findById(id) ?: continue
-            if (ShareEntity.findById(identity.shareId)?.deletedAt == null) continue
+            if (ShareEntity.findById(identity.shareId)?.deleted != true) continue
             if (!GuestIdentityUsage.unreferenced(identityUsages, id)) continue
             ShareIdentityEntity.deleteById(id)
         }
@@ -383,7 +383,7 @@ class SharingStore(
     @Transactional
     fun turnOffAllInScope(scopeId: String): Int {
         val turnedOff = ShareEntity.update("enabled = false, reissueOnly = true where scopeId = ?1 and enabled = true", scopeId)
-        ShareEntity.update("reissueOnly = true where scopeId = ?1 and reissueOnly = false and deletedAt is null", scopeId)
+        ShareEntity.update("reissueOnly = true where scopeId = ?1 and reissueOnly = false and deleted = false", scopeId)
         return turnedOff
     }
 

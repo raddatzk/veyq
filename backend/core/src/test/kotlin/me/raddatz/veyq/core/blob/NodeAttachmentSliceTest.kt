@@ -219,7 +219,7 @@ class NodeAttachmentSliceTest {
         QuarkusTransaction.requiringNew().run {
             ShareEntity().apply {
                 id = shareId; ownerAccount = userId; this.scopeId = scopeId; this.nodeId = nodeId; role = ShareEntity.READ_WRITE
-                enabled = false; createdAt = Instant.now(); deletedAt = Instant.now().minusSeconds(7200)
+                enabled = false; createdAt = Instant.now(); deleted = true
             }.persist()
         }
         return shareId to seedGuest(shareId)
