@@ -32,7 +32,12 @@ here; the server is blind.
   every guest write after a reload then failed, while the unit test that asserted the `router.push` arguments stayed
   green (found only in a real browser, 2026-10-07). A core page that keeps the share key in the URL fragment
   navigates with `hash: route.hash` and gives every link a real `href`; its test mounts the real component and the
-  real router and clicks the rendered element (`FolderShareBody.breadcrumb.test.ts`).
+  real router and clicks the rendered element (`FolderShareBody.breadcrumb.test.ts`, `FolderShareBody.test.ts`,
+  `FolderShareGuest.test.ts`).
+- **A guest-mode mount proves it calls no authenticated client** (inbox #401): mock each client module through
+  `src/test/guestMode.ts`'s `guardedClients` (`vi.mock('…/api/client', async (o) => (await import('…/test/guestMode'))
+  .guardedClients(await o()))` — the public factories become `vi.fn`s to stub, every other one throws and is recorded)
+  and assert `authenticatedCalls` stayed empty; a call is then red even where the view swallowed the error.
 - **`vi.mock` resolves by path, so moving a module silently disarms every mock of it.** A mock left on the old
   path stubs nothing and the real module runs — and a passthrough mock (`withRefresh: (f) => f()`) is green
   either way, so no red announces it. After a move, prove the new mocks bite by sabotaging the *real* module
@@ -150,8 +155,9 @@ here; the server is blind.
   `shareDialog` — props `NodeShareDialogProps` `{scopeId, nodeId, nodeKey, epochs, nodeName, nodeKind, uploader?}`; a
   kind without one offers no share; and its `shareSection` — `{ order, component }`, props `ShareSectionProps`
   (the share, the folder on screen, the kind's children with the chain's keys and names, `canWrite`, `requestGuest`):
-  core's folder page of a public share (`core/sharing/FolderShareBody.vue`) renders it at every folder instead of
-  cards for those children, by the level sections' rules (Files' file list for guests). Core owns the rest: a folder's create and every node's rename are
+  core's folder page of a public share (`core/sharing/FolderShareBody.vue`, which is core's `LevelView` handed the
+  guest's access and tree since inbox #401 S2) draws it in the level's `host-section` slot instead of that kind's level
+  section (Files' file list for guests; retired in S3). Core owns the rest: a folder's create and every node's rename are
   `core/node/FolderNameDialog.vue`, which derives the slug by the renamed node's kind, and FOLDER's share dialog
   `core/sharing/FolderShareDialog.vue` is pre-registered); `addSlotItem(slot, id, component, order?)` for the two list slots `topbarTray`
   and `sidebarPins` (an id namespaced by the application, e.g. `memories.pinned`; write-once per (slot, id); the shell
@@ -170,9 +176,16 @@ here; the server is blind.
   an explicit unsupported/unavailable state, never an empty region. **Who looks** (inbox #401, `core/access.ts`): a
   `detail` (`NodeDetailProps`) and a `section` (`LevelSectionProps`) are handed `access` — `Access`, a member
   (`scopeId`, `epochs`, `readonly` = pending deletion, the instance's `publicLinks`/`uploaderLinks`) or a share guest
-  (`shareId`, `role`, `head`, `pwToken`, `requestGuest`; built from S2 on) — and `tree`, a `TreeSource` (`node`,
+  (`shareId`, `role`, `head`, `pwToken`, `requestGuest` — `guestAccess`, built by `views/ShareView.vue`, which owns the
+  page's one naming flow, core's `core/sharing/GuestNaming.vue` with its "Not you?"; every naming place uses that one
+  component) — and `tree`, a `TreeSource` (`node`,
   `children`, `keyOf`, `nameOf`, `inIdentityFolder`, `linkTo`: every navigation goes through it, so a guest's link keeps
-  `#k=`); the member's come from `memberAccess`/`memberTreeSource`, built by the host. What a view offers is its
+  `#k=`); the member's come from `memberAccess`/`memberTreeSource`, built by the host, the guest's tree from
+  `guestTreeSource` (`core/sharing/guestAccess.ts`: a served `ShareNode` as a `TreeNode` — `createdAt` 0, so equal
+  names number by node id; `metaVersion` 0; `wrappedMeta` as served). A section mounted for a guest reads nothing of
+  the member's world (`treeStore`, `activeSpace`, the cover and pin stores) — Memories' section reads its dates, covers
+  and map from the guest's tree (`features/memory/guestCover.ts`). A share body (`ShareBodyProps`) is handed the
+  guest's `access` too, and a body embedded below a folder asks `access.requestGuest` instead of naming on its own. What a view offers is its
   application's pure, fail-closed capability function over `access` and `targetOf(tree, node)` — `memoryCapabilities`
   (`features/memory/capabilities.ts`), `filesCapabilities` (`features/files/capabilities.ts`), core's
   `folderCapabilities` for the level view; each matrix is its `docs/apps/<app>.md` table — never a `readonly`,

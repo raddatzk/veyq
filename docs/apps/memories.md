@@ -138,6 +138,16 @@ one. A share right also needs the kind's descriptor to bring a share dialog (`ta
 half; a right shows only where the session's data source also implements it (ADR 0079), so the guest's columns are the
 most a guest page can ever offer.
 
+**The guest's folder page (since inbox #401 S2)** renders this section as a member's: `MemoriesSection` handed a
+guest's access and tree shows the Memories of a shared folder as MemoryCards, each date and place unsealed under the
+node's key the link's chain opened, each cover through the link's own reads (`guestCover.ts`: a chosen photo's
+thumbnail from `listShareMedia`, read once and only when a cover needs it; an uploaded cover blob through
+`resolveShareBlob`, which serves a node's cover blob below the share), the map over the opened subtree — no heart, no
+member store (`treeStore`, `activeSpace`, `coverStore`, `favoritesStore`) read. A Memory opened from there is still
+Memories' guest body, embedded (`MemoryShareBody`, until S5). A link's guest names itself through core's one naming
+component (`core/sharing/GuestNaming.vue`): on a Memory link the pre-screen's form, and "Not you?" — the shell's line
+for a contributor, the drop page's own for an uploader — which asks, then forgets the device's session.
+
 ## How far it is separated
 
 Measured 2026-10-05 (`ls backend/core/src/main/kotlin/me/raddatz/veyq/core backend/apps/memories/src/main/kotlin/me/raddatz/veyq/memories`):

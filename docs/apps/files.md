@@ -156,8 +156,10 @@ columns are the most a guest page can ever offer.
 - **Quota:** a guest's attachment names its identity, so the link's usage counts it (core's attachment term; Files'
   `UploadAdmission` reports 0) against the tenant's per-link limit; core's `AttachmentGuestIdentityUsage` keeps the
   guest's identity while a file names it (Files stores no row of its own naming a guest, so it ships no usage).
-- **The web:** core's folder page of a public share (`core/sharing/FolderShareBody.vue`) renders a kind's
-  `shareSection` for its children; Files' is `components/ShareFilesSection.vue` — the files with name, size and date
+- **The web:** core's folder page of a public share (`core/sharing/FolderShareBody.vue`) is core's member `LevelView`
+  handed the guest's access and tree (inbox #401 S2): the drop boxes are `DropBoxSection`'s rows as for a member, and
+  until S3 a kind's `shareSection` is drawn in the level's `host-section` slot instead of its level section; Files' is
+  `components/ShareFilesSection.vue` — the files with name, size and date
   opened under the chain's keys, download through the link, and for a contributor an upload button (one core-queue job
   per file, `shareUpload.ts`: guest create → guest transport with the blob meta → `completeShareFile`) and a replace per
   row (an upload into it, for a file that holds no content), above the list the sentence that it can replace any file,
@@ -166,7 +168,8 @@ columns are the most a guest page can ever offer.
   name exists and to use its row's replace. **Every replace asks first** (owner decision 2026-10-08, inbox #383) —
   the contributor's row replace, after the file is picked and before the guest is named ("it changes for everyone who
   sees this folder, the owner too; the old content cannot be restored"), as the member's does (§ The web); a file that
-  holds no content asks nothing. The guest names itself once per link through the page's own dialog (`requestGuest`).
+  holds no content asks nothing. The guest names itself once per link through the page's one naming flow
+  (`requestGuest`, the shell's dialog, core's `GuestNaming`).
   No rename on the guest page (no kind has one there yet, inbox #358). Inside a guest's identity folder (§ The drop box)
   core's folder page hands no write to any guest.
 
@@ -187,7 +190,8 @@ one per guest identity, which are core `FOLDER`s carrying `veyq_node.share_ident
   out of the member's tree instead of failing it.
 - **The guest** (`components/DropBoxGuestForm.vue`, what Files' share body `DropBoxShareBody.vue` renders on the link
   rooted at the drop box; `dropBox.ts`): names itself once (the session keeps identity,
-  token, `K_up` and the name on the device; the page says "Sending as …" with a "Not you?" that asks, then forgets the
+  token, `K_up` and the name on the device; through core's one guest-naming component, `core/sharing/GuestNaming.vue`,
+  the page says "You are here as …" with a "Not you?" that asks, then forgets the
   session there and asks for a name again — a new identity, the old one's folder untouched; after a gone link the same
   action reads the link again first — a revoked or deleted one turns the page to "not available", inbox #393), then, with its **first file**, **`ensureShareDropFolder`** — `POST /api/shares/{shareId}/files/drop-folder`,
   Files' operation over core's `IdentityFolders`: the first call creates the folder from the guest's ciphertext, every

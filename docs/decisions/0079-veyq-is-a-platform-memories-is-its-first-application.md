@@ -292,9 +292,15 @@ on their own.
   **Built** (S1 of #401): `web/src/core/access.ts` (`Access`, `TreeSource`, the member's factories, `targetOf`,
   `folderCapabilities`), `memoryCapabilities` and `filesCapabilities`; the member host hands `access` and `tree` to
   every detail and section, whose controls read the capabilities (the matrix half — the source half arrives with each
-  source). **Open, in this order, each green before the next:** S2 the guest's tree source and core's level view on the
-  share page (`FolderShareBody` shrinks to building the guest's context, breadcrumb, note and badge; one core naming
-  component); S3 Files' views serve guests (`ShareFilesSection` deleted, `DropBoxDetail` absorbs `DropBoxSharedView`,
+  source). **Built** (S2): the guest's `access` and `tree` (`web/src/core/sharing/guestAccess.ts`: `guestAccess`,
+  `guestTreeSource` over the opened subtree — a served `ShareNode` as a `TreeNode`, `createdAt` 0 so equal names number
+  by node id, `metaVersion` 0, `wrappedMeta` as served); the shell (`views/ShareView.vue`) builds the access and owns
+  the page's one naming flow (`requestGuest`, core's `GuestNaming` with "Not you?", used by every naming place — the
+  shell's dialog, the Memories link's pre-screen, Files' drop page); a folder link's page is core's `LevelView` handed
+  both, so a Memory is the member's MemoryCard with its date, cover and map read from what the link opened. Two
+  transitional seams until their steps: a kind's `shareSection` is drawn in the level's `host-section` slot (S3), and a
+  non-folder node is still the claimed share body, embedded (S5). **Open, in this order, each green before the next:**
+  S3 Files' views serve guests (`ShareFilesSection` deleted, `DropBoxDetail` absorbs `DropBoxSharedView`,
   `shareSection` removed from the registry); S4 Memories' data source, the member's and the guest's; S5 `MemoryDetail`
   for guests (`MemoryShareBody` reduced to the drop; a contributor uploads into the chapter it navigated to).
 - **Guards move with the code, and the build is one of them.** On the backend, core → application is the

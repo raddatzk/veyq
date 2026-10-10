@@ -50,6 +50,15 @@ acceptanceCriteria:
       web:
         unit: [src/features/memory/share.test.ts]
         e2e: [src/features/memory/shareContributor.e2e.test.ts]
+  - id: not-you-forgets-the-device-session
+    text: >-
+      Named, the page says whose session this device holds on the link, with a "Not you?" that asks first and then
+      forgets the session on the device only — the next visitor names itself afresh, nothing on the server changes.
+      One core component names every guest: a Memory link's pre-screen, a folder link's first-write dialog (the
+      shell's one naming flow, under the share root's key), Files' drop page.
+    coverage:
+      web:
+        unit: [src/views/ShareView.naming.test.ts, src/views/ShareView.test.ts, src/features/files/components/DropBoxShareBody.test.ts, src/features/memory/components/MemoryShareBody.embedded.test.ts]
   - id: share-scoped-upload
     text: Three share-scoped UNAUTHENTICATED endpoints mirror the media control plane, gated only on share state (role READ_WRITE + enabled + a valid contributor token) — POST /api/shares/{shareId}/blob-uploads opens sessions and presigns their first window of PUTs, POST /api/shares/{shareId}/blob-upload-windows presigns each next window, POST /api/shares/{shareId}/media completes + attaches. The contributor seals K_blob + derivatives + metadata under K_mem and PUTs ciphertext direct-to-store; bytes never flow through the backend. A parallel authz path keyed on share state, never a relaxed member filter.
     coverage:
@@ -160,12 +169,13 @@ acceptanceCriteria:
       backend:
         integration: [ShareNodesCoreSliceTest.aGuestCreatesAFolderAndANestedNodeAndAMemberListsThem, ShareNodesCoreSliceTest.aGuestMovesAndRenamesInsideTheSubtree, ShareNodesCoreSliceTest.aStalePlacementVersionIsAConflictAndWritesNothing, ShareNodesCoreSliceTest.anEpochAboveTheCurrentIsStaleAndStoresNothing, ShareNodesCoreSliceTest.anEpochBelowTheCurrentIsStoredAsSentWithNoPayload, ShareNodesCoreSliceTest.aTakenSlugIsAConflictOnCreateAndOnMove, ShareNodesCoreSliceTest.aGuestNeverMovesANodeOutOfTheSubtreeTheRootOrIntoACycle, ShareNodesCoreSliceTest.aGuestCreatesNothingOutsideTheSubtree, ShareNodesCoreSliceTest.aGuestNeverRenamesTheShareRoot, ShareNodesCoreSliceTest.aTrashedShareRootTakesNoTreeOperation, ShareNodesSliceTest.aGuestMovesAMemoryBetweenTwoSubfoldersOfASharedFolder, ShareNodeRaceCoreSliceTest.aGuestMoveIntoAFolderAMemberMovesOutOfTheSubtreeMeanwhileIsRefused, ShareNodeRaceCoreSliceTest.aGuestCreateUnderAParentAMemberTrashesMeanwhileIsRefused, ShareNodeRaceCoreSliceTest.aRevokedOrDeletedLinkNeverAcceptsAGuestWriteMeanwhile, ShareNodeRaceCoreSliceTest.aGuestWriteAndAReactivationOfTheLinkBothLandWithoutADeadlock]
       web:
-        unit: [src/core/sharing/guestTree.wire.test.ts, src/core/sharing/FolderShareBody.test.ts]
+        unit: [src/core/sharing/guestTree.wire.test.ts, src/core/sharing/FolderShareBody.test.ts, src/views/ShareView.naming.test.ts, src/features/memory/components/MemoriesSection.guest.test.ts]
         e2e: [src/features/memory/folderShareGuest.e2e.test.ts]
     gaps:
       - surface: web
         reason: >-
-          The guest page offers "New folder" only: no move or rename control exists (inbox #358), so a guest's
+          The guest page offers "New folder" and, in Memories' section, "New Memory" (the level's create cards, inbox
+          #401 S2): no move or rename control exists (inbox #358), so a guest's
           placement is proven through placeShareNodeAsGuest by the wire test and the e2e, not through a screen.
   - id: guest-tree-refusals
     text: >-
