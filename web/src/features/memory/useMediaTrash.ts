@@ -8,7 +8,8 @@ import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Menu from 'primevue/menu'
 import type { MenuItem } from 'primevue/menuitem'
-import { openGrid, hasDerivatives, unsealMeta, listTrash, restoreMedia, purgeMedia, type MediaItem } from './media'
+import { hasDerivatives, unsealMeta, type MediaItem } from './media'
+import type { MemorySource } from './source'
 import { galleryDisplayAspectRatio } from './mediaGridLayout'
 import { useObjectUrls } from '../../shared/state/useObjectUrls'
 import type { TreeNode } from '../../core/node/tree'
@@ -16,6 +17,9 @@ import type { TreeNode } from '../../core/node/tree'
 /** The reactive context MemoryDetail hands the trash slice — getters so props stay reactive, plus the two host
  *  effects: re-list the gallery after a restore, and lift the gallery's pending-delete tombstone. */
 export interface MediaTrashContext {
+  /** The session's data source: its media trash (`trash`; absent — a guest's — nothing here reads or writes) and the
+   *  tiles' grid loader. */
+  source: MemorySource
   scopeId: () => string
   node: () => TreeNode
   memoryKey: () => Uint8Array | null
@@ -38,10 +42,12 @@ export function useMediaTrash(ctx: MediaTrashContext) {
 
   /** Restore a media from the Trash tab: drop it from the tab (optimistic), restore server-side, re-list the gallery. */
   async function onRestoreFromTrash(mediaId: string) {
+    const trash = ctx.source.trash
+    if (!trash) return
     dropFromTrash(mediaId)
     ctx.liftTombstone(mediaId) // cr-0111: a genuine restore lifts the gallery tombstone
     try {
-      await restoreMedia(ctx.scopeId(), mediaId)
+      await trash.restore(mediaId)
     } finally {
       ctx.reloadGallery()
     }
@@ -61,12 +67,13 @@ export function useMediaTrash(ctx: MediaTrashContext) {
   /** Load the Memory's trashed media for the Trash tab (lazy, on open) — decrypt each thumbnail like the gallery. */
   async function loadTrash() {
     const key = ctx.memoryKey()
-    if (!key) return
+    const trash = ctx.source.trash
+    if (!key || !trash) return
     const nodeId = ctx.node().id
     trashStatus.value = 'loading'
     thumbs.clear()
     try {
-      const list = await listTrash(ctx.scopeId(), nodeId)
+      const list = await trash.list(nodeId)
       if (ctx.node().id !== nodeId) return
       trashedItems.value = list
       trashStatus.value = 'ready'
@@ -74,7 +81,7 @@ export function useMediaTrash(ctx: MediaTrashContext) {
         list.map(async (m) => {
           if (!hasDerivatives(m)) return
           try {
-            const bytes = await openGrid(ctx.scopeId(), key, m)
+            const bytes = await ctx.source.loaders.grid(m, key)
             if (ctx.node().id === nodeId) thumbs.set(m.mediaId, new Blob([bytes as BlobPart]))
           } catch {
             // a failed tile stays a placeholder
@@ -144,9 +151,10 @@ export function useMediaTrash(ctx: MediaTrashContext) {
   /** Batch restore the current selection: optimistic drop, restore each server-side, one re-list of the gallery. */
   async function restoreSelected() {
     const ids = [...selectedTrash.value]
-    if (!ids.length) return
+    const trash = ctx.source.trash
+    if (!ids.length || !trash) return
     ids.forEach((id) => { dropFromTrash(id); ctx.liftTombstone(id) })
-    await Promise.allSettled(ids.map((id) => restoreMedia(ctx.scopeId(), id)))
+    await Promise.allSettled(ids.map((id) => trash.restore(id)))
     ctx.reloadGallery()
   }
   function purgeSelected() {
@@ -158,14 +166,15 @@ export function useMediaTrash(ctx: MediaTrashContext) {
   const purgeBusy = ref(false)
   async function confirmPurge() {
     const ids = purgeConfirm.value?.ids ?? []
-    if (!ids.length) {
+    const trash = ctx.source.trash
+    if (!ids.length || !trash) {
       purgeConfirm.value = null
       return
     }
     purgeBusy.value = true
     try {
       ids.forEach(dropFromTrash)
-      const results = await Promise.allSettled(ids.map((id) => purgeMedia(ctx.scopeId(), id)))
+      const results = await Promise.allSettled(ids.map((id) => trash.purge(id)))
       if (results.some((r) => r.status === 'rejected')) void loadTrash() // resync the tab on any failure
     } finally {
       purgeBusy.value = false

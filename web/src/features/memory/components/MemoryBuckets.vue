@@ -17,13 +17,9 @@ import MediaGrid from './MediaGrid.vue'
 import MediaTile from './MediaTile.vue'
 import { galleryDisplayAspectRatio } from '../mediaGridLayout'
 import {
-  listBuckets, createBucket, renameBucket, deleteBucket, moveBucketMedia, openBucketName, deleteMedia, restoreMedia,
-  unsealMeta, originalMediaType, isVideoMediaType, hasDerivatives, type MediaItem, type BucketItem,
+  openBucketName, unsealMeta, originalMediaType, isVideoMediaType, hasDerivatives, type MediaItem, type BucketItem,
 } from '../media'
-import { listScopeMembers } from '../../spaces/members'
-import { contentKeyChain } from '../../../core/node/tree'
-import { treeStore } from '../../../core/node/treeStore'
-import { activeEpochKeys } from '../../../app/activeSpace'
+import { useMemoryView } from '../source'
 import { useToast } from '../../../shared/state/useToast'
 import { useUndo } from '../../../shared/state/useUndo'
 
@@ -42,6 +38,15 @@ const emit = defineEmits<{
 
 const { t, locale } = useI18n()
 const toast = useToast()
+// Every read and write of the organizer goes through the Memory detail's data source (`../source.ts`, inbox #401 S4):
+// its buckets door — the scope's buckets and members, the tree's ancestor keys. A member's only; the detail mounts this
+// where the capabilities AND the source say so, and outside a detail, or on a source without the door, it throws rather
+// than reach for the member's API itself.
+const buckets = (() => {
+  const door = useMemoryView().source.buckets
+  if (!door) throw new Error('MemoryBuckets mounted without a buckets door')
+  return door
+})()
 const SELF_PRIMARY = '__veyq_self_primary__'
 
 type BucketVM = {
@@ -84,13 +89,7 @@ const dropActive = ref(false)
 /** The keys of this node's ancestors, nearest first, from the loaded tree: a guest of a link rooted ABOVE this node
  *  (a shared folder, a shared Memory for a chapter) named itself under that root's key (`openBucketName`). */
 function ancestorKeys(): Uint8Array[] {
-  const epochs = activeEpochKeys()
-  if (!epochs) return []
-  try {
-    return contentKeyChain(props.scopeId, epochs, treeStore.nodes, props.nodeId).slice(1)
-  } catch {
-    return [] // a chain that does not open: only this node's own key
-  }
+  return buckets.ancestorKeys(props.nodeId)
 }
 
 function labelFor(b: BucketItem, key: Uint8Array | null, members: Map<string, string>, above: Uint8Array[]): string {
@@ -107,8 +106,8 @@ async function loadBuckets() {
   status.value = 'loading'
   try {
     const [raw, members] = await Promise.all([
-      listBuckets(props.scopeId, props.nodeId),
-      listScopeMembers(props.scopeId).catch(() => []),
+      buckets.list(props.nodeId),
+      buckets.members().catch(() => []),
     ])
     const names = new Map(members.map((m) => [m.userId, m.username]))
     const above = ancestorKeys()
@@ -252,9 +251,9 @@ async function submitBucketDialog() {
       // Nest under the active primary root — a real id targets that owner (incl. a contributor's); the virtual
       // own-primary passes none, so the server nests under (and materializes) your own primary.
       const parent = activeBucket.value
-      await createBucket(props.scopeId, props.nodeId, key, name, parent && !parent.virtual ? parent.id : undefined)
+      await buckets.create(props.nodeId, key, name, parent && !parent.virtual ? parent.id : undefined)
     } else if (activeBucket.value) {
-      await renameBucket(props.scopeId, props.nodeId, key, activeBucket.value.id, name)
+      await buckets.rename(props.nodeId, key, activeBucket.value.id, name)
     }
     bucketDialog.value.open = false
     await loadBuckets()
@@ -277,7 +276,7 @@ async function confirmDeleteBucket() {
   if (!b || !canConfirmDeleteBucket.value) return
   deleteBucketDialog.value.saving = true
   try {
-    await deleteBucket(props.scopeId, props.nodeId, b.id) // media reparent to your primary (server-side)
+    await buckets.remove(props.nodeId, b.id) // media reparent to your primary (server-side)
     deleteBucketDialog.value.open = false
     await loadBuckets()
     emit('changed')
@@ -317,7 +316,7 @@ async function submitMove() {
   moveDialog.value.saving = true
   moveDialog.value.error = ''
   try {
-    await moveBucketMedia(props.scopeId, props.nodeId, [...selected.value], moveDialog.value.target)
+    await buckets.move(props.nodeId, [...selected.value], moveDialog.value.target)
     moveDialog.value.open = false
     selected.value = new Set()
     await loadBuckets()
@@ -334,7 +333,7 @@ async function deleteSelected() {
   const ids = [...selected.value]
   if (!ids.length) return
   selected.value = new Set()
-  await Promise.allSettled(ids.map((id) => deleteMedia(props.scopeId, id))) // soft-delete → trash
+  await Promise.allSettled(ids.map((id) => buckets.trash(id))) // soft-delete → trash
   await loadBuckets()
   emit('changed')
   undo.arm({ ids, count: ids.length })
@@ -343,7 +342,7 @@ async function deleteSelected() {
 async function undoDelete() {
   const u = undo.cancel()
   if (!u) return
-  await Promise.allSettled(u.ids.map((id) => restoreMedia(props.scopeId, id)))
+  await Promise.allSettled(u.ids.map((id) => buckets.restore(id)))
   await loadBuckets()
   emit('changed')
 }

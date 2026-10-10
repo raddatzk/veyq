@@ -35,6 +35,7 @@ vi.mock('../uploadQueue', async (orig) => {
 import { mount, flushPromises } from '@vue/test-utils'
 import PrimeVue from 'primevue/config'
 import MemoryDetail from './MemoryDetail.vue'
+import { memberMemorySource } from '../source'
 import { addMedia, type MediaDeriver } from '../media'
 import { retryFile, enqueueUploads } from '../uploadQueue'
 import { blobApi, contentApi } from '../../../api/client'
@@ -99,7 +100,7 @@ function pushBatch(files: unknown[], nodeId = NODE_ID) {
 
 function mountDetail(memoryKey: Uint8Array) {
   return mount(MemoryDetail, {
-    props: { node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey, favorite: false, caps: memberMemoryCaps() },
+    props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey, favorite: false, caps: memberMemoryCaps() },
     global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
   })
 }

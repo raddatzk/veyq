@@ -40,6 +40,7 @@ import MemoryMap from './MemoryMap.vue'
 import { registerPlayback, revokePlayback, handleFromUrl } from '../../../sw/register'
 import { useObjectUrl } from '../../../shared/state/useObjectUrls'
 import { formatBytes } from '../../../shared/formatBytes'
+import type { MediaMetaDoor } from '../source'
 
 const props = defineProps<{
   scopeId: string
@@ -64,6 +65,9 @@ const props = defineProps<{
   // provider (per-item K_mem + guest pwToken), so the SW path and the download cover the anonymous viewer without the
   // SW learning the route. Absent → the authed provider is used.
   videoChunkProvider?: (item: MediaItem) => ChunkProvider
+  // The medium's meta writes (capture-time correction, place-name backfill) as the Memory's data source carries them
+  // (`../source.ts`, inbox #401 S4); absent → the authed media API. Only read while not `readonly`.
+  mediaMeta?: MediaMetaDoor
   suspendKeys?: boolean // pause the global Escape/arrow handler while a modal (the cover cropper) is open over the lightbox
 }>()
 const emit = defineEmits<{
@@ -225,7 +229,9 @@ async function persistCapturedAt(overrideMs: number | null) {
   savingCapturedAt.value = true
   capturedAtError.value = null
   try {
-    const updated: MediaMetaWrite = await setMediaMeta(props.scopeId, target, props.memoryKey, overrideMs)
+    const updated: MediaMetaWrite = props.mediaMeta
+      ? await props.mediaMeta.set(target, props.memoryKey, overrideMs)
+      : await setMediaMeta(props.scopeId, target, props.memoryKey, overrideMs)
     applyMetaState(target, updated, updated.tier) // let the grid re-sort
     if (item.value !== target) return // navigated away mid-save — drop the stale result
     isEditingCapturedAt.value = false
@@ -338,7 +344,9 @@ async function resolvePlaceForCurrent() {
   const resolved = await resolvePlaceName(geocoderUrl.value, meta.gpsLat!, meta.gpsLng!, locale.value)
   if (!resolved) return
   try {
-    const updated = await backfillPlaceName(props.scopeId, target, props.memoryKey, resolved.name, resolved.level)
+    const updated = props.mediaMeta
+      ? await props.mediaMeta.backfillPlace(target, props.memoryKey, resolved.name, resolved.level)
+      : await backfillPlaceName(props.scopeId, target, props.memoryKey, resolved.name, resolved.level)
     applyMetaState(target, updated, updated.tier)
   } catch (e) {
     /* best-effort: a failed seal leaves the coordinate showing, and the next open tries again — and a tier that

@@ -5,14 +5,14 @@
 // cr-0073). This owns the reactive wiring: editor/lightbox-seed state, the decrypted cover src (incl. the upload
 // object-URL lifecycle), and the read-modify-write save.
 import { ref, computed, watch, type Ref } from 'vue'
-import { unsealMemoryCover, setMemoryCover, FULL_FRAME, type MemoryCover, type CoverSaveIntent } from './memoryCover'
-import { openBlob, uploadCoverBlob, deleteCoverBlob } from './media'
+import { unsealMemoryCover, FULL_FRAME, type MemoryCover, type CoverSaveIntent } from './memoryCover'
 import { useObjectUrl } from '../../shared/state/useObjectUrls'
 import { useToast } from '../../shared/state/useToast'
 import { QUOTA_EXCEEDED } from './uploadQueue'
 import { nodeMetaState } from './nodeMeta'
 import { useMetaWriteFeedback, type NodeMetaUpdate } from './useMetaWriteFeedback'
 import type { TreeNode } from '../../core/node/tree'
+import type { CoverDoor, MediaLoaders } from './source'
 
 /** The reactive context MemoryDetail hands the cover slice — getters so props stay reactive, plus the live gallery
  *  `thumbs` map (a media-source cover reuses an already-decrypted thumbnail) and the host's `metaUpdated` emit. */
@@ -20,6 +20,11 @@ export interface MemoryCoverContext {
   scopeId: () => string
   node: () => TreeNode
   memoryKey: () => Uint8Array | null
+  /** How the node's uploaded cover blob opens (the source's loader: the member's presign or the link's). */
+  loaders: MediaLoaders
+  /** The cover writes this view may make — the source's door where the capabilities grant `setCover`, else null: then
+   *  no save writes anything. */
+  write: () => CoverDoor | null
   thumbs: Ref<Map<string, string>>
   onMetaUpdated: (payload: NodeMetaUpdate) => void
   /** The resolved "no space left" wording (`media.uploadNoSpace`), for a cover refused `quota_exceeded`. */
@@ -44,7 +49,7 @@ export function useMemoryCover(ctx: MemoryCoverContext) {
       const key = ctx.memoryKey()
       if (!key || cover?.source.kind !== 'upload') return
       try {
-        const bytes = await openBlob(ctx.scopeId(), key, cover.source.ref)
+        const bytes = await ctx.loaders.coverBlob(cover.source.ref, key)
         uploadCover.set(new Blob([bytes as BlobPart]))
       } catch {
         // best-effort: a locked/absent cover blob ⇒ the placeholder tile
@@ -110,12 +115,13 @@ export function useMemoryCover(ctx: MemoryCoverContext) {
    */
   async function onCoverSave(intent: CoverSaveIntent) {
     const key = ctx.memoryKey()
-    if (!key) return
+    const write = ctx.write()
+    if (!key || !write) return
     const nodeId = ctx.node().id
     try {
       let cover: MemoryCover | null
       if (intent.kind === 'upload') {
-        const ref = await uploadCoverBlob(ctx.scopeId(), nodeId, key, {
+        const ref = await write.uploadBlob(nodeId, key, {
           blob: intent.file,
           mediaType: intent.file.type,
           lastModified: intent.file.lastModified,
@@ -132,10 +138,10 @@ export function useMemoryCover(ctx: MemoryCoverContext) {
         cover = null
       }
       const blobMoved = intent.kind === 'upload'
-      const { replaced, ...state } = await setMemoryCover(ctx.scopeId(), nodeId, key, cover, nodeMetaState(ctx.node()), !blobMoved)
+      const { replaced, ...state } = await write.set(nodeId, key, cover, nodeMetaState(ctx.node()), !blobMoved)
       ctx.onMetaUpdated({ nodeId, ...state })
       if (!blobMoved && replaced?.source.kind === 'upload' && cover?.source.kind !== 'upload') {
-        await deleteCoverBlob(ctx.scopeId(), nodeId, replaced.source.ref.blobId).catch(() => {
+        await write.deleteBlob(nodeId, replaced.source.ref.blobId).catch(() => {
           /* the node still holds the blob; the next upload's commit or the node's delete reclaims it */
         })
       }

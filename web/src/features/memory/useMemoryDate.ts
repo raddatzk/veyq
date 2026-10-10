@@ -5,12 +5,13 @@
 // the reactive wiring the component used to inline (editor open-state, the header label, save + self-heal).
 import { computed, ref, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { unsealMemoryDate, computeAutoRange, reconcileMemoryDate, setMemoryDate, sortNodesByDate, type MemoryDate } from './memoryDate'
+import { unsealMemoryDate, computeAutoRange, sortNodesByDate, type MemoryDate } from './memoryDate'
 import { nodeMetaState } from './nodeMeta'
 import { useMetaWriteFeedback, type NodeMetaUpdate } from './useMetaWriteFeedback'
 import { formatClosedRange, formatDay } from './memoryDateRange'
 import type { MediaItem } from './media'
 import type { TreeNode } from '../../core/node/tree'
+import type { NodeMetaDoor } from './source'
 
 /** The reactive context MemoryDetail hands the date slice — getters so props stay reactive, plus the live media
  *  list (`auto` materializes from it) and the host's `metaUpdated` emit. */
@@ -19,6 +20,9 @@ export interface MemoryDateContext {
   node: () => TreeNode
   memoryKey: () => Uint8Array | null
   chapters: () => TreeNode[] | undefined
+  /** The node-meta writes this view may make — the source's door where the capabilities grant `editMeta`, else null:
+   *  then the save and the `auto` self-heal write nothing (a guest, a scope pending deletion). */
+  write: () => NodeMetaDoor | null
   items: Ref<MediaItem[]>
   onMetaUpdated: (payload: NodeMetaUpdate) => void
 }
@@ -51,10 +55,11 @@ export function useMemoryDate(ctx: MemoryDateContext) {
    *  date written meanwhile re-opens the editor on it (ADR 0077); other failures stay best-effort. */
   async function onDateSave(date: MemoryDate) {
     const key = ctx.memoryKey()
-    if (!key) return
+    const write = ctx.write()
+    if (!key || !write) return
     const nodeId = ctx.node().id
     try {
-      const state = await setMemoryDate(ctx.scopeId(), nodeId, key, date, nodeMetaState(ctx.node()))
+      const state = await write.setDate(nodeId, key, date, nodeMetaState(ctx.node()))
       ctx.onMetaUpdated({ nodeId, ...state })
     } catch (e) {
       await editorFailed(nodeId, e, () => (dateEditorOpen.value = true))
@@ -66,10 +71,11 @@ export function useMemoryDate(ctx: MemoryDateContext) {
    *  loaded at space entry (uc.memory.concurrent-curation E2). Silent either way. */
   async function reconcileAuto() {
     const key = ctx.memoryKey()
-    if (!key) return
+    const write = ctx.write()
+    if (!key || !write) return
     const nodeId = ctx.node().id
     try {
-      const { state } = await reconcileMemoryDate(ctx.scopeId(), nodeId, key, ctx.items.value, nodeMetaState(ctx.node()))
+      const { state } = await write.reconcileDate(nodeId, key, ctx.items.value, nodeMetaState(ctx.node()))
       if (ctx.node().id === nodeId) ctx.onMetaUpdated({ nodeId, ...state })
     } catch (e) {
       // leave the stale range; the next Memory open self-heals it (a blob that does not open is never rebuilt)
