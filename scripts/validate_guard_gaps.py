@@ -219,6 +219,9 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      standing — rejected: `validate_request_bounds` rule 6 reads a list of scalars' element bounds and requires the
      list to carry them. Until then that guard documented element bounds as beyond it, and the claim took any string
      as a tag (measured: `NOT-HEX` answered 204, inbox #354)
+  81 a stylesheet rule whose class only a `*.test.ts` spells — rejected: `validate_stylesheet_anchors` leaves test
+     evidence (tests, `src/test/` helpers, snapshots, fixtures, goldens) out of its markup vocabulary. Until then a
+     test asserting a button does NOT carry a class kept that class's hiding rule anchored (inbox #362)
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
 (a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
 which the Gradle module split retired: `:core` has no edge to an application, so either shape fails
@@ -1154,6 +1157,22 @@ def forge_dead_class_inside_a_selector(root: pathlib.Path) -> str:
             "(the anchor-only open gap)")
 
 
+def forge_class_anchored_only_by_a_test(root: pathlib.Path) -> str:
+    # inbox #362: a rule whose class only a TEST spells (an assertion that a button does NOT carry it) stayed
+    # "anchored" until validate_stylesheet_anchors stopped reading test evidence as markup. The test file is
+    # found, not named, so a renamed test cannot turn this case red.
+    sheet = root / "web" / "src" / "styles" / "ui.css"
+    if not sheet.is_file():
+        raise ForgeError("web/src/styles/ui.css is missing — the shared primitives sheet moved or was deleted")
+    tests = sorted((root / "web" / "src").rglob("*.test.ts"))
+    if not tests:
+        raise ForgeError("no *.test.ts under web/src — re-anchor this forgery")
+    sheet.write_text(sheet.read_text() + "\n.guard-gap-only-a-test-names-this {\n  display: none;\n}\n")
+    tests[0].write_text(tests[0].read_text()
+                        + "\n// expect(button.classes()).not.toContain('guard-gap-only-a-test-names-this')\n")
+    return "a CSS rule whose class only a test file spells (must be REJECTED — a test is not markup)"
+
+
 def forge_admin_web_primary_lightened(root: pathlib.Path) -> str:
     # The defect that bought the guard, put back on the copy it did not read at first: admin-web's light primary
     # set to Aura's emerald-500 under white text (2.54:1). The token's current value is matched, not spelled, so
@@ -1430,6 +1449,7 @@ CASES = [
     ("78", WEB_GUARD, forge_web_core_reads_application_i18n, False),
     ("79", "validate_web_contrast.py", forge_admin_web_primary_lightened, False),
     ("80", "validate_request_bounds.py", forge_request_list_elements_unbounded, False),
+    ("81", "validate_stylesheet_anchors.py", forge_class_anchored_only_by_a_test, False),
 ]
 
 

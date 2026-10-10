@@ -47,6 +47,11 @@ lines across both packages), which is what made this guard green on arrival and 
       an unrelated string keeps its rule alive. The bias is deliberate: this guard's false answers must be
       *misses*, never accusations, because a guard that cries wolf over live CSS gets switched off. A sweep
       wanting to *delete* dead CSS needs the narrower reading and a live pass — see #146 for what that took.
+      **One narrowing, and only one: test evidence is not markup.** Tests (`*.test.*`, `*.spec.*`), the
+      helpers under `src/test/`, snapshots, fixtures and goldens are left out of the vocabulary, because a test
+      names a class to *assert* on it — inbox #362's case was a test asserting that a button does NOT carry
+      `memory-action-collapsible`, which kept a hiding rule "anchored" after its last rendering user was gone.
+      Leaving them out cannot accuse live CSS: a class only a test spells is a class no rendered file spells.
   (c) **A class composed at runtime is seen only by its static prefix** (`` :class="`is-${status}`" `` keeps
       every `is-*` alive). Anything assembled from fragments with no literal prefix is not seen at all.
   (d) **It proves a rule CAN match, never that anything renders it.** A component that exists and is never
@@ -99,6 +104,16 @@ SPLIT_NESTED = re.compile(r"""[\s,:{}\[\]()'"`|&?+!]+""")
 CLASS_TOKEN = re.compile(r"^-?[_a-zA-Z][_a-zA-Z0-9-]*$")
 
 MARKUP_SUFFIXES = (".vue", ".ts", ".tsx", ".js", ".html")
+
+# Test evidence is not markup (limit (b)'s one narrowing): a test names a class to assert on it — often that it
+# is ABSENT — and a test helper, fixture or golden snapshot renders nothing the browser is ever served.
+TEST_FILE = re.compile(r"\.(test|spec)\.[^.]+$|\.golden\b")
+TEST_DIRS = {"test", "__tests__", "__snapshots__", "__fixtures__", "__mocks__"}
+
+
+def is_test_evidence(path: pathlib.Path, src: pathlib.Path) -> bool:
+    """A test, a test helper (`src/test/`), a snapshot, a fixture or a golden — never rendered markup."""
+    return bool(TEST_FILE.search(path.name)) or bool(TEST_DIRS & set(path.relative_to(src).parts[:-1]))
 
 
 def rel(path: pathlib.Path) -> str:
@@ -208,7 +223,7 @@ def markup_vocabulary(pkg: pathlib.Path):
     for path in src.rglob("*"):
         if path.suffix not in MARKUP_SUFFIXES:
             continue
-        if "styles" in path.relative_to(src).parts:
+        if "styles" in path.relative_to(src).parts or is_test_evidence(path, src):
             continue
         text = path.read_text(errors="ignore")
         for match in CLASS_ATTR.finditer(text):
