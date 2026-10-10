@@ -80,8 +80,8 @@
 }
 
 /* The card grid of a node list outside an application — the same track rule as Memories' `.memory-card-grid`: the
-   public folder page (core/sharing/FolderShareBody.vue, its `.veyq-node-card` tiles) and the level view's sub-folders
-   (core/node/LevelView.vue, with `.veyq-level-grid` and `.veyq-folder-card` at the end of this sheet). */
+   level view's sub-folders (core/node/LevelView.vue, with `.veyq-level-grid` and `.veyq-folder-card` at the end of this
+   sheet) and its fallback section's `.veyq-node-card` tiles — a member's level and a share guest's alike (inbox #401). */
 .veyq-card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 260px));
@@ -114,10 +114,6 @@
   background: var(--app-accent-soft);
   color: var(--app-accent);
   font-size: 1.25rem;
-}
-
-.veyq-node-card-create {
-  background: color-mix(in srgb, var(--app-surface) 72%, transparent);
 }
 
 /* A child of a kind no level section serves (core/node/LevelView.vue's fallback): listed, not openable. */

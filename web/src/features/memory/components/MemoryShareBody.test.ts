@@ -3,6 +3,8 @@
 // what turns the shell's head into a rendering, and it is the one that reports a share it cannot open. Mounted bare —
 // the password/terms gates and the registry dispatch are the shell's (views/ShareView*.test.ts).
 import { describe, it, expect, vi } from 'vitest'
+import PrimeVue from 'primevue/config'
+import { guestAccessFor } from '../../../test/models'
 import { mount, flushPromises } from '@vue/test-utils'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
@@ -34,8 +36,8 @@ function head(share: Partial<PublicShare>, role: ShareRole = ShareRole.Read): Pu
 
 function mountBody(h: PublicShareHead) {
   return mount(MemoryShareBody, {
-    props: { shareId: 's1', fragmentKey: 'AAAA', pwToken: undefined, head: h, reload: async () => {} },
-    global: { plugins: [realI18n()], stubs: { MediaGrid: true, OptimisticTile: true, MediaLightbox: true } },
+    props: { shareId: 's1', fragmentKey: 'AAAA', pwToken: undefined, head: h, reload: async () => {}, access: guestAccessFor(h) },
+    global: { plugins: [realI18n(), PrimeVue], stubs: { MediaGrid: true, OptimisticTile: true, MediaLightbox: true } },
   })
 }
 
@@ -55,8 +57,8 @@ describe('MemoryShareBody opens the Memory from the shell\'s head', () => {
   it('lists the media from Memories\' own read, asked with the guest\'s token', async () => {
     const { listShareMedia } = stubApi(publicShareMediaApi, { listShareMedia: { media: [ROW], identities: [] } })
     const w = mount(MemoryShareBody, {
-      props: { shareId: 's1', fragmentKey: 'AAAA', pwToken: 'tok', head: head({ wrap: openWrap(), nodes: ROOT_NODES }), reload: async () => {} },
-      global: { plugins: [realI18n()], stubs: { MediaGrid: true, OptimisticTile: true, MediaLightbox: true } },
+      props: { shareId: 's1', fragmentKey: 'AAAA', pwToken: 'tok', head: head({ wrap: openWrap(), nodes: ROOT_NODES }), reload: async () => {}, access: guestAccessFor(head({ wrap: openWrap(), nodes: ROOT_NODES }), { pwToken: 'tok' }) },
+      global: { plugins: [realI18n(), PrimeVue], stubs: { MediaGrid: true, OptimisticTile: true, MediaLightbox: true } },
     })
     await flushPromises()
     expect(listShareMedia).toHaveBeenCalledWith({ shareId: 's1', xSharePassword: 'tok' })

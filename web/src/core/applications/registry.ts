@@ -33,14 +33,14 @@
 // state), never an empty area.
 //
 // **Share sections (`KindDescriptor.shareSection`, cr-files-application F2).** The guest's folder page of a public
-// share is core's too (`core/sharing/FolderShareBody.vue`): at a folder it renders the sub-folders and every other child
-// as a card, and a kind that brings a share section has its children rendered by THAT component instead (props
-// `ShareSectionProps`) — Files' file list with its download and a contributor's upload. The same rules as the level
-// sections: keyed by component, sorted by `order`, rendered at every folder (an empty one too), a contradicting `order`
-// throws. A kind without one keeps its card, which opens the body its application claimed (below). Being retired (ADR
-// 0079 Consequences, inbox #401 S3): a kind's `section` serves the guest's folder page too, handed a guest's `access`.
+// share is core's too (`core/sharing/FolderShareBody.vue`), and a kind that brings a share section has its children
+// rendered by THAT component (props `ShareSectionProps`) — Files' file list with its download and a contributor's
+// upload. The same rules as the level sections: keyed by component, sorted by `order`, a contradicting `order`
+// throws. Since inbox #401 S2 the folder page IS core's level view (`LevelView`, handed the guest's access and tree):
+// every kind's level `section` renders there as for a member, and a kind that brings a share section has that drawn in
+// the level's `host-section` slot instead of its level section. Being retired (ADR 0079 Consequences, inbox #401 S3).
 //
-// **Who looks (`core/access.ts`).** A `detail` and a `section` are handed `access` (a member, or from S2 a share guest)
+// **Who looks (`core/access.ts`).** A `detail` and a `section` are handed `access` (a member, or a share guest)
 // and `tree` (the tree as that session reads it), and offer what their application's fail-closed capability function
 // answers for them — one view per kind in both modes, never a flag the host decides.
 //
@@ -79,7 +79,7 @@ import type { EpochKeys } from '../../features/spaces/epochs'
 import type { PublicShareHead } from '../sharing/resolvePublicShare'
 import type { GuestIdentity } from '../sharing/guestIdentity'
 import type { ShareNode } from '../../api/generated/sharing'
-import type { Access, TreeSource } from '../access'
+import type { Access, GuestAccess, TreeSource } from '../access'
 import { slugify } from '../../shared/naming'
 
 // The platform's own share dialog for a FOLDER (cr-node-key-hierarchy 5b.3), FOLDER's `shareDialog` since P4c. LAZY for
@@ -175,8 +175,8 @@ export interface NodeDetailProps {
   contentKey: Uint8Array | null
   /** The opened node's children, bucketed by kind (`byKind`). */
   children: Level
-  /** Who looks: a member of the scope (its pending deletion, the instance's sharing capabilities) — a share guest from
-   *  S2 of inbox #401 on. */
+  /** Who looks: a member of the scope (its pending deletion, the instance's sharing capabilities) — a share guest once
+   *  the share page mounts details (inbox #401 S5; its folder level does since S2). */
   access: Access
   /** The tree as that session reads it: keys, names, the identity-folder test and the links every navigation takes. */
   tree: TreeSource
@@ -269,6 +269,9 @@ export interface ShareBodyProps {
   head: PublicShareHead
   /** Re-resolve the share (after a contribution, so the new media lists); resolves once `head` has been replaced. */
   reload: () => Promise<void>
+  /** Who looks: the guest of this link (`core/sharing/guestAccess.ts`), built by the shell — its role, and the page's
+   *  ONE naming flow (`requestGuest`, the shell's dialog), so no body asks for a name on its own behind a container. */
+  access: GuestAccess
   /** Set only when a container's body embeds this one for a node BELOW the share root (core's folder body for a Memory
    *  in a shared folder, cr-node-key-hierarchy 5b.4b): that node's id, its key and its name as the chain opened them.
    *  The body renders that node, not the root; the share's note is the container's to show. The shell never sets it. */

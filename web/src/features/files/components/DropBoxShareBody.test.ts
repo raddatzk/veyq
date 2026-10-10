@@ -7,6 +7,7 @@
 // refusal (403) is a failed file with a retry, not a gone link. The real upload queue runs; the guest's job is a stub
 // whose `run` fails as the wire would.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { guestAccessFor } from '../../../test/models'
 import { mount, flushPromises } from '@vue/test-utils'
 import PrimeVue from 'primevue/config'
 import * as v1 from '@veyq/crypto/v1'
@@ -76,7 +77,7 @@ beforeEach(() => {
 
 function mountPage(reload: () => Promise<void> = async () => {}) {
   return mount(DropBoxShareBody, {
-    props: { shareId: SHARE, fragmentKey: 'frag', pwToken: undefined, head: HEAD, reload },
+    props: { shareId: SHARE, fragmentKey: 'frag', pwToken: undefined, head: HEAD, reload, access: guestAccessFor(HEAD) },
     global: { plugins: [realI18n(), PrimeVue] },
   })
 }
@@ -201,7 +202,7 @@ describe('DropBoxShareBody: what became of every file (inbox #381)', () => {
 describe('DropBoxShareBody: whose session this is (inbox #385 a)', () => {
   const ANNA: DropGuestSession = { ...SESSION, displayName: 'Anna' }
   const BEN: DropGuestSession = { identityId: 'id-2', contributorToken: 'tok-2', identityKey: 'a2V5Mg==', displayName: 'Ben' }
-  const notYou = (w: Page) => w.find('button.dropbox-guest-not-you')
+  const notYou = (w: Page) => w.find('button.guest-naming-not-you')
   async function name(w: Page, who: string) {
     await w.find('input').setValue(who)
     await w.find('form').trigger('submit')
@@ -224,24 +225,24 @@ describe('DropBoxShareBody: whose session this is (inbox #385 a)', () => {
   it('a reload says whose session it is; "Not you?" forgets it and asks for a name, without the files sent before', async () => {
     vi.mocked(loadDropGuest).mockReturnValue(ANNA)
     const w = mountPage()
-    expect(w.text()).toContain(t('files.dropBox.guestAs', { name: 'Anna' }))
+    expect(w.text()).toContain(t('share.guest.as', { name: 'Anna' }))
     await pick(w, 'annas.pdf')
     await settled(w, 1)
     expect(vi.mocked(ensureDropFolder).mock.calls[0][2], 'after a reload the folder is named from the session').toBe('Anna')
-    expect(notYou(w).text()).toBe(t('files.dropBox.guestNotYou'))
+    expect(notYou(w).text()).toBe(t('share.guest.notYou'))
 
     // It asks first (inbox #395), through the app's real dialog: declined, nothing is forgotten.
     const dialog = mountConfirmDialog()
     await notYou(w).trigger('click')
     await flushPromises()
-    expect(dialog.text()).toContain(t('files.dropBox.guestNotYouConfirm', { name: 'Anna' }))
+    expect(dialog.text()).toContain(t('share.guest.notYouConfirm', { name: 'Anna' }))
     dialog.click(t('common.cancel'))
     await flushPromises()
     expect(forgetDropGuest).not.toHaveBeenCalled()
-    expect(w.text()).toContain(t('files.dropBox.guestAs', { name: 'Anna' }))
+    expect(w.text()).toContain(t('share.guest.as', { name: 'Anna' }))
     await notYou(w).trigger('click')
     await flushPromises()
-    dialog.click(t('files.dropBox.guestNotYouAccept'))
+    dialog.click(t('share.guest.notYouAccept'))
     await flushPromises()
     expect(forgetDropGuest).toHaveBeenCalledWith(SHARE)
     expect(w.find('form').exists(), 'the name form again').toBe(true)
@@ -250,7 +251,7 @@ describe('DropBoxShareBody: whose session this is (inbox #385 a)', () => {
     vi.mocked(nameDropGuest).mockResolvedValue(BEN)
     vi.mocked(ensureDropFolder).mockClear()
     await name(w, 'Ben')
-    expect(w.text()).toContain(t('files.dropBox.guestAs', { name: 'Ben' }))
+    expect(w.text()).toContain(t('share.guest.as', { name: 'Ben' }))
     expect(w.text(), 'the next visitor does not see what Anna sent').not.toContain('annas.pdf')
     await pick(w, 'bens.pdf')
     expect(vi.mocked(ensureDropFolder).mock.calls[0][1], 'a new identity, a new folder').toEqual(BEN)

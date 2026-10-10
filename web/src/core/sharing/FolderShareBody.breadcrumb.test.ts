@@ -5,6 +5,7 @@
 // with `href="#"` the browser cleared the `#k=` fragment (the share key) and the pending push was cancelled. Here the
 // real PrimeVue Breadcrumb and the real vue-router render and route; the registry is a Proxy onto a fresh one, as there.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { guestAccessFor } from '../../test/models'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
 import PrimeVue from 'primevue/config'
@@ -67,7 +68,7 @@ beforeEach(async () => {
 
 async function mountAtNested() {
   const w = mount(FolderShareBody, {
-    props: { shareId: SHARE_ID, fragmentKey: b64url(K_SHARE), pwToken: undefined, head, reload: async () => {} },
+    props: { shareId: SHARE_ID, fragmentKey: b64url(K_SHARE), pwToken: undefined, head, reload: async () => {}, access: guestAccessFor(head) },
     global: { plugins: [router, realI18n(), PrimeVue] },
   })
   await flushPromises()
@@ -98,7 +99,7 @@ describe('FolderShareBody: a breadcrumb click keeps the share key', () => {
     expect(click.defaultPrevented).toBe(true)
     expect(router.currentRoute.value.hash).toBe(HASH)
     expect(router.currentRoute.value.query.node).toBeUndefined()
-    expect(w.find('.veyq-section-header h1').text()).toBe('Familie')
+    expect(w.find('.veyq-folder-overview-card h2').text()).toBe('Familie')
   })
 
   it('a MIDDLE crumb navigates to that folder, the fragment kept, the anchor default prevented', async () => {
@@ -107,7 +108,7 @@ describe('FolderShareBody: a breadcrumb click keeps the share key', () => {
     expect(click.defaultPrevented).toBe(true)
     expect(router.currentRoute.value.hash).toBe(HASH)
     expect(router.currentRoute.value.query.node).toBe(LETTERS)
-    expect(w.find('.veyq-section-header h1').text()).toBe('Briefe')
+    expect(w.find('.veyq-folder-overview-card h2').text()).toBe('Briefe')
   })
 
   it('a modified click is left to the browser (open the real href elsewhere): not prevented, no navigation here', async () => {

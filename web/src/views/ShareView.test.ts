@@ -6,6 +6,7 @@
 // locale pick) + the REAL ShareView wiring (needsTerms/loadTerms/acceptTerms) — only the network resolve/terms
 // reads and the heavy media composables are stubbed, so what's exercised is the gate itself, not resolve crypto.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import PrimeVue from 'primevue/config'
 import { mount, flushPromises } from '@vue/test-utils'
 
 const SHARE_ID = 's1'
@@ -42,22 +43,25 @@ vi.mock('../core/sharing/resolvePublicShare', async (importOriginal) => {
 })
 vi.mock('../features/memory/share', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../features/memory/share')>()
-  return { ...actual, openSharedMemory: vi.fn(), listShareMedia: vi.fn() }
+  return { ...actual, openSharedMemory: vi.fn(), listShareMedia: vi.fn(), createContributorIdentity: vi.fn() }
 })
 
 import ShareView from './ShareView.vue'
 import { resolvePublicShare, fetchShareTerms } from '../core/sharing/resolvePublicShare'
-import { openSharedMemory, listShareMedia, NO_SHARE_MEDIA, type ResolvedShare, type ShareAccess } from '../features/memory/share'
+import { openSharedMemory, listShareMedia, createContributorIdentity, NO_SHARE_MEDIA, type ContributorSession, type ResolvedShare, type ShareAccess } from '../features/memory/share'
+import { loadGuestSession, saveGuestSession } from '../core/sharing/guestIdentity'
+import { mountConfirmDialog } from '../test/confirmDialog'
+import { confirmRequest, settleConfirm } from '../shared/state/useConfirm'
 import { headOf, openedOf } from '../test/shareHead'
 import { ShareRole } from '../api/generated/sharing'
-import { realI18n } from '../test/i18n'
+import { realI18n, t } from '../test/i18n'
 import type { NodeKind } from '../core/node/kind'
 import { MEMORY_KIND, CHAPTER_KIND } from '../features/memory/kinds'
 
 function mountShareView() {
   return mount(ShareView, {
     global: {
-      plugins: [realI18n()],
+      plugins: [realI18n(), PrimeVue],
       stubs: { MediaGrid: true, OptimisticTile: true, MediaLightbox: true },
     },
   })
@@ -206,6 +210,61 @@ describe('ShareView — a chapter share', () => {
     const wrapper = mountShareView()
     await flushPromises()
     expect(wrapper.find('.share-view-unavailable').exists()).toBe(false)
+    expect(wrapper.find('.share-name-card').exists()).toBe(true)
+  })
+})
+
+// A Memory link names its guest with core's one form (inbox #401 S2), and gained the "Not you?" Files' drop box had: a
+// contributor's line is the shell's (whose session this device holds on a READ_WRITE link), an uploader's the drop
+// page's own. Either asks first, then forgets the session and shows the name screen again.
+describe('ShareView — a Memory link: core\'s naming form and its "Not you?"', () => {
+  const DROP: ShareAccess = { kind: 'drop', nodeId: 'n1', dropPublicKey: { x: new Uint8Array(), m: new Uint8Array() } }
+  beforeEach(() => {
+    if (confirmRequest.value) settleConfirm(false)
+    localStorage.clear()
+    vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: TENANT, termsVersion: 0, terms: {} })
+    vi.mocked(createContributorIdentity).mockReset()
+  })
+
+  it('READ_WRITE: the pre-screen is core\'s form; named, the shell says who it is; "Not you?" asks, then shows the screen again', async () => {
+    serve({ ...viewerShare(), role: ShareRole.ReadWrite, access: { kind: 'read', memoryKey: new Uint8Array(32) } })
+    vi.mocked(createContributorIdentity).mockResolvedValue({ identityId: 'id-1', contributorToken: 'tok-1' })
+    const wrapper = mountShareView()
+    await flushPromises()
+    await wrapper.find('.share-name-card .guest-naming-input').setValue(' Oma ')
+    await wrapper.find('.share-name-card form').trigger('submit')
+    await flushPromises()
+    expect(vi.mocked(createContributorIdentity).mock.calls[0][3], 'the trimmed name').toBe('Oma')
+    expect(loadGuestSession(SHARE_ID)).toEqual({ identityId: 'id-1', contributorToken: 'tok-1', displayName: 'Oma' })
+    expect(wrapper.find('.share-name-card').exists()).toBe(false)
+    const line = wrapper.find('.share-view-identity')
+    expect(line.text()).toContain(t('share.guest.as', { name: 'Oma' }))
+
+    const dialog = mountConfirmDialog()
+    await line.find('button.guest-naming-not-you').trigger('click')
+    await flushPromises()
+    expect(dialog.text()).toContain(t('share.guest.notYouConfirm', { name: 'Oma' }))
+    dialog.click(t('share.guest.notYouAccept'))
+    await flushPromises()
+    expect(loadGuestSession(SHARE_ID)).toBeNull()
+    expect(wrapper.find('.share-name-card').exists(), 'the name screen again').toBe(true)
+  })
+
+  it('WRITE_ONLY: the drop page carries its own line (the shell shows none); "Not you?" forgets the uploader', async () => {
+    const uploader: ContributorSession = { identityId: 'id-2', contributorToken: 'tok-2', uploaderKey: 'AAAA', displayName: 'Ben' }
+    saveGuestSession(SHARE_ID, uploader)
+    serve({ ...viewerShare(), role: ShareRole.WriteOnly, access: DROP })
+    const wrapper = mountShareView()
+    await flushPromises()
+    expect(wrapper.find('.share-view-identity').exists(), "not the shell's").toBe(false)
+    const line = wrapper.find('.share-view-header .guest-naming-identity')
+    expect(line.text()).toContain(t('share.guest.as', { name: 'Ben' }))
+    const dialog = mountConfirmDialog()
+    await line.find('button.guest-naming-not-you').trigger('click')
+    await flushPromises()
+    dialog.click(t('share.guest.notYouAccept'))
+    await flushPromises()
+    expect(loadGuestSession(SHARE_ID)).toBeNull()
     expect(wrapper.find('.share-name-card').exists()).toBe(true)
   })
 })

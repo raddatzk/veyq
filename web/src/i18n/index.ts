@@ -1029,17 +1029,8 @@ const en = {
       close: 'Close',
       guestTitle: 'Send files',
       guestHint: 'Your files go to {name}. You cannot see what others sent, and you cannot see your files again here after you leave.',
-      guestNameLabel: 'Your name',
       guestNameHint: 'The owner sees your files under this name.',
-      guestStart: 'Continue',
-      // Whose session this device holds (inbox #385): its name, and a way for the next person to start their own.
-      guestAs: 'Sending as {name}.',
-      guestNotYou: 'Not you?',
       guestStartOver: 'Start over under a new name',
-      // "Not you?" asks first (inbox #395): the session this device holds is forgotten.
-      guestNotYouTitle: 'Start over under a new name?',
-      guestNotYouConfirm: 'This device forgets that you send as “{name}”. What was already sent stays with the owner; your next files go to a new folder under the name you give next.',
-      guestNotYouAccept: 'Start over',
       // The folder's name when a session saved before names were kept sends its first file (its folder exists already).
       guestNameFallback: 'Guest',
       guestPick: 'Choose files',
@@ -1242,6 +1233,21 @@ const en = {
     readonly: 'Shared with you · read-only',
     contributorBadge: 'Shared with you · you can add photos',
     securityFooter: 'How safe is this?',
+    // core's one guest-naming component (core/sharing/GuestNaming.vue, inbox #401): whose session this device holds on a
+    // link and its "Not you?" — every application's page, so the words name none of them.
+    guest: {
+      as: 'You are here as {name}.',
+      asUnnamed: 'You gave your name on this device.',
+      notYou: 'Not you?',
+      // "Not you?" asks first (inbox #395): the session this device holds is forgotten, nothing on the server changes.
+      notYouTitle: 'Start over under a new name?',
+      notYouConfirm: 'This device forgets that you are here as “{name}”. What you already added stays. Before you add anything else, you give a name again.',
+      notYouConfirmUnnamed: 'This device forgets the name you gave here. What you already added stays. Before you add anything else, you give a name again.',
+      notYouAccept: 'Start over',
+      // the shell's naming dialog behind `GuestAccess.requestGuest`: a guest's first write, whichever view asks
+      nameTitle: 'What is your name?',
+      nameHint: 'Before you add something, tell us your name. Only the people this belongs to see it.',
+    },
     // contributor pre-screen + add-photos (cr-0101)
     contributeIntro: 'You can add your own photos to this memory. First, tell us your name.',
     // ADR 0030 point 8: no share link is served a guest's name — only the Memory's members read it
@@ -1249,7 +1255,6 @@ const en = {
     yourName: 'Your name',
     yourNamePlaceholder: 'e.g. Grandma',
     join: 'Continue',
-    joining: 'Just a moment…',
     joinFailed: 'Something went wrong — please try again.',
     addPhotos: 'Add photos',
     // uploader drop-box (cr-0102, ADR 0031) — write-only, session-only own-view
@@ -1288,16 +1293,12 @@ const en = {
       createFailed: 'That did not work — please try again.',
       // the anonymous /s/ page of a folder link (core/sharing/FolderShareBody.vue)
       loading: 'Opening this folder…',
-      empty: 'This folder is empty.',
       readonly: 'Shared with you · read-only',
       contributorBadge: 'Shared with you · you can add and change things here',
-      newFolder: 'New folder',
       newFolderTitle: 'Create a folder',
       nameLabel: 'Name',
       unsupportedKind: 'This page cannot show this kind of item.',
       breadcrumbRoot: 'Where you are in this folder',
-      guestNameTitle: 'What is your name?',
-      guestNameHint: 'Before you add something, tell us your name. Only the people this folder belongs to see it.',
     },
   },
 }
@@ -2264,15 +2265,8 @@ const de: typeof en = {
       close: 'Schließen',
       guestTitle: 'Dateien senden',
       guestHint: 'Deine Dateien gehen an {name}. Was andere gesendet haben, siehst du nicht, und deine eigenen Dateien siehst du hier nach dem Verlassen nicht mehr.',
-      guestNameLabel: 'Dein Name',
       guestNameHint: 'Unter diesem Namen sieht die Person, die den Link geteilt hat, deine Dateien.',
-      guestStart: 'Weiter',
-      guestAs: 'Du sendest als {name}.',
-      guestNotYou: 'Nicht du?',
       guestStartOver: 'Mit neuem Namen neu beginnen',
-      guestNotYouTitle: 'Mit neuem Namen neu beginnen?',
-      guestNotYouConfirm: 'Dieses Gerät vergisst, dass du als „{name}“ sendest. Was schon gesendet wurde, bleibt bei der Person, der der Briefkasten gehört; deine nächsten Dateien gehen in einen neuen Ordner unter dem Namen, den du dann angibst.',
-      guestNotYouAccept: 'Neu beginnen',
       guestNameFallback: 'Gast',
       guestPick: 'Dateien auswählen',
       guestSession: 'Deine Dateien in dieser Sitzung',
@@ -2463,13 +2457,23 @@ const de: typeof en = {
     readonly: 'Mit dir geteilt · schreibgeschützt',
     contributorBadge: 'Mit dir geteilt · du kannst Fotos hinzufügen',
     securityFooter: 'Wie sicher ist das?',
+    guest: {
+      as: 'Du bist hier als {name}.',
+      asUnnamed: 'Du hast auf diesem Gerät deinen Namen angegeben.',
+      notYou: 'Nicht du?',
+      notYouTitle: 'Mit neuem Namen neu beginnen?',
+      notYouConfirm: 'Dieses Gerät vergisst, dass du hier als „{name}“ bist. Was du schon hinzugefügt hast, bleibt. Bevor du wieder etwas hinzufügst, gibst du erneut einen Namen an.',
+      notYouConfirmUnnamed: 'Dieses Gerät vergisst den Namen, den du hier angegeben hast. Was du schon hinzugefügt hast, bleibt. Bevor du wieder etwas hinzufügst, gibst du erneut einen Namen an.',
+      notYouAccept: 'Neu beginnen',
+      nameTitle: 'Wie heißt du?',
+      nameHint: 'Bevor du etwas hinzufügst, sag uns deinen Namen. Ihn sehen nur die Personen, denen das hier gehört.',
+    },
     // contributor pre-screen + add-photos (cr-0101)
     contributeIntro: 'Du kannst eigene Fotos zu dieser Erinnerung hinzufügen. Sag uns zuerst deinen Namen.',
     nameVisibility: 'Deinen Namen sehen nur die Personen, denen diese Erinnerung gehört.',
     yourName: 'Dein Name',
     yourNamePlaceholder: 'z. B. Oma',
     join: 'Weiter',
-    joining: 'Einen Moment …',
     joinFailed: 'Etwas ist schiefgelaufen — bitte erneut versuchen.',
     addPhotos: 'Fotos hinzufügen',
     // uploader drop-box (cr-0102, ADR 0031) — schreibgeschützt für andere, eigene Ansicht nur diese Sitzung
@@ -2500,16 +2504,12 @@ const de: typeof en = {
       gone: 'Das gibt es hier nicht mehr. Lade die Seite neu.',
       createFailed: 'Das hat nicht geklappt — bitte erneut versuchen.',
       loading: 'Dieser Ordner wird geöffnet …',
-      empty: 'Dieser Ordner ist leer.',
       readonly: 'Mit dir geteilt · schreibgeschützt',
       contributorBadge: 'Mit dir geteilt · du kannst hier hinzufügen und ändern',
-      newFolder: 'Neuer Ordner',
       newFolderTitle: 'Ordner anlegen',
       nameLabel: 'Name',
       unsupportedKind: 'Diese Seite kann diese Art von Eintrag nicht anzeigen.',
       breadcrumbRoot: 'Wo du in diesem Ordner bist',
-      guestNameTitle: 'Wie heißt du?',
-      guestNameHint: 'Bevor du etwas hinzufügst, sag uns deinen Namen. Ihn sehen nur die Personen, denen dieser Ordner gehört.',
     },
   },
 }

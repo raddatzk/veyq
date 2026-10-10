@@ -6,15 +6,15 @@
 // guests (the resolve serves no node, `listShareFiles` an empty list): only what it sent in this session. Its session
 // (identity, token, `K_up`, the name it gave) stays on the device, so a reload keeps uploading into the same folder.
 //
-// Inbox #385 (a): the page says whose session it is ("Sending as Anna") with a "Not you?" that forgets it on this device
-// and asks for a name again — a new identity; the old one's folder stays in the drop box untouched. The same action
+// Inbox #385 (a): the page says whose session it is with a "Not you?" that forgets it on this device and asks for a name
+// again — a new identity; the old one's folder stays in the drop box untouched. Both the form and that line are core's one
+// guest-naming component (`core/sharing/GuestNaming.vue`, inbox #401), which asks before it forgets. The same action
 // starts over after the link stopped taking files from this guest (its folder trashed, inbox #381). The folder is made
 // with the FIRST file, not when the guest names itself (`ensureDropFolder` is idempotent: the same folder on every later
 // call), so a visitor who names itself and leaves leaves no empty folder behind — only the identity.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
-import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import type { ShareBodyProps } from '../../../core/applications/registry'
 import { enqueue, retryFile, useUploadQueue, QUOTA_EXCEEDED, type UploadItem } from '../../../core/blob/queue'
@@ -25,18 +25,15 @@ import {
   type DropFolder, type DropGuestSession,
 } from '../dropBox'
 import { guestFileUploadJob } from '../shareUpload'
-import { useConfirm } from '../../../shared/state/useConfirm'
+import GuestNaming from '../../../core/sharing/GuestNaming.vue'
 import { FileUploadError } from '../uploadFile'
 
 const props = defineProps<ShareBodyProps>()
 const { t, locale } = useI18n()
 
 const session = ref<DropGuestSession | null>(loadDropGuest(props.shareId))
-const displayName = ref('')
-const busy = ref(false)
 /** A start over after a gone link is reading the link again. */
 const restarting = ref(false)
-const { ask } = useConfirm()
 const error = ref<string | null>(null)
 const picker = ref<HTMLInputElement | null>(null)
 // The folder's key is key material: kept out of a deep reactive ref (a plain variable, read when the jobs start).
@@ -94,10 +91,9 @@ const retryable = (item: UploadItem) =>
 /** A file of this session is still on its way: "Not you?" waits for it (it goes out under the current identity). */
 const sending = computed(() => items.value.some((f) => f.status === 'queued' || f.status === 'preparing' || f.status === 'uploading'))
 
-async function start() {
-  const name = displayName.value.trim()
-  if (!name) return
-  busy.value = true
+/** The guest names itself (core's form): its own identity key and folder-to-be, the session kept on the device. A link
+ *  that takes nothing any more ends the form; any other refusal is the form's own message. */
+async function start(name: string) {
   error.value = null
   try {
     const named = await nameDropGuest(props.head, { name, pwToken: props.pwToken })
@@ -105,9 +101,7 @@ async function start() {
     session.value = named
   } catch (e) {
     if (await isDropLinkGone(e)) linkGone.value = true
-    else error.value = t('files.dropBox.guestFailed')
-  } finally {
-    busy.value = false
+    else throw e
   }
 }
 
@@ -121,7 +115,7 @@ async function onPicked(e: Event) {
     // The guest's one folder: made on its first upload, the same one on every later (and after a reload); the name
     // sent with the first call is the folder's, later calls' names are ignored by the server. A session saved before
     // the name was kept already has its folder (it was made when the guest named itself), so its fallback is never used.
-    const name = session.value.displayName || displayName.value.trim() || t('files.dropBox.guestNameFallback')
+    const name = session.value.displayName || t('files.dropBox.guestNameFallback')
     folder ??= await ensureDropFolder(props.head, session.value, name, props.pwToken)
   } catch (err) {
     if (await isDropLinkGone(err)) linkGone.value = true
@@ -136,10 +130,10 @@ async function onPicked(e: Event) {
 }
 
 /** "Not you?" / start over: forget this device's session and ask for a name again. Nothing on the server changes.
- *  "Not you?" asks first — the session is the only way back into this folder from here (inbox #395). After a gone
- *  link the link itself is read again first (inbox #393 (a)): a revoked or deleted one leaves the shell's "not
- *  available" page (its `reload` says so) instead of a name form for a link that takes nothing; one that still resolves
- *  — this guest's folder was trashed, the link lives — starts over under a new name. */
+ *  "Not you?" asks first (core's `GuestNaming`) — the session is the only way back into this folder from here (inbox
+ *  #395). After a gone link it does not ask: the link itself is read again first (inbox #393 (a)): a revoked or deleted
+ *  one leaves the shell's "not available" page (its `reload` says so) instead of a name form for a link that takes
+ *  nothing; one that still resolves — this guest's folder was trashed, the link lives — starts over under a new name. */
 async function notYou() {
   if (linkGone.value) {
     restarting.value = true
@@ -148,19 +142,10 @@ async function notYou() {
     } finally {
       restarting.value = false
     }
-  } else {
-    const accepted = await ask({
-      header: t('files.dropBox.guestNotYouTitle'),
-      message: t('files.dropBox.guestNotYouConfirm', { name: session.value?.displayName || t('files.dropBox.guestNameFallback') }),
-      acceptLabel: t('files.dropBox.guestNotYouAccept'),
-      acceptIcon: 'pi pi-refresh',
-    })
-    if (!accepted) return
   }
   forgetDropGuest(props.shareId)
   session.value = null
   folder = null
-  displayName.value = ''
   error.value = null
   linkGone.value = false
 }
@@ -175,32 +160,17 @@ async function notYou() {
 
     <!-- Refused before a session exists (the link is gone): said, with no form to try again. -->
     <Message v-if="!session && linkGone" severity="error" :closable="false">{{ t('files.dropBox.guestGone') }}</Message>
-    <form v-else-if="!session" class="veyq-form" @submit.prevent="start">
-      <label>
-        {{ t('files.dropBox.guestNameLabel') }}
-        <InputText v-model="displayName" autocomplete="name" required :disabled="busy" />
-        <small>{{ t('files.dropBox.guestNameHint') }}</small>
-      </label>
-      <div class="veyq-dialog-action-row">
-        <Button type="submit" :label="t('files.dropBox.guestStart')" icon="pi pi-arrow-right" :loading="busy" :disabled="!displayName.trim()" />
-      </div>
-    </form>
+    <GuestNaming v-else-if="!session" :action="start" :hint="t('files.dropBox.guestNameHint')" :error-text="() => t('files.dropBox.guestFailed')" />
 
     <template v-else>
-      <p class="dropbox-guest-identity">
-        <span v-if="session.displayName">{{ t('files.dropBox.guestAs', { name: session.displayName }) }}</span>
-        <Button
-          type="button"
-          class="dropbox-guest-not-you"
-          :label="linkGone ? t('files.dropBox.guestStartOver') : t('files.dropBox.guestNotYou')"
-          size="small"
-          severity="secondary"
-          text
-          :disabled="sending"
-          :loading="restarting"
-          @click="notYou"
-        />
-      </p>
+      <GuestNaming
+        :current="session"
+        :forget="notYou"
+        :forget-label="linkGone ? t('files.dropBox.guestStartOver') : undefined"
+        :ask-before-forget="!linkGone"
+        :forget-disabled="sending"
+        :forget-busy="restarting"
+      />
       <Message v-if="linkGone" severity="error" :closable="false">{{ t('files.dropBox.guestGone') }}</Message>
       <template v-else>
         <input ref="picker" class="dropbox-picker" type="file" multiple hidden @change="onPicked" />
@@ -236,13 +206,6 @@ async function notYou() {
 </template>
 
 <style scoped>
-.dropbox-guest-identity {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.25rem 0.5rem;
-  margin: 0;
-}
 /* A session row: the status icon inline before the name (the list row's grid stacks it on a phone), the name cut
    with its full text in the tooltip, the reason a file was not sent wrapped rather than cut. */
 .dropbox-guest-row {

@@ -4,6 +4,7 @@
 // opens in the REAL Memories body, embedded. Only the network reads are stubbed (the resolve, the terms, Memories' media
 // read); the subtree is real crypto.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import PrimeVue from 'primevue/config'
 import { mount, flushPromises } from '@vue/test-utils'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url } from '@veyq/crypto/base64'
@@ -55,7 +56,7 @@ function folderHead(): PublicShareHead {
 }
 
 function mountShareView() {
-  return mount(ShareView, { global: { plugins: [realI18n()], stubs: { MediaGrid: true, OptimisticTile: true, MediaLightbox: true } } })
+  return mount(ShareView, { global: { plugins: [realI18n(), PrimeVue], stubs: { MediaGrid: true, OptimisticTile: true, MediaLightbox: true } } })
 }
 
 beforeEach(() => {
@@ -71,10 +72,10 @@ describe('ShareView: a link rooted at a FOLDER', () => {
     const w = mountShareView()
     await flushPromises()
     // the folder body is registered lazily (it reads the registry: a static import would be a cycle) — it loads first
-    await vi.waitFor(() => expect(w.find('.veyq-section-header h1').exists()).toBe(true))
+    await vi.waitFor(() => expect(w.find('.veyq-folder-overview-card h2').exists()).toBe(true))
     expect(w.find('.share-view-unavailable').exists()).toBe(false)
-    expect(w.find('.veyq-section-header h1').text()).toBe('Familie')
-    expect(w.find('.veyq-node-card strong').text()).toBe('Rom 2026')
+    expect(w.find('.veyq-folder-overview-card h2').text()).toBe('Familie')
+    expect(w.find('.memory-card strong').text(), "a Memory is the member's MemoryCard").toBe('Rom 2026')
   })
 
   it('a Memory below the folder opens in the Memories body, embedded', async () => {
