@@ -47,7 +47,8 @@ describe.skipIf(!process.env.VEYQ_E2E)('memory location e2e (live, operator-blin
 
     const medoid = computeMedoid([TENERIFE_A, TENERIFE_B])!
     // real reverse geocode (optional leg) — returns the address hierarchy; we pick the city level
-    let name = 'Teneriffa'
+    // Not plain 'Teneriffa': nine base64-alphabet letters are a canary random ciphertext can contain (inbox #323)
+    let name = 'Teneriffa Süd'
     let level: GeoLevel['key'] = 'city'
     const geocoder = process.env.VEYQ_GEOCODER
     if (geocoder) {

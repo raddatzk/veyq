@@ -433,7 +433,7 @@ class TenantHandler(
      *    member to OWNER (the orphan rule — a server rule, the tenant owner never gains access), then delete.
      *  - the target's **own** scopes — their **PERSONAL** scope + any **solo GROUP** (they are the only member) →
      *    **soft-delete** (cr-0090 grace + read-only + purge) but **keep** their membership, so they retain read-only
-     *    access to read/export their own memories during grace before `ScopePurge` erases them.
+     *    access to read/export their own content during grace before `ScopePurge` erases them.
      * Every scope cut counts the removal ([ScopesStore.recordRemoval], ADR 0075 point 4); with [revokeLinks] every
      * link of the TENANT scope is also turned off and marked (point 5). A refused removal writes neither.
      * Operator-blind: only membership deletions + a lifecycle timestamp — never a key.

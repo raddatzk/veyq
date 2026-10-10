@@ -9,7 +9,7 @@ package me.raddatz.veyq.core.platform.capabilities
  * [me.raddatz.veyq.core.tasks.CapabilityTags] gets against its registry.
  */
 object CapabilityIds {
-    /** Public read/contribute share links (viewer + contributor) of a personal-scope Memory (uc.sharing.*). */
+    /** Public read/contribute share links (viewer + contributor) of a node (uc.sharing.*). */
     const val SHARING_PUBLIC_LINKS = "sharing.public-links"
 
     /** Write-only uploader (drop-box) share links (uc.sharing.share-uploader). */

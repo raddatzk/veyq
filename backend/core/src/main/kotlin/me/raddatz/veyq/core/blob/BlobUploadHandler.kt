@@ -110,7 +110,7 @@ class BlobUploadHandler(
      *  2. check each item on its own ([admissibility]);
      *  3. ask [StorageQuota] whether the admissible items fit **together**: the tenant quota always, and the per-link
      *     limit too when [link] names a link. The two are independent, and either one refuses the whole
-     *     request — every admissible item `quota_exceeded`, no session inserted — so a photo never lands without its
+     *     request — every admissible item `quota_exceeded`, no session inserted — so an original never lands without its
      *     derivatives; admitting item by item would reserve an original alone until the stale-session purge;
      *  4. otherwise insert every admissible session, and commit.
      * Presigning runs after the commit: the lock covers the check and the inserts only, never up to 256 × window

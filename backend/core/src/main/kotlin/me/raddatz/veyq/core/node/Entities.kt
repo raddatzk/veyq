@@ -95,7 +95,7 @@ class NodeEntity : PanacheEntityBase {
     var coverByteSize: Long? = null
 
     /** Live-updates change signal (cr-0107, ADR 0033): a monotonic per-node counter bumped by **every**
-     *  gallery-media mutation — attach, meta-edit, delete — but **not** a cover change. Doubles as the
+     *  gallery-media mutation — attach, meta-edit, delete — but **not** a cover change. Doubles as Memories'
      *  `listNodeMedia` ETag; an unchanged poll is an O(1) compare → a 304 (no media query). */
     @Column(name = "media_revision", nullable = false)
     var mediaRevision: Int = 0

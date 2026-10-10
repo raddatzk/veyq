@@ -58,15 +58,15 @@ data class TrashedNodeRow(
 )
 
 /**
- * Persistence for the Memory tree (cr-0027). Operator-blind: stores ciphertext + the blinded slug token only.
+ * Persistence for the node tree (cr-0027). Operator-blind: stores ciphertext + the blinded slug token only.
  * Who may act on a scope is decided before this store is reached, by the handler's `ScopeAccess` gate.
  */
 @ApplicationScoped
 class NodesStore {
     // cr-0073 reclaimed a node's standalone cover blob HERE, at delete time. ADR 0061 moved that into
     // `NodeSubtreePurge`: under a soft-delete, reclaiming the cover when the user deletes would hand a restore
-    // back a Memory whose cover is already gone. So this store no longer touches the blob store at all — the
-    // one-way dependency (media → content) is restored, and the purge worker owns both directions.
+    // back a node whose cover is already gone. So this store no longer touches the blob store at all — the
+    // one-way dependency (application → content) is restored, and the purge worker owns both directions.
 
     /**
      * The scope row's lock — the serializer of the scope's node tree (developer-styleguide §12). Every write that
@@ -281,8 +281,8 @@ class NodesStore {
      * parent (READ COMMITTED, ADR 0078). So do two renames onto one name: the second's [slugTaken] reads the first's
      * committed token and answers [ApplyResult.SlugTaken] — unlocked, its UPDATE died on `ux_node_parent_slug` with a
      * 500, which no `createOrConflict` re-asks here, since every slug writer holds this lock (inbox #320,
-     * `NodeTreeRaceCoreSliceTest`). No writer takes a node row and then the scope: the media writes that lock a
-     * node row (`MediaStore.commitCover`, a primary bucket) never take the scope lock, and every tree write here
+     * `NodeTreeRaceCoreSliceTest`). No writer takes a node row and then the scope: an application's writes that lock a
+     * node row (Memories' `MediaStore.commitCover`, a primary bucket) never take the scope lock, and every tree write here
      * takes the scope first, so there is no inversion.
      *
      * A [boundary] ([SubtreeBoundary]) is decided here, under the lock, and only here: the node outside it is
@@ -346,14 +346,14 @@ class NodesStore {
 
     /**
      * **Soft-delete** the node + its whole subtree within the scope (uc.memory.delete-node, ADR 0061): stamp
-     * `deletedAt` on every doomed node in one transaction. **Nothing is destroyed** — the subtree's media,
-     * derivative, bucket and blob rows and every store object survive untouched, which is what makes a restore
+     * `deletedAt` on every doomed node in one transaction. **Nothing is destroyed** — the applications' rows
+     * under the subtree, its blob rows and every store object survive untouched, which is what makes a restore
      * complete rather than partial.
      *
      * Two halves of uc.memory.delete-node E3, and they pull in opposite directions. **Idempotent:** a delete of
      * an already-trashed root returns without touching anything. **But when the root is live, every doomed node
      * is re-stamped, including descendants an earlier, narrower delete had already trashed** — the whole subtree
-     * has to age out on ONE timestamp, or the purge reaches the inner rows first and erases the Memory inside a
+     * has to age out on ONE timestamp, or the purge reaches the inner rows first and erases a node inside a
      * folder the user can still see in the trash and still believes is restorable. That is what "stops early and
      * strands the rest" costs, and `NodeTrashSliceTest` pins it against the purge rather than against the marker.
      *

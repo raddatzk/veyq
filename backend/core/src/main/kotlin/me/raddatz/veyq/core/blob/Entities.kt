@@ -66,7 +66,7 @@ class UploadSessionEntity : PanacheEntityBase {
     @Column(name = "blob_id", length = 36)
     var blobId: String? = null
 
-    /** What the blob belongs to — the client-minted media id, or the node for a cover (ADR 0072). */
+    /** What the blob belongs to — the client-minted id of the application's item (Memories: the media id), or the node for a cover (ADR 0072). */
     @Column(name = "owner_id", length = 36)
     var ownerId: String? = null
 

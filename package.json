@@ -7,6 +7,10 @@
     "web",
     "admin-web"
   ],
+  "//engines": "The Node the workspace supports, stated so a wrong local one is named once, here, instead of as one EBADENGINE warning per package (inbox #353). It is the intersection of what the locked tree declares (measured 2026-10-10: abbrev and nopt `^22.22.2 || ^24.15.0 || >=26.0.0`, the eslint family `^20.19.0 || ^22.13.0 || >=24`, vitest `^20.0.0 || ^22.0.0 || >=24.0.0`). The images and CI run Node 22 (the Dockerfiles' `node:22-bookworm-slim`, the workflows' `node-version: \"22\"`); an odd, non-LTS release such as 23 is outside every one of those ranges.",
+  "engines": {
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+  },
   "//overrides": "MOVED here from web/package.json when the workspace was introduced (cr-admin-web-extraction): npm honours `overrides` only from the workspace ROOT, so leaving it in web/ would have silently stopped applying — a knowingly-vulnerable transitive dep back in the tree with no signal. qs: @stryker-mutator/core -> typed-rest-client@2.3.1 pins qs at EXACTLY 6.15.1, which carries GHSA-q8mj-m7cp-5q26 (qs.stringify DoS). That exact pin — not a range — is why `npm audit fix` cannot resolve it without --force. The vulnerable path is unreachable here (typed-rest-client only serves Stryker's dashboard reporter, which stryker.config.mjs does not enable), but a knowingly-vulnerable dependency is not something we keep. Drop this override once typed-rest-client ships qs >= 6.15.2.",
   "overrides": {
     "qs": "^6.15.2"

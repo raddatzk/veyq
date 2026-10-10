@@ -2,8 +2,8 @@ package me.raddatz.veyq.core.blob
 
 import me.raddatz.veyq.core.blobstore.PresignedRef
 
-// The upload protocol's request/result shapes, shared by every application that stores blobs (Memories' member and
-// guest paths today): an upload session is a core.blob row ([UploadSessionEntity]) and who may act on it
+// The upload protocol's request/result shapes, shared by every application that stores blobs (Memories' and Files'
+// member and guest paths today): an upload session is a core.blob row ([UploadSessionEntity]) and who may act on it
 // ([UploadOpener]) is a statement about that row, so these live beside it, not in an application. The completion's
 // shapes live beside the seam that takes them, in UploadCompletion.kt.
 

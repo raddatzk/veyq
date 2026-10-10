@@ -23,7 +23,7 @@ enum class StoreProvisioningState {
     /** The store is usable: layout, bucket, key, grant and CORS policy are all in place. */
     PROVISIONED,
 
-    /** The bounded retries are exhausted. Media stays broken until the store is repaired and the app restarted. */
+    /** The bounded retries are exhausted. Every upload and download stays broken until the store is repaired and the app restarted. */
     FAILED,
 }
 
@@ -47,7 +47,7 @@ enum class StoreProvisioningState {
  * should find a shape here rather than improvise a second one.
  *
  * **The failure is readable, not only logged.** ADR 0063's projector logs loudly and that is enough because its
- * failure stays invisible until someone adds a tenant; this one's failure reaches the operator as a photo that
+ * failure stays invisible until someone adds a tenant; this one's failure reaches the operator as a file that
  * will not upload, which is the experience the read exists to remove.
  *
  * **It does not run in `%test`.** The hermetic slice suite has no network and uses the in-memory stub, so there

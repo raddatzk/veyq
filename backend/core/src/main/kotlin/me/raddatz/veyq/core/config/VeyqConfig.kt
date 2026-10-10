@@ -414,7 +414,7 @@ interface VeyqConfig {
         @WithDefault("s3")
         fun type(): StoreType
 
-        /** Internal S3 endpoint (blank/absent fails startup — media is not gracefully degraded). */
+        /** Internal S3 endpoint (blank/absent fails startup — blob storage is not gracefully degraded). */
         fun endpoint(): Optional<String>
 
         /** Client-reachable URL used purely to SIGN presigned URLs (blank ⇒ endpoint). */

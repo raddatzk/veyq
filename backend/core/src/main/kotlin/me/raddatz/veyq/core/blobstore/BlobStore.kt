@@ -120,7 +120,7 @@ fun BlobStore.presignGets(storageKey: String, chunkCount: Int, domain: String?):
 
 /**
  * `%test`-only store (cr-0105): holds no bytes and **cannot presign** (ADR 0013 §1). It exists purely so the
- * hermetic slice suite can drive the metadata control plane (`start`/`complete`/`list` — blob/media rows, the
+ * hermetic slice suite can drive the metadata control plane (`start`/`complete`/`list` — blob and application rows, the
  * wrap, the budget *declaration*) without a real store; the byte transfer is covered by the opt-in store e2e.
  * `%dev`/`%prod` never reach it — [BlobStoreStartupCheck] fails loud there if no store is configured.
  */

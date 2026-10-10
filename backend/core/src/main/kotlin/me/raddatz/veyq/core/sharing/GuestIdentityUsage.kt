@@ -13,9 +13,9 @@ package me.raddatz.veyq.core.sharing
  * therefore **not** kept safe by this rule any more: its identity is dropped once core's attachments stop naming it
  * — refused loudly only where its column has a foreign key onto `veyq_share_identity` (Memories' `share_identity_id`
  * has none). Every application whose rows name a guest identity implements this interface; that is a rule for the
- * application, no longer a default of the platform. Today: core (an attachment uploaded by the guest) and the media
- * application (a medium, live or trashed — a trashed one can be restored, and the identity's wrapped key is the only
- * way to open an uploader guest's photo — or a bucket owned by the guest).
+ * application, no longer a default of the platform. Today: core (an attachment uploaded by the guest) and Memories
+ * (a medium, live or trashed — a trashed one can be restored, and the identity's wrapped key is the only way to open
+ * an uploader guest's upload — or a bucket owned by the guest).
  *
  * Reads the state of the caller's transaction: it must be asked only after the rows that named the identity were
  * deleted (`NodeSubtreeEraser` implementations run first; `NodeSubtreeEraserOrderSliceTest` pins that).

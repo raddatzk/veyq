@@ -26,7 +26,7 @@ data class StoreObjectRef(val storageKey: String, val chunkCount: Int)
 /**
  * A pending store-object deletion (ADR 0062, `veyq_store_reclaim`).
  *
- * **Deliberately says nothing about where it came from.** No scope, no media, no node: after a group erasure
+ * **Deliberately says nothing about where it came from.** No scope, no owning row, no node: after a group erasure
  * these rows are the only surviving trace, and a per-scope tally of object counts would describe the erased
  * group (Decision 6). The cost is on the operator side and is accepted, not hidden — a stuck object is a number,
  * never a space.
@@ -110,7 +110,7 @@ class StoreReclaimStore {
      * still streaming). **Not a second knob on purpose** — one would have to be kept at least this large by hand.
      *
      * Why a recorded key must wait at all: the row a caller drops can name a key whose last window was signed
-     * moments earlier — a media purged straight from the trash, a replaced or cleared cover, the budget purge —
+     * moments earlier — an item purged straight from the trash, a replaced or cleared cover, the budget purge —
      * and S3 accepts a PUT on that still-valid URL onto a key that was deleted in the meantime, because a key is
      * only a name. A sweep that deleted on the next tick would let that PUT re-create the object under a key no
      * row, no reclaim row and no quota names. The wait is sufficient because no URL for a key is signed after its

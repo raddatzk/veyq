@@ -6,8 +6,8 @@ package me.raddatz.veyq.core.node
  * (ADR 0079 phase 1, step 6).
  *
  * **Order is [phase], sorted by the caller — never CDI bean order**, as for `ScopeEraser`. Core's own cover-blob
- * erase sits at [COVER_BLOBS_PHASE]: an eraser below it runs before the covers (media, whose blob rows must go
- * through the FK-ordered body), one above it after. No implementation may use [COVER_BLOBS_PHASE] itself.
+ * erase sits at [COVER_BLOBS_PHASE]: an eraser below it runs before the covers (an application's rows whose blobs must
+ * go first — Memories' media, through its FK-ordered body), one above it after. No implementation may use [COVER_BLOBS_PHASE] itself.
  * `NodeSubtreeEraserOrderSliceTest` pins the table.
  *
  * [erase] runs inside `NodeSubtreePurge.eraseExpiredIn`'s transaction, **after** `ScopeEntity.lockRow` and the

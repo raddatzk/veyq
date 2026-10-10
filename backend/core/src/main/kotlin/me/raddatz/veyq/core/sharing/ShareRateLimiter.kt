@@ -16,7 +16,7 @@ import jakarta.enterprise.context.ApplicationScoped
  *
  * Two **separate budgets**, because they bound different things and must not consume each other:
  *  - [allowUpload] — the contributor upload/attach flow (`startShareBlobUploads`, `completeShareMedia`). Generous:
- *    a legitimate bulk contributor uploading an evening's photos is the normal case, not the abuse case.
+ *    a legitimate bulk contributor uploading an evening's worth of files is the normal case, not the abuse case.
  *  - [allowIdentity] — naming yourself on a contributable share (`createShareIdentity`). This is the one
  *    unauthenticated call that **creates a row before any upload exists**, so an unbounded link holder could grow
  *    the identity table on its own. A real guest does this **once** per share, which is why the cap can be an

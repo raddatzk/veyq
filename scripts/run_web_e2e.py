@@ -1310,9 +1310,11 @@ def occurrences(text: str, needle: str) -> Iterator[int]:
     """Every offset of `needle` in `text`: a plain, case-sensitive substring — the one matcher of the log surface.
 
     Over the WHOLE text rather than per line, so a needle holding a newline is still found; its line is computed
-    from the offset. No word boundary and no length floor: the canary set holds envelope vocabulary (`auto`,
-    `range`) that a boundary rule would be the obvious guard against, and a threshold added against false positives
-    is where the false negatives hide (changes/README). A collision is explained, never excluded.
+    from the offset. No word boundary and no length floor HERE: a threshold added against false positives is where
+    the false negatives hide (changes/README), so a collision is explained, never excluded. The floor that keeps
+    random ciphertext from matching lives where the canaries are made, and it refuses rather than drops: the
+    recorder (`web/src/test/canaries.ts`, `MIN_CANARY_LENGTH`) throws on a short base64-alphabet canary, and leaves
+    an envelope's closed enum values (`auto`, `range`, `city`) out of the set (inbox #323).
     """
     at = text.find(needle)
     while at != -1:

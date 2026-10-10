@@ -63,7 +63,7 @@ fun httpError(failure: HttpFailure): Response =
 
 /**
  * The one failure body that carries more than its code (ADR 0077): a stale sealed-meta write answers with the
- * blob's current value and version, because neither the node nor the media has a single-item read the loser could
+ * blob's current value and version, because neither the node nor an application's item (Memories' media) has a single-item read the loser could
  * re-GET — the body IS the re-read. Ciphertext the caller can already list, so nothing new crosses. The status
  * still comes from the failure's bucket, never from the call site.
  */

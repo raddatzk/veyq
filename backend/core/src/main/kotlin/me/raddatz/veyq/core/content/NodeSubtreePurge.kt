@@ -19,8 +19,8 @@ import org.jboss.logging.Logger
 /**
  * Scheduled hard-purge of soft-deleted node subtrees (uc.memory.delete-node, ADR 0061 Decision 6). A node the
  * user deleted enters the space's trash; once its `deletedAt` is older than the retention window this erases it
- * for good — the subtree's media, derivative, bucket and blob rows and the store objects behind them, then the
- * node rows. Irreversible, and **not** a member action: deleting is reversible so any member may do it, purging
+ * for good — the applications' rows under the subtree (through each [NodeSubtreeEraser]), its blob rows and the
+ * store objects behind them, then the node rows. Irreversible, and **not** a member action: deleting is reversible so any member may do it, purging
  * belongs to the system (security-model § *Deletion & erasure*).
  *
  * This is where inbox #131 closes. The hard delete this replaced removed the node rows and the cover blobs and
@@ -30,19 +30,19 @@ import org.jboss.logging.Logger
  * The purge finally owns the whole subtree instead of just its covers.
  *
  * Two shape decisions, both deliberate:
- * - **Rows through `MediaStore.purgeMediaRows`** (the media eraser), the shared per-media body — so the FK order (derivative →
- *   media → blob) and the chunk-key enumeration stay in one place rather than becoming a fourth copy. Not
+ * - **Each application erases its own rows per item** (its [NodeSubtreeEraser]; Memories' routes through its
+ *   FK-ordered per-media body, so that order and the chunk-key enumeration stay in one place). Not
  *   `ScopePurge.eraseScope`'s set-based shape: that erases by *scope* and lets the scope-row delete cascade the
- *   rest, and its own docstring says a per-media copy is the wrong shape **there**. A node subtree is not a
- *   scope — neighbouring nodes, buckets and the scope row all survive it.
+ *   rest. A node subtree is not a scope — neighbouring nodes, an application's other rows and the scope row all
+ *   survive it.
  * - **One transaction per scope covers its rows AND their reclaim entries** (ADR 0062). `QuarkusTransaction`, not
  *   `@Transactional` on [run]: a self-invoked `@Transactional` method would not be intercepted at all. This job
  *   deletes no store objects itself — it records the key prefixes and `StoreReclaimSweep` drains them. The old
  *   shape reclaimed best-effort after the commit, which is unobservable by construction: the row that named the
  *   key was already gone when the delete failed.
  *
- * And it **ends every link on the erased Memories** (ADR 0029 §7). Trashing a Memory leaves its links resolving to
- * nothing and bringing it back on restore; once the Memory is erased there is nothing to bring back, and a link left
+ * And it **ends every link on the erased nodes** (ADR 0029 §7). Trashing a node leaves its links resolving to
+ * nothing and bringing it back on restore; once the node is erased there is nothing to bring back, and a link left
  * standing kept answering `200` with its sealed title, listed nowhere a member could revoke it. With the links go the
  * guest identities nothing can use or open any more (inbox #229).
  */
@@ -98,15 +98,15 @@ class NodeSubtreePurge(
         if (expired.isEmpty()) return
         val nodeIds = expired.map { it.id }
 
-        // Phases below COVER_BLOBS_PHASE: the media application's rows (its locks, its buckets, its blobs through the
-        // FK-ordered body). Each returns the guest identities its rows named, read while they still did; the last
+        // Phases below COVER_BLOBS_PHASE: the applications' rows whose blobs must go before the covers (Memories' locks,
+        // buckets, and blobs through its FK-ordered body). Each returns the guest identities its rows named, read while they still did; the last
         // step drops the ones nothing references any more.
         val guests = HashSet<String>()
         beforeCovers.forEach { guests += it.erase(scopeId, nodeIds) }
 
         // The standalone COVER blobs. This reclaim used to sit in `NodesStore.deleteSubtree` (cr-0073) and
         //    moved here: under a soft-delete, reclaiming a cover when the user deletes hands a later restore
-        //    back a Memory whose cover is already gone. `cover_blob_id` is the only reference to these rows.
+        //    back a node whose cover is already gone. `cover_blob_id` is the only reference to these rows.
         val coverBlobIds = expired.mapNotNull { it.coverBlobId }
         if (coverBlobIds.isNotEmpty()) {
             val covers = BlobEntity.find("id in ?1", coverBlobIds).list()
@@ -127,7 +127,7 @@ class NodeSubtreePurge(
         guests += expired.mapNotNull { it.shareIdentityId }
         expired.forEach { NodeEntity.deleteById(it.id) }
 
-        // The guests of ANY deleted link whose last media, bucket, attachment or identity folder went above — a link
+        // The guests of ANY deleted link whose last attachment, identity folder or application row naming them went above — a link
         //    deleted earlier loses its guests here, with the last node that held their uploads. After every eraser
         //    above, the tombstones and the node rows, which it reads (GuestIdentityUsage).
         sharing.dropDeadIdentities(guests)

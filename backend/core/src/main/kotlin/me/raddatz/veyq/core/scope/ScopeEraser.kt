@@ -9,7 +9,7 @@ package me.raddatz.veyq.core.scope
  * and runs them `sortedBy { phase }`; a phase is therefore a statement about a foreign key, and each
  * implementation says in its own KDoc which FK its number protects. Core's own blob and upload-session row
  * deletes sit at [BLOB_ROWS_PHASE]: an eraser below it runs while the blob rows still exist (anything whose rows
- * reference `veyq_blob`, i.e. media and its derivatives, must), one above it runs after. No implementation may
+ * reference `veyq_blob` must — Memories' media and derivatives today), one above it runs after. No implementation may
  * use [BLOB_ROWS_PHASE] itself. `ScopeEraserOrderSliceTest` pins the table.
  *
  * An implementation erases rows only. It must not record store objects for reclaim (`ScopePurge` does that for
