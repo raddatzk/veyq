@@ -1,0 +1,429 @@
+// Memories' data source (inbox #401 S4): the one object through which a Memory's detail (`MemoryDetail`, its composables,
+// the lightbox it opens, the organizer `MemoryBuckets`) reads and writes, so ONE view serves a member and a share guest.
+// The member's wraps the unlocked scope's doors exactly as the view called them before (`media.ts`, the node-meta
+// writers, the item marks, the buckets, `treeStore` + the active scope's epochs for the bucket names); the guest's the
+// link's (`listShareMedia` + `openSharedMemory`, the gated share presign, `addSharePhoto` with the target node, the
+// contributor's delete-own with the device's record of its own uploads, `ownShareMedia.ts`). Neither reads the other's
+// world, and which one a view holds is fixed at mount (the host picks it by `access.mode`).
+//
+// **A door exists only where the session has it.** Every write and every member-only read is an OPTIONAL member of the
+// source: the guest's has no media trash, no node meta (date, place, cover), no buckets, no item marks, no live poll, no
+// heavy EXIF, no media-meta writes, and its delete reaches only its own media (an irreversible purge, never the member's
+// trash with undo). A view offers an operation where `memoryCapabilities` grants it AND the source carries it
+// (`sourceCapabilities`), so a forgotten guard cannot fall through to a member call — there is no member call to fall to.
+// A `WRITE_ONLY` guest holds no key to read anything: its page is the drop (`MemoryShareBody`), never this source's, so
+// the guest source uploads and deletes for a `READ_WRITE` link only.
+//
+// Operator-blind as the views: every byte is fetched as ciphertext and opened on the device under the key the caller
+// hands in (the node's `K_mem` from the tree's chain); the sources move ids, wraps and ciphertext.
+import { computed, inject, provide, ref, type ComputedRef, type InjectionKey } from 'vue'
+import type { GuestAccess } from '../../core/access'
+import { openBlobFromUrls } from '../../core/blob/transport'
+import { shareChunkUrls } from '../../core/sharing/guestBlob'
+import { contentKeyChain } from '../../core/node/tree'
+import { treeStore } from '../../core/node/treeStore'
+import { useGuestSession, type GuestIdentity } from '../../core/sharing/guestIdentity'
+import type { OpenedBlobMeta } from '../../core/blob/meta'
+import type { SealedMetaState } from '../../core/node/sealedMetaWrite'
+import { activeEpochKeys } from '../../app/activeSpace'
+import { listScopeMembers } from '../spaces/members'
+import type { ScopeMember } from '../../api/generated/scopes'
+import { ShareRole } from '../../api/generated/sharing'
+import type { ChunkProvider } from '../../sw/protocol'
+import {
+  openGrid,
+  openLightbox,
+  openOriginal,
+  openBlob,
+  chunkProvider,
+  unsealMeta,
+  originalBlobMeta,
+  loadMediaExif,
+  listMediaPage,
+  deleteMedia,
+  restoreMedia,
+  listTrash,
+  purgeMedia,
+  setMediaMeta,
+  backfillPlaceName,
+  uploadCoverBlob,
+  deleteCoverBlob,
+  downloadRef,
+  listBuckets,
+  createBucket,
+  renameBucket,
+  deleteBucket,
+  moveBucketMedia,
+  type AddMediaSource,
+  type BlobRef,
+  type BucketItem,
+  type MediaExif,
+  type MediaItem,
+  type MediaMeta,
+  type MediaMetaTarget,
+  type MediaMetaWrite,
+  type MediaPage,
+} from './media'
+import { setMemoryDate, reconcileMemoryDate, type MemoryDate } from './memoryDate'
+import { setMemoryLocation, type MemoryLocation } from './memoryLocation'
+import { setMemoryCover, type MemoryCover } from './memoryCover'
+import { writeNodeMeta } from './nodeMetaWrite'
+import { loadItemFavoritesFor, toggleItemFavorite } from './itemFavoritesStore'
+import {
+  addSharePhoto,
+  deleteSharePhoto,
+  listShareMedia,
+  openSharedMemory,
+  openShareGrid,
+  openShareLightbox,
+  openShareOriginal,
+  shareChunkProvider,
+  type ShareItem,
+} from './share'
+import { forgetOwnShareMedia, loadOwnShareMedia, rememberOwnShareMedia } from './ownShareMedia'
+import type { UploadTarget } from './uploadQueue'
+import type { MemoryCapabilities } from './capabilities'
+
+/** A node's media as a source lists it: the live media and, where the session polls, the revisions a live poll
+ *  continues from (`null`: this source has no live poll). */
+export type MediaListing = { items: MediaItem[]; revision: { media: number; delete: number } | null }
+
+/** Where a live poll continues from (uc.memory.live-updates, cr-0107). */
+export type PollCursor = { mediaRevision: number; since?: string; deleteRevision: number }
+
+/** How a media's bytes and its listed seals open — every one under `key`, the node's `K_mem` from the chain. */
+export interface MediaLoaders {
+  /** The grid tier (thumbnail). */
+  grid(item: MediaItem, key: Uint8Array): Promise<Uint8Array>
+  /** The lightbox tier (preview). */
+  preview(item: MediaItem, key: Uint8Array): Promise<Uint8Array>
+  /** The whole original (the lightbox's video fallback without a service worker). */
+  original(item: MediaItem, key: Uint8Array): Promise<Uint8Array>
+  /** The key-free chunk source over the original (service-worker playback and the streamed download, ADR 0047). */
+  chunk(item: MediaItem, key: Uint8Array): ChunkProvider
+  /** The listed metadata tier (capture time, geometry, GPS). */
+  meta(item: MediaItem, key: Uint8Array): MediaMeta | null
+  /** The original's sealed blob meta (type, file name, modified time — inbox #397). */
+  blobMeta(item: MediaItem, key: Uint8Array): OpenedBlobMeta | null
+  /** The node's uploaded cover blob (a `COVER` attachment). */
+  coverBlob(ref: BlobRef, key: Uint8Array): Promise<Uint8Array>
+  /** The heavy EXIF bundle, fetched lazily per opened item. Absent: no endpoint serves it to this session (a guest). */
+  exif?(item: MediaItem, key: Uint8Array): Promise<MediaExif | null>
+}
+
+/** The upload door of a session that has one. */
+export interface MemoryUpload {
+  /** The session may pick files now. False: `prepare` first (a guest names itself through the page's one flow) — the
+   *  pick follows on the next click, because a picker opened after an awaited dialog no longer counts as the click. */
+  ready(): boolean
+  /** Make the session ready (a guest: the page's naming flow); resolves whether it now is. */
+  prepare(): Promise<boolean>
+  /** The upload-queue target of a batch into `nodeId` sealed under `key`, or null when the session cannot send now. */
+  target(nodeId: string, key: Uint8Array): UploadTarget | null
+}
+
+/** Which media a delete reaches, and how: a member's trash (reversible, undo) or a guest's purge of its own
+ *  (irreversible — the view confirms first). */
+export type MediaDelete =
+  | { readonly reach: 'any'; trash(mediaId: string): Promise<void>; restore(mediaId: string): Promise<void> }
+  | { readonly reach: 'own'; isOwn(mediaId: string): boolean; purge(mediaId: string): Promise<void> }
+
+/** The node's media trash (cr-0110/0111). */
+export interface MediaTrashDoor {
+  list(nodeId: string): Promise<MediaItem[]>
+  restore(mediaId: string): Promise<void>
+  purge(mediaId: string): Promise<void>
+}
+
+/** The node's sealed meta writes (date, place; the automatic reconcile of both) — ADR 0077's version-checked PATCH. */
+export interface NodeMetaDoor {
+  setDate(nodeId: string, key: Uint8Array, date: MemoryDate, current: SealedMetaState): Promise<SealedMetaState>
+  reconcileDate(nodeId: string, key: Uint8Array, items: MediaItem[], current: SealedMetaState): Promise<{ state: SealedMetaState; wrote: boolean }>
+  setLocation(nodeId: string, key: Uint8Array, location: MemoryLocation | null, current: SealedMetaState): Promise<SealedMetaState>
+  /** The read-modify-write the location's self-heal runs its own edit through. */
+  write: (
+    nodeId: string,
+    key: Uint8Array,
+    current: SealedMetaState,
+    edit: Parameters<typeof writeNodeMeta>[4],
+  ) => ReturnType<typeof writeNodeMeta>
+}
+
+/** The node's cover: the sealed choice and its uploaded blob (cr-0072/0073). */
+export interface CoverDoor {
+  set(nodeId: string, key: Uint8Array, cover: MemoryCover | null, current: SealedMetaState, surfaceConflict: boolean): Promise<SealedMetaState & { replaced: MemoryCover | null }>
+  uploadBlob(nodeId: string, key: Uint8Array, source: AddMediaSource): Promise<BlobRef>
+  deleteBlob(nodeId: string, blobId: string): Promise<void>
+}
+
+/** A medium's own meta writes from the lightbox (capture-time correction, the resolved place name). */
+export interface MediaMetaDoor {
+  set(target: MediaMetaTarget, key: Uint8Array, overrideMs: number | null): Promise<MediaMetaWrite>
+  backfillPlace(target: MediaMetaTarget, key: Uint8Array, placeName: string, placeLevel?: string): Promise<MediaMetaWrite>
+}
+
+/** The item marks (ADR 0068): sealed under `K_SC` at `E_0`, the scope members' own. */
+export interface MarksDoor {
+  load(nodeId: string, scopeKey: Uint8Array): Promise<void>
+  toggle(mediaId: string, nodeId: string, scopeKey: Uint8Array): Promise<void>
+}
+
+/** The contributions organizer (uc.memory.buckets): the buckets, the scope's members that name them, and the moves. */
+export interface BucketsDoor {
+  list(nodeId: string): Promise<BucketItem[]>
+  members(): Promise<ScopeMember[]>
+  /** The keys of `nodeId`'s ancestors, nearest first — a link's guest named itself under its root's key. */
+  ancestorKeys(nodeId: string): Uint8Array[]
+  create(nodeId: string, key: Uint8Array, name: string, parentBucketId?: string): Promise<BucketItem>
+  rename(nodeId: string, key: Uint8Array, bucketId: string, name: string): Promise<BucketItem>
+  remove(nodeId: string, bucketId: string): Promise<void>
+  move(nodeId: string, mediaIds: string[], targetBucketId: string | null): Promise<void>
+  trash(mediaId: string): Promise<void>
+  restore(mediaId: string): Promise<void>
+}
+
+/** Memories' data source; see the header. */
+export interface MemorySource {
+  /** The scope every seal binds (its id, never a key). */
+  scopeId(): string
+  /** The upload-queue grouping of a node's batches — which in-flight tiles a gallery shows (one per node and session). */
+  batchKey(nodeId: string): string
+  /** The live media of `nodeId` in full. Throws what the read throws. */
+  listMedia(nodeId: string): Promise<MediaListing>
+  readonly loaders: MediaLoaders
+  /** One live poll from `cursor` (a conditional delta read). Absent: no live updates — the view re-reads after its own writes. */
+  readonly poll?: (nodeId: string, cursor: PollCursor) => Promise<MediaPage>
+  /** Upload into a node. Absent: this session uploads nothing. */
+  readonly upload?: MemoryUpload
+  /** Delete media. Absent: this session deletes nothing. */
+  readonly deleteMedia?: MediaDelete
+  /** The node's media trash. Absent: none. */
+  readonly trash?: MediaTrashDoor
+  /** The node's date and place, their automatic reconcile included. Absent: read-only meta, no reconcile. */
+  readonly nodeMeta?: NodeMetaDoor
+  /** The node's cover. Absent: shown, never set. */
+  readonly cover?: CoverDoor
+  /** A medium's capture-time correction and place-name backfill. Absent: the lightbox is read-only. */
+  readonly mediaMeta?: MediaMetaDoor
+  /** The item marks. Absent: none shown, none loaded. */
+  readonly marks?: MarksDoor
+  /** The contributions organizer. Absent: no organizer. */
+  readonly buckets?: BucketsDoor
+}
+
+/** The capabilities a view shows: the matrix's answer, narrowed to the doors `source` carries. A delete keeps its reach
+ *  only where the source's delete has that same reach (a member's trash for `any`, a guest's purge for `own`). */
+export function sourceCapabilities(caps: MemoryCapabilities, source: MemorySource): MemoryCapabilities {
+  return {
+    ...caps,
+    upload: caps.upload && !!source.upload,
+    deleteMedia: caps.deleteMedia !== 'none' && source.deleteMedia?.reach === caps.deleteMedia ? caps.deleteMedia : 'none',
+    editMeta: caps.editMeta && !!source.nodeMeta,
+    setCover: caps.setCover && !!source.cover,
+    mark: caps.mark && !!source.marks,
+    mediaTrash: caps.mediaTrash && !!source.trash,
+    buckets: caps.buckets && !!source.buckets,
+  }
+}
+
+/** What `MemoryDetail` hands its deep children (the organizer, …): the source and the capabilities it shows. */
+export interface MemoryView {
+  readonly source: MemorySource
+  readonly caps: ComputedRef<MemoryCapabilities>
+}
+/** The injection key of {@link MemoryView} — exported for a test that mounts a child on its own (`global.provide`). */
+export const MEMORY_VIEW: InjectionKey<MemoryView> = Symbol('memories.view')
+
+/** Provide the view to the detail's children (`MemoryDetail`). */
+export function provideMemoryView(view: MemoryView): void {
+  provide(MEMORY_VIEW, view)
+}
+
+/** The view a child of a Memory's detail serves. Throws outside one: no child falls back to the member's doors. */
+export function useMemoryView(): MemoryView {
+  const view = inject(MEMORY_VIEW, null)
+  if (!view) throw new Error('useMemoryView outside a Memory detail')
+  return view
+}
+
+/** A member's source over the scope `scopeId` (a getter: the host's scope changes under it on a scope switch). Every
+ *  door is today's call, unchanged — the wire is `media.ts`'s (`uploadWire.*` snapshots). */
+export function memberMemorySource(from: { scopeId: () => string }): MemorySource {
+  const scope = from.scopeId
+  return {
+    scopeId: scope,
+    batchKey: (nodeId) => nodeId,
+    async listMedia(nodeId) {
+      const page = await listMediaPage(scope(), nodeId) // full list — no ETag/cursor, so never a 304
+      if (page.notModified) return { items: [], revision: null } // unreachable without an ETag: exhaustiveness
+      return { items: page.items, revision: { media: page.mediaRevision, delete: page.deleteRevision } }
+    },
+    loaders: {
+      grid: (item, key) => openGrid(scope(), key, item),
+      preview: (item, key) => openLightbox(scope(), key, item),
+      original: (item, key) => openOriginal(scope(), key, item),
+      chunk: (item, key) => chunkProvider(scope(), key, item),
+      meta: (item, key) => unsealMeta(scope(), key, item),
+      blobMeta: (item, key) => originalBlobMeta(scope(), key, item),
+      coverBlob: (ref, key) => openBlob(scope(), key, ref),
+      exif: (item, key) => loadMediaExif(scope(), item, key),
+    },
+    poll: (nodeId, c) => listMediaPage(scope(), nodeId, { ifNoneMatch: String(c.mediaRevision), since: c.since, sinceDelete: c.deleteRevision }),
+    upload: {
+      ready: () => true,
+      prepare: async () => true,
+      target: (nodeId, key) => ({ scopeId: scope(), nodeId, memoryKey: key }),
+    },
+    deleteMedia: {
+      reach: 'any',
+      trash: (mediaId) => deleteMedia(scope(), mediaId),
+      restore: (mediaId) => restoreMedia(scope(), mediaId),
+    },
+    trash: {
+      list: (nodeId) => listTrash(scope(), nodeId),
+      restore: (mediaId) => restoreMedia(scope(), mediaId),
+      purge: (mediaId) => purgeMedia(scope(), mediaId),
+    },
+    nodeMeta: {
+      setDate: (nodeId, key, date, current) => setMemoryDate(scope(), nodeId, key, date, current),
+      reconcileDate: (nodeId, key, items, current) => reconcileMemoryDate(scope(), nodeId, key, items, current),
+      setLocation: (nodeId, key, location, current) => setMemoryLocation(scope(), nodeId, key, location, current),
+      write: (nodeId, key, current, edit) => writeNodeMeta(scope(), nodeId, key, current, edit),
+    },
+    cover: {
+      set: (nodeId, key, cover, current, surfaceConflict) => setMemoryCover(scope(), nodeId, key, cover, current, surfaceConflict),
+      uploadBlob: (nodeId, key, source) => uploadCoverBlob(scope(), nodeId, key, source),
+      deleteBlob: (nodeId, blobId) => deleteCoverBlob(scope(), nodeId, blobId),
+    },
+    mediaMeta: {
+      set: (target, key, overrideMs) => setMediaMeta(scope(), target, key, overrideMs),
+      backfillPlace: (target, key, name, level) => backfillPlaceName(scope(), target, key, name, level),
+    },
+    marks: {
+      load: (nodeId, scopeKey) => loadItemFavoritesFor(scope(), nodeId, scopeKey),
+      toggle: (mediaId, nodeId, scopeKey) => toggleItemFavorite(mediaId, scope(), nodeId, scopeKey),
+    },
+    buckets: {
+      list: (nodeId) => listBuckets(scope(), nodeId),
+      members: () => listScopeMembers(scope()),
+      ancestorKeys(nodeId) {
+        const epochs = activeEpochKeys()
+        if (!epochs) return []
+        try {
+          return contentKeyChain(scope(), epochs, treeStore.nodes, nodeId).slice(1)
+        } catch {
+          return [] // a chain that does not open: only the node's own key
+        }
+      },
+      create: (nodeId, key, name, parent) => createBucket(scope(), nodeId, key, name, parent),
+      rename: (nodeId, key, bucketId, name) => renameBucket(scope(), nodeId, key, bucketId, name),
+      remove: (nodeId, bucketId) => deleteBucket(scope(), nodeId, bucketId),
+      move: (nodeId, mediaIds, target) => moveBucketMedia(scope(), nodeId, mediaIds, target),
+      trash: (mediaId) => deleteMedia(scope(), mediaId),
+      restore: (mediaId) => restoreMedia(scope(), mediaId),
+    },
+  }
+}
+
+/**
+ * A share guest's source over its link (`access`, a getter: a re-resolve replaces the head). `rootId` is the share root
+ * (the tree's): an upload into it names no target node, as every upload of a link always did; one into a Memory or
+ * chapter below names that node (5a.5), sealed under ITS key from the chain — the server then creates the guest's own
+ * bucket there (`ensurePrimaryBucket` for `share:<identity>`).
+ *
+ * Reads for `READ` and `READ_WRITE`; the upload and the delete of its own media for `READ_WRITE` only (see the header).
+ */
+export function guestMemorySource(access: () => GuestAccess, tree: { readonly rootId: string | null }): MemorySource {
+  const a0 = access()
+  const shareId = a0.shareId
+  const contributes = a0.role === ShareRole.ReadWrite
+  const scope = () => access().head.scopeId
+  // A served media as the share helpers take it: opened under `key` (the node's, from the chain), its origin on the item.
+  const shareItem = (item: MediaItem, key: Uint8Array): ShareItem => ({ item, memoryKey: key, scopeId: scope(), nodeId: '', chapterName: null })
+
+  return {
+    scopeId: scope,
+    batchKey: (nodeId) => `share:${shareId}:${nodeId}`,
+    async listMedia(nodeId) {
+      const a = access()
+      if (a.role === ShareRole.WriteOnly) return { items: [], revision: null } // served nothing, holds no key (ADR 0031)
+      // The link's listing is its whole subtree (`listShareMedia`); the walk keys every media by its node, and this
+      // node's are the view's. A media whose node's key did not open is not served (`openSharedMemory`).
+      const listing = await listShareMedia(a.shareId, a.role, a.pwToken)
+      const opened = openSharedMemory(a.head, listing)
+      return { items: opened.items.filter((si) => si.nodeId === nodeId).map((si) => si.item), revision: null }
+    },
+    loaders: {
+      grid: (item, key) => openShareGrid(shareId, shareItem(item, key), access().pwToken),
+      preview: (item, key) => openShareLightbox(shareId, shareItem(item, key), access().pwToken),
+      original: (item, key) => openShareOriginal(shareId, shareItem(item, key), access().pwToken),
+      chunk: (item, key) => shareChunkProvider(shareId, shareItem(item, key), downloadRef(item), access().pwToken),
+      meta: (item, key) => unsealMeta(scope(), key, item),
+      blobMeta: (item, key) => originalBlobMeta(scope(), key, item),
+      // The node's uploaded cover through the gated share presign, which serves a cover blob below the share.
+      coverBlob: async (ref, key) => openBlobFromUrls(scope(), key, ref, await shareChunkUrls(shareId, ref.blobId, access().pwToken)),
+    },
+    ...(contributes ? guestWrites(access, tree, shareId, scope) : {}),
+  }
+}
+
+/** A contributor's two doors: upload into the node on screen, and the irreversible delete of what this device sent. */
+function guestWrites(
+  access: () => GuestAccess,
+  tree: { readonly rootId: string | null },
+  shareId: string,
+  scope: () => string,
+): Pick<MemorySource, 'upload' | 'deleteMedia'> {
+  // The page's one session (named or forgotten anywhere on it), and the device's record of which listed media it added
+  // under that identity (#361) — the server tells no guest whose an upload is (ADR 0030 point 8).
+  const session = useGuestSession<GuestIdentity>(shareId)
+  const recorded = ref(0) // bumped on every remember/forget, so `own` re-reads the record
+  const own = computed(() => {
+    void recorded.value
+    const s = session.value
+    return s ? loadOwnShareMedia(shareId, s.identityId) : new Set<string>()
+  })
+  return {
+    upload: {
+      ready: () => !!session.value,
+      prepare: async () => !!(await access().requestGuest()),
+      target(nodeId, key) {
+        const s = session.value
+        if (!s) return null
+        return {
+          key: `share:${shareId}:${nodeId}`,
+          async upload(source, opts) {
+            const a = access()
+            const added = await addSharePhoto(
+              {
+                ...s,
+                shareId,
+                scopeId: scope(),
+                sealKey: key,
+                pwToken: a.pwToken,
+                ...(nodeId === tree.rootId ? {} : { nodeId }),
+              },
+              source,
+              undefined,
+              opts,
+            )
+            rememberOwnShareMedia(shareId, s.identityId, added.mediaId)
+            recorded.value++
+            return added
+          },
+        }
+      },
+    },
+    deleteMedia: {
+      reach: 'own',
+      isOwn: (mediaId) => own.value.has(mediaId),
+      async purge(mediaId) {
+        const s = session.value
+        if (!s) throw new Error('no_guest_session')
+        await deleteSharePhoto(shareId, s.contributorToken, mediaId, access().pwToken)
+        forgetOwnShareMedia(shareId, s.identityId, mediaId)
+        recorded.value++
+      },
+    },
+  }
+}
