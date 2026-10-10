@@ -23,6 +23,8 @@ import java.util.UUID
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.membership.ScopeAccessWorld
 import me.raddatz.veyq.core.membership.refusal
+import me.raddatz.veyq.memories.testing.blobId
+import me.raddatz.veyq.memories.testing.shareId
 
 /**
  * The scope-access gate where its answer is a **filter** or a **token holder's view** rather than a refusal

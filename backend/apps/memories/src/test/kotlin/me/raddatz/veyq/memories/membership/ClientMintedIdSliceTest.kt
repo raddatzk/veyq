@@ -25,6 +25,11 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import me.raddatz.veyq.core.membership.ScopeAccessWorld
 import me.raddatz.veyq.core.membership.TestAdmission
+import me.raddatz.veyq.memories.testing.nodeId
+import me.raddatz.veyq.memories.testing.mediaId
+import me.raddatz.veyq.memories.testing.blobId
+import me.raddatz.veyq.memories.testing.bucketId
+import me.raddatz.veyq.memories.testing.shareId
 
 /**
  * The client mints the id of every sealed object it creates, and the server stores it under exactly that id

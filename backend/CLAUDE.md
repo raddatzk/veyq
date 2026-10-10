@@ -36,7 +36,12 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   helper on `Arc.container()` and the CDI fakes all work from there in `:core`'s, `:apps:memories`' and the root's
   tests (measured 2026-10-05, inbox #333) — as long as no jar is renamed (`archivesName`, `buildSrc`'s `veyq.module`
   says why). The fixtures need their own `META-INF/beans.xml`, carry no config file (`%test` keys go in a module's
-  `src/test/resources`), and never depend on an application.
+  `src/test/resources`), and never depend on an application. **An application's helpers another project's tests
+  need** go in that application's own fixtures, never core's: `:apps:memories`' `src/testFixtures` holds
+  `MemoriesWorldContent`, its content in core's `ScopeAccessWorld` (a `WorldContent` CDI bean, `@Unremovable`, found
+  through `Arc` in whatever application is under test), consumed by the root as
+  `testImplementation(testFixtures(project(":apps:memories")))` (inbox #335). So core's world builds with core alone,
+  and a second application covers its routes in the gate probes by contributing a `WorldContent` the same way.
 - **Run the app (`quarkusDev`) on a persistent MariaDB** (`%dev`): `docker compose -f infra/docker-compose.yml
   up -d` starts it; data survives restarts (Flyway migrates once, then "up to date"). `docker compose -f
   infra/docker-compose.yml down -v` wipes it for a fresh instance. The H2 fallback is only the test default now.

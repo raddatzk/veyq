@@ -8,7 +8,7 @@ cr-platform-gradle-modules). Buildless: it reads the build files, the config fil
 `testImplementation`/`testRuntimeOnly` test edges, `compileOnly` neither (it is still an edge for rule (b)); a
 `testFixtures(project(":x"))` inside any of them is an edge to `:x` as well. A module the root reaches over runtime
 edges **ships** (its jar is in the fast-jar's `quarkus-app/lib/main`). The test helpers the modules share are a
-module's `java-test-fixtures` source set (`src/testFixtures`, today `:core`'s), test code that ships nothing.
+module's `java-test-fixtures` source set (`src/testFixtures`, today `:core`'s and `:apps:memories`'), test code that ships nothing.
 
 - **(a) The settings name every module, and only the two kinds there are.** The included projects equal the
   directories below `backend/` holding a `build.gradle.kts` (build output excluded). A module directory the settings

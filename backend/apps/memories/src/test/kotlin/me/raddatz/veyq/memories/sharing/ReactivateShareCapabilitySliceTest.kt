@@ -13,6 +13,8 @@ import java.time.Instant
 import java.util.UUID
 import org.hamcrest.Matchers.equalTo
 import org.junit.jupiter.api.Test
+import me.raddatz.veyq.memories.testing.nodeId
+import me.raddatz.veyq.memories.testing.MemoriesWorldContent
 
 /**
  * Re-activating a share publishes its link again, so it passes the check creating one does: the instance
@@ -30,7 +32,7 @@ class ReactivateShareCapabilitySliceTest {
 
     @Test
     fun reactivatingALinkWhoseCapabilityIsOffIs422() {
-        val w = ScopeAccessWorld(shareRole = ShareEntity.WRITE_ONLY).build()
+        val w = ScopeAccessWorld(listOf(MemoriesWorldContent(shareRole = ShareEntity.WRITE_ONLY))).build()
         val viewer = disabledShare(w.live, ShareEntity.READ)
         val uploader = disabledShare(w.live, ShareEntity.WRITE_ONLY)
         val auth = bearer(w.live.ownerId)
