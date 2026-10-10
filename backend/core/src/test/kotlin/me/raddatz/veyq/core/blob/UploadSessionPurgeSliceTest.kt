@@ -29,7 +29,7 @@ import org.junit.jupiter.api.Test
 /**
  * Slice tests for the abandoned-upload-session reclaim (uc.memory.upload E2, en.memory.media E3, ADR 0013).
  * An upload that is cancelled or dies mid-flight leaves an OPEN `veyq_upload_session` row **and** the chunks
- * the client already PUT direct-to-store; [UploadSessionPurge] reclaims both past `veyq.media.upload.retention`.
+ * the client already PUT direct-to-store; [UploadSessionPurge] reclaims both past `veyq.blob.upload.retention`.
  *
  * The load-bearing assertion is that **both** halves happen. A row-only delete is strictly worse than no GC —
  * the row is the only pointer to its `storage_key`, so dropping it alone orphans those objects for the life of
@@ -70,7 +70,7 @@ class UploadSessionPurgeSliceTest {
         val blob3 = TestBlob.ofChunks(3)
         val sessionId = store.createSession(scopeId, OPENER, storageKey, blob3.upload("d3JhcA=="))
         // the client PUT its chunks, then went away: backdate past the retention window
-        backdate(sessionId, Instant.now().minus(config.media().upload().retention()).minusSeconds(60))
+        backdate(sessionId, Instant.now().minus(config.blob().upload().retention()).minusSeconds(60))
 
         clearReclaim()
         recorder.reset()
@@ -121,7 +121,7 @@ class UploadSessionPurgeSliceTest {
         val storageKey = UUID.randomUUID().toString()
         val blob1 = TestBlob.ofChunks(1)
         val sessionId = store.createSession(scopeId, OPENER, storageKey, blob1.upload("d3JhcA=="))
-        backdate(sessionId, Instant.now().minus(config.media().upload().retention()).minusSeconds(60))
+        backdate(sessionId, Instant.now().minus(config.blob().upload().retention()).minusSeconds(60))
 
         clearReclaim()
         recorder.reset()
@@ -143,7 +143,7 @@ class UploadSessionPurgeSliceTest {
         // the other's control — a purge on the start takes both, a purge that takes nothing keeps both.
         val scopeId = seedScope()
         val blob = TestBlob.ofChunks(2)
-        val longAgo = Instant.now().minus(config.media().upload().retention()).minus(Duration.ofHours(1))
+        val longAgo = Instant.now().minus(config.blob().upload().retention()).minus(Duration.ofHours(1))
         val liveKey = UUID.randomUUID().toString()
         val live = store.createSession(scopeId, OPENER, liveKey, blob.upload("d3JhcA=="))
         backdate(live, startedAt = longAgo, lastWindowAt = Instant.now().minus(Duration.ofMinutes(5)))
@@ -173,7 +173,7 @@ class UploadSessionPurgeSliceTest {
         // another byte. PT1H is the buffer over that floor, and this pins the two against each other rather than
         // restating one of them.
         assertEquals(600, config.blobStore().presignTtlSeconds())
-        assertTrue(config.media().upload().retention().seconds > config.blobStore().presignTtlSeconds()) {
+        assertTrue(config.blob().upload().retention().seconds > config.blobStore().presignTtlSeconds()) {
             "the retention window must outlast the presign TTL it buffers"
         }
     }

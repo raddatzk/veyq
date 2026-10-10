@@ -1487,7 +1487,7 @@ class ScopesSliceTest {
      * BITE-TEST for the upload arm of the same erasure — a **live defect**: `eraseScope` deleted the scope's OPEN
      * upload sessions without recording the chunks their clients may already have PUT straight into the store,
      * and the session row is the only pointer to that `storage_key` (ADR 0062 § Context), so those bytes were
-     * orphaned for the life of the bucket. The `veyq.media.upload.retention` sweep does not close it: a session
+     * orphaned for the life of the bucket. The `veyq.blob.upload.retention` sweep does not close it: a session
      * younger than that window when the purge tick lands is still open. Refusing uploads during the grace
      * narrows it to an operator whose scope retention is shorter than the upload one — erasure must not depend on
      * how two independent windows compare.
