@@ -59,6 +59,7 @@ import { galleryFakeStore } from './galleryFakeStore'
 import { fakeApi } from '../../../test/apiMock'
 import { resetPlaceNameCache } from '../placeName'
 import { realI18n, t } from '../../../test/i18n'
+import { memberMemorySource } from '../source'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const NODE_ID = '22222222-2222-2222-2222-222222222222'
@@ -95,6 +96,26 @@ function pickerNames(): string[] {
   return names
 }
 
+/** What `MemoryDetail` hands the lightbox for a MEMBER: the member's source's loaders under the node's key, its media-meta
+ *  door, every write offered (the lightbox has no default of its own, inbox #401 S5). */
+function memberProps(memoryKey: Uint8Array) {
+  const source = memberMemorySource({ scopeId: () => SCOPE_ID })
+  const l = source.loaders
+  return {
+    canSetCover: true,
+    canDelete: () => true,
+    previewLoader: (it: MediaItem) => l.preview(it, memoryKey),
+    originalLoader: (it: MediaItem) => l.original(it, memoryKey),
+    videoChunkProvider: (it: MediaItem) => l.chunk(it, memoryKey),
+    metaResolver: (it: MediaItem) => l.meta(it, memoryKey),
+    blobMetaResolver: (it: MediaItem) => l.blobMeta(it, memoryKey),
+    exifLoader: (it: MediaItem) => l.exif!(it, memoryKey),
+    mediaMeta: source.mediaMeta,
+  }
+}
+/** What a share guest's source leaves out: no media-meta door, no EXIF, no cover, no delete of this item. */
+const GUEST_WRITES = { mediaMeta: undefined, exifLoader: undefined, canSetCover: false, canDelete: () => false }
+
 function mountLightbox(
   memoryKey: Uint8Array,
   items: MediaItem[],
@@ -103,7 +124,7 @@ function mountLightbox(
   extraProps: Record<string, unknown> = {},
 ) {
   return mount(MediaLightbox, {
-    props: { scopeId: SCOPE_ID, memoryKey, items, startIndex, memoryName: 'Rom 2026', coverMediaId, ...extraProps },
+    props: { memoryKey, items, startIndex, memoryName: 'Rom 2026', coverMediaId, ...memberProps(memoryKey), ...extraProps },
     global: { plugins: [realI18n()] },
   })
 }
@@ -584,18 +605,36 @@ describe('MediaLightbox — delete (cr-0110)', () => {
     expect(wrapper.emitted('delete')?.[0]?.[0]).toEqual({ mediaId: items[0].mediaId })
   })
 
-  it('a readonly viewer (public share) has no trash button and ignores the Delete key', async () => {
+  it('where canDelete says no (a viewer, or a guest on what it did not send) there is no trash button and the Delete key does nothing', async () => {
     const memoryKey = v1.randomBytes(32)
     const { items } = await seedTwo(memoryKey)
-    const wrapper = mount(MediaLightbox, {
-      props: { scopeId: SCOPE_ID, memoryKey, items, startIndex: 0, memoryName: 'Rom 2026', coverMediaId: null, readonly: true },
-      global: { plugins: [realI18n()] },
-    })
+    const wrapper = mountLightbox(memoryKey, items, 0, null, GUEST_WRITES)
     await flushPromises()
 
     expect(wrapper.findAll('.media-lightbox-actions button').some((b) => b.attributes('aria-label') === t('media.delete'))).toBe(false)
+    expect(wrapper.findAll('.media-lightbox-actions button').some((b) => b.attributes('aria-label') === t('memory.cover.setFromPhoto')), 'no set-as-cover either').toBe(false)
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete' }))
     expect(wrapper.emitted('delete')).toBeFalsy()
+  })
+
+  // The delete is per item (inbox #401 S5): a READ_WRITE guest deletes what it sent, only that — the parent purges it.
+  it('canDelete is asked per shown item: the trash shows on the one it allows, and the Delete key follows it', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seedTwo(memoryKey)
+    const own = items[1].mediaId
+    const wrapper = mountLightbox(memoryKey, items, 0, null, { ...GUEST_WRITES, canDelete: (it: MediaItem) => it.mediaId === own })
+    await flushPromises()
+    const hasTrash = () => wrapper.findAll('.media-lightbox-actions button').some((b) => b.attributes('aria-label') === t('media.delete'))
+
+    expect(hasTrash(), "another's photo").toBe(false)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete' }))
+    expect(wrapper.emitted('delete')).toBeFalsy()
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
+    await flushPromises()
+    expect(hasTrash(), 'its own').toBe(true)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete' }))
+    expect(wrapper.emitted('delete')?.[0]?.[0]).toEqual({ mediaId: own })
   })
 })
 
@@ -757,8 +796,8 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
     expect(wrapper.findAll('.media-lightbox-metadata dd').map((d) => d.text())).toContain('48.137000, 11.575000')
   })
 
-  // B2.5 — a public-share viewer is `readonly` and must never write, consent or not.
-  // Lever: remove the `props.readonly` check in `resolvePlaceForCurrent`.
+  // B2.5 — a session without the medium's meta door (a share guest) must never write, consent or not.
+  // Lever: remove the `mediaMeta` check in `resolvePlaceForCurrent`.
   it('never writes from a read-only viewer, even with consent on and a coordinate present', async () => {
     resetPlaceNameCache()
     mapConfig.maps = true
@@ -766,7 +805,7 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
     const memoryKey = v1.randomBytes(32)
     const { store, geo, items } = await seedGeotagged(memoryKey)
 
-    mountLightbox(memoryKey, items, 0, null, { readonly: true })
+    mountLightbox(memoryKey, items, 0, null, GUEST_WRITES)
     await flushPromises()
     await flushPromises()
 

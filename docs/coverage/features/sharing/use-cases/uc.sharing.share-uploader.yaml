@@ -61,11 +61,12 @@ acceptanceCriteria:
   - id: ephemerality-warned
     text: The write-only, session-only nature is surfaced prominently in four places - (a) the mandatory name pre-screen before the first upload; (b) a persistent header badge ("visible only in this session") in place of the viewer's read-only badge; (c) a dedicated empty-state after a reload (not a blank gallery); (d) a note that delete works only in this session. The plain-language "what this means for you" states it too.
     # The four warning surfaces (name-pre-screen warning, header badge, session note, reload empty-state) are
-    # guarded as present + translated (en+de) by the i18n test; the end-to-end render is proven by the live
-    # browser smoke (cr-0102): the WRITE_ONLY /s/ shows all four in place, not the gallery.
+    # guarded as present + translated (en+de) by the i18n test; Memories' drop page renders the pre-screen warning,
+    # the badge and the reload empty state in MemoryShareBody.test.ts (the session note shows only beside a tile, which
+    # the live browser smoke of cr-0102 saw in place).
     coverage:
       web:
-        unit: [src/i18n/setLocale.test.ts]
+        unit: [src/i18n/setLocale.test.ts, src/features/memory/components/MemoryShareBody.test.ts]
   - id: operator-blind
     text: The server serves the uploader NO gallery and NO bytes (resolve nodes=[], the media read an empty list; the blob endpoint is role-gated to 404 for an uploader). It holds only the opaque share record + the sealed anonymous identity + the share_identity_id stamp (for the curator's own view + the delete ownership check) + ciphertext blobs — never K_share/K_mem/any name/the photo bytes/a per-guest content listing. The no-install page carries the same trust-tier honesty (footer link, ADR 0026).
     coverage:

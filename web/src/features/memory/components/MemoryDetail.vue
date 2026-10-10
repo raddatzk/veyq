@@ -7,8 +7,8 @@
 // Ported presentation from the design source (legacy/frontend-noe2ee); only the data layer is ours. Decrypted
 // thumbnails become object URLs that are **revoked** on reload / unmount (no lingering plaintext blob URLs).
 // Tabs: the Gallery, the Chapters (each opens to the same detail under its own `K_mem`), the Contributions organizer
-// (buckets) and the media Trash; the header carries upload, the share actions, the pin, rename and delete, the cover,
-// date and place. Journal, tracks and playlists are not built.
+// (buckets) and the media Trash — the last two a member's only; the header carries upload, the share actions, the pin,
+// rename and delete, the cover, date and place. Journal, tracks and playlists are not built.
 //
 // **One view for a member and a share guest** (inbox #401). It reads and writes only through `source` — Memories' data
 // source (`../source.ts`), the member's or the guest's, fixed by the host at mount — and offers what `caps` grants
@@ -17,8 +17,10 @@
 // writes the node's meta, the cover's save — reads `can`; nothing here checks a role, a pending deletion or an instance
 // capability itself, and nothing calls an API but through the source. The children that need the source get it by
 // injection (`provideMemoryView`: the organizer). The delete differs honestly by door: a member's trash with undo, a
-// guest's purge of its own media, asked first. The lightbox's write gate is still its one `readonly` — set where the
-// source has no media-meta door — until the Memories UI merge splits it (S5 of #401).
+// guest's purge of its own media, asked first — on the tile and in the lightbox alike. The lightbox is handed the
+// source's loaders and each write per capability (`canSetCover`, `canDelete`, the source's `mediaMeta` door). A guest
+// mounts this through core's share page (`core/sharing/ShareTreePage.vue`) for every Memory and chapter of its link: it
+// sees the date and place sealed in the node's meta, but never reconciles them (that writes the node's meta, `editMeta`).
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
@@ -128,7 +130,7 @@ async function onToggleMark(mediaId: string) {
 watch(
   () => [props.node.id, props.scopeKey, can.value.mark] as const,
   () => {
-    clearItemFavorites()
+    if (can.value.mark) clearItemFavorites() // the store is the scope members'; a guest's view never touches it
     markFilter.value = 'all' // a filter is about the Memory you are in, not a mode you carry into the next
     void loadMarks()
   },
@@ -374,6 +376,16 @@ async function onDeleteOwn(mediaId: string) {
   }
 }
 
+/** The lightbox's delete on the shown item: a member's trash on any, a guest's purge on its own only. */
+function canDeleteInLightbox(it: MediaItem): boolean {
+  return can.value.deleteMedia === 'any' || isOwnMedia(it.mediaId)
+}
+/** The lightbox asked to delete: the door decides how — a trash with undo, or a guest's purge asked first. */
+function onLightboxDelete(payload: { mediaId: string }) {
+  if (can.value.deleteMedia === 'own') void onDeleteOwn(payload.mediaId)
+  else void onDeleteFromLightbox(payload)
+}
+
 // The lightbox's bytes and seals through the source, under this node's key (the lightbox mounts only with one).
 const lightboxKey = computed(() => props.memoryKey ?? new Uint8Array())
 const loaders = props.source.loaders
@@ -608,9 +620,9 @@ watch(
                   :is-video="galleryVideoIds.has(item.media.mediaId)"
                   :open-label="t('media.openItem', { index: item.index + 1 })"
                   :markable="can.mark && !!scopeKey"
-                  :mark-count="personalScope ? 0 : markCount(item.media.mediaId)"
-                  :marked-by-me="isMarkedByMe(item.media.mediaId)"
-                  :mark-label="isMarkedByMe(item.media.mediaId) ? t('media.marks.unmark') : t('media.marks.mark')"
+                  :mark-count="!can.mark || personalScope ? 0 : markCount(item.media.mediaId)"
+                  :marked-by-me="can.mark && isMarkedByMe(item.media.mediaId)"
+                  :mark-label="can.mark && isMarkedByMe(item.media.mediaId) ? t('media.marks.unmark') : t('media.marks.mark')"
                   @open="openLightboxAt(item.index)"
                   @toggle-mark="onToggleMark(item.media.mediaId)"
                 >
@@ -748,14 +760,14 @@ watch(
 
     <MediaLightbox
       v-if="lightboxIndex !== null && memoryKey"
-      :scope-id="scopeId"
       :memory-key="memoryKey"
       :items="lightboxItems"
       :start-index="lightboxIndex"
       :memory-name="node.name"
       :cover-media-id="coverMediaId"
       :suspend-keys="coverEditorOpen"
-      :readonly="!source.mediaMeta"
+      :can-set-cover="can.setCover"
+      :can-delete="canDeleteInLightbox"
       :media-meta="source.mediaMeta"
       :preview-loader="previewLoader"
       :original-loader="originalLoader"
@@ -766,7 +778,7 @@ watch(
       @close="lightboxIndex = null"
       @updated="onCapturedAtUpdated"
       @set-cover="onSetCoverFromPhoto"
-      @delete="onDeleteFromLightbox"
+      @delete="onLightboxDelete"
     />
 
     <MemoryDateEditor

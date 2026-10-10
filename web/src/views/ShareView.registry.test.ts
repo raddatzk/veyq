@@ -1,9 +1,11 @@
 // @vitest-environment happy-dom
-// The share page as a SHELL over the application registry (ADR 0079), proven against a
-// STUBBED registry (a fresh `createRegistry()` per test behind a delegating Proxy) so each test chooses exactly which
-// share bodies "an application" claimed, with a stub body that renders what the shell handed it. The real registry +
-// the real Memories body are covered in ShareView.test.ts / .order.test.ts / .picker.test.ts. Every negative has its
-// live control: the same share with the body claimed renders.
+// The share page as a SHELL over the application registry (ADR 0079, inbox #401 S5), proven against a STUBBED registry (a
+// fresh `createRegistry()` per test behind a delegating Proxy) so each test chooses exactly which kinds "an application"
+// registered and which drop pages it claimed, with stubs that render what the shell handed them. The dispatch: a
+// WRITE_ONLY link gets the drop page claimed for its root kind; a READ or READ_WRITE link gets core's page
+// (`ShareTreePage`, stubbed here — its own suites prove it) when the app can render the root kind as a member would
+// (FOLDER, or a kind with a `detail`), and never a claimed drop page. The real registry + the real pages are covered in
+// ShareView.test.ts / .memory.test.ts / .folder.test.ts / .picker.test.ts. Every negative has its live control.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import PrimeVue from 'primevue/config'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -23,6 +25,17 @@ vi.mock('../core/applications/registry', async (importOriginal) => {
   }
 })
 vi.mock('../api/client', () => ({ sharesApi: vi.fn(), publicSharesApi: vi.fn(), tokenApi: vi.fn() }))
+vi.mock('../core/sharing/ShareTreePage.vue', async () => {
+  const { defineComponent: dc, h: hh } = await import('vue')
+  return {
+    default: dc({
+      name: 'TreePageStub',
+      props: ['shareId', 'fragmentKey', 'pwToken', 'head', 'reload', 'access'],
+      emits: ['unavailable'],
+      setup: (p) => () => hh('div', { class: 'tree-stub' }, `${p.head.name}|${p.access.role}`),
+    }),
+  }
+})
 vi.mock('vue-router', () => ({ useRoute: () => ({ params: { shareId: 's1' }, hash: '#k=AAAA' }) }))
 vi.mock('../core/sharing/resolvePublicShare', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../core/sharing/resolvePublicShare')>()
@@ -38,7 +51,7 @@ import {
   type PublicShareHead,
 } from '../core/sharing/resolvePublicShare'
 import { createRegistry, type Registry } from '../core/applications/registry'
-import type { NodeKind } from '../core/node/kind'
+import { FOLDER_KIND, type NodeKind } from '../core/node/kind'
 import { MEMORY_KIND } from '../features/memory/kinds'
 import { ShareRole } from '../api/generated/sharing'
 import { realI18n } from '../test/i18n'
@@ -46,11 +59,11 @@ import { realI18n } from '../test/i18n'
 function head(over: Partial<PublicShareHead> = {}): PublicShareHead {
   return {
     shareId: 's1', share: {} as PublicShareHead['share'], kShare: new Uint8Array(32), scopeId: 'scope-1',
-    name: 'Rom 2026', noteByLocale: {}, role: ShareRole.Read, rootKind: MEMORY_KIND, ...over,
+    name: 'Rom 2026', noteByLocale: {}, role: ShareRole.WriteOnly, rootKind: MEMORY_KIND, ...over,
   }
 }
 
-/** A body that renders what the shell handed it and can raise the one event a body has. */
+/** A drop page that renders what the shell handed it and can raise the one event a body has. */
 const StubBody = defineComponent({
   name: 'StubBody',
   props: ['shareId', 'fragmentKey', 'pwToken', 'head', 'reload'],
@@ -60,8 +73,12 @@ const StubBody = defineComponent({
       `${p.head.name}|${p.shareId}|${p.fragmentKey}|${p.pwToken ?? '-'}`),
 })
 
-function registryWith(claims: NodeKind[]): Registry {
+/** A kind's member detail (never mounted by these tests: the page that would mount it is stubbed). */
+const StubDetail = defineComponent({ name: 'StubDetail', setup: () => () => h('div') })
+
+function registryWith(claims: NodeKind[], details: NodeKind[] = []): Registry {
   const r = createRegistry()
+  for (const key of details) r.registerKind({ kind: key, icon: 'x', shareable: true, detail: StubDetail })
   for (const key of claims) r.claimShareBody(key, StubBody)
   return r
 }
@@ -78,8 +95,8 @@ beforeEach(() => {
   vi.mocked(derivePasswordToken).mockReset().mockResolvedValue('tok')
 })
 
-describe('ShareView dispatches on the share root kind', () => {
-  it('renders the body claimed for the root kind, handing it the shell\'s context', async () => {
+describe("ShareView dispatches a WRITE_ONLY link on its root kind's drop page", () => {
+  it('renders the drop page claimed for the root kind, handing it the shell\'s context', async () => {
     const w = mountShare()
     await flushPromises()
     expect(w.find('.body-stub').text()).toBe('Rom 2026|s1|AAAA|-')
@@ -102,20 +119,12 @@ describe('ShareView dispatches on the share root kind', () => {
     expect(w.find('.share-view-unavailable').exists()).toBe(true)
   })
 
-  it('a WRITE_ONLY share goes to the body claimed for its root kind, like any other role', async () => {
-    vi.mocked(resolvePublicShare).mockResolvedValue(head({ role: ShareRole.WriteOnly, rootKind: MEMORY_KIND }))
+  it('…even where the kind has a member detail: a WRITE_ONLY guest holds no key to render it with', async () => {
+    holder.reg = registryWith([MEMORY_KIND], [MEMORY_KIND])
     const w = mountShare()
     await flushPromises()
     expect(w.find('.body-stub').exists()).toBe(true)
-  })
-
-  it('…and is unavailable when nobody claimed its root kind (the role picks no body of its own)', async () => {
-    holder.reg = registryWith([MEMORY_KIND])
-    vi.mocked(resolvePublicShare).mockResolvedValue(head({ role: ShareRole.WriteOnly, rootKind: 'EXPENSE' }))
-    const w = mountShare()
-    await flushPromises()
-    expect(w.find('.body-stub').exists()).toBe(false)
-    expect(w.find('.share-view-unavailable').exists()).toBe(true)
+    expect(w.find('.tree-stub').exists()).toBe(false)
   })
 
   it('shows the unavailable state when the body reports the share unusable', async () => {
@@ -131,6 +140,37 @@ describe('ShareView dispatches on the share root kind', () => {
     vi.mocked(resolvePublicShare).mockRejectedValue(new Error('404'))
     const w = mountShare()
     await flushPromises()
+    expect(w.find('.body-stub').exists()).toBe(false)
+    expect(w.find('.share-view-unavailable').exists()).toBe(true)
+  })
+})
+
+// READ and READ_WRITE: core's page — the member's views — never a claimed drop page (inbox #401: no guest-only body).
+describe('ShareView gives a READ or READ_WRITE link the member\'s views (core\'s page)', () => {
+  for (const role of [ShareRole.Read, ShareRole.ReadWrite]) {
+    it(`${role}: a root kind with a member detail renders core's page — not the drop page claimed for it`, async () => {
+      holder.reg = registryWith([MEMORY_KIND], [MEMORY_KIND])
+      vi.mocked(resolvePublicShare).mockResolvedValue(head({ role }))
+      const w = mountShare()
+      await flushPromises()
+      expect(w.find('.tree-stub').text()).toBe(`Rom 2026|${role}`)
+      expect(w.find('.body-stub').exists()).toBe(false)
+    })
+  }
+
+  it('a FOLDER root renders core\'s page (the platform kind, no detail)', async () => {
+    vi.mocked(resolvePublicShare).mockResolvedValue(head({ role: ShareRole.Read, rootKind: FOLDER_KIND }))
+    const w = mountShare()
+    await flushPromises()
+    expect(w.find('.tree-stub').exists()).toBe(true)
+  })
+
+  it('a root kind with no member detail is unavailable — a claimed drop page does not stand in (live control above)', async () => {
+    holder.reg = registryWith([MEMORY_KIND])
+    vi.mocked(resolvePublicShare).mockResolvedValue(head({ role: ShareRole.Read }))
+    const w = mountShare()
+    await flushPromises()
+    expect(w.find('.tree-stub').exists()).toBe(false)
     expect(w.find('.body-stub').exists()).toBe(false)
     expect(w.find('.share-view-unavailable').exists()).toBe(true)
   })

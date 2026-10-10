@@ -38,8 +38,8 @@ export async function loadGuestNodeCover(
       bytes = await openBlobFromUrls(scopeId, nodeKey, cover.source.ref, await shareChunkUrls(access.shareId, cover.source.ref.blobId, access.pwToken))
     } else {
       const mediaId = cover.source.mediaId
-      // Only this node's media, keyed as the guest's gallery keys them (a drop-box guest's upload through its identity).
-      const opened = openSharedMemory(access.head, await listing(), { nodeId: node.id, key: nodeKey })
+      // Keyed as the guest's gallery keys them (a drop-box guest's upload through its identity); this node's only.
+      const opened = openSharedMemory(access.head, await listing())
       const pick = opened.items.find((si) => si.nodeId === node.id && si.item.mediaId === mediaId && hasDerivatives(si.item))
       bytes = pick ? await openShareGrid(access.shareId, pick, access.pwToken) : null
     }

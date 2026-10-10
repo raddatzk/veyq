@@ -1,19 +1,18 @@
 // @vitest-environment happy-dom
-// A link rooted at a FOLDER on the share page, with the REAL registry (cr-node-key-hierarchy 5b.4b): core pre-registers
-// its folder body, so the shell renders it instead of the unavailable state it showed before; a Memory below the folder
-// opens in the REAL Memories body, embedded. Only the network reads are stubbed (the resolve, the terms, Memories' media
-// read); the subtree is real crypto.
+// A link rooted at a FOLDER on the share page, with the REAL registry (cr-node-key-hierarchy 5b.4b): the shell renders
+// core's page (`ShareTreePage`), not the unavailable state; a Memory below the folder opens in the member's REAL
+// `MemoryDetail` (inbox #401 S5). Only the network reads are stubbed (the resolve, the terms, Memories' media read; every
+// authenticated client throws, `test/guestMode.ts`); the subtree is real crypto.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import PrimeVue from 'primevue/config'
 import { mount, flushPromises } from '@vue/test-utils'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url } from '@veyq/crypto/base64'
 
-vi.mock('../features/memory/useThumbnailPipeline', () => ({
-  useThumbnailPipeline: () => ({ thumbs: new Map(), reconcile: vi.fn(), decrypt: vi.fn().mockResolvedValue(undefined), revokeAll: vi.fn() }),
-}))
-vi.mock('../api/client', () => ({ sharesApi: vi.fn(), publicSharesApi: vi.fn(), tokenApi: vi.fn() }))
-vi.mock('../features/memory/api', () => ({ publicShareMediaApi: vi.fn() }))
+vi.mock('leaflet', () => ({ default: {} }))
+vi.mock('../api/client', async (orig) => (await import('../test/guestMode')).guardedClients(await orig<object>()))
+vi.mock('../features/memory/api', async (orig) => (await import('../test/guestMode')).guardedClients(await orig<object>()))
+vi.mock('../features/files/api', async (orig) => (await import('../test/guestMode')).guardedClients(await orig<object>()))
 const route = vi.hoisted(() => ({ params: { shareId: 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_3' }, hash: '', query: {} as Record<string, string> }))
 vi.mock('vue-router', () => ({ useRoute: () => route, useRouter: () => ({ push: vi.fn(), resolve: () => ({ href: '/s/stub' }) }) }))
 vi.mock('../core/sharing/resolvePublicShare', async (importOriginal) => {
@@ -30,6 +29,7 @@ import { publicShareMediaApi } from '../features/memory/api'
 import { ShareRole, type PublicShare } from '../api/generated/sharing'
 import { stubApi } from '../test/apiMock'
 import { realI18n } from '../test/i18n'
+import { authenticatedCalls } from '../test/guestMode'
 
 const SCOPE_ID = '66666666-6666-4666-8666-666666666666'
 const ROOT = '6e5a0000-0000-4000-8000-0000000000e0'
@@ -56,10 +56,12 @@ function folderHead(): PublicShareHead {
 }
 
 function mountShareView() {
-  return mount(ShareView, { global: { plugins: [realI18n(), PrimeVue], stubs: { MediaGrid: true, OptimisticTile: true, MediaLightbox: true } } })
+  return mount(ShareView, { global: { plugins: [realI18n(), PrimeVue], stubs: { MediaGrid: true, OptimisticTile: true }, directives: { tooltip: {} } } })
 }
 
 beforeEach(() => {
+  authenticatedCalls.length = 0
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
   route.hash = `#k=${b64url(K_SHARE)}`
   route.query = {}
   vi.mocked(resolvePublicShare).mockReset().mockResolvedValue(folderHead())
@@ -68,22 +70,24 @@ beforeEach(() => {
 })
 
 describe('ShareView: a link rooted at a FOLDER', () => {
-  it("renders core's folder body, not the unavailable state", async () => {
+  it("renders core's page — the folder's level — not the unavailable state", async () => {
     const w = mountShareView()
     await flushPromises()
-    // the folder body is registered lazily (it reads the registry: a static import would be a cycle) — it loads first
     await vi.waitFor(() => expect(w.find('.veyq-folder-overview-card h2').exists()).toBe(true))
     expect(w.find('.share-view-unavailable').exists()).toBe(false)
     expect(w.find('.veyq-folder-overview-card h2').text()).toBe('Familie')
     expect(w.find('.memory-card strong').text(), "a Memory is the member's MemoryCard").toBe('Rom 2026')
+    expect(authenticatedCalls).toEqual([])
   })
 
-  it('a Memory below the folder opens in the Memories body, embedded', async () => {
+  it("a Memory below the folder opens in the member's MemoryDetail", async () => {
     route.query = { node: MEMORY }
     const w = mountShareView()
     await flushPromises()
     await vi.waitFor(() => expect(w.find('.gallery-title').exists()).toBe(true))
     expect(w.find('.share-view-unavailable').exists()).toBe(false)
     expect(w.find('.gallery-title').text()).toBe('Rom 2026')
+    expect(w.find('.memory-detail').exists()).toBe(true)
+    expect(authenticatedCalls).toEqual([])
   })
 })

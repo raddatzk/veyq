@@ -13,8 +13,8 @@
 // The `FILES_DROPBOX` kind (F3, ADR 0080 decision 11): its level section (the drop boxes of a folder, a "New drop box"
 // action), its `createDialog` (a name), its `detail` (its guests' folders — for a member, and read-only for a READ or
 // READ_WRITE guest of a folder link above it, inbox #380 and #401 S3), its `shareDialog` (WRITE_ONLY links only) and the
-// share BODY: on its own WRITE_ONLY link the guest's page (name yourself, pick files, upload into your own folder) —
-// claimed without `embedBelowFolder`, so core's folder page never embeds it below a shared folder.
+// share BODY: on its own WRITE_ONLY link the guest's drop page (name yourself, pick files, upload into your own folder),
+// the one page core renders by claim (every other guest page is the member's views, inbox #401).
 import { DROPBOX_KIND, FILE_KIND } from './kinds'
 import type { Registry } from '../../core/applications/registry'
 import { fileNameSlug } from '../../shared/naming'

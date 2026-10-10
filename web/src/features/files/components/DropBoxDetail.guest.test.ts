@@ -6,7 +6,7 @@
 // serves no creation time), a folder opens on core's folder page with its files and their download, and nowhere is there
 // a form to send files, an upload, a replace, a 'New folder', a share or a delete: the server places nothing in an
 // identity folder but its own identity (`NodesHandler`) and lets no guest move out of one (`ShareNodesHandler`). Here the
-// app's real registry (Files and Memories, filled by `src/test/setup.ts`), the real `FolderShareBody`, the real PrimeVue
+// app's real registry (Files and Memories, filled by `src/test/setup.ts`), the real `ShareTreePage`, the real PrimeVue
 // and the real vue-router: every step is a DOM click on the rendered element, the `#k=` fragment that carries the share
 // key stays in the URL throughout, and every authenticated client throws (`test/guestMode.ts`).
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -21,7 +21,7 @@ vi.mock('../../../api/client', async (orig) => (await import('../../../test/gues
 vi.mock('../api', async (orig) => (await import('../../../test/guestMode')).guardedClients(await orig<object>()))
 vi.mock('../download', async (importOriginal) => ({ ...(await importOriginal<typeof import('../download')>()), downloadFile: vi.fn() }))
 
-import FolderShareBody from '../../../core/sharing/FolderShareBody.vue'
+import ShareTreePage from '../../../core/sharing/ShareTreePage.vue'
 import { FOLDER_KIND } from '../../../core/node/kind'
 import { sealName, wrapContentKey } from '../../../core/node/tree'
 import { dropKeysForShare, mintIdentityKey, openDropKey } from '../../../core/sharing/dropKey'
@@ -97,7 +97,7 @@ beforeEach(async () => {
 })
 
 async function mountBody(role: ShareRole, served: PublicShareHead = head(role)) {
-  const w = mount(FolderShareBody, {
+  const w = mount(ShareTreePage, {
     props: { shareId: SHARE_ID, fragmentKey: b64url(K_SHARE), pwToken: undefined, head: served, reload: async () => {}, access: guestAccessFor(served) },
     global: { plugins: [router, realI18n(), PrimeVue], directives: { tooltip: {} } },
   })
@@ -163,7 +163,7 @@ describe("a drop box inside a folder share is the member's detail, read-only (in
       expect(router.currentRoute.value.query.node).toBe(ANNA)
       expect(router.currentRoute.value.hash).toBe(HASH)
       expect(heading(w)).toBe('Anna')
-      expect(w.find('.share-folder-badge').text(), 'the badge says view only').toBe(t('share.folder.readonly'))
+      expect(w.find('.share-folder-badge').text(), 'the badge says view only').toBe(t('share.readonly'))
       expect(w.find('.veyq-row-title').text()).toBe('steuer.pdf')
       expectNoWriteControl(w)
 

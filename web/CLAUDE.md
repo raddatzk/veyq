@@ -32,7 +32,7 @@ here; the server is blind.
   every guest write after a reload then failed, while the unit test that asserted the `router.push` arguments stayed
   green (found only in a real browser, 2026-10-07). A core page that keeps the share key in the URL fragment
   navigates with `hash: route.hash` and gives every link a real `href`; its test mounts the real component and the
-  real router and clicks the rendered element (`FolderShareBody.breadcrumb.test.ts`, `FolderShareBody.test.ts`,
+  real router and clicks the rendered element (`ShareTreePage.breadcrumb.test.ts`, `ShareTreePage.test.ts`,
   `FolderShareGuest.test.ts`).
 - **A guest-mode mount proves it calls no authenticated client** (inbox #401): mock each client module through
   `src/test/guestMode.ts`'s `guardedClients` (`vi.mock('…/api/client', async (o) => (await import('…/test/guestMode'))
@@ -153,24 +153,19 @@ here; the server is blind.
   different `order`s throws; its `createDialog` — props `NodeCreateDialogProps` `{kind, scopeId, epochs, parentId,
   parentKey}`, mounted by the shell when a section emits `create` or a detail `createChild` with that KIND; and its
   `shareDialog` — props `NodeShareDialogProps` `{scopeId, nodeId, nodeKey, epochs, nodeName, nodeKind, uploader?}`; a
-  kind without one offers no share. There is no guest-only section: core's folder page of a public share
-  (`core/sharing/FolderShareBody.vue`) is core's `LevelView` handed the guest's access and tree, so a kind's `section`
-  serves guests too, and a non-folder node there renders its kind's `detail` (inbox #401; the `shareSection` that drew a
-  guest list instead was retired in S3). Core owns the rest: a folder's create and every node's rename are
+  kind without one offers no share. There is no guest-only section or detail: core's page of a `READ`/`READ_WRITE` public
+  share (`core/sharing/ShareTreePage.vue`) is core's `LevelView` at a folder and the kind's `detail` at any other node —
+  the link's root included — handed the guest's access and tree (inbox #401). Core owns the rest: a folder's create and every node's rename are
   `core/node/FolderNameDialog.vue`, which derives the slug by the renamed node's kind, and FOLDER's share dialog
   `core/sharing/FolderShareDialog.vue` is pre-registered); `addSlotItem(slot, id, component, order?)` for the two list slots `topbarTray`
   and `sidebarPins` (an id namespaced by the application, e.g. `memories.pinned`; write-once per (slot, id); the shell
   renders `slotItems(slot)` sorted by `order`, ties in registration order — the top bar after core's own upload status
   menu, `core/blob/UploadStatusMenu.vue`, which lists every application's batches of the one core queue and is no
-  application's item, so today no application adds to `topbarTray`); `claimShareBody(rootKind, body, options?)`
-  for the public share page (`PublicShare.rootKind`, served for every role, so one body per kind picks its screens by
-  role; core claims `FOLDER` itself). The target narrows a claim to the `WRITE_ONLY` drop page (Files' drop box claims
-  only that): below a shared folder core renders the kind's `detail` with the guest's access and tree — Files' drop box
-  is the member's `DropBoxDetail` there, read-only, inbox #380. Transitional until inbox #401 S5: a claim made
-  `{ embedBelowFolder: true }` (Memories') is still embedded for each such child instead (`registry.embeddedShareBody`),
-  handed `subtreeRoot` — that node's id, key and name — so the body renders and writes into that node, not the share
-  root. Inside a guest's identity folder — the served `shareIdentityId`, core's column — no view offers any guest a
-  write;
+  application's item, so today no application adds to `topbarTray`); `claimShareBody(rootKind, body)` for the drop page of
+  a `WRITE_ONLY` link rooted at that kind (`PublicShare.rootKind`) — the one page with no member equivalent, its guest
+  holding no key: Memories' photo drop (`MemoryShareBody`), Files' drop box (`DropBoxShareBody`); `FOLDER` is claimed by
+  nobody and refused. Inside a guest's identity folder — the served `shareIdentityId`, core's column — no view offers any
+  guest a write;
   `registerLifecycle(id, hooks)` with `onScopeReset` / `onScopeEntered` and the **required**
   `onMasterKeyRotated` — `rotateKeys` refuses to start when none is registered, because material sealed under the
   Master Key (Memories' pins) is otherwise undecryptable after a rotation. A kind or share nobody registered renders
@@ -191,13 +186,22 @@ here; the server is blind.
   does Memories' detail (`features/memory/source.ts`, picked by `MemoryDetailHost`: the detail, its composables, the
   lightbox's loaders and — by injection, `useMemoryView`, which throws outside a detail — the organizer touch no API but
   through it; the guest's has no trash, node meta, cover, marks, buckets, live poll or EXIF, and its delete is a purge of
-  its own). A share body (`ShareBodyProps`) is handed the
-  guest's `access` too, and a body embedded below a folder asks `access.requestGuest` instead of naming on its own. What a view offers is its
+  its own). A drop page (`ShareBodyProps`) is handed the
+  guest's `access` too and names its uploader on the page (the identity key is its application's). What a view offers is its
   application's pure, fail-closed capability function over `access` and `targetOf(tree, node)` — `memoryCapabilities`
   (`features/memory/capabilities.ts`), `filesCapabilities` (`features/files/capabilities.ts`), core's
   `folderCapabilities` for the level view; each matrix is its `docs/apps/<app>.md` table — never a `readonly`,
   `shareable` or `hasCapability` read inline; `targetOf` carries the kind's descriptor (`shareable` AND a `shareDialog`),
-  so no share button appears whose dialog the host cannot mount. **Limits, stated:** no slot is single-claim any
+  so no share button appears whose dialog the host cannot mount.
+  **A share view is the member view with a source and capabilities — never add a guest-only UI** (owner principle
+  2026-10-09, inbox #401). A guest's function goes into the member's component as a door of the application's data
+  source and a right of its capability function; a member-only function must not leak into share mode (no door on the
+  guest's source, false in the guest's column, and the guest-mode mount test of that view records it). The guest-only
+  exceptions are exactly the ones with no member equivalent: the shell's gates (password, terms), core's one naming
+  component with "Not you?" (`GuestNaming`, the shell's dialog behind `access.requestGuest`), the curator-note banner, the
+  role badge and the breadcrumb up to the link's root (`ShareTreePage`), and the two `WRITE_ONLY` drop pages
+  (`*ShareBody.vue`, claimed — `scripts/validate_web_share_bodies_are_drop_pages.py`). Every other separate guest body
+  drifted from its member twin (#356, #361, #363) and was deleted. **Limits, stated:** no slot is single-claim any
   more (the dialogs are per kind since cr-files-application P4c; the two slots `topbarTray`, `sidebarPins` are ordered
   lists); the level view and core's `FolderNameDialog` carry core `veyq-*` classes (`styles/ui.css`, dark twins in
   `dark.css`) and core `node.*` i18n keys since cr-files-application P4d, which Memories' own dialogs and detail read

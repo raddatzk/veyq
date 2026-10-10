@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
-// The member's Memory detail mounted for a SHARE GUEST (inbox #401 S4): what S5 will ship, mounted here ahead of it.
-// Core's folder page of a link (`FolderShareBody`) with the app's REAL registry — except that the Memories' claimed body
-// is not embedded below the folder (the one thing S5 removes), so the page renders the kind's registered `detail`
-// (`MemoryDetailHost` → `MemoryDetail`) with the guest's access and tree, and the host hands it the guest's data source
-// (`../source.ts`). Real PrimeVue, the real vue-router, every step a DOM click on the rendered element.
+// The member's Memory detail mounted for a SHARE GUEST below a shared folder (inbox #401 S4, shipped in S5): core's page of
+// a link (`ShareTreePage`) with the app's REAL registry renders the kind's registered `detail` (`MemoryDetailHost` →
+// `MemoryDetail`) with the guest's access and tree, and the host hands it the guest's data source (`../source.ts`). Real
+// PrimeVue, the real vue-router, every step a DOM click on the rendered element. A link rooted at the Memory itself,
+// through the shell, is `views/ShareView.memory.test.ts`.
 //
 // What it proves: nothing reaches an AUTHENTICATED client (each throws and is recorded, `test/guestMode.ts`), nothing of
 // the member's world is read (`activeSpace`, the pin store, the item marks' load), no member-only control is on the page
@@ -41,8 +41,7 @@ vi.mock('../itemFavoritesStore', async (orig) => ({ ...(await orig<object>()), l
 // The guest's upload is recorded at the share helper (its wire is `source.wire.test.ts`'s).
 vi.mock('../share', async (orig) => ({ ...(await orig<typeof import('../share')>()), addSharePhoto: vi.fn() }))
 
-import FolderShareBody from '../../../core/sharing/FolderShareBody.vue'
-import { registry } from '../../../core/applications/registry'
+import ShareTreePage from '../../../core/sharing/ShareTreePage.vue'
 import { FOLDER_KIND } from '../../../core/node/kind'
 import { sealName, wrapContentKey } from '../../../core/node/tree'
 import type { PublicShareHead } from '../../../core/sharing/resolvePublicShare'
@@ -106,8 +105,6 @@ beforeEach(async () => {
   memberReads.length = 0
   vi.clearAllMocks()
   setViewMode('grid')
-  // S5's one change, ahead of it: below a folder the Memories detail renders, not the embedded share body.
-  vi.spyOn(registry, 'embeddedShareBody').mockReturnValue(null)
   stubApi(publicShareMediaApi, {
     listShareMedia: { media: [row('m-1', MEMORY), row('m-own', MEMORY), row('c-1', CHAPTER)], identities: [] },
     deleteShareMedia: undefined,
@@ -129,7 +126,7 @@ afterEach(() => {
 async function mountPage(role: ShareRole) {
   const h = head(role)
   requestGuest = vi.fn(async () => null)
-  const w = mount(FolderShareBody, {
+  const w = mount(ShareTreePage, {
     props: { shareId: SHARE, fragmentKey: b64url(K_SHARE), pwToken: PW, head: h, reload: async () => {}, access: guestAccessFor(h, { pwToken: PW, requestGuest }) },
     global: { plugins: [router, realI18n(), PrimeVue], directives: { tooltip: {} } },
     attachTo: document.body,
@@ -169,7 +166,7 @@ function click(el: Element) {
   el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
 }
 
-describe("the member's Memory detail for a share guest (inbox #401 S4)", () => {
+describe("the member's Memory detail for a share guest (inbox #401 S4/S5)", () => {
   for (const role of [ShareRole.Read, ShareRole.ReadWrite]) {
     it(`${role}: the gallery of the node on screen, its chapters, and nothing of a member's`, async () => {
       const w = await mountPage(role)
@@ -239,6 +236,35 @@ describe("the member's Memory detail for a share guest (inbox #401 S4)", () => {
     click(deletes[0].element)
     await flushPromises()
     expect(confirm.isOpen()).toBe(true)
+    confirm.click(t('share.deleteOwnAccept'))
+    await flushPromises()
+    expect(publicShareMediaApi().deleteShareMedia).toHaveBeenCalledWith({ shareId: SHARE, mediaId: 'm-own', xContributorToken: GUEST.contributorToken, xSharePassword: PW })
+    await vi.waitFor(() => expect(tiles(w)).toEqual(['m-1']))
+    expectGuestOnly(w)
+    w.unmount()
+  })
+
+  // S5: the lightbox's one `readonly` split per capability — a contributor deletes its OWN photo there too (asked first,
+  // purged), never another's, and is offered no "set as cover".
+  it('READ_WRITE: in the lightbox, its own photo carries the delete — asked first, then purged — and no other does', async () => {
+    saveGuestSession(SHARE, GUEST)
+    rememberOwnShareMedia(SHARE, GUEST.identityId, 'm-own')
+    const confirm = mountConfirmDialog()
+    const w = await mountPage(ShareRole.ReadWrite)
+    const trashIn = (box: ReturnType<Page['find']>) => box.find(`[aria-label="${t('media.delete')}"]`)
+
+    click(w.find('[data-media-id="m-1"] button').element)
+    await flushPromises()
+    expect(trashIn(w.find('.media-lightbox')).exists(), "another's photo").toBe(false)
+    expect(w.find(`.media-lightbox [aria-label="${t('memory.cover.setFromPhoto')}"]`).exists(), 'set as cover').toBe(false)
+    click(w.find(`.media-lightbox [aria-label="${t('media.close')}"]`).element)
+    await flushPromises()
+
+    click(w.find('[data-media-id="m-own"] button').element)
+    await flushPromises()
+    click(trashIn(w.find('.media-lightbox')).element)
+    await flushPromises()
+    expect(confirm.isOpen(), 'asked first').toBe(true)
     confirm.click(t('share.deleteOwnAccept'))
     await flushPromises()
     expect(publicShareMediaApi().deleteShareMedia).toHaveBeenCalledWith({ shareId: SHARE, mediaId: 'm-own', xContributorToken: GUEST.contributorToken, xSharePassword: PW })

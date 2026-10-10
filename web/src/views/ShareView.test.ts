@@ -13,30 +13,24 @@ const SHARE_ID = 's1'
 const TENANT = 't-1'
 const ACCEPT_KEY = `veyq:terms-accepted:${TENANT}`
 
-// The two heavy media composables → inert stubs (no crypto, no object URLs, no timers).
+// The drop page's tile composable → an inert stub (no crypto, no object URLs, no timers).
 vi.mock('../features/memory/useOptimisticTiles', () => ({
   useOptimisticTiles: () => ({ optimisticTiles: { value: [] }, donorPreviewFor: () => undefined }),
-}))
-vi.mock('../features/memory/useThumbnailPipeline', () => ({
-  useThumbnailPipeline: () => ({
-    thumbs: new Map(),
-    reconcile: vi.fn(),
-    decrypt: vi.fn().mockResolvedValue(undefined),
-    revokeAll: vi.fn(),
-  }),
 }))
 
 // The generated client is never hit (resolvePublicShare/openSharedMemory/fetchShareTerms are overridden below), but share.ts imports it
 // at module load — mock it exactly as share.test.ts does so loading the real module is side-effect-free.
 vi.mock('../api/client', () => ({ sharesApi: vi.fn(), publicSharesApi: vi.fn(), tokenApi: vi.fn() }))
 
-// A resolvable, unlocked READ share reached via a valid fragment link.
+// A resolvable, unlocked share reached via a valid fragment link.
 vi.mock('vue-router', () => ({ useRoute: () => ({ params: { shareId: SHARE_ID }, hash: '#k=AAAA' }) }))
 
 // Keep the REAL terms helpers (acceptedTermsVersion/recordTermsAccepted/pickShareTerms) + error classes; override
 // only the two network reads so no resolve crypto runs.
-// The shell resolves the platform half and fetches the terms; the Memories body opens the rest. Only those three
-// reads are stubbed — the shell, the registry, the body and the helpers it uses are real.
+// The shell resolves the platform half and fetches the terms; the drop page opens the rest. Only those reads are
+// stubbed — the shell, the registry, the page and the helpers it uses are real. The gates are role-independent, so they
+// are proven on a WRITE_ONLY link's drop page (no tree to open); a READ/READ_WRITE link's page with real crypto is
+// `ShareView.memory.test.ts`'s.
 vi.mock('../core/sharing/resolvePublicShare', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../core/sharing/resolvePublicShare')>()
   return { ...actual, resolvePublicShare: vi.fn(), fetchShareTerms: vi.fn() }
@@ -62,29 +56,33 @@ function mountShareView() {
   return mount(ShareView, {
     global: {
       plugins: [realI18n(), PrimeVue],
-      stubs: { MediaGrid: true, OptimisticTile: true, MediaLightbox: true },
+      stubs: { MediaGrid: true, OptimisticTile: true },
     },
   })
 }
 
-/** Serve one resolved share to the shell (head) and the Memories body (the rest), as production splits it. */
+/** Serve one resolved share to the shell (head) and the drop page (the rest), as production splits it. */
 function serve(r: ResolvedShare, rootKind: NodeKind = MEMORY_KIND) {
   vi.mocked(resolvePublicShare).mockReset().mockResolvedValue(headOf(r, 's1', rootKind))
   vi.mocked(openSharedMemory).mockReset().mockReturnValue(openedOf(r))
   vi.mocked(listShareMedia).mockReset().mockResolvedValue(NO_SHARE_MEDIA) // the items come from openSharedMemory's stub
 }
 
-function viewerShare(): ResolvedShare {
-  return {
-    memoryName: 'My Memory', noteByLocale: {}, role: ShareRole.Read, scopeId: 'scope-1',
-    access: { kind: 'read', memoryKey: new Uint8Array() }, items: [],
-  }
+const DROP: ShareAccess = { kind: 'drop', nodeId: 'n1', dropPublicKey: { x: new Uint8Array(), m: new Uint8Array() } }
+function dropShare(): ResolvedShare {
+  return { memoryName: 'My Memory', noteByLocale: {}, role: ShareRole.WriteOnly, scopeId: 'scope-1', access: DROP, items: [] }
+}
+/** A named uploader on this device: its page's content is the drop (`.share-view-header`), past every gate. */
+function nameUploader() {
+  const uploader: ContributorSession = { identityId: 'id-0', contributorToken: 'tok-0', uploaderKey: 'AAAA' }
+  saveGuestSession(SHARE_ID, uploader)
 }
 
 describe('ShareView — accountless terms gate', () => {
   beforeEach(() => {
     localStorage.clear()
-    serve(viewerShare())
+    nameUploader()
+    serve(dropShare())
     vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({
       tenantId: TENANT,
       termsVersion: 1,
@@ -143,12 +141,12 @@ describe('ShareView — accountless terms gate', () => {
   })
 })
 
-// The gate order password -> terms -> name -> content (the name pre-screen is the Memories body's first screen). This
-// is the only place the terms gate and the name gate meet, so it is where swapping them in the shell goes red.
+// The gate order password -> terms -> name -> content (the name pre-screen is the drop page's first screen). This is the
+// only place the terms gate and the name gate meet, so it is where swapping them in the shell goes red.
 describe('ShareView — terms come before the name pre-screen', () => {
-  it('a not-yet-accepted contributor sees the terms first and the name screen only after accepting', async () => {
+  it('a not-yet-accepted uploader sees the terms first and the name screen only after accepting', async () => {
     localStorage.clear()
-    serve({ ...viewerShare(), role: ShareRole.ReadWrite, access: { kind: 'read', memoryKey: new Uint8Array(32) } })
+    serve(dropShare())
     vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: TENANT, termsVersion: 1, terms: { en: '## Rules' } })
     const wrapper = mountShareView()
     await flushPromises()
@@ -164,49 +162,41 @@ describe('ShareView — terms come before the name pre-screen', () => {
   })
 })
 
-// The name pre-screen tells a guest who reads the name it types (ADR 0030 point 8): the Memory's members, and no
-// other link holder — which is what the resolve serves, so the page must not promise "everyone" either.
+// The drop page's name pre-screen tells a guest who reads the name it types (ADR 0030 point 8): the Memory's members, and
+// no other link holder — which is what the resolve serves, so the page must not promise "everyone" either. (A
+// contributor names itself in the shell's dialog, whose hint says the same: `ShareView.naming.test.ts`.)
 describe('ShareView — who sees a guest name', () => {
   beforeEach(() => {
     localStorage.clear()
     vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: TENANT, termsVersion: 0, terms: {} })
   })
 
-  it.each<[ShareRole, ShareAccess]>([
-    [ShareRole.ReadWrite, { kind: 'read', memoryKey: new Uint8Array(32) }],
-    [ShareRole.WriteOnly, { kind: 'drop', nodeId: 'n1', dropPublicKey: { x: new Uint8Array(), m: new Uint8Array() } }],
-  ])('the %s name screen says only the Memory\'s members see the name', async (role, access) => {
-    serve({ ...viewerShare(), role, access })
+  it("the uploader's name screen says only the Memory's members see the name", async () => {
+    serve(dropShare())
     const wrapper = mountShareView()
     await flushPromises()
 
     const card = wrapper.find('.share-name-card')
     expect(card.exists()).toBe(true) // the gate itself, so the text checks below cannot pass on an empty page
-    expect(card.text()).toContain('Only the people this memory belongs to see your name.')
+    expect(card.text()).toContain(t('share.nameVisibility'))
+    // the same page serves a chapter's link: its words name no Memory (#399) — only the title (the link's name) may
+    expect(card.text().replace(card.find('h1').text(), ''), 'no Memory wording on a chapter link').not.toMatch(/memory/i)
     expect(card.text()).not.toContain('everyone')
   })
 })
 
-// A chapter is a share root of its own (ADR 0080 Decision 13): over the REAL registry, a share the server roots at a
-// CHAPTER reaches the same Memories body as a Memory's — for a viewer, and for the WRITE_ONLY drop — never the
-// shell's unavailable state, which is what an unclaimed root kind renders (`ShareView.registry.test.ts`).
+// A chapter is a share root of its own (ADR 0080 Decision 13): over the REAL registry, a WRITE_ONLY link the server roots
+// at a CHAPTER reaches Memories' drop page as a Memory's does — never the shell's unavailable state, which is what an
+// unclaimed root kind renders (`ShareView.registry.test.ts`). A viewer's chapter link is `ShareView.memory.test.ts`'s.
 describe('ShareView — a chapter share', () => {
   beforeEach(() => {
     localStorage.clear()
     vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: TENANT, termsVersion: 0, terms: {} })
   })
 
-  it('a viewer link rooted at a CHAPTER renders the Memories body under the chapter\'s title', async () => {
-    serve({ ...viewerShare(), memoryName: 'Day 1' }, CHAPTER_KIND)
-    const wrapper = mountShareView()
-    await flushPromises()
-    expect(wrapper.find('.share-view-unavailable').exists()).toBe(false)
-    expect(wrapper.find('.share-view-header').text()).toContain('Day 1')
-  })
-
   it('an uploader link rooted at a CHAPTER reaches the drop\'s name screen', async () => {
     const access: ShareAccess = { kind: 'drop', nodeId: 'chapter-1', dropPublicKey: { x: new Uint8Array(), m: new Uint8Array() } }
-    serve({ ...viewerShare(), memoryName: 'Day 1', role: ShareRole.WriteOnly, access }, CHAPTER_KIND)
+    serve({ ...dropShare(), memoryName: 'Day 1', access }, CHAPTER_KIND)
     const wrapper = mountShareView()
     await flushPromises()
     expect(wrapper.find('.share-view-unavailable').exists()).toBe(false)
@@ -214,11 +204,10 @@ describe('ShareView — a chapter share', () => {
   })
 })
 
-// A Memory link names its guest with core's one form (inbox #401 S2), and gained the "Not you?" Files' drop box had: a
-// contributor's line is the shell's (whose session this device holds on a READ_WRITE link), an uploader's the drop
-// page's own. Either asks first, then forgets the session and shows the name screen again.
-describe('ShareView — a Memory link: core\'s naming form and its "Not you?"', () => {
-  const DROP: ShareAccess = { kind: 'drop', nodeId: 'n1', dropPublicKey: { x: new Uint8Array(), m: new Uint8Array() } }
+// A Memory link's uploader names itself with core's one form (inbox #401 S2) and has the "Not you?" Files' drop box had —
+// the drop page's own line (a contributor's is the shell's: `ShareView.memory.test.ts`). It asks first, then forgets the
+// session and shows the name screen again.
+describe('ShareView — a Memory drop: core\'s naming form and its "Not you?"', () => {
   beforeEach(() => {
     if (confirmRequest.value) settleConfirm(false)
     localStorage.clear()
@@ -226,34 +215,10 @@ describe('ShareView — a Memory link: core\'s naming form and its "Not you?"', 
     vi.mocked(createContributorIdentity).mockReset()
   })
 
-  it('READ_WRITE: the pre-screen is core\'s form; named, the shell says who it is; "Not you?" asks, then shows the screen again', async () => {
-    serve({ ...viewerShare(), role: ShareRole.ReadWrite, access: { kind: 'read', memoryKey: new Uint8Array(32) } })
-    vi.mocked(createContributorIdentity).mockResolvedValue({ identityId: 'id-1', contributorToken: 'tok-1' })
-    const wrapper = mountShareView()
-    await flushPromises()
-    await wrapper.find('.share-name-card .guest-naming-input').setValue(' Oma ')
-    await wrapper.find('.share-name-card form').trigger('submit')
-    await flushPromises()
-    expect(vi.mocked(createContributorIdentity).mock.calls[0][3], 'the trimmed name').toBe('Oma')
-    expect(loadGuestSession(SHARE_ID)).toEqual({ identityId: 'id-1', contributorToken: 'tok-1', displayName: 'Oma' })
-    expect(wrapper.find('.share-name-card').exists()).toBe(false)
-    const line = wrapper.find('.share-view-identity')
-    expect(line.text()).toContain(t('share.guest.as', { name: 'Oma' }))
-
-    const dialog = mountConfirmDialog()
-    await line.find('button.guest-naming-not-you').trigger('click')
-    await flushPromises()
-    expect(dialog.text()).toContain(t('share.guest.notYouConfirm', { name: 'Oma' }))
-    dialog.click(t('share.guest.notYouAccept'))
-    await flushPromises()
-    expect(loadGuestSession(SHARE_ID)).toBeNull()
-    expect(wrapper.find('.share-name-card').exists(), 'the name screen again').toBe(true)
-  })
-
   it('WRITE_ONLY: the drop page carries its own line (the shell shows none); "Not you?" forgets the uploader', async () => {
     const uploader: ContributorSession = { identityId: 'id-2', contributorToken: 'tok-2', uploaderKey: 'AAAA', displayName: 'Ben' }
     saveGuestSession(SHARE_ID, uploader)
-    serve({ ...viewerShare(), role: ShareRole.WriteOnly, access: DROP })
+    serve(dropShare())
     const wrapper = mountShareView()
     await flushPromises()
     expect(wrapper.find('.share-view-identity').exists(), "not the shell's").toBe(false)

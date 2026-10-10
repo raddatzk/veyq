@@ -1,13 +1,13 @@
 // @vitest-environment happy-dom
-// Core's body of the public page of a FOLDER link (cr-node-key-hierarchy 5b.4b; since inbox #401 S2 core's member level
-// view handed a guest's access and tree), against a STUBBED registry (a fresh `createRegistry()` behind a delegating
-// Proxy, as `views/ShareView.registry.test.ts`): the test registers the kinds, their level sections and the share bodies
-// "an application" would, with stubs that render what they were handed. The subtree is real crypto (names and keys open
+// Core's page of a READ or READ_WRITE public link (cr-node-key-hierarchy 5b.4b; inbox #401: core's member level view and
+// the kinds' member details handed a guest's access and tree, whatever the link's root kind), against a STUBBED registry
+// (a fresh `createRegistry()` behind a delegating Proxy, as `views/ShareView.registry.test.ts`): the test registers the
+// kinds, their level sections and details "an application" would, with stubs that render what they were handed. The subtree is real crypto (names and keys open
 // through the chain), the router and PrimeVue are real and every navigation is a DOM click on the rendered element, the
 // clients are guarded (`test/guestMode.ts`: an authenticated one throws).
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { defineComponent, h, onMounted } from 'vue'
+import { defineComponent, h } from 'vue'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
 import PrimeVue from 'primevue/config'
 import * as v1 from '@veyq/crypto/v1'
@@ -26,7 +26,7 @@ vi.mock('../applications/registry', async (importOriginal) => {
 })
 vi.mock('../../api/client', async (orig) => (await import('../../test/guestMode')).guardedClients(await orig<object>()))
 
-import FolderShareBody from './FolderShareBody.vue'
+import ShareTreePage from './ShareTreePage.vue'
 import ShareNameDialog from './ShareNameDialog.vue'
 import { createRegistry, type LevelSectionProps } from '../applications/registry'
 import { FOLDER_KIND } from '../node/kind'
@@ -52,8 +52,7 @@ const K_SHARE = v1.randomBytes(32)
 const keys = { root: v1.randomBytes(32), letters: v1.randomBytes(32), nested: v1.randomBytes(32), note: v1.randomBytes(32), alien: v1.randomBytes(32), broken: v1.randomBytes(32) }
 const HASH = `#k=${b64url(K_SHARE)}`
 
-// Kinds an application would register: one with a share body, one whose body reports its node unusable — both with a
-// level section, as every real kind has. 'EXPENSE' is registered by nobody.
+// Kinds an application would register, with a level section and no detail. 'EXPENSE' is registered by nobody.
 const NOTE_KIND = 'NOTE'
 const BROKEN_KIND = 'BROKEN'
 
@@ -91,12 +90,12 @@ const StubSection = defineComponent({
       h('button', { class: 'stub-open', 'data-node-id': n.id, onClick: () => emit('openNode', n) }, n.name)))
   },
 })
-/** A body that renders what the folder body handed it. */
+/** A WRITE_ONLY drop page an application claimed: never this page's to mount. */
 const StubBody = defineComponent({
   name: 'StubBody',
-  props: ['shareId', 'fragmentKey', 'pwToken', 'head', 'reload', 'access', 'subtreeRoot'],
+  props: ['shareId', 'fragmentKey', 'pwToken', 'head', 'reload', 'access'],
   emits: ['unavailable'],
-  setup: (p) => () => h('div', { class: 'embedded-stub' }, `${p.subtreeRoot?.nodeId}|${p.subtreeRoot?.name}|${p.shareId}`),
+  setup: () => () => h('div', { class: 'drop-stub' }),
 })
 /** A kind's detail, as an application's: what it was handed, and an open button per child. */
 const StubDetail = defineComponent({
@@ -106,19 +105,11 @@ const StubDetail = defineComponent({
   setup: (p, { emit }) => () =>
     h('div', { class: 'detail-stub' }, [
       h('span', { class: 'detail-of' }, `${p.node.id}|${p.tree.nameOf(p.node.id)}|${p.scopeId}`),
-      ...[...(p.children as { folders: { id: string; name: string }[] }).folders].map((n) =>
-        h('button', { class: 'detail-open', 'data-node-id': n.id, onClick: () => emit('openNode', n) }, n.name)),
+      ...(() => {
+        const c = p.children as { folders: { id: string; name: string }[]; byKind: Map<string, { id: string; name: string }[]> }
+        return [...c.folders, ...[...c.byKind.values()].flat()]
+      })().map((n) => h('button', { class: 'detail-open', 'data-node-id': n.id, onClick: () => emit('openNode', n) }, n.name)),
     ]),
-})
-/** A body that finds its node unusable as soon as it mounts. */
-const BrokenBody = defineComponent({
-  name: 'BrokenBody',
-  props: ['shareId', 'fragmentKey', 'pwToken', 'head', 'reload', 'access', 'subtreeRoot'],
-  emits: ['unavailable'],
-  setup: (_p, { emit }) => {
-    onMounted(() => emit('unavailable'))
-    return () => h('div', { class: 'broken-stub' })
-  },
 })
 
 // The name dialog is PrimeVue's (teleported); stubbed to render in place.
@@ -132,7 +123,7 @@ async function at(node?: string) {
 }
 async function mountBody(h0: PublicShareHead, o: { reload?: () => Promise<void>; requestGuest?: () => Promise<GuestIdentity | null> } = {}) {
   const access = guestAccessFor(h0, { requestGuest: o.requestGuest })
-  const w = mount(FolderShareBody, {
+  const w = mount(ShareTreePage, {
     props: { shareId: SHARE_ID, fragmentKey: b64url(K_SHARE), pwToken: undefined, head: h0, reload: o.reload ?? (async () => {}), access },
     global: { plugins: [router, realI18n(), PrimeVue], stubs, directives: { tooltip: {} } },
   })
@@ -164,16 +155,14 @@ beforeEach(async () => {
   const section = { order: 10, component: StubSection }
   r.registerKind({ kind: NOTE_KIND, icon: 'pi pi-file', shareable: true, section })
   r.registerKind({ kind: BROKEN_KIND, icon: 'pi pi-file', shareable: true, section })
-  // Claimed to be embedded below a folder, as Memories' are until inbox #401 S5.
-  r.claimShareBody(NOTE_KIND, StubBody, { embedBelowFolder: true })
-  r.claimShareBody(BROKEN_KIND, BrokenBody, { embedBelowFolder: true })
+  r.claimShareBody(NOTE_KIND, StubBody) // a WRITE_ONLY drop page: never mounted on this page
   holder.reg = r
   router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/s/:id', component: { render: () => null } }] })
   await at()
   await router.isReady()
 })
 
-describe("FolderShareBody browses the shared folder with core's level view", () => {
+describe("ShareTreePage browses a shared folder with core's level view", () => {
   it("shows the folder's name, the note once, its sub-folders and every kind's section, opened through the chain", async () => {
     const w = await mountBody(head())
     expect(w.emitted('unavailable')).toBeUndefined()
@@ -238,15 +227,14 @@ describe("FolderShareBody browses the shared folder with core's level view", () 
     expect(w.find('.veyq-level-toolbar').exists(), "the space's trash").toBe(false)
     expect(w.find('.veyq-folder-overview-actions').exists(), 'share, rename, delete').toBe(false)
     expect(w.find('.veyq-create-card').exists()).toBe(false)
-    expect(w.find('.share-folder-badge').text()).toBe(t('share.folder.readonly'))
+    expect(w.find('.share-folder-badge').text()).toBe(t('share.readonly'))
     expect(authenticatedCalls).toEqual([])
   })
 })
 
-// inbox #401 S3: a node that is not a folder renders its kind's DETAIL, exactly as the member's host mounts it — handed the
-// guest's access and tree — unless its application still claims its body `embedBelowFolder` (Memories, until S5). A plain
-// claim is the root page only (Files' WRITE_ONLY drop): never embedded.
-describe("FolderShareBody renders a node's detail for the guest", () => {
+// inbox #401: a node that is not a folder renders its kind's DETAIL, exactly as the member's host mounts it — handed the
+// guest's access and tree — below a folder and at a link's root alike. A claimed drop page is never mounted here.
+describe("ShareTreePage renders a node's detail for the guest", () => {
   const BOX_KIND = 'BOX'
   const BOX = '6e5a0000-0000-4000-8000-0000000000d6'
   const INNER = '6e5a0000-0000-4000-8000-0000000000d7'
@@ -258,13 +246,13 @@ describe("FolderShareBody renders a node's detail for the guest", () => {
   }
   beforeEach(() => {
     holder.reg!.registerKind({ kind: BOX_KIND, icon: 'pi pi-inbox', shareable: true, detail: StubDetail })
-    holder.reg!.claimShareBody(BOX_KIND, StubBody) // the root page alone
+    holder.reg!.claimShareBody(BOX_KIND, StubBody) // its WRITE_ONLY drop page: not this page's
   })
 
   it("mounts the kind's detail with the node, the link's scope, no epochs, the chain's key, its children, the guest's access and tree", async () => {
     await at(BOX)
     const w = await mountBody(boxHead())
-    expect(w.find('.embedded-stub').exists(), 'a plain claim is never embedded').toBe(false)
+    expect(w.find('.drop-stub').exists(), 'a drop page is never mounted here').toBe(false)
     expect(w.find('.detail-of').text()).toBe(`${BOX}|Postfach|${SCOPE_ID}`)
     const d = w.findComponent(StubDetail)
     expect(d.props('epochs')).toBeNull()
@@ -284,31 +272,70 @@ describe("FolderShareBody renders a node's detail for the guest", () => {
   })
 })
 
-describe('FolderShareBody embeds a claimed body (until its application mounts its detail, inbox #401 S5)', () => {
-  it("embeds the body claimed for the node's kind, handing it the node's id, key and name from the chain and the access", async () => {
-    const w = await mountBody(head())
-    await click(w.find(`.stub-open[data-node-id="${NOTE}"]`).element)
-    expect(w.find('.embedded-stub').text()).toBe(`${NOTE}|Notizen|${SHARE_ID}`)
-    const body = w.findComponent(StubBody)
-    expect(Array.from((body.props('subtreeRoot') as { key: Uint8Array }).key), "the node's key, opened through the chain").toEqual(Array.from(keys.note))
-    expect((body.props('access') as { mode: string }).mode).toBe('guest')
-    expect(w.findAll('a.p-breadcrumb-item-link').map((a) => a.text())).toEqual(['Familie', 'Notizen'])
-    expect(w.findAll('.markdown-body'), 'the note stays once, above the embedded body').toHaveLength(1)
-    expect(w.find('.share-folder-badge').exists(), 'the embedded body says its own role').toBe(false)
+// A link rooted at a node that is not a folder (a Memory, a chapter — inbox #401 S5): the same page, the kind's detail at
+// the root, with the guest's breadcrumb, the note once and the role badge.
+describe('ShareTreePage on a link rooted at a non-folder node', () => {
+  const BOX_KIND = 'BOX'
+  const BOX = '6e5a0000-0000-4000-8000-0000000000e6'
+  const INNER = '6e5a0000-0000-4000-8000-0000000000e7'
+  const box = { key: v1.randomBytes(32), inner: v1.randomBytes(32) }
+  function rootedHead(role: ShareRole = ShareRole.Read): PublicShareHead {
+    return {
+      shareId: SHARE_ID, kShare: K_SHARE, scopeId: SCOPE_ID, name: 'Rom 2026', noteByLocale: { en: 'Box **note**' }, role, rootKind: BOX_KIND,
+      share: {
+        role, scopeId: SCOPE_ID, rootKind: BOX_KIND, wrap: b64std(v1.seal({ purpose: 'share-key' }, K_SHARE, box.key)),
+        nodes: [{ id: BOX, parentId: null, kind: BOX_KIND, epoch: 0 }, child(INNER, BOX, box.key, box.inner, 'Tag 1', BOX_KIND)],
+      } as PublicShare,
+    }
+  }
+  beforeEach(() => {
+    holder.reg!.registerKind({ kind: BOX_KIND, icon: 'pi pi-inbox', shareable: true, detail: StubDetail })
+    holder.reg!.claimShareBody(BOX_KIND, StubBody)
   })
 
-  it("a kind nobody claimed is a local empty state, never the page's unavailable state", async () => {
-    await at(ALIEN)
+  for (const [role, badge] of [[ShareRole.Read, 'share.readonly'], [ShareRole.ReadWrite, 'share.contributorBadge']] as const) {
+    it(`${role}: the root's detail under the link's name, the note once, the role badge, no drop page`, async () => {
+      const w = await mountBody(rootedHead(role))
+      expect(w.emitted('unavailable')).toBeUndefined()
+      expect(w.find('.detail-of').text()).toBe(`${BOX}|Rom 2026|${SCOPE_ID}`)
+      expect(Array.from(w.findComponent(StubDetail).props('contentKey') as Uint8Array), "the root's key from the wrap").toEqual(Array.from(box.key))
+      expect(w.findAll('.markdown-body')).toHaveLength(1)
+      expect(w.find('.markdown-body').text()).toContain('Box note')
+      expect(w.find('.share-folder-badge').text()).toBe(t(badge))
+      expect(w.find('.drop-stub').exists()).toBe(false)
+      expect(w.findAll('a.p-breadcrumb-item-link').map((a) => a.text())).toEqual(['Rom 2026'])
+      expect(authenticatedCalls).toEqual([])
+    })
+  }
+
+  it("a child opens through the tree's link with the #k= fragment kept; the breadcrumb leads back to the root", async () => {
+    const w = await mountBody(rootedHead())
+    await click(w.find(`.detail-open[data-node-id="${INNER}"]`).element)
+    expect(router.currentRoute.value.query.node).toBe(INNER)
+    expect(router.currentRoute.value.hash).toBe(HASH)
+    expect(w.find('.detail-of').text()).toBe(`${INNER}|Tag 1|${SCOPE_ID}`)
+    const links = w.findAll('a.p-breadcrumb-item-link')
+    expect(links.map((a) => a.text())).toEqual(['Rom 2026', 'Tag 1'])
+    const e = await click(links[0].element)
+    expect(e.defaultPrevented).toBe(true)
+    expect(router.currentRoute.value.query.node).toBeUndefined()
+    expect(router.currentRoute.value.hash).toBe(HASH)
+  })
+})
+
+describe('ShareTreePage: what it cannot render stays local', () => {
+  it("a kind with no detail is a local empty state, never the page's unavailable state — nor its drop page", async () => {
+    await at(NOTE)
     const w = await mountBody(head())
     expect(w.find('.veyq-empty').text()).toBe(t('share.folder.unsupportedKind'))
+    expect(w.find('.drop-stub').exists()).toBe(false)
     expect(w.emitted('unavailable')).toBeUndefined()
   })
 
-  it('an embedded body that reports its node unusable becomes a local empty state too', async () => {
-    await at(BROKEN)
+  it('…and so is a kind nobody registered', async () => {
+    await at(ALIEN)
     const w = await mountBody(head())
-    expect(w.find('.broken-stub').exists()).toBe(false)
-    expect(w.find('.veyq-empty').text()).toBe(t('share.folder.gone'))
+    expect(w.find('.veyq-empty').text()).toBe(t('share.folder.unsupportedKind'))
     expect(w.emitted('unavailable')).toBeUndefined()
   })
 
@@ -320,7 +347,7 @@ describe('FolderShareBody embeds a claimed body (until its application mounts it
   })
 })
 
-describe('FolderShareBody: a READ_WRITE guest adds folders', () => {
+describe('ShareTreePage: a READ_WRITE guest adds folders', () => {
   it('a READ_WRITE guest gets the level\'s create card and the contributor badge', async () => {
     const w = await mountBody(head(ShareRole.ReadWrite))
     expect(createFolderCard(w).exists()).toBe(true)

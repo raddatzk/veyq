@@ -6,20 +6,19 @@
 // fetched as ciphertext and decrypted on device; the decrypted preview becomes an object URL that is **revoked** on
 // navigation / close / unmount.
 // The detail panel (cr-0064) shows the lazily-loaded EXIF tier and lets the user **correct the capture time**
-// (cr-0065, sealed under K_mem). Out of scope (own CRs): highlight, delete, fullscreen-original, sharing.
+// (cr-0065, sealed under K_mem). Out of scope (own CRs): highlight, fullscreen-original, sharing.
+//
+// **One lightbox for a member and a share guest** (inbox #401). It touches no API itself: every byte and seal comes
+// through the loaders the Memory's data source hands in (`../source.ts`, the member's or the guest's — required, so no
+// default can fall through to a member call), and every write is offered per capability, never by a mode flag:
+// 'set as cover' where `canSetCover`, the delete where `canDelete` answers for the shown item (a member's trash any, a
+// guest's purge only its own — the parent runs each), the capture-time correction and the place-name backfill where
+// the source carries the medium's meta door (`mediaMeta`), the heavy EXIF where it carries `exifLoader`.
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
-  openLightbox,
-  openOriginal,
-  chunkProvider,
   hasDerivatives,
-  loadMediaExif,
-  unsealMeta,
-  setMediaMeta,
-  backfillPlaceName,
   isVideoMediaType,
-  originalBlobMeta,
   mediaTypeOf,
   effectiveCapturedAt,
   plaintextSize,
@@ -43,30 +42,28 @@ import { formatBytes } from '../../../shared/formatBytes'
 import type { MediaMetaDoor } from '../source'
 
 const props = defineProps<{
-  scopeId: string
   memoryKey: Uint8Array
   items: MediaItem[]
   startIndex: number
   memoryName: string
   coverMediaId?: string | null // the photo currently used as the Memory's cover — marks the "Set as cover" button
-  // --- reuse hooks (cr-0100): the SAME lightbox drives the internal Memory (authed, default) AND the anonymous
-  // public-share viewer. When these are omitted it behaves exactly as before (authed media API). When provided,
-  // the byte/metadata access is injected — the share viewer passes its operator-blind, per-item share loaders.
-  readonly?: boolean // hide every write affordance (set-cover, capture-time edit) — the public viewer is view-only
-  previewLoader?: (item: MediaItem) => Promise<Uint8Array> // fetch+decrypt the preview tier (default: authed openLightbox)
-  originalLoader?: (item: MediaItem) => Promise<Uint8Array> // fetch+decrypt the whole original — the Slice-1 video fallback only (default: authed openOriginal)
-  exifLoader?: (item: MediaItem) => Promise<MediaExif | null> // lazy heavy-EXIF (default: authed getMediaExif; skipped when readonly + absent)
-  metaResolver?: (item: MediaItem) => MediaMeta | null // unseal the listed date/GPS tier (default: unsealMeta under memoryKey)
-  // the original's sealed blob meta — its type, file name, modified time (inbox #397); default: originalBlobMeta under
-  // memoryKey. The share viewer opens it under each item's own K_mem.
-  blobMetaResolver?: (item: MediaItem) => OpenedBlobMeta | null
+  /** Offer "use this photo as the Memory's cover" (`setCover` event). */
+  canSetCover: boolean
+  /** Whether the shown item carries a delete (`delete` event; the parent trashes or purges it, Delete key included). */
+  canDelete: (item: MediaItem) => boolean
+  previewLoader: (item: MediaItem) => Promise<Uint8Array> // fetch+decrypt the preview tier
+  originalLoader: (item: MediaItem) => Promise<Uint8Array> // fetch+decrypt the whole original — the Slice-1 video fallback only
+  metaResolver: (item: MediaItem) => MediaMeta | null // unseal the listed date/GPS tier
+  // the original's sealed blob meta — its type, file name, modified time (inbox #397)
+  blobMetaResolver: (item: MediaItem) => OpenedBlobMeta | null
   // Slice 2 (ADR 0047): the per-item key-free chunk source over the ORIGINAL, for SW range playback and the streamed
-  // download (inbox #371 S4). Default (authed) presigns via the media API; the share viewer injects its share-scoped
-  // provider (per-item K_mem + guest pwToken), so the SW path and the download cover the anonymous viewer without the
-  // SW learning the route. Absent → the authed provider is used.
-  videoChunkProvider?: (item: MediaItem) => ChunkProvider
-  // The medium's meta writes (capture-time correction, place-name backfill) as the Memory's data source carries them
-  // (`../source.ts`, inbox #401 S4); absent → the authed media API. Only read while not `readonly`.
+  // download (inbox #371 S4) — the member's presigns via the media API, the guest's via the share presign, so the SW
+  // never learns the route.
+  videoChunkProvider: (item: MediaItem) => ChunkProvider
+  // lazy heavy-EXIF; absent: no endpoint serves it to this session (a guest) and the panel shows the listed tier only
+  exifLoader?: (item: MediaItem) => Promise<MediaExif | null>
+  // The medium's meta writes (capture-time correction, place-name backfill) as the data source carries them; absent:
+  // neither is offered nor run.
   mediaMeta?: MediaMetaDoor
   suspendKeys?: boolean // pause the global Escape/arrow handler while a modal (the cover cropper) is open over the lightbox
 }>()
@@ -74,26 +71,20 @@ const emit = defineEmits<{
   close: []
   updated: [{ mediaId: string } & SealedMetaState] // a meta write landed, or a conflict handed back the current tier
   setCover: [{ mediaId: string }] // "use this photo as the Memory's cover" (cr-0073 §gallery-source)
-  delete: [{ mediaId: string }] // trash this photo (cr-0110); the parent soft-deletes + shows an undo toast
+  delete: [{ mediaId: string }] // delete this photo: a member's trash with undo (cr-0110), a guest's purge of its own (asked first)
 }>()
 
 const { t, locale } = useI18n()
 const toast = useToast()
 
-// Byte/metadata access, resolved once per item: the injected loader when the host provides one (the share
-// viewer), else the built-in authed media-API path (the internal Memory). Keeps behaviour identical by default.
-const previewOf = (it: MediaItem) => (props.previewLoader ?? ((x: MediaItem) => openLightbox(props.scopeId, props.memoryKey, x)))(it)
-// The whole decrypted original — only the Slice-1 video fallback (no usable SW) still holds it; the download streams.
-const originalOf = (it: MediaItem) => (props.originalLoader ?? ((x: MediaItem) => openOriginal(props.scopeId, props.memoryKey, x)))(it)
-// The Slice-2 chunk provider for the shown item's ORIGINAL (the video streams the pristine original, and so does the
-// download). Injected by the share viewer; else the authed media-API provider. Keys never leave the page.
-const originalProviderOf = (it: MediaItem): ChunkProvider =>
-  (props.videoChunkProvider ?? ((x: MediaItem) => chunkProvider(props.scopeId, props.memoryKey, x)))(it)
-const metaOf = (it: MediaItem) => (props.metaResolver ?? ((x: MediaItem) => unsealMeta(props.scopeId, props.memoryKey, x)))(it)
-const blobMetaOf = (it: MediaItem) =>
-  (props.blobMetaResolver ?? ((x: MediaItem) => originalBlobMeta(props.scopeId, props.memoryKey, x)))(it)
-const exifOf = (it: MediaItem): Promise<MediaExif | null> =>
-  props.exifLoader ? props.exifLoader(it) : props.readonly ? Promise.resolve(null) : loadMediaExif(props.scopeId, it, props.memoryKey)
+// Byte/metadata access through the source's loaders (see the header). The whole decrypted original is only the Slice-1
+// video fallback (no usable SW); the video and the download stream the ORIGINAL through the chunk provider.
+const previewOf = (it: MediaItem) => props.previewLoader(it)
+const originalOf = (it: MediaItem) => props.originalLoader(it)
+const originalProviderOf = (it: MediaItem): ChunkProvider => props.videoChunkProvider(it)
+const metaOf = (it: MediaItem) => props.metaResolver(it)
+const blobMetaOf = (it: MediaItem) => props.blobMetaResolver(it)
+const exifOf = (it: MediaItem): Promise<MediaExif | null> => (props.exifLoader ? props.exifLoader(it) : Promise.resolve(null))
 
 const current = ref(props.startIndex)
 // The current item's decrypted preview tier as an object URL — minted + revoked (on switch/unmount) by the primitive.
@@ -186,9 +177,9 @@ watch(() => item.value?.mediaId, loadDetails, { immediate: true })
 // --- capturedAt (cr-0066): effective time = override ?? derived original, from the listed capture-time tier ---
 const effectiveCaptured = computed(() => effectiveCapturedAt(captured.value))
 const isCapturedAtCorrected = computed(() => captured.value?.capturedAtOverride !== undefined)
-// editable as soon as the item is shown — even with no date, the user can *set* one (a fresh tier). Never in
-// the read-only public viewer (cr-0100) — it has no authed write path.
-const canEditCapturedAt = computed(() => !!item.value && !props.readonly)
+// editable as soon as the item is shown — even with no date, the user can *set* one (a fresh tier). Only where the
+// source carries the medium's meta door: a guest's has none (no guest route writes a medium's meta).
+const canEditCapturedAt = computed(() => !!item.value && !!props.mediaMeta)
 
 /** epoch-ms → the `<input type="datetime-local">` value (local wall-clock, minute precision). */
 function msToDatetimeLocal(ms: number | undefined): string {
@@ -225,13 +216,12 @@ async function backfillFailed(target: MediaItem, e: unknown) {
 
 async function persistCapturedAt(overrideMs: number | null) {
   const target = item.value
-  if (!target) return
+  const write = props.mediaMeta
+  if (!target || !write) return
   savingCapturedAt.value = true
   capturedAtError.value = null
   try {
-    const updated: MediaMetaWrite = props.mediaMeta
-      ? await props.mediaMeta.set(target, props.memoryKey, overrideMs)
-      : await setMediaMeta(props.scopeId, target, props.memoryKey, overrideMs)
+    const updated: MediaMetaWrite = await write.set(target, props.memoryKey, overrideMs)
     applyMetaState(target, updated, updated.tier) // let the grid re-sort
     if (item.value !== target) return // navigated away mid-save — drop the stale result
     isEditingCapturedAt.value = false
@@ -317,7 +307,7 @@ const placeLabel = computed(() => captured.value?.placeName ?? '')
 // --- the resolved place name (uc.memory.place, ADR 0016) ------------------------------------------------
 // Resolved once per photo, then read from the sealed tier forever. Four gates, and each one is a bite:
 // consent (`geocodingAvailable` — with it off NO coordinate leaves the device), a coordinate to resolve,
-// a writable surface (the public share viewer is `readonly` and must never write), and no name sealed yet.
+// a writable surface (the source's `mediaMeta` door — a guest's has none and must never write), and no name sealed yet.
 const { mapsAvailable, tileUrl, tileAttribution, tileMaxZoom, geocoderUrl, geocodingAvailable } = useMapConfig()
 
 // The mini map: the SAME MemoryMap the location editor uses, read-only (no crosshair, no frame handling) and
@@ -338,15 +328,14 @@ const viewDirection = computed(() => {
 async function resolvePlaceForCurrent() {
   const target = item.value
   const meta = captured.value
-  if (!target || !meta || props.readonly) return
+  const write = props.mediaMeta
+  if (!target || !meta || !write) return
   if (!hasGps.value || meta.placeName !== undefined) return
   if (!geocodingAvailable.value) return // consent off → resolvePlaceName is never even asked
   const resolved = await resolvePlaceName(geocoderUrl.value, meta.gpsLat!, meta.gpsLng!, locale.value)
   if (!resolved) return
   try {
-    const updated = props.mediaMeta
-      ? await props.mediaMeta.backfillPlace(target, props.memoryKey, resolved.name, resolved.level)
-      : await backfillPlaceName(props.scopeId, target, props.memoryKey, resolved.name, resolved.level)
+    const updated = await write.backfillPlace(target, props.memoryKey, resolved.name, resolved.level)
     applyMetaState(target, updated, updated.tier)
   } catch (e) {
     /* best-effort: a failed seal leaves the coordinate showing, and the next open tries again — and a tier that
@@ -481,8 +470,8 @@ async function download() {
 }
 
 function emitDelete() {
-  if (props.readonly || !item.value) return
-  emit('delete', { mediaId: item.value.mediaId }) // the parent trashes it + shows an undo toast (cr-0110)
+  if (!item.value || !props.canDelete(item.value)) return
+  emit('delete', { mediaId: item.value.mediaId }) // the parent trashes it with an undo, or purges a guest's own (asked first)
 }
 
 function onKeydown(event: KeyboardEvent) {
@@ -525,7 +514,7 @@ onBeforeUnmount(() => {
           <span class="pi" :class="downloading ? 'pi-spin pi-spinner' : 'pi-download'" />
         </button>
         <button
-          v-if="previewable && !readonly"
+          v-if="previewable && canSetCover"
           class="veyq-icon-button lightbox-icon-button"
           :class="{ 'lightbox-cover-active': isCover }"
           type="button"
@@ -537,7 +526,7 @@ onBeforeUnmount(() => {
           <span class="pi" :class="isCover ? 'pi-check' : 'pi-image'" />
         </button>
         <button
-          v-if="!readonly"
+          v-if="item && canDelete(item)"
           class="veyq-icon-button lightbox-icon-button lightbox-delete-button"
           type="button"
           :aria-label="t('media.delete')"

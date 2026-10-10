@@ -63,7 +63,8 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    stays a separate, still-deferred slice.
 
    **Ordering + fail-open.** On the share page the gate sits **after** the password shell (ADR 0037) and **before**
-   the display-name pre-screen (ADR 0030/0031): **password → terms → name → content**. It **fails open** — a
+   the display-name pre-screen (ADR 0030/0031; since inbox #401 S5 a contributor names itself at its first
+   contribution, behind the gate all the same): **password → terms → name → content**. It **fails open** — a
    transient terms-fetch error leaves the visitor viewing (a gate is operational, not enforcement; locking someone
    out on a network blip is worse than none), mirroring the member path's fail-open terms refresh.
 

@@ -13,9 +13,9 @@
   password-protected ([uc.sharing.share-password](uc.sharing.share-password.md)) the visitor has already unlocked
   it — the terms gate sits **after** the password shell.
 - **Postconditions (success):** the visitor's acceptance is recorded **client-side only** (localStorage, keyed by
-  the tenant + version); the gate clears and the visitor proceeds to the content — or, for a READ_WRITE/WRITE_ONLY
-  share, to the display-name pre-screen ([uc.sharing.share-contributor](uc.sharing.share-contributor.md) /
-  [uc.sharing.share-uploader](uc.sharing.share-uploader.md)). **The server records nothing** about the accountless
+  the tenant + version); the gate clears and the visitor proceeds to the content — or, for a WRITE_ONLY share, to
+  the display-name pre-screen ([uc.sharing.share-uploader](uc.sharing.share-uploader.md)); a READ_WRITE visitor is
+  asked its name at its first contribution ([uc.sharing.share-contributor](uc.sharing.share-contributor.md)). **The server records nothing** about the accountless
   visitor — anonymity is preserved.
 
 ## The mechanism here
@@ -63,8 +63,8 @@ blip is worse than none, and it is not enforcement anyway) — mirroring the mem
    version for that `tenantId` is lower, the **terms gate** shows: the operator's terms (viewer's locale, rendered
    with the safe markdown renderer reused from member terms + share notes) and an **Accept** button.
 3. The visitor accepts → the client writes `termsVersion` to `localStorage[tenant]` → the gate clears.
-4. The visitor proceeds: straight to the read-only gallery (READ), or to the mandatory display-name pre-screen
-   (READ_WRITE / WRITE_ONLY) and then contributing.
+4. The visitor proceeds: straight to the content (READ, READ_WRITE — a contributor names itself at its first
+   contribution), or to the mandatory display-name pre-screen (WRITE_ONLY) and then contributing.
 
 ## Alternate / exception flows
 

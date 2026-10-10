@@ -44,7 +44,7 @@ acceptanceCriteria:
       A guest's name reaches the Memory's members only, through their bucket list. No guest read of a public share
       (its resolve, its media read) serves a guest's sealed name, or any READ_WRITE identity — not even the reading link's own, including on a READ
       link that was once a READ_WRITE link. It serves a WRITE_ONLY identity as its wrapped key alone, which a reader
-      needs to open that identity's media, and only that media names its identity. The name pre-screen tells the
+      needs to open that identity's media, and only that media names its identity. The naming form tells the
       guest who sees the name. A link plus a database dump still opens the names — the residual ADR 0030 point 8
       accepts.
     coverage:

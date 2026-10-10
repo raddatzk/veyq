@@ -99,7 +99,7 @@ direct-append, personal scope.**
      already decrypts every medium of the Memory, and a name is less than the photos it is attached to. A key
      only members hold — a name keypair whose private half sits under `K_SC` — would close it, and was rejected
      as more machinery than that difference is worth.
-   - **The guest is told:** the name pre-screen says that only the people the Memory belongs to see the name.
+   - **The guest is told:** the naming form says that only the people the Memory belongs to see the name.
 
 ## Consequences
 
@@ -123,6 +123,11 @@ direct-append, personal scope.**
 - **Deferred, each its own slice:** the **buckets UI** (per-contributor grouping/display), **MANAGER** /
   contributor edit + delete, **password protection**, **moderation** (review-before-
   publish), and per-contributor **delete-your-own-upload**.
+- **Amended 2026-10-11 (inbox #401 S5): the name is asked at the first contribution, not in front of the Memory.** A
+  share view is the member view with functions removed ([ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md)
+  Consequences), so a READ_WRITE link opens on the Memory itself and its visitor names itself in the share page's one
+  naming dialog when it first adds a photo — still mandatory before any contribution (point 2), never asked of a
+  visitor who only looks. Point 2's identity, seal and buckets hook are unchanged.
 
 ## Alternatives considered
 

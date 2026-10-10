@@ -268,7 +268,7 @@ describe('registry: level sections', () => {
   })
 })
 
-describe('registry: share bodies', () => {
+describe('registry: drop pages (share bodies)', () => {
   it('is empty until claimed: shareBody() is null, not undefined', () => {
     const r = createRegistry()
     expect(r.shareBody(MEMORY_KIND)).toBeNull()
@@ -290,24 +290,13 @@ describe('registry: share bodies', () => {
     expect(() => r.claimShareBody(MEMORY_KIND, Other)).not.toThrow()
     expect(r.shareBody(MEMORY_KIND)).toBe(Other)
   })
-  // inbox #401 S3: below a shared folder core renders a kind's detail; only a claim made `embedBelowFolder` (Memories',
-  // until S5) is still embedded there. A plain claim is the root page alone (Files' WRITE_ONLY drop).
-  it('embeds below a folder only a claim made with embedBelowFolder; a plain claim stays the root page', () => {
+  // A WRITE_ONLY link's drop page is an application's (inbox #401 S5); no such link roots at a folder (ADR 0080 decision
+  // 11), so FOLDER is claimed by nobody — an application's claim of it throws and leaves it unclaimed.
+  it('refuses a claim of FOLDER: no drop page for the platform kind', () => {
     const r = createRegistry()
-    r.claimShareBody('DROP', Stub)
-    r.claimShareBody(MEMORY_KIND, Other, { embedBelowFolder: true })
-    expect(r.shareBody('DROP')).toBe(Stub)
-    expect(r.embeddedShareBody('DROP')).toBeNull()
-    expect(r.shareBody(MEMORY_KIND)).toBe(Other)
-    expect(r.embeddedShareBody(MEMORY_KIND)).toBe(Other)
-    expect(r.embeddedShareBody('UNCLAIMED')).toBeNull()
-  })
-
-  it('a refused second claim does not flag the kind for embedding', () => {
-    const r = createRegistry()
-    r.claimShareBody('DROP', Stub)
-    expect(() => r.claimShareBody('DROP', Other, { embedBelowFolder: true })).toThrow(/already claimed/)
-    expect(r.embeddedShareBody('DROP')).toBeNull()
+    expect(r.shareBody(FOLDER_KIND)).toBeNull()
+    expect(() => r.claimShareBody(FOLDER_KIND, Stub)).toThrow(/already claimed/)
+    expect(r.shareBody(FOLDER_KIND)).toBeNull()
   })
 })
 

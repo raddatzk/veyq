@@ -4,10 +4,9 @@
 // the member's way: name yourself, send files into your own folder (`DropBoxGuestForm.vue`). The one legitimate
 // guest-only page of Files (ADR 0079 Consequences, inbox #401).
 //
-// A READ or READ_WRITE guest of a folder link ABOVE the drop box never gets this body: core's folder page renders the
-// drop box's `detail` (`DropBoxDetail.vue`) for it, handed the guest's access and tree — read-only (owner decision
-// 2026-10-08, inbox #380). Embedding this page there once offered a WRITE_ONLY form under the folder's name that then
-// failed, which is why the claim is made without `embedBelowFolder`.
+// A READ or READ_WRITE guest of a folder link ABOVE the drop box never gets this body: core's page renders the drop box's
+// `detail` (`DropBoxDetail.vue`) for it, handed the guest's access and tree — read-only (owner decision 2026-10-08,
+// inbox #380). Embedding this page there once offered a WRITE_ONLY form under the folder's name that then failed.
 import type { ShareBodyProps } from '../../../core/applications/registry'
 import DropBoxGuestForm from './DropBoxGuestForm.vue'
 

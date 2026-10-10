@@ -123,13 +123,13 @@ describe('MemoryDetail follows caps', () => {
     expect(updateNode).toHaveBeenCalled()
   })
 
-  // The cover's save writes only through the door the capabilities open (inbox #401 S4): the lightbox's "set as cover" is
-  // still offered during a pending deletion (its one `readonly` gate is S5's to split), and without `setCover` what it
-  // picks must reach no write.
+  // The cover's save writes only through the door the capabilities open (inbox #401 S4): the lightbox offers "set as
+  // cover" exactly where `setCover` holds (S5 split its one `readonly` per capability), and even a pick forced from it
+  // without `setCover` reaches no write.
   it('a cover picked in the lightbox is written only with setCover', async () => {
     const memoryKey = v1.randomBytes(32)
     await seedDated(memoryKey)
-    const LightboxStub = { emits: ['setCover'], template: `<button class="stub-set-cover" @click="$emit('setCover', { mediaId: 'x' })" />` }
+    const LightboxStub = { props: ['canSetCover'], emits: ['setCover'], template: `<button class="stub-set-cover" @click="$emit('setCover', { mediaId: 'x' })" />` }
     const CoverStub = {
       emits: ['save', 'close'],
       template: `<button class="stub-cover-save" @click="$emit('save', { kind: 'media', mediaId: 'x', crop: { x: 0, y: 0, width: 1, height: 1 } })" />`,
@@ -142,6 +142,7 @@ describe('MemoryDetail follows caps', () => {
       })
       await vi.waitFor(() => expect(w.find('[data-media-id] button').exists()).toBe(true))
       await w.find('[data-media-id] button').trigger('click')
+      expect(w.findComponent(LightboxStub).props('canSetCover'), 'offered in the lightbox').toBe(setCover)
       await w.find('.stub-set-cover').trigger('click')
       await flushPromises()
       if (w.find('.stub-cover-save').exists()) await w.find('.stub-cover-save').trigger('click')

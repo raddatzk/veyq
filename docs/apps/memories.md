@@ -144,19 +144,27 @@ member's wraps the scope's calls; the guest's reads the link's media listing (ea
 opens every tier through the share presign, and — for `READ_WRITE` only — uploads into the node on screen, naming it
 (the root names none) and sealing under that node's key from the chain, and purges what this device sent
 (`ownShareMedia.ts`). It has no door for the media trash, the node's date, place and cover, a medium's meta, the item
-marks, the organizer, the live poll or the heavy EXIF; a `WRITE_ONLY` link uploads and deletes through its drop page,
-never this source.
+marks, the organizer, the live poll or the heavy EXIF — so a guest's view re-reads its own listing after its own
+upload or delete, and sees another guest's upload on its next open; a `WRITE_ONLY` link uploads and deletes through its
+drop page, never this source.
 
-**The guest's folder page (since inbox #401 S2)** renders this section as a member's: `MemoriesSection` handed a
-guest's access and tree shows the Memories of a shared folder as MemoryCards, each date and place unsealed under the
-node's key the link's chain opened, each cover through the link's own reads (`guestCover.ts`: a chosen photo's
-thumbnail from `listShareMedia`, read once and only when a cover needs it; an uploaded cover blob through
-`resolveShareBlob`, which serves a node's cover blob below the share), the map over the opened subtree — no heart, no
-member store (`treeStore`, `activeSpace`, `coverStore`, `favoritesStore`) read. A Memory opened from there is still
-Memories' guest body, embedded (`MemoryShareBody`, until S5), though the member's detail already renders for a guest
-over that source (its tests mount it under core's folder page). A link's guest names itself through core's one naming
-component (`core/sharing/GuestNaming.vue`): on a Memory link the pre-screen's form, and "Not you?" — the shell's line
-for a contributor, the drop page's own for an uploader — which asks, then forgets the device's session.
+**A guest sees the member's views (inbox #401).** At a folder level `MemoriesSection`, handed a guest's access and tree,
+shows the Memories of a shared folder as MemoryCards, each date and place unsealed under the node's key the link's
+chain opened, each cover through the link's own reads (`guestCover.ts`: a chosen photo's thumbnail from
+`listShareMedia`, read once and only when a cover needs it; an uploaded cover blob through `resolveShareBlob`, which
+serves a node's cover blob below the share), the map over the opened subtree. A Memory or a chapter — below a shared
+folder, or the root of a Memory or chapter link — is the member's `MemoryDetail` (core's `ShareTreePage` mounts the
+kind's `detail`): the gallery, the lightbox with the download, the Chapters tab to navigate into (through the tree's
+link, `#k=` kept); for a contributor besides, the upload into the node on screen and the delete of its own photos on
+the tile and in the lightbox. It shows the date and place the members sealed but never reconciles them (the member's
+detail settles them automatically on a gallery change; that writes the node's meta, which no guest may). Nothing of the
+member's world is read — no `treeStore`, `activeSpace`, `coverStore`, `favoritesStore` or item-mark store
+(`ShareView.memory.test.ts` records every export of those and every authenticated client). The one page a guest gets
+that a member has not is a `WRITE_ONLY` link's drop page (`MemoryShareBody`: name, warning, add photos, the session's
+own tiles) — its guest holds no key to render anything the member's way. A link's guest names itself through core's
+one naming component (`core/sharing/GuestNaming.vue`): a contributor in the shell's dialog at its first write, an
+uploader on the drop page; "Not you?" — the shell's line for a contributor, the drop page's own for an uploader — asks,
+then forgets the device's session.
 
 ## How far it is separated
 

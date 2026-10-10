@@ -26,7 +26,7 @@ vi.mock('../../api/client', () => ({ sharesApi: vi.fn(), publicSharesApi: vi.fn(
 const nav = vi.hoisted(() => ({ route: null as null | { query: Record<string, string>; hash: string } }))
 vi.mock('vue-router', () => ({ useRoute: () => nav.route, useRouter: () => ({ push: vi.fn(), resolve: () => ({ href: '/s/stub' }) }) }))
 
-import FolderShareBody from './FolderShareBody.vue'
+import ShareTreePage from './ShareTreePage.vue'
 import { createRegistry, type LevelSectionProps } from '../applications/registry'
 import { FOLDER_KIND } from '../node/kind'
 import { sealName, wrapContentKey } from '../node/tree'
@@ -85,7 +85,7 @@ const stubs = {
 }
 
 function mountBody(h0: PublicShareHead, access = guestAccessFor(h0)) {
-  return mount(FolderShareBody, {
+  return mount(ShareTreePage, {
     props: { shareId: SHARE_ID, fragmentKey: b64url(K_SHARE), pwToken: undefined, head: h0, reload: async () => {}, access },
     global: { plugins: [realI18n()], stubs },
   })
@@ -101,7 +101,7 @@ beforeEach(() => {
   nav.route = reactive({ query: {} as Record<string, string>, hash: `#k=${b64url(K_SHARE)}` })
 })
 
-describe("FolderShareBody renders the registered kinds' level sections for a guest", () => {
+describe("ShareTreePage renders the registered kinds' level sections for a guest", () => {
   it("hands a section its kind's children at the folder on screen — never as cards — with the guest's access and tree", async () => {
     const w = mountBody(head(ShareRole.Read))
     await flushPromises()
@@ -128,7 +128,7 @@ describe("FolderShareBody renders the registered kinds' level sections for a gue
   })
 })
 
-describe("FolderShareBody: a section's requestGuest is the page's one naming flow", () => {
+describe("ShareTreePage: a section's requestGuest is the page's one naming flow", () => {
   it("hands the section the shell's flow (GuestAccess.requestGuest) — no dialog of the body's own", async () => {
     const requestGuest = vi.fn(async () => ({ identityId: 'id-0', contributorToken: 'tok-0' }))
     const h0 = head(ShareRole.ReadWrite)

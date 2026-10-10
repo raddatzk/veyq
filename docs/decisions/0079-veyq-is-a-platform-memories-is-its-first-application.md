@@ -294,32 +294,30 @@ on their own.
 
   Rejected: a capabilities object that defaults to allowed, with the operations as optional props that fall back to the
   member's calls — the legacy plaintext client's design; a forgotten prop there calls the member API from a share page.
-  **Built** (S1 of #401): `web/src/core/access.ts` (`Access`, `TreeSource`, the member's factories, `targetOf`,
-  `folderCapabilities`), `memoryCapabilities` and `filesCapabilities`; the member host hands `access` and `tree` to
-  every detail and section, whose controls read the capabilities (the matrix half — the source half arrives with each
-  source). **Built** (S2): the guest's `access` and `tree` (`web/src/core/sharing/guestAccess.ts`: `guestAccess`,
-  `guestTreeSource` over the opened subtree — a served `ShareNode` as a `TreeNode`, `createdAt` 0 so equal names number
-  by node id, `metaVersion` 0, `wrappedMeta` as served); the shell (`views/ShareView.vue`) builds the access and owns
-  the page's one naming flow (`requestGuest`, core's `GuestNaming` with "Not you?", used by every naming place — the
-  shell's dialog, the Memories link's pre-screen, Files' drop page); a folder link's page is core's `LevelView` handed
-  both, so a Memory is the member's MemoryCard with its date, cover and map read from what the link opened. **Built**
-  (S3): Files' views serve guests — `FilesSection` and `DropBoxDetail` read and write through Files' data source
-  (`web/src/features/files/source.ts`, the member's and the guest's; a write shows where the matrix grants it AND the
-  source carries it), the guest-only `ShareFilesSection` and `DropBoxSharedView` are deleted, `shareSection` (with
-  `ShareSectionProps`, `shareSections()` and the level's `host-section` slot) is gone from the registry, and core's folder
-  page renders a non-folder node's `detail` for the guest. `GuestAccess` gained the link's fragment key and the shell's
-  re-resolve (`reload`), what a guest's write needs. One transitional seam until S5: a claim made `embedBelowFolder`
-  (Memories') is still embedded below a folder instead of the kind's detail; Files' drop-box claim is the `WRITE_ONLY`
-  page alone. **Built** (S4): Memories' data source (`web/src/features/memory/source.ts`): `MemoryDetail`, its
-  composables, its lightbox's loaders and the contributions organizer read and write only through it, the member's
-  wrapping the calls they made before unchanged and the guest's the link's (its media listing, the share presign, the
-  upload naming the node on screen under that node's key, the delete of what the device sent); every write and
-  member-only read is an optional door the guest's lacks, and the detail shows a right where the matrix grants it AND
-  the source carries the door (`sourceCapabilities`), the organizer taking the source by injection and refusing to
-  mount without its door. `MemoryDetailHost` picks the source by `access.mode` and reads nothing of the member's world
-  for a guest, so the detail already renders for a guest under core's folder page — mounted in its tests, not yet in
-  production. **Open:** S5 `MemoryDetail` for guests (`MemoryShareBody` reduced to the drop; `embedBelowFolder`
-  removed; the lightbox's one `readonly` split per capability).
+  **Built** (inbox #401, five steps, 2026-10-09 to 2026-10-11). Core: `web/src/core/access.ts` (`Access`, `TreeSource`,
+  the member's factories, `targetOf`, `folderCapabilities`) and the guest's half, `core/sharing/guestAccess.ts`
+  (`guestAccess`, `guestTreeSource` over the opened subtree — a served `ShareNode` as a `TreeNode`, `createdAt` 0 so equal
+  names number by node id, `metaVersion` 0, `wrappedMeta` as served, every `linkTo` keeping `#k=`). The shell
+  (`views/ShareView.vue`) runs the gates, builds the access and owns the page's one naming flow (`requestGuest`, core's
+  `GuestNaming` with "Not you?"); then a `READ` or `READ_WRITE` link of any root kind gets core's page
+  (`core/sharing/ShareTreePage.vue`): core's `LevelView` at a folder, the kind's `detail` at any other node — the link's
+  root included — with what only a guest's page adds (the breadcrumb up to the root, the curator's note, the role
+  badge); a `WRITE_ONLY` link gets the drop page its root kind's application claimed (`claimShareBody`, which no longer
+  takes an option, and refuses `FOLDER`). Each application reads and writes through its data source, the member's or the
+  guest's, fixed at mount: Files' `features/files/source.ts` (its `FilesSection` and `DropBoxDetail` serve guests;
+  `ShareFilesSection` and `DropBoxSharedView` are deleted) and Memories' `features/memory/source.ts` (`MemoryDetail`,
+  its composables, the lightbox and the organizer touch no API but through it; `MemoryDetailHost` picks the source by
+  `access.mode` and reads nothing of the member's world for a guest). A view shows a right where the matrix grants it
+  AND the source carries the door (`sourceCapabilities`); the lightbox takes its loaders as required props and each
+  write per capability (`canSetCover`, `canDelete` per item, the source's `mediaMeta` door). Memories' share body is the
+  drop page alone: the grouped-chapters guest gallery of #356, its lightbox wiring and its own-delete are deleted, and a
+  contributor uploads into the chapter it navigated to (the chapter named as the target, sealed under its own key; the
+  server creates the guest's own bucket there). A guest's Memory view shows the date and place the members sealed but
+  never reconciles them (that writes the node's meta). `shareSection`, `embedBelowFolder`, `embeddedShareBody` and a share
+  body's `subtreeRoot` are gone. What proves it: guest-mode mounts through the real shell, registry and router
+  (`ShareView.memory.test.ts`, `MemoryDetail.guest.test.ts`, `DropBoxDetail.guest.test.ts`, `FolderShareGuest.test.ts`)
+  record every authenticated client and every read of the member's stores and assert both empty;
+  `validate_web_share_bodies_are_drop_pages.py` keeps the name `ShareBody` meaning a claimed drop page.
 - **Guards move with the code, and the build is one of them.** On the backend, core → application is the
   compiler's (no edge, so no import) and every other direction is `validate_backend_module_graph.py`'s — including
   application → application, held between Memories and Files and bitten with a forged third application; inside core,
