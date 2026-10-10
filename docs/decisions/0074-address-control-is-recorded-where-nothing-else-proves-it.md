@@ -50,7 +50,9 @@ and the login `verify` step. This record therefore says **confirm** for the addr
 **1. The record is a fact about the address, not a permission.** `veyq_user.email_confirmed_at` is a nullable
 timestamp. It means *the account holder showed, at that time, that they read the mail sent to this address*. It
 is bound to the address it confirmed: any future path that changes an account's address clears it in the same
-write.
+write. The code reads only its presence (the "confirmed" state); the time is kept on purpose, as the record of
+*when* control was shown — the one stored time a data-minimisation pass (inbox #398, 2026-10-10) left as a time
+by decision rather than narrowing it to a flag.
 
 **2. Exactly three events set it:**
 

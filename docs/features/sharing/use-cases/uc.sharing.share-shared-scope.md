@@ -84,7 +84,7 @@ create-gate (scope) and a member-removal hook are new.
   link even when someone leaves on good terms; a group owner already holds the stronger power of deleting the group.
 - **A7 — delete a link.** A switched-off link stays in the manage panel — folded under a count — until someone
   **deletes** it, behind a confirm ([ADR 0029](../../../decisions/0029-public-viewer-share.md) §7). The server keeps
-  a **tombstone**: the id, scope, Memory, role and dates, every ciphertext (sealed name, note, label, recovery copy,
+  a **tombstone**: the id, scope, Memory, role and creation time — not when it was deleted — every ciphertext (sealed name, note, label, recovery copy,
   password fields, the wrap or drop key) cleared. The link `404`s, can never be re-activated, renewed or edited, and
   is in no listing; its id is never minted again. The photos its guests added **stay** in the Memory, readable as
   before — an uploader guest's photos open only through their identity's wrapped key, which goes only once nothing

@@ -42,7 +42,8 @@ on a change the client pulls a keyset delta + reconciles deletes against the ret
 
 3. **On change, a keyset delta — never a full re-list.** The client sends its cursor `(updatedAt, id)`; the
    server returns **only media with `updated_at > cursor`** (tie-broken by id). This requires a new
-   `veyq_media.updated_at` (set `= created_at` at attach, bumped on meta edit). So an **active upload streams the
+   `veyq_media.updated_at` (set to the attach time at attach, bumped on meta edit; since inbox #398 the
+   medium's only creation time — no separate `created_at` is stored). So an **active upload streams the
    handful of new items each poll**, not the whole gallery every interval — the failure mode a full-re-list-on-
    change would have. The client upserts the delta by `mediaId` and advances the cursor.
 
@@ -128,7 +129,7 @@ add/edit never carries the O(N) id-set, and nothing does per idle tick.
   that ([ADR 0077](0077-a-write-carries-the-version-it-read.md)).
 - **New server state:** a `media_revision INT` + a `delete_revision INT` per node (columns on `veyq_node` then;
   Memories' `veyq_media_revision` since inbox #341), an `updated_at
-  TIMESTAMP` on `veyq_media` (backfilled `= created_at`); `listNodeMedia` gains a conditional GET (`If-None-Match`
+  TIMESTAMP` on `veyq_media` (backfilled `= created_at` then; `NOT NULL` and the only creation time since inbox #398); `listNodeMedia` gains a conditional GET (`If-None-Match`
   → `304`), a `since` cursor (keyset delta), and the current-id-set on a `200` **only when the client's
   `delete_revision` lags** (a delete occurred). All opaque/operational — no key, no plaintext.
 - **Scope: own-node gallery only.** The gallery lists the open node's own media (chapters open to their own

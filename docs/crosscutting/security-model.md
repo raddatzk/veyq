@@ -105,14 +105,17 @@ request the **user** turned on, straight to the chosen provider.
   named as such, an operator reading the database for audit evidence (inbox #318; the root test
   `EveryStoredTimeHasAReaderTest` names each stored time's reader and turns red on one without).
   So the database does **not** hold when an account, tenant, tenant profile, scope, blob, upload session, attachment
-  or medium's derivative was created, when a scope's key epoch rotated, when a member re-sealed
+  or medium's derivative was created, when a share link was deleted (its tombstone is a flag), a medium's creation
+  apart from its change time (which starts at the attach, inbox #398), when a scope's key epoch rotated, when a member re-sealed
   their favorites, device register or identity pins, when a share guest joined, when a job was declined, or when
   first-run setup completed; the request time the server observes live is not kept for them. What it does hold, by
   reader: session family creation + last refresh (served), token/challenge/invite/share/recovery/pairing/
   confirmation expiries, a recovery/pairing/confirmation/invite/job/reclaim row's creation (purge or order), a
   membership's creation (the orphan rule's successor), a node's creation (served) and trash time, a group's and a
-  medium's trash time and a medium's change time (cursor + purge), a bucket's creation (order), a share's creation
-  (served) and tombstone time, `email_confirmed_at`, and when a member accepted each terms version they
+  medium's trash time and a medium's change time (cursor + purge; set at attach, so also its creation), a bucket's
+  creation (order), a share's creation (served), `email_confirmed_at` (its presence shows "confirmed"; the time is
+  [ADR 0074](../decisions/0074-address-control-is-recorded-where-nothing-else-proves-it.md) Decision 1's record,
+  kept by decision, inbox #398), and when a member accepted each terms version they
   accepted (a history, one row per version — audit evidence, served by no API — below); sizes; job-queue and op-log offsets; presence facts; a media
   item's **trash state** (a trashed flag + who trashed it + when, until the scheduled purge); a media item's
   **uploader attribution + bucket structure** (an opaque `owner_key` per medium — `user:{id}` / `share:{id}` —

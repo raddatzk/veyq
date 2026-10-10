@@ -80,10 +80,11 @@ Adopt a **public viewer share** as a standalone, operator-blind resource address
    `expiresAt` in the past `404`s. The same soft-revoke fires **automatically on member removal** for the removed
    member's shares (§6), and a re-activation flips `enabled` back on (transferring ownership).
 
-   **Deleting a link is a tombstone, not a row delete.** The row keeps its id, scope, node, role and dates; every
+   **Deleting a link is a tombstone, not a row delete.** The row keeps its id, scope, node, role and creation time; every
    ciphertext column — wrap, drop public key, sealed name, note, label, recovery copy, password fields, write
    verifier — and its
-   expiry are cleared and `deleted_at` is set. A tombstone `404`s like a revoked link, cannot be re-activated,
+   expiry are cleared and its `deleted` flag is set — a flag, not a time: every reader asks only *whether* a link
+   is deleted, so *when* is not stored (inbox #398). A tombstone `404`s like a revoked link, cannot be re-activated,
    edited or re-issued, and is in no listing. The row stays because the link's guest identities hang off it by
    foreign key, and a WRITE_ONLY identity's wrapped key is the only way members open that guest's uploads
    ([ADR 0031](0031-uploader-public-share.md) point 7): a delete never touches the Memory's media, buckets or drop

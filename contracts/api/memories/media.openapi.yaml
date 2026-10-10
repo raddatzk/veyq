@@ -915,7 +915,7 @@ components:
           type: string
           format: date-time
           description: >
-            When this media last changed — set `= createdAt` at attach, bumped on a meta edit (cr-0068). The
+            When this media last changed — the attach time at attach, bumped on a meta edit (cr-0068). The
             `(updatedAt, mediaId)` pair is the gallery's keyset cursor for the live-updates delta (cr-0107,
             ADR 0033); the client advances its `since` cursor to the newest row it has seen.
           example: 2026-07-09T12:34:56.789Z
