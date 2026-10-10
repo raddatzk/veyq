@@ -44,11 +44,11 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   11 the app's config-secret volume removed from the production compose file — rejected:
      `validate_config_secret_persistence` pins the mount, so the KEK cannot silently stop surviving a
      container recreate (the hole ADR 0056 § Consequences surfaced)
-  12 a fourth column referencing `veyq_blob`, declared in Kotlin and in a migration with its own foreign key —
-     rejected: `validate_blob_reference_arity` pins the arms by name (four since cr-files-application P3-S3), so an arm added without teaching
-     the predicates that enumerate them cannot land quietly. It is the one case here whose cost is *user
-     data*: a reclaim predicate short by one arm deletes live content, and the arm it would miss
-     (`veyq_node.cover_blob_id`) is the one with no foreign key to refuse
+  12 one more column referencing `veyq_blob`, declared in Kotlin and in a migration with its own foreign key —
+     rejected: `validate_blob_reference_arity` pins the arms by name (three since inbox #341 moved the cover onto
+     the attachment table), so an arm added without teaching the predicates that enumerate them cannot land
+     quietly. It is the one case here whose cost is *user data*: a reclaim predicate short by one arm deletes live
+     content wherever no foreign key refuses it (the cover column it was built for had none)
   13 a scheduled purge deleting store objects inline, under a receiver named something other than `blobStore`
      and typed with a fully-qualified name — rejected: `validate_store_reclaim_arity` keys on the declared
      type, not on one spelling. The shape is chosen because it is the one that got through: that guard's first

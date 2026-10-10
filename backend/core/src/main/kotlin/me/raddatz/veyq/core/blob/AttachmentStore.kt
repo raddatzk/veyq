@@ -113,6 +113,47 @@ class AttachmentStore(private val nodes: NodesStore, private val blobs: BlobUplo
         return AttachOutcome.Attached(blobId, expectedBlobId)
     }
 
+    /** What [detach] did. Only [Detached] wrote. */
+    enum class DetachOutcome {
+        /** The slot held the expected blob: the row is gone and the blob freed (row + reclaim record). */
+        Detached,
+
+        /** The slot is empty — never filled, detached before (a replay), or the node is not live in the scope. */
+        Empty,
+
+        /** The slot holds another blob than the expected one: a peer replaced it, and that replace freed the expected blob. */
+        Replaced,
+    }
+
+    /**
+     * Empty [slot] of [nodeId] — a live node of [scopeId] — only while it still holds [expectedBlobId] (ADR 0077: a
+     * write carries the version it read), freeing the blob in the same transaction ([BlobUploadStore.deleteBlobRow]).
+     * The application's own remove operation (Memories' `deleteCoverBlob`, inbox #341); the erasers empty slots with
+     * their node, not through here.
+     *
+     * Under the scope row's lock, as [attach] and both erasers take it first, so a peer's attach of this slot has
+     * committed and is seen, or waits. The compare is the delete's own predicate, never a read before it. A node that
+     * is not live answers [DetachOutcome.Empty] and frees nothing: a trashed node keeps its attachments for a restore,
+     * and the purge frees them (`AttachmentNodeSubtreeEraser`).
+     */
+    @Transactional
+    fun detach(scopeId: String, nodeId: String, slot: String, expectedBlobId: String): DetachOutcome {
+        require(SLOT.matches(slot)) { "a slot is an application's token ${SLOT.pattern}" }
+        nodes.lockScope(scopeId)
+        if (liveKind(scopeId, nodeId) == null) return DetachOutcome.Empty
+        val removed = NodeAttachmentEntity.delete(
+            "scopeId = ?1 and nodeId = ?2 and slot = ?3 and blobId = ?4", scopeId, nodeId, slot, expectedBlobId,
+        )
+        if (removed == 1L) {
+            blobs.deleteBlobRow(expectedBlobId)
+            return DetachOutcome.Detached
+        }
+        return if (currentBlobId(nodeId, slot) == null) DetachOutcome.Empty else DetachOutcome.Replaced
+    }
+
+    /** The blob in [slot] of [nodeId] now, or null — what a caller passes [attach] as the expected blob of a replace. */
+    fun slotBlobId(nodeId: String, slot: String): String? = currentBlobId(nodeId, slot)
+
     /** An insert, only while the slot is empty — read under the scope lock every writer of the table holds. */
     private fun insertIntoEmpty(scopeId: String, nodeId: String, slot: String, blobId: String, shareIdentityId: String?): Boolean {
         if (currentBlobId(nodeId, slot) != null) return false

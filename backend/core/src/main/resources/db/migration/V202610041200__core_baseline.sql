@@ -176,8 +176,8 @@ CREATE UNIQUE INDEX ux_membership_user_scope ON veyq_membership (user_id, scope_
 -- The node tree (ADR 0079: the platform's). parent_id is the parent node id, or the SCOPE id for a root node, so
 -- it is not a foreign key; slug uniqueness is per parent slot. ux_node_parent_slug spans trashed rows on
 -- purpose: a trash frees the slug by writing the node's own id into slug_token (ADR 0061), because neither
--- engine pair has a filtered index. cover_blob_id, cover_byte_size, media_revision and delete_revision serve
--- the Memories application today and stay here until they are generalised (ADR 0079 Consequences). Of this table's
+-- engine pair has a filtered index. No column here is an application's (inbox #341): a Memory's cover is an
+-- attachment (veyq_node_attachment, slot COVER) and its gallery counters are Memories' own table. Of this table's
 -- times only created_at keeps the millisecond (TIMESTAMP(3)): clients order equal-named siblings by it, then by id
 -- (ADR 0015).
 CREATE TABLE veyq_node (
@@ -191,11 +191,7 @@ CREATE TABLE veyq_node (
     wrapped_content_key     TEXT NOT NULL,
     created_at              TIMESTAMP(3) NOT NULL,
     wrapped_meta            TEXT NULL,
-    cover_blob_id           VARCHAR(36) NULL,
-    cover_byte_size         BIGINT NULL,
     epoch                   INT NOT NULL DEFAULT 0,
-    media_revision          INT NOT NULL DEFAULT 0,
-    delete_revision         INT NOT NULL DEFAULT 0,
     deleted_at              TIMESTAMP NULL,
     sealed_drop_private_key TEXT NULL,
     meta_version            BIGINT NOT NULL DEFAULT 0,
@@ -356,13 +352,14 @@ ALTER TABLE veyq_node ADD CONSTRAINT fk_node_share_identity FOREIGN KEY (share_i
 CREATE UNIQUE INDEX ux_node_parent_identity ON veyq_node (parent_id, share_identity_id);
 
 -- A sealed file on a node (ADR 0079 Consequences, cr-files-application P3): one blob per (node, slot). slot is a
--- token the owning application names (Files' FILE_CONTENT, equal to the blob role its wrap is sealed to); core
+-- token the owning application names (Files' FILE_CONTENT, Memories' COVER — each equal to the blob role its wrap is
+-- sealed to); core
 -- stores and compares it, never names one. share_identity_id is the guest identity that uploaded it, or null for a
 -- member. blob_id is unique: one blob row has exactly one reference, so freeing the attachment frees the blob.
 -- No foreign key here cascades, on purpose: a cascade would drop the row without BlobUploadStore.deleteBlobRow,
 -- leaving its blob row and store objects orphaned with no sweep to find them. The erasers delete these rows first
 -- (AttachmentNodeSubtreeEraser, AttachmentScopeEraser); a path that forgets is refused by the database, loudly.
--- fk_attachment_node is the first foreign key onto veyq_node. Keep blob_id on a line of its own:
+-- fk_attachment_node was the first foreign key onto veyq_node. Keep blob_id on a line of its own:
 -- scripts/validate_blob_reference_arity.py reads the column declaration line by line.
 CREATE TABLE veyq_node_attachment (
     id                VARCHAR(36) NOT NULL PRIMARY KEY,

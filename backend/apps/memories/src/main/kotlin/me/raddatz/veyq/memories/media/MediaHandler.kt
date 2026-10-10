@@ -1,5 +1,7 @@
 package me.raddatz.veyq.memories.media
 
+import me.raddatz.veyq.core.blob.AttachOutcome
+import me.raddatz.veyq.core.blob.AttachmentStore
 import me.raddatz.veyq.core.blob.BlobUploadHandler
 import me.raddatz.veyq.core.blob.BlobUploadHandler.BlobVerify
 import me.raddatz.veyq.core.blob.BlobUploadStore
@@ -214,12 +216,12 @@ class MediaHandler(
         // conditional-GET/delta — the trash isn't live-polled, so the ETag/since/id-set machinery doesn't apply.
         if (trashed) {
             val rows = store.listNodeTrashed(scopeId, nodeId)
+            val (mediaRevision, deleteRevision) = store.revisions(nodeId)
             return ListMediaOutcome.Page(
-                rows, node.mediaRevision, node.deleteRevision, null, node.sealedDropPrivateKey, store.uploaderKeys(rows),
+                rows, mediaRevision, deleteRevision, null, node.sealedDropPrivateKey, store.uploaderKeys(rows),
             )
         }
-        val mediaRevision = node.mediaRevision
-        val deleteRevision = node.deleteRevision
+        val (mediaRevision, deleteRevision) = store.revisions(nodeId)
         if (ifNoneMatch != null && ifNoneMatch == mediaRevision) return ListMediaOutcome.NotModified
         val rows = store.listNodeMediaSince(scopeId, nodeId, since)
         val mediaIds = if (sinceDelete < deleteRevision) store.listNodeMediaIds(scopeId, nodeId) else null
@@ -280,7 +282,7 @@ class MediaHandler(
     /**
      * Commit an uploaded blob as the node's **standalone cover** (cr-0073): resolve the node + session, run the
      * same declare-then-verify as `complete` (stat the stored objects against the byte budget, purge + fail on
-     * excess), then persist one `veyq_blob` + point the node's `cover_blob_id` at it, atomically reclaiming any
+     * excess), then persist one `veyq_blob` as the node's `COVER` attachment (inbox #341), atomically reclaiming any
      * prior cover blob (its row goes and its store objects are recorded for reclaim, in the same transaction). No `veyq_media` row — the cover never lists in the
      * gallery. Guards mirror `complete`: member gate (non-member → NoTarget/404), a kind that attaches no media → IllegalTarget/422.
      */
@@ -299,8 +301,18 @@ class MediaHandler(
                 return CoverCommitOutcome.Budget
             }
         }
-        // A concurrent commit of this upload spent the session first: answer as a replay of it does (the upload is gone).
-        return store.commitCover(node.id, session, manifest)?.let(CoverCommitOutcome::Ok) ?: CoverCommitOutcome.NoTarget
+        return when (val o = store.commitCover(scopeId, node.id, session, manifest)) {
+            is AttachOutcome.Attached -> CoverCommitOutcome.Ok(
+                BlobRefData(o.blobId, session.chunkCount, session.byteSize, session.wrappedBlobKey, manifest, session.wrappedBlobMeta),
+            )
+            // A concurrent commit of this upload spent the session first: answer as a replay of it does (the upload is
+            // gone). A node trashed since the gate above answers as an unknown one.
+            AttachOutcome.UploadNotFound, AttachOutcome.NodeNotFound -> CoverCommitOutcome.NoTarget
+            AttachOutcome.IllegalTarget -> CoverCommitOutcome.IllegalTarget
+            AttachOutcome.UploadMismatch -> CoverCommitOutcome.UploadMismatch
+            // The slot was read under the scope lock attach holds, and a member's commit passes no gate.
+            is AttachOutcome.Conflict, AttachOutcome.NotAdmitted -> error("a cover commit swaps the slot it read under the scope lock: $o")
+        }
     }
 
     /**
@@ -314,8 +326,8 @@ class MediaHandler(
             .refusal(CoverDeleteOutcome.NoTarget, CoverDeleteOutcome.Suspended, CoverDeleteOutcome.Deleting)?.let { return it }
         if (store.findNode(scopeId, nodeId) == null) return CoverDeleteOutcome.NoTarget
         return when (store.clearCover(scopeId, nodeId, expectedBlobId)) {
-            MediaStore.ClearCoverResult.CLEARED, MediaStore.ClearCoverResult.EMPTY -> CoverDeleteOutcome.Done
-            MediaStore.ClearCoverResult.REPLACED -> CoverDeleteOutcome.Replaced
+            AttachmentStore.DetachOutcome.Detached, AttachmentStore.DetachOutcome.Empty -> CoverDeleteOutcome.Done
+            AttachmentStore.DetachOutcome.Replaced -> CoverDeleteOutcome.Replaced
         }
     }
 

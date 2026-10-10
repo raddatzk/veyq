@@ -38,8 +38,9 @@ names a node kind an application owns (developer-styleguide § 1, ADR 0007's sha
   declared to core's member start through `MemberBlobRoles` (inbox #366).
   The lists are by hand (a token is a value, not a path): a new application adds its kinds and roles here — Files'
   sat out of them for its whole build until its harvest, and nothing turned red, because a missing entry guards nothing
-  silently. Core's
-  `cover_blob_id` slot is a column, not the role, and names none.
+  silently. A
+  Memory's cover is core's attachment slot `COVER` (inbox #341): the slot is the application's token, stored and
+  compared by core, never named in its code.
 
 **What it no longer asserts: core importing an application.** Until the Gradle module split it also held every
 non-Memories main file away from the `me.raddatz.veyq.memories` packages. That is the build's now: `:core` has no project

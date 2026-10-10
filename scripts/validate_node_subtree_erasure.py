@@ -19,11 +19,12 @@ At least one `NodeSubtreeEraser` implementation must exist at all; zero is red o
 and `validate_store_reclaim_arity` all stayed green, and `NodeSubtreePurge` would then delete the node rows with
 nothing erasing their media, derivative and bucket rows or reclaiming their blobs. Unlike the scope side, nothing
 at runtime refuses that: none of those tables has a foreign key onto `veyq_node`, so the orphans are silent — inbox
-#131, the defect the purge was built to close, back in one deleted file. The one foreign key onto `veyq_node` is
-core's attachment table's (`fk_attachment_node`, cr-files-application P3-S3, deliberately without a cascade: a
-cascade would drop the row without freeing its blob): an attachment the erasure misses makes the node delete — and
-with it the whole purge of that scope — fail loudly instead. That is a backstop for one table, not for the others,
-so this guard still holds every node-keyed table, that one included.
+#131, the defect the purge was built to close, back in one deleted file. Two tables have a foreign key onto
+`veyq_node`, both deliberately without a cascade: core's attachments (`fk_attachment_node`, cr-files-application
+P3-S3 — a cascade would drop the row without freeing its blob) and Memories' gallery counters
+(`fk_media_revision_node`, inbox #341): a row of either the erasure misses makes the node delete — and with it the
+whole purge of that scope — fail loudly instead. That is a backstop for those two tables, not for the others, so
+this guard still holds every node-keyed table, those included.
 
 **Its limit.** It reads **text, not a running purge**. (a) It proves each node-keyed entity is *named* by an
 eraser's `erase` body (everything after that file's first `override fun erase`), never that the delete is reached,
@@ -105,7 +106,7 @@ def main() -> int:
             "no class implementing `NodeSubtreeEraser` with an `override fun erase(` was found under backend main "
             "Kotlin. The media, bucket and item-favorite rows of an erased subtree are deleted by those; with none, "
             "NodeSubtreePurge deletes the node rows and leaves every row keyed on them orphaned — silently, as no "
-            "foreign key onto veyq_node guards them (only core's attachments have one)."
+            "foreign key onto veyq_node guards them (only core's attachments and Memories' gallery counters have one)."
         )
     deleted = set(ERASED_ENTITY.findall(bodies))
 

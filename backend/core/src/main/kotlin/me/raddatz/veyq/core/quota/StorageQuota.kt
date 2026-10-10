@@ -98,8 +98,8 @@ class StorageQuota(
      * [shareId]'s identities uploaded — in any node of any kind, trashed ones included (ADR 0073 §2). A replace moves
      * the row's identity with the blob (`AttachmentStore.attach`), so the term counts what the slot holds now, and
      * never the replaced blob, whose row is gone. No blob is in two arms (`ux_attachment_blob`; each arm's row is born
-     * with a fresh blob), so no application's term counts one of these too; a cover (`veyq_node.cover_blob_id`) is no
-     * attachment row and a member's.
+     * with a fresh blob), so no application's term counts one of these too. A member's attachment (a Memory's cover is
+     * one, inbox #341) names no identity, so no link's term counts it.
      */
     private fun linkAttachmentUsage(shareId: String): Long = sum(
         """

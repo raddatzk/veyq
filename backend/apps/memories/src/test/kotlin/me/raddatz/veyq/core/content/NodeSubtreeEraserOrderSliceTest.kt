@@ -58,9 +58,10 @@ class NodeSubtreeEraserOrderSliceTest {
             "the eraser set and its phases are the documented table",
         )
         assertEquals(erasers.size, erasers.map { it.phase }.toSet().size, "phases are distinct, so order never rests on a tie")
-        assertTrue(erasers.none { it.phase == NodeSubtreeEraser.COVER_BLOBS_PHASE }, "no eraser sits on core's own cover erase")
-        assertTrue(byName.getValue("MediaNodeSubtreeEraser") < NodeSubtreeEraser.COVER_BLOBS_PHASE, "media precedes the cover blobs, as the purge always ran it")
-        assertTrue(byName.getValue("AttachmentNodeSubtreeEraser") < NodeSubtreeEraser.COVER_BLOBS_PHASE, "attachments go with the other node-hung blobs, before the covers")
+        assertTrue(
+            byName.getValue("MediaNodeSubtreeEraser") < byName.getValue("AttachmentNodeSubtreeEraser"),
+            "media before core's attachments (a Memory's cover among them since inbox #341), as the purge always ran them",
+        )
     }
 
     @Test

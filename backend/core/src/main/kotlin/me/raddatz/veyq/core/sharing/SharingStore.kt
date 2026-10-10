@@ -70,7 +70,7 @@ data class ShareBlobRef(val storageKey: String, val chunkCount: Int)
  */
 @ApplicationScoped
 class SharingStore(
-    /** The blobs hung under a shared node beyond the cover (today: core's attachments, Memories' media + derivatives). Merged without order. */
+    /** The blobs hung under a shared node (today: core's attachments — a Memory's cover among them — and Memories' media + derivatives). Merged without order. */
     private val contributors: Instance<SharedSubtreeContributor>,
     /** What still names a guest identity (today: core's attachments, Memories' media + buckets). Combined with "any". */
     private val identityUsages: Instance<GuestIdentityUsage>,
@@ -128,7 +128,7 @@ class SharingStore(
      *  row lock that update holds, so a concurrent edit cannot slip a role change between the read and the
      *  tombstone. `ID_TAKEN`, nothing written, when [newId] was ever used — checked before the spend on purpose: a
      *  re-issue that deleted the old link and then failed would leave the curator with no link at all, believing
-     *  they had a new one. Never touches the Memory's drop key — a WRITE_ONLY re-issue seals to the one it already
+     *  they had a new one. Never touches the shared node's drop key — a WRITE_ONLY re-issue seals to the one it already
      *  has. */
     @Transactional
     fun reissue(
@@ -462,8 +462,9 @@ class SharingStore(
 
     /**
      * The blob (object-store prefix + chunk count) to presign for a viewer — **iff** [blobId] is attached under
-     * the shared subtree (an original/derivative media blob on a subtree node, or a subtree node's standalone
-     * cover blob). Null otherwise (→ a non-enumerable 404). A structural id check; no name or content is read.
+     * the shared subtree (an attachment on a subtree node — a Memory's cover is one — or an application's own arm,
+     * Memories' media and derivatives). Null otherwise (→ a non-enumerable 404). A structural id check; no name or
+     * content is read.
      */
     fun authorizedBlob(scopeId: String, rootNodeId: String, blobId: String): ShareBlobRef? {
         if (blobId !in subtreeBlobIds(scopeId, rootNodeId)) return null
@@ -471,7 +472,7 @@ class SharingStore(
         return ShareBlobRef(blob.storageKey, blob.chunkCount)
     }
 
-    /** Every blob id attached under the subtree: the contributors' (attachments, live media originals + derivatives) + node cover blobs. */
+    /** Every blob id attached under the subtree: the contributors' (attachments, live media originals + derivatives). */
     private fun subtreeBlobIds(scopeId: String, rootNodeId: String): Set<String> {
         val subtreeIds = collectSubtreeIds(scopeId, rootNodeId)
         // `deletedAt is null` — the sibling of [subtree]'s predicate, deliberately its OWN read (ADR 0061).
@@ -481,9 +482,8 @@ class SharingStore(
         if (liveNodes.isEmpty()) return emptySet() // the shared root itself is trashed
         val liveIds = liveNodes.map { it.id }
         val ids = HashSet<String>()
-        // The media + derivative arms are the contributors' (each with its own trashed-media predicate).
+        // Every arm is a contributor's (each with its own live predicate): core's attachments, an application's own.
         contributors.forEach { ids.addAll(it.authorizedBlobIds(scopeId, liveIds)) }
-        liveNodes.mapNotNull { it.coverBlobId }.forEach { ids.add(it) }
         return ids
     }
 

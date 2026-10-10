@@ -59,7 +59,7 @@ class NodeEntity : PanacheEntityBase {
     var wrappedMeta: String? = null
 
     /** How many times [wrappedMeta] was replaced (ADR 0077): 0 at birth, bumped only by the compare-and-set in
-     *  `NodesStore.applyUpdate`, which every meta write goes through. Not [mediaRevision], which every attach and trash also moves. */
+     *  `NodesStore.applyUpdate`, which every meta write goes through. Not Memories' gallery counter (`veyq_media_revision`), which every attach and trash also moves. */
     @Column(name = "meta_version", nullable = false)
     var metaVersion: Long = 0
 
@@ -85,27 +85,6 @@ class NodeEntity : PanacheEntityBase {
      *  still need the identity's key to open the entry, and `NodeGuestIdentityUsage` keeps the identity alive. */
     @Column(name = "share_identity_id", length = 36)
     var shareIdentityId: String? = null
-
-    /** The node's standalone **cover** blob id (cr-0073): a veyq_blob with NO veyq_media row (never in the gallery), or null. Opaque — the server never learns it is "the cover" (that stays in the sealed `wrappedMeta.cover`). */
-    @Column(name = "cover_blob_id", length = 36)
-    var coverBlobId: String? = null
-
-    /** The cover blob's ciphertext size in bytes (cr-0073), for the byte budget + retention; null when no cover blob. */
-    @Column(name = "cover_byte_size")
-    var coverByteSize: Long? = null
-
-    /** Live-updates change signal (cr-0107, ADR 0033): a monotonic per-node counter bumped by **every**
-     *  gallery-media mutation — attach, meta-edit, delete — but **not** a cover change. Doubles as the
-     *  `listNodeMedia` ETag; an unchanged poll is an O(1) compare → a 304 (no media query). */
-    @Column(name = "media_revision", nullable = false)
-    var mediaRevision: Int = 0
-
-    /** Live-updates delete gate (cr-0107, ADR 0033): bumped **only** by a delete — so a delete moves **both**
-     *  counters, an add/edit only [mediaRevision]. Gates the O(N) id-set delete-reconcile: the server returns
-     *  the current mediaId set only when a client's echoed value lags this. On the same row as [mediaRevision],
-     *  so one read is a consistent pair. */
-    @Column(name = "delete_revision", nullable = false)
-    var deleteRevision: Int = 0
 
     /** When this node was soft-deleted (uc.memory.delete-node, ADR 0061), or null while it is live. Set on the
      *  node **and every descendant** in one transaction; cleared by a restore. Every user- and guest-facing read

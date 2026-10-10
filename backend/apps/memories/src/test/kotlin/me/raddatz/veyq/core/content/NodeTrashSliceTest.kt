@@ -1,11 +1,13 @@
 package me.raddatz.veyq.core.content
 
 import me.raddatz.veyq.core.blob.BlobEntity
+import me.raddatz.veyq.core.blob.NodeAttachmentEntity
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.memories.itemfavorites.ItemFavoritesEntity
 import me.raddatz.veyq.memories.media.BucketEntity
 import me.raddatz.veyq.memories.media.MediaDerivativeEntity
 import me.raddatz.veyq.memories.media.MediaEntity
+import me.raddatz.veyq.memories.media.MediaRevisionEntity
 import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.TestIds
 import me.raddatz.veyq.core.blobstore.BlobStore
@@ -372,6 +374,10 @@ class NodeTrashSliceTest {
             assertTrue(BucketEntity.find("nodeId = ?1", memory).list().isEmpty()) { "bucket rows must be gone" }
             assertNull(BucketEntity.findById(subBucket)) { "the sub-bucket row must be gone" }
             assertNull(BlobEntity.findById(coverBlob)) { "the cover blob row must be gone" }
+            // inbox #341: the cover is the node's COVER attachment and the gallery counters Memories' own row — both
+            // name the node by a foreign key, so the node delete above would have been refused had either survived
+            assertEquals(0L, NodeAttachmentEntity.count("nodeId", memory), "the cover's attachment row must be gone")
+            assertNull(MediaRevisionEntity.findById(memory)) { "the purged node's gallery counters must be gone" }
             assertTrue(ItemFavoritesEntity.find("nodeId = ?1", memory).list().isEmpty()) {
                 "the purged subtree's item-favorite blobs must be gone"
             }
@@ -379,6 +385,7 @@ class NodeTrashSliceTest {
             // control: the in-window subtree is untouched on every arm
             assertNotNull(NodeEntity.findById(survivor)) { "a trashed subtree still inside the window must survive" }
             assertNotNull(MediaEntity.findById(freshMediaId)) { "its media must survive too" }
+            assertNotNull(MediaRevisionEntity.findById(survivor)) { "and its gallery counters" }
             assertTrue(ItemFavoritesEntity.find("nodeId = ?1", survivor).list().isNotEmpty()) {
                 "and its item favorites must survive — a restore inside the window hands the marks back"
             }

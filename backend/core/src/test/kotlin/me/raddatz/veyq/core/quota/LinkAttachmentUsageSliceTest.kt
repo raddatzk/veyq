@@ -74,27 +74,6 @@ class LinkAttachmentUsageSliceTest {
         assertEquals(APP_BYTES + s.byteSize, linkUsage(other), "the other link holds only its own")
     }
 
-    /**
-     * A member's cover (`veyq_node.cover_blob_id`) is no attachment row, so the attachment term never meets it — and no
-     * blob is in two arms (every arm's row is born with a fresh blob in the transaction that consumes its session;
-     * `ux_attachment_blob`), so the attachment term and an application's term cannot both count one blob.
-     */
-    @Test
-    fun aCoverIsNoAttachmentAndIsNotCounted() {
-        val f = fixture()
-        val target = node(f)
-        seedAttachment(f.scopeId, target, SLOT, shareIdentityId = f.guestId)
-        val cover = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            BlobEntity().apply {
-                id = cover; scopeId = f.scopeId; storageKey = UUID.randomUUID().toString().replace("-", "")
-                chunkCount = big.chunkCount; byteSize = big.byteSize; wrappedBlobKey = "Y292ZXI="
-            }.persist()
-            NodeEntity.findById(target)!!.coverBlobId = cover
-        }
-        assertEquals(APP_BYTES + s.byteSize, linkUsage(f.shareId))
-    }
-
     /** The exact boundary, with attachment bytes already held: an upload that exactly fits is admitted, one byte more is not. */
     @Test
     fun anUploadThatExactlyFitsIsAdmittedAndOneByteMoreIsNot() {

@@ -151,3 +151,32 @@ class BucketEntity : PanacheEntityBase {
 
     companion object : PanacheCompanionBase<BucketEntity, String>
 }
+
+/**
+ * A Memory's gallery counters (cr-0107, ADR 0033) — Memories' own row per node, two columns of core's `veyq_node`
+ * until inbox #341. **No row reads as 0/0**: the row is born by the node's first gallery mutation
+ * (`MediaStore.bumpMediaRevision`, under the node row's lock), and the node-subtree and scope erasers delete it before
+ * the node goes (`fk_media_revision_node`, no cascade). Opaque operational metadata — operator-blind.
+ */
+@Entity
+@Table(name = "veyq_media_revision")
+@DynamicUpdate
+class MediaRevisionEntity : PanacheEntityBase {
+    @Id
+    @Column(name = "node_id", length = 36)
+    lateinit var nodeId: String
+
+    /** Live-updates change signal: bumped by **every** gallery-media mutation — attach, meta-edit, trash, restore,
+     *  a guest's delete, a re-bucket — but **not** a cover change. Doubles as the `listNodeMedia` ETag; an unchanged
+     *  poll is an O(1) compare → a 304 (no media query). */
+    @Column(name = "media_revision", nullable = false)
+    var mediaRevision: Int = 0
+
+    /** Live-updates delete gate: bumped **only** by a removal — so a removal moves **both** counters, an add/edit only
+     *  [mediaRevision]. Gates the O(N) id-set delete-reconcile: the server returns the current mediaId set only when a
+     *  client's echoed value lags this. On the same row as [mediaRevision], so one read is a consistent pair. */
+    @Column(name = "delete_revision", nullable = false)
+    var deleteRevision: Int = 0
+
+    companion object : PanacheCompanionBase<MediaRevisionEntity, String>
+}

@@ -45,6 +45,7 @@ import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
+import me.raddatz.veyq.core.testing.TestFixtures.seedAttachment
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.TestFixtures.shareKeysJson
 import io.quarkus.arc.All
@@ -344,18 +345,8 @@ class CoreAloneSliceTest {
             .`when`().post("/api/shares")
             .then()
 
-    /** A blob in [scopeId] attached to [nodeId] as its cover — the arm of a share's blob gate that core owns. */
-    private fun seedCover(scopeId: String, nodeId: String): String {
-        val blobId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            BlobEntity().apply {
-                id = blobId; this.scopeId = scopeId; storageKey = UUID.randomUUID().toString().replace("-", "")
-                chunkCount = 1; byteSize = TestBlob.SMALL.byteSize; wrappedBlobKey = "d3JhcA=="
-            }.persist()
-            NodeEntity.findById(nodeId)!!.coverBlobId = blobId
-        }
-        return blobId
-    }
+    /** A blob in [scopeId] attached to [nodeId] — core's own arm of a share's blob gate (an application's cover is one). */
+    private fun seedCover(scopeId: String, nodeId: String): String = seedAttachment(scopeId, nodeId, "CORE_TEST").blobId
 
     private fun download(userId: String, scopeId: String, blobId: String) =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
