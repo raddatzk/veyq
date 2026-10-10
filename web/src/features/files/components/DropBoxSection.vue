@@ -2,13 +2,16 @@
 // The drop boxes of a folder level (cr-files-application F3): a row per `FILES_DROPBOX` child that opens it (its
 // `detail`, `DropBoxDetail.vue`), and a "New drop box" action (its `createDialog`). Files' file rows' markup (the
 // `veyq-list` rows of `FilesSection.vue`); hidden in map mode like the folders and the files. With none yet, it says
-// what a drop box is (inbox #385), as the files section says how to start.
+// what a drop box is (inbox #385), as the files section says how to start. The create action is Files' capability
+// matrix's (`../capabilities.ts`, inbox #401): not during a pending deletion, never in a guest's identity folder.
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import type { LevelSectionEmits, LevelSectionProps } from '../../../core/applications/registry'
 import { useViewMode } from '../../../shared/state/useViewMode'
 import { DROPBOX_KIND } from '../kinds'
+import { filesCapabilities } from '../capabilities'
+import { targetOf } from '../../../core/access'
 
 const props = defineProps<LevelSectionProps>()
 const emit = defineEmits<LevelSectionEmits>()
@@ -16,14 +19,17 @@ const { t } = useI18n()
 const { viewMode } = useViewMode()
 
 const boxes = computed(() => props.nodes.filter((n) => n.kind === DROPBOX_KIND))
+const caps = computed(() =>
+  filesCapabilities(props.access, targetOf(props.tree, props.folder)),
+)
 </script>
 
 <template>
-  <section v-if="viewMode !== 'map' && (boxes.length || !readonly)" class="veyq-section dropbox-section">
+  <section v-if="viewMode !== 'map' && (boxes.length || caps.createDropBox)" class="veyq-section dropbox-section">
     <div class="veyq-section-header">
       <h2>{{ t('files.dropBox.section') }}</h2>
       <span>{{ boxes.length }}</span>
-      <div v-if="!readonly" class="dropbox-toolbar">
+      <div v-if="caps.createDropBox" class="dropbox-toolbar">
         <Button
           type="button"
           :label="t('files.dropBox.create')"

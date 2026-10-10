@@ -26,7 +26,7 @@ import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 import { realI18n, t } from '../../../test/i18n'
 import { toggleFavorite } from '../favoritesStore'
-import { treeNode } from '../../../test/models'
+import { treeNode, memberAccessOf, memberTreeOf } from '../../../test/models'
 
 // A stub for the Leaflet map — captures the pins it received and re-emits `open` on demand.
 const SpaceMapStub = {
@@ -77,9 +77,14 @@ const folderOf = (label: string, name: string): TreeNode =>
   ({ ...node(label, FOLDER_KIND, name), id: uid(label), wrappedContentKey: wrapFor(uid(label), scopeKey, keyOf(label)) })
 const pinNames = (map: { props: (k: string) => unknown }) => (map.props('pins') as { node: TreeNode }[]).map((p) => p.node.name)
 
-const mountSection = (props: { folder?: TreeNode | null; nodes: TreeNode[]; epochs?: ReturnType<typeof epochsOf> | null; readonly?: boolean }) =>
+/** `pending`: the scope is pending deletion (the member's `access.readonly`). */
+const mountSection = ({ pending = false, ...props }: { folder?: TreeNode | null; nodes: TreeNode[]; epochs?: ReturnType<typeof epochsOf> | null; pending?: boolean }) =>
   mount(MemoriesSection, {
-    props: { folder: null, epochs: null, readonly: false, ...props },
+    props: {
+      folder: null, epochs: null, ...props,
+      access: memberAccessOf({ scopeId: SCOPE_ID, epochs: props.epochs ?? null, readonly: pending }),
+      tree: memberTreeOf(() => treeStore.nodes, { scopeId: SCOPE_ID, epochs: props.epochs ?? null }),
+    },
     global: { plugins: [realI18n()], directives: { tooltip: {} }, stubs: { SpaceMap: SpaceMapStub } },
   })
 
@@ -116,7 +121,7 @@ describe('MemoriesSection', () => {
   })
 
   it('read-only (a scope pending deletion): no create card, the cards stay', () => {
-    const wrapper = mountSection({ nodes: [node('m1', MEMORY_KIND, 'Solo')], readonly: true })
+    const wrapper = mountSection({ nodes: [node('m1', MEMORY_KIND, 'Solo')], pending: true })
     expect(wrapper.find('.memory-create-card-memory').exists()).toBe(false)
     expect(wrapper.text()).toContain('Solo')
   })

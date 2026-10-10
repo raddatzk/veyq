@@ -28,7 +28,8 @@ import { FOLDER_KIND, type NodeKind } from './kind'
 import type { TreeNode } from './tree'
 import { setViewMode } from '../../shared/state/useViewMode'
 import { realI18n, t } from '../../test/i18n'
-import { treeNode } from '../../test/models'
+import { treeNode, memberAccessOf, memberTreeOf } from '../../test/models'
+import type { Access, TreeSource } from '../access'
 
 /** A section stub: renders its name, what it was handed, and offers buttons for the three events. */
 function sectionStub(name: string) {
@@ -38,12 +39,16 @@ function sectionStub(name: string) {
       folder: { type: Object as PropType<TreeNode | null>, default: null },
       nodes: { type: Array as PropType<readonly TreeNode[]>, required: true },
       epochs: { type: Object, default: null },
-      readonly: { type: Boolean, required: true },
-      deletable: { type: Boolean, default: false },
+      access: { type: Object as PropType<Access>, required: true },
+      tree: { type: Object as PropType<TreeSource>, required: true },
     },
     emits: ['openNode', 'create', 'rename'],
     setup: (p, { emit }) => () =>
-      h('section', { class: 'stub-section', 'data-name': name, 'data-readonly': String(p.readonly), 'data-deletable': String(p.deletable), 'data-folder': p.folder?.name ?? '-' }, [
+      h('section', {
+        class: 'stub-section', 'data-name': name, 'data-folder': p.folder?.name ?? '-', 'data-mode': p.access.mode,
+        'data-readonly': String(p.access.mode === 'member' && p.access.readonly),
+        'data-identity': String(p.tree.inIdentityFolder(p.folder?.id ?? null)),
+      }, [
         h('span', { class: 'stub-nodes' }, p.nodes.map((n) => n.name).join(',')),
         h('button', { class: 'stub-open', onClick: () => emit('openNode', p.nodes[0]) }),
         h('button', { class: 'stub-create', onClick: () => emit('create', `create-${name}`) }),
@@ -59,15 +64,19 @@ function node(id: string, kind: NodeKind, parentId: string | null = null, orderI
 }
 
 const TRIPS = node('Trips', FOLDER_KIND)
+/** The level as a member sees it. `pending`: the scope is pending deletion (`access.readonly`); `identityFolder`: the folder
+ *  is a guest's identity folder (what the member's tree answers); `publicLinks`: the instance offers public links. */
 function mountLevel(
   tree: TreeNode[],
-  over: { folder?: TreeNode | null; readonly?: boolean; shareable?: boolean; hideEmptySections?: boolean; deletable?: boolean; folderName?: string } = {},
+  over: { folder?: TreeNode | null; pending?: boolean; identityFolder?: boolean; publicLinks?: boolean; folderName?: string } = {},
 ) {
   const folder = over.folder ?? null
+  const source = memberTreeOf(() => tree)
   return mount(LevelView, {
     props: {
-      folder, level: childrenOf(tree, folder?.id ?? null), epochs: null, readonly: over.readonly ?? false,
-      shareable: over.shareable ?? false, hideEmptySections: over.hideEmptySections, deletable: over.deletable,
+      folder, level: childrenOf(tree, folder?.id ?? null),
+      access: memberAccessOf({ readonly: over.pending ?? false, publicLinks: over.publicLinks ?? false }),
+      tree: { ...source, inIdentityFolder: () => over.identityFolder ?? false },
       folderName: over.folderName,
     },
     global: { plugins: [realI18n()], directives: { tooltip: {} } },
@@ -117,12 +126,15 @@ describe('LevelView: application sections', () => {
     expect(w.find('.stub-nodes').text()).toBe('')
   })
 
-  it('hands each section the folder, the read-only flag, and forwards its openNode, create and rename', async () => {
+  it('hands each section the folder, the access and the tree, and forwards its openNode, create and rename', async () => {
     reg().registerKind({ kind: 'ALPHA', icon: 'pi pi-a', shareable: false, section: { order: 10, component: A } })
     const a1 = node('a1', 'ALPHA', 'Trips')
-    const w = mountLevel([TRIPS, a1], { folder: TRIPS, readonly: true })
+    const w = mountLevel([TRIPS, a1], { folder: TRIPS, pending: true })
     expect(w.find('.stub-section').attributes('data-folder')).toBe('Trips')
+    expect(w.find('.stub-section').attributes('data-mode')).toBe('member')
     expect(w.find('.stub-section').attributes('data-readonly')).toBe('true')
+    expect(w.findComponent(A).props('access')).toBe(w.props('access'))
+    expect(w.findComponent(A).props('tree')).toBe(w.props('tree'))
     await w.find('.stub-open').trigger('click')
     await w.find('.stub-create').trigger('click')
     await w.find('.stub-rename').trigger('click')
@@ -134,17 +146,19 @@ describe('LevelView: application sections', () => {
   })
 })
 
-// Inbox #391: where nothing is placed (a guest's identity folder) a member still deletes — the host says so with
-// `deletable`; a section is handed it, `!readonly` everywhere else, and never during a pending deletion.
-describe('LevelView: deletable', () => {
+// Inbox #391/#401: where nothing is placed (a guest's identity folder) a member still deletes — what a section offers
+// there is its application's capability over the access and the tree it is handed; the level only passes them on.
+describe('LevelView: what a section learns about the folder', () => {
   beforeEach(() => reg().registerKind({ kind: 'ALPHA', icon: 'pi pi-a', shareable: false, section: { order: 10, component: A } }))
-  const handed = (over: { readonly: boolean; deletable?: boolean }) =>
-    mountLevel([TRIPS, node('a1', 'ALPHA', 'Trips')], { folder: TRIPS, ...over }).find('.stub-section').attributes('data-deletable')
+  const handed = (over: { pending?: boolean; identityFolder?: boolean }) => {
+    const s = mountLevel([TRIPS, node('a1', 'ALPHA', 'Trips')], { folder: TRIPS, ...over }).find('.stub-section')
+    return [s.attributes('data-readonly'), s.attributes('data-identity')]
+  }
 
-  it('hands a section `deletable` where the level writes, and where the host allows a delete only', () => {
-    expect(handed({ readonly: false })).toBe('true')
-    expect(handed({ readonly: true, deletable: true })).toBe('true')
-    expect(handed({ readonly: true })).toBe('false')
+  it('hands a section the pending deletion and the identity-folder answer apart, never folded into one flag', () => {
+    expect(handed({})).toEqual(['false', 'false'])
+    expect(handed({ identityFolder: true })).toEqual(['false', 'true'])
+    expect(handed({ pending: true })).toEqual(['true', 'false'])
   })
 })
 
@@ -218,16 +232,18 @@ describe('LevelView: the folders section', () => {
     expect(blocks(mountLevel([]))).toEqual([])
   })
 
-  it('read-only: no new-folder card, the folder cards stay', () => {
-    const w = mountLevel([TRIPS, node('Rome', FOLDER_KIND, 'Trips')], { folder: TRIPS, readonly: true })
-    expect(w.find('.veyq-level-grid .veyq-create-card').exists()).toBe(false)
-    expect(w.text()).toContain('Rome')
+  it('read-only (a pending deletion, a guest\'s identity folder): no new-folder card, the folder cards stay', () => {
+    for (const over of [{ pending: true }, { identityFolder: true }]) {
+      const w = mountLevel([TRIPS, node('Rome', FOLDER_KIND, 'Trips')], { folder: TRIPS, ...over })
+      expect(w.find('.veyq-level-grid .veyq-create-card').exists()).toBe(false)
+      expect(w.text()).toContain('Rome')
+    }
   })
 })
 
-// cr-node-key-hierarchy 5b.3 (moved from `MemoryBrowse.test.ts`): the folder overview card carries the share button the
-// host allows (FOLDER's descriptor AND the capability — `MemoryHomeView.test.ts` pins that half), with a Memory's icon
-// and label.
+// cr-node-key-hierarchy 5b.3 (moved from `MemoryBrowse.test.ts`): the folder overview card carries the share button
+// core's folder capabilities allow (the instance's public links, a folder, not a guest's identity folder), with a
+// Memory's icon and label.
 describe('LevelView: the folder overview card', () => {
   const shareButton = (w: ReturnType<typeof mountLevel>) => w.find(`button[aria-label="${t('share.share')}"]`)
 
@@ -242,15 +258,15 @@ describe('LevelView: the folder overview card', () => {
   })
 
   it('shows the share button on a shareable folder and emits share', async () => {
-    const w = mountLevel([TRIPS], { folder: TRIPS, shareable: true })
+    const w = mountLevel([TRIPS], { folder: TRIPS, publicLinks: true })
     expect(shareButton(w).exists()).toBe(true)
     expect(shareButton(w).find('.pi-share-alt').exists()).toBe(true)
     await shareButton(w).trigger('click')
     expect(w.emitted('share')).toHaveLength(1)
   })
 
-  it('shows none when the host says the folder is not shareable', () => {
-    const w = mountLevel([TRIPS], { folder: TRIPS, shareable: false })
+  it('shows none when the instance offers no public links', () => {
+    const w = mountLevel([TRIPS], { folder: TRIPS, publicLinks: false })
     expect(shareButton(w).exists()).toBe(false)
     expect(w.find(`button[aria-label="${t('node.rename')}"]`).exists(), 'control: the card actions render').toBe(true)
   })
@@ -267,7 +283,7 @@ describe('LevelView: the folder overview card', () => {
   // memory.css hid at 721–1120 px and ≤ 720 px — and this card has no overflow menu to offer them instead. jsdom has no
   // layout, so the contract pinned is the DOM one: no width-hiding class on any of them.
   it('keeps share, rename and delete free of any width-hiding class (the card has no overflow menu)', () => {
-    const w = mountLevel([TRIPS], { folder: TRIPS, shareable: true })
+    const w = mountLevel([TRIPS], { folder: TRIPS, publicLinks: true })
     const actions = w.findAll('.veyq-folder-overview-actions button')
     expect(actions.map((b) => b.attributes('aria-label'))).toEqual([t('share.share'), t('node.rename'), t('node.delete')])
     for (const b of actions) {
@@ -277,9 +293,16 @@ describe('LevelView: the folder overview card', () => {
   })
 
   it('keeps the share (a read of the links) but no rename/delete during a pending deletion', () => {
-    const w = mountLevel([TRIPS], { folder: TRIPS, shareable: true, readonly: true })
+    const w = mountLevel([TRIPS], { folder: TRIPS, publicLinks: true, pending: true })
     expect(shareButton(w).exists()).toBe(true)
     expect(w.find(`button[aria-label="${t('node.rename')}"]`).exists()).toBe(false)
+  })
+
+  // A guest's identity folder (inbox #385): a member looks, downloads and deletes there — the folder itself offers no
+  // share, rename or delete, and the card has no action row at all.
+  it('offers no action on a guest\'s identity folder', () => {
+    const w = mountLevel([TRIPS], { folder: TRIPS, publicLinks: true, identityFolder: true })
+    expect(w.find('.veyq-folder-overview-actions').exists()).toBe(false)
   })
 })
 
@@ -298,27 +321,28 @@ describe('LevelView: the toolbar', () => {
   })
 
   it('has none where nothing is written (a pending deletion, a guest\'s folder)', () => {
-    expect(mountLevel([], { readonly: true }).find('.veyq-level-toolbar').exists()).toBe(false)
+    expect(mountLevel([], { pending: true }).find('.veyq-level-toolbar').exists()).toBe(false)
+    expect(mountLevel([TRIPS], { folder: TRIPS, identityFolder: true }).find('.veyq-level-toolbar').exists()).toBe(false)
   })
 })
 
-// inbox #385 (b): a guest's folder in a drop box (the host's `hideEmptySections`) shows only what is there.
-describe('LevelView: hideEmptySections', () => {
+// inbox #385 (b): a guest's folder in a drop box (the tree's `inIdentityFolder`) shows only what is there.
+describe('LevelView: a guest\'s identity folder hides empty sections', () => {
   beforeEach(() => {
     reg().registerKind({ kind: 'ALPHA', icon: 'pi pi-a', shareable: false, section: { order: 10, component: A } })
     reg().registerKind({ kind: 'BETA', icon: 'pi pi-b', shareable: false, section: { order: 20, component: B } })
   })
 
   it('leaves out every section and the folders section with nothing to show', () => {
-    const w = mountLevel([TRIPS, node('b1', 'BETA', 'Trips')], { folder: TRIPS, readonly: true, hideEmptySections: true })
+    const w = mountLevel([TRIPS, node('b1', 'BETA', 'Trips')], { folder: TRIPS, identityFolder: true })
     expect(blocks(w)).toEqual(['overview', 'section:b'])
-    // control: without the flag every section shows, empty or not
-    expect(blocks(mountLevel([TRIPS, node('b1', 'BETA', 'Trips')], { folder: TRIPS, readonly: true }))).toEqual(['overview', 'section:a', 'section:b', 'folders'])
+    // control: read-only for another reason (a pending deletion), every section shows, empty or not
+    expect(blocks(mountLevel([TRIPS, node('b1', 'BETA', 'Trips')], { folder: TRIPS, pending: true }))).toEqual(['overview', 'section:a', 'section:b', 'folders'])
   })
 
   it('keeps a section or the folders that have something, and says once when nothing is left', () => {
     const rome = node('Rome', FOLDER_KIND, 'Trips')
-    expect(blocks(mountLevel([TRIPS, rome], { folder: TRIPS, readonly: true, hideEmptySections: true }))).toEqual(['overview', 'folders'])
-    expect(blocks(mountLevel([TRIPS], { folder: TRIPS, readonly: true, hideEmptySections: true }))).toEqual(['overview', `empty:${t('node.levelEmpty')}`])
+    expect(blocks(mountLevel([TRIPS, rome], { folder: TRIPS, identityFolder: true }))).toEqual(['overview', 'folders'])
+    expect(blocks(mountLevel([TRIPS], { folder: TRIPS, identityFolder: true }))).toEqual(['overview', `empty:${t('node.levelEmpty')}`])
   })
 })

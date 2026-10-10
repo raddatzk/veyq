@@ -266,6 +266,37 @@ on their own.
   nothing, and nothing turns red), not typed, and no compiler lists the kinds: the registry's fail-closed answer and its tests carry what a closed enum's exhaustiveness
   did.
   Docs describing the target say which of these they rely on.
+- **One view per kind, for a member and a share guest alike** (owner principle 2026-10-09, inbox #401). A share
+  view looks exactly like the member view; a link's role only removes functions. So the registry's contract does not
+  know which of the two is looking:
+  - A kind's `detail` and `section` receive `access` — who looks: a member of the unlocked scope (its epoch keys,
+    whether it is pending deletion, the instance's sharing capabilities) or a guest of a link (its role, the resolved
+    share, the password token, core's one naming flow) — and `tree`, the tree as that session reads it: the member's
+    decrypted scope tree or the guest's opened subtree, every navigation through its `linkTo`, so a guest's link keeps
+    its `#k=` fragment. Core mounts them in **both** modes: the share page runs its gates, builds the guest's access and
+    tree, and renders core's level view or the kind's `detail` exactly as the member host does.
+  - What a view offers is its application's **capability function**: pure and fail-closed — every right false unless
+    granted, an unknown mode, role or kind grants nothing — the role matrix of
+    [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) decision 6 in code, written down
+    in its `docs/apps/<application>.md`; core has its own for `FOLDER`. A right holds only where the matrix allows it
+    **and** the session's data source implements the operation: a guest's source simply lacks the member's operations,
+    so a function it does not have cannot appear. Member-only state — pins under the Master Key, item marks under `K_SC`
+    at `E_0`, a node's sealed meta, the scope's member list — is granted to no guest role.
+  - `shareSection` is retired (a kind's section serves the guest's folder page too), and `claimShareBody` narrows to the
+    one page with no member equivalent: a `WRITE_ONLY` link's drop, whose guest holds no key and so has nothing to
+    render the member's way. The guest-only shell stays core's: the password and terms gates, one naming flow with
+    "Not you?", the curator's note, the role badge.
+
+  Rejected: a capabilities object that defaults to allowed, with the operations as optional props that fall back to the
+  member's calls — the legacy plaintext client's design; a forgotten prop there calls the member API from a share page.
+  **Built** (S1 of #401): `web/src/core/access.ts` (`Access`, `TreeSource`, the member's factories, `targetOf`,
+  `folderCapabilities`), `memoryCapabilities` and `filesCapabilities`; the member host hands `access` and `tree` to
+  every detail and section, whose controls read the capabilities (the matrix half — the source half arrives with each
+  source). **Open, in this order, each green before the next:** S2 the guest's tree source and core's level view on the
+  share page (`FolderShareBody` shrinks to building the guest's context, breadcrumb, note and badge; one core naming
+  component); S3 Files' views serve guests (`ShareFilesSection` deleted, `DropBoxDetail` absorbs `DropBoxSharedView`,
+  `shareSection` removed from the registry); S4 Memories' data source, the member's and the guest's; S5 `MemoryDetail`
+  for guests (`MemoryShareBody` reduced to the drop; a contributor uploads into the chapter it navigated to).
 - **Guards move with the code, and the build is one of them.** On the backend, core → application is the
   compiler's (no edge, so no import) and every other direction is `validate_backend_module_graph.py`'s — including
   application → application, held between Memories and Files and bitten with a forged third application; inside core,

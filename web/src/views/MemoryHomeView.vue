@@ -8,6 +8,11 @@
 // create and every node's rename are core's own `core/node/FolderNameDialog.vue`; FOLDER's share dialog is core's
 // `core/sharing/FolderShareDialog.vue`, which the registry pre-registers. The folder level is core's
 // (`core/node/LevelView.vue`), which asks the registry for each application's section.
+//
+// **Who looks** (inbox #401, `core/access.ts`): the host builds the member's `Access` (the scope, its epoch keys, its
+// pending deletion, the instance's sharing capabilities) and its `TreeSource` (the decrypted tree, fragment links) and
+// hands both to the level view and to an opened node's detail. What a view offers is its application's capability
+// function over them; the host decides no control itself.
 import { computed, ref, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -22,7 +27,7 @@ import { listMyTenants } from '../features/spaces/scopes'
 import { FOLDER_KIND, type NodeKind } from '../core/node/kind'
 import { ScopeKind, type MyTenant } from '../api/generated/scopes'
 import { useCapabilities } from '../shared/state/useCapabilities'
-import { SHARING_PUBLIC_LINKS } from '../features/platform/capabilities'
+import { SHARING_PUBLIC_LINKS, SHARING_UPLOADER_LINKS } from '../features/platform/capabilities'
 import type { TreeNode } from '../core/node/tree'
 import Message from 'primevue/message'
 import DeleteNodeDialog from '../core/node/components/DeleteNodeDialog.vue'
@@ -30,6 +35,7 @@ import SpaceTrashDialog from '../core/node/components/SpaceTrashDialog.vue'
 import FolderNameDialog from '../core/node/FolderNameDialog.vue'
 import LevelView from '../core/node/LevelView.vue'
 import { registry } from '../core/applications/registry'
+import { memberAccess, memberTreeSource } from '../core/access'
 import TrustResetLink from '../features/account/trustReset/TrustResetLink.vue'
 
 const route = useRoute()
@@ -40,15 +46,6 @@ const { hasCapability } = useCapabilities()
 // Pending-deletion (cr-0090): the active GROUP is being deleted — the shell shows a banner and the browse hides
 // its create affordances (every write is server-rejected during the grace window anyway, uc.spaces.scope-access).
 const isPendingDeletion = computed(() => activeSpace.deletedAt !== null)
-// A guest's identity folder in a drop box, or a folder below one (ADR 0080 decision 11, `TreeNode.shareIdentityId`): a
-// member places nothing there (the server refuses it), so its level is read-only — download, and delete (`deletable`: a
-// member removes a guest's file singly, inbox #391, or its whole folder from the drop box, the application's detail; a
-// move out is the server's, not offered here yet, inbox #358). It
-// offers no share and leaves out its empty sections (inbox #385): a guest's folder is looked at, not built on.
-const inIdentityFolder = computed(() => {
-  for (let n = currentNode.value; n; n = nodeById(treeStore.nodes, n.parentId)) if (n.shareIdentityId) return true
-  return false
-})
 const pendingPurgeDay = computed(() =>
   activeSpace.purgeAfter ? new Date(activeSpace.purgeAfter).toLocaleDateString(locale.value) : '',
 )
@@ -98,14 +95,33 @@ const shareDialog = computed(() => {
   const info = registry.kind(currentNode.value.kind)
   return info.supported ? (info.shareDialog ?? null) : null
 })
-// Public-share affordance: offered for a node whose kind descriptor says it is shareable AND brings a share dialog, in a
-// scope the caller is a member of — personal, group, or tenant (cr-0104; the backend refuses a share root of a kind no
-// application declares). Also gated on the `sharing.public-links` capability (ADR 0032): an operator can turn public
-// sharing off instance-wide, in which case the affordance is hidden entirely (and the server rejects createShare with 422).
-const shareable = computed(() => {
-  if (!hasCapability(SHARING_PUBLIC_LINKS) || !currentNode.value) return false
+// A share dialog opens only for a node whose kind descriptor says it is shareable AND brings a share dialog (cr-0104; the
+// backend refuses a share root of a kind no application declares). Whether the share BUTTON shows is the capability
+// function's (the `sharing.public-links` capability, ADR 0032: an operator can turn public sharing off instance-wide,
+// and the server then rejects createShare with 422); this is the host's second gate on what it mounts.
+const kindShareable = computed(() => {
+  if (!currentNode.value) return false
   const info = registry.kind(currentNode.value.kind)
   return info.supported && info.shareable && !!shareDialog.value
+})
+
+// Who looks: the member (see the header). A pending deletion (cr-0090) takes every write away — the server refuses them
+// during the grace window (uc.spaces.scope-access); a guest's identity folder in a drop box (ADR 0080 decision 11,
+// `TreeNode.shareIdentityId`) takes placement away, which the capability functions read from the tree.
+const access = computed(() =>
+  memberAccess({
+    scopeId: activeSpace.scopeId ?? '',
+    epochs: epochs.value,
+    readonly: isPendingDeletion.value,
+    publicLinks: hasCapability(SHARING_PUBLIC_LINKS),
+    uploaderLinks: hasCapability(SHARING_UPLOADER_LINKS),
+  }),
+)
+const tree = memberTreeSource({
+  nodes: () => treeStore.nodes,
+  scopeId: () => activeSpace.scopeId,
+  epochs: () => epochs.value,
+  scope: () => currentScope.value,
 })
 const shareVisible = ref(false)
 const uploaderVisible = ref(false) // the uploader (drop-box) variant of the same dialog — a separate detail action
@@ -234,7 +250,8 @@ async function onDeleteDone() {
         :epochs="epochs"
         :content-key="memoryKey"
         :children="level"
-        :shareable="shareable"
+        :access="access"
+        :tree="tree"
         @rename="startRename(currentNode)"
         @delete="startDelete(currentNode)"
         @create-child="startCreate"
@@ -247,12 +264,9 @@ async function onDeleteDone() {
         v-else
         :folder="currentFolder"
         :level="level"
-        :epochs="epochs"
-        :readonly="isPendingDeletion || inIdentityFolder"
-        :deletable="!isPendingDeletion"
+        :access="access"
+        :tree="tree"
         :folder-name="currentFolderName"
-        :shareable="shareable && !inIdentityFolder"
-        :hide-empty-sections="inIdentityFolder"
         @open-node="openNode"
         @create="startCreate"
         @rename-folder="currentFolder && startRename(currentFolder)"
@@ -302,7 +316,7 @@ async function onDeleteDone() {
     />
     <component
       :is="shareDialog"
-      v-if="shareDialog && shareVisible && currentNode && currentNodeKey && epochs && activeSpace.scopeId"
+      v-if="shareDialog && kindShareable && shareVisible && currentNode && currentNodeKey && epochs && activeSpace.scopeId"
       :scope-id="activeSpace.scopeId"
       :node-id="currentNode.id"
       :node-key="currentNodeKey"
@@ -315,7 +329,7 @@ async function onDeleteDone() {
          a folder's level view never asks for it (no WRITE_ONLY link on a folder). -->
     <component
       :is="shareDialog"
-      v-if="shareDialog && uploaderVisible && currentNode && currentNodeKey && epochs && activeSpace.scopeId"
+      v-if="shareDialog && kindShareable && uploaderVisible && currentNode && currentNodeKey && epochs && activeSpace.scopeId"
       uploader
       :scope-id="activeSpace.scopeId"
       :node-id="currentNode.id"

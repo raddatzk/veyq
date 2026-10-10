@@ -114,6 +114,30 @@ upload, delete-own, rename, create and move cells are tested (`SubtreeUploadSlic
 2026-10-07). **UNVERIFIED by a test** (read from the code only): a folder guest's create of a chapter directly under a folder answering `illegal_structure`
 (`FolderGuestNodeRules` allows, `MemoryNodeKindRules` refuses); a `READ` ↔ `READ_WRITE` flip on a folder link.
 
+### What the web offers — the capability matrix
+
+One view per kind serves a member and a guest ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)
+Consequences, inbox #401); what it shows is `memoryCapabilities(access, target)` (`web/src/features/memory/capabilities.ts`,
+pinned row by row in `capabilities.test.ts`): pure, every right false unless a row grants it, an unknown role or kind
+grants nothing. On an opened `MEMORY` or `CHAPTER` (the detail):
+
+| Right | member | member, scope pending deletion | `READ` | `READ_WRITE` | `WRITE_ONLY` |
+|---|---|---|---|---|---|
+| navigate (Chapters tab), download | ✓ | ✓ | ✓ | ✓ | ✗ |
+| upload into the node on screen | ✓ | ✗ | ✗ | ✓ | ✓ |
+| delete media | any (trash) | ✗ | ✗ | own (purge) | own (purge) |
+| create a chapter | ✓ on a `MEMORY` only | ✗ | ✗ | ✗ | ✗ |
+| date, place, cover (the node's sealed meta; the automatic reconcile too) | ✓ | ✗ | ✗ | ✗ | ✗ |
+| rename, delete the node | ✓ | ✗ | ✗ | ✗ | ✗ |
+| pin, item marks, media trash, contributions organizer | ✓ | ✓ | ✗ | ✗ | ✗ |
+| share (and the uploader link) | the instance's public (and uploader) links | the same | ✗ | ✗ | ✗ |
+
+At a folder level (Memories' section): a member creates a Memory (not during a pending deletion, never in a guest's
+identity folder) and pins; a `READ_WRITE` guest of a folder link creates a Memory there; every role that reads opens
+one. A share right also needs the kind's descriptor to bring a share dialog (`targetOf`, core's). These are the matrix
+half; a right shows only where the session's data source also implements it (ADR 0079), so the guest's columns are the
+most a guest page can ever offer.
+
 ## How far it is separated
 
 Measured 2026-10-05 (`ls backend/core/src/main/kotlin/me/raddatz/veyq/core backend/apps/memories/src/main/kotlin/me/raddatz/veyq/memories`):

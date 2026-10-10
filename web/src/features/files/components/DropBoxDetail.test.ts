@@ -23,7 +23,7 @@ import { slugPathOf } from '../../../core/node/location'
 import { confirmRequest, settleConfirm } from '../../../shared/state/useConfirm'
 import { DROPBOX_KIND, FILE_KIND } from '../kinds'
 import { realI18n } from '../../../test/i18n'
-import { treeNode } from '../../../test/models'
+import { treeNode, memberAccessOf, memberTreeOf } from '../../../test/models'
 
 const SCOPE = '11111111-1111-4111-8111-111111111111'
 const node = (id: string, kind: string, name: string, parentId: string | null, over: Partial<TreeNode> = {}): TreeNode => treeNode({
@@ -35,9 +35,13 @@ const ANNA_1 = node('a2000000-0000-4000-8000-000000000000', FOLDER_KIND, 'Anna',
 const ANNA_2 = node('a1000000-0000-4000-8000-000000000000', FOLDER_KIND, 'Anna', BOX.id, { shareIdentityId: 'i2', createdAt: 2_000 })
 const BEN = node('c0000000-0000-4000-8000-000000000000', FOLDER_KIND, 'Ben', BOX.id, { shareIdentityId: 'i3', createdAt: 3_000 })
 
-function mountDetail(shareable = true) {
+/** `publicLinks`: the instance offers public links (the share button's capability). */
+function mountDetail(publicLinks = true) {
   return mount(DropBoxDetail, {
-    props: { node: BOX, scopeId: SCOPE, epochs: null, contentKey: null, children: { byKind: {}, folders: [] } as unknown as NodeDetailProps["children"], shareable },
+    props: {
+      node: BOX, scopeId: SCOPE, epochs: null, contentKey: null, children: { byKind: {}, folders: [] } as unknown as NodeDetailProps["children"],
+      access: memberAccessOf({ scopeId: SCOPE, publicLinks }), tree: memberTreeOf(() => treeStore.nodes, { scopeId: SCOPE }),
+    },
     global: { plugins: [realI18n()] },
   })
 }

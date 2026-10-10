@@ -120,6 +120,22 @@ A `FILE` is **no share root** (Files declares no `ShareRoots`): a file is shared
 | `READ_WRITE` | the above; create a `FILE` under a folder of the subtree (core's `createShareNode`; core's `FolderGuestNodeRules` lets any kind `NodeKindRules` admits into a folder); upload into a file below the root, first or replacing its blob (any file below the root, a member's too); rename or move it (core's `updateShareNode`) |
 | any | **not** delete a file (nodes store no authorship), **not** upload into a `FOLDER` |
 
+**What the web offers.** One view per kind serves a member and a guest (ADR 0079 Consequences, inbox #401): what it
+shows is `filesCapabilities(access, target)` (`web/src/features/files/capabilities.ts`, pinned row by row in
+`capabilities.test.ts`) — pure, every right false unless a row grants it, an unknown role or kind grants nothing:
+
+| Right | member | member, pending deletion | member, guest's identity folder | `READ` | `READ_WRITE` | `WRITE_ONLY` |
+|---|---|---|---|---|---|---|
+| download (a folder's files; a drop box's guests' folders) | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ |
+| upload, replace | ✓ | ✗ | ✗ | ✗ | ✓ (not in an identity folder, not in a drop box below the link) | ✓ on its own drop box only |
+| rename a file | ✓ | ✗ | ✗ | ✗ | ✗ (the server allows it; offered nowhere yet, inbox #358) | ✗ |
+| delete a file, a guest's folder | ✓ | ✗ | ✓ (inbox #391) | ✗ | ✗ | ✗ |
+| create a drop box | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| a drop box's links, delete it | links with the instance's public links; delete ✓ | links only | — | ✗ | ✗ | ✗ |
+
+These are the matrix half; a right shows only where the session's data source also implements it, so the guest's
+columns are the most a guest page can ever offer.
+
 - **The contract** (tag `share-files` in `files.openapi.yaml`, no auth, behind core's `ShareGuestGate`):
   `listShareFiles` — `GET /api/shares/{shareId}/files`: `{items: [{nodeId, fileBlob|null}]}` for every live `FILE` of
   the live shared subtree (a `WRITE_ONLY` link: empty), each blob with its `wrappedBlobMeta`, names and keys coming

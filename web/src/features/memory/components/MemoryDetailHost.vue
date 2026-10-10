@@ -1,8 +1,9 @@
 <script setup lang="ts">
 // The Memories application's adapter between the host's generic node-detail context (core/applications/registry:
-// `NodeDetailProps`) and the props/events `MemoryDetail` already takes (ADR 0079). `MemoryDetail` itself is not
-// edited: everything Memories-shaped the shell used to pass — the pin (favorite) state, the item-mark key, the
-// personal-scope flag, the chapters bucket, the meta patch — is resolved here, inside the application.
+// `NodeDetailProps`) and the props/events `MemoryDetail` takes (ADR 0079): everything Memories-shaped — the pin
+// (favorite) state, the item-mark key, the personal-scope flag, the chapters bucket, the meta patch — is resolved here,
+// inside the application, and so are the CAPABILITIES (inbox #401): Memories' own fail-closed matrix over the host's
+// `access` and the opened node (`../capabilities.ts`), which is all `MemoryDetail` reads to show or hide a control.
 import { computed } from 'vue'
 import type { NodeDetailProps, NodeDetailEmits } from '../../../core/applications/registry'
 import { CHAPTER_KIND } from '../kinds'
@@ -10,12 +11,15 @@ import { activeSpace, activeEpochKeys } from '../../../app/activeSpace'
 import { isFavorite, toggleFavorite } from '../favoritesStore'
 import { patchNodeMeta } from '../../../core/node/treeStore'
 import { keyAt } from '../../spaces/epochs'
+import { memoryCapabilities } from '../capabilities'
+import { targetOf } from '../../../core/access'
 import MemoryDetail from './MemoryDetail.vue'
 
 const props = defineProps<NodeDetailProps>()
 const emit = defineEmits<NodeDetailEmits>()
 
 const chapters = computed(() => props.children.byKind.get(CHAPTER_KIND) ?? [])
+const caps = computed(() => memoryCapabilities(props.access, targetOf(props.tree, props.node)))
 
 // Item marks seal under `K_SC` at the **base epoch `E_0`** (ADR 0068), never under `activeScopeKey()`, which is
 // the *write* key `E_current`: the marked set is re-sealed whole on every toggle, so a rotation would strand it.
@@ -41,7 +45,7 @@ function onToggleFavorite() {
     :personal-scope="activeSpace.kind === 'PERSONAL'"
     :favorite="isFavorite(node.id)"
     :chapters="chapters"
-    :shareable="shareable"
+    :caps="caps"
     @toggle-favorite="onToggleFavorite"
     @rename="emit('rename')"
     @delete="emit('delete')"

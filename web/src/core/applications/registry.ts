@@ -37,7 +37,12 @@
 // as a card, and a kind that brings a share section has its children rendered by THAT component instead (props
 // `ShareSectionProps`) — Files' file list with its download and a contributor's upload. The same rules as the level
 // sections: keyed by component, sorted by `order`, rendered at every folder (an empty one too), a contradicting `order`
-// throws. A kind without one keeps its card, which opens the body its application claimed (below).
+// throws. A kind without one keeps its card, which opens the body its application claimed (below). Being retired (ADR
+// 0079 Consequences, inbox #401 S3): a kind's `section` serves the guest's folder page too, handed a guest's `access`.
+//
+// **Who looks (`core/access.ts`).** A `detail` and a `section` are handed `access` (a member, or from S2 a share guest)
+// and `tree` (the tree as that session reads it), and offer what their application's fail-closed capability function
+// answers for them — one view per kind in both modes, never a flag the host decides.
 //
 // **List slots (`addSlotItem`).** The top-bar tray and the sidebar pins are places where several applications each add
 // their own entry, so they are ordered lists: an item is registered under an id (namespaced by its application, e.g.
@@ -74,6 +79,7 @@ import type { EpochKeys } from '../../features/spaces/epochs'
 import type { PublicShareHead } from '../sharing/resolvePublicShare'
 import type { GuestIdentity } from '../sharing/guestIdentity'
 import type { ShareNode } from '../../api/generated/sharing'
+import type { Access, TreeSource } from '../access'
 import { slugify } from '../../shared/naming'
 
 // The platform's own share dialog for a FOLDER (cr-node-key-hierarchy 5b.3), FOLDER's `shareDialog` since P4c. LAZY for
@@ -159,7 +165,8 @@ export interface LevelSection {
 export type KindLookup = ({ supported: true } & KindDescriptor) | { supported: false; kind: NodeKind }
 
 /** The generic context the host hands the `detail` component of an opened node (event names below). The
- *  application's own host component maps it to whatever its detail view takes. */
+ *  application's own host component maps it to whatever its detail view takes. What the detail offers is its
+ *  application's capability function over `access` and the node (`core/access.ts`), never a flag the host decides. */
 export interface NodeDetailProps {
   node: TreeNode
   scopeId: string
@@ -168,8 +175,11 @@ export interface NodeDetailProps {
   contentKey: Uint8Array | null
   /** The opened node's children, bucketed by kind (`byKind`). */
   children: Level
-  /** Whether a public share may be offered for this node: the kind's descriptor AND the instance capability. */
-  shareable: boolean
+  /** Who looks: a member of the scope (its pending deletion, the instance's sharing capabilities) — a share guest from
+   *  S2 of inbox #401 on. */
+  access: Access
+  /** The tree as that session reads it: keys, names, the identity-folder test and the links every navigation takes. */
+  tree: TreeSource
 }
 /** Events a `detail` component emits to the host: `rename` (core's `FolderNameDialog`, any kind), `delete`,
  *  `createChild` (the KIND of the child to create: the host mounts that kind's `createDialog` under the opened node),
@@ -184,16 +194,17 @@ export interface NodeDetailEmits {
 }
 
 /** What the folder level view (`core/node/LevelView.vue`) hands an application's section: the folder (or the scope
- *  root, `folder` null) and the children of every kind that names the section, the scope's epoch keys, and whether
- *  the scope is read-only (pending deletion: no create action). */
+ *  root, `folder` null) and the children of every kind that names the section, the scope's epoch keys (null for a
+ *  guest, whose keys come through `tree`), who looks (`access`) and the tree as that session reads it. What the section
+ *  offers is its application's capability function over `access` and the folder (`core/access.ts`): no write during a
+ *  pending deletion, no placement in a guest's identity folder — where a member still deletes what a guest sent
+ *  (inbox #391). */
 export interface LevelSectionProps {
   folder: TreeNode | null
   nodes: readonly TreeNode[]
   epochs: EpochKeys | null
-  readonly: boolean
-  /** A child may still be deleted into the trash where nothing is placed (`readonly` true): inside a guest's identity
-   *  folder, where a member only looks, downloads and deletes (inbox #391). Omitted: `!readonly`. */
-  deletable?: boolean
+  access: Access
+  tree: TreeSource
 }
 /** Events a section emits to the level view: `openNode` (a child), `create` (the KIND to create at this level, e.g.
  *  Memories' MEMORY: the host mounts that kind's `createDialog`), `rename` (a child renamed in place, for a kind that
