@@ -4,9 +4,9 @@ import me.raddatz.veyq.core.node.NodeSubtreeEraser
 import jakarta.enterprise.context.ApplicationScoped
 
 /**
- * The attachments of an erased node subtree, and their blobs. Phase 200: below `NodeSubtreeEraser.COVER_BLOBS_PHASE`,
- * and in any case before `NodeSubtreePurge` deletes the node rows, which `fk_attachment_node` refuses while an
- * attachment still names one (the only foreign key onto `veyq_node`, deliberately without a cascade).
+ * The attachments of an erased node subtree — a Memory's cover among them (inbox #341) — and their blobs. Phase 200,
+ * before `NodeSubtreePurge` deletes the node rows, which `fk_attachment_node` refuses while an attachment still names
+ * one (deliberately without a cascade).
  *
  * - The guest identities are read FIRST, while the rows still name them; the caller drops the ones nothing
  *   references any more (`AttachmentGuestIdentityUsage` answers for this table).

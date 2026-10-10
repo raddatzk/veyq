@@ -42,7 +42,9 @@ class NodesSliceTest {
     fun aRenameOverlappingAMediaAddKeepsTheMediaRevision() {
         // The rename reads the Memory before a media add's revision bump commits and flushes after it. A full-row
         // UPDATE wrote the older `mediaRevision` back: the live-updates signal stepped backwards, and a client whose
-        // last seen revision was the restored one missed the add (uc.memory.live-updates, inbox #224).
+        // last seen revision was the restored one missed the add (uc.memory.live-updates, inbox #224). Since inbox #341
+        // the counter is no column of the node row at all (Memories' veyq_media_revision), so a node write cannot reach
+        // it; this keeps the observable pinned across that move.
         repeat(RACE_ROUNDS) { round ->
             val (_, scopeId) = seedMemberScope()
             val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
@@ -53,7 +55,7 @@ class NodesSliceTest {
             )
             QuarkusTransaction.requiringNew().run {
                 val node = NodeEntity.findById(memory)!!
-                assertEquals(1, node.mediaRevision, "round $round: the rename rolled the media revision back")
+                assertEquals(1, media.revisions(memory).first, "round $round: the rename rolled the media revision back")
                 // Control: the rename itself landed.
                 assertEquals(renamed, node.encryptedName, "round $round")
             }

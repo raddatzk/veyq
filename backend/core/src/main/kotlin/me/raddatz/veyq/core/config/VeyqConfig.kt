@@ -19,7 +19,13 @@ import java.util.Optional
  *
  * The `*.purge.every` / `*.reconcile.every` intervals are consumed by the sibling `@Scheduled(every = "{…}")`
  * beans as raw property expressions (a `@Scheduled` string cannot read a mapping), but they are declared here too
- * so this interface stays the complete inventory of `veyq.*`.
+ * so this interface stays the complete inventory of core's `veyq.*`.
+ *
+ * Core's only: an application's own keys are its own mapping in its own module, under a prefix of its own below
+ * `veyq` (Memories' `veyq.media.*`, `MemoriesMediaConfig`; inbox #342), never a member of this interface — core
+ * reading one would be core naming an application (ADR 0079). Its defaults are its mapping's `@WithDefault`s, not
+ * lines in `:core`'s `application.properties`: SmallRye refuses a `veyq.*` key no mapping claims (SRCFG00050), so
+ * such a line would fail core's boot without the application (`:core`'s tests).
  */
 @ConfigMapping(prefix = "veyq")
 interface VeyqConfig {
@@ -32,7 +38,6 @@ interface VeyqConfig {
     fun emailConfirmation(): EmailConfirmation
     fun pairing(): Pairing
     fun scope(): Scope
-    fun media(): Media
     fun node(): Node
     fun blob(): Blob
     fun blobStore(): BlobStore
@@ -328,38 +333,10 @@ interface VeyqConfig {
         }
     }
 
-    interface Media {
-        fun trash(): Trash
-        fun upload(): Upload
-
-        interface Trash {
-            /** Trashed-media restorable window before the hard purge. */
-            @WithDefault("P30D")
-            fun retention(): Duration
-
-            fun purge(): Interval
-        }
-
-        interface Upload {
-            /** How long an OPEN upload session is kept after its **last issued window** before the sweep reclaims
-             *  its row + staged chunk objects. Deliberately far shorter than the trash/scope/invite windows, and the
-             *  floor is **measured, not chosen**: every window's presigned PUTs are signed under
-             *  `veyq.blob-store.presign-ttl-seconds`, so a session with no new window past that TTL can receive no
-             *  further byte. What this buffers is only a PUT that started inside the TTL and is still streaming —
-             *  one 256 KiB chunk. **Also the reclaim list's not-before** (`StoreReclaimStore.record`, ADR 0062
-             *  Decision 1): it carries the same meaning there, so lowering it below the TTL breaks both —
-             *  `BlobStoreStartupCheck` refuses to start on a value that does not exceed the TTL. */
-            @WithDefault("PT1H")
-            fun retention(): Duration
-
-            fun purge(): Interval
-        }
-    }
-
     /** `veyq.store-reclaim.*` — the single store-object deleter (ADR 0062). */
     interface StoreReclaim {
         /** How often the sweep drains the reclaim list. With the not-before it is the **latency the design
-         *  accepts**: bytes linger up to `veyq.media.upload.retention` plus one interval after the rows that named
+         *  accepts**: bytes linger up to `veyq.blob.upload.retention` plus one interval after the rows that named
          *  them are gone, because a recorded key waits until no PUT signed for it can still land (Decision 1). */
         fun sweep(): Interval
 
@@ -395,6 +372,24 @@ interface VeyqConfig {
          */
         @WithDefault("64")
         fun presignWindow(): Int
+
+        fun upload(): Upload
+
+        /** `veyq.blob.upload.*` — core's upload sessions (ADR 0013); named `veyq.media.upload.*` until inbox #342. */
+        interface Upload {
+            /** How long an OPEN upload session is kept after its **last issued window** before the sweep reclaims
+             *  its row + staged chunk objects. Deliberately far shorter than the trash/scope/invite windows, and the
+             *  floor is **measured, not chosen**: every window's presigned PUTs are signed under
+             *  `veyq.blob-store.presign-ttl-seconds`, so a session with no new window past that TTL can receive no
+             *  further byte. What this buffers is only a PUT that started inside the TTL and is still streaming —
+             *  one 256 KiB chunk. **Also the reclaim list's not-before** (`StoreReclaimStore.record`, ADR 0062
+             *  Decision 1): it carries the same meaning there, so lowering it below the TTL breaks both —
+             *  `BlobStoreStartupCheck` refuses to start on a value that does not exceed the TTL. */
+            @WithDefault("PT1H")
+            fun retention(): Duration
+
+            fun purge(): Interval
+        }
     }
 
     interface BlobStore {

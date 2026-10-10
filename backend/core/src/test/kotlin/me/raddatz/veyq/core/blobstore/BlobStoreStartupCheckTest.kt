@@ -69,7 +69,7 @@ class BlobStoreStartupCheckTest {
         for (retention in listOf(Duration.ofSeconds(600), Duration.ofMinutes(5))) {
             val refusal = BlobStoreStartupCheck.retentionRefusal(retention, 600)
             assertNotNull(refusal, "refused: $retention")
-            assertTrue(refusal!!.contains("veyq.media.upload.retention=$retention"), refusal)
+            assertTrue(refusal!!.contains("veyq.blob.upload.retention=$retention"), refusal)
             assertTrue(refusal.contains("veyq.blob-store.presign-ttl-seconds=600"), refusal)
         }
     }

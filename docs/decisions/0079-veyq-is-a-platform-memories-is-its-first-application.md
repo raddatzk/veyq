@@ -123,9 +123,9 @@ on their own.
   structure, attachments and guests, and the user interface. `READ`/`READ_WRITE`/`WRITE_ONLY` are the wire values
   (`ShareRole`, renamed from `VIEWER`/`CONTRIBUTOR`/`UPLOADER` on 2026-10-06).
   Attachments are core's since cr-files-application P3 (`veyq_node_attachment`, written only by
-  `AttachmentStore.attach`), and Files is the first application on them (a `FILE` holds one blob in its slot); what a
-  verified upload becomes is still each application's (`UploadCompletion`), Memories' media keep their own tables, and
-  Memories' cover and revision columns still sit on `veyq_node`. Files, the second application, needed them and
+  `AttachmentStore`), and Files is the first application on them (a `FILE` holds one blob in its slot), Memories'
+  cover the second (its `COVER` slot, inbox #341); what a verified upload becomes is still each application's
+  (`UploadCompletion`), and Memories' media and gallery counters keep their own tables. Files, the second application, needed them and
   nothing else of a blob's; whether every application does, the next one shows. Files is an application on core's
   attachments, never a dependency of another application (Decision 4: an application depends on core only).
 - **Contracts by owner** (decided 2026-10-06, cr-platform-contract-split). A core spec describes what core does.
@@ -237,16 +237,21 @@ on their own.
   through core alone — while the root's `ModuleCompositionTest` pins the composed sets. `:core`'s test sources hold
   one stand-in, `CoreTestMemberBlobRoles` (the roles core's own upload tests start in), which `CoreAloneSliceTest`
   excludes.
-  **What core still knows of Memories**, each a decision a later change takes, not an oversight (the decided
-  targets are the bullets above): `veyq_node` carries Memories-flavoured columns in core's baseline (`cover_blob_id`,
-  `cover_byte_size`, `media_revision`, `delete_revision` — moving a column is a schema change, not a rename);
-  and the upload retention
-  and purge keys keep their `veyq.media.*` names though core reads them.
-  **Open for the next application** (inbox #341): the generalisation of the cover columns and revision counters
-  above. Built with Files (cr-files-application P3): core's `veyq_node_attachment` (one blob per node slot, the slot
+  **Core's schema and config name no Memories concept** (inbox #341, #342, 2026-10-10): a Memory's uploaded cover is
+  the node's `COVER` attachment (below), its gallery counters (`media_revision`, `delete_revision`, ADR 0033) are
+  Memories' own `veyq_media_revision` row per node (a foreign key onto `veyq_node`, not cascading, erased by
+  Memories' node-subtree and scope erasers; the node's first gallery change births it under the node row's lock),
+  and the never-read `cover_byte_size` is gone (a blob's size is its row's). Core's upload-session keys are
+  `veyq.blob.upload.*`; Memories' trash keys keep `veyq.media.trash.*` under its own `@ConfigMapping`
+  (`MemoriesMediaConfig`), whose `@WithDefault`s are their only defaults — SmallRye refuses a `veyq.*` key no
+  mapping claims, so a line in core's base config would fail core's boot without Memories. The drop key
+  (`veyq_node.sealed_drop_private_key`) stays core's: Files' drop box and Memories' uploader links both seal to it.
+  Core's attachments, built with Files (cr-files-application P3): `veyq_node_attachment` (one blob per node slot, the slot
   being the application's role token; foreign keys to scope, node, blob and guest identity, none cascading, so a
-  row goes only through core's erasers and `deleteBlobRow`), written only by `AttachmentStore.attach` and counted as
-  core's own term of a link's usage — `validate_blob_reference_arity` pins its fourth `veyq_blob` arm; and `BlobRole`,
+  row goes only through core's erasers and `deleteBlobRow`), written only by `AttachmentStore` (`attach`, and
+  `detach` for an application's own remove — Memories' `deleteCoverBlob`) and counted as
+  core's own term of a link's usage — `validate_blob_reference_arity` pins the `veyq_blob` arms, all three foreign-key
+  backed since the cover column left; and `BlobRole`,
   an open token (`^[A-Z][A-Z0-9_]{0,15}$`, like `NodeKind`) in the contract's `_common` and in the crypto package,
   core stores and compares it and names none (`validate_kernel_imports_no_slices.py` reads Memories' four roles
   as it reads its kinds), and Memories holds its own (`MemoryBlobRoles`, `MemoryBlobRole`) and refuses a guest's

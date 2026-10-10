@@ -23,7 +23,7 @@ import org.hibernate.annotations.DynamicUpdate
  *
  * This row is the **only** pointer to its `storage_key`, so nothing else can find the chunks a client staged
  * under it — reclaiming it and reclaiming those objects is one job, and it is [UploadSessionPurge]'s
- * (`veyq.media.upload.retention`). This KDoc is the live statement of the rule.
+ * (`veyq.blob.upload.retention`). This KDoc is the live statement of the rule.
  */
 @Entity
 @Table(name = "veyq_upload_session")

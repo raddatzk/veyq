@@ -21,7 +21,6 @@ acceptanceCriteria:
           - ShareLinkStorageLimitSliceTest.aMembersUploadIntoTheSameMemoryDoesNotCount
           - ShareLinkStorageLimitSliceTest.anUploaderLinkIsBoundedToo
           - LinkAttachmentUsageSliceTest.aLinksUsageCountsItsIdentitiesAttachmentsAndNoOtherLinksNorAMembers
-          - LinkAttachmentUsageSliceTest.aCoverIsNoAttachmentAndIsNotCounted
           - LinkAttachmentUsageSliceTest.aReplaceCountsTheNewBlobAndNoLongerTheOld
           - LinkAttachmentUsageSliceTest.aPurgedAttachmentNoLongerCounts
           - LinkUsageTermsSliceTest.aMemoryLinksMediaAndAttachmentsAddWithoutOverlap

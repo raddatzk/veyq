@@ -1,34 +1,34 @@
 #!/usr/bin/env python3
 """Guard the number of places that reference a `veyq_blob` row — and that the one predicate over them sees all of them (ADR 0013).
 
-**What it asserts.** Exactly **four arms** point at a blob row, and this pins each by name from four
+**What it asserts.** Exactly **three arms** point at a blob row, and this pins each by name from four
 independent keys:
 
-  - *entity* — the Kotlin `@Column` declarations: `NodeEntity.cover_blob_id`, `MediaEntity.blob_id`,
-    `MediaDerivativeEntity.blob_id`, `NodeAttachmentEntity.blob_id`.
-  - *schema* — the SQL declarations of the same four columns, keyed `<table>.<column>` by the statement that
+  - *entity* — the Kotlin `@Column` declarations: `MediaEntity.blob_id`, `MediaDerivativeEntity.blob_id`,
+    `NodeAttachmentEntity.blob_id`.
+  - *schema* — the SQL declarations of the same three columns, keyed `<table>.<column>` by the statement that
     declares them (`CREATE TABLE` body or `ALTER TABLE … ADD COLUMN`): `veyq_media.blob_id`,
-    `veyq_media_derivative.blob_id`, `veyq_node.cover_blob_id`, `veyq_node_attachment.blob_id`. Keyed on the table,
-    not the migration file: one baseline declares several tables, so a file key would fold two arms into one name and
-    stop telling them apart. A column is read on its own line, so a declaration must keep `blob_id VARCHAR` there.
-  - *backstop* — which of those arms a foreign key refuses to orphan: **three**, `veyq_media.fk_media_blob`,
+    `veyq_media_derivative.blob_id`, `veyq_node_attachment.blob_id`. Keyed on the table, not the migration file: one
+    baseline declares several tables, so a file key would fold two arms into one name and stop telling them apart. A
+    column is read on its own line, so a declaration must keep `blob_id VARCHAR` there.
+  - *backstop* — which of those arms a foreign key refuses to orphan: **all three**, `veyq_media.fk_media_blob`,
     `veyq_media_derivative.fk_derivative_blob` and `veyq_node_attachment.fk_attachment_blob`. This one is asserted
     by name deliberately. An arm *gaining* a foreign key is a real change in what the database guarantees, and it
     should turn this guard red and be recorded, not land silently as an improvement nobody notices — the attachment
     arm was recorded so (cr-files-application P3-S3), born with its key.
-  - *live twin* — that `SharingStore.subtreeBlobIds` (the cover arm) plus every `SharedSubtreeContributor.authorizedBlobIds`
-    (the media and derivative arms in Memories' contributor, the attachment arm in core's) enumerate all four.
+  - *live twin* — that `SharingStore.subtreeBlobIds` plus every `SharedSubtreeContributor.authorizedBlobIds` (the
+    media and derivative arms in Memories' contributor, the attachment arm in core's) enumerate all three.
 
 The first three keys pin how many arms **exist**. Only the fourth pins that the predicate already running over
 them in production **enumerates** them — and that is the one carrying the invariant, because the three
-declaration keys are completely unmoved by dropping the cover arm from the consumer.
+declaration keys are completely unmoved by dropping an arm from the consumer.
 
-The gap between the schema key and the backstop key is the whole reason this exists, and it names the arm:
-`veyq_node.cover_blob_id` is a plain nullable column with **no foreign key**, where the media, derivative and
-attachment arms have one. So of the four arms, the database will refuse to orphan three and silently permit the
-fourth — and that one is a standalone cover, user content, reclaimed irreversibly. Any reclaim predicate over
-`veyq_blob` that enumerates fewer arms than exist deletes live data, and only three quarters of the way is it
-stopped by anything but the code being right.
+The gap between the schema key and the backstop key is the reason this was built, and it named an arm that is gone:
+`veyq_node.cover_blob_id`, a plain nullable column with **no foreign key**, which the database silently let orphan a
+standalone cover — user content, reclaimed irreversibly. Since inbox #341 a Memory's cover is a `COVER` attachment
+(`veyq_node_attachment`), so every arm today is foreign-key backed, and a new arm *without* one is exactly what the
+backstop key turns red. Any reclaim predicate over `veyq_blob` that enumerates fewer arms than exist still deletes
+live data where a key does not refuse it, so the arity stays pinned.
 
 **The defect that bought it.** No incident — nothing has shipped a reclaim job. It was built with
 cr-blob-reference-arity-guard, whose refinement set out to *build* the long-promised sweep over blob rows
@@ -94,12 +94,10 @@ EXPECTED_ENTITY_ARMS = [
     "MediaDerivativeEntity.blob_id",
     "MediaEntity.blob_id",
     "NodeAttachmentEntity.blob_id",
-    "NodeEntity.cover_blob_id",
 ]
 EXPECTED_SCHEMA_ARMS = [
     "veyq_media.blob_id",
     "veyq_media_derivative.blob_id",
-    "veyq_node.cover_blob_id",
     "veyq_node_attachment.blob_id",
 ]
 EXPECTED_FK_ARMS = [
@@ -117,9 +115,10 @@ EXPECTED_FK_ARMS = [
 NOT_REFERENCE_ENTITY = ["UploadSessionEntity.blob_id"]
 NOT_REFERENCE_SCHEMA = ["veyq_upload_session.blob_id"]
 
-# The four arms as the live twin spells them in its bodies. Each is the accessor that arm is READ by, so removing the
-# arm removes the marker. The attachment arm is core's own contributor (`AttachmentSharedSubtreeContributor`), and
-# its marker is the entity it reads: that contributor is the only body that names it.
+# The three arms as the live twin spells them in its bodies. Each is the accessor that arm is READ by, so removing the
+# arm removes the marker. The attachment arm (a Memory's cover among its rows, inbox #341) is core's own contributor
+# (`AttachmentSharedSubtreeContributor`), and its marker is the entity it reads: that contributor is the only body
+# that names it.
 LIVE_TWIN_FN = "fun subtreeBlobIds"
 # Where the media, derivative and attachment arms live: every implementation of the interface,
 # found by its declaration, contributes its `authorizedBlobIds` body to the live twin.
@@ -129,7 +128,6 @@ EXPECTED_LIVE_TWIN_ARMS = {
     "attachment": "NodeAttachmentEntity",
     "media": "ids.add(m.blobId)",
     "derivative": "MediaDerivativeEntity",
-    "cover": "coverBlobId",
 }
 
 
@@ -222,7 +220,7 @@ def compare(key: str, expected: list[str], actual: list[str], errors: list[str])
         return
     for extra in sorted(set(actual) - set(expected)):
         errors.append(
-            f"{key}: unexpected reference arm `{extra}`. A fourth place referencing veyq_blob means every "
+            f"{key}: unexpected reference arm `{extra}`. One more place referencing veyq_blob means every "
             f"reclaim predicate over blob rows is now short by one arm — including "
             f"SharingStore.subtreeBlobIds. Teach the consumers first, then add it here."
         )

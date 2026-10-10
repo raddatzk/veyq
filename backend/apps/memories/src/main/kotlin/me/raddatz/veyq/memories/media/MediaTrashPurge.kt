@@ -1,6 +1,5 @@
 package me.raddatz.veyq.memories.media
 
-import me.raddatz.veyq.core.config.VeyqConfig
 import io.quarkus.scheduler.Scheduled
 import jakarta.enterprise.context.ApplicationScoped
 import java.time.Duration
@@ -24,9 +23,9 @@ import java.time.Instant
 @ApplicationScoped
 class MediaTrashPurge(
     private val store: MediaStore,
-    config: VeyqConfig,
+    config: MemoriesMediaConfig,
 ) {
-    private val retention: Duration = config.media().trash().retention()
+    private val retention: Duration = config.trash().retention()
 
     @Scheduled(every = "{veyq.media.trash.purge.every}")
     fun run() {

@@ -1,6 +1,6 @@
 -- The Memories application's schema as one baseline (ADR 0079). It sorts after the core baseline and its foreign
--- keys point at core tables (veyq_scope, veyq_blob) or at Memories tables created before them in this file; no
--- core table references a table created here. Same type rules as the core baseline: TEXT for opaque base64,
+-- keys point at core tables (veyq_scope, veyq_node, veyq_blob) or at Memories tables created before them in this
+-- file; no core table references a table created here. Same type rules as the core baseline: TEXT for opaque base64,
 -- MEDIUMTEXT where a contract cap passes the 65 535-byte TEXT ceiling (scripts/validate_maxlength_storage.py).
 -- Operator-blind: names, dates, places, EXIF and favorites are sealed under keys the server never holds.
 
@@ -35,7 +35,7 @@ CREATE INDEX ix_bucket_parent ON veyq_bucket (parent_bucket_id);
 -- media are reclaimed by code). updated_at is the keyset cursor's sort key and TIMESTAMP(3) on purpose: the
 -- cursor round-trips through a JS Date, which holds milliseconds, so a finer stored value would read as later
 -- than the echoed cursor and be re-fetched forever. meta_version is wrapped_meta's compare-and-set counter
--- (ADR 0077) and deliberately not the node's media_revision. ix_media_share_identity keeps a link's usage sum,
+-- (ADR 0077) and deliberately not the node's veyq_media_revision. ix_media_share_identity keeps a link's usage sum,
 -- taken under the tenant lock, off a table scan (ADR 0073).
 CREATE TABLE veyq_media (
     id                VARCHAR(36) NOT NULL PRIMARY KEY,
@@ -72,6 +72,18 @@ CREATE TABLE veyq_media_derivative (
     CONSTRAINT fk_derivative_blob FOREIGN KEY (blob_id) REFERENCES veyq_blob (id)
 );
 CREATE INDEX ix_derivative_media ON veyq_media_derivative (media_id);
+
+-- A Memory's gallery counters (ADR 0033), one row per node whose gallery ever changed — until inbox #341 two columns
+-- of veyq_node. media_revision moves on every gallery mutation and is the listing's ETag; delete_revision only on a
+-- removal, gating the id-set reconcile. One row, so one read is a consistent pair. No row reads as 0/0, as the
+-- columns' default did; the first bump inserts it under the node row's lock (MediaStore.bumpMediaRevision).
+-- fk_media_revision_node is not cascading: the node-subtree and scope erasers delete the row before the node goes.
+CREATE TABLE veyq_media_revision (
+    node_id         VARCHAR(36) NOT NULL PRIMARY KEY,
+    media_revision  INT NOT NULL,
+    delete_revision INT NOT NULL,
+    CONSTRAINT fk_media_revision_node FOREIGN KEY (node_id) REFERENCES veyq_node (id)
+);
 
 -- Per-(member, scope, node) item favorites (ADR 0068), one synthetic id `userId|scopeId|nodeId`. The scope FK is
 -- load-bearing: it puts the table in the erasure closure (scripts/validate_scope_erasure_arity.py). node_id has

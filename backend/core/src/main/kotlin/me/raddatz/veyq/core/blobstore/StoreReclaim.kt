@@ -105,7 +105,7 @@ class StoreReclaimStore {
     lateinit var config: VeyqConfig
 
     /**
-     * How long a recorded key waits before the sweep may delete its objects: `veyq.media.upload.retention`, the
+     * How long a recorded key waits before the sweep may delete its objects: `veyq.blob.upload.retention`, the
      * bound that already reads "after this, no PUT signed for a key can still land" (presign TTL plus one chunk
      * still streaming). **Not a second knob on purpose** — one would have to be kept at least this large by hand.
      *
@@ -116,7 +116,7 @@ class StoreReclaimStore {
      * row, no reclaim row and no quota names. The wait is sufficient because no URL for a key is signed after its
      * row drop: a window is signed only for a live upload session.
      */
-    private val notBefore: Duration get() = config.media().upload().retention()
+    private val notBefore: Duration get() = config.blob().upload().retention()
 
     /** Put [refs] on the reclaim list, **joining the caller's transaction**. Empty input is a no-op. */
     @Transactional(Transactional.TxType.MANDATORY)

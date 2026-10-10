@@ -52,7 +52,7 @@ Who pays for the store differs by deployment. Today there is one store connectio
      quota.
    - **Not counted:**
      - Reclaim tombstones. They carry no scope by design (ADR 0062 §6), so they cannot be attributed, and the
-       sweep's lag bounds them: a recorded key waits out `veyq.media.upload.retention`, so no signed PUT can
+       sweep's lag bounds them: a recorded key waits out `veyq.blob.upload.retention`, so no signed PUT can
        re-create its bytes after the sweep, then goes on the next tick (ADR 0062 Decision 1).
      - Material kept in the database: icons, share notes, job results, identity pins. It is not in the store, and
        the contract bounds each field.
@@ -121,7 +121,7 @@ Who pays for the store differs by deployment. Today there is one store connectio
   maintained counter is the fallback only against a *measured* cost, and it would come with a reconciliation
   against the SUM.
 - **Reservations from failed or abandoned sessions hold until the stale-session purge.** That runs
-  `veyq.media.upload.retention` after the last window. A client that abandons uploads therefore blocks its own
+  `veyq.blob.upload.retention` after the last window. A client that abandons uploads therefore blocks its own
   link for a while. This is accepted: the rule is conservative and heals itself.
 - **Limits can be overbooked.** A lowered limit deletes nothing; it refuses the next `start`. The link limits of
   one tenant may add up to more than its quota. First come, first served, and the quota still holds.

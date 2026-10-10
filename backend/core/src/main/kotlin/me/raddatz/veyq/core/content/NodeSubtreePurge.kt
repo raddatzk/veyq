@@ -1,11 +1,8 @@
 package me.raddatz.veyq.core.content
 
-import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.node.NodeSubtreeEraser
 import me.raddatz.veyq.core.sharing.SharingStore
-import me.raddatz.veyq.core.blobstore.StoreObjectRef
-import me.raddatz.veyq.core.blobstore.StoreReclaimStore
 import me.raddatz.veyq.core.config.VeyqConfig
 import me.raddatz.veyq.core.scope.ScopeEntity
 import io.quarkus.arc.All
@@ -49,15 +46,12 @@ import org.jboss.logging.Logger
 @ApplicationScoped
 class NodeSubtreePurge(
     private val sharing: SharingStore,
-    private val reclaim: StoreReclaimStore,
     config: VeyqConfig,
     // MutableList, not List: ArC rejects kotlin List with @All (see ScopePurge).
     @All erasers: MutableList<NodeSubtreeEraser>,
 ) {
-    // Sorted by the explicit phase, never by bean order; split once at core's own cover-blob erase (NodeSubtreeEraser).
+    // Sorted by the explicit phase, never by bean order (NodeSubtreeEraser).
     private val sorted = erasers.sortedBy { it.phase }
-    private val beforeCovers = sorted.filter { it.phase < NodeSubtreeEraser.COVER_BLOBS_PHASE }
-    private val afterCovers = sorted.filter { it.phase > NodeSubtreeEraser.COVER_BLOBS_PHASE }
 
     private val log = Logger.getLogger(NodeSubtreePurge::class.java)
     private val retention: Duration = config.node().trash().retention()
@@ -98,24 +92,13 @@ class NodeSubtreePurge(
         if (expired.isEmpty()) return
         val nodeIds = expired.map { it.id }
 
-        // Phases below COVER_BLOBS_PHASE: the applications' rows whose blobs must go before the covers (Memories' locks,
-        // buckets, and blobs through its FK-ordered body). Each returns the guest identities its rows named, read while they still did; the last
-        // step drops the ones nothing references any more.
+        // Every eraser in phase order: the application rows hanging off the nodes (their own locks, their blobs through
+        //    their FK-ordered bodies) and core's attachments — a Memory's cover among them since inbox #341, so its
+        //    blob is still reclaimed here, at the purge, never at the trash (a restore gets its cover back). Each
+        //    returns the guest identities its rows named, read while they still did; the last step drops the ones
+        //    nothing references any more.
         val guests = HashSet<String>()
-        beforeCovers.forEach { guests += it.erase(scopeId, nodeIds) }
-
-        // The standalone COVER blobs. This reclaim used to sit in `NodesStore.deleteSubtree` (cr-0073) and
-        //    moved here: under a soft-delete, reclaiming a cover when the user deletes hands a later restore
-        //    back a node whose cover is already gone. `cover_blob_id` is the only reference to these rows.
-        val coverBlobIds = expired.mapNotNull { it.coverBlobId }
-        if (coverBlobIds.isNotEmpty()) {
-            val covers = BlobEntity.find("id in ?1", coverBlobIds).list()
-            reclaim.record(covers.map { StoreObjectRef(it.storageKey, it.chunkCount) })
-            BlobEntity.delete("id in ?1", coverBlobIds)
-        }
-
-        // Phases above it: every member's item-favorite blob for these nodes.
-        afterCovers.forEach { guests += it.erase(scopeId, nodeIds) }
+        sorted.forEach { guests += it.erase(scopeId, nodeIds) }
 
         // Every link on these nodes is deleted — a tombstone (ADR 0029 §7), not a row delete: its id stays held,
         //    and the identities of guests with uploads elsewhere still hang off it.

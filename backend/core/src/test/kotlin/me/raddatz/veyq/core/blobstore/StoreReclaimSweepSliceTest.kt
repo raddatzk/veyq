@@ -53,7 +53,7 @@ class StoreReclaimSweepSliceTest {
      * presign TTL of the last window signed for it — a media purged straight from the trash, a replaced or
      * cleared cover — and a PUT on such a URL still lands after the drop. A sweep that deleted at the next tick
      * would let that PUT re-create the object under a key nothing names, which no quota counts and no sweep ever
-     * deletes. So a recorded key is not due until `veyq.media.upload.retention` — the bound that already says
+     * deletes. So a recorded key is not due until `veyq.blob.upload.retention` — the bound that already says
      * "after this, no signed PUT can still land" — has passed.
      *
      * Three rows on one tick, each the others' control:
@@ -66,7 +66,7 @@ class StoreReclaimSweepSliceTest {
      */
     @Test
     fun aRecordedKeyIsNotDeletedWhileAPutSignedForItCanStillLand() {
-        val bound = config.media().upload().retention()
+        val bound = config.blob().upload().retention()
         val ttl = Duration.ofSeconds(config.blobStore().presignTtlSeconds().toLong())
         val freshKey = UUID.randomUUID().toString()
         val insideTtlKey = UUID.randomUUID().toString()

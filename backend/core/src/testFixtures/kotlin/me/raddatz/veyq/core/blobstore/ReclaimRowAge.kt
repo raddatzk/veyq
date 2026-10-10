@@ -9,7 +9,7 @@ import java.time.Duration
  * keeps its place in the oldest-first batch and its due time stays the same distance from its recording.
  *
  * This is how a test travels past the not-before `StoreReclaimStore.record` stamps, the same way the purge tests
- * backdate a session's `lastWindowAt` past `veyq.media.upload.retention`. There is no clock seam and no `%test`
+ * backdate a session's `lastWindowAt` past `veyq.blob.upload.retention`. There is no clock seam and no `%test`
  * override of the bound on purpose: a bound of zero in the suite would make the one property it exists for —
  * no key is deleted while a PUT signed for it can still land — invisible to the tests that have to prove it.
  */
@@ -24,4 +24,4 @@ fun backdateReclaimRows(by: Duration, which: (StoreReclaimEntity) -> Boolean = {
 
 /** Age every reclaim row one second past the bound, so the next sweep tick may delete its objects. */
 fun ageReclaimRowsPastThePresignBound(config: VeyqConfig) =
-    backdateReclaimRows(config.media().upload().retention().plusSeconds(1))
+    backdateReclaimRows(config.blob().upload().retention().plusSeconds(1))

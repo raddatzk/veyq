@@ -103,7 +103,7 @@ class ScopePurge(
         if (cutoff != null && scope.deletedAt?.isBefore(cutoff) != true) return
         val blobs = BlobEntity.find("scopeId", scopeId).list()
         reclaim.record(blobs.map { StoreObjectRef(it.storageKey, it.chunkCount) })
-        // An upload still OPEN in the scope — last windowed inside `veyq.media.upload.retention`, so its own sweep has
+        // An upload still OPEN in the scope — last windowed inside `veyq.blob.upload.retention`, so its own sweep has
         // not reached it — may already have chunks in the store, and its row is their only pointer. Recorded
         // exactly as `BlobUploadStore.purgeSessionsIdleSince` does; a session a budget rejection already recorded
         // is recorded twice, which the reclaim list tolerates (no unique key, idempotent object delete).

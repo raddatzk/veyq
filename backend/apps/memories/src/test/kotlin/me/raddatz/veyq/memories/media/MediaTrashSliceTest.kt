@@ -16,17 +16,22 @@ import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
+import io.quarkus.scheduler.Scheduler
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
 import jakarta.inject.Inject
+import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.hasItem
 import org.hamcrest.CoreMatchers.notNullValue
 import org.hamcrest.CoreMatchers.nullValue
+import org.eclipse.microprofile.config.ConfigProvider
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 /**
@@ -55,6 +60,28 @@ class MediaTrashSliceTest {
 
     @Inject
     lateinit var config: VeyqConfig
+
+    @Inject
+    lateinit var mediaConfig: MemoriesMediaConfig
+
+    @Inject
+    lateinit var scheduler: Scheduler
+
+    /**
+     * The trash keys are Memories' (inbox #342) and sit in no properties file: core booted alone would refuse a
+     * `veyq.media.*` key no mapping of its own claims. Their defaults are [MemoriesMediaConfig]'s `@WithDefault`s,
+     * which SmallRye registers as config defaults, so the purge's `@Scheduled` expression resolves too.
+     */
+    @Test
+    fun theTrashKeysDefaultFromMemoriesOwnMapping() {
+        assertEquals(Duration.ofDays(30), mediaConfig.trash().retention())
+        assertEquals(Duration.ofHours(1), mediaConfig.trash().purge().every())
+        assertEquals("1h", ConfigProvider.getConfig().getValue("veyq.media.trash.purge.every", String::class.java))
+        assertTrue(
+            scheduler.scheduledJobs.any { it.methodDescription.contains("MediaTrashPurge") },
+            "the media trash purge is scheduled from the mapping's default",
+        )
+    }
 
     @Test
     fun trashHidesFromListBumpsBothCountersAndDropsFromIdSet() {
@@ -231,7 +258,7 @@ class MediaTrashSliceTest {
         // backdate past the configured retention so the job's own cutoff (not a hand-passed one) selects it
         val storageKey = QuarkusTransaction.requiringNew().call {
             val media = MediaEntity.findById(b)!!
-            media.deletedAt = Instant.now().minus(config.media().trash().retention()).minusSeconds(60)
+            media.deletedAt = Instant.now().minus(mediaConfig.trash().retention()).minusSeconds(60)
             media.persist()
             BlobEntity.findById(media.blobId)!!.storageKey
         }

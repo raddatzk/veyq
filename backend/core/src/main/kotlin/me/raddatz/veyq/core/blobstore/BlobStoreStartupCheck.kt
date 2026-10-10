@@ -18,7 +18,7 @@ import java.util.Optional
  * included — unlike the endpoint, the name is never absent. The value is not only a store's business: it becomes the
  * path of every blobs router `TraefikFileIngressSink` renders (ADR 0013 §4), so it is checked, not trusted.
  *
- * And it refuses, in every mode, a `veyq.media.upload.retention` that does not outlast
+ * And it refuses, in every mode, a `veyq.blob.upload.retention` that does not outlast
  * `veyq.blob-store.presign-ttl-seconds`: the retention is both the upload-session purge's idle bound and the store
  * reclaim's not-before (ADR 0062 Decision 1), and both hold only while no PUT signed under the TTL can still land.
  */
@@ -28,7 +28,7 @@ class BlobStoreStartupCheck(
 ) {
     private val endpoint: Optional<String> = config.blobStore().endpoint()
     private val bucket: String = config.blobStore().bucket()
-    private val uploadRetention: Duration = config.media().upload().retention()
+    private val uploadRetention: Duration = config.blob().upload().retention()
     private val presignTtlSeconds: Int = config.blobStore().presignTtlSeconds()
 
     fun onStart(@Observes ev: StartupEvent) {
@@ -57,7 +57,7 @@ class BlobStoreStartupCheck(
          */
         fun retentionRefusal(retention: Duration, presignTtlSeconds: Int): String? =
             if (retention > Duration.ofSeconds(presignTtlSeconds.toLong())) null
-            else "veyq.media.upload.retention=$retention must exceed veyq.blob-store.presign-ttl-seconds=" +
+            else "veyq.blob.upload.retention=$retention must exceed veyq.blob-store.presign-ttl-seconds=" +
                 "$presignTtlSeconds: an upload session idle past it is purged and its staged keys reclaimed while a " +
                 "PUT signed under that TTL can still land (ADR 0062 Decision 1)."
 

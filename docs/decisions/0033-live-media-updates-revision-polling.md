@@ -26,7 +26,9 @@ returns the full `MediaSummary[]` with **no timestamp, no cursor, no conditional
 **A per-node media-revision counter is the cheap change signal; a conditional GET short-circuits the idle case;
 on a change the client pulls a keyset delta + reconciles deletes against the returned id-set. Short-poll v1.**
 
-1. **`node.media_revision` — a per-node counter, the cheap signal.** A monotonic `INT` on `veyq_node`, **bumped
+1. **`node.media_revision` — a per-node counter, the cheap signal.** A monotonic `INT` per node (a `veyq_node`
+   column until inbox #341 moved both counters into Memories' own `veyq_media_revision` row, no row reading as 0),
+   **bumped
    on every gallery-media mutation**: attach (curator + contributor/uploader upload complete), meta edit
    (`updateMediaMeta`, cr-0068), and delete (share delete-own, cr-0102). **Cover changes are excluded** —
    `commitCover`/`clearCover` write no `veyq_media` row and never list, so a cover swap must not force a re-list.
@@ -124,7 +126,8 @@ add/edit never carries the O(N) id-set, and nothing does per idle tick.
   precondition** — it moves on every attach, trash, restore, move and meta change, so a compare-and-set on it would
   turn every concurrent upload into a date-edit conflict. The sealed meta blobs carry their own `metaVersion` for
   that ([ADR 0077](0077-a-write-carries-the-version-it-read.md)).
-- **New server state:** a `media_revision INT` + a `delete_revision INT` column on `veyq_node`, an `updated_at
+- **New server state:** a `media_revision INT` + a `delete_revision INT` per node (columns on `veyq_node` then;
+  Memories' `veyq_media_revision` since inbox #341), an `updated_at
   TIMESTAMP` on `veyq_media` (backfilled `= created_at`); `listNodeMedia` gains a conditional GET (`If-None-Match`
   → `304`), a `since` cursor (keyset delta), and the current-id-set on a `200` **only when the client's
   `delete_revision` lags** (a delete occurred). All opaque/operational — no key, no plaintext.

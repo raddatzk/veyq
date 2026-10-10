@@ -1,10 +1,14 @@
 package me.raddatz.veyq.memories.media
 
+import me.raddatz.veyq.core.blob.AttachOutcome
+import me.raddatz.veyq.core.blob.AttachmentStore
 import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.blob.BlobUploadStore
 import me.raddatz.veyq.core.blob.UploadSessionEntity
+import me.raddatz.veyq.core.content.NodesStore
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.sharing.ShareIdentityEntity
+import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
@@ -92,12 +96,17 @@ data class BucketRow(
 
 /**
  * Persistence for the Memories media (cr-0028): media, derivative and bucket rows, covers and the gallery
- * revision counters, on top of core's [BlobUploadStore] (sessions and blob rows). Operator-blind: stores ciphertext wraps + opaque metadata only.
+ * revision counters, on top of core's [BlobUploadStore] (sessions and blob rows) and core's [AttachmentStore] (a
+ * cover is the node's `COVER` attachment since inbox #341). Operator-blind: stores ciphertext wraps + opaque metadata only.
  * Who may act on a scope is decided before this store is reached, by the handler's `ScopeAccess` gate. The
  * manifest (per-chunk ciphertext sizes) is held as a small JSON array of integers — itself only ciphertext-size metadata.
  */
 @ApplicationScoped
-class MediaStore(private val blobs: BlobUploadStore) {
+class MediaStore(
+    private val blobs: BlobUploadStore,
+    private val attachments: AttachmentStore,
+    private val nodes: NodesStore,
+) {
 
     /** The node, if it exists **live** in this scope (its `kind` decides the media-target rule). `deletedAt is
      *  null` (ADR 0061): this is the gate every media/bucket/cover handler routes through, so filtering it once
@@ -174,21 +183,44 @@ class MediaStore(private val blobs: BlobUploadStore) {
     }
 
     /**
-     * Bump the node's live-updates counters (cr-0107, ADR 0033) in **one atomic UPDATE** on the `veyq_node` row,
-     * so `media_revision` + `delete_revision` always read as a **consistent pair**. Every gallery-media mutation
-     * moves `media_revision` (the conditional-GET change signal); a real delete additionally moves
-     * `delete_revision` ([deleted] = true), which gates the O(N) id-set delete-reconcile. A cover change calls
+     * Bump the node's live-updates counters (cr-0107, ADR 0033) in **one atomic UPDATE** on its
+     * [MediaRevisionEntity] row, so `media_revision` + `delete_revision` always read as a **consistent pair**. Every
+     * gallery-media mutation moves `media_revision` (the conditional-GET change signal); a real delete additionally
+     * moves `delete_revision` ([deleted] = true), which gates the O(N) id-set delete-reconcile. A cover change calls
      * neither. Joins the caller's transaction (attach/setMeta self-invoke within their `@Transactional`; the
      * share delete-own path calls it within its own). Opaque operational metadata — operator-blind.
+     *
+     * **The node's first change births the row** (inbox #341 moved the counters off `veyq_node`, where the row always
+     * existed). An UPDATE that matches nothing takes no lock under READ COMMITTED (ADR 0078), so the insert is decided
+     * under the node row's lock and the UPDATE asked again beneath it: of two first bumps the second waits, then finds
+     * the row the first committed and bumps it — never a second insert at the primary key. The node lock comes after
+     * the media rows the caller holds (media → node), the order every gallery writer already takes
+     * (`MediaLockOrderRaceSliceTest`); the attach path holds it already ([ensurePrimaryBucket]). Before the move every
+     * bump wrote the node row and so held its lock to the commit; now only the first does — nothing waited on it but
+     * other gallery writers, which now meet on the revision row instead.
      */
     @Transactional
     fun bumpMediaRevision(nodeId: String, deleted: Boolean = false) {
-        if (deleted) {
-            NodeEntity.update("mediaRevision = mediaRevision + 1, deleteRevision = deleteRevision + 1 where id = ?1", nodeId)
-        } else {
-            NodeEntity.update("mediaRevision = mediaRevision + 1 where id = ?1", nodeId)
-        }
+        if (bumpRevisionRow(nodeId, deleted) == 1) return
+        NodeEntity.find("id", nodeId).withLock(LockModeType.PESSIMISTIC_WRITE).firstResult()
+        if (bumpRevisionRow(nodeId, deleted) == 1) return
+        MediaRevisionEntity().apply {
+            this.nodeId = nodeId
+            mediaRevision = 1
+            deleteRevision = if (deleted) 1 else 0
+        }.persist()
     }
+
+    private fun bumpRevisionRow(nodeId: String, deleted: Boolean): Int =
+        if (deleted) {
+            MediaRevisionEntity.update("mediaRevision = mediaRevision + 1, deleteRevision = deleteRevision + 1 where nodeId = ?1", nodeId)
+        } else {
+            MediaRevisionEntity.update("mediaRevision = mediaRevision + 1 where nodeId = ?1", nodeId)
+        }
+
+    /** The node's (media_revision, delete_revision) — one row, so a consistent pair; (0, 0) before its first change. */
+    fun revisions(nodeId: String): Pair<Int, Int> =
+        MediaRevisionEntity.findById(nodeId)?.let { it.mediaRevision to it.deleteRevision } ?: (0 to 0)
 
     /**
      * The node's media as a **keyset delta** past [since] (cr-0107, ADR 0033): rows whose `updated_at` is strictly
@@ -366,61 +398,35 @@ class MediaStore(private val blobs: BlobUploadStore) {
     }
 
     /**
-     * Commit a verified session as the node's **standalone cover** blob (cr-0073): persist one `veyq_blob`
-     * (NO `veyq_media` row, so it never lists in the gallery), point the node's `cover_blob_id` at it, and
-     * **atomically reclaim** any prior cover blob (its row is deleted and its store objects go on the reclaim
-     * list, both in this transaction). Consumes the upload session. Returns the new ref, or null — nothing written —
-     * when the session was already spent.
+     * Commit a verified session as the node's **standalone cover** blob (cr-0073): the node's `COVER` attachment
+     * (core's `veyq_node_attachment`, inbox #341) — NO `veyq_media` row, so it never lists in the gallery —
+     * **atomically replacing and freeing** any prior cover blob (its row is deleted and its store objects go on the
+     * reclaim list, in this transaction). Consumes the upload session. Answers core's [AttachOutcome]; the caller
+     * builds the read-back ref from the session on [AttachOutcome.Attached].
      *
-     * The session is single-use, so it is **spent first**, as [attach] spends its own (developer-styleguide §12): two
-     * commits of one upload both found it live, and the loser's delete waits for the winner's and then hits no row.
-     * It answers what a replay answers — the upload is gone — instead of dying at the blob's primary key with a 500.
-     *
-     * The prior cover is read under the node row's lock, which a peer's commit and [clearCover] hold while they
-     * reclaim it (inbox #310): read before the wait, it named a blob the peer had already deleted, the delete found
-     * no row and the commit answered 500 — and a second commit left the peer's new cover unreclaimed.
+     * A cover commit replaces whatever the slot holds (the contract's `commitCoverBlob` carries no expected blob; the
+     * version a client states is its meta's, ADR 0077), while core's [AttachmentStore.attach] swaps only the blob it is
+     * told to expect. So the slot is read under the scope row's lock — the lock attach takes first and every writer of
+     * the table holds, re-taken there within this transaction — and handed over as the expected blob: no peer can
+     * change the slot between the read and the swap, and attach never answers a conflict here.
      */
     @Transactional
-    fun commitCover(nodeId: String, session: UploadSessionEntity, manifest: List<Long>?): BlobRefData? {
-        if (UploadSessionEntity.delete("id = ?1", session.id) != 1L) return null
-        // No `deletedAt` predicate: the handler already resolved this node through the filtering [findNode]
-        // gate before the verify step. This is the transaction's first load of the row, so the lock reads it as
-        // committed now (ADR 0078) — a lock on a row already loaded here would hand back that stale copy.
-        val node = NodeEntity.findById(nodeId, LockModeType.PESSIMISTIC_WRITE)!!
-        blobs.deleteBlobRow(node.coverBlobId)
-        val blobId = blobs.persistBlob(session, manifest)
-        node.coverBlobId = blobId
-        node.coverByteSize = session.byteSize
-        node.persist()
-        return BlobRefData(blobId, session.chunkCount, session.byteSize, session.wrappedBlobKey, manifest, session.wrappedBlobMeta)
+    fun commitCover(scopeId: String, nodeId: String, session: UploadSessionEntity, manifest: List<Long>?): AttachOutcome {
+        nodes.lockScope(scopeId)
+        val current = attachments.slotBlobId(nodeId, MemoryBlobRoles.COVER)
+        return attachments.attach(scopeId, nodeId, COVER_KINDS, MemoryBlobRoles.COVER, session, manifest, current)
     }
-
-    /** What [clearCover] did: detached the expected blob, found an empty slot (or no live node), or found another blob. */
-    enum class ClearCoverResult { CLEARED, EMPTY, REPLACED }
 
     /**
-     * Detach the node's cover blob (cr-0073) — only while the slot still holds [expectedBlobId] (inbox #308): clear
-     * its `cover_blob_id`/`cover_byte_size`, delete the `veyq_blob` row and put its store objects on the reclaim
-     * list — all in one transaction. An empty slot records nothing and is idempotent ([ClearCoverResult.EMPTY]).
-     *
-     * The compare is the clearing UPDATE's own predicate and its first write (developer-styleguide §12), never a
-     * read before it: a peer's `commitCover` in flight holds the node row, so this update waits for its commit and
-     * then matches no row, where a read made before the wait saw the expected blob and deleted the peer's new one.
+     * Detach the node's cover blob (cr-0073) — only while the slot still holds [expectedBlobId] (inbox #308): the
+     * attachment row goes and the blob is freed (row + reclaim record), in one transaction, through core's
+     * [AttachmentStore.detach]. An empty slot — or a node no longer live — records nothing and is idempotent.
      */
-    @Transactional
-    fun clearCover(scopeId: String, nodeId: String, expectedBlobId: String): ClearCoverResult {
-        val cleared = NodeEntity.update(
-            "coverBlobId = null, coverByteSize = null " +
-                "where id = ?1 and scopeId = ?2 and deletedAt is null and coverBlobId = ?3",
-            nodeId, scopeId, expectedBlobId,
-        )
-        if (cleared == 1) {
-            blobs.deleteBlobRow(expectedBlobId)
-            return ClearCoverResult.CLEARED
-        }
-        val slot = NodeEntity.findById(nodeId)?.takeIf { it.scopeId == scopeId && it.deletedAt == null }?.coverBlobId
-        return if (slot == null) ClearCoverResult.EMPTY else ClearCoverResult.REPLACED
-    }
+    fun clearCover(scopeId: String, nodeId: String, expectedBlobId: String): AttachmentStore.DetachOutcome =
+        attachments.detach(scopeId, nodeId, MemoryBlobRoles.COVER, expectedBlobId)
+
+    /** The node's cover blob id, or null — the `COVER` attachment's blob. */
+    fun coverBlobId(nodeId: String): String? = attachments.slotBlobId(nodeId, MemoryBlobRoles.COVER)
 
     // --- buckets (en.memory.buckets, ADR 0034, cr-0113) ----------------------
 
@@ -623,5 +629,10 @@ class MediaStore(private val blobs: BlobUploadStore) {
         media.forEach { it.bucketId = target.id; it.persist() }
         bumpMediaRevision(nodeId) // cr-0113: a re-bucket changes the listing's bucketId → advance the ETag so clients re-list
         return true
+    }
+
+    private companion object {
+        /** The kinds that carry a cover: a node that owns a `K_mem` — the kinds that attach media. */
+        val COVER_KINDS = setOf(MemoriesNodeKinds.MEMORY, MemoriesNodeKinds.CHAPTER)
     }
 }

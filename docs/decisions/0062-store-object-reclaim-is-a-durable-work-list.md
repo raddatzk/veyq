@@ -41,7 +41,7 @@ can no longer die with the row that held it. This needs no listing of the bucket
 an unpartitionable full-bucket scan.
 
 **A recorded key is not due until no PUT signed for it can still land.** `record` stamps `next_attempt_at` at
-`veyq.media.upload.retention` after the recording — the bound the upload-session purge already derives as
+`veyq.blob.upload.retention` after the recording — the bound the upload-session purge already derives as
 *presign TTL plus one chunk still streaming*, so one number with one meaning rather than a second knob that
 would have to be kept at least as large by hand. The wait is needed because several paths drop the row naming a
 key inside the TTL of the last window signed for it (a media purged straight from the trash, a replaced or

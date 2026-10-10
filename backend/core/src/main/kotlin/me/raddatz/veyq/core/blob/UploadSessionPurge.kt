@@ -24,7 +24,7 @@ import java.time.Instant
  * **It keys on a session's last issued window, not on its start** (ADR 0013 §3). An upload is signed window by
  * window, so a large file on a slow link is legitimately open for far longer than any retention — what bounds it
  * is that each window's PUTs are signed under `veyq.blob-store.presign-ttl-seconds`, so a session with no new
- * window past that TTL holds only dead URLs. That is also why the retention window (`veyq.media.upload.retention`)
+ * window past that TTL holds only dead URLs. That is also why the retention window (`veyq.blob.upload.retention`)
  * is bounded by construction, not by taste: it only has to outlast a PUT that started inside its window's TTL and
  * is still streaming.
  *
@@ -36,9 +36,9 @@ class UploadSessionPurge(
     private val store: BlobUploadStore,
     config: VeyqConfig,
 ) {
-    private val retention: Duration = config.media().upload().retention()
+    private val retention: Duration = config.blob().upload().retention()
 
-    @Scheduled(every = "{veyq.media.upload.purge.every}")
+    @Scheduled(every = "{veyq.blob.upload.purge.every}")
     fun run() {
         // Unconditional — NOT behind `canPresign`: a store that cannot presign still has to be told, and gating
         // would make the half this job exists for unobservable in the hermetic suite. That reasoning moved with

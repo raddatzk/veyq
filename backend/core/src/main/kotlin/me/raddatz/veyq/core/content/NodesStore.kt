@@ -64,9 +64,9 @@ data class TrashedNodeRow(
 @ApplicationScoped
 class NodesStore {
     // cr-0073 reclaimed a node's standalone cover blob HERE, at delete time. ADR 0061 moved that into
-    // `NodeSubtreePurge`: under a soft-delete, reclaiming the cover when the user deletes would hand a restore
-    // back a node whose cover is already gone. So this store no longer touches the blob store at all — the
-    // one-way dependency (application → content) is restored, and the purge worker owns both directions.
+    // `NodeSubtreePurge` (today through `AttachmentNodeSubtreeEraser`, the cover being an attachment since inbox
+    // #341): under a soft-delete, reclaiming the cover when the user deletes would hand a restore back a Memory whose
+    // cover is already gone. So this store touches no blob at all, and the purge worker owns both directions.
 
     /**
      * The scope row's lock — the serializer of the scope's node tree (developer-styleguide §12). Every write that
@@ -392,13 +392,9 @@ class NodesStore {
         // delete trashed holds that delete's freed token, re-stamped or not — the server cannot re-derive it, so
         // [restoreSubtree] leaves it in the trash.
         root.slugToken = root.id
-        // cr-0107 (ADR 0033): still no media_revision/delete_revision bump here, but the reason changed with
-        // ADR 0061 — the node rows and their counters now SURVIVE the delete, so "no open gallery can poll a
-        // deleted node" is no longer true of the rows. It is true of the path: every media read routes through
-        // the node gate (`MediaStore.findNode`), which filters trashed nodes, so a gallery polling a trashed
-        // node gets a 404 rather than a stale set. The conclusion the note supports is unchanged: the delete
-        // leaves each node's own media rows untouched, so no *surviving* node's gallery set changes. The
-        // observable delete-reconcile is still the share delete-own path (cr-0102), which bumps both counters.
+        // No application's change counter moves here (Memories' gallery revision, ADR 0033): the delete leaves every
+        // node's own rows untouched, so no *surviving* node's listing changes, and a listing of a trashed node is
+        // refused by the application's own live-node gate (`MediaStore.findNode`) — a 404, never a stale set.
         return true
     }
 

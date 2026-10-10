@@ -22,8 +22,11 @@ Gradle module of its own; the web half is separated by import direction only (se
   ([ADR 0012](../decisions/0012-content-key-hierarchy.md)). These derive as they always have, the documented
   exemption to the application-id context ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Decision 9).
 - **Domain data:** media and its derivatives, uploader buckets, a Memory's sealed `wrappedMeta` (date, place,
-  cover), item favorites. The media tables key on `node_id` (measured:
-  `grep -n "node_id" backend/apps/memories/src/main/resources/db/migration/V*__memories_baseline.sql`).
+  cover), item favorites, a node's gallery counters (`veyq_media_revision`, ADR 0033). The media tables key on
+  `node_id` (measured: `grep -n "node_id" backend/apps/memories/src/main/resources/db/migration/V*__memories_baseline.sql`).
+  An uploaded cover blob is core's: the node's `COVER` attachment in `veyq_node_attachment`, written through
+  `AttachmentStore` (inbox #341); core's `veyq_node` carries no Memories column. Memories' configuration is its own
+  mapping, `veyq.media.*` (`MemoriesMediaConfig`, inbox #342).
 - **Screens and behaviour:** gallery and lightbox, upload with client-generated derivatives, covers, date and
   place curation, the map, live updates. Their state is the use-cases and enablers under
   [`docs/features/memory/`](../features/memory/_index.md); this page points at them and does not restate them.
