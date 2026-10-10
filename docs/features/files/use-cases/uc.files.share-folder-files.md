@@ -14,8 +14,9 @@
 
 ## Main flow
 
-1. The guest opens the link; core's folder page renders Files' section at every folder of the subtree: its files with
-   name, size and date, opened under the keys the link's chain gives.
+1. The guest opens the link; core's folder page renders Files' section at every folder of the subtree — the member's
+   own section, with what the guest's role does not allow removed (inbox #401): its files with name, size and date,
+   opened under the keys the link's chain gives.
 2. **Download:** the client presigns through the link (`resolveShareBlob`, the share's subtree gate) and decrypts in
    the browser.
 3. **Add (contributor):** the guest names itself once per link, picks files; per file the client creates the `FILE`
@@ -29,7 +30,8 @@
 ## Alternate / exception flows
 
 - **E1 — a `READ` guest writes:** refused; the page offers no upload or replace.
-- **E2 — a stale replace:** `409 stale_file` with the current blob; no metadata is written.
+- **E2 — a stale replace:** `409 stale_file` with the current blob; no metadata is written. The page says someone else
+  replaced the file and offers "replace anyway" on the current blob, as it does a member.
 - **E3 — the file was trashed, moved out of the subtree, or the link revoked between start and completion:** the
   completion is refused (`upload_not_found` / `node_not_found`), nothing is attached.
 - **E4 — a trashed file** (or one under a trashed folder): not listed, its blob `404`, an upload into it `404`.

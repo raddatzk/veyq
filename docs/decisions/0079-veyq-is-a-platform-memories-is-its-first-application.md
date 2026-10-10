@@ -302,12 +302,17 @@ on their own.
   by node id, `metaVersion` 0, `wrappedMeta` as served); the shell (`views/ShareView.vue`) builds the access and owns
   the page's one naming flow (`requestGuest`, core's `GuestNaming` with "Not you?", used by every naming place — the
   shell's dialog, the Memories link's pre-screen, Files' drop page); a folder link's page is core's `LevelView` handed
-  both, so a Memory is the member's MemoryCard with its date, cover and map read from what the link opened. Two
-  transitional seams until their steps: a kind's `shareSection` is drawn in the level's `host-section` slot (S3), and a
-  non-folder node is still the claimed share body, embedded (S5). **Open, in this order, each green before the next:**
-  S3 Files' views serve guests (`ShareFilesSection` deleted, `DropBoxDetail` absorbs `DropBoxSharedView`,
-  `shareSection` removed from the registry); S4 Memories' data source, the member's and the guest's; S5 `MemoryDetail`
-  for guests (`MemoryShareBody` reduced to the drop; a contributor uploads into the chapter it navigated to).
+  both, so a Memory is the member's MemoryCard with its date, cover and map read from what the link opened. **Built**
+  (S3): Files' views serve guests — `FilesSection` and `DropBoxDetail` read and write through Files' data source
+  (`web/src/features/files/source.ts`, the member's and the guest's; a write shows where the matrix grants it AND the
+  source carries it), the guest-only `ShareFilesSection` and `DropBoxSharedView` are deleted, `shareSection` (with
+  `ShareSectionProps`, `shareSections()` and the level's `host-section` slot) is gone from the registry, and core's folder
+  page renders a non-folder node's `detail` for the guest. `GuestAccess` gained the link's fragment key and the shell's
+  re-resolve (`reload`), what a guest's write needs. One transitional seam until S5: a claim made `embedBelowFolder`
+  (Memories') is still embedded below a folder instead of the kind's detail; Files' drop-box claim is the `WRITE_ONLY`
+  page alone. **Open, in this order, each green before the next:** S4 Memories' data source, the member's and the
+  guest's; S5 `MemoryDetail` for guests (`MemoryShareBody` reduced to the drop; a contributor uploads into the chapter it
+  navigated to; `embedBelowFolder` removed).
 - **Guards move with the code, and the build is one of them.** On the backend, core → application is the
   compiler's (no edge, so no import) and every other direction is `validate_backend_module_graph.py`'s — including
   application → application, held between Memories and Files and bitten with a forged third application; inside core,

@@ -81,7 +81,7 @@ reads).
   "not uploaded yet" — none of it reads the node's own payload), with download, replace, rename (core's
   `FolderNameDialog`, through the section's `rename` event) and delete (into core's trash, restored from core's trash
   dialog). An upload button and a drop onto the section; an empty folder says so. Hidden in map mode, like the
-  folders. Read-only during a pending deletion: download only.
+  folders. Read-only during a pending deletion: download only. The same section is a share guest's (§ Guests).
 - **The upload** is one job of core's upload queue per file (`uploadFile.ts`): create the `FILE` node (or, for a name a
   FILE sibling already holds by `fileNameSlug`, replace that file after the member confirmed — the row's replace asks
   too, naming the file and the picked one, and both questions say the old content cannot be restored, there being no
@@ -133,8 +133,9 @@ shows is `filesCapabilities(access, target)` (`web/src/features/files/capabiliti
 | create a drop box | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
 | a drop box's links, delete it | links with the instance's public links; delete ✓ | links only | — | ✗ | ✗ | ✗ |
 
-These are the matrix half; a right shows only where the session's data source also implements it, so the guest's
-columns are the most a guest page can ever offer.
+These are the matrix half; a right shows only where the session's data source also implements it
+(`web/src/features/files/source.ts`, `sourceCapabilities`: the guest's source has no delete and no rename, and no upload
+unless the link is `READ_WRITE`), so the guest's columns are the most a guest page can ever offer.
 
 - **The contract** (tag `share-files` in `files.openapi.yaml`, no auth, behind core's `ShareGuestGate`):
   `listShareFiles` — `GET /api/shares/{shareId}/files`: `{items: [{nodeId, fileBlob|null}]}` for every live `FILE` of
@@ -156,22 +157,27 @@ columns are the most a guest page can ever offer.
 - **Quota:** a guest's attachment names its identity, so the link's usage counts it (core's attachment term; Files'
   `UploadAdmission` reports 0) against the tenant's per-link limit; core's `AttachmentGuestIdentityUsage` keeps the
   guest's identity while a file names it (Files stores no row of its own naming a guest, so it ships no usage).
-- **The web:** core's folder page of a public share (`core/sharing/FolderShareBody.vue`) is core's member `LevelView`
-  handed the guest's access and tree (inbox #401 S2): the drop boxes are `DropBoxSection`'s rows as for a member, and
-  until S3 a kind's `shareSection` is drawn in the level's `host-section` slot instead of its level section; Files' is
-  `components/ShareFilesSection.vue` — the files with name, size and date
-  opened under the chain's keys, download through the link, and for a contributor an upload button (one core-queue job
-  per file, `shareUpload.ts`: guest create → guest transport with the blob meta → `completeShareFile`) and a replace per
-  row (an upload into it, for a file that holds no content), above the list the sentence that it can replace any file,
-  the owner's too, and that no version is kept. An upload of a name a file there already holds stays refused (`409
-  slug_taken`, no replace by upload for a guest, owner decision 2026-10-08, inbox #392); its notice says a file of that
-  name exists and to use its row's replace. **Every replace asks first** (owner decision 2026-10-08, inbox #383) —
-  the contributor's row replace, after the file is picked and before the guest is named ("it changes for everyone who
-  sees this folder, the owner too; the old content cannot be restored"), as the member's does (§ The web); a file that
-  holds no content asks nothing. The guest names itself once per link through the page's one naming flow
-  (`requestGuest`, the shell's dialog, core's `GuestNaming`).
-  No rename on the guest page (no kind has one there yet, inbox #358). Inside a guest's identity folder (§ The drop box)
-  core's folder page hands no write to any guest.
+- **The web:** one view per kind for a member and a guest (inbox #401 S3). Core's folder page of a public share
+  (`core/sharing/FolderShareBody.vue`) is core's member `LevelView` handed the guest's access and tree, so the files are
+  the member's `components/FilesSection.vue` and the drop boxes `DropBoxSection`'s rows; a drop box below the link opens
+  the member's `DropBoxDetail.vue` (§ The drop box). Every read and write of those views goes through Files' data source
+  (`source.ts`): the guest's lists through `listShareFiles`, downloads through the link's presign (`shareChunkUrls`)
+  and, for a contributor, uploads one core-queue job per file (`shareUpload.ts`: guest create → guest transport with
+  the blob meta → `completeShareFile`) and re-resolves the link afterwards (`access.reload`). So a guest sees the
+  member's rows — name, size and date opened under the chain's keys, the download — and a contributor the upload and a
+  row's replace (an upload into it, for a file that holds no content), above the list the sentence that it can replace
+  any file, the owner's too, and that no version is kept. An upload of a name a file there already holds stays refused
+  (`409 slug_taken`, no replace by upload for a guest, owner decision 2026-10-08, inbox #392): the guest's source does
+  not turn it into a replace as the member's does, and the notice says a file of that name exists and to use its row's
+  replace. **Every replace asks first** (owner decision 2026-10-08, inbox #383) — the contributor's row replace, after
+  the file is picked and before the guest is named ("it changes for everyone who sees this folder, the owner too; the
+  old content cannot be restored"), as the member's does (§ The web); a file that holds no content asks nothing; after a
+  peer's replace (`stale_file`) the page offers "replace anyway" on the current blob, as a member's does. The guest names
+  itself once per link through the page's one naming flow (`requestGuest`, the shell's dialog, core's `GuestNaming`).
+  No rename and no delete on the guest page (inbox #358; nodes store no authorship). Inside a guest's identity folder
+  (§ The drop box) no guest is offered a write (the capabilities). A guest-mode mount of each view proves it calls no
+  authenticated client and reads nothing of the member's world (`FilesSection.guest.test.ts`,
+  `DropBoxDetail.guest.test.ts`).
 
 ## The drop box
 
@@ -225,15 +231,17 @@ one per guest identity, which are core `FOLDER`s carrying `veyq_node.share_ident
 - **In a folder share above** (`READ`/`READ_WRITE`) the drop box **is shown, read-only** (owner decision 2026-10-08,
   inbox #380: the guest was given that tree): the backend serves the drop box's subtree with its drop key to a guest of
   a link above (ADR 0080 decision 11), so core's walk opens the identity folders' names (`childEntryKey`) and their
-  files. Core's folder page embeds Files' share body for the drop box with `subtreeRoot`, and the body then renders
-  `components/DropBoxSharedView.vue` — the guests' folders with their file counts (a repeated name numbered in node-id
-  order: a guest's resolve serves no `createdAt`, so the numbers can differ from the member's) — instead of the
-  `WRITE_ONLY` guest's form; a folder opens on core's folder page, which inside an identity folder hands no write to any
-  guest (no 'New folder', the share sections get `canWrite: false`), so it lists the files with their download only.
-  No send form, no upload, no replace, no delete, no move; the server refuses each anyway (a create inside an identity
-  folder `illegal_structure` for anyone but its identity, a guest move out above). Pinned by
-  `DropBoxInFolderShare.test.ts` (the real registry, router and PrimeVue, DOM clicks; red with the write controls let
-  through or the guest's form embedded).
+  files. Core's folder page renders the drop box's `detail` — the member's `DropBoxDetail.vue`, handed the guest's
+  access and tree (inbox #401 S3) — never the `WRITE_ONLY` guest's form (Files claims its share body without
+  `embedBelowFolder`): the guests' folders with their file counts, a repeated name numbered in node-id order (the
+  guest's tree serves no `createdAt`, so `compareByCreation` falls to its id tie-break and the numbers can differ from the
+  member's creation order), in the guest's words (`files.dropBox.sharedHint`: only the owner deletes or moves); a folder
+  opens on core's folder page, which inside an identity folder offers no guest a write (no 'New folder', Files' section
+  only downloads), so it lists the files with their download only. No send form, no upload, no replace, no share, no
+  delete, no move — the guest's source carries no delete and the matrix grants a guest neither share nor delete; the
+  server refuses each anyway (a create inside an identity folder `illegal_structure` for anyone but its identity, a
+  guest move out above). Pinned by `DropBoxDetail.guest.test.ts` (the real registry, router and PrimeVue, DOM clicks,
+  guarded clients; red with the write controls let through or the guest's form embedded).
 - **Revoking or deleting a link keeps the drop box and everything in it**: an identity a folder names is kept
   (`NodeGuestIdentityUsage`, `fk_node_share_identity`), so the member still opens it; the purge of a trashed drop box
   erases its folders, then the identities nothing names any more.
