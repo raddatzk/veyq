@@ -10,17 +10,22 @@ import java.time.Instant
 import org.hibernate.annotations.DynamicUpdate
 
 /**
- * A member's acceptance of a tenant's terms (cr-0114, ADR 0035). Keyed logically by (user_id, tenant_id) — a
- * surrogate id + a UNIQUE — it records the highest terms version the member accepted. **Operational metadata**
- * (like membership), never content. When `acceptedVersion < tenant.termsVersion` the member accept gate re-fires
- * (uc.account.accept-terms); accepting upserts this row to the current version.
+ * One acceptance of one tenant terms version by one member (cr-0114, ADR 0035 §4). Keyed logically by
+ * (user_id, tenant_id, accepted_version) — a surrogate id + a UNIQUE — so the table is the member's **history** of
+ * acceptances, one row per version, never overwritten (owner decision 2026-10-10, inbox #402): acceptance is
+ * evidence should a violation or dispute arise, and a dispute about an older version needs that version's row.
+ * **Operational metadata** (like membership), never content. The gate reads the highest version accepted: when it
+ * is below `tenant.termsVersion` the member accept gate re-fires (uc.account.accept-terms); accepting the current
+ * version adds its row.
  *
  * [acceptedAt] is the server-observed time the member accepted [acceptedVersion] — audit evidence of *when* which
- * terms version was accepted, should a violation or dispute arise. No code path reads it and no API serves it:
- * operators and support read it from the database (owner decision 2026-10-09, after inbox #318 had dropped it as
- * unread; `EveryStoredTimeHasAReaderTest` names that reader). It is written once per version: a re-acceptance of
- * the version already recorded keeps the first time, an acceptance of a newer version replaces both. The client
- * never supplies it.
+ * terms version was accepted. No code path reads it and no API serves it: operators and support read it from the
+ * database (owner decision 2026-10-09, after inbox #318 had dropped it as unread; `EveryStoredTimeHasAReaderTest`
+ * names that reader). Written once per version: a re-acceptance of a version already recorded keeps its first
+ * time. The client never supplies it.
+ *
+ * Erased with the tenant (`ON DELETE CASCADE`). The user FK has no cascade, like `veyq_tenant_profile`'s: a future
+ * account erasure must name this table.
  */
 @Entity
 @Table(name = "veyq_tenant_terms_acceptance")

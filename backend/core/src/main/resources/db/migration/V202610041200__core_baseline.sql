@@ -378,14 +378,15 @@ CREATE TABLE veyq_node_attachment (
 CREATE INDEX ix_attachment_scope ON veyq_node_attachment (scope_id);
 CREATE INDEX ix_attachment_share_identity ON veyq_node_attachment (share_identity_id);
 
--- A member's acceptance of the tenant terms (ADR 0035).
+-- A member's acceptances of the tenant terms (ADR 0035 §4): one row per accepted version, kept as evidence.
 CREATE TABLE veyq_tenant_terms_acceptance (
     id               VARCHAR(36) NOT NULL PRIMARY KEY,
     user_id          VARCHAR(36) NOT NULL,
     tenant_id        VARCHAR(36) NOT NULL,
     accepted_version INT         NOT NULL,
     accepted_at      TIMESTAMP   NOT NULL,
-    CONSTRAINT ux_terms_acceptance UNIQUE (user_id, tenant_id),
+    CONSTRAINT ux_terms_acceptance UNIQUE (user_id, tenant_id, accepted_version),
+    CONSTRAINT fk_terms_acceptance_user FOREIGN KEY (user_id) REFERENCES veyq_user (id),
     CONSTRAINT fk_terms_acceptance_tenant FOREIGN KEY (tenant_id) REFERENCES veyq_tenant (id) ON DELETE CASCADE
 );
 
