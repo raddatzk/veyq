@@ -268,36 +268,6 @@ describe('registry: level sections', () => {
   })
 })
 
-// cr-files-application F2: the public share's folder page renders a kind's `shareSection` for its children.
-describe('registry: share sections', () => {
-  it('is empty until a kind brings one; a level section is not a share section', () => {
-    const r = createRegistry()
-    r.registerKind({ kind: 'LEAF', icon: 'x', shareable: false, section: { order: 10, component: Stub } })
-    expect(r.shareSections()).toEqual([])
-  })
-
-  it('sorts by order and keys a section by its component, as the level sections', () => {
-    const r = createRegistry()
-    r.registerKind({ kind: 'LATE', icon: 'x', shareable: false, shareSection: { order: 20, component: Other } })
-    r.registerKind({ kind: 'EARLY', icon: 'x', shareable: false, shareSection: { order: 10, component: Stub } })
-    r.registerKind({ kind: 'TWIN', icon: 'x', shareable: false, shareSection: { order: 20, component: Other } })
-    expect(r.shareSections()).toEqual([
-      { component: Stub, order: 10, kinds: ['EARLY'] },
-      { component: Other, order: 20, kinds: ['LATE', 'TWIN'] },
-    ])
-  })
-
-  it('refuses a contradicting order in EITHER list and then registers nothing of the kind', () => {
-    const r = createRegistry()
-    r.registerKind({ kind: 'A', icon: 'x', shareable: false, section: { order: 1, component: Stub }, shareSection: { order: 5, component: Other } })
-    expect(() => r.registerKind({ kind: 'B', icon: 'x', shareable: false, section: { order: 1, component: Stub }, shareSection: { order: 6, component: Other } }))
-      .toThrow(/B names the section of A with order 6, not 5/)
-    expect(r.kind('B').supported).toBe(false)
-    expect(r.sections()).toEqual([{ component: Stub, order: 1, kinds: ['A'] }])
-    expect(r.shareSections()).toEqual([{ component: Other, order: 5, kinds: ['A'] }])
-  })
-})
-
 describe('registry: share bodies', () => {
   it('is empty until claimed: shareBody() is null, not undefined', () => {
     const r = createRegistry()
@@ -319,6 +289,25 @@ describe('registry: share bodies', () => {
     // Control: claiming one kind leaves another free to claim.
     expect(() => r.claimShareBody(MEMORY_KIND, Other)).not.toThrow()
     expect(r.shareBody(MEMORY_KIND)).toBe(Other)
+  })
+  // inbox #401 S3: below a shared folder core renders a kind's detail; only a claim made `embedBelowFolder` (Memories',
+  // until S5) is still embedded there. A plain claim is the root page alone (Files' WRITE_ONLY drop).
+  it('embeds below a folder only a claim made with embedBelowFolder; a plain claim stays the root page', () => {
+    const r = createRegistry()
+    r.claimShareBody('DROP', Stub)
+    r.claimShareBody(MEMORY_KIND, Other, { embedBelowFolder: true })
+    expect(r.shareBody('DROP')).toBe(Stub)
+    expect(r.embeddedShareBody('DROP')).toBeNull()
+    expect(r.shareBody(MEMORY_KIND)).toBe(Other)
+    expect(r.embeddedShareBody(MEMORY_KIND)).toBe(Other)
+    expect(r.embeddedShareBody('UNCLAIMED')).toBeNull()
+  })
+
+  it('a refused second claim does not flag the kind for embedding', () => {
+    const r = createRegistry()
+    r.claimShareBody('DROP', Stub)
+    expect(() => r.claimShareBody('DROP', Other, { embedBelowFolder: true })).toThrow(/already claimed/)
+    expect(r.embeddedShareBody('DROP')).toBeNull()
   })
 })
 

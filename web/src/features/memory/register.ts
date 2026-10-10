@@ -37,7 +37,9 @@ export function registerMemories(registry: Registry): void {
   registry.addSlotItem('sidebarPins', 'memories.pinned', PinnedMemories)
   // The public share page: every Memories share — viewer, contributor and the WRITE_ONLY drop — is rooted at a MEMORY
   // or a CHAPTER node (`PublicShare.rootKind`); the one body renders either root and picks its screens by the role.
-  registry.claimShareBody(MEMORY_KIND, MemoryShareBody)
-  registry.claimShareBody(CHAPTER_KIND, MemoryShareBody)
+  // Below a shared folder core's page still embeds it (`embedBelowFolder`) until the guest gets `MemoryDetail` (inbox
+  // #401 S5).
+  registry.claimShareBody(MEMORY_KIND, MemoryShareBody, { embedBelowFolder: true })
+  registry.claimShareBody(CHAPTER_KIND, MemoryShareBody, { embedBelowFolder: true })
   registry.registerLifecycle('memories', memoriesLifecycle)
 }

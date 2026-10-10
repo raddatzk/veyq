@@ -54,19 +54,21 @@ describe('Access: the two shapes', () => {
   })
 
   // S2 builds it (the share page after its gates); here only its shape, so S2 builds against a fixed type.
-  it('a guest carries its link, its role, the resolved head, the password token and the one naming flow — nothing of a scope', () => {
+  it('a guest carries its link, its role, the resolved head, the password token, the fragment key, the one naming flow and the re-resolve — nothing of a scope', () => {
     expectTypeOf<GuestAccess['mode']>().toEqualTypeOf<'guest'>()
     expectTypeOf<GuestAccess['shareId']>().toEqualTypeOf<string>()
     expectTypeOf<GuestAccess['role']>().toEqualTypeOf<ShareRole>()
     expectTypeOf<GuestAccess['pwToken']>().toEqualTypeOf<string | undefined>()
     expectTypeOf<GuestAccess['head']>().toEqualTypeOf<PublicShareHead>()
+    expectTypeOf<GuestAccess['fragmentKey']>().toEqualTypeOf<string>()
     expectTypeOf<GuestAccess['requestGuest']>().toEqualTypeOf<() => Promise<GuestIdentity | null>>()
+    expectTypeOf<GuestAccess['reload']>().toEqualTypeOf<() => Promise<void>>()
     // no member state is reachable from a guest's access
     expectTypeOf<GuestAccess>().not.toHaveProperty('epochs')
     expectTypeOf<GuestAccess>().not.toHaveProperty('scopeId')
     expectTypeOf<GuestAccess>().not.toHaveProperty('readonly')
     const g = guestAccessOf('READ')
-    expect(Object.keys(g).sort()).toEqual(['head', 'mode', 'requestGuest', 'role', 'shareId'])
+    expect(Object.keys(g).sort()).toEqual(['fragmentKey', 'head', 'mode', 'reload', 'requestGuest', 'role', 'shareId'])
   })
 
   it('is told apart by `mode` alone (a discriminated union)', () => {

@@ -1,10 +1,9 @@
 // @vitest-environment happy-dom
-// Core's folder page of a public share renders the SHARE SECTIONS kinds registered (cr-files-application F2; until
-// inbox #401 S3 retires them): the page is core's level view (S2), and a kind with a `shareSection` has its level
-// section drawn by that component instead, in the level's host slot; the section gets the folder on screen, those
-// children with the chain's keys and names, whether the link writes, and `requestGuest` — the page's one naming flow,
-// the shell's (`GuestAccess.requestGuest`). Harness: a stubbed registry (a fresh `createRegistry()` behind a Proxy), real
-// crypto for the subtree, a stub share section that records its props, a stub level section that lists its nodes.
+// Core's folder page of a public share renders each kind's LEVEL section for a guest, as the member's level does (inbox
+// #401: S2 the page became core's level view, S3 retired the guest-only `shareSection`): the section gets the folder on
+// screen, that kind's children, the guest's `access` — its role and the page's one naming flow, the shell's
+// (`GuestAccess.requestGuest`) — and the guest's `tree` with the chain's keys and names. Harness: a stubbed registry (a
+// fresh `createRegistry()` behind a Proxy), real crypto for the subtree, a stub level section that records its props.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { guestAccessFor } from '../../test/models'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -28,7 +27,7 @@ const nav = vi.hoisted(() => ({ route: null as null | { query: Record<string, st
 vi.mock('vue-router', () => ({ useRoute: () => nav.route, useRouter: () => ({ push: vi.fn(), resolve: () => ({ href: '/s/stub' }) }) }))
 
 import FolderShareBody from './FolderShareBody.vue'
-import { createRegistry, type ShareSectionProps } from '../applications/registry'
+import { createRegistry, type LevelSectionProps } from '../applications/registry'
 import { FOLDER_KIND } from '../node/kind'
 import { sealName, wrapContentKey } from '../node/tree'
 import type { PublicShareHead } from './resolvePublicShare'
@@ -66,21 +65,15 @@ function head(role: ShareRole): PublicShareHead {
 }
 
 /** The props the section was last handed, for the test to read. */
-const seen = vi.hoisted(() => ({ props: null as null | ShareSectionProps }))
-const StubSection = defineComponent({
-  name: 'StubSection',
-  props: ['shareId', 'fragmentKey', 'pwToken', 'head', 'reload', 'folderId', 'nodes', 'keys', 'names', 'canWrite', 'requestGuest'],
-  setup: (p) => () => {
-    seen.props = p as unknown as ShareSectionProps
-    return h('div', { class: 'section-stub' }, (p.nodes as ShareNode[]).map((n) => n.id).join(','))
-  },
-})
-
-/** A kind's level section (what a member sees): lists its nodes. */
+const seen = vi.hoisted(() => ({ props: null as null | LevelSectionProps }))
+/** A kind's level section (what a member sees): lists its nodes, records its props. */
 const LevelStub = defineComponent({
   name: 'LevelStub',
   props: ['folder', 'nodes', 'epochs', 'access', 'tree'],
-  setup: (p) => () => h('div', { class: 'level-stub' }, (p.nodes as { id: string }[]).map((n) => n.id).join(',')),
+  setup: (p) => () => {
+    seen.props = p as unknown as LevelSectionProps
+    return h('div', { class: 'level-stub' }, (p.nodes as { id: string }[]).map((n) => n.id).join(','))
+  },
 })
 
 const stubs = {
@@ -103,54 +96,47 @@ beforeEach(() => {
   localStorage.clear()
   seen.props = null
   const r = createRegistry()
-  r.registerKind({ kind: DOC_KIND, icon: 'pi pi-file', shareable: false, section: { order: 20, component: LevelStub }, shareSection: { order: 20, component: StubSection } })
+  r.registerKind({ kind: DOC_KIND, icon: 'pi pi-file', shareable: false, section: { order: 20, component: LevelStub } })
   holder.reg = r
   nav.route = reactive({ query: {} as Record<string, string>, hash: `#k=${b64url(K_SHARE)}` })
 })
 
-describe('FolderShareBody renders the share sections of the registered kinds', () => {
-  it("hands a section its kind's children at the folder on screen — never as cards — with their keys and names", async () => {
+describe("FolderShareBody renders the registered kinds' level sections for a guest", () => {
+  it("hands a section its kind's children at the folder on screen — never as cards — with the guest's access and tree", async () => {
     const w = mountBody(head(ShareRole.Read))
     await flushPromises()
-    expect(cardNames(w), 'the DOC child is the section\'s, not a folder card').toEqual(['Briefe'])
-    expect(w.find('.section-stub').text()).toBe(DOC)
-    expect(w.find('.level-stub').exists(), 'drawn by the share section, not the level section').toBe(false)
-    const p = seen.props!
-    expect(p.folderId).toBe(ROOT)
-    expect(p.canWrite).toBe(false)
-    expect(p.names.get(DOC)).toBe('Rezept.pdf')
-    expect(Array.from(p.keys.get(DOC)!), "the child's key from the chain").toEqual(Array.from(keys.doc))
-  })
-
-  it('renders the section in a sub-folder with ITS children, and says writable on a READ_WRITE link', async () => {
-    nav.route!.query = { node: SUB }
-    const w = mountBody(head(ShareRole.ReadWrite))
-    await flushPromises()
-    expect(w.find('.section-stub').text()).toBe(DEEP)
-    expect(seen.props!.folderId).toBe(SUB)
-    expect(seen.props!.canWrite).toBe(true)
-    expect(cardNames(w)).toEqual([])
-  })
-
-  it('a kind without a share section is drawn by its level section, as for a member (the control)', async () => {
-    const r = createRegistry()
-    r.registerKind({ kind: DOC_KIND, icon: 'pi pi-file', shareable: false, section: { order: 20, component: LevelStub } })
-    holder.reg = r
-    const w = mountBody(head(ShareRole.Read))
-    await flushPromises()
-    expect(cardNames(w)).toEqual(['Briefe'])
+    expect(cardNames(w), "the DOC child is the section's, not a folder card").toEqual(['Briefe'])
     expect(w.find('.level-stub').text()).toBe(DOC)
-    expect(w.find('.section-stub').exists()).toBe(false)
+    const p = seen.props!
+    expect(p.folder?.id).toBe(ROOT)
+    expect(p.epochs, 'a guest has no epoch keys: its keys come through the tree').toBeNull()
+    expect(p.access).toMatchObject({ mode: 'guest', shareId: SHARE_ID, role: ShareRole.Read })
+    expect(p.tree.nameOf(DOC)).toBe('Rezept.pdf')
+    expect(Array.from(p.tree.keyOf(DOC)!), "the child's key from the chain").toEqual(Array.from(keys.doc))
+    expect(p.tree.linkTo(DOC), 'a link keeps the share key').toEqual({ query: { node: DOC }, hash: `#k=${b64url(K_SHARE)}` })
+  })
+
+  it('renders the section in a sub-folder with ITS children, handed the link as it is (READ_WRITE)', async () => {
+    nav.route!.query = { node: SUB }
+    const h0 = head(ShareRole.ReadWrite)
+    const w = mountBody(h0)
+    await flushPromises()
+    expect(w.find('.level-stub').text()).toBe(DEEP)
+    expect(seen.props!.folder?.id).toBe(SUB)
+    expect(seen.props!.access.mode === 'guest' && seen.props!.access.role).toBe(ShareRole.ReadWrite)
+    expect(cardNames(w)).toEqual([])
   })
 })
 
-describe("FolderShareBody: a share section's requestGuest is the page's one naming flow", () => {
+describe("FolderShareBody: a section's requestGuest is the page's one naming flow", () => {
   it("hands the section the shell's flow (GuestAccess.requestGuest) — no dialog of the body's own", async () => {
     const requestGuest = vi.fn(async () => ({ identityId: 'id-0', contributorToken: 'tok-0' }))
     const h0 = head(ShareRole.ReadWrite)
     const w = mountBody(h0, guestAccessFor(h0, { requestGuest }))
     await flushPromises()
-    await expect(seen.props!.requestGuest()).resolves.toEqual({ identityId: 'id-0', contributorToken: 'tok-0' })
+    const access = seen.props!.access
+    if (access.mode !== 'guest') throw new Error('a guest page handed a member access')
+    await expect(access.requestGuest()).resolves.toEqual({ identityId: 'id-0', contributorToken: 'tok-0' })
     expect(requestGuest).toHaveBeenCalledOnce()
     expect(w.find('.dialog-stub').exists(), 'the body opens no name dialog').toBe(false)
   })

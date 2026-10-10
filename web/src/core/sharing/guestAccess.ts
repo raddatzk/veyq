@@ -102,11 +102,13 @@ export function guestTreeSource(head: PublicShareHead, route: { readonly hash: s
 }
 
 /** The guest's `Access` for the link `head` resolved behind the page's gates; `requestGuest` is the page's one naming
- *  flow (the shell's dialog, `views/ShareView.vue`). */
+ *  flow (the shell's dialog, `views/ShareView.vue`), `reload` its re-resolve. */
 export function guestAccess(fields: {
   head: PublicShareHead
   pwToken?: string
+  fragmentKey: string
   requestGuest: () => Promise<GuestIdentity | null>
+  reload: () => Promise<void>
 }): GuestAccess {
   return {
     mode: 'guest',
@@ -114,6 +116,8 @@ export function guestAccess(fields: {
     role: fields.head.role,
     pwToken: fields.pwToken,
     head: fields.head,
+    fragmentKey: fields.fragmentKey,
     requestGuest: fields.requestGuest,
+    reload: fields.reload,
   }
 }
