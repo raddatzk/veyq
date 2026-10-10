@@ -44,7 +44,7 @@ acceptanceCriteria:
   - id: abandoned-session-reclaimed
     text: >-
       An upload that never reaches `complete` — cancelled, killed mid-flight, or rejected by the complete-time
-      budget gate — is reclaimed past `veyq.media.upload.retention`: the OPEN `veyq_upload_session` row AND the
+      budget gate — is reclaimed past `veyq.blob.upload.retention`: the OPEN `veyq_upload_session` row AND the
       chunk objects the client already PUT direct-to-store, since that row is the only pointer to their
       `storage_key` and a row-only delete would orphan the bytes permanently. Those are two components since
       ADR 0062 and the tests drive both — the purge deletes the row and records the key prefix in the same

@@ -123,7 +123,7 @@ The backend cannot see bytes mid-`PUT`, so it bounds them before and after:
 - **Abandoned uploads are reclaimed by the stale-session GC**, which keys on a session's **last issued window**,
   not on its start. A `PUT` can only begin within the TTL of the window that signed it (S3 honours a signature
   valid at request start, so one frame may still be streaming), which is why a session with no new window for
-  `veyq.media.upload.retention` can receive no further byte — the bound the retention rests on, now per window.
+  `veyq.blob.upload.retention` can receive no further byte — the bound the retention rests on, now per window.
 
 ### 4. The store must be client-reachable (public endpoint + CORS)
 

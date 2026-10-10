@@ -63,4 +63,5 @@ acceptanceCriteria:
         # 127.0.0.1:8089 = store public endpoint. Uploaded a new image into a media-less Memory → blob-uploads-batch
         # → PUT /veyq → commitCoverBlob → downloaded back; cropped cover rendered on the detail header + browse card;
         # DB: node cover_blob_id + cover_byte_size (downscaled), wrapped_meta ciphertext (no plaintext leak), 0
-        # veyq_media rows, 1 veyq_blob; remove reclaimed it (cover_blob_id NULL, veyq_blob 0).
+        # veyq_media rows, 1 veyq_blob; remove reclaimed it (cover_blob_id NULL, veyq_blob 0). Since inbox #341 the
+        # pointer is the node's COVER row in veyq_node_attachment (cover_byte_size dropped; the size is the blob's).
