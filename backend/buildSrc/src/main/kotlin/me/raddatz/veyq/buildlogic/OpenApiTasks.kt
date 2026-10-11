@@ -97,6 +97,8 @@ abstract class OpenApiGenerate : DefaultTask() {
                 library = "quarkus",
             )
         }
+        // The cascade of a generated list moves onto its element type (HV000271) — see ModelCascade.
+        ModelCascade.apply(modelsDir.get().asFile.resolve("src/main/kotlin"))
         if (set.owner == SpecSets.coreOwner) return
         // Every schema has ONE generated type. An application model named like a core one is a second definition of a
         // shared schema — the schema mapping did not apply (a schema copied instead of aliased to `_common`, or the

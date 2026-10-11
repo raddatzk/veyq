@@ -34,7 +34,12 @@ allOpen {
 }
 
 kotlin {
-    compilerOptions { javaParameters.set(true) }
+    compilerOptions {
+        javaParameters.set(true)
+        // The generated lists carry their cascade as `List<@Valid Item>` (`ModelCascade`, HV000271): Kotlin writes a
+        // type-argument annotation into the bytecode only with this flag — drop it and the cascade silently vanishes.
+        freeCompilerArgs.add("-Xemit-jvm-type-annotations")
+    }
 }
 
 // A module is a library: what it builds on reaches its dependants through `api`, the BOM (the root's version) too,
