@@ -7,7 +7,7 @@
 //     wrap); a stale second move built on the old placement version is refused `409 stale_placement`;
 //   - a drop box: a guest names itself, gets its folder and uploads a file; the member moves the guest's folder out into
 //     a normal folder — the folder lists there as an ordinary one (no identity), its file still decrypts, and the guest
-//     can no longer add to it with its old token (`403`).
+//     can no longer add to it with its old token (the server answers 403, the guest tree client reports `share_not_contributable`).
 // Run against a FRESH instance: `python3 scripts/run_web_e2e.py web/src/core/node/move.e2e.test.ts`.
 //
 // The raw-wire check as in the neighbouring suites: no folder, file or guest name crosses `fetch` in the clear, and the
@@ -70,6 +70,10 @@ const contentOf = async (b: Blob) => Array.from(new Uint8Array(await b.arrayBuff
 const failure = (p: Promise<unknown>): Promise<unknown> => p.then(() => null, (e: unknown) => e)
 const byId = (tree: TreeNode[], id: string) => tree.find((n) => n.id === id)!
 
+// Random opaque bytes of a sealed field's minimum size: the server refuses this move on its VERSION before it looks at the
+// values, and the wire assertion (cc.security.wire-assertion) requires every opaque field to look sealed.
+const filler = (): string => Buffer.from(crypto.getRandomValues(new Uint8Array(48))).toString('base64')
+
 describe.skipIf(!process.env.VEYQ_E2E)('move e2e (live, real crypto: a subtree keeps opening; a guest folder moved out ends its identity)', () => {
   it('a member moves a folder with a file between folders and the root; a drop box guest\'s folder out of its box', async () => {
     await birthInstance('E2E Move')
@@ -106,7 +110,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('move e2e (live, real crypto: a subtree k
     // (sent once, unretried: the version stated is the stale one)
     const stale = await failure(contentApi().updateNode({
       scopeId, nodeId: nId,
-      updateNodeRequest: { parentId: aId, wrappedContentKey: byId(inB, nId).wrappedContentKey, encryptedName: 'c3RhbGU=', slugToken: 'c3RhbGU=', epoch: epochs.current, placementVersion: byId(before, nId).placementVersion },
+      updateNodeRequest: { parentId: aId, wrappedContentKey: byId(inB, nId).wrappedContentKey, encryptedName: filler(), slugToken: filler(), epoch: epochs.current, placementVersion: byId(before, nId).placementVersion },
     }))
     expect(await decodeHttpError(stale)).toEqual({ status: 409, code: 'stale_placement' })
     await moveNode(scopeId, epochs, inB, nId, null) // to the scope root: sealed under K_SC at the current epoch
@@ -138,7 +142,8 @@ describe.skipIf(!process.env.VEYQ_E2E)('move e2e (live, real crypto: a subtree k
 
     // the guest adds nothing to its old folder with its old token
     const intoOld = await failure(guestFileUploadJob({ ctx: dropGuestContext(head, hilde, folder), parentId: folder.nodeId }, fileOf(bytesOf(7, 1), AFTER_MOVE)).run(ctx()))
-    expect(httpStatus(intoOld)).toBe(403)
+    // the server refuses (403); the guest tree client reports it as its own error, not as a raw response
+    expect(intoOld).toMatchObject({ name: 'GuestTreeError', code: 'share_not_contributable' })
     expect((await listTree(scopeId, epochs)).filter((n) => n.parentId === folder.nodeId).map((n) => n.name)).toEqual([GUEST_FILE])
 
     // --- the wire: no name, no MIME type in the clear ----------------------------------------------------------------
