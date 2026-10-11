@@ -31,18 +31,18 @@ import org.hibernate.annotations.DynamicUpdate
 @DynamicUpdate
 class DevicePairingEntity : PanacheEntityBase {
     @Id
-    @Column(name = "id", length = 36)
+    @Column(name = "id", columnDefinition = "uuid")
     lateinit var id: String
 
     @Column(name = "handle_hash", nullable = false, length = 64)
     lateinit var handleHash: String
 
     /** The account this channel became — null until the trusted device delegates (ADR 0059 §3). */
-    @Column(name = "user_id", length = 36)
+    @Column(name = "user_id", columnDefinition = "uuid")
     var userId: String? = null
 
     /** The family minted for this ceremony; revoked with the channel if it dies uncollected. */
-    @Column(name = "delegated_family_id", length = 36)
+    @Column(name = "delegated_family_id", columnDefinition = "uuid")
     var delegatedFamilyId: String? = null
 
     /** The answering device's ephemeral transport key and a MAC over it under a channel key the server never

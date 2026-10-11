@@ -25,7 +25,7 @@ import org.hibernate.annotations.DynamicUpdate
 @DynamicUpdate
 class DeviceRegisterEntity : PanacheEntityBase {
     @Id
-    @Column(name = "account_id", length = 36)
+    @Column(name = "account_id", columnDefinition = "uuid")
     lateinit var accountId: String
 
     @Column(name = "sealed_blob")

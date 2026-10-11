@@ -23,11 +23,11 @@ import org.hibernate.annotations.DynamicUpdate
 @DynamicUpdate
 class JobEntity : PanacheEntityBase {
     @Id
-    @Column(name = "id", length = 36)
+    @Column(name = "id", columnDefinition = "uuid")
     lateinit var id: String
 
     /** Routing key — the server already knows membership, so it matches claims against the caller's scopes. */
-    @Column(name = "scope_id", nullable = false, length = 36)
+    @Column(name = "scope_id", nullable = false, columnDefinition = "uuid")
     lateinit var scopeId: String
 
     /** Opaque capability token from the registry ([CapabilityTags]); matched against a worker's claimed tags. */
@@ -42,7 +42,7 @@ class JobEntity : PanacheEntityBase {
     lateinit var status: String
 
     /** The worker's opaque lease id while LEASED; null when PENDING/terminal. */
-    @Column(name = "lease_holder", length = 36)
+    @Column(name = "lease_holder", columnDefinition = "uuid")
     var leaseHolder: String? = null
 
     @Column(name = "lease_expires_at")
@@ -97,14 +97,14 @@ class JobEntity : PanacheEntityBase {
 @DynamicUpdate
 class JobDeclineEntity : PanacheEntityBase {
     @Id
-    @Column(name = "id", length = 36)
+    @Column(name = "id", columnDefinition = "uuid")
     lateinit var id: String
 
-    @Column(name = "job_id", nullable = false, length = 36)
+    @Column(name = "job_id", nullable = false, columnDefinition = "uuid")
     lateinit var jobId: String
 
     /** The declining worker's opaque id (the `SecurityIdentity` principal / lease holder). */
-    @Column(name = "worker_id", nullable = false, length = 36)
+    @Column(name = "worker_id", nullable = false, columnDefinition = "uuid")
     lateinit var workerId: String
 
     @Column(name = "reason", length = 256)

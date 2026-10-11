@@ -18,10 +18,10 @@ import org.hibernate.annotations.DynamicUpdate
 @DynamicUpdate
 class ScopeEpochEntity : PanacheEntityBase {
     @Id
-    @Column(name = "id", length = 36)
+    @Column(name = "id", columnDefinition = "uuid")
     lateinit var id: String
 
-    @Column(name = "scope_id", nullable = false, length = 36)
+    @Column(name = "scope_id", nullable = false, columnDefinition = "uuid")
     lateinit var scopeId: String
 
     @Column(name = "epoch", nullable = false)

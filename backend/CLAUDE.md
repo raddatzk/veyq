@@ -168,7 +168,11 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   one casts it to text (`CAST(t.id AS CHAR(36))`: a bare one is a `byte[]` on H2, measured). Never a sentinel id (`''`, `'system'`):
   write the query without the clause. A share id, a composite key and `owner_key` are not UUIDs and stay `VARCHAR`.
   A `UUID` column orders by its own segments, not by its text: sort ids in Kotlin where a text order is promised, and break a
-  `created_at` tie explicitly (second-precision on MariaDB). `python3 scripts/run_backend_races_on_mariadb.py --tests '*'` runs the whole suite on the real engine. The test datasource runs H2 with **`MODE=MariaDB`** (`application-test.properties`) so it parses
+  `created_at` tie explicitly (second-precision on MariaDB). **An entity maps such a column `@Column(columnDefinition = "uuid")`,
+  never `length = 36`**: Hibernate's schema validator (a `%dev` boot runs it, `validate-in-dev-mode`; production's `none` does not)
+  compares the declared type name with the database's, and `length = 36` says `varchar(36)` — an ERROR per column in every IntelliJ
+  start. `EntitySchemaValidationTest` (in `:core` and `:apps:memories`) boots with `strategy=validate`, so a drift is red on H2 and,
+  in the race runner's default run, on MariaDB (bitten both ways: one id back to `length = 36`). `python3 scripts/run_backend_races_on_mariadb.py --tests '*'` runs the whole suite on the real engine. The test datasource runs H2 with **`MODE=MariaDB`** (`application-test.properties`) so it parses
   what prod parses — a **parity** measure, not a workaround: a type-change is `MODIFY COLUMN` (MariaDB-only
   syntax; default-mode H2 rejects it, and there is no type-change form in the H2 ∩ MariaDB *default* subset).
   The mode does **not** make H2 enforce MariaDB's byte ceiling — that stays the guard's job; don't conflate them.

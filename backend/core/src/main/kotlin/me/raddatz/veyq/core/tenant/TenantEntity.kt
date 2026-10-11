@@ -25,7 +25,7 @@ import org.hibernate.annotations.DynamicUpdate
 @DynamicUpdate
 class TenantEntity : PanacheEntityBase {
     @Id
-    @Column(name = "id", length = 36)
+    @Column(name = "id", columnDefinition = "uuid")
     lateinit var id: String
 
     @Column(name = "name", nullable = false, length = 100)

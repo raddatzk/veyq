@@ -23,17 +23,17 @@ import org.hibernate.annotations.DynamicUpdate
 @DynamicUpdate
 class MembershipEntity : PanacheEntityBase {
     @Id
-    @Column(name = "id", length = 36)
+    @Column(name = "id", columnDefinition = "uuid")
     lateinit var id: String
 
-    @Column(name = "user_id", nullable = false, length = 36)
+    @Column(name = "user_id", nullable = false, columnDefinition = "uuid")
     lateinit var userId: String
 
-    @Column(name = "tenant_id", nullable = false, length = 36)
+    @Column(name = "tenant_id", nullable = false, columnDefinition = "uuid")
     lateinit var tenantId: String
 
     /** The scope this membership grants (cr-0026). For the TENANT root scope this equals `tenantId`. */
-    @Column(name = "scope_id", nullable = false, length = 36)
+    @Column(name = "scope_id", nullable = false, columnDefinition = "uuid")
     lateinit var scopeId: String
 
     @Column(name = "role", nullable = false, length = 16)
@@ -67,14 +67,14 @@ class MembershipEntity : PanacheEntityBase {
     /** For a `pendingConsent` proposal (cr-0094): the userId of the GroupOwner who proposed the add ("who added
      *  you"), resolved to their per-tenant username in the invitee's invitations view. Null for an ordinary
      *  membership; cleared on accept. */
-    @Column(name = "added_by", length = 36)
+    @Column(name = "added_by", columnDefinition = "uuid")
     var addedBy: String? = null
 
     /** The admission (ADR 0020 move 6): a client-minted id, the epoch whose key computed [admissionTag], and the tag —
      *  an HMAC only a holder of that epoch key can compute. Opaque to the server, which stores, relays and never
      *  verifies it; every client verifies it before wrapping a scope key to this member. Null = never admitted by a
      *  key-holder (or dropped by a rotation whose rotator could not verify it) — no honest client delivers to it. */
-    @Column(name = "admission_id", length = 36)
+    @Column(name = "admission_id", columnDefinition = "uuid")
     var admissionId: String? = null
 
     @Column(name = "admission_epoch")
@@ -86,7 +86,7 @@ class MembershipEntity : PanacheEntityBase {
     /** Who posted [wrappedGrant], and their Ed25519 identity signature over it (ADR 0028 Decision 6). Written with
      *  every grant — the granter is always the authenticated caller of the write — and never verified here: the
      *  recipient checks it before it uses the key. Null for a grant-less membership. */
-    @Column(name = "granter_user_id", length = 36)
+    @Column(name = "granter_user_id", columnDefinition = "uuid")
     var granterUserId: String? = null
 
     @Column(name = "grant_signature")

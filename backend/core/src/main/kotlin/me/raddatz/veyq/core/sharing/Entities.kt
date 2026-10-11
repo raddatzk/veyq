@@ -29,15 +29,15 @@ class ShareEntity : PanacheEntityBase {
     lateinit var id: String
 
     /** The veyq user who owns the share (list/revoke authz) — its creator, or the member who adopted it by re-activation. */
-    @Column(name = "owner_account", nullable = false, length = 36)
+    @Column(name = "owner_account", nullable = false, columnDefinition = "uuid")
     lateinit var ownerAccount: String
 
     /** The shared node's scope — personal, group or tenant (ADR 0029 §6); gates the curator ops and the subtree walk. */
-    @Column(name = "scope_id", nullable = false, length = 36)
+    @Column(name = "scope_id", nullable = false, columnDefinition = "uuid")
     lateinit var scopeId: String
 
     /** The shared node (the subtree root). */
-    @Column(name = "node_id", nullable = false, length = 36)
+    @Column(name = "node_id", nullable = false, columnDefinition = "uuid")
     lateinit var nodeId: String
 
     @Column(name = "role", nullable = false, length = 16)
@@ -155,7 +155,7 @@ class ShareEntity : PanacheEntityBase {
 @DynamicUpdate
 class ShareIdentityEntity : PanacheEntityBase {
     @Id
-    @Column(name = "id", length = 36)
+    @Column(name = "id", columnDefinition = "uuid")
     lateinit var id: String
 
     @Column(name = "share_id", nullable = false, length = 64)

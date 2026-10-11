@@ -20,7 +20,7 @@ import org.hibernate.annotations.DynamicUpdate
 @DynamicUpdate
 class IdentityPinsEntity : PanacheEntityBase {
     @Id
-    @Column(name = "account_id", length = 36)
+    @Column(name = "account_id", columnDefinition = "uuid")
     lateinit var accountId: String
 
     @Column(name = "sealed_blob", columnDefinition = "MEDIUMTEXT")

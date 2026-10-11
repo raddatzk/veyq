@@ -32,13 +32,13 @@ import org.hibernate.annotations.DynamicUpdate
 @DynamicUpdate
 class TenantTermsAcceptanceEntity : PanacheEntityBase {
     @Id
-    @Column(name = "id", length = 36)
+    @Column(name = "id", columnDefinition = "uuid")
     lateinit var id: String
 
-    @Column(name = "user_id", nullable = false, length = 36)
+    @Column(name = "user_id", nullable = false, columnDefinition = "uuid")
     lateinit var userId: String
 
-    @Column(name = "tenant_id", nullable = false, length = 36)
+    @Column(name = "tenant_id", nullable = false, columnDefinition = "uuid")
     lateinit var tenantId: String
 
     @Column(name = "accepted_version", nullable = false)
@@ -65,7 +65,7 @@ class TenantTermsAcceptanceEntity : PanacheEntityBase {
 @DynamicUpdate
 class TenantMailSettingsEntity : PanacheEntityBase {
     @Id
-    @Column(name = "tenant_id", length = 36)
+    @Column(name = "tenant_id", columnDefinition = "uuid")
     lateinit var tenantId: String
 
     @Column(name = "host", length = 253)
@@ -119,10 +119,10 @@ class TenantMailSettingsEntity : PanacheEntityBase {
 @DynamicUpdate
 class TenantInviteEntity : PanacheEntityBase {
     @Id
-    @Column(name = "id", length = 36)
+    @Column(name = "id", columnDefinition = "uuid")
     lateinit var id: String
 
-    @Column(name = "tenant_id", nullable = false, length = 36)
+    @Column(name = "tenant_id", nullable = false, columnDefinition = "uuid")
     lateinit var tenantId: String
 
     @Column(name = "owner_email", nullable = false, length = 254)
@@ -148,7 +148,7 @@ class TenantInviteEntity : PanacheEntityBase {
     /** A MEMBER invite's admission (ADR 0020 move 6) — tagged by the owner's client under the tenant scope's epoch
      *  key, kept by a reissue, and copied onto the membership its acceptance creates. Null on an owner invite (the
      *  tenant has no key yet). Never verified here. */
-    @Column(name = "admission_id", length = 36)
+    @Column(name = "admission_id", columnDefinition = "uuid")
     var admissionId: String? = null
 
     @Column(name = "admission_epoch")
