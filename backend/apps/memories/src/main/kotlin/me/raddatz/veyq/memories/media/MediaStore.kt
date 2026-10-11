@@ -527,7 +527,7 @@ class MediaStore(
      */
     @Transactional
     fun listBuckets(nodeId: String): List<BucketRow> {
-        return BucketEntity.find("nodeId = ?1 order by isPrimary desc, createdAt", nodeId).list().map { b ->
+        return BucketEntity.find("nodeId = ?1 order by isPrimary desc, createdAt, id", nodeId).list().map { b ->
             val count = MediaEntity.count("nodeId = ?1 and bucketId = ?2 and deletedAt is null", nodeId, b.id).toInt()
             val identity = contributorIdentityOf(b)
             BucketRow(

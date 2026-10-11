@@ -168,7 +168,7 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   one casts it to text (`CAST(t.id AS CHAR(36))`: a bare one is a `byte[]` on H2, measured). Never a sentinel id (`''`, `'system'`):
   write the query without the clause. A share id, a composite key and `owner_key` are not UUIDs and stay `VARCHAR`.
   A `UUID` column orders by its own segments, not by its text: sort ids in Kotlin where a text order is promised, and break a
-  `created_at` tie explicitly (second-precision on MariaDB). **An entity maps such a column `@Column(columnDefinition = "uuid")`,
+  `created_at` tie explicitly. A plain `TIMESTAMP` is **second-precision on MariaDB** (H2 keeps more, so H2 rarely shows the tie): a column that orders rows or picks the newest — `veyq_node`/`veyq_job`/`veyq_membership`/`veyq_tenant_invite.created_at`, the Memories media `updated_at` — is `TIMESTAMP(3)` (millisecond; inbox #387/#402), and the query still ends on `id`. **An entity maps such a column `@Column(columnDefinition = "uuid")`,
   never `length = 36`**: Hibernate's schema validator (a `%dev` boot runs it, `validate-in-dev-mode`; production's `none` does not)
   compares the declared type name with the database's, and `length = 36` says `varchar(36)` — an ERROR per column in every IntelliJ
   start. `EntitySchemaValidationTest` (in `:core` and `:apps:memories`) boots with `strategy=validate`, so a drift is red on H2 and,
