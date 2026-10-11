@@ -83,7 +83,7 @@ paths:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
         "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
-          description: No such node, or the caller is not a member of its scope.
+          description: No such node (a node in the trash is none: nobody shares it), or the caller is not a member of its scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
         "409":
@@ -106,8 +106,8 @@ paths:
             instance-wide, so the operator has turned public sharing off (ADR 0032; checked first, before any
             scope check, so it reads as instance policy not a scope error); `illegal_scope` — the node's kind may not
             be a share root with this role (`ShareRoots`, ADR 0080: a `FOLDER` with READ or READ_WRITE, a kind of an
-            application as that application declares; a kind nobody declares, or two do, is never shared); a
-            non-member scope is a non-enumerable `404`, not `422`.
+            application as that application declares — Files: a `FILE` with READ or READ_WRITE, never WRITE_ONLY; a kind
+            nobody declares, or two do, is never shared); a non-member scope is a non-enumerable `404`, not `422`.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: capability_disabled } }
     get:

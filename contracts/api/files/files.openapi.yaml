@@ -21,11 +21,13 @@ info:
 
     **Guest operations** (tag `share-files`, cr-files-application F2): on a public share link ([docs/apps/files.md](../../../docs/apps/files.md),
     [ADR 0080](../../../docs/decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)
-    Decision 6): a guest of a `READ` or `READ_WRITE` folder link lists the blob references of the files in the shared
-    subtree; a guest of a `READ_WRITE` link completes an upload it started through core's guest transport
+    Decision 6): a guest of a `READ` or `READ_WRITE` link lists the blob references of the files in the shared subtree —
+    a folder's files, or the one file of a **single-file link** (a `FILE` is a share root with `READ` or `READ_WRITE`,
+    never `WRITE_ONLY`: `createShare` answers that `422 illegal_scope`); a guest of a `READ_WRITE` link completes an
+    upload it started through core's guest transport
     (`sharing.openapi.yaml` `startShareBlobUploads` / `presignShareBlobUploadWindows`, with `role: FILE_CONTENT`,
-    `ownerId` and `nodeId` = the file node) into a file below the root — one it created with core's
-    `createShareNode`, or one already there, replacing its blob. Everything else is core's and is not repeated here:
+    `ownerId` and `nodeId` = the file node) into a file of the subtree — one it created with core's
+    `createShareNode`, one already there, or the link's root file itself — replacing its blob. Everything else is core's and is not repeated here:
     the shared nodes with their keys, names and sealed metadata (`resolveShare`), a file's download
     (`resolveShareBlob` by `blobId`), a guest's create, rename and move (`createShareNode`, `updateShareNode`). A
     guest deletes no file (nodes store no authorship, ADR 0080 Decision 6).
@@ -212,7 +214,7 @@ paths:
         **No auth.** A `READ_WRITE` guest's `completeFile`: promote one session it opened with `startShareBlobUploads`
         (`role: FILE_CONTENT`, `ownerId` = `nodeId` = this file) into the blob of the file's `FILE_CONTENT` slot.
         Core's guest gate runs first (`ShareGuestGate`) and spends the per-share upload budget. The node must be a
-        live `FILE` inside the share's subtree (a link's role applies to every node below its root as Files allows
+        live `FILE` inside the share's subtree — the root of a single-file link included — (a link's role applies to every node below its root as Files allows
         it, ADR 0080 Decision 6) — checked again in the write, under the scope lock, with the link: a file trashed or
         moved out of the subtree since, or a link revoked or deleted since, refuses it (`upload_not_found`).
         Declare-then-verify, the compare-and-set on `expectedBlobId` and the reclaim of a replaced blob are exactly
