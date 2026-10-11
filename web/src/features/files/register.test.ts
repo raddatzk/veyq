@@ -69,8 +69,8 @@ describe('registerFiles', () => {
     expect(file.supported && file.createDialog).toBeUndefined() // a file is created by uploading it, never by a name dialog
     expect(file.supported && file.shareDialog).toBeUndefined() // not a share root: no share offered
     expect(registry.sections()).toEqual([
-      { component: FilesSection, order: 20, kinds: [FILE_KIND] },
-      { component: DropBoxSection, order: 21, kinds: [DROPBOX_KIND] },
+      { component: FilesSection, order: 20, views: [], kinds: [FILE_KIND] },
+      { component: DropBoxSection, order: 21, views: [], kinds: [DROPBOX_KIND] },
     ])
     for (const slot of ['topbarTray', 'sidebarPins'] as const) expect(registry.slotItems(slot)).toEqual([])
     expect(registry.shareBody(FILE_KIND)).toBeNull()

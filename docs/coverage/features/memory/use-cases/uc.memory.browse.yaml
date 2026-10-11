@@ -22,7 +22,7 @@ acceptanceCriteria:
       web:
         unit:
           - src/shared/state/useViewMode.test.ts
-          - src/features/memory/components/ViewModeToggle.test.ts
+          - src/core/node/ViewModeToggle.test.ts
           - src/features/memory/components/MemoriesSection.test.ts
           - src/core/node/LevelView.test.ts
           - src/features/memory/components/SpaceMap.test.ts

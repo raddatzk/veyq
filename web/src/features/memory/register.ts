@@ -12,6 +12,7 @@
 // `topbarTray` list.
 import { MEMORY_KIND, CHAPTER_KIND } from './kinds'
 import type { Registry } from '../../core/applications/registry'
+import { GRID_VIEW, LIST_VIEW, type LevelViewOption } from '../../core/node/levelViews'
 import MemoryDetailHost from './components/MemoryDetailHost.vue'
 import MemoriesSection from './components/MemoriesSection.vue'
 import MemoryNodeDialog from './components/MemoryNodeDialog.vue'
@@ -20,13 +21,17 @@ import PinnedMemories from './components/PinnedMemories.vue'
 import MemoryShareBody from './components/MemoryShareBody.vue'
 import { memoriesLifecycle } from './lifecycle'
 
+/** The places map of a level (cr-0071): Memories' own presentation — its pins span the level's whole subtree. */
+const MAP_VIEW: LevelViewOption = { mode: 'map', icon: 'pi pi-map', label: 'memory.viewMap' }
+
 export function registerMemories(registry: Registry): void {
   // A Memory (cr-0104) and a chapter (ADR 0080 Decision 13) are both share roots for every role — the backend's
   // `MemoryShareRoots` — and both open the same detail, to the gallery (cr-0060). A chapter's share wraps its own
   // `K_mem`: its guest holds nothing of the Memory above it.
   // Both name the one section (rendered once, handed the children of both; a CHAPTER sits only inside a MEMORY, so at a
   // folder level that is the Memories). `order` 10 leaves room on either side for another application's section.
-  const section = { order: 10, component: MemoriesSection }
+  // Its `views`: the card grid, its list variant and the places map (inbox #370) — core's level toolbar offers them.
+  const section = { order: 10, component: MemoriesSection, views: [GRID_VIEW, LIST_VIEW, MAP_VIEW] }
   // One create dialog and one share dialog serve both kinds: the create's `kind` prop picks Memory or chapter, the
   // share dialog reads `nodeKind` for its wording. Core's delete dialog titles each by its own noun (`deleteTitle`):
   // "Delete Memory", "Delete chapter".

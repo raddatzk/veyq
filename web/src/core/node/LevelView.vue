@@ -1,7 +1,8 @@
 <script setup lang="ts">
 // The folder level view (cr-files-application P4b, ADR 0079): what a member sees at the scope root or inside a folder.
 // Core's, and it names no application: in this order it renders its TOOLBAR (the space's node trash, which holds every
-// application's nodes — it was Memories' section's until Files needed it too, inbox #370/#385), the folder's OVERVIEW card (name, share, rename,
+// application's nodes, and the view-mode switch — both were Memories' section's until Files needed them too, inbox
+// #370/#385), the folder's OVERVIEW card (name, share, rename,
 // delete — a folder is core's kind since cr-node-key-hierarchy 5b.3), then one SECTION per application as the registry
 // lists them (`registry.sections()`, sorted by `order`; a section renders its own `<section>`: heading, create action,
 // view modes), then a FALLBACK section per kind of child no section serves (its icon, its name, the explicit
@@ -15,8 +16,9 @@
 //
 // **The view mode is the shared one** (`shared/state/useViewMode`): the folders grid takes its list variant from it,
 // and the folders section steps aside while the map is shown (Memories' section draws the map, whose pins span the
-// whole subtree, folders included). The grid/list/map toggle is still Memories' section's (its map is Memories'; inbox
-// #370).
+// whole subtree, folders included). The switch is this toolbar's (inbox #370): it offers the union of the presentations
+// on screen — the folders' grid and list (`FOLDER_VIEWS`) and each shown section's `views` from its kind's descriptor
+// (Memories: grid, list, map) — and only where there is more than one to choose from.
 //
 // **Who looks** (inbox #401): the host hands the level its `access` and its `tree` (`core/access.ts`), and the level hands
 // both on to every section; what the level's own controls offer is core's `folderCapabilities` for the folder on screen
@@ -39,6 +41,9 @@ import { registry } from '../applications/registry'
 import { folderCapabilities, targetOf, type Access, type TreeSource } from '../access'
 import { useViewMode } from '../../shared/state/useViewMode'
 import { compareByCreation, displayNamesOf } from './location'
+import { FOLDER_VIEWS, unionViews } from './levelViews'
+import ViewModeToggle from './ViewModeToggle.vue'
+import NodeOverviewCard from './components/NodeOverviewCard.vue'
 
 const props = defineProps<{
   folder: TreeNode | null
@@ -84,6 +89,7 @@ const sectionViews = computed(() =>
     .map((s) => ({
       key: s.kinds[0],
       component: s.component,
+      views: s.views,
       nodes: s.kinds.length === 1 ? (props.level.byKind.get(s.kinds[0]) ?? []) : s.kinds.flatMap((k) => props.level.byKind.get(k) ?? []),
     }))
     .filter((s) => !hideEmptySections.value || s.nodes.length > 0),
@@ -91,6 +97,9 @@ const sectionViews = computed(() =>
 const showFolders = computed(() => !hideEmptySections.value || props.level.folders.length > 0)
 // The sub-folders' card labels: a repeated name numbered, in creation order — the rule the URL segments follow too.
 const folderLabels = computed(() => displayNamesOf(props.level.folders, (n) => n.name, compareByCreation))
+// The presentations of what is on screen, in the order first named; a switch only between two or more.
+const views = computed(() => unionViews([...sectionViews.value.map((s) => s.views), showFolders.value ? FOLDER_VIEWS : []]))
+const showViews = computed(() => views.value.length > 1)
 const nothingShown = computed(() => hideEmptySections.value && !sectionViews.value.length && !fallbacks.value.length && !showFolders.value)
 
 // The children no section serves, one bucket per kind, sorted by kind so the order is stable. A kind the registry
@@ -109,9 +118,11 @@ const fallbacks = computed(() =>
 <template>
   <div class="veyq-level-view">
     <!-- The space's node trash (uc.memory.delete-node): every application's deleted nodes, so the level view's own, not
-         a section's. Hidden where nothing is written (a pending deletion: a restore is a write; a guest's folder). -->
-    <div v-if="caps.nodeTrash" class="veyq-level-toolbar">
+         a section's. Hidden where nothing is written (a pending deletion: a restore is a write; a guest's folder). The
+         view switch governs every section and the folders, so it is the level's too — a guest's as well. -->
+    <div v-if="caps.nodeTrash || showViews" class="veyq-level-toolbar">
       <Button
+        v-if="caps.nodeTrash"
         type="button"
         :label="t('node.trash.open')"
         icon="pi pi-trash"
@@ -120,56 +131,20 @@ const fallbacks = computed(() =>
         size="small"
         @click="emit('openTrash')"
       />
+      <ViewModeToggle v-if="showViews" :views="views" />
     </div>
-    <section v-if="folder" class="veyq-section">
-      <div class="veyq-section-header">
-        <div class="veyq-card veyq-folder-card veyq-folder-overview-card">
-          <span class="pi pi-folder" />
-          <h2>{{ folderName ?? folder.name }}</h2>
-          <!-- Visible at EVERY width: the card has no overflow menu, so a width-hidden button is a lost action. They
-               carried the Memory header's collapse classes, which hid all three at 721–1120 px and ≤ 720 px (found in the
-               browser, 2026-10-07); three small icon buttons fit, and ≤ 520 px they take their own row (ui.css). -->
-          <div v-if="caps.share || caps.rename || caps.deleteNode" class="veyq-folder-overview-actions">
-            <!-- The same affordance as a Memory's share button (icon, label, tooltip); listing and copying links is a
-                 read, so it stays during a pending deletion, where a new link is refused server-side anyway. -->
-            <Button
-              v-if="caps.share"
-              v-tooltip.bottom="t('share.share')"
-              type="button"
-              class="veyq-icon-button veyq-prime-icon-button veyq-folder-overview-action"
-              icon="pi pi-share-alt"
-              :aria-label="t('share.share')"
-              severity="secondary"
-              outlined
-              size="small"
-              @click="emit('share')"
-            />
-            <Button
-              v-if="caps.rename"
-              type="button"
-              class="veyq-icon-button veyq-prime-icon-button veyq-folder-overview-action"
-              icon="pi pi-pencil"
-              :aria-label="t('node.rename')"
-              severity="secondary"
-              outlined
-              size="small"
-              @click="emit('renameFolder')"
-            />
-            <Button
-              v-if="caps.deleteNode"
-              type="button"
-              class="veyq-icon-button veyq-prime-icon-button veyq-folder-overview-action veyq-danger-action"
-              icon="pi pi-trash"
-              :aria-label="t('node.delete')"
-              severity="danger"
-              outlined
-              size="small"
-              @click="emit('deleteFolder')"
-            />
-          </div>
-        </div>
-      </div>
-    </section>
+    <!-- The folder's header card, core's one (`NodeOverviewCard`): a container kind's detail opens with it too. -->
+    <NodeOverviewCard
+      v-if="folder"
+      icon="pi pi-folder"
+      :name="folderName ?? folder.name"
+      :share="caps.share"
+      :rename="caps.rename"
+      :remove="caps.deleteNode"
+      @share="emit('share')"
+      @rename="emit('renameFolder')"
+      @delete="emit('deleteFolder')"
+    />
 
     <component
       :is="s.component"

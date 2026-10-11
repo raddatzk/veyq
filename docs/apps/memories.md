@@ -180,7 +180,8 @@ only `FOLDER`), declares that a `MEMORY` and a `CHAPTER` may be the root of a sh
 core tests that need an application at runtime; `:core`'s own run with no application at all. **The web is separated
 by import direction only**: `features/memory` is the application (core imports it nowhere but the composition root
 and asks a registry for what to render; the folder level view is core's, Memories contributes its section —
-`MemoriesSection`, the cards, the map and the toolbar — for both its kinds), and its create and share dialogs ride on its kinds
+`MemoriesSection`, the cards and the map — for both its kinds — and names its presentations, grid, list and map, which
+core's level toolbar offers, inbox #370), and its create and share dialogs ride on its kinds
 (a rename is core's, as a folder's create is), though its directory name is still Memories-shaped (the top-bar tray and
 the sidebar pins are ordered lists; the upload status in the top bar is core's, not Memories' tray item, and lists Memories'
 batches with every other application's). What core still knows of Memories, and what is open on both sides,

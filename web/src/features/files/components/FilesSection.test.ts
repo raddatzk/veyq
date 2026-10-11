@@ -13,9 +13,9 @@ import type { FileListPage } from '../../../api/generated/files'
 const keys = vi.hoisted(() => new Map<string, Uint8Array>())
 vi.mock('../api', () => ({ filesApi: vi.fn() }))
 vi.mock('../download', async (importOriginal) => ({ ...(await importOriginal<typeof import('../download')>()), downloadFile: vi.fn() }))
-const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }))
+const { toastError, showUndo } = vi.hoisted(() => ({ toastError: vi.fn(), showUndo: vi.fn() }))
 vi.mock('../../../shared/state/useToast', () => ({
-  useToast: () => ({ success: vi.fn(), error: toastError, showUndo: vi.fn(), dismissUndo: vi.fn() }),
+  useToast: () => ({ success: vi.fn(), error: toastError, showUndo, dismissUndo: vi.fn() }),
 }))
 vi.mock('../uploadFile', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../uploadFile')>()),
@@ -24,6 +24,7 @@ vi.mock('../uploadFile', async (importOriginal) => ({
 vi.mock('../../../core/node/tree', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../core/node/tree')>()),
   deleteNode: vi.fn(async () => {}),
+  restoreNode: vi.fn(async () => {}),
   nodeContentKey: (_s: string, _e: unknown, _t: unknown, nodeId: string) => keys.get(nodeId) ?? null,
 }))
 vi.mock('../../../core/node/treeStore', async () => {
@@ -40,7 +41,7 @@ import type { BlobMeta } from '../../../core/blob/meta'
 import { FILE_KIND } from '../kinds'
 import { MEMORY_KIND } from '../../memory/kinds'
 import { FOLDER_KIND } from '../../../core/node/kind'
-import { deleteNode, type TreeNode } from '../../../core/node/tree'
+import { deleteNode, restoreNode, type TreeNode } from '../../../core/node/tree'
 import { loadTree } from '../../../core/node/treeStore'
 import { enqueue, clearUploads, useUploadQueue } from '../../../core/blob/queue'
 import { confirmRequest, settleConfirm } from '../../../shared/state/useConfirm'
@@ -94,9 +95,11 @@ let listFiles: ReturnType<typeof stubApi<typeof filesApi, 'listFiles'>>['listFil
 
 /** `pending`: the scope is pending deletion (the member's `access.readonly`); `identityFolder`: the level is a guest's
  *  identity folder in a drop box (what the member's tree answers for it). */
-function mountSection({ pending = false, identityFolder = false, ...props }: { nodes: TreeNode[]; pending?: boolean; identityFolder?: boolean; folder?: TreeNode | null }) {
+/** `siblings`: the level's children of other kinds — in the tree (what the any-kind pre-check reads, inbox #400), not in
+ *  the section's `nodes`, as core's level view hands them. */
+function mountSection({ pending = false, identityFolder = false, siblings = [], ...props }: { nodes: TreeNode[]; pending?: boolean; identityFolder?: boolean; folder?: TreeNode | null; siblings?: TreeNode[] }) {
   const epochs = epochsOf(v1.randomBytes(32))
-  const tree = memberTreeOf(() => [], { scopeId: SCOPE, epochs })
+  const tree = memberTreeOf(() => [DOCS, ...props.nodes, ...siblings], { scopeId: SCOPE, epochs })
   return mount(FilesSection, {
     props: {
       folder: DOCS, epochs, access: memberAccessOf({ scopeId: SCOPE, epochs, readonly: pending }),
@@ -128,6 +131,9 @@ beforeEach(() => {
     name: file.name, sizeBytes: file.size, run: async () => ({ nodeId: R }), extra: { file },
   }))
   vi.mocked(deleteNode).mockClear()
+  vi.mocked(restoreNode).mockClear()
+  showUndo.mockClear()
+  toastError.mockClear()
   vi.mocked(loadTree).mockClear()
   vi.mocked(downloadFile).mockClear()
 })
@@ -241,6 +247,43 @@ describe('FilesSection', () => {
         replace: { nodeId: R, nodeKey: keyFor(R), expectedBlobId: REPORT_BLOB.blobId },
       }),
     }])
+  })
+
+  // Inbox #400: a picked name a sibling of ANOTHER kind holds — each name folded by its own kind — is not sent and not
+  // asked about: the section names that sibling. A file of a name that only looks alike is sent.
+  it('a name a folder or a Memory here holds is not sent: the notice names the sibling by its kind; the rest is uploaded', async () => {
+    const AB = node('5c09e000-0000-4000-8000-0000000000e5', FOLDER_KIND, 'a.b')
+    const w = mountSection({ nodes: [REPORT], siblings: [AB, MEMORY] })
+    await flushPromises()
+    // a folder `a.b` folds to `a-b` (a folder's slug), so a file `a-b` meets it, a file `a.b` does not (a file keeps its dot)
+    await pick(w, 0, [new File(['1'], 'a-b'), new File(['2'], 'a.b'), new File(['3'], 'a-memory'), new File(['4'], 'a memory')])
+    expect(confirmRequest.value).toBeNull()
+    // `a memory` keeps its space as a file name, so it does not meet the Memory `A Memory` (`a-memory`); `a-memory` does
+    expect(targets().map((x) => x.name)).toEqual(['a.b', 'a memory'])
+    const notices = w.findAll('.files-notice').map((n) => n.text())
+    expect(notices).toEqual([
+      expect.stringContaining(t('files.nameTakenBy', { name: 'a-b', reason: t('node.nameTakenBy', { kind: t('node.aFolder'), name: 'a.b' }) })),
+      expect.stringContaining(t('files.nameTakenBy', { name: 'a-memory', reason: t('node.nameTakenBy', { kind: t('memory.aMemory'), name: 'A Memory' }) })),
+    ])
+    // dismissed by its own button; the other stays
+    await w.findAll('.files-notice')[0].findAll('button').find((b) => b.text() === t('files.dismiss'))!.trigger('click')
+    expect(w.findAll('.files-notice')).toHaveLength(1)
+    // a FILE sibling is still the replace question, not a refusal (the replace semantics are unchanged)
+    const picking = pick(w, 0, [new File(['n'], 'report.pdf')])
+    await flushPromises()
+    expect(confirmRequest.value).toMatchObject({ message: t('files.replaceConfirm', { name: 'Report.pdf' }) })
+    settleConfirm(false)
+    await picking
+  })
+
+  it('a refusal the server answered for a name another kind holds by now names that sibling (the race backstop)', async () => {
+    const SUB = node('5c09e000-0000-4000-8000-0000000000e6', FOLDER_KIND, 'Later')
+    const w = mountSection({ nodes: [], siblings: [SUB] })
+    await flushPromises()
+    enqueue([{ name: 'later', sizeBytes: 1, run: async () => { throw new Error('slug_taken') }, extra: { file: new File([''], 'later') } }], { label: 'Docs', key: `files:${SCOPE}:${D}` })
+    await vi.waitFor(() => expect(useUploadQueue().batches.value[0]?.files[0]?.status).toBe('failed'))
+    await flushPromises()
+    expect(w.text()).toContain(t('files.nameTakenBy', { name: 'later', reason: t('node.nameTakenBy', { kind: t('node.aFolder'), name: 'Later' }) }))
   })
 
   it('a declined replace uploads nothing for that file', async () => {
@@ -359,11 +402,33 @@ describe('FilesSection', () => {
     settleConfirm(false)
     await flushPromises()
     expect(deleteNode).not.toHaveBeenCalled()
+    expect(showUndo).not.toHaveBeenCalled()
     await byLabel(w, t('files.delete', { name: 'notes.txt' })).trigger('click')
     settleConfirm(true)
     await flushPromises()
     expect(deleteNode).toHaveBeenCalledWith(SCOPE, N)
     expect(loadTree).toHaveBeenCalled()
+    // inbox #385 (c): said, with an undo (core's `trashUndo`, its toast clicked in `trashUndo.test.ts`) that restores the
+    // node through core's trash restore and reloads the tree
+    expect(showUndo).toHaveBeenCalledOnce()
+    const { summary, onUndo } = showUndo.mock.calls[0][0]
+    expect(summary).toBe(t('node.trash.moved', { name: 'notes.txt' }))
+    vi.mocked(loadTree).mockClear()
+    onUndo()
+    await flushPromises()
+    expect(vi.mocked(restoreNode).mock.calls.map((c) => [c[0], c[3]])).toEqual([[SCOPE, NOTES]])
+    expect(loadTree).toHaveBeenCalled()
+  })
+
+  it('a failed delete says so and offers no undo', async () => {
+    vi.mocked(deleteNode).mockRejectedValueOnce(new Error('boom'))
+    const w = mountSection({ nodes: [NOTES] })
+    await flushPromises()
+    await byLabel(w, t('files.delete', { name: 'notes.txt' })).trigger('click')
+    settleConfirm(true)
+    await flushPromises()
+    expect(toastError).toHaveBeenCalledWith(t('files.deleteFailed'))
+    expect(showUndo).not.toHaveBeenCalled()
   })
 
   it('says why a file of this folder was not uploaded; after a peer\'s replace it offers replace anyway, on the CURRENT blob', async () => {

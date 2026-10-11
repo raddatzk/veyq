@@ -5,8 +5,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
+const { showUndo } = vi.hoisted(() => ({ showUndo: vi.fn() }))
+vi.mock('../../../shared/state/useToast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn(), showUndo, dismissUndo: vi.fn() }) }))
 vi.mock('../../../core/node/tree', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../core/node/tree')>()),
+  restoreNode: vi.fn(async () => {}),
   deleteNode: vi.fn(async () => {}),
 }))
 vi.mock('../../../core/node/treeStore', async () => {
@@ -16,13 +19,14 @@ vi.mock('../../../core/node/treeStore', async () => {
 
 import DropBoxDetail from './DropBoxDetail.vue'
 import type { NodeDetailProps } from '../../../core/applications/registry'
-import { deleteNode, type TreeNode } from '../../../core/node/tree'
+import { deleteNode, restoreNode, type TreeNode } from '../../../core/node/tree'
 import { treeStore, loadTree } from '../../../core/node/treeStore'
 import { FOLDER_KIND } from '../../../core/node/kind'
 import { slugPathOf } from '../../../core/node/location'
 import { confirmRequest, settleConfirm } from '../../../shared/state/useConfirm'
 import { DROPBOX_KIND, FILE_KIND } from '../kinds'
-import { realI18n } from '../../../test/i18n'
+import { realI18n, t } from '../../../test/i18n'
+import { epochsOf } from '../../spaces/epochsTestUtil'
 import { treeNode, memberAccessOf, memberTreeOf } from '../../../test/models'
 
 const SCOPE = '11111111-1111-4111-8111-111111111111'
@@ -39,7 +43,7 @@ const BEN = node('c0000000-0000-4000-8000-000000000000', FOLDER_KIND, 'Ben', BOX
 function mountDetail(publicLinks = true) {
   return mount(DropBoxDetail, {
     props: {
-      node: BOX, scopeId: SCOPE, epochs: null, contentKey: null, children: { byKind: {}, folders: [] } as unknown as NodeDetailProps["children"],
+      node: BOX, scopeId: SCOPE, epochs: epochsOf(new Uint8Array(32).fill(4)), contentKey: null, children: { byKind: {}, folders: [] } as unknown as NodeDetailProps["children"],
       access: memberAccessOf({ scopeId: SCOPE, publicLinks }), tree: memberTreeOf(() => treeStore.nodes, { scopeId: SCOPE }),
     },
     global: { plugins: [realI18n()] },
@@ -84,8 +88,12 @@ describe('DropBoxDetail', () => {
     const w = mountDetail()
     await w.find('button[aria-label="Open Anna (2)"]').trigger('click')
     expect(w.emitted('openNode')).toEqual([[ANNA_2]])
-    await w.find('button[aria-label="Share link"]').trigger('click')
-    await w.find('button[aria-label="Delete drop box"]').trigger('click')
+    // inbox #385 (b): both sit on core's header card, the one a folder opens with — the drop box's icon and name on it
+    const card = w.find('.veyq-folder-overview-card')
+    expect(card.find('h2').text()).toBe(BOX.name)
+    expect(card.find('.pi-inbox').exists()).toBe(true)
+    await card.find('button[aria-label="Share link"]').trigger('click')
+    await card.find('button[aria-label="Delete drop box"]').trigger('click')
     expect(w.emitted('share')).toHaveLength(1)
     expect(w.emitted('delete')).toHaveLength(1)
     // control: no share offered where the host says the kind cannot be shared
@@ -104,5 +112,11 @@ describe('DropBoxDetail', () => {
     await flushPromises()
     expect(deleteNode).toHaveBeenCalledWith(SCOPE, BEN.id)
     expect(loadTree).toHaveBeenCalled()
+    // inbox #385 (c): said, with an undo that restores the folder through core's trash restore
+    expect(showUndo).toHaveBeenCalledOnce()
+    expect(showUndo.mock.calls[0][0].summary).toBe(t('node.trash.moved', { name: 'Ben' }))
+    showUndo.mock.calls[0][0].onUndo()
+    await flushPromises()
+    expect(vi.mocked(restoreNode).mock.calls.map((c) => [c[0], (c[3] as TreeNode).id])).toEqual([[SCOPE, BEN.id]])
   })
 })

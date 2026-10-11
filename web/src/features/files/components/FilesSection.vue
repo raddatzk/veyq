@@ -26,6 +26,8 @@
 // everyone, the owner too (inbox #383), the guest named first through the page's one flow (`requestGuest`). A
 // contributor's upload of a name a file here holds is NOT a replace — the server refuses it (`409 slug_taken`, owner
 // decision 2026-10-08, inbox #392) and the notice points at the row's replace. No rename, no delete for any guest.
+// A picked name that a sibling of ANOTHER kind holds (a folder, a Memory, a drop box — each name folded by its own kind)
+// is not sent at all, for a member and a guest alike: the section names that sibling instead (inbox #400).
 //
 // Operator-blind: the names, sizes, types and dates shown are opened here under keys the server never sees; Files' calls
 // are the listing (ids, sealed sizes and each blob's sealed meta) and the completion (ids only).
@@ -34,8 +36,9 @@ import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
 import type { LevelSectionProps, LevelSectionEmits } from '../../../core/applications/registry'
-import { registry } from '../../../core/applications/registry'
 import type { TreeNode } from '../../../core/node/tree'
+import { collidingSibling, nameTakenMessage } from '../../../core/node/siblingCollision'
+import { useTrashUndo } from '../../../core/node/trashUndo'
 import { enqueue, removeFile, useUploadQueue, QUOTA_EXCEEDED, type UploadItem } from '../../../core/blob/queue'
 import { activeSpace } from '../../../app/activeSpace'
 import { useConfirm } from '../../../shared/state/useConfirm'
@@ -49,7 +52,7 @@ import { fileFacts } from '../download'
 import { plaintextTotal } from '../../../sw/range'
 import { isSaveCancelled, SaveTooLarge } from '../../../shared/saveStream'
 import { filesCapabilities } from '../capabilities'
-import { targetOf, type GuestAccess } from '../../../core/access'
+import { targetOf, type GuestAccess, type TreeSource } from '../../../core/access'
 import { guestFilesSource, memberFilesSource, sourceCapabilities, type FileUploadEntry, type FilesSource } from '../source'
 
 const props = defineProps<LevelSectionProps>()
@@ -73,6 +76,7 @@ const source: FilesSource = guest
 const { t, locale } = useI18n()
 const { ask } = useConfirm()
 const toast = useToast()
+const offerUndo = useTrashUndo()
 const { batches } = useUploadQueue()
 // The map stands for the whole level (Memories' pins over the subtree): files step aside there, as the folders do.
 const { viewMode } = useViewMode()
@@ -149,12 +153,28 @@ const replaceTarget = ref<TreeNode | null>(null)
 
 const batchKey = computed(() => source.batchKey(props.folder?.id ?? null))
 
-/** The FILE sibling a picked name collides with: the same name folded by the kind's own function (`fileNameSlug`
- *  through the registry, so `Foto.JPG` meets `foto.jpg`), or none. */
-function siblingFile(name: string): TreeNode | undefined {
-  const slug = registry.slugFor(FILE_KIND, name)
-  return fileNodes.value.find((n) => registry.slugFor(FILE_KIND, n.name) === slug)
+/** The sibling of ANY kind a picked name collides with (inbox #400): what the server compares — a file's name folded by
+ *  the file's function, each sibling's by its own kind's (core's `collidingSibling`), so `Foto.JPG` meets `foto.jpg` and
+ *  a file `a-b` meets a folder `a.b` — or null. Read from the tree, which holds every kind of this level. */
+function sibling(name: string): TreeNode | null {
+  const parentId = props.folder?.id ?? null
+  // Both sessions' trees serve decrypted `TreeNode`s (the guest's `guestTreeSource` too), as Memories' section reads them.
+  return collidingSibling((props.tree as TreeSource<TreeNode>).children(parentId), parentId, FILE_KIND, name)
 }
+/** The FILE sibling a picked name collides with, or none: what a member's same-name upload replaces. */
+function siblingFile(name: string): TreeNode | undefined {
+  const s = sibling(name)
+  return s && s.kind === FILE_KIND ? s : undefined
+}
+/** "“a-b” was not uploaded. There is already a folder named “a.b” here." — the sibling named by its kind (core's words). */
+const takenBy = (name: string, other: TreeNode) => t('files.nameTakenBy', { name, reason: nameTakenMessage(t, other) })
+
+// A picked file whose name another kind's sibling holds is not sent (inbox #400): the server would refuse it
+// (`409 slug_taken`) and say only "a similar name". Said here, per file, until dismissed or the level changes.
+type Refusal = { key: string; text: string }
+const refusals = ref<Refusal[]>([])
+let refusalSeq = 0
+watch(() => props.folder?.id ?? null, () => (refusals.value = []))
 
 function refresh(): void {
   source.refresh(loadBlobs)
@@ -177,6 +197,13 @@ async function startUploads(files: File[], replaceNode?: TreeNode, confirmed = f
   if (!batch) return
   const entries: FileUploadEntry[] = []
   for (const file of files) {
+    // A name a folder, Memory or drop box here holds (each folded by its own kind): no question, nothing sent — for a
+    // member and a guest alike. A FILE sibling stays the replace below (a guest's is refused by the server).
+    const other = replaceNode ? null : sibling(file.name)
+    if (other && other.kind !== FILE_KIND) {
+      refusals.value = [...refusals.value, { key: `refused-${++refusalSeq}`, text: takenBy(file.name, other) }]
+      continue
+    }
     const existing = replaceNode ?? (upload.sameNameReplaces ? siblingFile(file.name) : undefined)
     if (existing && !confirmed && !isEmpty(existing)) {
       const accepted = await ask({
@@ -233,38 +260,51 @@ function onDrop(e: DragEvent) {
 
 // --- what the status menu cannot explain: this level's files that were not (fully) uploaded ----------------------
 
-type Notice = { item: UploadItem<FileUploadResult, FileJobExtra>; severity: 'error'; text: string; replaceAnyway: boolean }
+/** One explanation under the header: a queue item that failed (`item`), or a pick that was never sent (`item` null). */
+type Notice = { key: string; item: UploadItem<FileUploadResult, FileJobExtra> | null; severity: 'error'; text: string; replaceAnyway: boolean }
 const KNOWN_ERRORS = new Set<string>([...Object.values(FileUploadError), QUOTA_EXCEEDED])
 /** Why a file was not uploaded, in this session's words: a guest's link has a limit of its own and no trash to point at,
  *  and a guest's upload of a name a file here holds was refused on purpose (inbox #392) — the notice says where the
  *  replace is, not the generic "a similar name". */
 function noticeText(code: string, name: string): string {
   if (guest && code === QUOTA_EXCEEDED) return t('files.guest.linkFull', { name })
-  if (guest && code === FileUploadError.slugTaken && siblingFile(name)) return t('files.guest.fileExists', { name })
+  if (code === FileUploadError.slugTaken) {
+    // The race backstop: a sibling that came since the pick (or one the pre-check could not see) — named when it is here now.
+    const other = sibling(name)
+    if (other && other.kind !== FILE_KIND) return takenBy(name, other)
+    if (guest && other) return t('files.guest.fileExists', { name })
+  }
   return t(`files.errors.${code}`, { name })
 }
 const notices = computed<Notice[]>(() => {
   const mine = batches.value.filter((b) => b.key === batchKey.value)
   const madeGood = deliveredSince(mine) // the same file uploaded since: nothing left to explain (inbox #395)
-  return mine
+  const refused = refusals.value.map((r): Notice => ({ key: r.key, item: null, severity: 'error', text: r.text, replaceAnyway: false }))
+  return refused.concat(mine
     .flatMap((b) => b.files as UploadItem<FileUploadResult, FileJobExtra>[])
     .flatMap((item): Notice[] => {
       if (item.status === 'failed' && madeGood.has(item.id)) return []
       if (item.status === 'failed') {
         const code = item.error && KNOWN_ERRORS.has(item.error) ? item.error : 'failed'
-        return [{ item, severity: 'error', text: noticeText(code, item.name), replaceAnyway: code === FileUploadError.staleFile }]
+        return [{ key: item.id, item, severity: 'error', text: noticeText(code, item.name), replaceAnyway: code === FileUploadError.staleFile }]
       }
       return []
-    })
+    }))
 })
+function dismiss(n: Notice) {
+  if (n.item) removeFile(n.item.id)
+  else refusals.value = refusals.value.filter((r) => r.key !== n.key)
+}
 
 /** After a peer's replace: upload the same file again, expecting the blob the slot holds NOW (re-read first). */
 async function replaceAnyway(n: Notice) {
-  const node = fileNodes.value.find((f) => f.id === n.item.replaceNodeId)
-  removeFile(n.item.id)
+  const item = n.item
+  if (!item) return
+  const node = fileNodes.value.find((f) => f.id === item.replaceNodeId)
+  removeFile(item.id)
   if (!node) return
   await loadBlobs()
-  await startUploads([n.item.file], node, true)
+  await startUploads([item.file], node, true)
 }
 
 // --- download, rename, delete ----------------------------------------------------------------------------------
@@ -298,7 +338,11 @@ async function remove(node: TreeNode) {
     await deleteFile(node.id)
   } catch {
     toast.error(t('files.deleteFailed'))
+    return
   }
+  // It went to the trash: said, with an undo that restores it (inbox #385 (c)) — where this session can restore.
+  const restore = source.restore
+  if (restore) offerUndo(node.name, () => restore(node))
 }
 </script>
 
@@ -326,7 +370,7 @@ async function remove(node: TreeNode) {
     <input v-if="caps.upload" ref="picker" class="files-picker" type="file" multiple hidden @change="onPicked" />
     <input v-if="caps.replace" ref="replacePicker" class="files-picker" type="file" hidden @change="onReplacePicked" />
 
-    <Message v-for="n in notices" :key="n.item.id" :severity="n.severity" :closable="false" class="files-notice">
+    <Message v-for="n in notices" :key="n.key" :severity="n.severity" :closable="false" class="files-notice">
       <span class="files-notice-body">
         <span>{{ n.text }}</span>
         <span class="veyq-action-group">
@@ -339,7 +383,7 @@ async function remove(node: TreeNode) {
             outlined
             @click="replaceAnyway(n)"
           />
-          <Button type="button" :label="t('files.dismiss')" size="small" severity="secondary" text @click="removeFile(n.item.id)" />
+          <Button type="button" :label="t('files.dismiss')" size="small" severity="secondary" text @click="dismiss(n)" />
         </span>
       </span>
     </Message>

@@ -776,6 +776,10 @@ const en = {
     nameTakenBy: 'There is already {kind} named “{name}” here. Choose another name.',
     aFolder: 'a folder',
     anItem: 'an item',
+    // Core's view switch (`core/node/ViewModeToggle.vue`, inbox #370): the level toolbar's group and its two own views.
+    viewMode: 'View',
+    viewGrid: 'Grid view',
+    viewList: 'List view',
     illegalStructure: 'That isn’t allowed here.',
     saveFailed: 'That didn’t work. Please try again.',
     // The delete dialog (core's `DeleteNodeDialog`): a folder's own title and copy; any other node's title is its kind's
@@ -795,6 +799,9 @@ const en = {
       loadFailed: 'Could not open the trash. Please try again.',
       restore: 'Restore',
       restoreFailed: 'Could not restore this. Please try again.',
+      // The undo toast after a member's delete (core's `trashUndo.ts`, inbox #385 (c)) and its failed restore.
+      moved: '“{name}” moved to the trash.',
+      undoFailed: '“{name}” could not be restored. You can restore it from the trash.',
       deletedOn: 'Deleted {day}',
       purgeOn: 'removed for good on {day}',
       retryName: 'New name',
@@ -812,9 +819,7 @@ const en = {
     addChapter: 'Add chapter',
     chapters: 'Chapters',
     gallery: 'Gallery',
-    viewMode: 'View',
-    viewGrid: 'Grid view',
-    viewList: 'List view',
+    // The level's map (Memories' `views`, inbox #370): core's view switch names it with this label.
     viewMap: 'Map view',
     favorite: 'Favorite',
     unfavorite: 'Remove favorite',
@@ -974,6 +979,9 @@ const en = {
     downloadTooLarge: 'This file is too large to download in this browser.',
     replaceAnyway: 'Replace anyway',
     dismiss: 'Dismiss',
+    // A picked file whose name a sibling of another kind holds (inbox #400): not sent; `{reason}` is core's
+    // `node.nameTakenBy`, naming that sibling by its kind.
+    nameTakenBy: '“{name}” was not uploaded. {reason}',
     errors: {
       slug_taken: '“{name}” was not uploaded: a folder, Memory or file with a similar name already exists here.',
       illegal_structure: '“{name}” was not uploaded: a file cannot be stored here.',
@@ -2034,6 +2042,9 @@ const de: typeof en = {
     nameTakenBy: 'Hier gibt es schon {kind} namens „{name}“. Wähle einen anderen Namen.',
     aFolder: 'einen Ordner',
     anItem: 'einen Eintrag',
+    viewMode: 'Ansicht',
+    viewGrid: 'Rasteransicht',
+    viewList: 'Listenansicht',
     illegalStructure: 'Das ist hier nicht erlaubt.',
     saveFailed: 'Das hat nicht geklappt. Bitte versuche es erneut.',
     deleteFolderTitle: 'Ordner löschen',
@@ -2048,6 +2059,8 @@ const de: typeof en = {
       loadFailed: 'Der Papierkorb konnte nicht geöffnet werden. Bitte erneut versuchen.',
       restore: 'Wiederherstellen',
       restoreFailed: 'Konnte nicht wiederhergestellt werden. Bitte erneut versuchen.',
+      moved: '„{name}“ liegt jetzt im Papierkorb.',
+      undoFailed: '„{name}“ konnte nicht wiederhergestellt werden. Du kannst es aus dem Papierkorb wiederherstellen.',
       deletedOn: 'Gelöscht am {day}',
       purgeOn: 'endgültig entfernt am {day}',
       retryName: 'Neuer Name',
@@ -2064,9 +2077,6 @@ const de: typeof en = {
     addChapter: 'Kapitel hinzufügen',
     chapters: 'Kapitel',
     gallery: 'Galerie',
-    viewMode: 'Ansicht',
-    viewGrid: 'Rasteransicht',
-    viewList: 'Listenansicht',
     viewMap: 'Kartenansicht',
     favorite: 'Favorit',
     unfavorite: 'Favorit entfernen',
@@ -2213,6 +2223,7 @@ const de: typeof en = {
     downloadTooLarge: 'Diese Datei ist zu groß, um sie in diesem Browser herunterzuladen.',
     replaceAnyway: 'Trotzdem ersetzen',
     dismiss: 'Ausblenden',
+    nameTakenBy: '„{name}“ wurde nicht hochgeladen. {reason}',
     errors: {
       slug_taken: '„{name}“ wurde nicht hochgeladen: Hier gibt es schon einen Ordner, eine Erinnerung oder eine Datei mit ähnlichem Namen.',
       illegal_structure: '„{name}“ wurde nicht hochgeladen: Hier kann keine Datei liegen.',

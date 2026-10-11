@@ -21,7 +21,8 @@ import { suspensionSignals } from '../app/tenantSuspension'
 import { setBreadcrumb } from '../app/breadcrumb'
 import { treeStore, loadTree } from '../core/node/treeStore'
 import { childrenOf, breadcrumbOf, displayNameOf, nodeById } from '../core/node/browse'
-import { nodeContentKey } from '../core/node/tree'
+import { nodeContentKey, restoreNode } from '../core/node/tree'
+import { useTrashUndo } from '../core/node/trashUndo'
 import { parseHash, resolveSlugPath, hashForNode, TENANT_SCOPE } from '../core/node/location'
 import { listMyTenants } from '../features/spaces/scopes'
 import { FOLDER_KIND, type NodeKind } from '../core/node/kind'
@@ -41,6 +42,7 @@ import TrustResetLink from '../features/account/trustReset/TrustResetLink.vue'
 const route = useRoute()
 const router = useRouter()
 const { t, locale } = useI18n()
+const offerUndo = useTrashUndo()
 const { hasCapability } = useCapabilities()
 
 // Pending-deletion (cr-0090): the active GROUP is being deleted — the shell shows a banner and the browse hides
@@ -218,9 +220,20 @@ async function onTrashRestored() {
   await loadTree()
 }
 async function onDeleteDone() {
-  const parentId = deleteTarget.value?.parentId ?? null
+  const deleted = deleteTarget.value
+  const parentId = deleted?.parentId ?? null
   await loadTree()
   void router.push({ hash: hashForNode(treeStore.nodes, parentId, currentScope.value) })
+  // It went to the trash: said, with an undo that restores it as the trash dialog does (inbox #385 (c)); the restored
+  // node reappears where it belonged, the position stays.
+  const scopeId = activeSpace.scopeId
+  const keys = epochs.value
+  if (deleted && scopeId && keys) {
+    offerUndo(deleted.name, async () => {
+      await restoreNode(scopeId, keys, treeStore.nodes, deleted)
+      await loadTree()
+    })
+  }
 }
 </script>
 

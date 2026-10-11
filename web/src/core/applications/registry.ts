@@ -23,11 +23,12 @@
 //
 // **Level sections (`KindDescriptor.section`).** The folder level view is core's (`core/node/LevelView.vue`, cr-files-
 // application P4b): the folder's overview card, then one SECTION per application, then the sub-folders. A kind brings
-// its section with its descriptor — a component that renders its own `<section>` (heading, create action, view modes)
-// from `LevelSectionProps`. Several kinds may name the SAME component (Memories: MEMORY and CHAPTER): a section is keyed
+// its section with its descriptor — a component that renders its own `<section>` (heading, create action, its body in
+// the current view mode) from `LevelSectionProps`, and names the presentations it switches between (`views`): the
+// level's toolbar, core's, offers their union with the folders' grid and list (inbox #370) — no section draws a toggle. Several kinds may name the SAME component (Memories: MEMORY and CHAPTER): a section is keyed
 // by its component's identity, rendered once, and handed the children of every kind that names it (in the order the
 // kinds were registered). `sections()` lists them sorted by `order`, a tie in the order the section was first named.
-// Two kinds naming one component with two different `order`s is a contradiction, so that `registerKind` throws (and
+// Two kinds naming one component with two different `order`s or `views` is a contradiction, so that `registerKind` throws (and
 // registers nothing). A child whose kind no section serves — registered without one, or not registered at all — is
 // not dropped: the level view renders core's fallback section for it (its icon, its name, the explicit unsupported
 // state), never an empty area.
@@ -70,6 +71,7 @@ import { defineAsyncComponent, type Component } from 'vue'
 import { FOLDER_KIND, type NodeKind } from '../node/kind'
 import type { TreeNode } from '../node/tree'
 import type { Level } from '../node/browse'
+import type { LevelViewOption } from '../node/levelViews'
 import type { EpochKeys } from '../../features/spaces/epochs'
 import type { PublicShareHead } from '../sharing/resolvePublicShare'
 import type { Access, GuestAccess, TreeSource } from '../access'
@@ -130,17 +132,21 @@ export interface KindDescriptor {
   shareDialog?: Component
 }
 
-/** A kind's level section: the component and where it sorts among the sections. */
+/** A kind's level section: the component, where it sorts among the sections, and the presentations it switches between
+ *  (`views`, inbox #370) — core's level-view toolbar offers the union of what is on screen (`core/node/levelViews.ts`).
+ *  Omitted: the section has one presentation and adds no view. */
 export interface KindSection {
   order: number
   component: Component
+  views?: readonly LevelViewOption[]
 }
 
-/** A level section as the level view renders it: the component, its order, and every kind that named it (in
- *  registration order) — the section receives the children of all of them. */
+/** A level section as the level view renders it: the component, its order, its presentations (`[]`: one), and every
+ *  kind that named it (in registration order) — the section receives the children of all of them. */
 export interface LevelSection {
   component: Component
   order: number
+  views: readonly LevelViewOption[]
   kinds: readonly NodeKind[]
 }
 
@@ -336,7 +342,7 @@ export function createRegistry(): Registry {
   const lists = new Map<ListSlotName, { id: string; component: Component; order: number }[]>()
   const lifecycles = new Map<string, LifecycleHooks>()
   // One entry per distinct section component, in the order each was first named (the stable sort's tie-break).
-  const sections: { component: Component; order: number; kinds: NodeKind[] }[] = []
+  const sections: SectionEntry[] = []
   const shareBodies = new Map<NodeKind, Component>()
   /** Run `f` on every application, never stopping at the first failure; rethrow the first one at the end. */
   async function eachApplication(f: (h: LifecycleHooks) => Promise<void> | void): Promise<void> {
@@ -404,26 +410,32 @@ export function createRegistry(): Registry {
   }
 }
 
-type SectionEntry = { component: Component; order: number; kinds: NodeKind[] }
+type SectionEntry = { component: Component; order: number; views: readonly LevelViewOption[]; kinds: NodeKind[] }
 
-/** Check that `kind` may join `list` with `section` (a component already named with another `order` throws) and return
- *  the join, to run once every check of the registration passed. */
+const modesOf = (views: readonly LevelViewOption[]) => views.map((v) => v.mode).join(', ')
+
+/** Check that `kind` may join `list` with `section` (a component already named with another `order`, or other `views`,
+ *  throws: one component renders one way) and return the join, to run once every check of the registration passed. */
 function sectionJoin(list: SectionEntry[], kind: NodeKind, section: KindSection | undefined): () => void {
   if (!section) return () => {}
   const shared = list.find((s) => s.component === section.component)
   if (shared && shared.order !== section.order) {
     throw new Error(`node kind ${kind} names the section of ${shared.kinds.join(', ')} with order ${section.order}, not ${shared.order}`)
   }
+  const views = [...(section.views ?? [])]
+  if (shared && modesOf(shared.views) !== modesOf(views)) {
+    throw new Error(`node kind ${kind} names the section of ${shared.kinds.join(', ')} with views [${modesOf(views)}], not [${modesOf(shared.views)}]`)
+  }
   return () => {
     if (shared) shared.kinds.push(kind)
-    else list.push({ component: section.component, order: section.order, kinds: [kind] })
+    else list.push({ component: section.component, order: section.order, views, kinds: [kind] })
   }
 }
 
 function sortedSections(list: readonly SectionEntry[]): LevelSection[] {
   return [...list]
     .sort((a, b) => a.order - b.order) // stable (ES2019): a tie keeps the order each section was first named
-    .map((s) => ({ component: s.component, order: s.order, kinds: [...s.kinds] }))
+    .map((s) => ({ component: s.component, order: s.order, views: [...s.views], kinds: [...s.kinds] }))
 }
 
 /** The app's registry, filled once by `registerApplications()` (web/src/applications.ts) before the first route

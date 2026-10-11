@@ -91,7 +91,7 @@ type Page = Awaited<ReturnType<typeof mountPage>>
 /** No control only a member has: pins and marks, the trash, share, rename, delete, a cover, a chapter. */
 function expectNoMemberControl(w: Page) {
   expect(w.find('.memory-card-pin').exists(), 'pin').toBe(false)
-  expect(w.find('.veyq-level-toolbar').exists(), "the space's trash").toBe(false)
+  expect(w.find(`.veyq-level-toolbar button[aria-label="${t('node.trash.open')}"]`).exists(), "the space's trash").toBe(false)
   expect(w.find('.veyq-folder-overview-actions').exists(), 'share, rename, delete of the folder').toBe(false)
   for (const label of [
     t('memory.favorite'), t('memory.unfavorite'), t('media.marks.mark'), t('share.share'), t('share.uploadRequest'), t('node.rename'),
