@@ -80,7 +80,7 @@ reads).
   meta, or one whose meta does not open under this node's key, shows its size alone; a file listed without a blob says
   "not uploaded yet" — none of it reads the node's own payload), with download, replace, rename (core's
   `FolderNameDialog`, through the section's `rename` event) and delete (into core's trash, restored from core's trash
-  dialog). An upload button and a drop onto the section; an empty folder says so. Hidden in map mode, like the
+  dialog — or at once from the "moved to the trash" toast's Undo, core's `trashUndo.ts`, inbox #385 (c)). An upload button and a drop onto the section; an empty folder says so. Hidden in map mode, like the
   folders. Read-only during a pending deletion: download only. The same section is a share guest's (§ Guests).
 - **The upload** is one job of core's upload queue per file (`uploadFile.ts`): create the `FILE` node (or, for a name a
   FILE sibling already holds by `fileNameSlug`, replace that file after the member confirmed — the row's replace asks
@@ -89,7 +89,12 @@ reads).
   answer and asks nothing), plan and pump the blob
   under the node's own key with the file's metadata sealed under its `K_blob`, then `completeFile` with
   `expectedBlobId` — nothing is written after it. The status menu shows progress; the section says why a file of its
-  folder was not uploaded (a taken name, `stale_file` with "replace anyway", no space). **A given-up job cleans up**
+  folder was not uploaded (a taken name, `stale_file` with "replace anyway", no space). **A name another kind holds is
+  not sent** (inbox #400): before anything is asked, every picked name is folded by the file's function and each
+  sibling's by its own kind's (core's `collidingSibling`, the dialogs' pre-check), and one that meets a folder, Memory
+  or drop box is skipped with a notice naming that sibling by its kind (core's `nameTakenMessage`) — for a guest too, who
+  is then not even asked to name itself; a server `409 slug_taken` for such a sibling (the race backstop) is named the
+  same way. **A given-up job cleans up**
   (inbox #384): failed after its
   retry or cancelled (core's queue calls the job's `abandon`), a job moves a node it created to the trash once
   `listFiles` shows it still holds no content — best effort; a node it cannot trash stays and its retry fills it. A file
@@ -195,9 +200,11 @@ one per guest identity, which are core `FOLDER`s carrying `veyq_node.share_ident
   `childEntryKey`); no new seal purpose, no vector change. A guest-sealed entry that does not open leaves that folder
   out of the member's tree instead of failing it.
 - **The guest** (`components/DropBoxGuestForm.vue`, what Files' share body `DropBoxShareBody.vue` renders on the link
-  rooted at the drop box; `dropBox.ts`): names itself once (the session keeps identity,
-  token, `K_up` and the name on the device; through core's one guest-naming component, `core/sharing/GuestNaming.vue`,
-  the page says "You are here as …" with a "Not you?" that asks, then forgets the
+  rooted at the drop box; `dropBox.ts`): names itself once — the name stays in the page until the **first file**, which
+  creates the identity (`nameDropGuest`, once even for a second pick in flight) and then the folder, so a visitor who
+  names itself and leaves leaves nothing on the server (inbox #385 (a)); a reload before that asks for the name again
+  (the session then keeps identity, token, `K_up` and the name on the device; through core's one guest-naming component, `core/sharing/GuestNaming.vue`,
+  the page says "You are here as …" with a "Not you?" that asks — only once a session exists — then forgets the
   session there and asks for a name again — a new identity, the old one's folder untouched; after a gone link the same
   action reads the link again first — a revoked or deleted one turns the page to "not available", inbox #393), then, with its **first file**, **`ensureShareDropFolder`** — `POST /api/shares/{shareId}/files/drop-folder`,
   Files' operation over core's `IdentityFolders`: the first call creates the folder from the guest's ciphertext, every
@@ -215,7 +222,8 @@ one per guest identity, which are core `FOLDER`s carrying `veyq_node.share_ident
 - **The member** (`components/DropBoxSection.vue`, `DropBoxDetail.vue`, `DropBoxCreateDialog.vue`,
   `DropBoxShareDialog.vue`): creates a drop box from a folder level, mints, copies, switches off (after a question) and
   on again (core's `reactivateShare`; a link a departed member may hold says to make a new one) and deletes its links,
-  opens it to its guests' folders (a repeated guest name numbered at display time, never stored: `Anna`, `Anna (2)` in
+  opens it to its guests' folders — under core's header card (`NodeOverviewCard`, the one a folder opens with: the
+  drop box's name, its share and delete; inbox #385 (b)) — (a repeated guest name numbered at display time, never stored: `Anna`, `Anna (2)` in
   creation order — the server-observed `createdAt` of core's listing, then the node id for one millisecond, core's
   `compareByCreation`, by core's `displayNamesOf`, which the folder's heading and breadcrumb use too; the same two folders' URL segments are `anna`, `anna-2` by the same order,
   core's `segmentsOf` in `core/node/location.ts`, which a future folder export uses for its directory names too), opens a folder

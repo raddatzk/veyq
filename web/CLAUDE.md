@@ -147,7 +147,10 @@ here; the server is blind.
   create and rename dialogs name a colliding sibling of the kind with ("There is already a file named …", else "an item") — `emptyInTrash`, the note core's
   trash shows on a node of the kind that holds no attachment — `renameSelectionEnd`, where core's rename dialog ends the
   selection on a name, e.g. a file's before its extension — and its `section` of the folder level view —
-  `{ order, component }`; the level view is core's, `core/node/LevelView.vue`: its toolbar (the space's trash), the folder's overview card, the
+  `{ order, component, views? }`; the level view is core's, `core/node/LevelView.vue`: its toolbar (the space's trash, and
+  the view switch over the union of the shown sections' `views` and the folders' grid and list — `core/node/levelViews.ts`,
+  inbox #370; no section draws a toggle), the folder's overview card (core's `NodeOverviewCard`, which an application's
+  container detail opens with too — the drop box), the
   sections sorted by `order`, a fallback section for a child whose kind no section serves, then the sub-folders; kinds
   naming the same component share one section, rendered once with the children of all of them, and naming it with two
   different `order`s throws; its `createDialog` — props `NodeCreateDialogProps` `{kind, scopeId, epochs, parentId,
