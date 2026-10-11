@@ -1,0 +1,54 @@
+useCase: uc.memory.move-node
+feature: memory
+title: Move a node — put a folder, a Memory, a chapter, a file or a drop box somewhere else in the tree
+# Built by inbox #358 (web only; the placement endpoints, rules and refusals are ADR 0080's and were already server-side).
+# Every web criterion was bitten: the capability rows, the picker's blocks, the door per session, the refusal mapping,
+# the dialog's question, pre-check, re-read and undo, the epoch rule on the wire, the hosts' wiring and the placement
+# hints each turned their own tests red when sabotaged. The live run (`src/core/node/move.e2e.test.ts`: a moved subtree
+# decrypts; a guest's folder moved out takes no more files) is written but has not run in CI, so it is cited nowhere here.
+acceptanceCriteria:
+  - id: a-move-keeps-the-subtree-readable
+    text: "A move re-wraps only the moved node's own content key under the destination's key (K_SC at the current epoch at the scope root, the destination node's key elsewhere) and re-seals its name and slug token there at the next placement version, stating the version it was built on; every key below opens as before. A move into or out of the scope root seals at the current epoch, a move between two folders at the node's stored one."
+    coverage:
+      backend:
+        integration: [NodePlacementCoreSliceTest.theEpochIsCheckedOnlyAtTheRoot, NodePlacementCoreSliceTest.theListingServesThePlacementVersionAndOnlyAPlacementMovesIt, NodePlacementRaceCoreSliceTest.twoMovesOfOneNodeToDifferentParentsLandOne]
+      web:
+        unit: [src/core/node/move.wire.test.ts, src/core/node/tree.wire.test.ts]
+
+  - id: the-picker-offers-what-the-server-takes
+    text: "Core's move dialog lists the destinations the session can see — a member's whole space with its root, a guest's subtree only — and blocks, with the reason beside it, the node itself, anything inside it, where it is now, a guest's identity folder and anything inside one, and any place its kind's placement does not take (a mirror of NodeKindRules: a folder, Memory, file or drop box at the root or in a folder, a chapter only in a Memory; a guest only into a folder). A node at the destination whose name folds to the same slug is named before anything is sent."
+    coverage:
+      backend:
+        integration: [NodeKindMatrixSliceTest.moveFollowsTheMatrix, FilesNodeSliceTest.aFileIsRenamedAndMovedBetweenFolders]
+      web:
+        unit: [src/core/node/move.test.ts, src/core/node/MoveNodeDialog.test.ts, src/features/memory/register.test.ts, src/features/files/register.test.ts]
+
+  - id: who-may-move-what
+    text: "A member moves any node it may write (not during a pending deletion), a guest's identity folder or a file in one out of a drop box included; a READ_WRITE guest moves only a node a FOLDER of its subtree holds — never the link's root, never in or of an identity folder, never a chapter or a drop box — and only through its link after the page's naming flow; a READ or WRITE_ONLY guest moves nothing. A guest's move touches no authenticated client."
+    coverage:
+      backend:
+        integration: [ShareNodesCoreSliceTest.aGuestMovesAndRenamesInsideTheSubtree, ShareNodesCoreSliceTest.aGuestNeverMovesANodeOutOfTheSubtreeTheRootOrIntoACycle, DropBoxSliceTest.aGuestOfALinkAboveMovesNothingOutOfADropBox]
+      web:
+        unit: [src/core/access.test.ts, src/features/files/capabilities.test.ts, src/features/memory/capabilities.test.ts, src/core/sharing/ShareTreePage.move.test.ts, src/views/MemoryHomeView.move.test.ts, src/features/files/components/FilesSection.test.ts, src/features/files/components/FilesSection.guest.test.ts, src/features/files/components/DropBoxDetail.test.ts, src/features/memory/components/MemoryDetail.caps.test.ts, src/core/node/LevelView.test.ts]
+
+  - id: refusals-are-explained-by-name
+    text: "Each server refusal of a move is said by its code — slug_taken, illegal_structure, illegal_scope, stale_epoch, share_not_contributable, a gone node or link, rate_limited, scope_deleting — and a lost race (stale_placement, after the write's own bounded re-read) re-reads the tree so the next attempt builds on the node as it now is; a guest who declines to name itself sends nothing and is told nothing."
+    coverage:
+      backend:
+        integration: [ShareNodesCoreSliceTest.aTakenSlugIsAConflictOnCreateAndOnMove, NodePlacementCoreSliceTest.anEpochAboveTheCurrentIsRefusedForAnyDestination]
+      web:
+        unit: [src/core/node/move.test.ts, src/core/node/MoveNodeDialog.test.ts, src/core/sharing/ShareTreePage.move.test.ts]
+
+  - id: a-guest-folder-moved-out-ends-its-identity
+    text: "A member moving a drop-box guest's folder out is asked first (the folder becomes ordinary, its guest can add nothing more, nothing moves back into a drop box) and offered no undo; the folder's key, opened through the drop key and the guest's K_up, is re-wrapped under the destination's, and once the server ends the identity the folder and its files open as before."
+    coverage:
+      backend:
+        integration: [DropBoxSliceTest.aMemberPlacesNothingInADropBoxAndOnlyDeletesOrMovesOut]
+      web:
+        unit: [src/core/node/move.wire.test.ts, src/core/node/MoveNodeDialog.test.ts, src/views/MemoryHomeView.move.test.ts]
+
+  - id: a-move-is-undone-and-followed
+    text: "After a move the tree is re-read, a node on screen (or below the moved one) is followed to its new path, and a toast says where it went with an Undo that moves it back through the same door and follows it back."
+    coverage:
+      web:
+        unit: [src/core/node/MoveNodeDialog.test.ts, src/views/MemoryHomeView.move.test.ts]

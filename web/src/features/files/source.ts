@@ -4,8 +4,8 @@
 // guest create, the shell's naming flow and re-resolve). Neither reads the other's world.
 //
 // **A write exists only where the session has its door.** The guest's source has no `deleteFile` and no `rename` (a
-// guest deletes nothing — nodes store no authorship, ADR 0080 decision 6 — and no guest page offers a rename yet, inbox
-// #358); a view offers a write where `filesCapabilities` grants it AND the source carries it (`sourceCapabilities`), so
+// guest deletes nothing — nodes store no authorship, ADR 0080 decision 6 — and no guest page offers a rename yet), and a
+// `move` only for a `READ_WRITE` link (core's move dialog, the host's, inbox #358); a view offers a write where `filesCapabilities` grants it AND the source carries it (`sourceCapabilities`), so
 // a forgotten guard cannot fall through to a member call — there is no member call to fall to.
 //
 // Operator-blind as the views: every name, size and date is opened by the view under keys the tree holds; the sources
@@ -75,6 +75,9 @@ export interface FilesSource {
   readonly restore?: (node: TreeNode) => Promise<void>
   /** Rename a file (the host's name dialog). Absent: this session renames nothing. */
   readonly rename?: (node: TreeNode) => void
+  /** Move a file, a drop box or a guest's folder out of one (the host's `MoveNodeDialog`, inbox #358). Absent: this
+   *  session moves nothing. */
+  readonly move?: (node: TreeNode) => void
 }
 
 /** The capabilities a view shows: the matrix's answer, narrowed to the writes `source` carries. */
@@ -85,16 +88,19 @@ export function sourceCapabilities(caps: FilesCapabilities, source: FilesSource)
     replace: caps.replace && !!source.upload,
     rename: caps.rename && !!source.rename,
     deleteFile: caps.deleteFile && !!source.deleteFile,
+    moveFile: caps.moveFile && !!source.move,
+    moveNode: caps.moveNode && !!source.move,
   }
 }
 
 /** A member's source over the unlocked scope: `scopeId` the scope the view addresses, `epochs` its keys (null while
- *  locked), `keyOf` the tree's content keys, `rename` the host's name dialog. */
+ *  locked), `keyOf` the tree's content keys, `rename` the host's name dialog, `move` the host's move dialog. */
 export function memberFilesSource(from: {
   scopeId: () => string | null
   epochs: () => EpochKeys | null
   keyOf: (id: string) => Uint8Array | null
   rename?: (node: TreeNode) => void
+  move?: (node: TreeNode) => void
 }): FilesSource {
   return {
     scopeId: from.scopeId,
@@ -147,13 +153,15 @@ export function memberFilesSource(from: {
       await loadTree()
     },
     rename: from.rename,
+    move: from.move,
   }
 }
 
-/** A share guest's source over its link (`access`): reads for every role; the upload door only for a `READ_WRITE` link
- *  (the capability matrix decides where), naming the guest first through the page's one flow. A `WRITE_ONLY` guest holds
- *  no key to read anything: its page is the drop box's own (`DropBoxGuestForm`), never this source's. */
-export function guestFilesSource(access: () => GuestAccess): FilesSource {
+/** A share guest's source over its link (`access`): reads for every role; the upload and move doors only for a
+ *  `READ_WRITE` link (the capability matrix decides where), naming the guest first through the page's one flow — `move`
+ *  is the host's move dialog, which moves through core's guest placement. A `WRITE_ONLY` guest holds no key to read
+ *  anything: its page is the drop box's own (`DropBoxGuestForm`), never this source's. */
+export function guestFilesSource(access: () => GuestAccess, host: { move?: (node: TreeNode) => void } = {}): FilesSource {
   const contributes = access().role === ShareRole.ReadWrite
   return {
     scopeId: () => access().head.scopeId,
@@ -173,6 +181,7 @@ export function guestFilesSource(access: () => GuestAccess): FilesSource {
       void access().reload()
     },
     upload: contributes ? guestUpload(access) : undefined,
+    move: contributes ? host.move : undefined,
   }
 }
 

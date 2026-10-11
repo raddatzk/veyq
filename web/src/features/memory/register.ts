@@ -11,6 +11,7 @@
 // cr-files-application B3) and lists Memories' batches with every other application's, so Memories adds nothing to the
 // `topbarTray` list.
 import { MEMORY_KIND, CHAPTER_KIND } from './kinds'
+import { FOLDER_KIND } from '../../core/node/kind'
 import type { Registry } from '../../core/applications/registry'
 import { GRID_VIEW, LIST_VIEW, type LevelViewOption } from '../../core/node/levelViews'
 import MemoryDetailHost from './components/MemoryDetailHost.vue'
@@ -38,8 +39,16 @@ export function registerMemories(registry: Registry): void {
   const memories = {
     detail: MemoryDetailHost, icon: 'pi pi-images', shareable: true, section, createDialog: MemoryNodeDialog, shareDialog: ShareDialog,
   }
-  registry.registerKind({ kind: MEMORY_KIND, ...memories, deleteTitle: 'memory.deleteMemoryTitle', nounWithArticle: 'memory.aMemory' })
-  registry.registerKind({ kind: CHAPTER_KIND, ...memories, deleteTitle: 'memory.deleteChapterTitle', nounWithArticle: 'memory.aChapter' })
+  // Where each may be moved (core's move dialog, inbox #358) mirrors the backend's `MemoryNodeKindRules`: a Memory at the
+  // root or in a folder, a chapter only directly in a Memory.
+  registry.registerKind({
+    kind: MEMORY_KIND, ...memories, deleteTitle: 'memory.deleteMemoryTitle', nounWithArticle: 'memory.aMemory',
+    placement: { root: true, parents: [FOLDER_KIND] },
+  })
+  registry.registerKind({
+    kind: CHAPTER_KIND, ...memories, deleteTitle: 'memory.deleteChapterTitle', nounWithArticle: 'memory.aChapter',
+    placement: { root: false, parents: [MEMORY_KIND] },
+  })
   registry.addSlotItem('sidebarPins', 'memories.pinned', PinnedMemories)
   // The drop page of a WRITE_ONLY link rooted at a MEMORY or a CHAPTER (`PublicShare.rootKind`): its guest holds no key,
   // so it is the one page Memories draws for a guest alone. A viewer's or contributor's link is the detail above, for a

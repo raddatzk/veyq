@@ -71,7 +71,7 @@ async function mountDetail(caps: MemoryCapabilities, kind = MEMORY_KIND) {
   return w
 }
 
-const HEADER = ['media.upload', 'share.share', 'share.uploadRequest', 'memory.favorite', 'node.rename', 'node.delete'] as const
+const HEADER = ['media.upload', 'share.share', 'share.uploadRequest', 'memory.favorite', 'node.rename', 'node.move.action', 'node.delete'] as const
 const header = (w: Awaited<ReturnType<typeof mountDetail>>) =>
   HEADER.filter((key) => w.find(`.gallery-header-actions button[aria-label="${t(key)}"]`).exists())
 const tabs = (w: Awaited<ReturnType<typeof mountDetail>>) => w.findAll('[role="tab"]').map((tab) => tab.text().replace(/\d+$/, ''))
@@ -159,6 +159,15 @@ describe('MemoryDetail follows caps', () => {
     await w.findAll('[role="tab"]')[1].trigger('click')
     await flushPromises()
     expect(w.find('.memory-create-card-memory').exists()).toBe(false)
+  })
+
+  // inbox #358: the move is the host's (core's move dialog), asked for through `move`; offered only with caps.move.
+  it('Move to… asks the host for core\'s move dialog, and only with move', async () => {
+    const w = await mountDetail(memberMemoryCaps())
+    await w.find(`.gallery-header-actions button[aria-label="${t('node.move.action')}"]`).trigger('click')
+    expect(w.emitted('move')).toHaveLength(1)
+    const only = await mountDetail({ ...NO_MEMORY_CAPABILITIES, move: true })
+    expect(header(only)).toEqual(['node.move.action'])
   })
 
   it('a chapter offers no "Add chapter" (a chapter lives only directly in a Memory)', async () => {

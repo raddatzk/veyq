@@ -184,7 +184,7 @@ describe('FilesSection', () => {
     expect(w.find('.files-toolbar').exists()).toBe(false)
     expect(w.findAll('input[type="file"]')).toHaveLength(0)
     expect(byLabel(w, t('files.download', { name: 'notes.txt' })).exists()).toBe(true)
-    for (const action of ['files.replace', 'files.rename', 'files.delete']) {
+    for (const action of ['files.replace', 'files.rename', 'files.delete', 'files.move']) {
       expect(byLabel(w, t(action, { name: 'notes.txt' })).exists()).toBe(false)
     }
   })
@@ -208,6 +208,8 @@ describe('FilesSection', () => {
     await flushPromises()
     expect(deleteNode).toHaveBeenCalledWith(SCOPE, P)
     expect(byLabel(w, t('files.delete', { name: 'notes.txt' })).exists()).toBe(true)
+    // …and moves it out (a move out of a drop box is a member's, inbox #358, #377 (a))
+    expect(byLabel(w, t('files.move', { name: 'notes.txt' })).exists()).toBe(true)
   })
 
   it('steps aside when the level hands it the map', async () => {
@@ -374,6 +376,9 @@ describe('FilesSection', () => {
     await flushPromises()
     await byLabel(w, t('files.rename', { name: 'notes.txt' })).trigger('click')
     expect(w.emitted('rename')).toEqual([[NOTES]])
+    // the move, likewise the host's: core's move dialog (inbox #358)
+    await byLabel(w, t('files.move', { name: 'notes.txt' })).trigger('click')
+    expect(w.emitted('move')).toEqual([[NOTES]])
     await w.find('button.files-row-open').trigger('click')
     await flushPromises()
     expect(downloadFile).toHaveBeenCalledWith(SCOPE, keyFor(N), N, BLOBS.items[1].fileBlob, 'notes.txt')

@@ -214,6 +214,18 @@ describe('a guest reads the files of a shared folder in the member\'s section', 
     expectNoMemberWorld()
   })
 
+  // inbox #358: a contributor moves a file of a folder (core's move dialog, the host's — asked through `move`); a READ
+  // guest has no such button (the case above lists every label it has).
+  it('a contributor\'s row offers the move, which asks the host for core\'s move dialog', async () => {
+    const w = mountSection({ role: ShareRole.ReadWrite })
+    await flushPromises()
+    const move = w.find(`button[aria-label="${t('files.move', { name: 'Report.pdf' })}"]`)
+    expect(move.exists()).toBe(true)
+    await move.trigger('click')
+    expect((w.emitted('move') as [TreeNode][]).map(([n]) => n.id)).toEqual([R])
+    expectNoMemberWorld()
+  })
+
   it("inside a guest's identity folder a contributor only downloads (nobody but that guest places anything there)", async () => {
     const w = mountSection({ role: ShareRole.ReadWrite, at: ANNA })
     await flushPromises()

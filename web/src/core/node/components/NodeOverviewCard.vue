@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// The header card of an opened container node (inbox #385 (b)): its icon, its name, and its share, rename and delete as
-// icon buttons. Core's level view heads a folder with it; an application's detail of a container kind heads its node with
+// The header card of an opened container node (inbox #385 (b)): its icon, its name, and its share, rename, move (inbox
+// #358) and delete as icon buttons. Core's level view heads a folder with it; an application's detail of a container kind heads its node with
 // the same card (Files' drop box), so both pages open the same way. What it offers is the caller's capability answer —
 // the card decides nothing. The markup was the level view's own (`LevelView.vue`, whose golden pins it).
 import { useI18n } from 'vue-i18n'
@@ -13,13 +13,14 @@ withDefaults(
     share?: boolean
     rename?: boolean
     remove?: boolean
+    move?: boolean
     /** Accessible names of the actions, where the kind says more than core's neutral words. */
     shareLabel?: string
     deleteLabel?: string
   }>(),
-  { share: false, rename: false, remove: false },
+  { share: false, rename: false, remove: false, move: false },
 )
-const emit = defineEmits<{ share: []; rename: []; delete: [] }>()
+const emit = defineEmits<{ share: []; rename: []; move: []; delete: [] }>()
 const { t } = useI18n()
 </script>
 
@@ -32,7 +33,7 @@ const { t } = useI18n()
         <!-- Visible at EVERY width: the card has no overflow menu, so a width-hidden button is a lost action. They
              carried the Memory header's collapse classes, which hid all three at 721–1120 px and ≤ 720 px (found in the
              browser, 2026-10-07); three small icon buttons fit, and ≤ 520 px they take their own row (ui.css). -->
-        <div v-if="share || rename || remove" class="veyq-folder-overview-actions">
+        <div v-if="share || rename || move || remove" class="veyq-folder-overview-actions">
           <!-- The same affordance as a Memory's share button (icon, label, tooltip); listing and copying links is a
                read, so it stays during a pending deletion, where a new link is refused server-side anyway. -->
           <Button
@@ -57,6 +58,18 @@ const { t } = useI18n()
             outlined
             size="small"
             @click="emit('rename')"
+          />
+          <Button
+            v-if="move"
+            v-tooltip.bottom="t('node.move.action')"
+            type="button"
+            class="veyq-icon-button veyq-prime-icon-button veyq-folder-overview-action"
+            icon="pi pi-file-export"
+            :aria-label="t('node.move.action')"
+            severity="secondary"
+            outlined
+            size="small"
+            @click="emit('move')"
           />
           <Button
             v-if="remove"

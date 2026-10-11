@@ -24,6 +24,10 @@
 // named it (`access.requestGuest`); inside a detail what its application offers (Memories: an upload into the Memory or
 // chapter on screen, the delete of the guest's own media). Inside a guest's identity folder nothing is placed but by its
 // own identity, so no create is offered there (the server refuses it: `illegal_structure`), nor any section's write.
+// A MOVE (inbox #358) is core's `MoveNodeDialog` through the guest's door (`nodeMover`: `placeShareNodeAsGuest` after the
+// naming flow), offered where the capability functions grant it — a node a `FOLDER` of the subtree holds, never the
+// link's root, never in or of an identity folder — and its destinations are the subtree's folders only. A `READ` link has
+// no door, so nothing it renders can move anything.
 import { computed, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -41,6 +45,9 @@ import { guestTreeSource, type GuestTreeSource } from './guestAccess'
 import { useGuestSession } from './guestIdentity'
 import { renderMarkdown } from '../../shared/markdown'
 import ShareNameDialog from './ShareNameDialog.vue'
+import MoveNodeDialog from '../node/MoveNodeDialog.vue'
+import { nodeMover } from '../node/move'
+import type { TreeNode } from '../node/tree'
 
 // The props are the shell's, the registry's `ShareBodyProps` (core/applications/registry.ts), spelled out because the
 // SFC compiler reads them statically.
@@ -153,6 +160,10 @@ async function createNode(name: string) {
   await createShareNodeAsGuest(ctx, { parentId, kind, name })
   await props.reload() // the new node lists with its name and key
 }
+// --- a move (READ_WRITE): core's dialog, the guest's door ----------------------------------------------------------
+const mover = nodeMover(() => props.access)
+const moving = ref<TreeNode | null>(null)
+
 function createError(e: unknown): string {
   const m = guestTreeErrorMessageKey(e)
   return t(m.key, m.params ?? {})
@@ -182,6 +193,7 @@ function createError(e: unknown): string {
       :folder-name="tree.nameOf(current.id)"
       @open-node="go($event.id)"
       @create="startCreate"
+      @move-node="moving = $event"
     />
     <!-- The member's detail of the node's kind, for a guest: what it offers is its capabilities and its data source. -->
     <component
@@ -196,10 +208,20 @@ function createError(e: unknown): string {
       :access="access"
       :tree="tree"
       @open-node="go($event.id)"
+      @move="moving = $event"
     />
     <p v-else class="veyq-empty">{{ t('share.folder.unsupportedKind') }}</p>
   </section>
 
+  <MoveNodeDialog
+    v-if="moving && mover && tree"
+    :node="moving"
+    :access="access"
+    :tree="tree"
+    :mover="mover"
+    :node-name="tree.nameOf(moving.id)"
+    @close="moving = null"
+  />
   <ShareNameDialog
     v-if="creating"
     :title="creating === FOLDER_KIND ? t('share.folder.newFolderTitle') : t('common.create')"

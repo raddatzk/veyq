@@ -188,7 +188,8 @@ inherited down the subtree as the share allows:** a `READ_WRITE` folder link con
 below it, a `WRITE_ONLY` link writes into its root only. **A `CHAPTER` is a share root with every role.** **The
 share root's name is re-sealed by its own operation** (`setShareSealedName`), callable by any member with write
 access, not by the owner-gated `updateShare`. A folder is shared through core's own dialog, not the Memories one,
-and no guest move control is invented in the web yet (inbox #358).
+and a guest's move is core's one move dialog, the member's too (inbox #358: offered only for a node a folder of the
+subtree holds, through `placeShareNodeAsGuest`).
 
 **A name's slug is folded by its node's kind** (inbox #350, decided and built, cr-files-application P1). The slug is
 what the token HMACs, so the folding is frozen into every stored token. **Containers (folders, Memories, chapters) keep

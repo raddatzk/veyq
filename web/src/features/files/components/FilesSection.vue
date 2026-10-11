@@ -13,6 +13,8 @@
 // one remedy there is (replace anyway after a peer's replace). A file that holds no content (an upload that never
 // finished, e.g. the tab closed mid-way; a given-up job trashes its own empty node) offers an upload into it instead of
 // a replace, and a picked file of its name fills it without the replace question — there is nothing to replace (#384).
+// A row's move ("Move to…", inbox #358) asks the host for core's `MoveNodeDialog` through the section's `move` event: a
+// member anywhere (out of a guest's identity folder too), a contributor between the subtree's folders.
 // What it offers is Files' capability matrix for the level (`../capabilities.ts`, inbox #401): in a guest's identity
 // folder a member downloads and deletes per file (inbox #391), a content-less one ('not uploaded yet', a guest's upload
 // that never finished) too, and places nothing; during a pending deletion it only downloads.
@@ -60,16 +62,20 @@ const emit = defineEmits<LevelSectionEmits>()
 // One session for the section's life: a member's level or a link's page, never both — so the source is fixed at mount.
 const guest = props.access.mode === 'guest'
 const source: FilesSource = guest
-  ? guestFilesSource((): GuestAccess => {
-      const a = props.access
-      if (a.mode !== 'guest') throw new Error('a guest section was handed a member access')
-      return a
-    })
+  ? guestFilesSource(
+      (): GuestAccess => {
+        const a = props.access
+        if (a.mode !== 'guest') throw new Error('a guest section was handed a member access')
+        return a
+      },
+      { move: (node) => emit('move', node) },
+    )
   : memberFilesSource({
       scopeId: () => activeSpace.scopeId,
       epochs: () => props.epochs,
       keyOf: (id) => props.tree.keyOf(id),
       rename: (node) => emit('rename', node),
+      move: (node) => emit('move', node),
     })
 
 const { t, locale } = useI18n()
@@ -440,6 +446,18 @@ async function remove(node: TreeNode) {
             outlined
             size="small"
             @click="source.rename?.(row.node)"
+          />
+          <Button
+            v-if="caps.moveFile"
+            v-tooltip.bottom="t('files.move', { name: row.node.name })"
+            type="button"
+            class="veyq-icon-button veyq-prime-icon-button"
+            icon="pi pi-file-export"
+            :aria-label="t('files.move', { name: row.node.name })"
+            severity="secondary"
+            outlined
+            size="small"
+            @click="source.move?.(row.node)"
           />
           <!-- Delete also where nothing is placed: a guest's identity folder, where a member removes what a guest sent file
                by file — a content-less one too, a guest's upload that never finished (inbox #391). -->

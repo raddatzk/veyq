@@ -25,6 +25,10 @@ export interface FilesCapabilities {
   share: boolean
   /** Delete the drop box on screen. */
   deleteNode: boolean
+  /** Move a file of the level elsewhere — also a guest's folder out of a drop box (core's `MoveNodeDialog`, inbox #358). */
+  moveFile: boolean
+  /** Move the drop box on screen elsewhere. */
+  moveNode: boolean
 }
 
 export const NO_FILES_CAPABILITIES: Readonly<FilesCapabilities> = Object.freeze({
@@ -36,6 +40,8 @@ export const NO_FILES_CAPABILITIES: Readonly<FilesCapabilities> = Object.freeze(
   createDropBox: false,
   share: false,
   deleteNode: false,
+  moveFile: false,
+  moveNode: false,
 })
 
 /** The Files matrix (see the header; the table is `docs/apps/files.md`). `at` is the node on screen: a folder level whose
@@ -50,7 +56,8 @@ export function filesCapabilities(access: Access, at: CapabilityTarget): FilesCa
 function memberCapabilities(readonly: boolean, publicLinks: boolean, at: CapabilityTarget): FilesCapabilities {
   const write = !readonly
   // Nothing is placed in a guest's identity folder (a server placement rule), but a member removes what a guest sent,
-  // file by file (inbox #391).
+  // file by file (inbox #391), and moves it out (a move out of a drop box is a member's, inbox #377 (a); the move dialog
+  // offers no identity folder as a destination).
   const place = write && !at.inIdentityFolder
   if (at.kind === null || at.kind === FOLDER_KIND) {
     return {
@@ -61,11 +68,21 @@ function memberCapabilities(readonly: boolean, publicLinks: boolean, at: Capabil
       rename: place,
       deleteFile: write,
       createDropBox: place,
+      moveFile: write,
     }
   }
   if (at.kind === DROPBOX_KIND) {
-    // A drop box's listing and links stay readable during a pending deletion; deleting it, or a guest's folder, is a write.
-    return { ...NO_FILES_CAPABILITIES, download: true, share: publicLinks && at.shareable, deleteFile: write, deleteNode: write }
+    // A drop box's listing and links stay readable during a pending deletion; deleting or moving it, or a guest's folder
+    // (out of it: the folder's identity ends, ADR 0080 decision 11), is a write.
+    return {
+      ...NO_FILES_CAPABILITIES,
+      download: true,
+      share: publicLinks && at.shareable,
+      deleteFile: write,
+      deleteNode: write,
+      moveFile: write,
+      moveNode: write,
+    }
   }
   return NO_FILES_CAPABILITIES
 }
@@ -77,12 +94,14 @@ function guestCapabilities(role: string, at: CapabilityTarget): FilesCapabilitie
     case 'READ':
       return at.kind === FOLDER_KIND || at.kind === DROPBOX_KIND ? { ...NO_FILES_CAPABILITIES, download: true } : NO_FILES_CAPABILITIES
     case 'READ_WRITE':
-      // A contributor uploads and replaces any file of a folder (the owner's too); nothing in a guest's identity folder;
-      // a drop box below the link is read-only for it (inbox #380). Rename is the server's (core's `updateShareNode`)
-      // but offered nowhere yet (inbox #358); a guest deletes no file (nodes store no authorship).
+      // A contributor uploads, replaces and moves any file of a folder (the owner's too — core's `FolderGuestNodeRules`
+      // lets any kind out of and into a folder; the move dialog offers the subtree's folders only); nothing in a guest's
+      // identity folder (only a member moves out of a drop box, inbox #377 (a)); a drop box below the link is read-only
+      // for it, its move included (inbox #380). Rename is the server's (core's `updateShareNode`) but offered nowhere
+      // yet; a guest deletes no file (nodes store no authorship).
       if (at.kind === FOLDER_KIND) {
         const place = !at.inIdentityFolder
-        return { ...NO_FILES_CAPABILITIES, download: true, upload: place, replace: place }
+        return { ...NO_FILES_CAPABILITIES, download: true, upload: place, replace: place, moveFile: place }
       }
       return at.kind === DROPBOX_KIND ? { ...NO_FILES_CAPABILITIES, download: true } : NO_FILES_CAPABILITIES
     case 'WRITE_ONLY':

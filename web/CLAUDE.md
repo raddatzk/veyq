@@ -146,7 +146,9 @@ here; the server is blind.
   titles a node of the kind with, else a neutral "Delete", and `deleteCopy`, its sentence — `nounWithArticle`, the noun core's
   create and rename dialogs name a colliding sibling of the kind with ("There is already a file named …", else "an item") — `emptyInTrash`, the note core's
   trash shows on a node of the kind that holds no attachment — `renameSelectionEnd`, where core's rename dialog ends the
-  selection on a name, e.g. a file's before its extension — and its `section` of the folder level view —
+  selection on a name, e.g. a file's before its extension — `placement`, where a node of the kind may be moved (`{ root,
+  parents }`, a hint mirroring the backend's `NodeKindRules`; core's move dialog offers nothing for a kind without one,
+  inbox #358) — and its `section` of the folder level view —
   `{ order, component, views? }`; the level view is core's, `core/node/LevelView.vue`: its toolbar (the space's trash, and
   the view switch over the union of the shown sections' `views` and the folders' grid and list — `core/node/levelViews.ts`,
   inbox #370; no section draws a toggle; the level shows the stored mode only where that union offers it, else the grid,
@@ -161,7 +163,10 @@ here; the server is blind.
   kind without one offers no share. There is no guest-only section or detail: core's page of a `READ`/`READ_WRITE` public
   share (`core/sharing/ShareTreePage.vue`) is core's `LevelView` at a folder and the kind's `detail` at any other node —
   the link's root included — handed the guest's access and tree (inbox #401). Core owns the rest: a folder's create and every node's rename are
-  `core/node/FolderNameDialog.vue`, which derives the slug by the renamed node's kind, and FOLDER's share dialog
+  `core/node/FolderNameDialog.vue`, which derives the slug by the renamed node's kind; every node's move is
+  `core/node/MoveNodeDialog.vue` (inbox #358), mounted by both hosts when a section or a detail emits `move` with the
+  node, moving through the session's one door (`core/node/move.ts` `nodeMover`: the member's `moveNode`, a `READ_WRITE`
+  guest's `placeShareNodeAsGuest`, none otherwise) and explaining each server refusal by its code; and FOLDER's share dialog
   `core/sharing/FolderShareDialog.vue` is pre-registered); `addSlotItem(slot, id, component, order?)` for the two list slots `topbarTray`
   and `sidebarPins` (an id namespaced by the application, e.g. `memories.pinned`; write-once per (slot, id); the shell
   renders `slotItems(slot)` sorted by `order`, ties in registration order — the top bar after core's own upload status

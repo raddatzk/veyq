@@ -69,6 +69,7 @@ function onMetaUpdated(e: { nodeId: string; wrappedMeta: string | null; metaVers
     :source="source"
     @toggle-favorite="onToggleFavorite"
     @rename="emit('rename')"
+    @move="emit('move', node)"
     @delete="emit('delete')"
     @create-chapter="emit('createChild', CHAPTER_KIND)"
     @open-chapter="emit('openNode', $event)"

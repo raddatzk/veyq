@@ -84,6 +84,15 @@ describe('DropBoxDetail', () => {
     ])
   })
 
+  // inbox #358 / ADR 0080 decision 11: a member moves a guest's folder OUT (the host's core move dialog asks first and
+  // offers no drop box) and moves the drop box itself from its card.
+  it('hands the move of a guest\'s folder out, and of the drop box, to the host', async () => {
+    const w = mountDetail()
+    await w.find(`button[aria-label="${t('files.dropBox.moveFolder', { name: 'Anna (2)' })}"]`).trigger('click')
+    await w.find(`.veyq-folder-overview-card button[aria-label="${t('node.move.action')}"]`).trigger('click')
+    expect(w.emitted('move')).toEqual([[ANNA_2], [BOX]])
+  })
+
   it('opens a folder, and hands share and delete of the drop box to the host', async () => {
     const w = mountDetail()
     await w.find('button[aria-label="Open Anna (2)"]').trigger('click')

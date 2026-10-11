@@ -16,6 +16,7 @@
 // share BODY: on its own WRITE_ONLY link the guest's drop page (name yourself, pick files, upload into your own folder),
 // the one page core renders by claim (every other guest page is the member's views, inbox #401).
 import { DROPBOX_KIND, FILE_KIND } from './kinds'
+import { FOLDER_KIND } from '../../core/node/kind'
 import type { Registry } from '../../core/applications/registry'
 import { fileNameSlug } from '../../shared/naming'
 import FilesSection from './components/FilesSection.vue'
@@ -37,6 +38,10 @@ export const FILES_SECTION_ORDER = 20
 /** The drop boxes' section: right after the files. */
 export const DROPBOX_SECTION_ORDER = 21
 
+/** Where a file and a drop box live (the backend's `FilesNodeKindRules`): at the root or directly in a folder — never in
+ *  another file or a drop box, which take no placed child. */
+const FILES_PLACEMENT = { root: true, parents: [FOLDER_KIND] } as const
+
 export function registerFiles(registry: Registry): void {
   // A file is no share root (the backend declares no `ShareRoots` for it): it is shared through its folder. Its name
   // folds by `fileNameSlug` (inbox #350: `Foto.JPG` and `foto.jpg` collide, `Day1.md` and `Day1 md` do not) — frozen
@@ -52,6 +57,8 @@ export function registerFiles(registry: Registry): void {
     // Core's create and rename dialogs name a colliding file with it: "There is already a file named …" (#389).
     nounWithArticle: 'files.aFile',
     section: { order: FILES_SECTION_ORDER, component: FilesSection },
+    // Where it may be moved (core's move dialog, inbox #358): the backend's `FilesNodeKindRules`.
+    placement: FILES_PLACEMENT,
   })
   // Shared WRITE_ONLY only (the backend's `FilesShareRoots`); its name folds as a container's (`slugify`, the default).
   registry.registerKind({
@@ -67,6 +74,7 @@ export function registerFiles(registry: Registry): void {
     section: { order: DROPBOX_SECTION_ORDER, component: DropBoxSection },
     createDialog: DropBoxCreateDialog,
     shareDialog: DropBoxShareDialog,
+    placement: FILES_PLACEMENT,
   })
   registry.claimShareBody(DROPBOX_KIND, DropBoxShareBody)
 }
