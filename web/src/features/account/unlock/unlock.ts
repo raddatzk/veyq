@@ -8,7 +8,7 @@ import { fromB64std } from '@veyq/crypto/base64'
 import { accountApi } from '../../../api/client'
 import { withRefresh } from '../../../app/sessionRefresh'
 import { setUnlocked, type UnlockOrigin } from '../../../app/vault'
-import { setAccount } from '../../../app/account'
+import { setAccount, setAccountUserId } from '../../../app/account'
 import { MasterKeyWrapMethodEnum, type AccountKeyMaterial } from '../../../api/generated/account'
 import * as device from '../trustDevice/deviceKey'
 import { restoreDeviceKey } from '../rememberMe/deviceKeyWrap'
@@ -20,8 +20,10 @@ import { account } from '../../../app/account'
 import { session } from '../../../app/session'
 import { i18n } from '../../../i18n'
 
-function fetchKeyMaterial(): Promise<AccountKeyMaterial> {
-  return withRefresh(() => accountApi().getAccountKeyMaterial())
+async function fetchKeyMaterial(): Promise<AccountKeyMaterial> {
+  const material = await withRefresh(() => accountApi().getAccountKeyMaterial())
+  setAccountUserId(material.userId) // every unlock path reads it: per-user client settings key on it
+  return material
 }
 
 /** Unwrap the identity private key with the opened Master Key and store both in the in-memory vault.

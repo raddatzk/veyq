@@ -3,7 +3,7 @@
 // section, the fallback sections); an application tab shows that one section's nodes, and the sub-folders stay in every
 // tab so one can still navigate deeper. No subtree query: a tab never shows more than the folder on screen holds.
 //
-// Which tab is shown is a stable client setting (`shared/state/useLevelTab`, one global value like the view mode). The
+// Which tab is shown is a stable client setting (`shared/state/useLevelTab`, one value per account and one for the share-guest pages, like the view mode). The
 // level shows the stored tab only where this level has it (`effectiveTab`), else `All`, and never rewrites the stored
 // value: a folder without Files shows `All`, and the next folder with Files shows the Files tab again.
 //
