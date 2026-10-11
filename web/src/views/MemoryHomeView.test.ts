@@ -97,6 +97,10 @@ vi.mock('../features/files/components/FilesSection.vue', async () => {
     }),
   }
 })
+vi.mock('../features/files/components/FileDetail.vue', async () => {
+  const { defineComponent, h } = await import('vue')
+  return { default: defineComponent({ name: 'FileDetailStub', props: ['node', 'access', 'tree'], setup: (p) => () => h('div', { class: 'file-detail-stub' }, `file=${p.node.name}`) }) }
+})
 // Core's name dialog (folder create, rename of any kind) and Memories' create dialog (its kinds' `createDialog`).
 vi.mock('../core/node/FolderNameDialog.vue', async () => {
   const { defineComponent, h } = await import('vue')
@@ -492,7 +496,7 @@ describe('MemoryHomeView resolving the fragment grammar', () => {
   it('a slug shared by a file and a folder: the file without the slash, the folder with it or with a child behind it', async () => {
     const file = await mountAt('#~me/trips/report')
     expect(file.find('.section-stub').exists()).toBe(false)
-    expect(file.text()).toContain(t('home.unsupportedKind')) // a file is not opened (no detail): the explicit state
+    expect(file.find('.file-detail-stub').text()).toBe('file=Report') // a file opens its detail (Files' FileDetail)
     const folder = await mountAt('#~me/trips/report/')
     expect(folder.find('.section-stub').text()).toContain('folder=Report')
     const inner = await mountAt('#~me/trips/report/inner/')
