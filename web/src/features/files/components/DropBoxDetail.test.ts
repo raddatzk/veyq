@@ -84,8 +84,12 @@ describe('DropBoxDetail', () => {
     const w = mountDetail()
     await w.find('button[aria-label="Open Anna (2)"]').trigger('click')
     expect(w.emitted('openNode')).toEqual([[ANNA_2]])
-    await w.find('button[aria-label="Share link"]').trigger('click')
-    await w.find('button[aria-label="Delete drop box"]').trigger('click')
+    // inbox #385 (b): both sit on core's header card, the one a folder opens with — the drop box's icon and name on it
+    const card = w.find('.veyq-folder-overview-card')
+    expect(card.find('h2').text()).toBe(BOX.name)
+    expect(card.find('.pi-inbox').exists()).toBe(true)
+    await card.find('button[aria-label="Share link"]').trigger('click')
+    await card.find('button[aria-label="Delete drop box"]').trigger('click')
     expect(w.emitted('share')).toHaveLength(1)
     expect(w.emitted('delete')).toHaveLength(1)
     // control: no share offered where the host says the kind cannot be shared

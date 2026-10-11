@@ -43,6 +43,7 @@ import { useViewMode } from '../../shared/state/useViewMode'
 import { compareByCreation, displayNamesOf } from './location'
 import { FOLDER_VIEWS, unionViews } from './levelViews'
 import ViewModeToggle from './ViewModeToggle.vue'
+import NodeOverviewCard from './components/NodeOverviewCard.vue'
 
 const props = defineProps<{
   folder: TreeNode | null
@@ -132,55 +133,18 @@ const fallbacks = computed(() =>
       />
       <ViewModeToggle v-if="showViews" :views="views" />
     </div>
-    <section v-if="folder" class="veyq-section">
-      <div class="veyq-section-header">
-        <div class="veyq-card veyq-folder-card veyq-folder-overview-card">
-          <span class="pi pi-folder" />
-          <h2>{{ folderName ?? folder.name }}</h2>
-          <!-- Visible at EVERY width: the card has no overflow menu, so a width-hidden button is a lost action. They
-               carried the Memory header's collapse classes, which hid all three at 721–1120 px and ≤ 720 px (found in the
-               browser, 2026-10-07); three small icon buttons fit, and ≤ 520 px they take their own row (ui.css). -->
-          <div v-if="caps.share || caps.rename || caps.deleteNode" class="veyq-folder-overview-actions">
-            <!-- The same affordance as a Memory's share button (icon, label, tooltip); listing and copying links is a
-                 read, so it stays during a pending deletion, where a new link is refused server-side anyway. -->
-            <Button
-              v-if="caps.share"
-              v-tooltip.bottom="t('share.share')"
-              type="button"
-              class="veyq-icon-button veyq-prime-icon-button veyq-folder-overview-action"
-              icon="pi pi-share-alt"
-              :aria-label="t('share.share')"
-              severity="secondary"
-              outlined
-              size="small"
-              @click="emit('share')"
-            />
-            <Button
-              v-if="caps.rename"
-              type="button"
-              class="veyq-icon-button veyq-prime-icon-button veyq-folder-overview-action"
-              icon="pi pi-pencil"
-              :aria-label="t('node.rename')"
-              severity="secondary"
-              outlined
-              size="small"
-              @click="emit('renameFolder')"
-            />
-            <Button
-              v-if="caps.deleteNode"
-              type="button"
-              class="veyq-icon-button veyq-prime-icon-button veyq-folder-overview-action veyq-danger-action"
-              icon="pi pi-trash"
-              :aria-label="t('node.delete')"
-              severity="danger"
-              outlined
-              size="small"
-              @click="emit('deleteFolder')"
-            />
-          </div>
-        </div>
-      </div>
-    </section>
+    <!-- The folder's header card, core's one (`NodeOverviewCard`): a container kind's detail opens with it too. -->
+    <NodeOverviewCard
+      v-if="folder"
+      icon="pi pi-folder"
+      :name="folderName ?? folder.name"
+      :share="caps.share"
+      :rename="caps.rename"
+      :remove="caps.deleteNode"
+      @share="emit('share')"
+      @rename="emit('renameFolder')"
+      @delete="emit('deleteFolder')"
+    />
 
     <component
       :is="s.component"

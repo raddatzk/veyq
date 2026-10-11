@@ -3,7 +3,8 @@
 // identity, each named by its guest (its entry opened through the drop box's drop key, core's tree) — with how many
 // files each holds. A folder opens to core's level view, read-only there (a member places nothing in a guest's identity
 // folder) but for a delete per file (inbox #391); a member deletes a folder here, or the drop box, and shares it
-// (`DropBoxShareDialog`) — each where Files' capability matrix says so (`../capabilities.ts`, inbox #401: the share with
+// (`DropBoxShareDialog`) from core's header card, the one a folder opens with (`NodeOverviewCard`, inbox #385 (b)) — each
+// where Files' capability matrix says so (`../capabilities.ts`, inbox #401: the share with
 // the instance's public links, the deletes not during a pending deletion). Two guests of one name are told apart at
 // display time, never stored ("Anna", "Anna (2)",
 // in the order the server made their folders, a same-millisecond pair by id) — core's `displayNamesOf` in
@@ -28,6 +29,7 @@ import { compareByCreation, displayNamesOf } from '../../../core/node/location'
 import { useConfirm } from '../../../shared/state/useConfirm'
 import { useToast } from '../../../shared/state/useToast'
 import { FILE_KIND } from '../kinds'
+import NodeOverviewCard from '../../../core/node/components/NodeOverviewCard.vue'
 import { filesCapabilities } from '../capabilities'
 import { targetOf, type GuestAccess } from '../../../core/access'
 import { guestFilesSource, memberFilesSource, sourceCapabilities, type FilesSource } from '../source'
@@ -82,53 +84,55 @@ async function removeFolder(folder: TreeNode, label: string) {
 </script>
 
 <template>
-  <section class="veyq-section dropbox-detail">
-    <div class="veyq-section-header">
-      <h2><span class="pi pi-inbox" aria-hidden="true" /> {{ node.name }}</h2>
-      <span>{{ folders.length }}</span>
-      <div class="dropbox-toolbar">
-        <Button v-if="caps.share" type="button" :label="t('files.dropBox.share')" icon="pi pi-share-alt" size="small" @click="emit('share')" />
-        <Button v-if="caps.deleteNode" type="button" :label="t('files.dropBox.delete')" icon="pi pi-trash" severity="danger" outlined size="small" @click="emit('delete')" />
+  <!-- Opens like a folder (inbox #385 (b)): core's header card with the drop box's share and delete, then its folders. -->
+  <div class="veyq-level-view">
+    <NodeOverviewCard
+      icon="pi pi-inbox"
+      :name="node.name"
+      :share="caps.share"
+      :remove="caps.deleteNode"
+      :share-label="t('files.dropBox.share')"
+      :delete-label="t('files.dropBox.delete')"
+      @share="emit('share')"
+      @delete="emit('delete')"
+    />
+    <section class="veyq-section dropbox-detail">
+      <div class="veyq-section-header">
+        <h2>{{ t('node.folders') }}</h2>
+        <span>{{ folders.length }}</span>
       </div>
-    </div>
-    <!-- A guest's words: it opens and downloads, only the owner deletes or moves; nobody sent anything (no link to share). -->
-    <p>{{ guest ? t('files.dropBox.sharedHint') : t('files.dropBox.readOnlyHint') }}</p>
-    <p v-if="!folders.length" class="veyq-empty veyq-empty-inline">{{ guest ? t('files.dropBox.sharedEmpty') : t('files.dropBox.empty') }}</p>
-    <ul v-else class="veyq-list">
-      <li v-for="row in folders" :key="row.folder.id" class="veyq-list-row">
-        <button type="button" class="dropbox-row-open" :aria-label="t('files.dropBox.open', { name: row.label })" @click="emit('openNode', row.folder)">
-          <span class="pi pi-folder" aria-hidden="true" />
-          <span class="veyq-row-main">
-            <span class="veyq-row-title">{{ row.label }}</span>
-            <span class="veyq-row-subtitle">{{ t('files.dropBox.guestFiles', row.files) }}</span>
+      <!-- A guest's words: it opens and downloads, only the owner deletes or moves; nobody sent anything (no link to share). -->
+      <p>{{ guest ? t('files.dropBox.sharedHint') : t('files.dropBox.readOnlyHint') }}</p>
+      <p v-if="!folders.length" class="veyq-empty veyq-empty-inline">{{ guest ? t('files.dropBox.sharedEmpty') : t('files.dropBox.empty') }}</p>
+      <ul v-else class="veyq-list">
+        <li v-for="row in folders" :key="row.folder.id" class="veyq-list-row">
+          <button type="button" class="dropbox-row-open" :aria-label="t('files.dropBox.open', { name: row.label })" @click="emit('openNode', row.folder)">
+            <span class="pi pi-folder" aria-hidden="true" />
+            <span class="veyq-row-main">
+              <span class="veyq-row-title">{{ row.label }}</span>
+              <span class="veyq-row-subtitle">{{ t('files.dropBox.guestFiles', row.files) }}</span>
+            </span>
+          </button>
+          <span class="veyq-action-group veyq-action-group-icons">
+            <Button
+              v-if="caps.deleteFile"
+              type="button"
+              class="veyq-icon-button veyq-prime-icon-button"
+              icon="pi pi-trash"
+              :aria-label="t('files.dropBox.deleteFolder', { name: row.label })"
+              severity="danger"
+              outlined
+              size="small"
+              @click="removeFolder(row.folder, row.label)"
+            />
           </span>
-        </button>
-        <span class="veyq-action-group veyq-action-group-icons">
-          <Button
-            v-if="caps.deleteFile"
-            type="button"
-            class="veyq-icon-button veyq-prime-icon-button"
-            icon="pi pi-trash"
-            :aria-label="t('files.dropBox.deleteFolder', { name: row.label })"
-            severity="danger"
-            outlined
-            size="small"
-            @click="removeFolder(row.folder, row.label)"
-          />
-        </span>
-      </li>
-    </ul>
-  </section>
+        </li>
+      </ul>
+    </section>
+  </div>
 </template>
 
 <style scoped>
-.dropbox-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-  margin-left: auto;
-}
 .dropbox-row-open {
   display: flex;
   align-items: center;
