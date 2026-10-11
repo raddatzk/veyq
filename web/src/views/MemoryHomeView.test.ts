@@ -31,6 +31,8 @@ vi.mock('../features/memory/favoritesStore', () => ({
   toggleFavorite: vi.fn(),
 }))
 vi.mock('../features/spaces/scopes', () => ({ listMyTenants: vi.fn() }))
+const { showUndo } = vi.hoisted(() => ({ showUndo: vi.fn() }))
+vi.mock('../shared/state/useToast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn(), showUndo, dismissUndo: vi.fn() }) }))
 vi.mock('../core/node/treeStore', async () => {
   const { reactive } = await import('vue')
   return {
@@ -41,6 +43,7 @@ vi.mock('../core/node/treeStore', async () => {
 })
 vi.mock('../core/node/tree', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../core/node/tree')>()),
+  restoreNode: vi.fn(async () => {}),
   // Each node's key as the chain would resolve it: the chapter `day1` has its own (7), every other node 9.
   nodeContentKey: (_scopeId: string, _epochs: unknown, _nodes: unknown, nodeId: string) => new Uint8Array(32).fill(nodeId === 'day1' ? 7 : 9),
 }))
@@ -129,7 +132,7 @@ vi.mock('../core/sharing/FolderShareDialog.vue', async () => {
 })
 vi.mock('../core/node/components/DeleteNodeDialog.vue', async () => {
   const { defineComponent, h } = await import('vue')
-  return { default: defineComponent({ props: ['node'], setup: (p) => () => h('div', { class: 'delete-stub' }, p.node.name) }) }
+  return { default: defineComponent({ name: 'DeleteNodeStub', props: ['node'], emits: ['done', 'close'], setup: (p) => () => h('div', { class: 'delete-stub' }, p.node.name) }) }
 })
 vi.mock('../core/node/components/SpaceTrashDialog.vue', async () => {
   const { defineComponent, h } = await import('vue')
@@ -137,10 +140,10 @@ vi.mock('../core/node/components/SpaceTrashDialog.vue', async () => {
 })
 
 import MemoryHomeView from './MemoryHomeView.vue'
-import { treeStore } from '../core/node/treeStore'
+import { treeStore, loadTree } from '../core/node/treeStore'
 import { listMyTenants } from '../features/spaces/scopes'
 import { isFavorite } from '../features/memory/favoritesStore'
-import type { TreeNode } from '../core/node/tree'
+import { restoreNode, type TreeNode } from '../core/node/tree'
 import { FOLDER_KIND } from '../core/node/kind'
 import { MEMORY_KIND, CHAPTER_KIND } from '../features/memory/kinds'
 import { FILE_KIND } from '../features/files/kinds'
@@ -369,6 +372,17 @@ describe('MemoryHomeView over the real registry', () => {
     await w.find(`button[aria-label="${t('node.delete')}"]`).trigger('click')
     await flushPromises()
     expect(w.find('.delete-stub').text()).toBe('Trips')
+    // the dialog deleted it (inbox #385 (c)): the host says so with an undo that restores the folder as the trash does
+    showUndo.mockClear()
+    w.findComponent({ name: 'DeleteNodeStub' }).vm.$emit('done')
+    await flushPromises()
+    expect(showUndo).toHaveBeenCalledOnce()
+    expect(showUndo.mock.calls[0][0].summary).toBe(t('node.trash.moved', { name: 'Trips' }))
+    vi.mocked(loadTree).mockClear()
+    showUndo.mock.calls[0][0].onUndo()
+    await flushPromises()
+    expect(vi.mocked(restoreNode).mock.calls.map((c) => [c[0], (c[3] as TreeNode).id])).toEqual([['scope-1', 'trips']])
+    expect(loadTree).toHaveBeenCalled()
 
     const root = await mountAt('#~me')
     await root.findAll('button.veyq-folder-card').find((b) => b.text() === 'Trips')!.trigger('click')

@@ -13,9 +13,9 @@ import type { FileListPage } from '../../../api/generated/files'
 const keys = vi.hoisted(() => new Map<string, Uint8Array>())
 vi.mock('../api', () => ({ filesApi: vi.fn() }))
 vi.mock('../download', async (importOriginal) => ({ ...(await importOriginal<typeof import('../download')>()), downloadFile: vi.fn() }))
-const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }))
+const { toastError, showUndo } = vi.hoisted(() => ({ toastError: vi.fn(), showUndo: vi.fn() }))
 vi.mock('../../../shared/state/useToast', () => ({
-  useToast: () => ({ success: vi.fn(), error: toastError, showUndo: vi.fn(), dismissUndo: vi.fn() }),
+  useToast: () => ({ success: vi.fn(), error: toastError, showUndo, dismissUndo: vi.fn() }),
 }))
 vi.mock('../uploadFile', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../uploadFile')>()),
@@ -24,6 +24,7 @@ vi.mock('../uploadFile', async (importOriginal) => ({
 vi.mock('../../../core/node/tree', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../core/node/tree')>()),
   deleteNode: vi.fn(async () => {}),
+  restoreNode: vi.fn(async () => {}),
   nodeContentKey: (_s: string, _e: unknown, _t: unknown, nodeId: string) => keys.get(nodeId) ?? null,
 }))
 vi.mock('../../../core/node/treeStore', async () => {
@@ -40,7 +41,7 @@ import type { BlobMeta } from '../../../core/blob/meta'
 import { FILE_KIND } from '../kinds'
 import { MEMORY_KIND } from '../../memory/kinds'
 import { FOLDER_KIND } from '../../../core/node/kind'
-import { deleteNode, type TreeNode } from '../../../core/node/tree'
+import { deleteNode, restoreNode, type TreeNode } from '../../../core/node/tree'
 import { loadTree } from '../../../core/node/treeStore'
 import { enqueue, clearUploads, useUploadQueue } from '../../../core/blob/queue'
 import { confirmRequest, settleConfirm } from '../../../shared/state/useConfirm'
@@ -130,6 +131,9 @@ beforeEach(() => {
     name: file.name, sizeBytes: file.size, run: async () => ({ nodeId: R }), extra: { file },
   }))
   vi.mocked(deleteNode).mockClear()
+  vi.mocked(restoreNode).mockClear()
+  showUndo.mockClear()
+  toastError.mockClear()
   vi.mocked(loadTree).mockClear()
   vi.mocked(downloadFile).mockClear()
 })
@@ -398,11 +402,33 @@ describe('FilesSection', () => {
     settleConfirm(false)
     await flushPromises()
     expect(deleteNode).not.toHaveBeenCalled()
+    expect(showUndo).not.toHaveBeenCalled()
     await byLabel(w, t('files.delete', { name: 'notes.txt' })).trigger('click')
     settleConfirm(true)
     await flushPromises()
     expect(deleteNode).toHaveBeenCalledWith(SCOPE, N)
     expect(loadTree).toHaveBeenCalled()
+    // inbox #385 (c): said, with an undo (core's `trashUndo`, its toast clicked in `trashUndo.test.ts`) that restores the
+    // node through core's trash restore and reloads the tree
+    expect(showUndo).toHaveBeenCalledOnce()
+    const { summary, onUndo } = showUndo.mock.calls[0][0]
+    expect(summary).toBe(t('node.trash.moved', { name: 'notes.txt' }))
+    vi.mocked(loadTree).mockClear()
+    onUndo()
+    await flushPromises()
+    expect(vi.mocked(restoreNode).mock.calls.map((c) => [c[0], c[3]])).toEqual([[SCOPE, NOTES]])
+    expect(loadTree).toHaveBeenCalled()
+  })
+
+  it('a failed delete says so and offers no undo', async () => {
+    vi.mocked(deleteNode).mockRejectedValueOnce(new Error('boom'))
+    const w = mountSection({ nodes: [NOTES] })
+    await flushPromises()
+    await byLabel(w, t('files.delete', { name: 'notes.txt' })).trigger('click')
+    settleConfirm(true)
+    await flushPromises()
+    expect(toastError).toHaveBeenCalledWith(t('files.deleteFailed'))
+    expect(showUndo).not.toHaveBeenCalled()
   })
 
   it('says why a file of this folder was not uploaded; after a peer\'s replace it offers replace anyway, on the CURRENT blob', async () => {

@@ -30,6 +30,7 @@ import { useConfirm } from '../../../shared/state/useConfirm'
 import { useToast } from '../../../shared/state/useToast'
 import { FILE_KIND } from '../kinds'
 import NodeOverviewCard from '../../../core/node/components/NodeOverviewCard.vue'
+import { useTrashUndo } from '../../../core/node/trashUndo'
 import { filesCapabilities } from '../capabilities'
 import { targetOf, type GuestAccess } from '../../../core/access'
 import { guestFilesSource, memberFilesSource, sourceCapabilities, type FilesSource } from '../source'
@@ -39,6 +40,7 @@ const emit = defineEmits<NodeDetailEmits>()
 const { t } = useI18n()
 const { ask } = useConfirm()
 const toast = useToast()
+const offerUndo = useTrashUndo()
 
 // One session for the view's life (see FilesSection): the member's source or the link's.
 const guest = props.access.mode === 'guest'
@@ -79,7 +81,10 @@ async function removeFolder(folder: TreeNode, label: string) {
     await deleteFile(folder.id)
   } catch {
     toast.error(t('files.deleteFailed'))
+    return
   }
+  const restore = source.restore
+  if (restore) offerUndo(label, () => restore(folder)) // the undo after a delete (inbox #385 (c))
 }
 </script>
 

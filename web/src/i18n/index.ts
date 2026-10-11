@@ -799,6 +799,9 @@ const en = {
       loadFailed: 'Could not open the trash. Please try again.',
       restore: 'Restore',
       restoreFailed: 'Could not restore this. Please try again.',
+      // The undo toast after a member's delete (core's `trashUndo.ts`, inbox #385 (c)) and its failed restore.
+      moved: '“{name}” moved to the trash.',
+      undoFailed: '“{name}” could not be restored. You can restore it from the trash.',
       deletedOn: 'Deleted {day}',
       purgeOn: 'removed for good on {day}',
       retryName: 'New name',
@@ -2056,6 +2059,8 @@ const de: typeof en = {
       loadFailed: 'Der Papierkorb konnte nicht geöffnet werden. Bitte erneut versuchen.',
       restore: 'Wiederherstellen',
       restoreFailed: 'Konnte nicht wiederhergestellt werden. Bitte erneut versuchen.',
+      moved: '„{name}“ liegt jetzt im Papierkorb.',
+      undoFailed: '„{name}“ konnte nicht wiederhergestellt werden. Du kannst es aus dem Papierkorb wiederherstellen.',
       deletedOn: 'Gelöscht am {day}',
       purgeOn: 'endgültig entfernt am {day}',
       retryName: 'Neuer Name',

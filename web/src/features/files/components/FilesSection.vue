@@ -38,6 +38,7 @@ import Message from 'primevue/message'
 import type { LevelSectionProps, LevelSectionEmits } from '../../../core/applications/registry'
 import type { TreeNode } from '../../../core/node/tree'
 import { collidingSibling, nameTakenMessage } from '../../../core/node/siblingCollision'
+import { useTrashUndo } from '../../../core/node/trashUndo'
 import { enqueue, removeFile, useUploadQueue, QUOTA_EXCEEDED, type UploadItem } from '../../../core/blob/queue'
 import { activeSpace } from '../../../app/activeSpace'
 import { useConfirm } from '../../../shared/state/useConfirm'
@@ -75,6 +76,7 @@ const source: FilesSource = guest
 const { t, locale } = useI18n()
 const { ask } = useConfirm()
 const toast = useToast()
+const offerUndo = useTrashUndo()
 const { batches } = useUploadQueue()
 // The map stands for the whole level (Memories' pins over the subtree): files step aside there, as the folders do.
 const { viewMode } = useViewMode()
@@ -336,7 +338,11 @@ async function remove(node: TreeNode) {
     await deleteFile(node.id)
   } catch {
     toast.error(t('files.deleteFailed'))
+    return
   }
+  // It went to the trash: said, with an undo that restores it (inbox #385 (c)) — where this session can restore.
+  const restore = source.restore
+  if (restore) offerUndo(node.name, () => restore(node))
 }
 </script>
 

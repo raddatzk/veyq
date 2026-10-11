@@ -12,8 +12,8 @@
 // move ids, sealed sizes and ciphertext.
 import type { UploadJob } from '../../core/blob/queue'
 import type { GuestAccess } from '../../core/access'
-import { deleteNode, type NodeParent, type TreeNode } from '../../core/node/tree'
-import { loadTree } from '../../core/node/treeStore'
+import { deleteNode, restoreNode, type NodeParent, type TreeNode } from '../../core/node/tree'
+import { loadTree, treeStore } from '../../core/node/treeStore'
 import { guestTreeContext } from '../../core/sharing/guestTree'
 import { shareChunkUrls } from '../../core/sharing/guestBlob'
 import { withRefresh } from '../../app/sessionRefresh'
@@ -70,6 +70,9 @@ export interface FilesSource {
   /** Delete a file — or a guest's folder of a drop box — into the scope's trash, then re-read the tree. Absent: this
    *  session deletes nothing. */
   readonly deleteFile?: (nodeId: string) => Promise<void>
+  /** Bring back a node this session just deleted (the undo after a delete, inbox #385 (c)): core's trash restore, then
+   *  re-read the tree. Absent: no undo (a guest deletes nothing). */
+  readonly restore?: (node: TreeNode) => Promise<void>
   /** Rename a file (the host's name dialog). Absent: this session renames nothing. */
   readonly rename?: (node: TreeNode) => void
 }
@@ -134,6 +137,13 @@ export function memberFilesSource(from: {
       const scopeId = from.scopeId()
       if (!scopeId) return
       await deleteNode(scopeId, nodeId)
+      await loadTree()
+    },
+    async restore(node) {
+      const scopeId = from.scopeId()
+      const epochs = from.epochs()
+      if (!scopeId || !epochs) throw new Error('scope_locked')
+      await restoreNode(scopeId, epochs, treeStore.nodes, node)
       await loadTree()
     },
     rename: from.rename,
