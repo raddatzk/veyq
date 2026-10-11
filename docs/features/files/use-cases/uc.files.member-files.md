@@ -19,7 +19,8 @@
    slug folded as a file name: `Foto.JPG` and `foto.jpg` are the same name), plans its blob under the file node's own
    key, and pumps the chunks straight to the store.
 3. The client completes the upload (`completeFile`, no expected blob: the slot is empty) — the server attaches the
-   blob to the node in one transaction — and then writes the file's sealed metadata on the node.
+   blob to the node in one transaction; the file's sealed metadata is the blob's own, declared with the upload, so
+   nothing is written after it.
 4. The section lists the folder's files with name, size and modified time.
 5. **Download:** the client presigns the blob's chunks, opens them under the file node's key and saves the file under
    its name.
@@ -36,9 +37,9 @@
 - **E2 — the name is taken or the place illegal:** the create is refused (`slug_taken`, `illegal_structure`); no
   upload starts and the queue's automatic retry does not repeat it.
 - **E3 — no space left:** the upload is refused for the quota and never retried; the section says why.
-- **E4 — the metadata write fails after the bytes landed:** the file is there; the section says its metadata is
-  missing and shows the plaintext size the blob gives. The two writes are not atomic (docs/apps/files.md § Open
-  questions).
+- **E4 — the completion fails after the bytes were pumped:** nothing is attached, and no state shows a blob without
+  its metadata (the metadata is the blob's, written in the one attach transaction). A node the job created stays empty
+  until the queue gives the job up, then moves to the trash (best effort).
 - **E5 — the node is not a live file of this scope** (a folder, a Memory, a trashed file, another scope's node) or
   the caller cannot write the scope: the completion is refused and nothing is attached.
 - **A6 — the scope is being deleted:** the level is read-only; download only.

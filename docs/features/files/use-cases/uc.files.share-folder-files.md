@@ -47,7 +47,7 @@
   opens to the same file view (a row's info button).
 - A guest **deletes nothing** (nodes store no authorship) and the page offers no rename; a contributor moves a file
   between the subtree's folders through core's move dialog ([uc.memory.move-node](../../memory/use-cases/uc.memory.move-node.md)).
-- The metadata rides on the completion only for guests; a member's metadata write is separate (docs/apps/files.md).
+- The metadata is the blob's, declared with the upload and written in the attach transaction, for a guest as for a member (docs/apps/files.md § How a file is stored).
 
 ## What this means for you / Was das für dich bedeutet
 
