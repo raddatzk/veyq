@@ -25,13 +25,13 @@ import org.hibernate.annotations.DynamicUpdate
 @DynamicUpdate
 class NodeEntity : PanacheEntityBase {
     @Id
-    @Column(name = "id", length = 36)
+    @Column(name = "id", columnDefinition = "uuid")
     lateinit var id: String
 
-    @Column(name = "scope_id", nullable = false, length = 36)
+    @Column(name = "scope_id", nullable = false, columnDefinition = "uuid")
     lateinit var scopeId: String
 
-    @Column(name = "parent_id", nullable = false, length = 36)
+    @Column(name = "parent_id", nullable = false, columnDefinition = "uuid")
     lateinit var parentId: String
 
     @Column(name = "kind", nullable = false, length = 16)
@@ -83,7 +83,7 @@ class NodeEntity : PanacheEntityBase {
      *  identity creates (`NodesHandler.createInScope`); a placement clears it (the only placement it can take is a
      *  member's move out, which re-wraps the key under the new parent). Kept on a trashed row: the trash and a restore
      *  still need the identity's key to open the entry, and `NodeGuestIdentityUsage` keeps the identity alive. */
-    @Column(name = "share_identity_id", length = 36)
+    @Column(name = "share_identity_id", columnDefinition = "uuid")
     var shareIdentityId: String? = null
 
     /** When this node was soft-deleted (uc.memory.delete-node, ADR 0061), or null while it is live. Set on the

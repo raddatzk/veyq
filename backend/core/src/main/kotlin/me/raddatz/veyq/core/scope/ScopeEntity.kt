@@ -31,10 +31,10 @@ import java.time.Instant
 @DynamicUpdate
 class ScopeEntity : PanacheEntityBase {
     @Id
-    @Column(name = "id", length = 36)
+    @Column(name = "id", columnDefinition = "uuid")
     lateinit var id: String
 
-    @Column(name = "tenant_id", nullable = false, length = 36)
+    @Column(name = "tenant_id", nullable = false, columnDefinition = "uuid")
     lateinit var tenantId: String
 
     @Column(name = "kind", nullable = false, length = 16)
@@ -43,7 +43,7 @@ class ScopeEntity : PanacheEntityBase {
     /** A PERSONAL scope's owning account, null on every other kind: the key of `ux_scope_personal_owner
      *  (tenant_id, personal_owner)`, which holds "one personal scope per member and tenant" (ADR 0002) against two
      *  creates under two ids. Set once at birth and never changed. */
-    @Column(name = "personal_owner", length = 36)
+    @Column(name = "personal_owner", columnDefinition = "uuid")
     var personalOwner: String? = null
 
     /** A GROUP scope's name, sealed under its **derived name-key `K_name`** (ciphertext base64, cr-0096/ADR 0027);

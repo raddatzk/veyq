@@ -57,7 +57,7 @@ data class StoreObjectRef(val storageKey: String, val chunkCount: Int)
 @DynamicUpdate
 class StoreReclaimEntity : PanacheEntityBase {
     @Id
-    @Column(name = "id", length = 36)
+    @Column(name = "id", columnDefinition = "uuid")
     lateinit var id: String
 
     @Column(name = "storage_key", nullable = false, length = 64)

@@ -19,13 +19,13 @@ import org.hibernate.annotations.DynamicUpdate
 @DynamicUpdate
 class TenantProfileEntity : PanacheEntityBase {
     @Id
-    @Column(name = "id", length = 36)
+    @Column(name = "id", columnDefinition = "uuid")
     lateinit var id: String
 
-    @Column(name = "user_id", nullable = false, length = 36)
+    @Column(name = "user_id", nullable = false, columnDefinition = "uuid")
     lateinit var userId: String
 
-    @Column(name = "tenant_id", nullable = false, length = 36)
+    @Column(name = "tenant_id", nullable = false, columnDefinition = "uuid")
     lateinit var tenantId: String
 
     @Column(name = "username", nullable = false, length = 32)

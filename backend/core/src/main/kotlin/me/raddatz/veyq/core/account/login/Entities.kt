@@ -38,10 +38,10 @@ class LoginChallengeEntity : PanacheEntityBase {
 @DynamicUpdate
 class SessionFamilyEntity : PanacheEntityBase {
     @Id
-    @Column(name = "id", length = 36)
+    @Column(name = "id", columnDefinition = "uuid")
     lateinit var id: String
 
-    @Column(name = "user_id", nullable = false, length = 36)
+    @Column(name = "user_id", nullable = false, columnDefinition = "uuid")
     lateinit var userId: String
 
     @Column(name = "status", nullable = false, length = 16)
@@ -65,10 +65,10 @@ class SessionFamilyEntity : PanacheEntityBase {
 @DynamicUpdate
 class RefreshTokenEntity : PanacheEntityBase {
     @Id
-    @Column(name = "id", length = 36)
+    @Column(name = "id", columnDefinition = "uuid")
     lateinit var id: String
 
-    @Column(name = "family_id", nullable = false, length = 36)
+    @Column(name = "family_id", nullable = false, columnDefinition = "uuid")
     lateinit var familyId: String
 
     @Column(name = "token_hash", nullable = false, length = 64)
@@ -96,10 +96,10 @@ class RefreshTokenEntity : PanacheEntityBase {
 @DynamicUpdate
 class AccessTokenEntity : PanacheEntityBase {
     @Id
-    @Column(name = "id", length = 36)
+    @Column(name = "id", columnDefinition = "uuid")
     lateinit var id: String
 
-    @Column(name = "family_id", nullable = false, length = 36)
+    @Column(name = "family_id", nullable = false, columnDefinition = "uuid")
     lateinit var familyId: String
 
     @Column(name = "token_hash", nullable = false, length = 64)

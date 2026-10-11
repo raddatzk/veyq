@@ -19,16 +19,16 @@ import org.hibernate.annotations.DynamicUpdate
 @DynamicUpdate
 class MediaEntity : PanacheEntityBase {
     @Id
-    @Column(name = "id", length = 36)
+    @Column(name = "id", columnDefinition = "uuid")
     lateinit var id: String
 
-    @Column(name = "scope_id", nullable = false, length = 36)
+    @Column(name = "scope_id", nullable = false, columnDefinition = "uuid")
     lateinit var scopeId: String
 
-    @Column(name = "node_id", nullable = false, length = 36)
+    @Column(name = "node_id", nullable = false, columnDefinition = "uuid")
     lateinit var nodeId: String
 
-    @Column(name = "blob_id", nullable = false, length = 36)
+    @Column(name = "blob_id", nullable = false, columnDefinition = "uuid")
     lateinit var blobId: String
 
     /** The original's `{v,w,h,capturedAt,capturedAtOverride,capturedAtSource,gpsLat,gpsLng}` listed-metadata tier sealed under `K_mem` (opaque base64); always listed, for grid layout + date sorting + the place medoid (cr-0068, consolidates cr-0059/cr-0064 layout + cr-0066 capturedAt). */
@@ -53,11 +53,11 @@ class MediaEntity : PanacheEntityBase {
     var wrappedExif: String? = null
 
     /** The anonymous **contributor identity** that added this media on a READ_WRITE share (cr-0101); null for curator uploads. Opaque link only. */
-    @Column(name = "share_identity_id", length = 36)
+    @Column(name = "share_identity_id", columnDefinition = "uuid")
     var shareIdentityId: String? = null
 
     /** cr-0113: the bucket this media lives in, or null = the uploader's primary (resolved lazily). en.memory.buckets, ADR 0034. */
-    @Column(name = "bucket_id", length = 36)
+    @Column(name = "bucket_id", columnDefinition = "uuid")
     var bucketId: String? = null
 
     /** cr-0113: the uploader's opaque owner_key ("user:{id}" | "share:{id}"), copied on attach — the buckets attribution (denormalized). */
@@ -79,7 +79,7 @@ class MediaEntity : PanacheEntityBase {
     var deletedAt: Instant? = null
 
     /** Who trashed this media — the member's user id (the deletion audit), or null for a live media (cr-0110). */
-    @Column(name = "deleted_by", length = 36)
+    @Column(name = "deleted_by", columnDefinition = "uuid")
     var deletedBy: String? = null
 
     companion object : PanacheCompanionBase<MediaEntity, String>
@@ -95,16 +95,16 @@ class MediaEntity : PanacheEntityBase {
 @DynamicUpdate
 class MediaDerivativeEntity : PanacheEntityBase {
     @Id
-    @Column(name = "id", length = 36)
+    @Column(name = "id", columnDefinition = "uuid")
     lateinit var id: String
 
-    @Column(name = "media_id", nullable = false, length = 36)
+    @Column(name = "media_id", nullable = false, columnDefinition = "uuid")
     lateinit var mediaId: String
 
     @Column(name = "kind", nullable = false, length = 16)
     lateinit var kind: String
 
-    @Column(name = "blob_id", nullable = false, length = 36)
+    @Column(name = "blob_id", nullable = false, columnDefinition = "uuid")
     lateinit var blobId: String
 
     companion object : PanacheCompanionBase<MediaDerivativeEntity, String>
@@ -123,19 +123,19 @@ class MediaDerivativeEntity : PanacheEntityBase {
 @DynamicUpdate
 class BucketEntity : PanacheEntityBase {
     @Id
-    @Column(name = "id", length = 36)
+    @Column(name = "id", columnDefinition = "uuid")
     lateinit var id: String
 
-    @Column(name = "scope_id", nullable = false, length = 36)
+    @Column(name = "scope_id", nullable = false, columnDefinition = "uuid")
     lateinit var scopeId: String
 
-    @Column(name = "node_id", nullable = false, length = 36)
+    @Column(name = "node_id", nullable = false, columnDefinition = "uuid")
     lateinit var nodeId: String
 
     @Column(name = "owner_key", nullable = false, length = 64)
     lateinit var ownerKey: String
 
-    @Column(name = "parent_bucket_id", length = 36)
+    @Column(name = "parent_bucket_id", columnDefinition = "uuid")
     var parentBucketId: String? = null
 
     @Column(name = "sealed_name")
@@ -161,7 +161,7 @@ class BucketEntity : PanacheEntityBase {
 @DynamicUpdate
 class MediaRevisionEntity : PanacheEntityBase {
     @Id
-    @Column(name = "node_id", length = 36)
+    @Column(name = "node_id", columnDefinition = "uuid")
     lateinit var nodeId: String
 
     /** Live-updates change signal: bumped by **every** gallery-media mutation — attach, meta-edit, trash, restore,

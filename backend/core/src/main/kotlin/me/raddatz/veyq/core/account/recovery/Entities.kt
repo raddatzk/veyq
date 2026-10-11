@@ -26,10 +26,10 @@ import org.hibernate.annotations.DynamicUpdate
 @DynamicUpdate
 class AccountRecoveryEntity : PanacheEntityBase {
     @Id
-    @Column(name = "id", length = 36)
+    @Column(name = "id", columnDefinition = "uuid")
     lateinit var id: String
 
-    @Column(name = "user_id", nullable = false, length = 36)
+    @Column(name = "user_id", nullable = false, columnDefinition = "uuid")
     lateinit var userId: String
 
     @Column(name = "email", nullable = false, length = 254)

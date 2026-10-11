@@ -22,10 +22,10 @@ class FavoritesEntity : PanacheEntityBase {
     @Column(name = "id", length = 73)
     lateinit var id: String
 
-    @Column(name = "user_id", nullable = false, length = 36)
+    @Column(name = "user_id", nullable = false, columnDefinition = "uuid")
     lateinit var userId: String
 
-    @Column(name = "scope_id", nullable = false, length = 36)
+    @Column(name = "scope_id", nullable = false, columnDefinition = "uuid")
     lateinit var scopeId: String
 
     @Column(name = "ciphertext", nullable = false)

@@ -30,10 +30,10 @@ import org.hibernate.annotations.DynamicUpdate
 @DynamicUpdate
 class UploadSessionEntity : PanacheEntityBase {
     @Id
-    @Column(name = "id", length = 36)
+    @Column(name = "id", columnDefinition = "uuid")
     lateinit var id: String
 
-    @Column(name = "scope_id", nullable = false, length = 36)
+    @Column(name = "scope_id", nullable = false, columnDefinition = "uuid")
     lateinit var scopeId: String
 
     @Column(name = "storage_key", nullable = false, length = 64)
@@ -53,21 +53,21 @@ class UploadSessionEntity : PanacheEntityBase {
     @Column(name = "wrapped_meta", updatable = false)
     var wrappedBlobMeta: String? = null
 
-    @Column(name = "opener_user_id", length = 36)
+    @Column(name = "opener_user_id", columnDefinition = "uuid")
     var openerUserId: String? = null
 
-    @Column(name = "opener_share_identity_id", length = 36)
+    @Column(name = "opener_share_identity_id", columnDefinition = "uuid")
     var openerShareIdentityId: String? = null
 
     @Column(name = "last_window_at", nullable = false)
     lateinit var lastWindowAt: Instant
 
     /** The client-minted id the blob will be stored under — its `K_blob` wrap is sealed bound to it (ADR 0072). */
-    @Column(name = "blob_id", length = 36)
+    @Column(name = "blob_id", columnDefinition = "uuid")
     var blobId: String? = null
 
     /** What the blob belongs to — the client-minted id of the application's item (Memories: the media id), or the node for a cover (ADR 0072). */
-    @Column(name = "owner_id", length = 36)
+    @Column(name = "owner_id", columnDefinition = "uuid")
     var ownerId: String? = null
 
     /** The role the wrap is sealed bound to (ADR 0072): a token the owning application defines; core compares it, never names one. */
@@ -90,10 +90,10 @@ class UploadSessionEntity : PanacheEntityBase {
 @DynamicUpdate
 class BlobEntity : PanacheEntityBase {
     @Id
-    @Column(name = "id", length = 36)
+    @Column(name = "id", columnDefinition = "uuid")
     lateinit var id: String
 
-    @Column(name = "scope_id", nullable = false, length = 36)
+    @Column(name = "scope_id", nullable = false, columnDefinition = "uuid")
     lateinit var scopeId: String
 
     @Column(name = "storage_key", nullable = false, length = 64)
