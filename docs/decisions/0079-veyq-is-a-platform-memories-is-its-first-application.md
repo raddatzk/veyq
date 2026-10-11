@@ -108,6 +108,14 @@ on their own.
   root row's kind as stored, served for every unlocked role (a `WRITE_ONLY` guest, served no node, learns this one
   structural fact) and omitted on a locked response and while the root is in the trash; the public share page renders the body the kind's application
   claimed, whatever the role — for a `FOLDER`, core's own body, which embeds the body claimed for each child's kind.
+- **A node's URL carries its application's slug** (decided 2026-10-11, inbox #328; the grammar is
+  [ADR 0015](0015-operator-blind-readable-urls.md)'s amendment). The path stays in the `#fragment`: a folder ends
+  in a slash, a node of an application is `…/<route slug>/<name>` (a Memory: `#foo/memories/memory`), and Files —
+  the one application that **declares** it has no segment — is its plain name (`#foo/memory`). Each application
+  claims its slug once in the registry (`claimRouteSlug`, a second claim throws, platform words are refused) or
+  declares `claimNoRouteSegment`; a claimed slug is reserved among folder and file names, which are numbered
+  around it (`memories-2`). Rejected: history-mode `/<app>/:nodeId` URLs — they put a stable per-node id into the
+  operator's access logs on every hard load and need a scope lookup the fragment never did.
 - **What the server learns grows by one fact.** The node `kind` is already a server-visible column; once
   further kinds exist it also tells the operator which applications a scope uses, and the rows, timestamps and
   sizes each kind produces. [security-model](../crosscutting/security-model.md) lists it.

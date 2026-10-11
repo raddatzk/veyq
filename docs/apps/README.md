@@ -21,6 +21,10 @@ media tables. What is built and what is open: the ADR's Consequences.
 - **First-party, compiled in.** No runtime loading of application code, server or client.
 - **Depends on core, never the reverse, never on another application.** Cross-application references are generic
   core object references (scope id + node id) only.
+- **Claims its URL route slug once.** A node of an application is addressed `#<path>/<slug>/<name>` in the URL
+  fragment ([ADR 0015](../decisions/0015-operator-blind-readable-urls.md), amended 2026-10-11): the application
+  claims its slug in the web registry (a second claim throws; a platform word is refused), or declares explicitly
+  that it has none — Files is the one that does. The slug is reserved among folder names.
 - **Own tables keyed by `node_id`.** The server side is as thin as possible; domain logic lives in the client.
 - **Payloads carry a schema version.** Old versions stay readable; migration happens on write.
 - **No per-tenant activation.** Created on demand inside a scope. An operator may gate a node kind through the

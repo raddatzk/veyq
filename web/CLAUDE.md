@@ -171,7 +171,13 @@ here; the server is blind.
   and `sidebarPins` (an id namespaced by the application, e.g. `memories.pinned`; write-once per (slot, id); the shell
   renders `slotItems(slot)` sorted by `order`, ties in registration order — the top bar after core's own upload status
   menu, `core/blob/UploadStatusMenu.vue`, which lists every application's batches of the one core queue and is no
-  application's item, so today no application adds to `topbarTray`); `claimShareBody(rootKind, body)` for the drop page of
+  application's item, so today no application adds to `topbarTray`); `claimRouteSlug(slug, kinds)` — the application's segment in a node's URL fragment path (`#foo/memories/rom`; Memories claims
+  `memories`, a second claim of a slug or a kind throws, `RESERVED_ROUTE_SEGMENTS` are refused) — or `claimNoRouteSegment(kinds)`,
+  the explicit "no segment" option only Files takes (its nodes are plain names: `#foo/report`; one application at most). The grammar
+  — a folder ends in a slash, a claimed slug is reserved among folder and file names (`memories-2`), folders and files are numbered
+  apart, no slash resolves to the file before the folder — lives in `core/node/location.ts` (ADR 0015, amended 2026-10-11) and
+  nowhere else: `scripts/validate_web_fragment_paths_via_location.py` is red on a file that splits or hand-builds a fragment path;
+  `claimShareBody(rootKind, body)` for the drop page of
   a `WRITE_ONLY` link rooted at that kind (`PublicShare.rootKind`) — the one page with no member equivalent, its guest
   holding no key: Memories' photo drop (`MemoryShareBody`), Files' drop box (`DropBoxShareBody`); `FOLDER` is claimed by
   nobody and refused. Inside a guest's identity folder — the served `shareIdentityId`, core's column — no view offers any
