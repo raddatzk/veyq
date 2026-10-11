@@ -73,7 +73,9 @@ class AttachmentStore(private val nodes: NodesStore, private val blobs: BlobUplo
      *  6. the swap — into an empty slot an insert (`ux_attachment_node_slot` backs it), a replace a compare-and-set
      *     `… where blob_id = expected`; a miss is a [AttachOutcome.Conflict] that frees the new blob in this transaction;
      *  7. the replaced blob freed ([BlobUploadStore.deleteBlobRow]: row + reclaim record, never a bare delete — there
-     *     is no sweep) in this transaction.
+     *     is no sweep) in this transaction;
+     *  8. the scope's tree revision moved ([NodesStore.bumpTree], ADR 0081), the last write — a refusal above bumps
+     *     nothing, a [AttachOutcome.Conflict] changed no slot.
      * Every refusal before the swap rolls the transaction back, the spend included: the session stays open and expires
      * as an unfinished upload does (`UploadSessionPurge` reclaims its objects).
      */
@@ -110,6 +112,7 @@ class AttachmentStore(private val nodes: NodesStore, private val blobs: BlobUplo
             return AttachOutcome.Conflict(currentBlobId(nodeId, slot))
         }
         blobs.deleteBlobRow(expectedBlobId)
+        nodes.bumpTree(scopeId) // a first blob or a replacement is a change of the level view (a file's uploaded state, a cover; ADR 0081)
         return AttachOutcome.Attached(blobId, expectedBlobId)
     }
 
@@ -146,6 +149,7 @@ class AttachmentStore(private val nodes: NodesStore, private val blobs: BlobUplo
         )
         if (removed == 1L) {
             blobs.deleteBlobRow(expectedBlobId)
+            nodes.bumpTree(scopeId) // the slot is empty now: a change of the level view (ADR 0081)
             return DetachOutcome.Detached
         }
         return if (currentBlobId(nodeId, slot) == null) DetachOutcome.Empty else DetachOutcome.Replaced

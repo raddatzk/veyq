@@ -27,6 +27,7 @@ import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   resolvePublicShare,
+  pollPublicShare,
   derivePasswordToken,
   fetchShareTerms,
   pickShareTerms,
@@ -34,6 +35,7 @@ import {
   recordTermsAccepted,
   SharePasswordRequiredError,
   SharePasswordIncorrectError,
+  ShareUnavailableError,
   type PublicShareHead,
 } from '../core/sharing/resolvePublicShare'
 import { registry } from '../core/applications/registry'
@@ -158,18 +160,55 @@ const access = computed(() =>
 setPreferenceAudience('guest')
 onBeforeUnmount(() => setPreferenceAudience('account'))
 
-/** The level view's live refresh (inbox #408): re-resolve quietly and swap `head` only when the subtree differs. A
- *  failure is thrown to the poller (it backs off) and never reaches the page's state; a resolve that began before a
- *  `load` (the guest's own write) ran is dropped, as it may predate the write. */
+/** The level view's live refresh (inbox #408, ADR 0081): re-resolve quietly and CONDITIONALLY — the last response's tag
+ *  goes as `If-None-Match`, and a `304` is no work at all — and swap `head` only when the subtree differs (the
+ *  fingerprint stays the fallback for a server that sends no tag). Resolves whether the link's state moved, the cue for
+ *  the sections to look again at what lives beside the tree.
+ *
+ *  A link that is GONE (revoked, expired, deleted, its space going, its root trashed) is noticed here: the server's
+ *  non-enumerable `404` flips the page to the unavailable state, as a reload would, and a changed password to the
+ *  password gate. A failure that says nothing about the link (the network, a 5xx, a 429) is thrown to the poller (it
+ *  backs off) and never reaches the page's state. A resolve that began before a `load` (the guest's own write) ran is
+ *  dropped, as it may predate the write — and the write's own re-resolve starts the tag over. */
 let resolves = 0
-async function poll(signal: AbortSignal) {
+let shareTag: string | null = null
+async function poll(signal: AbortSignal): Promise<boolean> {
   const current = head.value
-  if (!current || status.value !== 'ready') return
+  if (!current || status.value !== 'ready') return false
   const mine = resolves
-  const resolved = await resolvePublicShare(shareId, fragmentKey.value, pwToken.value)
-  if (signal.aborted || mine !== resolves || head.value !== current) return
-  if (!bodyFor(resolved) || shareTreeFingerprint(resolved.share) === shareTreeFingerprint(current.share)) return
-  head.value = resolved
+  let polled
+  try {
+    polled = await pollPublicShare(shareId, fragmentKey.value, pwToken.value, shareTag)
+  } catch (e) {
+    if (signal.aborted || mine !== resolves || head.value !== current) return false
+    if (!failWith(e)) throw e
+    return false
+  }
+  if (signal.aborted || mine !== resolves || head.value !== current) return false
+  if (!polled) return false // 304: the link serves what is shown
+  shareTag = polled.etag
+  if (!bodyFor(polled.head)) {
+    status.value = 'unavailable' // the root is gone from under the link (trashed): nothing renders it any more
+    return false
+  }
+  if (shareTreeFingerprint(polled.head.share) !== shareTreeFingerprint(current.share)) head.value = polled.head
+  return true
+}
+
+/** The page state a failed resolve means, or false for a failure that is none of the link's (the caller rethrows). */
+function failWith(e: unknown): boolean {
+  if (e instanceof SharePasswordRequiredError) {
+    pwSalt.value = e.pwSalt
+    status.value = 'locked'
+  } else if (e instanceof SharePasswordIncorrectError) {
+    pwError.value = true
+    status.value = 'locked'
+  } else if (e instanceof ShareUnavailableError) {
+    status.value = 'unavailable'
+  } else {
+    return false
+  }
+  return true
 }
 
 /** The line that says whose session this is: a READ_WRITE link's (a drop page shows its own). */
@@ -178,6 +217,7 @@ const showsIdentity = computed(() => head.value?.role === ShareRole.ReadWrite &&
 // --- resolve (on mount, after the password, and after a contribution) --------
 async function load() {
   resolves++
+  shareTag = null // what this resolve serves carries no tag the poll holds: its first read is a full one
   try {
     const resolved = await resolvePublicShare(shareId, fragmentKey.value, pwToken.value)
     if (!bodyFor(resolved)) {
@@ -193,15 +233,7 @@ async function load() {
   } catch (e) {
     // cr-0118: a password-protected share → prompt (or re-prompt on a wrong password); otherwise the honest
     // "unavailable" state (bad key / 404 / unexpected).
-    if (e instanceof SharePasswordRequiredError) {
-      pwSalt.value = e.pwSalt
-      status.value = 'locked'
-    } else if (e instanceof SharePasswordIncorrectError) {
-      pwError.value = true
-      status.value = 'locked'
-    } else {
-      status.value = 'unavailable'
-    }
+    if (!failWith(e)) status.value = 'unavailable'
   }
 }
 

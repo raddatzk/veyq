@@ -63,7 +63,14 @@ sealed interface CreateShareOutcome {
 sealed interface ResolveShareOutcome {
     /** [nodes]: the live shared subtree (none for a WRITE_ONLY link). [rootKind]: the shared root node's kind as
      *  stored (core interprets none), null while the root is in the trash. */
-    data class Found(val share: ShareEntity, val nodes: List<ShareNodeRow>, val rootKind: String?) : ResolveShareOutcome
+    data class Found(
+        val share: ShareEntity,
+        val nodes: List<ShareNodeRow>,
+        val rootKind: String?,
+        /** What hangs off the served nodes — `node|slot|blob` per attachment: no part of the body, but a guest reads it
+         *  beside the nodes (a file's blob, a cover), so the conditional resolve's tag covers it (ADR 0081). */
+        val attachments: List<String> = emptyList(),
+    ) : ResolveShareOutcome
     /** Unknown, disabled, or expired — a non-enumerable 404 (identical in every case). */
     object NotFound : ResolveShareOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
     /** Password-protected + no token given (cr-0118) — a LOCKED shell (only `passwordRequired` + `pwSalt`). */
@@ -551,7 +558,8 @@ class SharingHandler(
         // the subtree. A trashed root names none, as it serves no node (`ShareDeletedNodeSliceTest`).
         val rootKind = store.findNode(share.nodeId)?.takeIf { it.deletedAt == null }?.kind
         if (ShareAccessPolicy.canView(share.role)) {
-            return ResolveShareOutcome.Found(share, store.subtree(share.scopeId, share.nodeId), rootKind)
+            val nodes = store.subtree(share.scopeId, share.nodeId)
+            return ResolveShareOutcome.Found(share, nodes, rootKind, store.attachmentTags(share.scopeId, nodes.map { it.id }))
         }
         // WRITE_ONLY: the minimal capability — no nodes; only the root's kind. The client seals its uploads under its own
         // identity key, wrapped to the root node's drop public key (served sealed under `K_share` in place of the wrap, ADR

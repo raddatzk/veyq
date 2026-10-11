@@ -67,10 +67,12 @@ export interface GuestAccess {
   /** Re-resolve the link after a guest's write, so what it created lists with its key and name; resolves once `head`
    *  has been replaced (the shell's). */
   reload(): Promise<void>
-  /** The live refresh's read (inbox #408, `core/node/useLevelLive.ts`): re-resolve the link QUIETLY and replace `head`
-   *  only if the subtree changed. Unlike `reload` it never changes the shell's state and it rejects on failure (the
-   *  poller backs off); it checks the signal before applying. Absent: the page does not poll. */
-  poll?(signal: AbortSignal): Promise<void>
+  /** The live refresh's read (inbox #408, `core/node/useLevelLive.ts`): re-resolve the link QUIETLY and CONDITIONALLY
+   *  (ADR 0081: a `304` is no work) and replace `head` only if the subtree changed. Resolves whether the link's state
+   *  MOVED (the sections then look again at what lives beside the tree); a link that is gone flips the shell to its
+   *  unavailable state — the one thing it does change. It rejects on a failure that says nothing about the link (the
+   *  poller backs off) and checks the signal before applying. Absent: the page does not poll. */
+  poll?(signal: AbortSignal): Promise<boolean>
 }
 
 export type Access = MemberAccess | GuestAccess

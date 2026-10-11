@@ -27,7 +27,11 @@ sealed interface CreateNodeOutcome {
 }
 
 sealed interface ListNodesOutcome {
-    data class Nodes(val rows: List<NodeRow>) : ListNodesOutcome
+    /** The scope's live rows and the tree [revision] they were read at (ADR 0081): read BEFORE them, so the rows are never older than the tag. */
+    data class Nodes(val rows: List<NodeRow>, val revision: Long) : ListNodesOutcome
+
+    /** The client's `If-None-Match` equals the scope's tree revision: nothing a level view shows changed, and no row was read. */
+    object NotModified : ListNodesOutcome
     object NoScope : ListNodesOutcome, HttpFailure by Failures.scopeNotFound
     object Suspended : ListNodesOutcome, HttpFailure by Failures.tenantSuspended
 }
@@ -182,9 +186,18 @@ class NodesHandler(
         return if (created) CreateNodeOutcome.Created(nodeId) else createReplay(scopeId, parentSlotId, slugToken, nodeId)() ?: CreateNodeOutcome.IdTaken
     }
 
-    fun list(userId: String, scopeId: String): ListNodesOutcome {
+    /**
+     * The scope's tree. [ifNoneMatch] is the client's last-seen tree revision (ADR 0081): equal to the current one ⇒
+     * [ListNodesOutcome.NotModified] before any row is read — the access gate still ran first, so a non-member learns
+     * nothing of the revision. The revision is read BEFORE the rows (each statement reads what is committed, ADR 0078):
+     * a change that commits in between puts newer rows under an older tag, and the next poll's 200 re-reads them; the
+     * other order would tag older rows with a newer revision and strand the change until the next one.
+     */
+    fun list(userId: String, scopeId: String, ifNoneMatch: Long? = null): ListNodesOutcome {
         access.check(userId, scopeId, READ).refusal(ListNodesOutcome.NoScope, ListNodesOutcome.Suspended)?.let { return it }
-        return ListNodesOutcome.Nodes(store.list(scopeId))
+        val revision = store.treeRevision(scopeId)
+        if (ifNoneMatch != null && ifNoneMatch == revision) return ListNodesOutcome.NotModified
+        return ListNodesOutcome.Nodes(store.list(scopeId), revision)
     }
 
     /**

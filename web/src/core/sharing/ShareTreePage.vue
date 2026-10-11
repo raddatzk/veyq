@@ -170,7 +170,7 @@ const moving = ref<TreeNode | null>(null)
 const { ticks: liveTick } = useLevelLive({
   active: () => atFolder.value && !!props.access.poll,
   paused: () => !!creating.value || !!moving.value,
-  read: (signal) => props.access.poll?.(signal) ?? Promise.resolve(),
+  read: (signal) => props.access.poll?.(signal) ?? Promise.resolve(false),
 })
 
 function createError(e: unknown): string {

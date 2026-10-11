@@ -45,6 +45,14 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
 - **Run the app (`quarkusDev`) on a persistent MariaDB** (`%dev`): `docker compose -f infra/docker-compose.yml
   up -d` starts it; data survives restarts (Flyway migrates once, then "up to date"). `docker compose -f
   infra/docker-compose.yml down -v` wipes it for a fresh instance. The H2 fallback is only the test default now.
+- **A write of node or attachment rows bumps the scope's tree revision** (`NodesStore.bumpTree`, [ADR 0081](../docs/decisions/0081-a-scopes-tree-revision-is-the-level-views-change-signal.md)) as its last
+  statement, in the same transaction and **under the scope lock it already holds** — that is what keeps the first-bump
+  insert race-free and the revision row a leaf (a bump after a node row, with no scope lock, is the lock-order inversion
+  `NodesStore.applyUpdate` documents). It is the listing's `ETag`, so a write that forgets is a live view that never
+  learns of a change, with no failing request to show it. `backend/src/test/.../TreeRevisionBumpsTest` reads the sources and
+  is red on a writer of those rows that is neither listed nor exempt; `TreeRevisionCoreSliceTest` / `FilesTreeRevisionSliceTest`
+  pin each path's one bump and a refusal's none. A guest's `resolveShare` tag is NOT this revision (it would leak the rest
+  of the space's activity): `ShareETag` digests what the response serves.
 - **A change to a lock, a gate or a transaction boundary also runs `python3 scripts/run_backend_races_on_mariadb.py`**
   (Docker; CI's `backend-races` job runs it too): every race class on a throwaway MariaDB of the pinned image. H2 cannot show what the production engine
   does under overlap — on 2026-10-03 three races green on H2 were red there ([ADR 0078](../docs/decisions/0078-production-reads-committed-like-its-tests.md)).

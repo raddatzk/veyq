@@ -3,7 +3,7 @@
 // (create/rename/delete) call `loadTree()` to refresh.
 import { reactive } from 'vue'
 import { activeSpace, activeEpochKeys } from '../../app/activeSpace'
-import { fetchTreeRows, openTree, treeFingerprint, type TreeNode } from './tree'
+import { fetchTree, openTree, treeFingerprint, type TreeNode } from './tree'
 
 export const treeStore = reactive({
   nodes: [] as TreeNode[],
@@ -12,9 +12,11 @@ export const treeStore = reactive({
 })
 
 // What the tree on screen was read from: bumped by every load and reset, so a live poll (below) that began before one
-// of them is recognised as stale when it lands. `shown` is the fingerprint of the rows `nodes` holds.
+// of them is recognised as stale when it lands. `shown` is the fingerprint of the rows `nodes` holds; `shownTag` the
+// tree revision (the listing's `ETag`, ADR 0081) those rows were read at, which a poll echoes as `If-None-Match`.
 let generation = 0
 let shown: string | null = null
+let shownTag: string | null = null
 
 /** (Re)load the active scope's tree. No-op if no space is open. */
 export async function loadTree(): Promise<void> {
@@ -22,9 +24,10 @@ export async function loadTree(): Promise<void> {
   if (!activeSpace.scopeId || !epochs) return
   generation++
   try {
-    const rows = await fetchTreeRows(activeSpace.scopeId)
+    const { rows, etag } = (await fetchTree(activeSpace.scopeId))! // no tag sent, so never a 304
     treeStore.nodes = openTree(activeSpace.scopeId, epochs, rows)
     shown = treeFingerprint(rows)
+    shownTag = etag
     treeStore.loaded = true
     treeStore.error = false
   } catch {
@@ -33,10 +36,14 @@ export async function loadTree(): Promise<void> {
 }
 
 /**
- * One tick of the level view's live refresh (`useLevelLive`, inbox #408): re-read the scope's rows and, only if they
- * differ from what is shown, open them and replace the tree. Resolves whether it changed anything; REJECTS when the read
- * fails (the poller backs off) and never touches `treeStore.error` — a transient failure of a background read must not
- * turn a working page into the error state.
+ * One tick of the level view's live refresh (`useLevelLive`, inbox #408): a CONDITIONAL read of the scope's rows (ADR
+ * 0081) — the tag of what is shown goes as `If-None-Match`, and an unchanged scope answers `304` with no rows, no
+ * decryption and no work at all. Only a moved scope sends rows, and those replace the tree only if they differ from
+ * what is shown (the fingerprint gate stays, as the fallback for a server that sends no tag and for a change in another
+ * folder, which moves the scope's revision and not this level's rows). Resolves whether the scope MOVED — the sections'
+ * cue to look again at what lives beside the tree (Files' blob listing: an upload completing changes the revision and
+ * no row) — and REJECTS when the read fails (the poller backs off); it never touches `treeStore.error`: a transient
+ * failure of a background read must not turn a working page into the error state.
  *
  * It never races a write. A user's write ends in `loadTree()`, which bumps the generation: a poll that STARTED before
  * any load began, or whose rows came back after one began, is dropped unopened (its rows may predate the write). The
@@ -47,12 +54,15 @@ export async function pollTree(signal: AbortSignal): Promise<boolean> {
   const scopeId = activeSpace.scopeId
   if (!scopeId || !epochs || !treeStore.loaded) return false
   const startedAt = generation
-  const rows = await fetchTreeRows(scopeId)
+  const read = await fetchTree(scopeId, shownTag)
   if (signal.aborted || startedAt !== generation || scopeId !== activeSpace.scopeId) return false
-  const fingerprint = treeFingerprint(rows)
-  if (fingerprint === shown) return false
-  treeStore.nodes = openTree(scopeId, epochs, rows)
-  shown = fingerprint
+  if (!read) return false // 304: the revision is the one shown
+  shownTag = read.etag
+  const fingerprint = treeFingerprint(read.rows)
+  if (fingerprint !== shown) {
+    treeStore.nodes = openTree(scopeId, epochs, read.rows)
+    shown = fingerprint
+  }
   return true
 }
 
@@ -72,6 +82,7 @@ export function patchNodeMeta(nodeId: string, wrappedMeta: string | null, metaVe
 export function resetTree(): void {
   generation++
   shown = null
+  shownTag = null
   treeStore.nodes = []
   treeStore.loaded = false
   treeStore.error = false

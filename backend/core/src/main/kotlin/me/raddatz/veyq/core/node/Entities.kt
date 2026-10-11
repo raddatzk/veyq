@@ -110,3 +110,24 @@ class NodeEntity : PanacheEntityBase {
         fun birthInstant(): Instant = Instant.now().truncatedTo(ChronoUnit.MILLIS)
     }
 }
+
+/**
+ * A scope's tree revision (ADR 0081) — one monotonic counter per scope, the cheap "did anything a level view shows
+ * change?" signal behind the node listing's conditional GET. **No row reads as 0**: the scope's first change births it
+ * (`NodesStore.bumpTree`), and the node eraser (phase 700) deletes it before the scope row goes. A row of its own, not
+ * a column of `veyq_scope`: the scope row is the tree's lock (`NodesStore.lockScope`), and a bump that took it again
+ * after a node row would invert the lock order. Opaque operational metadata (a number): operator-blind.
+ */
+@Entity
+@Table(name = "veyq_scope_tree_revision")
+@DynamicUpdate
+class ScopeTreeRevisionEntity : PanacheEntityBase {
+    @Id
+    @Column(name = "scope_id", columnDefinition = "uuid")
+    lateinit var scopeId: String
+
+    @Column(name = "revision", nullable = false)
+    var revision: Long = 0
+
+    companion object : PanacheCompanionBase<ScopeTreeRevisionEntity, String>
+}

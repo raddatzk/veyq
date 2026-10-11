@@ -86,12 +86,8 @@ export type PublicShareHead = {
   rootKind: NodeKind | null
 }
 
-/**
- * Resolve the kind-independent half of a public share for the anonymous viewer. Throws [ShareUnavailableError] on a
- * missing/bad fragment key or a 404 (unknown/revoked/expired — indistinguishable), [SharePasswordRequiredError] on
- * the locked shell, [SharePasswordIncorrectError] on a wrong guest token.
- */
-export async function resolvePublicShare(shareId: string, fragmentKey: string, pwToken?: string): Promise<PublicShareHead> {
+/** `K_share` out of the URL fragment; [ShareUnavailableError] when it is missing or malformed. */
+function shareKeyOf(fragmentKey: string): Uint8Array {
   let kShare: Uint8Array
   try {
     kShare = fromB64url(fragmentKey)
@@ -99,14 +95,11 @@ export async function resolvePublicShare(shareId: string, fragmentKey: string, p
     throw new ShareUnavailableError('bad_fragment_key')
   }
   if (kShare.length !== 32) throw new ShareUnavailableError('bad_fragment_key')
+  return kShare
+}
 
-  let share: PublicShare
-  try {
-    share = await publicSharesApi().resolveShare({ shareId, xSharePassword: pwToken }) // cr-0118: the guest token gates it
-  } catch (e) {
-    if (isHttpStatus(e, HttpStatus.forbidden)) throw new SharePasswordIncorrectError() // wrong password
-    throw new ShareUnavailableError('not_found') // 404 (revoked/expired/unknown) or a network error
-  }
+/** The head of an unlocked response, or the error its shape means (locked shell, no scope or name, a key that opens nothing). */
+function headOf(shareId: string, kShare: Uint8Array, share: PublicShare): PublicShareHead {
   // cr-0118: a locked share (password required, no/valid-less token) serves only the challenge — prompt the viewer.
   // Locked is "no sealed name", never "no wrap": an unlocked WRITE_ONLY share carries no wrap either.
   if (share.passwordRequired && !share.sealedName) throw new SharePasswordRequiredError(share.pwSalt ?? '')
@@ -121,6 +114,56 @@ export async function resolvePublicShare(shareId: string, fragmentKey: string, p
   // cr-0116: the optional per-locale curator note, opened with the same fragment key (a bad/absent one leaves `{}`).
   const noteByLocale = share.sealedNote ? openNoteMap(kShare, share.sealedNote) : {}
   return { shareId, share, kShare, scopeId: share.scopeId, name, noteByLocale, role: share.role, rootKind: share.rootKind ?? null }
+}
+
+/**
+ * Resolve the kind-independent half of a public share for the anonymous viewer. Throws [ShareUnavailableError] on a
+ * missing/bad fragment key or a 404 (unknown/revoked/expired — indistinguishable), [SharePasswordRequiredError] on
+ * the locked shell, [SharePasswordIncorrectError] on a wrong guest token.
+ */
+export async function resolvePublicShare(shareId: string, fragmentKey: string, pwToken?: string): Promise<PublicShareHead> {
+  const kShare = shareKeyOf(fragmentKey)
+  let share: PublicShare
+  try {
+    share = await publicSharesApi().resolveShare({ shareId, xSharePassword: pwToken }) // cr-0118: the guest token gates it
+  } catch (e) {
+    if (isHttpStatus(e, HttpStatus.forbidden)) throw new SharePasswordIncorrectError() // wrong password
+    throw new ShareUnavailableError('not_found') // 404 (revoked/expired/unknown) or a network error
+  }
+  return headOf(shareId, kShare, share)
+}
+
+/** What a polling resolve yields: the head again and the tag its response carried (`null`: the server sent none). */
+export type PolledShare = { head: PublicShareHead; etag: string | null }
+
+/**
+ * The live refresh's resolve (ADR 0081): the same head, asked CONDITIONALLY — `ifNoneMatch` is the tag of the last
+ * response, and a resolve that would serve exactly that answers `304`, which is `null` here (nothing to open, nothing
+ * to compare). The tag is a digest of what the guest is served, never the scope's revision, so a change outside the
+ * shared subtree leaves it alone.
+ *
+ * Unlike [resolvePublicShare] it tells a refusal from a hiccup: a `404` (revoked, expired, deleted, its space going —
+ * one non-enumerable answer) is [ShareUnavailableError], a `403` [SharePasswordIncorrectError], the locked shell
+ * [SharePasswordRequiredError]; a network failure, a `429` or a `5xx` is rethrown as it is, because a poll that cannot
+ * reach the server knows nothing about the link and must not take the page down.
+ */
+export async function pollPublicShare(
+  shareId: string, fragmentKey: string, pwToken: string | undefined, ifNoneMatch: string | null,
+): Promise<PolledShare | null> {
+  const kShare = shareKeyOf(fragmentKey)
+  let share: PublicShare
+  let etag: string | null
+  try {
+    const res = await publicSharesApi().resolveShareRaw({ shareId, xSharePassword: pwToken, ifNoneMatch: ifNoneMatch ?? undefined })
+    share = await res.value()
+    etag = res.raw.headers.get('ETag')
+  } catch (e) {
+    if (ifNoneMatch && isHttpStatus(e, HttpStatus.notModified)) return null
+    if (isHttpStatus(e, HttpStatus.forbidden)) throw new SharePasswordIncorrectError()
+    if (isHttpStatus(e, HttpStatus.notFound)) throw new ShareUnavailableError('not_found')
+    throw e
+  }
+  return { head: headOf(shareId, kShare, share), etag }
 }
 
 // --- accountless terms gate (uc.sharing.share-accept, ADR 0035 §3) ----------

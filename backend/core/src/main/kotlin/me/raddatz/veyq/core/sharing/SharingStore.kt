@@ -1,6 +1,8 @@
 package me.raddatz.veyq.core.sharing
 
 import me.raddatz.veyq.core.blob.BlobEntity
+import me.raddatz.veyq.core.blob.NodeAttachmentEntity
+import me.raddatz.veyq.core.content.NodesStore
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.sharing.GuestIdentityUsage
 import me.raddatz.veyq.core.sharing.ShareEntity
@@ -74,6 +76,7 @@ class SharingStore(
     private val contributors: Instance<SharedSubtreeContributor>,
     /** What still names a guest identity (today: core's attachments, Memories' media + buckets). Combined with "any". */
     private val identityUsages: Instance<GuestIdentityUsage>,
+    private val tree: NodesStore,
 ) {
 
     fun findNode(nodeId: String): NodeEntity? = NodeEntity.findById(nodeId)
@@ -100,6 +103,7 @@ class SharingStore(
                     "sealedDropPrivateKey = ?1 where id = ?2 and sealedDropPrivateKey is null", keys.sealedPrivateKey, nodeId,
                 )
                 if (set != 1) return CreateResult.DROP_KEY_EXISTS
+                tree.bumpTree(scopeId) // the root's row now carries the key (`NodeSummary.sealedDropPrivateKey`): a change of the listing (ADR 0081); the scope lock is held (SharingHandler.create)
             } else if (NodeEntity.findById(nodeId)?.sealedDropPrivateKey == null) {
                 return CreateResult.DROP_KEY_MISSING
             }
@@ -443,6 +447,13 @@ class SharingStore(
             )
         }
     }
+
+    /** `node|slot|blob` of every attachment on [nodeIds] (a subtree's live nodes), sorted — the guest resolve's tag input
+     *  (ADR 0081): a file's upload completing or being replaced changes no node row, and a guest sees it. */
+    fun attachmentTags(scopeId: String, nodeIds: List<String>): List<String> =
+        if (nodeIds.isEmpty()) emptyList()
+        else NodeAttachmentEntity.find("scopeId = ?1 and nodeId in ?2", scopeId, nodeIds).list()
+            .map { "${it.nodeId}|${it.slot}|${it.blobId}" }.sorted()
 
     /** The ids of [subtree]'s live nodes, by the same predicate — what the view gate hands an application
      *  (`ShareGuestGate.viewGate`). Empty when the shared root itself is trashed. */

@@ -57,10 +57,11 @@ class ContentResource(
         }
     }
 
-    override fun listNodes(scopeId: UUID): Response {
+    override fun listNodes(scopeId: UUID, ifNoneMatch: String?): Response {
         val sid = scopeId.toString()
-        return when (val o = handler.list(identity.principal.name, sid)) {
-            is ListNodesOutcome.Nodes -> Response.ok(o.rows.map { it.toSummary(sid) }).build()
+        return when (val o = handler.list(identity.principal.name, sid, TreeETag.parse(ifNoneMatch))) {
+            is ListNodesOutcome.Nodes -> Response.ok(o.rows.map { it.toSummary(sid) }).header("ETag", TreeETag.of(o.revision)).build()
+            ListNodesOutcome.NotModified -> Response.notModified().build() // 304 — no body, no row read (ADR 0081)
             is HttpFailure -> httpError(o)
         }
     }

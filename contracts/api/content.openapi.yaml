@@ -94,18 +94,40 @@ paths:
         Returns every node in the scope with its opaque id, parent, kind, ordering, ciphertext name, slug
         token, sealed payload (`wrappedMeta` + `metaVersion`), and the `wrappedContentKey`. The client assembles the tree top-down, opening each
         name under its parent's content key (`K_SC` at the node's epoch for a scope-root node, ADR 0080 Decision 2); the operator sees only the shape.
+
+        **Conditional GET (ADR 0081):** the scope carries one monotonic **tree revision**, bumped in the same transaction as
+        every change a level view shows — a node created, renamed, moved, re-sealed, trashed, restored or purged, a blob
+        attached to, replaced on or removed from a node. The `200` carries it as the `ETag`; a client echoes it as
+        `If-None-Match` and an unchanged scope answers `304` with no body and no row read — the idle case of a live
+        level view. The revision is read BEFORE the rows, so the rows are never older than the tag they travel with.
+        An opaque number: operator-blind, and it tells a member only that the scope changed (the rows say far more).
       security:
         - bearerAuth: []
       parameters:
         - $ref: "#/components/parameters/ScopeId"
+        - name: If-None-Match
+          x-veyq-visibility: structure
+          in: header
+          required: false
+          description: >
+            The `ETag` of the client's last listing (the scope's tree revision, quoted). When it equals the scope's
+            current revision the server answers `304`. Omitted on a first load; one that does not parse is no match.
+          schema: { type: string, maxLength: 64, example: "\"7\"" }
       responses:
         "200":
           description: The scope's nodes.
+          headers:
+            ETag:
+              x-veyq-visibility: structure
+              description: The scope's tree revision at the time of the read, quoted — echo it as `If-None-Match` on the next poll.
+              schema: { type: string, example: "\"7\"" }
           content:
             application/json:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/NodeSummary" }
+        "304":
+          description: Not Modified — the client's `If-None-Match` equals the scope's tree revision; nothing a level view shows has changed. No body, and no row was read.
         "401":
           description: Generic authentication failure.
           content:
