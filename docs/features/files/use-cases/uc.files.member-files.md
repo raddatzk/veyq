@@ -49,8 +49,9 @@
   metadata — never a file name, a MIME type or a key ([docs/apps/files.md](../../../apps/files.md) § Operator-visible).
 - **A replace carries what it read** ([ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md)): a
   compare-and-set on the blob id, never a blind overwrite.
-- **A file is no container and no share root:** nothing is placed under a `FILE`; a file is shared through its
-  folder ([uc.files.share-folder-files](uc.files.share-folder-files.md)).
+- **A file is no container:** nothing is placed under a `FILE`. It is shared through a folder above it
+  ([uc.files.share-folder-files](uc.files.share-folder-files.md)) or on its own
+  ([uc.files.share-file](uc.files.share-file.md)).
 - **The download streams** into a picked file or the Service Worker's download route, and only falls back to an
   in-memory `Blob` up to 512 MiB; a multi-gigabyte download in a real browser is unverified (inbox #371).
 

@@ -1,0 +1,38 @@
+useCase: uc.files.share-file
+feature: files
+title: Share one file — a guest sees, downloads and (as a contributor) replaces that file
+# Built for inbox #378 (a single FILE as a share root). Backend: FileShareSliceTest (core + Files) and the share-root
+# assertions of FilesNodeSliceTest / FilesNodeKindRulesTest; web: the member's file view (`FileDetail`) mounted by core's
+# page of a public link for a guest (real router and registry, guarded clients), the member's own mount, the link dialog
+# worded for a file, the mint on the wire; fileSingleShare.e2e.test.ts runs in the web-e2e job (unverified when written).
+acceptanceCriteria:
+  - id: a-file-is-shared-read-or-read-write-never-write-only
+    text: A FILE is a share root with READ and READ_WRITE; a WRITE_ONLY link on a file is refused (422 illegal_scope) and stores nothing, and so is a role change to WRITE_ONLY; a file in the trash is shared by nobody (404 node_not_found).
+    coverage:
+      backend: { integration: [FileShareSliceTest.aFileIsSharedReadOrReadWriteNeverWriteOnly, FileShareSliceTest.aFilesLinkChangesBetweenReadAndReadWriteAndNeverToWriteOnly, FileShareSliceTest.aTrashedFileIsSharedByNobody, FilesNodeSliceTest.aFileIsTheRootOfAReadAndAReadWriteShareOnly] }
+      web:
+        unit: [src/features/files/components/FileShareDialog.test.ts]
+        e2e: [src/features/files/fileSingleShare.e2e.test.ts]
+  - id: a-read-guest-sees-and-downloads-that-file-only
+    text: A guest of a READ file link is served that file alone — no folder above, no sibling — sees its name, size, type and date opened under the key the link carries, and downloads it through the link byte for byte; a sibling's blob is 404 and a write is refused.
+    coverage:
+      backend: { integration: [FileShareSliceTest.aReadGuestOfAFileSeesAndDownloadsThatFileOnly] }
+      web:
+        unit: [src/features/files/components/FileDetail.guest.test.ts, src/features/files/fileShare.wire.test.ts]
+        e2e: [src/features/files/fileSingleShare.e2e.test.ts]
+  - id: a-contributor-replaces-the-file-and-nothing-else
+    text: A READ_WRITE guest replaces the file's content with the blob it saw, after the question that says it changes for everyone with the link; a stale replace is 409 stale_file; the guest creates nothing under the file, places nothing, and targets no other node.
+    coverage:
+      backend: { integration: [FileShareSliceTest.aReadWriteGuestReplacesTheFileAndNothingElse] }
+      web:
+        unit: [src/features/files/components/FileDetail.guest.test.ts, src/features/files/shareUpload.wire.test.ts]
+        e2e: [src/features/files/fileSingleShare.e2e.test.ts]
+  - id: a-trashed-file-is-gone-for-its-guest
+    text: When the member trashes the shared file the link lists nothing, its blob is 404 and an upload into it is refused.
+    coverage:
+      backend: { integration: [FileShareSliceTest.aGuestOfAFileLinkLosesTheFileWhenItIsTrashed] }
+      web: { e2e: [src/features/files/fileSingleShare.e2e.test.ts] }
+  - id: the-member-opens-and-shares-a-file
+    text: A member opens a file from a folder's list and sees its facts, downloads it, replaces it (after the question), and makes links from its header card — share, rename, move and delete each where the matrix grants them (not during a pending deletion, not for a guest's file in an identity folder).
+    coverage:
+      web: { unit: [src/features/files/components/FileDetail.test.ts, src/features/files/capabilities.test.ts, src/features/files/register.test.ts, src/features/files/components/FilesSection.test.ts] }

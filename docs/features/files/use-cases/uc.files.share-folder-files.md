@@ -43,7 +43,8 @@
 
 ## Quality notes
 
-- A file is **no share root**: it is shared through a folder link above it (Files declares no `ShareRoots`).
+- A file can also be shared **on its own** ([uc.files.share-file](uc.files.share-file.md)); a file *inside* a folder link
+  opens to the same file view (a row's info button).
 - A guest **deletes nothing** (nodes store no authorship) and the page offers no rename; a contributor moves a file
   between the subtree's folders through core's move dialog ([uc.memory.move-node](../../memory/use-cases/uc.memory.move-node.md)).
 - The metadata rides on the completion only for guests; a member's metadata write is separate (docs/apps/files.md).

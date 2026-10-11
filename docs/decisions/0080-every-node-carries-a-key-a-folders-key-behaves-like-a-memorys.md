@@ -185,7 +185,7 @@ live in one folder per identity. The recovery copy is mandatory. Tree operations
 authorship). **A guest's create states the epoch it sealed with**, checked as a member's placement off the root —
 this replaced a server-chosen current epoch, which left a name unopenable whenever it differed. **A role is
 inherited down the subtree as the share allows:** a `READ_WRITE` folder link contributes in every Memory or chapter
-below it, a `WRITE_ONLY` link writes into its root only. **A `CHAPTER` is a share root with every role.** **The
+below it, a `WRITE_ONLY` link writes into its root only. **A `CHAPTER` is a share root with every role.** **A Files `FILE` is a share root with `READ` and `READ_WRITE`** (inbox #378): the file's own key goes under `K_share` (decision 1), its guest reaches that file alone and a contributor replaces its content; `WRITE_ONLY` on a file is `illegal_scope` — no key to hand out, no folder to send into ([docs/apps/files.md](../apps/files.md) § A single file as a share root). **The
 share root's name is re-sealed by its own operation** (`setShareSealedName`), callable by any member with write
 access, not by the owner-gated `updateShare`. A folder is shared through core's own dialog, not the Memories one,
 and a guest's move is core's one move dialog, the member's too (inbox #358: offered only for a node a folder of the
