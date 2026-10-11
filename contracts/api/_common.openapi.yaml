@@ -202,12 +202,11 @@ components:
         id:
           x-veyq-visibility: id
           type: string
+          format: uuid
           description: >
             Opaque id of this wrap. Present in responses (lets a client pin its own DEVICE wrap and untrust
-            it); ignored on input (setup assigns ids server-side).
-          maxLength: 64
+            it); ignored on input (setup assigns ids server-side), but a value sent must still be a UUID.
           example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 64)'
         method:
           x-veyq-visibility: enum
           type: string

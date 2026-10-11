@@ -59,7 +59,7 @@ class AccountResource(
                 log.warnf("Skipping master-key wrap with unrecognised method '%s'", wrap.method)
                 null
             } else {
-                MasterKeyWrap(id = wrap.id, method = method, wrappedKey = wrap.wrappedKey, kdfParams = wrap.kdfParams)
+                MasterKeyWrap(id = UUID.fromString(wrap.id), method = method, wrappedKey = wrap.wrappedKey, kdfParams = wrap.kdfParams)
             }
         }
 

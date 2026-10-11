@@ -346,7 +346,8 @@ paths:
         because logout can only end the family it is presented from. **Idempotent** (like logout and the wrap
         untrust): the family is revoked only if it is the caller's own; an unknown id, an already-revoked one,
         or another account's family is a silent no-op with the **same 204**, so this cannot be used to probe
-        which ids exist.
+        which ids exist. An id that is no UUID matches no route (404): the id column is a UUID, and the path
+        segment is parsed as one before any query.
 
         Revoking the caller's **own** family is permitted and means "sign me out here too" — the client treats
         the response as a logout.
@@ -358,11 +359,7 @@ paths:
           in: path
           required: true
           description: The opaque id of the session family to revoke (from the session list).
-          schema:
-            type: string
-            maxLength: 64
-            example: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
-            x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9-]+")'
+          schema: { type: string, format: uuid, example: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c }
       security:
         - bearerAuth: []
       responses:

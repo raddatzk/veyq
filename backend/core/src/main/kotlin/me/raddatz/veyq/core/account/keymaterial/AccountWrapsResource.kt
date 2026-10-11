@@ -9,6 +9,7 @@ import io.quarkus.security.Authenticated
 import io.quarkus.security.credential.TokenCredential
 import io.quarkus.security.identity.SecurityIdentity
 import jakarta.ws.rs.core.Response
+import java.util.UUID
 import me.raddatz.veyq.core.ratelimit.RateLimitExempt
 
 /**
@@ -40,12 +41,12 @@ class AccountWrapsResource(
             addWrapRequest.kdfParams,
         )) {
             is AddWrapOutcome.Created ->
-                Response.status(Response.Status.CREATED).entity(AddWrapResult(id = outcome.id)).build()
+                Response.status(Response.Status.CREATED).entity(AddWrapResult(id = UUID.fromString(outcome.id))).build()
             is HttpFailure -> httpError(outcome)
         }
 
-    override fun deleteAccountWrap(id: String): Response {
-        handler.deleteWrap(identity.principal.name, id)
+    override fun deleteAccountWrap(id: UUID): Response {
+        handler.deleteWrap(identity.principal.name, id.toString())
         return Response.noContent().build()
     }
 }

@@ -82,11 +82,11 @@ class SessionResource(
             "account, so every call strictly REDUCES what a token holder can reach. Answering 204 for every " +
             "id makes it no enumeration oracle either, so there is nothing a request budget would protect.",
     )
-    override fun revokeSessionFamily(id: String): Response {
+    override fun revokeSessionFamily(id: UUID): Response {
         // Always 204, whatever the id was: the service scopes the update to the caller's own account, so an
         // unknown id, a foreign one and an already-revoked one are indistinguishable from here. That is the
         // non-enumerability posture, and it is why nothing is read back before answering.
-        sessions.revokeFamilyForUser(identity.principal.name, id)
+        sessions.revokeFamilyForUser(identity.principal.name, id.toString())
         return Response.noContent().build()
     }
 
