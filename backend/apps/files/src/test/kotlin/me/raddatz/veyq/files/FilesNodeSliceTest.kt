@@ -93,12 +93,14 @@ class FilesNodeSliceTest {
     }
 
     @Test
-    fun aFileIsTheRootOfNoShare() {
+    fun aFileIsTheRootOfAReadAndAReadWriteShareOnly() {
         val (userId, scopeId) = seedMemberScope()
         val file = create(userId, scopeId, null, FilesNodeKinds.FILE).statusCode(201).extractId()
         val folder = create(userId, scopeId, null, NodeEntity.FOLDER).statusCode(201).extractId()
 
-        share(userId, file).statusCode(422).body("code", equalTo("illegal_scope"))
+        share(userId, file).statusCode(201)
+        share(userId, file, "READ_WRITE").statusCode(201)
+        share(userId, file, "WRITE_ONLY").statusCode(422).body("code", equalTo("illegal_scope"))
         // control: core's folder is shared through the same route
         share(userId, folder).statusCode(201)
     }
@@ -141,10 +143,12 @@ class FilesNodeSliceTest {
             .`when`().patch("/api/scopes/$scopeId/nodes/$node").then()
     }
 
-    private fun share(userId: String, nodeId: String): ValidatableResponse =
-        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"READ","wrap":"d3JhcA==","sealedName":"c2VhbGVk",${ShareWriteProof.recovery()}}""")
+    private fun share(userId: String, nodeId: String, role: String = "READ"): ValidatableResponse {
+        val keys = if (role == "WRITE_ONLY") """"sealedDropPublicKey":"ZHJvcA==","sealedDropPrivateKey":"cHJpdg=="""" else """"wrap":"d3JhcA==""""
+        return given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"$role",$keys,"sealedName":"c2VhbGVk",${ShareWriteProof.recovery()}}""")
             .`when`().post("/api/shares").then()
+    }
 
     private fun slug(): String = Base64.getEncoder().encodeToString(UUID.randomUUID().toString().toByteArray())
 

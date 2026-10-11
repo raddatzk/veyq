@@ -49,7 +49,9 @@ class FilesNodeKindRulesTest {
         }
         // and it is shared WRITE_ONLY only
         assertEquals(setOf("WRITE_ONLY"), FilesShareRoots().roles(dropBox))
-        assertEquals(null, FilesShareRoots().roles(file), "a file is no share root")
+        // …while a file is shared READ or READ_WRITE (a single-file link), never WRITE_ONLY
+        assertEquals(setOf("READ", "READ_WRITE"), FilesShareRoots().roles(file))
+        assertEquals(null, FilesShareRoots().roles(NodeEntity.FOLDER), "a folder is core's, not Files'")
     }
 
     @Test
