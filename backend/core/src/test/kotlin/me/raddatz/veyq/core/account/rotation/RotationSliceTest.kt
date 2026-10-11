@@ -521,6 +521,30 @@ class RotationSliceTest {
     }
 
     @Test
+    fun twoCoveringJobsOfOneInstantAreDecidedWithoutTheRandomId() {
+        // The newest covering job is read by `created_at` (millisecond). Forced to the SAME instant, the dead-lettered
+        // job still decides over an older DONE one whichever way their random ids sort — several scopes, so a tie
+        // that fell to the id would be red here with near-certainty (the pure rule: TasksStoreNewestCoveringTest).
+        val tenant = seedTenantScope()
+        val rotator = seedAccount()
+        val coOwner = seedAccount()
+        listOf(rotator, coOwner).forEach { seedGrantedMembership(it, tenant) }
+        val scopes = List(8) { seedGroup(tenant, rotator, coOwner) }
+        val older = scopes.associateWith { seedRotationJob(it) }
+        scopes.forEach { assertEquals(older.getValue(it), claimJob(coOwner, it)) }
+        rotate(rotator).then().statusCode(200)
+        scopes.forEach { scope ->
+            val newer = rotationJobsIn(scope).single { it != older.getValue(scope) }
+            QuarkusTransaction.requiringNew().run {
+                val at = Instant.now().truncatedTo(ChronoUnit.MILLIS)
+                JobEntity.update("status = ?1, createdAt = ?2 where id = ?3", JobEntity.DONE, at, older.getValue(scope))
+                JobEntity.update("status = ?1, createdAt = ?2 where id = ?3", JobEntity.FAILED, at, newer)
+            }
+            assertEquals("failed", stateOf(rotator, scope), "a tie of one instant: the dead-lettered job decides, not the id")
+        }
+    }
+
+    @Test
     fun fromFailedTheRotatorRequeuesAndTheExclusionIsBack() {
         // D9 + Q6: re-queue only from `failed`; it excludes the rotator again, which closes the Q5 lapse.
         val tenant = seedTenantScope()

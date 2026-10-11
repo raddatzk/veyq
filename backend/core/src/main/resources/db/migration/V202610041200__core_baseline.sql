@@ -126,7 +126,7 @@ CREATE TABLE veyq_tenant_invite (
     token_hash      VARCHAR(64) NOT NULL,
     status          VARCHAR(16) NOT NULL,
     expires_at      TIMESTAMP NOT NULL,
-    created_at      TIMESTAMP NOT NULL,
+    created_at      TIMESTAMP(3) NOT NULL, -- millisecond: the newest invite of a tenant is the current one
     role            VARCHAR(16) NOT NULL DEFAULT 'OWNER',
     admission_id    UUID NULL,
     admission_epoch INT NULL,
@@ -165,7 +165,7 @@ CREATE TABLE veyq_membership (
     scope_id                    UUID NOT NULL,
     role                        VARCHAR(16) NOT NULL,
     wrapped_grant               TEXT,
-    created_at                  TIMESTAMP NOT NULL,
+    created_at                  TIMESTAMP(3) NOT NULL, -- millisecond: the earliest-joined member is the orphan rule's successor
     granted_epoch               INT NOT NULL DEFAULT 0,
     pending_consent             BOOLEAN NOT NULL DEFAULT FALSE,
     sealed_name_key             TEXT NULL,
@@ -249,7 +249,9 @@ CREATE TABLE veyq_blob (
 );
 CREATE INDEX ix_blob_scope ON veyq_blob (scope_id);
 
--- The background-task pull queue (ADR 0021): opaque envelopes routed by scope and capability tag.
+-- The background-task pull queue (ADR 0021): opaque envelopes routed by scope and capability tag. created_at keeps
+-- the millisecond (TIMESTAMP(3)): the claim order and the "newest covering job" of a compromise rotation read it,
+-- and a dead-letter and its re-queue can land in one second.
 CREATE TABLE veyq_job (
     id               UUID NOT NULL PRIMARY KEY,
     scope_id         UUID NOT NULL,
@@ -262,7 +264,7 @@ CREATE TABLE veyq_job (
     max_attempts     INT NOT NULL,
     sealed_body      MEDIUMTEXT,
     sealed_result    MEDIUMTEXT,
-    created_at       TIMESTAMP NOT NULL,
+    created_at       TIMESTAMP(3) NOT NULL,
     rotated_epoch    INT NULL,
     CONSTRAINT fk_job_scope FOREIGN KEY (scope_id) REFERENCES veyq_scope (id)
 );

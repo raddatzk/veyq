@@ -160,7 +160,7 @@ class TasksStore {
                     "id not in (select d.jobId from JobDeclineEntity d where d.workerId = ?6)",
                 scopeIds, tag, JobEntity.PENDING, JobEntity.LEASED, now, userId,
             ).list()
-        }.sortedBy { it.createdAt }
+        }.sortedWith(compareBy<JobEntity>({ it.createdAt }, { it.id }))
 
         for (c in candidates) {
             val newExpiry = now.plus(ttl)
@@ -520,13 +520,11 @@ class TasksStore {
         val jobs = JobEntity.find("id in ?1", hits.map { it.second }.toSet()).list().associateBy { it.id }
         val covering = hits.mapNotNull { (rotator, jobId) -> jobs[jobId]?.let { rotator to it } }
             .groupBy({ (rotator, job) -> job.scopeId to rotator }, { it.second })
-            // `created_at` is second-precision on MariaDB, so a dead-letter and the re-queue after it can tie: the
-            // live job is the newer one (every later event joined it), then the id, so no engine's row order decides.
+            // `veyq_job.created_at` is TIMESTAMP(3), so a dead-letter and the re-queue after it order by their
+            // millisecond (second-precision made them tie on MariaDB, and the id decided: a coin flip). Only two
+            // jobs created inside ONE millisecond still tie, and [NEWEST_COVERING] decides that without the id first.
             .mapValues { (_, candidates) ->
-                candidates.maxWith(
-                    compareBy<JobEntity>({ it.createdAt }, { it.status == JobEntity.PENDING || it.status == JobEntity.LEASED })
-                        .thenBy { it.id },
-                )
+                candidates.maxWith(NEWEST_COVERING)
             }
         val scopes = covering.keys.map { it.first }.toSet()
         val members = MembershipEntity.find("scopeId in ?1", scopes).list().groupBy { it.scopeId }
@@ -669,5 +667,21 @@ class TasksStore {
          *  what tells a rotation exclusion apart from a worker's own `identity_changed` decline. Only this reason
          *  binds `rotateScope` ([isRotationExcluded]) and names a compromise rotation ([compromiseRotations]). */
         const val ROTATION_ORIGINATOR = "rotation_originator"
+
+        /**
+         * Which of several jobs covering one (scope, rotator) is the **newest**: the later `createdAt` (millisecond,
+         * `veyq_job.created_at` is `TIMESTAMP(3)`); on a tie — two jobs inside one millisecond — the live one
+         * (`PENDING`/`LEASED`: every later event joined it), then a `FAILED` over a `DONE` (the safe reading: a
+         * rotation is never shown `secured` on a tie it cannot decide), then the id, so no engine's row order
+         * decides. Used with `maxWith`.
+         */
+        internal val NEWEST_COVERING: Comparator<JobEntity> =
+            compareBy<JobEntity>({ it.createdAt }, { tieRank(it.status) }).thenBy { it.id }
+
+        private fun tieRank(status: String): Int = when (status) {
+            JobEntity.PENDING, JobEntity.LEASED -> 2
+            JobEntity.FAILED -> 1
+            else -> 0
+        }
     }
 }
