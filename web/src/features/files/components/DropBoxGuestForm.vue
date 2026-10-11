@@ -9,9 +9,10 @@
 // Inbox #385 (a): the page says whose session it is with a "Not you?" that forgets it on this device and asks for a name
 // again — a new identity; the old one's folder stays in the drop box untouched. Both the form and that line are core's one
 // guest-naming component (`core/sharing/GuestNaming.vue`, inbox #401), which asks before it forgets. The same action
-// starts over after the link stopped taking files from this guest (its folder trashed, inbox #381). The folder is made
-// with the FIRST file, not when the guest names itself (`ensureDropFolder` is idempotent: the same folder on every later
-// call), so a visitor who names itself and leaves leaves no empty folder behind — only the identity.
+// starts over after the link stopped taking files from this guest (its folder trashed, inbox #381). The identity AND the
+// folder are made with the FIRST file, not when the guest names itself (inbox #385 (a); `ensureDropFolder` is idempotent:
+// the same folder on every later call), so a visitor who names itself and leaves leaves nothing behind on the server. Until
+// then the name lives in this page only: a reload before the first file asks for it again.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
@@ -32,6 +33,14 @@ const props = defineProps<ShareBodyProps>()
 const { t, locale } = useI18n()
 
 const session = ref<DropGuestSession | null>(loadDropGuest(props.shareId))
+/** The name given before the first file: no identity exists yet (see the header). */
+const pendingName = ref<string | null>(null)
+/** Whose page this is, as the line says it: the saved session, or the name given before anything was sent. */
+const shown = computed(() => session.value ?? (pendingName.value !== null ? { displayName: pendingName.value } : null))
+/** The identity being created by the first pick, so a second pick in the meantime makes no second one. */
+let naming: Promise<DropGuestSession> | null = null
+/** The first pick is creating the identity or the folder: "Not you?" waits for it, as for a file on its way. */
+const preparing = ref(false)
 /** A start over after a gone link is reading the link again. */
 const restarting = ref(false)
 const error = ref<string | null>(null)
@@ -91,38 +100,52 @@ const retryable = (item: UploadItem) =>
 /** A file of this session is still on its way: "Not you?" waits for it (it goes out under the current identity). */
 const sending = computed(() => items.value.some((f) => f.status === 'queued' || f.status === 'preparing' || f.status === 'uploading'))
 
-/** The guest names itself (core's form): its own identity key and folder-to-be, the session kept on the device. A link
- *  that takes nothing any more ends the form; any other refusal is the form's own message. */
+/** The guest names itself (core's form): only the name, kept in this page — nothing is sent before its first file. */
 async function start(name: string) {
   error.value = null
-  try {
-    const named = await nameDropGuest(props.head, { name, pwToken: props.pwToken })
-    saveDropGuest(props.shareId, named)
-    session.value = named
-  } catch (e) {
-    if (await isDropLinkGone(e)) linkGone.value = true
-    else throw e
-  }
+  pendingName.value = name
+}
+
+/** The guest's identity: the saved session, else created now under the name it gave (its own identity key, the session
+ *  kept on the device from here on). */
+function identity(): Promise<DropGuestSession> {
+  if (session.value) return Promise.resolve(session.value)
+  const name = pendingName.value
+  if (name === null) return Promise.reject(new Error('no name given'))
+  naming ??= nameDropGuest(props.head, { name, pwToken: props.pwToken })
+    .then((named) => {
+      saveDropGuest(props.shareId, named)
+      session.value = named
+      pendingName.value = null
+      return named
+    })
+    .finally(() => (naming = null))
+  return naming
 }
 
 async function onPicked(e: Event) {
   const input = e.target as HTMLInputElement
   const files = Array.from(input.files ?? [])
   input.value = ''
-  if (!files.length || !session.value || linkGone.value) return
+  if (!files.length || !shown.value || linkGone.value) return
   error.value = null
+  preparing.value = true
+  let guest: DropGuestSession
   try {
+    guest = await identity()
     // The guest's one folder: made on its first upload, the same one on every later (and after a reload); the name
     // sent with the first call is the folder's, later calls' names are ignored by the server. A session saved before
     // the name was kept already has its folder (it was made when the guest named itself), so its fallback is never used.
-    const name = session.value.displayName || t('files.dropBox.guestNameFallback')
-    folder ??= await ensureDropFolder(props.head, session.value, name, props.pwToken)
+    const name = guest.displayName || t('files.dropBox.guestNameFallback')
+    folder ??= await ensureDropFolder(props.head, guest, name, props.pwToken)
   } catch (err) {
     if (await isDropLinkGone(err)) linkGone.value = true
     else error.value = t('files.dropBox.guestFailed')
     return
+  } finally {
+    preparing.value = false
   }
-  const ctx = dropGuestContext(props.head, session.value, folder, props.pwToken)
+  const ctx = dropGuestContext(props.head, guest, folder, props.pwToken)
   enqueue(
     files.map((file) => dropGuestJob(guestFileUploadJob({ ctx, parentId: folder!.nodeId }, file), link)),
     { label: props.head.name, key: batchKey.value },
@@ -145,6 +168,7 @@ async function notYou() {
   }
   forgetDropGuest(props.shareId)
   session.value = null
+  pendingName.value = null
   folder = null
   error.value = null
   linkGone.value = false
@@ -158,17 +182,17 @@ async function notYou() {
     </div>
     <p>{{ t('files.dropBox.guestHint', { name: head.name }) }}</p>
 
-    <!-- Refused before a session exists (the link is gone): said, with no form to try again. -->
-    <Message v-if="!session && linkGone" severity="error" :closable="false">{{ t('files.dropBox.guestGone') }}</Message>
-    <GuestNaming v-else-if="!session" :action="start" :hint="t('files.dropBox.guestNameHint')" :error-text="() => t('files.dropBox.guestFailed')" />
+    <GuestNaming v-if="!shown" :action="start" :hint="t('files.dropBox.guestNameHint')" :error-text="() => t('files.dropBox.guestFailed')" />
 
     <template v-else>
+      <!-- "Not you?" asks only when there is something to lose: a session (the way back into its folder), not a name
+           nothing was sent under yet. -->
       <GuestNaming
-        :current="session"
+        :current="shown"
         :forget="notYou"
         :forget-label="linkGone ? t('files.dropBox.guestStartOver') : undefined"
-        :ask-before-forget="!linkGone"
-        :forget-disabled="sending"
+        :ask-before-forget="!linkGone && !!session"
+        :forget-disabled="sending || preparing"
         :forget-busy="restarting"
       />
       <Message v-if="linkGone" severity="error" :closable="false">{{ t('files.dropBox.guestGone') }}</Message>

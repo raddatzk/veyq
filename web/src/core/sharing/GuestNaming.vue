@@ -24,8 +24,9 @@ import type { GuestIdentity } from './guestIdentity'
 
 const props = withDefaults(
   defineProps<{
-    /** The session this device holds for the link; null: none, the form shows (inline). Ignored as `dialog`. */
-    current?: GuestIdentity | null
+    /** Whose session this device holds for the link — only its name is read; null: none, the form shows (inline).
+     *  Ignored as `dialog`. A caller may hand a name nothing was sent under yet (Files' drop page, inbox #385 (a)). */
+    current?: Pick<GuestIdentity, 'displayName'> | null
     /** Names the guest with the trimmed name; resolves once named (the caller saves the session). */
     action?: (name: string) => Promise<void>
     /** Who reads the name — the caller's sentence. */
