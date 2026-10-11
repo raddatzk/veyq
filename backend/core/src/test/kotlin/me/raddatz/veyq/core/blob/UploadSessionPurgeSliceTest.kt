@@ -201,6 +201,6 @@ class UploadSessionPurgeSliceTest {
 
     private companion object {
         /** Who opened the sessions this class seeds — the purge never reads it. */
-        val OPENER = UploadOpener.Member("purge-test-opener")
+        val OPENER = UploadOpener.Member("4896eaa3-ac1d-4aa7-956d-bdd5d13a6f08")
     }
 }

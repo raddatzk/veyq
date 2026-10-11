@@ -95,7 +95,10 @@ class NodesStore {
      * it through the API; a handler-level caller can, and `NodesSlugTrapTest` pins exactly that.
      */
     fun slugTaken(parentSlot: String, slugToken: String, exceptNodeId: String? = null): Boolean =
-        NodeEntity.count("parentId = ?1 and slugToken = ?2 and id <> ?3", parentSlot, slugToken, exceptNodeId ?: "") > 0
+        // Two statements, never `id <> ''` as "no exception": `id` is a UUID column (inbox #387), and an empty string
+        // is no UUID — an error on H2, a warning and a coerced compare on MariaDB.
+        if (exceptNodeId == null) NodeEntity.count("parentId = ?1 and slugToken = ?2", parentSlot, slugToken) > 0
+        else NodeEntity.count("parentId = ?1 and slugToken = ?2 and id <> ?3", parentSlot, slugToken, exceptNodeId) > 0
 
     fun findInScope(scopeId: String, nodeId: String): NodeEntity? =
         NodeEntity.findById(nodeId)?.takeIf { it.scopeId == scopeId && it.deletedAt == null }

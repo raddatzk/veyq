@@ -36,15 +36,15 @@ class SessionPurgeTest {
             ensurePurgeUser()
             // A live session: unexpired access + refresh → kept, family kept.
             family(FAM_LIVE)
-            access("$FAM_LIVE-a", FAM_LIVE, future)
-            refresh("$FAM_LIVE-r", FAM_LIVE, RefreshTokenEntity.CURRENT, future)
+            access(id("$FAM_LIVE-a"), FAM_LIVE, future)
+            refresh(id("$FAM_LIVE-r"), FAM_LIVE, RefreshTokenEntity.CURRENT, future)
             // An expired session: both tokens expired → purged, family becomes token-less → deleted.
             family(FAM_EXPIRED)
-            access("$FAM_EXPIRED-a", FAM_EXPIRED, past)
-            refresh("$FAM_EXPIRED-r", FAM_EXPIRED, RefreshTokenEntity.CURRENT, past)
+            access(id("$FAM_EXPIRED-a"), FAM_EXPIRED, past)
+            refresh(id("$FAM_EXPIRED-r"), FAM_EXPIRED, RefreshTokenEntity.CURRENT, past)
             // A rotated session whose superseded refresh is still UNEXPIRED → kept (reuse tripwire).
             family(FAM_SUPERSEDED)
-            refresh("$FAM_SUPERSEDED-r", FAM_SUPERSEDED, RefreshTokenEntity.SUPERSEDED, future)
+            refresh(id("$FAM_SUPERSEDED-r"), FAM_SUPERSEDED, RefreshTokenEntity.SUPERSEDED, future)
             // Login challenges: one expired, one live.
             challenge(CHALLENGE_EXPIRED, past)
             challenge(CHALLENGE_LIVE, future)
@@ -74,9 +74,10 @@ class SessionPurgeTest {
 
     @Test
     fun tokenlessFamiliesBeyondOneBatchAreAllPurgedInOneRun() {
+        val batchIds = (0 until SessionPurge.FAMILY_BATCH + 5).map { id("$FAM_BATCH-$it") }
         QuarkusTransaction.requiringNew().run {
             ensurePurgeUser()
-            repeat(SessionPurge.FAMILY_BATCH + 5) { family("$FAM_BATCH-$it") }
+            batchIds.forEach { family(it) }
         }
 
         purge.run()
@@ -85,7 +86,7 @@ class SessionPurgeTest {
             // Asserted over the whole table, not only this test's rows: other tests leave token-less families too,
             // and a run that stopped after one batch might have happened to take all of ours.
             assert(sessions.emptyFamilyIds(1).isEmpty()) { "a token-less family outlived the run" }
-            assert(SessionFamilyEntity.count("id like ?1", "$FAM_BATCH-%") == 0L) { "one of this test's families was kept" }
+            assert(SessionFamilyEntity.count("id in ?1", batchIds) == 0L) { "one of this test's families was kept" }
         }
     }
 
@@ -97,7 +98,7 @@ class SessionPurgeTest {
             ensurePurgeUser()
             family(FAM_RECHECK_EMPTY)
             family(FAM_RECHECK_HELD)
-            refresh("$FAM_RECHECK_HELD-r", FAM_RECHECK_HELD, RefreshTokenEntity.CURRENT, Instant.now().plus(1, ChronoUnit.DAYS))
+            refresh(id("$FAM_RECHECK_HELD-r"), FAM_RECHECK_HELD, RefreshTokenEntity.CURRENT, Instant.now().plus(1, ChronoUnit.DAYS))
         }
 
         val deleted = sessions.purgeEmptyFamilies(listOf(FAM_RECHECK_EMPTY, FAM_RECHECK_HELD))
@@ -152,14 +153,17 @@ class SessionPurgeTest {
     }
 
     companion object {
-        private const val PURGE_USER = "purge-user"
-        private const val FAM_LIVE = "purge-fam-live"
-        private const val FAM_EXPIRED = "purge-fam-expired"
-        private const val FAM_SUPERSEDED = "purge-fam-superseded"
+        /** A family and token id is a UUID column (inbox #387): a readable name becomes the UUID derived from it. */
+        private fun id(name: String): String = java.util.UUID.nameUUIDFromBytes(name.toByteArray()).toString()
+
+        private const val PURGE_USER = "b8a9913a-c66f-4ad5-9843-068fcb6054f7"
+        private val FAM_LIVE = id("purge-fam-live")
+        private val FAM_EXPIRED = id("purge-fam-expired")
+        private val FAM_SUPERSEDED = id("purge-fam-superseded")
         private const val CHALLENGE_EXPIRED = "purge-expired@example.com"
         private const val CHALLENGE_LIVE = "purge-live@example.com"
         private const val FAM_BATCH = "purge-batch"
-        private const val FAM_RECHECK_EMPTY = "purge-recheck-empty"
-        private const val FAM_RECHECK_HELD = "purge-recheck-held"
+        private val FAM_RECHECK_EMPTY = id("purge-recheck-empty")
+        private val FAM_RECHECK_HELD = id("purge-recheck-held")
     }
 }

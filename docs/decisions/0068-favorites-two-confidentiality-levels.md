@@ -26,7 +26,7 @@ mine*. That request does not extend the existing object — it **collides** with
 
 **The ceiling, measured.** The contract caps `ciphertext` at **65 536** base64 chars → 49 152 sealed bytes; the
 `symWrap` frame (type byte + 12-byte nonce + 16-byte GCM tag) costs 29 (`packages/crypto/src/v1.ts:103`); a
-`veyq_media.id` is a 36-char UUID (`VARCHAR(36)`, Memories baseline) costing **39 bytes** per entry in a JSON array.
+`veyq_media.id` is a 36-char UUID string on the wire (a native `UUID` column, Memories baseline) costing **39 bytes** per entry in a JSON array.
 `measured` (a script over real `randomUUID()` ids + `JSON.stringify`, against this tree):
 
 | favorited ids in one blob | base64 chars | outcome |

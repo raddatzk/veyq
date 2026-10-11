@@ -10,7 +10,7 @@ independent keys:
     declares them (`CREATE TABLE` body or `ALTER TABLE … ADD COLUMN`): `veyq_media.blob_id`,
     `veyq_media_derivative.blob_id`, `veyq_node_attachment.blob_id`. Keyed on the table, not the migration file: one
     baseline declares several tables, so a file key would fold two arms into one name and stop telling them apart. A
-    column is read on its own line, so a declaration must keep `blob_id VARCHAR` there.
+    column is read on its own line, so a declaration must keep `blob_id UUID` (or `VARCHAR`) there.
   - *backstop* — which of those arms a foreign key refuses to orphan: **all three**, `veyq_media.fk_media_blob`,
     `veyq_media_derivative.fk_derivative_blob` and `veyq_node_attachment.fk_attachment_blob`. This one is asserted
     by name deliberately. An arm *gaining* a foreign key is a real change in what the database guarantees, and it
@@ -82,7 +82,7 @@ ENTITY_COLUMN = re.compile(r'@Column\([^)]*"([a-z_]*blob_id)"')
 ENTITY_CLASS = re.compile(r"^\s*(?:open\s+)?class\s+(\w+)\s*:")
 
 # The SQL side of the same columns: a CREATE TABLE body line, or a later ADD COLUMN.
-SQL_COLUMN = re.compile(r"^\s+([a-z_]*blob_id)\s+VARCHAR|ADD COLUMN\s+([a-z_]*blob_id)\b", re.IGNORECASE)
+SQL_COLUMN = re.compile(r"^\s+([a-z_]*blob_id)\s+(?:UUID|VARCHAR)\b|ADD COLUMN\s+([a-z_]*blob_id)\b", re.IGNORECASE)
 # The table a line belongs to: the open CREATE TABLE body, or the ALTER TABLE statement the line starts.
 SQL_TABLE = re.compile(r"\b(?:CREATE|ALTER)\s+TABLE\s+(\w+)", re.IGNORECASE)
 

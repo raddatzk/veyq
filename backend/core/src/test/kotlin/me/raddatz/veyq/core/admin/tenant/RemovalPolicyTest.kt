@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test
  */
 class RemovalPolicyTest {
 
-    private val tenantId = "tenant-scope"
+    private val tenantId = "1936be56-1739-441e-8180-125e45f1c3bd"
 
     private fun tenant(role: String = MembershipEntity.MEMBER, ownerCount: Long = 2) =
         RemovalScope(tenantId, ScopeEntity.TENANT, role, memberCount = 5, ownerCount = ownerCount)

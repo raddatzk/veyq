@@ -70,7 +70,7 @@ class InstanceStoreProvisioningSliceTest {
 
     private companion object {
         /** Distinct from every other class's: the `%test` H2 mem DB is JVM-shared across test classes. */
-        const val OWNER_ID = "instance-store-prov-owner"
-        const val MEMBER_ID = "instance-store-prov-member"
+        const val OWNER_ID = "2438067f-7e4a-44c7-b732-e81c52e04a2e"
+        const val MEMBER_ID = "c1a2896e-f38a-4e4b-b2ae-df395e0afff1"
     }
 }

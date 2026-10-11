@@ -94,8 +94,8 @@ class InstanceReleaseSliceTest {
 
     companion object {
         const val STAMPED_RELEASE = "77.13"
-        private const val OWNER_ID = "instance-release-owner"
-        private const val MEMBER_ID = "instance-release-member"
+        private const val OWNER_ID = "b0b898cf-8d16-40db-a849-14a07711dfe9"
+        private const val MEMBER_ID = "538b2928-3121-43c2-a0d7-41c5b0dda573"
     }
 }
 
@@ -133,6 +133,6 @@ class InstanceReleaseUnstampedSliceTest {
     }
 
     companion object {
-        private const val OWNER_ID = "instance-release-unstamped-owner"
+        private const val OWNER_ID = "7e747709-19e0-4aac-9e73-9fd7a3603099"
     }
 }

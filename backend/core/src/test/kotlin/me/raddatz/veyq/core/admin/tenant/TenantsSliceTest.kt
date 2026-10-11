@@ -280,7 +280,7 @@ class TenantsSliceTest {
     }
 
     companion object {
-        private const val OWNER_ID = "tenant-owner-user"
-        private const val MEMBER_ID = "tenant-member-user"
+        private const val OWNER_ID = "d6837146-be97-4cf5-85fd-6271734fc971"
+        private const val MEMBER_ID = "375a2763-6d61-4cd9-a19a-7fc396b3abf8"
     }
 }

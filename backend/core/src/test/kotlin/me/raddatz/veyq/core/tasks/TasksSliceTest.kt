@@ -546,7 +546,7 @@ class TasksSliceTest {
 
     private fun seedJob(
         scopeId: String, tag: String, status: String, attempts: Int, maxAttempts: Int = 5,
-        leaseExpiresAt: Instant? = null, resourceRef: String? = null, leaseHolder: String = "crashed",
+        leaseExpiresAt: Instant? = null, resourceRef: String? = null, leaseHolder: String = "b79744b3-dfa1-4389-bf85-6247ea6f0162",
     ): String {
         val jobId = UUID.randomUUID().toString()
         QuarkusTransaction.requiringNew().run {

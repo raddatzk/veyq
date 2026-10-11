@@ -390,18 +390,14 @@ paths:
         is one of the caller's own **device-local convenience wraps** — **DEVICE** or **DEVICE_KEY**, the two
         kinds `POST /api/account/wraps` creates (ADR 0005 §9: a device carries one at a time, so switching
         level removes the old one through this endpoint). An unknown id, another account's wrap, the PASSWORD
-        floor, or any other method is a silent no-op. Always 204 — no cross-account enumeration, the 2SKD
+        floor, or any other method is a silent no-op. Always 204 for a well-formed (UUID) id — no cross-account enumeration, the 2SKD
         floor can never be removed, and the RECOVERY/PASSKEY methods are out of reach of this endpoint.
       parameters:
         - name: id
           in: path
           required: true
           description: The opaque id of the wrap to remove (returned by the add-wrap call).
-          schema:
-            type: string
-            maxLength: 64
-            example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
-            x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9-]+")'
+          schema: { type: string, format: uuid, example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c }
       security:
         - bearerAuth: []
       responses:
@@ -835,8 +831,8 @@ components:
         id:
           x-veyq-visibility: id
           type: string
+          format: uuid
           description: Opaque id of the stored wrap.
-          maxLength: 64
           example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
 
     AccountKeyMaterial:

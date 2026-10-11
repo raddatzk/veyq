@@ -389,8 +389,8 @@ class SessionManagerSliceTest {
 
         private const val EMAIL = "sessions-test@example.com"
         private const val OTHER_EMAIL = "sessions-stranger@example.com"
-        private const val USER_ID = "sessions-test-user"
-        private const val OTHER_USER_ID = "sessions-stranger-user"
+        private const val USER_ID = "1db8c637-4cb6-43d6-aef1-7e45d862a9cc"
+        private const val OTHER_USER_ID = "592a76a5-b25f-4253-bb21-155b022b04d6"
         private val KEYPAIR: KeyPair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair()
         private val OTHER_KEYPAIR: KeyPair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair()
 
