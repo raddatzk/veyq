@@ -525,7 +525,7 @@ class ScopesStore(
     /** The earliest-joined **other** member of a scope (min `createdAt`), or null if the user is alone — the
      *  orphan rule's deterministic successor owner (cr-0091, ADR 0014 §6). */
     fun oldestOtherMember(scopeId: String, exceptUserId: String): String? =
-        MembershipEntity.find("scopeId = ?1 and userId <> ?2 order by createdAt asc", scopeId, exceptUserId)
+        MembershipEntity.find("scopeId = ?1 and userId <> ?2 order by createdAt asc, id", scopeId, exceptUserId)
             .firstResult()?.userId
 
     /** Admit a member to a scope **grant-less** (role=MEMBER, no grant) — grant-delivery wraps `K_SC` to them

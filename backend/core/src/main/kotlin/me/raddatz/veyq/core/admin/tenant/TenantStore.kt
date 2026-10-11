@@ -394,7 +394,7 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
         }
 
     private fun currentInvite(tenantId: String): TenantInviteEntity? =
-        TenantInviteEntity.find("tenantId = ?1 order by createdAt desc", tenantId).firstResult()
+        TenantInviteEntity.find("tenantId = ?1 order by createdAt desc, id desc", tenantId).firstResult()
 
     // --- terms of service (cr-0114, ADR 0035) ---
 
