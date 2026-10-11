@@ -89,6 +89,9 @@ async function mountPage() {
 
 beforeEach(() => {
   vi.useFakeTimers()
+  // The loop's delay is jittered (±20 %): with a random draw the 19 s settles below can land either side of a backoff, so
+  // the failure test flaked about once in a few dozen runs. A fixed draw (the middle of the spread) makes the delays exact.
+  vi.spyOn(Math, 'random').mockReturnValue(0.5)
   setVisibility('visible')
   localStorage.clear()
   authenticatedCalls.length = 0
@@ -98,6 +101,7 @@ beforeEach(() => {
 })
 afterEach(() => {
   vi.useRealTimers()
+  vi.restoreAllMocks()
 })
 
 describe("a share guest's folder page, live", () => {
