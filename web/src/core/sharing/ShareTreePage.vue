@@ -47,6 +47,7 @@ import { renderMarkdown } from '../../shared/markdown'
 import ShareNameDialog from './ShareNameDialog.vue'
 import MoveNodeDialog from '../node/MoveNodeDialog.vue'
 import { nodeMover } from '../node/move'
+import { useLevelLive } from '../node/useLevelLive'
 import type { TreeNode } from '../node/tree'
 
 // The props are the shell's, the registry's `ShareBodyProps` (core/applications/registry.ts), spelled out because the
@@ -164,6 +165,14 @@ async function createNode(name: string) {
 const mover = nodeMover(() => props.access)
 const moving = ref<TreeNode | null>(null)
 
+// --- the live refresh (inbox #408): a folder level on screen picks up what others changed, without a reload --------------
+// Paused while a dialog of this page is open; the shell's `poll` swaps `head` (and with it the tree) only on a change.
+const { ticks: liveTick } = useLevelLive({
+  active: () => atFolder.value && !!props.access.poll,
+  paused: () => !!creating.value || !!moving.value,
+  read: (signal) => props.access.poll?.(signal) ?? Promise.resolve(),
+})
+
 function createError(e: unknown): string {
   const m = guestTreeErrorMessageKey(e)
   return t(m.key, m.params ?? {})
@@ -191,6 +200,7 @@ function createError(e: unknown): string {
       :access="access"
       :tree="tree"
       :folder-name="tree.nameOf(current.id)"
+      :live-tick="liveTick"
       @open-node="go($event.id)"
       @create="startCreate"
       @move-node="moving = $event"

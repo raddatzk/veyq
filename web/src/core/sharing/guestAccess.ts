@@ -109,6 +109,7 @@ export function guestAccess(fields: {
   fragmentKey: string
   requestGuest: () => Promise<GuestIdentity | null>
   reload: () => Promise<void>
+  poll?: (signal: AbortSignal) => Promise<void>
 }): GuestAccess {
   return {
     mode: 'guest',
@@ -119,5 +120,6 @@ export function guestAccess(fields: {
     fragmentKey: fields.fragmentKey,
     requestGuest: fields.requestGuest,
     reload: fields.reload,
+    ...(fields.poll ? { poll: fields.poll } : {}),
   }
 }

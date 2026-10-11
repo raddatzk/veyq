@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // The view-mode switch (cr-0063; core's since inbox #370): one icon button per presentation in `views`, over the
-// app-wide `useViewMode` preference (persisted) — core's level-view toolbar hands it the presentations on screen
+// `useViewMode` preference (persisted, per account / one for share guests) — core's level-view toolbar hands it the presentations on screen
 // (`levelViews.ts`), Memories' chapters grid its grid and list. Every place drives the one value. The button pressed is
 // the mode shown there — the stored one where `views` offers it, else the grid (`effectiveViewMode`, inbox #404) — so a
 // stored map never leaves a grid-and-list switch with nothing pressed.

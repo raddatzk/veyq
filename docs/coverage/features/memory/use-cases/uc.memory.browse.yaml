@@ -17,7 +17,7 @@ acceptanceCriteria:
     coverage:
       web: { unit: [src/core/node/browse.test.ts, src/core/node/location.test.ts] }
   - id: view-modes
-    text: The current level is shown via one app-wide, persisted display toggle — grid (cards, default) / list / map. Grid/list is the card-grid layout (cr-0063); map ("Karte", browse-only, cr-0071) plots the current folder's subtree of located Memories/Chapters as clickable pins from each node's sealed `location` (unsealed on device from listNodes, no locations API, behind the ADR 0018 tiles opt-in), a pin click opening that Memory. The preference persists across surfaces (localStorage).
+    text: The current level is shown via one app-wide, persisted display toggle — grid (cards, default) / list / map. Grid/list is the card-grid layout (cr-0063); map ("Karte", browse-only, cr-0071) plots the current folder's subtree of located Memories/Chapters as clickable pins from each node's sealed `location` (unsealed on device from listNodes, no locations API, behind the ADR 0018 tiles opt-in), a pin click opening that Memory. The preference persists across surfaces (localStorage), one per signed-in account and one for the share-guest pages, never one for the whole browser (inbox #408).
     coverage:
       web:
         unit:
@@ -27,7 +27,7 @@ acceptanceCriteria:
           - src/core/node/LevelView.test.ts
           - src/features/memory/components/SpaceMap.test.ts
   - id: application-tabs
-    text: Where the level shows two or more application sections, a tab bar `All | <one tab per section>` filters the level to one section's nodes of the current folder (sub-folders stay in every tab, no subtree search); the selection is one global persisted setting, shown as `All` without being overwritten where the level lacks that tab; a share guest gets the same bar (inbox #348).
+    text: Where the level shows two or more application sections, a tab bar `All | <one tab per section>` filters the level to one section's nodes of the current folder (sub-folders stay in every tab, no subtree search); the selection is a persisted setting per signed-in account (and one for the share-guest pages), shown as `All` without being overwritten where the level lacks that tab; a share guest gets the same bar (inbox #348).
     coverage:
       web:
         unit:
@@ -35,6 +35,15 @@ acceptanceCriteria:
           - src/shared/state/useLevelTab.test.ts
           - src/core/node/LevelView.tabs.test.ts
           - src/core/applications/registry.test.ts
+  - id: level-live-refresh
+    text: An open folder level (member and share guest) re-reads itself about every 15 s while its tab is visible — jittered, backing off on errors, at once on visibility/focus, nothing while hidden or after unmount, paused while a dialog is open — and shows what others changed without a reload; a read that began before a write's own re-read is dropped, an unchanged read leaves the page alone, and Files re-reads its blob listing on each tick (inbox #408).
+    coverage:
+      web:
+        unit:
+          - src/shared/state/livePoller.test.ts
+          - src/views/MemoryHomeView.live.test.ts
+          - src/views/ShareView.live.test.ts
+          - src/features/files/components/FilesSection.test.ts
   - id: create-folder-and-memory
     text: Creating a folder/Memory seals the name + blinded slug under the parent's key (K_SC at the scope root) and POSTs only ciphertext (every node births its random key, wrapped under the same parent key).
     coverage:

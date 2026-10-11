@@ -5,7 +5,8 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ViewModeToggle from './ViewModeToggle.vue'
 import { GRID_VIEW, LIST_VIEW, type LevelViewOption } from './levelViews'
-import { setViewMode } from '../../shared/state/useViewMode'
+import { setViewMode, viewModeStorageKey } from '../../shared/state/useViewMode'
+import { setAccountUserId } from '../../app/account'
 import { realI18n, t } from '../../test/i18n'
 
 const MAP: LevelViewOption = { mode: 'map', icon: 'pi pi-map', label: 'memory.viewMap' }
@@ -14,6 +15,7 @@ const mountToggle = (views: readonly LevelViewOption[] = [GRID_VIEW, LIST_VIEW])
 
 beforeEach(() => {
   localStorage.clear()
+  setAccountUserId('user-1')
   setViewMode('grid')
 })
 
@@ -28,7 +30,7 @@ describe('ViewModeToggle', () => {
     await listBtn.trigger('click')
     expect(listBtn.attributes('aria-pressed')).toBe('true')
     expect(gridBtn.attributes('aria-pressed')).toBe('false')
-    expect(localStorage.getItem('veyq:view-mode')).toBe('list')
+    expect(localStorage.getItem(viewModeStorageKey()!)).toBe('list')
   })
 
   it('offers exactly the views it is handed, each named by its own label key', () => {
@@ -44,7 +46,7 @@ describe('ViewModeToggle', () => {
     expect(mapBtn.attributes('aria-pressed')).toBe('false')
     await mapBtn.trigger('click')
     expect(mapBtn.attributes('aria-pressed')).toBe('true')
-    expect(localStorage.getItem('veyq:view-mode')).toBe('map')
+    expect(localStorage.getItem(viewModeStorageKey()!)).toBe('map')
   })
 
   // inbox #404: a stored mode the toggle does not offer is shown as the grid, so the grid is pressed — the store is kept.
@@ -52,6 +54,6 @@ describe('ViewModeToggle', () => {
     setViewMode('map')
     const w = mountToggle()
     expect(w.findAll('.view-mode-button').map((b) => b.attributes('aria-pressed'))).toEqual(['true', 'false'])
-    expect(localStorage.getItem('veyq:view-mode')).toBe('map')
+    expect(localStorage.getItem(viewModeStorageKey()!)).toBe('map')
   })
 })

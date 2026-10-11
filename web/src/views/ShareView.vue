@@ -22,7 +22,7 @@
 // (core's `GuestNaming`, under the share ROOT's key, `nameShareGuest`) whichever view first writes, and the shell shows
 // whose session this device holds with its "Not you?" (`forgetGuestSession`, asked first). A WRITE_ONLY drop page names
 // its guest on the page itself (its own identity key, the application's), so the shell's line is a READ_WRITE link's.
-import { ref, shallowRef, computed, onMounted } from 'vue'
+import { ref, shallowRef, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -44,6 +44,8 @@ import { forgetGuestSession, nameShareGuest, useGuestSession, type GuestIdentity
 import { ShareRole } from '../api/generated/sharing'
 import GuestNaming from '../core/sharing/GuestNaming.vue'
 import { renderMarkdown } from '../shared/markdown'
+import { setPreferenceAudience } from '../shared/state/scopedPreference'
+import { shareTreeFingerprint } from '../core/sharing/shareTreeFingerprint'
 
 const route = useRoute()
 const { t, locale } = useI18n()
@@ -149,13 +151,33 @@ function onNamingClose() {
   for (const w of all) w(session.value)
 }
 const access = computed(() =>
-  head.value ? guestAccess({ head: head.value, pwToken: pwToken.value, fragmentKey: fragmentKey.value, requestGuest, reload: load }) : null,
+  head.value ? guestAccess({ head: head.value, pwToken: pwToken.value, fragmentKey: fragmentKey.value, requestGuest, reload: load, poll }) : null,
 )
+// This document's pages are a guest's: its stored view mode and tab are the guest's own, never an account's
+// (`shared/state/scopedPreference`, inbox #408).
+setPreferenceAudience('guest')
+onBeforeUnmount(() => setPreferenceAudience('account'))
+
+/** The level view's live refresh (inbox #408): re-resolve quietly and swap `head` only when the subtree differs. A
+ *  failure is thrown to the poller (it backs off) and never reaches the page's state; a resolve that began before a
+ *  `load` (the guest's own write) ran is dropped, as it may predate the write. */
+let resolves = 0
+async function poll(signal: AbortSignal) {
+  const current = head.value
+  if (!current || status.value !== 'ready') return
+  const mine = resolves
+  const resolved = await resolvePublicShare(shareId, fragmentKey.value, pwToken.value)
+  if (signal.aborted || mine !== resolves || head.value !== current) return
+  if (!bodyFor(resolved) || shareTreeFingerprint(resolved.share) === shareTreeFingerprint(current.share)) return
+  head.value = resolved
+}
+
 /** The line that says whose session this is: a READ_WRITE link's (a drop page shows its own). */
 const showsIdentity = computed(() => head.value?.role === ShareRole.ReadWrite && !!session.value)
 
 // --- resolve (on mount, after the password, and after a contribution) --------
 async function load() {
+  resolves++
   try {
     const resolved = await resolvePublicShare(shareId, fragmentKey.value, pwToken.value)
     if (!bodyFor(resolved)) {

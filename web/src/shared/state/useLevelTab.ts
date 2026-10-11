@@ -1,38 +1,22 @@
-// The level view's selected application tab (inbox #348): one global client preference, persisted in localStorage like
-// `useViewMode` (a ref plus a setter; no secrets). The value is an opaque tab id (`core/node/levelTabs.ts`) or 'all';
-// whether the level at hand has that tab is the level's question (`effectiveTab`), so an id no level offers is simply
-// shown as 'all' and stays stored. Every storage access is guarded: blocked storage means an in-memory preference.
-import { readonly, ref } from 'vue'
+// The level view's selected application tab (inbox #348): a stable client setting, one per USER of the browser — an
+// account's own (`veyq:level-tab:u:<userId>`), and one for every share guest page (`veyq:level-tab:guest`), never one
+// value for every role (`scopedPreference.ts` says why and how). The value is an opaque tab id (`core/node/levelTabs.ts`)
+// or 'all'; whether the level at hand has that tab is the level's question (`effectiveTab`), so an id no level offers is
+// simply shown as 'all' and stays stored. Every storage access is guarded: blocked storage means an in-memory preference.
+import { readonly } from 'vue'
+import { createScopedPreference, preferenceStorageKey } from './scopedPreference'
 
-export const LEVEL_TAB_STORAGE_KEY = 'veyq:level-tab'
+const LEVEL_TAB_BASE_KEY = 'veyq:level-tab'
 const DEFAULT_TAB = 'all'
-const levelTab = ref<string>(readStoredTab())
+const pref = createScopedPreference<string>(LEVEL_TAB_BASE_KEY, (raw) => raw || undefined, DEFAULT_TAB)
+
+/** Where the tab of whoever looks now is stored, or null while there is no owner to name. */
+export const levelTabStorageKey = (): string | null => preferenceStorageKey(LEVEL_TAB_BASE_KEY)
 
 export function useLevelTab() {
-  return { levelTab: readonly(levelTab), setLevelTab }
+  return { levelTab: readonly(pref.value), setLevelTab }
 }
 
 export function setLevelTab(id: string): void {
-  levelTab.value = id
-  try {
-    storage()?.setItem(LEVEL_TAB_STORAGE_KEY, id)
-  } catch {
-    // quota / blocked: the choice lives in memory only
-  }
-}
-
-function readStoredTab(): string {
-  try {
-    return storage()?.getItem(LEVEL_TAB_STORAGE_KEY) || DEFAULT_TAB
-  } catch {
-    return DEFAULT_TAB
-  }
-}
-
-function storage(): Storage | null {
-  try {
-    return typeof localStorage === 'undefined' ? null : localStorage
-  } catch {
-    return null // storage disabled (private mode / blocked) → in-memory default only
-  }
+  pref.set(id)
 }

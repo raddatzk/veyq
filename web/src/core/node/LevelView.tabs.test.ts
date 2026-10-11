@@ -24,7 +24,8 @@ import { childrenOf } from './browse'
 import { FOLDER_KIND, type NodeKind } from './kind'
 import type { TreeNode } from './tree'
 import { setViewMode, type ViewMode } from '../../shared/state/useViewMode'
-import { setLevelTab, useLevelTab, LEVEL_TAB_STORAGE_KEY } from '../../shared/state/useLevelTab'
+import { setLevelTab, useLevelTab, levelTabStorageKey } from '../../shared/state/useLevelTab'
+import { setAccountUserId } from '../../app/account'
 import { realI18n, t } from '../../test/i18n'
 import { treeNode, memberAccessOf, memberTreeOf, guestAccessOf } from '../../test/models'
 import { ShareRole } from '../../api/generated/sharing'
@@ -74,6 +75,7 @@ const LABEL_B = 'files.title'
 beforeEach(() => {
   holder.reg = createRegistry()
   localStorage.clear()
+  setAccountUserId('user-1')
   setLevelTab('all')
   setViewMode('grid')
   holder.reg.registerKind({ kind: 'ALPHA', icon: 'pi pi-a', shareable: false, section: { order: 10, component: A, tabLabel: LABEL_A } })
@@ -113,7 +115,7 @@ describe('LevelView application tabs', () => {
   it('persists the selection: a remount shows it, and the preference is in storage', async () => {
     const first = mountLevel(TREE)
     await tabNamed(first, t(LABEL_B)).trigger('click')
-    expect(localStorage.getItem(LEVEL_TAB_STORAGE_KEY)).toBe('BETA')
+    expect(localStorage.getItem(levelTabStorageKey()!)).toBe('BETA')
     first.unmount()
     const second = mountLevel(TREE)
     expect(shown(second)).toEqual(['b'])
@@ -134,7 +136,7 @@ describe('LevelView application tabs', () => {
     expect(selected(w)).toEqual([t('node.tabAll')])
     expect(shown(w)).toEqual(['a', 'c'])
     expect(useLevelTab().levelTab.value).toBe('BETA')
-    expect(localStorage.getItem(LEVEL_TAB_STORAGE_KEY)).toBe('BETA')
+    expect(localStorage.getItem(levelTabStorageKey()!)).toBe('BETA')
     // …and the level that has BETA shows it again
     w.unmount()
     expect(shown(mountLevel(TREE))).toEqual(['b'])

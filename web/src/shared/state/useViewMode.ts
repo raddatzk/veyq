@@ -1,41 +1,31 @@
 // Card-grid view mode (cr-0063): the memory card grid (browse + the Chapters tab) renders as cards ('grid'), a
-// plain list ('list'), or — in the browse only — a places map ('map', cr-0071). One app-wide preference, persisted
-// in localStorage — switching in one place applies everywhere. No secrets here; follows the useThemeState pattern
-// (a ref + a setter/toggle).
-import { readonly, ref } from 'vue'
+// plain list ('list'), or — in the browse only — a places map ('map', cr-0071). A stable client setting, one per USER of
+// the browser (an account's own, one for every share guest page — `scopedPreference.ts`): switching in one place applies
+// everywhere for whoever is looking. No secrets here; a ref plus a setter/toggle.
+import { readonly } from 'vue'
+import { createScopedPreference, preferenceStorageKey } from './scopedPreference'
 
 export type ViewMode = 'grid' | 'list' | 'map'
 
-const VIEW_MODE_STORAGE_KEY = 'veyq:view-mode'
+const VIEW_MODE_BASE_KEY = 'veyq:view-mode'
 const VIEW_MODES: readonly ViewMode[] = ['grid', 'list', 'map']
-const viewMode = ref<ViewMode>(readStoredViewMode())
+const pref = createScopedPreference<ViewMode>(VIEW_MODE_BASE_KEY, (raw) => VIEW_MODES.find((m) => m === raw), 'grid')
+
+/** Where the view mode of whoever looks now is stored, or null while there is no owner to name. */
+export const viewModeStorageKey = (): string | null => preferenceStorageKey(VIEW_MODE_BASE_KEY)
 
 export function useViewMode() {
   return {
-    viewMode: readonly(viewMode),
+    viewMode: readonly(pref.value),
     setViewMode,
     toggleViewMode,
   }
 }
 
 export function setViewMode(mode: ViewMode): void {
-  viewMode.value = mode
-  storage()?.setItem(VIEW_MODE_STORAGE_KEY, mode)
+  pref.set(mode)
 }
 
 export function toggleViewMode(): void {
-  setViewMode(viewMode.value === 'grid' ? 'list' : 'grid')
-}
-
-function readStoredViewMode(): ViewMode {
-  const stored = storage()?.getItem(VIEW_MODE_STORAGE_KEY)
-  return VIEW_MODES.find((m) => m === stored) ?? 'grid'
-}
-
-function storage(): Storage | null {
-  try {
-    return typeof localStorage === 'undefined' ? null : localStorage
-  } catch {
-    return null // storage disabled (private mode / blocked) → in-memory default only
-  }
+  setViewMode(pref.value.value === 'grid' ? 'list' : 'grid')
 }

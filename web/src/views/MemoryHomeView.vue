@@ -23,7 +23,8 @@ import { useI18n } from 'vue-i18n'
 import { activeSpace, activeEpochKeys, enterScope } from '../app/activeSpace'
 import { suspensionSignals } from '../app/tenantSuspension'
 import { setBreadcrumb } from '../app/breadcrumb'
-import { treeStore, loadTree } from '../core/node/treeStore'
+import { treeStore, loadTree, pollTree } from '../core/node/treeStore'
+import { useLevelLive } from '../core/node/useLevelLive'
 import { childrenOf, breadcrumbOf, displayNameOf, nodeById } from '../core/node/browse'
 import { nodeContentKey, restoreNode } from '../core/node/tree'
 import { useTrashUndo } from '../core/node/trashUndo'
@@ -153,6 +154,16 @@ const moving = ref<{ node: TreeNode; shown: string | null } | null>(null)
 const mover = nodeMover(() => access.value)
 const deleteVisible = ref(false)
 const trashVisible = ref(false) // the SPACE's node trash (uc.memory.delete-node) — not the per-Memory media trash
+
+// The level's live refresh (inbox #408): while a folder level is on screen, pick up what others changed (a share guest's
+// upload, a peer's new Memory) without a reload. One read of the scope's tree per tick, applied only when it changed and
+// dropped if a write of this tab re-read the tree meanwhile (`treeStore.pollTree`); skipped while any dialog is open.
+const { ticks: liveTick } = useLevelLive({
+  active: () => activeSpace.status === 'ready' && !treeStore.error && !kindDetail.value && !isOpenable.value,
+  paused: () =>
+    !!nameDialog.value || !!createKind.value || !!moving.value || deleteVisible.value || trashVisible.value || shareVisible.value || uploaderVisible.value,
+  read: (signal) => pollTree(signal),
+})
 const deleteTarget = ref<TreeNode | null>(null)
 
 // The breadcrumb root label reflects the **active** scope (the tenant's name vs. Personal), not the URL token —
@@ -332,6 +343,7 @@ async function onDeleteDone() {
         :access="access"
         :tree="tree"
         :folder-name="currentFolderName"
+        :live-tick="liveTick"
         @open-node="openNode"
         @create="startCreate"
         @rename-folder="currentFolder && startRename(currentFolder)"

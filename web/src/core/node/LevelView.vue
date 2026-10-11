@@ -37,8 +37,8 @@
 // **Application tabs** (inbox #348): below the overview card a tab bar `All | <one tab per application section shown>`
 // (`levelTabs.ts`), only where two or more sections have a tab (`KindSection.tabLabel`, the application's own i18n key).
 // `All` is the whole level; an application tab shows only that section, over the CURRENT folder's children — a filter, no
-// subtree search — and the sub-folders stay in every tab. The shown tab is the one global preference
-// (`shared/state/useLevelTab`), used only where this level has it, else `All`, and never rewritten. The view switch
+// subtree search — and the sub-folders stay in every tab. The shown tab is the viewer's own preference
+// (`shared/state/useLevelTab`: per account, one for share guests), used only where this level has it, else `All`, and never rewritten. The view switch
 // offers the presentations of what the tab shows. A guest gets the same bar (it is this view).
 //
 // In a guest's identity folder (a drop box's, inbox #385) a section, or the folders section, with nothing to show is
@@ -73,6 +73,8 @@ const props = defineProps<{
   /** The folder's name as its siblings tell it apart (`displayNamesOf`: a guest's folder `Anna (2)` beside `Anna`,
    *  inbox #393), when the host knows the siblings. Omitted: the folder's own name. */
   folderName?: string
+  /** The host's live-refresh count (`useLevelLive`, inbox #408), handed to every section as `LevelSectionProps.liveTick`. */
+  liveTick?: number
 }>()
 const emit = defineEmits<{
   openNode: [node: TreeNode]
@@ -203,6 +205,7 @@ const shownFallbacks = computed(() => (fallbacksVisible(shownTab.value) ? fallba
       :access="access"
       :tree="tree"
       :view-mode="mode"
+      :live-tick="liveTick"
       @open-node="emit('openNode', $event)"
       @create="emit('create', $event)"
       @rename="emit('renameNode', $event)"

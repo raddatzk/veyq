@@ -161,18 +161,31 @@ function openEntries(scopeId: string, epochs: EpochKeys, rows: EntryRow[]): Map<
   return names
 }
 
-/** List the scope's tree, each name opened under the key its entry lives under ({@link openEntries}): a scope-root
- *  entry under **its own** epoch key `E_{node.epoch}` (ADR 0024), every other under its parent's content key — so a
- *  tree spanning several epochs (post-rotation) decrypts fully for a current member. */
-export async function listTree(scopeId: string, epochs: EpochKeys): Promise<TreeNode[]> {
-  const rows = (await withRefresh(() => contentApi().listNodes({ scopeId }))).map((r: NodeSummary) => ({
-    ...r,
-    parentId: r.parentId ?? null,
-  }))
-  const names = openEntries(scopeId, epochs, rows)
+/** The scope's rows as the server lists them (`parentId` normalised to null), still sealed. */
+export async function fetchTreeRows(scopeId: string): Promise<NodeSummary[]> {
+  return (await withRefresh(() => contentApi().listNodes({ scopeId }))).map((r: NodeSummary) => ({ ...r, parentId: r.parentId ?? null }))
+}
+
+/** A string that differs whenever any listed row differs in a way a view can show: the shape (parent, kind, order), the
+ *  sealed entry and its placement version, the sealed meta and its version. Ciphertext and ids only — it is compared
+ *  for equality, never read — so a live poll (`treeStore.pollTree`) can tell "nothing changed" from "something did"
+ *  without opening a single name. A row's encrypted name changes with every rename (a fresh nonce), so nothing a
+ *  rename or a move writes can leave it equal. */
+export function treeFingerprint(rows: readonly NodeSummary[]): string {
+  return rows
+    .map((r) =>
+      [r.id, r.parentId ?? '', r.kind, r.orderIndex, r.epoch, r.placementVersion, r.metaVersion, r.encryptedName, r.wrappedContentKey, r.wrappedMeta ?? '', r.shareIdentityId ?? ''].join('|'),
+    )
+    .sort()
+    .join('\n')
+}
+
+/** Open listed rows into the decrypted tree: each name under the key its entry lives under ({@link openEntries}). */
+export function openTree(scopeId: string, epochs: EpochKeys, rows: NodeSummary[]): TreeNode[] {
+  const names = openEntries(scopeId, epochs, rows.map((r) => ({ ...r, parentId: r.parentId ?? null })))
   return rows.filter((r) => names.has(r.id)).map((r) => ({
     id: r.id,
-    parentId: r.parentId,
+    parentId: r.parentId ?? null,
     kind: r.kind,
     orderIndex: r.orderIndex,
     epoch: r.epoch,
@@ -186,6 +199,13 @@ export async function listTree(scopeId: string, epochs: EpochKeys): Promise<Tree
     shareIdentityId: r.shareIdentityId ?? null,
     wrappedIdentityKey: r.wrappedIdentityKey ?? null,
   }))
+}
+
+/** List the scope's tree, each name opened under the key its entry lives under ({@link openEntries}): a scope-root
+ *  entry under **its own** epoch key `E_{node.epoch}` (ADR 0024), every other under its parent's content key — so a
+ *  tree spanning several epochs (post-rotation) decrypts fully for a current member. */
+export async function listTree(scopeId: string, epochs: EpochKeys): Promise<TreeNode[]> {
+  return openTree(scopeId, epochs, await fetchTreeRows(scopeId))
 }
 
 /**
