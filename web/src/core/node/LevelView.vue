@@ -3,7 +3,8 @@
 // Core's, and it names no application: in this order it renders its TOOLBAR (the space's node trash, which holds every
 // application's nodes, and the view-mode switch — both were Memories' section's until Files needed them too, inbox
 // #370/#385), the folder's OVERVIEW card (name, share, rename,
-// delete — a folder is core's kind since cr-node-key-hierarchy 5b.3), then one SECTION per application as the registry
+// move, delete — a folder is core's kind since cr-node-key-hierarchy 5b.3; the move is core's `MoveNodeDialog`, which
+// the host mounts on `moveNode`, inbox #358), then one SECTION per application as the registry
 // lists them (`registry.sections()`, sorted by `order`; a section renders its own `<section>`: heading, create action,
 // view modes), then a FALLBACK section per kind of child no section serves (its icon, its name, the explicit
 // unsupported state — never a child silently dropped), then the sub-FOLDERS section (heading, folder cards, the
@@ -67,6 +68,9 @@ const emit = defineEmits<{
    *  section's own kind otherwise (that kind's `createDialog`, e.g. Memories' MEMORY). */
   create: [kind: NodeKind]
   renameFolder: []
+  /** A node to move (inbox #358): the folder on screen (its card) or a section's child (Files' row). The host mounts
+   *  core's `MoveNodeDialog` for it. */
+  moveNode: [node: TreeNode]
   /** A section's child renamed in place (a kind that does not open, e.g. Files' file): the host's `FolderNameDialog`. */
   renameNode: [node: TreeNode]
   deleteFolder: []
@@ -148,8 +152,10 @@ const fallbacks = computed(() =>
       :share="caps.share"
       :rename="caps.rename"
       :remove="caps.deleteNode"
+      :move="caps.move"
       @share="emit('share')"
       @rename="emit('renameFolder')"
+      @move="emit('moveNode', folder)"
       @delete="emit('deleteFolder')"
     />
 
@@ -166,6 +172,7 @@ const fallbacks = computed(() =>
       @open-node="emit('openNode', $event)"
       @create="emit('create', $event)"
       @rename="emit('renameNode', $event)"
+      @move="emit('moveNode', $event)"
     />
 
     <!-- A kind no section serves: listed, never dropped, and said plainly that this client cannot show it. Not

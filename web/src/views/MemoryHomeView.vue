@@ -7,7 +7,9 @@
 // registry descriptor (cr-files-application P4c) — the application that registered the kind fills them. A folder's
 // create and every node's rename are core's own `core/node/FolderNameDialog.vue`; FOLDER's share dialog is core's
 // `core/sharing/FolderShareDialog.vue`, which the registry pre-registers. The folder level is core's
-// (`core/node/LevelView.vue`), which asks the registry for each application's section.
+// (`core/node/LevelView.vue`), which asks the registry for each application's section. A move of any node — the folder
+// on screen, a section's row, an opened node, a drop box's guest folder — is core's `core/node/MoveNodeDialog.vue`
+// through the member's door (`nodeMover`, inbox #358); a moved node on screen is followed to its new place.
 //
 // **Who looks** (inbox #401, `core/access.ts`): the host builds the member's `Access` (the scope, its epoch keys, its
 // pending deletion, the instance's sharing capabilities) and its `TreeSource` (the decrypted tree, fragment links) and
@@ -35,6 +37,8 @@ import DeleteNodeDialog from '../core/node/components/DeleteNodeDialog.vue'
 import SpaceTrashDialog from '../core/node/components/SpaceTrashDialog.vue'
 import FolderNameDialog from '../core/node/FolderNameDialog.vue'
 import LevelView from '../core/node/LevelView.vue'
+import MoveNodeDialog from '../core/node/MoveNodeDialog.vue'
+import { nodeMover } from '../core/node/move'
 import { registry } from '../core/applications/registry'
 import { memberAccess, memberTreeSource } from '../core/access'
 import TrustResetLink from '../features/account/trustReset/TrustResetLink.vue'
@@ -139,6 +143,9 @@ const createDialog = computed(() => {
   const info = registry.kind(createKind.value)
   return info.supported ? (info.createDialog ?? null) : null
 })
+// The node being moved (core's `MoveNodeDialog`); the member's door, read against the current access on every call.
+const moving = ref<{ node: TreeNode; shown: string | null } | null>(null)
+const mover = nodeMover(() => access.value)
 const deleteVisible = ref(false)
 const trashVisible = ref(false) // the SPACE's node trash (uc.memory.delete-node) — not the per-Memory media trash
 const deleteTarget = ref<TreeNode | null>(null)
@@ -210,6 +217,28 @@ function startDelete(node: TreeNode) {
   deleteTarget.value = node
   deleteVisible.value = true
 }
+/** Remember what is on screen: a move of it (or of a folder above it) changes its path. */
+function startMove(node: TreeNode) {
+  moving.value = { node, shown: currentNodeId.value }
+}
+/** The move re-read the tree; when the node on screen moved — itself or with a folder above it — the URL follows it to
+ *  its new path (its slug segments changed with its parent), else the position stays. */
+function onMoved({ node }: { node: TreeNode }) {
+  follow(moving.value?.shown ?? null, node.id)
+}
+function follow(shown: string | null, movedId: string) {
+  if (shown && liesAtOrBelow(shown, movedId)) void router.replace({ hash: hashForNode(treeStore.nodes, shown, currentScope.value) })
+}
+/** The undo moved it back (after the dialog closed): follow it back the same way. */
+function afterUndo(shown: string | null) {
+  return (movedId: string) => follow(shown, movedId)
+}
+function liesAtOrBelow(id: string, ancestorId: string): boolean {
+  for (let n = nodeById(treeStore.nodes, id), steps = 0; n && steps <= treeStore.nodes.length; n = nodeById(treeStore.nodes, n.parentId), steps++) {
+    if (n.id === ancestorId) return true
+  }
+  return false
+}
 async function onMutationDone() {
   await loadTree()
 }
@@ -267,6 +296,7 @@ async function onDeleteDone() {
         :tree="tree"
         @rename="startRename(currentNode)"
         @delete="startDelete(currentNode)"
+        @move="startMove"
         @create-child="startCreate"
         @open-node="openNode"
         @share="shareVisible = true"
@@ -285,6 +315,7 @@ async function onDeleteDone() {
         @rename-folder="currentFolder && startRename(currentFolder)"
         @rename-node="startRename"
         @delete-folder="currentFolder && startDelete(currentFolder)"
+        @move-node="startMove"
         @open-trash="trashVisible = true"
         @share="shareVisible = true"
       />
@@ -318,6 +349,18 @@ async function onDeleteDone() {
       :node="deleteTarget"
       @done="onDeleteDone"
       @close="deleteVisible = false"
+    />
+    <MoveNodeDialog
+      v-if="moving && mover"
+      :node="moving.node"
+      :access="access"
+      :tree="tree"
+      :mover="mover"
+      :root-label="rootLabel"
+      :node-name="displayNameOf(treeStore.nodes, moving.node)"
+      :after-undo="afterUndo(moving.shown)"
+      @moved="onMoved"
+      @close="moving = null"
     />
     <SpaceTrashDialog
       v-if="trashVisible && epochs && activeSpace.scopeId"

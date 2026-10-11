@@ -288,10 +288,10 @@ describe('LevelView: the folder overview card', () => {
   // Found in the browser, 2026-10-07: the three carried `memory-action-collapsible` / `memory-action-inline`, which
   // memory.css hid at 721–1120 px and ≤ 720 px — and this card has no overflow menu to offer them instead. jsdom has no
   // layout, so the contract pinned is the DOM one: no width-hiding class on any of them.
-  it('keeps share, rename and delete free of any width-hiding class (the card has no overflow menu)', () => {
+  it('keeps share, rename, move and delete free of any width-hiding class (the card has no overflow menu)', () => {
     const w = mountLevel([TRIPS], { folder: TRIPS, publicLinks: true })
     const actions = w.findAll('.veyq-folder-overview-actions button')
-    expect(actions.map((b) => b.attributes('aria-label'))).toEqual([t('share.share'), t('node.rename'), t('node.delete')])
+    expect(actions.map((b) => b.attributes('aria-label'))).toEqual([t('share.share'), t('node.rename'), t('node.move.action'), t('node.delete')])
     for (const b of actions) {
       expect(b.classes()).not.toContain('memory-action-collapsible')
       expect(b.classes()).not.toContain('memory-action-inline')
@@ -305,10 +305,18 @@ describe('LevelView: the folder overview card', () => {
   })
 
   // A guest's identity folder (inbox #385): a member looks, downloads and deletes there — the folder itself offers no
-  // share, rename or delete, and the card has no action row at all.
-  it('offers no action on a guest\'s identity folder', () => {
+  // share, rename or delete; its one action is the move OUT of the drop box (inbox #358, #377 (a)).
+  it('offers only the move out on a guest\'s identity folder', async () => {
     const w = mountLevel([TRIPS], { folder: TRIPS, publicLinks: true, identityFolder: true })
-    expect(w.find('.veyq-folder-overview-actions').exists()).toBe(false)
+    const actions = w.findAll('.veyq-folder-overview-actions button')
+    expect(actions.map((b) => b.attributes('aria-label'))).toEqual([t('node.move.action')])
+    await actions[0].trigger('click')
+    expect(w.emitted('moveNode')).toEqual([[TRIPS]])
+  })
+
+  it('offers no move during a pending deletion', () => {
+    const w = mountLevel([TRIPS], { folder: TRIPS, publicLinks: true, pending: true })
+    expect(w.find(`button[aria-label="${t('node.move.action')}"]`).exists()).toBe(false)
   })
 })
 

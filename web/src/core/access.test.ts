@@ -150,7 +150,7 @@ describe('targetOf: the node as a capability is asked about it', () => {
   })
 
   it('a kind is shareable only when its descriptor says so AND brings a share dialog (FOLDER: core\'s own)', () => {
-    expect(targetOf(tree, tree.node('f'))).toEqual({ kind: FOLDER_KIND, inIdentityFolder: true, shareable: true })
+    expect(targetOf(tree, tree.node('f'))).toEqual({ kind: FOLDER_KIND, inIdentityFolder: true, shareable: true, parentKind: null })
     expect(targetOf(tree, tree.node('x')).shareable, 'a kind nobody registered').toBe(false)
     holder.reg!.registerKind({ kind: 'ALPHA', icon: 'x', shareable: true })
     expect(targetOf(tree, tree.node('x')).shareable, 'shareable, but no dialog to mount').toBe(false)
@@ -161,12 +161,32 @@ describe('targetOf: the node as a capability is asked about it', () => {
     holder.reg.registerKind({ kind: 'ALPHA', icon: 'x', shareable: true, shareDialog: Dialog })
     expect(targetOf(tree, tree.node('x')).shareable, 'control: both').toBe(true)
   })
+
+  // inbox #358: a guest moves only what a FOLDER holds, and never the link's root, whose parent lies above the link.
+  it('carries the parent\'s kind as the tree reads it: null at the scope root, unknown at the view\'s root', () => {
+    const nodes = [n('top', FOLDER_KIND, null), n('m', 'ALPHA', 'top'), n('c', 'BETA', 'm')]
+    const member = memberTreeSource({ nodes: () => nodes, scopeId: () => 's', epochs: () => null, scope: () => '' })
+    expect(targetOf(member, member.node('top')).parentKind, 'a member\'s top level').toBeNull()
+    expect(targetOf(member, member.node('m')).parentKind).toBe(FOLDER_KIND)
+    expect(targetOf(member, member.node('c')).parentKind).toBe('ALPHA')
+    // A guest's view rooted at `m`: the served root carries parentId null, the scope root's marker — it must not read so.
+    const guestNodes = [n('m', 'ALPHA', null), n('c', 'BETA', 'm')]
+    const guest: TreeSource = {
+      ...memberTreeSource({ nodes: () => guestNodes, scopeId: () => 's', epochs: () => null, scope: () => '' }),
+      rootId: 'm',
+    }
+    expect(targetOf(guest, guest.node('m')).parentKind, 'the link\'s root').toBeUndefined()
+    expect(targetOf(guest, guest.node('c')).parentKind).toBe('ALPHA')
+    // a parent the tree does not serve is unknown, never the scope root
+    const orphan = memberTreeSource({ nodes: () => [n('o', FOLDER_KIND, 'gone')], scopeId: () => 's', epochs: () => null, scope: () => '' })
+    expect(targetOf(orphan, orphan.node('o')).parentKind).toBeUndefined()
+  })
 })
 
 // Core's matrix for FOLDER (`folderCapabilities`). Every row names the rights it grants; every other right must be
 // false — so a right that turns true by accident (a default flipped, a role or kind falling through) is red.
 describe('folderCapabilities: core\'s fail-closed matrix', () => {
-  const NONE: FolderCapabilities = { navigate: false, createFolder: false, rename: false, deleteNode: false, share: false, nodeTrash: false }
+  const NONE: FolderCapabilities = { navigate: false, createFolder: false, rename: false, deleteNode: false, share: false, nodeTrash: false, move: false }
   const at = (kind: string | null, o: Partial<CapabilityTarget> = {}): CapabilityTarget => ({ kind, inIdentityFolder: false, shareable: kind === FOLDER_KIND, ...o })
   const grants = (...keys: (keyof FolderCapabilities)[]) => ({ ...NONE, ...Object.fromEntries(keys.map((k) => [k, true])) })
   const member = memberAccessOf()
@@ -176,17 +196,25 @@ describe('folderCapabilities: core\'s fail-closed matrix', () => {
   const rows: [string, Access, CapabilityTarget, FolderCapabilities][] = [
     // member
     ['member at the scope root', member, at(null), grants('navigate', 'createFolder', 'nodeTrash')],
-    ['member in a folder', member, at(FOLDER_KIND), grants('navigate', 'createFolder', 'rename', 'deleteNode', 'share', 'nodeTrash')],
-    ['member in a folder, public links off', noLinks, at(FOLDER_KIND), grants('navigate', 'createFolder', 'rename', 'deleteNode', 'nodeTrash')],
-    ['member in a folder, kind not shareable', member, at(FOLDER_KIND, { shareable: false }), grants('navigate', 'createFolder', 'rename', 'deleteNode', 'nodeTrash')],
+    ['member in a folder', member, at(FOLDER_KIND), grants('navigate', 'createFolder', 'rename', 'deleteNode', 'share', 'nodeTrash', 'move')],
+    ['member in a folder at the scope root\'s top level', member, at(FOLDER_KIND, { parentKind: null }), grants('navigate', 'createFolder', 'rename', 'deleteNode', 'share', 'nodeTrash', 'move')],
+    ['member in a folder, public links off', noLinks, at(FOLDER_KIND), grants('navigate', 'createFolder', 'rename', 'deleteNode', 'nodeTrash', 'move')],
+    ['member in a folder, kind not shareable', member, at(FOLDER_KIND, { shareable: false }), grants('navigate', 'createFolder', 'rename', 'deleteNode', 'nodeTrash', 'move')],
     ['member, pending deletion, root', pending, at(null), grants('navigate')],
     ['member, pending deletion, folder (links are a read)', pending, at(FOLDER_KIND), grants('navigate', 'share')],
-    ['member in a guest\'s identity folder', member, at(FOLDER_KIND, { inIdentityFolder: true }), grants('navigate')],
+    // a member's move OUT of a drop box is the identity folder's one placement (inbox #358, #377 (a))
+    ['member in a guest\'s identity folder: moves it out', member, at(FOLDER_KIND, { inIdentityFolder: true }), grants('navigate', 'move')],
+    ['member, pending deletion, identity folder', pending, at(FOLDER_KIND, { inIdentityFolder: true }), grants('navigate')],
     ['member at an application\'s kind', member, at('ALPHA', { shareable: true }), NONE],
     // guest
     ['READ guest in a folder', guestAccessOf('READ'), at(FOLDER_KIND), grants('navigate')],
-    ['READ_WRITE guest in a folder', guestAccessOf('READ_WRITE'), at(FOLDER_KIND), grants('navigate', 'createFolder')],
-    ['READ_WRITE guest in an identity folder', guestAccessOf('READ_WRITE'), at(FOLDER_KIND, { inIdentityFolder: true }), grants('navigate')],
+    ['READ guest in a folder a folder holds', guestAccessOf('READ'), at(FOLDER_KIND, { parentKind: FOLDER_KIND }), grants('navigate')],
+    ['READ_WRITE guest at its link\'s root (parent above the link)', guestAccessOf('READ_WRITE'), at(FOLDER_KIND), grants('navigate', 'createFolder')],
+    ['READ_WRITE guest in a folder a folder holds: moves it', guestAccessOf('READ_WRITE'), at(FOLDER_KIND, { parentKind: FOLDER_KIND }), grants('navigate', 'createFolder', 'move')],
+    ['READ_WRITE guest in a folder a non-folder holds', guestAccessOf('READ_WRITE'), at(FOLDER_KIND, { parentKind: 'ALPHA' }), grants('navigate', 'createFolder')],
+    ['READ_WRITE guest in a folder at the scope root\'s top level (never the guest\'s)', guestAccessOf('READ_WRITE'), at(FOLDER_KIND, { parentKind: null }), grants('navigate', 'createFolder')],
+    ['READ_WRITE guest in an identity folder', guestAccessOf('READ_WRITE'), at(FOLDER_KIND, { inIdentityFolder: true, parentKind: FOLDER_KIND }), grants('navigate')],
+    ['WRITE_ONLY guest in a folder a folder holds', guestAccessOf('WRITE_ONLY'), at(FOLDER_KIND, { parentKind: FOLDER_KIND }), NONE],
     ['WRITE_ONLY guest in a folder (no such root)', guestAccessOf('WRITE_ONLY'), at(FOLDER_KIND), NONE],
     ['an unknown role', guestAccessOf('ADMIN'), at(FOLDER_KIND), NONE],
     ['a guest at the scope root (never there)', guestAccessOf('READ_WRITE'), at(null), NONE],
@@ -197,12 +225,17 @@ describe('folderCapabilities: core\'s fail-closed matrix', () => {
     expect(folderCapabilities(access, target)).toEqual(expected)
   })
 
-  it('never grants anything to a guest beyond navigate and create-folder, in any role or position', () => {
+  it('never grants anything to a guest beyond navigate, create-folder and a READ_WRITE move, in any role or position', () => {
     for (const role of ['READ', 'READ_WRITE', 'WRITE_ONLY', 'X']) {
       for (const kind of [null, FOLDER_KIND, 'ALPHA']) {
         for (const inIdentityFolder of [false, true]) {
-          const c = folderCapabilities(guestAccessOf(role), { kind, inIdentityFolder, shareable: true })
-          expect([c.rename, c.deleteNode, c.share, c.nodeTrash]).toEqual([false, false, false, false])
+          for (const parentKind of [undefined, null, FOLDER_KIND, 'ALPHA']) {
+            const c = folderCapabilities(guestAccessOf(role), { kind, inIdentityFolder, shareable: true, parentKind })
+            expect([c.rename, c.deleteNode, c.share, c.nodeTrash]).toEqual([false, false, false, false])
+            // a move only for READ_WRITE, only of a folder a folder holds, never in an identity folder (#358, #377 (a))
+            const mayMove = role === 'READ_WRITE' && kind === FOLDER_KIND && !inIdentityFolder && parentKind === FOLDER_KIND
+            expect(c.move, `${role} at ${kind} in ${parentKind}, identity ${inIdentityFolder}`).toBe(mayMove)
+          }
         }
       }
     }

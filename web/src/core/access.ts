@@ -82,6 +82,10 @@ export interface CapabilityTarget {
   /** Its kind's descriptor says it is shareable AND brings a share dialog (the registry's answer): a share capability
    *  needs it, so no view shows a share button whose dialog the host cannot mount. False at the scope root. */
   readonly shareable: boolean
+  /** The kind of its parent as the session reads it (inbox #358: a guest moves only what a `FOLDER` lets out, core's
+   *  `FolderGuestNodeRules`): null at the scope root (a member's top level); undefined where the session cannot read the
+   *  parent — the view's own root (a guest's share root, whose parent lies above the link) and the scope root itself. */
+  readonly parentKind?: NodeKind | null
 }
 
 /** A node as a tree source serves it: enough to navigate, bucket by kind and ask a capability. */
@@ -116,10 +120,14 @@ export interface TreeSource<N extends SourceNode = SourceNode> {
 export function targetOf(tree: TreeSource, node: { id: string; kind: NodeKind } | null): CapabilityTarget {
   if (!node) return { kind: null, inIdentityFolder: false, shareable: false }
   const info = registry.kind(node.kind)
+  const parentId = tree.node(node.id)?.parentId ?? null
   return {
     kind: node.kind,
     inIdentityFolder: tree.inIdentityFolder(node.id),
     shareable: info.supported && info.shareable && !!info.shareDialog,
+    // The view's root has no parent this session reads (a guest's served root carries `parentId` null, the scope root's
+    // marker — so the root is asked first); a parent the tree does not serve is unknown, never the scope root.
+    parentKind: node.id === tree.rootId ? undefined : parentId === null ? null : (tree.node(parentId)?.kind ?? undefined),
   }
 }
 
@@ -177,10 +185,12 @@ export interface FolderCapabilities {
   share: boolean
   /** Open the scope's node trash (its restore is a write). */
   nodeTrash: boolean
+  /** Move the folder on screen elsewhere (core's `MoveNodeDialog`, inbox #358). */
+  move: boolean
 }
 
 const NO_FOLDER_CAPABILITIES: FolderCapabilities = Object.freeze({
-  navigate: false, createFolder: false, rename: false, deleteNode: false, share: false, nodeTrash: false,
+  navigate: false, createFolder: false, rename: false, deleteNode: false, share: false, nodeTrash: false, move: false,
 })
 
 /**
@@ -190,10 +200,14 @@ const NO_FOLDER_CAPABILITIES: FolderCapabilities = Object.freeze({
  * - **Member:** everything, but no write during a pending deletion and no placement in a guest's identity folder (a
  *   member deletes there file by file — the application's section — never the folder's own rename/delete here). A
  *   share needs the instance's `publicLinks`, a shareable kind and a folder (none at the scope root, none of an identity
- *   folder); listing links is a read, so a pending deletion keeps it.
- * - **Guest `READ`:** navigate. **`READ_WRITE`:** navigate, and create a folder (core's `FolderGuestNodeRules`), not in
- *   an identity folder. Rename and move are allowed by the server but offered nowhere yet (inbox #358); a guest deletes
- *   no node (ADR 0080 decision 6). **`WRITE_ONLY`:** nothing — no folder is a `WRITE_ONLY` root (`ShareRoots`).
+ *   folder); listing links is a read, so a pending deletion keeps it. A folder moves — a guest's identity folder too:
+ *   a member's move OUT of a drop box is the one placement it takes (ADR 0080 decision 11, inbox #377 (a)); nothing
+ *   moves INTO one (the move dialog offers no such destination, the server refuses it).
+ * - **Guest `READ`:** navigate. **`READ_WRITE`:** navigate, create a folder (core's `FolderGuestNodeRules`), and move the
+ *   folder on screen when a `FOLDER` holds it — never the link's root (its parent lies above the link), never in or of
+ *   an identity folder (only a member moves out of a drop box, inbox #377 (a)). Rename is the server's but offered
+ *   nowhere yet; a guest deletes no node (ADR 0080 decision 6). **`WRITE_ONLY`:** nothing — no folder is a
+ *   `WRITE_ONLY` root (`ShareRoots`).
  */
 export function folderCapabilities(access: Access, at: CapabilityTarget): FolderCapabilities {
   if (at.kind !== FOLDER_KIND && !(at.kind === null && access.mode === 'member')) return NO_FOLDER_CAPABILITIES
@@ -208,6 +222,7 @@ export function folderCapabilities(access: Access, at: CapabilityTarget): Folder
       deleteNode: write && folder,
       share: access.publicLinks && at.shareable && folder && !at.inIdentityFolder,
       nodeTrash: !access.readonly && !at.inIdentityFolder,
+      move: !access.readonly && folder,
     }
   }
   if (access.mode === 'guest') {
@@ -215,7 +230,12 @@ export function folderCapabilities(access: Access, at: CapabilityTarget): Folder
       case 'READ':
         return { ...NO_FOLDER_CAPABILITIES, navigate: true }
       case 'READ_WRITE':
-        return { ...NO_FOLDER_CAPABILITIES, navigate: true, createFolder: !at.inIdentityFolder }
+        return {
+          ...NO_FOLDER_CAPABILITIES,
+          navigate: true,
+          createFolder: !at.inIdentityFolder,
+          move: at.kind === FOLDER_KIND && !at.inIdentityFolder && at.parentKind === FOLDER_KIND,
+        }
       default:
         return NO_FOLDER_CAPABILITIES
     }

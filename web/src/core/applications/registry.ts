@@ -132,6 +132,18 @@ export interface KindDescriptor {
   /** The share management dialog of a node of this kind (props `NodeShareDialogProps`, emits `close`). Omitted: the
    *  kind offers no share, whatever `shareable` says. FOLDER's is core's own `FolderShareDialog`, pre-registered. */
   shareDialog?: Component
+  /** Where a node of this kind may be placed (inbox #358; read through {@link Registry.placementAllows}): at the scope
+   *  root (`root`) and/or directly in a parent of one of `parents`. A HINT mirroring the server's `NodeKindRules` for the
+   *  kind, so core's move dialog offers only destinations the server would take; the server stays the authority (its
+   *  `illegal_structure` is explained by name when the two disagree). Omitted: the move dialog offers no destination for
+   *  a node of the kind (fail closed). */
+  placement?: KindPlacement
+}
+
+/** Where a kind may live in the tree ({@link KindDescriptor.placement}). */
+export interface KindPlacement {
+  root: boolean
+  parents: readonly NodeKind[]
 }
 
 /** A kind's level section: the component, where it sorts among the sections, and the presentations it switches between
@@ -179,6 +191,9 @@ export interface NodeDetailProps {
 export interface NodeDetailEmits {
   rename: []
   delete: []
+  /** Move `node` (the opened node, or a child the detail lists — a drop box's guest folder): the host mounts core's
+   *  `MoveNodeDialog` for it (inbox #358). */
+  move: [node: TreeNode]
   createChild: [kind: NodeKind]
   openNode: [node: TreeNode]
   share: []
@@ -209,6 +224,8 @@ export interface LevelSectionEmits {
   openNode: [node: TreeNode]
   create: [kind: NodeKind]
   rename: [node: TreeNode]
+  /** A child moved elsewhere (inbox #358): the host mounts core's `MoveNodeDialog` for it. */
+  move: [node: TreeNode]
 }
 
 /** What the host hands a kind's `createDialog`: the kind to create (one component may serve several kinds), the scope,
@@ -327,6 +344,9 @@ export interface Registry {
    *  registered: the server stores any kind, and a token must still be computable for it). Every slug token is
    *  derived through this, so a node's token always uses ITS kind's folding (`core/node/tree.ts` `slugTokenFor`). */
   slugFor(kind: NodeKind, name: string): string
+  /** Whether a node of `kind` may be placed in a parent of `parentKind` (null: the scope root), by the kind's
+   *  `placement` hint — false for a kind that declares none or nobody registered (fail closed). */
+  placementAllows(kind: NodeKind, parentKind: NodeKind | null): boolean
   /** The items of a list slot, sorted by `order` (stable); empty when nobody added one (the shell renders nothing). */
   slotItems(slot: ListSlotName): readonly SlotItem[]
   /** The level sections, one per distinct section component, sorted by `order` (stable: a tie keeps the order in which
@@ -342,7 +362,11 @@ const LIST_SLOTS: readonly string[] = ['topbarTray', 'sidebarPins'] satisfies re
  *  The app uses the single `registry` below; tests build their own to prove the rules on an untouched instance. */
 export function createRegistry(): Registry {
   const kinds = new Map<NodeKind, KindDescriptor>([
-    [FOLDER_KIND, { kind: FOLDER_KIND, icon: 'pi pi-folder', shareable: true, shareDialog: FolderShareDialog, nounWithArticle: 'node.aFolder' }],
+    // A folder lives at the root or in another folder (the server's `FolderNodeRules`).
+    [FOLDER_KIND, {
+      kind: FOLDER_KIND, icon: 'pi pi-folder', shareable: true, shareDialog: FolderShareDialog, nounWithArticle: 'node.aFolder',
+      placement: { root: true, parents: [FOLDER_KIND] },
+    }],
   ])
   const lists = new Map<ListSlotName, { id: string; component: Component; order: number }[]>()
   const lifecycles = new Map<string, LifecycleHooks>()
@@ -410,6 +434,11 @@ export function createRegistry(): Registry {
     },
     slugFor(kind, name) {
       return (kinds.get(kind)?.slug ?? slugify)(name)
+    },
+    placementAllows(kind, parentKind) {
+      const p = kinds.get(kind)?.placement
+      if (!p) return false
+      return parentKind === null ? p.root : p.parents.includes(parentKind)
     },
     sections: () => sortedSections(sections),
   }
