@@ -683,7 +683,7 @@ def forge_fourth_blob_reference_arm(root: pathlib.Path) -> str:
         """)))
     (root / BANNER_MIGRATION).write_text(textwrap.dedent("""\
         -- A guard-gap probe: the SQL half of a fourth arm referencing veyq_blob.
-        ALTER TABLE veyq_scope ADD COLUMN banner_blob_id VARCHAR(36) NULL;
+        ALTER TABLE veyq_scope ADD COLUMN banner_blob_id UUID NULL;
         ALTER TABLE veyq_scope ADD CONSTRAINT fk_scope_banner_blob
             FOREIGN KEY (banner_blob_id) references veyq_blob (id);
         """))
