@@ -4,6 +4,7 @@ import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
 import io.restassured.response.Response
+import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -87,15 +88,18 @@ class IdBoundarySliceTest {
     @Test
     fun aClientMintedBlobAndOwnerIdThatIsNoUuidIsInvalidRequest() {
         val path = "/api/scopes/${space.scopeId}/blob-uploads-batch"
-        fun item(blobId: String, ownerId: String) =
-            """{"items":[{"blobId":"$blobId","ownerId":"$ownerId","role":"FILE_CONTENT","chunkCount":1,"byteSize":10,"wrappedBlobKey":"YQ=="}]}"""
-        assertEquals(400, send("POST", path, item("not-a-uuid", UUID.randomUUID().toString())).statusCode, "blobId")
-        assertEquals(400, send("POST", path, item(UUID.randomUUID().toString(), "not-a-uuid")).statusCode, "ownerId")
+        fun start(declaration: String) = send("POST", path, """{"items":[$declaration]}""")
+        // The control, so the 400s below are the ids': the same declaration with UUIDs is not a 400.
+        assertEquals(200, start(TestBlob.SMALL.declare("d3JhcA==")).statusCode, "the control: UUIDs start an upload")
+        assertEquals(400, start(TestBlob.SMALL.declare("d3JhcA==", blobId = "not-a-uuid")).statusCode, "blobId")
+        assertEquals(400, start(TestBlob.SMALL.declare("d3JhcA==", ownerId = "not-a-uuid")).statusCode, "ownerId")
     }
 
     @Test
     fun anIdInAListThatIsNoUuidIsInvalidRequest() {
-        val response = send("POST", "/api/scopes/${space.scopeId}/blob-downloads-batch", """{"items":[{"blobId":"not-a-uuid"}]}""")
+        val path = "/api/scopes/${space.scopeId}/blob-downloads-batch"
+        assertEquals(200, send("POST", path, """{"items":[{"blobId":"${UUID.randomUUID()}"}]}""").statusCode, "the control")
+        val response = send("POST", path, """{"items":[{"blobId":"not-a-uuid"}]}""")
         assertEquals(400, response.statusCode, response.asString())
     }
 

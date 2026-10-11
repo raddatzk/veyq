@@ -38,12 +38,12 @@ class FilesStore(private val blobs: BlobUploadStore) {
         val nodeIds = NodeEntity.getEntityManager()
             .createQuery(
                 "select n.id from NodeEntity n where n.scopeId = ?1 and n.parentId = ?2 and n.kind = ?3 " +
-                    "and n.deletedAt is null order by n.id",
+                    "and n.deletedAt is null",
                 String::class.java,
             )
             .setParameter(1, scopeId).setParameter(2, parentSlot).setParameter(3, FilesNodeKinds.FILE)
             .resultList
-        return withBlobs(nodeIds)
+        return withBlobs(nodeIds.sorted()) // by the text, not the column: a UUID column orders by its own segments
     }
 
     /**
@@ -56,12 +56,12 @@ class FilesStore(private val blobs: BlobUploadStore) {
         val nodeIds = NodeEntity.getEntityManager()
             .createQuery(
                 "select n.id from NodeEntity n where n.scopeId = ?1 and n.id in ?2 and n.kind = ?3 " +
-                    "and n.deletedAt is null order by n.id",
+                    "and n.deletedAt is null",
                 String::class.java,
             )
             .setParameter(1, scopeId).setParameter(2, liveNodeIds).setParameter(3, FilesNodeKinds.FILE)
             .resultList
-        return withBlobs(nodeIds)
+        return withBlobs(nodeIds.sorted())
     }
 
     /** [nodeIds] (files, in order) each paired with its slot's blob: two reads bounded by the ids. */

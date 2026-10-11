@@ -520,7 +520,14 @@ class TasksStore {
         val jobs = JobEntity.find("id in ?1", hits.map { it.second }.toSet()).list().associateBy { it.id }
         val covering = hits.mapNotNull { (rotator, jobId) -> jobs[jobId]?.let { rotator to it } }
             .groupBy({ (rotator, job) -> job.scopeId to rotator }, { it.second })
-            .mapValues { (_, candidates) -> candidates.maxBy { it.createdAt } }
+            // `created_at` is second-precision on MariaDB, so a dead-letter and the re-queue after it can tie: the
+            // live job is the newer one (every later event joined it), then the id, so no engine's row order decides.
+            .mapValues { (_, candidates) ->
+                candidates.maxWith(
+                    compareBy<JobEntity>({ it.createdAt }, { it.status == JobEntity.PENDING || it.status == JobEntity.LEASED })
+                        .thenBy { it.id },
+                )
+            }
         val scopes = covering.keys.map { it.first }.toSet()
         val members = MembershipEntity.find("scopeId in ?1", scopes).list().groupBy { it.scopeId }
         val epochs = ScopeEntity.find("id in ?1", scopes).list().associate { it.id to it.currentEpoch }
