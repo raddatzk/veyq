@@ -23,6 +23,10 @@ applied both baselines, every `:core` class failed Flyway's validate on the Memo
 (`FlywayValidateException`, 1 failed, 245 skipped). So the container holds a fresh database per project
 ([database_of]) and each project runs in its own Gradle invocation, pointed at its own.
 
+**Also the schema check.** The default run adds `*EntitySchemaValidationTest` ([schema_classes]): Hibernate's own
+`validate` of every entity against the migrated MariaDB schema (a `UUID` column an entity maps without
+`columnDefinition = "uuid"` is red there and in a dev boot's log, nowhere else).
+
 **What it never touches.** The owner's dev database (`veyq-mariadb`, port 3306). The container here has its own
 name, binds a free 127.0.0.1 port, is created fresh per run (`--rm`, a fresh database each time) and is stopped
 in a `finally`. Its image is read from `infra/docker-compose.yml`, so the pin has one home.
@@ -80,6 +84,18 @@ def race_classes() -> list[str]:
             found.append(f"*{f.stem}")
     if not found:
         sys.exit("no race test class found — refusing to report a run of nothing")
+    return found
+
+
+def schema_classes() -> list[str]:
+    """The schema-validation classes (`*EntitySchemaValidationTest`, one per project that holds entities): Hibernate's
+    `validate` against what Flyway built. They are no race, but the default run is the one place the production engine
+    is asked whether an entity still matches its column (H2 names column types differently, and `%prod` runs
+    `schema-management.strategy=none`, so a drift would otherwise show only as an ERROR in a dev boot)."""
+    found = [f"*{f.stem}" for f in backend_tree.kotlin_files(backend_tree.test_roots())
+             if f.stem.endswith("EntitySchemaValidationTest")]
+    if not found:
+        sys.exit("no EntitySchemaValidationTest found — the engine's schema check would silently not run")
     return found
 
 
@@ -168,7 +184,7 @@ def start(image: str, port: int, databases: list[str]) -> None:
 
 
 def main(argv: list[str]) -> int:
-    filters = [argv[i + 1] for i, a in enumerate(argv) if a == "--tests" and i + 1 < len(argv)] or race_classes()
+    filters = [argv[i + 1] for i, a in enumerate(argv) if a == "--tests" and i + 1 < len(argv)] or race_classes() + schema_classes()
     by_project = project_filters(filters)
     for project in sorted(by_project):
         print(f"{project}: {' '.join(by_project[project])}", flush=True)
