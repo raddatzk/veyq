@@ -149,7 +149,9 @@ here; the server is blind.
   selection on a name, e.g. a file's before its extension — and its `section` of the folder level view —
   `{ order, component, views? }`; the level view is core's, `core/node/LevelView.vue`: its toolbar (the space's trash, and
   the view switch over the union of the shown sections' `views` and the folders' grid and list — `core/node/levelViews.ts`,
-  inbox #370; no section draws a toggle), the folder's overview card (core's `NodeOverviewCard`, which an application's
+  inbox #370; no section draws a toggle; the level shows the stored mode only where that union offers it, else the grid,
+  without rewriting the stored preference, and hands that mode to every section as `LevelSectionProps.viewMode` — a
+  section never reads `useViewMode`, inbox #404), the folder's overview card (core's `NodeOverviewCard`, which an application's
   container detail opens with too — the drop box), the
   sections sorted by `order`, a fallback section for a child whose kind no section serves, then the sub-folders; kinds
   naming the same component share one section, rendered once with the children of all of them, and naming it with two
@@ -173,7 +175,7 @@ here; the server is blind.
   `onMasterKeyRotated` — `rotateKeys` refuses to start when none is registered, because material sealed under the
   Master Key (Memories' pins) is otherwise undecryptable after a rotation. A kind or share nobody registered renders
   an explicit unsupported/unavailable state, never an empty region. **Who looks** (inbox #401, `core/access.ts`): a
-  `detail` (`NodeDetailProps`) and a `section` (`LevelSectionProps`) are handed `access` — `Access`, a member
+  `detail` (`NodeDetailProps`) and a `section` (`LevelSectionProps`, which also carries the level's `viewMode`) are handed `access` — `Access`, a member
   (`scopeId`, `epochs`, `readonly` = pending deletion, the instance's `publicLinks`/`uploaderLinks`) or a share guest
   (`shareId`, `role`, `head`, `pwToken`, `fragmentKey`, `requestGuest`, `reload` — `guestAccess`, built by
   `views/ShareView.vue`, which owns the re-resolve after a guest's write and the page's one naming flow, core's `core/sharing/GuestNaming.vue` with its "Not you?"; every naming place uses that one
