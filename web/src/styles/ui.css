@@ -574,6 +574,44 @@
   margin-bottom: -0.75rem;
 }
 
+/* The level view's application tabs (inbox #348): the Memory detail's tab look (`.memory-tabs`) in core's own classes,
+   colours only from `--app-*` tokens (they carry the dark theme), so no dark twin. The row scrolls sideways instead of
+   wrapping on a narrow screen. */
+.veyq-level-tabs {
+  min-width: 0;
+  margin-bottom: -0.5rem;
+}
+.veyq-level-tabs .p-tablist-tab-list {
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-bottom: 1px solid var(--app-line);
+  background: transparent;
+  scrollbar-width: thin;
+}
+.veyq-level-tabs .p-tab {
+  position: relative;
+  flex: 0 0 auto;
+  min-width: max-content;
+}
+.veyq-level-tabs .p-tab:focus {
+  outline: 0 !important;
+}
+.veyq-level-tabs .p-tab:focus-visible {
+  z-index: 1;
+  box-shadow: inset 0 3px 0 var(--app-focus) !important;
+}
+.veyq-level-tabs .p-tab.p-tab-active,
+.veyq-level-tabs .p-tab[data-p-active='true'] {
+  color: var(--app-accent);
+  font-weight: 800;
+}
+.veyq-level-tabs .p-tab:not(.p-tab-active):not([data-p-active='true']):hover {
+  color: var(--app-text);
+}
+.veyq-level-tabs .p-tablist-active-bar {
+  background: var(--app-accent);
+}
+
 .veyq-level-grid.is-list {
   grid-template-columns: 1fr;
   gap: 0.4rem;

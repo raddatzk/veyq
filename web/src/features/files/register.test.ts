@@ -30,7 +30,7 @@ describe('registerFiles', () => {
       renameSelectionEnd: fileNameStemEnd,
       emptyInTrash: 'files.trashEmpty',
       nounWithArticle: 'files.aFile',
-      section: { order: 20, component: FilesSection },
+      section: { order: 20, component: FilesSection, tabLabel: 'files.title' },
       placement: { root: true, parents: [FOLDER_KIND] },
     })
   })
@@ -73,7 +73,7 @@ describe('registerFiles', () => {
       deleteTitle: 'files.dropBox.delete',
       deleteCopy: 'files.dropBox.deleteConfirm',
       nounWithArticle: 'files.dropBox.aDropBox',
-      section: { order: 21, component: DropBoxSection },
+      section: { order: 21, component: DropBoxSection, tabLabel: 'files.dropBox.section' },
       createDialog: DropBoxCreateDialog,
       shareDialog: DropBoxShareDialog,
       placement: { root: true, parents: [FOLDER_KIND] },
@@ -88,8 +88,8 @@ describe('registerFiles', () => {
     const file = registry.kind(FILE_KIND)
     expect(file.supported && file.createDialog).toBeUndefined() // a file is created by uploading it, never by a name dialog
     expect(registry.sections()).toEqual([
-      { component: FilesSection, order: 20, views: [], kinds: [FILE_KIND] },
-      { component: DropBoxSection, order: 21, views: [], kinds: [DROPBOX_KIND] },
+      { component: FilesSection, order: 20, views: [], tabLabel: 'files.title', kinds: [FILE_KIND] },
+      { component: DropBoxSection, order: 21, views: [], tabLabel: 'files.dropBox.section', kinds: [DROPBOX_KIND] },
     ])
     for (const slot of ['topbarTray', 'sidebarPins'] as const) expect(registry.slotItems(slot)).toEqual([])
     expect(registry.shareBody(FILE_KIND)).toBeNull() // no WRITE_ONLY link on a file: core's page serves every file link

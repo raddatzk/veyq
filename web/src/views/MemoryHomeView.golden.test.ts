@@ -18,6 +18,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
+import PrimeVue from 'primevue/config'
 
 vi.mock('leaflet', () => ({ default: {} }))
 const fixed = vi.hoisted(() => ({
@@ -66,6 +67,7 @@ import { MEMORY_KIND, CHAPTER_KIND } from '../features/memory/kinds'
 import { sealNodeMeta, type RawNodeMeta } from '../features/memory/nodeMeta'
 import type { TreeNode } from '../core/node/tree'
 import { setViewMode, type ViewMode } from '../shared/state/useViewMode'
+import { setLevelTab } from '../shared/state/useLevelTab'
 import { capabilityState } from '../shared/state/capabilities'
 import { SHARING_PUBLIC_LINKS } from '../features/platform/capabilities'
 import * as v1 from '@veyq/crypto/v1'
@@ -127,7 +129,7 @@ async function golden(hash: string, mode: ViewMode = 'grid'): Promise<string> {
   await router.replace({ name: 'home', hash })
   await router.isReady()
   const w = mount(MemoryHomeView, {
-    global: { plugins: [router, realI18n()], directives: { tooltip: {} }, stubs: { SpaceMap: SpaceMapStub } },
+    global: { plugins: [router, realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { SpaceMap: SpaceMapStub } },
   })
   await flushPromises()
   return serializeDom(w.element)
@@ -145,6 +147,7 @@ beforeEach(() => {
 })
 afterEach(() => {
   setViewMode('grid')
+  setLevelTab('all')
   vi.restoreAllMocks()
 })
 
@@ -168,9 +171,9 @@ describe('the Memories level view (golden)', () => {
   it('control: the level view renders the real Memories section registration, then Files\'', () => {
     // Memories names the grid, the list and its map as its presentations (inbox #370): core's level toolbar offers them.
     expect(registry.sections().map((s) => ({ ...s, views: s.views.map((v) => v.mode) }))).toEqual([
-      { component: MemoriesSection, order: 10, views: ['grid', 'list', 'map'], kinds: [MEMORY_KIND, CHAPTER_KIND] },
-      { component: FilesSection, order: 20, views: [], kinds: [FILE_KIND] },
-      { component: DropBoxSection, order: 21, views: [], kinds: [DROPBOX_KIND] },
+      { component: MemoriesSection, order: 10, views: ['grid', 'list', 'map'], tabLabel: 'memory.memories', kinds: [MEMORY_KIND, CHAPTER_KIND] },
+      { component: FilesSection, order: 20, views: [], tabLabel: 'files.title', kinds: [FILE_KIND] },
+      { component: DropBoxSection, order: 21, views: [], tabLabel: 'files.dropBox.section', kinds: [DROPBOX_KIND] },
     ])
   })
 

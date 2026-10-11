@@ -35,7 +35,7 @@ export function registerMemories(registry: Registry): void {
   // Both name the one section (rendered once, handed the children of both; a CHAPTER sits only inside a MEMORY, so at a
   // folder level that is the Memories). `order` 10 leaves room on either side for another application's section.
   // Its `views`: the card grid, its list variant and the places map (inbox #370) — core's level toolbar offers them.
-  const section = { order: 10, component: MemoriesSection, views: [GRID_VIEW, LIST_VIEW, MAP_VIEW] }
+  const section = { order: 10, component: MemoriesSection, views: [GRID_VIEW, LIST_VIEW, MAP_VIEW], tabLabel: 'memory.memories' }
   // One create dialog and one share dialog serve both kinds: the create's `kind` prop picks Memory or chapter, the
   // share dialog reads `nodeKind` for its wording. Core's delete dialog titles each by its own noun (`deleteTitle`):
   // "Delete Memory", "Delete chapter".

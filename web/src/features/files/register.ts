@@ -65,7 +65,7 @@ export function registerFiles(registry: Registry): void {
     emptyInTrash: 'files.trashEmpty',
     // Core's create and rename dialogs name a colliding file with it: "There is already a file named …" (#389).
     nounWithArticle: 'files.aFile',
-    section: { order: FILES_SECTION_ORDER, component: FilesSection },
+    section: { order: FILES_SECTION_ORDER, component: FilesSection, tabLabel: 'files.title' },
     // Where it may be moved (core's move dialog, inbox #358): the backend's `FilesNodeKindRules`.
     placement: FILES_PLACEMENT,
   })
@@ -80,7 +80,7 @@ export function registerFiles(registry: Registry): void {
     // …and its sentence names what goes with it: the guests' folders, and the links that stop taking files (#395).
     deleteCopy: 'files.dropBox.deleteConfirm',
     nounWithArticle: 'files.dropBox.aDropBox',
-    section: { order: DROPBOX_SECTION_ORDER, component: DropBoxSection },
+    section: { order: DROPBOX_SECTION_ORDER, component: DropBoxSection, tabLabel: 'files.dropBox.section' },
     createDialog: DropBoxCreateDialog,
     shareDialog: DropBoxShareDialog,
     placement: FILES_PLACEMENT,

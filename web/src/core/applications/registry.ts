@@ -29,10 +29,11 @@
 // level's toolbar, core's, offers their union with the folders' grid and list (inbox #370) — no section draws a toggle. Several kinds may name the SAME component (Memories: MEMORY and CHAPTER): a section is keyed
 // by its component's identity, rendered once, and handed the children of every kind that names it (in the order the
 // kinds were registered). `sections()` lists them sorted by `order`, a tie in the order the section was first named.
-// Two kinds naming one component with two different `order`s or `views` is a contradiction, so that `registerKind` throws (and
+// Two kinds naming one component with two different `order`s, `views` or `tabLabel`s is a contradiction, so that `registerKind` throws (and
 // registers nothing). A child whose kind no section serves — registered without one, or not registered at all — is
 // not dropped: the level view renders core's fallback section for it (its icon, its name, the explicit unsupported
-// state), never an empty area.
+// state), never an empty area. A section's `tabLabel` (an i18n key of its application) puts it on the level view's tab
+// bar (`core/node/levelTabs.ts`); a section without one shows in the `All` tab only.
 //
 // **Who looks (`core/access.ts`).** A `detail` and a `section` are handed `access` (a member, or a share guest)
 // and `tree` (the tree as that session reads it), and offer what their application's fail-closed capability function
@@ -162,6 +163,9 @@ export interface KindSection {
   order: number
   component: Component
   views?: readonly LevelViewOption[]
+  /** The i18n key of the section's TAB on the level view's tab bar (`core/node/levelTabs.ts`): the application's own
+   *  word, as a kind's noun is (core names none). Omitted: the section has no tab and shows in the `All` tab only. */
+  tabLabel?: string
 }
 
 /** A level section as the level view renders it: the component, its order, its presentations (`[]`: one), and every
@@ -170,6 +174,8 @@ export interface LevelSection {
   component: Component
   order: number
   views: readonly LevelViewOption[]
+  /** The i18n key of its tab (`KindSection.tabLabel`); undefined: no tab. */
+  tabLabel?: string
   kinds: readonly NodeKind[]
 }
 
@@ -510,7 +516,7 @@ export function createRegistry(): Registry {
   }
 }
 
-type SectionEntry = { component: Component; order: number; views: readonly LevelViewOption[]; kinds: NodeKind[] }
+type SectionEntry = { component: Component; order: number; views: readonly LevelViewOption[]; tabLabel?: string; kinds: NodeKind[] }
 
 const modesOf = (views: readonly LevelViewOption[]) => views.map((v) => v.mode).join(', ')
 
@@ -526,16 +532,19 @@ function sectionJoin(list: SectionEntry[], kind: NodeKind, section: KindSection 
   if (shared && modesOf(shared.views) !== modesOf(views)) {
     throw new Error(`node kind ${kind} names the section of ${shared.kinds.join(', ')} with views [${modesOf(views)}], not [${modesOf(shared.views)}]`)
   }
+  if (shared && shared.tabLabel !== section.tabLabel) {
+    throw new Error(`node kind ${kind} names the section of ${shared.kinds.join(', ')} with tab label ${section.tabLabel}, not ${shared.tabLabel}`)
+  }
   return () => {
     if (shared) shared.kinds.push(kind)
-    else list.push({ component: section.component, order: section.order, views, kinds: [kind] })
+    else list.push({ component: section.component, order: section.order, views, tabLabel: section.tabLabel, kinds: [kind] })
   }
 }
 
 function sortedSections(list: readonly SectionEntry[]): LevelSection[] {
   return [...list]
     .sort((a, b) => a.order - b.order) // stable (ES2019): a tie keeps the order each section was first named
-    .map((s) => ({ component: s.component, order: s.order, views: [...s.views], kinds: [...s.kinds] }))
+    .map((s) => ({ component: s.component, order: s.order, views: [...s.views], tabLabel: s.tabLabel, kinds: [...s.kinds] }))
 }
 
 /** The app's registry, filled once by `registerApplications()` (web/src/applications.ts) before the first route
