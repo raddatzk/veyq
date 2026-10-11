@@ -12,6 +12,22 @@ div.veyq-node-host
           span.pi.pi-bars
         button.is-active.view-mode-button [aria-label="Map view"] [aria-pressed="true"]
           span.pi.pi-map
+    div.p-component.p-tabs.veyq-level-tabs
+      div.p-tablist
+        div.p-tablist-content.p-tablist-viewport
+          div.p-tablist-tab-list [role="tablist"] [aria-label="Applications"]
+            button.p-tab.p-tab-active [role="tab"]
+              "All"
+            button.p-tab [role="tab"]
+              "Memories"
+            button.p-tab [role="tab"]
+              "Files"
+            button.p-tab [role="tab"]
+              "Drop boxes"
+            span.p-tablist-active-bar [role="presentation"]
+        button.p-tablist-nav-button.p-tablist-next-button [aria-label="Next"]
+          svg.p-icon
+            path
     section.memory-section.veyq-section
       div.memory-section-header.veyq-section-header
         h2

@@ -34,20 +34,32 @@
 // section, fallback and the folders are this view's for a member and a guest alike, the guest's functions removed by the
 // capability functions and the sections' data sources.
 //
+// **Application tabs** (inbox #348): below the overview card a tab bar `All | <one tab per application section shown>`
+// (`levelTabs.ts`), only where two or more sections have a tab (`KindSection.tabLabel`, the application's own i18n key).
+// `All` is the whole level; an application tab shows only that section, over the CURRENT folder's children — a filter, no
+// subtree search — and the sub-folders stay in every tab. The shown tab is the one global preference
+// (`shared/state/useLevelTab`), used only where this level has it, else `All`, and never rewritten. The view switch
+// offers the presentations of what the tab shows. A guest gets the same bar (it is this view).
+//
 // In a guest's identity folder (a drop box's, inbox #385) a section, or the folders section, with nothing to show is
 // left out instead of saying "none yet" — nobody can add anything there, so an empty heading only says that this kind
 // exists. When nothing is left, the level says so once.
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
+import Tabs from 'primevue/tabs'
+import TabList from 'primevue/tablist'
+import Tab from 'primevue/tab'
 import type { TreeNode } from './tree'
 import type { Level } from './browse'
 import { FOLDER_KIND, type NodeKind } from './kind'
 import { registry } from '../applications/registry'
 import { folderCapabilities, targetOf, type Access, type TreeSource } from '../access'
 import { useViewMode } from '../../shared/state/useViewMode'
+import { setLevelTab, useLevelTab } from '../../shared/state/useLevelTab'
 import { compareByCreation, displayNamesOf } from './location'
 import { FOLDER_VIEWS, effectiveViewMode, unionViews } from './levelViews'
+import { ALL_TAB, effectiveTab, fallbacksVisible, sectionVisible, showTabBar, type LevelTab } from './levelTabs'
 import ViewModeToggle from './ViewModeToggle.vue'
 import NodeOverviewCard from './components/NodeOverviewCard.vue'
 
@@ -80,6 +92,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const { viewMode } = useViewMode()
+const { levelTab } = useLevelTab()
 
 const inIdentityFolder = computed(() => props.tree.inIdentityFolder(props.folder?.id ?? null))
 const caps = computed(() => folderCapabilities(props.access, targetOf(props.tree, props.folder)))
@@ -97,21 +110,31 @@ const sectionViews = computed(() =>
   sections
     .map((s) => ({
       key: s.kinds[0],
+      tabLabel: s.tabLabel,
       component: s.component,
       views: s.views,
       nodes: s.kinds.length === 1 ? (props.level.byKind.get(s.kinds[0]) ?? []) : s.kinds.flatMap((k) => props.level.byKind.get(k) ?? []),
     }))
     .filter((s) => !hideEmptySections.value || s.nodes.length > 0),
 )
+// The tab bar: one tab per shown section that has a label; the bar only where there is a choice (`showTabBar`).
+const tabs = computed<LevelTab[]>(() => sectionViews.value.flatMap((s) => (s.tabLabel ? [{ id: s.key, label: s.tabLabel }] : [])))
+const tabBar = computed(() => showTabBar(tabs.value))
+// The tab this level shows: the stored one where the bar has it, else `All`; the stored one is not touched.
+const shownTab = computed(() => effectiveTab(levelTab.value, tabs.value))
+const tabbedSections = computed(() => sectionViews.value.filter((s) => sectionVisible(shownTab.value, s.tabLabel ? s.key : undefined)))
+function onTab(value: string | number): void {
+  setLevelTab(String(value))
+}
 const showFolders = computed(() => !hideEmptySections.value || props.level.folders.length > 0)
 // The sub-folders' card labels: a repeated name numbered, in creation order — the rule the URL segments follow too.
 const folderLabels = computed(() => displayNamesOf(props.level.folders, (n) => n.name, compareByCreation))
 // The presentations of what is on screen, in the order first named; a switch only between two or more.
-const views = computed(() => unionViews([...sectionViews.value.map((s) => s.views), showFolders.value ? FOLDER_VIEWS : []]))
+const views = computed(() => unionViews([...tabbedSections.value.map((s) => s.views), showFolders.value ? FOLDER_VIEWS : []]))
 const showViews = computed(() => views.value.length > 1)
 // The mode this level shows: the stored one clamped to what is on screen (inbox #404); the stored one is not touched.
 const mode = computed(() => effectiveViewMode(viewMode.value, views.value))
-const nothingShown = computed(() => hideEmptySections.value && !sectionViews.value.length && !fallbacks.value.length && !showFolders.value)
+const nothingShown = computed(() => hideEmptySections.value && !tabbedSections.value.length && !shownFallbacks.value.length && !showFolders.value)
 
 // The children no section serves, one bucket per kind, sorted by kind so the order is stable. A kind the registry
 // does not know at all still shows (with a generic icon): the server stores any kind.
@@ -124,6 +147,8 @@ const fallbacks = computed(() =>
       return { kind, icon: info.supported ? info.icon : 'pi pi-question-circle', nodes }
     }),
 )
+// The fallbacks belong to no application tab: only `All` shows them.
+const shownFallbacks = computed(() => (fallbacksVisible(shownTab.value) ? fallbacks.value : []))
 </script>
 
 <template>
@@ -159,9 +184,18 @@ const fallbacks = computed(() =>
       @delete="emit('deleteFolder')"
     />
 
+    <!-- The application tabs (inbox #348): a filter over this folder's children; real buttons (PrimeVue Tab), arrow keys
+         move between them. -->
+    <Tabs v-if="tabBar" :value="shownTab" class="veyq-level-tabs" @update:value="onTab">
+      <TabList :pt="{ tabList: { 'aria-label': t('node.tabs') } }">
+        <Tab :value="ALL_TAB">{{ t('node.tabAll') }}</Tab>
+        <Tab v-for="tab in tabs" :key="tab.id" :value="tab.id">{{ t(tab.label) }}</Tab>
+      </TabList>
+    </Tabs>
+
     <component
       :is="s.component"
-      v-for="s in sectionViews"
+      v-for="s in tabbedSections"
       :key="s.key"
       :folder="folder"
       :nodes="s.nodes"
@@ -177,7 +211,7 @@ const fallbacks = computed(() =>
 
     <!-- A kind no section serves: listed, never dropped, and said plainly that this client cannot show it. Not
          clickable — opening one lands on the host's same unsupported state. -->
-    <section v-for="b in fallbacks" :key="b.kind" class="veyq-section veyq-level-fallback">
+    <section v-for="b in shownFallbacks" :key="b.kind" class="veyq-section veyq-level-fallback">
       <div class="veyq-section-header">
         <h2>{{ b.kind }}</h2>
         <span>{{ b.nodes.length }}</span>

@@ -156,9 +156,11 @@ import { FILE_KIND } from '../features/files/kinds'
 import { capabilityState } from '../shared/state/capabilities'
 import { SHARING_PUBLIC_LINKS } from '../features/platform/capabilities'
 import { realI18n, t } from '../test/i18n'
+import PrimeVue from 'primevue/config'
 import { registry } from '../core/applications/registry'
 import { treeNode } from '../test/models'
 import { setViewMode, useViewMode } from '../shared/state/useViewMode'
+import { setLevelTab } from '../shared/state/useLevelTab'
 
 function node(over: Partial<TreeNode> & Pick<TreeNode, 'id' | 'kind'>): TreeNode {
   return treeNode({ parentId: null, orderIndex: 0, epoch: 0, name: over.id, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0, ...over })
@@ -175,7 +177,7 @@ async function mountAt(hash: string) {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'home', component: { template: '<div />' } }] })
   await router.replace({ name: 'home', hash })
   await router.isReady()
-  const wrapper = mount(MemoryHomeView, { global: { plugins: [router, realI18n()], directives: { tooltip: {} } } })
+  const wrapper = mount(MemoryHomeView, { global: { plugins: [router, realI18n(), PrimeVue], directives: { tooltip: {} } } })
   await flushPromises()
   return wrapper
 }
@@ -184,6 +186,7 @@ const folderCards = (w: Mounted) => w.findAll('button.veyq-folder-card').map((b)
 
 beforeEach(() => {
   setViewMode('grid')
+  setLevelTab('all')
   vi.mocked(listMyTenants).mockResolvedValue([])
   vi.mocked(isFavorite).mockReturnValue(false)
   treeStore.nodes = TREE.map((n) => ({ ...n }))

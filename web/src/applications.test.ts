@@ -58,9 +58,9 @@ describe('composition root', () => {
   it('gives the level view two sections: Memories\' for MEMORY and CHAPTER, then Files\' for FILE', () => {
     // Memories names the grid, the list and its map as its presentations (inbox #370): core's level toolbar offers them.
     expect(registry.sections().map((s) => ({ ...s, views: s.views.map((v) => v.mode) }))).toEqual([
-      { component: MemoriesSection, order: 10, views: ['grid', 'list', 'map'], kinds: [MEMORY_KIND, CHAPTER_KIND] },
-      { component: FilesSection, order: 20, views: [], kinds: [FILE_KIND] },
-      { component: DropBoxSection, order: 21, views: [], kinds: [DROPBOX_KIND] },
+      { component: MemoriesSection, order: 10, views: ['grid', 'list', 'map'], tabLabel: 'memory.memories', kinds: [MEMORY_KIND, CHAPTER_KIND] },
+      { component: FilesSection, order: 20, views: [], tabLabel: 'files.title', kinds: [FILE_KIND] },
+      { component: DropBoxSection, order: 21, views: [], tabLabel: 'files.dropBox.section', kinds: [DROPBOX_KIND] },
     ])
   })
 

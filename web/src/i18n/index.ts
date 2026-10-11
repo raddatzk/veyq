@@ -780,6 +780,9 @@ const en = {
     viewMode: 'View',
     viewGrid: 'Grid view',
     viewList: 'List view',
+    // The level view's application tabs (`core/node/LevelView.vue`, inbox #348): the tablist's name and the whole-level tab.
+    tabs: 'Applications',
+    tabAll: 'All',
     illegalStructure: 'That isn’t allowed here.',
     saveFailed: 'That didn’t work. Please try again.',
     // The delete dialog (core's `DeleteNodeDialog`): a folder's own title and copy; any other node's title is its kind's
@@ -2107,6 +2110,8 @@ const de: typeof en = {
     viewMode: 'Ansicht',
     viewGrid: 'Rasteransicht',
     viewList: 'Listenansicht',
+    tabs: 'Anwendungen',
+    tabAll: 'Alle',
     illegalStructure: 'Das ist hier nicht erlaubt.',
     saveFailed: 'Das hat nicht geklappt. Bitte versuche es erneut.',
     deleteFolderTitle: 'Ordner löschen',

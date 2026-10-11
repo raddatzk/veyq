@@ -25,6 +25,22 @@ div.veyq-node-host
               span.p-button-icon.pi.pi-file-export
             button.p-button.p-button-danger.p-button-icon-only.p-button-outlined.p-button-sm.p-component.veyq-danger-action.veyq-folder-overview-action.veyq-icon-button.veyq-prime-icon-button [aria-label="Delete"]
               span.p-button-icon.pi.pi-trash
+    div.p-component.p-tabs.veyq-level-tabs
+      div.p-tablist
+        div.p-tablist-content.p-tablist-viewport
+          div.p-tablist-tab-list [role="tablist"] [aria-label="Applications"]
+            button.p-tab.p-tab-active [role="tab"]
+              "All"
+            button.p-tab [role="tab"]
+              "Memories"
+            button.p-tab [role="tab"]
+              "Files"
+            button.p-tab [role="tab"]
+              "Drop boxes"
+            span.p-tablist-active-bar [role="presentation"]
+        button.p-tablist-nav-button.p-tablist-next-button [aria-label="Next"]
+          svg.p-icon
+            path
     section.memory-section.veyq-section
       div.memory-section-header.veyq-section-header
         h2

@@ -250,6 +250,18 @@ describe('registry: level sections', () => {
     expect(r.sections()).toEqual([{ component: Stub, order: 10, views: [], kinds: [MEMORY_KIND] }])
   })
 
+  // inbox #348: a section names its tab label (the application's own i18n key); one component has one tab.
+  it('carries a section\'s tab label, and refuses a kind naming a shared section with another one, registering nothing of it', () => {
+    const r = createRegistry()
+    r.registerKind({ kind: MEMORY_KIND, icon: 'x', shareable: true, section: { order: 10, component: Stub, tabLabel: 'x.tab' } })
+    r.registerKind({ kind: 'OTHER', icon: 'x', shareable: false, section: { order: 20, component: Other } })
+    expect(() => r.registerKind({ kind: CHAPTER_KIND, icon: 'x', shareable: true, section: { order: 10, component: Stub } }))
+      .toThrow(/CHAPTER names the section of MEMORY with tab label undefined, not x.tab/)
+    expect(r.kind(CHAPTER_KIND).supported).toBe(false)
+    r.registerKind({ kind: CHAPTER_KIND, icon: 'x', shareable: true, section: { order: 10, component: Stub, tabLabel: 'x.tab' } })
+    expect(r.sections().map((x) => x.tabLabel)).toEqual(['x.tab', undefined])
+  })
+
   // inbox #370: a section names its presentations; core's level toolbar offers them. One component renders one way.
   it('carries a section\'s views, and refuses a kind naming a shared section with other views, registering nothing of it', () => {
     const r = createRegistry()
