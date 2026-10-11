@@ -162,7 +162,13 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   by a new one, and an upgrade proof against a database of the release becomes possible.
   Column types: `TEXT` for opaque base64 (65 535 bytes on MariaDB, so a base64 cap must be ≤ 65 532 —
   guarded by `scripts/validate_maxlength_storage.py`), `MEDIUMTEXT` where a cap needs more (16 MiB), `VARCHAR`
-  for short. The test datasource runs H2 with **`MODE=MariaDB`** (`application-test.properties`) so it parses
+  for short, and **`UUID` (MariaDB's native type) for every id and id reference that is exactly a UUID** (inbox #387): the entities
+  keep `String id`, no converter. A non-UUID string is error 1292 on write and a silent miss on read, so an id enters only through a
+  `format: uuid` contract field (`scripts/validate_id_contract_format.py` holds it; `IdBoundarySliceTest` the wire) and a native `SELECT` of
+  one casts it to text (`CAST(t.id AS CHAR(36))`: a bare one is a `byte[]` on H2, measured). Never a sentinel id (`''`, `'system'`):
+  write the query without the clause. A share id, a composite key and `owner_key` are not UUIDs and stay `VARCHAR`.
+  A `UUID` column orders by its own segments, not by its text: sort ids in Kotlin where a text order is promised, and break a
+  `created_at` tie explicitly (second-precision on MariaDB). `python3 scripts/run_backend_races_on_mariadb.py --tests '*'` runs the whole suite on the real engine. The test datasource runs H2 with **`MODE=MariaDB`** (`application-test.properties`) so it parses
   what prod parses — a **parity** measure, not a workaround: a type-change is `MODIFY COLUMN` (MariaDB-only
   syntax; default-mode H2 rejects it, and there is no type-change form in the H2 ∩ MariaDB *default* subset).
   The mode does **not** make H2 enforce MariaDB's byte ceiling — that stays the guard's job; don't conflate them.
