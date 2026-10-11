@@ -84,11 +84,16 @@
   visible, core re-reads the level about every 15 s (jittered; doubling to 2 min after errors; at once when the tab
   becomes visible or focused; nothing while hidden or unmounted), so a share guest's upload or a peer's new Memory or
   folder appears without a reload — for a member (`MemoryHomeView`, one `listNodes` per tick) and a share guest
-  (`ShareView`, one `resolveShare` per tick) alike. No new endpoint: the existing list is re-read and compared by a
-  fingerprint of its ciphertext rows, and the page is only touched when something changed. A refresh never overwrites a
-  write of this tab (a read that began before the write's own re-read is dropped) and pauses while a dialog is open.
-  Files' section also re-reads its blob listing on each tick (an upload completes after its node is listed). A
-  Memory's own gallery has its own poll ([uc.memory.live-updates](uc.memory.live-updates.md)).
+  (`ShareView`, one `resolveShare` per tick) alike. Both reads are conditional ([ADR 0081](../../../decisions/0081-a-scopes-tree-revision-is-the-level-views-change-signal.md)):
+  the scope carries a tree revision, bumped in the transaction of every node create, rename, move, trash (a deleted
+  file included), restore and purge and every blob attached to or removed from a node (a file's upload or replace), and
+  an idle level is a `304` — nothing parsed, decrypted or compared. A guest's tag is a digest of what its link serves,
+  not that revision, so it never tells a guest when something outside the link changed. A `200` replaces the page's
+  tree only when the ciphertext rows' fingerprint differs. A refresh never overwrites a write of this tab (a read that
+  began before the write's own re-read is dropped) and pauses while a dialog is open. When the scope moved, Files'
+  section re-reads its blob listing (an upload completes after its node is listed); a `304` re-reads nothing. A guest
+  whose link was revoked, expired or deleted meets the same non-enumerable `404` as ever and the page shows its
+  unavailable state. A Memory's own gallery has its own poll ([uc.memory.live-updates](uc.memory.live-updates.md)).
 - **Display modes are a facet of browsing.** How the current level is shown — **grid / list / map** — is one
   persisted toggle per user of the browser (`useViewMode`, keyed like the tab: per account, one for the share guest; core's `ViewModeToggle` in the level view's toolbar, the map offered
   because Memories' section names it among its `views` — inbox #370), not a separate goal: grid/list shipped with

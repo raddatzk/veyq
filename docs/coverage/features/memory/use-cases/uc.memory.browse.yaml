@@ -36,14 +36,37 @@ acceptanceCriteria:
           - src/core/node/LevelView.tabs.test.ts
           - src/core/applications/registry.test.ts
   - id: level-live-refresh
-    text: An open folder level (member and share guest) re-reads itself about every 15 s while its tab is visible — jittered, backing off on errors, at once on visibility/focus, nothing while hidden or after unmount, paused while a dialog is open — and shows what others changed without a reload; a read that began before a write's own re-read is dropped, an unchanged read leaves the page alone, and Files re-reads its blob listing on each tick (inbox #408).
+    text: An open folder level (member and share guest) re-reads itself about every 15 s while its tab is visible — jittered, backing off on errors, at once on visibility/focus, nothing while hidden or after unmount, paused while a dialog is open — and shows what others changed without a reload; a read that began before a write's own re-read is dropped, an unchanged read leaves the page alone, and Files re-reads its blob listing when the scope moved (inbox #408). The read is conditional (ADR 0081) — the scope's tree revision as the member listing's ETag, bumped in the transaction of every node create, rename, move, trash, restore, purge and every blob attached or removed; a digest of what the link serves as the guest's, never that revision — so an idle level is a 304 that does no work, and a guest whose link was revoked sees the unavailable state.
     coverage:
+      backend:
+        integration:
+          - TreeRevisionCoreSliceTest.anUnchangedScopeAnswers304WithNoBodyAndAChangedOneA200WithTheNewTag
+          - TreeRevisionCoreSliceTest.createMovesItOnce
+          - TreeRevisionCoreSliceTest.aRenameMovesIt
+          - TreeRevisionCoreSliceTest.aMoveMovesIt
+          - TreeRevisionCoreSliceTest.aMetaWriteMovesIt
+          - TreeRevisionCoreSliceTest.aTrashMovesIt
+          - TreeRevisionCoreSliceTest.aRestoreMovesIt
+          - TreeRevisionCoreSliceTest.thePurgeOfAnExpiredSubtreeMovesIt
+          - TreeRevisionCoreSliceTest.aFirstAttachAReplaceAndADetachEachMoveIt
+          - TreeRevisionCoreSliceTest.aGuestsCreateAndPlacementMoveIt
+          - TreeRevisionCoreSliceTest.aRefusedWriteMovesNothing
+          - TreeRevisionCoreSliceTest.aNonMemberIs404WhateverItEchoes
+          - TreeRevisionCoreSliceTest.aChangeOutsideTheSharedSubtreeDoesNotMoveAGuestsTag
+          - TreeRevisionCoreSliceTest.aRevokedOrUnknownLinkIs404ForAPollingGuest
+          - TreeRevisionRaceCoreSliceTest.createsRacingForAScopesFirstBumpAllCount
+          - FilesTreeRevisionSliceTest.aMembersFirstUploadAReplaceAndAFileDeleteEachMoveIt
+          - FilesTreeRevisionSliceTest.aGuestsIdentityFolderAndItsUploadMoveIt
+          - FilesTreeRevisionSliceTest.anUploadMovesAGuestsResolveTagThoughNoNodeRowChanged
+          - TreeRevisionBumpsTest.everyListedWriterBumps
       web:
         unit:
           - src/shared/state/livePoller.test.ts
           - src/views/MemoryHomeView.live.test.ts
           - src/views/ShareView.live.test.ts
           - src/features/files/components/FilesSection.test.ts
+          - src/core/node/treeConditional.wire.test.ts
+          - src/core/sharing/pollPublicShare.wire.test.ts
   - id: create-folder-and-memory
     text: Creating a folder/Memory seals the name + blinded slug under the parent's key (K_SC at the scope root) and POSTs only ciphertext (every node births its random key, wrapped under the same parent key).
     coverage:

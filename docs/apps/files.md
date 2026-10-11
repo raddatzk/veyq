@@ -68,6 +68,13 @@
   and keys come from core's node listing; the client joins by `nodeId`. `404 node_not_found` for a parent that is no live node of the scope.
 - **A download** is core's `presignBlobDownloads` with the blob id (scope READ). **Delete** is core's node delete
   (trash). **Replace** is another `completeFile` with the blob the client read.
+- **Live.** An open Files level learns of a peer's file without a reload from core's conditional node listing
+  ([ADR 0081](../decisions/0081-a-scopes-tree-revision-is-the-level-views-change-signal.md)). Files writes no revision of
+  its own: a `FILE` created or deleted (trashed) is a node change, and `completeFile` — member or guest, first upload or
+  replace — is `AttachmentStore.attach`, which bumps the scope's tree revision in the transaction that fills the slot.
+  An upload completing changes no node row, so the level's section answers a *moved* poll (`liveTick`) by re-reading
+  `listFiles`, and answers nothing to a `304`. A guest's `resolveShare` tag covers the attachments of the served nodes
+  for the same reason.
 
 Backend: `me.raddatz.veyq.files.content` — `FilesResource`/`FilesHandler` (the scope-access gate first), core's
 dispatcher to `FilesUploadCompletion` (`UploadCompletion` for `FILE`, maps the item's `expectedBlobId` payload onto
