@@ -42,6 +42,9 @@ export interface MemoryCapabilities {
   rename: boolean
   /** Delete the node on screen (into the scope's trash). */
   deleteNode: boolean
+  /** Move the node on screen elsewhere (core's `MoveNodeDialog`, inbox #358): a Memory to the root or a folder, a chapter
+   *  into another Memory (the kinds' `placement`, the backend's `MemoryNodeKindRules`). */
+  move: boolean
   /** The node's media trash (restore, purge). */
   mediaTrash: boolean
   /** The contributions organizer (buckets: create, rename, move media). */
@@ -63,6 +66,7 @@ export const NO_MEMORY_CAPABILITIES: Readonly<MemoryCapabilities> = Object.freez
   shareUpload: false,
   rename: false,
   deleteNode: false,
+  move: false,
   mediaTrash: false,
   buckets: false,
 })
@@ -106,6 +110,7 @@ function memberCapabilities(readonly: boolean, publicLinks: boolean, uploaderLin
     setCover: write,
     rename: write,
     deleteNode: write,
+    move: write,
   }
 }
 
@@ -115,14 +120,22 @@ function guestCapabilities(role: string, at: CapabilityTarget): MemoryCapabiliti
       if (isLevel(at.kind)) return at.kind === FOLDER_KIND ? { ...NO_MEMORY_CAPABILITIES, navigate: true } : NO_MEMORY_CAPABILITIES
       return isMemoriesNode(at.kind) ? { ...NO_MEMORY_CAPABILITIES, navigate: true, download: true } : NO_MEMORY_CAPABILITIES
     case 'READ_WRITE':
-      // A folder link's contributor creates a Memory under a folder (core's `FolderGuestNodeRules`); a Memory or chapter
-      // link's, nothing of the tree (Memories declares no `GuestNodeRules`). Uploads go into the Memory or chapter on
-      // screen (`nodeId`), deletes reach its own media only.
+      // A folder link's contributor creates a Memory under a folder (core's `FolderGuestNodeRules`) and moves one a folder
+      // holds between the subtree's folders; a Memory or chapter link's, nothing of the tree (Memories declares no
+      // `GuestNodeRules`, so nothing moves out of or into a Memory, and the link's root has no parent the guest reads).
+      // Uploads go into the Memory or chapter on screen (`nodeId`), deletes reach its own media only.
       if (isLevel(at.kind)) {
         return at.kind === FOLDER_KIND ? { ...NO_MEMORY_CAPABILITIES, navigate: true, createMemory: !at.inIdentityFolder } : NO_MEMORY_CAPABILITIES
       }
       return isMemoriesNode(at.kind)
-        ? { ...NO_MEMORY_CAPABILITIES, navigate: true, download: true, upload: true, deleteMedia: 'own' }
+        ? {
+            ...NO_MEMORY_CAPABILITIES,
+            navigate: true,
+            download: true,
+            upload: true,
+            deleteMedia: 'own',
+            move: at.kind === MEMORY_KIND && at.parentKind === FOLDER_KIND && !at.inIdentityFolder,
+          }
         : NO_MEMORY_CAPABILITIES
     case 'WRITE_ONLY':
       // The drop: no key below the root, so nothing to open or download; it sends into the root and removes its own.

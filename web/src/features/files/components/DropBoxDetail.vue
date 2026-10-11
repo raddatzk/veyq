@@ -19,6 +19,11 @@
 // guest's Files source carries no delete, and the matrix grants a guest no share and no delete either: it opens a
 // folder (core's folder page, read-only inside an identity folder) and downloads there — no send form (that is the
 // WRITE_ONLY guest's own page, `DropBoxGuestForm`), nothing deleted or moved; the server refuses each to every guest.
+//
+// **A member moves a guest's folder out** (inbox #358, ADR 0080 decision 11 — the one placement an identity folder takes):
+// the row's move asks the host for core's `MoveNodeDialog`, which asks first (the folder becomes an ordinary one, its
+// guest can add nothing more, and nothing moves back in) and offers only places outside every drop box. The drop box
+// itself moves from the header card. A guest's source carries no move here (a drop box is read-only for it, #380).
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
@@ -50,7 +55,12 @@ const source: FilesSource = guest
       if (a.mode !== 'guest') throw new Error('a guest view was handed a member access')
       return a
     })
-  : memberFilesSource({ scopeId: () => props.scopeId, epochs: () => props.epochs, keyOf: (id) => props.tree.keyOf(id) })
+  : memberFilesSource({
+      scopeId: () => props.scopeId,
+      epochs: () => props.epochs,
+      keyOf: (id) => props.tree.keyOf(id),
+      move: (node) => emit('move', node),
+    })
 const caps = computed(() => sourceCapabilities(filesCapabilities(props.access, targetOf(props.tree, props.node)), source))
 
 /** The guests' folders, each with its display name (a repeated name numbered) and its file count. */
@@ -96,10 +106,12 @@ async function removeFolder(folder: TreeNode, label: string) {
       :name="node.name"
       :share="caps.share"
       :remove="caps.deleteNode"
+      :move="caps.moveNode"
       :share-label="t('files.dropBox.share')"
       :delete-label="t('files.dropBox.delete')"
       @share="emit('share')"
       @delete="emit('delete')"
+      @move="source.move?.(node)"
     />
     <section class="veyq-section dropbox-detail">
       <div class="veyq-section-header">
@@ -119,6 +131,18 @@ async function removeFolder(folder: TreeNode, label: string) {
             </span>
           </button>
           <span class="veyq-action-group veyq-action-group-icons">
+            <Button
+              v-if="caps.moveFile"
+              v-tooltip.bottom="t('files.dropBox.moveFolder', { name: row.label })"
+              type="button"
+              class="veyq-icon-button veyq-prime-icon-button"
+              icon="pi pi-file-export"
+              :aria-label="t('files.dropBox.moveFolder', { name: row.label })"
+              severity="secondary"
+              outlined
+              size="small"
+              @click="source.move?.(row.folder)"
+            />
             <Button
               v-if="caps.deleteFile"
               type="button"

@@ -79,6 +79,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   toggleFavorite: []
   rename: []
+  move: []
   delete: []
   openChapter: [node: TreeNode]
   createChapter: []
@@ -499,6 +500,17 @@ watch(
           severity="secondary"
           text
           @click="$emit('rename')"
+        />
+        <!-- Core's move dialog (inbox #358): a Memory to the root or a folder, a chapter into another Memory. -->
+        <Button
+          v-if="can.move"
+          v-tooltip.bottom="t('node.move.action')"
+          type="button"
+          :aria-label="t('node.move.action')"
+          icon="pi pi-file-export"
+          severity="secondary"
+          text
+          @click="$emit('move')"
         />
         <Button
           v-if="can.deleteNode"

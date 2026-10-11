@@ -25,7 +25,20 @@ describe('registerFiles', () => {
       emptyInTrash: 'files.trashEmpty',
       nounWithArticle: 'files.aFile',
       section: { order: 20, component: FilesSection },
+      placement: { root: true, parents: [FOLDER_KIND] },
     })
+  })
+
+  // inbox #358: core's move dialog mirrors the backend's `FilesNodeKindRules` — the root or a folder, never a file or a
+  // drop box (which take no placed child), never another application's kind.
+  it('places a file and a drop box at the root or in a folder only', () => {
+    const registry = createRegistry()
+    registerFiles(registry)
+    for (const kind of [FILE_KIND, DROPBOX_KIND]) {
+      expect(registry.placementAllows(kind, null), `${kind} at the root`).toBe(true)
+      expect(registry.placementAllows(kind, FOLDER_KIND), `${kind} in a folder`).toBe(true)
+      for (const parent of [FILE_KIND, DROPBOX_KIND, 'MEMORY']) expect(registry.placementAllows(kind, parent), `${kind} in ${parent}`).toBe(false)
+    }
   })
 
   it('folds a file name case-insensitively and keeps its punctuation', () => {
@@ -57,6 +70,7 @@ describe('registerFiles', () => {
       section: { order: 21, component: DropBoxSection },
       createDialog: DropBoxCreateDialog,
       shareDialog: DropBoxShareDialog,
+      placement: { root: true, parents: [FOLDER_KIND] },
     })
     expect(registry.shareBody(DROPBOX_KIND)).toBe(DropBoxShareBody)
     expect(registry.slugFor(DROPBOX_KIND, 'Foto.JPG')).toBe(slugify('Foto.JPG')) // a container's folding

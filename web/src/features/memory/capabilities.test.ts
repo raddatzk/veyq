@@ -22,7 +22,7 @@ const WO = guestAccessOf('WRITE_ONLY')
 /** A member on an opened Memory or chapter, as the detail has always offered it (cr-0049 … cr-0113). */
 const MEMBER_ON_NODE: Grant = {
   navigate: true, download: true, upload: true, deleteMedia: 'any', editMeta: true, setCover: true, favorite: true, mark: true,
-  share: true, shareUpload: true, rename: true, deleteNode: true, mediaTrash: true, buckets: true,
+  share: true, shareUpload: true, rename: true, deleteNode: true, move: true, mediaTrash: true, buckets: true,
 }
 
 const rows: [string, Access, CapabilityTarget, Grant][] = [
@@ -49,8 +49,12 @@ const rows: [string, Access, CapabilityTarget, Grant][] = [
   // --- guest READ_WRITE ---
   ['READ_WRITE guest in a folder: creates a Memory', RW, at(FOLDER_KIND), { navigate: true, createMemory: true }],
   ['READ_WRITE guest in an identity folder', RW, at(FOLDER_KIND, { inIdentityFolder: true }), { navigate: true }],
-  ['READ_WRITE guest on a Memory: uploads, deletes its own', RW, at(MEMORY_KIND), { navigate: true, download: true, upload: true, deleteMedia: 'own' }],
+  ['READ_WRITE guest on a Memory link\'s root: uploads, deletes its own, no move', RW, at(MEMORY_KIND), { navigate: true, download: true, upload: true, deleteMedia: 'own' }],
+  ['READ_WRITE guest on a Memory a folder holds: moves it (#358)', RW, at(MEMORY_KIND, { parentKind: FOLDER_KIND }), { navigate: true, download: true, upload: true, deleteMedia: 'own', move: true }],
   ['READ_WRITE guest on a chapter', RW, at(CHAPTER_KIND), { navigate: true, download: true, upload: true, deleteMedia: 'own' }],
+  ['READ_WRITE guest on a chapter of a Memory: Memories declares no GuestNodeRules', RW, at(CHAPTER_KIND, { parentKind: MEMORY_KIND }), { navigate: true, download: true, upload: true, deleteMedia: 'own' }],
+  ['READ guest on a Memory a folder holds: no move', READ, at(MEMORY_KIND, { parentKind: FOLDER_KIND }), { navigate: true, download: true }],
+  ['WRITE_ONLY guest on a Memory a folder holds: no move', WO, at(MEMORY_KIND, { parentKind: FOLDER_KIND }), { upload: true, deleteMedia: 'own' }],
   // --- guest WRITE_ONLY ---
   ['WRITE_ONLY guest on a Memory: sends, removes its own, reads nothing', WO, at(MEMORY_KIND), { upload: true, deleteMedia: 'own' }],
   ['WRITE_ONLY guest on a chapter', WO, at(CHAPTER_KIND), { upload: true, deleteMedia: 'own' }],
@@ -86,6 +90,24 @@ describe('memoryCapabilities: member-only functions', () => {
           const c = memoryCapabilities(guestAccessOf(role), { kind, inIdentityFolder, shareable: true })
           for (const k of MEMBER_ONLY) expect(c[k], `${role} at ${kind}: ${k}`).toBe(false)
           expect(c.deleteMedia, `${role} at ${kind}`).not.toBe('any')
+        }
+      }
+    }
+  })
+})
+
+// inbox #358: a guest moves only a Memory a folder of its subtree holds — never a chapter (Memories declares no
+// `GuestNodeRules`, so nothing leaves a Memory), never the link's root (its parent lies above the link: unknown).
+describe('memoryCapabilities: a guest\'s move', () => {
+  it('only READ_WRITE, only a Memory, only out of a folder, never in an identity folder', () => {
+    for (const role of ['READ', 'READ_WRITE', 'WRITE_ONLY', 'X']) {
+      for (const kind of [null, FOLDER_KIND, MEMORY_KIND, CHAPTER_KIND, FILE]) {
+        for (const parentKind of [undefined, null, FOLDER_KIND, MEMORY_KIND]) {
+          for (const inIdentityFolder of [false, true]) {
+            const c = memoryCapabilities(guestAccessOf(role), { kind, inIdentityFolder, shareable: true, parentKind })
+            const may = role === 'READ_WRITE' && kind === MEMORY_KIND && parentKind === FOLDER_KIND && !inIdentityFolder
+            expect(c.move, `${role} at ${kind} in ${parentKind}, identity ${inIdentityFolder}`).toBe(may)
+          }
         }
       }
     }
