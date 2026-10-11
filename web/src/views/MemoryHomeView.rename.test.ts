@@ -1,0 +1,221 @@
+// @vitest-environment happy-dom
+// A member's rename through the personal-space host, over the REAL registry (Memories and Files, as `main.ts` fills it),
+// the real router, PrimeVue, core's real level view, overview card and name dialog — every step a DOM click. The position
+// lives in the #fragment as a slug path derived from the names (ADR 0015), so a rename of the node on screen changes its
+// own path — and a restore of an older sibling of one plain segment renumbers it: the URL must follow it, or the old path
+// resolves to nothing and the view collapses to the scope root (found by the read-only assessment of inbox #328). The
+// writes are recorders (`renameNode`, `restoreNode`; their wire is `core/node/tree.wire.test.ts`'s) and the re-read is
+// `loadTree`'s stub. Only the heavy Memories views and Files' file list are stubs exposing the events the host listens to.
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { mount, flushPromises } from '@vue/test-utils'
+import { createRouter, createMemoryHistory, type Router } from 'vue-router'
+import PrimeVue from 'primevue/config'
+
+vi.mock('../app/activeSpace', async () => {
+  const { reactive } = await import('vue')
+  return {
+    activeSpace: reactive({
+      status: 'ready', scopeId: 'scope-1', tenantId: 't-1', kind: 'PERSONAL', name: null, epoch: 0,
+      deletedAt: null, purgeAfter: null, trustRefusal: null,
+    }),
+    enterScope: vi.fn(async () => {}),
+    activeEpochKeys: () => ({ current: 0, keys: new Map([[0, new Uint8Array(32).fill(1)]]) }),
+  }
+})
+vi.mock('../features/memory/favoritesStore', () => ({
+  favoritesStore: { loaded: true, ids: new Set<string>() }, loadFavoritesFor: vi.fn(), isFavorite: vi.fn(), toggleFavorite: vi.fn(),
+}))
+vi.mock('../features/spaces/scopes', () => ({ listMyTenants: vi.fn() }))
+const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), showUndo: vi.fn(), dismissUndo: vi.fn() }))
+vi.mock('../shared/state/useToast', () => ({ useToast: () => toast }))
+vi.mock('../core/node/treeStore', async () => {
+  const { reactive } = await import('vue')
+  return { treeStore: reactive({ nodes: [], loaded: true, error: false }), loadTree: vi.fn(async () => {}), patchNodeMeta: vi.fn() }
+})
+vi.mock('../core/node/tree', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../core/node/tree')>()),
+  renameNode: vi.fn(async () => {}),
+  listTrash: vi.fn(async () => []),
+  restoreNode: vi.fn(async () => {}),
+  nodeContentKey: () => new Uint8Array(32).fill(9),
+}))
+vi.mock('../core/sharing/manageShares', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../core/sharing/manageShares')>()),
+  resealShareNames: vi.fn(async () => ({ resealed: [], failed: [], skipped: [] })),
+}))
+vi.mock('../features/memory/components/MemoryDetail.vue', async () => {
+  const { defineComponent, h } = await import('vue')
+  return {
+    default: defineComponent({
+      name: 'MemoryDetailStub',
+      props: ['node', 'scopeId', 'memoryKey', 'scopeKey', 'personalScope', 'favorite', 'chapters', 'caps', 'source'],
+      emits: ['rename'],
+      setup: (p, { emit }) => () =>
+        h('div', { class: 'detail-stub' }, [h('h1', p.node.name), h('button', { class: 'detail-rename', onClick: () => emit('rename') }, 'rename')]),
+    }),
+  }
+})
+vi.mock('../features/memory/components/MemoriesSection.vue', async () => {
+  const { defineComponent, h } = await import('vue')
+  return { default: defineComponent({ props: ['folder', 'nodes', 'epochs', 'access', 'tree', 'viewMode'], setup: () => () => h('section', { class: 'memories-stub' }) }) }
+})
+vi.mock('../features/files/components/FilesSection.vue', async () => {
+  const { defineComponent, h } = await import('vue')
+  return {
+    default: defineComponent({
+      props: ['folder', 'nodes', 'epochs', 'access', 'tree', 'viewMode'],
+      emits: ['rename'],
+      setup: (p, { emit }) => () => h('section', { class: 'files-stub' },
+        (p.nodes as { id: string; name: string }[]).map((n) => h('button', { class: 'file-rename', 'data-id': n.id, onClick: () => emit('rename', n) }, n.name))),
+    }),
+  }
+})
+
+import MemoryHomeView from './MemoryHomeView.vue'
+import { treeStore, loadTree } from '../core/node/treeStore'
+import { renameNode, listTrash, restoreNode, type TreeNode, type TrashedNode } from '../core/node/tree'
+import { FOLDER_KIND } from '../core/node/kind'
+import { MEMORY_KIND } from '../features/memory/kinds'
+import { FILE_KIND } from '../features/files/kinds'
+import { realI18n, t } from '../test/i18n'
+import { treeNode } from '../test/models'
+import { listMyTenants } from '../features/spaces/scopes'
+import { isFavorite } from '../features/memory/favoritesStore'
+
+const node = (id: string, kind: string, parentId: string | null, name: string, createdAt: number): TreeNode =>
+  treeNode({ id, kind, name, parentId, createdAt })
+// Trips/ ─ x.y (a file, the older)   Rome/ ─ Forum/   Italy (a Memory)   Archive/
+const TREE = (): TreeNode[] => [
+  node('trips', FOLDER_KIND, null, 'Trips', 1), node('xy', FILE_KIND, 'trips', 'x.y', 2), node('rome', FOLDER_KIND, 'trips', 'Rome', 3),
+  node('forum', FOLDER_KIND, 'rome', 'Forum', 4), node('italy', MEMORY_KIND, 'trips', 'Italy', 5), node('archive', FOLDER_KIND, null, 'Archive', 6),
+]
+/** What the next re-read of the tree holds once the server took the write (`renames`: node id → its new name). The write
+ *  itself (`renameNode`, `restoreNode`) leaves the loaded tree alone, as the real one does: only the re-read changes it. */
+function reReadBrings(change: (nodes: TreeNode[]) => TreeNode[]) {
+  vi.mocked(loadTree).mockImplementationOnce(async () => {
+    treeStore.nodes = change(treeStore.nodes)
+  })
+}
+const serverRenames = (renames: Record<string, string>) =>
+  reReadBrings((nodes) => nodes.map((n) => (renames[n.id] ? { ...n, name: renames[n.id] } : n)))
+
+let router: Router
+async function mountAt(hash: string) {
+  router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'home', component: { template: '<div />' } }] })
+  await router.replace({ name: 'home', hash })
+  await router.isReady()
+  const w = mount(MemoryHomeView, { attachTo: document.body, global: { plugins: [router, realI18n(), PrimeVue], directives: { tooltip: {} } } })
+  await flushPromises()
+  return w
+}
+async function click(el: Element) {
+  el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
+  await flushPromises()
+}
+const byLabel = (label: string) => [...document.body.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.getAttribute('aria-label') === label)
+const heading = () => document.body.querySelector('.veyq-folder-overview-card h2')?.textContent ?? null
+/** Type the new name into core's open name dialog and press its Save. */
+async function renameTo(name: string) {
+  const input = document.body.querySelector<HTMLInputElement>('.veyq-form input')!
+  input.value = name
+  input.dispatchEvent(new Event('input', { bubbles: true }))
+  await flushPromises()
+  await click([...document.body.querySelectorAll('.veyq-form button')].find((b) => b.textContent?.trim() === t('common.save'))!)
+}
+
+beforeEach(() => {
+  document.body.innerHTML = ''
+  vi.mocked(listMyTenants).mockResolvedValue([])
+  vi.mocked(isFavorite).mockReturnValue(false)
+  treeStore.nodes = TREE()
+  vi.mocked(renameNode).mockReset()
+  vi.mocked(restoreNode).mockReset()
+  vi.mocked(loadTree).mockReset()
+})
+
+describe('a member renames the node on screen', () => {
+  it('a nested folder from its overview card: the view stays on it and the fragment becomes its new path, no history entry', async () => {
+    await mountAt('#~me/trips/rome')
+    expect(heading()).toBe('Rome')
+    const push = vi.spyOn(router, 'push')
+    await click(byLabel(t('node.rename'))!)
+    serverRenames({ rome: 'Roma Antica' })
+    await renameTo('Roma Antica')
+    expect(renameNode).toHaveBeenCalledWith('scope-1', expect.anything(), expect.any(Array), 'rome', 'Roma Antica')
+    expect(loadTree).toHaveBeenCalled()
+    expect(router.currentRoute.value.hash, 'the folder on screen is followed to its new path').toBe('#~me/trips/roma-antica')
+    expect(heading(), 'still on the renamed folder, not the scope root').toBe('Roma Antica')
+    expect(push, 'the same logical position: replaced, not pushed').not.toHaveBeenCalled()
+  })
+
+  it('an opened Memory from its detail: the detail stays open under the new path', async () => {
+    await mountAt('#~me/trips/italy')
+    await click(document.body.querySelector('.detail-rename')!)
+    serverRenames({ italy: 'Italia' })
+    await renameTo('Italia')
+    expect(router.currentRoute.value.hash).toBe('#~me/trips/italia')
+    expect(document.body.querySelector('.detail-stub h1')?.textContent).toBe('Italia')
+  })
+
+  it('a name that numbers against an older sibling of the same plain segment resolves to its numbered segment', async () => {
+    // the file `x.y` and the folder `X.Y` fold differently by kind (no collision), but share the URL segment `x-y`:
+    // the older file keeps it, the renamed folder is `x-y-2`
+    await mountAt('#~me/trips/rome')
+    await click(byLabel(t('node.rename'))!)
+    serverRenames({ rome: 'X.Y' })
+    await renameTo('X.Y')
+    expect(router.currentRoute.value.hash).toBe('#~me/trips/x-y-2')
+    expect(heading()).toBe('X.Y')
+  })
+})
+
+describe('a rename that changes an ancestor of the open node', () => {
+  // This host renames only the node on screen (its card or detail) or a row of the level on screen, so an ancestor of
+  // the open node is never the one renamed HERE; the re-read tree can still carry one renamed elsewhere (another device
+  // of the member, another member). The URL is rebuilt from the whole re-read path, not patched at the renamed segment.
+  it('the re-read tree also brings an ancestor\'s new name: the fragment is the open node\'s whole new path', async () => {
+    await mountAt('#~me/trips/rome/forum')
+    await click(byLabel(t('node.rename'))!)
+    serverRenames({ forum: 'Foro', trips: 'Travel' })
+    await renameTo('Foro')
+    expect(router.currentRoute.value.hash).toBe('#~me/travel/rome/foro')
+    expect(heading()).toBe('Foro')
+  })
+})
+
+// A node keeps its creation instant through a trash and a restore, so an older sibling that comes back takes its birth
+// place among the siblings of one plain segment and shifts the later ones' (`location.ts` `segmentsOf`): the same
+// collapse, reached through the space's trash.
+describe('a restore that renumbers an ancestor of the open node', () => {
+  it('the older sibling comes back: the fragment follows the open node to its renumbered path', async () => {
+    // the folder `x-y` and the file `x.y` fold differently by kind (they coexist) but share the URL segment `x-y`
+    treeStore.nodes = [
+      node('trips', FOLDER_KIND, null, 'Trips', 1), node('xyfolder', FOLDER_KIND, 'trips', 'x-y', 5), node('deep', FOLDER_KIND, 'xyfolder', 'Deep', 6),
+    ]
+    const trashed: TrashedNode = {
+      id: 'xyfile', parentId: 'trips', kind: FILE_KIND, epoch: 0, placementVersion: 0, name: 'x.y',
+      deletedAt: new Date(0), purgeAfter: new Date(0),
+    } as TrashedNode
+    vi.mocked(listTrash).mockResolvedValueOnce([trashed]).mockResolvedValue([])
+    reReadBrings((nodes) => [...nodes, node('xyfile', FILE_KIND, 'trips', 'x.y', 2)])
+    await mountAt('#~me/trips/x-y/deep')
+    expect(heading()).toBe('Deep')
+    await click([...document.body.querySelectorAll('button')].find((b) => b.textContent?.trim() === t('node.trash.open'))!)
+    await click([...document.body.querySelectorAll('.trash-row button')].find((b) => b.textContent?.trim() === t('node.trash.restore'))!)
+    expect(restoreNode).toHaveBeenCalled()
+    expect(router.currentRoute.value.hash).toBe('#~me/trips/x-y-2/deep')
+    expect(heading()).toBe('Deep')
+  })
+})
+
+describe('a rename of a row on the level', () => {
+  it('leaves the level where it is', async () => {
+    await mountAt('#~me/trips')
+    await click(document.body.querySelector('.file-rename[data-id="xy"]')!)
+    serverRenames({ xy: 'notes.txt' })
+    await renameTo('notes.txt')
+    expect(renameNode).toHaveBeenCalledWith('scope-1', expect.anything(), expect.any(Array), 'xy', 'notes.txt')
+    expect(router.currentRoute.value.hash).toBe('#~me/trips')
+    expect(heading()).toBe('Trips')
+  })
+})
