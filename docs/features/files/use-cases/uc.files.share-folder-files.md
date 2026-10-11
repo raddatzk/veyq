@@ -65,6 +65,7 @@ du den Link abschaltest.
 
 ## Related
 
+- End-user view (wiki): [Sharing with people who have no account](../../../../wiki/en/sharing.md)
 - **Feature:** [files](../_index.md); the application's description [docs/apps/files.md](../../../apps/files.md).
 - **Use-cases:** [uc.files.member-files](uc.files.member-files.md),
   [uc.sharing.share-contributor](../../sharing/use-cases/uc.sharing.share-contributor.md) (core's link, gate and guest
