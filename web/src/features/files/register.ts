@@ -77,4 +77,8 @@ export function registerFiles(registry: Registry): void {
     placement: FILES_PLACEMENT,
   })
   registry.claimShareBody(DROPBOX_KIND, DropBoxShareBody)
+  // Files is the one application with NO route segment (inbox #328, ADR 0015 amendment): a file or a drop box is its plain
+  // name in the path (`#reisen/report`), a folder of the same name needs the trailing slash (`#reisen/report/`). Declared,
+  // not defaulted, so the registry knows it was chosen — and no second application can choose it too.
+  registry.claimNoRouteSegment([FILE_KIND, DROPBOX_KIND])
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { defineComponent } from 'vue'
-import { createRegistry, type LifecycleHooks } from './registry'
+import { createRegistry, RESERVED_ROUTE_SEGMENTS, type LifecycleHooks } from './registry'
 import { FOLDER_KIND, type NodeKind } from '../node/kind'
 import { GRID_VIEW, LIST_VIEW } from '../node/levelViews'
 import { MEMORY_KIND, CHAPTER_KIND } from '../../features/memory/kinds'
@@ -371,5 +371,66 @@ describe('registry: lifecycle hooks', () => {
     r.registerLifecycle('a', hooks())
     expect(() => r.scopeReset()).not.toThrow()
     await expect(r.scopeEntered('s1')).resolves.toBeUndefined()
+  })
+})
+
+// Inbox #328: an application claims its URL route slug once (ADR 0015); Files declares it has none.
+describe('registry: route slugs', () => {
+  it('maps the claimed kinds to their application\'s slug and group, a folder and the rest to none', () => {
+    const r = createRegistry()
+    r.claimRouteSlug('memories', [MEMORY_KIND, CHAPTER_KIND])
+    r.claimNoRouteSegment(['FILE', 'FILES_DROPBOX'])
+    expect(r.routeOf(MEMORY_KIND)).toEqual({ slug: 'memories', group: 'app:memories' })
+    expect(r.routeOf(CHAPTER_KIND)).toEqual({ slug: 'memories', group: 'app:memories' })
+    expect(r.routeOf('FILE')).toEqual({ slug: null, group: 'none' })
+    expect(r.routeOf('FILES_DROPBOX')).toEqual(r.routeOf('FILE'))
+    expect(r.routeOf(FOLDER_KIND)).toEqual({ slug: null, group: 'folder' })
+    // a kind nobody claimed has no segment and numbers among the plain names of the segment-less application
+    expect(r.routeOf('FUTURE')).toEqual({ slug: null, group: 'none' })
+    expect(r.routeSlugs()).toEqual(['memories'])
+  })
+
+  it('is write-once: a second claim of a slug throws and keeps the first', () => {
+    const r = createRegistry()
+    r.claimRouteSlug('memories', [MEMORY_KIND])
+    expect(() => r.claimRouteSlug('memories', ['OTHER'])).toThrow(/already claimed/)
+    expect(r.routeOf('OTHER').slug).toBeNull()
+    expect(r.routeOf(MEMORY_KIND).slug).toBe('memories')
+  })
+
+  it('refuses a kind claimed twice (also under another slug), FOLDER, and an empty claim — and registers nothing then', () => {
+    const r = createRegistry()
+    r.claimRouteSlug('memories', [MEMORY_KIND])
+    expect(() => r.claimRouteSlug('other', [MEMORY_KIND])).toThrow(/already claimed/)
+    expect(() => r.claimNoRouteSegment([MEMORY_KIND])).toThrow(/already claimed/)
+    expect(() => r.claimRouteSlug('folders', [FOLDER_KIND])).toThrow(/platform/)
+    expect(() => r.claimNoRouteSegment([FOLDER_KIND])).toThrow(/platform/)
+    expect(() => r.claimRouteSlug('empty', [])).toThrow(/no node kind/)
+    // an atomic claim: one bad kind among good ones claims none
+    expect(() => r.claimRouteSlug('mixed', ['A', MEMORY_KIND])).toThrow()
+    expect(r.routeOf('A').slug).toBeNull()
+    expect(r.routeSlugs()).toEqual(['memories'])
+    r.claimRouteSlug('mixed', ['A']) // the slug stayed free
+  })
+
+  it('lets one application declare it has no segment — a second one cannot share the plain names', () => {
+    const r = createRegistry()
+    r.claimNoRouteSegment(['FILE'])
+    expect(() => r.claimNoRouteSegment(['INVOICE'])).toThrow(/no route segment/)
+    expect(r.routeOf('INVOICE')).toEqual({ slug: null, group: 'none' }) // unclaimed, but only as any unknown kind is
+  })
+
+  it('refuses a slug that is no slug, and the words the platform keeps', () => {
+    const r = createRegistry()
+    for (const bad of ['', 'Memories', 'a b', '-a', 'a-', 'a--b', '1a', 'a/b', '~me', '@g', 'a%2Fb']) {
+      expect(() => r.claimRouteSlug(bad, [`K${bad.length}`]), bad).toThrow(/not a slug/)
+    }
+    expect(RESERVED_ROUTE_SEGMENTS.length).toBeGreaterThan(0)
+    for (const word of RESERVED_ROUTE_SEGMENTS) {
+      expect(() => r.claimRouteSlug(word, ['K']), word).toThrow(/reserved/)
+    }
+    // the platform's history-mode routes are among them
+    for (const word of ['login', 'settings', 'invitations', 's', 'api']) expect(RESERVED_ROUTE_SEGMENTS).toContain(word)
+    expect(r.routeSlugs()).toEqual([])
   })
 })
