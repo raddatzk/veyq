@@ -71,10 +71,11 @@ vi.mock('../features/memory/components/MemoriesSection.vue', async () => {
   return {
     default: defineComponent({
       name: 'MemoriesSectionStub',
-      props: ['folder', 'nodes', 'epochs', 'access', 'tree'],
+      props: ['folder', 'nodes', 'epochs', 'access', 'tree', 'viewMode'],
       emits: ['openNode', 'create'],
       setup: (p) => () => h('section', {
         class: 'section-stub', 'data-readonly': String(!memoryCapabilities(p.access, targetOf(p.tree, p.folder)).createMemory),
+        'data-view': p.viewMode,
       },
         `folder=${p.folder?.name ?? '-'}|memories=${p.nodes.map((n: { name: string }) => n.name).join(',')}`),
     }),
@@ -87,10 +88,11 @@ vi.mock('../features/files/components/FilesSection.vue', async () => {
   return {
     default: defineComponent({
       name: 'FilesSectionStub',
-      props: ['folder', 'nodes', 'epochs', 'access', 'tree'],
+      props: ['folder', 'nodes', 'epochs', 'access', 'tree', 'viewMode'],
       emits: ['openNode', 'create', 'rename'],
       setup: (p) => () => h('section', {
         class: 'files-stub', 'data-deletable': String(filesCapabilities(p.access, targetOf(p.tree, p.folder)).deleteFile),
+        'data-view': p.viewMode,
       }, `files=${p.nodes.map((n: { name: string }) => n.name).join(',')}`),
     }),
   }
@@ -152,6 +154,7 @@ import { SHARING_PUBLIC_LINKS } from '../features/platform/capabilities'
 import { realI18n, t } from '../test/i18n'
 import { registry } from '../core/applications/registry'
 import { treeNode } from '../test/models'
+import { setViewMode, useViewMode } from '../shared/state/useViewMode'
 
 function node(over: Partial<TreeNode> & Pick<TreeNode, 'id' | 'kind'>): TreeNode {
   return treeNode({ parentId: null, orderIndex: 0, epoch: 0, name: over.id, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0, ...over })
@@ -176,6 +179,7 @@ type Mounted = Awaited<ReturnType<typeof mountAt>>
 const folderCards = (w: Mounted) => w.findAll('button.veyq-folder-card').map((b) => b.text())
 
 beforeEach(() => {
+  setViewMode('grid')
   vi.mocked(listMyTenants).mockResolvedValue([])
   vi.mocked(isFavorite).mockReturnValue(false)
   treeStore.nodes = TREE.map((n) => ({ ...n }))
@@ -225,6 +229,32 @@ describe('MemoryHomeView over the real registry', () => {
     const trips = await mountAt('#~me/trips')
     expect(trips.find('.section-stub').attributes('data-readonly')).toBe('false')
     expect(share(trips).exists()).toBe(true)
+  })
+
+  // Inbox #404: the view mode is one app-wide preference, but the level shows it only where a shown section offers it.
+  // A member who last chose the map opens a guest's identity folder: Memories' section (the map's) is left out there,
+  // so the level shows the grid — Files' rows and the folders, not a blank page — and offers the folders' switch with
+  // the grid pressed; the stored map is kept, and the next level with Memories' section shows it again.
+  it('a stored map shows an identity folder in the grid, and the map again where Memories draws it', async () => {
+    treeStore.nodes = [
+      ...TREE.map((n) => ({ ...n })),
+      node({ id: 'anna', kind: FOLDER_KIND, name: 'Anna', parentId: 'trips', shareIdentityId: 'identity-1' }),
+      node({ id: 'deep', kind: FOLDER_KIND, name: 'Deep', parentId: 'anna' }),
+      node({ id: 'scan', kind: FILE_KIND, name: 'scan.pdf', parentId: 'anna' }),
+    ]
+    setViewMode('map')
+    const anna = await mountAt('#~me/trips/anna')
+    expect(anna.find('.section-stub').exists(), "Memories' empty section is left out").toBe(false)
+    expect(anna.find('.files-stub').attributes('data-view')).toBe('grid')
+    expect(anna.find('.files-stub').text()).toBe('files=scan.pdf')
+    expect(folderCards(anna)).toEqual(['Deep'])
+    const pressed = anna.findAll('.veyq-level-toolbar .view-mode-button').filter((b) => b.attributes('aria-pressed') === 'true')
+    expect(pressed.map((b) => b.attributes('aria-label'))).toEqual([t('node.viewGrid')])
+    expect(useViewMode().viewMode.value, 'the stored preference is kept').toBe('map')
+    const trips = await mountAt('#~me/trips')
+    expect(trips.find('.section-stub').attributes('data-view')).toBe('map')
+    expect(trips.find('.files-stub').attributes('data-view')).toBe('map')
+    expect(folderCards(trips), 'the folders step aside for the map').toEqual([])
   })
 
   // Inbox #393 (b): two guests of one name — the folder at `anna-2` is headed, and its crumb named, "Anna (2)", as the

@@ -44,7 +44,6 @@ import { activeSpace } from '../../../app/activeSpace'
 import { useConfirm } from '../../../shared/state/useConfirm'
 import { useToast } from '../../../shared/state/useToast'
 import { formatBytes } from '../../../shared/formatBytes'
-import { useViewMode } from '../../../shared/state/useViewMode'
 import type { FileBlobRef } from '../../../api/generated/files'
 import { FILE_KIND } from '../kinds'
 import { deliveredSince, FileUploadError, type FileJobExtra, type FileUploadResult } from '../uploadFile'
@@ -78,8 +77,8 @@ const { ask } = useConfirm()
 const toast = useToast()
 const offerUndo = useTrashUndo()
 const { batches } = useUploadQueue()
-// The map stands for the whole level (Memories' pins over the subtree): files step aside there, as the folders do.
-const { viewMode } = useViewMode()
+// The map stands for the whole level (Memories' pins over the subtree): files step aside there, as the folders do — in
+// the mode the level hands in (`viewMode`), which is the map only where a shown section draws one (inbox #404).
 
 // Only FILE nodes, whatever the level hands in: the section speaks for its own kind alone.
 const fileNodes = computed(() => props.nodes.filter((n) => n.kind === FILE_KIND))

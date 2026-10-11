@@ -46,7 +46,7 @@ import { loadTree } from '../../../core/node/treeStore'
 import { enqueue, clearUploads, useUploadQueue } from '../../../core/blob/queue'
 import { confirmRequest, settleConfirm } from '../../../shared/state/useConfirm'
 import { formatBytes } from '../../../shared/formatBytes'
-import { setViewMode } from '../../../shared/state/useViewMode'
+import { setViewMode, type ViewMode } from '../../../shared/state/useViewMode'
 import { activeSpace } from '../../../app/activeSpace'
 import { epochsOf } from '../../spaces/epochsTestUtil'
 import { realI18n, t } from '../../../test/i18n'
@@ -97,12 +97,12 @@ let listFiles: ReturnType<typeof stubApi<typeof filesApi, 'listFiles'>>['listFil
  *  identity folder in a drop box (what the member's tree answers for it). */
 /** `siblings`: the level's children of other kinds — in the tree (what the any-kind pre-check reads, inbox #400), not in
  *  the section's `nodes`, as core's level view hands them. */
-function mountSection({ pending = false, identityFolder = false, siblings = [], ...props }: { nodes: TreeNode[]; pending?: boolean; identityFolder?: boolean; folder?: TreeNode | null; siblings?: TreeNode[] }) {
+function mountSection({ pending = false, identityFolder = false, siblings = [], ...props }: { nodes: TreeNode[]; pending?: boolean; identityFolder?: boolean; folder?: TreeNode | null; siblings?: TreeNode[]; viewMode?: ViewMode }) {
   const epochs = epochsOf(v1.randomBytes(32))
   const tree = memberTreeOf(() => [DOCS, ...props.nodes, ...siblings], { scopeId: SCOPE, epochs })
   return mount(FilesSection, {
     props: {
-      folder: DOCS, epochs, access: memberAccessOf({ scopeId: SCOPE, epochs, readonly: pending }),
+      folder: DOCS, epochs, viewMode: 'grid' as ViewMode, access: memberAccessOf({ scopeId: SCOPE, epochs, readonly: pending }),
       tree: { ...tree, inIdentityFolder: () => identityFolder }, ...props,
     },
     global: { plugins: [realI18n()], directives: { tooltip: {} } },
@@ -210,10 +210,19 @@ describe('FilesSection', () => {
     expect(byLabel(w, t('files.delete', { name: 'notes.txt' })).exists()).toBe(true)
   })
 
-  it('steps aside in map mode', async () => {
-    setViewMode('map')
-    const w = mountSection({ nodes: [NOTES] })
+  it('steps aside when the level hands it the map', async () => {
+    const w = mountSection({ nodes: [NOTES], viewMode: 'map' })
     expect(w.find('section').exists()).toBe(false)
+  })
+
+  // inbox #404: a stored map is not the section's to read — the level hands in the mode it shows (the grid where no
+  // shown section draws a map, e.g. a guest's identity folder), and the rows are there.
+  it('shows its rows in the mode handed in, whatever is stored', async () => {
+    setViewMode('map')
+    const w = mountSection({ nodes: [NOTES], viewMode: 'grid', identityFolder: true })
+    await flushPromises()
+    expect(w.find('section.files-section').exists()).toBe(true)
+    expect(w.findAll('.veyq-row-title').map((r) => r.text())).toEqual(['notes.txt'])
   })
 
   it('uploading a new name enqueues one job per file into this folder, under the folder\'s key, with no question', async () => {

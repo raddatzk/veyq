@@ -26,7 +26,7 @@ import { createRegistry, type Registry } from '../applications/registry'
 import { childrenOf } from './browse'
 import { FOLDER_KIND, type NodeKind } from './kind'
 import type { TreeNode } from './tree'
-import { setViewMode } from '../../shared/state/useViewMode'
+import { setViewMode, useViewMode, type ViewMode } from '../../shared/state/useViewMode'
 import { realI18n, t } from '../../test/i18n'
 import { treeNode, memberAccessOf, memberTreeOf, guestAccessOf } from '../../test/models'
 import { ShareRole } from '../../api/generated/sharing'
@@ -42,13 +42,14 @@ function sectionStub(name: string) {
       epochs: { type: Object, default: null },
       access: { type: Object as PropType<Access>, required: true },
       tree: { type: Object as PropType<TreeSource>, required: true },
+      viewMode: { type: String as PropType<ViewMode>, required: true },
     },
     emits: ['openNode', 'create', 'rename'],
     setup: (p, { emit }) => () =>
       h('section', {
         class: 'stub-section', 'data-name': name, 'data-folder': p.folder?.name ?? '-', 'data-mode': p.access.mode,
         'data-readonly': String(p.access.mode === 'member' && p.access.readonly),
-        'data-identity': String(p.tree.inIdentityFolder(p.folder?.id ?? null)),
+        'data-identity': String(p.tree.inIdentityFolder(p.folder?.id ?? null)), 'data-view': p.viewMode,
       }, [
         h('span', { class: 'stub-nodes' }, p.nodes.map((n) => n.name).join(',')),
         h('button', { class: 'stub-open', onClick: () => emit('openNode', p.nodes[0]) }),
@@ -230,7 +231,11 @@ describe('LevelView: the folders section', () => {
     setViewMode('list')
     expect(mountLevel([]).find('.veyq-level-grid').classes()).toContain('is-list')
     setViewMode('map')
-    expect(blocks(mountLevel([]))).toEqual([])
+    // the map only where a shown section draws one (inbox #404): without one, the folders stay, in the grid
+    expect(blocks(mountLevel([]))).toEqual(['folders'])
+    const MAP = { mode: 'map', icon: 'pi pi-map', label: 'node.folders' } as const
+    reg().registerKind({ kind: 'ALPHA', icon: 'pi pi-a', shareable: false, section: { order: 10, component: A, views: [MAP] } })
+    expect(blocks(mountLevel([]))).toEqual(['section:a'])
   })
 
   it('read-only (a pending deletion, a guest\'s identity folder): no new-folder card, the folder cards stay', () => {
@@ -370,6 +375,64 @@ describe('LevelView: the view switch', () => {
       expect(blocks(w)).toEqual(['overview', `section:${kind === 'ALPHA' ? 'a' : 'b'}`])
       expect(w.find('.view-mode-toggle').exists(), kind).toBe(false)
     }
+  })
+})
+
+// inbox #404: the level decides which mode it shows — the stored one where something on screen offers it, else the grid —
+// and hands that to its sections; the stored preference is never rewritten by the clamp.
+describe('LevelView: the mode it shows', () => {
+  const MAP = { mode: 'map', icon: 'pi pi-map', label: 'node.folders' } as const // core's test names no application key
+  const GRID = { mode: 'grid', icon: 'pi pi-th-large', label: 'node.viewGrid' } as const
+  const LIST = { mode: 'list', icon: 'pi pi-bars', label: 'node.viewList' } as const
+  const views = (w: ReturnType<typeof mountLevel>) => w.findAll('.stub-section').map((s) => `${s.attributes('data-name')}:${s.attributes('data-view')}`)
+  const pressed = (w: ReturnType<typeof mountLevel>) =>
+    w.findAll('.veyq-level-toolbar .view-mode-button').filter((b) => b.attributes('aria-pressed') === 'true').map((b) => b.attributes('aria-label'))
+  const stored = () => useViewMode().viewMode.value
+  beforeEach(() => {
+    // ALPHA draws the map (its empty section is left out in an identity folder); BETA has one presentation, as Files'.
+    reg().registerKind({ kind: 'ALPHA', icon: 'pi pi-a', shareable: false, section: { order: 10, component: A, views: [GRID, LIST, MAP] } })
+    reg().registerKind({ kind: 'BETA', icon: 'pi pi-b', shareable: false, section: { order: 20, component: B } })
+    setViewMode('map')
+  })
+  const anna = node('Anna', FOLDER_KIND, 'Trips')
+
+  it('a stored map in an identity folder without the map: the sections and the folders in the grid, the grid pressed', async () => {
+    const w = mountLevel([TRIPS, anna, node('scan', 'BETA', 'Anna'), node('Deep', FOLDER_KIND, 'Anna')], { folder: anna, identityFolder: true })
+    expect(blocks(w)).toEqual(['overview', 'section:b', 'folders'])
+    expect(views(w)).toEqual(['b:grid'])
+    expect(w.find('.veyq-level-grid').classes()).not.toContain('is-list')
+    // the folders' grid and list are offered, the grid shown and pressed
+    expect(pressed(w)).toEqual([t('node.viewGrid')])
+    expect(stored(), 'the clamp leaves the preference alone').toBe('map')
+    // a click is the member's choice: it is stored, and every section follows
+    await w.findAll('.view-mode-button')[1].trigger('click')
+    expect(stored()).toBe('list')
+    expect(views(w)).toEqual(['b:list'])
+    expect(w.find('.veyq-level-grid').classes()).toContain('is-list')
+  })
+
+  it('with one presentation left on screen: no switch, and the section is handed the grid, not the map', () => {
+    const w = mountLevel([TRIPS, anna, node('scan', 'BETA', 'Anna')], { folder: anna, identityFolder: true })
+    expect(blocks(w)).toEqual(['overview', 'section:b'])
+    expect(views(w)).toEqual(['b:grid'])
+    expect(w.find('.view-mode-toggle').exists()).toBe(false)
+    expect(stored()).toBe('map')
+  })
+
+  it('a level whose sections draw the map shows it again: the map handed in, the folders stepping aside', () => {
+    // first the identity folder (grid), then a level with ALPHA on screen: the stored map comes back
+    mountLevel([TRIPS, anna, node('scan', 'BETA', 'Anna')], { folder: anna, identityFolder: true })
+    const w = mountLevel([TRIPS, anna, node('scan', 'BETA', 'Trips')], { folder: TRIPS })
+    expect(views(w)).toEqual(['a:map', 'b:map'])
+    expect(blocks(w)).toEqual(['overview', 'section:a', 'section:b'])
+    expect(pressed(w)).toEqual([t('node.folders')]) // MAP's label in this test
+  })
+
+  it('any stored mode nothing on screen offers (a list, here) is the grid there, and stays stored', () => {
+    setViewMode('list')
+    const w = mountLevel([TRIPS, anna, node('scan', 'BETA', 'Anna')], { folder: anna, identityFolder: true })
+    expect(views(w)).toEqual(['b:grid']) // nothing on screen has a list
+    expect(stored()).toBe('list')
   })
 })
 

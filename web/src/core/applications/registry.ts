@@ -24,7 +24,8 @@
 // **Level sections (`KindDescriptor.section`).** The folder level view is core's (`core/node/LevelView.vue`, cr-files-
 // application P4b): the folder's overview card, then one SECTION per application, then the sub-folders. A kind brings
 // its section with its descriptor — a component that renders its own `<section>` (heading, create action, its body in
-// the current view mode) from `LevelSectionProps`, and names the presentations it switches between (`views`): the
+// the view mode the LEVEL hands it, `LevelSectionProps.viewMode`: the stored preference clamped to what is on screen,
+// inbox #404 — a section never reads the stored value itself) from `LevelSectionProps`, and names the presentations it switches between (`views`): the
 // level's toolbar, core's, offers their union with the folders' grid and list (inbox #370) — no section draws a toggle. Several kinds may name the SAME component (Memories: MEMORY and CHAPTER): a section is keyed
 // by its component's identity, rendered once, and handed the children of every kind that names it (in the order the
 // kinds were registered). `sections()` lists them sorted by `order`, a tie in the order the section was first named.
@@ -72,6 +73,7 @@ import { FOLDER_KIND, type NodeKind } from '../node/kind'
 import type { TreeNode } from '../node/tree'
 import type { Level } from '../node/browse'
 import type { LevelViewOption } from '../node/levelViews'
+import type { ViewMode } from '../../shared/state/useViewMode'
 import type { EpochKeys } from '../../features/spaces/epochs'
 import type { PublicShareHead } from '../sharing/resolvePublicShare'
 import type { Access, GuestAccess, TreeSource } from '../access'
@@ -188,13 +190,16 @@ export interface NodeDetailEmits {
  *  guest, whose keys come through `tree`), who looks (`access`) and the tree as that session reads it. What the section
  *  offers is its application's capability function over `access` and the folder (`core/access.ts`): no write during a
  *  pending deletion, no placement in a guest's identity folder — where a member still deletes what a guest sent
- *  (inbox #391). */
+ *  (inbox #391). `viewMode` is the mode the level shows (inbox #404): the app-wide preference where a section or the
+ *  folders on screen offer it, else the grid — a section draws that and never reads `useViewMode` itself, so a stored
+ *  map in a level whose map-drawing section is left out does not blank the rest. */
 export interface LevelSectionProps {
   folder: TreeNode | null
   nodes: readonly TreeNode[]
   epochs: EpochKeys | null
   access: Access
   tree: TreeSource
+  viewMode: ViewMode
 }
 /** Events a section emits to the level view: `openNode` (a child), `create` (the KIND to create at this level, e.g.
  *  Memories' MEMORY: the host mounts that kind's `createDialog`), `rename` (a child renamed in place, for a kind that

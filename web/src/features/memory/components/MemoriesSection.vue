@@ -8,7 +8,8 @@
 // One deliberate deviation from that source stays: the section stays mounted in map mode (the map is its body instead of
 // the grid). The space's trash button and the grid/list/map switch were in this section's header until Files needed
 // them too: both are core's level-view toolbar now (inbox #370, #385) — the switch offers the map because this section
-// names it among its `views` (`register.ts`), and the section only draws what the mode says.
+// names it among its `views` (`register.ts`), and the section only draws what the mode the level hands it says
+// (`viewMode`, the stored preference clamped to what is on screen, inbox #404).
 //
 // **A share guest's level too (inbox #401 S2).** Core's guest folder page renders this section with a guest's `access`
 // and its `tree` (`core/sharing/guestAccess.ts`): the same cards, dates, covers and map, read from what the link opened —
@@ -28,7 +29,6 @@ import { collectLocatedPins, collectLocatedPinsBy } from '../spaceMap'
 import { covers, ensureCovers } from '../coverStore'
 import { activeSpace } from '../../../app/activeSpace'
 import { isFavorite, toggleFavorite } from '../favoritesStore'
-import { useViewMode } from '../../../shared/state/useViewMode'
 import { memoryCapabilities } from '../capabilities'
 import { targetOf, type TreeSource } from '../../../core/access'
 import { useGuestCovers } from '../guestCover'
@@ -44,7 +44,6 @@ const props = defineProps<LevelSectionProps>()
 const emit = defineEmits<LevelSectionEmits>()
 
 const { t } = useI18n()
-const { viewMode } = useViewMode()
 const caps = computed(() =>
   memoryCapabilities(props.access, targetOf(props.tree, props.folder)),
 )
@@ -108,7 +107,7 @@ function onToggleFavorite(node: TreeNode) {
 // store owns the key chain, the object-URL lifecycle and the staleness rule, and the cards + SpaceMap read the
 // same `Map<string, LoadedCover>` they always did.
 function syncCovers() {
-  const nodes = viewMode.value === 'map' ? pins.value.map((pin) => pin.node) : props.nodes
+  const nodes = props.viewMode === 'map' ? pins.value.map((pin) => pin.node) : props.nodes
   if (guestCovers) guestCovers.ensure(nodes, (id) => props.tree.keyOf(id))
   else ensureCovers(nodes.map((n) => n.id))
 }
@@ -120,7 +119,7 @@ const favorite = (id: string) => caps.value.favorite && isFavorite(id)
 // in place, so watching the array (whose identity does not change) would leave a stale cover on the very card
 // the new one was chosen from. The store re-resolves on a changed meta — but only when it is asked to.
 watch(
-  [viewMode, pins, () => props.nodes.map((n) => `${n.id}:${n.wrappedMeta ?? ''}`).join('|')],
+  [() => props.viewMode, pins, () => props.nodes.map((n) => `${n.id}:${n.wrappedMeta ?? ''}`).join('|')],
   syncCovers,
   { immediate: true },
 )
