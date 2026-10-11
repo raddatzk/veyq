@@ -73,12 +73,24 @@
   **current folder** (a filter, never a subtree search: no new query, no server change); the sub-folders stay in every tab
   so one can navigate deeper. The bar appears only where **two or more sections have a tab** (one section is the whole
   level already: no bar, no filtering) and counts only the sections shown at that level (a guest's identity folder
-  leaves its empty ones out). The tab is one global, persisted client setting (`useLevelTab`, localStorage like the view
-  mode, not per folder); a stored tab that a level does not have is shown as `All` without overwriting the setting, so
+  leaves its empty ones out). The tab is a persisted client setting **per user of the browser** (`useLevelTab`, localStorage like the
+  view mode, not per folder): each signed-in account has its own (`veyq:level-tab:u:<userId>`, the account's opaque
+  id), and every share-guest page in the browser shares one separate value (`veyq:level-tab:guest`), so a guest tab never
+  flips a member's choice and two accounts on one browser never share one. It stays per **browser** — it is not synced
+  to the account (a synced preference would need a sealed per-user store of its own). A stored tab that a level does not have is shown as `All` without overwriting the setting, so
   the next level that has it shows it again. The view switch offers the presentations of what the tab shows. A share
   guest gets the same bar: the guest's page is this very view.
+- <a id="live-refresh"></a>**An open level stays current** (inbox #408). While a folder level is on screen and the tab is
+  visible, core re-reads the level about every 15 s (jittered; doubling to 2 min after errors; at once when the tab
+  becomes visible or focused; nothing while hidden or unmounted), so a share guest's upload or a peer's new Memory or
+  folder appears without a reload — for a member (`MemoryHomeView`, one `listNodes` per tick) and a share guest
+  (`ShareView`, one `resolveShare` per tick) alike. No new endpoint: the existing list is re-read and compared by a
+  fingerprint of its ciphertext rows, and the page is only touched when something changed. A refresh never overwrites a
+  write of this tab (a read that began before the write's own re-read is dropped) and pauses while a dialog is open.
+  Files' section also re-reads its blob listing on each tick (an upload completes after its node is listed). A
+  Memory's own gallery has its own poll ([uc.memory.live-updates](uc.memory.live-updates.md)).
 - **Display modes are a facet of browsing.** How the current level is shown — **grid / list / map** — is one
-  app-wide, persisted toggle (`useViewMode`; core's `ViewModeToggle` in the level view's toolbar, the map offered
+  persisted toggle per user of the browser (`useViewMode`, keyed like the tab: per account, one for the share guest; core's `ViewModeToggle` in the level view's toolbar, the map offered
   because Memories' section names it among its `views` — inbox #370), not a separate goal: grid/list shipped with
   cr-0063, the map view with cr-0071. The **map** stays operator-blind — it plots each node's sealed
   `location` unsealed on device from what `listNodes` already returns, behind the personal tiles opt-in (ADR

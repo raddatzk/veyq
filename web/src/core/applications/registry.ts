@@ -230,6 +230,11 @@ export interface LevelSectionProps {
   access: Access
   tree: TreeSource
   viewMode: ViewMode
+  /** The count of the level's live refreshes completed so far (inbox #408, `core/node/useLevelLive.ts`), changed or
+   *  not. The tree arrives through `nodes` on its own; a section that keeps data BESIDE the tree (Files' blob listing:
+   *  a peer's upload completes without the tree changing) re-reads it when this moves. Absent where the host does not
+   *  poll. */
+  liveTick?: number
 }
 /** Events a section emits to the level view: `openNode` (a child), `create` (the KIND to create at this level, e.g.
  *  Memories' MEMORY: the host mounts that kind's `createDialog`), `rename` (a child renamed in place, for a kind that

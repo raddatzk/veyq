@@ -100,8 +100,8 @@ const keyOf = (node: TreeNode): Uint8Array | null => props.tree.keyOf(node.id)
 const blobs = ref(new Map<string, FileBlobRef | null>())
 let loads = 0
 /** Re-read the blob refs of this level's files. Only when there is a file: an empty level asks the server nothing. A
- *  later load wins over an earlier one still in flight. */
-async function loadBlobs(): Promise<void> {
+ *  later load wins over an earlier one still in flight. A `background` load (the live tick) never blanks on failure. */
+async function loadBlobs(background = false): Promise<void> {
   const mine = ++loads
   if (!source.scopeId() || fileNodes.value.length === 0) {
     blobs.value = new Map()
@@ -111,14 +111,24 @@ async function loadBlobs(): Promise<void> {
     const listed = await source.listBlobs(props.folder?.id ?? null)
     if (mine === loads) blobs.value = listed
   } catch {
-    // The rows still show names; size falls back to nothing and download is unavailable until the next load.
-    if (mine === loads) blobs.value = new Map()
+    // The rows still show names; size falls back to nothing and download is unavailable until the next load. A
+    // background refresh (the live tick) keeps what the page already shows instead: a blip must not blank it.
+    if (mine === loads && !background) blobs.value = new Map()
   }
 }
 watch(
   () => [source.listKey(), props.folder?.id ?? null, fileNodes.value.map((n) => n.id).join(',')],
   () => void loadBlobs(),
   { immediate: true },
+)
+// A peer's upload COMPLETES without the tree changing (the node is listed first, its content after), and a peer's replace
+// swaps a blob under an unchanged node: the level's live refresh (inbox #408) says "look again" with its tick. Only a
+// level that holds files asks — an empty one listed nothing to complete.
+watch(
+  () => props.liveTick,
+  (tick, before) => {
+    if (tick !== undefined && tick !== before && fileNodes.value.length > 0) void loadBlobs(true)
+  },
 )
 
 // --- the rows --------------------------------------------------------------------------------------------------

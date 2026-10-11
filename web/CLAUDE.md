@@ -154,9 +154,15 @@ here; the server is blind.
   inbox #370; no section draws a toggle; the level shows the stored mode only where that union offers it, else the grid,
   without rewriting the stored preference, and hands that mode to every section as `LevelSectionProps.viewMode` — a
   section never reads `useViewMode`, inbox #404), the application TABS (inbox #348: `All | one tab per section` under the overview
-  card, from the section's `tabLabel` — an i18n key of its own application; `core/node/levelTabs.ts`, the one global preference
-  `shared/state/useLevelTab`; a filter over the CURRENT folder's children only, sub-folders in every tab, the bar only with
-  two or more tabbed sections, a stored tab the level lacks shown as `All` without rewriting it), the folder's overview card (core's `NodeOverviewCard`, which an application's
+  card, from the section's `tabLabel` — an i18n key of its own application; `core/node/levelTabs.ts`, a stable client setting
+  `shared/state/useLevelTab` — one per account (`veyq:level-tab:u:<userId>`, `account.userId`, set by every unlock path) and one
+  for every share-guest page (`…:guest`, declared by `views/ShareView.vue`), never one for the browser; `useViewMode` is
+  keyed the same way, both through `shared/state/scopedPreference.ts`; per browser, not synced, no value written while the
+  account id is unknown; a filter over the CURRENT folder's children only, sub-folders in every tab, the bar only with
+  two or more tabbed sections, a stored tab the level lacks shown as `All` without rewriting it), the LIVE REFRESH (inbox #408: `core/node/useLevelLive.ts` over `shared/state/livePoller.ts`, started by the two hosts
+  while a folder level is on screen — the member's `MemoryHomeView` through `treeStore.pollTree`, the guest's `ShareView`
+  through `GuestAccess.poll` — about every 15 s, only while the tab is visible, paused while a dialog is open, one request
+  per level; it hands every section `LevelSectionProps.liveTick`, which Files' section answers with a blob re-read), the folder's overview card (core's `NodeOverviewCard`, which an application's
   container detail opens with too — the drop box), the
   sections sorted by `order`, a fallback section for a child whose kind no section serves, then the sub-folders; kinds
   naming the same component share one section, rendered once with the children of all of them, and naming it with two

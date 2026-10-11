@@ -172,6 +172,31 @@ describe('FilesSection', () => {
     expect(rows.every((r) => r.find('.veyq-action-group').classes('veyq-action-group-icons'))).toBe(true)
   })
 
+  // inbox #408: a peer's upload COMPLETES (its blob appears) without the tree changing; the level's live tick says so.
+  it("re-reads the blob listing when the level's live tick moves, and keeps what it shows if that read fails", async () => {
+    const w = mountSection({ nodes: [REPORT, PENDING] })
+    await flushPromises()
+    const rows = () => w.findAll('li.files-row').map((r) => r.find('.veyq-row-subtitle').text())
+    expect(rows()[1]).toBe(t('files.notUploaded'))
+    const calls = listFiles.mock.calls.length
+    await w.setProps({ liveTick: 1 })
+    await flushPromises()
+    expect(listFiles.mock.calls.length).toBe(calls + 1)
+    const before = rows()
+    listFiles.mockRejectedValue(new TypeError('Failed to fetch'))
+    await w.setProps({ liveTick: 2 })
+    await flushPromises()
+    expect(rows(), 'a blip in the background read does not blank the sizes').toEqual(before)
+  })
+
+  it("an empty level does not read the listing on a live tick", async () => {
+    const w = mountSection({ nodes: [] })
+    await flushPromises()
+    await w.setProps({ liveTick: 1 })
+    await flushPromises()
+    expect(listFiles).not.toHaveBeenCalled()
+  })
+
   it('shows only FILE nodes, whatever else the level hands it', async () => {
     const w = mountSection({ nodes: [MEMORY, NOTES] })
     await flushPromises()
