@@ -1,14 +1,18 @@
 <script setup lang="ts">
 // The view-mode switch (cr-0063; core's since inbox #370): one icon button per presentation in `views`, over the
 // app-wide `useViewMode` preference (persisted) — core's level-view toolbar hands it the presentations on screen
-// (`levelViews.ts`), Memories' chapters grid its grid and list. Every place drives the one value.
+// (`levelViews.ts`), Memories' chapters grid its grid and list. Every place drives the one value. The button pressed is
+// the mode shown there — the stored one where `views` offers it, else the grid (`effectiveViewMode`, inbox #404) — so a
+// stored map never leaves a grid-and-list switch with nothing pressed.
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useViewMode, setViewMode } from '../../shared/state/useViewMode'
-import type { LevelViewOption } from './levelViews'
+import { effectiveViewMode, type LevelViewOption } from './levelViews'
 
-defineProps<{ views: readonly LevelViewOption[] }>()
+const props = defineProps<{ views: readonly LevelViewOption[] }>()
 
 const { viewMode } = useViewMode()
+const active = computed(() => effectiveViewMode(viewMode.value, props.views))
 const { t } = useI18n()
 </script>
 
@@ -20,9 +24,9 @@ const { t } = useI18n()
       v-tooltip.bottom="t(view.label)"
       type="button"
       class="view-mode-button"
-      :class="{ 'is-active': viewMode === view.mode }"
+      :class="{ 'is-active': active === view.mode }"
       :aria-label="t(view.label)"
-      :aria-pressed="viewMode === view.mode"
+      :aria-pressed="active === view.mode"
       @click="setViewMode(view.mode)"
     >
       <span :class="view.icon" aria-hidden="true" />

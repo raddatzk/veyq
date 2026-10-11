@@ -35,7 +35,7 @@ import { publicShareMediaApi } from '../api'
 import { openShareGrid } from '../share'
 import { isFavorite, toggleFavorite } from '../favoritesStore'
 import { ensureCovers } from '../coverStore'
-import { setViewMode } from '../../../shared/state/useViewMode'
+import type { ViewMode } from '../../../shared/state/useViewMode'
 import { stubApi } from '../../../test/apiMock'
 import { realI18n, t } from '../../../test/i18n'
 import { guestAccessFor } from '../../../test/models'
@@ -91,20 +91,20 @@ function head(role: ShareRole): PublicShareHead {
 
 const SpaceMapStub = { props: ['pins', 'covers'], emits: ['open'], template: '<div class="space-map-stub">{{ pins.length }}</div>' }
 
-function mountGuest(role: ShareRole) {
+/** `viewMode`: the mode the level hands in (inbox #404). */
+function mountGuest(role: ShareRole, viewMode: ViewMode = 'grid') {
   const h = head(role)
   const tree = guestTreeSource(h, reactive({ hash: `#k=${b64url(K_SHARE)}` }))
   const root = tree.node(ROOT)!
   const nodes = tree.children(ROOT).filter((n) => n.kind === MEMORY_KIND)
   return mount(MemoriesSection, {
-    props: { folder: root, nodes, epochs: null, access: guestAccessFor(h), tree },
+    props: { folder: root, nodes, epochs: null, access: guestAccessFor(h), tree, viewMode },
     global: { plugins: [realI18n()], directives: { tooltip: {} }, stubs: { SpaceMap: SpaceMapStub } },
   })
 }
 
 beforeEach(() => {
   authenticatedCalls.length = 0
-  setViewMode('grid')
   vi.mocked(ensureCovers).mockClear()
   vi.mocked(isFavorite).mockReset().mockReturnValue(false)
   vi.mocked(toggleFavorite).mockClear()
@@ -165,8 +165,7 @@ describe('MemoriesSection for a share guest', () => {
   })
 
   it("the map spans the opened subtree — a sub-folder's Memory too — keyed by the chain, and a pin opens its node", async () => {
-    setViewMode('map')
-    const w = mountGuest(ShareRole.Read)
+    const w = mountGuest(ShareRole.Read, 'map')
     await flushPromises()
     const map = w.findComponent(SpaceMapStub)
     expect((map.props('pins') as { node: TreeNode }[]).map((p) => p.node.name).sort()).toEqual(['Rom', 'Wien'])

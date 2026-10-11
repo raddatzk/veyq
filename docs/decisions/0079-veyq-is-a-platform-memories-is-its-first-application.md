@@ -263,7 +263,9 @@ on their own.
   Master Key rotates (that hook is required: a rotation refuses to start without it). Not done on the web: the
   directory is still named `features/memory`; the folder level view is core's (`core/node/LevelView.vue`) and each
   application contributes a section per kind through the registry — naming the presentations it switches between
-  (`views`), whose switch is the level's toolbar, core's (inbox #370) — and so its create and share dialogs (a folder's
+  (`views`), whose switch is the level's toolbar, core's (inbox #370); the level shows the stored mode only where a
+  shown section or the folders offer it, else the grid, and hands that mode to every section
+  (`LevelSectionProps.viewMode`, inbox #404: no section reads the stored preference) — and so its create and share dialogs (a folder's
   create and every node's rename are core's own dialog, FOLDER's share dialog is core's), while the top-bar tray and
   the sidebar pins are ordered list slots each application adds its own item to (the upload status in the top bar is
   core's own, listing every application's uploads, so no application adds it); the i18n catalog is one file and `styles/memory.css` is global. The kind is a string token on both

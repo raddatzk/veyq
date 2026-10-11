@@ -54,7 +54,6 @@ import type { GuestIdentity } from '../../../core/sharing/guestIdentity'
 import { enqueue, clearUploads, useUploadQueue } from '../../../core/blob/queue'
 import { confirmRequest, settleConfirm } from '../../../shared/state/useConfirm'
 import { formatBytes } from '../../../shared/formatBytes'
-import { setViewMode } from '../../../shared/state/useViewMode'
 import { SaveCancelled, SaveTooLarge } from '../../../shared/saveStream'
 import { ShareRole, type PublicShare, type ShareNode } from '../../../api/generated/sharing'
 import type { ShareFileListing } from '../../../api/generated/files'
@@ -132,7 +131,7 @@ function mountSection(o: Opts = {}) {
   return mount(FilesSection, {
     props: {
       folder: tree.node(at), nodes: o.nodes ?? (childrenOf([...tree.nodes], at).byKind.get(FILE_KIND) ?? []),
-      epochs: null, access, tree,
+      epochs: null, access, tree, viewMode: 'grid',
     },
     global: { plugins: [realI18n()], directives: { tooltip: {} } },
   })
@@ -167,7 +166,6 @@ function expectNoMemberWorld() {
 beforeEach(() => {
   authenticatedCalls.length = 0
   memberReads.length = 0
-  setViewMode('grid')
   vi.mocked(loadTree).mockClear()
   vi.mocked(deleteNode).mockClear()
   listShareFiles = stubApi(publicShareFilesApi, { listShareFiles: LISTING }).listShareFiles

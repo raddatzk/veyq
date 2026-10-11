@@ -14,11 +14,16 @@
 // sheet, with their dark twins in `dark.css`: the same declarations the `memory-*` rules had) and read core's `node.*`
 // keys. The P4-0 golden (`views/MemoryHomeView.golden.test.ts`) pins the DOM: P4d changed it in class names only.
 //
-// **The view mode is the shared one** (`shared/state/useViewMode`): the folders grid takes its list variant from it,
+// **The view mode is the shared one** (`shared/state/useViewMode`), but the LEVEL decides which mode it shows (inbox
+// #404): the stored preference where something on screen offers it, else the grid (`effectiveViewMode`) — the stored
+// value stays as it is, so the next level that offers it shows it again. The level hands that mode to every section
+// (`LevelSectionProps.viewMode`); no section reads the stored value. The folders grid takes its list variant from it,
 // and the folders section steps aside while the map is shown (Memories' section draws the map, whose pins span the
-// whole subtree, folders included). The switch is this toolbar's (inbox #370): it offers the union of the presentations
-// on screen — the folders' grid and list (`FOLDER_VIEWS`) and each shown section's `views` from its kind's descriptor
-// (Memories: grid, list, map) — and only where there is more than one to choose from.
+// whole subtree, folders included). A stored map where no shown section offers one (a guest's identity folder, whose
+// empty Memories section is left out) is the grid, not a blank level. The switch is this toolbar's (inbox #370): it
+// offers the union of the presentations on screen — the folders' grid and list (`FOLDER_VIEWS`) and each shown
+// section's `views` from its kind's descriptor (Memories: grid, list, map) — and only where there is more than one to
+// choose from.
 //
 // **Who looks** (inbox #401): the host hands the level its `access` and its `tree` (`core/access.ts`), and the level hands
 // both on to every section; what the level's own controls offer is core's `folderCapabilities` for the folder on screen
@@ -41,7 +46,7 @@ import { registry } from '../applications/registry'
 import { folderCapabilities, targetOf, type Access, type TreeSource } from '../access'
 import { useViewMode } from '../../shared/state/useViewMode'
 import { compareByCreation, displayNamesOf } from './location'
-import { FOLDER_VIEWS, unionViews } from './levelViews'
+import { FOLDER_VIEWS, effectiveViewMode, unionViews } from './levelViews'
 import ViewModeToggle from './ViewModeToggle.vue'
 import NodeOverviewCard from './components/NodeOverviewCard.vue'
 
@@ -100,6 +105,8 @@ const folderLabels = computed(() => displayNamesOf(props.level.folders, (n) => n
 // The presentations of what is on screen, in the order first named; a switch only between two or more.
 const views = computed(() => unionViews([...sectionViews.value.map((s) => s.views), showFolders.value ? FOLDER_VIEWS : []]))
 const showViews = computed(() => views.value.length > 1)
+// The mode this level shows: the stored one clamped to what is on screen (inbox #404); the stored one is not touched.
+const mode = computed(() => effectiveViewMode(viewMode.value, views.value))
 const nothingShown = computed(() => hideEmptySections.value && !sectionViews.value.length && !fallbacks.value.length && !showFolders.value)
 
 // The children no section serves, one bucket per kind, sorted by kind so the order is stable. A kind the registry
@@ -155,6 +162,7 @@ const fallbacks = computed(() =>
       :epochs="epochs"
       :access="access"
       :tree="tree"
+      :view-mode="mode"
       @open-node="emit('openNode', $event)"
       @create="emit('create', $event)"
       @rename="emit('renameNode', $event)"
@@ -180,12 +188,12 @@ const fallbacks = computed(() =>
 
     <p v-if="nothingShown" class="veyq-empty veyq-empty-inline">{{ t('node.levelEmpty') }}</p>
 
-    <section v-if="viewMode !== 'map' && showFolders" class="veyq-section">
+    <section v-if="mode !== 'map' && showFolders" class="veyq-section">
       <div class="veyq-section-header veyq-level-section-header">
         <h2>{{ t('node.folders') }}</h2>
         <span>{{ level.folders.length }}</span>
       </div>
-      <div class="veyq-card-grid veyq-level-grid" :class="{ 'is-list': viewMode === 'list' }">
+      <div class="veyq-card-grid veyq-level-grid" :class="{ 'is-list': mode === 'list' }">
         <p v-if="!level.folders.length" class="veyq-empty veyq-empty-inline">
           {{ t('node.folderEmpty') }}
         </p>

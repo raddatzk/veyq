@@ -46,7 +46,7 @@ describe('the drop boxes section', () => {
   const box: TreeNode = treeNode({ id: 'b1', kind: DROPBOX_KIND, name: 'Einsendungen', parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
   const section = (nodes: TreeNode[]) =>
     mount(DropBoxSection, {
-      props: { folder: null, nodes, epochs: EPOCHS, access: memberAccessOf({ scopeId: SCOPE, epochs: EPOCHS }), tree: memberTreeOf(() => nodes, { scopeId: SCOPE, epochs: EPOCHS }) },
+      props: { folder: null, nodes, epochs: EPOCHS, viewMode: 'grid', access: memberAccessOf({ scopeId: SCOPE, epochs: EPOCHS }), tree: memberTreeOf(() => nodes, { scopeId: SCOPE, epochs: EPOCHS }) },
       global,
     })
 

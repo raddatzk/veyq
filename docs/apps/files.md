@@ -81,7 +81,8 @@ reads).
   "not uploaded yet" — none of it reads the node's own payload), with download, replace, rename (core's
   `FolderNameDialog`, through the section's `rename` event) and delete (into core's trash, restored from core's trash
   dialog — or at once from the "moved to the trash" toast's Undo, core's `trashUndo.ts`, inbox #385 (c)). An upload button and a drop onto the section; an empty folder says so. Hidden in map mode, like the
-  folders. Read-only during a pending deletion: download only. The same section is a share guest's (§ Guests).
+  folders — the mode the level hands in (`LevelSectionProps.viewMode`), which is the map only where Memories' section is
+  on screen to draw it (inbox #404; a guest's identity folder without Memories shows its files in the grid). Read-only during a pending deletion: download only. The same section is a share guest's (§ Guests).
 - **The upload** is one job of core's upload queue per file (`uploadFile.ts`): create the `FILE` node (or, for a name a
   FILE sibling already holds by `fileNameSlug`, replace that file after the member confirmed — the row's replace asks
   too, naming the file and the picked one, and both questions say the old content cannot be restored, there being no

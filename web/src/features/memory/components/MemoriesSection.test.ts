@@ -16,7 +16,7 @@ import MemoryCard from './MemoryCard.vue'
 import { FOLDER_KIND, type NodeKind } from '../../../core/node/kind'
 import { MEMORY_KIND } from '../kinds'
 import { treeStore } from '../../../core/node/treeStore'
-import { setViewMode } from '../../../shared/state/useViewMode'
+import { setViewMode, type ViewMode } from '../../../shared/state/useViewMode'
 import { sealNodeMeta } from '../nodeMeta'
 import type { MemoryLocation } from '../memoryLocation'
 import type { TreeNode } from '../../../core/node/tree'
@@ -78,10 +78,11 @@ const folderOf = (label: string, name: string): TreeNode =>
 const pinNames = (map: { props: (k: string) => unknown }) => (map.props('pins') as { node: TreeNode }[]).map((p) => p.node.name)
 
 /** `pending`: the scope is pending deletion (the member's `access.readonly`). */
-const mountSection = ({ pending = false, ...props }: { folder?: TreeNode | null; nodes: TreeNode[]; epochs?: ReturnType<typeof epochsOf> | null; pending?: boolean }) =>
+/** `viewMode`: the mode the level hands in (inbox #404), the grid by default. */
+const mountSection = ({ pending = false, ...props }: { folder?: TreeNode | null; nodes: TreeNode[]; epochs?: ReturnType<typeof epochsOf> | null; pending?: boolean; viewMode?: ViewMode }) =>
   mount(MemoriesSection, {
     props: {
-      folder: null, epochs: null, ...props,
+      folder: null, epochs: null, viewMode: 'grid' as ViewMode, ...props,
       access: memberAccessOf({ scopeId: SCOPE_ID, epochs: props.epochs ?? null, readonly: pending }),
       tree: memberTreeOf(() => treeStore.nodes, { scopeId: SCOPE_ID, epochs: props.epochs ?? null }),
     },
@@ -89,7 +90,6 @@ const mountSection = ({ pending = false, ...props }: { folder?: TreeNode | null;
   })
 
 beforeEach(() => {
-  setViewMode('grid')
   treeStore.nodes = []
   activeSpace.scopeId = SCOPE_ID // the map binds every node's seals to the active scope
 })
@@ -138,9 +138,8 @@ describe('MemoriesSection', () => {
     const memInA = locatedMemory('memInA', 'fA', located(1, 1))
     const memRoot = locatedMemory('memRoot', null, located(2, 2))
     treeStore.nodes = [folderOf('fA', 'A'), memInA, memRoot]
-    setViewMode('map')
 
-    const wrapper = mountSection({ folder: null, nodes: [memRoot], epochs: epochsOf(scopeKey) })
+    const wrapper = mountSection({ folder: null, nodes: [memRoot], epochs: epochsOf(scopeKey), viewMode: 'map' })
 
     // the card grid is gone, the map is shown
     expect(wrapper.find('.memory-card-grid').exists()).toBe(false)
@@ -175,9 +174,8 @@ describe('MemoriesSection', () => {
     const memInB = locatedMemory('memInB', 'fB', located(2, 2))
     const fA = folderOf('fA', 'A')
     treeStore.nodes = [fA, folderOf('fB', 'B'), memInA, memInB]
-    setViewMode('map')
 
-    const wrapper = mountSection({ folder: fA, nodes: [], epochs: epochsOf(scopeKey) })
+    const wrapper = mountSection({ folder: fA, nodes: [], epochs: epochsOf(scopeKey), viewMode: 'map' })
     const map = wrapper.findComponent(SpaceMapStub)
     expect(pinNames(map)).toEqual(['memInA'])
   })
@@ -185,9 +183,8 @@ describe('MemoriesSection', () => {
   it('a pin open resolves to its TreeNode and emits openNode', async () => {
     const memRoot = locatedMemory('memRoot', null, located(2, 2))
     treeStore.nodes = [memRoot]
-    setViewMode('map')
 
-    const wrapper = mountSection({ folder: null, nodes: [memRoot], epochs: epochsOf(scopeKey) })
+    const wrapper = mountSection({ folder: null, nodes: [memRoot], epochs: epochsOf(scopeKey), viewMode: 'map' })
     wrapper.findComponent(SpaceMapStub).vm.$emit('open', uid('memRoot'))
     await wrapper.vm.$nextTick()
 
@@ -195,9 +192,20 @@ describe('MemoriesSection', () => {
   })
 
   it('grid mode still renders the card grid (map absent)', () => {
-    setViewMode('grid')
-    const wrapper = mountSection({ nodes: [node('m1', MEMORY_KIND, 'Solo')] })
+    const wrapper = mountSection({ nodes: [node('m1', MEMORY_KIND, 'Solo')], viewMode: 'grid' })
     expect(wrapper.find('.memory-card-grid').exists()).toBe(true)
     expect(wrapper.findComponent(SpaceMapStub).exists()).toBe(false)
+  })
+
+  // inbox #404: the level decides the mode; the stored preference is not the section's to read.
+  it('draws the mode the level hands it, whatever is stored, and follows a change of it', async () => {
+    setViewMode('map')
+    const wrapper = mountSection({ nodes: [node('m1', MEMORY_KIND, 'Solo')], viewMode: 'grid' })
+    expect(wrapper.find('.memory-card-grid').exists()).toBe(true)
+    expect(wrapper.findComponent(SpaceMapStub).exists()).toBe(false)
+    setViewMode('grid')
+    await wrapper.setProps({ viewMode: 'map' })
+    expect(wrapper.find('.memory-card-grid').exists()).toBe(false)
+    expect(wrapper.findComponent(SpaceMapStub).exists()).toBe(true)
   })
 })

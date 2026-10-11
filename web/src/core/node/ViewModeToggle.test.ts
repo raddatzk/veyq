@@ -46,4 +46,12 @@ describe('ViewModeToggle', () => {
     expect(mapBtn.attributes('aria-pressed')).toBe('true')
     expect(localStorage.getItem('veyq:view-mode')).toBe('map')
   })
+
+  // inbox #404: a stored mode the toggle does not offer is shown as the grid, so the grid is pressed — the store is kept.
+  it('presses the grid where the stored mode is not among its views, and leaves the stored mode alone', () => {
+    setViewMode('map')
+    const w = mountToggle()
+    expect(w.findAll('.view-mode-button').map((b) => b.attributes('aria-pressed'))).toEqual(['true', 'false'])
+    expect(localStorage.getItem('veyq:view-mode')).toBe('map')
+  })
 })
