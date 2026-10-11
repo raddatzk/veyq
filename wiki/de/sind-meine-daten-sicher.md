@@ -21,6 +21,7 @@ stehlen — nur unverständlicher Datenmüll:
 
 - deine **Fotos und Videos** (und die kleineren Vorschaubilder),
 - deine **Tagebuchtexte**,
+- deine **Dateien** — Dokumente, PDFs, alles, was du in [Dateien](dateien.md) ablegst — und ihre **Namen**,
 - die **sensiblen Details**: Titel, Bildunterschriften, Beschreibungen, Orte, die abgebildeten
   Personen, Schlagwörter,
 - **wo** ein Foto aufgenommen wurde (GPS) und **wann** es entstand,
@@ -35,7 +36,7 @@ zu liefern, zu regeln, wer reindarf — sieht der Server ein paar **wenig sensib
 | Wir sehen | Wir sehen nicht |
 |---|---|
 | dass eine Erinnerung / ein Foto / eine Freigabe **existiert**, und ihre ID | was **darin** ist |
-| **wie groß** eine Datei ist | die Datei selbst — nicht einmal, ob es ein Foto oder ein Video ist; allerdings kann die Art, wie ein Video beim Anschauen nachgeladen wird, das verraten |
+| **wie groß** eine Datei ist (Foto, Dokument, alles) | die Datei selbst — nicht einmal, ob es ein Foto oder ein Video ist; allerdings kann die Art, wie ein Video beim Anschauen nachgeladen wird, das verraten |
 | **wer in welcher** Gruppe oder welchem Bereich ist | was sie geschrieben oder hochgeladen haben |
 | **wann** etwas hochgeladen oder zuletzt geändert wurde | wann ein Foto **aufgenommen** wurde — nach diesem Datum sortiert dein Gerät die Zeitleiste, und es bleibt verschlossen |
 
@@ -49,12 +50,14 @@ ausdrückliche Handlung:
 
 - Teilst du mit einer **Gruppe oder Person**, kann sie diesen Inhalt lesen. Du hast ihn **ihr**
   gegeben — nicht uns; wir können ihn weiterhin nicht lesen.
-- Einen **öffentlichen Link** kann **jede Person öffnen, die den Link hat**. Der Schlüssel, der ihn
+- Einen **öffentlichen Link** — auf einen Ordner, eine einzelne Datei oder eine Erinnerung — kann **jede Person öffnen, die den Link hat**. Der Schlüssel, der ihn
   entsperrt, steckt **im Link selbst** und erreicht unseren Server nie — eine öffentliche Freigabe ist
   also „lesbar für alle mit dem Link, weiterhin nicht für uns". Die Adresse ohne diesen Schlüssel kann
   nichts lesen — und nichts hinzufügen: Bei einem Link, über den Gäste Fotos beisteuern dürfen, muss ihre
   App erst beweisen, dass sie den Schlüssel hat. Wer nur die Adresse kennt (etwa aus einer Kopie unserer
   Datenbank), kann darüber nichts hochladen.
+
+Wie die verschiedenen Links funktionieren — nur ansehen, ansehen und mitmachen, Briefkasten — steht unter [Teilen](teilen.md).
 
 Drei ehrliche Grenzen:
 - **Entteilen macht das Heruntergeladene nicht rückgängig.** Ein Entzug stoppt den *künftigen* Zugriff;

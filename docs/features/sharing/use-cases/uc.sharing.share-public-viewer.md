@@ -123,6 +123,7 @@ im Footer erklärt die Details.
 
 ## Related
 
+- End-user view (wiki): [Sharing with people who have no account](../../../../wiki/en/sharing.md)
 - Feature: [Sharing](../_index.md)
 - Decisions: [ADR 0029](../../../decisions/0029-public-viewer-share.md) (this share's resource + anonymous access
   path), [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (the `K_mem` second-wrap keying),

@@ -177,6 +177,7 @@ das?"-Link erklärt die Details.
 
 ## Related
 
+- End-user view (wiki): [Sharing with people who have no account](../../../../wiki/en/sharing.md)
 - Feature: [Sharing](../_index.md)
 - Decisions: [ADR 0030](../../../decisions/0030-contributor-public-share.md) (this contributor share — the sealed
   anonymous identity + the share-scoped upload path), [ADR 0029](../../../decisions/0029-public-viewer-share.md)

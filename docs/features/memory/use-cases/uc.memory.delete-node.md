@@ -131,6 +131,7 @@ nur, dass etwas gelöscht wurde, und entfernt später verschlüsselte Dateien, d
 
 ## Related
 
+- End-user view (wiki): [Files — and finding your way around](../../../../wiki/en/files.md)
 - Feature: [Memory](../_index.md)
 - Enablers: [en.memory.tree](../enablers/en.memory.tree.md) (the node lifecycle this defines),
   [en.memory.media](../enablers/en.memory.media.md) (what the purge reclaims)

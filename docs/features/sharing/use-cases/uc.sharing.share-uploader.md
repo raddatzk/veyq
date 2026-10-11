@@ -140,6 +140,7 @@ Galerie. Du als Kurator:in siehst jeden Beitrag in deiner eigenen Erinnerung und
 
 ## Related
 
+- End-user view (wiki): [Sharing with people who have no account](../../../../wiki/en/sharing.md)
 - Feature: [Sharing](../_index.md)
 - Decisions: [ADR 0031](../../../decisions/0031-uploader-public-share.md) (this write-only drop-box — the
   client-local, session-only own-view + delete-own), [ADR 0030](../../../decisions/0030-contributor-public-share.md)
