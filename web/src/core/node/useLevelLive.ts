@@ -3,10 +3,11 @@
 // where the level's tree comes from (the member's `treeStore`, the guest's re-resolve), so it passes the one read;
 // this composable owns the lifecycle and the cadence, and the level hands the resulting `ticks` on to its sections.
 //
-// **One request per level, not per section.** The read is the tree's (one list); a section whose data lives beside the
-// tree (Files' blob listing, whose rows change when an upload COMPLETES, without the tree changing) watches `ticks` —
-// the count of completed ticks, changed or not — and re-reads its own, cheap, part. A section with nothing beside the
-// tree ignores it.
+// **One request per level, not per section.** The read is the tree's (one conditional list, ADR 0081: an idle scope is a
+// `304`, no work); a section whose data lives beside the tree (Files' blob listing, whose rows change when an upload
+// COMPLETES, without the tree changing) watches `ticks` — the count of reads that found the scope MOVED, which an
+// upload's completion does (it bumps the scope's tree revision) — and re-reads its own, cheap, part. A 304 ticks
+// nothing. A section with nothing beside the tree ignores it.
 //
 // **Cadence** (`LIVE_POLL`): ~15 s ± 20 %, only while the tab is visible, at once on the return to visible or focus,
 // doubling to 2 min on errors (`shared/state/livePoller.ts`). **Never over a write**: `paused` is the host's "a dialog
@@ -22,22 +23,23 @@ export interface LevelLiveOptions {
   active: () => boolean
   /** The host's "do not refresh over this": a dialog is open, a write is in flight. */
   paused: () => boolean
-  /** The one read of the level's tree. Resolves when it applied (or found nothing new); rejects on failure. It gets the
+  /** The one read of the level's tree (a conditional GET, ADR 0081). Resolves whether the server's state MOVED — `false`
+   *  for a `304`, a dropped read or nothing to do, which tells the sections nothing; rejects on failure. It gets the
    *  poller's signal and must check it before applying anything. */
-  read: (signal: AbortSignal) => Promise<unknown>
+  read: (signal: AbortSignal) => Promise<boolean>
   /** Overrides {@link LIVE_POLL} (tests). */
   poll?: LivePollerOptions
 }
 
-/** Run the level's live refresh for the calling component's life; `ticks` counts the completed reads. */
+/** Run the level's live refresh for the calling component's life; `ticks` counts the reads that found the state moved. */
 export function useLevelLive(options: LevelLiveOptions): { ticks: Readonly<Ref<number>> } {
   const ticks = ref(0)
   const poller = createLivePoller(options.poll ?? LIVE_POLL)
   const run = () => {
     poller.start(async (signal) => {
       if (options.paused()) return 'skip'
-      await options.read(signal)
-      if (!signal.aborted) ticks.value++
+      const moved = await options.read(signal)
+      if (moved && !signal.aborted) ticks.value++
     })
   }
   watch(options.active, (on) => (on ? run() : poller.stop()), { immediate: true })

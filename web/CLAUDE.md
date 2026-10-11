@@ -162,7 +162,14 @@ here; the server is blind.
   two or more tabbed sections, a stored tab the level lacks shown as `All` without rewriting it), the LIVE REFRESH (inbox #408: `core/node/useLevelLive.ts` over `shared/state/livePoller.ts`, started by the two hosts
   while a folder level is on screen — the member's `MemoryHomeView` through `treeStore.pollTree`, the guest's `ShareView`
   through `GuestAccess.poll` — about every 15 s, only while the tab is visible, paused while a dialog is open, one request
-  per level; it hands every section `LevelSectionProps.liveTick`, which Files' section answers with a blob re-read), the folder's overview card (core's `NodeOverviewCard`, which an application's
+  per level, and a CONDITIONAL one, [ADR 0081](../docs/decisions/0081-a-scopes-tree-revision-is-the-level-views-change-signal.md):
+  the member's `fetchTree` (`listNodesRaw`, the scope's tree revision as `ETag`/`If-None-Match`) and the guest's
+  `pollPublicShare` (`resolveShareRaw`, a digest of what the link serves — never the scope revision, which would tell a guest
+  when the rest of the space changes) read a `304` as "nothing moved": no parse, no decryption, no tick. `read` resolves whether
+  the state MOVED and the host's `useLevelLive` hands every section `LevelSectionProps.liveTick` only then, which Files'
+  section answers with a blob re-read — an upload completing moves the revision and changes no row; the tree itself is
+  replaced only when the rows' fingerprint differs. A guest poll that meets the link gone (`404`) flips `ShareView` to its
+  unavailable state, a changed password to the gate; a network error, `429` or `5xx` only backs the loop off), the folder's overview card (core's `NodeOverviewCard`, which an application's
   container detail opens with too — the drop box), the
   sections sorted by `order`, a fallback section for a child whose kind no section serves, then the sub-folders; kinds
   naming the same component share one section, rendered once with the children of all of them, and naming it with two

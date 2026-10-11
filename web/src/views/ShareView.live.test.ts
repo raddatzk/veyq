@@ -2,8 +2,11 @@
 // A share guest's folder page picks up what the owner or a peer changed WITHOUT a reload (inbox #408), and stores its
 // own view preferences. The real shell (`ShareView`), the real page (`ShareTreePage`), the real level view and the real
 // guest tree over sealed rows, with the resolve faked and the heavy sections stubbed to print the nodes they are handed.
-// Each case has its control: a changed share appears after one poll interval; nothing is requested while hidden; a failed
-// resolve leaves the page standing; an unmount stops the loop.
+// The poll is conditional (ADR 0081): the faked resolve keeps a tag like the server's digest, answers `null` (a 304) to an
+// echo of it, and the page does nothing with that. Each case has its control: a changed share appears after one poll
+// interval; an idle one is a 304 and tells the sections nothing; nothing is requested while hidden; a failed resolve
+// leaves the page standing; a link that is GONE (revoked, expired, deleted, its root trashed) flips the page to its
+// unavailable state and ends the loop; a changed password flips it to the gate; an unmount stops the loop.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
@@ -17,7 +20,7 @@ vi.mock('../features/memory/api', async (orig) => (await import('../test/guestMo
 vi.mock('../features/files/api', async (orig) => (await import('../test/guestMode')).guardedClients(await orig<object>()))
 vi.mock('../core/sharing/resolvePublicShare', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../core/sharing/resolvePublicShare')>()
-  return { ...actual, resolvePublicShare: vi.fn(), fetchShareTerms: vi.fn() }
+  return { ...actual, resolvePublicShare: vi.fn(), pollPublicShare: vi.fn(), fetchShareTerms: vi.fn() }
 })
 vi.mock('../features/memory/components/MemoriesSection.vue', async () => {
   const { defineComponent, h } = await import('vue')
@@ -34,7 +37,14 @@ vi.mock('../features/files/components/FilesSection.vue', async () => {
 })
 
 import ShareView from './ShareView.vue'
-import { resolvePublicShare, fetchShareTerms, type PublicShareHead } from '../core/sharing/resolvePublicShare'
+import {
+  resolvePublicShare,
+  pollPublicShare,
+  fetchShareTerms,
+  ShareUnavailableError,
+  SharePasswordIncorrectError,
+  type PublicShareHead,
+} from '../core/sharing/resolvePublicShare'
 import { sealName, wrapContentKey } from '../core/node/tree'
 import { ShareRole, type PublicShare, type ShareNode } from '../api/generated/sharing'
 import { FOLDER_KIND } from '../core/node/kind'
@@ -67,6 +77,12 @@ function head(files: ShareNode[]): PublicShareHead {
 }
 
 let served: PublicShareHead
+let servedTag: string // the digest the faked server holds for `served`; every change of it moves the tag
+const serve = (next: PublicShareHead) => {
+  served = next
+  servedTag = `"${tagCounter++}"`
+}
+let tagCounter = 1
 const setVisibility = (state: 'visible' | 'hidden') => {
   Object.defineProperty(document, 'visibilityState', { value: state, configurable: true })
   document.dispatchEvent(new Event('visibilitychange'))
@@ -95,8 +111,11 @@ beforeEach(() => {
   setVisibility('visible')
   localStorage.clear()
   authenticatedCalls.length = 0
-  served = head([])
+  serve(head([]))
   vi.mocked(resolvePublicShare).mockReset().mockImplementation(async () => served)
+  vi.mocked(pollPublicShare).mockReset().mockImplementation(async (_id, _key, _pw, ifNoneMatch) =>
+    ifNoneMatch === servedTag ? null : { head: served, etag: servedTag },
+  )
   vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: 't-1', termsVersion: 0, terms: {} })
 })
 afterEach(() => {
@@ -108,10 +127,10 @@ describe("a share guest's folder page, live", () => {
   it("shows a peer's new file after one poll interval, with no reload", async () => {
     const w = await mountPage()
     expect(w.find('.files-stub').text()).toBe('')
-    vi.mocked(resolvePublicShare).mockClear()
-    served = head([fileOf('6e5a0000-0000-4000-8000-0000000009a1', 'foto.png')])
+    vi.mocked(pollPublicShare).mockClear()
+    serve(head([fileOf('6e5a0000-0000-4000-8000-0000000009a1', 'foto.png')]))
     await settle(OVER_ONE_INTERVAL)
-    expect(resolvePublicShare).toHaveBeenCalled()
+    expect(pollPublicShare).toHaveBeenCalled()
     expect(w.find('.files-stub').text()).toBe('foto.png')
     expect(authenticatedCalls).toEqual([])
     w.unmount()
@@ -119,36 +138,78 @@ describe("a share guest's folder page, live", () => {
 
   it('requests nothing while the tab is hidden, and catches up when it shows', async () => {
     const w = await mountPage()
-    vi.mocked(resolvePublicShare).mockClear()
+    vi.mocked(pollPublicShare).mockClear()
     setVisibility('hidden')
-    served = head([fileOf('6e5a0000-0000-4000-8000-0000000009a1', 'foto.png')])
+    serve(head([fileOf('6e5a0000-0000-4000-8000-0000000009a1', 'foto.png')]))
     await settle(120_000)
-    expect(resolvePublicShare).not.toHaveBeenCalled()
+    expect(pollPublicShare).not.toHaveBeenCalled()
     setVisibility('visible')
     await settle(0)
-    expect(resolvePublicShare).toHaveBeenCalledTimes(1)
+    expect(pollPublicShare).toHaveBeenCalledTimes(1)
     expect(w.find('.files-stub').text()).toBe('foto.png')
     w.unmount()
   })
 
   it('a failed resolve leaves the page standing (no unavailable state), and the loop backs off', async () => {
     const w = await mountPage()
-    vi.mocked(resolvePublicShare).mockReset().mockRejectedValue(new Error('down'))
+    vi.mocked(pollPublicShare).mockReset().mockRejectedValue(new Error('down'))
     await settle(OVER_ONE_INTERVAL)
-    expect(vi.mocked(resolvePublicShare)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(pollPublicShare)).toHaveBeenCalledTimes(1)
     expect(w.find('.share-view-unavailable').exists()).toBe(false)
     expect(w.find('.files-stub').exists()).toBe(true)
     await settle(OVER_ONE_INTERVAL)
-    expect(vi.mocked(resolvePublicShare)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(pollPublicShare)).toHaveBeenCalledTimes(1)
+    w.unmount()
+  })
+
+  it('echoes the last response\'s tag; an idle link is a 304 that swaps nothing and tells the sections nothing', async () => {
+    const w = await mountPage()
+    vi.mocked(pollPublicShare).mockClear()
+    await settle(OVER_ONE_INTERVAL) // the load's response carried no tag the page holds: this first poll is a full read
+    await settle(OVER_ONE_INTERVAL * 2)
+    const calls = vi.mocked(pollPublicShare).mock.calls
+    expect(calls.length).toBeGreaterThanOrEqual(3)
+    expect(calls[0][3]).toBeNull()
+    for (const call of calls.slice(1)) expect(call[3]).toBe(servedTag) // every later poll echoes it
+    expect(Number(w.find('.files-stub').attributes('data-tick'))).toBe(1) // only the first, full read told the sections
+    w.unmount()
+  })
+
+  it('a link revoked, expired or deleted flips the page to its unavailable state, and the loop ends', async () => {
+    const w = await mountPage()
+    expect(w.find('.share-view-unavailable').exists()).toBe(false) // control: standing before
+    vi.mocked(pollPublicShare).mockReset().mockRejectedValue(new ShareUnavailableError('not_found'))
+    await settle(OVER_ONE_INTERVAL)
+    expect(w.find('.share-view-unavailable').exists()).toBe(true)
+    expect(w.find('.files-stub').exists()).toBe(false)
+    await settle(OVER_ONE_INTERVAL * 3)
+    expect(vi.mocked(pollPublicShare)).toHaveBeenCalledTimes(1) // nothing is asked of a link that is gone
+    w.unmount()
+  })
+
+  it('a link whose root was trashed (it serves no kind any more) is unavailable too', async () => {
+    const w = await mountPage()
+    serve({ ...head([]), rootKind: null })
+    await settle(OVER_ONE_INTERVAL)
+    expect(w.find('.share-view-unavailable').exists()).toBe(true)
+    w.unmount()
+  })
+
+  it('a link that became password-protected under a guest shows the gate, not the page', async () => {
+    const w = await mountPage()
+    vi.mocked(pollPublicShare).mockReset().mockRejectedValue(new SharePasswordIncorrectError())
+    await settle(OVER_ONE_INTERVAL)
+    expect(w.find('#share-password-input').exists()).toBe(true)
+    expect(w.find('.share-view-unavailable').exists()).toBe(false)
     w.unmount()
   })
 
   it('stops with the page', async () => {
     const w = await mountPage()
-    vi.mocked(resolvePublicShare).mockClear()
+    vi.mocked(pollPublicShare).mockClear()
     w.unmount()
     await settle(OVER_ONE_INTERVAL * 3)
-    expect(resolvePublicShare).not.toHaveBeenCalled()
+    expect(pollPublicShare).not.toHaveBeenCalled()
   })
 
   it("keeps the guest's view preferences apart from the account's, and gives them back on leaving", async () => {

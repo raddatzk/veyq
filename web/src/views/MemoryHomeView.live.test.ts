@@ -1,8 +1,11 @@
 // @vitest-environment happy-dom
 // The member's level view picks up what others changed WITHOUT a reload (inbox #408): the real host (`MemoryHomeView`),
-// the real level view, the real tree store and the real tree decryption over sealed rows served by a faked content API;
+// the real level view, the real tree store and the real tree decryption over sealed rows served by a faked content API
+// that keeps a tree revision like the server's (ADR 0081: the listing's `ETag`, a `304` for an echo of it);
 // only the heavy section components are stubs that print the nodes they are handed. What this pins, each with its
-// control: a row a peer added appears after one poll interval; nothing is requested while the tab is hidden (and the
+// control: a row a peer added appears after one poll interval; the poll is CONDITIONAL — it echoes the tag of what is
+// shown, an idle scope is a 304 that does no tree work and tells the sections nothing, a moved one updates the tree; a
+// moved revision whose rows did not change replaces nothing; nothing is requested while the tab is hidden (and the
 // loop resumes when it shows); an open dialog pauses it; an unmount stops it; and a poll that began before a write's own
 // re-read of the tree never overwrites it.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -51,6 +54,8 @@ import { loadTree, treeStore, resetTree } from '../core/node/treeStore'
 import { contentApi } from '../api/client'
 import { listMyTenants } from '../features/spaces/scopes'
 import { fakeApi } from '../test/apiMock'
+import { apiResponse } from '../test/apiResponse'
+import { httpError } from '../test/httpError'
 import type { ContentApi, NodeSummary } from '../api/generated/content'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
@@ -71,7 +76,12 @@ const cache = new Map<string, NodeSummary>()
 const rowOf = (id: string, kind: string, name: string) => cache.get(id + name) ?? (cache.set(id + name, row(id, kind, name)), cache.get(id + name)!)
 
 let served: NodeSummary[]
-let listNodes: ReturnType<typeof vi.fn<ContentApi['listNodes']>>
+let revision: number // the tree revision the faked server is at: every change moves it, as every write of the server's does
+let listNodes: ReturnType<typeof vi.fn<ContentApi['listNodesRaw']>>
+const change = (rows: NodeSummary[]) => {
+  served = rows
+  revision++
+}
 
 const setVisibility = (state: 'visible' | 'hidden') => {
   Object.defineProperty(document, 'visibilityState', { value: state, configurable: true })
@@ -98,8 +108,12 @@ beforeEach(async () => {
   resetTree()
   vi.mocked(listMyTenants).mockResolvedValue([])
   served = [rowOf(FOLDER_ID, 'FOLDER', 'Trips')]
-  listNodes = vi.fn<ContentApi['listNodes']>(async () => served)
-  fakeApi(contentApi, { listNodes })
+  revision = 1
+  listNodes = vi.fn<ContentApi['listNodesRaw']>(async ({ ifNoneMatch }) => {
+    if (ifNoneMatch === `"${revision}"`) throw httpError(304)
+    return apiResponse(served, { ETag: `"${revision}"` })
+  })
+  fakeApi(contentApi, { listNodesRaw: listNodes })
   await loadTree()
   listNodes.mockClear()
 })
@@ -111,7 +125,7 @@ describe('the member level view, live', () => {
   it("shows a peer's new file after one poll interval, with no reload", async () => {
     const w = await mountLevel()
     expect(w.find('.files-stub').text()).toBe('')
-    served = [...served, rowOf(FILE_ID, 'FILE', 'foto.png')]
+    change([...served, rowOf(FILE_ID, 'FILE', 'foto.png')])
     await settle(OVER_ONE_INTERVAL)
     expect(listNodes).toHaveBeenCalled()
     expect(w.find('.files-stub').text()).toBe('foto.png')
@@ -122,7 +136,7 @@ describe('the member level view, live', () => {
   it('requests nothing while the tab is hidden, and catches up the moment it shows', async () => {
     const w = await mountLevel()
     setVisibility('hidden')
-    served = [...served, rowOf(FILE_ID, 'FILE', 'foto.png')]
+    change([...served, rowOf(FILE_ID, 'FILE', 'foto.png')])
     await settle(120_000)
     expect(listNodes).not.toHaveBeenCalled()
     expect(w.find('.files-stub').text()).toBe('')
@@ -157,14 +171,64 @@ describe('the member level view, live', () => {
     w.unmount()
   })
 
+  it("echoes the tag of what is shown, and an idle scope's 304 is no work and no cue for the sections", async () => {
+    const w = await mountLevel()
+    const before = treeStore.nodes
+    await settle(OVER_ONE_INTERVAL * 3)
+    expect(listNodes.mock.calls.length).toBeGreaterThanOrEqual(2)
+    for (const [request] of listNodes.mock.calls) expect(request.ifNoneMatch).toBe('"1"') // the load's tag, on every poll
+    expect(treeStore.nodes).toBe(before) // not even re-opened
+    expect(w.find('.files-stub').attributes('data-tick')).toBe('0') // a 304 tells the sections nothing
+    w.unmount()
+  })
+
+  it('takes the new tag from a moved scope and echoes THAT on the next poll', async () => {
+    const w = await mountLevel()
+    change([...served, rowOf(FILE_ID, 'FILE', 'foto.png')])
+    await settle(OVER_ONE_INTERVAL)
+    expect(w.find('.files-stub').text()).toBe('foto.png')
+    listNodes.mockClear()
+    await settle(OVER_ONE_INTERVAL)
+    expect(listNodes.mock.calls.map(([r]) => r.ifNoneMatch)).toEqual(['"2"'])
+    w.unmount()
+  })
+
+  it("a moved revision with this level's rows unchanged replaces nothing, yet tells the sections to look again", async () => {
+    const w = await mountLevel()
+    const before = treeStore.nodes
+    revision++ // a change the level does not show: another folder, an upload completing on an existing file
+    await settle(OVER_ONE_INTERVAL)
+    expect(listNodes.mock.calls.some(([r]) => r.ifNoneMatch === '"1"')).toBe(true)
+    expect(treeStore.nodes).toBe(before) // the same array: nothing re-renders
+    expect(Number(w.find('.files-stub').attributes('data-tick'))).toBeGreaterThan(0) // Files re-reads its blob listing
+    w.unmount()
+  })
+
+  it('falls back to the fingerprint when the server sends no tag: every poll is a full read, applied only on a difference', async () => {
+    listNodes.mockImplementation(async () => apiResponse(served)) // no ETag header
+    await loadTree()
+    const w = await mountLevel()
+    const before = treeStore.nodes
+    await settle(OVER_ONE_INTERVAL)
+    expect(listNodes).toHaveBeenCalled()
+    expect(listNodes.mock.calls.every(([r]) => r.ifNoneMatch === undefined)).toBe(true)
+    expect(treeStore.nodes).toBe(before)
+    served = [...served, rowOf(FILE_ID, 'FILE', 'foto.png')]
+    await settle(OVER_ONE_INTERVAL)
+    expect(w.find('.files-stub').text()).toBe('foto.png')
+    w.unmount()
+  })
+
   it("never overwrites a write's own re-read with a poll that began before it", async () => {
     const w = await mountLevel()
     // The poll's read hangs; meanwhile this tab writes and re-reads the tree (loadTree), which sees the new file.
     let releasePoll: (rows: NodeSummary[]) => void = () => {}
-    listNodes.mockImplementationOnce(() => new Promise<NodeSummary[]>((resolve) => (releasePoll = resolve)))
+    listNodes.mockImplementationOnce(
+      () => new Promise((resolve) => (releasePoll = (rows) => resolve(apiResponse(rows, { ETag: '"1"' })))),
+    )
     await settle(OVER_ONE_INTERVAL)
     const stale = [...served]
-    served = [...served, rowOf(FILE_ID, 'FILE', 'mine.png')]
+    change([...served, rowOf(FILE_ID, 'FILE', 'mine.png')])
     await loadTree()
     await nextTick()
     expect(w.find('.files-stub').text()).toBe('mine.png')

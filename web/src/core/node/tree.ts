@@ -31,7 +31,7 @@ import type { NodeSummary, TrashedNodeSummary } from '../../api/generated/conten
 import { FOLDER_KIND, type NodeKind } from './kind'
 import { writeKey, keyAt, type EpochKeys } from '../../features/spaces/epochs'
 import { registry } from '../applications/registry'
-import { HttpStatus, isCodedError } from '../../shared/httpError'
+import { HttpStatus, isCodedError, isHttpStatus } from '../../shared/httpError'
 import { expectMintedId } from './mintedId'
 import { identityEntryKey } from '../sharing/dropKey'
 
@@ -164,6 +164,29 @@ function openEntries(scopeId: string, epochs: EpochKeys, rows: EntryRow[]): Map<
 /** The scope's rows as the server lists them (`parentId` normalised to null), still sealed. */
 export async function fetchTreeRows(scopeId: string): Promise<NodeSummary[]> {
   return (await withRefresh(() => contentApi().listNodes({ scopeId }))).map((r: NodeSummary) => ({ ...r, parentId: r.parentId ?? null }))
+}
+
+/** The scope's rows with the tree revision they were read at (the listing's `ETag`, ADR 0081; `null` when the server
+ *  names none). */
+export interface TreeRead {
+  rows: NodeSummary[]
+  etag: string | null
+}
+
+/**
+ * The scope's rows as a conditional read (ADR 0081): with `ifNoneMatch` — the tag of the last read — an unchanged scope
+ * answers `304` and this resolves `null` (nothing read, nothing to open); otherwise the rows and their new tag. Other
+ * failures reject. The live refresh asks this way; a plain load passes no tag and so always gets rows.
+ */
+export async function fetchTree(scopeId: string, ifNoneMatch?: string | null): Promise<TreeRead | null> {
+  try {
+    const res = await withRefresh(() => contentApi().listNodesRaw({ scopeId, ifNoneMatch: ifNoneMatch ?? undefined }))
+    const rows = (await res.value()).map((r: NodeSummary) => ({ ...r, parentId: r.parentId ?? null }))
+    return { rows, etag: res.raw.headers.get('ETag') }
+  } catch (e) {
+    if (ifNoneMatch && isHttpStatus(e, HttpStatus.notModified)) return null
+    throw e
+  }
 }
 
 /** A string that differs whenever any listed row differs in a way a view can show: the shape (parent, kind, order), the
