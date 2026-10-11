@@ -19,6 +19,7 @@ database:
 
 - your **photos and videos** (and the smaller preview versions),
 - your **journal text**,
+- your **files** — documents, PDFs, anything you keep in [Files](files.md) — and their **names**,
 - the **sensitive details**: titles, captions, descriptions, places, the people in them, tags,
 - **where** a photo was taken (GPS) and **when** it was captured,
 - the **file's own name**, and everything the camera wrote into the picture: the camera and lens, how it was
@@ -32,7 +33,7 @@ allowed in — the server sees a few **low-sensitivity, operational** facts:
 | We can see | We cannot see |
 |---|---|
 | that a memory / photo / share **exists**, and its ID | what's **inside** it |
-| **how big** a file is | the file itself — not even whether it's a photo or a video, though the way a video streams while someone watches it can give that away |
+| **how big** a file is (a photo, a document, anything) | the file itself — not even whether it's a photo or a video, though the way a video streams while someone watches it can give that away |
 | **who is in which** group or space | what they wrote or uploaded |
 | **when** something was uploaded or last changed | when a photo was **taken** — your device sorts your timeline by that date, and it stays locked |
 
@@ -45,11 +46,13 @@ Sharing is the one moment you **choose** to lower the wall — always by your ex
 
 - Share with a **group or person** and they can read that content. You've given it up **to them** —
   not to us; we still can't read it.
-- A **public link** can be opened by **anyone who has the link**. The secret that unlocks it lives
+- A **public link** — to a folder, a single file or a Memory — can be opened by **anyone who has the link**. The secret that unlocks it lives
   **in the link itself** and never reaches our server — so a public share is "readable by
   link-holders, still not by us." The address without that secret can read nothing — and add nothing: on
   a link that lets guests add photos, their app first has to prove it holds the secret, so someone who
   only has the address (say, from a copy of our database) cannot upload anything through it.
+
+How the different links work — view only, view and add, drop box — is in [Sharing](sharing.md).
 
 Three honest limits:
 - **Un-sharing doesn't un-download.** Revoking access stops *future* access; it can't reach back and
