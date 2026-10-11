@@ -66,6 +66,8 @@ afterAll(() => {
 const bytesOf = (n: number, salt: number) => new Uint8Array(n).map((_, i) => (i * 13 + salt) % 251)
 const fileOf = (bytes: Uint8Array, name: string) => new File([bytes as BlobPart], name, { type: MIME, lastModified: 1_700_000_000_000 })
 const ctx = () => ({ onProgress: () => {}, signal: new AbortController().signal })
+// Sealed-looking filler (48 random bytes): the wire check refuses a declared-opaque field shorter than a nonce and a tag.
+const filler = (): string => Buffer.from(crypto.getRandomValues(new Uint8Array(48))).toString('base64')
 const contentOf = async (b: Blob) => Array.from(new Uint8Array(await b.arrayBuffer()))
 const failure = (p: Promise<unknown>): Promise<unknown> => p.then(() => null, (e: unknown) => e)
 
@@ -91,7 +93,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('single-file share e2e (live, real crypto
 
     // --- a WRITE_ONLY link on a file is refused ------------------------------------------------------------------------
     const dropOnFile = await failure(mintShare(scopeId, target, targetKey, epochs, TARGET_FILE, ShareRole.WriteOnly, null, {}, '', '', {
-      dropFields: async () => ({ sealedDropPublicKey: 'ZHJvcA==', sealedDropPrivateKey: 'cHJpdg==' }),
+      dropFields: async () => ({ sealedDropPublicKey: filler(), sealedDropPrivateKey: filler() }),
     }))
     expect(await decodeHttpError(dropOnFile)).toEqual({ status: 422, code: 'illegal_scope' })
 
