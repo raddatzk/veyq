@@ -89,7 +89,7 @@ reads).
   version history (owner decision 2026-10-08, inbox #383); "replace anyway" after a peer's replace is itself the
   answer and asks nothing), plan and pump the blob
   under the node's own key with the file's metadata sealed under its `K_blob`, then `completeFile` with
-  `expectedBlobId` — nothing is written after it. The status menu shows progress; the section says why a file of its
+  `expectedBlobId` — nothing is written after it. The status menu shows progress; a final refusal (`slug_taken`, `illegal_structure`, `stale_file` — the job's `isFinal`, core's queue) fails the item at once and the menu offers no retry for it; the section says why a file of its
   folder was not uploaded (a taken name, `stale_file` with "replace anyway", no space). **A name another kind holds is
   not sent** (inbox #400): before anything is asked, every picked name is folded by the file's function and each
   sibling's by its own kind's (core's `collidingSibling`, the dialogs' pre-check), and one that meets a folder, Memory

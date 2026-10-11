@@ -9,7 +9,7 @@
 // Rules, carried over unchanged from the queue Memories had (cr-0058, cr-0105, cr-0111, ADR 0073 §6): SEQUENTIAL
 // (one job at a time, batches in enqueue order), fraction-based progress (no speed/ETA), one automatic retry on a
 // transient failure, explicit retry on a hard failure — except a refusal no retry can help (`quota_exceeded`), which
-// fails at once and offers none. An abort (the item's signal, or an `AbortError`) settles `cancelled`, never `failed`.
+// fails at once and offers none, as does a refusal the job itself declares final (`isFinal`). An abort (the item's signal, or an `AbortError`) settles `cancelled`, never `failed`.
 import { reactive, computed } from 'vue'
 
 // `preparing` = picked up, but still in the runner's pre-network phase (for a media file: derive poster/dimensions,
@@ -41,6 +41,12 @@ export type UploadJob<R = unknown, X extends object = object> = {
    * user starts clean. Awaited before the batch settles; a throw is swallowed (best effort, never a second failure).
    */
   abandon?(): Promise<void> | void
+  /**
+   * Whether `error` is a refusal no retry of THIS job can change (Files: a taken name, an illegal structure, a file a
+   * peer replaced). The queue then fails the item at once and the tray offers no retry — a retry would only fail
+   * again. Core's own [QUOTA_EXCEEDED] needs no declaration here.
+   */
+  isFinal?(error: string): boolean
 }
 
 /** A job in the queue, with its state. `X` is the application's own fields from the job's `extra`. */
@@ -51,6 +57,8 @@ export type UploadItem<R = unknown, X extends object = object> = X & {
   status: UploadStatus
   progress: number // 0..1
   error?: string
+  /** Set with `error` when the job declared the refusal final ({@link UploadJob.isFinal}): no retry is offered. */
+  final?: boolean
   attempts: number
   controller: AbortController
   /** What `run` resolved with once the item settled `done`. Undefined until then. */
@@ -92,8 +100,9 @@ const MAX_ATTEMPTS = 2 // one automatic retry on a transient failure
  */
 export const QUOTA_EXCEEDED = 'quota_exceeded'
 
-/** Whether a failed item is one a retry could help — every failure but [QUOTA_EXCEEDED]. */
-export const isRetryable = (f: { error?: string }): boolean => f.error !== QUOTA_EXCEEDED
+/** Whether a failed item is one a retry could help — every failure but [QUOTA_EXCEEDED] and a refusal its job declared
+ *  final ({@link UploadJob.isFinal}). */
+export const isRetryable = (f: { error?: string; final?: boolean }): boolean => f.error !== QUOTA_EXCEEDED && !f.final
 
 const batches = reactive<AnyBatch[]>([])
 /** The job behind each item, by item id — kept off the reactive item so the queue's state stays plain data. */
@@ -140,11 +149,15 @@ async function runOne(item: AnyItem): Promise<void> {
     const error = (e as Error)?.message ?? 'upload_failed'
     if (item.controller.signal.aborted || (e as { name?: string })?.name === 'AbortError') {
       item.status = 'cancelled'
-    } else if (item.attempts < MAX_ATTEMPTS && isRetryable({ error })) {
-      item.status = 'queued' // one automatic retry on a transient failure
     } else {
-      item.status = 'failed'
-      item.error = error
+      const final = job.isFinal?.(error) === true
+      if (item.attempts < MAX_ATTEMPTS && isRetryable({ error, final })) {
+        item.status = 'queued' // one automatic retry on a transient failure
+      } else {
+        item.status = 'failed'
+        item.error = error
+        if (final) item.final = true
+      }
     }
     if (item.status !== 'queued') await abandon(job)
   }
@@ -243,6 +256,7 @@ export function retryFile(fileId: string): void {
     item.status = 'queued'
     item.attempts = 0
     item.error = undefined
+    item.final = undefined
     batch.finishedAt = null
     scheduleRunner()
     return

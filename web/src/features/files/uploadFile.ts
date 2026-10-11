@@ -193,6 +193,7 @@ export function fileUploadJob(target: FileUploadTarget, file: File): UploadJob<F
     sizeBytes: file.size,
     run,
     abandon,
+    isFinal: (error) => FINAL.has(error),
     extra: target.replace ? { file, replaceNodeId: target.replace.nodeId } : { file },
   }
 }

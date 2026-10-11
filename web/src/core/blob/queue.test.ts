@@ -159,6 +159,18 @@ describe('core upload queue — failure and retry', () => {
     expect(isRetryable({ error: 'chunk_put_failed:500' })).toBe(true)
   })
 
+  it('fails a refusal its job declares final on the first attempt and marks the item not retryable', async () => {
+    const run = vi.fn<Run>().mockRejectedValue(new Error('stale_file'))
+    const { batches } = useUploadQueue()
+    enqueue([{ ...job('a', run), isFinal: (e) => e === 'stale_file' }], { label: '1' })
+    const item = batches.value[0].files[0]
+
+    await vi.waitFor(() => expect(item.status).toBe('failed'))
+    expect(run).toHaveBeenCalledOnce()
+    expect(isRetryable(item)).toBe(false)
+    expect(item.final).toBe(true)
+  })
+
   it('marks a job failed after the retry is exhausted; retryFile re-runs it with fresh attempts', async () => {
     const run = vi.fn<Run>().mockRejectedValue(new Error('chunk_put_failed:500'))
     const complete = vi.fn()

@@ -89,6 +89,7 @@ export function guestFileUploadJob(target: GuestFileTarget, file: File): UploadJ
     name: file.name,
     sizeBytes: file.size,
     run,
+    isFinal: (error) => FINAL.has(error),
     extra: target.replace ? { file, replaceNodeId: target.replace.nodeId } : { file },
   }
 }
