@@ -117,7 +117,12 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   `@NotBlank`/`@Size`/`@Pattern` + a Jackson trim deserializer) → enforced by `@Valid` at the boundary,
   **400 before the handler** — but only one level deep: a nested object or list needs its own
   `@field:jakarta.validation.Valid`, a list of scalars carries its elements' bounds as core's `EachElement`, and
-  every request bound needs its annotation ([styleguide](../docs/crosscutting/developer-styleguide.md)). Don't
+  every request bound needs its annotation ([styleguide](../docs/crosscutting/developer-styleguide.md)). A list's
+  `@field:jakarta.validation.Valid` stays in the spec, but the generated field is rewritten to `List<@Valid Item>`
+  (`buildSrc`'s `ModelCascade`; Hibernate Validator 9 warns `HV000271` on a container-level `@Valid`). **Trap:** the
+  type-argument annotation reaches the bytecode only with `-Xemit-jvm-type-annotations` (`veyq.module`) — drop the flag
+  and the cascade silently vanishes (nested-element slice tests + `GeneratedCascadeSweepTest` go red); a generator
+  bump that writes a list differently fails the build in `ModelCascade` rather than losing the cascade. Don't
   re-validate field shape in the handler. Every such refusal — and Jackson's own, below — answers the contract's
   `400 invalid_request` with nothing of the request in it, through core's `core/http/RequestRejectionMappers.kt`
   (styleguide §7); an application writes no mapper of its own.
