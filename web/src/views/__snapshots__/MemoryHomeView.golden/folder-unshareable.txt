@@ -5,6 +5,13 @@ div.veyq-node-host
         span.p-button-icon.p-button-icon-left.pi.pi-trash
         span.p-button-label
           "Trash"
+      div.view-mode-toggle [role="group"] [aria-label="View"]
+        button.is-active.view-mode-button [aria-label="Grid view"] [aria-pressed="true"]
+          span.pi.pi-th-large
+        button.view-mode-button [aria-label="List view"] [aria-pressed="false"]
+          span.pi.pi-bars
+        button.view-mode-button [aria-label="Map view"] [aria-pressed="false"]
+          span.pi.pi-map
     section.veyq-section
       div.veyq-section-header
         div.veyq-card.veyq-folder-card.veyq-folder-overview-card
@@ -22,14 +29,6 @@ div.veyq-node-host
           "Memories"
         span
           "1"
-        div.memory-browse-toolbar
-          div.view-mode-toggle [role="group"] [aria-label="View"]
-            button.is-active.view-mode-button [aria-label="Grid view"] [aria-pressed="true"]
-              span.pi.pi-th-large
-            button.view-mode-button [aria-label="List view"] [aria-pressed="false"]
-              span.pi.pi-bars
-            button.view-mode-button [aria-label="Map view"] [aria-pressed="false"]
-              span.pi.pi-map
       div.memory-card-grid
         div.memory-card.p-card.p-component.veyq-card.veyq-card-interactive
           div.p-card-body

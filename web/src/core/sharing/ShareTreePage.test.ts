@@ -224,7 +224,9 @@ describe("ShareTreePage browses a shared folder with core's level view", () => {
 
   it('a READ guest is offered nothing that writes or is a member\'s: no trash, no share, rename or delete, no create', async () => {
     const w = await mountBody(head())
-    expect(w.find('.veyq-level-toolbar').exists(), "the space's trash").toBe(false)
+    expect(w.find(`.veyq-level-toolbar button[aria-label="${t('node.trash.open')}"]`).exists(), "the space's trash").toBe(false)
+    // …while the view switch is the guest's too (inbox #370: a share view is the member view)
+    expect(w.find('.veyq-level-toolbar .view-mode-toggle').exists()).toBe(true)
     expect(w.find('.veyq-folder-overview-actions').exists(), 'share, rename, delete').toBe(false)
     expect(w.find('.veyq-create-card').exists()).toBe(false)
     expect(w.find('.share-folder-badge').text()).toBe(t('share.readonly'))

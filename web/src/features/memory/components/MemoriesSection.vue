@@ -5,11 +5,10 @@
 // former `MemoryBrowse.vue`, whose template and classes were the design source's MemoryFolderOverview verbatim; the
 // overview card and the Folders section around it are core's now, this is the Memories half, markup unchanged.
 //
-// Two deliberate deviations from that source stay: the view-mode toggle sits *inside* this section's header rather than
-// on a row of its own — right-aligned controls on an otherwise empty row read as a blank line — and the section stays
-// mounted in map mode (the map is its body instead of the grid), which keeps the toggle reachable there without a
-// second copy of it. The space's trash button was here too until Files needed it: it is core's level view's now
-// (inbox #370, #385; the toggle stays, its map being Memories').
+// One deliberate deviation from that source stays: the section stays mounted in map mode (the map is its body instead of
+// the grid). The space's trash button and the grid/list/map switch were in this section's header until Files needed
+// them too: both are core's level-view toolbar now (inbox #370, #385) — the switch offers the map because this section
+// names it among its `views` (`register.ts`), and the section only draws what the mode says.
 //
 // **A share guest's level too (inbox #401 S2).** Core's guest folder page renders this section with a guest's `access`
 // and its `tree` (`core/sharing/guestAccess.ts`): the same cards, dates, covers and map, read from what the link opened —
@@ -34,7 +33,6 @@ import { memoryCapabilities } from '../capabilities'
 import { targetOf, type TreeSource } from '../../../core/access'
 import { useGuestCovers } from '../guestCover'
 import MemoryCard from './MemoryCard.vue'
-import ViewModeToggle from './ViewModeToggle.vue'
 import SpaceMap from './SpaceMap.vue'
 
 // `epochs` (the scope's epoch key set, ADR 0024) unseals each Memory's sealed date/cover/pins under its own epoch's
@@ -129,16 +127,12 @@ watch(
 </script>
 
 <template>
-  <!-- One Memories section in every view mode: its header carries the browse toolbar (so the controls share the
-       heading's row instead of claiming an empty one of their own), its body is the card grid or the map. -->
+  <!-- One Memories section in every view mode: its body is the card grid or the map. -->
   <section class="veyq-section memory-section">
     <div class="veyq-section-header memory-section-header">
       <h2>{{ t('memory.memories') }}</h2>
       <!-- the map's pins span the whole subtree, so this level's count would misread there -->
       <span v-if="viewMode !== 'map'">{{ nodes.length }}</span>
-      <div class="memory-browse-toolbar">
-        <ViewModeToggle show-map />
-      </div>
     </div>
     <SpaceMap v-if="viewMode === 'map'" :pins="pins" :covers="coverMap" @open="onPinOpen" />
     <div v-else class="memory-card-grid" :class="{ 'is-list': viewMode === 'list' }">
@@ -171,12 +165,3 @@ watch(
   </section>
 </template>
 
-<style scoped>
-.memory-browse-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-  margin-left: auto;
-}
-</style>

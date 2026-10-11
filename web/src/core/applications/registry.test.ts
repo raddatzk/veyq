@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { defineComponent } from 'vue'
 import { createRegistry, type LifecycleHooks } from './registry'
 import { FOLDER_KIND, type NodeKind } from '../node/kind'
+import { GRID_VIEW, LIST_VIEW } from '../node/levelViews'
 import { MEMORY_KIND, CHAPTER_KIND } from '../../features/memory/kinds'
 import { fileNameSlug, slugify } from '../../shared/naming'
 
@@ -217,8 +218,8 @@ describe('registry: level sections', () => {
     r.registerKind({ kind: 'LATE', icon: 'x', shareable: false, section: { order: 20, component: Other } })
     r.registerKind({ kind: 'EARLY', icon: 'x', shareable: false, section: { order: 10, component: Stub } })
     expect(r.sections()).toEqual([
-      { component: Stub, order: 10, kinds: ['EARLY'] },
-      { component: Other, order: 20, kinds: ['LATE'] },
+      { component: Stub, order: 10, views: [], kinds: ['EARLY'] },
+      { component: Other, order: 20, views: [], kinds: ['LATE'] },
     ])
   })
 
@@ -235,8 +236,8 @@ describe('registry: level sections', () => {
     r.registerKind({ kind: 'OTHER', icon: 'x', shareable: false, section: { order: 5, component: Other } })
     r.registerKind({ kind: CHAPTER_KIND, icon: 'x', shareable: true, section: { order: 10, component: Stub } })
     expect(r.sections()).toEqual([
-      { component: Other, order: 5, kinds: ['OTHER'] },
-      { component: Stub, order: 10, kinds: [MEMORY_KIND, CHAPTER_KIND] },
+      { component: Other, order: 5, views: [], kinds: ['OTHER'] },
+      { component: Stub, order: 10, views: [], kinds: [MEMORY_KIND, CHAPTER_KIND] },
     ])
   })
 
@@ -246,7 +247,23 @@ describe('registry: level sections', () => {
     expect(() => r.registerKind({ kind: CHAPTER_KIND, icon: 'x', shareable: true, section: { order: 11, component: Stub } }))
       .toThrow(/CHAPTER names the section of MEMORY with order 11, not 10/)
     expect(r.kind(CHAPTER_KIND).supported).toBe(false)
-    expect(r.sections()).toEqual([{ component: Stub, order: 10, kinds: [MEMORY_KIND] }])
+    expect(r.sections()).toEqual([{ component: Stub, order: 10, views: [], kinds: [MEMORY_KIND] }])
+  })
+
+  // inbox #370: a section names its presentations; core's level toolbar offers them. One component renders one way.
+  it('carries a section\'s views, and refuses a kind naming a shared section with other views, registering nothing of it', () => {
+    const r = createRegistry()
+    const map = { mode: 'map', icon: 'pi pi-map', label: 'x.map' } as const
+    r.registerKind({ kind: MEMORY_KIND, icon: 'x', shareable: true, section: { order: 10, component: Stub, views: [GRID_VIEW, LIST_VIEW, map] } })
+    r.registerKind({ kind: 'OTHER', icon: 'x', shareable: false, section: { order: 20, component: Other } })
+    expect(() => r.registerKind({ kind: CHAPTER_KIND, icon: 'x', shareable: true, section: { order: 10, component: Stub, views: [GRID_VIEW] } }))
+      .toThrow(/CHAPTER names the section of MEMORY with views \[grid\], not \[grid, list, map\]/)
+    expect(r.kind(CHAPTER_KIND).supported).toBe(false)
+    r.registerKind({ kind: CHAPTER_KIND, icon: 'x', shareable: true, section: { order: 10, component: Stub, views: [GRID_VIEW, LIST_VIEW, map] } })
+    expect(r.sections()).toEqual([
+      { component: Stub, order: 10, views: [GRID_VIEW, LIST_VIEW, map], kinds: [MEMORY_KIND, CHAPTER_KIND] },
+      { component: Other, order: 20, views: [], kinds: ['OTHER'] },
+    ])
   })
 
   it('a kind without a section adds none, and a refused re-registration does not add its section', () => {
@@ -263,8 +280,9 @@ describe('registry: level sections', () => {
     r.registerKind({ kind: MEMORY_KIND, icon: 'x', shareable: true, section: { order: 10, component: Stub } })
     const got = r.sections() as unknown as { kinds: string[] }[]
     got[0].kinds.push('FORGED')
+    ;(got[0] as unknown as { views: unknown[] }).views.push(GRID_VIEW)
     ;(got as unknown[]).length = 0
-    expect(r.sections()).toEqual([{ component: Stub, order: 10, kinds: [MEMORY_KIND] }])
+    expect(r.sections()).toEqual([{ component: Stub, order: 10, views: [], kinds: [MEMORY_KIND] }])
   })
 })
 

@@ -4,7 +4,7 @@
 // a core level view, and promises that nobody using Memories sees a difference; every e2e suite is API-level, so this
 // file is the proof of that promise. It mounts the REAL host (`MemoryHomeView`), the REAL registry as `main.ts` fills
 // it (`src/test/setup.ts` runs `registerApplications()` into this file's fresh registry), core's REAL `LevelView` (since
-// P4b: the overview card and the Folders section), Memories' REAL `MemoriesSection`, `MemoryCard`, `ViewModeToggle` and
+// P4b: the overview card and the Folders section), Memories' REAL `MemoriesSection` and `MemoryCard`, core's REAL `ViewModeToggle`, and
 // PrimeVue buttons, real crypto (every date and pin below is sealed
 // and unsealed for real), and the real i18n catalog. Stubbed: the scope/tree/favourites state (no network), the Leaflet
 // map (no canvas in happy-dom) and the tooltip directive.
@@ -166,10 +166,11 @@ describe('the Memories level view (golden)', () => {
   // Since cr-files-application F1b Files' section follows it: it renders in every folder (its heading, the upload
   // action, its empty state — no FILE child in these fixtures, so it asks the server nothing) and steps aside in map mode.
   it('control: the level view renders the real Memories section registration, then Files\'', () => {
-    expect(registry.sections()).toEqual([
-      { component: MemoriesSection, order: 10, kinds: [MEMORY_KIND, CHAPTER_KIND] },
-      { component: FilesSection, order: 20, kinds: [FILE_KIND] },
-      { component: DropBoxSection, order: 21, kinds: [DROPBOX_KIND] },
+    // Memories names the grid, the list and its map as its presentations (inbox #370): core's level toolbar offers them.
+    expect(registry.sections().map((s) => ({ ...s, views: s.views.map((v) => v.mode) }))).toEqual([
+      { component: MemoriesSection, order: 10, views: ['grid', 'list', 'map'], kinds: [MEMORY_KIND, CHAPTER_KIND] },
+      { component: FilesSection, order: 20, views: [], kinds: [FILE_KIND] },
+      { component: DropBoxSection, order: 21, views: [], kinds: [DROPBOX_KIND] },
     ])
   })
 

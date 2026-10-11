@@ -48,7 +48,8 @@ import MemoryLocationEditor from './MemoryLocationEditor.vue'
 import MemoryCoverImage from './MemoryCoverImage.vue'
 import MemoryCoverDialog from './MemoryCoverDialog.vue'
 import MemoryCard from './MemoryCard.vue'
-import ViewModeToggle from './ViewModeToggle.vue'
+import ViewModeToggle from '../../../core/node/ViewModeToggle.vue'
+import { GRID_VIEW, LIST_VIEW } from '../../../core/node/levelViews'
 import Dialog from 'primevue/dialog'
 import Menu from 'primevue/menu'
 import { useViewMode } from '../../../shared/state/useViewMode'
@@ -649,7 +650,7 @@ watch(
           <!-- Chapters as a MemoryCard grid + a create card, like the browse Memories section (design source).
                Each chapter opens to its own gallery; its media is sealed under the chapter's own K_mem. -->
           <div class="chapters-toolbar">
-            <ViewModeToggle />
+            <ViewModeToggle :views="[GRID_VIEW, LIST_VIEW]" />
           </div>
           <div
             class="memory-card-grid"

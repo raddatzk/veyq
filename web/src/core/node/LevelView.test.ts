@@ -28,7 +28,8 @@ import { FOLDER_KIND, type NodeKind } from './kind'
 import type { TreeNode } from './tree'
 import { setViewMode } from '../../shared/state/useViewMode'
 import { realI18n, t } from '../../test/i18n'
-import { treeNode, memberAccessOf, memberTreeOf } from '../../test/models'
+import { treeNode, memberAccessOf, memberTreeOf, guestAccessOf } from '../../test/models'
+import { ShareRole } from '../../api/generated/sharing'
 import type { Access, TreeSource } from '../access'
 
 /** A section stub: renders its name, what it was handed, and offers buttons for the three events. */
@@ -320,9 +321,55 @@ describe('LevelView: the toolbar', () => {
     }
   })
 
-  it('has none where nothing is written (a pending deletion, a guest\'s folder)', () => {
-    expect(mountLevel([], { pending: true }).find('.veyq-level-toolbar').exists()).toBe(false)
+  it('has no trash where nothing is written (a pending deletion, a guest\'s folder)', () => {
+    expect(trash(mountLevel([], { pending: true }))).toBeUndefined()
+    // an empty identity folder shows no section and no folders: nothing to switch either, so no toolbar at all
     expect(mountLevel([TRIPS], { folder: TRIPS, identityFolder: true }).find('.veyq-level-toolbar').exists()).toBe(false)
+  })
+})
+
+// inbox #370: the view switch governs every section and the folders, so it is the level's — offered as the union of the
+// presentations on screen: the folders' grid and list, and each shown section's `views` from its kind's descriptor.
+describe('LevelView: the view switch', () => {
+  const MAP = { mode: 'map', icon: 'pi pi-map', label: 'node.folders' } as const // core's test names no application key
+  const trash = (w: ReturnType<typeof mountLevel>) => w.findAll('.veyq-level-toolbar button').find((b) => b.text() === t('node.trash.open'))
+  const switchLabels = (w: ReturnType<typeof mountLevel>) =>
+    w.findAll('.veyq-level-toolbar .view-mode-button').map((b) => b.attributes('aria-label'))
+
+  it('offers the folders\' grid and list where no section brings a view; a click switches the folders grid', async () => {
+    reg().registerKind({ kind: 'ALPHA', icon: 'pi pi-a', shareable: false, section: { order: 10, component: A } })
+    const w = mountLevel([TRIPS])
+    expect(switchLabels(w)).toEqual([t('node.viewGrid'), t('node.viewList')])
+    await w.findAll('.view-mode-button')[1].trigger('click')
+    expect(w.find('.veyq-level-grid').classes()).toContain('is-list')
+  })
+
+  it('adds a section\'s own view, each mode once in the order first named; its mode takes the folders section away', async () => {
+    reg().registerKind({ kind: 'ALPHA', icon: 'pi pi-a', shareable: false, section: { order: 10, component: A, views: [{ mode: 'grid', icon: 'pi pi-th-large', label: 'node.viewGrid' }, MAP] } })
+    const w = mountLevel([TRIPS])
+    expect(switchLabels(w)).toEqual([t('node.viewGrid'), t('node.folders'), t('node.viewList')])
+    await w.findAll('.view-mode-button')[1].trigger('click')
+    expect(blocks(w)).toEqual(['section:a'])
+  })
+
+  it('is offered to a guest too, without the trash; and where only one presentation is on screen, not at all', () => {
+    reg().registerKind({ kind: 'ALPHA', icon: 'pi pi-a', shareable: false, section: { order: 10, component: A } })
+    const guest = mount(LevelView, {
+      props: {
+        folder: TRIPS, level: childrenOf([TRIPS], TRIPS.id), access: guestAccessOf(ShareRole.Read), tree: memberTreeOf(() => [TRIPS]),
+      },
+      global: { plugins: [realI18n()], directives: { tooltip: {} } },
+    })
+    expect(trash(guest)).toBeUndefined()
+    expect(guest.findAll('.veyq-level-toolbar .view-mode-button')).toHaveLength(2)
+    // an identity folder with a section of one presentation and no folders: nothing to switch between — whether the
+    // section names no view or exactly one
+    reg().registerKind({ kind: 'BETA', icon: 'pi pi-b', shareable: false, section: { order: 20, component: B, views: [{ mode: 'grid', icon: 'pi pi-th-large', label: 'node.viewGrid' }] } })
+    for (const kind of ['ALPHA', 'BETA']) {
+      const w = mountLevel([TRIPS, node('only', kind, TRIPS.id)], { folder: TRIPS, identityFolder: true })
+      expect(blocks(w)).toEqual(['overview', `section:${kind === 'ALPHA' ? 'a' : 'b'}`])
+      expect(w.find('.view-mode-toggle').exists(), kind).toBe(false)
+    }
   })
 })
 

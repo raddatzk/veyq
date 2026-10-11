@@ -214,7 +214,7 @@ describe('MemoryHomeView over the real registry', () => {
     expect(anna.find('.files-stub').attributes('data-deletable')).toBe('true')
     expect(folderCards(anna)).toEqual(['Deep'])
     expect(share(anna).exists()).toBe(false)
-    expect(anna.find('.veyq-level-toolbar').exists(), 'no trash where nothing is written').toBe(false)
+    expect(anna.find(`.veyq-level-toolbar button[aria-label="${t('node.trash.open')}"]`).exists(), 'no trash where nothing is written').toBe(false)
     const deep = await mountAt('#~me/trips/anna/deep')
     expect(deep.find('.section-stub').attributes('data-readonly')).toBe('true')
     expect(deep.find('.files-stub').exists(), 'no empty Files section').toBe(false)

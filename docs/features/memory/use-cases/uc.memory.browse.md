@@ -66,7 +66,8 @@
 - **No media derivatives yet.** Cards show an icon + name; covers/thumbnails land with the media-display
   slice.
 - **Display modes are a facet of browsing.** How the current level is shown — **grid / list / map** — is one
-  app-wide, persisted toggle (`useViewMode`, `ViewModeToggle`), not a separate goal: grid/list shipped with
+  app-wide, persisted toggle (`useViewMode`; core's `ViewModeToggle` in the level view's toolbar, the map offered
+  because Memories' section names it among its `views` — inbox #370), not a separate goal: grid/list shipped with
   cr-0063, the map view with cr-0071. The **map** stays operator-blind — it plots each node's sealed
   `location` unsealed on device from what `listNodes` already returns, behind the personal tiles opt-in (ADR
   0018); there is no locations API. It is **browse-only** (the Chapters-tab grid offers grid/list only).

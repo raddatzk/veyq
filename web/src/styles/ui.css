@@ -563,11 +563,12 @@
   gap: 1.45rem;
 }
 
-/* The level view's own toolbar (the space's trash, inbox #370/#385): one right-aligned row, pulled closer to the first
-   section than the view's section gap. No colour of its own, so no dark twin. */
+/* The level view's own toolbar (the space's trash and the view switch, inbox #370/#385): one right-aligned row, pulled
+   closer to the first section than the view's section gap. No colour of its own, so no dark twin. */
 .veyq-level-toolbar {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
   gap: 0.5rem;
   margin-bottom: -0.75rem;
