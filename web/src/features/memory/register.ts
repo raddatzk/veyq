@@ -25,6 +25,9 @@ import { memoriesLifecycle } from './lifecycle'
 /** The places map of a level (cr-0071): Memories' own presentation — its pins span the level's whole subtree. */
 const MAP_VIEW: LevelViewOption = { mode: 'map', icon: 'pi pi-map', label: 'memory.viewMap' }
 
+/** Memories' URL route slug (inbox #328): the segment before the name of a Memory in the fragment path. */
+export const MEMORIES_ROUTE_SLUG = 'memories'
+
 export function registerMemories(registry: Registry): void {
   // A Memory (cr-0104) and a chapter (ADR 0080 Decision 13) are both share roots for every role — the backend's
   // `MemoryShareRoots` — and both open the same detail, to the gallery (cr-0060). A chapter's share wraps its own
@@ -49,6 +52,10 @@ export function registerMemories(registry: Registry): void {
     kind: CHAPTER_KIND, ...memories, deleteTitle: 'memory.deleteChapterTitle', nounWithArticle: 'memory.aChapter',
     placement: { root: false, parents: [MEMORY_KIND] },
   })
+  // Its nodes' URLs carry the application's segment: a Memory `rom` in `reisen` is `#reisen/memories/rom`, its chapters
+  // extend that (`…/rom/tag-1`). The slug is reserved in the unprefixed namespace: a folder called "Memories" is
+  // `memories-2` (`core/node/location.ts`, inbox #328).
+  registry.claimRouteSlug(MEMORIES_ROUTE_SLUG, [MEMORY_KIND, CHAPTER_KIND])
   registry.addSlotItem('sidebarPins', 'memories.pinned', PinnedMemories)
   // The drop page of a WRITE_ONLY link rooted at a MEMORY or a CHAPTER (`PublicShare.rootKind`): its guest holds no key,
   // so it is the one page Memories draws for a guest alone. A viewer's or contributor's link is the detail above, for a

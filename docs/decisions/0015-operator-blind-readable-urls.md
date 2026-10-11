@@ -1,7 +1,7 @@
 # ADR 0015 — Operator-blind readable URLs: the content path lives in the #fragment
 
 - Status: Accepted
-- Date: 2026-06-28
+- Date: 2026-06-28 (amended 2026-10-08: sibling numbering; amended 2026-10-11: the grammar of a node's path, inbox #328)
 
 ## Context
 
@@ -30,7 +30,7 @@ Considered and rejected during refinement:
 **The in-shell content path lives in the URL `#fragment`, resolved entirely client-side; top-level (auth)
 routes stay history-mode.**
 
-- The current Memory-tree position is encoded in `location.hash`: `#~kevin/reisen-2026/rom` (a **`~username`**
+- The current tree position is encoded in `location.hash`: `#~kevin/reisen-2026/memories/rom` (a **`~username`**
   personal/profile scope), `#@familie/sommer` (a group scope). The browser **never transmits the fragment** in
   an HTTP request — so the readable, name-derived slugs (and the username) reach the operator **never**, while
   the path stays bookmarkable. `~<username>` + `@<group>` + the folder/Memory slugs live only in the fragment.
@@ -57,7 +57,7 @@ routes stay history-mode.**
   kind's function (a file `a.b` and a folder `a-b` coexist with one URL segment), and two drop-box guests' identity
   folders sit under different guest keys, so two guests named "Anna" both slugify to `anna`. So the client
   disambiguates, by one rule for building and resolving a path (`web/src/core/node/location.ts` `segmentsOf`):
-  among siblings of one plain segment the first in **creation order** keeps it, the others get `-2`, `-3`, …
+  among siblings of one plain segment **and one class** (amended 2026-10-11, below) the first in **creation order** keeps it, the others get `-2`, `-3`, …
   skipping a number whose segment a sibling holds as its own name. Creation order is the server-observed
   `NodeSummary.createdAt` (to the millisecond, `veyq_node.created_at TIMESTAMP(3)`), then the node id for two born
   in one millisecond (`compareByCreation`) — an order no client can steer: the instant is the server's, set once and
@@ -68,6 +68,39 @@ routes stay history-mode.**
   older sibling that comes back (restored, or moved or renamed in) takes its birth place and shifts the younger
   ones' segments — deterministic, by design; and a future folder export names its directories by the same rule. Group slugs are **not** server-enforced (no group slug token) — same-named groups resolve
   first-match, client-side ([ADR 0014](0014-group-scopes-and-governance.md)).
+- **Amended 2026-10-11 (inbox #328): the grammar of a node's path — a folder ends in a slash, an application
+  puts its slug before its nodes, Files has none.** The path stays in the fragment, readable and resolved
+  client-side exactly as above; the scope token is unchanged (token-less tenant, `~username`, `@group`). What
+  follows the token is now:
+  - **A folder** is its slug path with a **trailing slash**: folder `memory` in `foo` is `#foo/memory/`.
+  - **A Files node** (a file, a drop box) is its plain slug, no segment and no slash: `#foo/memory`. Files is an
+    explicit, documented exception — it **declares** that it has no segment (`claimNoRouteSegment`), so that
+    absence is a choice the registry knows and only one application may make.
+  - **Every other application's node** carries the application's **route slug** before its name, claimed once in
+    the registry (`claimRouteSlug`, a second claim throws): Memory `memory` in `foo` is `#foo/memories/memory`.
+    The segment stands where the path enters the application; its children extend the path without repeating it
+    (`#foo/memories/memory/<chapter>`), and sub-pages are the application's own.
+  - **Resolution.** A segment equal to a registered route slug, where a node child is expected and the parent is
+    not already that application's, is the application segment and the next segment names one of its nodes. The
+    slug is therefore **reserved** among the plain names: a folder (or file) whose name folds to it is numbered by
+    the existing rule — a folder `Memories` is `memories-2`, the next `memories-3`. Platform words
+    (`RESERVED_ROUTE_SEGMENTS`: the history-mode routes) cannot be claimed as a slug.
+  - **Numbering spaces are separate.** Equal names are numbered (`anna`, `anna-2`, by `compareByCreation`) within a
+    **class** only — the folders; one application's nodes; the nodes with no segment (Files and any kind nobody
+    claimed). File `a.b` and folder `a-b` are both `a-b` and need no `-2` between them; the trailing slash tells
+    them apart.
+  - **The trailing slash is part of the address, and fragile by design.** A path without it means the **file** if
+    one has that slug, else the folder; with it, **only** the folder (never a file, never a Memory). `…/memory/bar`
+    always reads `memory` as a folder, since a file has no children (a drop box has, so the reading backtracks:
+    folder first for a segment with more behind it, then the node that has children). `parseHash` therefore keeps
+    the slash and `buildHash` emits it for a folder at the end of the path; a client that drops it still opens
+    the right node unless a file shares the slug.
+  - **Dropped from the row that asked for this change.** Inbox #328 first proposed history-mode node URLs
+    (`/<app-slug>/:nodeId`), with no name, title or place in a URL. That idea is **not** taken: it would put the
+    node id into the operator's access logs on every hard load, needed a scope lookup (an endpoint, a probe or a scope
+    in the path) and a replacement for `~username`, and contradicted this ADR's reason for the fragment. The
+    fragment stays; no backend change; old segment-less Memory bookmarks (`#foo/rom`) no longer resolve and fall
+    back to the scope root.
 - **History-mode for the top level.** `/`, `/login`, `/setup`, … stay real paths; only the content position
   rides the fragment. The shell renders **browse or detail by the resolved node's `kind`** — no per-node route.
 - **Deep links survive a cold start.** Because a fresh load drops the in-memory vault, a bookmarked

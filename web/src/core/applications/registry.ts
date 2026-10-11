@@ -64,6 +64,15 @@
 // `assertRotationHooks()` before it touches anything and refuses to start when no registered application carries the
 // hook (a composition root that registered nothing is that case too).
 //
+// **Route slugs (`claimRouteSlug`, `claimNoRouteSegment`; inbox #328, ADR 0015).** A node's place is a path in the URL
+// `#fragment` (`core/node/location.ts`); every application but one puts its slug before the name of its nodes
+// (`#foo/memories/rom`) so a path says what kind of thing it opens. An application claims its slug once for the kinds it
+// owns — a second claim of a slug throws, a slug the platform keeps for its own paths (`RESERVED_ROUTE_SEGMENTS`) is
+// refused, and so is a kind claimed twice — or declares, explicitly, that it has NO segment (Files: its nodes are plain
+// names, a file is `#foo/report`). Only one application may have none: the unprefixed names are one namespace. A claimed
+// slug is RESERVED in that namespace: a folder (or a file) whose name folds to it is numbered (`memories-2`) by
+// `location.ts`. A kind nobody claimed has no segment either and is numbered among the plain names of the application that has none.
+//
 // **Fail closed.** `kind()` never returns `undefined`: a node kind nobody registered resolves to
 // `{ supported: false }`, which the host renders as an explicit unsupported state, never as an empty region. The kind
 // is an open string token (`core/node/kind.ts`), so no compiler checks that every kind is handled: this answer and its
@@ -114,7 +123,7 @@ export interface KindDescriptor {
   shareable: boolean
   /** How a name of this kind folds before it is HMAC'd into its blinded slug token (inbox #350; read through
    *  {@link Registry.slugFor}). Omitted: `slugify`, the container folding that is also the URL segment. A kind that is
-   *  never a URL segment may fold more strictly (a file: `fileNameSlug`). **Frozen into stored tokens**: the function
+   *  need not fold like the URL segment (a file: `fileNameSlug`, which keeps punctuation; the URL segment of every kind is `slugify`). **Frozen into stored tokens**: the function
    *  a kind registers must never change once a node of the kind is stored, and must be pinned by vectors. */
   slug?: (name: string) => string
   /** Where core's rename dialog (`core/node/FolderNameDialog.vue`) ends the selection it puts on a node's name when the
@@ -344,6 +353,20 @@ export interface Registry {
    *  registered: the server stores any kind, and a token must still be computable for it). Every slug token is
    *  derived through this, so a node's token always uses ITS kind's folding (`core/node/tree.ts` `slugTokenFor`). */
   slugFor(kind: NodeKind, name: string): string
+  /** Claim the URL route slug of an application for the `kinds` it owns (see the header). Throws on a slug that is
+   *  malformed or reserved, on a slug already claimed, on a kind already claimed (or FOLDER, the platform's), and on an
+   *  empty `kinds`. */
+  claimRouteSlug(slug: string, kinds: readonly NodeKind[]): void
+  /** Declare that the application owning `kinds` has NO route segment: its nodes are plain names in the path (Files).
+   *  Throws on a kind already claimed (or FOLDER), on an empty `kinds`, and when another application already declared
+   *  it — the unprefixed names are one namespace. */
+  claimNoRouteSegment(kinds: readonly NodeKind[]): void
+  /** How a node of `kind` is addressed in the path: its application's `slug` (null: none — a folder, the application
+   *  that declared no segment, a kind nobody claimed) and the `group` that kind's nodes are numbered in among equal
+   *  siblings — one per application with a segment, one for the folders, one for every node with none (Files and the kinds nobody claimed). */
+  routeOf(kind: NodeKind): KindRoute
+  /** The claimed route slugs (the applications' own, not the platform's reserved words). */
+  routeSlugs(): readonly string[]
   /** Whether a node of `kind` may be placed in a parent of `parentKind` (null: the scope root), by the kind's
    *  `placement` hint — false for a kind that declares none or nobody registered (fail closed). */
   placementAllows(kind: NodeKind, parentKind: NodeKind | null): boolean
@@ -354,6 +377,19 @@ export interface Registry {
    *  fallback and the folders). */
   sections(): readonly LevelSection[]
 }
+
+/** How a kind is addressed in the URL path ({@link Registry.routeOf}). */
+export interface KindRoute {
+  slug: string | null
+  group: string
+}
+
+/** Words the platform keeps for itself in a route slug's place: the history-mode routes (`router.ts`) and the scope tokens'
+ *  names. An application's slug can never shadow them, whatever a later route or mapping makes of the fragment. */
+export const RESERVED_ROUTE_SEGMENTS: readonly string[] = [
+  'api', 'confirm-email', 'folder', 'invitations', 'login', 'not-set-up', 'offline', 'recover', 's', 'settings', 'tenant', 'terms',
+]
+const ROUTE_SLUG = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/
 
 const LIST_SLOTS: readonly string[] = ['topbarTray', 'sidebarPins'] satisfies readonly ListSlotName[]
 
@@ -373,6 +409,17 @@ export function createRegistry(): Registry {
   // One entry per distinct section component, in the order each was first named (the stable sort's tie-break).
   const sections: SectionEntry[] = []
   const shareBodies = new Map<NodeKind, Component>()
+  // kind → its application's route slug, or null for the application with no segment.
+  const routes = new Map<NodeKind, string | null>()
+  const slugs = new Set<string>()
+  function claimKinds(kinds: readonly NodeKind[], slug: string | null) {
+    if (kinds.length === 0) throw new Error('a route claim names no node kind')
+    for (const k of kinds) {
+      if (k === FOLDER_KIND) throw new Error("FOLDER is the platform's: no application claims its route")
+      if (routes.has(k)) throw new Error(`the route of node kind ${k} is already claimed`)
+    }
+    for (const k of kinds) routes.set(k, slug)
+  }
   /** Run `f` on every application, never stopping at the first failure; rethrow the first one at the end. */
   async function eachApplication(f: (h: LifecycleHooks) => Promise<void> | void): Promise<void> {
     let failure: { error: unknown } | null = null
@@ -435,6 +482,25 @@ export function createRegistry(): Registry {
     slugFor(kind, name) {
       return (kinds.get(kind)?.slug ?? slugify)(name)
     },
+    claimRouteSlug(slug, claimed) {
+      if (!ROUTE_SLUG.test(slug)) throw new Error(`route slug ${JSON.stringify(slug)} is not a slug ([a-z0-9-], starting with a letter)`)
+      if (RESERVED_ROUTE_SEGMENTS.includes(slug)) throw new Error(`route slug ${slug} is reserved by the platform`)
+      if (slugs.has(slug)) throw new Error(`route slug ${slug} is already claimed`)
+      claimKinds(claimed, slug)
+      slugs.add(slug)
+    },
+    claimNoRouteSegment(claimed) {
+      if ([...routes.values()].includes(null)) throw new Error('an application already declared that it has no route segment')
+      claimKinds(claimed, null)
+    },
+    routeOf(kind) {
+      if (kind === FOLDER_KIND) return { slug: null, group: 'folder' }
+      const slug = routes.get(kind)
+      // A kind nobody claimed shares the unprefixed namespace with the application that has no segment, so its names are
+      // numbered among that application's (two nodes never build one URL).
+      return { slug: slug ?? null, group: slug ? `app:${slug}` : 'none' }
+    },
+    routeSlugs: () => [...slugs],
     placementAllows(kind, parentKind) {
       const p = kinds.get(kind)?.placement
       if (!p) return false

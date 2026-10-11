@@ -298,7 +298,7 @@ describe('MemoryHomeView over the real registry', () => {
   })
 
   it('opens a Memory to the registered detail: content key, ordered chapters bucket, shareable', async () => {
-    const w = await mountAt('#~me/trips/italy')
+    const w = await mountAt('#~me/trips/memories/italy')
     const d = w.find('.detail-stub')
     expect(d.text()).toBe('Italy|Day1,Day2')
     expect(d.attributes('data-key')).toBe('9')
@@ -310,7 +310,7 @@ describe('MemoryHomeView over the real registry', () => {
   // dialogs open for the chapter itself — its id, its own K_mem (the key chain's, not the Memory's) and its name as the
   // tree opened it, which the dialog re-seals under K_share.
   it('opens a chapter to the same detail, shareable, and shares the chapter itself (both dialogs)', async () => {
-    const w = await mountAt('#~me/trips/italy/day1')
+    const w = await mountAt('#~me/trips/memories/italy/day1')
     expect(w.find('.detail-stub').text()).toBe('Day1|')
     expect(w.find('.detail-stub').attributes('data-shareable')).toBe('true')
 
@@ -328,12 +328,12 @@ describe('MemoryHomeView over the real registry', () => {
 
   it('hides the share affordance when the instance turns public links off, even for a shareable kind', async () => {
     capabilityState.ids = []
-    const w = await mountAt('#~me/trips/italy')
+    const w = await mountAt('#~me/trips/memories/italy')
     expect(w.find('.detail-stub').attributes('data-shareable')).toBe('false')
   })
 
   it("wires the detail events to the kind's dialogs: rename (core's), create-chapter, share, uploader share, delete", async () => {
-    const w = await mountAt('#~me/trips/italy')
+    const w = await mountAt('#~me/trips/memories/italy')
     const detail = w.findComponent({ name: 'MemoryDetailStub' })
 
     detail.vm.$emit('rename')
@@ -465,5 +465,50 @@ describe('MemoryHomeView entering a scope', () => {
     } finally {
       entered.mockRestore()
     }
+  })
+})
+
+// Inbox #328 over real URLs (ADR 0015, amended 2026-10-11): the host resolves a fragment by `location.ts`'s grammar —
+// a folder ends in a slash, a Files node is its plain name, a Memory sits behind Memories' segment.
+describe('MemoryHomeView resolving the fragment grammar', () => {
+  const REPORT_TREE: TreeNode[] = [
+    ...TREE.map((n) => ({ ...n })),
+    node({ id: 'rfile', kind: FILE_KIND, name: 'Report', parentId: 'trips', createdAt: 5 }),
+    node({ id: 'rdir', kind: FOLDER_KIND, name: 'Report', parentId: 'trips', createdAt: 6 }),
+    node({ id: 'inner', kind: FOLDER_KIND, name: 'Inner', parentId: 'rdir', createdAt: 7 }),
+    node({ id: 'mem-folder', kind: FOLDER_KIND, name: 'Memories', createdAt: 8 }),
+  ]
+  beforeEach(() => {
+    treeStore.nodes = REPORT_TREE.map((n) => ({ ...n }))
+  })
+
+  it('a Memory is reached behind its application\'s segment; the segment-less path of the old URLs opens nothing', async () => {
+    expect((await mountAt('#~me/trips/memories/italy')).find('.detail-stub').text()).toContain('Italy')
+    const old = await mountAt('#~me/trips/italy')
+    expect(old.find('.detail-stub').exists()).toBe(false)
+    expect(old.find('.section-stub').text()).toBe('folder=-|memories=Solo') // collapsed to the scope root
+  })
+
+  it('a slug shared by a file and a folder: the file without the slash, the folder with it or with a child behind it', async () => {
+    const file = await mountAt('#~me/trips/report')
+    expect(file.find('.section-stub').exists()).toBe(false)
+    expect(file.text()).toContain(t('home.unsupportedKind')) // a file is not opened (no detail): the explicit state
+    const folder = await mountAt('#~me/trips/report/')
+    expect(folder.find('.section-stub').text()).toContain('folder=Report')
+    const inner = await mountAt('#~me/trips/report/inner/')
+    expect(inner.find('.section-stub').text()).toContain('folder=Inner')
+  })
+
+  it('a folder called "Memories" lives at `memories-2`; the bare application segment opens nothing', async () => {
+    expect((await mountAt('#~me/memories-2/')).find('.section-stub').text()).toContain('folder=Memories')
+    expect((await mountAt('#~me/memories/')).find('.section-stub').text()).toBe('folder=-|memories=Solo')
+  })
+
+  it('clicking a folder card pushes the fragment `location.ts` builds: the folder\'s path with its slash', async () => {
+    const w = await mountAt('#~me')
+    await w.findAll('button.veyq-folder-card').find((b) => b.text() === 'Trips')!.trigger('click')
+    await flushPromises()
+    expect(w.vm.$route.hash).toBe('#~me/trips/')
+    expect(w.find('.section-stub').text()).toContain('folder=Trips')
   })
 })

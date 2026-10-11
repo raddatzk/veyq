@@ -118,7 +118,7 @@ beforeEach(() => {
 
 describe('a member moves a folder from its card', () => {
   it('Move to… opens core\'s dialog, the pick goes through moveNode, the URL follows the folder on screen, Undo moves it back', async () => {
-    await mountAt('#~me/trips/rome')
+    await mountAt('#~me/trips/rome/')
     expect(document.body.querySelector('.veyq-folder-overview-card h2')!.textContent).toBe('Rome')
     await click(byLabel(t('node.move.action'))!)
     expect(dialogOpen()).toBe(true)
@@ -132,7 +132,7 @@ describe('a member moves a folder from its card', () => {
     expect(loadTree).toHaveBeenCalled()
     expect(dialogOpen(), 'closed after the move').toBe(false)
     expect(router.currentRoute.value.hash, 'the folder on screen is followed to its new path').toBe(hashForNode(treeStore.nodes, 'rome', '~me'))
-    expect(router.currentRoute.value.hash).toBe('#~me/archive/rome')
+    expect(router.currentRoute.value.hash).toBe('#~me/archive/rome/')
     expect(toast.showUndo).toHaveBeenCalledWith(expect.objectContaining({ summary: t('node.move.moved', { name: 'Rome', to: 'Archive' }) }))
     // Undo: back to Trips, and the URL with it
     vi.mocked(moveNode).mockImplementationOnce(async () => {
@@ -141,18 +141,18 @@ describe('a member moves a folder from its card', () => {
     toast.showUndo.mock.calls[0][0].onUndo()
     await flushPromises()
     expect(moveNode).toHaveBeenLastCalledWith('scope-1', expect.anything(), expect.any(Array), 'rome', 'trips')
-    expect(router.currentRoute.value.hash).toBe('#~me/trips/rome')
+    expect(router.currentRoute.value.hash).toBe('#~me/trips/rome/')
   })
 
   it('a section\'s row (Files\' file) and an opened Memory ask the host for the same dialog', async () => {
-    await mountAt('#~me/trips')
+    await mountAt('#~me/trips/')
     await click(document.body.querySelector('.file-move[data-id="notes"]')!)
     expect(document.body.textContent).toContain(t('node.move.title', { name: 'notes.txt' }))
     await pickAndMove('Archive')
     expect(moveNode).toHaveBeenCalledWith('scope-1', expect.anything(), expect.any(Array), 'notes', 'archive')
-    expect(router.currentRoute.value.hash, 'a row moved away: the level stays').toBe('#~me/trips')
+    expect(router.currentRoute.value.hash, 'a row moved away: the level stays').toBe('#~me/trips/')
 
-    await router.push({ hash: '#~me/trips/italy' })
+    await router.push({ hash: '#~me/trips/memories/italy' })
     await flushPromises()
     await click(document.body.querySelector('.detail-move')!)
     expect(document.body.textContent).toContain(t('node.move.title', { name: 'Italy' }))
@@ -179,7 +179,7 @@ describe('a member moves a guest\'s folder out of a drop box', () => {
   })
 
   it('from the guest\'s folder itself: its card offers the move out, and nothing else', async () => {
-    await mountAt('#~me/inbox/anna')
+    await mountAt('#~me/inbox/anna/')
     const actions = [...document.body.querySelectorAll('.veyq-folder-overview-actions button')].map((b) => b.getAttribute('aria-label'))
     expect(actions).toEqual([t('node.move.action')])
   })

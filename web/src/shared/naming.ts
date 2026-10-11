@@ -43,7 +43,7 @@ export function slugify(name: string): string {
  * lowercasing (context-sensitive final sigma and `İ` → `i̇` included), nothing else. Punctuation and spaces are KEPT,
  * so `Foto.JPG` = `foto.jpg` but `Day1.md` ≠ `Day1 md`; a composed and a decomposed `ä` are the same name. It does
  * NOT trim: the member UI trims a name before it is folded, and the folding must not re-decide that. The stored name
- * keeps its case; this string only feeds the blinded slug token (a file is never a URL segment).
+ * keeps its case; this string only feeds the blinded slug token (a file's URL segment is `slugify`'s, like every kind's: `core/node/location.ts`).
  *
  * **Frozen into tokens.** Like {@link slugify}, its output is HMAC'd into every stored slug token: changing a single
  * rule here silently stops a stored file from colliding with its own name. Its output is pinned by the

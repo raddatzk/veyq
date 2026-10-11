@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // The personal-space content host (cr-0030/0031, uc.memory.browse). Mounted at `/`; the current tree position
-// lives in the URL **#fragment** (`#~me/reisen-2026/rom`), resolved against the locally-decrypted tree — the
+// lives in the URL **#fragment** (`#~me/reisen-2026/memories/rom`), resolved against the locally-decrypted tree — the
 // operator-blind server computes no navigation and never sees the path. Renders a folder/root level (browse)
 // or an opened node (detail) by the resolved node's kind, and owns the create / rename / delete dialogs. It names
 // no application kind (ADR 0079): the detail component, the create dialog and the share dialog come from the kind's
@@ -58,11 +58,13 @@ const pendingPurgeDay = computed(() =>
   activeSpace.purgeAfter ? new Date(activeSpace.purgeAfter).toLocaleDateString(locale.value) : '',
 )
 
-// Position from the #fragment. The leading token selects the scope (token-less = tenant, `~me` = personal —
-// ADR 0019); a slug segment that doesn't resolve (`false`) collapses to the scope root.
+// Position from the #fragment (`core/node/location.ts` owns its grammar: a folder ends in a slash, a Files node is its
+// plain name, any other application's node carries the application's slug). The leading token selects the scope
+// (token-less = tenant, `~me` = personal — ADR 0019); a path that doesn't resolve (`false`) collapses to the scope root.
 const currentScope = computed(() => parseHash(route.hash).scope)
-const segments = computed(() => parseHash(route.hash).segments)
-const resolved = computed(() => resolveSlugPath(treeStore.nodes, segments.value))
+const place = computed(() => parseHash(route.hash))
+// The path (application segment included) and its trailing slash resolve together: `…/report` is the file, `…/report/` the folder.
+const resolved = computed(() => resolveSlugPath(treeStore.nodes, place.value.segments, place.value.folder))
 const currentNodeId = computed(() => (typeof resolved.value === 'string' ? resolved.value : null))
 const currentNode = computed(() => nodeById(treeStore.nodes, currentNodeId.value))
 // Folders and the scope root browse (core's `LevelView`); any other node OPENS, to the detail component its kind
