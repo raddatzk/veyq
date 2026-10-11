@@ -56,6 +56,6 @@ class AdminListenerSliceTest {
     }
 
     private companion object {
-        const val OWNER_ID = "admin-listener-owner"
+        const val OWNER_ID = "7ede6ff7-4211-43c0-b075-e4c8e810aea2"
     }
 }

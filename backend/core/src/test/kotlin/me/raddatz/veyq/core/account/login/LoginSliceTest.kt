@@ -35,7 +35,7 @@ class LoginSliceTest {
         QuarkusTransaction.requiringNew().run(Runnable {
             if (VeyqUser.find("email", EMAIL).firstResult() == null) {
                 newUser(
-                    id = "login-test-user", email = EMAIL, serverRole = "SERVER_OWNER",
+                    id = "4a00c728-6a78-436c-9b6c-223064433d36", email = EMAIL, serverRole = "SERVER_OWNER",
                     authPublicKey = b64(rawPublicKey(KEYPAIR)),
                 ).persist()
             }

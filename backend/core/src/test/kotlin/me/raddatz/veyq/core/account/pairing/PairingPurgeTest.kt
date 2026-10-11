@@ -136,8 +136,8 @@ class PairingPurgeTest {
 
         const val EMAIL = "pairing-purge@example.com"
         const val OTHER_EMAIL = "pairing-purge-stranger@example.com"
-        const val USER_ID = "pairing-purge-user"
-        const val OTHER_USER_ID = "pairing-purge-stranger"
+        const val USER_ID = "fc3f66c7-14b2-46c4-bda1-48bec5d6ebf6"
+        const val OTHER_USER_ID = "27d64f8a-1d10-4229-9e88-91ae98e38bbf"
 
         fun seed(userId: String, email: String) {
             if (VeyqUser.findById(userId) != null) return

@@ -63,6 +63,6 @@ class AdminChannelForgedHeadersSliceTest {
     }
 
     private companion object {
-        const val OWNER_ID = "admin-forged-owner"
+        const val OWNER_ID = "0ed82d21-75b2-48b4-b20e-cb2337d32964"
     }
 }

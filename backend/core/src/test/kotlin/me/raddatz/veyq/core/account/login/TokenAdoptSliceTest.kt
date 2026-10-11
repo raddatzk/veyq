@@ -218,6 +218,6 @@ class TokenAdoptSliceTest {
     private companion object {
         // Distinct from every other slice test's seed: the %test H2 mem DB is JVM-shared across test classes.
         private const val EMAIL = "token-adopt-test@example.com"
-        private const val USER_ID = "token-adopt-test-user"
+        private const val USER_ID = "518579a2-f475-48b5-8d02-abfbf58e3108"
     }
 }

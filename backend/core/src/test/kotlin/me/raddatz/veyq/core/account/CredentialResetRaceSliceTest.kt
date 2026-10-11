@@ -361,7 +361,8 @@ class CredentialResetRaceSliceTest {
 
     /** ACTIVE families of the account beyond the one the cleanup spares by design. */
     private fun liveFamiliesBeyond(account: Account, cleanup: Cleanup): Long = QuarkusTransaction.requiringNew().call<Long> {
-        val spared = if (cleanup == Cleanup.RESET) "" else account.ownFamily
+        // Nothing is spared on a reset: the nil UUID matches no family (the id column is a UUID, an empty string is none).
+        val spared = if (cleanup == Cleanup.RESET) "00000000-0000-0000-0000-000000000000" else account.ownFamily
         SessionFamilyEntity.count("userId = ?1 and status = ?2 and id <> ?3", account.id, SessionFamilyEntity.ACTIVE, spared)
     }
 

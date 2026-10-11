@@ -395,8 +395,8 @@ class MediaSliceTest {
 
         // make b contributor-owned so the real cr-0102 delete-own path authorizes it, then delete it: that path
         // bumps BOTH counters (cr-0107) — media_revision 2→3, delete_revision 0→1
-        QuarkusTransaction.requiringNew().run { MediaEntity.findById(b)!!.shareIdentityId = "id-X" }
-        sharing.deleteOwn(scopeId, memory, b, "id-X")
+        QuarkusTransaction.requiringNew().run { MediaEntity.findById(b)!!.shareIdentityId = "d8a912ea-41ab-413a-97a2-2d4c91ccb02c" }
+        sharing.deleteOwn(scopeId, memory, b, "d8a912ea-41ab-413a-97a2-2d4c91ccb02c")
 
         // a poll whose sinceDelete (0) lags delete_revision (1) gets the current id-set — only a remains, b dropped
         given().header("Authorization", bearer(userId)).header("If-None-Match", "2")
@@ -420,8 +420,8 @@ class MediaSliceTest {
 
         // net-zero: delete b (media_revision 2→3, delete_revision 0→1) then add c (media_revision 3→4). The count
         // returns to 2 but the SET changed — a count-only signal would miss it; the id-set catches it.
-        QuarkusTransaction.requiringNew().run { MediaEntity.findById(b)!!.shareIdentityId = "id-X" }
-        sharing.deleteOwn(scopeId, memory, b, "id-X")
+        QuarkusTransaction.requiringNew().run { MediaEntity.findById(b)!!.shareIdentityId = "d8a912ea-41ab-413a-97a2-2d4c91ccb02c" }
+        sharing.deleteOwn(scopeId, memory, b, "d8a912ea-41ab-413a-97a2-2d4c91ccb02c")
         val c = completeOne(userId, scopeId, memory, wrap = "Yw==")
 
         // the poll: c rides the delta (past the cursor) AND the id-set is present (a delete advanced delete_revision),

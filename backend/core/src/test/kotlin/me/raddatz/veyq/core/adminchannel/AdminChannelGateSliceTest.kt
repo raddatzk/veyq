@@ -147,7 +147,7 @@ class AdminChannelGateSliceTest {
     }
 
     private companion object {
-        const val OWNER_ID = "admin-gate-owner"
+        const val OWNER_ID = "6b00c42e-a730-47f2-a6bc-4caa430ff3f3"
 
         /** The generated interfaces the marked operations live on — asserted complete by the tripwire above. */
         val GENERATED_APIS = listOf(

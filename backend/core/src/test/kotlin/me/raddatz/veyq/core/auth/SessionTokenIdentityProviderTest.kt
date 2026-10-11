@@ -85,7 +85,7 @@ class SessionTokenIdentityProviderTest {
             .await().indefinitely()
 
     companion object {
-        private const val OWNER = "idp-user-owner"
-        private const val MEMBER = "idp-user-member"
+        private const val OWNER = "566f1f22-e9a7-4af2-adcc-c17c43160875"
+        private const val MEMBER = "798925ab-d3a4-4f8b-ac2f-37fdb44024fb"
     }
 }
