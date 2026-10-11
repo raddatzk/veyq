@@ -28,16 +28,16 @@ stillschweigend zu überschreiben, und du kannst **Trotzdem ersetzen** wählen.
 Ein Name muss im Ordner frei sein: Eine Datei kann nicht denselben Namen tragen wie ein Ordner, eine Erinnerung oder
 ein Briefkasten, die schon dort liegen. veyq überspringt so eine Datei und sagt dir, welcher Eintrag den Namen hat.
 
-**Große Dateien** werden Stück für Stück heruntergeladen und auf deinem Gerät wieder zusammengesetzt. Kann dein
-Browser direkt in eine Datei speichern, die du auswählst, funktionieren auch sehr große Dateien. Kann er das nicht,
-wird eine Datei von mehr als etwa einem halben Gigabyte mit einer Meldung abgelehnt, statt mittendrin zu scheitern.
+**Große Dateien** werden Stück für Stück heruntergeladen und auf deinem Gerät wieder zusammengesetzt. Browser
+kommen unterschiedlich gut mit sehr großen Dateien zurecht: Kann dein Browser direkt in eine Datei speichern, die du
+auswählst, ist das der beste Fall. Kann er das nicht, wird eine sehr große Datei unter Umständen mit einer Meldung
+abgelehnt, statt mittendrin zu scheitern.
 
 ## Dinge verschieben
 
 **Verschieben nach …** funktioniert gleich bei einem Ordner, einer Erinnerung, einem Kapitel, einer Datei oder einem
-Briefkasten: Wähle den neuen Ort aus einer Liste, und alles darin kommt mit und bleibt lesbar. Ein Verschieben lässt
-sich sofort rückgängig machen. Hat dir jemand einen Ordner freigegeben, in dem du mitwirken darfst, kannst du Dinge
-**darin** verschieben — aber nicht hinaus.
+Briefkasten: Wähle den neuen Ort aus einer Liste, und alles darin kommt mit und bleibt lesbar. Hat dir jemand einen Ordner freigegeben, in dem du mitwirken darfst, kannst du
+Dinge **darin** verschieben — aber nicht hinaus.
 
 ## Raster und Liste
 

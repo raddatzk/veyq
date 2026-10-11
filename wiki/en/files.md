@@ -27,14 +27,14 @@ overwriting their version, and you can choose **Replace anyway**.
 A name has to be free in its folder: a file cannot share a name with a folder, a Memory or a drop box that is
 already there. veyq skips such a file and tells you which item has the name.
 
-**Big files** are downloaded piece by piece and put back together on your device. Where your browser can save
-straight to a file you choose, even very large files work. Where it cannot, a file above roughly half a gigabyte
-is refused with a message instead of failing halfway.
+**Big files** are downloaded piece by piece and put back together on your device. Browsers differ in how well
+they cope with very large files: where your browser can save straight to a file you choose, that is the best case.
+Where it cannot, a very large file may be refused with a message instead of failing halfway.
 
 ## Moving things
 
 **Move to…** works the same on a folder, a Memory, a chapter, a file or a drop box: choose the new place from a
-list, and everything inside comes along and stays readable. A move can be undone right away. If somebody shared a
+list, and everything inside comes along and stays readable. If somebody shared a
 folder with you and lets you contribute, you can move things around **inside** that folder — but not out of it.
 
 ## Grid and list
