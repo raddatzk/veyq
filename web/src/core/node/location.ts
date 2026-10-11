@@ -1,7 +1,19 @@
-// Fragment-based content navigation (cr-0031, cr-0075). The current Memory tree position lives in the URL
-// **#fragment** — e.g. `#~me/reisen-2026/rom` — which the browser never sends to the server, so the
+// Fragment-based content navigation (cr-0031, cr-0075, inbox #328). The current tree position lives in the URL
+// **#fragment** — e.g. `#~me/reisen-2026/memories/rom` — which the browser never sends to the server, so the
 // operator-blind invariant holds even though the path carries human-readable slugs. Everything here is pure +
-// client-side: the slug path is resolved against the locally-decrypted tree, and reverse-built from it.
+// client-side: the slug path is resolved against the locally-decrypted tree, and reverse-built from it. This file is the
+// ONE place a fragment path is built or read (`scripts/validate_web_fragment_paths_via_location.py`).
+//
+// **The grammar after the scope token (ADR 0015, amended 2026-10-11):**
+//   - a **folder** is its slug path with a TRAILING SLASH: `#reisen-2026/` (the slash marks the target as a folder);
+//   - a **Files** node (file, drop box) is its plain slug, no slash: `#reisen-2026/rechnung`;
+//   - a node of **any other application** carries the application's route slug before its name — a Memory `rom` is
+//     `#reisen-2026/memories/rom`, a chapter of it extends that (`…/rom/tag-1`; the segment is written where the path
+//     enters the application, not again below it). The slug is claimed once in the registry (`claimRouteSlug`).
+// A claimed slug is therefore RESERVED among the unprefixed names: a folder (or file) called "Memories" is numbered
+// `memories-2` ({@link segmentsOf}). Folders and files are separate numbering spaces: file `a.b` and folder `a-b` are both
+// `a-b`. Without the trailing slash a path means the file when one has that slug, else the folder; with it, only the
+// folder; `…/a-b/x` always reads `a-b` as a folder (a file has no children) — see {@link resolveSlugPath}.
 //
 // The leading token selects the scope (ADR 0015 + ADR 0019): its **absence** is the shared **tenant** scope
 // (the token-less default home — `/`, `#urlaube`), `~me` is the personal scope, and the `@group` form is
@@ -9,6 +21,8 @@
 // `[a-z0-9-]`, so a folder slug can never start with `~`/`@` and thus never collides with a scope token.
 import { type TreeNode } from './tree'
 import { slugify } from '../../shared/naming'
+import { registry } from '../applications/registry'
+import { FOLDER_KIND } from './kind'
 
 /** A personal/profile scope token is `~<username>` (ADR 0023) — your own opens your personal scope, a foreign
  *  one is the later profile view. `~me` remains a valid fallback token (it also starts with `~`). */
@@ -22,28 +36,37 @@ export function personalScope(username?: string): string {
 /** The token-less scope marker (ADR 0019): the absence of a leading `~<username>`/`@` token *is* the tenant selector. */
 export const TENANT_SCOPE = ''
 
-export type ContentLocation = { scope: string; segments: string[] }
+export type ContentLocation = {
+  scope: string
+  /** The path segments below the scope root, application segments included (they are resolved, not stripped). */
+  segments: string[]
+  /** The path ended in a slash: its target is a folder ({@link resolveSlugPath}). Never set for the scope root. */
+  folder: boolean
+}
 
-/** Parse a `location.hash` into a scope token + slug segments. Empty/`#`/token-less → the tenant scope. */
+/** Parse a `location.hash` into a scope token + path segments + the trailing-slash mark. Empty/`#`/token-less → the
+ *  tenant scope. */
 export function parseHash(hash: string): ContentLocation {
-  const parts = hash
-    .replace(/^#/, '')
+  const raw = hash.replace(/^#/, '')
+  const parts = raw
     .split('/')
     .filter(Boolean)
     .map(decodeURIComponent)
-  if (parts.length === 0) return { scope: TENANT_SCOPE, segments: [] }
+  const slash = raw.endsWith('/')
+  if (parts.length === 0) return { scope: TENANT_SCOPE, segments: [], folder: false }
   const [head, ...rest] = parts
   // A leading scope token (`~<username>` / `@group`) selects the scope; no token → the token-less tenant scope,
   // and every part is a slug under the tenant root.
-  if (isPersonalScope(head) || head.startsWith('@')) return { scope: head, segments: rest }
-  return { scope: TENANT_SCOPE, segments: parts }
+  if (isPersonalScope(head) || head.startsWith('@')) return { scope: head, segments: rest, folder: slash && rest.length > 0 }
+  return { scope: TENANT_SCOPE, segments: parts, folder: slash }
 }
 
-/** Build the fragment for a scope + slug path. Tenant is token-less (`#urlaube`, `''` at the root); `~me`/`@`
- *  carry their leading token (`#~me/reisen-2026/rom`). */
-export function buildHash(scope: string, segments: string[]): string {
+/** Build the fragment for a scope + path. Tenant is token-less (`#urlaube`, `''` at the root); `~me`/`@` carry their
+ *  leading token (`#~me/reisen-2026/memories/rom`). `folder`: the target is a folder, marked by a trailing slash
+ *  (`#reisen-2026/`) — meaningless at the scope root, which has no segment to end. */
+export function buildHash(scope: string, segments: string[], folder = false): string {
   const tokens = scope === TENANT_SCOPE ? segments : [scope, ...segments]
-  return tokens.length ? `#${tokens.map(encodeURIComponent).join('/')}` : ''
+  return tokens.length ? `#${tokens.map(encodeURIComponent).join('/')}${folder && segments.length > 0 ? '/' : ''}` : ''
 }
 
 /** Sibling order: the server-observed creation instant (`NodeSummary.createdAt`, to the millisecond, ADR 0015), then the
@@ -92,79 +115,161 @@ const childrenOfParent = (tree: readonly TreeNode[], parentId: string | null) =>
   tree.filter((n) => (n.parentId ?? null) === parentId)
 
 /**
- * The URL segment of each of one parent's children, keyed by node id — the **one** rule both directions use, so a
- * path built here always resolves back to the node it was built for.
+ * The URL name segment of each of one parent's children, keyed by node id — the **one** rule both directions use, so a
+ * path built here always resolves back to the node it was built for. (The application segment in front of it, where one
+ * belongs, is {@link slugPathOf}'s.)
  *
  * A child's plain segment is `slugify(name)` whatever its kind (the URL folding; a kind's uniqueness folding,
- * `registry.slugFor`, is not the URL's). Siblings can share a plain segment: two drop-box guests of one display name
- * (their entries sit under different guest keys, so the server's slug uniqueness never sees the pair, ADR 0080
- * decision 11), or a file and a folder whose kinds fold differently (`a.b` and `a-b`). Among the siblings of one
- * plain segment, in {@link compareByCreation} order, the first keeps it and each further one gets `<slug>-<n>` with the
- * smallest `n ≥ 2` above the previous one's that no sibling holds as its plain segment — a real sibling named
- * `Anna 2` keeps `anna-2`, and the second `Anna` becomes `anna-3`. Consequences, all deterministic: a node whose
- * plain segment is unique among its siblings always keeps it; a sibling created later never changes the earlier ones'
- * segments (two born in one millisecond fall to their ids); a node keeps its creation instant through a rename, a move,
- * a trash and a restore, so an older sibling that comes back — restored, or moved or renamed in — takes its birth
- * place (the plain segment, if it is the oldest) and shifts the later ones' segments; and a sibling later given the
- * literal name `anna-3` takes that segment over. A suffixed segment can never equal another group's suffixed segment
- * (`<a>-<n>` = `<b>-<m>` with digits-only n, m forces a = b), so the result does not depend on the order the groups
- * are visited in.
+ * `registry.slugFor`, is not the URL's). Equal plain segments are numbered **within a class** of siblings — the folders;
+ * one application's nodes (`registry.routeOf(kind).group`) — so a file `a.b` and a folder `a-b` are both `a-b` (the
+ * trailing slash tells them apart), and a Memory and a folder of one name never meet. Among the siblings of one plain
+ * segment of one class, in {@link compareByCreation} order, the first keeps it and each further one gets `<slug>-<n>`
+ * with the smallest `n ≥ 2` above the previous one's that no sibling of the class holds as its plain segment — a real
+ * sibling named `Anna 2` keeps `anna-2`, and the second `Anna` becomes `anna-3`. **A reserved plain segment** — an
+ * application's route slug, among the classes whose nodes carry no application segment (folders, Files) — has no
+ * keeper: the application segment stands at that spot of the path, so a folder `Memories` is `memories-2`, a second one
+ * `memories-3`. Consequences, all deterministic: a node whose plain segment is unique among its class and not reserved
+ * always keeps it; a sibling created later never changes the earlier ones' segments (two born in one millisecond fall to
+ * their ids); a node keeps its creation instant through a rename, a move, a trash and a restore, so an older sibling that
+ * comes back — restored, or moved or renamed in — takes its birth place (the plain segment, if it is the oldest) and
+ * shifts the later ones' segments; and a sibling later given the literal name `anna-3` takes that segment over. A
+ * suffixed segment can never equal another group's suffixed segment (`<a>-<n>` = `<b>-<m>` with digits-only n, m forces
+ * a = b), so the result does not depend on the order the groups are visited in.
  *
  * **A future folder export** (ADR 0080 names a ZIP export) names its directories by this same rule, so an exported
  * tree and the in-app paths agree; it is client-side only — nothing here is stored or sealed.
  */
 export function segmentsOf(siblings: readonly TreeNode[]): Map<string, string> {
-  const byPlain = new Map<string, TreeNode[]>()
+  const reserved = new Set(registry.routeSlugs())
+  const keyOf = (group: string, plain: string) => `${group}\0${plain}`
+  const buckets = new Map<string, { group: string; plain: string; unprefixed: boolean; nodes: TreeNode[] }>()
   for (const n of siblings) {
+    const { slug, group } = registry.routeOf(n.kind)
     const plain = slugify(n.name)
-    const group = byPlain.get(plain)
-    if (group) group.push(n)
-    else byPlain.set(plain, [n])
+    const key = keyOf(group, plain)
+    const bucket = buckets.get(key)
+    if (bucket) bucket.nodes.push(n)
+    else buckets.set(key, { group, plain, unprefixed: slug === null, nodes: [n] })
   }
   const segments = new Map<string, string>()
-  for (const [plain, group] of byPlain) {
-    const [first, ...rest] = [...group].sort(compareByCreation)
-    segments.set(first.id, plain)
+  for (const { group, plain, unprefixed, nodes } of buckets.values()) {
+    const sorted = [...nodes].sort(compareByCreation)
+    // Reserved: the application segment stands where the plain one would, so nobody keeps it.
+    const keeper = unprefixed && reserved.has(plain) ? null : sorted[0]
+    if (keeper) segments.set(keeper.id, plain)
     let suffix = 1
-    for (const n of rest) {
+    for (const n of keeper ? sorted.slice(1) : sorted) {
       do suffix++
-      while (byPlain.has(`${plain}-${suffix}`))
+      while (buckets.has(keyOf(group, `${plain}-${suffix}`)))
       segments.set(n.id, `${plain}-${suffix}`)
     }
   }
   return segments
 }
 
-/**
- * Resolve a slug path under the scope root to a node id, walking the tree level by level, each level by
- * {@link segmentsOf}. `null` = the scope root (no segments); a node id = the addressed node; `false` = a segment
- * didn't match.
- */
-export function resolveSlugPath(tree: TreeNode[], segments: string[]): string | null | false {
-  let parentId: string | null = null
-  for (const seg of segments) {
-    let match: string | null = null
-    for (const [id, segment] of segmentsOf(childrenOfParent(tree, parentId))) if (segment === seg) match = id
-    if (match === null) return false
-    parentId = match
-  }
-  return parentId
+/** The application segment a node needs in front of its name: its application's route slug, where the path ENTERS the
+ *  application (the parent belongs to another one, or is a folder, or the scope root); none below it (a chapter in a
+ *  Memory) and none for a folder or an application without a segment. */
+function appSegmentOf(node: TreeNode, parent: TreeNode | null): string | null {
+  const slug = registry.routeOf(node.kind).slug
+  if (slug === null) return null
+  return parent && registry.routeOf(parent.kind).slug === slug ? null : slug
 }
 
-/** The slug path from the scope root down to `nodeId` (root = `[]`), each segment by {@link segmentsOf}. */
+/**
+ * Resolve a path under the scope root to a node id, walking the tree level by level, each name by {@link segmentsOf}.
+ * `null` = the scope root (no segments); a node id = the addressed node; `false` = a segment didn't match.
+ *
+ * At each level a segment is either an **application segment** — a registered route slug where the parent does not
+ * already belong to that application, taking the next segment as the name of one of that application's nodes — or a
+ * plain name among the nodes that need no application segment. Trailing slash (`folder`): the last segment names a
+ * folder, nothing else. Without it, the last segment names the non-folder node of that name if there is one (a file, a
+ * drop box), else the folder; a segment before the last prefers a folder but falls back to a non-folder that has
+ * children (a drop box's guest folders), so `…/a-b/x` reads `a-b` as the folder whenever it holds an `x`. The search
+ * backtracks over these candidates, so a path resolves if any reading of it does.
+ */
+export function resolveSlugPath(tree: readonly TreeNode[], segments: string[], folder = false): string | null | false {
+  const children = new Map<string | null, TreeNode[]>()
+  for (const n of tree) {
+    const key = n.parentId ?? null
+    const list = children.get(key)
+    if (list) list.push(n)
+    else children.set(key, [n])
+  }
+  const names = new Map<string | null, Map<string, string>>()
+  const namesOf = (parentId: string | null) => {
+    let m = names.get(parentId)
+    if (!m) names.set(parentId, (m = segmentsOf(children.get(parentId) ?? [])))
+    return m
+  }
+  const slugs = new Set(registry.routeSlugs())
+  const byId = new Map(tree.map((n) => [n.id, n]))
+  const count = segments.length
+
+  /** Read the segments from `i` on, below the node `parentId` (null: the scope root). */
+  function walk(parentId: string | null, i: number): string | null | false {
+    if (i === count) return parentId
+    const seg = segments[i]
+    const parent = parentId ? byId.get(parentId) ?? null : null
+    const parentSlug = parent ? registry.routeOf(parent.kind).slug : null
+    const kids = children.get(parentId) ?? []
+    const names_ = namesOf(parentId)
+    /** Step into `kid`; the last segment of a trailing-slash path must be a folder. */
+    const into = (kid: TreeNode, next: number): string | null | false =>
+      next === count && folder && kid.kind !== FOLDER_KIND ? false : walk(kid.id, next)
+    // 1. An application segment: the next segment names one of that application's nodes.
+    if (slugs.has(seg) && seg !== parentSlug && i + 1 < count) {
+      for (const kid of kids) {
+        if (registry.routeOf(kid.kind).slug === seg && names_.get(kid.id) === segments[i + 1]) {
+          const r = into(kid, i + 2)
+          if (r !== false) return r
+        }
+      }
+    }
+    // 2. A plain name among the nodes that need no application segment, in the order this reading prefers: the last
+    //    segment a file before a folder (a trailing slash already ruled files out), any other a folder first.
+    const plain = kids.filter((k) => {
+      const slug = registry.routeOf(k.kind).slug
+      return (slug === null || slug === parentSlug) && names_.get(k.id) === seg
+    })
+    const folderFirst = i < count - 1
+    const ordered = [
+      ...plain.filter((k) => (k.kind === FOLDER_KIND) === folderFirst),
+      ...plain.filter((k) => (k.kind === FOLDER_KIND) !== folderFirst),
+    ]
+    for (const kid of ordered) {
+      const r = into(kid, i + 1)
+      if (r !== false) return r
+    }
+    return false
+  }
+  return walk(null, 0)
+}
+
+/** The path segments from the scope root down to `nodeId` (root = `[]`): each node's name by {@link segmentsOf}, an
+ *  application's segment in front of the first of its nodes on the way ({@link appSegmentOf}). */
 export function slugPathOf(tree: TreeNode[], nodeId: string | null): string[] {
   const byId = new Map(tree.map((n) => [n.id, n]))
-  const segments: string[] = []
+  const chain: TreeNode[] = []
+  const seen = new Set<string>()
   let cur = nodeId ? byId.get(nodeId) ?? null : null
-  while (cur) {
-    const parentId = cur.parentId ?? null
-    segments.unshift(segmentsOf(childrenOfParent(tree, parentId)).get(cur.id) as string)
-    cur = parentId ? byId.get(parentId) ?? null : null
+  while (cur && !seen.has(cur.id)) {
+    seen.add(cur.id)
+    chain.unshift(cur)
+    cur = cur.parentId ? byId.get(cur.parentId) ?? null : null
   }
+  const segments: string[] = []
+  chain.forEach((node, index) => {
+    const app = appSegmentOf(node, index > 0 ? chain[index - 1] : null)
+    if (app) segments.push(app)
+    segments.push(segmentsOf(childrenOfParent(tree, node.parentId ?? null)).get(node.id) as string)
+  })
   return segments
 }
 
-/** The fragment for a node in the given scope (`null` → the scope root — `''` for tenant, `#~me` for personal). */
+/** The fragment for a node in the given scope (`null` → the scope root — `''` for tenant, `#~me` for personal). A folder
+ *  ends in the slash that marks it ({@link buildHash}). */
 export function hashForNode(tree: TreeNode[], nodeId: string | null, scope: string): string {
-  return buildHash(scope, slugPathOf(tree, nodeId))
+  const node = nodeId ? tree.find((n) => n.id === nodeId) : undefined
+  return buildHash(scope, slugPathOf(tree, nodeId), node?.kind === FOLDER_KIND)
 }

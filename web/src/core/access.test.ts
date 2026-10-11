@@ -128,10 +128,10 @@ describe('memberTreeSource: the member\'s tree', () => {
   })
 
   it('links a node by its fragment slug path in the CURRENT scope, the root by the bare scope', () => {
-    expect(tree.linkTo('deep')).toEqual({ hash: '#~me/box/anna-2/deep' })
+    expect(tree.linkTo('deep')).toEqual({ hash: '#~me/box/anna-2/deep/' })
     expect(tree.linkTo(null)).toEqual({ hash: '#~me' })
     scope = ''
-    expect(tree.linkTo('trips')).toEqual({ hash: '#trips' })
+    expect(tree.linkTo('trips')).toEqual({ hash: '#trips/' })
     scope = '~me'
   })
 

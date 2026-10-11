@@ -68,19 +68,19 @@ describe('childrenOf', () => {
 })
 
 describe('breadcrumbOf', () => {
-  it('walks root → ancestors → node, each crumb carrying its #fragment in the active scope', () => {
+  it('walks root → ancestors → node, each crumb carrying its #fragment in the active scope (a folder\'s ends in the slash that marks it)', () => {
     expect(breadcrumbOf(tree, '2025', 'Personal', PERSONAL_SCOPE)).toEqual([
       { id: null, name: 'Personal', hash: '#~me' },
-      { id: 'trips', name: 'Trips', hash: '#~me/trips' },
-      { id: '2025', name: '2025', hash: '#~me/trips/2025' },
+      { id: 'trips', name: 'Trips', hash: '#~me/trips/' },
+      { id: '2025', name: '2025', hash: '#~me/trips/2025/' },
     ])
   })
 
   it('builds token-less fragments in the tenant scope', () => {
     expect(breadcrumbOf(tree, '2025', 'Family', TENANT_SCOPE)).toEqual([
       { id: null, name: 'Family', hash: '' },
-      { id: 'trips', name: 'Trips', hash: '#trips' },
-      { id: '2025', name: '2025', hash: '#trips/2025' },
+      { id: 'trips', name: 'Trips', hash: '#trips/' },
+      { id: '2025', name: '2025', hash: '#trips/2025/' },
     ])
   })
 

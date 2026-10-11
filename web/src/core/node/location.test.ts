@@ -1,3 +1,6 @@
+// @vitest-environment happy-dom
+// (The route grammar asks the application registry which kinds carry which segment — `src/test/setup.ts` fills it for a
+// DOM-environment file, as `main.ts` does: Memories claims `memories`, Files declares no segment.)
 import { describe, it, expect } from 'vitest'
 import {
   parseHash,
@@ -11,8 +14,9 @@ import {
   TENANT_SCOPE,
 } from './location'
 import { breadcrumbOf } from './browse'
+import { registry } from '../applications/registry'
 import { FOLDER_KIND, type NodeKind } from './kind'
-import { MEMORY_KIND } from '../../features/memory/kinds'
+import { MEMORY_KIND, CHAPTER_KIND } from '../../features/memory/kinds'
 import { DROPBOX_KIND } from '../../features/files/kinds'
 import type { TreeNode } from './tree'
 import { treeNode } from '../../test/models'
@@ -33,20 +37,33 @@ const tree: TreeNode[] = [
 
 describe('parseHash', () => {
   it('defaults empty/#/token-less to the tenant scope (ADR 0019)', () => {
-    expect(parseHash('')).toEqual({ scope: TENANT_SCOPE, segments: [] })
-    expect(parseHash('#')).toEqual({ scope: TENANT_SCOPE, segments: [] })
+    expect(parseHash('')).toEqual({ scope: TENANT_SCOPE, segments: [], folder: false })
+    expect(parseHash('#')).toEqual({ scope: TENANT_SCOPE, segments: [], folder: false })
     // A bare slug path with no leading token is the tenant root, not personal.
-    expect(parseHash('#urlaube')).toEqual({ scope: TENANT_SCOPE, segments: ['urlaube'] })
-    expect(parseHash('#reisen-2026/rom')).toEqual({ scope: TENANT_SCOPE, segments: ['reisen-2026', 'rom'] })
+    expect(parseHash('#urlaube')).toEqual({ scope: TENANT_SCOPE, segments: ['urlaube'], folder: false })
+    expect(parseHash('#reisen-2026/memories/rom')).toEqual({ scope: TENANT_SCOPE, segments: ['reisen-2026', 'memories', 'rom'], folder: false })
   })
 
   it('resolves the explicit `~me` token to the personal scope', () => {
-    expect(parseHash('#~me')).toEqual({ scope: PERSONAL_SCOPE, segments: [] })
-    expect(parseHash('#~me/reisen-2026/rom')).toEqual({ scope: PERSONAL_SCOPE, segments: ['reisen-2026', 'rom'] })
+    expect(parseHash('#~me')).toEqual({ scope: PERSONAL_SCOPE, segments: [], folder: false })
+    expect(parseHash('#~me/reisen-2026/memories/rom')).toEqual({ scope: PERSONAL_SCOPE, segments: ['reisen-2026', 'memories', 'rom'], folder: false })
   })
 
   it('parses the (later) group token, leaving it unresolved', () => {
-    expect(parseHash('#@familie/sommer')).toEqual({ scope: '@familie', segments: ['sommer'] })
+    expect(parseHash('#@familie/sommer')).toEqual({ scope: '@familie', segments: ['sommer'], folder: false })
+  })
+
+  it('keeps the trailing slash — it marks the target as a folder — in every scope, and never on the scope root', () => {
+    expect(parseHash('#urlaube/')).toEqual({ scope: TENANT_SCOPE, segments: ['urlaube'], folder: true })
+    expect(parseHash('#reisen-2026/sommer/')).toEqual({ scope: TENANT_SCOPE, segments: ['reisen-2026', 'sommer'], folder: true })
+    expect(parseHash('#~kevin/reisen-2026/')).toEqual({ scope: '~kevin', segments: ['reisen-2026'], folder: true })
+    expect(parseHash('#%40familie/sommer/')).toEqual({ scope: '@familie', segments: ['sommer'], folder: true })
+    // the written-out leading slash of the grammar (`#/foo/memory/`) reads as `#foo/memory/`
+    expect(parseHash('#/foo/memory/')).toEqual({ scope: TENANT_SCOPE, segments: ['foo', 'memory'], folder: true })
+    // the scope root has no segment to end in a slash
+    expect(parseHash('#~me/')).toEqual({ scope: PERSONAL_SCOPE, segments: [], folder: false })
+    expect(parseHash('#/')).toEqual({ scope: TENANT_SCOPE, segments: [], folder: false })
+    expect(parseHash('#urlaube').folder).toBe(false)
   })
 
   it('never parses a folder slug as a scope token (slugs are [a-z0-9-], so `~`/`@` never lead)', () => {
@@ -68,24 +85,44 @@ describe('buildHash', () => {
     expect(buildHash(PERSONAL_SCOPE, ['reisen-2026', 'rom'])).toBe('#~me/reisen-2026/rom')
     // `@` url-encodes to `%40` (unchanged from cr-0031); it decodes back on parse, so the fragment round-trips.
     expect(buildHash('@familie', ['sommer'])).toBe('#%40familie/sommer')
-    expect(parseHash(buildHash('@familie', ['sommer']))).toEqual({ scope: '@familie', segments: ['sommer'] })
+    expect(parseHash(buildHash('@familie', ['sommer']))).toEqual({ scope: '@familie', segments: ['sommer'], folder: false })
+  })
+
+  it('emits the trailing slash for a folder, in every scope, and none at the scope root', () => {
+    expect(buildHash(TENANT_SCOPE, ['foo', 'memory'], true)).toBe('#foo/memory/')
+    expect(buildHash(PERSONAL_SCOPE, ['foo'], true)).toBe('#~me/foo/')
+    expect(buildHash('@familie', ['sommer'], true)).toBe('#%40familie/sommer/')
+    expect(buildHash(TENANT_SCOPE, [], true)).toBe('')
+    expect(buildHash(PERSONAL_SCOPE, [], true)).toBe('#~me')
+  })
+
+  it('round-trips with parseHash, the slash included', () => {
+    for (const scope of [TENANT_SCOPE, PERSONAL_SCOPE, '@familie']) {
+      for (const folder of [false, true]) {
+        const segments = ['reisen-2026', 'memories', 'rom']
+        expect(parseHash(buildHash(scope, segments, folder))).toEqual({ scope, segments, folder })
+      }
+    }
   })
 })
 
 describe('slugPathOf + hashForNode', () => {
   it('round-trips a node to its fragment in the personal scope', () => {
-    expect(slugPathOf(tree, 'm1')).toEqual(['reisen-2026', 'rom'])
-    expect(hashForNode(tree, 'm1', PERSONAL_SCOPE)).toBe('#~me/reisen-2026/rom')
+    // the Memory carries Memories' segment where the path enters the application
+    expect(slugPathOf(tree, 'm1')).toEqual(['reisen-2026', 'memories', 'rom'])
+    expect(hashForNode(tree, 'm1', PERSONAL_SCOPE)).toBe('#~me/reisen-2026/memories/rom')
+    expect(hashForNode(tree, 'f1', PERSONAL_SCOPE)).toBe('#~me/reisen-2026/')
     expect(hashForNode(tree, null, PERSONAL_SCOPE)).toBe('#~me')
   })
 
   it('round-trips a node to its token-less fragment in the tenant scope', () => {
-    expect(hashForNode(tree, 'm1', TENANT_SCOPE)).toBe('#reisen-2026/rom')
+    expect(hashForNode(tree, 'm1', TENANT_SCOPE)).toBe('#reisen-2026/memories/rom')
+    expect(hashForNode(tree, 'f2', TENANT_SCOPE)).toBe('#reisen-2026/sommer/')
     expect(hashForNode(tree, null, TENANT_SCOPE)).toBe('')
     // parse ∘ build is identity for the tenant scope
-    const { scope, segments } = parseHash(hashForNode(tree, 'm1', TENANT_SCOPE))
+    const { scope, segments, folder } = parseHash(hashForNode(tree, 'm1', TENANT_SCOPE))
     expect(scope).toBe(TENANT_SCOPE)
-    expect(resolveSlugPath(tree, segments)).toBe('m1')
+    expect(resolveSlugPath(tree, segments, folder)).toBe('m1')
   })
 })
 
@@ -93,19 +130,25 @@ describe('resolveSlugPath', () => {
   it('walks the slug path to a node id (level by level)', () => {
     expect(resolveSlugPath(tree, [])).toBeNull() // root
     expect(resolveSlugPath(tree, ['reisen-2026'])).toBe('f1')
-    expect(resolveSlugPath(tree, ['reisen-2026', 'rom'])).toBe('m1')
+    expect(resolveSlugPath(tree, ['reisen-2026', 'memories', 'rom'])).toBe('m1')
   })
 
   it('returns false when a segment does not match', () => {
     expect(resolveSlugPath(tree, ['nope'])).toBe(false)
     expect(resolveSlugPath(tree, ['reisen-2026', 'venedig'])).toBe(false)
+    // a Memory is reached through its application's segment only, and the segment alone names nothing
+    expect(resolveSlugPath(tree, ['reisen-2026', 'rom'])).toBe(false)
+    expect(resolveSlugPath(tree, ['reisen-2026', 'memories'])).toBe(false)
+    expect(resolveSlugPath(tree, ['memories', 'rom'])).toBe(false)
+    // …and a folder is not reachable through it
+    expect(resolveSlugPath(tree, ['reisen-2026', 'memories', 'sommer'])).toBe(false)
   })
 
   it('round-trips with hashForNode for every node (both scopes)', () => {
     for (const scope of [PERSONAL_SCOPE, TENANT_SCOPE]) {
       for (const n of tree) {
-        const { segments } = parseHash(hashForNode(tree, n.id, scope))
-        expect(resolveSlugPath(tree, segments)).toBe(n.id)
+        const { segments, folder } = parseHash(hashForNode(tree, n.id, scope))
+        expect(resolveSlugPath(tree, segments, folder)).toBe(n.id)
       }
     }
   })
@@ -135,7 +178,10 @@ describe('equal sibling slugs', () => {
     for (const list of [t, [...t].reverse()]) {
       const paths = list.map((n) => hashForNode(list, n.id, PERSONAL_SCOPE))
       expect(new Set(paths).size).toBe(list.length)
-      for (const n of list) expect(resolveSlugPath(list, parseHash(hashForNode(list, n.id, PERSONAL_SCOPE)).segments)).toBe(n.id)
+      for (const n of list) {
+        const { segments, folder } = parseHash(hashForNode(list, n.id, PERSONAL_SCOPE))
+        expect(resolveSlugPath(list, segments, folder)).toBe(n.id)
+      }
     }
   }
 
@@ -146,7 +192,7 @@ describe('equal sibling slugs', () => {
       expect(resolveSlugPath(list, ['uploads', 'anna'])).toBe(ANNA_1)
       expect(resolveSlugPath(list, ['uploads', 'anna-2'])).toBe(ANNA_2)
     }
-    expect(hashForNode(dropTree, ANNA_2, TENANT_SCOPE)).toBe('#uploads/anna-2')
+    expect(hashForNode(dropTree, ANNA_2, TENANT_SCOPE)).toBe('#uploads/anna-2/')
     expectUnambiguous(dropTree)
   })
 
@@ -218,14 +264,16 @@ describe('equal sibling slugs', () => {
     expectUnambiguous(t)
   })
 
-  it('is kind-neutral: a file and a folder of one URL segment are told apart the same way, a unique name keeps its slug', () => {
-    // A folder `a-b` and a file `a.b` fold to different uniqueness slugs (ADR 0080, both may exist) but to one URL segment.
+  it('numbers folders and files apart: file `a.b` and folder `a-b` are both `a-b`, told apart by the trailing slash', () => {
+    // A folder `a-b` and a file `a.b` fold to different uniqueness slugs (ADR 0080, both may exist) and to one URL segment.
     const FOLDER_AB = 'e0000000-0000-4000-8000-000000000000'
     const FILE_AB = 'e1000000-0000-4000-8000-000000000000'
     const t = [...tree, node(FOLDER_AB, 'a-b', 'f1', FOLDER_KIND, 20), node(FILE_AB, 'a.b', 'f1', 'FILE', 10)]
     expect(lastSegment(t, FILE_AB)).toBe('a-b')
-    expect(lastSegment(t, FOLDER_AB)).toBe('a-b-2')
-    expect(slugPathOf(t, 'm1')).toEqual(['reisen-2026', 'rom'])
+    expect(lastSegment(t, FOLDER_AB)).toBe('a-b')
+    expect(hashForNode(t, FILE_AB, TENANT_SCOPE)).toBe('#reisen-2026/a-b')
+    expect(hashForNode(t, FOLDER_AB, TENANT_SCOPE)).toBe('#reisen-2026/a-b/')
+    expect(slugPathOf(t, 'm1')).toEqual(['reisen-2026', 'memories', 'rom'])
     expectUnambiguous(t)
   })
 
@@ -233,9 +281,9 @@ describe('equal sibling slugs', () => {
     const t = [...dropTree, node('c2000000-0000-4000-8000-000000000000', 'Fotos', ANNA_2)]
     expect(breadcrumbOf(t, 'c2000000-0000-4000-8000-000000000000', 'Root', TENANT_SCOPE).map((c) => c.hash)).toEqual([
       '',
-      '#uploads',
-      '#uploads/anna-2',
-      '#uploads/anna-2/fotos',
+      '#uploads', // the drop box: a Files node, its plain name
+      '#uploads/anna-2/', // its guest's folder: a folder, the trailing slash
+      '#uploads/anna-2/fotos/',
     ])
   })
 
@@ -261,5 +309,180 @@ describe('displayNamesOf', () => {
     expect(Object.fromEntries(displayNamesOf(siblings, (n) => n.name, compareById))).toEqual({
       a: 'Anna', c: 'Anna (2)', d: 'Anna (3)', b: 'Ben',
     })
+  })
+})
+
+// The grammar of inbox #328 (ADR 0015, amended 2026-10-11): a folder ends in a slash, a Files node is its plain name, any
+// other application's node carries the application's slug, and a claimed slug is reserved among the plain names.
+describe('the route grammar', () => {
+  it('rests on what the applications claimed in the real registry: Memories `memories`, Files no segment', () => {
+    expect(registry.routeSlugs()).toEqual(['memories'])
+    expect(() => registry.claimRouteSlug('memories', ['SOMETHING'])).toThrow(/already claimed/) // Memories holds it
+    expect(() => registry.claimNoRouteSegment(['SOMETHING'])).toThrow(/no route segment/) // Files declared it
+    for (const kind of [MEMORY_KIND, CHAPTER_KIND]) expect(registry.routeOf(kind).slug).toBe('memories')
+    for (const kind of ['FILE', DROPBOX_KIND]) expect(registry.routeOf(kind).slug).toBeNull()
+  })
+
+  const FILE = 'FILE'
+  /** Everything one parent `foo` can hold: a folder, a file and a Memory — all called "memory". */
+  const mixed: TreeNode[] = [
+    node('foo', 'foo', null),
+    node('d-memory', 'memory', 'foo', FOLDER_KIND, 3),
+    node('f-memory', 'memory', 'foo', FILE, 2),
+    node('m-memory', 'memory', 'foo', MEMORY_KIND, 1),
+    node('c-1', 'Tag 1', 'm-memory', CHAPTER_KIND, 4),
+    node('d-inner', 'inner', 'd-memory', FOLDER_KIND, 5),
+  ]
+  const hashOf = (t: TreeNode[], id: string, scope = TENANT_SCOPE) => hashForNode(t, id, scope)
+  const resolveHash = (t: TreeNode[], hash: string) => {
+    const { segments, folder } = parseHash(hash)
+    return resolveSlugPath(t, segments, folder)
+  }
+
+  it('writes a folder with the trailing slash, a file plain, a Memory behind its application segment', () => {
+    expect(hashOf(mixed, 'd-memory')).toBe('#foo/memory/')
+    expect(hashOf(mixed, 'f-memory')).toBe('#foo/memory')
+    expect(hashOf(mixed, 'm-memory')).toBe('#foo/memories/memory')
+    expect(hashOf(mixed, 'foo')).toBe('#foo/')
+  })
+
+  it('extends a Memory\'s path with its chapters and states the application segment once', () => {
+    expect(hashOf(mixed, 'c-1')).toBe('#foo/memories/memory/tag-1')
+    expect(slugPathOf(mixed, 'c-1')).toEqual(['foo', 'memories', 'memory', 'tag-1'])
+    expect(hashOf(mixed, 'c-1', '~kevin')).toBe('#~kevin/foo/memories/memory/tag-1')
+    expect(resolveHash(mixed, '#foo/memories/memory/tag-1')).toBe('c-1')
+    expect(resolveHash(mixed, '#foo/memories/memory/memories/tag-1')).toBe(false) // the segment is not repeated below
+  })
+
+  it('resolves one slug three ways: file without slash, folder with it, Memory behind its segment', () => {
+    expect(resolveHash(mixed, '#foo/memory')).toBe('f-memory') // without a slash the file wins…
+    expect(resolveHash(mixed, '#foo/memory/')).toBe('d-memory') // …the slash asks for the folder only
+    expect(resolveHash(mixed, '#foo/memories/memory')).toBe('m-memory')
+    expect(resolveHash(mixed, '#foo/memories/memory/')).toBe(false) // the slash is a folder's: a Memory is no folder
+    // a file has no children: a longer path reads the slug as the folder
+    expect(resolveHash(mixed, '#foo/memory/inner')).toBe('d-inner')
+    expect(resolveHash(mixed, '#foo/memory/inner/')).toBe('d-inner')
+    expect(resolveHash(mixed, '#foo/memory/inner/nope')).toBe(false)
+    // a path with no file of that slug resolves to the folder, the slash or not
+    expect(resolveHash(mixed, '#foo')).toBe('foo')
+    expect(resolveHash(mixed, '#foo/')).toBe('foo')
+  })
+
+  it('a trailing slash never reaches a file', () => {
+    const t = [node('foo', 'foo', null), node('rechnung', 'Rechnung', 'foo', FILE, 1)]
+    expect(resolveHash(t, '#foo/rechnung')).toBe('rechnung')
+    expect(resolveHash(t, '#foo/rechnung/')).toBe(false)
+    expect(resolveHash(t, '#foo/rechnung/x')).toBe(false)
+  })
+
+  it('round-trips every node of the mixed parent, in every kind of scope and either list order', () => {
+    for (const scope of [TENANT_SCOPE, PERSONAL_SCOPE, '~kevin', '@familie']) {
+      for (const list of [mixed, [...mixed].reverse()]) {
+        const seen = new Set<string>()
+        for (const n of list) {
+          const hash = hashOf(list, n.id, scope)
+          expect(seen.has(hash), `${hash} is built twice`).toBe(false)
+          seen.add(hash)
+          expect(parseHash(hash).scope).toBe(scope)
+          expect(resolveHash(list, hash), hash).toBe(n.id)
+        }
+      }
+    }
+  })
+
+  it('reserves a claimed slug: a folder, a file or a drop box called "Memories" is numbered, a Memory is not', () => {
+    const t = [
+      node('d1', 'Memories', null, FOLDER_KIND, 1),
+      node('d2', 'memories', null, FOLDER_KIND, 2),
+      node('f1', 'MEMORIES', null, FILE, 3),
+      node('x1', 'Memories', null, DROPBOX_KIND, 4),
+      node('m1', 'Memories', null, MEMORY_KIND, 5),
+    ]
+    expect(slugPathOf(t, 'd1')).toEqual(['memories-2'])
+    expect(slugPathOf(t, 'd2')).toEqual(['memories-3'])
+    expect(slugPathOf(t, 'f1')).toEqual(['memories-2'])
+    expect(slugPathOf(t, 'x1')).toEqual(['memories-3'])
+    expect(slugPathOf(t, 'm1')).toEqual(['memories', 'memories']) // application segment, then its own name
+    expect(hashOf(t, 'd1')).toBe('#memories-2/')
+    expect(hashOf(t, 'm1')).toBe('#memories/memories')
+    for (const n of t) expect(resolveHash(t, hashOf(t, n.id)), n.id).toBe(n.id)
+    // the bare segment names nothing: it is the application's
+    expect(resolveHash(t, '#memories')).toBe(false)
+    expect(resolveHash(t, '#memories/')).toBe(false)
+  })
+
+  it('skips a numbered segment a sibling holds literally: `Memories 2` keeps `memories-2`', () => {
+    const t = [node('d1', 'Memories', null, FOLDER_KIND, 1), node('d2', 'Memories 2', null, FOLDER_KIND, 2)]
+    expect(slugPathOf(t, 'd2')).toEqual(['memories-2'])
+    expect(slugPathOf(t, 'd1')).toEqual(['memories-3'])
+  })
+
+  it('does not reserve the slug inside a Memory, where a chapter has no application segment', () => {
+    const t = [node('m', 'Rom', null, MEMORY_KIND, 1), node('c', 'Memories', 'm', CHAPTER_KIND, 2)]
+    expect(slugPathOf(t, 'c')).toEqual(['memories', 'rom', 'memories'])
+    expect(resolveHash(t, '#memories/rom/memories')).toBe('c')
+  })
+
+  it('numbers within a class only: equal Memories, equal folders and a file with a Memory\'s name', () => {
+    const t = [
+      node('m1', 'Rom', null, MEMORY_KIND, 1),
+      node('m2', 'Rom', null, MEMORY_KIND, 2),
+      node('d1', 'Rom', null, FOLDER_KIND, 3),
+      node('d2', 'Rom', null, FOLDER_KIND, 4),
+      node('f1', 'rom', null, FILE, 5),
+    ]
+    expect(t.map((n) => hashOf(t, n.id))).toEqual([
+      '#memories/rom', '#memories/rom-2', '#rom/', '#rom-2/', '#rom',
+    ])
+    for (const n of t) expect(resolveHash(t, hashOf(t, n.id))).toBe(n.id)
+  })
+
+  it('walks a deep path through folders, a drop box, its guest folder and a Memory with a chapter', () => {
+    const t = [
+      node('a', 'A', null),
+      node('b', 'B', 'a'),
+      node('box', 'Box', 'b', DROPBOX_KIND, 1),
+      node('anna', 'Anna', 'box', FOLDER_KIND, 2),
+      node('deep', 'Deep', 'anna', FOLDER_KIND, 3),
+      node('rom', 'Rom', 'b', MEMORY_KIND, 4),
+      node('tag', 'Tag', 'rom', CHAPTER_KIND, 5),
+    ]
+    expect(hashOf(t, 'deep', '@familie')).toBe('#%40familie/a/b/box/anna/deep/')
+    expect(hashOf(t, 'tag', '~kevin')).toBe('#~kevin/a/b/memories/rom/tag')
+    for (const scope of [TENANT_SCOPE, '~kevin', '@familie']) {
+      for (const n of t) expect(resolveHash(t, hashOf(t, n.id, scope)), `${n.id} in ${scope}`).toBe(n.id)
+    }
+    // a drop box has children although it is no folder: its path continues
+    expect(resolveHash(t, '#a/b/box/anna')).toBe('anna')
+  })
+
+  it('reads a drop box and a folder of one name by backtracking, so the guest\'s folder stays reachable', () => {
+    const t = [
+      node('box', 'Box', null, DROPBOX_KIND, 1),
+      node('dir', 'Box', null, FOLDER_KIND, 2),
+      node('anna', 'Anna', 'box', FOLDER_KIND, 3),
+      node('inner', 'Inner', 'dir', FOLDER_KIND, 4),
+    ]
+    expect(resolveHash(t, '#box')).toBe('box')
+    expect(resolveHash(t, '#box/')).toBe('dir')
+    expect(resolveHash(t, '#box/anna/')).toBe('anna')
+    expect(resolveHash(t, '#box/inner/')).toBe('inner')
+  })
+
+  it('prefers the folder for a segment with more behind it when the drop box could be read too', () => {
+    const t = [
+      node('box', 'Box', null, DROPBOX_KIND, 1),
+      node('dir', 'Box', null, FOLDER_KIND, 2),
+      node('box-x', 'X', 'box', FOLDER_KIND, 3),
+      node('dir-x', 'X', 'dir', FOLDER_KIND, 4),
+    ]
+    expect(resolveHash(t, '#box/x/')).toBe('dir-x') // the folder, as `…/a-b/x` always reads `a-b` as one
+    expect(resolveHash(t, '#box/x')).toBe('dir-x')
+  })
+
+  it('numbers a kind nobody claimed among the plain names of Files, so two nodes never build one URL', () => {
+    const t = [node('u', 'Thing', null, 'FUTURE', 1), node('f', 'Thing', null, FILE, 2), node('d', 'Thing', null, FOLDER_KIND, 3)]
+    expect(t.map((n) => hashOf(t, n.id))).toEqual(['#thing', '#thing-2', '#thing/'])
+    for (const n of t) expect(resolveHash(t, hashOf(t, n.id))).toBe(n.id)
   })
 })

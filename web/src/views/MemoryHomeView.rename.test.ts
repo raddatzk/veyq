@@ -135,7 +135,7 @@ beforeEach(() => {
 
 describe('a member renames the node on screen', () => {
   it('a nested folder from its overview card: the view stays on it and the fragment becomes its new path, no history entry', async () => {
-    await mountAt('#~me/trips/rome')
+    await mountAt('#~me/trips/rome/')
     expect(heading()).toBe('Rome')
     const push = vi.spyOn(router, 'push')
     await click(byLabel(t('node.rename'))!)
@@ -143,29 +143,28 @@ describe('a member renames the node on screen', () => {
     await renameTo('Roma Antica')
     expect(renameNode).toHaveBeenCalledWith('scope-1', expect.anything(), expect.any(Array), 'rome', 'Roma Antica')
     expect(loadTree).toHaveBeenCalled()
-    expect(router.currentRoute.value.hash, 'the folder on screen is followed to its new path').toBe('#~me/trips/roma-antica')
+    expect(router.currentRoute.value.hash, 'the folder on screen is followed to its new path').toBe('#~me/trips/roma-antica/')
     expect(heading(), 'still on the renamed folder, not the scope root').toBe('Roma Antica')
     expect(push, 'the same logical position: replaced, not pushed').not.toHaveBeenCalled()
   })
 
   it('an opened Memory from its detail: the detail stays open under the new path', async () => {
-    await mountAt('#~me/trips/italy')
+    await mountAt('#~me/trips/memories/italy')
     await click(document.body.querySelector('.detail-rename')!)
     serverRenames({ italy: 'Italia' })
     await renameTo('Italia')
-    expect(router.currentRoute.value.hash).toBe('#~me/trips/italia')
+    expect(router.currentRoute.value.hash).toBe('#~me/trips/memories/italia')
     expect(document.body.querySelector('.detail-stub h1')?.textContent).toBe('Italia')
   })
 
-  it('a name that numbers against an older sibling of the same plain segment resolves to its numbered segment', async () => {
-    // the file `x.y` and the folder `X.Y` fold differently by kind (no collision), but share the URL segment `x-y`:
-    // the older file keeps it, the renamed folder is `x-y-2`
-    await mountAt('#~me/trips/rome')
+  it('a folder renamed to a file\'s name keeps the plain segment — the trailing slash tells them apart', async () => {
+    // the file `x.y` and the folder `X.Y` share the URL segment `x-y` but are separate numbering spaces (ADR 0015)
+    await mountAt('#~me/trips/rome/')
     await click(byLabel(t('node.rename'))!)
     serverRenames({ rome: 'X.Y' })
     await renameTo('X.Y')
-    expect(router.currentRoute.value.hash).toBe('#~me/trips/x-y-2')
-    expect(heading()).toBe('X.Y')
+    expect(router.currentRoute.value.hash).toBe('#~me/trips/x-y/')
+    expect(heading(), 'the folder, not the file of the same segment').toBe('X.Y')
   })
 })
 
@@ -174,11 +173,11 @@ describe('a rename that changes an ancestor of the open node', () => {
   // the open node is never the one renamed HERE; the re-read tree can still carry one renamed elsewhere (another device
   // of the member, another member). The URL is rebuilt from the whole re-read path, not patched at the renamed segment.
   it('the re-read tree also brings an ancestor\'s new name: the fragment is the open node\'s whole new path', async () => {
-    await mountAt('#~me/trips/rome/forum')
+    await mountAt('#~me/trips/rome/forum/')
     await click(byLabel(t('node.rename'))!)
     serverRenames({ forum: 'Foro', trips: 'Travel' })
     await renameTo('Foro')
-    expect(router.currentRoute.value.hash).toBe('#~me/travel/rome/foro')
+    expect(router.currentRoute.value.hash).toBe('#~me/travel/rome/foro/')
     expect(heading()).toBe('Foro')
   })
 })
@@ -188,34 +187,35 @@ describe('a rename that changes an ancestor of the open node', () => {
 // collapse, reached through the space's trash.
 describe('a restore that renumbers an ancestor of the open node', () => {
   it('the older sibling comes back: the fragment follows the open node to its renumbered path', async () => {
-    // the folder `x-y` and the file `x.y` fold differently by kind (they coexist) but share the URL segment `x-y`
+    // two folders of one URL segment `x-y` (in real data two drop-box guests' identity folders, whose slug tokens the server
+    // cannot see collide; the numbering is kind-neutral): the older one is trashed while the younger is open
     treeStore.nodes = [
       node('trips', FOLDER_KIND, null, 'Trips', 1), node('xyfolder', FOLDER_KIND, 'trips', 'x-y', 5), node('deep', FOLDER_KIND, 'xyfolder', 'Deep', 6),
     ]
     const trashed: TrashedNode = {
-      id: 'xyfile', parentId: 'trips', kind: FILE_KIND, epoch: 0, placementVersion: 0, name: 'x.y',
+      id: 'xyold', parentId: 'trips', kind: FOLDER_KIND, epoch: 0, placementVersion: 0, name: 'x_y',
       deletedAt: new Date(0), purgeAfter: new Date(0),
     } as TrashedNode
     vi.mocked(listTrash).mockResolvedValueOnce([trashed]).mockResolvedValue([])
-    reReadBrings((nodes) => [...nodes, node('xyfile', FILE_KIND, 'trips', 'x.y', 2)])
-    await mountAt('#~me/trips/x-y/deep')
+    reReadBrings((nodes) => [...nodes, node('xyold', FOLDER_KIND, 'trips', 'x_y', 2)])
+    await mountAt('#~me/trips/x-y/deep/')
     expect(heading()).toBe('Deep')
     await click([...document.body.querySelectorAll('button')].find((b) => b.textContent?.trim() === t('node.trash.open'))!)
     await click([...document.body.querySelectorAll('.trash-row button')].find((b) => b.textContent?.trim() === t('node.trash.restore'))!)
     expect(restoreNode).toHaveBeenCalled()
-    expect(router.currentRoute.value.hash).toBe('#~me/trips/x-y-2/deep')
+    expect(router.currentRoute.value.hash).toBe('#~me/trips/x-y-2/deep/')
     expect(heading()).toBe('Deep')
   })
 })
 
 describe('a rename of a row on the level', () => {
   it('leaves the level where it is', async () => {
-    await mountAt('#~me/trips')
+    await mountAt('#~me/trips/')
     await click(document.body.querySelector('.file-rename[data-id="xy"]')!)
     serverRenames({ xy: 'notes.txt' })
     await renameTo('notes.txt')
     expect(renameNode).toHaveBeenCalledWith('scope-1', expect.anything(), expect.any(Array), 'xy', 'notes.txt')
-    expect(router.currentRoute.value.hash).toBe('#~me/trips')
+    expect(router.currentRoute.value.hash).toBe('#~me/trips/')
     expect(heading()).toBe('Trips')
   })
 })
