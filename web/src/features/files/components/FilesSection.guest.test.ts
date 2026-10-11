@@ -357,16 +357,33 @@ describe('a contributor uploads into the shared folder', () => {
 
   // Inbox #392: the refused name a file here holds says so plainly, with where the replace is; a name taken by something
   // else keeps the generic wording.
-  it('a refused name a file here holds says a file exists and points at its replace; another taken name stays generic', async () => {
+  it('a refused name a file here holds says a file exists and points at its replace; a folder is named; an unseen one stays generic', async () => {
     const w = mountSection({ role: ShareRole.ReadWrite })
     await flushPromises()
     const refused = (name: string) => ({ name, sizeBytes: 1, run: async () => { throw new Error('slug_taken') }, extra: { file: new File([''], name) } })
-    enqueue([refused('report.PDF'), refused('Sub')], { label: 'x', key: `files-share:${SHARE}:${ROOT}` })
+    enqueue([refused('report.PDF'), refused('Sub'), refused('elsewhere.txt')], { label: 'x', key: `files-share:${SHARE}:${ROOT}` })
     await vi.waitFor(() => expect(useUploadQueue().batches.value[0]?.files.every((f) => f.status === 'failed')).toBe(true))
     await flushPromises()
     expect(w.text()).toContain(t('files.guest.fileExists', { name: 'report.PDF' }))
-    expect(w.text()).toContain(t('files.errors.slug_taken', { name: 'Sub' }))
+    // the race backstop (inbox #400): a sibling of another kind that holds the name now is named by its kind
+    expect(w.text()).toContain(t('files.nameTakenBy', { name: 'Sub', reason: t('node.nameTakenBy', { kind: t('node.aFolder'), name: 'Sub' }) }))
+    expect(w.text()).toContain(t('files.errors.slug_taken', { name: 'elsewhere.txt' }))
     expect(w.text()).not.toContain(t('files.errors.slug_taken', { name: 'report.PDF' }))
+  })
+
+  // Inbox #400: the guest goes through the member's pre-check — a name another kind holds is not sent, and the guest is
+  // not even named for it.
+  it('a picked name a folder here holds is not sent and names the folder — the guest is not asked to name itself', async () => {
+    const requestGuest = vi.fn(async () => GUEST)
+    const w = mountSection({ role: ShareRole.ReadWrite, requestGuest })
+    await flushPromises()
+    await pickNew(w, ['sub'])
+    expect(requestGuest).not.toHaveBeenCalled()
+    expect(guestFileUploadJob).not.toHaveBeenCalled()
+    const text = t('files.nameTakenBy', { name: 'sub', reason: t('node.nameTakenBy', { kind: t('node.aFolder'), name: 'Sub' }) })
+    expect(w.find('.files-notice').text()).toContain(text)
+    await w.find('.files-notice').findAll('button').find((b) => b.text() === t('files.dismiss'))!.trigger('click')
+    expect(w.find('.files-notice').exists()).toBe(false)
   })
 
   // Inbox #395 (F9): once the same file arrives, its failure is no longer explained.

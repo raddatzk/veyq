@@ -974,6 +974,9 @@ const en = {
     downloadTooLarge: 'This file is too large to download in this browser.',
     replaceAnyway: 'Replace anyway',
     dismiss: 'Dismiss',
+    // A picked file whose name a sibling of another kind holds (inbox #400): not sent; `{reason}` is core's
+    // `node.nameTakenBy`, naming that sibling by its kind.
+    nameTakenBy: '“{name}” was not uploaded. {reason}',
     errors: {
       slug_taken: '“{name}” was not uploaded: a folder, Memory or file with a similar name already exists here.',
       illegal_structure: '“{name}” was not uploaded: a file cannot be stored here.',
@@ -2213,6 +2216,7 @@ const de: typeof en = {
     downloadTooLarge: 'Diese Datei ist zu groß, um sie in diesem Browser herunterzuladen.',
     replaceAnyway: 'Trotzdem ersetzen',
     dismiss: 'Ausblenden',
+    nameTakenBy: '„{name}“ wurde nicht hochgeladen. {reason}',
     errors: {
       slug_taken: '„{name}“ wurde nicht hochgeladen: Hier gibt es schon einen Ordner, eine Erinnerung oder eine Datei mit ähnlichem Namen.',
       illegal_structure: '„{name}“ wurde nicht hochgeladen: Hier kann keine Datei liegen.',

@@ -94,9 +94,11 @@ let listFiles: ReturnType<typeof stubApi<typeof filesApi, 'listFiles'>>['listFil
 
 /** `pending`: the scope is pending deletion (the member's `access.readonly`); `identityFolder`: the level is a guest's
  *  identity folder in a drop box (what the member's tree answers for it). */
-function mountSection({ pending = false, identityFolder = false, ...props }: { nodes: TreeNode[]; pending?: boolean; identityFolder?: boolean; folder?: TreeNode | null }) {
+/** `siblings`: the level's children of other kinds — in the tree (what the any-kind pre-check reads, inbox #400), not in
+ *  the section's `nodes`, as core's level view hands them. */
+function mountSection({ pending = false, identityFolder = false, siblings = [], ...props }: { nodes: TreeNode[]; pending?: boolean; identityFolder?: boolean; folder?: TreeNode | null; siblings?: TreeNode[] }) {
   const epochs = epochsOf(v1.randomBytes(32))
-  const tree = memberTreeOf(() => [], { scopeId: SCOPE, epochs })
+  const tree = memberTreeOf(() => [DOCS, ...props.nodes, ...siblings], { scopeId: SCOPE, epochs })
   return mount(FilesSection, {
     props: {
       folder: DOCS, epochs, access: memberAccessOf({ scopeId: SCOPE, epochs, readonly: pending }),
@@ -241,6 +243,43 @@ describe('FilesSection', () => {
         replace: { nodeId: R, nodeKey: keyFor(R), expectedBlobId: REPORT_BLOB.blobId },
       }),
     }])
+  })
+
+  // Inbox #400: a picked name a sibling of ANOTHER kind holds — each name folded by its own kind — is not sent and not
+  // asked about: the section names that sibling. A file of a name that only looks alike is sent.
+  it('a name a folder or a Memory here holds is not sent: the notice names the sibling by its kind; the rest is uploaded', async () => {
+    const AB = node('5c09e000-0000-4000-8000-0000000000e5', FOLDER_KIND, 'a.b')
+    const w = mountSection({ nodes: [REPORT], siblings: [AB, MEMORY] })
+    await flushPromises()
+    // a folder `a.b` folds to `a-b` (a folder's slug), so a file `a-b` meets it, a file `a.b` does not (a file keeps its dot)
+    await pick(w, 0, [new File(['1'], 'a-b'), new File(['2'], 'a.b'), new File(['3'], 'a-memory'), new File(['4'], 'a memory')])
+    expect(confirmRequest.value).toBeNull()
+    // `a memory` keeps its space as a file name, so it does not meet the Memory `A Memory` (`a-memory`); `a-memory` does
+    expect(targets().map((x) => x.name)).toEqual(['a.b', 'a memory'])
+    const notices = w.findAll('.files-notice').map((n) => n.text())
+    expect(notices).toEqual([
+      expect.stringContaining(t('files.nameTakenBy', { name: 'a-b', reason: t('node.nameTakenBy', { kind: t('node.aFolder'), name: 'a.b' }) })),
+      expect.stringContaining(t('files.nameTakenBy', { name: 'a-memory', reason: t('node.nameTakenBy', { kind: t('memory.aMemory'), name: 'A Memory' }) })),
+    ])
+    // dismissed by its own button; the other stays
+    await w.findAll('.files-notice')[0].findAll('button').find((b) => b.text() === t('files.dismiss'))!.trigger('click')
+    expect(w.findAll('.files-notice')).toHaveLength(1)
+    // a FILE sibling is still the replace question, not a refusal (the replace semantics are unchanged)
+    const picking = pick(w, 0, [new File(['n'], 'report.pdf')])
+    await flushPromises()
+    expect(confirmRequest.value).toMatchObject({ message: t('files.replaceConfirm', { name: 'Report.pdf' }) })
+    settleConfirm(false)
+    await picking
+  })
+
+  it('a refusal the server answered for a name another kind holds by now names that sibling (the race backstop)', async () => {
+    const SUB = node('5c09e000-0000-4000-8000-0000000000e6', FOLDER_KIND, 'Later')
+    const w = mountSection({ nodes: [], siblings: [SUB] })
+    await flushPromises()
+    enqueue([{ name: 'later', sizeBytes: 1, run: async () => { throw new Error('slug_taken') }, extra: { file: new File([''], 'later') } }], { label: 'Docs', key: `files:${SCOPE}:${D}` })
+    await vi.waitFor(() => expect(useUploadQueue().batches.value[0]?.files[0]?.status).toBe('failed'))
+    await flushPromises()
+    expect(w.text()).toContain(t('files.nameTakenBy', { name: 'later', reason: t('node.nameTakenBy', { kind: t('node.aFolder'), name: 'Later' }) }))
   })
 
   it('a declined replace uploads nothing for that file', async () => {
