@@ -238,16 +238,22 @@ describe('a replace on the wire', () => {
     expect(requests.length, 'no second upload for a conflict no retry can change').toBe(sent)
   })
 
-  it('through the core queue, the conflict settles the item failed with stale_file after the one automatic retry', async () => {
+  it('through the core queue, the conflict settles the item failed with stale_file at once (a final refusal: no automatic retry, none offered)', async () => {
     fakeServer({ complete: () => json({ code: 'stale_file', currentBlobId: null }, 409) })
     enqueue([fileUploadJob(replaceTarget('9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a'), fileOf(100))], { label: 'Docs', key: 'files:test' })
     const { batches } = useUploadQueue()
     await vi.waitFor(() => expect(batches.value[0].finishedAt).not.toBeNull())
-    expect(batches.value[0].files[0]).toMatchObject({ status: 'failed', error: 'stale_file', attempts: 2 })
+    expect(batches.value[0].files[0]).toMatchObject({ status: 'failed', error: 'stale_file', attempts: 1, final: true })
   })
 })
 
 describe('a file upload\'s other outcomes', () => {
+  it('declares its final refusals to the queue (no retry is offered for them), and nothing else', () => {
+    const job = fileUploadJob(newTarget(), fileOf(10))
+    for (const code of ['slug_taken', 'illegal_structure', 'stale_file']) expect(job.isFinal?.(code), code).toBe(true)
+    expect(job.isFinal?.('chunk_put_failed:500')).toBe(false)
+  })
+
   it('a create refused as slug_taken or illegal_structure ends there: no blob started, and a rerun sends nothing', async () => {
     for (const [answer, code] of [
       [json({ code: 'slug_taken' }, 409), 'slug_taken'],

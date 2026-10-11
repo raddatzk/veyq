@@ -6,6 +6,7 @@
 > `web/src/features/files`. What a person does with it, and the tests that hold it, are its use-cases:
 > [uc.files.member-files](../features/files/use-cases/uc.files.member-files.md),
 > [uc.files.share-folder-files](../features/files/use-cases/uc.files.share-folder-files.md),
+> [uc.files.share-file](../features/files/use-cases/uc.files.share-file.md),
 > [uc.files.drop-box](../features/files/use-cases/uc.files.drop-box.md). This page is how it works.
 
 ## What it is
@@ -14,8 +15,9 @@
   `FOLDER`: every node carries a key and a `FOLDER` can be a share root with `READ` or `READ_WRITE`
   ([ADR 0080](../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md), built), so Files needs
   no directory kind of its own, and a directory can be shared whole. A file node carries its own key like every node,
-  but Files declares it **no share root**: a file is shared through its folder (a single-file link would need a share
-  body of its own). Files live in the scope's one folder tree, beside Memories.
+  and Files declares it a share root with `READ` or `READ_WRITE` (never `WRITE_ONLY`): a file is shared through its
+  folder above it, or **on its own** (§ A single file as a share root). Files live in the scope's one folder tree, beside
+  Memories.
 - **Web only.** No sync client, no versioning: replacing a file replaces its blob.
 - A **drop box** (write-only) is a node of its own with one guest folder per identity (ADR 0080 decision 11,
   § The drop box); a `WRITE_ONLY` link on a plain `FOLDER` stays refused. Viewer and
@@ -89,7 +91,7 @@ reads).
   version history (owner decision 2026-10-08, inbox #383); "replace anyway" after a peer's replace is itself the
   answer and asks nothing), plan and pump the blob
   under the node's own key with the file's metadata sealed under its `K_blob`, then `completeFile` with
-  `expectedBlobId` — nothing is written after it. The status menu shows progress; the section says why a file of its
+  `expectedBlobId` — nothing is written after it. The status menu shows progress; a final refusal (`slug_taken`, `illegal_structure`, `stale_file` — the job's `isFinal`, core's queue) fails the item at once and the menu offers no retry for it; the section says why a file of its
   folder was not uploaded (a taken name, `stale_file` with "replace anyway", no space). **A name another kind holds is
   not sent** (inbox #400): before anything is asked, every picked name is folded by the file's function and each
   sibling's by its own kind's (core's `collidingSibling`, the dialogs' pre-check), and one that meets a folder, Memory
@@ -117,8 +119,8 @@ reads).
 
 ## Guests (a folder share)
 
-A `FILE` is **no share root** (Files declares no `ShareRoots`): a file is shared through a `FOLDER` link above it,
-`READ` or `READ_WRITE`. The role matrix (ADR 0080 decision 6):
+A file is shared through a `FOLDER` link above it, `READ` or `READ_WRITE` (or on its own, § A single file as a share
+root). The role matrix (ADR 0080 decision 6):
 
 | A guest of a … link | may |
 |---|---|
@@ -132,12 +134,14 @@ shows is `filesCapabilities(access, target)` (`web/src/features/files/capabiliti
 
 | Right | member | member, pending deletion | member, guest's identity folder | `READ` | `READ_WRITE` | `WRITE_ONLY` |
 |---|---|---|---|---|---|---|
-| download (a folder's files; a drop box's guests' folders) | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ |
+| download (a folder's files; a drop box's guests' folders; an opened file) | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ |
 | upload, replace | ✓ | ✗ | ✗ | ✗ | ✓ (not in an identity folder, not in a drop box below the link) | ✓ on its own drop box only |
 | rename a file | ✓ | ✗ | ✗ | ✗ | ✗ (the server allows it; offered nowhere yet) | ✗ |
 | move a file (core's move dialog, inbox #358) | ✓ | ✗ | ✓ out of it (inbox #377 (a)) | ✗ | ✓ between the subtree's folders (not in an identity folder) | ✗ |
 | move a guest's folder out of a drop box, move the drop box | ✓ | ✗ | — | ✗ | ✗ (a drop box below the link is read-only, #380) | ✗ |
 | delete a file, a guest's folder | ✓ | ✗ | ✓ (inbox #391) | ✗ | ✗ | ✗ |
+| the **opened file** (`FileDetail`): replace | ✓ | ✗ | ✗ | ✗ | ✓ (not in an identity folder) | ✗ |
+| the opened file: rename, share, delete, move | all ✓ (share with the instance's public links; not in an identity folder) | share only (links are a read) | delete, move only | ✗ | move only, between the folder link's folders (never the link's root, not in an identity folder) | ✗ |
 | create a drop box | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
 | a drop box's links, delete it | links with the instance's public links; delete ✓ | links only | — | ✗ | ✗ | ✗ |
 
@@ -190,6 +194,41 @@ box at the root or in a folder (the kinds' `placement`), never into a drop box o
   (§ The drop box) no guest is offered a write (the capabilities). A guest-mode mount of each view proves it calls no
   authenticated client and reads nothing of the member's world (`FilesSection.guest.test.ts`,
   `DropBoxDetail.guest.test.ts`).
+
+## A single file as a share root
+
+A `FILE` is a share root with **`READ` and `READ_WRITE`** (`FilesShareRoots`; inbox #378, owner principle #401: a share is
+the member view with functions removed). Decided with it, small questions answered here:
+
+- **`WRITE_ONLY` on a file is refused** — `422 illegal_scope` on create, `invalid_role_change` on a change, nothing
+  stored, and the web never offers it. A write-only guest holds no key and reads nothing back, and a file has no
+  identity folder to send into; sending a file *to* someone is the drop box. (Fail closed: core's `ShareRoots` answers a
+  role Files does not list with `illegal_scope`.)
+- **The link's guest reaches that file and nothing else.** The resolve serves the file alone (`parentId` null, no folder
+  above, no sibling); `listShareFiles` lists it alone; `resolveShareBlob` authorizes its blob only. The file's key
+  is the share's `wrap` under `K_share` (ADR 0080 decision 1), its name the link's own `sealedName`; every seal is bound
+  to the file node (ADR 0072), so a blob the server lists for another node opens nothing under it. A `READ_WRITE` guest
+  replaces the content through the same guest transport and `completeShareFile` a folder contributor uses — the root is
+  a valid target (the guest's `ShareGuestGate.target` names a live node *inside* the subtree, the root included) — and
+  creates nothing under the file (no `GuestNodeRules` answers for a `FILE` container: `illegal_scope`) and places nothing
+  (the root is never placed: `illegal_structure`). No code changed there; `FileShareSliceTest` pins it.
+- **A node in the trash is shared by nobody:** core's `createShare` answers `404 node_not_found` for one (for every kind;
+  it served no guest anyway, and a restore is not a new share). A file trashed after its link exists serves nothing:
+  not listed, its blob `404`, an upload refused.
+- **The page is the member's file view, `FileDetail`** (`components/FileDetail.vue`, FILE's registered `detail`): core's
+  header card (name; share, rename, move, delete where the matrix says), the file's size, type and date from its blob's
+  sealed meta, a download and a replace (asks first; the node keeps its name; a compare-and-set on the blob it read, with
+  "replace anyway" after a peer's replace; a file that holds no content offers an upload into it). A member opens it from
+  a row's info button in the folder's list (`FilesSection` emits `openNode`); core's page of a public link
+  (`ShareTreePage`) mounts it for the link's root — and for a file *inside* a folder link, which therefore also gets a
+  page of its own. Its data source is the same `FilesSource` (`beginReplace` is its one addition: a replace names the
+  file, so no folder is asked for). The download name is `downloadName` (the node name, else the blob's sealed name,
+  plus the sealed type's extension).
+- **The link dialog is core's** (`FolderShareDialog`) with the sentences about what is shared swapped for the file's
+  (`ShareDialogCopy`, `files.share.*`; `FileShareDialog.vue` is a three-line wrapper). It offers `READ` and
+  `READ_WRITE` only, as it does for a folder.
+- **Delete** from the page is core's delete dialog (`deleteTitle`/`deleteCopy` of the kind) into the trash, with the
+  undo toast; **rename** is core's name dialog (selecting the stem); **move** is core's move dialog.
 
 ## The drop box
 

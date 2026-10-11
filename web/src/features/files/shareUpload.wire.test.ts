@@ -144,6 +144,12 @@ describe("a guest's new file on the wire", () => {
     expectNoPlaintextName(requests, NAME)
   })
 
+  it('declares its final refusals to the queue, and nothing else', () => {
+    const job = guestFileUploadJob({ ctx: context(), parentId: ROOT }, new File(['x'], 'a.txt'))
+    for (const code of ['slug_taken', 'illegal_structure', 'stale_file']) expect(job.isFinal?.(code), code).toBe(true)
+    expect(job.isFinal?.('chunk_put_failed:500')).toBe(false)
+  })
+
   it('a name a readable sibling folds to is refused before anything is sent (slug_taken)', async () => {
     const requests = fakeServer()
     const job = guestFileUploadJob({ ctx: context(), parentId: ROOT }, new File(['x'], 'alt.TXT'))

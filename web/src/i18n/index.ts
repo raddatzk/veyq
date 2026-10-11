@@ -1011,6 +1011,28 @@ const en = {
     deleteConfirm: '“{name}” moves to the trash. You can restore it from there until it is deleted for good.',
     deleteAccept: 'Delete',
     deleteFailed: 'The file could not be deleted. Please try again.',
+    // An opened file (components/FileDetail.vue, inbox #378): the page of one file, a single-file link's page included.
+    detail: {
+      open: 'Open {name}',
+      size: 'Size',
+      type: 'Type',
+      typeUnknown: 'Unknown',
+      modified: 'Modified',
+      download: 'Download',
+      replace: 'Replace content',
+      uploadInto: 'Upload content',
+      // A contributor of a file link: what a replace does, said before it happens (inbox #383).
+      contributorHint: 'You can replace this file’s content. It changes for everyone who has this link, the owner too. The old content cannot be restored: there is no version history.',
+    },
+    // Core's link dialog on a file (components/FileShareDialog.vue): the sentences that would be wrong for a folder.
+    share: {
+      title: 'Share this file',
+      intro: 'Create a link anyone can open in a browser — no account, no install. It shows only this one file, and you can switch it off anytime.',
+      roleViewerHint: 'Anyone with the link can see this file and download it, read-only.',
+      roleContributorHint: 'Anyone with the link can see and download this file and replace its content — the old content cannot be restored: there is no version history.',
+      deleteConfirm: 'Delete this link for good? It can never be switched on or renewed again. Content guests replaced stays in this file.',
+      reissueWarning: 'This makes a new link and deletes the old one. Hand out the new link.',
+    },
     // Core's trash, on a trashed file that holds no content (inbox #391): what a restore brings back.
     trashEmpty: 'No content — its upload did not finish. Restoring brings back an empty file you can upload into.',
     downloadFailed: 'The file could not be downloaded. Please try again.',
@@ -1035,6 +1057,7 @@ const en = {
       // A contributor's page (inbox #383): what an upload or a replace does, said before it happens.
       contributorHint: 'You can upload files here and replace any file, including the owner’s. A replaced file cannot be brought back: there is no version history.',
       replaceConfirm: 'Replace the content of “{name}” with “{file}”? It changes for everyone who sees this folder, the owner too. The old content cannot be restored: there is no version history.',
+      replaceFileConfirm: 'Replace the content of “{name}” with “{file}”? It changes for everyone who has this link, the owner too. The old content cannot be restored: there is no version history.',
       // A contributor's upload of a name a file here already has (inbox #392): refused (409), and what to do instead.
       fileExists: '“{name}” was not uploaded: a file with this name already exists here. To replace it, use the replace button in its row.',
     },
@@ -2291,6 +2314,25 @@ const de: typeof en = {
     deleteConfirm: '„{name}“ kommt in den Papierkorb. Dort kannst du sie wiederherstellen, bis sie endgültig gelöscht wird.',
     deleteAccept: 'Löschen',
     deleteFailed: 'Die Datei konnte nicht gelöscht werden. Bitte versuche es erneut.',
+    detail: {
+      open: '{name} öffnen',
+      size: 'Größe',
+      type: 'Typ',
+      typeUnknown: 'Unbekannt',
+      modified: 'Geändert',
+      download: 'Herunterladen',
+      replace: 'Inhalt ersetzen',
+      uploadInto: 'Inhalt hochladen',
+      contributorHint: 'Du kannst den Inhalt dieser Datei ersetzen. Das gilt dann für alle, die diesen Link haben, auch für die Person, der die Datei gehört. Der alte Inhalt lässt sich nicht wiederherstellen: Es gibt keinen Versionsverlauf.',
+    },
+    share: {
+      title: 'Diese Datei teilen',
+      intro: 'Erstelle einen Link, den jede:r im Browser öffnen kann — ohne Konto, ohne Installation. Er zeigt nur diese eine Datei, und du kannst ihn jederzeit abschalten.',
+      roleViewerHint: 'Wer den Link hat, kann diese Datei ansehen und herunterladen — schreibgeschützt.',
+      roleContributorHint: 'Wer den Link hat, kann diese Datei ansehen, herunterladen und ihren Inhalt ersetzen — der alte Inhalt lässt sich nicht wiederherstellen: Es gibt keinen Versionsverlauf.',
+      deleteConfirm: 'Diesen Link endgültig löschen? Er lässt sich danach nie wieder einschalten oder erneuern. Inhalt, den Gäste ersetzt haben, bleibt in dieser Datei.',
+      reissueWarning: 'Dadurch entsteht ein neuer Link, und der alte wird gelöscht. Gib den neuen Link weiter.',
+    },
     trashEmpty: 'Ohne Inhalt — das Hochladen wurde nicht abgeschlossen. Wiederherstellen bringt eine leere Datei zurück, in die du hochladen kannst.',
     downloadFailed: 'Die Datei konnte nicht heruntergeladen werden. Bitte versuche es erneut.',
     downloadTooLarge: 'Diese Datei ist zu groß, um sie in diesem Browser herunterzuladen.',
@@ -2309,6 +2351,7 @@ const de: typeof en = {
       linkFull: '„{name}“ wurde nicht hochgeladen: Dieser Link nimmt gerade keine weiteren Uploads an.',
       contributorHint: 'Du kannst hier Dateien hochladen und jede Datei ersetzen, auch die der Person, der der Ordner gehört. Eine ersetzte Datei lässt sich nicht zurückholen: Es gibt keinen Versionsverlauf.',
       replaceConfirm: 'Den Inhalt von „{name}“ durch „{file}“ ersetzen? Er ändert sich für alle, die diesen Ordner sehen, auch für die Person, der er gehört. Der alte Inhalt lässt sich nicht wiederherstellen: Es gibt keinen Versionsverlauf.',
+      replaceFileConfirm: 'Den Inhalt von „{name}“ durch „{file}“ ersetzen? Er ändert sich für alle, die diesen Link haben, auch für die Person, der die Datei gehört. Der alte Inhalt lässt sich nicht wiederherstellen: Es gibt keinen Versionsverlauf.',
       fileExists: '„{name}“ wurde nicht hochgeladen: Hier gibt es schon eine Datei mit diesem Namen. Um sie zu ersetzen, nutze die Schaltfläche zum Ersetzen in ihrer Zeile.',
     },
     dropBox: {

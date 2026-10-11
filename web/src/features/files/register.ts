@@ -3,12 +3,14 @@
 // parameter, not an import of the singleton, so a test can register into a fresh one.
 //
 // The `FILE` kind with its level SECTION (cr-files-application F1b): the file list of a folder, the upload, replace,
-// download, rename and delete. No `detail` — a file is not opened, it is downloaded from its row (an opened FILE, e.g.
-// by a typed URL, renders the host's explicit unsupported state, `home.unsupportedKind`), no `createDialog` (a file is
-// created by uploading it, never by naming an empty one) and no `shareDialog` (a file is shared through its folder).
-// The same section is a shared folder's file list on the public page (inbox #401 S3): core's folder page mounts it with
-// the guest's access and tree, the download for every guest, the upload and replace for a contributor. No share body —
-// a file is never a share root.
+// download, rename and delete; its `detail` (inbox #378) is the page of one opened file (`FileDetail`: facts, download,
+// replace, and the header card's share, rename, move and delete) and its `shareDialog` the links of that one file
+// (`FileShareDialog`, READ and READ_WRITE — a single-file share; the backend's `FilesShareRoots`). No `createDialog` (a
+// file is created by uploading it, never by naming an empty one). The same section is a shared folder's file list on the
+// public page (inbox #401 S3): core's folder page mounts it with the guest's access and tree, the download for every
+// guest, the upload and replace for a contributor; the same `detail` is a single-file link's whole page (core's
+// `ShareTreePage` mounts the kind's detail at the link's root), and a file opened inside a folder link. No share body —
+// a file is never a `WRITE_ONLY` root, and every other role gets core's page.
 //
 // The `FILES_DROPBOX` kind (F3, ADR 0080 decision 11): its level section (the drop boxes of a folder, a "New drop box"
 // action), its `createDialog` (a name), its `detail` (its guests' folders — for a member, and read-only for a READ or
@@ -25,6 +27,8 @@ import DropBoxCreateDialog from './components/DropBoxCreateDialog.vue'
 import DropBoxDetail from './components/DropBoxDetail.vue'
 import DropBoxShareDialog from './components/DropBoxShareDialog.vue'
 import DropBoxShareBody from './components/DropBoxShareBody.vue'
+import FileDetail from './components/FileDetail.vue'
+import FileShareDialog from './components/FileShareDialog.vue'
 
 /** What a rename selects of a file's name (core's rename dialog, inbox #385): the name without its extension — up to
  *  the last dot, unless the name starts with its only dot (`.env` stays whole). */
@@ -43,13 +47,18 @@ export const DROPBOX_SECTION_ORDER = 21
 const FILES_PLACEMENT = { root: true, parents: [FOLDER_KIND] } as const
 
 export function registerFiles(registry: Registry): void {
-  // A file is no share root (the backend declares no `ShareRoots` for it): it is shared through its folder. Its name
-  // folds by `fileNameSlug` (inbox #350: `Foto.JPG` and `foto.jpg` collide, `Day1.md` and `Day1 md` do not) — frozen
+  // A file is a READ / READ_WRITE share root (the backend's `FilesShareRoots`), and is also shared through its folder.
+  // Its name folds by `fileNameSlug` (inbox #350: `Foto.JPG` and `foto.jpg` collide, `Day1.md` and `Day1 md` do not) — frozen
   // into every stored slug token from the first `FILE` on, and pinned by `name_folding` in `contracts/crypto/vectors/v1.json`.
   registry.registerKind({
     kind: FILE_KIND,
     icon: 'pi pi-file',
-    shareable: false,
+    shareable: true,
+    detail: FileDetail,
+    shareDialog: FileShareDialog,
+    // Core's delete dialog (the detail's delete) names the file, not "item".
+    deleteTitle: 'files.deleteTitle',
+    deleteCopy: 'files.deleteConfirm',
     slug: fileNameSlug,
     renameSelectionEnd: fileNameStemEnd,
     // A trashed file that holds no blob is one whose upload never finished (inbox #391): core's trash says so.

@@ -5,7 +5,7 @@
 // role or kind grants nothing.
 import { FOLDER_KIND } from '../../core/node/kind'
 import type { Access, CapabilityTarget } from '../../core/access'
-import { DROPBOX_KIND } from './kinds'
+import { DROPBOX_KIND, FILE_KIND } from './kinds'
 
 export interface FilesCapabilities {
   /** Download a file of the level, open a drop box or one of its guests' folders. */
@@ -45,8 +45,9 @@ export const NO_FILES_CAPABILITIES: Readonly<FilesCapabilities> = Object.freeze(
 })
 
 /** The Files matrix (see the header; the table is `docs/apps/files.md`). `at` is the node on screen: a folder level whose
- *  files and drop boxes the sections show (`FOLDER`; null at a member's scope root), or an opened drop box. A `FILE` is
- *  never "on screen" (it is downloaded from its row), so it grants nothing. */
+ *  files and drop boxes the sections show (`FOLDER`; null at a member's scope root), an opened drop box, or an opened
+ *  file (`FileDetail`: the page of one file, the root of a single-file link included). On an opened file `replace`,
+ *  `rename`, `share`, `deleteNode` and `moveNode` are about THAT file. */
 export function filesCapabilities(access: Access, at: CapabilityTarget): FilesCapabilities {
   if (access.mode === 'member') return memberCapabilities(access.readonly, access.publicLinks, at)
   if (access.mode === 'guest') return guestCapabilities(access.role, at)
@@ -71,6 +72,20 @@ function memberCapabilities(readonly: boolean, publicLinks: boolean, at: Capabil
       moveFile: write,
     }
   }
+  if (at.kind === FILE_KIND) {
+    // The opened file: what its row offers, plus its own share (not in a guest's identity folder, where the guest's
+    // folder is the owner's to delete or move out only) and delete/move of itself. Download stays during a pending
+    // deletion; a share's links are a read there, like a drop box's.
+    return {
+      ...NO_FILES_CAPABILITIES,
+      download: true,
+      replace: place,
+      rename: place,
+      share: publicLinks && at.shareable && !at.inIdentityFolder,
+      deleteNode: write,
+      moveNode: write,
+    }
+  }
   if (at.kind === DROPBOX_KIND) {
     // A drop box's listing and links stay readable during a pending deletion; deleting or moving it, or a guest's folder
     // (out of it: the folder's identity ends, ADR 0080 decision 11), is a write.
@@ -92,7 +107,9 @@ function guestCapabilities(role: string, at: CapabilityTarget): FilesCapabilitie
   if (at.kind === null) return NO_FILES_CAPABILITIES
   switch (role) {
     case 'READ':
-      return at.kind === FOLDER_KIND || at.kind === DROPBOX_KIND ? { ...NO_FILES_CAPABILITIES, download: true } : NO_FILES_CAPABILITIES
+      return at.kind === FOLDER_KIND || at.kind === DROPBOX_KIND || at.kind === FILE_KIND
+        ? { ...NO_FILES_CAPABILITIES, download: true }
+        : NO_FILES_CAPABILITIES
     case 'READ_WRITE':
       // A contributor uploads, replaces and moves any file of a folder (the owner's too — core's `FolderGuestNodeRules`
       // lets any kind out of and into a folder; the move dialog offers the subtree's folders only); nothing in a guest's
@@ -103,9 +120,21 @@ function guestCapabilities(role: string, at: CapabilityTarget): FilesCapabilitie
         const place = !at.inIdentityFolder
         return { ...NO_FILES_CAPABILITIES, download: true, upload: place, replace: place, moveFile: place }
       }
+      if (at.kind === FILE_KIND) {
+        // An opened file (the link's root, or one inside a folder link): download, and replace the content (the owner's
+        // file too, after the question); moved only out of a folder into the subtree's other folders, never the link's
+        // root (whose parent lies above the link) nor in or out of an identity folder. No rename, no delete.
+        return {
+          ...NO_FILES_CAPABILITIES,
+          download: true,
+          replace: !at.inIdentityFolder,
+          moveNode: at.parentKind === FOLDER_KIND && !at.inIdentityFolder,
+        }
+      }
       return at.kind === DROPBOX_KIND ? { ...NO_FILES_CAPABILITIES, download: true } : NO_FILES_CAPABILITIES
     case 'WRITE_ONLY':
-      // The drop box's own guest: sends into its identity folder, holds no key to read anything back.
+      // The drop box's own guest: sends into its identity folder, holds no key to read anything back. A file is no
+      // `WRITE_ONLY` root (the backend refuses that link), so nothing on a file.
       return at.kind === DROPBOX_KIND ? { ...NO_FILES_CAPABILITIES, upload: true } : NO_FILES_CAPABILITIES
     default:
       return NO_FILES_CAPABILITIES

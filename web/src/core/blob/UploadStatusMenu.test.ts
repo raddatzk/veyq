@@ -3,7 +3,7 @@
 // file, status and badge, and the cancel control aborts it. Core's since cr-files-application B3: it is driven here by
 // plain queue jobs, no application involved, and it lists a batch of any application (the case at the end) — what a
 // Memories batch looks like through the real top bar is `AppTopbar.test.ts`'s.
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import UploadStatusMenu from './UploadStatusMenu.vue'
 import { enqueue, clearUploads, type UploadJob } from './queue'
@@ -94,6 +94,33 @@ describe('UploadStatusMenu', () => {
     expect(w.text()).toContain(t('upload.status.failed'))
     expect(w.find('.uploads-file-reason').exists()).toBe(false)
     expect(w.find('.uploads-file-action').attributes('aria-label')).toBe(t('upload.retry'))
+  })
+
+  // A job's own final refusal (Files: slug_taken, illegal_structure, stale_file) is not retryable either: the tray
+  // offers no retry control for it, and the job ran once (no automatic second attempt). Its control is the same code
+  // on a job that declares nothing final — that one still offers the retry and the click re-runs it.
+  it('offers no retry for a refusal its job declared final', async () => {
+    const run = vi.fn(() => Promise.reject(new Error('slug_taken')))
+    enqueue([{ name: 'a.txt', sizeBytes: 1, run, isFinal: (e) => e === 'slug_taken' }], { label: '1 file' })
+    const w = mountTray()
+    await flushPromises()
+    await w.find('.uploads-trigger').trigger('click')
+
+    expect(w.text()).toContain(t('upload.status.failed'))
+    expect(w.find('.uploads-file-action').exists()).toBe(false)
+    expect(run).toHaveBeenCalledTimes(1)
+  })
+
+  it('control: the same code from a job that declares nothing final offers the retry, and its click runs the job again', async () => {
+    const run = vi.fn(() => Promise.reject(new Error('slug_taken')))
+    enqueue([{ name: 'a.txt', sizeBytes: 1, run }], { label: '1 file' })
+    const w = mountTray()
+    await flushPromises()
+    await w.find('.uploads-trigger').trigger('click')
+    expect(run).toHaveBeenCalledTimes(2) // the automatic retry
+    await w.find('.uploads-file-action').trigger('click')
+    await flushPromises()
+    expect(run).toHaveBeenCalledTimes(4)
   })
 
   // The menu is the platform's: a batch enqueued by an application that is not Memories — no `target`, no `file`, its

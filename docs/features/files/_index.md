@@ -1,6 +1,6 @@
 # Feature: Files
 
-The **Files** application's user-facing flows: a member's file tree, files on a shared folder, and the drop box.
+The **Files** application's user-facing flows: a member's file tree, files on a shared folder, one shared file, and the drop box.
 What a file *is* — its node, its one blob, its sealed metadata, its contract and the operator-visible metadata — is
 the application's description, [docs/apps/files.md](../../apps/files.md); the use-cases below say what a person does
 with it and point there instead of repeating it.
@@ -20,5 +20,7 @@ with it and point there instead of repeating it.
   or the scope root, downloads, replaces, renames and deletes them.
 - [uc.files.share-folder-files](use-cases/uc.files.share-folder-files.md) — **built (web)**: a folder link carries
   its files — a `READ` guest downloads them, a `READ_WRITE` guest also adds and replaces files.
+- [uc.files.share-file](use-cases/uc.files.share-file.md) — **built (web)**: one file, shared on its own — a `READ` guest
+  sees and downloads it, a `READ_WRITE` guest also replaces its content.
 - [uc.files.drop-box](use-cases/uc.files.drop-box.md) — **built (web)**: guests send files into a drop box, each
   into a folder of its own, and the members open them.

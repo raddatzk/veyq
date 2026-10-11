@@ -10,16 +10,22 @@ import DropBoxCreateDialog from './components/DropBoxCreateDialog.vue'
 import DropBoxDetail from './components/DropBoxDetail.vue'
 import DropBoxShareDialog from './components/DropBoxShareDialog.vue'
 import DropBoxShareBody from './components/DropBoxShareBody.vue'
+import FileDetail from './components/FileDetail.vue'
+import FileShareDialog from './components/FileShareDialog.vue'
 
 describe('registerFiles', () => {
-  it('registers the FILE kind: not shareable, a file icon, its level section (a guest\'s too), no detail', () => {
+  it('registers the FILE kind: shareable (READ / READ_WRITE, a single-file link), a file icon, its level section, its own page and link dialog', () => {
     const registry = createRegistry()
     registerFiles(registry)
     expect(registry.kind(FILE_KIND)).toEqual({
       supported: true,
       kind: FILE_KIND,
       icon: 'pi pi-file',
-      shareable: false,
+      shareable: true,
+      detail: FileDetail,
+      shareDialog: FileShareDialog,
+      deleteTitle: 'files.deleteTitle',
+      deleteCopy: 'files.deleteConfirm',
       slug: fileNameSlug,
       renameSelectionEnd: fileNameStemEnd,
       emptyInTrash: 'files.trashEmpty',
@@ -76,18 +82,17 @@ describe('registerFiles', () => {
     expect(registry.slugFor(DROPBOX_KIND, 'Foto.JPG')).toBe(slugify('Foto.JPG')) // a container's folding
   })
 
-  it('brings its own level sections after Memories\' (files 20, drop boxes 21), and no FILE dialog, list item, share body or lifecycle', () => {
+  it('brings its own level sections after Memories\' (files 20, drop boxes 21), and no FILE create dialog, list item, drop page or lifecycle', () => {
     const registry = createRegistry()
     registerFiles(registry)
     const file = registry.kind(FILE_KIND)
     expect(file.supported && file.createDialog).toBeUndefined() // a file is created by uploading it, never by a name dialog
-    expect(file.supported && file.shareDialog).toBeUndefined() // not a share root: no share offered
     expect(registry.sections()).toEqual([
       { component: FilesSection, order: 20, views: [], kinds: [FILE_KIND] },
       { component: DropBoxSection, order: 21, views: [], kinds: [DROPBOX_KIND] },
     ])
     for (const slot of ['topbarTray', 'sidebarPins'] as const) expect(registry.slotItems(slot)).toEqual([])
-    expect(registry.shareBody(FILE_KIND)).toBeNull()
+    expect(registry.shareBody(FILE_KIND)).toBeNull() // no WRITE_ONLY link on a file: core's page serves every file link
   })
 
   it('is write-once: a second registration throws', () => {

@@ -13,7 +13,8 @@ object FilesNodeKinds {
     /**
      * A file: a node holding ONE sealed blob (replaced, never versioned), with its name sealed under its parent's key like
      * every node (docs/apps/files.md). It has no children — no rule admits a `FILE` as a parent — and its directories
-     * are core's `FOLDER`s. Not a share root: a file is shared through its folder.
+     * are core's `FOLDER`s. A share root with `READ` or `READ_WRITE` ([FilesShareRoots]); it is also shared through
+     * any folder above it.
      */
     const val FILE = "FILE"
 
@@ -45,19 +46,25 @@ class FilesNodeKindRules : NodeKindRules {
 
 /**
  * Which share roles Files' kinds take (ADR 0080 decision 6: shareability is separate from guest writes): a drop box is
- * shared `WRITE_ONLY` only — its guests hold no key of it and get one identity folder each (decision 11); a `FILE` is no
- * share root (it is shared through its folder).
+ * shared `WRITE_ONLY` only — its guests hold no key of it and get one identity folder each (decision 11); a `FILE` is
+ * shared `READ` (see and download it) or `READ_WRITE` (and replace its content, as a contributor of a folder above may).
+ * **Never `WRITE_ONLY` on a file**: a write-only guest holds no key and reads nothing back, and a file has no identity
+ * folder to send into, so the role would mean nothing — `illegal_scope`, fail closed (a guest then creates nothing under
+ * a file either: no [me.raddatz.veyq.core.sharing.GuestNodeRules] answers for a `FILE` container).
  */
 @ApplicationScoped
 class FilesShareRoots : ShareRoots {
-    override fun roles(kind: String): Set<String>? =
-        if (kind == FilesNodeKinds.DROPBOX) setOf(ShareEntity.WRITE_ONLY) else null
+    override fun roles(kind: String): Set<String>? = when (kind) {
+        FilesNodeKinds.DROPBOX -> setOf(ShareEntity.WRITE_ONLY)
+        FilesNodeKinds.FILE -> setOf(ShareEntity.READ, ShareEntity.READ_WRITE)
+        else -> null
+    }
 }
 
 /**
  * What a drop box's `WRITE_ONLY` guest may create inside its own identity folder (ADR 0080 decision 11, core's
  * [WriteOnlyGuestKinds]): **`FILE`s only** — no sub-folder, no other kind (owner decision 2026-10-08, inbox #377 (c));
- * it uploads into those files and does nothing else. A `FILE` is never a share root, so Files handles the drop box only.
+ * it uploads into those files and does nothing else. A `FILE` is never a `WRITE_ONLY` root ([FilesShareRoots]), so Files handles the drop box only.
  */
 @ApplicationScoped
 class FilesWriteOnlyGuestKinds : WriteOnlyGuestKinds {

@@ -255,7 +255,8 @@ class SharingHandler(
         // before any node/scope lookup so it reads as "the operator turned sharing off", not a scope error.
         if (!capabilities.isActive(capabilityFor(role))) return CreateShareOutcome.CapabilityDisabled
         val keys = shareKeys(role, wrap, sealedDropPublicKey, sealedDropPrivateKey) ?: return CreateShareOutcome.InvalidRequest
-        val node = store.findNode(nodeId) ?: return CreateShareOutcome.NoNode
+        // A node in the trash is shared by nobody: a link on it would serve nothing, and a restore is not a new share.
+        val node = store.findNode(nodeId)?.takeIf { it.deletedAt == null } ?: return CreateShareOutcome.NoNode
         access.check(userId, node.scopeId, WRITE)
             .refusal(CreateShareOutcome.NoNode, CreateShareOutcome.Suspended, CreateShareOutcome.Deleting)?.let { return it }
         // Any member of the node's scope may share (cr-0104) — personal, group, or tenant; only a node whose kind's owner
