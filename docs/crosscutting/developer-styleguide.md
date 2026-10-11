@@ -115,10 +115,12 @@
   `@field:me.raddatz.veyq.core.http.EachElement(maxLength = …, pattern = "…")` beside the list's own `@Size` —
   `ClaimRequest.capabilityTags` took any string as a tag until it did (inbox #354). A list of `uuid`s needs none:
   the element type refuses the rest. Parameters are exempt: the `jaxrs-spec` API generator derives their annotations
-  itself (`useBeanValidation`). Enforced by `scripts/validate_request_bounds.py`. On a list, Hibernate
-  Validator logs `HV000271` (a container-level `@Valid` is deprecated in favour of the type argument) — which
-  the `kotlin` generator cannot place, so the field form stays; `MediaCoreSliceTest.startBlobUploadsValidatesInsideEachItem`
-  is what reddens if a later Hibernate Validator stops honouring it.
+  itself (`useBeanValidation`). Enforced by `scripts/validate_request_bounds.py`. A list's cascade stays written as
+  `@field:jakarta.validation.Valid` in the spec; the build moves it onto the element type (`List<@Valid Item>`) after
+  generation (`buildSrc`'s `ModelCascade`, with the compiler flag `-Xemit-jvm-type-annotations`), because Hibernate
+  Validator logs `HV000271` for a container-level `@Valid` and announces its removal (inbox #336). A generator bump
+  that changes how a list type is written fails the build instead of dropping the cascade;
+  `GeneratedCascadeSweepTest` and `MediaCoreSliceTest.startBlobUploadsValidatesInsideEachItem` hold the result.
 - **Stateful / cross-field / domain checks stay imperative** in the handler or a guard, close to the
   invariant, and small/named/fail-closed (e.g. crypto-suite allow-list, scope-grant checks, upload
   quota/path-traversal guards). Anything needing DB state does not belong in a field annotation.
