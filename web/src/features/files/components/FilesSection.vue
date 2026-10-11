@@ -13,6 +13,7 @@
 // one remedy there is (replace anyway after a peer's replace). A file that holds no content (an upload that never
 // finished, e.g. the tab closed mid-way; a given-up job trashes its own empty node) offers an upload into it instead of
 // a replace, and a picked file of its name fills it without the replace question — there is nothing to replace (#384).
+// A row's "Open" (the info icon) opens the file's own page, `FileDetail` (inbox #378), through the section's `openNode`.
 // A row's move ("Move to…", inbox #358) asks the host for core's `MoveNodeDialog` through the section's `move` event: a
 // member anywhere (out of a guest's identity folder too), a contributor between the subtree's folders.
 // What it offers is Files' capability matrix for the level (`../capabilities.ts`, inbox #401): in a guest's identity
@@ -410,6 +411,18 @@ async function remove(node: TreeNode) {
           </span>
         </button>
         <span class="veyq-action-group veyq-action-group-icons">
+          <!-- Opens the file's own page (`FileDetail`, inbox #378): its facts, download, replace and — for a member — share. -->
+          <Button
+            v-tooltip.bottom="t('files.detail.open', { name: row.node.name })"
+            type="button"
+            class="veyq-icon-button veyq-prime-icon-button files-row-details"
+            icon="pi pi-info-circle"
+            :aria-label="t('files.detail.open', { name: row.node.name })"
+            severity="secondary"
+            outlined
+            size="small"
+            @click="emit('openNode', row.node)"
+          />
           <Button
             type="button"
             class="veyq-icon-button veyq-prime-icon-button"

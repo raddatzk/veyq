@@ -143,6 +143,16 @@ afterEach(() => {
 })
 
 describe('FilesSection', () => {
+  // inbox #378: a row's info button opens the file's own page (the host navigates on the section's `openNode`); the row's
+  // main button stays the download, so opening is a separate, real click.
+  it('a row\'s info button asks the host to open that file; the row\'s name still downloads', async () => {
+    const w = mountSection({ nodes: [REPORT, NOTES] })
+    await flushPromises()
+    await byLabel(w, t('files.detail.open', { name: 'notes.txt' })).trigger('click')
+    expect((w.emitted('openNode') as TreeNode[][]).map(([n]) => n.id)).toEqual([N])
+    expect(downloadFile).not.toHaveBeenCalled()
+  })
+
   it('lists this level\'s files with name, size and modified time — from their BLOB, the node\'s own meta empty', async () => {
     const w = mountSection({ nodes: [REPORT, NOTES, PENDING] })
     await flushPromises()

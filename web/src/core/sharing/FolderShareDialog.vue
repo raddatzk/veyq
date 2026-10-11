@@ -49,6 +49,7 @@ import {
 import { buildShareLink, recoverShareLink } from './shareLink'
 import { ShareRole } from '../../api/generated/sharing'
 import type { NodeShareDialogProps } from '../applications/registry'
+import type { ShareDialogCopy } from './shareDialogCopy'
 
 /** A password-protected link needs at least this many characters (the Memory dialog's convention, cr-0118). */
 const MIN_PW = 10
@@ -58,8 +59,11 @@ const MIN_PW = 10
 // the key chain opens it (`nodeKey`, ADR 0080 decision 1 — what a link wraps; key material) and its name (`nodeName`,
 // re-sealed under `K_share` so a guest sees it without the scope key). `nodeKind` is always FOLDER here; `uploader` is
 // never set for a folder (no WRITE_ONLY link on a folder) and would be ignored.
-const props = defineProps<NodeShareDialogProps>()
+const props = defineProps<NodeShareDialogProps & { words?: ShareDialogCopy }>()
 const emit = defineEmits<{ close: [] }>()
+/** The i18n key of a sentence that says what the node is: the folder's own (`share.folder.*`) unless the wrapping dialog
+ *  of another kind hands its own (`words`, Files' single-file link). */
+const copyKey = (name: keyof ShareDialogCopy) => props.words?.[name] ?? `share.folder.${name}`
 
 const { t, locale } = useI18n()
 const { ask } = useConfirm()
@@ -166,7 +170,7 @@ async function onReactivate(s: ManagedShare) {
 async function onDelete(s: ManagedShare) {
   const confirmed = await ask({
     header: t('share.deleteTitle'),
-    message: t('share.folder.deleteConfirm'),
+    message: t(copyKey('deleteConfirm')),
     acceptLabel: t('share.delete'),
     acceptIcon: 'pi pi-trash',
   })
@@ -181,7 +185,7 @@ async function onDelete(s: ManagedShare) {
 async function onReissue(s: ManagedShare) {
   const confirmed = await ask({
     header: t('share.reissueTitle'),
-    message: t('share.folder.reissueWarning'),
+    message: t(copyKey('reissueWarning')),
     acceptLabel: t('share.reissueSubmit'),
     acceptIcon: 'pi pi-replay',
   })
@@ -228,7 +232,7 @@ const roleOptions = computed(() => [
   { label: t('share.folder.roleContributor'), value: ShareRole.ReadWrite },
 ])
 const roleHint = computed(() =>
-  role.value === ShareRole.ReadWrite ? t('share.folder.roleContributorHint') : t('share.folder.roleViewerHint'),
+  role.value === ShareRole.ReadWrite ? t(copyKey('roleContributorHint')) : t(copyKey('roleViewerHint')),
 )
 const passwordTooShort = computed(() => passwordEnabled.value && password.value.trim().length < MIN_PW)
 
@@ -343,7 +347,7 @@ async function onCreate() {
 const creating = computed(() => minting.value || saving.value)
 
 const header = computed(() =>
-  view.value === 'create' ? t('share.createNew') : view.value === 'edit' ? t('share.editTitle') : t('share.folder.title'),
+  view.value === 'create' ? t('share.createNew') : view.value === 'edit' ? t('share.editTitle') : t(copyKey('title')),
 )
 function onDialogVisible(visible: boolean) {
   if (!visible && !creating.value) emit('close')
@@ -528,7 +532,7 @@ function onDialogVisible(visible: boolean) {
 
     <!-- The list of the folder's links. -->
     <div v-else class="veyq-form">
-      <p class="veyq-form-copy">{{ t('share.folder.intro') }}</p>
+      <p class="veyq-form-copy">{{ t(copyKey('intro')) }}</p>
       <Button class="folder-share-new" :label="t('share.createNew')" icon="pi pi-plus" @click="openCreate" />
 
       <p v-if="loadError" class="veyq-form-error">{{ t('share.loadFailed') }}</p>

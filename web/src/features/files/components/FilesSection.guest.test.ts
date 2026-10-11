@@ -195,7 +195,10 @@ describe('a guest reads the files of a shared folder in the member\'s section', 
     const w = mountSection()
     await flushPromises()
     expect(w.find('input[type="file"]').exists()).toBe(false)
-    expect(new Set(labels(w))).toEqual(new Set([t('files.download', { name: 'aaa.bin' }), t('files.download', { name: 'Report.pdf' })]))
+    expect(new Set(labels(w))).toEqual(new Set([
+      t('files.download', { name: 'aaa.bin' }), t('files.download', { name: 'Report.pdf' }),
+      t('files.detail.open', { name: 'aaa.bin' }), t('files.detail.open', { name: 'Report.pdf' }), // opens the file's own page
+    ]))
     expect(w.find('.pi-pencil').exists(), 'no rename').toBe(false)
     expect(w.find('.pi-trash').exists(), 'no delete').toBe(false)
     expect(w.text()).not.toContain(t('files.upload'))
@@ -231,7 +234,7 @@ describe('a guest reads the files of a shared folder in the member\'s section', 
     await flushPromises()
     expect(rowTitles(w)).toEqual(['steuer.pdf'])
     expect(w.find('input[type="file"]').exists()).toBe(false)
-    expect(labels(w).every((l) => l === t('files.download', { name: 'steuer.pdf' }))).toBe(true)
+    expect(labels(w).every((l) => l === t('files.download', { name: 'steuer.pdf' }) || l === t('files.detail.open', { name: 'steuer.pdf' }))).toBe(true)
     expect(w.text()).not.toContain(t('files.guest.contributorHint'))
     expectNoMemberWorld()
   })

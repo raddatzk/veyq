@@ -45,6 +45,10 @@ export interface FilesUpload {
   /** Start the level `folder`'s uploads (null: a member's scope root), or null when this session cannot create there
    *  (no scope, no epoch keys, the folder's key not open) — nothing is asked then. Nothing is sent before `jobs`. */
   begin(folder: TreeNode | null): FilesUploadBatch | null
+  /** Start a replace of an opened file's content (`FileDetail`, the root of a single-file link included): there is no
+   *  folder to create under, so none is asked for — every entry handed to `jobs` names the file it replaces. Null as
+   *  `begin`: this session cannot write now. */
+  beginReplace(): FilesUploadBatch | null
 }
 
 /** Files' data source; see the header. */
@@ -131,12 +135,13 @@ export function memberFilesSource(from: {
         const key = folder ? from.keyOf(folder.id) : null
         if (folder && !key) return null
         const parent: NodeParent = folder && key ? { id: folder.id, key } : null
-        return {
-          jobs: async (entries) =>
-            entries.map(({ file, replace }) =>
-              replace ? fileUploadJob({ scopeId, epochs, parent, replace }, file) : fileUploadJob({ scopeId, epochs, parent }, file),
-            ),
-        }
+        return memberBatch(scopeId, epochs, parent)
+      },
+      beginReplace() {
+        const scopeId = from.scopeId()
+        const epochs = from.epochs()
+        // A replace creates nothing, so no parent is read: the file's own key comes with the entry.
+        return scopeId && epochs ? memberBatch(scopeId, epochs, null) : null
       },
     },
     async deleteFile(nodeId) {
@@ -154,6 +159,15 @@ export function memberFilesSource(from: {
     },
     rename: from.rename,
     move: from.move,
+  }
+}
+
+function memberBatch(scopeId: string, epochs: EpochKeys, parent: NodeParent): FilesUploadBatch {
+  return {
+    jobs: async (entries) =>
+      entries.map(({ file, replace }) =>
+        replace ? fileUploadJob({ scopeId, epochs, parent, replace }, file) : fileUploadJob({ scopeId, epochs, parent }, file),
+      ),
   }
 }
 
@@ -191,19 +205,23 @@ function guestUpload(access: () => GuestAccess): FilesUpload {
     ready: () => true,
     begin(folder) {
       if (!folder) return null // a guest is never at a scope root
-      return {
-        async jobs(entries) {
-          const a = access()
-          const guest = await a.requestGuest()
-          if (!guest) return []
-          const ctx = guestTreeContext(a.head, { contributorToken: guest.contributorToken, fragmentKey: a.fragmentKey, pwToken: a.pwToken })
-          return entries.map(({ file, replace }) =>
-            replace
-              ? guestFileUploadJob({ ctx, parentId: folder.id, replace }, file)
-              : guestFileUploadJob({ ctx, parentId: folder.id }, file),
-          )
-        },
-      }
+      return guestBatch(access, folder.id)
+    },
+    // A replace creates nothing, so the parent a create would use is never read (any id does; the job's type wants one).
+    beginReplace: () => guestBatch(access, ''),
+  }
+}
+
+function guestBatch(access: () => GuestAccess, parentId: string): FilesUploadBatch {
+  return {
+    async jobs(entries) {
+      const a = access()
+      const guest = await a.requestGuest()
+      if (!guest) return []
+      const ctx = guestTreeContext(a.head, { contributorToken: guest.contributorToken, fragmentKey: a.fragmentKey, pwToken: a.pwToken })
+      return entries.map(({ file, replace }) =>
+        replace ? guestFileUploadJob({ ctx, parentId, replace }, file) : guestFileUploadJob({ ctx, parentId }, file),
+      )
     },
   }
 }

@@ -10,6 +10,8 @@ import PinnedMemories from './features/memory/components/PinnedMemories.vue'
 import MemoriesSection from './features/memory/components/MemoriesSection.vue'
 import FilesSection from './features/files/components/FilesSection.vue'
 import DropBoxSection from './features/files/components/DropBoxSection.vue'
+import FileDetail from './features/files/components/FileDetail.vue'
+import FileShareDialog from './features/files/components/FileShareDialog.vue'
 import MemoryNodeDialog from './features/memory/components/MemoryNodeDialog.vue'
 import ShareDialog from './features/memory/components/ShareDialog.vue'
 import { FOLDER_KIND } from './core/node/kind'
@@ -23,14 +25,15 @@ describe('composition root', () => {
     expect(registry.kind(CHAPTER_KIND)).toMatchObject({ supported: true, shareable: true })
   })
 
-  // Files, the second application (cr-files-application F0): one kind, not a share root, its names folded as file names.
-  it('registers the Files kind into the same registry, not shareable, with the file-name folding', () => {
-    expect(registry.kind(FILE_KIND)).toMatchObject({ supported: true, shareable: false, slug: fileNameSlug })
+  // Files, the second application (cr-files-application F0): its file kind, a READ / READ_WRITE share root with its own
+  // page and link dialog (inbox #378), its names folded as file names.
+  it('registers the Files kind into the same registry, shareable, with the file-name folding', () => {
+    expect(registry.kind(FILE_KIND)).toMatchObject({ supported: true, shareable: true, slug: fileNameSlug, detail: FileDetail, shareDialog: FileShareDialog })
     expect(registry.shareBody(FILE_KIND)).toBeNull()
   })
 
   // The dialogs are per kind (P4c): Memories' one create dialog and one share dialog serve both its kinds; FOLDER keeps
-  // core's pre-registered share dialog; FILE brings neither (a file is created by uploading it, shared by its folder).
+  // core's pre-registered share dialog; FILE brings its own share dialog and no create dialog (a file is created by uploading it).
   it('gives both Memories kinds the Memories create and share dialogs, and leaves FOLDER and FILE alone', () => {
     for (const kind of [MEMORY_KIND, CHAPTER_KIND]) {
       expect(registry.kind(kind)).toMatchObject({ createDialog: MemoryNodeDialog, shareDialog: ShareDialog })
@@ -42,7 +45,8 @@ describe('composition root', () => {
     expect(folder.supported && folder.shareDialog).toBeTruthy()
     expect(folder.supported && folder.shareDialog).not.toBe(ShareDialog)
     expect(registry.kind(FILE_KIND)).not.toHaveProperty('createDialog')
-    expect(registry.kind(FILE_KIND)).not.toHaveProperty('shareDialog')
+    expect(registry.kind(FILE_KIND)).toMatchObject({ shareDialog: FileShareDialog })
+    expect(registry.kind(FILE_KIND)).not.toMatchObject({ shareDialog: ShareDialog })
   })
 
   it('claims the one Memories share body for both root kinds', () => {
