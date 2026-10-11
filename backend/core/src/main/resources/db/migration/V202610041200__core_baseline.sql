@@ -3,10 +3,19 @@
 -- no core table references them.
 --
 -- Operator-blind throughout: a column the server could read content from does not exist. TEXT holds opaque
--- base64 ciphertext, VARCHAR short ids, hashes and tokens. TEXT is a 65 535-byte ceiling on MariaDB (H2 does not
+-- base64 ciphertext, VARCHAR hashes and tokens, UUID every id that is exactly a UUID. TEXT is a 65 535-byte ceiling on MariaDB (H2 does not
 -- enforce it), so a contract cap above 65 532 base64 chars needs MEDIUMTEXT — scripts/validate_maxlength_storage.py
 -- holds the two sides together. Types stay in what H2 MODE=MariaDB (the test engine) and MariaDB both parse.
 -- Constraint and index names are cited by code, guards and tests: renaming one is a schema change.
+--
+-- Ids are MariaDB's native UUID type (inbox #387, decided 2026-10-11, before any release): 16 bytes, printed as the
+-- canonical lowercase string, so the entities keep `String id` with no converter and a SQL console still reads them.
+-- Only a column that holds nothing but a UUID is one (every id, FK and *_user_id / *_scope_id style reference);
+-- the share id (a 256-bit token), the synthetic composite keys `userId|scopeId[|nodeId]`, owner_key, slug_token and
+-- every hash stay VARCHAR. A non-UUID string in a UUID column is error 1292 on INSERT, and matches nothing on a
+-- SELECT, so each id enters through a `format: uuid` contract field, whose type (java.util.UUID) refuses it with a
+-- 400/404 before a query is built. A database created from the VARCHAR(36) form of this baseline is recreated
+-- (`docker compose -f infra/docker-compose.yml down -v`), not migrated: nothing was released.
 
 -- First-run setup: the single-owner lock.
 CREATE TABLE veyq_server_setup (
@@ -18,7 +27,7 @@ CREATE TABLE veyq_server_setup (
 -- secret_key_proof_public_key is the Ed25519 public key rotation, change-password and recovery are signed under
 -- (ADR 0060, ADR 0054).
 CREATE TABLE veyq_user (
-    id                           VARCHAR(36) NOT NULL PRIMARY KEY,
+    id                           UUID NOT NULL PRIMARY KEY,
     server_role                  VARCHAR(32) NOT NULL,
     suite_id                     VARCHAR(16) NOT NULL,
     identity_public_key          TEXT NOT NULL,
@@ -33,8 +42,8 @@ CREATE UNIQUE INDEX ux_veyq_user_email ON veyq_user (email);
 
 -- A Master Key wrap per unlock method; kdf_params are opaque to the server (null for device/passkey).
 CREATE TABLE veyq_master_key_wrap (
-    id          VARCHAR(36) NOT NULL PRIMARY KEY,
-    user_id     VARCHAR(36) NOT NULL,
+    id          UUID NOT NULL PRIMARY KEY,
+    user_id     UUID NOT NULL,
     method      VARCHAR(16) NOT NULL,
     wrapped_key TEXT NOT NULL,
     kdf_params  TEXT,
@@ -59,8 +68,8 @@ CREATE TABLE veyq_login_challenge (
 
 -- Sessions (ADR 0004): a family per login/device; only token HASHES are stored.
 CREATE TABLE veyq_session_family (
-    id           VARCHAR(36) NOT NULL PRIMARY KEY,
-    user_id      VARCHAR(36) NOT NULL,
+    id           UUID NOT NULL PRIMARY KEY,
+    user_id      UUID NOT NULL,
     status       VARCHAR(16) NOT NULL,
     created_at   TIMESTAMP NOT NULL,
     last_used_at TIMESTAMP NOT NULL,
@@ -68,8 +77,8 @@ CREATE TABLE veyq_session_family (
 );
 
 CREATE TABLE veyq_refresh_token (
-    id         VARCHAR(36) NOT NULL PRIMARY KEY,
-    family_id  VARCHAR(36) NOT NULL,
+    id         UUID NOT NULL PRIMARY KEY,
+    family_id  UUID NOT NULL,
     token_hash VARCHAR(64) NOT NULL,
     generation INT NOT NULL,
     status     VARCHAR(16) NOT NULL,
@@ -83,8 +92,8 @@ CREATE UNIQUE INDEX ux_refresh_token_hash ON veyq_refresh_token (token_hash);
 CREATE INDEX ix_refresh_token_expires ON veyq_refresh_token (expires_at);
 
 CREATE TABLE veyq_access_token (
-    id         VARCHAR(36) NOT NULL PRIMARY KEY,
-    family_id  VARCHAR(36) NOT NULL,
+    id         UUID NOT NULL PRIMARY KEY,
+    family_id  UUID NOT NULL,
     token_hash VARCHAR(64) NOT NULL,
     expires_at TIMESTAMP NOT NULL,
     CONSTRAINT fk_access_token_family FOREIGN KEY (family_id) REFERENCES veyq_session_family (id)
@@ -96,7 +105,7 @@ CREATE UNIQUE INDEX ux_access_token_hash ON veyq_access_token (token_hash);
 -- storage_quota_bytes (§1, null = no quota) live here because every upload start locks this row (§5).
 -- TenantEntity repeats the link-limit default for a tenant born through the entity.
 CREATE TABLE veyq_tenant (
-    id                       VARCHAR(36) NOT NULL PRIMARY KEY,
+    id                       UUID NOT NULL PRIMARY KEY,
     name                     VARCHAR(100) NOT NULL,
     domain                   VARCHAR(253) NOT NULL,
     owner_email              VARCHAR(254) NOT NULL,
@@ -111,15 +120,15 @@ CREATE TABLE veyq_tenant (
 -- A tenant invite: only the SHA-256 token hash is stored. The admission triple (ADR 0020) is relayed, never
 -- verified by the server.
 CREATE TABLE veyq_tenant_invite (
-    id              VARCHAR(36) NOT NULL PRIMARY KEY,
-    tenant_id       VARCHAR(36) NOT NULL,
+    id              UUID NOT NULL PRIMARY KEY,
+    tenant_id       UUID NOT NULL,
     owner_email     VARCHAR(254) NOT NULL,
     token_hash      VARCHAR(64) NOT NULL,
     status          VARCHAR(16) NOT NULL,
     expires_at      TIMESTAMP NOT NULL,
     created_at      TIMESTAMP NOT NULL,
     role            VARCHAR(16) NOT NULL DEFAULT 'OWNER',
-    admission_id    VARCHAR(36) NULL,
+    admission_id    UUID NULL,
     admission_epoch INT NULL,
     admission_tag   TEXT NULL,
     CONSTRAINT fk_tenant_invite_tenant FOREIGN KEY (tenant_id) REFERENCES veyq_tenant (id)
@@ -131,8 +140,8 @@ CREATE INDEX ix_tenant_invite_tenant ON veyq_tenant_invite (tenant_id);
 -- scope and null on every other kind, so ux_scope_personal_owner allows one personal scope per member and
 -- tenant (both engines admit any number of nulls in a unique index).
 CREATE TABLE veyq_scope (
-    id              VARCHAR(36) NOT NULL PRIMARY KEY,
-    tenant_id       VARCHAR(36) NOT NULL,
+    id              UUID NOT NULL PRIMARY KEY,
+    tenant_id       UUID NOT NULL,
     kind            VARCHAR(16) NOT NULL,
     encrypted_name  TEXT NULL,
     current_epoch   INT NOT NULL DEFAULT 0,
@@ -141,7 +150,7 @@ CREATE TABLE veyq_scope (
     sealed_icon     TEXT NULL,
     icon_epoch      INT NOT NULL DEFAULT 0,
     member_removals INT NOT NULL DEFAULT 0,
-    personal_owner  VARCHAR(36) NULL,
+    personal_owner  UUID NULL,
     CONSTRAINT fk_scope_tenant FOREIGN KEY (tenant_id) REFERENCES veyq_tenant (id)
 );
 CREATE INDEX ix_scope_tenant ON veyq_scope (tenant_id);
@@ -150,21 +159,21 @@ CREATE UNIQUE INDEX ux_scope_personal_owner ON veyq_scope (tenant_id, personal_o
 -- Membership: (user, scope, role, grant) (ADR 0007). wrapped_grant is null for a grant-less member until a
 -- key-holder delivers it. The fk_m21_* names are the table's constraint names and are kept as they are.
 CREATE TABLE veyq_membership (
-    id                          VARCHAR(36) NOT NULL PRIMARY KEY,
-    user_id                     VARCHAR(36) NOT NULL,
-    tenant_id                   VARCHAR(36) NOT NULL,
-    scope_id                    VARCHAR(36) NOT NULL,
+    id                          UUID NOT NULL PRIMARY KEY,
+    user_id                     UUID NOT NULL,
+    tenant_id                   UUID NOT NULL,
+    scope_id                    UUID NOT NULL,
     role                        VARCHAR(16) NOT NULL,
     wrapped_grant               TEXT,
     created_at                  TIMESTAMP NOT NULL,
     granted_epoch               INT NOT NULL DEFAULT 0,
     pending_consent             BOOLEAN NOT NULL DEFAULT FALSE,
     sealed_name_key             TEXT NULL,
-    added_by                    VARCHAR(36) NULL,
-    admission_id                VARCHAR(36) NULL,
+    added_by                    UUID NULL,
+    admission_id                UUID NULL,
     admission_epoch             INT NULL,
     admission_tag               TEXT NULL,
-    granter_user_id             VARCHAR(36) NULL,
+    granter_user_id             UUID NULL,
     grant_signature             TEXT NULL,
     granter_identity_public_key TEXT NULL,
     CONSTRAINT fk_m21_user   FOREIGN KEY (user_id)   REFERENCES veyq_user (id),
@@ -181,9 +190,9 @@ CREATE UNIQUE INDEX ux_membership_user_scope ON veyq_membership (user_id, scope_
 -- times only created_at keeps the millisecond (TIMESTAMP(3)): clients order equal-named siblings by it, then by id
 -- (ADR 0015).
 CREATE TABLE veyq_node (
-    id                      VARCHAR(36) NOT NULL PRIMARY KEY,
-    scope_id                VARCHAR(36) NOT NULL,
-    parent_id               VARCHAR(36) NOT NULL,
+    id                      UUID NOT NULL PRIMARY KEY,
+    scope_id                UUID NOT NULL,
+    parent_id               UUID NOT NULL,
     kind                    VARCHAR(16) NOT NULL,
     encrypted_name          TEXT NOT NULL,
     slug_token              VARCHAR(128) NOT NULL,
@@ -196,7 +205,7 @@ CREATE TABLE veyq_node (
     sealed_drop_private_key TEXT NULL,
     meta_version            BIGINT NOT NULL DEFAULT 0,
     placement_version       BIGINT NOT NULL DEFAULT 0,
-    share_identity_id       VARCHAR(36) NULL,
+    share_identity_id       UUID NULL,
     CONSTRAINT fk_node_scope FOREIGN KEY (scope_id) REFERENCES veyq_scope (id)
 );
 CREATE UNIQUE INDEX ux_node_parent_slug ON veyq_node (parent_id, slug_token);
@@ -206,18 +215,18 @@ CREATE INDEX ix_node_scope ON veyq_node (scope_id);
 -- the ids its K_blob wrap is sealed to (blob_id, owner_id, blob_role; ADR 0072). blob_id is unique so two open
 -- sessions never promise one blob id.
 CREATE TABLE veyq_upload_session (
-    id                       VARCHAR(36) NOT NULL PRIMARY KEY,
-    scope_id                 VARCHAR(36) NOT NULL,
+    id                       UUID NOT NULL PRIMARY KEY,
+    scope_id                 UUID NOT NULL,
     storage_key              VARCHAR(64) NOT NULL,
     chunk_count              INT NOT NULL,
     byte_size                BIGINT NOT NULL,
     wrapped_blob_key         TEXT NOT NULL,
     wrapped_meta             TEXT NULL,
-    opener_user_id           VARCHAR(36) NULL,
-    opener_share_identity_id VARCHAR(36) NULL,
+    opener_user_id           UUID NULL,
+    opener_share_identity_id UUID NULL,
     last_window_at           TIMESTAMP NOT NULL,
-    blob_id                  VARCHAR(36) NULL,
-    owner_id                 VARCHAR(36) NULL,
+    blob_id                  UUID NULL,
+    owner_id                 UUID NULL,
     blob_role                VARCHAR(16) NULL,
     CONSTRAINT fk_upload_scope FOREIGN KEY (scope_id) REFERENCES veyq_scope (id)
 );
@@ -228,8 +237,8 @@ CREATE UNIQUE INDEX ux_upload_session_blob_id ON veyq_upload_session (blob_id);
 -- storage_key/<index>. wrapped_meta is the blob's metadata sealed under its own K_blob (the blob-meta seal),
 -- copied from its upload session and written once: no statement updates it.
 CREATE TABLE veyq_blob (
-    id               VARCHAR(36) NOT NULL PRIMARY KEY,
-    scope_id         VARCHAR(36) NOT NULL,
+    id               UUID NOT NULL PRIMARY KEY,
+    scope_id         UUID NOT NULL,
     storage_key      VARCHAR(64) NOT NULL,
     chunk_count      INT NOT NULL,
     byte_size        BIGINT NOT NULL,
@@ -242,12 +251,12 @@ CREATE INDEX ix_blob_scope ON veyq_blob (scope_id);
 
 -- The background-task pull queue (ADR 0021): opaque envelopes routed by scope and capability tag.
 CREATE TABLE veyq_job (
-    id               VARCHAR(36) NOT NULL PRIMARY KEY,
-    scope_id         VARCHAR(36) NOT NULL,
+    id               UUID NOT NULL PRIMARY KEY,
+    scope_id         UUID NOT NULL,
     capability_tag   VARCHAR(64) NOT NULL,
     resource_ref     VARCHAR(64),
     status           VARCHAR(16) NOT NULL,
-    lease_holder     VARCHAR(36),
+    lease_holder     UUID,
     lease_expires_at TIMESTAMP,
     attempts         INT NOT NULL,
     max_attempts     INT NOT NULL,
@@ -261,9 +270,9 @@ CREATE INDEX ix_job_claimable ON veyq_job (scope_id, capability_tag, status);
 
 -- Per-tenant member identity (ADR 0023).
 CREATE TABLE veyq_tenant_profile (
-    id          VARCHAR(36) NOT NULL PRIMARY KEY,
-    user_id     VARCHAR(36) NOT NULL,
-    tenant_id   VARCHAR(36) NOT NULL,
+    id          UUID NOT NULL PRIMARY KEY,
+    user_id     UUID NOT NULL,
+    tenant_id   UUID NOT NULL,
     username    VARCHAR(32) NOT NULL,
     sealed_name TEXT,
     CONSTRAINT fk_tp_user   FOREIGN KEY (user_id)   REFERENCES veyq_user (id),
@@ -274,8 +283,8 @@ CREATE UNIQUE INDEX ux_tp_tenant_username ON veyq_tenant_profile (tenant_id, use
 
 -- The scope-key epoch chain (ADR 0024): wrapped_prev links epoch n to n-1.
 CREATE TABLE veyq_scope_epoch (
-    id           VARCHAR(36) NOT NULL PRIMARY KEY,
-    scope_id     VARCHAR(36) NOT NULL,
+    id           UUID NOT NULL PRIMARY KEY,
+    scope_id     UUID NOT NULL,
     epoch        INT         NOT NULL,
     wrapped_prev TEXT        NOT NULL,
     CONSTRAINT fk_scope_epoch_scope FOREIGN KEY (scope_id) REFERENCES veyq_scope (id)
@@ -284,7 +293,7 @@ CREATE UNIQUE INDEX ux_scope_epoch ON veyq_scope_epoch (scope_id, epoch);
 
 -- The sealed identity-pin store (ADR 0028); version is the compare-and-set counter. 1 MiB cap: MEDIUMTEXT.
 CREATE TABLE veyq_identity_pins (
-    account_id  VARCHAR(36) NOT NULL PRIMARY KEY,
+    account_id  UUID NOT NULL PRIMARY KEY,
     sealed_blob MEDIUMTEXT,
     version     BIGINT      NOT NULL DEFAULT 0,
     CONSTRAINT fk_identity_pins_user FOREIGN KEY (account_id) REFERENCES veyq_user (id)
@@ -293,9 +302,9 @@ CREATE TABLE veyq_identity_pins (
 -- A key-holder's decline of a grant-delivery job (ADR 0028): worker_id is the user id, so the decline covers
 -- every device of that identity, while a different key-holder still delivers.
 CREATE TABLE veyq_job_decline (
-    id          VARCHAR(36) NOT NULL PRIMARY KEY,
-    job_id      VARCHAR(36) NOT NULL,
-    worker_id   VARCHAR(36) NOT NULL,
+    id          UUID NOT NULL PRIMARY KEY,
+    job_id      UUID NOT NULL,
+    worker_id   UUID NOT NULL,
     reason      VARCHAR(256),
     CONSTRAINT fk_job_decline_job FOREIGN KEY (job_id) REFERENCES veyq_job (id)
 );
@@ -306,9 +315,9 @@ CREATE UNIQUE INDEX ux_job_decline ON veyq_job_decline (job_id, worker_id);
 -- instead (ADR 0031). write_verifier = SHA-256 of the link's write token (ADR 0076); null takes no new guest.
 CREATE TABLE veyq_share (
     id                      VARCHAR(64)  NOT NULL PRIMARY KEY,
-    owner_account           VARCHAR(36)  NOT NULL,
-    scope_id                VARCHAR(36)  NOT NULL,
-    node_id                 VARCHAR(36)  NOT NULL,
+    owner_account           UUID  NOT NULL,
+    scope_id                UUID  NOT NULL,
+    node_id                 UUID  NOT NULL,
     role                    VARCHAR(16)  NOT NULL,
     wrap                    TEXT         NULL,
     sealed_name             TEXT         NULL,
@@ -335,7 +344,7 @@ CREATE INDEX ix_share_node ON veyq_share (node_id);
 
 -- An anonymous guest identity on a share (ADR 0030).
 CREATE TABLE veyq_share_identity (
-    id                   VARCHAR(36) NOT NULL PRIMARY KEY,
+    id                   UUID NOT NULL PRIMARY KEY,
     share_id             VARCHAR(64) NOT NULL,
     sealed_display_name  TEXT        NOT NULL,
     token_hash           VARCHAR(64) NOT NULL,
@@ -362,12 +371,12 @@ CREATE UNIQUE INDEX ux_node_parent_identity ON veyq_node (parent_id, share_ident
 -- fk_attachment_node was the first foreign key onto veyq_node. Keep blob_id on a line of its own:
 -- scripts/validate_blob_reference_arity.py reads the column declaration line by line.
 CREATE TABLE veyq_node_attachment (
-    id                VARCHAR(36) NOT NULL PRIMARY KEY,
-    scope_id          VARCHAR(36) NOT NULL,
-    node_id           VARCHAR(36) NOT NULL,
+    id                UUID NOT NULL PRIMARY KEY,
+    scope_id          UUID NOT NULL,
+    node_id           UUID NOT NULL,
     slot              VARCHAR(16) NOT NULL,
-    blob_id           VARCHAR(36) NOT NULL,
-    share_identity_id VARCHAR(36) NULL,
+    blob_id           UUID NOT NULL,
+    share_identity_id UUID NULL,
     CONSTRAINT ux_attachment_node_slot UNIQUE (node_id, slot),
     CONSTRAINT ux_attachment_blob UNIQUE (blob_id),
     CONSTRAINT fk_attachment_scope FOREIGN KEY (scope_id) REFERENCES veyq_scope (id),
@@ -380,9 +389,9 @@ CREATE INDEX ix_attachment_share_identity ON veyq_node_attachment (share_identit
 
 -- A member's acceptances of the tenant terms (ADR 0035 §4): one row per accepted version, kept as evidence.
 CREATE TABLE veyq_tenant_terms_acceptance (
-    id               VARCHAR(36) NOT NULL PRIMARY KEY,
-    user_id          VARCHAR(36) NOT NULL,
-    tenant_id        VARCHAR(36) NOT NULL,
+    id               UUID NOT NULL PRIMARY KEY,
+    user_id          UUID NOT NULL,
+    tenant_id        UUID NOT NULL,
     accepted_version INT         NOT NULL,
     accepted_at      TIMESTAMP   NOT NULL,
     CONSTRAINT ux_terms_acceptance UNIQUE (user_id, tenant_id, accepted_version),
@@ -392,7 +401,7 @@ CREATE TABLE veyq_tenant_terms_acceptance (
 
 -- Per-tenant SMTP settings (ADR 0048-0050). The password is sealed under the env KEK, never plaintext.
 CREATE TABLE veyq_tenant_mail_settings (
-    tenant_id           VARCHAR(36)  NOT NULL PRIMARY KEY,
+    tenant_id           UUID  NOT NULL PRIMARY KEY,
     host                VARCHAR(253),
     port                INT,
     from_address        VARCHAR(254),
@@ -409,8 +418,8 @@ CREATE TABLE veyq_tenant_mail_settings (
 -- One-time password-recovery tokens (ADR 0054): only the hash is stored. Not the second factor — a live token
 -- only releases the recovery wrap, which the Secret Key alone opens. email is the address actually mailed.
 CREATE TABLE veyq_account_recovery (
-    id          VARCHAR(36)  NOT NULL PRIMARY KEY,
-    user_id     VARCHAR(36)  NOT NULL,
+    id          UUID  NOT NULL PRIMARY KEY,
+    user_id     UUID  NOT NULL,
     email       VARCHAR(254) NOT NULL,
     token_hash  VARCHAR(64)  NOT NULL,
     status      VARCHAR(16)  NOT NULL,
@@ -423,7 +432,7 @@ CREATE INDEX ix_account_recovery_user_status ON veyq_account_recovery (user_id, 
 
 -- The sealed device register (ADR 0004). Plain TEXT on purpose: the contract caps it inside the TEXT ceiling.
 CREATE TABLE veyq_device_register (
-    account_id  VARCHAR(36) NOT NULL PRIMARY KEY,
+    account_id  UUID NOT NULL PRIMARY KEY,
     sealed_blob TEXT,
     version     BIGINT      NOT NULL DEFAULT 0,
     CONSTRAINT fk_device_register_user FOREIGN KEY (account_id) REFERENCES veyq_user (id)
@@ -433,10 +442,10 @@ CREATE TABLE veyq_device_register (
 -- delegated_family_id deliberately has NO foreign key: SessionPurge deletes families whose tokens all expired,
 -- and an FK would make that delete fail against a pairing row still in its retention window.
 CREATE TABLE veyq_device_pairing (
-    id                  VARCHAR(36) NOT NULL PRIMARY KEY,
+    id                  UUID NOT NULL PRIMARY KEY,
     handle_hash         VARCHAR(64) NOT NULL,
-    user_id             VARCHAR(36) NULL,
-    delegated_family_id VARCHAR(36) NULL,
+    user_id             UUID NULL,
+    delegated_family_id UUID NULL,
     answer              TEXT        NULL,
     envelope            TEXT        NULL,
     status              VARCHAR(16) NOT NULL,
@@ -452,7 +461,7 @@ CREATE INDEX ix_device_pairing_user_status ON veyq_device_pairing (user_id, stat
 -- committed blob keeps its session's storage_key, so one prefix legitimately arrives twice, and a unique index
 -- would turn that into a constraint violation inside someone else's transaction.
 CREATE TABLE veyq_store_reclaim (
-    id              VARCHAR(36) NOT NULL PRIMARY KEY,
+    id              UUID NOT NULL PRIMARY KEY,
     storage_key     VARCHAR(64) NOT NULL,
     chunk_count     INT         NOT NULL,
     created_at      TIMESTAMP   NOT NULL,
@@ -464,8 +473,8 @@ CREATE INDEX ix_store_reclaim_due ON veyq_store_reclaim (abandoned_at, next_atte
 
 -- One-time address-confirmation tokens (ADR 0074), shaped like veyq_account_recovery.
 CREATE TABLE veyq_email_confirmation (
-    id          VARCHAR(36)  NOT NULL PRIMARY KEY,
-    user_id     VARCHAR(36)  NOT NULL,
+    id          UUID  NOT NULL PRIMARY KEY,
+    user_id     UUID  NOT NULL,
     email       VARCHAR(254) NOT NULL,
     token_hash  VARCHAR(64)  NOT NULL,
     status      VARCHAR(16)  NOT NULL,

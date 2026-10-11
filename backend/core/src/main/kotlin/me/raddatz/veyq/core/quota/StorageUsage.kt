@@ -39,13 +39,16 @@ class StorageUsage(private val em: EntityManager) {
         }
 
     /**
+     * The id is cast to text: a native `SELECT` of a `UUID` column hands back `byte[]` on H2 and `java.util.UUID` on
+     * MariaDB, never the `String` the callers read (inbox #387).
+     *
      * The one tenant total, per tenant row [where] admits: its blobs' sizes plus its open sessions', through
      * `veyq_scope.tenant_id`. The tenant filter sits on the outer row, and each term is a correlated subquery, so
      * the locked single-tenant check reads only that tenant's scopes (`ix_scope_tenant`, `ix_blob_scope`).
      */
     private fun tenantUsageSql(where: String): String =
         """
-        SELECT t.id,
+        SELECT CAST(t.id AS CHAR(36)),
                COALESCE((SELECT SUM(b.byte_size) FROM veyq_blob b
                    JOIN veyq_scope sc ON sc.id = b.scope_id
                   WHERE sc.tenant_id = t.id), 0)
