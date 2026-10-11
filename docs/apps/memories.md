@@ -132,12 +132,14 @@ grants nothing. On an opened `MEMORY` or `CHAPTER` (the detail):
 | create a chapter | ✓ on a `MEMORY` only | ✗ | ✗ | ✗ | ✗ |
 | date, place, cover (the node's sealed meta; the automatic reconcile too) | ✓ | ✗ | ✗ | ✗ | ✗ |
 | rename, delete the node | ✓ | ✗ | ✗ | ✗ | ✗ |
+| move the node (core's move dialog, inbox #358) | ✓ a Memory to the root or a folder, a chapter into another Memory | ✗ | ✗ | ✓ a Memory a folder of the subtree holds, between the subtree's folders; ✗ a chapter, the link's root | ✗ |
 | pin, item marks, media trash, contributions organizer | ✓ | ✓ | ✗ | ✗ | ✗ |
 | share (and the uploader link) | the instance's public (and uploader) links | the same | ✗ | ✗ | ✗ |
 
 At a folder level (Memories' section): a member creates a Memory (not during a pending deletion, never in a guest's
 identity folder) and pins; a `READ_WRITE` guest of a folder link creates a Memory there; every role that reads opens
-one. A share right also needs the kind's descriptor to bring a share dialog (`targetOf`, core's). These are the matrix
+one. A share right also needs the kind's descriptor to bring a share dialog (`targetOf`, core's), and a guest's move
+the node's parent to be a folder the link serves (`targetOf`'s `parentKind`: unknown at the link's root). These are the matrix
 half; a right shows only where the session's data source also implements it (ADR 0079), so the guest's columns are the
 most a guest page can ever offer. Memories' source is `web/src/features/memory/source.ts` (inbox #401 S4): the
 member's wraps the scope's calls; the guest's reads the link's media listing (each node's own media from the subtree's),

@@ -317,7 +317,13 @@ on their own.
   contributor uploads into the chapter it navigated to (the chapter named as the target, sealed under its own key; the
   server creates the guest's own bucket there). A guest's Memory view shows the date and place the members sealed but
   never reconciles them (that writes the node's meta). `shareSection`, `embedBelowFolder`, `embeddedShareBody` and a share
-  body's `subtreeRoot` are gone. What proves it: guest-mode mounts through the real shell, registry and router
+  body's `subtreeRoot` are gone. A move (inbox #358) follows the same rule: one right per matrix
+  (`folderCapabilities.move`, `filesCapabilities.moveFile`/`moveNode`, `memoryCapabilities.move` — a guest's only
+  `READ_WRITE`, only of a node a `FOLDER` of its subtree holds, never in an identity folder), one core dialog
+  (`core/node/MoveNodeDialog.vue`) mounted by both hosts, and one door per session (`core/node/move.ts` `nodeMover`:
+  the member's `moveNode`, a `READ_WRITE` guest's `placeShareNodeAsGuest`, none for any other role); its destinations
+  mirror the server's `NodeKindRules` through each kind's `placement` (the registry's `placementAllows`), and the server
+  stays the authority — each of its refusals is explained by its code. What proves it: guest-mode mounts through the real shell, registry and router
   (`ShareView.memory.test.ts`, `MemoryDetail.guest.test.ts`, `DropBoxDetail.guest.test.ts`, `FolderShareGuest.test.ts`)
   record every authenticated client and every read of the member's stores and assert both empty;
   `validate_web_share_bodies_are_drop_pages.py` keeps the name `ShareBody` meaning a claimed drop page.

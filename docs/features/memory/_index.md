@@ -89,6 +89,10 @@ seals its name under the folder's key instead of `K_SC` ([ADR 0080](../../decisi
   every read (both public-share paths included) → retention → scheduled hard-purge of nodes + media + derivatives
   + buckets + blobs. Replaces today's immediate hard delete, which reclaimed only the cover blobs and orphaned the
   rest (inbox #131). The trash hangs off the **space**, not the node: a trashed Memory has no Memory to hang from
+- [uc.memory.move-node](use-cases/uc.memory.move-node.md) — **built (web)** (inbox #358,
+  [ADR 0080](../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) decision 3): "Move
+  to…" for any node — core's dialog, a member through `moveNode`, a `READ_WRITE` folder guest through its link; one
+  re-wrap per move keeps the subtree readable; a drop-box guest's folder moved out by a member ends its identity
 - [uc.memory.buckets](use-cases/uc.memory.buckets.md) — **built (web)** (cr-0113, curation authz relaxed to
   member-gated by cr-0123) ([ADR 0034](../../decisions/0034-media-uploader-buckets.md),
   on [en.memory.buckets](enablers/en.memory.buckets.md)): group a Memory's media by **who contributed it** — the

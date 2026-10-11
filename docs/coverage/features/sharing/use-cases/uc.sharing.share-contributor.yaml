@@ -183,8 +183,9 @@ acceptanceCriteria:
       - surface: web
         reason: >-
           The guest page offers "New folder" and, in Memories' section, "New Memory" (the level's create cards, inbox
-          #401 S2): no move or rename control exists (inbox #358), so a guest's
-          placement is proven through placeShareNodeAsGuest by the wire test and the e2e, not through a screen.
+          #401 S2), and core's move dialog (inbox #358, uc.memory.move-node, ShareTreePage.move.test.ts); no rename
+          control exists, so a guest's rename is proven through placeShareNodeAsGuest by the wire test and the e2e, not
+          through a screen.
   - id: guest-tree-refusals
     text: >-
       Inside an application's container the application decides, and Memories declares nothing: a guest's create

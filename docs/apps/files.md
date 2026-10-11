@@ -134,14 +134,19 @@ shows is `filesCapabilities(access, target)` (`web/src/features/files/capabiliti
 |---|---|---|---|---|---|---|
 | download (a folder's files; a drop box's guests' folders) | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ |
 | upload, replace | ✓ | ✗ | ✗ | ✗ | ✓ (not in an identity folder, not in a drop box below the link) | ✓ on its own drop box only |
-| rename a file | ✓ | ✗ | ✗ | ✗ | ✗ (the server allows it; offered nowhere yet, inbox #358) | ✗ |
+| rename a file | ✓ | ✗ | ✗ | ✗ | ✗ (the server allows it; offered nowhere yet) | ✗ |
+| move a file (core's move dialog, inbox #358) | ✓ | ✗ | ✓ out of it (inbox #377 (a)) | ✗ | ✓ between the subtree's folders (not in an identity folder) | ✗ |
+| move a guest's folder out of a drop box, move the drop box | ✓ | ✗ | — | ✗ | ✗ (a drop box below the link is read-only, #380) | ✗ |
 | delete a file, a guest's folder | ✓ | ✗ | ✓ (inbox #391) | ✗ | ✗ | ✗ |
 | create a drop box | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
 | a drop box's links, delete it | links with the instance's public links; delete ✓ | links only | — | ✗ | ✗ | ✗ |
 
 These are the matrix half; a right shows only where the session's data source also implements it
 (`web/src/features/files/source.ts`, `sourceCapabilities`: the guest's source has no delete and no rename, and no upload
-unless the link is `READ_WRITE`), so the guest's columns are the most a guest page can ever offer.
+or move unless the link is `READ_WRITE`), so the guest's columns are the most a guest page can ever offer. A move is
+core's (`core/node/MoveNodeDialog.vue`, the host's): the row's or the card's "Move to…" asks the host through the
+section's or the detail's `move` event, and the dialog offers only what `FilesNodeKindRules` takes — a file or a drop
+box at the root or in a folder (the kinds' `placement`), never into a drop box or a guest's folder.
 
 - **The contract** (tag `share-files` in `files.openapi.yaml`, no auth, behind core's `ShareGuestGate`):
   `listShareFiles` — `GET /api/shares/{shareId}/files`: `{items: [{nodeId, fileBlob|null}]}` for every live `FILE` of
@@ -180,7 +185,8 @@ unless the link is `READ_WRITE`), so the guest's columns are the most a guest pa
   old content cannot be restored"), as the member's does (§ The web); a file that holds no content asks nothing; after a
   peer's replace (`stale_file`) the page offers "replace anyway" on the current blob, as a member's does. The guest names
   itself once per link through the page's one naming flow (`requestGuest`, the shell's dialog, core's `GuestNaming`).
-  No rename and no delete on the guest page (inbox #358; nodes store no authorship). Inside a guest's identity folder
+  No rename and no delete on the guest page (nodes store no authorship); a contributor's move of a file is core's move
+  dialog (inbox #358). Inside a guest's identity folder
   (§ The drop box) no guest is offered a write (the capabilities). A guest-mode mount of each view proves it calls no
   authenticated client and reads nothing of the member's world (`FilesSection.guest.test.ts`,
   `DropBoxDetail.guest.test.ts`).
@@ -232,7 +238,14 @@ one per guest identity, which are core `FOLDER`s carrying `veyq_node.share_ident
   `deletable`, no share, and no section that has nothing to show — the host's `hideEmptySections`) and deletes a folder. **Members place nothing** in a drop box or
   a guest's folder (core: no rule places into the drop box; a create, move or rename into an identity folder is
   `illegal_structure`, `NodesHandler`), and only delete or move out — a move out re-wraps and re-slugs under the
-  target and ends the folder's identity link. The server allows the move out; the web offers no move yet (inbox #358).
+  target and ends the folder's identity link. **The web offers it** (inbox #358): "Move … out…" on each guest's folder
+  of the drop box's detail, and "Move to…" on the folder's own card (its one action there) — core's
+  `MoveNodeDialog`, which asks first (the folder becomes an ordinary one, its guest can add nothing more, and nothing
+  moves back into a drop box, so the toast offers no undo) and lists no place inside a drop box. The member's move
+  re-wraps the folder's own key, opened through the drop key and the guest's `K_up`, under the destination's
+  (`core/node/move.wire.test.ts`: the folder and its file open afterwards; `views/MemoryHomeView.move.test.ts`: the
+  question asked and answered in the real dialog). A file inside a guest's folder moves out the same way, without the
+  question (the folder keeps its identity).
   **Only a member moves out** (owner decision 2026-10-08, inbox #377 (a)): a guest's `updateShareNode` of an identity
   folder or of anything inside one is `422 illegal_structure` (`ShareNodesHandler`, known by core's
   `share_identity_id`, before any application's `GuestNodeRules`), held by
