@@ -203,10 +203,10 @@ class SharingResource(
             "available axis fits, and the residual gap is recorded in cc.security.rate-limit " +
             "(§ Unbounded by decision) rather than left silent.",
     )
-    override fun resolveShare(shareId: String, xSharePassword: String?): Response =
+    override fun resolveShare(shareId: String, xSharePassword: String?, ifNoneMatch: String?): Response =
         when (val o = handler.resolve(shareId, xSharePassword)) {
-            is ResolveShareOutcome.Found -> Response.ok(
-                PublicShare(
+            is ResolveShareOutcome.Found -> {
+                val body = PublicShare(
                     role = ShareRole.decode(o.share.role),
                     scopeId = UUID.fromString(o.share.scopeId), // every seal under a node's content key the viewer opens is bound to it (ADR 0072)
                     passwordRequired = o.share.passwordRequired, // cr-0118: false, or true once unlocked with a valid token
@@ -220,8 +220,13 @@ class SharingResource(
                     sealedName = o.share.sealedName,
                     sealedNote = o.share.sealedNote, // cr-0115: the share page renders it (null when none)
                     nodes = o.nodes.map(::toShareNode),
-                ),
-            ).build()
+                )
+                // ADR 0081: the tag is a digest of what this response serves — nothing the guest could not already read, and
+                // so (unlike the member listing's scope revision) blind to every change outside the shared subtree.
+                val etag = ShareETag.of(body.copy(nodes = body.nodes.sortedBy { it.id.toString() }), o.attachments) // the store's row order is no part of the content
+                if (ShareETag.matches(ifNoneMatch, etag)) Response.notModified().header("ETag", etag).build()
+                else Response.ok(body).header("ETag", etag).build()
+            }
             // cr-0118: password required + no token → a LOCKED shell (only the challenge; no wrap/name/note/subtree).
             is ResolveShareOutcome.Locked -> Response.ok(
                 PublicShare(

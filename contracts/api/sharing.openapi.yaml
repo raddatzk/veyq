@@ -372,15 +372,35 @@ paths:
         **Password-protected shares (cr-0118, ADR 0037):** with **no** `X-Share-Password` the response is
         **locked** — only `passwordRequired` + `pwSalt` (no `wrap`/`sealedName`/subtree); the client prompts,
         derives the token, and re-resolves with the header. A **wrong** token → `403 share_password_incorrect`.
+
+        **Conditional GET (ADR 0081):** an unlocked `200` carries an `ETag` — a digest of exactly what the response
+        serves (role, wrap, sealed name and note, the subtree's sealed rows), so a function of nothing the guest
+        cannot already read. Unlike the member listing's scope revision it does NOT move when something outside the
+        shared subtree changes, and so tells the guest nothing about the rest of the space. A guest echoes it as
+        `If-None-Match`; an unchanged resolve answers `304`. A link revoked, expired or whose space is going is the
+        same non-enumerable `404` as always, so a polling guest notices it.
       parameters:
         - $ref: "#/components/parameters/ShareId"
         - $ref: "#/components/parameters/SharePassword"
+        - name: If-None-Match
+          x-veyq-visibility: structure
+          in: header
+          required: false
+          description: The `ETag` of the guest's last unlocked resolve. When it equals the digest of the response the server would send, `304`.
+          schema: { type: string, maxLength: 80, example: "\"2a9b1d4a6e8b2c1f\"" }
       responses:
         "200":
           description: The share record + its sealed subtree (opaque; still under the nodes' content keys) — or a locked shell when a password is required and none/valid-token was given.
+          headers:
+            ETag:
+              x-veyq-visibility: structure
+              description: A digest of the unlocked response (absent on a locked shell) — echo it as `If-None-Match` on the next poll.
+              schema: { type: string, example: "\"2a9b1d4a6e8b2c1f\"" }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/PublicShare" }
+        "304":
+          description: Not Modified — the guest's `If-None-Match` equals the digest of what this resolve would serve.
         "403":
           description: The share is password-protected and the presented `X-Share-Password` token is wrong (cr-0118).
           content:

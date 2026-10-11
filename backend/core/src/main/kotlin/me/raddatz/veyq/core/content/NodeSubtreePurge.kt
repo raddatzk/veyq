@@ -46,6 +46,7 @@ import org.jboss.logging.Logger
 @ApplicationScoped
 class NodeSubtreePurge(
     private val sharing: SharingStore,
+    private val nodes: NodesStore,
     config: VeyqConfig,
     // MutableList, not List: ArC rejects kotlin List with @All (see ScopePurge).
     @All erasers: MutableList<NodeSubtreeEraser>,
@@ -114,5 +115,10 @@ class NodeSubtreePurge(
         //    deleted earlier loses its guests here, with the last node that held their uploads. After every eraser
         //    above, the tombstones and the node rows, which it reads (GuestIdentityUsage).
         sharing.dropDeadIdentities(guests)
+
+        // The tree revision (ADR 0081), under the lock taken first. A trashed node is on no level view already, so this
+        //    changes nothing a listing shows — but what the purge erased (attachments, rows) is a change of the scope's
+        //    tree like any other, and a client that reads the revision should never see one move silently.
+        nodes.bumpTree(scopeId)
     }
 }

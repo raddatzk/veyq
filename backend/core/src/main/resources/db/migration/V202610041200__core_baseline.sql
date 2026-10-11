@@ -211,6 +211,18 @@ CREATE TABLE veyq_node (
 CREATE UNIQUE INDEX ux_node_parent_slug ON veyq_node (parent_id, slug_token);
 CREATE INDEX ix_node_scope ON veyq_node (scope_id);
 
+-- A scope's tree revision (ADR 0081): one monotonic counter per scope, bumped in the SAME transaction as every change
+-- a level view shows (a node created, renamed, moved, trashed, restored, purged; a blob attached to, replaced on or
+-- removed from a node) and served as the node listing's ETag. A row of its own, not a column of veyq_scope: the scope
+-- row is the tree's lock, and a bump that took it again after a node row would invert the documented lock order.
+-- No row reads as 0; the first bump inserts it, under the scope lock every bumping writer already holds. Not
+-- cascading: the node eraser (phase 700) deletes it before the scope row goes.
+CREATE TABLE veyq_scope_tree_revision (
+    scope_id UUID NOT NULL PRIMARY KEY,
+    revision BIGINT NOT NULL,
+    CONSTRAINT fk_tree_revision_scope FOREIGN KEY (scope_id) REFERENCES veyq_scope (id)
+);
+
 -- An open upload session (ADR 0013): bound to its opener (an account or a share identity, never both) and to
 -- the ids its K_blob wrap is sealed to (blob_id, owner_id, blob_role; ADR 0072). blob_id is unique so two open
 -- sessions never promise one blob id.

@@ -3,6 +3,7 @@ package me.raddatz.veyq.core.content
 import me.raddatz.veyq.core.blob.NodeAttachmentEntity
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.node.ParentSlot
+import me.raddatz.veyq.core.node.ScopeTreeRevisionEntity
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.sharing.ShareIdentityEntity
 import jakarta.enterprise.context.ApplicationScoped
@@ -78,6 +79,31 @@ class NodesStore {
     fun lockScope(scopeId: String) {
         ScopeEntity.lockRow(scopeId)
     }
+
+    /**
+     * Move the scope's tree revision (ADR 0081) — the listing's ETag. **Every write a level view shows calls this in the
+     * transaction that makes it**, as its last write: a node created, renamed, moved, re-sealed, trashed, restored or
+     * purged, a blob attached to, replaced on or removed from a node. A write that forgets is a change the live view
+     * never picks up, so `TreeRevisionBumpsTest` reads the sources for it and the per-path tests pin each site.
+     *
+     * **Only under the scope lock ([lockScope])**, which every caller already holds. That is what makes it race-free
+     * and deadlock-free: the lock serializes the first-bump insert (no second ask under another lock, as Memories'
+     * gallery counter needs: that bump runs without the scope lock), and the revision row, taken after it, is a leaf —
+     * nothing waits on it while holding anything else. The increment is still ONE atomic `UPDATE`, never a read-add-write.
+     */
+    fun bumpTree(scopeId: String) {
+        if (ScopeTreeRevisionEntity.update("revision = revision + 1 where scopeId = ?1", scopeId) == 1) return
+        ScopeTreeRevisionEntity().apply {
+            this.scopeId = scopeId
+            revision = 1
+        }.persistAndFlush() // flushed: a second bump in this transaction updates the row, not a pending insert
+    }
+
+    /** The scope's tree revision now (0 before its first change), read from the database — a scalar query is never a cached entity. */
+    fun treeRevision(scopeId: String): Long =
+        ScopeTreeRevisionEntity.getEntityManager()
+            .createQuery("select r.revision from ScopeTreeRevisionEntity r where r.scopeId = ?1", Long::class.javaObjectType)
+            .setParameter(1, scopeId).resultList.singleOrNull() ?: 0L
 
     /** Resolve a parent slot within the scope: the scope id (root), a node in the same scope, or missing. */
     fun parentSlot(scopeId: String, parentSlot: String): ParentSlot {
@@ -171,6 +197,7 @@ class NodesStore {
             this.wrappedMeta = wrappedMeta
             createdAt = NodeEntity.birthInstant()
         }.persist()
+        bumpTree(scopeId)
         return true
     }
 
@@ -235,6 +262,7 @@ class NodesStore {
             this.shareIdentityId = identityId
             createdAt = NodeEntity.birthInstant()
         }.persist()
+        bumpTree(scopeId)
     }
 
     /** What [applyUpdate] did: applied, found no live node, refused a placement its destination no longer allows (a
@@ -340,7 +368,10 @@ class NodesStore {
         }
         if (sets.isEmpty()) return if (findInScope(scopeId, nodeId) != null) ApplyResult.Applied else ApplyResult.Missing
         val rows = NodeEntity.update("${sets.joinToString(", ")} where ${conds.joinToString(" and ")}", params)
-        if (rows > 0) return ApplyResult.Applied
+        if (rows > 0) {
+            bumpTree(scopeId)
+            return ApplyResult.Applied
+        }
         val current = NodeEntity.findById(nodeId)?.takeIf { it.deletedAt == null } ?: return ApplyResult.Missing
         if (placement != null && current.placementVersion != placement.expectedVersion) return ApplyResult.StalePlacement
         if (wrappedMeta != null && current.metaVersion != metaVersion) return ApplyResult.StaleMeta(current.wrappedMeta, current.metaVersion)
@@ -397,7 +428,9 @@ class NodesStore {
         root.slugToken = root.id
         // No application's change counter moves here (Memories' gallery revision, ADR 0033): the delete leaves every
         // node's own rows untouched, so no *surviving* node's listing changes, and a listing of a trashed node is
-        // refused by the application's own live-node gate (`MediaStore.findNode`) — a 404, never a stale set.
+        // refused by the application's own live-node gate (`MediaStore.findNode`) — a 404, never a stale set. The
+        // TREE's does: the subtree leaves every level view of the scope (ADR 0081) — a trashed FILE is a file deleted.
+        bumpTree(scopeId)
         return true
     }
 
@@ -441,6 +474,7 @@ class NodesStore {
         root.slugToken = slugToken
         // The A1 retry re-seals the name in the SAME write as the token it is derived from.
         encryptedName?.let { root.encryptedName = it }
+        bumpTree(scopeId) // the subtree is back in every level view (ADR 0081)
         return RestoreResult.DONE
     }
 
