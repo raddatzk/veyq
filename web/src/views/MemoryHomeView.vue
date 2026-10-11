@@ -9,7 +9,9 @@
 // `core/sharing/FolderShareDialog.vue`, which the registry pre-registers. The folder level is core's
 // (`core/node/LevelView.vue`), which asks the registry for each application's section. A move of any node — the folder
 // on screen, a section's row, an opened node, a drop box's guest folder — is core's `core/node/MoveNodeDialog.vue`
-// through the member's door (`nodeMover`, inbox #358); a moved node on screen is followed to its new place.
+// through the member's door (`nodeMover`, inbox #358). The fragment is a slug path derived from the names (ADR 0015), so
+// after every write that re-reads the tree the node on screen is followed to its path in the new tree (`stayOn`): a
+// move or a rename of it or of a folder above it, and an older equal-segment sibling restored or moved in, change it.
 //
 // **Who looks** (inbox #401, `core/access.ts`): the host builds the member's `Access` (the scope, its epoch keys, its
 // pending deletion, the instance's sharing capabilities) and its `TreeSource` (the decrypted tree, fragment links) and
@@ -133,7 +135,8 @@ const shareVisible = ref(false)
 const uploaderVisible = ref(false) // the uploader (drop-box) variant of the same dialog — a separate detail action
 
 // At most one name dialog is open: core's folder-create/rename one, or the create dialog of the kind being created.
-const nameDialog = ref<{ mode: 'create' } | { mode: 'rename'; node: TreeNode } | null>(null)
+// A rename remembers what was on screen (`shown`), as a move does: renaming it (or a folder above it) changes its path.
+const nameDialog = ref<{ mode: 'create' } | { mode: 'rename'; node: TreeNode; shown: string | null } | null>(null)
 const createKind = ref<NodeKind | null>(null)
 // A kind with no `createDialog` (or one nobody registered) opens nothing: the create action is the application's own
 // (its section or detail), so offering one without registering the dialog is that application's bug, not a state the
@@ -211,7 +214,7 @@ function startCreate(kind: NodeKind) {
 }
 function startRename(node: TreeNode) {
   createKind.value = null
-  nameDialog.value = { mode: 'rename', node }
+  nameDialog.value = { mode: 'rename', node, shown: currentNodeId.value }
 }
 function startDelete(node: TreeNode) {
   deleteTarget.value = node
@@ -221,32 +224,46 @@ function startDelete(node: TreeNode) {
 function startMove(node: TreeNode) {
   moving.value = { node, shown: currentNodeId.value }
 }
-/** The move re-read the tree; when the node on screen moved — itself or with a folder above it — the URL follows it to
- *  its new path (its slug segments changed with its parent), else the position stays. */
-function onMoved({ node }: { node: TreeNode }) {
-  follow(moving.value?.shown ?? null, node.id)
-}
-function follow(shown: string | null, movedId: string) {
-  if (shown && liesAtOrBelow(shown, movedId)) void router.replace({ hash: hashForNode(treeStore.nodes, shown, currentScope.value) })
+/** The move re-read the tree: the node on screen keeps its place on screen, under its new path if the move changed it. */
+function onMoved() {
+  stayOn(moving.value?.shown ?? null)
 }
 /** The undo moved it back (after the dialog closed): follow it back the same way. */
 function afterUndo(shown: string | null) {
-  return (movedId: string) => follow(shown, movedId)
+  return () => stayOn(shown)
 }
-function liesAtOrBelow(id: string, ancestorId: string): boolean {
-  for (let n = nodeById(treeStore.nodes, id), steps = 0; n && steps <= treeStore.nodes.length; n = nodeById(treeStore.nodes, n.parentId), steps++) {
-    if (n.id === ancestorId) return true
-  }
-  return false
+/**
+ * After a write re-read the tree, keep `shown` — the node that was on screen before it — on screen: rebuild its fragment
+ * from the new tree and replace the URL with it when it differs. A slug segment is derived from a name and numbered among
+ * equal ones by creation (`location.ts` `segmentsOf`), so a rename or a move of the node or of any folder above it, and an
+ * older sibling of one plain segment restored, moved or renamed in, all change the path; left alone, the old path
+ * resolves to nothing and the view collapses to the scope root. Rebuilt from the whole path, never patched where the
+ * write was: kind-neutral, and right whichever write changed it. A replace, not a push: the same logical position. A
+ * node gone from the tree (deleted elsewhere) is left to the resolve, as any unknown path is.
+ */
+function stayOn(shown: string | null) {
+  if (!shown || !nodeById(treeStore.nodes, shown)) return
+  const hash = hashForNode(treeStore.nodes, shown, currentScope.value)
+  if (hash !== route.hash) void router.replace({ hash })
 }
 async function onMutationDone() {
   await loadTree()
 }
-/** A restore puts a whole subtree back, so the tree is refetched exactly as a delete refetches it — no local
- *  splice. The position stays where it is: the restored node reappears wherever it belonged. The open trash dialog
- *  re-reads its list when the new tree reaches its `tree` prop (a descendant left behind is a root then, inbox #357). */
-async function onTrashRestored() {
+/** Core's name dialog wrote: a create lands below the position (it cannot change its path), a rename may change it. */
+async function onNameDone() {
+  const shown = nameDialog.value?.mode === 'rename' ? nameDialog.value.shown : null
   await loadTree()
+  stayOn(shown)
+}
+/** A restore puts a whole subtree back, so the tree is refetched exactly as a delete refetches it — no local
+ *  splice. The position stays where it is: the restored node reappears wherever it belonged — and when it is an older
+ *  sibling of one plain segment with the node on screen or a folder above it, it takes its birth place and that path
+ *  renumbers, which `stayOn` follows. The open trash dialog re-reads its list when the new tree reaches its `tree` prop
+ *  (a descendant left behind is a root then, inbox #357). */
+async function onTrashRestored() {
+  const shown = currentNodeId.value
+  await loadTree()
+  stayOn(shown)
 }
 async function onDeleteDone() {
   const deleted = deleteTarget.value
@@ -254,13 +271,16 @@ async function onDeleteDone() {
   await loadTree()
   void router.push({ hash: hashForNode(treeStore.nodes, parentId, currentScope.value) })
   // It went to the trash: said, with an undo that restores it as the trash dialog does (inbox #385 (c)); the restored
-  // node reappears where it belonged, the position stays.
+  // node reappears where it belonged, the position (wherever the member is by then) stays, renumbered as a trash
+  // dialog's restore is.
   const scopeId = activeSpace.scopeId
   const keys = epochs.value
   if (deleted && scopeId && keys) {
     offerUndo(deleted.name, async () => {
+      const shown = currentNodeId.value
       await restoreNode(scopeId, keys, treeStore.nodes, deleted)
       await loadTree()
+      stayOn(shown)
     })
   }
 }
@@ -329,7 +349,7 @@ async function onDeleteDone() {
       :parent-id="currentNodeId"
       :parent-key="currentNodeKey"
       :node="nameDialog.mode === 'rename' ? nameDialog.node : null"
-      @done="onMutationDone"
+      @done="onNameDone"
       @close="nameDialog = null"
     />
     <component
