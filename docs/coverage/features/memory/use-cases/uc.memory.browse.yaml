@@ -26,6 +26,15 @@ acceptanceCriteria:
           - src/features/memory/components/MemoriesSection.test.ts
           - src/core/node/LevelView.test.ts
           - src/features/memory/components/SpaceMap.test.ts
+  - id: application-tabs
+    text: Where the level shows two or more application sections, a tab bar `All | <one tab per section>` filters the level to one section's nodes of the current folder (sub-folders stay in every tab, no subtree search); the selection is one global persisted setting, shown as `All` without being overwritten where the level lacks that tab; a share guest gets the same bar (inbox #348).
+    coverage:
+      web:
+        unit:
+          - src/core/node/levelTabs.test.ts
+          - src/shared/state/useLevelTab.test.ts
+          - src/core/node/LevelView.tabs.test.ts
+          - src/core/applications/registry.test.ts
   - id: create-folder-and-memory
     text: Creating a folder/Memory seals the name + blinded slug under the parent's key (K_SC at the scope root) and POSTs only ciphertext (every node births its random key, wrapped under the same parent key).
     coverage:

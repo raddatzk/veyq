@@ -29,7 +29,9 @@
    default), **list** (a compact list), or **map** ("Karte": the level's located Memories/Chapters plotted as
    pins, [uc.memory.place](uc.memory.place.md)) — one **app-wide, persisted** preference. In grid/list the
    child **folders** and **Memories** render with a *create* card each; in map the subtree's located nodes
-   render as clickable pins (folders are navigated from grid/list).
+   render as clickable pins (folders are navigated from grid/list). Where the level shows two or more
+   application sections (Memories, Files, drop boxes), a **tab bar** `All | Memories | Files | …` sits under the
+   folder's card ([Application tabs](#application-tabs-a-facet-of-browsing)).
 4. **Navigate:** clicking a folder drills into it (new level + breadcrumb); clicking a Memory opens it (its
    detail view is a later slice). The breadcrumb walks back up the local tree.
 5. **Organize:** *create folder* / *create Memory* seal the name + blinded slug under the parent's key (`K_SC` at
@@ -65,6 +67,16 @@
   **unlock**, not merely after login.
 - **No media derivatives yet.** Cards show an icon + name; covers/thumbnails land with the media-display
   slice.
+- <a id="application-tabs-a-facet-of-browsing"></a>**Application tabs are a facet of browsing** (inbox #348; core's
+  `LevelView`, not Memories': every application's section gets one). `All` is the whole level — the folders, every
+  section and the fallback for a kind this client cannot show. An application tab shows only that section's nodes of the
+  **current folder** (a filter, never a subtree search: no new query, no server change); the sub-folders stay in every tab
+  so one can navigate deeper. The bar appears only where **two or more sections have a tab** (one section is the whole
+  level already: no bar, no filtering) and counts only the sections shown at that level (a guest's identity folder
+  leaves its empty ones out). The tab is one global, persisted client setting (`useLevelTab`, localStorage like the view
+  mode, not per folder); a stored tab that a level does not have is shown as `All` without overwriting the setting, so
+  the next level that has it shows it again. The view switch offers the presentations of what the tab shows. A share
+  guest gets the same bar: the guest's page is this very view.
 - **Display modes are a facet of browsing.** How the current level is shown — **grid / list / map** — is one
   app-wide, persisted toggle (`useViewMode`; core's `ViewModeToggle` in the level view's toolbar, the map offered
   because Memories' section names it among its `views` — inbox #370), not a separate goal: grid/list shipped with

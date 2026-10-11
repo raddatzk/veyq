@@ -149,15 +149,18 @@ here; the server is blind.
   selection on a name, e.g. a file's before its extension — `placement`, where a node of the kind may be moved (`{ root,
   parents }`, a hint mirroring the backend's `NodeKindRules`; core's move dialog offers nothing for a kind without one,
   inbox #358) — and its `section` of the folder level view —
-  `{ order, component, views? }`; the level view is core's, `core/node/LevelView.vue`: its toolbar (the space's trash, and
+  `{ order, component, views?, tabLabel? }`; the level view is core's, `core/node/LevelView.vue`: its toolbar (the space's trash, and
   the view switch over the union of the shown sections' `views` and the folders' grid and list — `core/node/levelViews.ts`,
   inbox #370; no section draws a toggle; the level shows the stored mode only where that union offers it, else the grid,
   without rewriting the stored preference, and hands that mode to every section as `LevelSectionProps.viewMode` — a
-  section never reads `useViewMode`, inbox #404), the folder's overview card (core's `NodeOverviewCard`, which an application's
+  section never reads `useViewMode`, inbox #404), the application TABS (inbox #348: `All | one tab per section` under the overview
+  card, from the section's `tabLabel` — an i18n key of its own application; `core/node/levelTabs.ts`, the one global preference
+  `shared/state/useLevelTab`; a filter over the CURRENT folder's children only, sub-folders in every tab, the bar only with
+  two or more tabbed sections, a stored tab the level lacks shown as `All` without rewriting it), the folder's overview card (core's `NodeOverviewCard`, which an application's
   container detail opens with too — the drop box), the
   sections sorted by `order`, a fallback section for a child whose kind no section serves, then the sub-folders; kinds
   naming the same component share one section, rendered once with the children of all of them, and naming it with two
-  different `order`s throws; its `createDialog` — props `NodeCreateDialogProps` `{kind, scopeId, epochs, parentId,
+  different `order`s, `views` or `tabLabel`s throws; its `createDialog` — props `NodeCreateDialogProps` `{kind, scopeId, epochs, parentId,
   parentKey}`, mounted by the shell when a section emits `create` or a detail `createChild` with that KIND; and its
   `shareDialog` — props `NodeShareDialogProps` `{scopeId, nodeId, nodeKey, epochs, nodeName, nodeKind, uploader?}`; a
   kind without one offers no share. There is no guest-only section or detail: core's page of a `READ`/`READ_WRITE` public
