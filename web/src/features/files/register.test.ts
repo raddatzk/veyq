@@ -4,6 +4,7 @@ import { FOLDER_KIND } from '../../core/node/kind'
 import { fileNameSlug, slugify } from '../../shared/naming'
 import { fileNameStemEnd, registerFiles } from './register'
 import { DROPBOX_KIND, FILE_KIND } from './kinds'
+import { filesRows } from './levelRows'
 import FilesSection from './components/FilesSection.vue'
 import DropBoxSection from './components/DropBoxSection.vue'
 import DropBoxCreateDialog from './components/DropBoxCreateDialog.vue'
@@ -31,7 +32,9 @@ describe('registerFiles', () => {
       emptyInTrash: 'files.trashEmpty',
       nounWithArticle: 'files.aFile',
       section: { order: 20, component: FilesSection, tabLabel: 'files.title' },
-      levelActions: [{ id: 'files.upload', label: 'files.upload', icon: 'pi pi-upload', order: 30, allowed: expect.any(Function) }],
+      list: { rows: filesRows, tabLabel: 'files.title', emptyText: expect.any(Function) },
+      // "Upload files" takes files dropped onto the level too (core hands them over only while the entry is enabled)
+      levelActions: [{ id: 'files.upload', label: 'files.upload', icon: 'pi pi-upload', order: 30, acceptsDrop: true, allowed: expect.any(Function) }],
       placement: { root: true, parents: [FOLDER_KIND] },
     })
   })
@@ -75,6 +78,7 @@ describe('registerFiles', () => {
       deleteCopy: 'files.dropBox.deleteConfirm',
       nounWithArticle: 'files.dropBox.aDropBox',
       section: { order: 21, component: DropBoxSection, tabLabel: 'files.dropBox.section' },
+      list: { rows: filesRows, tabLabel: 'files.dropBox.section', emptyText: expect.any(Function) },
       createDialog: DropBoxCreateDialog,
       createEntry: { label: 'files.dropBox.create', icon: 'pi pi-inbox', order: 20, allowed: expect.any(Function), enabled: expect.any(Function) },
       shareDialog: DropBoxShareDialog,
@@ -92,6 +96,12 @@ describe('registerFiles', () => {
     expect(registry.sections()).toEqual([
       { component: FilesSection, order: 20, views: [], tabLabel: 'files.title', kinds: [FILE_KIND] },
       { component: DropBoxSection, order: 21, views: [], tabLabel: 'files.dropBox.section', kinds: [DROPBOX_KIND] },
+    ])
+    // inbox #407: both kinds name ONE row factory (one source per level, called once) and one tab each
+    expect(registry.lists()).toEqual([{ rows: filesRows, kinds: [FILE_KIND, DROPBOX_KIND], views: [] }])
+    expect(registry.tabs().map((t) => [t.id, t.label, t.kinds])).toEqual([
+      [FILE_KIND, 'files.title', [FILE_KIND]],
+      [DROPBOX_KIND, 'files.dropBox.section', [DROPBOX_KIND]],
     ])
     for (const slot of ['topbarTray', 'sidebarPins'] as const) expect(registry.slotItems(slot)).toEqual([])
     expect(registry.shareBody(FILE_KIND)).toBeNull() // no WRITE_ONLY link on a file: core's page serves every file link

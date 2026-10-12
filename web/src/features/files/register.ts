@@ -30,6 +30,7 @@ import DropBoxShareBody from './components/DropBoxShareBody.vue'
 import FileDetail from './components/FileDetail.vue'
 import FileShareDialog from './components/FileShareDialog.vue'
 import { filesCapabilities } from './capabilities'
+import { filesRows, UPLOAD_ACTION } from './levelRows'
 import { targetOf } from '../../core/access'
 
 /** What a rename selects of a file's name (core's rename dialog, inbox #385): the name without its extension — up to
@@ -52,6 +53,13 @@ const NEW_UPLOAD_ORDER = 30
  *  another file or a drop box, which take no placed child. */
 const FILES_PLACEMENT = { root: true, parents: [FOLDER_KIND] } as const
 
+/** The plain text of the Files tab when it has nothing: where a file may be uploaded it points at "New"; a reader is not
+ *  pointed at a menu it does not have, a guest says what its link shows. */
+function filesEmptyText(ctx: LevelActionContext): string {
+  if (filesCapabilities(ctx.access, targetOf(ctx.tree, ctx.folder)).upload) return 'files.empty'
+  return ctx.access.mode === 'guest' ? 'files.guest.empty' : 'files.emptyReadOnly'
+}
+
 export function registerFiles(registry: Registry): void {
   // A file is a READ / READ_WRITE share root (the backend's `FilesShareRoots`), and is also shared through its folder.
   // Its name folds by `fileNameSlug` (inbox #350: `Foto.JPG` and `foto.jpg` collide, `Day1.md` and `Day1 md` do not) — frozen
@@ -72,10 +80,11 @@ export function registerFiles(registry: Registry): void {
     // Core's create and rename dialogs name a colliding file with it: "There is already a file named …" (#389).
     nounWithArticle: 'files.aFile',
     section: { order: FILES_SECTION_ORDER, component: FilesSection, tabLabel: 'files.title' },
+    list: { rows: filesRows, tabLabel: 'files.title', emptyText: filesEmptyText },
     // "Upload files" in core's level "New" menu (inbox #406): no create dialog - the mounted section registers the handler
     // that opens its picker under this id (`core/node/levelActions.ts`), and the entry is greyed out while none is.
     levelActions: [{
-      id: 'files.upload', label: 'files.upload', icon: 'pi pi-upload', order: NEW_UPLOAD_ORDER,
+      id: UPLOAD_ACTION, label: 'files.upload', icon: 'pi pi-upload', order: NEW_UPLOAD_ORDER, acceptsDrop: true,
       allowed: (ctx: LevelActionContext) => filesCapabilities(ctx.access, targetOf(ctx.tree, ctx.folder)).upload,
     }],
     // Where it may be moved (core's move dialog, inbox #358): the backend's `FilesNodeKindRules`.
@@ -93,6 +102,7 @@ export function registerFiles(registry: Registry): void {
     deleteCopy: 'files.dropBox.deleteConfirm',
     nounWithArticle: 'files.dropBox.aDropBox',
     section: { order: DROPBOX_SECTION_ORDER, component: DropBoxSection, tabLabel: 'files.dropBox.section' },
+    list: { rows: filesRows, tabLabel: 'files.dropBox.section', emptyText: () => 'files.dropBox.sectionEmpty' },
     createDialog: DropBoxCreateDialog,
     createEntry: {
       label: 'files.dropBox.create', icon: 'pi pi-inbox', order: NEW_DROPBOX_ORDER,

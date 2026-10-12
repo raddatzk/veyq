@@ -768,12 +768,10 @@ const en = {
     // A level with nothing to show (also a guest's folder in a drop box): said once. `levelEmptyNew` is the same sentence for a
     // viewer who may add something; `{entries}` names what the "New" menu offers them (their own labels).
     levelEmpty: 'Nothing here yet.',
-    levelEmptyNew: 'Nothing here yet. Choose New to add something ({entries}).',
     // An application tab with nothing in it and no application text of its own (the unified level list, inbox #407).
     tabEmpty: 'Nothing here yet.',
     // The unified level list: a row's overflow menu button (`{name}` is the row's name), and a folder's meta line.
     rowMore: 'More actions for “{name}”',
-    kindFolder: 'Folder',
     createFolderTitle: 'Create a folder',
     renameTitle: 'Rename',
     nameLabel: 'Name',
@@ -791,6 +789,8 @@ const en = {
     viewList: 'List view',
     // The level view's application tabs (`core/node/LevelView.vue`, inbox #348): the tablist's name and the whole-level tab.
     tabs: 'Applications',
+    // The dismiss button of a notice an application shows above the level list (`LevelNotices.vue`).
+    dismiss: 'Dismiss',
     tabAll: 'All',
     illegalStructure: 'That isn’t allowed here.',
     saveFailed: 'That didn’t work. Please try again.',
@@ -1005,6 +1005,8 @@ const en = {
     // Where nothing can be uploaded (a pending deletion): no pointer to the "New" menu, which is not there.
     emptyReadOnly: 'No files yet.',
     notUploaded: 'Not uploaded yet',
+    // The noun that leads a row's meta line in the unified level list (inbox #407): "File · 157 B · Modified …".
+    kindFile: 'File',
     // A file's noun with its article, for core's `node.nameTakenBy` (the registry's `nounWithArticle`).
     aFile: 'a file',
     modified: 'Modified {date}',
@@ -1078,6 +1080,9 @@ const en = {
     // The drop box (cr-files-application F3): a member's section, detail, create and share dialogs; a guest's page.
     dropBox: {
       section: 'Drop boxes',
+      // A drop box's row meta line: "Drop box · 3 people" (the guests who have a folder in it).
+      kind: 'Drop box',
+      people: 'Nobody yet | 1 person | {count} people',
       create: 'New drop box',
       createTitle: 'New drop box',
       aDropBox: 'a drop box',
@@ -2110,10 +2115,8 @@ const de: typeof en = {
     folderCreate: 'Neuer Ordner',
     new: 'Neu',
     levelEmpty: 'Hier ist noch nichts.',
-    levelEmptyNew: 'Hier ist noch nichts. Wähle „Neu“, um etwas hinzuzufügen ({entries}).',
     tabEmpty: 'Hier ist noch nichts.',
     rowMore: 'Weitere Aktionen für „{name}“',
-    kindFolder: 'Ordner',
     createFolderTitle: 'Ordner anlegen',
     renameTitle: 'Umbenennen',
     nameLabel: 'Name',
@@ -2127,6 +2130,7 @@ const de: typeof en = {
     viewGrid: 'Rasteransicht',
     viewList: 'Listenansicht',
     tabs: 'Anwendungen',
+    dismiss: 'Ausblenden',
     tabAll: 'Alle',
     illegalStructure: 'Das ist hier nicht erlaubt.',
     saveFailed: 'Das hat nicht geklappt. Bitte versuche es erneut.',
@@ -2321,6 +2325,7 @@ const de: typeof en = {
     emptyReadOnly: 'Noch keine Dateien.',
     aFile: 'eine Datei',
     notUploaded: 'Noch nicht hochgeladen',
+    kindFile: 'Datei',
     modified: 'Geändert {date}',
     download: '{name} herunterladen',
     replace: 'Inhalt von {name} ersetzen — der Name bleibt',
@@ -2378,6 +2383,8 @@ const de: typeof en = {
     },
     dropBox: {
       section: 'Briefkästen',
+      kind: 'Briefkasten',
+      people: 'Noch niemand | 1 Person | {count} Personen',
       create: 'Neuer Briefkasten',
       createTitle: 'Neuer Briefkasten',
       aDropBox: 'einen Briefkasten',
