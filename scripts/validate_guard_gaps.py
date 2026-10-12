@@ -184,10 +184,11 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      `"me.raddatz.veyq.memories.generated"`) — rejected: rule (d) derives the packages from one `"…$owner…"` template
      and refuses a package root spelled for one owner, so the list that refused every unnamed application cannot
      quietly come back as what the rule reads
-  66 a `core/blob/` file naming Memories' blob role `"COVER"` as a literal in code — rejected:
+  66 a `core/blob/` file naming Memories' blob role `"THUMBNAIL"` as a literal in code — rejected:
      `validate_kernel_imports_no_slices` reads the roles an application owns by the node-kind rule since the
-     contract's `BlobRole` opened to a token (cr-files-application P3-S2); core compares a role and names none. The
-     KDoc beside it names the role too and must not be what is read
+     contract's `BlobRole` opened to a token (cr-files-application P3-S2); core compares a role and names none of an
+     application's (`COVER` is core's own since inbox #411, so the probe moved to `THUMBNAIL`). The KDoc beside it
+     names the role too and must not be what is read
   67 core's attachment `SharedSubtreeContributor` deleted — rejected: `validate_blob_reference_arity`'s live twin
      names the attachment arm (`NodeAttachmentEntity` in a contributor body); the three declaration keys are
      unchanged by it, and a share's blob GET would refuse every file under it (cr-files-application P3-S3)
@@ -936,11 +937,11 @@ def forge_core_names_memory_blob_role(root: pathlib.Path) -> str:
     if not f.parent.is_dir():
         raise ForgeError(f"{f.parent.relative_to(root)} is missing — core/blob moved")
     f.write_text("package me.raddatz.veyq.core.blob\n\n"
-                 "/** Whether this session uploads a COVER. */\n"
+                 "/** Whether this session uploads a THUMBNAIL. */\n"
                  "class GuardGapProbe {\n"
-                 "    fun isCover(role: String): Boolean = role == \"COVER\"\n"
+                 "    fun isThumbnail(role: String): Boolean = role == \"THUMBNAIL\"\n"
                  "}\n")
-    return "a core/blob file naming the blob role \"COVER\" in code (must be REJECTED — core names no role)"
+    return "a core/blob file naming the blob role \"THUMBNAIL\" in code (must be REJECTED — core names no application role)"
 
 
 def forge_kernel_imports_slice(root: pathlib.Path) -> str:
