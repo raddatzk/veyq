@@ -106,13 +106,11 @@ async function mountBody(role: ShareRole, served: PublicShareHead = head(role)) 
   return w
 }
 type Body = Awaited<ReturnType<typeof mountBody>>
-// The level is core's member view (inbox #401 S2): sub-folders are its folder cards, drop boxes Files' drop-box rows.
-const tiles = (w: Body) => [
-  ...w.findAll('button.veyq-folder-card').map((c) => ({ name: c.find('strong').text(), el: c })),
-  ...w.findAll('button.dropbox-row-open').map((c) => ({ name: c.find('.veyq-row-title').text(), el: c })),
-]
-const tile = (w: Body, name: string) => tiles(w).find((c) => c.name === name)?.el
-const tileNames = (w: Body) => tiles(w).map((c) => c.name)
+// The level is core's member view (inbox #401 S2; inbox #407: ONE unified list): sub-folders and drop boxes alike are
+// core's items, each opened by its primary button.
+const items = (w: Body) => w.findAll('li.veyq-level-item').map((li) => ({ name: li.find('.veyq-level-item-title').text(), el: li.find('button.veyq-level-item-main') }))
+const tile = (w: Body, name: string) => items(w).find((c) => c.name === name)?.el
+const tileNames = (w: Body) => items(w).map((c) => c.name)
 const heading = (w: Body) => w.find('.veyq-node-header-title').text()
 async function click(el: Element) {
   el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
@@ -142,9 +140,9 @@ describe("a drop box inside a folder share is the member's detail, read-only (in
   })
 
   for (const role of [ShareRole.Read, ShareRole.ReadWrite]) {
-    it(`${role}: the drop box tile opens its guests' folders, a folder its files with their download — nothing writes`, async () => {
+    it(`${role}: the drop box item opens its guests' folders, a folder its files with their download — nothing writes`, async () => {
       const w = await mountBody(role)
-      expect(tileNames(w).sort()).toEqual(['Briefe', 'Postfach'])
+      expect(tileNames(w), 'folders first, then the drop box (by name)').toEqual(['Briefe', 'Postfach'])
       // control: at the share root a contributor does get 'New folder' and the upload
       if (role === ShareRole.ReadWrite) expect(await newMenuLabels(w)).toContain(t('node.folderCreate'))
 
@@ -165,10 +163,10 @@ describe("a drop box inside a folder share is the member's detail, read-only (in
       expect(router.currentRoute.value.hash).toBe(HASH)
       expect(heading(w)).toBe('Anna')
       expect(w.find('.share-folder-badge').text(), 'the badge says view only').toBe(t('share.readonly'))
-      expect(w.find('.veyq-row-title').text()).toBe('steuer.pdf')
+      expect(w.find('.veyq-level-item-title').text()).toBe('steuer.pdf')
       expectNoWriteControl(w)
 
-      const download = w.find(`button[aria-label="${t('files.download', { name: 'steuer.pdf' })}"]`)
+      const download = w.find(`li.veyq-level-item .veyq-level-item-actions [data-action="download"][aria-label="${t('files.download', { name: 'steuer.pdf' })}"]`)
       await click(download.element)
       expect(vi.mocked(downloadFile).mock.calls.map((c) => [c[2], c[3].blobId, c[4]])).toEqual([[ANNA_FILE, 'blob-a', 'steuer.pdf']])
     })

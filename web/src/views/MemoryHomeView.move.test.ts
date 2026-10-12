@@ -2,8 +2,9 @@
 // A member's move through the personal-space host (inbox #358), over the REAL registry (Memories and Files, as `main.ts`
 // fills it), the real router, PrimeVue, core's real level view, move dialog and confirmation dialog, Files' real drop-box
 // detail and Memories' real detail adapter — every step a DOM click. The placement write is a recorder (`moveNode`): its
-// wire is `core/node/move.wire.test.ts`'s. Only the heavy Memories views and Files' file list are stubs that expose the
-// events the level view listens to.
+// wire is `core/node/move.wire.test.ts`'s. Only the heavy Memories detail view is a stub that exposes the events the host
+// listens to; the level's rows (inbox #407: one list, the applications' real row factories) are real, Files' blob
+// listing is an empty stub.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
@@ -34,6 +35,7 @@ vi.mock('../core/node/tree', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../core/node/tree')>()),
   moveNode: vi.fn(async () => {}),
   nodeContentKey: () => new Uint8Array(32).fill(9),
+  parentContentKey: () => new Uint8Array(32).fill(9), // the key a Memory row opens its meta under
 }))
 vi.mock('../features/memory/components/MemoryDetail.vue', async () => {
   const { defineComponent, h } = await import('vue')
@@ -46,21 +48,7 @@ vi.mock('../features/memory/components/MemoryDetail.vue', async () => {
     }),
   }
 })
-vi.mock('../features/memory/components/MemoriesSection.vue', async () => {
-  const { defineComponent, h } = await import('vue')
-  return { default: defineComponent({ props: ['folder', 'nodes', 'epochs', 'access', 'tree', 'viewMode'], setup: () => () => h('section', { class: 'memories-stub' }) }) }
-})
-vi.mock('../features/files/components/FilesSection.vue', async () => {
-  const { defineComponent, h } = await import('vue')
-  return {
-    default: defineComponent({
-      props: ['folder', 'nodes', 'epochs', 'access', 'tree', 'viewMode'],
-      emits: ['move'],
-      setup: (p, { emit }) => () => h('section', { class: 'files-stub' },
-        (p.nodes as { id: string; name: string }[]).map((n) => h('button', { class: 'file-move', 'data-id': n.id, onClick: () => emit('move', n) }, n.name))),
-    }),
-  }
-})
+vi.mock('../features/files/api', () => ({ filesApi: vi.fn() }))
 
 import MemoryHomeView from './MemoryHomeView.vue'
 import { treeStore, loadTree } from '../core/node/treeStore'
@@ -74,6 +62,9 @@ import { mountConfirmDialog } from '../test/confirmDialog'
 import { hashForNode } from '../core/node/location'
 import { listMyTenants } from '../features/spaces/scopes'
 import { isFavorite } from '../features/memory/favoritesStore'
+import { stubApi } from '../test/apiMock'
+import { filesApi } from '../features/files/api'
+import { clickAction } from '../test/levelRows'
 
 const node = (id: string, kind: string, parentId: string | null, name: string, over: Partial<TreeNode> = {}): TreeNode =>
   treeNode({ id, kind, name, parentId, ...over })
@@ -110,6 +101,7 @@ async function pickAndMove(name: string) {
 beforeEach(() => {
   vi.mocked(listMyTenants).mockResolvedValue([])
   vi.mocked(isFavorite).mockReturnValue(false)
+  stubApi(filesApi, { listFiles: { items: [] } })
   treeStore.nodes = TREE()
   vi.mocked(moveNode).mockClear()
   vi.mocked(loadTree).mockClear()
@@ -144,9 +136,9 @@ describe('a member moves a folder from its card', () => {
     expect(router.currentRoute.value.hash).toBe('#~me/trips/rome/')
   })
 
-  it('a section\'s row (Files\' file) and an opened Memory ask the host for the same dialog', async () => {
-    await mountAt('#~me/trips/')
-    await click(document.body.querySelector('.file-move[data-id="notes"]')!)
+  it('a row\'s move (Files\' file, by its real menu entry) and an opened Memory ask the host for the same dialog', async () => {
+    const w = await mountAt('#~me/trips/')
+    await clickAction(w, 'notes.txt', 'move')
     expect(document.body.textContent).toContain(t('node.move.title', { name: 'notes.txt' }))
     await pickAndMove('Archive')
     expect(moveNode).toHaveBeenCalledWith('scope-1', expect.anything(), expect.any(Array), 'notes', 'archive')

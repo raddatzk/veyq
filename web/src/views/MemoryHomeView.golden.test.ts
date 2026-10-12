@@ -53,9 +53,8 @@ vi.mock('../core/node/treeStore', async () => {
 })
 
 import MemoryHomeView from './MemoryHomeView.vue'
-import MemoriesSection from '../features/memory/components/MemoriesSection.vue'
-import FilesSection from '../features/files/components/FilesSection.vue'
-import DropBoxSection from '../features/files/components/DropBoxSection.vue'
+import { memoryRows } from '../features/memory/levelRows'
+import { filesRows } from '../features/files/levelRows'
 import { DROPBOX_KIND, FILE_KIND } from '../features/files/kinds'
 import { registry } from '../core/applications/registry'
 import { activeSpace } from '../app/activeSpace'
@@ -164,16 +163,14 @@ function pendingDeletion() {
 }
 
 describe('the Memories level view (golden)', () => {
-  // The control every snapshot rests on: the level's one application section is the real Memories one, as `main.ts`
-  // registers it (MEMORY and CHAPTER naming it) — a golden of a stub would pin nothing about what a user sees.
-  // Since cr-files-application F1b Files' section follows it: it renders in every folder (its heading, the upload
-  // action, its empty state — no FILE child in these fixtures, so it asks the server nothing) and steps aside in map mode.
-  it('control: the level view renders the real Memories section registration, then Files\'', () => {
+  // The control every snapshot rests on: the level's rows are the real Memories and Files registrations, as `main.ts` registers
+  // them (MEMORY and CHAPTER naming one row factory, FILE and the drop box the other) - a golden of a stub would pin nothing
+  // about what a user sees. Since the unified list (inbox #407) core draws ONE list of folders and every kind's rows.
+  it('control: the level view renders the real Memories and Files registrations', () => {
     // Memories names the grid, the list and its map as its presentations (inbox #370): core's level toolbar offers them.
-    expect(registry.sections().map((s) => ({ ...s, views: s.views.map((v) => v.mode) }))).toEqual([
-      { component: MemoriesSection, order: 10, views: ['grid', 'list', 'map'], tabLabel: 'memory.memories', kinds: [MEMORY_KIND, CHAPTER_KIND] },
-      { component: FilesSection, order: 20, views: [], tabLabel: 'files.title', kinds: [FILE_KIND] },
-      { component: DropBoxSection, order: 21, views: [], tabLabel: 'files.dropBox.section', kinds: [DROPBOX_KIND] },
+    expect(registry.lists().map((l) => ({ ...l, views: l.views.map((v) => v.mode) }))).toEqual([
+      { rows: memoryRows, views: ['grid', 'list', 'map'], kinds: [MEMORY_KIND, CHAPTER_KIND] },
+      { rows: filesRows, views: [], kinds: [FILE_KIND, DROPBOX_KIND] },
     ])
   })
 

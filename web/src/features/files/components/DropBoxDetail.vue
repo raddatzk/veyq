@@ -48,7 +48,7 @@ const { ask } = useConfirm()
 const toast = useToast()
 const offerUndo = useTrashUndo()
 
-// One session for the view's life (see FilesSection): the member's source or the link's.
+// One session for the view's life (see `../levelRows.ts`): the member's source or the link's.
 const guest = props.access.mode === 'guest'
 const source: FilesSource = guest
   ? guestFilesSource((): GuestAccess => {

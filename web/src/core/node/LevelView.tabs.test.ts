@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
-// The application tabs of core's level view (inbox #348) with REAL DOM clicks on the rendered tab buttons, against a
-// stubbed registry (as `LevelView.test.ts`): kinds are made-up tokens, tab labels are two real catalog keys.
+// The application tabs of core's level view (inbox #348; a pure FILTER over the one list, inbox #407) with REAL DOM clicks on
+// the rendered tab buttons, against a stubbed registry (as `LevelView.test.ts`): kinds are made-up tokens, tab labels are real
+// catalog keys. The tabs filter by the KIND's application; the folders are shown in every tab.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { defineComponent, h, type PropType } from 'vue'
 import PrimeVue from 'primevue/config'
 
 const holder = vi.hoisted(() => ({ reg: null as null | import('../applications/registry').Registry }))
@@ -23,30 +23,15 @@ import { createRegistry } from '../applications/registry'
 import { childrenOf } from './browse'
 import { FOLDER_KIND, type NodeKind } from './kind'
 import type { TreeNode } from './tree'
-import { setViewMode, type ViewMode } from '../../shared/state/useViewMode'
+import { setViewMode } from '../../shared/state/useViewMode'
 import { setLevelTab, useLevelTab, levelTabStorageKey } from '../../shared/state/useLevelTab'
 import { setAccountUserId } from '../../app/account'
 import { realI18n, t } from '../../test/i18n'
 import { treeNode, memberAccessOf, memberTreeOf, guestAccessOf } from '../../test/models'
 import { ShareRole } from '../../api/generated/sharing'
-
-function sectionStub(name: string) {
-  return defineComponent({
-    name: `Section${name}`,
-    props: {
-      folder: { type: Object as PropType<TreeNode | null>, default: null },
-      nodes: { type: Array as PropType<readonly TreeNode[]>, required: true },
-      epochs: { type: Object, default: null },
-      access: { type: Object, required: true },
-      tree: { type: Object, required: true },
-      viewMode: { type: String as PropType<ViewMode>, required: true },
-    },
-    setup: (p) => () => h('section', { class: 'stub-section', 'data-name': name }, [h('span', { class: 'stub-nodes' }, p.nodes.map((n) => n.name).join(','))]),
-  })
-}
-const A = sectionStub('a')
-const B = sectionStub('b')
-const C = sectionStub('c')
+import { stubRows } from '../../test/stubRows'
+import { titlesOf } from '../../test/levelRows'
+import { isDisabled, openNewMenu } from '../../test/newMenu'
 
 function node(id: string, kind: NodeKind, parentId: string | null = null): TreeNode {
   return treeNode({ id, kind, name: id, parentId, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
@@ -62,15 +47,15 @@ function mountLevel(tree: TreeNode[], guest = false) {
     global: PLUGINS,
   })
 }
+type Level = ReturnType<typeof mountLevel>
 
-const shown = (w: ReturnType<typeof mountLevel>) => w.findAll('.stub-section').map((s) => s.attributes('data-name'))
-const folderCards = (w: ReturnType<typeof mountLevel>) => w.findAll('button.veyq-folder-card').map((b) => b.text())
-const tabButtons = (w: ReturnType<typeof mountLevel>) => w.findAll('[role="tab"]')
-const tabNamed = (w: ReturnType<typeof mountLevel>, label: string) => tabButtons(w).find((b) => b.text() === label)!
-const selected = (w: ReturnType<typeof mountLevel>) => tabButtons(w).filter((b) => b.attributes('aria-selected') === 'true').map((b) => b.text())
+const tabButtons = (w: Level) => w.findAll('[role="tab"]')
+const tabNamed = (w: Level, label: string) => tabButtons(w).find((b) => b.text() === label)!
+const selected = (w: Level) => tabButtons(w).filter((b) => b.attributes('aria-selected') === 'true').map((b) => b.text())
 
 const LABEL_A = 'memory.memories'
 const LABEL_B = 'files.title'
+let b: ReturnType<typeof stubRows>
 
 beforeEach(() => {
   holder.reg = createRegistry()
@@ -78,38 +63,45 @@ beforeEach(() => {
   setAccountUserId('user-1')
   setLevelTab('all')
   setViewMode('grid')
-  holder.reg.registerKind({ kind: 'ALPHA', icon: 'pi pi-a', shareable: false, section: { order: 10, component: A, tabLabel: LABEL_A } })
-  holder.reg.registerKind({ kind: 'BETA', icon: 'pi pi-b', shareable: false, section: { order: 20, component: B, tabLabel: LABEL_B } })
+  const a = stubRows('a')
+  b = stubRows('b')
+  holder.reg.registerKind({ kind: 'ALPHA', icon: 'pi pi-a', shareable: false, list: { rows: a.factory, tabLabel: LABEL_A } })
+  holder.reg.registerKind({ kind: 'BETA', icon: 'pi pi-b', shareable: false, list: { rows: b.factory, tabLabel: LABEL_B } })
 })
 
 const TREE = [TRIPS, SUB, node('a1', 'ALPHA', 'Trips'), node('b1', 'BETA', 'Trips'), node('x1', 'OTHER', 'Trips')]
 
 describe('LevelView application tabs', () => {
-  it('offers All and one tab per section, with proper tablist semantics, All selected by default', () => {
+  it('offers All and one tab per application, with proper tablist semantics, All selected by default', () => {
     const w = mountLevel(TREE)
     expect(w.find('[role="tablist"]').attributes('aria-label')).toBe(t('node.tabs'))
-    expect(tabButtons(w).map((b) => b.text())).toEqual([t('node.tabAll'), t(LABEL_A), t(LABEL_B)])
-    expect(tabButtons(w).every((b) => b.element.tagName === 'BUTTON' && !b.attributes('href'))).toBe(true)
+    expect(tabButtons(w).map((x) => x.text())).toEqual([t('node.tabAll'), t(LABEL_A), t(LABEL_B)])
+    expect(tabButtons(w).every((x) => x.element.tagName === 'BUTTON' && !x.attributes('href'))).toBe(true)
     expect(selected(w)).toEqual([t('node.tabAll')])
-    // All = today's view: both sections, the fallback for the unknown kind, the folders
-    expect(shown(w)).toEqual(['a', 'b'])
-    expect(w.find('.veyq-level-fallback').exists()).toBe(true)
-    expect(folderCards(w)).toEqual(['Sub'])
+    // All = the whole level in ONE list: the folder, both applications' rows (mixed by name), the unsupported kind
+    expect(titlesOf(w)).toEqual(['Sub', 'a1', 'b1', 'x1'])
+    expect(w.find('.is-unsupported').exists()).toBe(true)
   })
 
-  it('a click on an application tab shows only that section, keeps the sub-folders and drops the fallback', async () => {
+  it('a click on an application tab filters the list to that application\'s nodes, keeps the sub-folders and drops the unsupported row', async () => {
     const w = mountLevel(TREE)
     await tabNamed(w, t(LABEL_B)).trigger('click')
-    expect(shown(w)).toEqual(['b'])
-    expect(w.find('.stub-nodes').text()).toBe('b1')
-    expect(w.find('.veyq-level-fallback').exists()).toBe(false)
-    expect(folderCards(w)).toEqual(['Sub'])
+    expect(titlesOf(w)).toEqual(['Sub', 'b1'])
+    expect(w.find('.is-unsupported').exists()).toBe(false)
     expect(selected(w)).toEqual([t(LABEL_B)])
     await tabNamed(w, t(LABEL_A)).trigger('click')
-    expect(shown(w)).toEqual(['a'])
+    expect(titlesOf(w)).toEqual(['Sub', 'a1'])
     await tabNamed(w, t('node.tabAll')).trigger('click')
-    expect(shown(w)).toEqual(['a', 'b'])
-    expect(w.find('.veyq-level-fallback').exists()).toBe(true)
+    expect(titlesOf(w)).toEqual(['Sub', 'a1', 'b1', 'x1'])
+  })
+
+  it('keeps the folders in EVERY tab, however many there are, and the filter changes nothing about them', async () => {
+    const tree = [...TREE, node('Zed', FOLDER_KIND, 'Trips'), node('Mid', FOLDER_KIND, 'Trips')]
+    const w = mountLevel(tree)
+    for (const label of [t('node.tabAll'), t(LABEL_A), t(LABEL_B)]) {
+      await tabNamed(w, label).trigger('click')
+      expect(titlesOf(w).slice(0, 3), label).toEqual(['Mid', 'Sub', 'Zed'])
+    }
   })
 
   it('persists the selection: a remount shows it, and the preference is in storage', async () => {
@@ -118,43 +110,44 @@ describe('LevelView application tabs', () => {
     expect(localStorage.getItem(levelTabStorageKey()!)).toBe('BETA')
     first.unmount()
     const second = mountLevel(TREE)
-    expect(shown(second)).toEqual(['b'])
+    expect(titlesOf(second)).toEqual(['Sub', 'b1'])
     expect(selected(second)).toEqual([t(LABEL_B)])
   })
 
   it('shows All for a stored tab this level lacks, WITHOUT overwriting the stored preference', async () => {
     setLevelTab('BETA')
-    // an identity folder leaves empty sections out: here BETA has no node, so the bar has ALPHA and GAMMA only
-    holder.reg!.registerKind({ kind: 'GAMMA', icon: 'pi pi-c', shareable: false, section: { order: 30, component: C, tabLabel: 'files.dropBox.section' } })
+    // an identity folder offers no tab for a kind with nothing in it: here BETA has no node, so the bar has ALPHA and GAMMA only
+    const c = stubRows('c')
+    holder.reg!.registerKind({ kind: 'GAMMA', icon: 'pi pi-c', shareable: false, list: { rows: c.factory, tabLabel: 'files.dropBox.section' } })
     const level = childrenOf([TRIPS, node('a1', 'ALPHA', 'Trips'), node('g1', 'GAMMA', 'Trips')], TRIPS.id)
     const tree = memberTreeOf(() => [TRIPS])
     const w = mount(LevelView, {
       props: { folder: TRIPS, level, access: memberAccessOf({}), tree: { ...tree, inIdentityFolder: () => true } },
       global: PLUGINS,
     })
-    expect(tabButtons(w).map((b) => b.text())).toEqual([t('node.tabAll'), t(LABEL_A), t('files.dropBox.section')])
+    expect(tabButtons(w).map((x) => x.text())).toEqual([t('node.tabAll'), t(LABEL_A), t('files.dropBox.section')])
     expect(selected(w)).toEqual([t('node.tabAll')])
-    expect(shown(w)).toEqual(['a', 'c'])
+    expect(titlesOf(w)).toEqual(['a1', 'g1'])
     expect(useLevelTab().levelTab.value).toBe('BETA')
     expect(localStorage.getItem(levelTabStorageKey()!)).toBe('BETA')
     // …and the level that has BETA shows it again
     w.unmount()
-    expect(shown(mountLevel(TREE))).toEqual(['b'])
+    expect(titlesOf(mountLevel(TREE))).toEqual(['Sub', 'b1'])
   })
 
-  it('shows no tab bar with fewer than two sections that have a tab (and then no filtering, whatever is stored)', () => {
+  it('shows no tab bar with fewer than two applications that have a tab (and then no filtering, whatever is stored)', () => {
     setLevelTab('BETA')
     holder.reg = createRegistry()
-    holder.reg.registerKind({ kind: 'ALPHA', icon: 'pi pi-a', shareable: false, section: { order: 10, component: A, tabLabel: LABEL_A } })
+    holder.reg.registerKind({ kind: 'ALPHA', icon: 'pi pi-a', shareable: false, list: { rows: stubRows('a').factory, tabLabel: LABEL_A } })
     const one = mountLevel(TREE)
     expect(one.find('[role="tablist"]').exists()).toBe(false)
-    expect(shown(one)).toEqual(['a'])
+    expect(titlesOf(one)).toEqual(['Sub', 'a1', 'b1', 'x1'])
     holder.reg = createRegistry()
-    holder.reg.registerKind({ kind: 'ALPHA', icon: 'pi pi-a', shareable: false, section: { order: 10, component: A, tabLabel: LABEL_A } })
-    holder.reg.registerKind({ kind: 'BETA', icon: 'pi pi-b', shareable: false, section: { order: 20, component: B } }) // no label: no tab
+    holder.reg.registerKind({ kind: 'ALPHA', icon: 'pi pi-a', shareable: false, list: { rows: stubRows('a').factory, tabLabel: LABEL_A } })
+    holder.reg.registerKind({ kind: 'BETA', icon: 'pi pi-b', shareable: false, list: { rows: stubRows('b').factory } }) // no label: no tab
     const unlabelled = mountLevel(TREE)
     expect(unlabelled.find('[role="tablist"]').exists()).toBe(false)
-    expect(shown(unlabelled)).toEqual(['a', 'b'])
+    expect(titlesOf(unlabelled)).toEqual(['Sub', 'a1', 'b1', 'x1'])
   })
 
   it('moves between tabs with the arrow keys (roving tabindex) and selects with Enter', async () => {
@@ -164,25 +157,88 @@ describe('LevelView application tabs', () => {
     expect(tabNamed(w, t(LABEL_A)).attributes('tabindex')).toBe('-1')
     await all.trigger('keydown', { code: 'ArrowRight', key: 'ArrowRight' })
     await tabNamed(w, t(LABEL_A)).trigger('keydown', { code: 'Enter', key: 'Enter' })
-    expect(shown(w)).toEqual(['a'])
+    expect(titlesOf(w)).toEqual(['Sub', 'a1'])
   })
 
   it('a guest gets the same bar and the same filter (share = member view)', async () => {
     const w = mountLevel(TREE, true)
-    expect(tabButtons(w).map((b) => b.text())).toEqual([t('node.tabAll'), t(LABEL_A), t(LABEL_B)])
+    expect(tabButtons(w).map((x) => x.text())).toEqual([t('node.tabAll'), t(LABEL_A), t(LABEL_B)])
     await tabNamed(w, t(LABEL_A)).trigger('click')
-    expect(shown(w)).toEqual(['a'])
-    expect(folderCards(w)).toEqual(['Sub'])
+    expect(titlesOf(w)).toEqual(['Sub', 'a1'])
   })
 
-  it('the view switch offers what the tab shows: a tab of a section without views leaves the folders\' grid and list', async () => {
+  it('kinds sharing a tab label share ONE tab: its filter shows the nodes of both', async () => {
+    holder.reg = createRegistry()
+    const shared = stubRows('s')
+    holder.reg.registerKind({ kind: 'ALPHA', icon: 'pi pi-a', shareable: false, list: { rows: shared.factory, tabLabel: LABEL_A } })
+    holder.reg.registerKind({ kind: 'ALPHA_PART', icon: 'pi pi-a', shareable: false, list: { rows: shared.factory, tabLabel: LABEL_A } })
+    holder.reg.registerKind({ kind: 'BETA', icon: 'pi pi-b', shareable: false, list: { rows: stubRows('b').factory, tabLabel: LABEL_B } })
+    const w = mountLevel([TRIPS, node('a1', 'ALPHA', 'Trips'), node('p1', 'ALPHA_PART', 'Trips'), node('b1', 'BETA', 'Trips')])
+    expect(tabButtons(w).map((x) => x.text())).toEqual([t('node.tabAll'), t(LABEL_A), t(LABEL_B)])
+    await tabNamed(w, t(LABEL_A)).trigger('click')
+    expect(titlesOf(w)).toEqual(['a1', 'p1'])
+  })
+
+  it('a tab is offered where its kinds have a node here or the viewer may add one: a reader gets no empty tab', () => {
+    const only = mountLevel([TRIPS, node('a1', 'ALPHA', 'Trips')], true)
+    expect(only.find('[role="tablist"]').exists(), 'one tab with nodes is no choice').toBe(false)
+    const both = mountLevel([TRIPS, node('a1', 'ALPHA', 'Trips'), node('b1', 'BETA', 'Trips')], true)
+    expect(tabButtons(both)).toHaveLength(3)
+  })
+
+  it('the view switch offers what the tab shows: a tab of a kind without views of its own leaves the grid and the list', async () => {
     holder.reg = createRegistry()
     const map = { mode: 'map' as const, icon: 'pi pi-map', label: 'node.viewGrid' }
-    holder.reg.registerKind({ kind: 'ALPHA', icon: 'pi pi-a', shareable: false, section: { order: 10, component: A, tabLabel: LABEL_A, views: [map] } })
-    holder.reg.registerKind({ kind: 'BETA', icon: 'pi pi-b', shareable: false, section: { order: 20, component: B, tabLabel: LABEL_B } })
+    holder.reg.registerKind({ kind: 'ALPHA', icon: 'pi pi-a', shareable: false, list: { rows: stubRows('a').factory, tabLabel: LABEL_A, views: [map] } })
+    holder.reg.registerKind({ kind: 'BETA', icon: 'pi pi-b', shareable: false, list: { rows: stubRows('b').factory, tabLabel: LABEL_B } })
     const w = mountLevel(TREE)
     expect(w.findAll('.view-mode-button')).toHaveLength(3)
     await tabNamed(w, t(LABEL_B)).trigger('click')
     expect(w.findAll('.view-mode-button')).toHaveLength(2)
+  })
+})
+
+// The "New" menu's upload action no longer depends on a mounted section: the row factory registered its handler for the
+// level's life, so another application's tab being shown greys nothing out (inbox #407).
+describe('LevelView application tabs: the level action does not depend on the tab', () => {
+  it('"Upload"-like entry of a kind in another tab stays enabled', async () => {
+    holder.reg = createRegistry()
+    const a = stubRows('a', { action: { id: 'a.up', handler: { enabled: () => true, run: () => {} } } })
+    holder.reg.registerKind({
+      kind: 'ALPHA', icon: 'pi pi-a', shareable: false, list: { rows: a.factory, tabLabel: LABEL_A },
+      levelActions: [{ id: 'a.up', label: 'node.rename', icon: 'pi pi-upload', order: 30, allowed: () => true }],
+    })
+    holder.reg.registerKind({ kind: 'BETA', icon: 'pi pi-b', shareable: false, list: { rows: stubRows('b').factory, tabLabel: LABEL_B } })
+    const w = mountLevel([TRIPS, node('a1', 'ALPHA', 'Trips'), node('b1', 'BETA', 'Trips')])
+    await tabNamed(w, t(LABEL_B)).trigger('click')
+    expect(titlesOf(w)).toEqual(['b1'])
+    const items = await openNewMenu(w)
+    expect(isDisabled(items.find((i) => i.textContent?.trim() === t('node.rename'))!), 'enabled while the other application\'s tab is shown').toBe(false)
+  })
+})
+
+// A tab that is offered but holds nothing says so in its application's own words (`list.emptyText`), else a neutral line.
+describe('LevelView application tabs: an empty tab', () => {
+  it('shows the application\'s own text, else the neutral one, once, beside the folders', async () => {
+    holder.reg = createRegistry()
+    const allow = () => true
+    const Dialog = { name: 'D', render: () => null }
+    holder.reg.registerKind({
+      kind: 'ALPHA', icon: 'pi pi-a', shareable: false, createDialog: Dialog, createEntry: { label: 'node.anItem', icon: 'pi pi-a', order: 10, allowed: allow },
+      list: { rows: stubRows('a').factory, tabLabel: LABEL_A, emptyText: () => 'memory.memoryEmpty' },
+    })
+    holder.reg.registerKind({
+      kind: 'BETA', icon: 'pi pi-b', shareable: false, createDialog: Dialog, createEntry: { label: 'node.anItem', icon: 'pi pi-b', order: 20, allowed: allow },
+      list: { rows: stubRows('b').factory, tabLabel: LABEL_B },
+    })
+    const w = mountLevel([TRIPS, SUB])
+    expect(tabButtons(w)).toHaveLength(3) // the viewer may add to both, so both tabs are offered although empty
+    await tabNamed(w, t(LABEL_A)).trigger('click')
+    expect(w.find('.veyq-empty').text()).toBe(t('memory.memoryEmpty'))
+    expect(titlesOf(w)).toEqual(['Sub'])
+    await tabNamed(w, t(LABEL_B)).trigger('click')
+    expect(w.find('.veyq-empty').text()).toBe(t('node.tabEmpty'))
+    await tabNamed(w, t('node.tabAll')).trigger('click')
+    expect(w.find('.veyq-empty').exists(), 'under All the folder is something').toBe(false)
   })
 })

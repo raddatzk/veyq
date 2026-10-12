@@ -28,7 +28,8 @@ vi.mock('../../api/client', async (orig) => (await import('../../test/guestMode'
 
 import ShareTreePage from './ShareTreePage.vue'
 import ShareNameDialog from './ShareNameDialog.vue'
-import { createRegistry, type LevelSectionProps } from '../applications/registry'
+import { createRegistry } from '../applications/registry'
+import type { LevelRowsContext, LevelRowsFactory } from '../node/levelRow'
 import { FOLDER_KIND } from '../node/kind'
 import { sealName, wrapContentKey } from '../node/tree'
 import { saveGuestSession, type GuestIdentity } from './guestIdentity'
@@ -79,16 +80,13 @@ function head(role: ShareRole = ShareRole.Read): PublicShareHead {
   }
 }
 
-/** A kind's level section, as an application's: one open button per node, labelled by the tree's name. */
-const seenSection = vi.hoisted(() => ({ props: null as null | LevelSectionProps }))
-const StubSection = defineComponent({
-  name: 'StubSection',
-  props: ['folder', 'nodes', 'epochs', 'access', 'tree'],
-  emits: ['openNode', 'create', 'rename'],
-  setup: (p, { emit }) => () => {
-    seenSection.props = p as unknown as LevelSectionProps
-    return h('section', { class: 'stub-section' }, (p.nodes as { id: string; name: string }[]).map((n) =>
-      h('button', { class: 'stub-open', 'data-node-id': n.id, onClick: () => emit('openNode', n) }, n.name)))
+/** A kind's row factory, as an application's (inbox #407): one row per node, whose primary click opens the node through the
+ *  host, labelled by the tree's name. Records the level context it was handed. */
+const seenCtx = vi.hoisted(() => ({ ctx: null as null | LevelRowsContext }))
+const stubRows: LevelRowsFactory = (ctx, host) => ({
+  row: (node) => {
+    seenCtx.ctx = ctx.value
+    return { icon: 'pi pi-file', title: node.name, meta: 'stub', primary: { label: node.name, onClick: () => host.open(node) }, actions: [] }
   },
 })
 /** A WRITE_ONLY drop page an application claimed: never this page's to mount. */
@@ -133,7 +131,10 @@ async function mountBody(h0: PublicShareHead, o: { reload?: () => Promise<void>;
 }
 type Body = Awaited<ReturnType<typeof mountBody>>
 const heading = (w: Body) => w.find('.veyq-node-header-title').text()
-const folderCards = (w: Body) => w.findAll('button.veyq-folder-card').map((c) => c.find('strong').text())
+const folderCards = (w: Body) => w.findAll('li.veyq-level-item.is-folder').map((c) => c.find('.veyq-level-item-title').text())
+/** The item of a node by its (numbered) title, and its primary button. */
+const itemOf = (w: Body, title: string) => w.findAll('li.veyq-level-item').find((c) => c.find('.veyq-level-item-title').text() === title)!
+const openButton = (w: Body, title: string) => itemOf(w, title).find('button.veyq-level-item-main')
 const createsFolder = async (w: Body) => (await newMenuLabels(w)).includes(t('node.folderCreate'))
 /** Click as a user does; the event says whether the element's default action ran. */
 async function click(el: Element) {
@@ -151,11 +152,11 @@ async function submitName(w: Body, name: string) {
 beforeEach(async () => {
   localStorage.clear()
   authenticatedCalls.length = 0
-  seenSection.props = null
+  seenCtx.ctx = null
   const r = createRegistry()
-  const section = { order: 10, component: StubSection }
-  r.registerKind({ kind: NOTE_KIND, icon: 'pi pi-file', shareable: true, section })
-  r.registerKind({ kind: BROKEN_KIND, icon: 'pi pi-file', shareable: true, section })
+  const list = { rows: stubRows }
+  r.registerKind({ kind: NOTE_KIND, icon: 'pi pi-file', shareable: true, list })
+  r.registerKind({ kind: BROKEN_KIND, icon: 'pi pi-file', shareable: true, list })
   r.claimShareBody(NOTE_KIND, StubBody) // a WRITE_ONLY drop page: never mounted on this page
   holder.reg = r
   router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/s/:id', component: { render: () => null } }] })
@@ -164,45 +165,50 @@ beforeEach(async () => {
 })
 
 describe("ShareTreePage browses a shared folder with core's level view", () => {
-  it("shows the folder's name, the note once, its sub-folders and every kind's section, opened through the chain", async () => {
+  it("shows the folder's name, the note once and ONE list of its sub-folders and every kind's nodes, opened through the chain", async () => {
     const w = await mountBody(head())
     expect(w.emitted('unavailable')).toBeUndefined()
     expect(heading(w)).toBe('Familie')
     expect(w.findAll('.markdown-body')).toHaveLength(1)
     expect(w.find('.markdown-body').text()).toContain('Folder note')
+    expect(w.findAll('ul.veyq-level-list'), 'one list for everything').toHaveLength(1)
     expect(folderCards(w)).toEqual(['Briefe'])
-    expect(w.findAll('.stub-open').map((b) => b.text()).sort(), "the kinds' section gets their nodes").toEqual(['Kaputt', 'Notizen'])
-    expect(w.find('.veyq-level-fallback').text(), 'a kind nobody registered: the level fallback').toContain('Ausgaben')
-    // The section is handed the guest's access and tree — the member's props, a guest's values.
-    const p = seenSection.props!
+    // Unified list (inbox #407): folders first, then every other node MIXED BY NAME (not grouped by kind as the sections
+    // were) - the unregistered kind's explicit unsupported row ("Ausgaben") sorts among the kinds' nodes.
+    expect(w.findAll('.veyq-level-item-title').map((b) => b.text())).toEqual(['Briefe', 'Ausgaben', 'Kaputt', 'Notizen'])
+    expect(w.find('li.veyq-level-item.is-unsupported .veyq-level-item-title').text(), 'a kind nobody registered: the explicit unsupported row').toBe('Ausgaben')
+    expect(openButton(w, 'Notizen').exists(), "the kinds' nodes are rows with an open button").toBe(true)
+    // The row factory is handed the guest's access and tree - the member's context, a guest's values.
+    const p = seenCtx.ctx!
     expect(p.access.mode).toBe('guest')
     expect(p.epochs, "a guest's keys come through the tree").toBeNull()
     expect(Array.from(p.tree.keyOf(NOTE)!)).toEqual(Array.from(keys.note))
     expect(authenticatedCalls).toEqual([])
   })
 
-  it('a folder card click navigates into it with the real router, keeping the #k= fragment; its level shows there', async () => {
+  it('a folder item click navigates into it with the real router, keeping the #k= fragment; its level shows there', async () => {
     const w = await mountBody(head())
-    const card = w.findAll('button.veyq-folder-card').find((c) => c.text().includes('Briefe'))!
-    await click(card.element)
+    await click(openButton(w, 'Briefe').element)
     expect(router.currentRoute.value.query.node).toBe(LETTERS)
     expect(router.currentRoute.value.hash, 'the share key stays in the URL').toBe(HASH)
     expect(heading(w)).toBe('Briefe')
     expect(folderCards(w)).toEqual(['Feldpost'])
   })
 
-  it("a section's open goes through the tree's link: ?node= with the fragment kept", async () => {
+  it("a row's open goes through the tree's link: ?node= with the fragment kept", async () => {
     const w = await mountBody(head())
-    await click(w.find(`.stub-open[data-node-id="${NOTE}"]`).element)
+    await click(openButton(w, 'Notizen').element)
     expect(router.currentRoute.value.query.node).toBe(NOTE)
     expect(router.currentRoute.value.hash).toBe(HASH)
   })
 
-  it('an empty folder says so, as a member\'s does', async () => {
+  it("an empty folder says so once in plain text, as a member's does", async () => {
     await at(NESTED)
     const w = await mountBody(head())
     expect(heading(w)).toBe('Feldpost')
-    expect(w.text()).toContain(t('node.folderEmpty'))
+    // A READ guest may create nothing: the plain "nothing here" (a writer's names the New-menu entries).
+    expect(w.find('p.veyq-empty').text()).toBe(t('node.levelEmpty'))
+    expect(w.findAll('li.veyq-level-item')).toHaveLength(0)
   })
 
   it('the breadcrumb runs along the parent chain to the share root, each crumb a real link with the fragment', async () => {

@@ -1,5 +1,5 @@
 // What a Memories view may offer to whoever looks (inbox #401): one pure, FAIL-CLOSED function over core's `Access` and
-// the node on screen, so `MemoryDetail` and `MemoriesSection` show a control only where this says yes — a member and a
+// the node on screen, so `MemoryDetail` and Memories' rows (`levelRows.ts`) show a control only where this says yes — a member and a
 // share guest see the same view with functions removed. The matrix is written down once, in `docs/apps/memories.md`
 // § What a guest may do (ADR 0080 decision 6); this is its code. Every field defaults to false: an unknown mode, role or
 // kind grants nothing, so a new kind or a new role never inherits a right by accident.

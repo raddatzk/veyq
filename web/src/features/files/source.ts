@@ -1,4 +1,4 @@
-// Files' data source (inbox #401 S3): the one object through which a Files view (`FilesSection`, `DropBoxDetail`) reads
+// Files' data source (inbox #401 S3): the one object through which a Files view (Files' rows `levelRows.ts`, `DropBoxDetail`) reads
 // and writes, so ONE view serves a member and a share guest. The member's wraps the unlocked scope's doors (`filesApi`,
 // core's node operations and `treeStore`); the guest's the link's (`publicShareFilesApi`, core's guest transport and
 // guest create, the shell's naming flow and re-resolve). Neither reads the other's world.

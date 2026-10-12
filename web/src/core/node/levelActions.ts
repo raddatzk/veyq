@@ -1,16 +1,17 @@
-// The seam between the level view's "New" menu and an application's section (inbox #406). A menu entry that is no create
-// dialog - Files' "Upload files" needs the section's hidden file input and its upload flow - cannot be run by core, which
-// imports no application. So the level provides a small handler registry (`provideLevelActions`), and the application's
-// section, while it is mounted, registers the handler for the action id its kind's `levelActions` entry declared
-// (`useLevelAction`). Core only calls the handler of the entry the viewer chose.
+// The seam between the level view's "New" menu (and its drop target) and an application's row source (inbox #406, #407). A
+// menu entry that is no create dialog - Files' "Upload files" needs the picker and the upload flow - cannot be run by core,
+// which imports no application. So the level keeps a small handler registry (`createLevelActions`), and the application's row
+// factory registers, through the host it is handed (`LevelRowsHost.registerAction`), the handler for the action id its kind's
+// `levelActions` entry declared. Core only calls the handler of the entry the viewer chose - or, for dropped files, the one of
+// an entry that declared `acceptsDrop`.
 //
-// A section that is not mounted (another application's tab is shown) has no handler: the entry stays in the menu but
-// DISABLED (`handles` false), never a click that does nothing. A section mounted without a level (a test mounting it
-// alone) registers nothing and breaks nothing.
-import { inject, onBeforeUnmount, provide, shallowReactive } from 'vue'
+// The row factory is set up once per level view, in the level's setup, so its handlers exist for the level's whole life and do
+// NOT depend on which application tab is shown: "Upload files" is never greyed out because another tab is open. The level
+// removes them when it unmounts.
+import { shallowReactive } from 'vue'
 
 export interface LevelActionHandler {
-  /** Whether the action can run right now (e.g. the session's keys are unlocked). */
+  /** Whether the action can run right now (e.g. the session's keys are unlocked, the matrix grants it). */
   enabled: () => boolean
   run: () => void
   /** Files dropped onto the level (the entry declared `acceptsDrop`): core calls it only while `enabled()` says yes. */
@@ -18,17 +19,16 @@ export interface LevelActionHandler {
 }
 
 export interface LevelActions {
-  /** The handler registered under `id`, or undefined (the section is not mounted). Reactive. */
+  /** The handler registered under `id`, or undefined. Reactive. */
   get(id: string): LevelActionHandler | undefined
+  /** Register `handler` under `id`; the returned function removes it (only if it is still the registered one). */
   register(id: string, handler: LevelActionHandler): () => void
 }
 
-const KEY = Symbol('veyq-level-actions')
-
-/** Create the level's handler registry and provide it to its sections. Called once by the level view. */
-export function provideLevelActions(): LevelActions {
+/** The level's handler registry. Called once by the level view. */
+export function createLevelActions(): LevelActions {
   const handlers = shallowReactive(new Map<string, LevelActionHandler>())
-  const actions: LevelActions = {
+  return {
     get: (id) => handlers.get(id),
     register(id, handler) {
       handlers.set(id, handler)
@@ -37,14 +37,4 @@ export function provideLevelActions(): LevelActions {
       }
     },
   }
-  provide(KEY, actions)
-  return actions
-}
-
-/** Register `handler` for the level action `id` for the calling component's life. A no-op outside a level view. */
-export function useLevelAction(id: string, handler: LevelActionHandler): void {
-  const actions = inject<LevelActions | null>(KEY, null)
-  if (!actions) return
-  const unregister = actions.register(id, handler)
-  onBeforeUnmount(unregister)
 }

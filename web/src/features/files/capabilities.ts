@@ -1,5 +1,5 @@
 // What a Files view may offer to whoever looks (inbox #401): one pure, FAIL-CLOSED function over core's `Access` and the
-// node on screen, so `FilesSection`, `DropBoxSection` and `DropBoxDetail` show a control only where this says yes — a
+// node on screen, so Files' rows (`levelRows.ts`) and `DropBoxDetail` show a control only where this says yes — a
 // member and a share guest see the same view with functions removed. The matrix is written down once, in
 // `docs/apps/files.md` § Guests (ADR 0080 decision 6); this is its code. Every field defaults to false: an unknown mode,
 // role or kind grants nothing.

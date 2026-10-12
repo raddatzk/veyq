@@ -1,18 +1,19 @@
 // @vitest-environment happy-dom
 // The personal-space content host over the REAL registry (filled by `src/test/setup.ts`, as `main.ts` does: Memories
 // and Files), core's real level view (`core/node/LevelView.vue`) and the real Memories detail adapter
-// (`MemoryDetailHost`), with only the heavy Memories views (`MemoryDetail`, `MemoriesSection`) and the dialogs stubbed
-// to prop recorders. What this pins: which component the host renders for which node kind, and that the generic
-// context (buckets by kind, the member's access and tree, content key) arrives in the props the Memories components
-// take. The section recorders record what the REAL capability functions answer for the access and the tree they were
-// handed — what the real section would offer. The
-// registry-variant cases (an unregistered detail, no section at all) are in `MemoryHomeView.registry.test.ts`, which
-// stubs the registry itself.
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+// (`MemoryDetailHost`), with only the heavy Memories view (`MemoryDetail`) and the dialogs stubbed to prop recorders.
+// What this pins: which component the host renders for which node kind, and that the generic context (buckets by kind,
+// the member's access and tree, content key) arrives in the props the Memories components take. Since inbox #407 the
+// level is ONE list drawn by core, with the applications' REAL row factories (nothing of the level is stubbed): the
+// cases read the rows, the "New" menu and the row actions the way a person finds them. The registry-variant cases (an
+// unregistered detail, no row source at all) are in `MemoryHomeView.registry.test.ts`, which stubs the registry itself.
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { breadcrumb } from '../app/breadcrumb'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 
+// Leaflet is neither needed nor runnable here (the Memories map is stubbed below).
+vi.mock('leaflet', () => ({ default: {} }))
 vi.mock('../app/activeSpace', async () => {
   const { reactive } = await import('vue')
   return {
@@ -30,6 +31,8 @@ vi.mock('../features/memory/favoritesStore', () => ({
   isFavorite: vi.fn(),
   toggleFavorite: vi.fn(),
 }))
+// Files' row factory lists the blobs of the level's files; here there are none (the rows read "not uploaded yet").
+vi.mock('../features/files/api', () => ({ filesApi: vi.fn() }))
 vi.mock('../features/spaces/scopes', () => ({ listMyTenants: vi.fn() }))
 const { showUndo } = vi.hoisted(() => ({ showUndo: vi.fn() }))
 vi.mock('../shared/state/useToast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn(), showUndo, dismissUndo: vi.fn() }) }))
@@ -44,6 +47,8 @@ vi.mock('../core/node/treeStore', async () => {
 vi.mock('../core/node/tree', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../core/node/tree')>()),
   restoreNode: vi.fn(async () => {}),
+  // The key a Memory row opens its meta under (nothing is sealed in this file's tree).
+  parentContentKey: () => new Uint8Array(32).fill(9),
   // Each node's key as the chain would resolve it: the chapter `day1` has its own (7), every other node 9.
   nodeContentKey: (_scopeId: string, _epochs: unknown, _nodes: unknown, nodeId: string) => new Uint8Array(32).fill(nodeId === 'day1' ? 7 : 9),
 }))
@@ -61,39 +66,6 @@ vi.mock('../features/memory/components/MemoryDetail.vue', async () => {
         'data-upload': String(p.caps.upload), 'data-key': String(p.memoryKey?.[0]),
       },
         `${p.node.name}|${(p.chapters ?? []).map((c: { name: string }) => c.name).join(',')}`),
-    }),
-  }
-})
-vi.mock('../features/memory/components/MemoriesSection.vue', async () => {
-  const { defineComponent, h } = await import('vue')
-  const { memoryCapabilities } = await import('../features/memory/capabilities')
-  const { targetOf } = await import('../core/access')
-  return {
-    default: defineComponent({
-      name: 'MemoriesSectionStub',
-      props: ['folder', 'nodes', 'epochs', 'access', 'tree', 'viewMode'],
-      emits: ['openNode', 'create'],
-      setup: (p) => () => h('section', {
-        class: 'section-stub', 'data-readonly': String(!memoryCapabilities(p.access, targetOf(p.tree, p.folder)).createMemory),
-        'data-view': p.viewMode,
-      },
-        `folder=${p.folder?.name ?? '-'}|memories=${p.nodes.map((n: { name: string }) => n.name).join(',')}`),
-    }),
-  }
-})
-vi.mock('../features/files/components/FilesSection.vue', async () => {
-  const { defineComponent, h } = await import('vue')
-  const { filesCapabilities } = await import('../features/files/capabilities')
-  const { targetOf } = await import('../core/access')
-  return {
-    default: defineComponent({
-      name: 'FilesSectionStub',
-      props: ['folder', 'nodes', 'epochs', 'access', 'tree', 'viewMode'],
-      emits: ['openNode', 'create', 'rename'],
-      setup: (p) => () => h('section', {
-        class: 'files-stub', 'data-deletable': String(filesCapabilities(p.access, targetOf(p.tree, p.folder)).deleteFile),
-        'data-view': p.viewMode,
-      }, `files=${p.nodes.map((n: { name: string }) => n.name).join(',')}`),
     }),
   }
 })
@@ -156,10 +128,13 @@ import { FILE_KIND } from '../features/files/kinds'
 import { capabilityState } from '../shared/state/capabilities'
 import { SHARING_PUBLIC_LINKS } from '../features/platform/capabilities'
 import { realI18n, t } from '../test/i18n'
-import { chooseNew } from '../test/newMenu'
+import { chooseNew, hasNewMenu, newMenuLabels } from '../test/newMenu'
+import { actionIdsOf, clickAction, rowOf, titlesOf } from '../test/levelRows'
 import PrimeVue from 'primevue/config'
 import { registry } from '../core/applications/registry'
 import { treeNode } from '../test/models'
+import { stubApi } from '../test/apiMock'
+import { filesApi } from '../features/files/api'
 import { setViewMode, useViewMode } from '../shared/state/useViewMode'
 import { setLevelTab } from '../shared/state/useLevelTab'
 
@@ -174,46 +149,56 @@ const TREE: TreeNode[] = [
   node({ id: 'day1', kind: CHAPTER_KIND, name: 'Day1', parentId: 'italy', orderIndex: 0 }),
 ]
 
+const mounted: { unmount(): void }[] = []
 async function mountAt(hash: string) {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'home', component: { template: '<div />' } }] })
   await router.replace({ name: 'home', hash })
   await router.isReady()
-  const wrapper = mount(MemoryHomeView, { global: { plugins: [router, realI18n(), PrimeVue], directives: { tooltip: {} } } })
+  const SpaceMapStub = { name: 'SpaceMap', props: ['pins', 'covers'], emits: ['open'], template: '<div class="space-map-stub" />' }
+  const wrapper = mount(MemoryHomeView, { global: { plugins: [router, realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { SpaceMap: SpaceMapStub } } })
+  mounted.push(wrapper)
   await flushPromises()
   return wrapper
 }
 type Mounted = Awaited<ReturnType<typeof mountAt>>
-const folderCards = (w: Mounted) => w.findAll('button.veyq-folder-card').map((b) => b.text())
+const folderCards = (w: Mounted) => w.findAll('li.veyq-level-item.is-folder .veyq-level-item-title').map((b) => b.text())
+
+// The "New" and row menus are popups teleported to the body; leave none behind for the next case.
+afterEach(() => { mounted.splice(0).forEach((w) => w.unmount()) })
 
 beforeEach(() => {
   setViewMode('grid')
   setLevelTab('all')
   vi.mocked(listMyTenants).mockResolvedValue([])
+  stubApi(filesApi, { listFiles: { items: [] } })
   vi.mocked(isFavorite).mockReturnValue(false)
   treeStore.nodes = TREE.map((n) => ({ ...n }))
   capabilityState.ids = [SHARING_PUBLIC_LINKS]
 })
 
 describe('MemoryHomeView over the real registry', () => {
-  it("renders core's level view at the scope root: Memories' section with the Memories bucket, then the folders", async () => {
+  // Since inbox #407 the level is one list: the folders first, then the Memory rows (no section of Memories' own).
+  it("renders core's level view at the scope root: the folders, then the Memories as rows of the one list", async () => {
     const w = await mountAt('#~me')
-    expect(w.find('.section-stub').text()).toBe('folder=-|memories=Solo')
+    expect(titlesOf(w)).toEqual(['Trips', 'Solo'])
     expect(folderCards(w)).toEqual(['Trips'])
+    expect(w.find('li.veyq-level-item[data-kind="MEMORY"] .veyq-level-item-meta').text()).toContain(t('memory.kindMemory'))
     expect(w.find('.detail-stub').exists()).toBe(false)
   })
 
-  it('renders the level view for a folder, handing the section the folder and its own children', async () => {
+  it('renders the level view for a folder: its header and its own children as rows', async () => {
     const w = await mountAt('#~me/trips')
-    expect(w.find('.section-stub').text()).toBe('folder=Trips|memories=Italy')
+    expect(titlesOf(w)).toEqual(['Italy'])
     expect(folderCards(w)).toEqual([])
     expect(w.find('.veyq-node-header-title').text()).toBe('Trips')
-    expect(w.find('.section-stub').attributes('data-readonly')).toBe('false')
+    expect(await newMenuLabels(w), 'a member may add a Memory here').toContain(t('memory.create'))
   })
 
   // A guest's identity folder (ADR 0080 decision 11) and a folder below it: a member places nothing there, so the level
   // is read-only (the server refuses a create or a move in); the folder beside it stays writable. It offers no share and
-  // leaves out its empty sections (inbox #385): Memories' empty one is not rendered there, Files' with the file is.
-  it('renders a guest identity folder, and a folder below it, read-only, unshared and without its empty sections', async () => {
+  // leaves out its empty tabs (inbox #385): with only the file there, the level has one tab - no tab bar - and in the
+  // folder below it nothing is offered to add (no "New" menu).
+  it('renders a guest identity folder, and a folder below it, read-only, unshared and without its empty tabs', async () => {
     treeStore.nodes = [
       ...TREE.map((n) => ({ ...n })),
       node({ id: 'anna', kind: FOLDER_KIND, name: 'Anna', parentId: 'trips', shareIdentityId: 'identity-1' }),
@@ -223,26 +208,28 @@ describe('MemoryHomeView over the real registry', () => {
     ]
     const share = (w: Mounted) => w.find(`button[aria-label="${t('share.share')}"]`)
     const anna = await mountAt('#~me/trips/anna')
-    expect(anna.find('.section-stub').exists(), 'no empty Memories section').toBe(false)
-    expect(anna.find('.files-stub').text()).toBe('files=scan.pdf')
+    expect(titlesOf(anna)).toEqual(['Deep', 'scan.pdf'])
+    expect(anna.find('li.veyq-level-item[data-kind="MEMORY"]').exists(), 'no Memory row, no empty Memories tab').toBe(false)
+    expect(anna.find('.veyq-level-tabs').exists(), 'one tab only: no tab bar').toBe(false)
     // …but a member deletes what a guest sent there, file by file (inbox #391)
-    expect(anna.find('.files-stub').attributes('data-deletable')).toBe('true')
+    expect(await actionIdsOf(anna, 'scan.pdf')).toContain('delete')
     expect(folderCards(anna)).toEqual(['Deep'])
     expect(share(anna).exists()).toBe(false)
+    expect(hasNewMenu(anna), "nothing may be added in a guest's folder").toBe(false)
     expect(anna.find(`.veyq-level-toolbar button[aria-label="${t('node.trash.open')}"]`).exists(), 'no trash where nothing is written').toBe(false)
     const deep = await mountAt('#~me/trips/anna/deep')
-    expect(deep.find('.section-stub').attributes('data-readonly')).toBe('true')
-    expect(deep.find('.files-stub').exists(), 'no empty Files section').toBe(false)
-    // control: the folder beside it is writable, shared, and shows its sections empty or not
+    expect(titlesOf(deep)).toEqual(['Memo'])
+    expect(hasNewMenu(deep), 'read-only below it as well').toBe(false)
+    // control: the folder beside it is writable, shared, and offers the New menu
     const trips = await mountAt('#~me/trips')
-    expect(trips.find('.section-stub').attributes('data-readonly')).toBe('false')
+    expect(await newMenuLabels(trips)).toContain(t('memory.create'))
     expect(share(trips).exists()).toBe(true)
   })
 
-  // Inbox #404: the view mode is one app-wide preference, but the level shows it only where a shown section offers it.
-  // A member who last chose the map opens a guest's identity folder: Memories' section (the map's) is left out there,
-  // so the level shows the grid — Files' rows and the folders, not a blank page — and offers the folders' switch with
-  // the grid pressed; the stored map is kept, and the next level with Memories' section shows it again.
+  // Inbox #404: the view mode is one app-wide preference, but the level shows it only where something on screen offers it.
+  // A member who last chose the map opens a guest's identity folder: Memories (the map's) has no node and no entry there,
+  // so the level shows the grid - Files' rows and the folders, not a blank page - and offers the switch with the grid
+  // pressed; the stored map is kept, and the next level with Memories shows the map again.
   it('a stored map shows an identity folder in the grid, and the map again where Memories draws it', async () => {
     treeStore.nodes = [
       ...TREE.map((n) => ({ ...n })),
@@ -252,16 +239,17 @@ describe('MemoryHomeView over the real registry', () => {
     ]
     setViewMode('map')
     const anna = await mountAt('#~me/trips/anna')
-    expect(anna.find('.section-stub').exists(), "Memories' empty section is left out").toBe(false)
-    expect(anna.find('.files-stub').attributes('data-view')).toBe('grid')
-    expect(anna.find('.files-stub').text()).toBe('files=scan.pdf')
+    expect(anna.find('.space-map-stub').exists(), 'no map where Memories has nothing to offer').toBe(false)
+    expect(anna.find('ul.veyq-level-list').classes()).not.toContain('is-list')
+    expect(anna.find('li.veyq-level-item.is-grid').exists()).toBe(true)
+    expect(titlesOf(anna)).toEqual(['Deep', 'scan.pdf'])
     expect(folderCards(anna)).toEqual(['Deep'])
     const pressed = anna.findAll('.veyq-level-toolbar .view-mode-button').filter((b) => b.attributes('aria-pressed') === 'true')
     expect(pressed.map((b) => b.attributes('aria-label'))).toEqual([t('node.viewGrid')])
     expect(useViewMode().viewMode.value, 'the stored preference is kept').toBe('map')
     const trips = await mountAt('#~me/trips')
-    expect(trips.find('.section-stub').attributes('data-view')).toBe('map')
-    expect(trips.find('.files-stub').attributes('data-view')).toBe('map')
+    expect(trips.find('.space-map-stub').exists(), "Memories' presentation replaces the list").toBe(true)
+    expect(trips.find('ul.veyq-level-list').exists()).toBe(false)
     expect(folderCards(trips), 'the folders step aside for the map').toEqual([])
   })
 
@@ -280,28 +268,26 @@ describe('MemoryHomeView over the real registry', () => {
     expect(first.find('.veyq-node-header-title').text()).toBe('Anna')
   })
 
-  // Files registers FILE with its own section (F1b): a file in a folder is listed there, after Memories' section, and no
-  // longer in core's fallback; the Memory beside it stays in Memories' section.
-  it('hands a FILE child to Files\' section, after Memories\', and leaves no fallback', async () => {
+  // Files' row factory lists a file at the level beside the Memory (inbox #407: one list, mixed by name, not grouped by
+  // application and not Memories-first as the sections were); no fallback row for it.
+  it("lists a FILE child as Files' row beside the Memory, with no unsupported fallback", async () => {
     treeStore.nodes = [...TREE.map((n) => ({ ...n })), node({ id: 'report', kind: FILE_KIND, name: 'report.pdf', parentId: 'trips' })]
     const w = await mountAt('#~me/trips')
-    expect(w.find('.section-stub').text()).toBe('folder=Trips|memories=Italy')
-    expect(w.find('.files-stub').text()).toBe('files=report.pdf')
-    expect(w.findAll('section').map((s) => s.classes()).findIndex((c) => c.includes('files-stub')))
-      .toBeGreaterThan(w.findAll('section').map((s) => s.classes()).findIndex((c) => c.includes('section-stub')))
-    expect(w.find('.veyq-level-fallback').exists()).toBe(false)
+    // Order is by name now (Italy < report.pdf), whatever the kind - it used to be Memories' section, then Files'.
+    expect(titlesOf(w)).toEqual(['Italy', 'report.pdf'])
+    expect(w.find('li.veyq-level-item[data-kind="FILE"] .veyq-level-item-meta').text()).toContain(t('files.kindFile'))
+    expect(w.find('li.is-unsupported').exists()).toBe(false)
     expect(w.text()).not.toContain(t('home.unsupportedKind'))
   })
 
-  // A section's `rename` (F1b: a file is renamed from its row, it never opens) reaches the host through core's level
-  // view: core's name dialog opens in rename mode for THAT node, at its level.
-  it('a section\'s rename opens core\'s name dialog in rename mode for the node it names', async () => {
+  // A row's `rename` (F1b: a file is renamed from its row, it never opens) reaches the host through core's level view:
+  // core's name dialog opens in rename mode for THAT node, at its level - by a real click on the row's menu entry.
+  it("a row's rename opens core's name dialog in rename mode for the node it names", async () => {
     const report = node({ id: 'report', kind: FILE_KIND, name: 'report.pdf', parentId: 'trips' })
     treeStore.nodes = [...TREE.map((n) => ({ ...n })), report]
     const w = await mountAt('#~me/trips')
     expect(w.find('.name-stub').exists()).toBe(false)
-    w.findComponent({ name: 'FilesSectionStub' }).vm.$emit('rename', report)
-    await flushPromises()
+    await clickAction(w, 'report.pdf', 'rename')
     expect(w.find('.name-stub').text()).toBe('rename|trips|report.pdf')
   })
 
@@ -311,7 +297,7 @@ describe('MemoryHomeView over the real registry', () => {
     expect(d.text()).toBe('Italy|Day1,Day2')
     expect(d.attributes('data-key')).toBe('9')
     expect(d.attributes('data-shareable')).toBe('true')
-    expect(w.find('.section-stub').exists()).toBe(false)
+    expect(w.find('ul.veyq-level-list').exists(), 'the detail replaces the level').toBe(false)
   })
 
   // A chapter is a share root of its own (ADR 0080 Decision 13): the same detail offers the share affordances, and both
@@ -365,9 +351,8 @@ describe('MemoryHomeView over the real registry', () => {
     expect(w.find('.delete-stub').text()).toBe('Italy')
   })
 
-  it("wires the level events: a create by kind (MEMORY's dialog from the section, core's for a folder), trash, and opening a child navigates", async () => {
+  it("wires the level events: a create by kind (MEMORY's dialog from the New menu, core's for a folder), trash, and opening a child navigates", async () => {
     const w = await mountAt('#~me')
-    const section = w.findComponent({ name: 'MemoriesSectionStub' })
 
     await chooseNew(w, t('memory.create')) // the real registry's entry of the Memory kind
     await flushPromises()
@@ -382,27 +367,27 @@ describe('MemoryHomeView over the real registry', () => {
     await flushPromises()
     expect(w.find('.trash-stub').exists()).toBe(true)
 
-    section.vm.$emit('openNode', TREE[1])
+    await rowOf(w, 'Solo').find('button.veyq-level-item-main').trigger('click')
     await flushPromises()
     expect(w.find('.detail-stub').text()).toBe('Solo|')
   })
 
-  // A kind whose application registered no createDialog (Files' FILE, F0): a create of it opens nothing — no dialog of
-  // another kind, no core dialog — and the level stays as it was.
-  it('a create of a kind with no createDialog opens nothing', async () => {
+  // A kind whose application registered no createDialog (Files' FILE, F0) has no create entry at all in the New menu
+  // (Files' upload is a level action, not a create of a kind): choosing "Upload files" opens no dialog of another kind and
+  // no core dialog, and the level stays as it was; control: the entry with a registered dialog opens it.
+  it('a New entry of a kind with no createDialog opens nothing', async () => {
     const w = await mountAt('#~me/trips')
-    const section = w.findComponent({ name: 'MemoriesSectionStub' })
-    section.vm.$emit('create', FILE_KIND)
-    await flushPromises()
+    const labels = await newMenuLabels(w)
+    expect(labels).toContain(t('files.upload'))
+    await chooseNew(w, t('files.upload'))
     expect(w.find('.create-stub').exists()).toBe(false)
     expect(w.find('.name-stub').exists()).toBe(false)
-    expect(w.find('.section-stub').text(), 'the level is untouched').toBe('folder=Trips|memories=Italy')
-    section.vm.$emit('create', MEMORY_KIND) // control: the same path with a registered dialog opens it
-    await flushPromises()
+    expect(titlesOf(w), 'the level is untouched').toEqual(['Italy'])
+    await chooseNew(w, t('memory.create')) // control: the same path with a registered dialog opens it
     expect(w.find('.create-stub').text()).toBe('MEMORY|trips')
   })
 
-  it('wires the folder overview card (rename, delete for the folder) and a folder card navigates', async () => {
+  it('wires the folder header (rename, delete for the folder) and a folder row navigates', async () => {
     const w = await mountAt('#~me/trips')
     await w.find(`button[aria-label="${t('node.rename')}"]`).trigger('click')
     await flushPromises()
@@ -423,9 +408,10 @@ describe('MemoryHomeView over the real registry', () => {
     expect(loadTree).toHaveBeenCalled()
 
     const root = await mountAt('#~me')
-    await root.findAll('button.veyq-folder-card').find((b) => b.text() === 'Trips')!.trigger('click')
+    await rowOf(root, 'Trips').find('button.veyq-level-item-main').trigger('click')
     await flushPromises()
-    expect(root.find('.section-stub').text()).toBe('folder=Trips|memories=Italy')
+    expect(titlesOf(root)).toEqual(['Italy'])
+    expect(root.find('.veyq-node-header-title').text()).toBe('Trips')
   })
 })
 
@@ -494,29 +480,34 @@ describe('MemoryHomeView resolving the fragment grammar', () => {
     expect((await mountAt('#~me/trips/memories/italy')).find('.detail-stub').text()).toContain('Italy')
     const old = await mountAt('#~me/trips/italy')
     expect(old.find('.detail-stub').exists()).toBe(false)
-    expect(old.find('.section-stub').text()).toBe('folder=-|memories=Solo') // collapsed to the scope root
+    expect(titlesOf(old)).toContain('Solo') // collapsed to the scope root
+    expect(old.find('.veyq-node-header').exists()).toBe(false)
   })
 
   it('a slug shared by a file and a folder: the file without the slash, the folder with it or with a child behind it', async () => {
     const file = await mountAt('#~me/trips/report')
-    expect(file.find('.section-stub').exists()).toBe(false)
+    expect(file.find('ul.veyq-level-list').exists()).toBe(false)
     expect(file.find('.file-detail-stub').text()).toBe('file=Report') // a file opens its detail (Files' FileDetail)
     const folder = await mountAt('#~me/trips/report/')
-    expect(folder.find('.section-stub').text()).toContain('folder=Report')
+    // (the folder beside the same-named file is headed "Report (2)": equal names are numbered across kinds)
+    expect(folder.find('.veyq-node-header').exists()).toBe(true)
+    expect(titlesOf(folder)).toEqual(['Inner'])
     const inner = await mountAt('#~me/trips/report/inner/')
-    expect(inner.find('.section-stub').text()).toContain('folder=Inner')
+    expect(inner.find('.veyq-node-header-title').text()).toBe('Inner')
   })
 
   it('a folder called "Memories" lives at `memories-2`; the bare application segment opens nothing', async () => {
-    expect((await mountAt('#~me/memories-2/')).find('.section-stub').text()).toContain('folder=Memories')
-    expect((await mountAt('#~me/memories/')).find('.section-stub').text()).toBe('folder=-|memories=Solo')
+    expect((await mountAt('#~me/memories-2/')).find('.veyq-node-header-title').text()).toBe('Memories')
+    const bare = await mountAt('#~me/memories/')
+    expect(bare.find('.veyq-node-header').exists(), 'collapsed to the scope root').toBe(false)
+    expect(titlesOf(bare)).toContain('Solo')
   })
 
   it('clicking a folder card pushes the fragment `location.ts` builds: the folder\'s path with its slash', async () => {
     const w = await mountAt('#~me')
-    await w.findAll('button.veyq-folder-card').find((b) => b.text() === 'Trips')!.trigger('click')
+    await rowOf(w, 'Trips').find('button.veyq-level-item-main').trigger('click')
     await flushPromises()
     expect(w.vm.$route.hash).toBe('#~me/trips/')
-    expect(w.find('.section-stub').text()).toContain('folder=Trips')
+    expect(w.find('.veyq-node-header-title').text()).toBe('Trips')
   })
 })

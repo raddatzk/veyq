@@ -2,8 +2,8 @@
 // composition root (`web/src/applications.ts`), which is the only core file allowed to import this application.
 // The registry is a parameter, not an import of the singleton, so a test can register into a fresh one.
 //
-// Memories' section of the folder level view (`MemoriesSection`) rides on its two kinds' descriptors: core's level view
-// renders it once, between the folder's overview card and the sub-folders (cr-files-application P4b). So do its dialogs
+// Memories' rows of the folder level (`memoryRows`, inbox #407) ride on its two kinds' descriptors: core's level view calls
+// the row factory once and draws every Memory as a row or a tile of the one list (cr-files-application P4b). So do its dialogs
 // (P4c): `MemoryNodeDialog` creates a Memory or a chapter (the kind picks which), `ShareDialog` manages a Memory's or a
 // chapter's links (its uploader variant included); a rename of either is core's `FolderNameDialog`. The same detail
 // serves a member and a share guest (inbox #401): the host picks the data source by `access.mode`. The pinned rail in the sidebar is a list slot: Memories adds one item
@@ -15,7 +15,6 @@ import { FOLDER_KIND } from '../../core/node/kind'
 import type { LevelActionContext, Registry } from '../../core/applications/registry'
 import { GRID_VIEW, LIST_VIEW, type LevelViewOption } from '../../core/node/levelViews'
 import MemoryDetailHost from './components/MemoryDetailHost.vue'
-import MemoriesSection from './components/MemoriesSection.vue'
 import { memoryRows } from './levelRows'
 import MemoryNodeDialog from './components/MemoryNodeDialog.vue'
 import ShareDialog from './components/ShareDialog.vue'
@@ -35,18 +34,17 @@ export function registerMemories(registry: Registry): void {
   // A Memory (cr-0104) and a chapter (ADR 0080 Decision 13) are both share roots for every role — the backend's
   // `MemoryShareRoots` — and both open the same detail, to the gallery (cr-0060). A chapter's share wraps its own
   // `K_mem`: its guest holds nothing of the Memory above it.
-  // Both name the one section (rendered once, handed the children of both; a CHAPTER sits only inside a MEMORY, so at a
-  // folder level that is the Memories). `order` 10 leaves room on either side for another application's section.
-  // Its `views`: the card grid, its list variant and the places map (inbox #370) — core's level toolbar offers them.
-  const section = { order: 10, component: MemoriesSection, views: [GRID_VIEW, LIST_VIEW, MAP_VIEW], tabLabel: 'memory.memories' }
+  // Both name the one row source (called once, handed the nodes of both; a CHAPTER sits only inside a MEMORY, so at a folder
+  // level that is the Memories).
   // One create dialog and one share dialog serve both kinds: the create's `kind` prop picks Memory or chapter, the
   // share dialog reads `nodeKind` for its wording. Core's delete dialog titles each by its own noun (`deleteTitle`):
   // "Delete Memory", "Delete chapter".
-  // inbox #407: the same two kinds name ONE row factory, its tab, the presentations it switches between (the card grid and list
-  // are core's; the map is Memories' own, drawn by the factory) and the plain text of its tab while it has nothing.
+  // Its `views`: the card grid, its list variant and the places map (inbox #370) - core's level toolbar offers them; the grid
+  // and list are core's, the map is Memories' own, drawn by the factory. The same list names its tab and the plain text of
+  // that tab while it has nothing.
   const list = { rows: memoryRows, tabLabel: 'memory.memories', views: [GRID_VIEW, LIST_VIEW, MAP_VIEW], emptyText: () => 'memory.memoryEmpty' }
   const memories = {
-    detail: MemoryDetailHost, icon: 'pi pi-images', shareable: true, section, list, createDialog: MemoryNodeDialog, shareDialog: ShareDialog,
+    detail: MemoryDetailHost, icon: 'pi pi-images', shareable: true, list, createDialog: MemoryNodeDialog, shareDialog: ShareDialog,
   }
   // Where each may be moved (core's move dialog, inbox #358) mirrors the backend's `MemoryNodeKindRules`: a Memory at the
   // root or in a folder, a chapter only directly in a Memory.

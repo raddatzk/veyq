@@ -82,54 +82,6 @@
 /* The card grid of a node list outside an application — the same track rule as Memories' `.memory-card-grid`: the
    level view's sub-folders (core/node/LevelView.vue, with `.veyq-level-grid` and `.veyq-folder-card` at the end of this
    sheet) and its fallback section's `.veyq-node-card` tiles — a member's level and a share guest's alike (inbox #401). */
-.veyq-card-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 260px));
-  align-items: stretch;
-  min-width: 0;
-  max-width: 100%;
-  gap: 1rem;
-}
-
-.veyq-node-card {
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  align-items: center;
-  gap: 0.8rem;
-  width: 100%;
-  min-height: 82px;
-  padding: 1rem;
-  color: var(--app-text);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.veyq-node-card > .pi {
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 10px;
-  background: var(--app-accent-soft);
-  color: var(--app-accent);
-  font-size: 1.25rem;
-}
-
-/* A child of a kind no level section serves (core/node/LevelView.vue's fallback): listed, not openable. */
-.veyq-node-card-unsupported {
-  cursor: default;
-}
-
-.veyq-node-card-text {
-  display: grid;
-  gap: 0.15rem;
-  min-width: 0;
-}
-
-.veyq-node-card-text small {
-  color: var(--app-muted);
-}
 
 .veyq-empty {
   display: flex;
@@ -527,8 +479,9 @@
   }
 }
 
-/* The folder level view (core/node/LevelView.vue, cr-files-application P4d): the folder's overview card, the
-   sub-folders section, its folder cards and its new-folder card. Moved from Memories' `memory.css`, where this
+/* The folder level view (core/node/LevelView.vue, cr-files-application P4d; its list is the unified one at the end of this
+   sheet since inbox #407): the toolbar, the application tabs and the create card Memories' detail still uses. Moved from
+   Memories' `memory.css`, where this
    markup's `memory-folder-*`/`memory-create-card`/`memory-card-grid` rules lived, with the same declarations in
    the same order. They sit at the END of this sheet on purpose: in `memory.css` they came after every rule of
    `ui.css`, `layout.css` and `forms.css`, and some of those tie with them on specificity and lose by source order
@@ -538,24 +491,7 @@
    `memory.css` twin, the same declarations in the same order): Memories adds only `.memory-create-card-memory` and
    its list variant in `memory.css`, which come after these and win where they differ — the one place the twin's later
    position had decided anything, `white-space: nowrap` on the label beating the modifier's `normal`, is kept by the
-   modifier no longer saying `normal`. The grid is `.veyq-card-grid` (the identical track rule) plus `.veyq-level-grid` for the
-   list variant and the narrow-screen column. The dark counterparts are in `dark.css`. */
-.veyq-level-section-header h2 {
-  font-size: 1rem;
-}
-
-.veyq-level-section-header span {
-  display: inline-grid;
-  place-items: center;
-  min-width: 1.75rem;
-  min-height: 1.55rem;
-  padding: 0.12rem 0.5rem;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--app-muted);
-  font-size: 0.9rem;
-  font-weight: 700;
-}
+   modifier no longer saying `normal`. The dark counterparts are in `dark.css`. */
 
 .veyq-level-view {
   display: grid;
@@ -612,18 +548,6 @@
   background: var(--app-accent);
 }
 
-.veyq-level-grid.is-list {
-  grid-template-columns: 1fr;
-  gap: 0.4rem;
-}
-
-.veyq-level-grid.is-list .veyq-folder-card,
-.veyq-level-grid.is-list .veyq-create-card {
-  min-height: 0;
-  padding: 0.6rem 0.75rem;
-}
-
-.veyq-folder-card,
 .veyq-create-card {
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr);
@@ -637,7 +561,6 @@
   cursor: pointer;
 }
 
-.veyq-folder-card > .pi,
 .veyq-create-card .pi {
   display: grid;
   place-items: center;
@@ -650,15 +573,9 @@
   font-size: 1.25rem;
 }
 
-.veyq-folder-card > .pi,
 .veyq-create-card .pi {
   width: 42px;
   height: 42px;
-}
-
-.veyq-folder-card > .pi {
-  background: var(--app-info-soft);
-  color: var(--app-info-text);
 }
 
 /* The node header (core/node/components/NodeHeader.vue, inbox #406): leading visual, name (+ subtitle + meta), actions on
@@ -794,7 +711,6 @@
   color: var(--app-control-text);
 }
 
-.veyq-folder-card strong,
 .veyq-create-card strong {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -802,10 +718,6 @@
 }
 
 @media (max-width: 520px) {
-  .veyq-level-grid {
-    grid-template-columns: 1fr;
-    max-width: none;
-  }
 }
 
 /* The unified level list (core/node/LevelView.vue + core/node/components/LevelRowItem.vue, inbox #407): ONE list of

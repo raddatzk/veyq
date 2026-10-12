@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { defineComponent } from 'vue'
 import { createRegistry, RESERVED_ROUTE_SEGMENTS, type LifecycleHooks } from './registry'
 import { FOLDER_KIND, type NodeKind } from '../node/kind'
-import { GRID_VIEW, LIST_VIEW } from '../node/levelViews'
+import { GRID_VIEW } from '../node/levelViews'
 import { MEMORY_KIND, CHAPTER_KIND } from '../../features/memory/kinds'
 import { fileNameSlug, slugify } from '../../shared/naming'
 
@@ -204,100 +204,6 @@ describe('registry: list slots (topbarTray, sidebarPins)', () => {
   })
 })
 
-// cr-files-application P4b: the folder level view is core's; a kind brings its section with its descriptor.
-describe('registry: level sections', () => {
-  it('is empty until a kind brings one, and the level view slot is gone', () => {
-    const r = createRegistry()
-    expect(r.sections()).toEqual([])
-    // @ts-expect-error the level view is core's since P4b, and `slot()` went with the last single-claim slot in P4c
-    expect(r.slot).toBeUndefined()
-  })
-
-  it('sorts the sections by order, not by registration', () => {
-    const r = createRegistry()
-    r.registerKind({ kind: 'LATE', icon: 'x', shareable: false, section: { order: 20, component: Other } })
-    r.registerKind({ kind: 'EARLY', icon: 'x', shareable: false, section: { order: 10, component: Stub } })
-    expect(r.sections()).toEqual([
-      { component: Stub, order: 10, views: [], kinds: ['EARLY'] },
-      { component: Other, order: 20, views: [], kinds: ['LATE'] },
-    ])
-  })
-
-  it('keeps registration order on a tie (the order each section was first named)', () => {
-    const r = createRegistry()
-    r.registerKind({ kind: 'ONE', icon: 'x', shareable: false, section: { order: 10, component: Other } })
-    r.registerKind({ kind: 'TWO', icon: 'x', shareable: false, section: { order: 10, component: Stub } })
-    expect(r.sections().map((s) => s.component)).toEqual([Other, Stub])
-  })
-
-  it('keys a section by its component: two kinds naming one component are ONE section carrying both kinds', () => {
-    const r = createRegistry()
-    r.registerKind({ kind: MEMORY_KIND, icon: 'x', shareable: true, section: { order: 10, component: Stub } })
-    r.registerKind({ kind: 'OTHER', icon: 'x', shareable: false, section: { order: 5, component: Other } })
-    r.registerKind({ kind: CHAPTER_KIND, icon: 'x', shareable: true, section: { order: 10, component: Stub } })
-    expect(r.sections()).toEqual([
-      { component: Other, order: 5, views: [], kinds: ['OTHER'] },
-      { component: Stub, order: 10, views: [], kinds: [MEMORY_KIND, CHAPTER_KIND] },
-    ])
-  })
-
-  it('refuses a kind naming a shared section with another order, and registers nothing of it', () => {
-    const r = createRegistry()
-    r.registerKind({ kind: MEMORY_KIND, icon: 'x', shareable: true, section: { order: 10, component: Stub } })
-    expect(() => r.registerKind({ kind: CHAPTER_KIND, icon: 'x', shareable: true, section: { order: 11, component: Stub } }))
-      .toThrow(/CHAPTER names the section of MEMORY with order 11, not 10/)
-    expect(r.kind(CHAPTER_KIND).supported).toBe(false)
-    expect(r.sections()).toEqual([{ component: Stub, order: 10, views: [], kinds: [MEMORY_KIND] }])
-  })
-
-  // inbox #348: a section names its tab label (the application's own i18n key); one component has one tab.
-  it('carries a section\'s tab label, and refuses a kind naming a shared section with another one, registering nothing of it', () => {
-    const r = createRegistry()
-    r.registerKind({ kind: MEMORY_KIND, icon: 'x', shareable: true, section: { order: 10, component: Stub, tabLabel: 'x.tab' } })
-    r.registerKind({ kind: 'OTHER', icon: 'x', shareable: false, section: { order: 20, component: Other } })
-    expect(() => r.registerKind({ kind: CHAPTER_KIND, icon: 'x', shareable: true, section: { order: 10, component: Stub } }))
-      .toThrow(/CHAPTER names the section of MEMORY with tab label undefined, not x.tab/)
-    expect(r.kind(CHAPTER_KIND).supported).toBe(false)
-    r.registerKind({ kind: CHAPTER_KIND, icon: 'x', shareable: true, section: { order: 10, component: Stub, tabLabel: 'x.tab' } })
-    expect(r.sections().map((x) => x.tabLabel)).toEqual(['x.tab', undefined])
-  })
-
-  // inbox #370: a section names its presentations; core's level toolbar offers them. One component renders one way.
-  it('carries a section\'s views, and refuses a kind naming a shared section with other views, registering nothing of it', () => {
-    const r = createRegistry()
-    const map = { mode: 'map', icon: 'pi pi-map', label: 'x.map' } as const
-    r.registerKind({ kind: MEMORY_KIND, icon: 'x', shareable: true, section: { order: 10, component: Stub, views: [GRID_VIEW, LIST_VIEW, map] } })
-    r.registerKind({ kind: 'OTHER', icon: 'x', shareable: false, section: { order: 20, component: Other } })
-    expect(() => r.registerKind({ kind: CHAPTER_KIND, icon: 'x', shareable: true, section: { order: 10, component: Stub, views: [GRID_VIEW] } }))
-      .toThrow(/CHAPTER names the section of MEMORY with views \[grid\], not \[grid, list, map\]/)
-    expect(r.kind(CHAPTER_KIND).supported).toBe(false)
-    r.registerKind({ kind: CHAPTER_KIND, icon: 'x', shareable: true, section: { order: 10, component: Stub, views: [GRID_VIEW, LIST_VIEW, map] } })
-    expect(r.sections()).toEqual([
-      { component: Stub, order: 10, views: [GRID_VIEW, LIST_VIEW, map], kinds: [MEMORY_KIND, CHAPTER_KIND] },
-      { component: Other, order: 20, views: [], kinds: ['OTHER'] },
-    ])
-  })
-
-  it('a kind without a section adds none, and a refused re-registration does not add its section', () => {
-    const r = createRegistry()
-    r.registerKind({ kind: 'LEAF', icon: 'x', shareable: false })
-    expect(r.sections()).toEqual([])
-    r.registerKind({ kind: MEMORY_KIND, icon: 'x', shareable: true })
-    expect(() => r.registerKind({ kind: MEMORY_KIND, icon: 'x', shareable: true, section: { order: 1, component: Stub } })).toThrow(/already registered/)
-    expect(r.sections()).toEqual([])
-  })
-
-  it('hands out a copy: mutating what sections() returned changes nothing', () => {
-    const r = createRegistry()
-    r.registerKind({ kind: MEMORY_KIND, icon: 'x', shareable: true, section: { order: 10, component: Stub } })
-    const got = r.sections() as unknown as { kinds: string[] }[]
-    got[0].kinds.push('FORGED')
-    ;(got[0] as unknown as { views: unknown[] }).views.push(GRID_VIEW)
-    ;(got as unknown[]).length = 0
-    expect(r.sections()).toEqual([{ component: Stub, order: 10, views: [], kinds: [MEMORY_KIND] }])
-  })
-})
-
 describe('registry: drop pages (share bodies)', () => {
   it('is empty until claimed: shareBody() is null, not undefined', () => {
     const r = createRegistry()
@@ -481,6 +387,7 @@ describe('registry: the level "New" menu (inbox #406)', () => {
   })
 })
 
+
 // inbox #407: the unified level list - a kind names its row factory, its tab and its views; the registry derives the row
 // sources and the tabs.
 describe('registry: the unified level list', () => {
@@ -488,10 +395,37 @@ describe('registry: the unified level list', () => {
   const rowsB = () => ({ row: () => null })
   const map = { mode: 'map', icon: 'pi pi-map', label: 'x.map' } as const
 
-  it('is empty until a kind names a row factory', () => {
+  it('is empty until a kind names a row factory, and the sections and the level view slot are gone', () => {
     const r = createRegistry()
     expect(r.lists()).toEqual([])
     expect(r.tabs()).toEqual([])
+    // @ts-expect-error the sections were retired with the unified list (inbox #407): rows replace them
+    expect(r.sections).toBeUndefined()
+    // @ts-expect-error the level view is core's since P4b, and `slot()` went with the last single-claim slot in P4c
+    expect(r.slot).toBeUndefined()
+  })
+
+  it('a kind without a list adds none, and a refused re-registration does not add its list or its tab', () => {
+    const r = createRegistry()
+    r.registerKind({ kind: 'LEAF', icon: 'x', shareable: false })
+    expect(r.lists()).toEqual([])
+    r.registerKind({ kind: MEMORY_KIND, icon: 'x', shareable: true })
+    expect(() => r.registerKind({ kind: MEMORY_KIND, icon: 'x', shareable: true, list: { rows: rowsA, tabLabel: 'x.mem' } })).toThrow(/already registered/)
+    expect(r.lists()).toEqual([])
+    expect(r.tabs()).toEqual([])
+  })
+
+  it('hands out copies: mutating what lists() and tabs() returned changes nothing', () => {
+    const r = createRegistry()
+    r.registerKind({ kind: MEMORY_KIND, icon: 'x', shareable: true, list: { rows: rowsA, tabLabel: 'x.mem' } })
+    const lists = r.lists() as unknown as { kinds: string[]; views: unknown[] }[]
+    lists[0].kinds.push('FORGED')
+    lists[0].views.push(GRID_VIEW)
+    ;(lists as unknown[]).length = 0
+    const tabs = r.tabs() as unknown as { kinds: string[] }[]
+    tabs[0].kinds.push('FORGED')
+    expect(r.lists()).toEqual([{ rows: rowsA, kinds: [MEMORY_KIND], views: [] }])
+    expect(r.tabs().map((t) => t.kinds)).toEqual([[MEMORY_KIND]])
   })
 
   it('keys a row source by its function: two kinds naming one factory are ONE source carrying both, in registration order', () => {
@@ -512,6 +446,10 @@ describe('registry: the unified level list', () => {
       .toThrow(/CHAPTER names the row source of MEMORY with views \[grid\], not \[grid, map\]/)
     expect(r.kind(CHAPTER_KIND)).toEqual({ supported: false, kind: CHAPTER_KIND })
     expect(r.lists()).toHaveLength(1)
+    // the refused kind added no tab either
+    expect(r.tabs()).toEqual([])
+    r.registerKind({ kind: CHAPTER_KIND, icon: 'x', shareable: true, list: { rows: rowsA, views: [GRID_VIEW, map] } })
+    expect(r.lists()).toEqual([{ rows: rowsA, kinds: [MEMORY_KIND, CHAPTER_KIND], views: [GRID_VIEW, map] }])
   })
 
   it('derives one tab per distinct label, in registration order: kinds sharing a label share a tab, the id is its first kind', () => {

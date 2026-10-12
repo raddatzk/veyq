@@ -1,26 +1,5 @@
 
 
-.memory-section {
-  gap: 0.75rem;
-}
-
-.memory-section-header h2 {
-  font-size: 1rem;
-}
-
-.memory-section-header span {
-  display: inline-grid;
-  place-items: center;
-  min-width: 1.75rem;
-  min-height: 1.55rem;
-  padding: 0.12rem 0.5rem;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--app-muted);
-  font-size: 0.9rem;
-  font-weight: 700;
-}
-
 .media-grid {
   position: relative;
   display: block;
@@ -243,13 +222,7 @@
   gap: 1.45rem;
 }
 
-.memory-section {
-  gap: 0.85rem;
-}
-
-/* The same track definition as core's `.veyq-card-grid` (ui.css), which the level view's Folders grid uses — Memories
-   and Folders sit in columns of the same width, so they keep scaling together as the viewport narrows (a `1fr`
-   track here would let the Folders grow past them). Change one, change both. */
+/* The chapters' card grid in a Memory's detail (the level's own list is core's `.veyq-level-list`, ui.css). */
 .memory-card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 260px));

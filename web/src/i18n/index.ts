@@ -761,17 +761,18 @@ const en = {
   // wording where it names a Memory (`memory.slugTaken`, `memory.deleteMemoryTitle`).
   node: {
     folders: 'Folders',
-    folderEmpty: 'No folders here yet.',
     folderCreate: 'New folder',
     // The level toolbar's menu of everything that can be created or uploaded here (inbox #406).
     new: 'New',
     // A level with nothing to show (also a guest's folder in a drop box): said once. `levelEmptyNew` is the same sentence for a
     // viewer who may add something; `{entries}` names what the "New" menu offers them (their own labels).
     levelEmpty: 'Nothing here yet.',
+    levelEmptyNew: 'Nothing here yet. Choose New to add something ({entries}).',
     // An application tab with nothing in it and no application text of its own (the unified level list, inbox #407).
     tabEmpty: 'Nothing here yet.',
     // The unified level list: a row's overflow menu button (`{name}` is the row's name), and a folder's meta line.
     rowMore: 'More actions for “{name}”',
+    kindFolder: 'Folder',
     createFolderTitle: 'Create a folder',
     renameTitle: 'Rename',
     nameLabel: 'Name',
@@ -937,7 +938,7 @@ const en = {
       remove: 'Remove cover',
       save: 'Save cover',
     },
-    // The toolbar button in Memories' section that opens core's node trash (`node.trash.*`).
+    // The toolbar button in the level view that opens core's node trash (`node.trash.*`).
     trash: {
       title: 'Trash',
       empty: 'The trash is empty.',
@@ -1068,7 +1069,7 @@ const en = {
       quota_exceeded: '“{name}” was not uploaded: there is no space left. Deleted files only free space once the trash is emptied.',
       failed: '“{name}” could not be uploaded.',
     },
-    // A guest's words in Files' section on a shared folder (components/FilesSection.vue, F2): no trash to point at, a link has
+    // A guest's words in Files' rows on a shared folder (levelRows.ts, F2): no trash to point at, a link has
     // a limit of its own (the code does not say which limit was reached, ADR 0073 §6).
     guest: {
       empty: 'No files here.',
@@ -2114,12 +2115,13 @@ const de: typeof en = {
   },
   node: {
     folders: 'Ordner',
-    folderEmpty: 'Hier gibt es noch keine Ordner.',
     folderCreate: 'Neuer Ordner',
     new: 'Neu',
     levelEmpty: 'Hier ist noch nichts.',
+    levelEmptyNew: 'Hier ist noch nichts. Wähle „Neu“, um etwas hinzuzufügen ({entries}).',
     tabEmpty: 'Hier ist noch nichts.',
     rowMore: 'Weitere Aktionen für „{name}“',
+    kindFolder: 'Ordner',
     createFolderTitle: 'Ordner anlegen',
     renameTitle: 'Umbenennen',
     nameLabel: 'Name',

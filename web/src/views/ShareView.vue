@@ -163,7 +163,7 @@ onBeforeUnmount(() => setPreferenceAudience('account'))
 /** The level view's live refresh (inbox #408, ADR 0081): re-resolve quietly and CONDITIONALLY — the last response's tag
  *  goes as `If-None-Match`, and a `304` is no work at all — and swap `head` only when the subtree differs (the
  *  fingerprint stays the fallback for a server that sends no tag). Resolves whether the link's state moved, the cue for
- *  the sections to look again at what lives beside the tree.
+ *  the row sources to look again at what lives beside the tree.
  *
  *  A link that is GONE (revoked, expired, deleted, its space going, its root trashed) is noticed here: the server's
  *  non-enumerable `404` flips the page to the unavailable state, as a reload would, and a changed password to the

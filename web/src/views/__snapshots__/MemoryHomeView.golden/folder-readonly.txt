@@ -24,59 +24,26 @@ div.veyq-node-host
           div.veyq-node-header-actions
             button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Share"]
               span.p-button-icon.pi.pi-share-alt
-    div.p-component.p-tabs.veyq-level-tabs
-      div.p-tablist
-        div.p-tablist-content.p-tablist-viewport
-          div.p-tablist-tab-list [role="tablist"] [aria-label="Applications"]
-            button.p-tab.p-tab-active [role="tab"]
-              "All"
-            button.p-tab [role="tab"]
-              "Memories"
-            button.p-tab [role="tab"]
-              "Files"
-            button.p-tab [role="tab"]
-              "Drop boxes"
-            span.p-tablist-active-bar [role="presentation"]
-        button.p-tablist-nav-button.p-tablist-next-button [aria-label="Next"]
-          svg.p-icon
-            path
-    section.memory-section.veyq-section
-      div.memory-section-header.veyq-section-header
-        h2
-          "Memories"
-        span
-          "1"
-      div.memory-card-grid
-        div.memory-card.p-card.p-component.veyq-card.veyq-card-interactive
-          div.p-card-body
-            div.p-card-content
-              button.memory-card-main
-                span.memory-card-cover
-                  span.memory-cover-image
-                    span.memory-card-icon.pi.pi-images
-                span.memory-card-text
-                  strong
-                    "Italy"
-                  small.memory-card-date
-                    "05/01/2024 – 05/10/2024"
-              button.memory-card-pin [aria-label="Favorite"] [aria-pressed="false"]
-                span.pi.pi-heart
-    section.files-section.veyq-section
-      div.veyq-section-header
-        h2
-          "Files"
-        span
-          "0"
-      p.veyq-empty.veyq-empty-inline
-        "No files yet."
-    section.veyq-section
-      div.veyq-level-section-header.veyq-section-header
-        h2
-          "Folders"
-        span
-          "1"
-      div.veyq-card-grid.veyq-level-grid
-        button.veyq-card.veyq-card-interactive.veyq-folder-card
-          span.pi.pi-folder
-          strong
-            "Rome"
+    ul.veyq-level-list
+      li.is-folder.is-grid.veyq-level-item
+        button.veyq-level-item-main [aria-label="Rome"]
+          span.veyq-level-item-visual
+            span.pi.pi-folder.veyq-level-item-icon
+          span.veyq-level-item-text
+            strong.veyq-level-item-title
+              "Rome"
+            small.veyq-level-item-meta
+              "Folder"
+      li.has-cover.is-grid.veyq-level-item
+        button.veyq-level-item-main [aria-label="Italy"]
+          span.veyq-level-item-visual
+            span.memory-cover-image
+              span.memory-cover-image-ph.pi.pi-images
+          span.veyq-level-item-text
+            strong.veyq-level-item-title
+              "Italy"
+            small.veyq-level-item-meta
+              "Memory · 05/01/2024 – 05/10/2024"
+        span.veyq-level-item-actions
+          button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-level-item-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
+            span.p-button-icon.pi.pi-heart

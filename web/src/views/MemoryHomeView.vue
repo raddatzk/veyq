@@ -7,8 +7,8 @@
 // registry descriptor (cr-files-application P4c) — the application that registered the kind fills them. A folder's
 // create and every node's rename are core's own `core/node/FolderNameDialog.vue`; FOLDER's share dialog is core's
 // `core/sharing/FolderShareDialog.vue`, which the registry pre-registers. The folder level is core's
-// (`core/node/LevelView.vue`), which asks the registry for each application's section. A move of any node — the folder
-// on screen, a section's row, an opened node, a drop box's guest folder — is core's `core/node/MoveNodeDialog.vue`
+// (`core/node/LevelView.vue`), which asks the registry for each application's rows. A move of any node — the folder
+// on screen, an application's row, an opened node, a drop box's guest folder — is core's `core/node/MoveNodeDialog.vue`
 // through the member's door (`nodeMover`, inbox #358). The fragment is a slug path derived from the names (ADR 0015), so
 // after every write that re-reads the tree the node on screen is followed to its path in the new tree (`stayOn`): a
 // move or a rename of it or of a folder above it, and an older equal-segment sibling restored or moved in, change it.
@@ -142,7 +142,7 @@ const uploaderVisible = ref(false) // the uploader (drop-box) variant of the sam
 const nameDialog = ref<{ mode: 'create' } | { mode: 'rename'; node: TreeNode; shown: string | null } | null>(null)
 const createKind = ref<NodeKind | null>(null)
 // A kind with no `createDialog` (or one nobody registered) opens nothing: the create action is the application's own
-// (its section or detail), so offering one without registering the dialog is that application's bug, not a state the
+// (its rows or detail), so offering one without registering the dialog is that application's bug, not a state the
 // host can explain.
 const createDialog = computed(() => {
   if (!createKind.value) return null
