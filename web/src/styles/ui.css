@@ -844,57 +844,40 @@ div.veyq-level-item-main,
 }
 
 .veyq-level-item.is-list .veyq-level-item-main {
-  grid-template-columns: 2.5rem minmax(0, 1fr);
+  grid-template-columns: 4rem minmax(0, 1fr);
   align-items: center;
   gap: 0.75rem;
 }
 
+/* ONE visual size for every kind (an icon tile, a Memory's cover, later a folder's cover): the names of a mixed list
+   start on the same line, and a tile's top edge is the same height whatever it shows. */
 .veyq-level-item.is-list .veyq-level-item-visual {
-  width: 2.5rem;
+  width: 4rem;
   height: 2.5rem;
   border-radius: 8px;
 }
 
-.veyq-level-item.is-list.has-cover .veyq-level-item-main {
-  grid-template-columns: 4rem minmax(0, 1fr);
-}
-
-.veyq-level-item.is-list.has-cover .veyq-level-item-visual {
-  width: 4rem;
-}
-
-/* A tile: the visual on top (a cover across the whole width, an icon in a square tile), then the text, then the actions. */
+/* A tile: the visual across the whole width on top (a cover or an icon tile of the same size), then the text, then the actions. */
 .veyq-level-item.is-grid {
   grid-template-rows: 1fr auto;
   gap: 0.25rem;
-  padding: 0.75rem;
+  padding: 0 0 0.5rem;
 }
 
 .veyq-level-item.is-grid .veyq-level-item-main {
   grid-template-rows: auto minmax(0, 1fr);
   gap: 0.7rem;
-  min-height: 7rem;
 }
 
 .veyq-level-item.is-grid .veyq-level-item-visual {
-  width: 3.5rem;
-  height: 3.5rem;
-  border-radius: 12px;
-}
-
-.veyq-level-item.is-grid.has-cover {
-  padding: 0 0 0.5rem;
-}
-
-.veyq-level-item.is-grid.has-cover .veyq-level-item-visual {
   width: 100%;
   height: auto;
   aspect-ratio: 16 / 9;
   border-radius: 12px 12px 0 0;
 }
 
-.veyq-level-item.is-grid.has-cover .veyq-level-item-text,
-.veyq-level-item.is-grid.has-cover .veyq-level-item-actions {
+.veyq-level-item.is-grid .veyq-level-item-text,
+.veyq-level-item.is-grid .veyq-level-item-actions {
   padding: 0 0.75rem;
 }
 
