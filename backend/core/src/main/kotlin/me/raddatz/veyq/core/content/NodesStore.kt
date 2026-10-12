@@ -87,8 +87,8 @@ class NodesStore {
      * never picks up, so `TreeRevisionBumpsTest` reads the sources for it and the per-path tests pin each site.
      *
      * **Only under the scope lock ([lockScope])**, which every caller already holds. That is what makes it race-free
-     * and deadlock-free: the lock serializes the first-bump insert (no second ask under another lock, as Memories'
-     * gallery counter needs: that bump runs without the scope lock), and the revision row, taken after it, is a leaf —
+     * and deadlock-free: the lock serializes the first-bump insert (no second ask under another lock, as a node's
+     * item-list counter needs: `NodeItemsRevisions.bump` runs without the scope lock), and the revision row, taken after it, is a leaf —
      * nothing waits on it while holding anything else. The increment is still ONE atomic `UPDATE`, never a read-add-write.
      */
     fun bumpTree(scopeId: String) {
