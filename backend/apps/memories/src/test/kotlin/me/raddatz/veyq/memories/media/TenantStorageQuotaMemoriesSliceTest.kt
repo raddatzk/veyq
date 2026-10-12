@@ -1,5 +1,6 @@
 package me.raddatz.veyq.memories.media
 
+import me.raddatz.veyq.core.testing.CoverKit
 import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.blob.UploadSessionEntity
 import me.raddatz.veyq.core.node.NodeEntity
@@ -88,10 +89,7 @@ class TenantStorageQuotaMemoriesSliceTest {
     fun aCoverCounts() {
         val f = fixture()
         val uploadId = memberStartOk(f, f.scopeB, d, ownerId = f.memoryB, role = "COVER")
-        given().header("Authorization", bearer(f.userId)).contentType(ContentType.JSON)
-            .body("""{"uploadId":"$uploadId"}""")
-            .`when`().post("/api/scopes/${f.scopeB}/nodes/${f.memoryB}/cover-blob")
-            .then().statusCode(200)
+        CoverKit.set(f.userId, f.scopeB, f.memoryB, uploadId, expectedBlobId = null).statusCode(204)
         assertTenantHolds(f, d.byteSize)
     }
 

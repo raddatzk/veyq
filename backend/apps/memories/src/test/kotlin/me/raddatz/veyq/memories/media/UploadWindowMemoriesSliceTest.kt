@@ -1,5 +1,6 @@
 package me.raddatz.veyq.memories.media
 
+import me.raddatz.veyq.core.testing.CoverKit
 import me.raddatz.veyq.core.testing.FakePresignProfile
 import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.blob.UploadSessionEntity
@@ -75,7 +76,7 @@ class UploadWindowMemoriesSliceTest {
         val uploadId = startStaged(scope.owner, scope.scopeId, TestBlob.SMALL, ownerId = memory, role = "COVER")
 
         commitCover(other, scope.scopeId, memory, uploadId).statusCode(404).body("code", equalTo("node_not_found"))
-        commitCover(scope.owner, scope.scopeId, memory, uploadId).statusCode(200)
+        commitCover(scope.owner, scope.scopeId, memory, uploadId).statusCode(204)
     }
 
     @Test
@@ -124,10 +125,7 @@ class UploadWindowMemoriesSliceTest {
             .then().statusCode(200)
 
     private fun commitCover(userId: String, scopeId: String, nodeId: String, uploadId: String) =
-        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"uploadId":"$uploadId"}""")
-            .`when`().post("/api/scopes/$scopeId/nodes/$nodeId/cover-blob")
-            .then()
+        CoverKit.set(userId, scopeId, nodeId, uploadId, expectedBlobId = null)
 
     private fun seedScope(): Scope = seedMemberScope(ScopeEntity.GROUP).let { Scope(it.userId, it.tenantId, it.scopeId) }
 

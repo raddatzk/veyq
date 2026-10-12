@@ -36,4 +36,7 @@ class MemoryNodeKindRules : NodeKindRules {
         MemoriesNodeKinds.CHAPTER -> parent is ParentSlot.Node && parent.kind == MemoriesNodeKinds.MEMORY
         else -> false
     }
+
+    /** A Memory and a Chapter carry a cover (inbox #411: core's `COVER` slot, since #341). */
+    override fun takesCover(kind: String): Boolean = handles(kind)
 }

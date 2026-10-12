@@ -26,7 +26,7 @@ acceptanceCriteria:
       # MediaStore.findNode (an upload's completion through NodesStore.findInScope, the same predicate) — so the listing case covers the read sweep, and the cover case covers the one
       # media-side read whose behaviour visibly CHANGED (the blob now survives the delete).
       backend:
-        integration: [NodeTrashSliceTest.deleteHidesTheWholeSubtreeAndListsTheRootInTheTrash, NodeCoverSliceTest.deleteNodeKeepsTheCoverBlobForTheRestore]
+        integration: [NodeTrashSliceTest.deleteHidesTheWholeSubtreeAndListsTheRootInTheTrash, NodeCoverCoreSliceTest.aTrashedNodeKeepsItsCoverForTheRestoreAndThePurgeFreesIt]
 
   - id: subtree-leaves-both-share-paths
     text: "A soft-deleted subtree leaves a public share on BOTH guest paths at once — the anonymous resolve stops listing it AND its blobs stop being authorized for a presign — and comes back on both on restore. Filtering only the listing leaves a Memory invisible in the share and fully downloadable by anyone holding a blobId for the whole retention window. Each predicate is bite-tested on its own: removing either must redden exactly its own assertion and leave the other's control green."
@@ -91,4 +91,4 @@ acceptanceCriteria:
       # no-op, so a row-only assertion would prove the chunk keys were COMPUTED and never that they arrived.
       # Carries its own in-window control — a subtree trashed but not yet expired survives on every arm.
       backend:
-        integration: [NodeTrashSliceTest.purgeReclaimsMediaDerivativesBucketsCoverAndTheStoreObjects, NodeCoverSliceTest.deleteNodeKeepsTheCoverBlobForTheRestore]
+        integration: [NodeTrashSliceTest.purgeReclaimsMediaDerivativesBucketsCoverAndTheStoreObjects, NodeCoverCoreSliceTest.aTrashedNodeKeepsItsCoverForTheRestoreAndThePurgeFreesIt]

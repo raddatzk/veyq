@@ -32,15 +32,15 @@ names a node kind an application owns (developer-styleguide § 1, ADR 0007's sha
   generated type lists a kind, so a literal or an application's constant is the only way core could name one — and
   both are what this rule reads. Each kind must still be named in code by some application main file, so the list
   cannot rot into names that guard nothing. **The blob roles an application owns** (`APPLICATION_BLOB_ROLES`:
-  Memories' `ORIGINAL`, `THUMBNAIL`, `PREVIEW`, `COVER`, Files' `FILE_CONTENT`) are read by the same rule since the contract's `BlobRole`
+  Memories' `ORIGINAL`, `THUMBNAIL`, `PREVIEW`, Files' `FILE_CONTENT`; `COVER` is core's own since inbox #411, `NodeCover`) are read by the same rule since the contract's `BlobRole`
   opened to the same kind of token (cr-files-application P3-S2): core stores a role and compares it
   (`UploadSessionEntity.boundTo`), and which roles exist is the application's (`MemoryBlobRoles`, `FilesBlobRoles`),
   declared to core's member start through `MemberBlobRoles` (inbox #366).
   The lists are by hand (a token is a value, not a path): a new application adds its kinds and roles here — Files'
   sat out of them for its whole build until its harvest, and nothing turned red, because a missing entry guards nothing
   silently. A
-  Memory's cover is core's attachment slot `COVER` (inbox #341): the slot is the application's token, stored and
-  compared by core, never named in its code.
+  node's cover is core's attachment slot `COVER` (inbox #341, core's own feature since #411): core names the token because
+  the cover is a platform feature, and no kind may be named for it (`NodeKindRules.takesCover` is each kind's answer).
 
 **What it no longer asserts: core importing an application.** Until the Gradle module split it also held every
 non-Memories main file away from the `me.raddatz.veyq.memories` packages. That is the build's now: `:core` has no project
@@ -132,7 +132,6 @@ APPLICATION_BLOB_ROLES = [
     "ORIGINAL",
     "THUMBNAIL",
     "PREVIEW",
-    "COVER",
     "FILE_CONTENT",
 ]
 APPLICATION_TOKENS = APPLICATION_KINDS + APPLICATION_BLOB_ROLES

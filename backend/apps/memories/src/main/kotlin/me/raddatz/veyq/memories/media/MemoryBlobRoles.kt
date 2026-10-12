@@ -15,18 +15,15 @@ object MemoryBlobRoles {
     /** A medium's lightbox derivative. */
     const val PREVIEW = "PREVIEW"
 
-    /** A node's standalone cover (`cover_blob_id`, cr-0073). */
-    const val COVER = "COVER"
-
     /** The roles a medium's derivative is attached in — the values of the media contract's `MediaDerivativeKind`. */
     val DERIVATIVES: Set<String> = setOf(THUMBNAIL, PREVIEW)
 
     /**
-     * The roles a guest of a share uploads in: a medium and its derivatives, never a [COVER] — the cover is a member's
-     * write (`commitCover`). The contract's closed enum said this until the role opened to a token.
+     * The roles a guest of a share uploads in: a medium and its derivatives. Never a cover - `COVER` is core's role
+     * (`NodeCover`, declared by `CoreMemberBlobRoles`) and a member's write; no guest operation sets one.
      */
     val GUEST: Set<String> = setOf(ORIGINAL) + DERIVATIVES
 
-    /** The roles a member uploads in: every role above — a guest's and the [COVER] ([MemoriesMemberBlobRoles]). */
-    val MEMBER: Set<String> = GUEST + COVER
+    /** The roles a member uploads a Memories blob in: a guest's, the same set ([MemoriesMemberBlobRoles]). */
+    val MEMBER: Set<String> = GUEST
 }

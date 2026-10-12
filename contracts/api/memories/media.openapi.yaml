@@ -10,7 +10,7 @@ info:
     ([ADR 0013](../../../docs/decisions/0013-blob-storage-presigned-direct-to-store.md)) — bytes never flow through
     the backend. The blob transfer itself — start, next windows, downloads — is core's (`../blob.openapi.yaml`,
     ADR 0079); this spec is what Memories makes of a blob: completing uploads into media attached to a node,
-    listing, metadata, trash, covers and buckets. The control plane is **batch-shaped** (lists + per-item results)
+    listing, metadata, trash and buckets. The control plane is **batch-shaped** (lists + per-item results)
     from the start; the first slice exercises **length-1 lists**.
 
     **Operator-blind:** the server + object store hold only ciphertext chunks + opaque metadata
@@ -23,7 +23,7 @@ tags:
   - name: media
     description: >
       Encrypted media under a scope: complete uploads (started through core's `blob` resource) + attach to a
-      node → list a node's media → read and update its sealed metadata, trash, covers. One tag = one resource
+      node → list a node's media → read and update its sealed metadata, trash. One tag = one resource
       interface owning the media subtree under `/api/scopes/{scopeId}` (distinct from the `content` nodes
       resource and core's `blob` resource).
   - name: buckets
@@ -395,119 +395,6 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
         "409": { $ref: "../_common.openapi.yaml#/components/responses/ScopeDeleting" }
-
-  /api/scopes/{scopeId}/nodes/{nodeId}/cover-blob:
-    post:
-      tags: [media]
-      operationId: commitCoverBlob
-      x-veyq-concurrency:
-        mode: last-writer-wins
-        reason: >-
-          The write replaces the node's one cover slot with the blob this member just uploaded; which
-          image and crop the cover shows lives in the node's wrappedMeta, which is version-checked (ADR 0077).
-      summary: Commit an uploaded blob as the node's standalone cover — no media row.
-      description: >
-        Promote one `startBlobUploads` session into a **standalone cover blob** attached to the node. The server
-        verifies the upload session (declare-then-verify: stats the stored chunk objects against the declared
-        count + byte budget, purging + failing on mismatch), records one `veyq_blob`, and makes it the node's
-        `COVER` attachment (core's one-blob-per-slot node attachment) — **atomically replacing + reclaiming** any
-        prior cover blob (its `veyq_blob` row is
-        deleted and its store objects go on the reclaim list, both in the same transaction). Unlike `completeMedia` this creates **no `veyq_media` row** (no gallery
-        entry, no derivative tiers): the cover is a single blob the client downscaled on device. Serving reuses
-        `presignBlobDownloads`. Returns the committed `BlobRef`. Guards: the caller holds a grant for the scope;
-        the target node must be a **MEMORY** or **CHAPTER** (`illegal_target` on a FOLDER); the upload must have
-        been started as this node's cover (`role: COVER`, `ownerId` = this node — `upload_mismatch` otherwise,
-        since its `K_blob` wrap is sealed bound to both, ADR 0072). Operator-blind — the
-        server holds the ciphertext + the opaque attachment row (node, slot, blob id) + size only, never the image
-        or the crop (those stay in the sealed node meta); that the blob fills the node's cover slot it knows from
-        the role the upload was started in.
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: "#/components/parameters/ScopeId"
-        - $ref: "#/components/parameters/NodeId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/CoverBlobCommitRequest" }
-            example:
-              uploadId: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
-      responses:
-        "200":
-          description: The committed cover blob ref (opaque metadata; any prior cover blob was reclaimed).
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/BlobRef" }
-        "400":
-          description: Malformed request, or the upload failed declare-then-verify (`budget_exceeded`).
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
-        "401":
-          description: Generic authentication failure.
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
-        "403": { $ref: "../_common.openapi.yaml#/components/responses/TenantSuspended" }
-        "404":
-          description: No such scope/node/upload, or the caller holds no grant for the scope.
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
-        "409": { $ref: "../_common.openapi.yaml#/components/responses/ScopeDeleting" }
-        "422":
-          description: The target node is a FOLDER (owns no `K_mem`, so it can carry no cover — `illegal_target`), or the upload was not started as this node's cover (`upload_mismatch`).
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_target } }
-    delete:
-      tags: [media]
-      operationId: deleteCoverBlob
-      summary: Detach + reclaim the node's standalone cover blob — only if it is still the expected one.
-      description: >
-        Remove the node's `COVER` attachment, delete its `veyq_blob` row, and hand the blob's store objects to the
-        reclaim list. Used when an uploaded cover is removed (the sealed node meta drops its `cover` separately,
-        via `updateNode`). The request names the blob it expects in the slot (`blobId`, the upload the landed
-        meta write replaced): the node has ONE cover-blob slot, and between the client's meta write and this
-        delete a peer may commit a new upload into it. The compare is the clearing write's own predicate
-        (`… where blob_id = ?` on the node's cover slot), so a peer's commit that lands first, or is in flight, is
-        seen. A slot that
-        holds another blob answers `409 cover_replaced` and writes nothing — the expected blob was already
-        reclaimed by that commit, so there is nothing left to delete. Idempotent — a node with no cover blob
-        answers `204`. Guards: the caller holds a grant for the scope. The purge of a deleted node performs the same
-        reclaim (a node's attachments go with it), so this is the explicit client-driven detach. The row, its reference and the reclaim entry are written in **one**
-        transaction, so a crash can leave neither a blob row nor a forgotten object; one scheduled sweep then
-        drains that list, retrying a refused delete and marking a permanently failed one
-        ([ADR 0062](../../../docs/decisions/0062-store-object-reclaim-is-a-durable-work-list.md)). The objects
-        therefore go up to one sweep interval after the `204` — nothing readable references them in between.
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: "#/components/parameters/ScopeId"
-        - $ref: "#/components/parameters/NodeId"
-        - name: blobId
-          in: query
-          required: true
-          description: >
-            The cover blob the caller expects in the node's slot — the uploaded cover its meta write replaced. The
-            server clears the slot only while it still holds this blob.
-          schema: { type: string, format: uuid, example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a }
-      responses:
-        "204":
-          description: The cover blob row is gone and its objects are queued for reclaim (or the node had none).
-        "401":
-          description: Generic authentication failure.
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
-        "403": { $ref: "../_common.openapi.yaml#/components/responses/TenantSuspended" }
-        "404":
-          description: No such scope/node, or the caller holds no grant for the scope.
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
-        "409":
-          description: >
-            The node's cover slot holds another blob than `blobId` (`cover_replaced` — a peer's upload replaced it,
-            and its commit already reclaimed the expected one; nothing was written), or the space is being deleted
-            and read-only (`scope_deleting`, uc.spaces.delete-group A4).
-          content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: cover_replaced } }
 
   /api/scopes/{scopeId}/media/{mediaId}/exif:
     get:
@@ -1268,62 +1155,6 @@ components:
           format: uuid
           description: The destination bucket (same owner as the source), or null ⇒ that owner's primary.
           example: 5b6c7c3f-0e2a-9b1d-4a6e-8b2c1f2d3e4a
-
-    # --- cover blob (standalone, no media row) -------------------------------
-    CoverBlobCommitRequest:
-      type: object
-      description: >
-        Promote one upload session into the node's standalone cover blob. The blob was sealed + PUT via the
-        existing `startBlobUploads` transport — started with `role: COVER` and `ownerId` = this node; here the
-        client hands back only its `uploadId`.
-      required: [uploadId]
-      properties:
-        uploadId:
-          x-veyq-visibility: id
-          type: string
-          format: uuid
-          description: The upload session for the cover blob, opened by `startBlobUploads`.
-          example: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
-
-    BlobRef:
-      type: object
-      description: >
-        A committed blob's opaque read-back ref — the same shape the gallery consumes per media tier, reused for
-        the standalone cover. The client unwraps `wrappedBlobKey` under `K_mem`, presigns via
-        `presignBlobDownloads`, and opens the chunks with `openFrame`.
-      required: [blobId, chunkCount, byteSize, wrappedBlobKey]
-      properties:
-        blobId: { type: string, format: uuid, example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a, x-veyq-visibility: id }
-        chunkCount:
-          x-veyq-visibility: measure
-          type: integer
-          format: int32
-          example: 1
-        byteSize:
-          x-veyq-visibility: measure
-          type: integer
-          format: int64
-          example: 65536
-        manifest:
-          x-veyq-visibility: measure
-          type: [array, "null"]
-          description: Per-chunk ciphertext byte sizes in chunk order (server-recorded at commit; ciphertext sizes only).
-          items: { type: integer, format: int64, example: 65536 }
-        wrappedBlobKey:
-          type: string
-          description: The cover blob's random `K_blob` wrapped under the Memory's `K_mem` (opaque base64).
-          contentEncoding: base64
-          maxLength: 256
-          example: d3JhcHBlZC1rLWJsb2I=
-        wrappedBlobMeta:
-          type: [string, "null"]
-          description: >
-            The blob's sealed metadata exactly as its upload declared it: under the blob's own `K_blob` (the
-            `blob-meta` seal), client-supplied, write-once, opaque base64 to the server. Null when the upload
-            declared none.
-          contentEncoding: base64
-          maxLength: 2048
-          example: c2VhbGVkLWJsb2ItbWV0YQ==
 
     ErrorResponse:
       $ref: '../_common.openapi.yaml#/components/schemas/ErrorResponse'

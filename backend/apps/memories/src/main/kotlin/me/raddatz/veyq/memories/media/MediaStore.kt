@@ -1,14 +1,11 @@
 package me.raddatz.veyq.memories.media
 
-import me.raddatz.veyq.core.blob.AttachOutcome
-import me.raddatz.veyq.core.blob.AttachmentStore
 import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.blob.BlobUploadStore
 import me.raddatz.veyq.core.blob.UploadSessionEntity
 import me.raddatz.veyq.core.content.NodesStore
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.sharing.ShareIdentityEntity
-import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
@@ -67,17 +64,6 @@ data class DerivativeRow(
 /** A verified derivative upload to attach: its role + session + the verified per-chunk manifest. */
 data class DerivativeAttach(val kind: String, val session: UploadSessionEntity, val manifest: List<Long>?)
 
-/** A committed blob's opaque read-back ref (cr-0073): the same shape a gallery tier carries, reused for the cover. */
-data class BlobRefData(
-    val blobId: String,
-    val chunkCount: Int,
-    val byteSize: Long,
-    val wrappedBlobKey: String,
-    val manifest: List<Long>?,
-    /** The blob's sealed metadata as its upload declared it (opaque, write-once). */
-    val wrappedBlobMeta: String?,
-)
-
 /** A node's uploader bucket for the "Beiträge" tab (en.memory.buckets, cr-0113): opaque owner_key + structure + count. */
 data class BucketRow(
     val bucketId: String,
@@ -95,16 +81,15 @@ data class BucketRow(
 )
 
 /**
- * Persistence for the Memories media (cr-0028): media, derivative and bucket rows, covers and the gallery
- * revision counters, on top of core's [BlobUploadStore] (sessions and blob rows) and core's [AttachmentStore] (a
- * cover is the node's `COVER` attachment since inbox #341). Operator-blind: stores ciphertext wraps + opaque metadata only.
+ * Persistence for the Memories media (cr-0028): media, derivative and bucket rows and the gallery
+ * revision counters, on top of core's [BlobUploadStore] (sessions and blob rows). A node's cover is core's
+ * (`NodeCoverStore`, inbox #411). Operator-blind: stores ciphertext wraps + opaque metadata only.
  * Who may act on a scope is decided before this store is reached, by the handler's `ScopeAccess` gate. The
  * manifest (per-chunk ciphertext sizes) is held as a small JSON array of integers — itself only ciphertext-size metadata.
  */
 @ApplicationScoped
 class MediaStore(
     private val blobs: BlobUploadStore,
-    private val attachments: AttachmentStore,
     private val nodes: NodesStore,
 ) {
 
@@ -396,37 +381,6 @@ class MediaStore(
         return SetMetaResult.Written(media.wrappedMeta)
     }
 
-    /**
-     * Commit a verified session as the node's **standalone cover** blob (cr-0073): the node's `COVER` attachment
-     * (core's `veyq_node_attachment`, inbox #341) — NO `veyq_media` row, so it never lists in the gallery —
-     * **atomically replacing and freeing** any prior cover blob (its row is deleted and its store objects go on the
-     * reclaim list, in this transaction). Consumes the upload session. Answers core's [AttachOutcome]; the caller
-     * builds the read-back ref from the session on [AttachOutcome.Attached].
-     *
-     * A cover commit replaces whatever the slot holds (the contract's `commitCoverBlob` carries no expected blob; the
-     * version a client states is its meta's, ADR 0077), while core's [AttachmentStore.attach] swaps only the blob it is
-     * told to expect. So the slot is read under the scope row's lock — the lock attach takes first and every writer of
-     * the table holds, re-taken there within this transaction — and handed over as the expected blob: no peer can
-     * change the slot between the read and the swap, and attach never answers a conflict here.
-     */
-    @Transactional
-    fun commitCover(scopeId: String, nodeId: String, session: UploadSessionEntity, manifest: List<Long>?): AttachOutcome {
-        nodes.lockScope(scopeId)
-        val current = attachments.slotBlobId(nodeId, MemoryBlobRoles.COVER)
-        return attachments.attach(scopeId, nodeId, COVER_KINDS, MemoryBlobRoles.COVER, session, manifest, current)
-    }
-
-    /**
-     * Detach the node's cover blob (cr-0073) — only while the slot still holds [expectedBlobId] (inbox #308): the
-     * attachment row goes and the blob is freed (row + reclaim record), in one transaction, through core's
-     * [AttachmentStore.detach]. An empty slot — or a node no longer live — records nothing and is idempotent.
-     */
-    fun clearCover(scopeId: String, nodeId: String, expectedBlobId: String): AttachmentStore.DetachOutcome =
-        attachments.detach(scopeId, nodeId, MemoryBlobRoles.COVER, expectedBlobId)
-
-    /** The node's cover blob id, or null — the `COVER` attachment's blob. */
-    fun coverBlobId(nodeId: String): String? = attachments.slotBlobId(nodeId, MemoryBlobRoles.COVER)
-
     // --- buckets (en.memory.buckets, ADR 0034, cr-0113) ----------------------
 
     /** The owner_key for a NEW upload: a contributor `share:{id}`, else a member `user:{id}`. */
@@ -628,10 +582,5 @@ class MediaStore(
         media.forEach { it.bucketId = target.id; it.persist() }
         bumpMediaRevision(nodeId) // cr-0113: a re-bucket changes the listing's bucketId → advance the ETag so clients re-list
         return true
-    }
-
-    private companion object {
-        /** The kinds that carry a cover: a node that owns a `K_mem` — the kinds that attach media. */
-        val COVER_KINDS = setOf(MemoriesNodeKinds.MEMORY, MemoriesNodeKinds.CHAPTER)
     }
 }
