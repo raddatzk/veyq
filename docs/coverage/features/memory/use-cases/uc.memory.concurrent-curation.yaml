@@ -44,7 +44,7 @@ acceptanceCriteria:
           - src/features/memory/memoryDate.test.ts
           - src/core/node/nodeMeta.test.ts
           - src/features/memory/memoryCover.test.ts
-          - src/features/memory/useMemoryCover.test.ts
+          - src/core/node/cover/useNodeCover.test.ts
           - src/features/memory/components/MediaLightbox.test.ts
   - id: self-heal-recomputes-on-fresh
     text: The auto date and auto place self-heals re-run their whole decision on the fresh blob — a peer's manual date or fixed place meanwhile means no write.

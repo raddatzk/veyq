@@ -23,8 +23,8 @@ what this instance can do, what version it speaks, and which optional features t
   [ADR 0032](../../decisions/0032-capability-discovery-version-gating.md))
 - [uc.platform.node-cover](use-cases/uc.platform.node-cover.md) — **built (web, backend, contracts)** (inbox #411: any node
   of a kind that opts in — a folder, a drop box, a Memory — carries a **cover**, an image its owner uploads as the node's own
-  blob in core's `COVER` slot, written together with the sealed meta that names it in one transaction; core's action, picker,
-  derive, upload and display; a guest sees it and never sets it.)
+  blob in core's `COVER` slot, written together with the sealed meta that names it in one transaction; core's action, one dialog (choose,
+  crop, remove), derive, upload and display; a guest sees it and never sets it.)
 
 ## Precedent already in the fresh state
 

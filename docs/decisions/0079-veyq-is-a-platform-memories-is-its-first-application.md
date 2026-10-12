@@ -271,9 +271,9 @@ on their own.
   with a compare on the blob replaced, or detach) and the node's re-sealed `wrappedMeta` (the `cover` field, ADR 0077
   version-checked) in ONE transaction, so the slot and the meta that names it never part. `COVER` is a role core declares
   (`CoreMemberBlobRoles`) and the opt-in is a seam on each kind's own placement rules, so core names no application kind. The web
-  mechanism (`core/node/cover/`: the model, the upload, the one writer, the store, the action and the display) serves every kind;
-  an application adds only what is its own - Memories' second source (one of its photos, `cover.load`) and its dialog (the
-  action's `choose`). A guest sees the cover through the share's gated blob route and gets no action in this step.
+  mechanism (`core/node/cover/`: the model, the upload, the one writer, the store, the action, the one dialog and the display) serves every kind;
+  an application adds only what is its own - Memories' second source (one of its photos: `cover.load` reads it, `cover.extraSource`
+  offers it to core's dialog; the follow-up of 2026-10-12 retired the Memory's dialog of its own). A guest sees the cover through the share's gated blob route and gets no action in this step.
   **The web side is separated by import direction, not by name or by kind:** `web/src/features/memory` is the
   application, and no core file imports it except the composition root `web/src/applications.ts`; the shell asks a
   build-time registry (`web/src/core/applications/registry.ts`) what to render for a node kind, which slot an

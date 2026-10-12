@@ -54,9 +54,10 @@ boxes** — let you show just one kind. Sub-folders stay visible in every tab so
 ## Give a folder a cover
 
 A folder, a drop box or a Memory can have a **cover**: a picture of your choice that replaces its icon in the list, on its page
-and in your favorites. Open the **⋯** menu of the entry (or the buttons at the top of its page) and choose **Set cover**, then
-pick an image from your device. The picture is shrunk on your device and locked with the entry's own key before it leaves it, just
-like everything else — the server only ever stores scrambled data. **Change cover** swaps it, **Remove cover** takes it away;
+and in your favorites. Open the **⋯** menu of the entry (or the buttons at the top of its page) and choose **Set cover** (it says **Change cover** once there is one). A window opens: pick an image from your device and drag or
+zoom it into the frame you like — the same window for a folder, a drop box and a Memory, and it frames the cover the same way
+everywhere it shows. The picture is shrunk on your device and locked with the entry's own key before it leaves it, just
+like everything else — the server only ever stores scrambled data. Open **Change cover** again to re-frame it or swap the picture; **Remove cover** in that same window takes it away;
 the old picture is deleted from the server's storage (copies that other people's browsers already hold, or a link that was
 already handed out, can't be taken back — they expire on their own). It is a picture for the entry, not a file in the folder, and
 only people who may change the space can set it. People you share a link with see the covers but can't set them. A file has no

@@ -253,7 +253,7 @@ A **`FILES_DROPBOX`** is a Files node at the root or in a `FOLDER` (no placement
 one per guest identity, which are core `FOLDER`s carrying `veyq_node.share_identity_id` (ADR 0080 decision 11).
 
 **A drop box carries a cover** (inbox #411, core's feature - [uc.platform.node-cover](../features/platform/use-cases/uc.platform.node-cover.md)):
-Files opts it in (`FilesNodeKindRules.takesCover`, `register.ts` `cover: {}`), nothing else - the action, the picker, the upload, the
+Files opts it in (`FilesNodeKindRules.takesCover`, `register.ts` `cover: {}`), nothing else - the action, the dialog (choose, crop, remove), the upload, the
 write and the display are core's, the image is the box's own blob in the `COVER` slot (not a file in it), and a **`FILE` takes none**
 (its one blob is its content; a file's own thumbnail is a different idea, deferred). The header's leading slot shows it
 (`DropBoxDetail.vue`), the row/tile and the sidebar's Favorites too; a guest of a link above sees it and sets none.
