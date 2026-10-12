@@ -1,4 +1,6 @@
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { loadEnv, type Plugin } from 'vite'
 // `vitest/config`'s defineConfig extends Vite's with the `test` block (setupFiles below) while staying a valid
@@ -40,6 +42,47 @@ function cspPlugin(env: Record<string, string>, dev: boolean): Plugin {
     generateBundle() {
       if (dev) return
       this.emitFile({ type: 'asset', fileName: CSP_POLICY_FILE, source: `${csp}\n` })
+    },
+  }
+}
+
+// The runtime data pdf.js reads while it draws (inbox #412): the predefined CMaps (CJK and other non-embedded encodings),
+// the standard 14 fonts' substitutes and the CMYK ICC profile. pdf.js fetches them by URL from a DIRECTORY, so they cannot
+// be hashed single imports; this plugin copies the three directories verbatim to `assets/pdfjs-<version>/` (under
+// `/assets/`, so the backend serves them immutable - the version is in the path, a new release is a new path) and serves
+// the same path from node_modules in dev. They are same-origin, so `connect-src 'self'` carries the fetches and the policy
+// gains nothing. The WASM decoders (`wasm/`) are deliberately NOT copied: they need 'wasm-unsafe-eval' (csp.ts).
+const PDFJS_DATA_DIRS = ['cmaps', 'standard_fonts', 'iccs'] as const
+function pdfjsPackage(): { root: string; version: string } {
+  const pkg = createRequire(import.meta.url).resolve('pdfjs-dist/package.json')
+  return { root: dirname(pkg), version: JSON.parse(readFileSync(pkg, 'utf8')).version as string }
+}
+function pdfjsAssetsPlugin(): Plugin {
+  const { root, version } = pdfjsPackage()
+  const prefix = `/assets/pdfjs-${version}/`
+  return {
+    name: 'veyq-pdfjs-assets',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const url = (req.url ?? '').split('?')[0]
+        const rel = url.startsWith(prefix) ? url.slice(prefix.length) : ''
+        const [dir, name, ...rest] = rel.split('/')
+        if (!(PDFJS_DATA_DIRS as readonly string[]).includes(dir) || !name || rest.length || name.includes('..')) return next()
+        try {
+          res.setHeader('Content-Type', 'application/octet-stream')
+          res.end(readFileSync(join(root, dir, name)))
+        } catch {
+          res.statusCode = 404
+          res.end()
+        }
+      })
+    },
+    generateBundle() {
+      for (const dir of PDFJS_DATA_DIRS) {
+        for (const name of readdirSync(join(root, dir))) {
+          this.emitFile({ type: 'asset', fileName: `assets/pdfjs-${version}/${dir}/${name}`, source: readFileSync(join(root, dir, name)) })
+        }
+      }
     },
   }
 }
@@ -115,7 +158,8 @@ function devSeedCredentialsPlugin(): Plugin {
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   return {
-    plugins: [vue(), cspPlugin(env, command === 'serve'), mediaSwDevPlugin(), devSeedCredentialsPlugin()],
+    plugins: [vue(), cspPlugin(env, command === 'serve'), pdfjsAssetsPlugin(), mediaSwDevPlugin(), devSeedCredentialsPlugin()],
+    define: { __PDFJS_VERSION__: JSON.stringify(pdfjsPackage().version) },
     test: {
       // Provide the PrimeVue toast service to every mounted component (cr-0157) — see src/test/setup.ts.
       setupFiles: ['./src/test/setup.ts'],
@@ -132,6 +176,10 @@ export default defineConfig(({ command, mode }) => {
         },
         output: {
           entryFileNames: (chunk) => (chunk.name === 'media-sw' ? 'sw.js' : 'assets/[name]-[hash].js'),
+          // pdf.js' worker is an ASSET (`?url`, started by pdf.js itself as a module worker), emitted with a `.js` name so the
+          // backend's static handler serves it with a script MIME type under `nosniff` - an `.mjs` is not in every MIME table.
+          assetFileNames: (asset) =>
+            (asset.names ?? []).some((n) => /^pdf\.worker/.test(n)) ? 'assets/[name]-[hash].js' : 'assets/[name]-[hash][extname]',
         },
       },
     },

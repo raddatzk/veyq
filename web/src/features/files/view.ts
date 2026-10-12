@@ -6,14 +6,16 @@
 // is nothing we show. Nothing here renders anything: it returns what a view may be built from (a typed `Blob`, a string, or
 // the container a media element streams), and a viewer builds the DOM.
 //
-// **Memory is bounded per kind** ([IMAGE_CAP], [TEXT_CAP]; a PDF is not rendered, see below): an image is collected
-// chunk by chunk into one typed `Blob` (opened [FILE_VIEW_IN_FLIGHT] at a time, the stream pump of #371) only up to its cap,
-// a text is cut at its cap and says so, and audio/video read nothing beyond chunk 0 here - the service worker's media route
-// (ADR 0047) pulls the rest on demand. A file over its cap is not read past the first chunk.
+// **Memory is bounded per kind** ([IMAGE_CAP], [TEXT_CAP], [PDF_CAP]): an image is collected chunk by chunk into one typed
+// `Blob` (opened [FILE_VIEW_IN_FLIGHT] at a time, the stream pump of #371) only up to its cap, a text is cut at its cap and
+// says so, a PDF is collected into ONE buffer allocated at its size (no parts to concatenate afterwards), and audio/video
+// read nothing beyond chunk 0 here - the service worker's media route (ADR 0047) pulls the rest on demand. A file over its
+// cap is not read past the first chunk.
 //
-// **A PDF is not shown** (first cut, inbox #412): the browser's own viewer needs an `<iframe>`/`<object>` on a `blob:` URL,
-// and the app's policy is `frame-src 'none'; object-src 'none'` (`docs/crosscutting/cc.security.csp.md`). Weakening it is the
-// owner's decision, so the view says "pdf" and the page offers the download.
+// **A PDF is returned as bytes** (inbox #412): it is drawn by pdf.js onto canvases inside the page (`pdf/pdfEngine.ts`), not
+// by the browser's own viewer, which would need an `<iframe>`/`<object>` on a `blob:` URL against the app's policy
+// (`frame-src 'none'; object-src 'none'`, `docs/crosscutting/cc.security.csp.md`). This module does not load pdf.js: it
+// decides "this is a PDF" from the bytes and reads them; opening them is the viewer's.
 //
 // Operator-blind: the chunks are opened on this device under the keys the page holds; nothing here talks to a server but the
 // provider's own presigned reads.
@@ -27,6 +29,8 @@ import { PLAINTEXT_CHUNK_SIZE, plaintextTotal } from '../../sw/range'
 export const IMAGE_CAP = 64 * 1024 * 1024
 /** Most text shown; a longer file shows its first [TEXT_CAP] bytes and a note. */
 export const TEXT_CAP = 1024 * 1024
+/** Largest PDF the page decrypts into memory (and hands to pdf.js, which holds its own copy while it draws). */
+export const PDF_CAP = 64 * 1024 * 1024
 /** Frames opened at once while collecting an image or text - the pump's bound (`streamBlob`). */
 export const FILE_VIEW_IN_FLIGHT = 4
 
@@ -37,12 +41,13 @@ export type ViewHints = { type?: string | null; name?: string | null }
 export type ViewSource = ChunkSource & { readonly byteSize: number }
 
 /** Why a file is not shown. `format`: unknown to the sniffers (or an encoding we do not guess); `empty`: no content. */
-export type UnsupportedReason = 'format' | 'pdf' | 'empty'
+export type UnsupportedReason = 'format' | 'empty'
 
 /** What opening a file produced. `image`'s `blob` carries the SNIFFED type, never the claimed one. */
 export type FileView =
   | { kind: 'image'; blob: Blob; type: string }
   | { kind: 'text'; text: string; truncated: boolean }
+  | { kind: 'pdf'; bytes: Uint8Array }
   | { kind: 'stream'; element: 'video' | 'audio'; type: string }
   | { kind: 'too-large'; limit: number }
   | { kind: 'unsupported'; reason: UnsupportedReason }
@@ -63,6 +68,29 @@ async function collect(
   }
   await streamBlob(from, sink, { inFlight: FILE_VIEW_IN_FLIGHT, signal, onProgress })
   return parts
+}
+
+/** Collect all `chunks` chunks of `source` (chunk 0 is `head`) into ONE buffer of `total` bytes, reporting progress. */
+async function collectInto(
+  source: ViewSource, head: Uint8Array, chunks: number, total: number, signal: AbortSignal | undefined, onProgress: ((f: number) => void) | undefined,
+): Promise<Uint8Array> {
+  const out = new Uint8Array(total)
+  let at = 0
+  const sink: ByteSink = {
+    write: async (b) => {
+      if (at + b.length > out.length) throw new RangeError('the file is larger than its size says')
+      out.set(b, at)
+      at += b.length
+    },
+    close: async () => {},
+    abort: async () => {},
+  }
+  const from: ChunkSource = {
+    chunkCount: chunks,
+    getPlaintextChunk: (i) => (i === 0 ? Promise.resolve(head) : source.getPlaintextChunk(i)),
+  }
+  await streamBlob(from, sink, { inFlight: FILE_VIEW_IN_FLIGHT, signal, onProgress })
+  return at === out.length ? out : out.subarray(0, at)
 }
 
 /** `cut`: the bytes end where the cap did, so a multi-byte sequence cut in half is withheld instead of printing U+FFFD for it. */
@@ -93,9 +121,12 @@ export async function loadFileView(
     const parts = await collect(source, head, source.chunkCount, signal, onProgress)
     return { kind: 'image', blob: new Blob(parts as BlobPart[], { type }), type }
   }
-  if (sniffPdf(head)) return { kind: 'unsupported', reason: 'pdf' }
   const media: StreamKind | undefined = sniffStream(head)
   if (media) return { kind: 'stream', element: media.element, type: media.type }
+  if (sniffPdf(head)) {
+    if (total > PDF_CAP) return { kind: 'too-large', limit: PDF_CAP }
+    return { kind: 'pdf', bytes: await collectInto(source, head, source.chunkCount, total, signal, onProgress) }
+  }
   const encoding = claimsText(hints.type, hints.name) ? sniffText(head, source.chunkCount === 1) : undefined
   if (encoding) {
     const truncated = total > TEXT_CAP

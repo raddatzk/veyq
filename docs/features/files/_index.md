@@ -23,6 +23,6 @@ with it and point there instead of repeating it.
 - [uc.files.share-file](use-cases/uc.files.share-file.md) — **built (web)**: one file, shared on its own — a `READ` guest
   sees and downloads it, a `READ_WRITE` guest also replaces its content.
 - [uc.files.view-file](use-cases/uc.files.view-file.md) — **built (web)**: an opened file is shown on its page (image,
-  text, video, audio; full screen), a member's and a guest's alike, or comes with a note and the download.
+  text, PDF, video, audio; full screen), a member's and a guest's alike, or comes with a note and the download.
 - [uc.files.drop-box](use-cases/uc.files.drop-box.md) — **built (web)**: guests send files into a drop box, each
   into a folder of its own, and the members open them.

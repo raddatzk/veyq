@@ -126,9 +126,25 @@ describe('sniffStream: the container of a video or audio', () => {
 })
 
 describe('sniffPdf', () => {
-  it('needs the header at byte 0', () => {
+  it('finds the header at byte 0', () => {
     expect(sniffPdf(ascii('%PDF-1.7\n%'))).toBe(true)
+    expect(sniffPdf(ascii('%PDF-'))).toBe(true)
+    expect(sniffPdf(ascii('%PDF'))).toBe(false)
+  })
+  it('does not take a text that merely mentions the header for a PDF', () => {
     expect(sniffPdf(utf8('A note that mentions %PDF- in its body'))).toBe(false)
+  })
+  it('finds the header after junk, within the first KiB, when the bytes are not text (a reader tolerates it)', () => {
+    expect(sniffPdf(cat(ascii('junk'), [0], ascii('%PDF-1.4'), [0xff, 0x00]))).toBe(true)
+    const late = cat(new Uint8Array(1024), ascii('%PDF-1.4')) // at offset 1024: the last place a reader looks
+    expect(sniffPdf(late)).toBe(true)
+  })
+  it('does not look past the first KiB', () => {
+    expect(sniffPdf(cat(new Uint8Array(1025), ascii('%PDF-1.4'), [0xff]))).toBe(false)
+  })
+  it('is not fooled by other formats', () => {
+    expect(sniffPdf(ascii('\x89PNG\r\n\x1a\n'))).toBe(false)
+    expect(sniffPdf(new Uint8Array(0))).toBe(false)
   })
 })
 

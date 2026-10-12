@@ -2,7 +2,7 @@
 // bytes: the decrypt is `transport.ts`'s, this is the decision, the caps and the cancellation.
 import { describe, it, expect, vi } from 'vitest'
 import { FRAME_OVERHEAD, PLAINTEXT_CHUNK_SIZE } from '../../sw/range'
-import { IMAGE_CAP, TEXT_CAP, loadFileView, type ViewSource } from './view'
+import { IMAGE_CAP, PDF_CAP, TEXT_CAP, loadFileView, type ViewSource } from './view'
 
 const CHUNK = PLAINTEXT_CHUNK_SIZE
 const utf8 = (s: string) => new TextEncoder().encode(s)
@@ -96,11 +96,58 @@ describe('the bytes decide the kind, the claim only narrows', () => {
     })
   })
 
-  it('answers a PDF without rendering it', async () => {
-    const pdf = Uint8Array.from([...utf8('%PDF-1.7\n'), 1, 2, 3, 0xff])
-    const s = sourceOf(pdf)
-    expect(await loadFileView(s, { type: 'application/pdf', name: 'a.pdf' })).toEqual({ kind: 'unsupported', reason: 'pdf' })
-    expect(s.read).toEqual([0])
+  describe('a PDF: the bytes are collected whole, pdf.js is the viewer\'s to load', () => {
+    const header = utf8('%PDF-1.7\n')
+    it('returns every byte of a PDF cut over several chunks, in order, reporting progress', async () => {
+      const pdf = new Uint8Array(CHUNK * 2 + 123)
+      pdf.set(header)
+      for (let i = header.length; i < pdf.length; i++) pdf[i] = (i * 13) % 256
+      const progress: number[] = []
+      const s = sourceOf(pdf)
+      const v = await loadFileView(s, { type: 'application/octet-stream', name: 'x' }, { onProgress: (f) => progress.push(f) })
+      expect(v.kind).toBe('pdf')
+      if (v.kind === 'pdf') expect(v.bytes).toEqual(pdf)
+      expect([...new Set(s.read)].sort()).toEqual([0, 1, 2])
+      expect(progress.at(-1)).toBe(1)
+    })
+
+    it('is decided by the bytes: a PDF claimed as an image or as text is still a PDF', async () => {
+      const pdf = Uint8Array.from([...header, 1, 2, 3, 0xff])
+      expect((await loadFileView(sourceOf(pdf), { type: 'image/png', name: 'a.png' })).kind).toBe('pdf')
+      expect((await loadFileView(sourceOf(pdf), { type: 'text/plain', name: 'a.txt' })).kind).toBe('pdf')
+    })
+
+    it('tolerates junk before the header (within the first KiB) as a reader does, but not a text that mentions it', async () => {
+      const junk = Uint8Array.from([...utf8('\n\n  '), 0x00, ...header, 1, 2, 0xff])
+      expect((await loadFileView(sourceOf(junk), {})).kind).toBe('pdf')
+      expect(await loadFileView(sourceOf(utf8('see %PDF-1.7 in the note')), { type: 'text/plain' })).toMatchObject({ kind: 'text' })
+    })
+
+    it('a PDF over the cap is not read past its first chunk', async () => {
+      const s = hugeSource(Uint8Array.from([...header, 1, 2]), PDF_CAP + CHUNK)
+      expect(await loadFileView(s, { type: 'application/pdf' })).toEqual({ kind: 'too-large', limit: PDF_CAP })
+      expect(s.read).toEqual([0])
+    })
+
+    it('a file that is larger than its stated size is an error, not a silent truncation', async () => {
+      const pdf = Uint8Array.from([...header, 1, 2, 3])
+      const s = { ...sourceOf(pdf), byteSize: 10 + FRAME_OVERHEAD } // claims 10 plaintext bytes, delivers 12
+      await expect(loadFileView(s, {})).rejects.toThrow(RangeError)
+    })
+
+    it('stops reading when aborted', async () => {
+      const ctl = new AbortController()
+      const pdf = new Uint8Array(CHUNK * 8)
+      pdf.set(header)
+      const s = sourceOf(pdf)
+      const inner = s.getPlaintextChunk
+      s.getPlaintextChunk = async (i) => {
+        if (i === 1) ctl.abort()
+        return inner(i)
+      }
+      await expect(loadFileView(s, {}, { signal: ctl.signal })).rejects.toBeTruthy()
+      expect(Math.max(...s.read)).toBeLessThan(8)
+    })
   })
 
   it.each([

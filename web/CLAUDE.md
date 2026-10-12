@@ -375,7 +375,17 @@ here; the server is blind.
   too - never inline, `<object>` or `<iframe>`); (3) **video/audio go through the service worker's media route** with the
   chunk provider the download uses (the worker holds no key; protocol 4 accepts `audio/*`), never a whole-file decrypt;
   (4) **everything the viewer made is undone** on a new file, on navigation and on unmount (object URL, playback handle,
-  the `AbortSignal` into the stream pump). A PDF is deliberately **not** rendered: `frame-src`/`object-src` are `'none'`,
-  and widening the CSP is the owner's decision (inbox #412). The member and the guest mount the same component.
+  the `AbortSignal` into the stream pump). A PDF is drawn by **pdf.js** (`pdfjs-dist`, legacy build) onto canvases in the page, never by the browser's
+  viewer: `frame-src`/`object-src` stay `'none'` and **the CSP is unchanged** (widening it is the owner's decision). The rules
+  (`features/files/pdf/`, `docs/apps/files.md` § The viewer): `pdfEngine.ts` is the only seam and reaches pdf.js through a
+  **dynamic** `import('./pdfjsRuntime')` - the one file that imports it, never imported statically (a source test and
+  `npm run verify:pdf-worker` pin it, with the worker a same-origin hashed asset for `worker-src 'self'`, no `eval`/`new
+  Function` in the emitted files, no `.wasm`); `pdfOptions.ts` is the option set - the document is `{data}` (never a URL),
+  `useWasm: false` (the WASM decoders need `'wasm-unsafe-eval'`, which the policy does not grant: JBIG2/JPEG 2000 scan
+  images render blank - a documented gap, a policy decision to change), `enableXfa: false`, no scripting, no annotation or
+  text layer; CMaps, standard fonts and ICC profiles are same-origin copies under `assets/pdfjs-<version>/`
+  (`vite.config.ts`'s `pdfjsAssetsPlugin`), `connect-src 'self'` carries them. **Bumping `pdfjs-dist` re-runs the real-library
+  test and `verify:pdf-worker`; check that its options still exist** (v6 dropped `isEvalSupported`). The member and the guest
+  mount the same component.
 
 Stack: Vue 3, PrimeVue, vue-router. Working rules: [`../docs/ai/README.md`](../docs/ai/README.md).

@@ -13,11 +13,14 @@ space, side by side.
 - **Download** — the download button on the file's row gives you the file back exactly as you put it in, under the
   name it has in veyq. Clicking the row itself opens the file's own page.
 - **Look at it** — click the file's row and its page opens with the file itself on it: a **picture** is shown, a
-  **text** (plain text, Markdown, code, JSON, CSV …) is shown as text, and a **video** or a **sound file** plays,
+  **text** (plain text, Markdown, code, JSON, CSV …) is shown as text, a **PDF** is shown page by page (with its page
+  count and buttons to zoom in and out and to fit it to the width), and a **video** or a **sound file** plays,
   with a button for **full screen**. The file is unlocked on your device while you look, nothing extra is stored,
-  and someone you shared the file with sees exactly the same. Some things are not shown on the page: a **PDF** (for
-  now it comes with a note and the download), a format your browser cannot display, and very large pictures (over
-  64 MB) — and a long text shows only its first megabyte. In all of those cases the download button is right there.
+  and someone you shared the file with sees exactly the same. Some things are not shown on the page: a PDF that is
+  **protected by a password** (it says so; open it from the download), a format your browser cannot display, and very large
+  pictures or PDFs (over 64 MB) — and a long text shows only its first megabyte. In a PDF you cannot select or search the
+  text yet, links inside it do nothing, and **scanned pages** (some scanners store the page in an image format veyq does
+  not draw) may show gaps. In all of those cases the download button is right there.
 - **Replace** — put a newer version of a file in its place. The name stays. veyq **asks first**, because there is
   **no version history**: the old content cannot be brought back. Uploading a file whose name is already taken in
   that folder asks the same question.

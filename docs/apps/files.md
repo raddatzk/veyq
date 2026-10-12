@@ -146,8 +146,8 @@ a guest's link presign) with the chunk provider the download uses (`fileChunkPro
 | JPEG, PNG, GIF, WebP, AVIF, BMP, SVG (HEIC is tried) | `<img>` on an object URL typed with the **sniffed** type (`useObjectUrl`, revoked on replace/unmount) | 64 MiB, then the download |
 | text: valid UTF-8 (BOM dropped) or UTF-16 with a BOM, no NUL or other control byte, and a text-ish type or extension | `<pre>` through `textContent`, monospace, wrapping | first 1 MiB, a note says so |
 | MP4, MOV, WebM, Matroska, Ogg, MP3, AAC, WAV, FLAC, M4A | `<video controls playsinline>` / `<audio controls>` on the service worker's `/__media/<handle>` ([ADR 0047](../decisions/0047-inline-video-playback-range-streaming.md); the page holds the key, the worker none) | none: streamed |
-| PDF | not rendered (below): message + download | — |
-| anything else, a text in another encoding, an image the browser cannot decode (`<img>` `error`), a codec it lacks, no usable worker | message + download | — |
+| PDF (`%PDF-` in the first KiB) | drawn page by page onto `<canvas>` elements by pdf.js, in the page (below) | 64 MiB and 1000 pages, then the download |
+| anything else, a text in another encoding, an image the browser cannot decode (`<img>` `error`), a codec it lacks, no usable worker, a password-protected or unreadable PDF | message + download | — |
 
 - **The bytes decide** (`core/blob/sniff.ts`, `view.ts`): the first chunk is opened and sniffed; the blob's sealed type
   and the name only *narrow*. A PNG claimed as `text/plain` is an image; a binary claimed as `image/png` shows nothing;
@@ -162,19 +162,66 @@ a guest's link presign) with the chunk provider the download uses (`fileChunkPro
   (remembered from the specification, not measured in a browser).
 - **Memory.** Per-kind caps above; a file of another kind is read no further than its first chunk. Images and text are
   collected chunk by chunk (four frames in flight) into one `Blob`/string.
-- **A PDF is not rendered in this cut.** The browser's own viewer needs an `<iframe>`/`<object>` on a `blob:` URL; the
-  app's policy is `object-src 'none'; frame-src 'none'` (`web/src/shared/security/csp.ts`, pinned by `csp.test.ts`,
-  emitted to `dist/content-security-policy.txt` and served as the header by the backend's app shell —
-  [cc.security.csp](../crosscutting/cc.security.csp.md)), and a viewer frame would also be a same-origin `blob:` document
-  next to the keys. Showing one would mean widening the policy — the owner's decision, not made. The page says so and
-  offers the download. Follow-ups, recorded in inbox #412: open the PDF in a new tab from a `blob:` URL (a top-level
-  navigation is no frame, so no policy change; it needs the whole file decrypted before the click) and pdf.js
-  (Apache-2.0, a lazily loaded chunk and a same-origin worker, which `worker-src 'self'` already allows; its optional
-  WASM image decoders would need `'wasm-unsafe-eval'`, which is a policy change again).
+- **A PDF is drawn inline by pdf.js, not by the browser's viewer** (owner decision 2026-10-12). The browser's own viewer
+  needs an `<iframe>`/`<object>` on a `blob:` URL, and the app's policy is `object-src 'none'; frame-src 'none'`
+  (`web/src/shared/security/csp.ts`, [cc.security.csp](../crosscutting/cc.security.csp.md)); a viewer frame would also
+  be a same-origin `blob:` document next to the keys. So the file is decrypted whole (cap 64 MiB, one buffer allocated
+  at its size) and handed to **`pdfjs-dist`** (Mozilla, Apache-2.0, the *legacy* build) as `{data: Uint8Array}` — never
+  a URL, so pdf.js opens no connection for the document. **The policy is unchanged** (the built header is pinned by
+  `verify:csp`).
+  - **Lazy.** `pdf/pdfEngine.ts` is the seam (`openPdf` -> `PdfDocument`: page count, page size, `render` onto a canvas,
+    `destroy`); it reaches pdf.js through a dynamic `import('./pdfjsRuntime')`, so the library (~0.5 MB) and its worker
+    (~1.3 MB) are a chunk of their own that loads on the first PDF opened, never before. The worker is a hashed
+    same-origin asset (`pdfjsRuntime.ts` imports it with `?url`; `vite.config.ts` emits it as `assets/pdf.worker.min-<hash>.js`,
+    a `.js` name so the backend's static handler serves a script MIME type to a module worker under `nosniff`), which is
+    what `worker-src 'self'` admits. `npm run verify:pdf-worker` (in `npm run check`) fails the build unless the worker and
+    the runtime chunk exist, the runtime names the worker, the runtime is reached by a dynamic `import()` and by no static
+    one, the entry chunks hold none of pdf.js, neither file contains `new Function(`/`eval(`, no `.wasm` shipped, and the
+    runtime data below is emitted.
+  - **What is switched off, and why** (`pdf/pdfOptions.ts`, one pure module read by the runtime and the tests):
+    `useWasm: false` — pdf.js would use WebAssembly for the JBIG2 and JPEG 2000 image decoders, ICC colour transforms and
+    PostScript functions, and compiling WebAssembly needs `'wasm-unsafe-eval'`, which the policy does not grant; the `.wasm`
+    files are not shipped and no `wasmUrl` is set. **Consequence, stated:** a scanned page whose image is JBIG2 or JPEG 2000
+    (common in scanner output) shows that image blank or with gaps, and ICC-profiled colours fall back to their alternate
+    colour space. `enableXfa: false` (XFA forms are XML + script). **No scripting:** pdf.js 6 runs a PDF's JavaScript only
+    for a viewer that mounts its scripting manager and loads `pdf.sandbox.mjs`; this one does neither. There is no
+    `isEvalSupported` option any more in pdf.js 6 and no `new Function`/`eval` in the emitted files (checked by
+    `verify:pdf-worker`). `disableRange/Stream/AutoFetch` (they concern a URL; stated), `verbosity: 0` (no document
+    structure in the console), `maxImageSize` 32 M pixels per decoded image, and the page canvas is capped at 16 M pixels
+    (a page is drawn at a lower resolution rather than allocate more).
+  - **No network but our own origin.** pdf.js fetches predefined CMaps (CJK and other non-embedded encodings), the
+    standard fonts' substitutes and the CMYK ICC profile by URL from a directory; `vite.config.ts`'s `pdfjsAssetsPlugin`
+    copies `cmaps/`, `standard_fonts/` and `iccs/` to `assets/pdfjs-<version>/` (versioned path, so the backend's
+    `/assets/` immutable caching is safe) and `connect-src 'self'` carries the requests. No origin is added.
+  - **The page.** `FileViewer` mounts `PdfPages`: a vertical scroll of every page as a placeholder, drawn only while near
+    the viewport (an `IntersectionObserver` with a one-viewport margin; each page is drawn at the container's width times
+    `devicePixelRatio`, at most 3), and its canvas is given back (resized to 0 x 0) when far away, so a long PDF holds a
+    handful of bitmaps. "Page n of N", and zoom out / zoom in / fit width (50 % to 400 % of the fitted width) are labelled
+    buttons (`files.viewer.pdf.*`, DE + EN); the scroll area takes focus, so the arrow and page keys scroll. The same
+    component serves the member and both guest roles. Full screen is the viewer's, unchanged.
+  - **What a PDF can never do here.** No `<iframe>`/`<object>`/`<embed>`, no link, button or form element is ever in the
+    page: there is **no annotation layer** (a link in a PDF is ink on a canvas, not an element — it cannot navigate the
+    app or open a URL; annotations that carry an appearance are drawn into the page) and **no text layer**.
+  - **Limits and follow-ups** (inbox #412): the text cannot be selected or searched in this cut (the download remains);
+    no password prompt — a protected PDF says so and offers the download; no annotation layer (live links, form filling);
+    the WASM decoders stay off until the owner decides on `'wasm-unsafe-eval'` (the asm.js fallbacks pdf.js ships next to
+    them could be served same-origin instead — not done). More than **1000 pages** is not shown (a message and the
+    download): the page tree is a parse cost and a placeholder per page a DOM cost. A page that fails to draw says so
+    in its place and leaves the others. Everything pdf.js holds (the document, its pages, its worker) is destroyed on a new
+    file, on navigation and on unmount, and a document that finishes opening after the page moved on is destroyed at once.
+  - **Tested:** the viewer's wiring with the engine mocked (`FileViewer.pdf.test.ts`: states, lazy drawing with an
+    `IntersectionObserver` stub, zoom, destroy on unmount/replace, guest parity); the real library through our engine in node
+    (`pdfEngine.real.test.ts`: page count, page size, a password-protected, a broken and an over-long PDF); and
+    `verify:pdf-worker` on the build. **Proven in a real browser** (2026-10-12, a local server serving the built `dist` with
+    the built `content-security-policy.txt` as the header): the built pdf.js chunk and its worker ran, three pages of a PDF
+    drew with text, a non-embedded standard font was fetched from `assets/pdfjs-<version>/standard_fonts/`, a broken PDF was
+    refused with `InvalidPDFException`, and no `securitypolicyviolation` fired. **Not yet proven:** the Vue viewer on a real
+    file page (scroll, zoom, full screen, the observer's margin) and the dev server's serving of the runtime data.
 - **Full screen.** A button toggles the Fullscreen API on the viewer's container (Escape leaves, which the browser
   handles); where the API is missing or refused (an iPhone's Safari has no element fullscreen) a fixed-position overlay
   stands in, left by the button or Escape.
-- **Not proven in a real browser yet:** video/audio through the worker for a FILE, fullscreen, mobile Safari, HEIC.
+- **Not proven in a real browser yet:** video/audio through the worker for a FILE, fullscreen, mobile Safari, HEIC, and the
+  Vue PDF viewer on a real file page (the pdf.js chunk itself is: § above).
 
 ## Guests (a folder share)
 
@@ -390,7 +437,8 @@ folder and its files, and when.
 
 - A thumbnail or cover for a file: out of scope for the viewer (inbox #412 decided Files makes no preview blobs); a cover
   for a file is inbox #411.
-- Showing a PDF on the page (needs the owner's decision on the CSP, or pdf.js): § The viewer, inbox #412.
+- A PDF's text selection and search, a password prompt, live links and form fields (an annotation layer), and the WASM image
+  decoders (a policy decision, `'wasm-unsafe-eval'`): § The viewer, inbox #412.
 - An operator-configurable per-file size cap (the quota only, at first).
 - The other reversible choices made while building Files wait for the owner's review: inbox #378. (Where the drop box
   differed from ADR 0080 decision 11, inbox #377, the owner ruled 2026-10-08 — § The drop box.)

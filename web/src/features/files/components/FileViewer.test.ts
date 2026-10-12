@@ -13,12 +13,15 @@ vi.mock('../../../sw/register', () => ({
   handleFromUrl: (url: string) => url.replace('/__media/', ''),
 }))
 
+// PDFs are `FileViewer.pdf.test.ts`'s; here the engine is a stub so no test loads pdf.js by accident.
+vi.mock('../pdf/pdfEngine', async (orig) => ({ ...(await orig<typeof import('../pdf/pdfEngine')>()), openPdf: vi.fn() }))
+
 import FileViewer from './FileViewer.vue'
 import { registerPlayback, revokePlayback } from '../../../sw/register'
 import { PLAINTEXT_CHUNK_SIZE } from '../../../sw/range'
 import { IMAGE_CAP, TEXT_CAP } from '../view'
 import type { ViewerTarget } from '../useFileViewer'
-import { MP3_BYTES, MP4_BYTES, PDF_BYTES, PNG_BYTES, providerOf, utf8, type FakeProvider } from '../../../test/fileChunks'
+import { MP3_BYTES, MP4_BYTES, PNG_BYTES, providerOf, utf8, type FakeProvider } from '../../../test/fileChunks'
 import { realI18n, t } from '../../../test/i18n'
 import { formatBytes } from '../../../shared/formatBytes'
 
@@ -37,6 +40,7 @@ beforeEach(() => {
 })
 afterEach(() => vi.restoreAllMocks())
 
+const UNKNOWN_BYTES = Uint8Array.from({ length: 300 }, (_, i) => (i * 7) % 250)
 const target = (source: FakeProvider, hints: ViewerTarget['hints'] = {}, id = 'blob-1'): ViewerTarget => ({ id, source, hints })
 function mountViewer(tg: ViewerTarget | null, o: { canDownload?: boolean; name?: string } = {}) {
   return mount(FileViewer, {
@@ -82,7 +86,7 @@ describe('an image', () => {
   it('revokes the image\'s object URL when the page\'s file is replaced by one that is no image', async () => {
     const w = mountViewer(target(providerOf(PNG_BYTES), {}, 'blob-1'))
     await flushPromises()
-    await w.setProps({ target: target(providerOf(PDF_BYTES), {}, 'blob-2') })
+    await w.setProps({ target: target(providerOf(UNKNOWN_BYTES), {}, 'blob-2') })
     await flushPromises()
     expect(revoked).toEqual(['blob:viewer-1'])
     expect(w.find('img').exists()).toBe(false)
@@ -145,16 +149,6 @@ describe('a text', () => {
 })
 
 describe('what is not shown: the download is offered instead', () => {
-  it('a PDF: the browser\'s viewer needs a frame the policy does not allow, so a clear message and the download', async () => {
-    const w = mountViewer(target(providerOf(PDF_BYTES), { type: 'application/pdf', name: 'Report.pdf' }), { name: 'Report.pdf' })
-    await flushPromises()
-    expect(w.text()).toContain(t('files.viewer.unsupported.pdf'))
-    expect(w.find('iframe, object, embed').exists()).toBe(false)
-    expect(minted).toHaveLength(0)
-    await downloadButton(w).trigger('click')
-    expect(w.emitted('download')).toHaveLength(1)
-  })
-
   it('an image over the cap: not decrypted into memory, the download offered with the limit named', async () => {
     const p = providerOf(PNG_BYTES, { byteSize: IMAGE_CAP + 10 * PLAINTEXT_CHUNK_SIZE, chunkCount: Math.ceil(IMAGE_CAP / PLAINTEXT_CHUNK_SIZE) + 10 })
     const w = mountViewer(target(p, { type: 'image/png' }))
@@ -166,9 +160,9 @@ describe('what is not shown: the download is offered instead', () => {
   })
 
   it('offers no download button where the session has none (the message still stands)', async () => {
-    const w = mountViewer(target(providerOf(PDF_BYTES), {}), { canDownload: false })
+    const w = mountViewer(target(providerOf(UNKNOWN_BYTES), {}), { canDownload: false })
     await flushPromises()
-    expect(w.text()).toContain(t('files.viewer.unsupported.pdf'))
+    expect(w.text()).toContain(t('files.viewer.unsupported.format'))
     expect(downloadButton(w).exists()).toBe(false)
   })
 
@@ -322,7 +316,7 @@ describe('full screen', () => {
   })
 
   it('is a real, focusable button offered once something is shown, and only then', async () => {
-    const w = mountViewer(target(providerOf(PDF_BYTES), {}))
+    const w = mountViewer(target(providerOf(UNKNOWN_BYTES), {}))
     await flushPromises()
     expect(fullscreenButton(w).exists()).toBe(false) // nothing to enlarge for a fallback message
     await w.setProps({ target: target(providerOf(PNG_BYTES), {}, 'blob-2') })

@@ -188,8 +188,19 @@ export function sniffStream(head: Uint8Array): StreamKind | undefined {
 
 // --- documents -------------------------------------------------------------------------------------------------------
 
-/** Whether `head` is a PDF: the `%PDF-` header at byte 0 (a reader tolerates junk before it; a viewer that must not take
- *  a text that merely mentions the header for a PDF does not). */
+/** How far into the file a PDF reader looks for the `%PDF-` header (pdf.js does the same: the first KiB). */
+const PDF_HEADER_WINDOW = 1024
+
+/**
+ * Whether `head` is a PDF: the `%PDF-` header at byte 0, or - a reader tolerates junk before it - within the first
+ * {@link PDF_HEADER_WINDOW} bytes, but then only where `head` is NOT valid text: a text that merely mentions the header
+ * (a note about PDFs, a diff of one) is a text, not a document, and must not be taken for a PDF that then fails to open.
+ * The bytes decide; no claimed type is consulted.
+ */
 export function sniffPdf(head: Uint8Array): boolean {
-  return hasAscii(head, 0, '%PDF-')
+  if (hasAscii(head, 0, '%PDF-')) return true
+  for (let i = 1; i <= PDF_HEADER_WINDOW; i++) {
+    if (head[i] === 0x25 && hasAscii(head, i, '%PDF-')) return sniffText(head) === undefined
+  }
+  return false
 }
