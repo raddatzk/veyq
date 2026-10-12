@@ -24,8 +24,15 @@ function fakeTextLayer(this: { args: LayerArgs; cancel: ReturnType<typeof vi.fn>
 }
 
 const renderTask = { promise: Promise.resolve(), cancel: vi.fn() }
+let rotated = false
 const page = {
-  getViewport: ({ scale }: { scale: number }) => ({ scale, width: 200 * scale, height: 100 * scale }),
+  // A page 200 x 100 points; rotated, it is SHOWN 100 x 200 but its raw (unrotated) dimensions stay 200 x 100.
+  getViewport: ({ scale }: { scale: number }) => ({
+    scale,
+    width: (rotated ? 100 : 200) * scale,
+    height: (rotated ? 200 : 100) * scale,
+    rawDims: { pageWidth: 200, pageHeight: 100 },
+  }),
   render: vi.fn((_: { viewport: { scale: number } }) => renderTask),
   streamTextContent: vi.fn(() => 'stream'),
   cleanup: vi.fn(),
@@ -38,6 +45,7 @@ import { getDocument, TextLayer } from './pdfjsRuntime'
 beforeEach(() => {
   layers.length = 0
   layerBehaviour = 'ok'
+  rotated = false
   vi.clearAllMocks()
   cleanup = vi.fn()
   ;(TextLayer as unknown as { cleanup: unknown }).cleanup = cleanup // pdf.js' static, which the engine calls on destroy
@@ -66,6 +74,18 @@ describe('the engine builds the text layer with the page', () => {
     expect(host.textContent).toBe('Hello')
     expect(host.lastElementChild?.className).toBe(PDF_TEXT_END_CLASS)
     expect(page.streamTextContent).toHaveBeenCalledWith({ includeMarkedContent: true })
+    await doc.destroy()
+  })
+
+  it('sizes the host as the raw page at the CSS scale, not the (rotated) page box: the stylesheet turns it into place', async () => {
+    const doc = await openPdf(new Uint8Array(1))
+    const host = document.createElement('div')
+    await doc.render(1, canvas(), 400, 1, host).done
+    expect([host.style.width, host.style.height]).toEqual(['400px', '200px'])
+    rotated = true
+    const turned = document.createElement('div')
+    await doc.render(1, canvas(), 200, 1, turned).done // shown 200 px wide: scale 2 over a 100-point-wide rotated page
+    expect([turned.style.width, turned.style.height]).toEqual(['400px', '200px']) // still the raw 200 x 100 points, at scale 2
     await doc.destroy()
   })
 

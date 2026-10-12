@@ -125,12 +125,15 @@ export async function openPdf(bytes: Uint8Array, signal?: AbortSignal, onPasswor
     host.style.setProperty('--total-scale-factor', String(cssScale))
     if (isCancelled()) return
     try {
-      const layer = new TextLayer({
-        textContentSource: page.streamTextContent({ includeMarkedContent: true }),
-        container: host,
-        viewport: page.getViewport({ scale: cssScale }),
-      })
+      const viewport = page.getViewport({ scale: cssScale })
+      const layer = new TextLayer({ textContentSource: page.streamTextContent({ includeMarkedContent: true }), container: host, viewport })
       setLayer(layer)
+      // The layer is laid out in the page's UNROTATED space (`rawDims`) and turned into place by `[data-main-rotation]` in
+      // `styles/pdf.css`, so its box is the raw page at this scale - not the (rotated) page box. pdf.js writes the same size
+      // with the CSS `round()` function, which not every browser has; this is the plain px the page needs.
+      const { pageWidth, pageHeight } = viewport.rawDims
+      host.style.width = `${pageWidth * cssScale}px`
+      host.style.height = `${pageHeight * cssScale}px`
       await layer.render()
       // The element pdf.js' own viewer appends so a drag that leaves the text does not select the whole page.
       const end = document.createElement('div')

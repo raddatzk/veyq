@@ -5,14 +5,12 @@
    of their own, so the rules reach them through `.pdf-text-layer`; each is a two-class selector or longer so no framework rule
    (a PrimeVue / PrimeIcons `span`, `.pi`) can win over it. The host gets its custom properties from the engine:
    `--total-scale-factor` (CSS px per PDF point), `--min-font-size` (measured by pdf.js), and per span `--font-height`,
-   `--scale-x`, `--rotate`. Its box is the page's (`.pdf-page` is sized in px), so the percentages pdf.js writes line up at
-   every zoom. A page is paper in every theme (white), so the layer is `color-scheme: only light`. */
+   `--scale-x`, `--rotate`, and its width and height in px (the raw, unrotated page at the current zoom). The spans sit at
+   percentages of that box, so they line up at every zoom; a page with /Rotate is turned into place by the
+   `[data-main-rotation]` rules below. A page is paper in every theme (white), so the layer is `color-scheme: only light`. */
 .pdf-page .pdf-text-layer {
   position: absolute;
   inset: 0;
-  /* pdf.js writes a width/height with the CSS round() function inline; the page box is the truth, in every browser. */
-  width: 100% !important;
-  height: 100% !important;
   z-index: 1;
   overflow: clip;
   color-scheme: only light;
@@ -28,6 +26,17 @@
   --min-font-size: 1;
   --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
   --min-font-size-inv: calc(1 / var(--min-font-size));
+}
+
+/* pdf.js sets data-main-rotation to the page's /Rotate; its own sheet turns the unrotated layer into the rotated page box. */
+.pdf-page .pdf-text-layer[data-main-rotation='90'] {
+  transform: rotate(90deg) translateY(-100%);
+}
+.pdf-page .pdf-text-layer[data-main-rotation='180'] {
+  transform: rotate(180deg) translate(-100%, -100%);
+}
+.pdf-page .pdf-text-layer[data-main-rotation='270'] {
+  transform: rotate(270deg) translateX(-100%);
 }
 
 .pdf-text-layer :is(span, br) {
