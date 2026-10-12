@@ -182,8 +182,8 @@ acceptanceCriteria:
     gaps:
       - surface: web
         reason: >-
-          The guest page offers "New folder" and, in Memories' section, "New Memory" (the level's create cards, inbox
-          #401 S2), and core's move dialog (inbox #358, uc.memory.move-node, ShareTreePage.move.test.ts); no rename
+          The guest page offers "New folder", "New Memory" and "Upload files" in the level toolbar's "New" menu (each
+          entry only where its capability function grants it, inbox #401 S2, #406), and core's move dialog (inbox #358, uc.memory.move-node, ShareTreePage.move.test.ts); no rename
           control exists, so a guest's rename is proven through placeShareNodeAsGuest by the wire test and the e2e, not
           through a screen.
   - id: guest-tree-refusals

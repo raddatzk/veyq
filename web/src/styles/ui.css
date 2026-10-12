@@ -661,7 +661,7 @@
   color: var(--app-info-text);
 }
 
-/* The node header (core/node/components/NodeHeader.vue, inbox #405): leading visual, name (+ subtitle + meta), actions on
+/* The node header (core/node/components/NodeHeader.vue, inbox #406): leading visual, name (+ subtitle + meta), actions on
    the right. Every action is visible at EVERY width (a width-hidden button is a lost action): the title row wraps, so on
    a narrow screen the actions take their own row. Tokens only, so the dark theme needs no rule of its own beyond the icon
    tile's (dark.css). */

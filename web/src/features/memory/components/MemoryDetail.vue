@@ -438,7 +438,7 @@ watch(
 
 <template>
   <div class="memory-route-surface memory-detail">
-    <!-- Core's header (`NodeHeader`, inbox #405): the cover is the leading visual — it IS the "set / edit cover" button —
+    <!-- Core's header (`NodeHeader`, inbox #406): the cover is the leading visual — it IS the "set / edit cover" button —
          the count is the subtitle, the date and place chips the meta row, and the actions are the capability answers
          below (`headerActions`), the same list a share guest gets with fewer entries. -->
     <NodeHeader :title="node.name" :subtitle="t('media.itemCount', { count: items.length }, items.length)" :level="1" :actions="headerActions">

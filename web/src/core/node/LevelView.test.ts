@@ -28,6 +28,8 @@ import { FOLDER_KIND, type NodeKind } from './kind'
 import type { TreeNode } from './tree'
 import { setViewMode, useViewMode, type ViewMode } from '../../shared/state/useViewMode'
 import { realI18n, t } from '../../test/i18n'
+import { chooseNew, hasNewMenu, isDisabled, newMenuLabels, openNewMenu } from '../../test/newMenu'
+import { useLevelAction } from './levelActions'
 import { treeNode, memberAccessOf, memberTreeOf, guestAccessOf } from '../../test/models'
 import { ShareRole } from '../../api/generated/sharing'
 import type { Access, TreeSource } from '../access'
@@ -195,23 +197,20 @@ describe('LevelView: the fallback section (a kind no section serves)', () => {
 })
 
 describe('LevelView: the folders section', () => {
-  it('lists the sub-folders, opens one, and offers the new-folder card that asks for create-folder', async () => {
+  it('lists the sub-folders and opens one; the folder is created from the "New" menu, no tile', async () => {
     const rome = node('Rome', FOLDER_KIND, 'Trips')
     const w = mountLevel([TRIPS, rome], { folder: TRIPS })
     const card = w.findAll('button.veyq-folder-card').find((b) => b.text() === 'Rome')!
     await card.trigger('click')
     expect(w.emitted('openNode')).toEqual([[rome]])
-    await w.find('.veyq-level-grid .veyq-create-card').trigger('click')
+    expect(w.find('.veyq-level-grid .veyq-create-card').exists(), 'the create tile is retired (inbox #406)').toBe(false)
+    await chooseNew(w, t('node.folderCreate'))
     expect(w.emitted('create')).toEqual([[FOLDER_KIND]])
   })
 
   // inbox #385 (g): a tile is named by its text alone — its icon glyph is hidden from assistive technology.
-  it('names the new-folder card and each folder card by their text, their icons hidden', () => {
+  it('names each folder card by its text, its icon hidden', () => {
     const w = mountLevel([TRIPS, node('Rome', FOLDER_KIND, 'Trips')], { folder: TRIPS })
-    const create = w.find('.veyq-level-grid .veyq-create-card')
-    expect(create.text()).toBe(t('node.folderCreate'))
-    expect(create.attributes('aria-label'), 'named outright too: an accessibility-tree reader showed the tile unnamed').toBe(t('node.folderCreate'))
-    expect(create.find('.pi').attributes('aria-hidden')).toBe('true')
     expect(w.find('button.veyq-folder-card .pi').attributes('aria-hidden')).toBe('true')
   })
 
@@ -238,10 +237,10 @@ describe('LevelView: the folders section', () => {
     expect(blocks(mountLevel([]))).toEqual(['section:a'])
   })
 
-  it('read-only (a pending deletion, a guest\'s identity folder): no new-folder card, the folder cards stay', () => {
+  it('read-only (a pending deletion, a guest\'s identity folder): no "New" menu, the folder cards stay', () => {
     for (const over of [{ pending: true }, { identityFolder: true }]) {
       const w = mountLevel([TRIPS, node('Rome', FOLDER_KIND, 'Trips')], { folder: TRIPS, ...over })
-      expect(w.find('.veyq-level-grid .veyq-create-card').exists()).toBe(false)
+      expect(hasNewMenu(w)).toBe(false)
       expect(w.text()).toContain('Rome')
     }
   })
@@ -462,5 +461,81 @@ describe('LevelView: a guest\'s identity folder hides empty sections', () => {
     const rome = node('Rome', FOLDER_KIND, 'Trips')
     expect(blocks(mountLevel([TRIPS, rome], { folder: TRIPS, identityFolder: true }))).toEqual(['overview', 'folders'])
     expect(blocks(mountLevel([TRIPS], { folder: TRIPS, identityFolder: true }))).toEqual(['overview', `empty:${t('node.levelEmpty')}`])
+  })
+})
+
+// inbox #406: the creation actions are ONE menu in the toolbar, derived from the registry, each entry only where its own
+// capability function says yes. Real clicks on the button and on the entries.
+describe('LevelView: the "New" menu', () => {
+  const Dialog = defineComponent({ name: 'StubDialog', setup: () => () => h('div') })
+  const grant = { value: true }
+  const ready = { value: true }
+  const ran: string[] = []
+  const allowed = (ctx: { access: Access }) => grant.value && !(ctx.access.mode === 'guest' && ctx.access.role === ShareRole.Read)
+  /** A section stub that registers a level action while mounted, like Files' section does. */
+  const StubUploader = defineComponent({
+    name: 'StubUploader',
+    props: { nodes: { type: Array, default: () => [] } },
+    setup() {
+      useLevelAction('x.upload', { enabled: () => ready.value, run: () => ran.push('upload') })
+      return () => h('section', { class: 'stub-section', 'data-name': 'u' })
+    },
+  })
+  beforeEach(() => {
+    grant.value = true
+    ready.value = true
+    ran.length = 0
+    reg().registerKind({
+      kind: 'ALPHA', icon: 'pi pi-a', shareable: false, createDialog: Dialog,
+      createEntry: { label: 'node.anItem', icon: 'pi pi-a', order: 10, allowed: allowed },
+      levelActions: [{ id: 'x.upload', label: 'node.rename', icon: 'pi pi-upload', order: 30, allowed: allowed }],
+      section: { order: 10, component: StubUploader },
+    })
+  })
+
+  it('lists core\'s folder entry and the registry\'s entries by order, and each choice acts: create by kind, an action by its handler', async () => {
+    const w = mountLevel([TRIPS], { folder: TRIPS })
+    expect(await newMenuLabels(w)).toEqual([t('node.folderCreate'), t('node.anItem'), t('node.rename')])
+    await chooseNew(w, t('node.anItem'))
+    await chooseNew(w, t('node.rename'))
+    await chooseNew(w, t('node.folderCreate'))
+    expect(w.emitted('create')).toEqual([['ALPHA'], [FOLDER_KIND]])
+    expect(ran).toEqual(['upload'])
+  })
+
+  it('is keyboard reachable: a real button with a popup menu, entries are menu items', async () => {
+    const w = mountLevel([TRIPS], { folder: TRIPS })
+    const button = w.find('.veyq-new-menu-button')
+    expect(button.element.tagName).toBe('BUTTON')
+    expect(button.attributes('aria-haspopup')).toBe('menu')
+    const items = await openNewMenu(w)
+    expect(items.every((i) => i.getAttribute('role') === 'menuitem')).toBe(true)
+  })
+
+  it('fails closed: an entry whose capability function says no is not drawn; none left, no button', async () => {
+    grant.value = false
+    const w = mountLevel([TRIPS], { folder: TRIPS })
+    expect(await newMenuLabels(w)).toEqual([t('node.folderCreate')])
+    const readonly = mountLevel([TRIPS], { folder: TRIPS, pending: true })
+    expect(hasNewMenu(readonly)).toBe(false)
+  })
+
+  it('an action whose handler is not ready (or whose section is not mounted: another tab) is disabled, not a dead click', async () => {
+    ready.value = false
+    const w = mountLevel([TRIPS], { folder: TRIPS })
+    const items = await openNewMenu(w)
+    const upload = items.find((i) => i.textContent?.trim() === t('node.rename'))!
+    expect(isDisabled(upload)).toBe(true)
+    expect(isDisabled(items.find((i) => i.textContent?.trim() === t('node.anItem'))!)).toBe(false)
+  })
+
+  it('a READ guest gets no menu; a READ_WRITE guest gets the entries its capabilities grant', () => {
+    const mountGuest = (role: ShareRole) =>
+      mount(LevelView, {
+        props: { folder: TRIPS, level: childrenOf([TRIPS], TRIPS.id), access: guestAccessOf(role), tree: memberTreeOf(() => [TRIPS]) },
+        global: { plugins: [realI18n()], directives: { tooltip: {} } },
+      })
+    expect(hasNewMenu(mountGuest(ShareRole.Read))).toBe(false)
+    expect(hasNewMenu(mountGuest(ShareRole.ReadWrite))).toBe(true)
   })
 })

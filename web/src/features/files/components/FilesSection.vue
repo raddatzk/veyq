@@ -54,6 +54,7 @@ import { fileFacts } from '../download'
 import { plaintextTotal } from '../../../sw/range'
 import { isSaveCancelled, SaveTooLarge } from '../../../shared/saveStream'
 import { filesCapabilities } from '../capabilities'
+import { useLevelAction } from '../../../core/node/levelActions'
 import { targetOf, type GuestAccess, type TreeSource } from '../../../core/access'
 import { guestFilesSource, memberFilesSource, sourceCapabilities, type FileUploadEntry, type FilesSource } from '../source'
 
@@ -251,6 +252,10 @@ async function startUploads(files: File[], replaceNode?: TreeNode, confirmed = f
   })
 }
 
+// "Upload files" is an entry of core's level "New" menu (`register.ts`, inbox #406), not a button of this header: the
+// section hands the level the handler that opens its picker, for as long as it is mounted.
+useLevelAction('files.upload', { enabled: () => caps.value.upload && writeReady.value, run: () => picker.value?.click() })
+
 const pickedFiles = (e: Event): File[] => {
   const input = e.target as HTMLInputElement
   const files = [...(input.files ?? [])]
@@ -367,18 +372,6 @@ async function remove(node: TreeNode) {
     <div class="veyq-section-header">
       <h2>{{ t('files.title') }}</h2>
       <span>{{ fileNodes.length }}</span>
-      <div v-if="caps.upload" class="files-toolbar">
-        <Button
-          type="button"
-          :label="t('files.upload')"
-          icon="pi pi-upload"
-          severity="secondary"
-          outlined
-          size="small"
-          :disabled="!writeReady"
-          @click="picker?.click()"
-        />
-      </div>
     </div>
     <!-- A contributor guest is told what an upload or a replace does before it happens (inbox #383); a replace asks
          again when it is picked. -->
@@ -404,7 +397,7 @@ async function remove(node: TreeNode) {
       </span>
     </Message>
 
-    <p v-if="!fileNodes.length" class="veyq-empty veyq-empty-inline">{{ guest && !caps.upload ? t('files.guest.empty') : t('files.empty') }}</p>
+    <p v-if="!fileNodes.length" class="veyq-empty veyq-empty-inline">{{ caps.upload ? t('files.empty') : guest ? t('files.guest.empty') : t('files.emptyReadOnly') }}</p>
     <ul v-else class="veyq-list files-list">
       <li v-for="row in rows" :key="row.node.id" class="veyq-list-row files-row">
         <button
@@ -502,13 +495,6 @@ async function remove(node: TreeNode) {
 </template>
 
 <style scoped>
-.files-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-  margin-left: auto;
-}
 .files-row-open {
   display: flex;
   align-items: center;

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Core's `NodeHeader` (inbox #405): the data it is fed is all it draws. Every action is a real labelled button that calls
+// Core's `NodeHeader` (inbox #406): the data it is fed is all it draws. Every action is a real labelled button that calls
 // its handler on a real click, an action that is not `shown` is not rendered, a disabled one does not fire, core's own
 // actions are merged around the application's, and the leading visual is the icon or the application's slot.
 import { describe, it, expect, vi } from 'vitest'

@@ -3,7 +3,7 @@
 // identity, each named by its guest (its entry opened through the drop box's drop key, core's tree) — with how many
 // files each holds. A folder opens to core's level view, read-only there (a member places nothing in a guest's identity
 // folder) but for a delete per file (inbox #391); a member deletes a folder here, or the drop box, and shares it
-// (`DropBoxShareDialog`) from core's header card, the one a folder opens with (`NodeHeader`, inbox #385 (b), #405) — each
+// (`DropBoxShareDialog`) from core's header card, the one a folder opens with (`NodeHeader`, inbox #385 (b), #406) — each
 // where Files' capability matrix says so (`../capabilities.ts`, inbox #401: the share with
 // the instance's public links, the deletes not during a pending deletion). Two guests of one name are told apart at
 // display time, never stored ("Anna", "Anna (2)",

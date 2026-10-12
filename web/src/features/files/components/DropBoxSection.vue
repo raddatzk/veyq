@@ -6,7 +6,6 @@
 // matrix's (`../capabilities.ts`, inbox #401): not during a pending deletion, never in a guest's identity folder.
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
 import type { LevelSectionEmits, LevelSectionProps } from '../../../core/applications/registry'
 import { DROPBOX_KIND } from '../kinds'
 import { filesCapabilities } from '../capabilities'
@@ -27,18 +26,6 @@ const caps = computed(() =>
     <div class="veyq-section-header">
       <h2>{{ t('files.dropBox.section') }}</h2>
       <span>{{ boxes.length }}</span>
-      <div v-if="caps.createDropBox" class="dropbox-toolbar">
-        <Button
-          type="button"
-          :label="t('files.dropBox.create')"
-          icon="pi pi-inbox"
-          severity="secondary"
-          outlined
-          size="small"
-          :disabled="!epochs"
-          @click="emit('create', DROPBOX_KIND)"
-        />
-      </div>
     </div>
     <p v-if="!boxes.length" class="veyq-empty veyq-empty-inline">{{ t('files.dropBox.sectionEmpty') }}</p>
     <ul v-else class="veyq-list">
@@ -55,13 +42,6 @@ const caps = computed(() =>
 </template>
 
 <style scoped>
-.dropbox-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-  margin-left: auto;
-}
 .dropbox-row-open {
   display: flex;
   align-items: center;

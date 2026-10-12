@@ -19,7 +19,7 @@
 // the one page core renders by claim (every other guest page is the member's views, inbox #401).
 import { DROPBOX_KIND, FILE_KIND } from './kinds'
 import { FOLDER_KIND } from '../../core/node/kind'
-import type { Registry } from '../../core/applications/registry'
+import type { LevelActionContext, Registry } from '../../core/applications/registry'
 import { fileNameSlug } from '../../shared/naming'
 import FilesSection from './components/FilesSection.vue'
 import DropBoxSection from './components/DropBoxSection.vue'
@@ -29,6 +29,8 @@ import DropBoxShareDialog from './components/DropBoxShareDialog.vue'
 import DropBoxShareBody from './components/DropBoxShareBody.vue'
 import FileDetail from './components/FileDetail.vue'
 import FileShareDialog from './components/FileShareDialog.vue'
+import { filesCapabilities } from './capabilities'
+import { targetOf } from '../../core/access'
 
 /** What a rename selects of a file's name (core's rename dialog, inbox #385): the name without its extension — up to
  *  the last dot, unless the name starts with its only dot (`.env` stays whole). */
@@ -41,6 +43,10 @@ export function fileNameStemEnd(name: string): number {
 export const FILES_SECTION_ORDER = 20
 /** The drop boxes' section: right after the files. */
 export const DROPBOX_SECTION_ORDER = 21
+
+/** Where Files' entries sit in the level's "New" menu: after core's folder (0) and Memories' Memory (10). */
+const NEW_DROPBOX_ORDER = 20
+const NEW_UPLOAD_ORDER = 30
 
 /** Where a file and a drop box live (the backend's `FilesNodeKindRules`): at the root or directly in a folder — never in
  *  another file or a drop box, which take no placed child. */
@@ -66,6 +72,12 @@ export function registerFiles(registry: Registry): void {
     // Core's create and rename dialogs name a colliding file with it: "There is already a file named …" (#389).
     nounWithArticle: 'files.aFile',
     section: { order: FILES_SECTION_ORDER, component: FilesSection, tabLabel: 'files.title' },
+    // "Upload files" in core's level "New" menu (inbox #406): no create dialog - the mounted section registers the handler
+    // that opens its picker under this id (`core/node/levelActions.ts`), and the entry is greyed out while none is.
+    levelActions: [{
+      id: 'files.upload', label: 'files.upload', icon: 'pi pi-upload', order: NEW_UPLOAD_ORDER,
+      allowed: (ctx: LevelActionContext) => filesCapabilities(ctx.access, targetOf(ctx.tree, ctx.folder)).upload,
+    }],
     // Where it may be moved (core's move dialog, inbox #358): the backend's `FilesNodeKindRules`.
     placement: FILES_PLACEMENT,
   })
@@ -82,6 +94,11 @@ export function registerFiles(registry: Registry): void {
     nounWithArticle: 'files.dropBox.aDropBox',
     section: { order: DROPBOX_SECTION_ORDER, component: DropBoxSection, tabLabel: 'files.dropBox.section' },
     createDialog: DropBoxCreateDialog,
+    createEntry: {
+      label: 'files.dropBox.create', icon: 'pi pi-inbox', order: NEW_DROPBOX_ORDER,
+      allowed: (ctx: LevelActionContext) => filesCapabilities(ctx.access, targetOf(ctx.tree, ctx.folder)).createDropBox,
+      enabled: (ctx: LevelActionContext) => ctx.epochs !== null,
+    },
     shareDialog: DropBoxShareDialog,
     placement: FILES_PLACEMENT,
   })

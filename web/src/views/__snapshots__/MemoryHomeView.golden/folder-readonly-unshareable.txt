@@ -65,7 +65,7 @@ div.veyq-node-host
         span
           "0"
       p.veyq-empty.veyq-empty-inline
-        "No files yet — upload the first one."
+        "No files yet."
     section.veyq-section
       div.veyq-level-section-header.veyq-section-header
         h2

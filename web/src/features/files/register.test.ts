@@ -31,6 +31,7 @@ describe('registerFiles', () => {
       emptyInTrash: 'files.trashEmpty',
       nounWithArticle: 'files.aFile',
       section: { order: 20, component: FilesSection, tabLabel: 'files.title' },
+      levelActions: [{ id: 'files.upload', label: 'files.upload', icon: 'pi pi-upload', order: 30, allowed: expect.any(Function) }],
       placement: { root: true, parents: [FOLDER_KIND] },
     })
   })
@@ -75,6 +76,7 @@ describe('registerFiles', () => {
       nounWithArticle: 'files.dropBox.aDropBox',
       section: { order: 21, component: DropBoxSection, tabLabel: 'files.dropBox.section' },
       createDialog: DropBoxCreateDialog,
+      createEntry: { label: 'files.dropBox.create', icon: 'pi pi-inbox', order: 20, allowed: expect.any(Function), enabled: expect.any(Function) },
       shareDialog: DropBoxShareDialog,
       placement: { root: true, parents: [FOLDER_KIND] },
     })

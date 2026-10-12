@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// The header of every node page and level (owner design 2026-10-12, inbox #405): ONE core component, so a folder, a file,
+// The header of every node page and level (owner design 2026-10-12, inbox #406): ONE core component, so a folder, a file,
 // a drop box and a Memory open the same way. Left a LEADING VISUAL (the `leading` slot — an application's cover image —
 // or, by default, the kind's `icon`), then the NAME (`title`, optionally a `subtitle` and a `meta` slot below it), and
 // the ACTIONS on the right (`NodeHeaderAction`, `../nodeHeader.ts`). The application feeds data and its capability

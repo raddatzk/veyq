@@ -44,16 +44,19 @@
 // In a guest's identity folder (a drop box's, inbox #385) a section, or the folders section, with nothing to show is
 // left out instead of saying "none yet" — nobody can add anything there, so an empty heading only says that this kind
 // exists. When nothing is left, the level says so once.
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
+import Menu from 'primevue/menu'
+import type { MenuItem } from 'primevue/menuitem'
 import Tabs from 'primevue/tabs'
 import TabList from 'primevue/tablist'
 import Tab from 'primevue/tab'
 import type { TreeNode } from './tree'
 import type { Level } from './browse'
 import { FOLDER_KIND, type NodeKind } from './kind'
-import { registry } from '../applications/registry'
+import { registry, type LevelActionContext, type LevelMenuItem } from '../applications/registry'
+import { provideLevelActions } from './levelActions'
 import { folderCapabilities, targetOf, type Access, type TreeSource } from '../access'
 import { useViewMode } from '../../shared/state/useViewMode'
 import { setLevelTab, useLevelTab } from '../../shared/state/useLevelTab'
@@ -100,6 +103,35 @@ const { levelTab } = useLevelTab()
 const inIdentityFolder = computed(() => props.tree.inIdentityFolder(props.folder?.id ?? null))
 const caps = computed(() => folderCapabilities(props.access, targetOf(props.tree, props.folder)))
 const hideEmptySections = computed(() => inIdentityFolder.value)
+
+// The "New" menu (inbox #406): core's folder entry plus every entry the registry derives from the kinds' descriptors, each
+// shown only where ITS capability function says yes (member and guest alike; a READ guest gets none, so no menu button).
+// An application action (Files' upload) runs the handler its mounted section registered (`levelActions.ts`); with none
+// mounted (another application's tab is shown) the entry is disabled, never a click that does nothing.
+const levelActions = provideLevelActions()
+const FOLDER_ENTRY: LevelMenuItem = { id: 'create:FOLDER', create: FOLDER_KIND, label: 'node.folderCreate', icon: 'pi pi-folder', order: 0, allowed: () => true }
+const registryMenu = registry.levelMenu()
+const menuCtx = computed<LevelActionContext>(() => ({
+  access: props.access,
+  tree: props.tree,
+  folder: props.folder,
+  epochs: props.access.mode === 'member' ? props.access.epochs : null,
+}))
+const menuEntries = computed(() => [...(caps.value.createFolder ? [FOLDER_ENTRY] : []), ...registryMenu.filter((e) => e.allowed(menuCtx.value))])
+const menuItems = computed<MenuItem[]>(() =>
+  menuEntries.value.map((e) => {
+    const handler = e.create === undefined ? levelActions.get(e.id) : undefined
+    const ready = e.create !== undefined ? true : !!handler?.enabled()
+    return {
+      label: t(e.label),
+      icon: e.icon,
+      disabled: !ready || (e.enabled ? !e.enabled(menuCtx.value) : false),
+      class: `veyq-new-menu-item veyq-new-menu-${e.id.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`,
+      command: () => (e.create !== undefined ? emit('create', e.create) : handler?.run()),
+    }
+  }),
+)
+const newMenu = ref<InstanceType<typeof Menu> | null>(null)
 // The folder header's actions: the capability answers for the folder on screen, in the header's fixed order.
 const folderActions = computed(() =>
   standardNodeActions(
@@ -172,7 +204,19 @@ const shownFallbacks = computed(() => (fallbacksVisible(shownTab.value) ? fallba
     <!-- The space's node trash (uc.memory.delete-node): every application's deleted nodes, so the level view's own, not
          a section's. Hidden where nothing is written (a pending deletion: a restore is a write; a guest's folder). The
          view switch governs every section and the folders, so it is the level's too — a guest's as well. -->
-    <div v-if="caps.nodeTrash || showViews" class="veyq-level-toolbar">
+    <div v-if="menuEntries.length || caps.nodeTrash || showViews" class="veyq-level-toolbar">
+      <template v-if="menuEntries.length">
+        <Button
+          type="button"
+          class="veyq-new-menu-button"
+          :label="t('node.new')"
+          icon="pi pi-plus"
+          size="small"
+          aria-haspopup="menu"
+          @click="newMenu?.toggle($event)"
+        />
+        <Menu ref="newMenu" :model="menuItems" popup />
+      </template>
       <Button
         v-if="caps.nodeTrash"
         type="button"
@@ -252,16 +296,6 @@ const shownFallbacks = computed(() => (fallbacksVisible(shownTab.value) ? fallba
         >
           <span class="pi pi-folder" aria-hidden="true" />
           <strong>{{ folderLabels.get(child.id) ?? child.name }}</strong>
-        </button>
-        <button
-          v-if="caps.createFolder"
-          class="veyq-card veyq-card-interactive veyq-create-card"
-          type="button"
-          :aria-label="t('node.folderCreate')"
-          @click="emit('create', FOLDER_KIND)"
-        >
-          <span class="pi pi-plus" aria-hidden="true" />
-          <strong>{{ t('node.folderCreate') }}</strong>
         </button>
       </div>
     </section>

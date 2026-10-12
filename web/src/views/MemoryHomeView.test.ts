@@ -156,6 +156,7 @@ import { FILE_KIND } from '../features/files/kinds'
 import { capabilityState } from '../shared/state/capabilities'
 import { SHARING_PUBLIC_LINKS } from '../features/platform/capabilities'
 import { realI18n, t } from '../test/i18n'
+import { chooseNew } from '../test/newMenu'
 import PrimeVue from 'primevue/config'
 import { registry } from '../core/applications/registry'
 import { treeNode } from '../test/models'
@@ -368,16 +369,16 @@ describe('MemoryHomeView over the real registry', () => {
     const w = await mountAt('#~me')
     const section = w.findComponent({ name: 'MemoriesSectionStub' })
 
-    section.vm.$emit('create', MEMORY_KIND)
+    await chooseNew(w, t('memory.create')) // the real registry's entry of the Memory kind
     await flushPromises()
     expect(w.find('.create-stub').text()).toBe('MEMORY|-')
     expect(w.find('.name-stub').exists()).toBe(false)
-    await w.find('.veyq-level-grid .veyq-create-card').trigger('click')
+    await chooseNew(w, t('node.folderCreate'))
     await flushPromises()
     expect(w.find('.name-stub').text()).toBe('create|-|-')
     expect(w.find('.create-stub').exists(), 'the Memory dialog gives way').toBe(false)
 
-    await w.find('.veyq-level-toolbar button').trigger('click')
+    await w.find(`.veyq-level-toolbar button[aria-label="${t('node.trash.open')}"], .veyq-level-toolbar button:not(.veyq-new-menu-button)`).trigger('click')
     await flushPromises()
     expect(w.find('.trash-stub').exists()).toBe(true)
 

@@ -38,7 +38,7 @@ Two honest details:
 ## A drop box for files
 
 A **drop box** (in Files) is a place of its own that collects files from people without an account. Create it with
-**New drop box**, then make a link. Everyone who uses the link gets **a folder of their own** in it, so nobody
+**New** → **New drop box**, then make a link. Everyone who uses the link gets **a folder of their own** in it, so nobody
 sees what others sent — and you and the other members of your space see all of it in one place. Switching the link
 off keeps everything that already arrived. If you want to keep a guest's folder, you can move it out as an ordinary
 folder; that person can then no longer add anything to it.

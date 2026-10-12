@@ -12,7 +12,7 @@
 // `topbarTray` list.
 import { MEMORY_KIND, CHAPTER_KIND } from './kinds'
 import { FOLDER_KIND } from '../../core/node/kind'
-import type { Registry } from '../../core/applications/registry'
+import type { LevelActionContext, Registry } from '../../core/applications/registry'
 import { GRID_VIEW, LIST_VIEW, type LevelViewOption } from '../../core/node/levelViews'
 import MemoryDetailHost from './components/MemoryDetailHost.vue'
 import MemoriesSection from './components/MemoriesSection.vue'
@@ -21,6 +21,8 @@ import ShareDialog from './components/ShareDialog.vue'
 import PinnedMemories from './components/PinnedMemories.vue'
 import MemoryShareBody from './components/MemoryShareBody.vue'
 import { memoriesLifecycle } from './lifecycle'
+import { memoryCapabilities } from './capabilities'
+import { targetOf } from '../../core/access'
 
 /** The places map of a level (cr-0071): Memories' own presentation — its pins span the level's whole subtree. */
 const MAP_VIEW: LevelViewOption = { mode: 'map', icon: 'pi pi-map', label: 'memory.viewMap' }
@@ -44,8 +46,15 @@ export function registerMemories(registry: Registry): void {
   }
   // Where each may be moved (core's move dialog, inbox #358) mirrors the backend's `MemoryNodeKindRules`: a Memory at the
   // root or in a folder, a chapter only directly in a Memory.
+  // Only a Memory is created from a level (core's "New" menu, inbox #406): the entry shows where Memories' capability
+  // matrix lets a Memory be created, and is greyed while the scope's keys are locked. A chapter is created inside its Memory.
+  const newMemory = {
+    label: 'memory.create', icon: 'pi pi-images', order: 10,
+    allowed: (ctx: LevelActionContext) => memoryCapabilities(ctx.access, targetOf(ctx.tree, ctx.folder)).createMemory,
+    enabled: (ctx: LevelActionContext) => ctx.epochs !== null,
+  }
   registry.registerKind({
-    kind: MEMORY_KIND, ...memories, deleteTitle: 'memory.deleteMemoryTitle', nounWithArticle: 'memory.aMemory',
+    kind: MEMORY_KIND, ...memories, createEntry: newMemory, deleteTitle: 'memory.deleteMemoryTitle', nounWithArticle: 'memory.aMemory',
     placement: { root: true, parents: [FOLDER_KIND] },
   })
   registry.registerKind({

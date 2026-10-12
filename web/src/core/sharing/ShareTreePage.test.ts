@@ -37,6 +37,7 @@ import { ShareRole, type PublicShare, type ShareNode } from '../../api/generated
 import { publicSharesApi } from '../../api/client'
 import { stubApi } from '../../test/apiMock'
 import { realI18n, t } from '../../test/i18n'
+import { chooseNew, hasNewMenu, newMenuLabels } from '../../test/newMenu'
 import { guestAccessFor } from '../../test/models'
 import { authenticatedCalls } from '../../test/guestMode'
 
@@ -133,7 +134,7 @@ async function mountBody(h0: PublicShareHead, o: { reload?: () => Promise<void>;
 type Body = Awaited<ReturnType<typeof mountBody>>
 const heading = (w: Body) => w.find('.veyq-node-header-title').text()
 const folderCards = (w: Body) => w.findAll('button.veyq-folder-card').map((c) => c.find('strong').text())
-const createFolderCard = (w: Body) => w.find(`.veyq-create-card[aria-label="${t('node.folderCreate')}"]`)
+const createsFolder = async (w: Body) => (await newMenuLabels(w)).includes(t('node.folderCreate'))
 /** Click as a user does; the event says whether the element's default action ran. */
 async function click(el: Element) {
   const e = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })
@@ -228,7 +229,7 @@ describe("ShareTreePage browses a shared folder with core's level view", () => {
     // …while the view switch is the guest's too (inbox #370: a share view is the member view)
     expect(w.find('.veyq-level-toolbar .view-mode-toggle').exists()).toBe(true)
     expect(w.find('.veyq-node-header-actions').exists(), 'share, rename, delete').toBe(false)
-    expect(w.find('.veyq-create-card').exists()).toBe(false)
+    expect(hasNewMenu(w), 'a READ guest has no "New" menu').toBe(false)
     expect(w.find('.share-folder-badge').text()).toBe(t('share.readonly'))
     expect(authenticatedCalls).toEqual([])
   })
@@ -350,9 +351,9 @@ describe('ShareTreePage: what it cannot render stays local', () => {
 })
 
 describe('ShareTreePage: a READ_WRITE guest adds folders', () => {
-  it('a READ_WRITE guest gets the level\'s create card and the contributor badge', async () => {
+  it('a READ_WRITE guest gets the level\'s "New" menu with the folder entry and the contributor badge', async () => {
     const w = await mountBody(head(ShareRole.ReadWrite))
-    expect(createFolderCard(w).exists()).toBe(true)
+    expect(await createsFolder(w)).toBe(true)
     expect(w.find('.share-folder-badge').text()).toBe(t('share.folder.contributorBadge'))
   })
 
@@ -368,7 +369,7 @@ describe('ShareTreePage: a READ_WRITE guest adds folders', () => {
     await at(LETTERS)
     const w = await mountBody(head(ShareRole.ReadWrite), { reload, requestGuest })
 
-    await click(createFolderCard(w).element)
+    await chooseNew(w, t('node.folderCreate'))
     expect(requestGuest).toHaveBeenCalledOnce()
     expect(w.find('.dialog-stub .header').text()).toBe(t('share.folder.newFolderTitle'))
     await submitName(w, 'Urlaub 1998')
@@ -383,7 +384,7 @@ describe('ShareTreePage: a READ_WRITE guest adds folders', () => {
 
   it('a visitor who declines to name itself gets no folder dialog', async () => {
     const w = await mountBody(head(ShareRole.ReadWrite), { requestGuest: async () => null })
-    await click(createFolderCard(w).element)
+    await chooseNew(w, t('node.folderCreate'))
     expect(w.find('.dialog-stub').exists()).toBe(false)
   })
 
@@ -391,7 +392,7 @@ describe('ShareTreePage: a READ_WRITE guest adds folders', () => {
     saveGuestSession(SHARE_ID, { identityId: 'id-0', contributorToken: 'tok-0' })
     const api = stubApi(publicSharesApi, { createShareNode: { nodeId: 'x' } })
     const w = await mountBody(head(ShareRole.ReadWrite), { requestGuest: async () => ({ identityId: 'id-0', contributorToken: 'tok-0' }) })
-    await click(createFolderCard(w).element)
+    await chooseNew(w, t('node.folderCreate'))
     await submitName(w, 'briefe')
     expect(api.createShareNode).not.toHaveBeenCalled()
     expect(w.find('.dialog-stub').text()).toContain(t('share.folder.nameTaken', { name: 'Briefe' }))

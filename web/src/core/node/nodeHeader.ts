@@ -1,7 +1,7 @@
 // What core's `NodeHeader` (`core/node/components/NodeHeader.vue`) is fed: the data of ONE header row. Every node page and
 // level header — a folder's, a file's, a drop box's, a Memory's — is that one component; an application only says WHAT
 // is in it (a leading icon or image, a title, a subtitle, a meta row, its actions) and core decides the look, the
-// spacing, the wrap, the keyboard and the dark mode (owner design 2026-10-12, inbox #405).
+// spacing, the wrap, the keyboard and the dark mode (owner design 2026-10-12, inbox #406).
 //
 // **An action is already a capability answer.** The caller builds the list from its fail-closed capability function
 // (`core/access.ts`, `../capabilities.ts`): an action it was not granted is `shown: false` or simply left out, and the

@@ -1,0 +1,72 @@
+// @vitest-environment happy-dom
+// The "New" menu's entries as the two real applications declare them (inbox #406): which entry shows to whom is the
+// application's capability matrix (`memoryCapabilities`, `filesCapabilities`) read through the descriptor's `allowed`, and
+// the order is the registry's. Fail closed: no entry for a READ guest, a pending deletion or a guest's identity folder.
+import { describe, it, expect } from 'vitest'
+import { createRegistry, type LevelActionContext } from '../core/applications/registry'
+import { registerMemories } from '../features/memory/register'
+import { registerFiles } from '../features/files/register'
+import { ShareRole } from '../api/generated/sharing'
+import { treeNode, memberAccessOf, memberTreeOf, guestAccessOf } from '../test/models'
+import { epochsOf } from '../features/spaces/epochsTestUtil'
+import { FOLDER_KIND } from '../core/node/kind'
+import type { Access } from '../core/access'
+import * as v1 from '@veyq/crypto/v1'
+
+const registry = createRegistry()
+registerMemories(registry)
+registerFiles(registry)
+
+const FOLDER = treeNode({ id: 'f1', kind: FOLDER_KIND, name: 'Trips', parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
+
+function ctx(access: Access, over: { identity?: boolean; epochs?: boolean } = {}): LevelActionContext {
+  const epochs = over.epochs === false ? null : epochsOf(v1.randomBytes(32))
+  const tree = { ...memberTreeOf(() => [FOLDER]), inIdentityFolder: () => over.identity ?? false }
+  return { access, tree, folder: FOLDER, epochs: access.mode === 'member' ? epochs : null }
+}
+/** The ids of the entries shown to this level, in menu order. */
+const shown = (c: LevelActionContext) => registry.levelMenu().filter((e) => e.allowed(c)).map((e) => e.id)
+
+describe('the applications\' "New" menu entries', () => {
+  it('are ordered Memory, drop box, upload (core adds the folder before them)', () => {
+    expect(registry.levelMenu().map((e) => e.id)).toEqual(['create:MEMORY', 'create:FILES_DROPBOX', 'files.upload'])
+    expect(registry.levelMenu().map((e) => e.label)).toEqual(['memory.create', 'files.dropBox.create', 'files.upload'])
+  })
+
+  it('a chapter is not created from a level: no entry for it', () => {
+    expect(registry.levelMenu().some((e) => e.create === 'CHAPTER')).toBe(false)
+  })
+
+  it('a member at a folder sees all of them', () => {
+    expect(shown(ctx(memberAccessOf()))).toEqual(['create:MEMORY', 'create:FILES_DROPBOX', 'files.upload'])
+  })
+
+  it('a pending deletion writes nothing: no entry', () => {
+    expect(shown(ctx(memberAccessOf({ readonly: true })))).toEqual([])
+  })
+
+  it('a guest\'s identity folder places nothing: no entry, for a member either', () => {
+    expect(shown(ctx(memberAccessOf(), { identity: true }))).toEqual([])
+  })
+
+  it('a READ guest sees none', () => {
+    expect(shown(ctx(guestAccessOf(ShareRole.Read)))).toEqual([])
+  })
+
+  it('an unknown role grants nothing (fail closed)', () => {
+    expect(shown(ctx(guestAccessOf('SOMETHING_NEW')))).toEqual([])
+  })
+
+  it('a READ_WRITE guest sees what its role creates, and the upload', () => {
+    expect(shown(ctx(guestAccessOf(ShareRole.ReadWrite)))).toEqual(['create:MEMORY', 'files.upload'])
+  })
+
+  it('the create entries are greyed out while the member\'s epoch keys are locked; the upload is the section\'s to enable', () => {
+    const locked = ctx(memberAccessOf(), { epochs: false })
+    const byId = Object.fromEntries(registry.levelMenu().map((e) => [e.id, e]))
+    expect(byId['create:MEMORY'].enabled!(locked)).toBe(false)
+    expect(byId['create:FILES_DROPBOX'].enabled!(locked)).toBe(false)
+    expect(byId['create:MEMORY'].enabled!(ctx(memberAccessOf()))).toBe(true)
+    expect(byId['files.upload'].enabled).toBeUndefined()
+  })
+})

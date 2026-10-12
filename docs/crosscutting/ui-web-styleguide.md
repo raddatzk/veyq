@@ -133,9 +133,10 @@ or a one-off `1rem` label sitting in them.
   one column on mobile — don't hide essential content in trailing action columns.
 - **Node cards (core):** `.veyq-card-grid` is the one track rule for a grid of node cards; the folder level view
   (`core/node/LevelView.vue`) adds `.veyq-level-grid` (list variant, narrow column), `.veyq-folder-card`,
-  `.veyq-folder-overview-card`, `.veyq-create-card` and `.veyq-danger-action` (`styles/ui.css`, end of sheet; dark
-  twins in `dark.css`). Memories' create cards wear `.veyq-create-card` too, plus their own `.memory-create-card-memory`;
-  `.memory-card-grid` is Memories' twin of the grid.
+  `.veyq-create-card` (Memories' chapter card wears it too) and `.veyq-danger-action` (`styles/ui.css`, end of sheet; dark
+  twins in `dark.css`); `.memory-card-grid` is Memories' twin of the grid. Creation lives in the level toolbar's "New" menu
+  (`.veyq-new-menu-button`), not in tiles. **Node header:** every node page and level opens with `.veyq-node-header`
+  (core's `NodeHeader`: leading visual, title, subtitle, actions on the right; tokens only, the icon tile has its dark twin).
 - **Badges:** `.veyq-badge.success|.warning|.muted` for status; no one-off pills.
 - **Forms:** `.veyq-form`, `.veyq-form-grid`, `.veyq-form-copy`; full-width inputs; concise labels;
   muted helper text that explains *consequences*, not the label.

@@ -22,7 +22,6 @@ import { useI18n } from 'vue-i18n'
 import { parentContentKey, type TreeNode } from '../../../core/node/tree'
 import type { LevelSectionProps, LevelSectionEmits } from '../../../core/applications/registry'
 import { sortNodesByDate } from '../memoryDate'
-import { MEMORY_KIND } from '../kinds'
 import { nodeById } from '../../../core/node/browse'
 import { treeStore } from '../../../core/node/treeStore'
 import { collectLocatedPins, collectLocatedPinsBy } from '../spaceMap'
@@ -150,16 +149,6 @@ watch(
         @open="emit('openNode', $event)"
         @toggle-favorite="onToggleFavorite"
       />
-      <button
-        v-if="caps.createMemory"
-        class="veyq-card veyq-card-interactive veyq-create-card memory-create-card-memory"
-        type="button"
-        :aria-label="t('memory.create')"
-        @click="emit('create', MEMORY_KIND)"
-      >
-        <span class="pi pi-plus" aria-hidden="true" />
-        <strong>{{ t('memory.create') }}</strong>
-      </button>
     </div>
   </section>
 </template>
