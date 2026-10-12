@@ -1018,3 +1018,11 @@ div.veyq-level-item-main,
     max-width: none;
   }
 }
+
+/* A toggle action on an item (the Memory's heart, inbox #409 moves it to core): pressed = the accent-soft tile with the
+   filled favourite heart, the same purple tile the sidebar icons use. Two classes, so it beats PrimeVue's outlined button. */
+.veyq-level-item-action.is-pressed {
+  border-color: color-mix(in srgb, var(--app-favorite) 30%, var(--app-line));
+  background: var(--app-accent-soft);
+  color: var(--app-favorite);
+}

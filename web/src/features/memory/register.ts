@@ -16,6 +16,7 @@ import type { LevelActionContext, Registry } from '../../core/applications/regis
 import { GRID_VIEW, LIST_VIEW, type LevelViewOption } from '../../core/node/levelViews'
 import MemoryDetailHost from './components/MemoryDetailHost.vue'
 import MemoriesSection from './components/MemoriesSection.vue'
+import { memoryRows } from './levelRows'
 import MemoryNodeDialog from './components/MemoryNodeDialog.vue'
 import ShareDialog from './components/ShareDialog.vue'
 import PinnedMemories from './components/PinnedMemories.vue'
@@ -41,8 +42,11 @@ export function registerMemories(registry: Registry): void {
   // One create dialog and one share dialog serve both kinds: the create's `kind` prop picks Memory or chapter, the
   // share dialog reads `nodeKind` for its wording. Core's delete dialog titles each by its own noun (`deleteTitle`):
   // "Delete Memory", "Delete chapter".
+  // inbox #407: the same two kinds name ONE row factory, its tab, the presentations it switches between (the card grid and list
+  // are core's; the map is Memories' own, drawn by the factory) and the plain text of its tab while it has nothing.
+  const list = { rows: memoryRows, tabLabel: 'memory.memories', views: [GRID_VIEW, LIST_VIEW, MAP_VIEW], emptyText: () => 'memory.memoryEmpty' }
   const memories = {
-    detail: MemoryDetailHost, icon: 'pi pi-images', shareable: true, section, createDialog: MemoryNodeDialog, shareDialog: ShareDialog,
+    detail: MemoryDetailHost, icon: 'pi pi-images', shareable: true, section, list, createDialog: MemoryNodeDialog, shareDialog: ShareDialog,
   }
   // Where each may be moved (core's move dialog, inbox #358) mirrors the backend's `MemoryNodeKindRules`: a Memory at the
   // root or in a folder, a chapter only directly in a Memory.

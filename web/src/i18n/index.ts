@@ -859,6 +859,9 @@ const en = {
   memory: {
     memories: 'Memories',
     memoryEmpty: 'No Memories here yet.',
+    // The noun that leads a row's meta line in the unified level list (inbox #407): "Memory · 1 Jun – 30 Jun 2024".
+    kindMemory: 'Memory',
+    kindChapter: 'Chapter',
     create: 'New Memory',
     createMemoryTitle: 'Create a Memory',
     createChapterTitle: 'Create a chapter',
@@ -2189,6 +2192,8 @@ const de: typeof en = {
   memory: {
     memories: 'Erinnerungen',
     memoryEmpty: 'Hier gibt es noch keine Erinnerungen.',
+    kindMemory: 'Erinnerung',
+    kindChapter: 'Kapitel',
     create: 'Neue Erinnerung',
     createMemoryTitle: 'Erinnerung anlegen',
     createChapterTitle: 'Kapitel anlegen',

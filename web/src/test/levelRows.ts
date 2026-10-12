@@ -25,7 +25,12 @@ export interface RowsHarness {
 
 /** Mount `factory` with the level `ctx`: the nodes drawn in core's order as core's real items, the notices as core's real
  *  notice component. `mode` is the layout. */
-export function mountRows(factory: LevelRowsFactory, ctx: LevelRowsContext, mode: 'grid' | 'list' = 'list', plugins: unknown[] = []): RowsHarness {
+export function mountRows(
+  factory: LevelRowsFactory,
+  ctx: LevelRowsContext,
+  mode: 'grid' | 'list' = 'list',
+  options: { stubs?: Record<string, unknown> } = {},
+): RowsHarness {
   const events = { open: [] as TreeNode[], rename: [] as TreeNode[], move: [] as TreeNode[] }
   const actions = new Map<string, LevelActionHandler>()
   const state = reactive({ ...ctx }) as LevelRowsContext
@@ -39,6 +44,12 @@ export function mountRows(factory: LevelRowsFactory, ctx: LevelRowsContext, mode
         registerAction: (id, handler) => actions.set(id, handler),
       })
       return () => {
+        // The application's own presentation of the mode (Memories' map) replaces the list, as core's level view does.
+        const presentation = state.viewMode === 'map' ? source.presentation?.('map') : null
+        if (presentation) {
+          const listeners = Object.fromEntries(Object.entries(presentation.on ?? {}).map(([name, f]) => [`on${name[0].toUpperCase()}${name.slice(1)}`, f]))
+          return h('div', { class: 'rows-harness' }, [h(presentation.component, { ...presentation.props, ...listeners })])
+        }
         const nodes = orderLevel([], state.nodes, 'en')
         return h('div', { class: 'rows-harness' }, [
           h(LevelNotices, { notices: (source.notices?.value ?? []) as readonly LevelNotice[] }),
@@ -50,7 +61,7 @@ export function mountRows(factory: LevelRowsFactory, ctx: LevelRowsContext, mode
       }
     },
   })
-  const w = mount(Host, { global: { plugins: [realI18n(), ...plugins] as never[], directives: { tooltip: {} } } })
+  const w = mount(Host, { global: { plugins: [realI18n()], directives: { tooltip: {} }, stubs: options.stubs as never } })
   return { w, events, actions, source: () => source, setCtx: async (over) => { Object.assign(state, over); await flushPromises() } }
 }
 
