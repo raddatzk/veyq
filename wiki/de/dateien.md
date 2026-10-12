@@ -13,13 +13,16 @@ Beide liegen in denselben Ordnern deines Bereichs, Seite an Seite.
 - **Herunterladen** — die Herunterladen-Schaltfläche in der Zeile der Datei gibt dir die Datei genau so zurück, wie
   du sie abgelegt hast, unter dem Namen, den sie in veyq hat. Ein Klick auf die Zeile selbst öffnet die Seite der Datei.
 - **Ansehen** — klicke auf die Zeile der Datei, und ihre Seite öffnet sich mit der Datei selbst darauf: ein **Bild**
-  wird angezeigt, ein **Text** (reiner Text, Markdown, Code, JSON, CSV …) wird als Text angezeigt, und ein **Video**
-  oder eine **Audiodatei** wird abgespielt, mit einer Schaltfläche für den **Vollbildmodus**. Die Datei wird auf
-  deinem Gerät entschlüsselt, während du sie ansiehst, es wird nichts Zusätzliches gespeichert, und wer die Datei von
-  dir freigegeben bekommen hat, sieht genau dasselbe. Manches zeigt die Seite nicht an: eine **PDF-Datei** (vorerst
-  gibt es dazu einen Hinweis und den Download), ein Format, das dein Browser nicht darstellen kann, und sehr große
-  Bilder (über 64 MB) — und von einem langen Text erscheint nur das erste Megabyte. In all diesen Fällen ist die
-  Schaltfläche zum Herunterladen gleich daneben.
+  wird angezeigt, ein **Text** (reiner Text, Markdown, Code, JSON, CSV …) wird als Text angezeigt, eine **PDF-Datei**
+  wird Seite für Seite angezeigt (mit Seitenzahl und Schaltflächen zum Vergrößern, Verkleinern und Anpassen an die
+  Breite), und ein **Video** oder eine **Audiodatei** wird abgespielt, mit einer Schaltfläche für den
+  **Vollbildmodus**. Die Datei wird auf deinem Gerät entschlüsselt, während du sie ansiehst, es wird nichts Zusätzliches
+  gespeichert, und wer die Datei von dir freigegeben bekommen hat, sieht genau dasselbe. Manches zeigt die Seite nicht
+  an: eine PDF, die **mit einem Passwort geschützt** ist (die Seite sagt es; öffne sie über den Download), ein Format,
+  das dein Browser nicht darstellen kann, und sehr große Bilder oder PDFs (über 64 MB) — und von einem langen Text
+  erscheint nur das erste Megabyte. In einer PDF lässt sich der Text noch nicht markieren oder durchsuchen, Links darin
+  tun nichts, und **eingescannte Seiten** (manche Scanner speichern die Seite in einem Bildformat, das veyq nicht
+  zeichnet) können Lücken zeigen. In all diesen Fällen ist die Schaltfläche zum Herunterladen gleich daneben.
 - **Ersetzen** — lege eine neuere Fassung an die Stelle der Datei. Der Name bleibt. veyq **fragt vorher nach**, denn
   es gibt **keinen Versionsverlauf**: Der alte Inhalt lässt sich nicht zurückholen. Dieselbe Frage kommt, wenn du eine
   Datei hochlädst, deren Name in dem Ordner schon vergeben ist.

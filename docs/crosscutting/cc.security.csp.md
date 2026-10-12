@@ -61,10 +61,10 @@ Why each non-obvious source is there:
   accepted gap.
 - **`frame-ancestors 'none'`.** This is the anti-clickjacking rule: no page on any origin may frame the app. It
   only works in a header, which is one reason the policy is not a `<meta>`.
-- **`object-src 'none'` / `frame-src 'none'`.** The app embeds nothing, and a decrypted file is never given a frame: Files
-  shows a PDF as a message plus the download for exactly this reason, because the browser's viewer needs a frame on a
-  `blob:` URL ([Files § The viewer](../apps/files.md#the-viewer-filedetail--fileviewer-inbox-412)). Widening either is a
-  decision, not a tweak.
+- **`object-src 'none'` / `frame-src 'none'`.** The app embeds nothing, and a decrypted file is never given a frame: the
+  browser's own PDF viewer needs a frame on a `blob:` URL, so Files draws a PDF itself with pdf.js onto canvases instead
+  (§ *A dependency that parses untrusted bytes*; [Files § The viewer](../apps/files.md#the-viewer-filedetail--fileviewer-inbox-412)).
+  Widening either is a decision, not a tweak.
 - **`img-src data: blob:` / `media-src blob:`.** These cover the favicon SVG and QR `data:` URLs, and the object
   URLs of decrypted media.
 - **`connect-src https://api.pwnedpasswords.com`.** This is the client-direct HIBP k-anonymity password check:
@@ -84,6 +84,31 @@ Why each non-obvious source is there:
   - `store-origin` (Kubernetes, [ADR 0064](../decisions/0064-kubernetes-helm-deployment-target.md)) appends
     the origin of `public-endpoint`;
   - `internal-endpoint` (a publicly reachable external S3) appends the origin of `endpoint`.
+
+## A dependency that parses untrusted bytes: pdf.js (inbox #412)
+
+A PDF is a peer's document, and `pdfjs-dist` (Mozilla, Apache-2.0, the legacy build) parses and draws it in the page's
+origin, next to the keys. Its threat note, and what keeps it inside the policy above **without changing it**:
+
+- **It runs in a worker** (`worker-src 'self'`): the parser and the interpreter run off the page thread, in a same-origin
+  hashed module worker the build emits (`assets/pdf.worker.min-<hash>.js`, served with a script MIME type). The page thread
+  holds only the drawing onto a canvas. A worker has no DOM and no access to the page's memory, but it shares the origin,
+  so this is containment of a crash and of CPU, not a sandbox against a pdf.js defect.
+- **No code from strings:** the CSP has no `'unsafe-eval'`; the emitted pdf.js files contain no `new Function(`/`eval(`
+  (`npm run verify:pdf-worker` fails the build otherwise), and pdf.js 6 has no eval path to switch off.
+- **No WebAssembly:** `useWasm: false`, the `.wasm` decoders are not shipped (`verify:pdf-worker` fails on a `.wasm` or a
+  `wasm/` directory), because compiling them needs `'wasm-unsafe-eval'`. Cost: JBIG2 and JPEG 2000 images (scans) and ICC
+  transforms do not render; the page shows gaps. Granting `'wasm-unsafe-eval'` is the owner's decision.
+- **No network but the origin:** the document is our decrypted buffer (`{data}`, never a URL); the CMaps, standard fonts
+  and ICC profile pdf.js reads on demand are same-origin copies under `assets/pdfjs-<version>/`, and `connect-src 'self'`
+  already covers them. No origin was added.
+- **No script, no navigation:** a PDF's JavaScript is never run (no scripting manager, no sandbox file) and no annotation or
+  text layer exists, so a link in a PDF is pixels, not an element; the page holds no frame, object, embed, link or form
+  control for a PDF to use.
+- **Bounded:** 64 MiB per file, 1000 pages, 32 M pixels per decoded image, 16 M pixels per page canvas; destroyed (document
+  and worker) on a new file, navigation and unmount.
+- **Maintenance (measured 2026-10-12):** 6.4.299, published 2026-10-03, monthly releases, not deprecated; the project rule
+  on unmaintained dependencies applies — a deprecation or an abandonment makes replacing it in-scope.
 
 ## The other response headers
 
@@ -151,6 +176,10 @@ every header of the admin origin.
   - no third-party origin baked in when providers are unset;
   - `ws:` in dev only;
   - `frame-ancestors 'none'` in dev and production alike.
+- [`web/scripts/assert-pdf-worker-in-dist.mjs`](../../web/scripts/assert-pdf-worker-in-dist.mjs) (`npm run verify:pdf-worker`,
+  in `npm run check`) pins what lets pdf.js run under this policy: the same-origin worker, the lazy chunk, no eval, no WASM
+  (§ *A dependency that parses untrusted bytes*). **Run in a real browser 2026-10-12** against a local server sending the
+  built header: the worker started, pages drew, a standard font loaded from the same origin, no violation fired.
 - [`web/scripts/assert-csp-policy-in-dist.mjs`](../../web/scripts/assert-csp-policy-in-dist.mjs)
   (`npm run verify:csp`, run by `npm run check` and by the `Dockerfile`'s frontend stage) fails a `dist` that
   has no emitted policy or whose `index.html` carries a CSP `<meta>`.
