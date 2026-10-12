@@ -1,0 +1,272 @@
+<script setup lang="ts">
+// The viewer of an opened file (inbox #412): the file's own content, decrypted when the page opens and shown in the page
+// or full screen - an image, a text, a video or audio through the service worker's media route (ADR 0047), and for anything
+// else (a PDF, a format the browser cannot decode, a file over its cap) a plain statement and the download. Files makes no
+// thumbnail and no preview blob: this reads the file itself.
+//
+// **What is rendered, and how** (every rule is a security rule - the bytes are a peer's):
+// - the kind is decided by the decrypted BYTES (`view.ts`), never by the claimed type alone;
+// - an image is an `<img>` on an object URL typed with the SNIFFED type (SVG included: never inline, never `<object>`/
+//   `<iframe>`); a decode failure (`error`) is the "cannot be shown" message, not an exception;
+// - a text is interpolated (`textContent`), never `innerHTML`: markup in it stays visible characters;
+// - a video/audio plays from the service worker's `/__media/<handle>` (the page holds the key, the worker none); no worker,
+//   no playback;
+// - nothing is logged and nothing leaves the client; the object URL and the playback handle are revoked on a new file, on
+//   unmount and on a failure.
+//
+// The same component serves the member and the share guest (inbox #401): it gets a reader and the facts, whoever opened it.
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+import Button from 'primevue/button'
+import Message from 'primevue/message'
+import { formatBytes } from '../../../shared/formatBytes'
+import { useFileViewer, type ViewerTarget } from '../useFileViewer'
+import { TEXT_CAP } from '../view'
+
+const props = defineProps<{
+  /** What to open; null while the page has not read the file's blob yet. */
+  target: ViewerTarget | null
+  /** The file's name, for the accessible names and the image's alt text. */
+  name: string
+  /** Whether the session may download: the fallbacks then offer it. */
+  canDownload: boolean
+}>()
+const emit = defineEmits<{ download: [] }>()
+const { t, locale } = useI18n()
+
+const { state, retry, cancel, imageFailed, mediaFailed } = useFileViewer(() => props.target)
+const ready = computed(() => (state.value.status === 'ready' ? state.value.view : null))
+const percent = computed(() => (state.value.status === 'loading' ? Math.round(state.value.progress * 100) : 0))
+const unsupportedKey = computed(() => {
+  const s = state.value
+  return s.status === 'unsupported' ? `files.viewer.unsupported.${s.reason}` : ''
+})
+
+// --- full screen -----------------------------------------------------------------------------------------------------
+// The Fullscreen API on the viewer's own container, with Escape (the browser's). Where it is missing or refused (an
+// iPhone's Safari has none for an element) a fixed-position overlay stands in, closed by Escape or the same button.
+
+const root = ref<HTMLElement | null>(null)
+const full = ref(false)
+let native = false
+
+function onFullscreenChange(): void {
+  if (native && document.fullscreenElement !== root.value) {
+    native = false
+    full.value = false
+  }
+}
+function onKeydown(e: KeyboardEvent): void {
+  if (e.key === 'Escape' && full.value && !native) full.value = false
+}
+async function toggleFullscreen(): Promise<void> {
+  if (full.value) {
+    if (native && document.fullscreenElement) await document.exitFullscreen().catch(() => {})
+    native = false
+    full.value = false
+    return
+  }
+  const el = root.value
+  if (el && typeof el.requestFullscreen === 'function' && document.fullscreenEnabled !== false) {
+    try {
+      await el.requestFullscreen()
+      native = true
+      full.value = true
+      return
+    } catch {
+      // refused (a policy, no activation): the overlay below
+    }
+  }
+  full.value = true
+}
+onMounted(() => {
+  document.addEventListener('fullscreenchange', onFullscreenChange)
+  window.addEventListener('keydown', onKeydown)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('fullscreenchange', onFullscreenChange)
+  window.removeEventListener('keydown', onKeydown)
+  if (native && document.fullscreenElement) void document.exitFullscreen().catch(() => {})
+})
+</script>
+
+<template>
+  <div v-if="state.status !== 'idle'" ref="root" class="file-viewer" :class="{ 'file-viewer-full': full }" role="region" :aria-label="t('files.viewer.label', { name })">
+    <div class="file-viewer-stage" :aria-busy="state.status === 'loading'">
+      <div v-if="state.status === 'loading'" class="file-viewer-status" role="status">
+        <i class="pi pi-spin pi-spinner" aria-hidden="true" />
+        <span>{{ t('files.viewer.loading') }}<template v-if="percent > 0"> {{ percent }} %</template></span>
+        <Button type="button" :label="t('files.viewer.stop')" size="small" severity="secondary" text @click="cancel" />
+      </div>
+
+      <img
+        v-else-if="ready?.kind === 'image'"
+        class="file-viewer-image"
+        :src="ready.url"
+        :alt="name"
+        @error="imageFailed"
+      />
+      <template v-else-if="ready?.kind === 'text'">
+        <pre class="file-viewer-text" tabindex="0" :aria-label="t('files.viewer.textLabel', { name })">{{ ready.text }}</pre>
+      </template>
+      <video
+        v-else-if="ready?.kind === 'stream' && ready.element === 'video'"
+        class="file-viewer-video"
+        :src="ready.src"
+        :aria-label="name"
+        controls
+        playsinline
+        preload="metadata"
+        @error="mediaFailed"
+      />
+      <audio
+        v-else-if="ready?.kind === 'stream'"
+        class="file-viewer-audio"
+        :src="ready.src"
+        :aria-label="name"
+        controls
+        preload="metadata"
+        @error="mediaFailed"
+      />
+
+      <Message v-else-if="state.status === 'error'" severity="error" :closable="false" class="file-viewer-message">
+        <span class="file-viewer-note">
+          <span>{{ t('files.viewer.error') }}</span>
+          <Button type="button" :label="t('files.viewer.retry')" size="small" severity="secondary" outlined @click="retry" />
+        </span>
+      </Message>
+      <Message v-else-if="state.status === 'cancelled'" severity="info" :closable="false" class="file-viewer-message">
+        <span class="file-viewer-note">
+          <span>{{ t('files.viewer.cancelled') }}</span>
+          <Button type="button" :label="t('files.viewer.retry')" size="small" severity="secondary" outlined @click="retry" />
+        </span>
+      </Message>
+      <Message v-else-if="state.status === 'too-large' || state.status === 'unsupported'" severity="info" :closable="false" class="file-viewer-message">
+        <span class="file-viewer-note">
+          <span v-if="state.status === 'too-large'">{{ t('files.viewer.tooLarge', { limit: formatBytes(state.limit, locale) }) }}</span>
+          <span v-else>{{ t(unsupportedKey) }}</span>
+          <Button
+            v-if="canDownload"
+            type="button"
+            class="file-viewer-download"
+            icon="pi pi-download"
+            :label="t('files.detail.download')"
+            :aria-label="t('files.download', { name })"
+            size="small"
+            severity="secondary"
+            outlined
+            @click="emit('download')"
+          />
+        </span>
+      </Message>
+
+      <p v-if="ready?.kind === 'text' && ready.truncated" class="file-viewer-hint" role="note">
+        {{ t('files.viewer.textTruncated', { shown: formatBytes(TEXT_CAP, locale) }) }}
+      </p>
+    </div>
+
+    <Button
+      v-if="ready"
+      type="button"
+      class="file-viewer-fullscreen"
+      :icon="full ? 'pi pi-window-minimize' : 'pi pi-window-maximize'"
+      :label="full ? t('files.viewer.exitFullscreen') : t('files.viewer.fullscreen')"
+      :aria-label="full ? t('files.viewer.exitFullscreen') : t('files.viewer.fullscreen')"
+      :aria-pressed="full"
+      size="small"
+      severity="secondary"
+      outlined
+      @click="toggleFullscreen"
+    />
+  </div>
+</template>
+
+<style scoped>
+.file-viewer {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+}
+.file-viewer-stage {
+  width: 100%;
+  min-width: 0;
+}
+.file-viewer-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--app-muted);
+}
+.file-viewer-image,
+.file-viewer-video {
+  display: block;
+  max-width: 100%;
+  max-height: 70vh;
+  margin: 0 auto;
+  object-fit: contain;
+}
+.file-viewer-video {
+  width: 100%;
+  background: var(--app-backdrop-strong);
+}
+.file-viewer-audio {
+  display: block;
+  width: 100%;
+}
+.file-viewer-text {
+  margin: 0;
+  max-height: 70vh;
+  overflow: auto;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-radius);
+  background: var(--app-surface-muted);
+  color: var(--app-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 4;
+}
+.file-viewer-hint {
+  margin: 0.5rem 0 0;
+  color: var(--app-muted);
+}
+.file-viewer-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+}
+/* The overlay stands in where the Fullscreen API is missing; the native :fullscreen state gets the same fill. */
+.file-viewer-full,
+.file-viewer:fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  margin: 0;
+  padding: 1rem;
+  overflow: auto;
+  background: var(--app-bg);
+}
+.file-viewer-full .file-viewer-stage,
+.file-viewer:fullscreen .file-viewer-stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.file-viewer-full .file-viewer-image,
+.file-viewer-full .file-viewer-video,
+.file-viewer:fullscreen .file-viewer-image,
+.file-viewer:fullscreen .file-viewer-video,
+.file-viewer-full .file-viewer-text,
+.file-viewer:fullscreen .file-viewer-text {
+  max-height: calc(100vh - 6rem);
+}
+</style>

@@ -1056,6 +1056,27 @@ const en = {
       // A contributor of a file link: what a replace does, said before it happens (inbox #383).
       contributorHint: 'You can replace this file’s content. It changes for everyone who has this link, the owner too. The old content cannot be restored: there is no version history.',
     },
+    // The viewer on an opened file's page (components/FileViewer.vue, inbox #412).
+    viewer: {
+      label: 'View of {name}',
+      textLabel: 'Content of {name}',
+      loading: 'Opening the file…',
+      stop: 'Stop',
+      cancelled: 'Opening the file was stopped.',
+      retry: 'Try again',
+      error: 'The file could not be opened. Please try again.',
+      tooLarge: 'This file is too large to show here (over {limit}). You can download it.',
+      textTruncated: 'Showing only the first {shown}. Download the file to read all of it.',
+      fullscreen: 'Full screen',
+      exitFullscreen: 'Exit full screen',
+      unsupported: {
+        format: 'This file cannot be shown in your browser. You can download it.',
+        pdf: 'PDFs are not shown on this page yet. Download the file to read it.',
+        empty: 'This file is empty.',
+        codec: 'Your browser cannot play this file. You can download it.',
+        'no-sw': 'Playing this file needs a browser feature that is not available here. You can download it.',
+      },
+    },
     // Core's link dialog on a file (components/FileShareDialog.vue): the sentences that would be wrong for a folder.
     share: {
       title: 'Share this file',
@@ -2380,6 +2401,27 @@ const de: typeof en = {
       replace: 'Inhalt ersetzen',
       uploadInto: 'Inhalt hochladen',
       contributorHint: 'Du kannst den Inhalt dieser Datei ersetzen. Das gilt dann für alle, die diesen Link haben, auch für die Person, der die Datei gehört. Der alte Inhalt lässt sich nicht wiederherstellen: Es gibt keinen Versionsverlauf.',
+    },
+    // Die Ansicht auf der Seite einer geöffneten Datei (components/FileViewer.vue, Inbox #412).
+    viewer: {
+      label: 'Ansicht von {name}',
+      textLabel: 'Inhalt von {name}',
+      loading: 'Die Datei wird geöffnet…',
+      stop: 'Abbrechen',
+      cancelled: 'Das Öffnen der Datei wurde abgebrochen.',
+      retry: 'Erneut versuchen',
+      error: 'Die Datei konnte nicht geöffnet werden. Bitte versuche es erneut.',
+      tooLarge: 'Diese Datei ist zu groß, um sie hier anzuzeigen (über {limit}). Du kannst sie herunterladen.',
+      textTruncated: 'Angezeigt werden nur die ersten {shown}. Lade die Datei herunter, um alles zu lesen.',
+      fullscreen: 'Vollbild',
+      exitFullscreen: 'Vollbild beenden',
+      unsupported: {
+        format: 'Diese Datei kann in deinem Browser nicht angezeigt werden. Du kannst sie herunterladen.',
+        pdf: 'PDFs werden auf dieser Seite noch nicht angezeigt. Lade die Datei herunter, um sie zu lesen.',
+        empty: 'Diese Datei ist leer.',
+        codec: 'Dein Browser kann diese Datei nicht abspielen. Du kannst sie herunterladen.',
+        'no-sw': 'Zum Abspielen dieser Datei braucht der Browser eine Funktion, die hier nicht verfügbar ist. Du kannst sie herunterladen.',
+      },
     },
     share: {
       title: 'Diese Datei teilen',
