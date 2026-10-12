@@ -4,6 +4,8 @@ import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.blob.BlobUploadStore
 import me.raddatz.veyq.core.blob.UploadSessionEntity
 import me.raddatz.veyq.core.content.NodesStore
+import me.raddatz.veyq.core.items.ItemsCursor
+import me.raddatz.veyq.core.items.NodeItemsRevisions
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.sharing.ShareIdentityEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -45,9 +47,6 @@ data class MediaRow(
  * SERVED is the share read's rule, not this row's (ADR 0030 point 8).
  */
 data class ShareMediaRow(val nodeId: String, val identityId: String?, val row: MediaRow)
-
-/** The gallery's keyset cursor (cr-0107, ADR 0033): the newest `(updatedAt, mediaId)` the client has already seen. */
-data class MediaCursor(val updatedAt: Instant, val mediaId: String)
 
 /** One role-tagged derivative tier of a media (its own blob metadata + wrap). */
 data class DerivativeRow(
@@ -91,6 +90,7 @@ data class BucketRow(
 class MediaStore(
     private val blobs: BlobUploadStore,
     private val nodes: NodesStore,
+    private val items: NodeItemsRevisions,
 ) {
 
     /** The node, if it exists **live** in this scope (its `kind` decides the media-target rule). `deletedAt is
@@ -162,62 +162,22 @@ class MediaStore(
                 blobId = derivBlobId
             }.persist()
         }
-        bumpMediaRevision(nodeId) // cr-0107: an add moves media_revision (the live-updates change signal), not delete_revision
+        items.bump(scopeId, nodeId) // cr-0107: an add moves the node's item revision (the live-updates change signal), not its delete revision
         return originalBlobId to mediaId
     }
-
-    /**
-     * Bump the node's live-updates counters (cr-0107, ADR 0033) in **one atomic UPDATE** on its
-     * [MediaRevisionEntity] row, so `media_revision` + `delete_revision` always read as a **consistent pair**. Every
-     * gallery-media mutation moves `media_revision` (the conditional-GET change signal); a real delete additionally
-     * moves `delete_revision` ([deleted] = true), which gates the O(N) id-set delete-reconcile. A cover change calls
-     * neither. Joins the caller's transaction (attach/setMeta self-invoke within their `@Transactional`; the
-     * share delete-own path calls it within its own). Opaque operational metadata — operator-blind.
-     *
-     * **The node's first change births the row** (inbox #341 moved the counters off `veyq_node`, where the row always
-     * existed). An UPDATE that matches nothing takes no lock under READ COMMITTED (ADR 0078), so the insert is decided
-     * under the node row's lock and the UPDATE asked again beneath it: of two first bumps the second waits, then finds
-     * the row the first committed and bumps it — never a second insert at the primary key. The node lock comes after
-     * the media rows the caller holds (media → node), the order every gallery writer already takes
-     * (`MediaLockOrderRaceSliceTest`); the attach path holds it already ([ensurePrimaryBucket]). Before the move every
-     * bump wrote the node row and so held its lock to the commit; now only the first does — nothing waited on it but
-     * other gallery writers, which now meet on the revision row instead.
-     */
-    @Transactional
-    fun bumpMediaRevision(nodeId: String, deleted: Boolean = false) {
-        if (bumpRevisionRow(nodeId, deleted) == 1) return
-        NodeEntity.find("id", nodeId).withLock(LockModeType.PESSIMISTIC_WRITE).firstResult()
-        if (bumpRevisionRow(nodeId, deleted) == 1) return
-        MediaRevisionEntity().apply {
-            this.nodeId = nodeId
-            mediaRevision = 1
-            deleteRevision = if (deleted) 1 else 0
-        }.persist()
-    }
-
-    private fun bumpRevisionRow(nodeId: String, deleted: Boolean): Int =
-        if (deleted) {
-            MediaRevisionEntity.update("mediaRevision = mediaRevision + 1, deleteRevision = deleteRevision + 1 where nodeId = ?1", nodeId)
-        } else {
-            MediaRevisionEntity.update("mediaRevision = mediaRevision + 1 where nodeId = ?1", nodeId)
-        }
-
-    /** The node's (media_revision, delete_revision) — one row, so a consistent pair; (0, 0) before its first change. */
-    fun revisions(nodeId: String): Pair<Int, Int> =
-        MediaRevisionEntity.findById(nodeId)?.let { it.mediaRevision to it.deleteRevision } ?: (0 to 0)
 
     /**
      * The node's media as a **keyset delta** past [since] (cr-0107, ADR 0033): rows whose `updated_at` is strictly
      * greater than the cursor (id as the tie-break), oldest-first so the client advances its cursor to the last
      * row. [since] = null ⇒ the full list (first load). Ordered by `(updated_at, id)`, the cursor's sort key.
      */
-    fun listNodeMediaSince(scopeId: String, nodeId: String, since: MediaCursor?): List<MediaRow> {
+    fun listNodeMediaSince(scopeId: String, nodeId: String, since: ItemsCursor?): List<MediaRow> {
         val media = if (since == null) {
             MediaEntity.find("scopeId = ?1 and nodeId = ?2 and deletedAt is null order by updatedAt, id", scopeId, nodeId).list()
         } else {
             MediaEntity.find(
                 "scopeId = ?1 and nodeId = ?2 and deletedAt is null and (updatedAt > ?3 or (updatedAt = ?3 and id > ?4)) order by updatedAt, id",
-                scopeId, nodeId, since.updatedAt, since.mediaId,
+                scopeId, nodeId, since.updatedAt, since.id,
             ).list()
         }
         return media.mapNotNull(::toRow)
@@ -233,7 +193,7 @@ class MediaStore(
 
     /**
      * Soft-delete (trash) a media in this scope (uc.memory.delete-media, cr-0110): set `deleted_at`/`deleted_by`
-     * (the audit) and bump BOTH counters (`bumpMediaRevision(deleted = true)`) so an open gallery drops the tile
+     * (the audit) and bump BOTH counters (core's `NodeItemsRevisions.bump(deleted = true)`) so an open gallery drops the tile
      * via the id-set reconcile (cr-0107). Idempotent — an already-trashed media is a no-op (no re-bump). Returns
      * the media's nodeId, or null when no such media exists in the scope (⇒ a non-enumerable 404).
      */
@@ -247,13 +207,13 @@ class MediaStore(
         media.deletedAt = Instant.now()
         media.deletedBy = userId
         media.persist()
-        bumpMediaRevision(media.nodeId, deleted = true)
+        items.bump(scopeId, media.nodeId, deleted = true)
         return media.nodeId
     }
 
     /**
      * Restore a trashed media (cr-0110): clear `deleted_at`/`deleted_by`, advance `updated_at` so it re-surfaces
-     * in the live keyset delta, and bump `media_revision` (an add-back, not a delete). Idempotent on a live media.
+     * in the live keyset delta, and bump the item revision (an add-back, not a delete). Idempotent on a live media.
      * Returns the nodeId, or null when no such media in the scope (e.g. already purged) ⇒ a 404.
      */
     @Transactional
@@ -266,7 +226,7 @@ class MediaStore(
             Instant.now(), mediaId, scopeId,
         ) == 1
         val media = MediaEntity.findById(mediaId)?.takeIf { it.scopeId == scopeId } ?: return null
-        if (restored) bumpMediaRevision(media.nodeId)
+        if (restored) items.bump(scopeId, media.nodeId)
         return media.nodeId // restored now, or already live — idempotent
     }
 
@@ -377,7 +337,7 @@ class MediaStore(
         }
         val media = MediaEntity.findById(mediaId)?.takeIf { it.scopeId == scopeId } ?: return SetMetaResult.Missing
         if (rows == 0) return SetMetaResult.Stale(media.wrappedMeta, media.metaVersion)
-        bumpMediaRevision(media.nodeId) // a meta edit moves media_revision, not delete_revision
+        items.bump(scopeId, media.nodeId) // a meta edit moves the item revision, not the delete revision
         return SetMetaResult.Written(media.wrappedMeta)
     }
 
@@ -541,7 +501,7 @@ class MediaStore(
         MediaEntity.find("bucketId = ?1 order by id", bucketId).withLock(LockModeType.PESSIMISTIC_WRITE).list()
         val primary = ensurePrimaryBucket(sub.scopeId, sub.nodeId, sub.ownerKey, primarySealedNameFor(sub.ownerKey))
         MediaEntity.update("bucketId = ?1 where bucketId = ?2", primary.id, bucketId)
-        bumpMediaRevision(sub.nodeId) // cr-0113: reparent changed the media's bucketId → advance the ETag
+        items.bump(sub.scopeId, sub.nodeId) // cr-0113: reparent changed the media's bucketId → advance the ETag
         BucketEntity.deleteById(bucketId)
     }
 
@@ -580,7 +540,7 @@ class MediaStore(
             else -> return false
         }
         media.forEach { it.bucketId = target.id; it.persist() }
-        bumpMediaRevision(nodeId) // cr-0113: a re-bucket changes the listing's bucketId → advance the ETag so clients re-list
+        items.bump(scopeId, nodeId) // cr-0113: a re-bucket changes the listing's bucketId → advance the ETag so clients re-list
         return true
     }
 }

@@ -28,7 +28,7 @@ CREATE INDEX ix_bucket_parent ON veyq_bucket (parent_bucket_id);
 -- cursor round-trips through a JS Date, which holds milliseconds, so a finer stored value would read as later
 -- than the echoed cursor and be re-fetched forever. It is set at attach, so it is the medium's only time besides
 -- deleted_at: no separate created_at, which nothing read but as its fallback (#398). meta_version is wrapped_meta's
--- compare-and-set counter (ADR 0077) and deliberately not the node's veyq_media_revision. ix_media_share_identity
+-- compare-and-set counter (ADR 0077) and deliberately not the node's item-list revision (core's veyq_node_items_revision). ix_media_share_identity
 -- keeps a link's usage sum, taken under the tenant lock, off a table scan (ADR 0073).
 CREATE TABLE veyq_media (
     id                UUID NOT NULL PRIMARY KEY,
@@ -64,18 +64,6 @@ CREATE TABLE veyq_media_derivative (
     CONSTRAINT fk_derivative_blob FOREIGN KEY (blob_id) REFERENCES veyq_blob (id)
 );
 CREATE INDEX ix_derivative_media ON veyq_media_derivative (media_id);
-
--- A Memory's gallery counters (ADR 0033), one row per node whose gallery ever changed — until inbox #341 two columns
--- of veyq_node. media_revision moves on every gallery mutation and is the listing's ETag; delete_revision only on a
--- removal, gating the id-set reconcile. One row, so one read is a consistent pair. No row reads as 0/0, as the
--- columns' default did; the first bump inserts it under the node row's lock (MediaStore.bumpMediaRevision).
--- fk_media_revision_node is not cascading: the node-subtree and scope erasers delete the row before the node goes.
-CREATE TABLE veyq_media_revision (
-    node_id         UUID NOT NULL PRIMARY KEY,
-    media_revision  INT NOT NULL,
-    delete_revision INT NOT NULL,
-    CONSTRAINT fk_media_revision_node FOREIGN KEY (node_id) REFERENCES veyq_node (id)
-);
 
 -- Per-(member, scope, node) item favorites (ADR 0068), one synthetic id `userId|scopeId|nodeId`. The scope FK is
 -- load-bearing: it puts the table in the erasure closure (scripts/validate_scope_erasure_arity.py). node_id has

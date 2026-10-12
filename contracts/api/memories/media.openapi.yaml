@@ -120,30 +120,9 @@ paths:
       parameters:
         - $ref: "#/components/parameters/ScopeId"
         - $ref: "#/components/parameters/NodeId"
-        - name: If-None-Match
-          x-veyq-visibility: structure
-          in: header
-          required: false
-          description: >
-            The client's cached `mediaRevision` (opaque ETag). When it equals the node's current
-            `media_revision` the server answers `304`. Omitted on first load.
-          schema: { type: string, maxLength: 64, example: "7" }
-        - name: since
-          in: query
-          required: false
-          description: >
-            The client's keyset cursor `updatedAt,mediaId` (an RFC3339 timestamp, a `,`, then the media uuid). On a
-            `200` the server returns only media strictly past it (`updated_at > ts`, id as the tie-break). Omitted
-            on first load ⇒ the full list.
-          schema: { type: string, maxLength: 80, example: "2026-07-09T12:34:56.789Z,2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e" }
-        - name: sinceDelete
-          in: query
-          required: false
-          description: >
-            The client's last-seen `deleteRevision`. The server includes the current `mediaIds` set (for
-            delete-reconcile) **only when it lags** the node's `delete_revision` — i.e. a delete happened since.
-            Defaults to 0.
-          schema: { type: integer, format: int32, minimum: 0, default: 0, example: 0 }
+        - $ref: "../_common.openapi.yaml#/components/parameters/ItemsIfNoneMatch"
+        - $ref: "../_common.openapi.yaml#/components/parameters/ItemsSince"
+        - $ref: "../_common.openapi.yaml#/components/parameters/ItemsSinceDelete"
         - name: state
           in: query
           required: false
@@ -159,17 +138,11 @@ paths:
             A keyset delta (the media past the `since` cursor) plus both revisions; `mediaIds` is present only when
             `deleteRevision` advanced past the client's `sinceDelete`.
           headers:
-            ETag:
-              x-veyq-visibility: structure
-              description: The node's current `mediaRevision` — echo it as `If-None-Match` on the next poll.
-              schema: { type: string, example: "7" }
+            ETag: { $ref: "../_common.openapi.yaml#/components/headers/ItemsETag" }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/MediaListPage" }
-        "304":
-          description: >
-            Not Modified — the client's `If-None-Match` equals the node's `media_revision`; nothing changed. No
-            body, and no media query ran server-side (the idle fast path).
+        "304": { $ref: "../_common.openapi.yaml#/components/responses/ItemsNotModified" }
         "401":
           description: Generic authentication failure.
           content:

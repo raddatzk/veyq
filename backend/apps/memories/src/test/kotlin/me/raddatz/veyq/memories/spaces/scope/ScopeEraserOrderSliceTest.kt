@@ -8,7 +8,7 @@ import me.raddatz.veyq.core.sharing.ShareScopeEraser
 import me.raddatz.veyq.memories.itemfavorites.ItemFavoritesScopeEraser
 import me.raddatz.veyq.memories.media.MediaDerivativeEntity
 import me.raddatz.veyq.memories.media.MediaEntity
-import me.raddatz.veyq.memories.media.MediaRevisionEntity
+import me.raddatz.veyq.core.items.NodeItemsRevisionEntity
 import me.raddatz.veyq.memories.media.MediaScopeEraser
 import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.scope.ScopeEntity
@@ -90,9 +90,9 @@ class ScopeEraserOrderSliceTest {
             MediaDerivativeEntity().apply {
                 id = UUID.randomUUID().toString(); this.mediaId = mediaId; kind = "thumb"; blobId = blobIds[1]
             }.persist()
-            // the node's gallery counters (inbox #341): fk_media_revision_node refuses core's node delete (700)
-            // unless Memories' eraser took the row first
-            MediaRevisionEntity().apply { this.nodeId = nodeId; mediaRevision = 1 }.persist()
+            // the node's item-list counters (inbox #410): fk_items_revision_node refuses the node delete (700)
+            // unless core's node eraser took the row first
+            NodeItemsRevisionEntity().apply { this.nodeId = nodeId; revision = 1 }.persist()
         }
 
         purge.purge(scopeId) // throws on an FK refusal if the media step ran after the blob delete
@@ -101,7 +101,7 @@ class ScopeEraserOrderSliceTest {
             assertNull(ScopeEntity.findById(scopeId), "the scope is gone")
             assertEquals(0, MediaEntity.count("scopeId", scopeId))
             assertEquals(0, MediaDerivativeEntity.count("mediaId", mediaId))
-            assertNull(MediaRevisionEntity.findById(nodeId), "the gallery counters went with the node")
+            assertNull(NodeItemsRevisionEntity.findById(nodeId), "the item-list counters went with the node")
             assertEquals(0, BlobEntity.count("scopeId", scopeId))
         }
     }

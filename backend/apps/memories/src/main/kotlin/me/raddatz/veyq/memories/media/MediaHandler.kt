@@ -11,6 +11,9 @@ import me.raddatz.veyq.core.http.FailureStatus.NOT_FOUND
 import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpFailure
+import me.raddatz.veyq.core.items.ItemsCursor
+import me.raddatz.veyq.core.items.ItemsRead
+import me.raddatz.veyq.core.items.NodeItemsRevisions
 import me.raddatz.veyq.core.membership.AccessMode.READ
 import me.raddatz.veyq.core.membership.AccessMode.WRITE
 import me.raddatz.veyq.core.membership.ScopeAccess
@@ -38,7 +41,7 @@ sealed interface ListMediaOutcome {
         val sealedDropPrivateKey: String? = null,
         val uploaderKeys: Map<String, String> = emptyMap(),
     ) : ListMediaOutcome
-    /** The client's `If-None-Match` equals the node's `media_revision` — nothing changed (a 304, no media query ran). */
+    /** The client's `If-None-Match` equals the node's item revision — nothing changed (a 304, no media query ran). */
     object NotModified : ListMediaOutcome
     object NoNode : ListMediaOutcome, HttpFailure by Failures.nodeNotFound
 }
@@ -152,6 +155,7 @@ class MediaHandler(
     private val uploads: BlobUploadHandler,
     private val completions: UploadCompletions,
     private val access: ScopeAccess,
+    private val itemsRevisions: NodeItemsRevisions,
 ) {
     /** The member's `completeMedia`: the access check, then core's dispatcher, attributing each item to [userId]. */
     fun complete(userId: String, scopeId: String, items: List<CompleteItem>): CompleteOutcome {
@@ -161,8 +165,8 @@ class MediaHandler(
     }
 
     /**
-     * One `listNodeMedia` poll (cr-0107, ADR 0033). Reads the node's `media_revision` + `delete_revision` as a
-     * **consistent pair** (one row). When the client's [ifNoneMatch] still equals `media_revision` ⇒ **NotModified**
+     * One `listNodeMedia` poll (cr-0107, ADR 0033). Core's `NodeItemsRevisions.read` reads the node's
+     * revision + delete revision as a **consistent pair** (one row). When the client's [ifNoneMatch] still equals the revision ⇒ **NotModified**
      * (a 304 — no media query, the idle fast path). Otherwise a **keyset delta** past the [since] cursor, plus both
      * revisions and — **only when [sinceDelete] lags `delete_revision`** (a real delete since) — the current
      * `mediaId` set for delete-reconcile. Non-member / unknown node ⇒ NoNode (a 404, no reveal).
@@ -172,7 +176,7 @@ class MediaHandler(
         scopeId: String,
         nodeId: String,
         ifNoneMatch: Int?,
-        since: MediaCursor?,
+        since: ItemsCursor?,
         sinceDelete: Int,
         trashed: Boolean,
     ): ListMediaOutcome {
@@ -183,18 +187,25 @@ class MediaHandler(
         // conditional-GET/delta — the trash isn't live-polled, so the ETag/since/id-set machinery doesn't apply.
         if (trashed) {
             val rows = store.listNodeTrashed(scopeId, nodeId)
-            val (mediaRevision, deleteRevision) = store.revisions(nodeId)
+            val (revision, deleteRevision) = itemsRevisions.revisions(nodeId)
             return ListMediaOutcome.Page(
-                rows, mediaRevision, deleteRevision, null, node.sealedDropPrivateKey, store.uploaderKeys(rows),
+                rows, revision, deleteRevision, null, node.sealedDropPrivateKey, store.uploaderKeys(rows),
             )
         }
-        val (mediaRevision, deleteRevision) = store.revisions(nodeId)
-        if (ifNoneMatch != null && ifNoneMatch == mediaRevision) return ListMediaOutcome.NotModified
-        val rows = store.listNodeMediaSince(scopeId, nodeId, since)
-        val mediaIds = if (sinceDelete < deleteRevision) store.listNodeMediaIds(scopeId, nodeId) else null
-        return ListMediaOutcome.Page(
-            rows, mediaRevision, deleteRevision, mediaIds, node.sealedDropPrivateKey, store.uploaderKeys(rows),
-        )
+        // The platform's conditional read (core's NodeItemsRevisions, inbox #410): compare -> 304, else Memories' own
+        // keyset query, and the id set only when a delete advanced past the client's sinceDelete.
+        return when (
+            val r = itemsRevisions.read(
+                nodeId, ifNoneMatch, sinceDelete,
+                delta = { store.listNodeMediaSince(scopeId, nodeId, since) },
+                ids = { store.listNodeMediaIds(scopeId, nodeId) },
+            )
+        ) {
+            ItemsRead.NotModified -> ListMediaOutcome.NotModified
+            is ItemsRead.Changed -> ListMediaOutcome.Page(
+                r.delta, r.revisions.revision, r.revisions.deleteRevision, r.ids, node.sealedDropPrivateKey, store.uploaderKeys(r.delta),
+            )
+        }
     }
 
     /** The media's lazy, panel-only tier for the detail panel. Non-member or unknown media → NoMedia (a 404, no reveal). */

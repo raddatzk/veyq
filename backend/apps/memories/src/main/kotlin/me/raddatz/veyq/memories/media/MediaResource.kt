@@ -14,6 +14,8 @@ import me.raddatz.veyq.memories.generated.model.MediaResultItem
 import me.raddatz.veyq.memories.generated.model.MediaSummary
 import me.raddatz.veyq.memories.generated.model.UploaderKey
 import me.raddatz.veyq.core.http.Failures
+import me.raddatz.veyq.core.items.ItemsCursor
+import me.raddatz.veyq.core.items.ItemsETag
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpError
 import me.raddatz.veyq.core.http.httpStaleSealedMeta
@@ -78,7 +80,7 @@ class MediaResource(
         when (
             val o = handler.listMedia(
                 identity.principal.name, scopeId.toString(), nodeId.toString(),
-                parseETag(ifNoneMatch), parseCursor(since), sinceDelete ?: 0, trashed = state == "trashed",
+                ItemsETag.parse(ifNoneMatch), ItemsCursor.parse(since), sinceDelete ?: 0, trashed = state == "trashed",
             )
         ) {
             is ListMediaOutcome.Page -> Response.ok(
@@ -90,31 +92,10 @@ class MediaResource(
                     sealedDropPrivateKey = o.sealedDropPrivateKey,
                     uploaderKeys = o.uploaderKeys.map { (id, wrap) -> UploaderKey(identityId = UUID.fromString(id), wrappedIdentityKey = wrap) },
                 ),
-            ).header("ETag", "\"${o.mediaRevision}\"").build() // the ETag doubles as the client's next If-None-Match
+            ).header("ETag", ItemsETag.of(o.mediaRevision)).build() // the ETag doubles as the client's next If-None-Match
             ListMediaOutcome.NotModified -> Response.notModified().build() // 304 — no body, no media query (idle fast path)
             is HttpFailure -> httpError(o)
         }
-
-    /** The client's `If-None-Match` echo of `media_revision` — lenient (strips a weak marker + quotes); null when absent/unparseable ⇒ never a 304. */
-    private fun parseETag(raw: String?): Int? =
-        raw?.trim()?.removePrefix("W/")?.trim()?.trim('"')?.toIntOrNull()
-
-    /**
-     * Parse the keyset cursor `"updatedAt,mediaId"`; null (⇒ the full list) when absent or malformed. Robust to
-     * the timestamp's wire form — an offset date-time (`…Z` / `…+00:00`, what `MediaSummary.updatedAt` serializes
-     * as) or a bare instant — so the client can echo back exactly what it received.
-     */
-    private fun parseCursor(raw: String?): MediaCursor? {
-        val s = raw?.trim().orEmpty()
-        val comma = s.indexOf(',')
-        if (comma <= 0 || comma == s.length - 1) return null
-        val ts = s.substring(0, comma).trim()
-        val id = s.substring(comma + 1).trim()
-        val instant = runCatching { OffsetDateTime.parse(ts).toInstant() }
-            .recoverCatching { Instant.parse(ts) }
-            .getOrNull() ?: return null
-        return MediaCursor(instant, id)
-    }
 
     override fun getMediaExif(scopeId: UUID, mediaId: UUID): Response =
         when (val o = handler.mediaExif(identity.principal.name, scopeId.toString(), mediaId.toString())) {
