@@ -4,8 +4,8 @@
 // guest sees what a member sees — the rows with their sealed dates and covers, the map of the opened subtree — with every
 // member-only function removed (no heart:
 // pins are the member's own, sealed under the Master Key) and NOTHING of the member's world touched: every authenticated
-// client throws (`test/guestMode.ts`), and the member's cover and pin stores must not be asked. Covers come through the
-// link's own reads; only their transport (the presigned GETs) is stubbed.
+// client throws (`test/guestMode.ts`). The covers are core's since inbox #411 (`host.covers`, resolved by the level through
+// the link's own reads - `core/node/cover/coverStore.test.ts`, `coverLoad.test.ts`); here a row only draws what the level hands it.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import { reactive } from 'vue'
@@ -15,7 +15,6 @@ import { b64std, b64url } from '@veyq/crypto/base64'
 vi.mock('leaflet', () => ({ default: {} }))
 vi.mock('../../api/client', async (orig) => (await import('../../test/guestMode')).guardedClients(await orig<object>()))
 vi.mock('./api', async (orig) => (await import('../../test/guestMode')).guardedClients(await orig<object>()))
-vi.mock('./coverStore', async (orig) => ({ ...(await orig<typeof import('./coverStore')>()), ensureCovers: vi.fn() }))
 vi.mock('../../core/sharing/guestBlob', async (orig) => ({ ...(await orig<object>()), shareChunkUrls: vi.fn(async () => ['https://store/c0']) }))
 vi.mock('../../core/blob/transport', async (orig) => ({ ...(await orig<object>()), openBlobFromUrls: vi.fn(async () => new Uint8Array([1, 2, 3])) }))
 vi.mock('./share', async (orig) => ({ ...(await orig<typeof import('./share')>()), openShareGrid: vi.fn() }))
@@ -30,10 +29,9 @@ import { shareChunkUrls } from '../../core/sharing/guestBlob'
 import { openBlobFromUrls } from '../../core/blob/transport'
 import { ShareRole, type PublicShare, type ShareNode } from '../../api/generated/sharing'
 import { MEMORY_KIND } from './kinds'
-import { sealNodeMeta } from './nodeMeta'
+import { sealNodeMeta } from '../../core/node/nodeMeta'
 import { publicShareMediaApi } from './api'
 import { openShareGrid } from './share'
-import { ensureCovers } from './coverStore'
 import type { ViewMode } from '../../shared/state/useViewMode'
 import { formatClosedRange } from './memoryDateRange'
 import { stubApi } from '../../test/apiMock'
@@ -113,7 +111,6 @@ afterEach(() => {
 
 beforeEach(() => {
   authenticatedCalls.length = 0
-  vi.mocked(ensureCovers).mockClear()
   vi.mocked(shareChunkUrls).mockClear()
   vi.mocked(openBlobFromUrls).mockClear()
   vi.mocked(openShareGrid).mockReset().mockResolvedValue(new Uint8Array([4, 5, 6]))
@@ -138,27 +135,20 @@ describe('Memories rows for a share guest', () => {
       expect(metaOf(h, 'Ostsee')).toBe(`${t('memory.kindMemory')} · ${formatClosedRange('2019-07-01', '2019-07-01', 'en')}`)
       // no rename (the heart is core's, and a guest has none: `core/favorites/favoriteActions.test.ts`); a contributor may move a Memory a folder holds
       expect(await actionIdsOf(h.w, 'Rom')).toEqual(role === ShareRole.Read ? [] : ['move'])
-      expect(ensureCovers, "the member's cover store is not asked").not.toHaveBeenCalled()
       expect(authenticatedCalls).toEqual([])
     })
   }
 
-  it("resolves each cover through the link's own reads: an uploaded cover blob, a chosen photo's thumbnail", async () => {
+  it("draws the covers the level resolved (core's, inbox #411) and the placeholder tile for a Memory without one", async () => {
     const h = mountGuest(ShareRole.Read)
+    h.covers.value = new Map([[OLD, { url: 'blob:ostsee', crop: { x: 0, y: 0, width: 1, height: 1 } }]])
     await flushPromises()
-    await vi.waitFor(() => expect(h.w.findAllComponents(MemoryRowCover).every((c) => c.props('src'))).toBe(true))
-    // The uploaded cover: the gated share presign of its blob, opened under the Memory's key from the chain.
-    expect(shareChunkUrls).toHaveBeenCalledWith(SHARE_ID, 'cover-blob', undefined)
-    const [scope, key, ref] = vi.mocked(openBlobFromUrls).mock.calls[0]
-    expect(scope).toBe(SCOPE_ID)
-    expect(Array.from(key)).toEqual(Array.from(keys.old))
-    expect(ref).toMatchObject({ blobId: 'cover-blob', ownerId: OLD, role: 'COVER' })
-    // The chosen photo: the link's listing, read once, its thumbnail opened as the guest's gallery opens it.
-    expect(vi.mocked(publicShareMediaApi().listShareMedia)).toHaveBeenCalledOnce()
-    const [shareId, item] = vi.mocked(openShareGrid).mock.calls[0]
-    expect(shareId).toBe(SHARE_ID)
-    expect(item.item.mediaId).toBe('m-rom')
-    expect(Array.from(item.memoryKey)).toEqual(Array.from(keys.new))
+    const srcOf = (title: string) => rowOf(h.w, title).findComponent(MemoryRowCover).props('src')
+    expect(srcOf('Ostsee')).toBe('blob:ostsee')
+    expect(srcOf('Rom')).toBeNull() // not resolved (yet): the tile, never a broken image
+    // This source loads no cover of its own: it asks the level only for what its map draws beyond the level.
+    expect(h.events.ensuredCovers).toEqual([])
+    expect(shareChunkUrls).not.toHaveBeenCalled()
     expect(authenticatedCalls).toEqual([])
   })
 
@@ -172,6 +162,7 @@ describe('Memories rows for a share guest', () => {
     const h = mountGuest(ShareRole.Read, 'map')
     await flushPromises()
     const map = h.w.findComponent(SpaceMapStub)
+    expect(h.events.ensuredCovers.map((n) => n.name).sort(), 'the map asks for the covers of its pins').toEqual(['Rom', 'Wien'])
     expect((map.props('pins') as { node: TreeNode }[]).map((p) => p.node.name).sort()).toEqual(['Rom', 'Wien'])
     map.vm.$emit('open', DEEP)
     await flushPromises()

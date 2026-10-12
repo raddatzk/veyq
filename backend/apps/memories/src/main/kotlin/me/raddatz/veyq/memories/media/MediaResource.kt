@@ -2,8 +2,6 @@ package me.raddatz.veyq.memories.media
 
 import me.raddatz.veyq.core.blob.DerivativeDeclare
 import me.raddatz.veyq.memories.generated.api.MediaApi
-import me.raddatz.veyq.memories.generated.model.BlobRef
-import me.raddatz.veyq.memories.generated.model.CoverBlobCommitRequest
 import me.raddatz.veyq.memories.generated.model.MediaBatchRequest
 import me.raddatz.veyq.memories.generated.model.MediaBatchResponse
 import me.raddatz.veyq.memories.generated.model.MediaDerivativeKind
@@ -150,27 +148,6 @@ class MediaResource(
     override fun purgeMedia(scopeId: UUID, mediaId: UUID): Response =
         when (val o = handler.purgeMedia(identity.principal.name, scopeId.toString(), mediaId.toString())) {
             PurgeMediaOutcome.Done -> Response.noContent().build()
-            is HttpFailure -> httpError(o)
-        }
-
-    override fun commitCoverBlob(scopeId: UUID, nodeId: UUID, coverBlobCommitRequest: CoverBlobCommitRequest): Response =
-        when (val o = handler.commitCover(identity.principal.name, scopeId.toString(), nodeId.toString(), coverBlobCommitRequest.uploadId.toString())) {
-            is CoverCommitOutcome.Ok -> Response.ok(
-                BlobRef(
-                    blobId = UUID.fromString(o.ref.blobId),
-                    chunkCount = o.ref.chunkCount,
-                    byteSize = o.ref.byteSize,
-                    wrappedBlobKey = o.ref.wrappedBlobKey,
-                    manifest = o.ref.manifest,
-                    wrappedBlobMeta = o.ref.wrappedBlobMeta,
-                ),
-            ).build()
-            is HttpFailure -> httpError(o)
-        }
-
-    override fun deleteCoverBlob(scopeId: UUID, nodeId: UUID, blobId: UUID): Response =
-        when (val o = handler.deleteCover(identity.principal.name, scopeId.toString(), nodeId.toString(), blobId.toString())) {
-            CoverDeleteOutcome.Done -> Response.noContent().build()
             is HttpFailure -> httpError(o)
         }
 

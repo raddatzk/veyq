@@ -1,4 +1,4 @@
-<!-- speaks-for: docs/features/files/use-cases/uc.files.member-files.md, docs/features/memory/use-cases/uc.memory.move-node.md, docs/features/memory/use-cases/uc.memory.delete-node.md, docs/features/memory/use-cases/uc.memory.browse.md; pair: de/dateien.md -->
+<!-- speaks-for: docs/features/platform/use-cases/uc.platform.node-cover.md, docs/features/files/use-cases/uc.files.member-files.md, docs/features/memory/use-cases/uc.memory.move-node.md, docs/features/memory/use-cases/uc.memory.delete-node.md, docs/features/memory/use-cases/uc.memory.browse.md; pair: de/dateien.md -->
 # Files — and finding your way around
 
 A plain-language companion to [Is my data safe?](is-my-data-safe.md). veyq is a platform for sealed, shareable
@@ -50,6 +50,17 @@ server. Where you may not do something, its button is simply not there (people y
 
 When a folder holds more than one kind of thing, tabs above the list — **All**, **Memories**, **Files**, **Drop
 boxes** — let you show just one kind. Sub-folders stay visible in every tab so you can keep navigating.
+
+## Give a folder a cover
+
+A folder, a drop box or a Memory can have a **cover**: a picture of your choice that replaces its icon in the list, on its page
+and in your favorites. Open the **⋯** menu of the entry (or the buttons at the top of its page) and choose **Set cover**, then
+pick an image from your device. The picture is shrunk on your device and locked with the entry's own key before it leaves it, just
+like everything else — the server only ever stores scrambled data. **Change cover** swaps it, **Remove cover** takes it away;
+the old picture is deleted from the server's storage (copies that other people's browsers already hold, or a link that was
+already handed out, can't be taken back — they expire on their own). It is a picture for the entry, not a file in the folder, and
+only people who may change the space can set it. People you share a link with see the covers but can't set them. A file has no
+cover.
 
 ## Grid and list
 

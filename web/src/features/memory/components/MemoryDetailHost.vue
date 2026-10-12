@@ -11,11 +11,12 @@
 // scope kind), no pin store, no `treeStore` patch — the guest's capabilities grant none of them, and the guest's source
 // carries no door to them. A guest gets it from core's share page (`core/sharing/ShareTreePage.vue`) for every Memory and
 // chapter of a `READ` or `READ_WRITE` link, the link's root included (inbox #401 S5).
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { NodeDetailProps, NodeDetailEmits } from '../../../core/applications/registry'
 import { CHAPTER_KIND } from '../kinds'
 import { activeSpace, activeEpochKeys } from '../../../app/activeSpace'
 import { favoriteHeaderActions } from '../../../core/favorites/favoriteActions'
+import { useNodeCover } from '../../../core/node/cover/useNodeCover'
 import { useI18n } from 'vue-i18n'
 import { patchNodeMeta } from '../../../core/node/treeStore'
 import { keyAt } from '../../spaces/epochs'
@@ -48,8 +49,15 @@ const itemMarkKey = computed<Uint8Array | null>(() => {
 })
 const personalScope = computed(() => !guest && activeSpace.kind === 'PERSONAL')
 const { t } = useI18n()
-// Core's heart (inbox #409): the same action every kind's header gets; a guest's list is empty.
-const coreActions = computed(() => favoriteHeaderActions(t, props.access, props.node))
+// Core's heart (inbox #409) and cover action (inbox #411): the same actions every kind's header gets; a guest's list is empty.
+// A Memory's cover has a source UI of its own (a photo of the Memory, an upload, a crop - its dialog), so the cover action
+// hands `choose` the dialog `MemoryDetail` opens; core owns the action's id and place, the Memory supplies the way to choose.
+const detail = ref<InstanceType<typeof MemoryDetail> | null>(null)
+const cover = useNodeCover(() => props.access, () => props.tree, () => [props.node])
+const coreActions = computed(() => [
+  ...favoriteHeaderActions(t, props.access, props.node),
+  ...cover.headerActions(props.node, { choose: () => detail.value?.openCoverEditor() }),
+])
 
 function onMetaUpdated(e: { nodeId: string; wrappedMeta: string | null; metaVersion: number }) {
   if (!guest) patchNodeMeta(e.nodeId, e.wrappedMeta, e.metaVersion)
@@ -58,6 +66,7 @@ function onMetaUpdated(e: { nodeId: string; wrappedMeta: string | null; metaVers
 
 <template>
   <MemoryDetail
+    ref="detail"
     :node="node"
     :scope-id="scopeId"
     :memory-key="contentKey"

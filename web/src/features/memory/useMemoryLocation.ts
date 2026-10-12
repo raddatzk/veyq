@@ -15,7 +15,7 @@ import {
   normalizeLocation,
   type MemoryLocation,
 } from './memoryLocation'
-import { nodeMetaState } from './nodeMeta'
+import { nodeMetaState } from '../../core/node/nodeMeta'
 import { useMetaWriteFeedback, type NodeMetaUpdate } from './useMetaWriteFeedback'
 import { reverseGeocode, defaultLevel, nameAtLevel } from './geocode'
 import { useMapConfig, setMapsConsent } from '../../shared/state/useMapConfig'

@@ -1,5 +1,6 @@
-// en.memory.node-meta (web) — the sealed `wrappedMeta` blob on a content node (MEMORY/CHAPTER), the single
-// home for a Memory's curated node-level metadata (its `date`, its `location`, and its `cover`). AEAD-sealed
+// en.memory.node-meta (web) — the sealed `wrappedMeta` blob on a node, the single home for a node's curated
+// node-level metadata: a Memory's `date` and `location`, and any node's `cover` (inbox #411 moved this envelope from
+// Memories to core, so a folder's and a drop box's cover use the very one a Memory's does). AEAD-sealed
 // under the node's `K_mem` (purpose `node-meta`, bound to (scope, node) — ADR 0072) so the blind server only ever
 // holds ciphertext it cannot move to another node (cr-0067 / cr-0069 / cr-0072).
 //
@@ -14,7 +15,7 @@
 // `memoryLocation`, `memoryCover`) own how each sub-object is validated + materialized.
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
-import { MetaConflictError, MetaUnreadableError, stableJson, type MetaEditContext, type SealedMetaState } from '../../core/node/sealedMetaWrite'
+import { MetaConflictError, MetaUnreadableError, stableJson, type MetaEditContext, type SealedMetaState } from './sealedMetaWrite'
 
 /** The node a metadata blob belongs to (ADR 0072). */
 export type NodeMetaAddress = { scopeId: string; nodeId: string }
@@ -25,7 +26,7 @@ const metaContext = (a: NodeMetaAddress) => ({ purpose: 'node-meta', scopeId: a.
  * knows the envelope, not the semantics — each domain module normalizes its own sub-object (`date`, `location`)
  * after unsealing. Keeping them `unknown` also means a writer preserves a *future* sibling it doesn't understand.
  */
-export type RawNodeMeta = { v: number; date?: unknown; location?: unknown; cover?: unknown }
+export type RawNodeMeta = { v: number; cover?: unknown; [field: string]: unknown }
 
 /**
  * Unseal a node's whole `wrappedMeta` under `nodeKey` (`K_mem`) into the raw envelope **for display**.
@@ -84,7 +85,7 @@ export const nodeMetaState = (node: { wrappedMeta: string | null; metaVersion: n
  * false` re-applies regardless (the cover editor once its save moved the cover blob — D9).
  */
 export function editField(
-  field: 'date' | 'location' | 'cover',
+  field: string,
   value: unknown,
   openedWith: unknown,
   surface = true,

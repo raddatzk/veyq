@@ -4,7 +4,7 @@ import jakarta.enterprise.context.ApplicationScoped
 
 /**
  * The one application stand-in of `:core`'s test application: the roles core's own slice tests start a member's
- * upload in, spelled as the wire spells Memories' (`TestBlob`'s default `ORIGINAL`, and a `COVER`). With no
+ * upload in, spelled as the wire spells Memories' (`TestBlob`'s default `ORIGINAL`; `COVER` is core's own, `CoreMemberBlobRoles`). With no
  * application in `:core`, [MemberBlobRoles] declares nothing and every member start is refused (inbox #366, fail
  * closed) — so the tests of what core does with a started upload (the quota, the windows, the presign domain) need a
  * declared role, and this is it, by the test sources only.
@@ -14,5 +14,5 @@ import jakarta.enterprise.context.ApplicationScoped
  */
 @ApplicationScoped
 class CoreTestMemberBlobRoles : MemberBlobRoles {
-    override fun roles(): Set<String> = setOf("ORIGINAL", "COVER")
+    override fun roles(): Set<String> = setOf("ORIGINAL")
 }

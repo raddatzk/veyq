@@ -13,7 +13,7 @@
 import exifr from 'exifr'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
-import { isCodedError, isHttpStatus, HttpStatus } from '../../shared/httpError'
+import { isHttpStatus, HttpStatus } from '../../shared/httpError'
 import { mediaApi } from './api'
 import { withRefresh } from '../../app/sessionRefresh'
 import { type MediaListPage, type MediaSummary, type MediaDerivativeKind } from '../../api/generated/media'
@@ -686,71 +686,9 @@ export async function addMedia(
   return uploadMediaVia(scopeId, memoryKey, source, deriver, mediaApiTransport(scopeId, nodeId), opts)
 }
 
-// --- standalone cover blob (cr-0073) ---------------------------------------
-
-/**
- * Cover downscale spec: a Memory's cover is only ever shown small-to-medium (a card tile, a ~180 px detail
- * preview, a 34 px pin), so an uploaded cover is downscaled to ONE cover-sized JPEG — no THUMBNAIL/PREVIEW
- * tiers. Matches the PREVIEW long edge; the normalized crop then renders it identically at any size.
- */
-export const COVER_SPEC = { maxEdge: 2048, quality: 0.85 }
-
-/**
- * Upload a brand-new image as a Memory's **standalone cover blob** (cr-0073, uc.memory.cover second source):
- * downscale on device to one cover-sized JPEG, seal it under a fresh `K_blob` (wrapped under `K_mem`), upload
- * the ciphertext chunks direct-to-store, and commit it to the node via `commitCoverBlob` — attached with **no
- * `veyq_media` row** (never in the gallery, no derivative tiers). Commit **atomically reclaims** any prior
- * cover blob on the node. Returns the committed [BlobRef] the display layer opens with [openBlob]. Best-effort
- * downscale: an undecodable source seals the original bytes rather than fail (uc.memory.upload E4).
- */
-export async function uploadCoverBlob(
-  scopeId: string,
-  nodeId: string,
-  memoryKey: Uint8Array,
-  source: AddMediaSource,
-  deriver: MediaDeriver = createBrowserDeriver(),
-): Promise<BlobRef> {
-  let blob = source.blob
-  // The cover blob's meta is its type alone (inbox #397): the JPEG it was derived into, else the pristine source's.
-  let meta: BlobMeta = { type: cleanStr(source.mediaType) ?? UNKNOWN_TYPE }
-  if (source.mediaType.startsWith('image/')) {
-    try {
-      blob = new Blob([(await deriver.deriveImage(source.blob, COVER_SPEC)).bytes as BlobPart])
-      meta = DERIVED_META
-    } catch {
-      /* undecodable codec → seal the pristine bytes (still a valid, if larger, cover) */
-    }
-  }
-  // A cover's owner is its node, in the COVER role (ADR 0072) — the server commits only an upload started so.
-  const cover = { ownerId: nodeId, role: 'COVER' } as const
-  const plan = planBlob(scopeId, cover, memoryKey, blob, meta)
-  const [uploadId] = await reserveAndPump([plan], (d) => authedReserve(scopeId, d), authedWindow(scopeId))
-
-  const committed = await withRefresh(() =>
-    mediaApi().commitCoverBlob({ scopeId, nodeId, coverBlobCommitRequest: { uploadId } }),
-  )
-  return {
-    blobId: expectMintedId(plan.blobId, committed.blobId),
-    chunkCount: committed.chunkCount, byteSize: committed.byteSize, wrappedBlobKey: committed.wrappedBlobKey, ...cover,
-  }
-}
-
-/**
- * Detach + reclaim a node's standalone cover blob (cr-0073) — the client-driven counterpart to `deleteNode`'s
- * cascade. Called when an **uploaded** cover is superseded by a media cover or removed (a fresh upload commit
- * already reclaims the prior blob atomically, so a replace-upload-with-upload needs no explicit delete).
- *
- * `blobId` is the upload the caller's write replaced: the node has ONE cover-blob slot, and a peer's upload may
- * have landed in it since. The server clears the slot only while it still holds `blobId`, and answers
- * `409 cover_replaced` otherwise — that peer's commit already reclaimed our blob, so there is nothing to delete.
- */
-export async function deleteCoverBlob(scopeId: string, nodeId: string, blobId: string): Promise<void> {
-  try {
-    await withRefresh(() => mediaApi().deleteCoverBlob({ scopeId, nodeId, blobId }))
-  } catch (e) {
-    if (!(await isCodedError(e, HttpStatus.conflict, 'cover_replaced'))) throw e
-  }
-}
+// --- the standalone cover blob is core's since inbox #411 ---------------------------------------------------------------
+// Its upload (`uploadCoverImage`), spec and write (`setNodeCover` / `removeNodeCover`) live in `core/node/cover/`; what Memories
+// adds - its second cover source, one of its own photos - is `memoryCover.ts` / `coverLoad.ts`.
 
 // --- delete / restore / trash (uc.memory.delete-media, cr-0110) -------------
 

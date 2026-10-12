@@ -6,7 +6,7 @@
 import { MEMORY_KIND, CHAPTER_KIND } from './kinds'
 import type { EpochKeys } from '../spaces/epochs'
 import { createContentNode, type NodeAddress, type NodeParent } from '../../core/node/tree'
-import { sealNodeMeta } from './nodeMeta'
+import { sealNodeMeta } from '../../core/node/nodeMeta'
 import type { MemoryLocation } from './memoryLocation'
 
 /**

@@ -42,6 +42,9 @@ class FilesNodeKindRules : NodeKindRules {
 
     override fun parentAllows(kind: String, parent: ParentSlot): Boolean =
         handles(kind) && (parent is ParentSlot.Root || (parent is ParentSlot.Node && parent.kind == NodeEntity.FOLDER))
+
+    /** A drop box takes a cover (inbox #411); a file does not - its one blob is its content, and a file's own thumbnail is a different idea. */
+    override fun takesCover(kind: String): Boolean = kind == FilesNodeKinds.DROPBOX
 }
 
 /**

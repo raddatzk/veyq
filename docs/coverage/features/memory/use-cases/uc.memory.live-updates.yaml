@@ -15,7 +15,7 @@ acceptanceCriteria:
       backend:
         integration:
           - MediaSliceTest.unchangedPollIsNotModified
-          - NodeCoverSliceTest.commitAttachesCoverBlobWithNoMediaRow
+          - NodeCoverMemoriesSliceTest.aMemoryAndAChapterTakeACoverWithoutTouchingTheGallery
       web:
         unit:
           - src/features/memory/media.test.ts

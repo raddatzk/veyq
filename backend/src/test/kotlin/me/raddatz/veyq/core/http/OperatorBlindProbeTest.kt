@@ -123,13 +123,15 @@ class OperatorBlindProbeTest {
             Call("PATCH", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/buckets/${s.bucketId}", """{"sealedName":"$B64"}""")
         },
         "deleteBucket" to Probe(Address.SCOPE) { s -> Call("DELETE", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/buckets/${s.bucketId}") },
+        "setNodeCover" to Probe(Address.SCOPE) { s ->
+            Call("PUT", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/cover", """{"uploadId":"${s.uploadId}","expectedBlobId":null,"wrappedMeta":"$B64","metaVersion":0}""")
+        },
+        "removeNodeCover" to Probe(Address.SCOPE) { s ->
+            Call("POST", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/cover/removal", """{"blobId":"${UUID.randomUUID()}","wrappedMeta":"$B64","metaVersion":0}""")
+        },
         "moveBucketMedia" to Probe(Address.SCOPE) { s ->
             Call("POST", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/media-moves", """{"mediaIds":["${s.mediaId}"],"targetBucketId":"${s.bucketId}"}""")
         },
-        "commitCoverBlob" to Probe(Address.SCOPE) { s ->
-            Call("POST", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/cover-blob", """{"uploadId":"${s.uploadId}"}""")
-        },
-        "deleteCoverBlob" to Probe(Address.SCOPE) { s -> Call("DELETE", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/cover-blob?blobId=${UUID.randomUUID()}") },
         "getMediaExif" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/media/${s.mediaId}/exif") },
         "updateMediaMeta" to Probe(Address.SCOPE) { s ->
             Call("PUT", "/api/scopes/${s.scopeId}/media/${s.mediaId}/meta", """{"wrappedMeta":"$B64","metaVersion":0}""")

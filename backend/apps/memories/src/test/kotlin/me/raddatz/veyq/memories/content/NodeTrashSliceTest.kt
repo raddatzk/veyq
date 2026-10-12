@@ -2,6 +2,8 @@ package me.raddatz.veyq.memories.content
 
 import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.blob.NodeAttachmentEntity
+import me.raddatz.veyq.core.blob.UploadSessionEntity
+import me.raddatz.veyq.core.testing.CoverKit
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.memories.itemfavorites.ItemFavoritesEntity
 import me.raddatz.veyq.memories.media.BucketEntity
@@ -426,10 +428,10 @@ class NodeTrashSliceTest {
             .extract().path("results[0].mediaId")
     }
 
-    private fun commitCover(userId: String, scopeId: String, nodeId: String, uploadId: String): String =
-        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"uploadId":"$uploadId"}""")
-            .`when`().post("/api/scopes/$scopeId/nodes/$nodeId/cover-blob")
-            .then().statusCode(200).body("blobId", notNullValue())
-            .extract().path("blobId")
+    /** Commit an upload as the node's cover through core's `setNodeCover` and return the committed blob's id. */
+    private fun commitCover(userId: String, scopeId: String, nodeId: String, uploadId: String): String {
+        val blobId = QuarkusTransaction.requiringNew().call { UploadSessionEntity.findById(uploadId)!!.blobId!! }
+        CoverKit.set(userId, scopeId, nodeId, uploadId, expectedBlobId = null).statusCode(204)
+        return blobId
+    }
 }

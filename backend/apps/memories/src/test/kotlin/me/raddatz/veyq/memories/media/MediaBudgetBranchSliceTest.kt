@@ -2,6 +2,7 @@ package me.raddatz.veyq.memories.media
 
 import me.raddatz.veyq.core.testing.FakePresignProfile
 import me.raddatz.veyq.core.blob.UploadSessionPurge
+import me.raddatz.veyq.core.testing.CoverKit
 import me.raddatz.veyq.core.testing.TestBlob
 import me.raddatz.veyq.core.blob.UploadSessionEntity
 import me.raddatz.veyq.core.blobstore.BlobStore.Companion.chunkKey
@@ -146,10 +147,7 @@ class MediaBudgetBranchSliceTest {
         scriptSession(uploadId) { _, declared -> declared + 1 }
         val storageKey = QuarkusTransaction.requiringNew().call { UploadSessionEntity.findById(uploadId)!!.storageKey }
 
-        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"uploadId":"$uploadId"}""")
-            .`when`().post("/api/scopes/$scopeId/nodes/$memory/cover-blob")
-            .then().statusCode(400).body("code", equalTo("budget_exceeded"))
+        CoverKit.set(userId, scopeId, memory, uploadId, expectedBlobId = null).statusCode(400).body("code", equalTo("budget_exceeded"))
 
         QuarkusTransaction.requiringNew().run {
             assert(StoreReclaimEntity.count("storageKey", storageKey) == 1L) {

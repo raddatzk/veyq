@@ -252,6 +252,12 @@ A **`FILES_DROPBOX`** is a Files node at the root or in a `FOLDER` (no placement
 **`WRITE_ONLY` only** (`FilesShareRoots`). Its guests hold no key of it; what they send lands in **identity folders**,
 one per guest identity, which are core `FOLDER`s carrying `veyq_node.share_identity_id` (ADR 0080 decision 11).
 
+**A drop box carries a cover** (inbox #411, core's feature - [uc.platform.node-cover](../features/platform/use-cases/uc.platform.node-cover.md)):
+Files opts it in (`FilesNodeKindRules.takesCover`, `register.ts` `cover: {}`), nothing else - the action, the picker, the upload, the
+write and the display are core's, the image is the box's own blob in the `COVER` slot (not a file in it), and a **`FILE` takes none**
+(its one blob is its content; a file's own thumbnail is a different idea, deferred). The header's leading slot shows it
+(`DropBoxDetail.vue`), the row/tile and the sidebar's Favorites too; a guest of a link above sees it and sets none.
+
 - **The keys.** The drop box's drop key pair is core's (`veyq_node.sealed_drop_private_key` under the drop box's key,
   the public half per link under `K_share`, set with the first link exactly as for a Memory's uploader link,
   `core/sharing/dropKey.ts`). A guest names itself with its own identity key `K_up`, wrapped to the drop public key

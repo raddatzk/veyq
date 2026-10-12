@@ -4,8 +4,12 @@
 - **Primary actor:** A member with an **unlocked vault** who has a Memory open and wants to give it a **cover**.
 - **Goal:** Curate a Memory's **cover** — pick **one image** and **crop** it — **sealed under the Memory's `K_mem`**
   and shown identically wherever the Memory appears: its **browse card**, its **detail header**, its **map pin**
-  ([uc.memory.place](uc.memory.place.md)). (Its entry in the sidebar's Favorites showed it too until the Favorites
-  section became core's and draws each kind's icon, inbox #409; a cover for any node is inbox #411.)
+  ([uc.memory.place](uc.memory.place.md)) and its entry in the **sidebar's Favorites**. **A cover is core's since inbox
+   #411** ([uc.platform.node-cover](../../platform/use-cases/uc.platform.node-cover.md)): the action ("Set cover" /
+  "Change cover" / "Remove cover" — in the page's header and in the Memory's row menu), the upload, the one-request write and
+  the display are the platform's, the same for a folder and a drop box; what stays the Memory's is its **own source UI** (this
+  page's dialog) and its **second source**, one of its own photos. The sidebar showed the cover until the Favorites section
+  became core's and drew each kind's icon (#409); #411 restored it, for every kind that has one.
   **Operator-blind** — the server never sees which image, or the crop.
 - **Preconditions:** The vault is unlocked and the Memory is open (its **`K_mem`** is held). The node already carries
   the sealed `wrappedMeta` blob ([en.memory.node-meta](../enablers/en.memory.node-meta.md)); this adds a `cover`
@@ -44,14 +48,17 @@ and offsets it.
    the lightbox**, an **uploaded image**, or the **current cover re-framed**; the user **drag-pans** and **zooms**
    (1–3×) to frame it. Save normalizes the pan/zoom back to the `0..1` crop rectangle.
 3. On save, the client seals `cover { source, crop }` — `source` = the media `mediaId` or the uploaded blob ref —
-   into the node's `wrappedMeta` under `K_mem` (read-modify-write — the sibling date/location are preserved) and
-   PATCHes it via `updateNode`. Switching away from an uploaded cover reclaims its standalone blob once that write
-   has landed, decided from the cover the write replaced ([ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md)
-   point 3), not from the editor's copy. The delete names the upload it reclaims, so a peer's upload that landed in
-   the node's one cover slot meanwhile is refused rather than deleted. The detail
-   header re-renders; the browse card and the map pin pick it up.
+   into the node's `wrappedMeta` under `K_mem` (read-modify-write — the sibling date/location are preserved) and sends it with
+   core's write: a new image is `setNodeCover` (the open upload AND the meta that names it, one transaction), a switch away
+   from an uploaded cover or its removal is `removeNodeCover` (the blob freed in the same write), anything else a plain
+   `updateNode`. The blob step is decided from the cover the write replaced
+   ([ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md) point 3), read from the blob the server accepted
+   the write over, not from the editor's copy; a cover another writer replaced meanwhile is a `cover_stale` conflict with
+   nothing written, so the old cover is never left half-replaced. The detail header re-renders; the browse card, the map pin
+   and the sidebar pick it up.
 4. **Everywhere the Memory shows**, its cover is rendered from the same sealed crop over the chosen media's
-   decrypted thumbnail: the **browse card**, the **detail header** and the **map pin**. **Remove** clears the cover → the
+   decrypted thumbnail (or the uploaded cover blob): the **browse card**, the **detail header**, the **map pin** and the
+   **sidebar's Favorites** tile. **Remove** clears the cover → the
    placeholder returns on every one of them. The
    thumbnail itself is decrypted **once per Memory per scope** and shared by all three; a cover changed on one
    surface is re-resolved for the rest because the cache is keyed on the node's sealed meta, not on its id.
@@ -105,6 +112,9 @@ Gerät verschlüsselt; der Server speichert nur verschlüsselte Daten.
   sub-objects on the same `wrappedMeta`), [uc.memory.gallery](uc.memory.gallery.md) (the media tiers the cover is
   chosen from + displayed with), [uc.memory.browse](uc.memory.browse.md) (the card + `updateNode` this folds into)
 - Decisions: [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (K_mem seals node content)
+- Core's feature: [uc.platform.node-cover](../../platform/use-cases/uc.platform.node-cover.md) (inbox #411 — Memories' two
+  cover endpoints became core's `setNodeCover` / `removeNodeCover`; the crop model, the store and the writer moved to
+  `core/node/cover/`, the Memory keeps its photo source and its dialog)
 - Built: the existing-media source (web, cr-0072) and the **new-upload** source (a standalone cover blob —
   contract + backend + web, cr-0073). cr-0073 generalized the cr-0072 **`mediaId`-only** `cover` shape into a
   discriminated **`source` (media | upload blob ref)** — with a backward-compatible `normalizeMemoryCover` so

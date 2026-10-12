@@ -24,8 +24,9 @@ Gradle module of its own; the web half is separated by import direction only (se
 - **Domain data:** media and its derivatives, uploader buckets, a Memory's sealed `wrappedMeta` (date, place,
   cover), item favorites (the marks on media; the member's *pin* of a node is core's, `core/favorites`, ADR 0068 §10), a node's gallery counters (`veyq_media_revision`, ADR 0033). The media tables key on
   `node_id` (measured: `grep -n "node_id" backend/apps/memories/src/main/resources/db/migration/V*__memories_baseline.sql`).
-  An uploaded cover blob is core's: the node's `COVER` attachment in `veyq_node_attachment`, written through
-  `AttachmentStore` (inbox #341); core's `veyq_node` carries no Memories column. Memories' configuration is its own
+  A cover is core's feature (inbox #341, #411): the node's `COVER` attachment in `veyq_node_attachment`, written by core's
+  `setNodeCover` / `removeNodeCover` together with the sealed meta that names it; Memories opts its two kinds in
+  (`MemoryNodeKindRules.takesCover`), keeps its second source (one of its photos) and its dialog; core's `veyq_node` carries no Memories column. Memories' configuration is its own
   mapping, `veyq.media.*` (`MemoriesMediaConfig`, inbox #342).
 - **Screens and behaviour:** gallery and lightbox, upload with client-generated derivatives, covers, date and
   place curation, the map, live updates. Their state is the use-cases and enablers under
@@ -152,15 +153,15 @@ drop page, never this source.
 
 **A guest sees the member's views (inbox #401).** At a folder level `memoryRows` (`web/src/features/memory/levelRows.ts`), handed a guest's access and tree,
 gives core's list the Memories of a shared folder as rows and tiles (a cover tile in the grid), each date and place unsealed under the node's key the link's
-chain opened, each cover through the link's own reads (`guestCover.ts`: a chosen photo's thumbnail from
-`listShareMedia`, read once and only when a cover needs it; an uploaded cover blob through `resolveShareBlob`, which
-serves a node's cover blob below the share), the map over the opened subtree. A Memory or a chapter — below a shared
+chain opened, each cover through the link's own reads (core's cover store, `core/node/cover/coverStore.ts`: an uploaded cover blob through
+`resolveShareBlob`, which serves a node's cover blob below the share; a chosen photo's thumbnail by Memories' `cover.load`,
+`coverLoad.ts`, from `listShareMedia`, read once and only when a cover needs it), the map over the opened subtree. A Memory or a chapter — below a shared
 folder, or the root of a Memory or chapter link — is the member's `MemoryDetail` (core's `ShareTreePage` mounts the
 kind's `detail`): the gallery, the lightbox with the download, the Chapters tab to navigate into (through the tree's
 link, `#k=` kept); for a contributor besides, the upload into the node on screen and the delete of its own photos on
 the tile and in the lightbox. It shows the date and place the members sealed but never reconciles them (the member's
 detail settles them automatically on a gallery change; that writes the node's meta, which no guest may). Nothing of the
-member's world is read — no `treeStore`, `activeSpace`, `coverStore`, the pin store or item-mark store
+member's world is read — no `treeStore`, `activeSpace`, the member's cover store, the pin store or item-mark store
 (`ShareView.memory.test.ts` records every export of those and every authenticated client). The one page a guest gets
 that a member has not is a `WRITE_ONLY` link's drop page (`MemoryShareBody`: name, warning, add photos, the session's
 own tiles) — its guest holds no key to render anything the member's way. A link's guest names itself through core's
@@ -183,8 +184,8 @@ core tests that need an application at runtime; `:core`'s own run with no applic
 by import direction only**: `features/memory` is the application (core imports it nowhere but the composition root
 and asks a registry for what to render; the folder level view is core's, Memories contributes ROW DATA, not a section
 (inbox #407): its row factory `memoryRows` answers, for each MEMORY and CHAPTER at the level, a row — the cover as the
-leading visual (large on a tile), the name, the meta line "Memory · date range", a primary click that opens it, rename and move in
-the row's menu (the favorite heart on the row is core's own action, the same for every kind, inbox #409) —
+leading visual (large on a tile; core resolves the cover, `host.covers`, inbox #411), the name, the meta line "Memory · date range", a primary click that opens it, rename and move in
+the row's menu (the favorite heart on the row is core's own action, the same for every kind, inbox #409, and so are "Set cover" / "Change cover" / "Remove cover", inbox #411) —
 and the map as its own presentation; core draws the list, orders it (folders first, then everything by name, mixed with
 files and drop boxes) and offers the presentations grid, list and map in the level's toolbar, inbox #370), and its create and share dialogs ride on its kinds
 (a rename is core's, as a folder's create is), though its directory name is still Memories-shaped (the top-bar tray and

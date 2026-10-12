@@ -11,8 +11,8 @@
 import { epochMsToIsoDate } from '../../shared/isoDate'
 import { effectiveCapturedAt, unsealMeta, type MediaItem } from './media'
 import { openContentKey, type TreeNode } from '../../core/node/tree'
-import { editField, sealNodeMeta, unsealNodeMeta, type NodeMetaAddress } from './nodeMeta'
-import { writeNodeMeta } from './nodeMetaWrite'
+import { editField, sealNodeMeta, unsealNodeMeta, type NodeMetaAddress } from '../../core/node/nodeMeta'
+import { writeNodeMeta } from '../../core/node/nodeMetaWrite'
 import type { SealedMetaState } from '../../core/node/sealedMetaWrite'
 
 /** The four date modes: derive from media (`auto`), a single day, a `from..to` span, or an open-ended `since`. */

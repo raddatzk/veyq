@@ -1,11 +1,10 @@
 // The Memories application's lifecycle hooks (lifecycle.ts) in isolation: what each hook does, and what it must not.
 // Their wiring into the shell is proven where the shell calls the registry (activeSpace.test.ts: scope reset/refresh,
-// coverStore.test.ts: sign-out, rotateKeys.test.ts: the master-key hook). The node pins are CORE's since inbox #409
-// (`core/favorites`): the shell clears and loads them itself, so this application's hooks touch none of that.
+// core/node/cover/coverStore.test.ts: sign-out, rotateKeys.test.ts: the master-key hook). The node pins are CORE's since inbox #409
+// (`core/favorites`) and the covers since #411: the shell clears and loads them itself, so this application's hooks touch none of that.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('./itemFavorites', () => ({ retagItemMarksUnderNewMasterKey: vi.fn() }))
-vi.mock('./coverStore', () => ({ resetCovers: vi.fn() }))
 vi.mock('../../core/favorites/favorites', () => ({ resealFavoritesUnderNewMasterKey: vi.fn(), loadFavorites: vi.fn(), saveFavorites: vi.fn() }))
 vi.mock('../../core/favorites/favoritesStore', () => ({
   favoritesStore: { loaded: false, ids: new Set<string>() },
@@ -15,16 +14,14 @@ vi.mock('../../core/favorites/favoritesStore', () => ({
 
 import { memoriesLifecycle } from './lifecycle'
 import { retagItemMarksUnderNewMasterKey } from './itemFavorites'
-import { resetCovers } from './coverStore'
 import { resealFavoritesUnderNewMasterKey } from '../../core/favorites/favorites'
 import { clearFavorites, loadFavoritesFor } from '../../core/favorites/favoritesStore'
 
 beforeEach(() => vi.clearAllMocks())
 
 describe('onScopeReset', () => {
-  it('releases the covers, and leaves the node pins to core', () => {
+  it('leaves the covers and the node pins to core: it holds no per-scope state of its own to drop', () => {
     memoriesLifecycle.onScopeReset?.()
-    expect(resetCovers).toHaveBeenCalledTimes(1)
     expect(clearFavorites).not.toHaveBeenCalled()
   })
 })

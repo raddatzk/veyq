@@ -9,6 +9,7 @@ import me.raddatz.veyq.core.testing.TestFixtures.bearer
 import me.raddatz.veyq.core.testing.TestFixtures.seedMemberScope
 import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.answer
+import me.raddatz.veyq.core.testing.CoverKit
 import me.raddatz.veyq.core.testing.assertWinnerAndLoser
 import me.raddatz.veyq.core.testing.race
 import me.raddatz.veyq.core.testing.whileUncommitted
@@ -88,12 +89,18 @@ class MediaCreateRaceSliceTest {
         val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
         repeat(RACE_ROUNDS) { round ->
             val uploadId = startCover(userId, scopeId, memory)
-            val answers = race({ commitCover(userId, scopeId, memory, uploadId) }, { commitCover(userId, scopeId, memory, uploadId) })
-            val replay = commitCover(userId, scopeId, memory, uploadId)
+            // both commits state the slot and the meta version they read before the race: one wins, one meets a spent session
+            val expected = CoverKit.slot(memory)
+            val version = CoverKit.meta(memory).second
+            val answers = race(
+                { commitCover(userId, scopeId, memory, uploadId, expected, version) },
+                { commitCover(userId, scopeId, memory, uploadId, expected, version) },
+            )
+            val replay = commitCover(userId, scopeId, memory, uploadId, expected, version)
             assertEquals(404 to "node_not_found", replay, "round $round: the replay's answer")
-            assertWinnerAndLoser(200, replay, answers, "round $round")
+            assertWinnerAndLoser(204, replay, answers, "round $round")
         }
-        assertEquals(200 to null, commitCover(userId, scopeId, memory, startCover(userId, scopeId, memory)))
+        assertEquals(204 to null, commitCover(userId, scopeId, memory, startCover(userId, scopeId, memory), CoverKit.slot(memory), CoverKit.meta(memory).second))
     }
 
     /** Two creates of one sub-bucket id: the loser answers `id_taken`, as a replay does. */
@@ -173,9 +180,8 @@ class MediaCreateRaceSliceTest {
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
             .then().statusCode(200).extract().path("results[0].uploadId")
 
-    private fun commitCover(userId: String, scopeId: String, nodeId: String, uploadId: String): Pair<Int, String?> =
-        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON).body("""{"uploadId":"$uploadId"}""")
-            .`when`().post("/api/scopes/$scopeId/nodes/$nodeId/cover-blob").then().extract().answer()
+    private fun commitCover(userId: String, scopeId: String, nodeId: String, uploadId: String, expected: String?, version: Long): Pair<Int, String?> =
+        CoverKit.set(userId, scopeId, nodeId, uploadId, expected, metaVersion = version).extract().answer()
 
     private fun createBucket(userId: String, scopeId: String, nodeId: String, bucketId: String): Pair<Int, String?> =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)

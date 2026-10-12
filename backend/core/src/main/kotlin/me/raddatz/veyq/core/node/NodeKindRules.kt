@@ -27,7 +27,19 @@ interface NodeKindRules {
     /** Whether a node of [kind] — one this implementation [handles] — may live in [parent]. */
     fun parentAllows(kind: String, parent: ParentSlot): Boolean
 
+    /**
+     * Whether a node of [kind] — one this implementation [handles] — may carry a **cover**: an image attached to the
+     * node itself, in its `COVER` slot ([me.raddatz.veyq.core.content.NodeCover], inbox #411). The kind's own answer,
+     * so core names no application kind: `FOLDER` here, a drop box, a Memory and a Chapter in their applications.
+     * Default no — a kind opts in. Asked from the one rule that handles the kind, so a kind no rule claims takes none.
+     */
+    fun takesCover(kind: String): Boolean = false
+
     companion object {
+        /** Whether the one rule of [rules] that handles [kind] says it takes a cover; none or several → false. */
+        fun takesCover(rules: List<NodeKindRules>, kind: String): Boolean =
+            rules.filter { it.handles(kind) }.singleOrNull()?.takesCover(kind) ?: false
+
         /** The one rule of [rules] that handles [kind] decides; none or several → false. */
         fun parentAllows(rules: List<NodeKindRules>, kind: String, parent: ParentSlot): Boolean =
             rules.filter { it.handles(kind) }.singleOrNull()?.parentAllows(kind, parent) ?: false
@@ -41,4 +53,6 @@ class FolderNodeRules : NodeKindRules {
 
     override fun parentAllows(kind: String, parent: ParentSlot): Boolean =
         parent is ParentSlot.Root || (parent is ParentSlot.Node && parent.kind == NodeEntity.FOLDER)
+
+    override fun takesCover(kind: String): Boolean = kind == NodeEntity.FOLDER
 }

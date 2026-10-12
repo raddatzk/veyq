@@ -42,7 +42,7 @@ acceptanceCriteria:
       web:
         unit:
           - src/features/memory/memoryDate.test.ts
-          - src/features/memory/nodeMeta.test.ts
+          - src/core/node/nodeMeta.test.ts
           - src/features/memory/memoryCover.test.ts
           - src/features/memory/useMemoryCover.test.ts
           - src/features/memory/components/MediaLightbox.test.ts
@@ -58,7 +58,7 @@ acceptanceCriteria:
     coverage:
       web:
         unit:
-          - src/features/memory/nodeMeta.test.ts
+          - src/core/node/nodeMeta.test.ts
           - src/features/memory/memoryDate.test.ts
           - src/features/memory/media.test.ts
   - id: toggle-waits-for-its-set

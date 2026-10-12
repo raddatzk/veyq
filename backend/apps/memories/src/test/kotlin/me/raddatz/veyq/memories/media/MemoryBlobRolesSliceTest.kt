@@ -128,7 +128,7 @@ class MemoryBlobRolesSliceTest {
         val mediaId = TestIds.uuid()
         val original = start(mediaId, MemoryBlobRoles.ORIGINAL)
         // each session is bound to this media in exactly the role it is declared in, so only the role list refuses it
-        for (role in listOf("FILE_CONTENT", MemoryBlobRoles.ORIGINAL, MemoryBlobRoles.COVER)) {
+        for (role in listOf("FILE_CONTENT", MemoryBlobRoles.ORIGINAL, "COVER")) {
             val derivative = if (role in MemoryBlobRoles.MEMBER) start(mediaId, role) else openPastTheStart(mediaId, role)
             assertEquals(
                 "upload_mismatch", completeThroughTheSeam(mediaId, original, listOf(DerivativeDeclare(role, derivative))),

@@ -9,7 +9,7 @@ import { createMemory } from './memoryNodes'
 import { setMemoryDate, unsealMemoryDate } from './memoryDate'
 import { setMemoryLocation, unsealMemoryLocation } from './memoryLocation'
 import { setMemoryCover, unsealMemoryCover, type MemoryCover } from './memoryCover'
-import { unsealNodeMeta } from './nodeMeta'
+import { unsealNodeMeta } from '../../core/node/nodeMeta'
 
 /**
  * Opt-in live smoke for the Memory cover (cr-0072) — the one path the API-mocked unit tests cannot cover: the

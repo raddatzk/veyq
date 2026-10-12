@@ -290,7 +290,12 @@ const {
   thumbs,
   onMetaUpdated: (payload) => emit('metaUpdated', payload),
   noSpaceMessage: () => t('media.uploadNoSpace'),
+  coverStaleMessage: () => t('node.cover.stale'),
 })
+
+// Core's "Set cover" action in this header (inbox #411) opens THIS dialog - a Memory's own source UI (a photo of the Memory,
+// an upload, a crop) - instead of core's plain image picker: the host hands the action `choose` through this handle.
+defineExpose({ openCoverEditor })
 
 /** The reconcile settle point `useMediaGalleryLive` calls after each list refresh: auto-date first, then
  *  auto-location (which reads the date-reconciled wrappedMeta patched in place → read-modify-write safe). Both WRITE the

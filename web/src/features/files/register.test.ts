@@ -69,6 +69,7 @@ describe('registerFiles', () => {
       supported: true,
       kind: DROPBOX_KIND,
       icon: 'pi pi-inbox',
+      cover: {}, // a drop box carries a cover (inbox #411)
       shareable: true,
       detail: DropBoxDetail,
       deleteTitle: 'files.dropBox.delete',

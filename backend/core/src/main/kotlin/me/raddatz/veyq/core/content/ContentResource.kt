@@ -3,7 +3,11 @@ package me.raddatz.veyq.core.content
 import me.raddatz.veyq.core.generated.api.ContentApi
 import me.raddatz.veyq.core.generated.model.CreateNodeRequest
 import me.raddatz.veyq.core.generated.model.NodeCreated
+import me.raddatz.veyq.core.generated.model.NodeCoverConflict
 import me.raddatz.veyq.core.generated.model.NodeSummary
+import me.raddatz.veyq.core.generated.model.RemoveNodeCoverRequest
+import me.raddatz.veyq.core.generated.model.SetNodeCoverRequest
+import me.raddatz.veyq.core.validation.validated
 import me.raddatz.veyq.core.generated.model.RestoreNodeRequest
 import me.raddatz.veyq.core.generated.model.TrashedNodeSummary
 import me.raddatz.veyq.core.generated.model.UpdateNodeRequest
@@ -34,6 +38,7 @@ import me.raddatz.veyq.core.ratelimit.RateLimitExempt
 )
 class ContentResource(
     private val handler: NodesHandler,
+    private val covers: NodeCoverHandler,
     private val identity: SecurityIdentity,
     config: VeyqConfig,
 ) : ContentApi {
@@ -83,6 +88,35 @@ class ContentResource(
             is UpdateNodeOutcome.StaleMeta -> httpStaleSealedMeta(o, o.wrappedMeta, o.metaVersion)
             is HttpFailure -> httpError(o)
         }
+
+    override fun setNodeCover(scopeId: UUID, nodeId: UUID, setNodeCoverRequest: SetNodeCoverRequest): Response =
+        coverResponse(
+            covers.set(
+                identity.principal.name, scopeId.toString(), nodeId.toString(), setNodeCoverRequest.uploadId.toString(),
+                setNodeCoverRequest.expectedBlobId?.toString(), setNodeCoverRequest.wrappedMeta,
+                setNodeCoverRequest.metaVersion.validated(),
+            ),
+        )
+
+    override fun removeNodeCover(scopeId: UUID, nodeId: UUID, removeNodeCoverRequest: RemoveNodeCoverRequest): Response =
+        coverResponse(
+            covers.remove(
+                identity.principal.name, scopeId.toString(), nodeId.toString(), removeNodeCoverRequest.blobId.toString(),
+                removeNodeCoverRequest.wrappedMeta, removeNodeCoverRequest.metaVersion.validated(),
+            ),
+        )
+
+    /** `204`, or the refusal; the two 409s that carry more than their code answer the contract's `NodeCoverConflict`. */
+    private fun coverResponse(o: NodeCoverOutcome): Response = when (o) {
+        NodeCoverOutcome.Done -> Response.noContent().build()
+        is NodeCoverOutcome.CoverStale ->
+            Response.status(o.status.httpStatus)
+                .entity(NodeCoverConflict(code = o.code, currentBlobId = o.currentBlobId?.let(UUID::fromString))).build()
+        is NodeCoverOutcome.StaleMeta ->
+            Response.status(o.status.httpStatus)
+                .entity(NodeCoverConflict(code = o.code, wrappedMeta = o.wrappedMeta, metaVersion = o.metaVersion)).build()
+        is HttpFailure -> httpError(o)
+    }
 
     override fun deleteNode(scopeId: UUID, nodeId: UUID): Response =
         when (val o = handler.delete(identity.principal.name, scopeId.toString(), nodeId.toString())) {

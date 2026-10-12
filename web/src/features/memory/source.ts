@@ -46,8 +46,6 @@ import {
   purgeMedia,
   setMediaMeta,
   backfillPlaceName,
-  uploadCoverBlob,
-  deleteCoverBlob,
   downloadRef,
   listBuckets,
   createBucket,
@@ -66,8 +64,8 @@ import {
 } from './media'
 import { setMemoryDate, reconcileMemoryDate, type MemoryDate } from './memoryDate'
 import { setMemoryLocation, type MemoryLocation } from './memoryLocation'
-import { setMemoryCover, type MemoryCover } from './memoryCover'
-import { writeNodeMeta } from './nodeMetaWrite'
+import { setMemoryCover, setMemoryCoverUpload, type CoverCrop, type MemoryCover } from './memoryCover'
+import { writeNodeMeta } from '../../core/node/nodeMetaWrite'
 import { loadItemFavoritesFor, toggleItemFavorite } from './itemFavoritesStore'
 import {
   addSharePhoto,
@@ -149,11 +147,12 @@ export interface NodeMetaDoor {
   ) => ReturnType<typeof writeNodeMeta>
 }
 
-/** The node's cover: the sealed choice and its uploaded blob (cr-0072/0073). */
+/** The node's cover (cr-0072/0073; the blob step is core's since inbox #411): the sealed choice, and a new uploaded image. Both
+ *  are ONE write with the blob they imply - an uploaded cover replaced by a photo, or removed, frees its blob in the same
+ *  request (`core/node/cover/coverWrite.ts`), so there is no separate blob door. */
 export interface CoverDoor {
   set(nodeId: string, key: Uint8Array, cover: MemoryCover | null, current: SealedMetaState, surfaceConflict: boolean): Promise<SealedMetaState & { replaced: MemoryCover | null }>
-  uploadBlob(nodeId: string, key: Uint8Array, source: AddMediaSource): Promise<BlobRef>
-  deleteBlob(nodeId: string, blobId: string): Promise<void>
+  setUpload(nodeId: string, key: Uint8Array, source: AddMediaSource, crop: CoverCrop, current: SealedMetaState): Promise<SealedMetaState & { replaced: MemoryCover | null; cover: MemoryCover }>
 }
 
 /** A medium's own meta writes from the lightbox (capture-time correction, the resolved place name). */
@@ -292,8 +291,7 @@ export function memberMemorySource(from: { scopeId: () => string }): MemorySourc
     },
     cover: {
       set: (nodeId, key, cover, current, surfaceConflict) => setMemoryCover(scope(), nodeId, key, cover, current, surfaceConflict),
-      uploadBlob: (nodeId, key, source) => uploadCoverBlob(scope(), nodeId, key, source),
-      deleteBlob: (nodeId, blobId) => deleteCoverBlob(scope(), nodeId, blobId),
+      setUpload: (nodeId, key, source, crop, current) => setMemoryCoverUpload(scope(), nodeId, key, source, crop, current),
     },
     mediaMeta: {
       set: (target, key, overrideMs) => setMediaMeta(scope(), target, key, overrideMs),

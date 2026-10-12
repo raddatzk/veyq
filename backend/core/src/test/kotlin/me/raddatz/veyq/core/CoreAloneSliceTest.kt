@@ -18,6 +18,7 @@ import me.raddatz.veyq.core.content.NodesStore
 import me.raddatz.veyq.core.crypto.Tokens
 import me.raddatz.veyq.core.node.FolderNodeRules
 import me.raddatz.veyq.core.node.NodeEntity
+import me.raddatz.veyq.core.content.CoreMemberBlobRoles
 import me.raddatz.veyq.core.node.NodeKindRules
 import me.raddatz.veyq.core.favorites.FavoritesScopeEraser
 import me.raddatz.veyq.core.node.NodeScopeEraser
@@ -64,6 +65,8 @@ import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.notNullValue
 import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
@@ -157,9 +160,19 @@ class CoreAloneSliceTest {
         for ((seam, beans) in mapOf(
             "MembershipEraser" to membershipErasers,
             "ShareGuestWrites" to guestWrites, "UploadCompletion" to completions, "UploadAdmission" to admissions,
-            "WriteOnlyGuestKinds" to writeOnlyGuestKinds, "MemberBlobRoles" to memberRoles,
+            "WriteOnlyGuestKinds" to writeOnlyGuestKinds,
         )) {
             assertEquals(emptySet<Class<*>>(), classes(beans), "$seam: core implements none, and no application is here")
+        }
+        // core's one role is its own cover (inbox #411), declared by core and by no application
+        assertEquals(setOf(CoreMemberBlobRoles::class.java), classes(memberRoles), "MemberBlobRoles: core's COVER only")
+    }
+
+    @Test
+    fun onlyAFolderTakesACoverWithCoreAlone() {
+        assertTrue(NodeKindRules.takesCover(kindRules, NodeEntity.FOLDER), "core's own kind takes a cover")
+        for (kind in listOf("MEMORY", "CHAPTER", "FILE", "FILES_DROPBOX", "NOT_A_KIND")) {
+            assertFalse(NodeKindRules.takesCover(kindRules, kind), "$kind: no rule here opts it in (fail closed)")
         }
     }
 
@@ -273,21 +286,27 @@ class CoreAloneSliceTest {
     }
 
     /**
-     * Inbox #366: no application declares a member's role here, so a member's start is refused whole in every role —
-     * the role an application owns as much as a forged one — and no session is opened. The control is the composition's
+     * Inbox #366: no application declares a member's role here, so a member's start is refused whole in every role an
+     * application owns and in a forged one - and no session is opened. The one exception is core's own `COVER`
+     * (inbox #411: a folder takes a cover with no application). The control is the composition's
      * (`ModuleCompositionTest.aMemberStartTakesTheRolesTheApplicationsDeclare`), and `:core`'s other tests, which boot
      * [CoreTestMemberBlobRoles]: the same body opens a session there.
      */
     @Test
     fun aMemberUploadStartIsRefusedInEveryRole() {
         val (userId, scopeId) = seedMemberScope(ScopeEntity.GROUP)
-        for (role in listOf("ORIGINAL", "COVER", "FILE_CONTENT", "NOT_A_ROLE")) {
+        for (role in listOf("ORIGINAL", "FILE_CONTENT", "NOT_A_ROLE")) {
             given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
                 .body("""{"items":[${TestBlob.SMALL.declare("d3JhcA==", role = role)}]}""")
                 .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
                 .then().statusCode(400).body("code", equalTo("invalid_request"))
         }
         assertEquals(0L, QuarkusTransaction.requiringNew().call { UploadSessionEntity.count("scopeId", scopeId) }, "no session opened")
+        // the control: core's own role opens one
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+            .body("""{"items":[${TestBlob.SMALL.declare("d3JhcA==", role = "COVER")}]}""")
+            .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
+            .then().statusCode(200).body("results[0].error", nullValue())
         // a non-member still learns nothing but its 404 — the role is asked only past the access check
         val (stranger, _) = seedMemberScope(ScopeEntity.GROUP)
         given().header("Authorization", bearer(stranger)).contentType(ContentType.JSON)

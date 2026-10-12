@@ -135,8 +135,8 @@ export function contentApi(): ContentApi {
 }
 
 // The platform's generic blob transfer (core's `blob` tag, ADR 0079): start an upload, sign each next window,
-// presign downloads. Completing an upload is the application's (Memories' `mediaApi().completeMedia`,
-// `commitCoverBlob`, built in `features/memory/api.ts`).
+// presign downloads. Completing an upload is the application's (Memories' `mediaApi().completeMedia`, built in
+// `features/memory/api.ts`) - or core's, for a node's cover (`contentApi().setNodeCover`, inbox #411).
 export function blobApi(): BlobApi {
   return new BlobApi(new BlobConfiguration(bearerParams()))
 }

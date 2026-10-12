@@ -9,7 +9,9 @@ import { unsealMemoryCover, FULL_FRAME, type MemoryCover, type CoverSaveIntent }
 import { useObjectUrl } from '../../shared/state/useObjectUrls'
 import { useToast } from '../../shared/state/useToast'
 import { QUOTA_EXCEEDED } from './uploadQueue'
-import { nodeMetaState } from './nodeMeta'
+import { CoverStaleError } from '../../core/node/cover/coverWrite'
+import type { SealedMetaState } from '../../core/node/sealedMetaWrite'
+import { nodeMetaState } from '../../core/node/nodeMeta'
 import { useMetaWriteFeedback, type NodeMetaUpdate } from './useMetaWriteFeedback'
 import type { TreeNode } from '../../core/node/tree'
 import type { CoverDoor, MediaLoaders } from './source'
@@ -29,6 +31,8 @@ export interface MemoryCoverContext {
   onMetaUpdated: (payload: NodeMetaUpdate) => void
   /** The resolved "no space left" wording (`media.uploadNoSpace`), for a cover refused `quota_exceeded`. */
   noSpaceMessage: () => string
+  /** The resolved wording for a cover another writer replaced meanwhile (`node.cover.stale`). */
+  coverStaleMessage: () => string
 }
 
 export function useMemoryCover(ctx: MemoryCoverContext) {
@@ -98,20 +102,17 @@ export function useMemoryCover(ctx: MemoryCoverContext) {
 
   /**
    * Apply the cover dialog's save intent (cr-0072 media + cr-0073 upload): read-modify-write the node meta under
-   * K_mem (the date + location are preserved). An **upload** uploads + commits a standalone cover blob (whose
-   * commit atomically reclaims any prior cover blob); a save that replaced an **uploaded** cover reclaims that
-   * blob via `deleteCoverBlob` once the write has landed. `keep` re-seals the current source with a moved crop only.
+   * K_mem (the date + location are preserved). An **upload** uploads the image and attaches it as the node's cover in ONE
+   * write with the meta that names it (core's `setNodeCover`, inbox #411) - replacing, in that same request, the uploaded
+   * cover it supersedes. A switch to a photo, or no cover, frees the uploaded blob it replaces the same way
+   * (`removeNodeCover`); `keep` re-seals the current source with a moved crop only.
    *
    * Version-checked like every meta write (ADR 0077): a peer's cover written meanwhile re-opens the editor on it —
-   * unless this save already moved the node's one cover blob (an upload), in which case its own cover is
-   * re-applied: re-opening on the peer's cover would show a cover whose blob this save just replaced.
+   * unless this save moves the node's one cover blob (an upload), in which case its own cover is re-applied.
    *
-   * The reclaim is decided from the cover the landed write replaced, never from this tree copy (inbox #284): the
-   * node has ONE cover-blob slot, so a stale copy naming an upload deleted a peer's newer one, and a stale copy
-   * naming none left a replaced upload behind. The delete names that replaced upload, and the server refuses it
-   * when a peer's upload has landed in the slot since (inbox #308) — nothing is left to delete then. Write first, then delete: a
-   * failed delete leaves a blob the node still holds (the next upload's commit or the node's delete reclaims it),
-   * where deleting first left a cover the meta still named and nothing could open.
+   * No half state: the blob step and the meta are one request, so a failed save leaves the previous cover, its blob and its
+   * meta exactly as they were (a cover another writer replaced meanwhile is a `CoverStaleError`, said as a conflict). What
+   * the write replaced is read from the blob the server accepted it over (inbox #284), never from this tree copy.
    */
   async function onCoverSave(intent: CoverSaveIntent) {
     const key = ctx.memoryKey()
@@ -119,36 +120,35 @@ export function useMemoryCover(ctx: MemoryCoverContext) {
     if (!key || !write) return
     const nodeId = ctx.node().id
     try {
-      let cover: MemoryCover | null
+      const current = nodeMetaState(ctx.node())
+      let state: SealedMetaState
       if (intent.kind === 'upload') {
-        const ref = await write.uploadBlob(nodeId, key, {
-          blob: intent.file,
-          mediaType: intent.file.type,
-          lastModified: intent.file.lastModified,
-          name: intent.file.name,
-        })
-        cover = { source: { kind: 'upload', ref }, crop: intent.crop }
-      } else if (intent.kind === 'media') {
-        cover = { source: { kind: 'media', mediaId: intent.mediaId }, crop: intent.crop }
-      } else if (intent.kind === 'keep') {
-        const source = storedCover.value?.source
-        if (!source) return
-        cover = { source, crop: intent.crop }
+        const { replaced: _replaced, cover: _cover, ...written } = await write.setUpload(
+          nodeId, key,
+          { blob: intent.file, mediaType: intent.file.type, lastModified: intent.file.lastModified, name: intent.file.name },
+          intent.crop, current,
+        )
+        state = written
       } else {
-        cover = null
+        let cover: MemoryCover | null
+        if (intent.kind === 'media') {
+          cover = { source: { kind: 'media', mediaId: intent.mediaId }, crop: intent.crop }
+        } else if (intent.kind === 'keep') {
+          const source = storedCover.value?.source
+          if (!source) return
+          cover = { source, crop: intent.crop }
+        } else {
+          cover = null
+        }
+        const { replaced: _replaced, ...written } = await write.set(nodeId, key, cover, current, true)
+        state = written
       }
-      const blobMoved = intent.kind === 'upload'
-      const { replaced, ...state } = await write.set(nodeId, key, cover, nodeMetaState(ctx.node()), !blobMoved)
       ctx.onMetaUpdated({ nodeId, ...state })
-      if (!blobMoved && replaced?.source.kind === 'upload' && cover?.source.kind !== 'upload') {
-        await write.deleteBlob(nodeId, replaced.source.ref.blobId).catch(() => {
-          /* the node still holds the blob; the next upload's commit or the node's delete reclaims it */
-        })
-      }
     } catch (e) {
       // best-effort: keep the header stable; a retry re-seals. A refusal for lack of room is the one failure the
       // user must hear about — the cover would otherwise just not appear — and it reads as the uploads tray's does.
       if ((e as Error)?.message === QUOTA_EXCEEDED) toast.error(ctx.noSpaceMessage())
+      else if (e instanceof CoverStaleError) toast.error(ctx.coverStaleMessage())
       else await editorFailed(nodeId, e, () => (coverEditorOpen.value = true))
     }
   }

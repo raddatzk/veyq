@@ -313,7 +313,7 @@ class NodesStore {
      * committed token and answers [ApplyResult.SlugTaken] — unlocked, its UPDATE died on `ux_node_parent_slug` with a
      * 500, which no `createOrConflict` re-asks here, since every slug writer holds this lock (inbox #320,
      * `NodeTreeRaceCoreSliceTest`). No writer takes a node row and then the scope: an application's writes that lock a
-     * node row (Memories' `MediaStore.commitCover`, a primary bucket) never take the scope lock, and every tree write here
+     * node row (Memories' primary bucket) never take the scope lock, and every tree write here
      * takes the scope first, so there is no inversion.
      *
      * A [boundary] ([SubtreeBoundary]) is decided here, under the lock, and only here: the node outside it is

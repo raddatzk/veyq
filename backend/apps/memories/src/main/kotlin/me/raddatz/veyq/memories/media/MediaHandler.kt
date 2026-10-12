@@ -1,19 +1,13 @@
 package me.raddatz.veyq.memories.media
 
-import me.raddatz.veyq.core.blob.AttachOutcome
-import me.raddatz.veyq.core.blob.AttachmentStore
 import me.raddatz.veyq.core.blob.BlobUploadHandler
-import me.raddatz.veyq.core.blob.BlobUploadHandler.BlobVerify
 import me.raddatz.veyq.core.blob.BlobUploadStore
 import me.raddatz.veyq.core.blob.CompleteItem
 import me.raddatz.veyq.core.blob.CompleteItemResult
 import me.raddatz.veyq.core.blob.UploadCompletions
 import me.raddatz.veyq.core.blob.UploadOpener
-import me.raddatz.veyq.core.http.FailureStatus.BAD_REQUEST
-import me.raddatz.veyq.core.http.FailureStatus.CONFLICT
 import me.raddatz.veyq.core.http.FailureStatus.FORBIDDEN
 import me.raddatz.veyq.core.http.FailureStatus.NOT_FOUND
-import me.raddatz.veyq.core.http.FailureStatus.UNPROCESSABLE
 import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpFailure
@@ -64,33 +58,6 @@ sealed interface MetaOutcome {
     object NoMedia : MetaOutcome, HttpFailure by httpFailure("media_not_found", NOT_FOUND)
     /** The tier moved past the stated version; nothing was written (ADR 0077). Carries the current tier + version. */
     data class Stale(val wrappedMeta: String?, val metaVersion: Long) : MetaOutcome, HttpFailure by Failures.staleVersion
-}
-
-sealed interface CoverCommitOutcome {
-    /** The committed cover blob ref (any prior cover blob was reclaimed). */
-    object Suspended : CoverCommitOutcome, HttpFailure by Failures.tenantSuspended
-    object Deleting : CoverCommitOutcome, HttpFailure by Failures.scopeDeleting
-    data class Ok(val ref: BlobRefData) : CoverCommitOutcome
-    /** No such scope/node/upload, or the caller holds no grant (a 404, no reveal). */
-    object NoTarget : CoverCommitOutcome, HttpFailure by Failures.nodeNotFound
-    /** The target node's kind attaches no media (e.g. a FOLDER, which owns no `K_mem`) — a 422. */
-    object IllegalTarget : CoverCommitOutcome, HttpFailure by httpFailure("illegal_target", UNPROCESSABLE)
-    /** The upload was not started as this node's cover — its wrap would not open here (ADR 0072) — a 422. */
-    object UploadMismatch : CoverCommitOutcome, HttpFailure by httpFailure("upload_mismatch", UNPROCESSABLE)
-    /** The upload failed declare-then-verify (staged objects purged) — a 400. */
-    object Budget : CoverCommitOutcome, HttpFailure by httpFailure("budget_exceeded", BAD_REQUEST)
-}
-
-sealed interface CoverDeleteOutcome {
-    /** The cover blob was detached + reclaimed (or the node had none — idempotent). */
-    object Suspended : CoverDeleteOutcome, HttpFailure by Failures.tenantSuspended
-    object Deleting : CoverDeleteOutcome, HttpFailure by Failures.scopeDeleting
-    object Done : CoverDeleteOutcome
-    /** No such scope/node, or the caller holds no grant (a 404). */
-    object NoTarget : CoverDeleteOutcome, HttpFailure by Failures.nodeNotFound
-    /** The slot holds another blob than the expected one — a peer's upload replaced it, and that commit already
-     *  reclaimed the expected blob; nothing written (inbox #308) — a 409. */
-    object Replaced : CoverDeleteOutcome, HttpFailure by httpFailure("cover_replaced", CONFLICT)
 }
 
 sealed interface DeleteMediaOutcome {
@@ -277,58 +244,6 @@ class MediaHandler(
             .refusal(PurgeMediaOutcome.NoMedia, PurgeMediaOutcome.Suspended, PurgeMediaOutcome.Deleting)?.let { return it }
         if (!store.purgeMedia(scopeId, mediaId)) return PurgeMediaOutcome.NoMedia
         return PurgeMediaOutcome.Done
-    }
-
-    /**
-     * Commit an uploaded blob as the node's **standalone cover** (cr-0073): resolve the node + session, run the
-     * same declare-then-verify as `complete` (stat the stored objects against the byte budget, purge + fail on
-     * excess), then persist one `veyq_blob` as the node's `COVER` attachment (inbox #341), atomically reclaiming any
-     * prior cover blob (its row goes and its store objects are recorded for reclaim, in the same transaction). No `veyq_media` row — the cover never lists in the
-     * gallery. Guards mirror `complete`: member gate (non-member → NoTarget/404), a kind that attaches no media → IllegalTarget/422.
-     */
-    fun commitCover(userId: String, scopeId: String, nodeId: String, uploadId: String): CoverCommitOutcome {
-        access.check(userId, scopeId, WRITE)
-            .refusal(CoverCommitOutcome.NoTarget, CoverCommitOutcome.Suspended, CoverCommitOutcome.Deleting)?.let { return it }
-        val node = store.findNode(scopeId, nodeId) ?: return CoverCommitOutcome.NoTarget
-        if (!MediaUploadCompletion.attachesMedia(node.kind)) return CoverCommitOutcome.IllegalTarget
-        val session = blobs.findSession(scopeId, uploadId, UploadOpener.Member(userId)) ?: return CoverCommitOutcome.NoTarget
-        // The cover's K_blob wrap is sealed bound to (this node, COVER) (ADR 0072).
-        if (!session.boundTo(node.id, MemoryBlobRoles.COVER)) return CoverCommitOutcome.UploadMismatch
-        val manifest = when (val v = uploads.verifyBlob(session)) {
-            is BlobVerify.Ok -> v.manifest
-            BlobVerify.Budget -> {
-                uploads.purge(listOf(session))
-                return CoverCommitOutcome.Budget
-            }
-        }
-        return when (val o = store.commitCover(scopeId, node.id, session, manifest)) {
-            is AttachOutcome.Attached -> CoverCommitOutcome.Ok(
-                BlobRefData(o.blobId, session.chunkCount, session.byteSize, session.wrappedBlobKey, manifest, session.wrappedBlobMeta),
-            )
-            // A concurrent commit of this upload spent the session first: answer as a replay of it does (the upload is
-            // gone). A node trashed since the gate above answers as an unknown one.
-            AttachOutcome.UploadNotFound, AttachOutcome.NodeNotFound -> CoverCommitOutcome.NoTarget
-            AttachOutcome.IllegalTarget -> CoverCommitOutcome.IllegalTarget
-            AttachOutcome.UploadMismatch -> CoverCommitOutcome.UploadMismatch
-            // The slot was read under the scope lock attach holds, and a member's commit passes no gate.
-            is AttachOutcome.Conflict, AttachOutcome.NotAdmitted -> error("a cover commit swaps the slot it read under the scope lock: $o")
-        }
-    }
-
-    /**
-     * Detach + reclaim the node's standalone cover blob (cr-0073), only while its slot still holds [expectedBlobId]
-     * — the upload the caller's meta write replaced (ADR 0077 point 3). A slot holding another blob is a peer's newer
-     * upload, whose commit already reclaimed the expected one → Replaced, nothing written. Idempotent — a node with no
-     * cover → Done.
-     */
-    fun deleteCover(userId: String, scopeId: String, nodeId: String, expectedBlobId: String): CoverDeleteOutcome {
-        access.check(userId, scopeId, WRITE)
-            .refusal(CoverDeleteOutcome.NoTarget, CoverDeleteOutcome.Suspended, CoverDeleteOutcome.Deleting)?.let { return it }
-        if (store.findNode(scopeId, nodeId) == null) return CoverDeleteOutcome.NoTarget
-        return when (store.clearCover(scopeId, nodeId, expectedBlobId)) {
-            AttachmentStore.DetachOutcome.Detached, AttachmentStore.DetachOutcome.Empty -> CoverDeleteOutcome.Done
-            AttachmentStore.DetachOutcome.Replaced -> CoverDeleteOutcome.Replaced
-        }
     }
 
     // --- buckets (uc.memory.buckets, ADR 0034, cr-0113 · curation relaxed cr-0123) — member-gated: a member may

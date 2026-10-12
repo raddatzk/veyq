@@ -3,7 +3,7 @@ import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import * as base64 from '@veyq/crypto/base64'
 import { editField, nodeMetaState, openNodeMetaForWrite, sealNodeMeta, unsealNodeMeta } from './nodeMeta'
-import { MetaConflictError, MetaUnreadableError } from '../../core/node/sealedMetaWrite'
+import { MetaConflictError, MetaUnreadableError } from './sealedMetaWrite'
 import { treeNode } from '../../test/models'
 
 // Assertion-strength KAT for the wrappedMeta envelope (cr-0177, ADR 0045). nodeMeta was untested: the seal

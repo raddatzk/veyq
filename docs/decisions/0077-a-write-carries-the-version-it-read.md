@@ -49,8 +49,10 @@ one-element set over the stored one.
    - A **self-heal** re-runs its whole decision on the fresh blob, including *"a manual date is never
      overwritten"*, and writes nothing when that decision says so.
    - A **backfill** re-applies its one field, and writes nothing when the fresh blob already has it.
-   - The **cover editor** is the one exception: once its save has moved the node's single cover-blob slot
-     (an upload, whose commit replaces whatever blob the slot held), its own cover wins on the retry —
+   - The **cover editor** is the one exception (since inbox #411 the blob step and the meta are ONE request, `setNodeCover` /
+     `removeNodeCover`, version-checked together with a compare on the blob it replaces): once its save moves the node's
+     single cover-blob slot
+     (an upload, whose commit replaces the blob the meta being replaced named), its own cover wins on the retry —
      re-opening on the peer's cover would show a cover whose blob that save just replaced. A switch **away** from
      an uploaded cover moves nothing before its write: it surfaces a peer's cover like any editor, and reclaims
      the slot only after the write has landed, and only when the cover that write replaced — read from the blob
