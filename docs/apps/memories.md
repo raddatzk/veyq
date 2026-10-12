@@ -12,7 +12,7 @@ Gradle module of its own; the web half is separated by import direction only (se
   `NodeKind` of `contracts/api/_common.openapi.yaml`, `^[A-Z][A-Z0-9_]{0,15}$`, which core's specs alias), so the
   two values are Memories' own: `MemoriesNodeKinds` in the backend, `features/memory/kinds.ts` in the web, with their
   rules (`MemoryNodeKindRules`, `registerKind`).
-- **Contracts:** `contracts/api/memories/` (`media.openapi.yaml`, `favorites.openapi.yaml`, `share-media.openapi.yaml`
+- **Contracts:** `contracts/api/memories/` (`media.openapi.yaml`, `item-favorites.openapi.yaml`, `share-media.openapi.yaml`
   — a guest's media under a share link: the list a guest is served with the uploader keys that open it
   (`listShareMedia`), complete and delete-own; rooted at `/api/shares/{shareId}/media`), generated into
   `me.raddatz.veyq.memories.generated`; the blob transfer an upload runs on is core's `contracts/api/blob.openapi.yaml`,
@@ -22,7 +22,7 @@ Gradle module of its own; the web half is separated by import direction only (se
   ([ADR 0012](../decisions/0012-content-key-hierarchy.md)). These derive as they always have, the documented
   exemption to the application-id context ([ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Decision 9).
 - **Domain data:** media and its derivatives, uploader buckets, a Memory's sealed `wrappedMeta` (date, place,
-  cover), item favorites, a node's gallery counters (`veyq_media_revision`, ADR 0033). The media tables key on
+  cover), item favorites (the marks on media; the member's *pin* of a node is core's, `core/favorites`, ADR 0068 §10), a node's gallery counters (`veyq_media_revision`, ADR 0033). The media tables key on
   `node_id` (measured: `grep -n "node_id" backend/apps/memories/src/main/resources/db/migration/V*__memories_baseline.sql`).
   An uploaded cover blob is core's: the node's `COVER` attachment in `veyq_node_attachment`, written through
   `AttachmentStore` (inbox #341); core's `veyq_node` carries no Memories column. Memories' configuration is its own
@@ -133,11 +133,11 @@ grants nothing. On an opened `MEMORY` or `CHAPTER` (the detail):
 | date, place, cover (the node's sealed meta; the automatic reconcile too) | ✓ | ✗ | ✗ | ✗ | ✗ |
 | rename, delete the node | ✓ | ✗ | ✗ | ✗ | ✗ |
 | move the node (core's move dialog, inbox #358) | ✓ a Memory to the root or a folder, a chapter into another Memory | ✗ | ✗ | ✓ a Memory a folder of the subtree holds, between the subtree's folders; ✗ a chapter, the link's root | ✗ |
-| pin, item marks, media trash, contributions organizer | ✓ | ✓ | ✗ | ✗ | ✗ |
+| item marks, media trash, contributions organizer | ✓ | ✓ | ✗ | ✗ | ✗ |
 | share (and the uploader link) | the instance's public (and uploader) links | the same | ✗ | ✗ | ✗ |
 
 At a folder level (Memories' rows in core's one list): a member creates a Memory (not during a pending deletion, never in a guest's
-identity folder) and pins; a `READ_WRITE` guest of a folder link creates a Memory there; every role that reads opens
+identity folder); a `READ_WRITE` guest of a folder link creates a Memory there; every role that reads opens
 one. A share right also needs the kind's descriptor to bring a share dialog (`targetOf`, core's), and a guest's move
 the node's parent to be a folder the link serves (`targetOf`'s `parentKind`: unknown at the link's root). These are the matrix
 half; a right shows only where the session's data source also implements it (ADR 0079), so the guest's columns are the
@@ -160,7 +160,7 @@ kind's `detail`): the gallery, the lightbox with the download, the Chapters tab 
 link, `#k=` kept); for a contributor besides, the upload into the node on screen and the delete of its own photos on
 the tile and in the lightbox. It shows the date and place the members sealed but never reconciles them (the member's
 detail settles them automatically on a gallery change; that writes the node's meta, which no guest may). Nothing of the
-member's world is read — no `treeStore`, `activeSpace`, `coverStore`, `favoritesStore` or item-mark store
+member's world is read — no `treeStore`, `activeSpace`, `coverStore`, the pin store or item-mark store
 (`ShareView.memory.test.ts` records every export of those and every authenticated client). The one page a guest gets
 that a member has not is a `WRITE_ONLY` link's drop page (`MemoryShareBody`: name, warning, add photos, the session's
 own tiles) — its guest holds no key to render anything the member's way. A link's guest names itself through core's
@@ -174,7 +174,7 @@ Measured 2026-10-05 (`ls backend/core/src/main/kotlin/me/raddatz/veyq/core backe
 **the backend is.** Memories is the Gradle module `:apps:memories` (`backend/apps/memories`), depending on `:core`
 and never the reverse; the root `backend/` composes both into the one fast-jar. Every class lives in its owner's
 package — the platform in `me.raddatz.veyq.core` (the node tree in `core.content`/`core.node`, sharing in `core.sharing`),
-Memories in `me.raddatz.veyq.memories` (`media`, `favorites`, `itemfavorites`, `node`) — and core reaches Memories only
+Memories in `me.raddatz.veyq.memories` (`media`, `itemfavorites`, `node`) — and core reaches Memories only
 through the interfaces Memories implements: it attaches its media through `UploadCompletion`, measures a link's
 contributed blobs through `UploadAdmission`, places its `MEMORY` and `CHAPTER` through `NodeKindRules` (core places
 only `FOLDER`), declares that a `MEMORY` and a `CHAPTER` may be the root of a share of every role through
@@ -183,11 +183,11 @@ core tests that need an application at runtime; `:core`'s own run with no applic
 by import direction only**: `features/memory` is the application (core imports it nowhere but the composition root
 and asks a registry for what to render; the folder level view is core's, Memories contributes ROW DATA, not a section
 (inbox #407): its row factory `memoryRows` answers, for each MEMORY and CHAPTER at the level, a row — the cover as the
-leading visual (large on a tile), the name, the meta line "Memory · date range", a primary click that opens it, the heart
-as its one first-class action (a member's own pin, inbox #409 moves it to core) and rename and move in the row's menu —
+leading visual (large on a tile), the name, the meta line "Memory · date range", a primary click that opens it, rename and move in
+the row's menu (the favorite heart on the row is core's own action, the same for every kind, inbox #409) —
 and the map as its own presentation; core draws the list, orders it (folders first, then everything by name, mixed with
 files and drop boxes) and offers the presentations grid, list and map in the level's toolbar, inbox #370), and its create and share dialogs ride on its kinds
 (a rename is core's, as a folder's create is), though its directory name is still Memories-shaped (the top-bar tray and
-the sidebar pins are ordered lists; the upload status in the top bar is core's, not Memories' tray item, and lists Memories'
+the sidebar pins are ordered lists, today unused by Memories: the sidebar's Favorites section is core's; the upload status in the top bar is core's, not Memories' tray item, and lists Memories'
 batches with every other application's). What core still knows of Memories, and what is open on both sides,
 [ADR 0079](../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) Consequences lists.

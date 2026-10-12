@@ -69,6 +69,7 @@ import { orderLevel } from './levelList'
 import { FOLDER_VIEWS, effectiveViewMode, unionViews } from './levelViews'
 import { ALL_TAB, effectiveTab, kindVisible, offeredTabs, showTabBar } from './levelTabs'
 import type { CoreRowAction, LevelRow, LevelRowsContext, LevelRowsHost } from './levelRow'
+import { favoriteHeaderActions, favoriteRowActions } from '../favorites/favoriteActions'
 import ViewModeToggle from './ViewModeToggle.vue'
 import NodeHeader from './components/NodeHeader.vue'
 import LevelRowItem from './components/LevelRowItem.vue'
@@ -229,24 +230,24 @@ const sourceOfKind = new Map(lists.flatMap((list, i) => list.kinds.map((k) => [k
 // The sub-folders' labels: a repeated name numbered, in creation order - the rule the URL segments follow too.
 const folderLabels = computed(() => displayNamesOf(props.level.folders, (n) => n.name, compareByCreation))
 
-interface Item { key: string; kind: NodeKind; row: LevelRow; folder: boolean; unsupported: boolean }
+interface Item { key: string; node: TreeNode; kind: NodeKind; row: LevelRow; folder: boolean; unsupported: boolean }
 const items = computed<Item[]>(() => {
   const ordered = orderLevel(showFolders.value ? props.level.folders : [], visibleNodes.value, locale.value)
   return ordered.map((node): Item => {
     if (node.kind === FOLDER_KIND) {
       const label = folderLabels.value.get(node.id) ?? node.name
       return {
-        key: node.id, kind: node.kind, folder: true, unsupported: false,
+        key: node.id, node, kind: node.kind, folder: true, unsupported: false,
         row: { icon: 'pi pi-folder', title: label, meta: t('node.kindFolder'), primary: { label, onClick: () => emit('openNode', node) }, actions: [] },
       }
     }
     const row = sourceOfKind.get(node.kind)?.row(node) ?? null
-    if (row) return { key: node.id, kind: node.kind, folder: false, unsupported: false, row }
+    if (row) return { key: node.id, node, kind: node.kind, folder: false, unsupported: false, row }
     // A kind no application serves (or one its source has no row for): listed, never dropped, and said plainly that this
     // client cannot show it. Not clickable - opening one lands on the host's same unsupported state.
     const info = registry.kind(node.kind)
     return {
-      key: node.id, kind: node.kind, folder: false, unsupported: true,
+      key: node.id, node, kind: node.kind, folder: false, unsupported: true,
       row: {
         icon: info.supported ? info.icon : 'pi pi-question-circle', title: node.name, meta: `${node.kind} · ${t('home.unsupportedKind')}`,
         primary: { label: node.name, onClick: () => {} }, actions: [],
@@ -254,9 +255,12 @@ const items = computed<Item[]>(() => {
     }
   })
 })
-// Core's own row actions (the favourite heart of inbox #409 will be one): gated by a core capability function and merged
-// around the application's, with no change to any application. None yet.
-const coreRowActions = computed<CoreRowAction[]>(() => [])
+// Core's own row actions: the favorite heart of inbox #409, gated by `favoriteCapabilities` (member only, fail closed) and
+// merged around the application's, for EVERY kind and the folders, with no change to any application. An unsupported row
+// (a kind nobody draws) gets none.
+const coreRowActions = (item: Item): CoreRowAction[] => (item.unsupported ? [] : favoriteRowActions(t, props.access, item.node))
+// The folder on screen is a node too: its header carries the same heart (the scope root is no node and has none).
+const folderCoreActions = computed(() => favoriteHeaderActions(t, props.access, props.folder))
 const itemMode = computed<'grid' | 'list'>(() => (mode.value === 'list' ? 'list' : 'grid'))
 
 // The application's own presentation of the mode (Memories' map), in place of the list.
@@ -330,7 +334,7 @@ function onDrop(e: DragEvent): void {
       <ViewModeToggle v-if="showViews" :views="views" />
     </div>
     <!-- The folder's header, core's one (`NodeHeader`): a container kind's detail opens with it too. -->
-    <NodeHeader v-if="folder" icon="pi pi-folder" :title="folderName ?? folder.name" :actions="folderActions" />
+    <NodeHeader v-if="folder" icon="pi pi-folder" :title="folderName ?? folder.name" :actions="folderActions" :core-actions="folderCoreActions" />
 
     <!-- The application tabs (inbox #348): a filter over this folder's children, the folders in every tab; real buttons
          (PrimeVue Tab), arrow keys move between them. -->
@@ -357,7 +361,7 @@ function onDrop(e: DragEvent): void {
         :kind="item.kind"
         :folder="item.folder"
         :unsupported="item.unsupported"
-        :core-actions="coreRowActions"
+        :core-actions="coreRowActions(item)"
       />
     </ul>
   </div>

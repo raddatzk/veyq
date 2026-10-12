@@ -1,4 +1,4 @@
-package me.raddatz.veyq.memories.favorites
+package me.raddatz.veyq.core.favorites
 
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheCompanionBase
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheEntityBase
@@ -9,9 +9,9 @@ import jakarta.persistence.Table
 import org.hibernate.annotations.DynamicUpdate
 
 /**
- * The caller's per-(user, scope) favorites blob (en.memory.favorites, cr-0031). Operator-blind: `ciphertext`
- * is the pinned-Memory set AEAD-sealed under `K_SC` — the server stores it verbatim and never sees which
- * nodes are pinned. The natural key is (user, scope); we encode it as a single synthetic id (`userId|scopeId`)
+ * The caller's per-(user, scope) pin blob (en.memory.favorites, ADR 0068; core's since the pin covers a node of any
+ * kind). Operator-blind: `ciphertext` is the pinned-node-id set AEAD-sealed under the member's master key (not
+ * `K_SC`) — the server stores it verbatim and never sees which nodes are pinned. The natural key is (user, scope); we encode it as a single synthetic id (`userId|scopeId`)
  * so upsert is a plain findById, no composite-key plumbing.
  */
 @Entity

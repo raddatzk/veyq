@@ -1,15 +1,14 @@
 // The Memories application's API clients — the factories over the clients generated from its own specs
-// (`contracts/api/memories/`: `generated/media`, `generated/favorites`, `generated/share-media`). They live here, not in core's
+// (`contracts/api/memories/`: `generated/media`, `generated/item-favorites`, `generated/share-media`). They live here, not in core's
 // `api/client.ts`, because core imports no application client (ADR 0079;
 // `validate_web_core_imports_no_applications.py` derives these directories from `generate:api`). The credential
 // is core's: [bearerParams] for a member's call, [publicParams] for a guest's, so the token source stays one.
 import { BucketsApi, Configuration as MediaConfiguration, MediaApi } from '../../api/generated/media'
 import {
-  Configuration as FavoritesConfiguration,
-  FavoritesApi,
+  Configuration as ItemFavoritesConfiguration,
   ItemFavoritesApi,
   OwnItemFavoritesApi,
-} from '../../api/generated/favorites'
+} from '../../api/generated/item-favorites'
 import { Configuration as ShareMediaConfiguration, ShareMediaApi } from '../../api/generated/share-media'
 import { bearerParams, publicParams } from '../../api/client'
 
@@ -25,21 +24,16 @@ export function bucketsApi(): BucketsApi {
   return new BucketsApi(new MediaConfiguration(bearerParams()))
 }
 
-export function favoritesApi(): FavoritesApi {
-  return new FavoritesApi(new FavoritesConfiguration(bearerParams()))
-}
-
-// The item marks inside one Memory (ADR 0068) — the `item-favorites` tag on the favorites spec → its own
-// ItemFavoritesApi, same config/auth. A separate resource from `favoritesApi` because the two objects have
-// different audiences, not because the paths differ.
+// The item marks inside one Memory (ADR 0068) — the `item-favorites` tag of its own spec → ItemFavoritesApi. The node
+// pins are the other object and core's (`favoritesApi`, `api/client.ts`): different audiences, different owners.
 export function itemFavoritesApi(): ItemFavoritesApi {
-  return new ItemFavoritesApi(new FavoritesConfiguration(bearerParams()))
+  return new ItemFavoritesApi(new ItemFavoritesConfiguration(bearerParams()))
 }
 
 // The caller's own item marks across every scope (ADR 0068 §9) — the `own-item-favorites` tag, read only by an
 // account-key rotation's re-tag.
 export function ownItemFavoritesApi(): OwnItemFavoritesApi {
-  return new OwnItemFavoritesApi(new FavoritesConfiguration(bearerParams()))
+  return new OwnItemFavoritesApi(new ItemFavoritesConfiguration(bearerParams()))
 }
 
 // ── Token-less: a guest's calls from the anonymous /s/ page ────────────────────────────────────────────────

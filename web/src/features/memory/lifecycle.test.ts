@@ -1,45 +1,37 @@
 // The Memories application's lifecycle hooks (lifecycle.ts) in isolation: what each hook does, and what it must not.
 // Their wiring into the shell is proven where the shell calls the registry (activeSpace.test.ts: scope reset/refresh,
-// coverStore.test.ts: sign-out, rotateKeys.test.ts: the master-key hook).
+// coverStore.test.ts: sign-out, rotateKeys.test.ts: the master-key hook). The node pins are CORE's since inbox #409
+// (`core/favorites`): the shell clears and loads them itself, so this application's hooks touch none of that.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-vi.mock('./favorites', () => ({ resealFavoritesUnderNewMasterKey: vi.fn(), loadFavorites: vi.fn(), saveFavorites: vi.fn() }))
 vi.mock('./itemFavorites', () => ({ retagItemMarksUnderNewMasterKey: vi.fn() }))
 vi.mock('./coverStore', () => ({ resetCovers: vi.fn() }))
-vi.mock('./favoritesStore', () => ({
+vi.mock('../../core/favorites/favorites', () => ({ resealFavoritesUnderNewMasterKey: vi.fn(), loadFavorites: vi.fn(), saveFavorites: vi.fn() }))
+vi.mock('../../core/favorites/favoritesStore', () => ({
   favoritesStore: { loaded: false, ids: new Set<string>() },
   clearFavorites: vi.fn(),
   loadFavoritesFor: vi.fn(),
 }))
 
 import { memoriesLifecycle } from './lifecycle'
-import { resealFavoritesUnderNewMasterKey } from './favorites'
 import { retagItemMarksUnderNewMasterKey } from './itemFavorites'
 import { resetCovers } from './coverStore'
-import { favoritesStore, clearFavorites, loadFavoritesFor } from './favoritesStore'
+import { resealFavoritesUnderNewMasterKey } from '../../core/favorites/favorites'
+import { clearFavorites, loadFavoritesFor } from '../../core/favorites/favoritesStore'
 
-beforeEach(() => {
-  vi.clearAllMocks()
-  favoritesStore.loaded = false
-})
+beforeEach(() => vi.clearAllMocks())
 
 describe('onScopeReset', () => {
-  it('drops the pins and releases the covers', () => {
+  it('releases the covers, and leaves the node pins to core', () => {
     memoriesLifecycle.onScopeReset?.()
-    expect(clearFavorites).toHaveBeenCalledTimes(1)
     expect(resetCovers).toHaveBeenCalledTimes(1)
+    expect(clearFavorites).not.toHaveBeenCalled()
   })
 })
 
 describe('onScopeEntered', () => {
-  it('loads the pin set of the entered scope', async () => {
-    await memoriesLifecycle.onScopeEntered?.('s1')
-    expect(loadFavoritesFor).toHaveBeenCalledWith('s1')
-  })
-
-  it('is idempotent per reset: an already loaded pin set is not fetched again', async () => {
-    favoritesStore.loaded = true
-    await memoriesLifecycle.onScopeEntered?.('s1')
+  it('has no hook: Memories holds no per-scope state of its own to load (the pins are core\'s)', async () => {
+    expect(memoriesLifecycle.onScopeEntered).toBeUndefined()
     expect(loadFavoritesFor).not.toHaveBeenCalled()
   })
 })
@@ -48,19 +40,14 @@ describe('onMasterKeyRotated', () => {
   const o = new Uint8Array([1])
   const n = new Uint8Array([2])
 
-  it('re-seals the pins of every scope and re-tags the item marks', async () => {
+  it('re-tags the item marks, and re-seals no node pins (rotateKeys does, for every application)', async () => {
     await memoriesLifecycle.onMasterKeyRotated(o, n, ['a', 'b'])
-    expect(resealFavoritesUnderNewMasterKey).toHaveBeenCalledWith(o, n, ['a', 'b'])
     expect(retagItemMarksUnderNewMasterKey).toHaveBeenCalledWith(o, n)
+    expect(resealFavoritesUnderNewMasterKey).not.toHaveBeenCalled()
   })
 
-  it('a failing pin re-seal does not skip the item marks (and vice versa), and neither throws', async () => {
-    vi.mocked(resealFavoritesUnderNewMasterKey).mockRejectedValueOnce(new Error('unreadable'))
-    await expect(memoriesLifecycle.onMasterKeyRotated(o, n, [])).resolves.toBeUndefined()
-    expect(retagItemMarksUnderNewMasterKey).toHaveBeenCalledTimes(1)
-
+  it('a failing item re-tag does not throw (a mark whose tag the new key does not verify is someone else\'s set)', async () => {
     vi.mocked(retagItemMarksUnderNewMasterKey).mockRejectedValueOnce(new Error('bad tag'))
     await expect(memoriesLifecycle.onMasterKeyRotated(o, n, [])).resolves.toBeUndefined()
-    expect(resealFavoritesUnderNewMasterKey).toHaveBeenCalledTimes(2)
   })
 })

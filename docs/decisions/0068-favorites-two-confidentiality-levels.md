@@ -1,14 +1,15 @@
-# ADR 0068 — Favorites are two objects: a private Memory pin and a shared item mark
+# ADR 0068 — Favorites are two objects: a private node pin and a shared item mark
 
 - Status: Accepted
 - Date: 2026-09-20
 
 ## Context
 
-Favorites today are **one** object: a per-(user, scope) set of **node ids**, `symWrap`-sealed under the scope
+Favorites were **one** object: a per-(user, scope) set of **node ids**, `symWrap`-sealed under the scope
 content key `K_SC` at the base epoch `E_0`, stored as one opaque blob and surfaced as the sidebar Favorites
 section plus a heart on the Memory card and detail
-([en.memory.favorites](../features/memory/enablers/en.memory.favorites.md)).
+([en.memory.favorites](../features/memory/enablers/en.memory.favorites.md)). (That object is the **pin**; §10 says
+it now belongs to the platform and covers a node of any kind.)
 
 The product asks for a second axis: mark an **individual media item**, then filter a Memory's gallery
 ([uc.memory.gallery](../features/memory/use-cases/uc.memory.gallery.md)) to *everyone's favorites* or *only
@@ -44,13 +45,14 @@ constraint; raising the cap only buys a larger per-toggle upload.
 
 **1. Two objects, two confidentiality levels, two seals.**
 
-| | **Memory favorite** (the pin) | **Item favorite** (the mark) |
+| | **Node pin** (the pin) | **Item favorite** (the mark) |
 | --- | --- | --- |
-| what | a node id | a `veyq_media` id |
+| what | a node id, of any kind (§10) | a `veyq_media` id |
 | audience | **private to the member** | **shared, member-attributed** |
 | seal | `symWrap(masterKey, …, "favorites")` | `symWrap(K_SC@E_0, …, "item-favorites")` |
 | read | the caller's blob only | the scope's **per-member** blobs |
-| surfaces | sidebar Favorites, heart on card/detail | gallery filter + per-tile aggregate |
+| surfaces | sidebar Favorites, the heart on every node's row and header | gallery filter + per-tile aggregate |
+| owner | **core** (§10) | Memories |
 
 The typed single-envelope shape is **rejected**: one blob has one key, so it can serve only one audience.
 The pin's plaintext is a **bare id array**; the mark's is `{"tag", "ids"}`, the ids beside the self-tag that says
@@ -63,11 +65,11 @@ ML-KEM keygen per toggle**, and buys nothing: nobody seals *to* the member here 
 `symWrap` under the master key costs +29 bytes, is the property stated exactly, and already has a live
 precedent in the identity-pin store.
 
-**3. The Memory seal does not branch on scope type.** In a personal scope `K_SC` is per-user, so the old seal
+**3. The pin's seal does not branch on scope type.** In a personal scope `K_SC` is per-user, so the old seal
 was *already* private there, and a seal that keeps `K_SC` for personal scopes and the master key for groups
 would be **defensible on paper** — which is exactly what makes it dangerous: the branch nobody exercises is
 where the fallback survives. One seal, every scope. That is what makes the guarantee testable at all:
-*a member's Memory favorites must not open with `K_SC` in hand* — in **any** scope, with no case exempted.
+*a member's pins must not open with `K_SC` in hand* — in **any** scope, with no case exempted.
 
 **4. Item favorites are partitioned per node — and the partition key is chosen for what it does not leak.**
 One blob per **(member, scope, node)**, not per (member, scope). The ceiling becomes 1 257 ids *per Memory* (the
@@ -167,6 +169,36 @@ version of one member's set) and still leaves R1, R2 and R4 open. **Re-open (C)*
 `E_0` (so a former member can no longer forge) **and** a freshness floor covers them: replay is then the last power
 over the count. The plaintext is JSON, so a later optional field is additive.
 
+**10. The pin is core's, and covers every node (2026-10-12, inbox #409).** The pin is a private preference about a
+*node*, and a node is core's: a folder, a file, a Memory and a drop box are all nodes, and the data already fitted any
+of them — a bare id array, sealed under the Master Key, knows no kind. Keeping it in Memories meant the one application
+that happened to draw a heart owned a function every kind needs, and a Files user could not favorite a file. So the pin
+object moved **out of the Memories module into the platform's**:
+
+- **Contract and storage.** `contracts/api/favorites.openapi.yaml` (core's; Memories keeps
+  `memories/item-favorites.openapi.yaml`, the item marks) with the same two operations, the same
+  `GET`/`PUT /api/scopes/{scopeId}/favorites`, the same body `{ciphertext}` and the same 65 536-char ceiling;
+  `veyq_scope_favorites` moved from the Memories baseline to the core baseline (both baselines are editable before the
+  first release, pinned together; a database created before the move is recreated). Core's `favorites` package holds the
+  entity, store, handler, resource and the scope eraser (phase 600, as before). The seal purpose `favorites`, the
+  plaintext (a bare id array) and the last-write-wins rule are **unchanged**, so every crypto vector stays valid and a pin
+  set stored by the Memories-era client opens as it did.
+- **Surfaces.** The heart is a **core action** — `favoriteCapabilities(access, node)` (member only, fail closed: no
+  guest in any role, no scope root, no kind this client cannot draw) contributed through `NodeHeader`'s `coreActions` and
+  the level list's `coreRowActions`, so every kind gets the same heart with no change to its application; the sidebar
+  Favorites section is core's too and lists every kind's pinned nodes, each with its kind's registry icon (the Memory
+  cover it used to show is a Memories concern; inbox #411 brings a cover to any node). A share guest has no heart and the
+  server has no guest route: share view = member view with the function removed.
+- **A pinned id that no longer resolves is inert, not pruned.** The server cannot read the set, so a purged node's id
+  stays in the blob; every view resolves ids against the loaded tree and skips what is not there, so a dangling id never
+  renders a broken row. A *trashed* node's pin survives on purpose — restoring it hands the heart back. A client-side
+  prune was rejected: it cannot tell "purged" from "not loaded yet", and a prune on the wrong reading is a lost pin. The
+  cost is the ceiling (about 1 600 ids), the same as before.
+- **A pending deletion keeps the heart**, as Memories always kept it (a pin is a preference, not a write to the scope's
+  tree). The server's put still takes the WRITE gate, so a toggle in that window is refused with `scope_deleting` and the
+  optimistic state reverts — the existing behaviour, kept.
+- **The mark stays Memories'** (`item-favorites`): it names a `veyq_media` id and lives only in a Memory's gallery.
+
 ## Consequences
 
 - **Aggregate-only is a presentation choice, not a confidentiality guarantee — and this must be said where
@@ -208,6 +240,7 @@ over the count. The plaintext is JSON, so a later optional field is additive.
 
 - Supersedes nothing; it **discharges** [ADR 0014](0014-group-scopes-and-governance.md) §7, whose open question
   ("folded in when favorites reach group scopes") is answered by §1–§3 above.
+- Owner map: [docs/apps/memories.md](../apps/memories.md) (the marks) and [web/CLAUDE.md](../../web/CLAUDE.md) (the pin in core), [ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md) (core and applications)
 - Enabler: [en.memory.favorites](../features/memory/enablers/en.memory.favorites.md) (both objects)
 - Use-case: [uc.memory.gallery](../features/memory/use-cases/uc.memory.gallery.md) (the filter + the aggregate)
 - Concepts: [Security Model](../crosscutting/security-model.md) § *What is encrypted vs. server-visible*

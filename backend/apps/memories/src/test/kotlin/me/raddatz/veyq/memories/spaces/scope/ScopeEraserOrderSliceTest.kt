@@ -5,7 +5,6 @@ import me.raddatz.veyq.core.blob.BlobEntity
 import me.raddatz.veyq.core.node.NodeScopeEraser
 import me.raddatz.veyq.core.scope.ScopeEraser
 import me.raddatz.veyq.core.sharing.ShareScopeEraser
-import me.raddatz.veyq.memories.favorites.FavoritesScopeEraser
 import me.raddatz.veyq.memories.itemfavorites.ItemFavoritesScopeEraser
 import me.raddatz.veyq.memories.media.MediaDerivativeEntity
 import me.raddatz.veyq.memories.media.MediaEntity
@@ -53,7 +52,7 @@ class ScopeEraserOrderSliceTest {
             mapOf(
                 MediaScopeEraser::class.java.simpleName to 100,
                 AttachmentScopeEraser::class.java.simpleName to 200,
-                FavoritesScopeEraser::class.java.simpleName to 600,
+                "FavoritesScopeEraser" to 600, // core's pin eraser (ADR 0068)
                 ItemFavoritesScopeEraser::class.java.simpleName to 610,
                 NodeScopeEraser::class.java.simpleName to 700,
                 ShareScopeEraser::class.java.simpleName to 800,

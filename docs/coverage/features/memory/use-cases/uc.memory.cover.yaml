@@ -4,8 +4,8 @@ title: Memory cover — a chosen, cropped cover shown everywhere
 # Built web-first. The cover reuses the node's `wrappedMeta` blob (date cr-0067, location cr-0069) and adds a
 # `cover` sub-object `{ source (media mediaId | upload blob ref), crop{x,y,width,height} 0..1 }`, sealed under
 # K_mem, set via the same partial updateNode, returned on listNodes. Deliberate pick (no auto-cover), one
-# normalized crop shown identically on **four** surfaces: the browse card, the detail header, the map pin, and
-# the sidebar's Favorites entry. cr-0072 built the existing-media source (web, no backend); cr-0073 added the
+# normalized crop shown identically on **three** surfaces: the browse card, the detail header and the map pin (the
+# sidebar's Favorites entry was a fourth until core took the section over, inbox #409). cr-0072 built the existing-media source (web, no backend); cr-0073 added the
 # new-upload source — a standalone cover blob (contract + backend + web) committed with no `veyq_media` row; the
 # sidebar surface and the shared cover store came last, and the store is why a fifth surface would cost a read
 # rather than a decrypt.

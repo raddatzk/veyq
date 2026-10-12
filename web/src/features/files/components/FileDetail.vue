@@ -26,6 +26,7 @@ import Message from 'primevue/message'
 import type { NodeDetailEmits, NodeDetailProps } from '../../../core/applications/registry'
 import NodeHeader from '../../../core/node/components/NodeHeader.vue'
 import { standardNodeActions } from '../../../core/node/nodeHeader'
+import { favoriteHeaderActions } from '../../../core/favorites/favoriteActions'
 import { enqueue, removeFile, useUploadQueue, QUOTA_EXCEEDED, type UploadItem } from '../../../core/blob/queue'
 import { useConfirm } from '../../../shared/state/useConfirm'
 import { useToast } from '../../../shared/state/useToast'
@@ -41,6 +42,8 @@ import { fileFacts } from '../download'
 const props = defineProps<NodeDetailProps>()
 const emit = defineEmits<NodeDetailEmits>()
 const { t, locale } = useI18n()
+// Core's heart (inbox #409): the same for every kind; a guest gets none.
+const coreActions = computed(() => favoriteHeaderActions(t, props.access, props.node))
 const { ask } = useConfirm()
 const toast = useToast()
 const { batches } = useUploadQueue()
@@ -196,7 +199,7 @@ async function replaceAnyway(n: Notice) {
 <template>
   <!-- Opens like a folder (inbox #385 (b)): core's `NodeHeader` with the file's own actions, then what it holds. -->
   <div class="veyq-level-view">
-    <NodeHeader icon="pi pi-file" :title="node.name" :level="1" :actions="headerActions" />
+    <NodeHeader icon="pi pi-file" :title="node.name" :level="1" :actions="headerActions" :core-actions="coreActions" />
     <section class="veyq-section file-detail">
       <Message v-for="n in notices" :key="n.key" severity="error" :closable="false" class="files-notice">
         <span class="file-detail-notice">

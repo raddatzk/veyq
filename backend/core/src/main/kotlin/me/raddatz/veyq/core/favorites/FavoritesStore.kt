@@ -1,10 +1,10 @@
-package me.raddatz.veyq.memories.favorites
+package me.raddatz.veyq.core.favorites
 
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 
 /**
- * Persistence for per-(user, scope) favorites (cr-0031). Operator-blind: stores the sealed ciphertext only.
+ * Persistence for per-(user, scope) node pins (ADR 0068). Operator-blind: stores the sealed ciphertext only.
  * Who may act on a scope is decided before this store is reached, by the handler's `ScopeAccess` gate.
  */
 @ApplicationScoped

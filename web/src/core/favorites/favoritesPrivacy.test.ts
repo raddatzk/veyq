@@ -13,12 +13,12 @@
 // The lever: re-seal under the scope key in `favoritesStore.ts`, and the first expectation below goes red.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-vi.mock('./api', () => ({ favoritesApi: vi.fn() }))
+vi.mock('../../api/client', () => ({ favoritesApi: vi.fn() }))
 vi.mock('../../app/sessionRefresh', () => ({ withRefresh: (fn: () => unknown) => fn() }))
 vi.mock('../../app/vault', () => ({ masterKey: vi.fn() }))
 
 import { toggleFavorite, clearFavorites, loadFavoritesFor } from './favoritesStore'
-import { favoritesApi } from './api'
+import { favoritesApi } from '../../api/client'
 import { fakeApi } from '../../test/apiMock'
 import { masterKey } from '../../app/vault'
 import * as v1 from '@veyq/crypto/v1'

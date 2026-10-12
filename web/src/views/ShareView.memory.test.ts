@@ -53,7 +53,7 @@ vi.mock('../features/memory/api', async (orig) => (await import('../test/guestMo
 vi.mock('../features/files/api', async (orig) => (await import('../test/guestMode')).guardedClients(await orig<object>()))
 vi.mock('../app/activeSpace', async (orig) => recording('activeSpace', await orig<Record<string, unknown>>()))
 vi.mock('../core/node/treeStore', async (orig) => recording('treeStore', await orig<Record<string, unknown>>()))
-vi.mock('../features/memory/favoritesStore', async (orig) => recording('favoritesStore', await orig<Record<string, unknown>>()))
+vi.mock('../core/favorites/favoritesStore', async (orig) => recording('favoritesStore', await orig<Record<string, unknown>>()))
 vi.mock('../features/memory/itemFavoritesStore', async (orig) => recording('itemFavoritesStore', await orig<Record<string, unknown>>()))
 vi.mock('../features/memory/coverStore', async (orig) => recording('coverStore', await orig<Record<string, unknown>>()))
 // The guest's upload is recorded at the share helper (its wire is `features/memory/source.wire.test.ts`'s).
@@ -169,7 +169,7 @@ async function pick(w: Page, name: string) {
 function expectGuestOnly(w: Page) {
   expect(authenticatedCalls).toEqual([])
   expect(touched).toEqual([])
-  for (const label of [t('share.share'), t('memory.favorite'), t('node.rename'), t('node.delete'), t('memory.addChapter'), t('media.marks.mark')]) {
+  for (const label of [t('share.share'), t('node.favorite'), t('node.rename'), t('node.delete'), t('memory.addChapter'), t('media.marks.mark')]) {
     expect(w.find(`[aria-label="${label}"]`).exists(), label).toBe(false)
   }
   expect(w.find('.drop-stub, .share-add-button').exists(), "no drop page on a reading guest's page").toBe(false)

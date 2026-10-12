@@ -1,18 +1,21 @@
-# Enabler: Favorites (pin a Memory, mark an item)
+# Enabler: Favorites (pin a node, mark an item)
 
 - **ID:** en.memory.favorites
 - **Type:** **Enabler** — a navigation aid, no standalone end-user goal
   ([features/README → use-case vs enabler vs ADR vs change-request](../../README.md#use-case-vs-enabler-vs-adr-vs-change-request)).
-  It speeds finding a Memory and narrows a gallery; value flows through the [Memory](../_index.md) use-cases it
-  accelerates.
+  It speeds finding a node and narrows a gallery; value flows through the [Memory](../_index.md) use-cases it
+  accelerates. **The pin is the platform's** (core, since inbox #409: `core/favorites` in the backend and the web, the
+  heart on every node of every kind); **the mark is Memories'**. This doc stays under Memories because the mark and
+  the gallery filter are its use-cases; [ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md) §10
+  says why the pin moved.
 - **Provides:** **two** favorite objects with **two different audiences**
   ([ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md)) — a **private** per-(user, scope)
-  set of pinned **Memory ids**, and a **shared, member-attributed** per-(member, scope, node) set of marked
+  set of pinned **node ids** (a folder, a file, a Memory, a drop box - any kind), and a **shared, member-attributed** per-(member, scope, node) set of marked
   **media ids**. Each is sealed on device and stored as an opaque blob.
-- **Serves (use-cases):** [uc.memory.gallery](../use-cases/uc.memory.gallery.md) (the header pin toggle, and the
-  per-item mark + the *everyone's / only mine* filter) + [uc.memory.browse](../use-cases/uc.memory.browse.md)
-  (the sidebar Favorites section) — a shortcut to frequently-opened Memories, and a way to single out the good
-  pictures inside one.
+- **Serves (use-cases):** [uc.memory.gallery](../use-cases/uc.memory.gallery.md) (the per-item mark + the
+  *everyone's / only mine* filter) + [uc.memory.browse](../use-cases/uc.memory.browse.md) (the heart on every row of
+  a level and in every node's header, and the sidebar Favorites section) — a shortcut to frequently-opened nodes, and
+  a way to single out the good pictures inside a Memory.
 - **Depends on:** [en.spaces.personal-scope](../../spaces/enablers/en.spaces.personal-scope.md) (the `K_SC` the
   **item** set is sealed under) + the account **master key** (the **pin** set) + [en.memory.tree](en.memory.tree.md)
   (the nodes pinned) + [en.memory.media](en.memory.media.md) (the items marked).
@@ -28,14 +31,15 @@
 They look like one feature and are not. The full rule, its rejected alternatives and its measurements live in
 [ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md); what binds here:
 
-| | **Memory favorite** (the pin) | **Item favorite** (the mark) |
+| | **Node pin** (the pin) | **Item favorite** (the mark) |
 | --- | --- | --- |
-| what | a node id | a `veyq_media` id |
+| what | a node id, of any kind | a `veyq_media` id |
 | audience | **private to the member** | **shared** with the scope, member-attributed |
 | seal | master key, purpose `favorites`, bound to the scope | `K_SC@E_0`, purpose `item-favorites`, bound to scope + node |
 | stored | one blob per **(user, scope)** | one blob per **(member, scope, node)** |
 | read | the caller's blob only | the scope's **per-member** blobs |
-| surfaces | sidebar Favorites, heart on card/detail | gallery filter + per-tile aggregate |
+| surfaces | sidebar Favorites; the heart on every row and header | gallery filter + per-tile aggregate |
+| owner | **core** (`core/favorites`, `contracts/api/favorites.openapi.yaml`) | Memories (`contracts/api/memories/item-favorites.openapi.yaml`) |
 
 One blob has one key and therefore one audience, so a single envelope carrying both sets is not available — that
 is *why* there are two, not a convenience.
@@ -65,17 +69,21 @@ blob for that Memory; the `PUT` writes only the caller's.
 
 ## Main flow
 
-**Pinning a Memory.**
+**Pinning a node.**
 
 1. On opening a scope, the client `GET`s the pin blob and `symUnwrap`s it with the **master key** → the pinned-id
    set. There is no branch on scope type: the seal is the same in a personal and in a group scope.
-2. Toggling a Memory's pin updates the in-memory set at once, then re-seals it and `PUT`s the new blob. A failure
-   reverts the optimistic change.
-3. The sidebar resolves the pinned ids against the **local decrypted tree** to render the Favorites section (a
-   pinned node that no longer exists simply drops) — each entry with its **name and its chosen cover**
-   ([uc.memory.cover](../use-cases/uc.memory.cover.md)), read from the shared cover store. The rail asks that
-   store which nodes are on screen and holds **no key material of its own**: the chain that opens a node's
-   `K_mem` stays out of an always-mounted component.
+2. Toggling a node's heart - in its row of a level, or in its own header - updates the in-memory set at once, then
+   re-seals it and `PUT`s the new blob. A failure reverts the optimistic change. The heart is **core's action**, the
+   same for every kind (`favoriteCapabilities`: a member only, fail closed); a share guest has none and the server has
+   no guest route.
+3. The sidebar resolves the pinned ids against the **local decrypted tree** to render the Favorites section - every
+   kind, each entry with **its kind's icon** (the registry's descriptor) and its decrypted name, opened by the
+   readable fragment path (`hashForNode`). A pinned id that no longer resolves - purged, trashed, or a kind this
+   client does not draw - is **skipped**, never a broken row. The server cannot read the set, so nothing prunes a
+   purged node's id there; it is inert, and a trashed node's pin survives so a restore hands the heart back
+   ([ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md) §10). The rail holds **no key
+   material of its own**.
 
 **Marking an item.**
 

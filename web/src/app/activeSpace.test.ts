@@ -11,7 +11,7 @@ vi.mock('../features/spaces/scopes', () => ({
 // Stub only the async loaders refreshActiveScope drives (they hit the content/favorites APIs) — keep the rest of
 // the stores real so the other tests still assert on treeStore/favoritesStore.
 vi.mock('../core/node/treeStore', async (orig) => ({ ...(await orig<object>()), loadTree: vi.fn() }))
-vi.mock('../features/memory/favoritesStore', async (orig) => ({ ...(await orig<object>()), loadFavoritesFor: vi.fn() }))
+vi.mock('../core/favorites/favoritesStore', async (orig) => ({ ...(await orig<object>()), loadFavoritesFor: vi.fn() }))
 vi.mock('../features/account/instance/instance', () => ({ getSetupStatus: vi.fn() }))
 
 import { activeSpace, activeScopeKey, activeEpochKeys, enterScope, refreshActiveScope, clearActiveSpace } from './activeSpace'
@@ -22,7 +22,7 @@ import { TrustStateRefused } from '../features/account/trustMarks'
 
 const PERSONAL_SCOPE = '~me'
 import { treeStore, resetTree } from '../core/node/treeStore'
-import { favoritesStore, clearFavorites, loadFavoritesFor } from '../features/memory/favoritesStore'
+import { favoritesStore, clearFavorites, loadFavoritesFor } from '../core/favorites/favoritesStore'
 import { registry } from '../core/applications/registry'
 import { memoriesLifecycle } from '../features/memory/lifecycle'
 import { getSetupStatus } from '../features/account/instance/instance'
@@ -202,7 +202,7 @@ describe('refreshActiveScope — reactive epoch swap after a rotation (cr-0089)'
     expect(activeScopeKey()).toBe(e2)
   })
 
-  it('drops the application state of the old epoch and has each application re-load its per-scope state (Memories: the pin set)', async () => {
+  it('drops the state of the old epoch and re-loads the core pin set (and each application per-scope state)', async () => {
     const e0 = new Uint8Array(32).fill(4)
     vi.mocked(openGroupByToken).mockResolvedValue(opened('g-1', ScopeKind.Group, e0))
     await enterScope('@g-1')
@@ -213,8 +213,8 @@ describe('refreshActiveScope — reactive epoch swap after a rotation (cr-0089)'
 
     await refreshActiveScope()
 
-    expect(favoritesStore.loaded).toBe(false) // onScopeReset ran (the load itself is the stubbed loader)…
-    expect(loadFavoritesFor).toHaveBeenCalledWith('g-1') // …and onScopeEntered asked for the reload
+    expect(favoritesStore.loaded).toBe(false) // the reset ran (the load itself is the stubbed loader)…
+    expect(loadFavoritesFor).toHaveBeenCalledWith('g-1') // …and core asked for the reload
   })
 })
 

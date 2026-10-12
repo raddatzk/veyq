@@ -24,6 +24,8 @@ div.veyq-node-host
           h2.veyq-node-header-title
             "Empty"
           div.veyq-node-header-actions
+            button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
+              span.p-button-icon.pi.pi-heart
             button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Share"]
               span.p-button-icon.pi.pi-share-alt
             button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Rename"]

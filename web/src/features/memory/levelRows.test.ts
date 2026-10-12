@@ -9,7 +9,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 // SpaceMap wraps Leaflet, which we neither need nor can run here - stub the module out; the component is stubbed too.
 vi.mock('leaflet', () => ({ default: {} }))
-vi.mock('./favoritesStore', () => ({ isFavorite: vi.fn(), toggleFavorite: vi.fn() }))
 
 import { flushPromises } from '@vue/test-utils'
 import { memoryRows } from './levelRows'
@@ -27,7 +26,6 @@ import { activeSpace } from '../../app/activeSpace'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 import { t } from '../../test/i18n'
-import { isFavorite, toggleFavorite } from './favoritesStore'
 import { formatClosedRange } from './memoryDateRange'
 import { treeNode, memberAccessOf, memberTreeOf } from '../../test/models'
 import { actionIdsOf, clickAction, mountRows, rowOf, titlesOf, type RowsHarness } from '../../test/levelRows'
@@ -100,8 +98,6 @@ const metaOf = (h: RowsHarness, title: string) => rowOf(h.w, title).find('.veyq-
 beforeEach(() => {
   treeStore.nodes = []
   activeSpace.scopeId = SCOPE_ID // the map binds every node's seals to the active scope
-  vi.mocked(isFavorite).mockReset().mockReturnValue(false)
-  vi.mocked(toggleFavorite).mockClear()
 })
 afterEach(() => {
   harness?.w.unmount()
@@ -134,37 +130,19 @@ describe('Memories rows', () => {
     expect(h.w.text()).not.toContain(t('node.trash.open'))
   })
 
-  it('read-only (a scope pending deletion): the rows stay, with the heart (a pin is the member\'s own, no scope write) and no rename or move', async () => {
+  it('read-only (a scope pending deletion): the rows stay, with no rename or move (the heart is core\'s row action, not this factory\'s)', async () => {
     const h = mountSection({ nodes: [node('m1', MEMORY_KIND, 'Solo')], pending: true })
     expect(titlesOf(h.w)).toEqual(['Solo'])
-    expect(await actionIdsOf(h.w, 'Solo')).toEqual(['favorite'])
+    expect(await actionIdsOf(h.w, 'Solo')).toEqual([])
   })
 
-  it('a member\'s row offers the heart, then rename and move in its menu', async () => {
+  it('a member\'s row offers rename and move in its menu, and no heart of its own: one heart, core\'s (inbox #409)', async () => {
     const h = mountSection({ nodes: [node('m1', MEMORY_KIND, 'Solo')] })
-    expect(await actionIdsOf(h.w, 'Solo')).toEqual(['favorite', 'rename', 'move'])
+    expect(await actionIdsOf(h.w, 'Solo')).toEqual(['rename', 'move'])
     await clickAction(h.w, 'Solo', 'rename')
     await clickAction(h.w, 'Solo', 'move')
     expect(h.events.rename.map((n) => n.id)).toEqual(['m1'])
     expect(h.events.move.map((n) => n.id)).toEqual(['m1'])
-  })
-
-  it('toggles the favourite of a row in the active scope with a real click (the factory owns the heart)', async () => {
-    const h = mountSection({ nodes: [node('m1', MEMORY_KIND, 'Solo')] })
-    const heart = () => rowOf(h.w, 'Solo').find('[data-action="favorite"]')
-    expect(heart().attributes('aria-pressed')).toBe('false')
-    expect(heart().attributes('aria-label')).toBe(t('memory.favorite'))
-    await clickAction(h.w, 'Solo', 'favorite')
-    expect(vi.mocked(toggleFavorite)).toHaveBeenCalledWith('m1', SCOPE_ID)
-  })
-
-  it('shows a pinned Memory\'s heart pressed', async () => {
-    vi.mocked(isFavorite).mockImplementation((id) => id === 'm1')
-    const h = mountSection({ nodes: [node('m1', MEMORY_KIND, 'Solo')] })
-    const heart = rowOf(h.w, 'Solo').find('[data-action="favorite"]')
-    expect(heart.attributes('aria-pressed')).toBe('true')
-    expect(heart.attributes('aria-label')).toBe(t('memory.unfavorite'))
-    expect(heart.find('.pi-heart-fill').exists()).toBe(true)
   })
 
   it('in map mode asks core to draw the subtree map in place of the list and pins located nodes', () => {

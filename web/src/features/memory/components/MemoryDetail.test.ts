@@ -61,7 +61,7 @@ function stubDeriver(): MediaDeriver {
 
 function mountDetail(memoryKey: Uint8Array, props: Partial<Record<string, unknown>> = {}) {
   return mount(MemoryDetail, {
-    props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey, favorite: false, caps: memberMemoryCaps({ publicLinks: false }), ...props },
+    props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey, caps: memberMemoryCaps({ publicLinks: false }), ...props },
     global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
   })
 }
@@ -325,7 +325,7 @@ describe('MemoryDetail (gallery grid + header)', () => {
     const card = wrapper.find('.memory-card')
     expect(card.exists()).toBe(true)
     expect(card.text()).toContain('Day 1')
-    expect(card.find('.memory-card-pin').exists()).toBe(false) // favoritable=false
+    expect(card.find('.memory-card-pin').exists()).toBe(false) // the card is open-only: the heart is core's
     // clicking the card asks the host to open that chapter
     await card.find('.memory-card-main').trigger('click')
     expect(wrapper.emitted('openChapter')?.[0]?.[0]).toMatchObject({ id: 'c1' })
@@ -434,7 +434,7 @@ describe('MemoryDetail (Memory date — header + auto-reconcile, cr-0067)', () =
       template: `<button class="stub-save" @click="$emit('save', { mode: 'single', from: '2026-06-15', to: '2026-06-15' })" />`,
     }
     const wrapper = mount(MemoryDetail, {
-      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey, favorite: false, caps: memberMemoryCaps({ publicLinks: false }) },
+      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey, caps: memberMemoryCaps({ publicLinks: false }) },
       global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { MemoryDateEditor: DateEditorStub } },
     })
     await flushPromises()
@@ -471,7 +471,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
   function mountWithLocationStub(memoryKey: Uint8Array, wrappedMeta: string | null) {
     setMapsConsent(true) // skip the consent dialog — go straight into the (stubbed) editor
     return mount(MemoryDetail, {
-      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026', wrappedMeta), scopeId: SCOPE_ID, memoryKey, favorite: false, caps: memberMemoryCaps({ publicLinks: false }) },
+      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026', wrappedMeta), scopeId: SCOPE_ID, memoryKey, caps: memberMemoryCaps({ publicLinks: false }) },
       global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { MemoryLocationEditor: LocationEditorStub } },
     })
   }
@@ -665,7 +665,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     setMapsConsent(false)
     const DialogStub = { props: ['visible'], template: '<div v-if="visible" class="dlg"><slot /></div>' }
     const wrapper = mount(MemoryDetail, {
-      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey: v1.randomBytes(32), favorite: false, caps: memberMemoryCaps({ publicLinks: false }) },
+      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey: v1.randomBytes(32), caps: memberMemoryCaps({ publicLinks: false }) },
       global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { MemoryLocationEditor: LocationEditorStub, Dialog: DialogStub } },
     })
     await flushPromises()

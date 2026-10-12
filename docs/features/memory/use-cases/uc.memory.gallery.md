@@ -60,7 +60,7 @@
    many items are added after it. A name without an extension gains the one its sealed media type names. Only an item
    whose original carries no name (or no meta that opens) is named from the Memory's name and its position, which
    moves when the gallery does, with an extension from the sealed media type, else `.bin`.
-6. **Pin the Memory:** the header toggle pins / unpins it
+6. **Pin the Memory:** the heart in the header pins / unpins it - the same heart every node has, core's
    ([en.memory.favorites](../enablers/en.memory.favorites.md)). This pin is **private to the user**.
 7. **Mark an item, and narrow by marks.** A heart on each tile (and in the lightbox) marks that item. Unlike the
    header pin, an item mark is **shared with the scope**: the tile's heart carries a **count** — how many

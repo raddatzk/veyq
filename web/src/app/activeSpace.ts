@@ -2,7 +2,7 @@
 // the in-memory scope content key `K_SC` (the key bytes live OUTSIDE the reactive proxy — never expose key
 // material to Vue reactivity). Which scope is active is driven by the URL's leading fragment token (ADR 0019):
 // token-less → the shared **tenant** scope, `~me` → **personal**. Entering a scope opens its grant client-side
-// (operator-blind: `K_SC` is derived on-device) and resets the per-scope tree + favorites.
+// (operator-blind: `K_SC` is derived on-device) and resets the per-scope tree + pins.
 import { reactive } from 'vue'
 import { ensurePersonalScope, openScope, openScopeById, openGroupByToken, type OpenedScope } from '../features/spaces/scopes'
 import { getTenantTerms } from '../features/tenant/tenantTerms'
@@ -12,6 +12,7 @@ import { TENANT_SCOPE } from '../core/node/location'
 import { isHttpStatus, HttpStatus } from '../shared/httpError'
 import { resetTree, loadTree } from '../core/node/treeStore'
 import { registry } from '../core/applications/registry'
+import { clearFavorites, favoritesStore, loadFavoritesFor } from '../core/favorites/favoritesStore'
 import { startGrantDeliveryPolling, stopGrantDeliveryPolling } from '../features/tasks/grantDeliveryPolling'
 import { startScopeRotationPolling, stopScopeRotationPolling } from '../features/tasks/scopeRotationPolling'
 import { refreshMyInvitations, clearMyInvitations } from '../features/spaces/invitations'
@@ -130,7 +131,8 @@ export async function enterScope(token: string): Promise<void> {
     activeSpace.kind = opened.kind
     activeSpace.name = opened.name ?? null
     resetTree() // no stale tree bleeds across scopes — the view reloads for the new scope
-    registry.scopeReset() // …and each application drops what it held for the old scope (Memories: pins, covers)
+    clearFavorites() // no stale pins bleed across scopes (core's: a pin names a node of any kind, ADR 0068)
+    registry.scopeReset() // …and each application drops what it held for the old scope (Memories: covers)
     activeSpace.status = 'ready'
     // cr-0114: refresh the tenant's terms status so the router accept-gate knows if a (re-)accept is due. The
     // tenant is the same regardless of which scope (tenant/personal/group) is open, and terms are member-readable.
@@ -178,10 +180,12 @@ export async function refreshActiveScope(): Promise<void> {
   activeSpace.purgeAfter = opened.purgeAfter
   activeSpace.name = opened.name ?? null
   resetTree()
+  clearFavorites()
   registry.scopeReset() // a rotation swaps the epoch keys: every held cover was decrypted under the old ones
   await loadTree()
-  // An application's per-scope state that survives a rotation untouched (Memories' pin set seals under the
-  // member's master key, not an epoch key — ADR 0068) is still re-read here, because the reset above dropped it.
+  // The pin set (core's) and an application's per-scope state survive a rotation untouched (the pins seal under the
+  // member's master key, not an epoch key — ADR 0068) but are re-read here, because the reset above dropped them.
+  if (!favoritesStore.loaded) await loadFavoritesFor(activeSpace.scopeId) // once per reset
   await registry.scopeEntered(activeSpace.scopeId)
 }
 
@@ -205,7 +209,8 @@ export function clearActiveSpace(): void {
   if (epochKeys) zeroEpochKeys(epochKeys)
   epochKeys = null
   scopeKey = null
-  registry.scopeReset() // sign-out / re-lock: what an application decrypted (Memories' covers) must not outlive the keys
+  clearFavorites() // sign-out / re-lock: the decrypted pin set must not outlive the keys
+  registry.scopeReset() // …nor what an application decrypted (Memories' covers)
 }
 
 /** A 404 from the scope endpoints means no tenant claims this Host (`tenant_not_found`). */

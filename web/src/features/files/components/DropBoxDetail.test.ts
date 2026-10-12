@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
 const { showUndo } = vi.hoisted(() => ({ showUndo: vi.fn() }))
+vi.mock('../../../core/favorites/favoritesStore', () => ({ isFavorite: vi.fn(() => false), toggleFavorite: vi.fn() }))
 vi.mock('../../../shared/state/useToast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn(), showUndo, dismissUndo: vi.fn() }) }))
 vi.mock('../../../core/node/tree', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../core/node/tree')>()),
@@ -24,6 +25,7 @@ import { treeStore, loadTree } from '../../../core/node/treeStore'
 import { FOLDER_KIND } from '../../../core/node/kind'
 import { slugPathOf } from '../../../core/node/location'
 import { confirmRequest, settleConfirm } from '../../../shared/state/useConfirm'
+import { toggleFavorite } from '../../../core/favorites/favoritesStore'
 import { DROPBOX_KIND, FILE_KIND } from '../kinds'
 import { realI18n, t } from '../../../test/i18n'
 import { epochsOf } from '../../spaces/epochsTestUtil'
@@ -62,6 +64,14 @@ beforeEach(() => {
 })
 
 describe('DropBoxDetail', () => {
+  it('core\'s heart is in the drop box\'s header, like every kind\'s: a real click toggles THIS drop box in the access\'s scope', async () => {
+    const w = mountDetail()
+    const heart = w.find('.veyq-node-header-actions button[data-action="favorite"]')
+    expect(heart.attributes('aria-label')).toBe(t('node.favorite'))
+    await heart.trigger('click')
+    expect(toggleFavorite).toHaveBeenCalledWith(BOX.id, SCOPE)
+  })
+
   it('lists the guests’ folders, a repeated name numbered in creation order, each with its file count', () => {
     const w = mountDetail()
     const rows = w.findAll('.veyq-row-title').map((e) => e.text())

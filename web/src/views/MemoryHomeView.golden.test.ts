@@ -36,7 +36,7 @@ vi.mock('../app/activeSpace', async () => {
     activeEpochKeys: () => ({ current: 0, keys: new Map([[0, fixed.scopeKey]]) }),
   }
 })
-vi.mock('../features/memory/favoritesStore', () => ({
+vi.mock('../core/favorites/favoritesStore', () => ({
   favoritesStore: { loaded: true, ids: new Set<string>() },
   loadFavoritesFor: vi.fn(),
   isFavorite: vi.fn(),
@@ -60,7 +60,7 @@ import { registry } from '../core/applications/registry'
 import { activeSpace } from '../app/activeSpace'
 import { treeStore } from '../core/node/treeStore'
 import { listMyTenants } from '../features/spaces/scopes'
-import { isFavorite } from '../features/memory/favoritesStore'
+import { isFavorite } from '../core/favorites/favoritesStore'
 import { FOLDER_KIND, type NodeKind } from '../core/node/kind'
 import { MEMORY_KIND, CHAPTER_KIND } from '../features/memory/kinds'
 import { sealNodeMeta, type RawNodeMeta } from '../features/memory/nodeMeta'

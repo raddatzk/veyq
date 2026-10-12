@@ -15,7 +15,6 @@ import { b64std, b64url } from '@veyq/crypto/base64'
 vi.mock('leaflet', () => ({ default: {} }))
 vi.mock('../../api/client', async (orig) => (await import('../../test/guestMode')).guardedClients(await orig<object>()))
 vi.mock('./api', async (orig) => (await import('../../test/guestMode')).guardedClients(await orig<object>()))
-vi.mock('./favoritesStore', () => ({ isFavorite: vi.fn(), toggleFavorite: vi.fn() }))
 vi.mock('./coverStore', async (orig) => ({ ...(await orig<typeof import('./coverStore')>()), ensureCovers: vi.fn() }))
 vi.mock('../../core/sharing/guestBlob', async (orig) => ({ ...(await orig<object>()), shareChunkUrls: vi.fn(async () => ['https://store/c0']) }))
 vi.mock('../../core/blob/transport', async (orig) => ({ ...(await orig<object>()), openBlobFromUrls: vi.fn(async () => new Uint8Array([1, 2, 3])) }))
@@ -34,7 +33,6 @@ import { MEMORY_KIND } from './kinds'
 import { sealNodeMeta } from './nodeMeta'
 import { publicShareMediaApi } from './api'
 import { openShareGrid } from './share'
-import { isFavorite, toggleFavorite } from './favoritesStore'
 import { ensureCovers } from './coverStore'
 import type { ViewMode } from '../../shared/state/useViewMode'
 import { formatClosedRange } from './memoryDateRange'
@@ -116,8 +114,6 @@ afterEach(() => {
 beforeEach(() => {
   authenticatedCalls.length = 0
   vi.mocked(ensureCovers).mockClear()
-  vi.mocked(isFavorite).mockReset().mockReturnValue(false)
-  vi.mocked(toggleFavorite).mockClear()
   vi.mocked(shareChunkUrls).mockClear()
   vi.mocked(openBlobFromUrls).mockClear()
   vi.mocked(openShareGrid).mockReset().mockResolvedValue(new Uint8Array([4, 5, 6]))
@@ -140,9 +136,8 @@ describe('Memories rows for a share guest', () => {
       expect(titlesOf(h.w)).toEqual(['Ostsee', 'Rom'])
       expect(metaOf(h, 'Rom')).toBe(`${t('memory.kindMemory')} · ${formatClosedRange('2024-04-02', '2024-04-02', 'en')}`)
       expect(metaOf(h, 'Ostsee')).toBe(`${t('memory.kindMemory')} · ${formatClosedRange('2019-07-01', '2019-07-01', 'en')}`)
-      // no pin (the member’s own, under the Master Key), no rename; a contributor may move a Memory a folder holds
+      // no rename (the heart is core's, and a guest has none: `core/favorites/favoriteActions.test.ts`); a contributor may move a Memory a folder holds
       expect(await actionIdsOf(h.w, 'Rom')).toEqual(role === ShareRole.Read ? [] : ['move'])
-      expect(isFavorite).not.toHaveBeenCalled()
       expect(ensureCovers, "the member's cover store is not asked").not.toHaveBeenCalled()
       expect(authenticatedCalls).toEqual([])
     })
@@ -188,7 +183,6 @@ describe('Memories rows for a share guest', () => {
     const h = mountGuest(ShareRole.Read)
     await rowOf(h.w, 'Rom').find('button.veyq-level-item-main').trigger('click')
     expect(h.events.open[0].id).toBe(NEW)
-    expect(toggleFavorite).not.toHaveBeenCalled()
   })
 
   // inbox #358: a contributor moves a Memory of a folder (core's move dialog, the host's - asked through the host); a READ

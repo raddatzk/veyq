@@ -2,7 +2,7 @@
 // in-memory `session.apiBase` ('' → relative `/api/...`). Keeping construction here means views/features
 // depend on our typed surface, never on the generator's runtime details. Every spec generates into a client package
 // of its own (`./generated` for setup, `./generated/<spec>` for the rest). This file builds **core's** clients
-// only: the Memories application's (`contracts/api/memories/` → `./generated/media`, `./generated/favorites`) are
+// only: the Memories application's (`contracts/api/memories/` → `./generated/media`, `./generated/item-favorites`) are
 // built in `features/memory/api.ts` on the params exported below, because core imports no application client
 // (ADR 0079; `validate_web_core_imports_no_applications.py`).
 import { Configuration, SetupApi } from './generated'
@@ -31,6 +31,7 @@ import { ContentApi, Configuration as ContentConfiguration } from './generated/c
 import { BlobApi, Configuration as BlobConfiguration } from './generated/blob'
 import { TasksApi, Configuration as TasksConfiguration } from './generated/tasks'
 import { SharingApi, Configuration as SharingConfiguration } from './generated/sharing'
+import { FavoritesApi, Configuration as FavoritesConfiguration } from './generated/favorites'
 import { session } from '../app/session'
 
 export function setupApi(): SetupApi {
@@ -122,6 +123,11 @@ export function tenantsApi(): TenantsApi {
 
 export function scopesApi(): ScopesApi {
   return new ScopesApi(new ScopesConfiguration(bearerParams()))
+}
+
+// The member's node pins (ADR 0068, core's): one sealed blob per (user, scope). No guest route exists.
+export function favoritesApi(): FavoritesApi {
+  return new FavoritesApi(new FavoritesConfiguration(bearerParams()))
 }
 
 export function contentApi(): ContentApi {

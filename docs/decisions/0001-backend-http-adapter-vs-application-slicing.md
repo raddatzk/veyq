@@ -35,8 +35,8 @@ core/content/
   ContentResource.kt        # implements ContentApi (generated); thin; delegates per operation
   NodesHandler.kt           # the node-tree use-cases (create/browse/rename/delete)
   NodesStore.kt
-memories/favorites/
-  FavoritesResource.kt → FavoritesHandler.kt  # an application's use-case, same shape
+memories/itemfavorites/
+  ItemFavoritesResource.kt → ItemFavoritesHandler.kt  # an application's use-case, same shape
 ```
 
 *(Illustrative — the actual content feature is flatter than one folder per use-case; the rule is the

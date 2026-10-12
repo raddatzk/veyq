@@ -173,7 +173,7 @@ describe('LevelView: the one list', () => {
     const w = mountLevel([TRIPS, a1], { folder: TRIPS })
     await rowOf(w, 'a1').find('button.veyq-level-item-main').trigger('click')
     expect(w.emitted('openNode')).toEqual([[a1]])
-    expect(await actionIdsOf(w, 'a1')).toEqual(['rename'])
+    expect(await actionIdsOf(w, 'a1')).toEqual(['favorite', 'rename']) // core's heart first, then the application's
     await clickAction(w, 'a1', 'rename')
     // a row's node renamed in place reaches the host as `renameNode` with that node (never as the folder's rename)
     expect(w.emitted('renameNode')).toEqual([[a1]])
@@ -230,7 +230,7 @@ describe('LevelView: the folders', () => {
     expect(w.emitted('openNode')).toEqual([[rome]])
     expect(rowOf(w, 'Rome').find('button.veyq-level-item-main').attributes('aria-label')).toBe('Rome')
     expect(w.find('.veyq-create-card').exists(), 'the create tile is retired (inbox #406)').toBe(false)
-    expect(await actionIdsOf(w, 'Rome'), 'a folder\'s actions are its own header\'s once opened').toEqual([])
+    expect(await actionIdsOf(w, 'Rome'), 'a folder\'s row carries core\'s heart only; the rest is its own header\'s once opened').toEqual(['favorite'])
     await chooseNew(w, t('node.folderCreate'))
     expect(w.emitted('create')).toEqual([[FOLDER_KIND]])
   })
@@ -313,7 +313,7 @@ describe('LevelView: the folder header', () => {
   it('keeps share, rename, move and delete free of any width-hiding class (the card has no overflow menu)', () => {
     const w = mountLevel([TRIPS], { folder: TRIPS, publicLinks: true })
     const actions = w.findAll('.veyq-node-header-actions button')
-    expect(actions.map((b) => b.attributes('aria-label'))).toEqual([t('share.share'), t('node.rename'), t('node.move.action'), t('node.delete')])
+    expect(actions.map((b) => b.attributes('aria-label'))).toEqual([t('node.favorite'), t('share.share'), t('node.rename'), t('node.move.action'), t('node.delete')])
     for (const b of actions) {
       expect(b.classes()).not.toContain('memory-action-collapsible')
       expect(b.classes()).not.toContain('memory-action-inline')
@@ -331,8 +331,8 @@ describe('LevelView: the folder header', () => {
   it('offers only the move out on a guest\'s identity folder', async () => {
     const w = mountLevel([TRIPS], { folder: TRIPS, publicLinks: true, identityFolder: true })
     const actions = w.findAll('.veyq-node-header-actions button')
-    expect(actions.map((b) => b.attributes('aria-label'))).toEqual([t('node.move.action')])
-    await actions[0].trigger('click')
+    expect(actions.map((b) => b.attributes('aria-label'))).toEqual([t('node.favorite'), t('node.move.action')])
+    await actions[1].trigger('click')
     expect(w.emitted('moveNode')).toEqual([[TRIPS]])
   })
 

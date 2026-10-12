@@ -21,19 +21,6 @@ vi.mock('../../features/account/profile/profile', async (importOriginal) => ({
   getMyProfile: vi.fn(),
 }))
 
-// The shared cover store — the rail reads it and holds no key API of its own, which is the property phase 1
-// exists for. Driven directly here so a favorite can be given a cover without opening a scope.
-// Typed by the store's own `LoadedCover` (inbox #287): typed `crop: unknown`, this holder took a `{ x, y, w, h }`
-// crop — a shape `CoverCrop` does not have — and every test here stayed green on it.
-const storeCovers = vi.hoisted(() => ({ map: new Map<string, LoadedCover>() }))
-vi.mock('../../features/memory/coverStore', () => ({
-  // A plain getter, not a `computed`: the hoisted holder is not reactive, so a computed would cache the first
-  // map it saw and every later test would assert against the previous one's covers.
-  covers: { get value() { return storeCovers.map } },
-  ensureCovers: vi.fn(),
-  resetCovers: vi.fn(),
-}))
-
 import AppSidebar from './AppSidebar.vue'
 import { listMyTenants, listMyGroups, openMyTenantIcon, type GroupSpace } from '../../features/spaces/scopes'
 import type { CompromiseRotation } from '../../api/generated/scopes'
@@ -41,8 +28,9 @@ import { getMyProfile } from '../../features/account/profile/profile'
 import { activeSpace, clearActiveSpace } from '../../app/activeSpace'
 import { treeStore } from '../../core/node/treeStore'
 import type { TreeNode } from '../../core/node/tree'
-import type { LoadedCover } from '../../features/memory/memoryCover'
-import { favoritesStore } from '../../features/memory/favoritesStore'
+import { favoritesStore } from '../../core/favorites/favoritesStore'
+import { registry } from '../../core/applications/registry'
+import { hashForNode } from '../../core/node/location'
 
 import { realI18n, t } from '../../test/i18n'
 import { memberProfile, myTenant, treeNode } from '../../test/models'
@@ -221,69 +209,70 @@ describe('AppSidebar tenant switcher', () => {
   })
 })
 
-// uc.memory.cover promises a chosen cover is shown "identically wherever the Memory appears". The rail is the
-// fourth such surface and was never wired: it drew a hardcoded glyph whatever cover the Memory carried. The
-// tell was in the stylesheet — `.sidebar-favorite-cover .memory-cover-image` and three `.mobile-nav-favorite`
-// rules existed with nothing in the markup matching them.
-describe('AppSidebar favorites — a pinned Memory shows its cover', () => {
-  const MEMORY: TreeNode = treeNode({
-    id: 'n1', name: 'Rom 2026', kind: 'MEMORY', parentId: null, orderIndex: 0, epoch: 0,
-    wrappedContentKey: 'k', wrappedMeta: 'm', metaVersion: 0, placementVersion: 0,
-  })
+// The Favorites section is CORE's (inbox #409): every pinned node of the scope, each with its KIND's icon from the registry and
+// its name, opened through `hashForNode`. A pinned id that no longer resolves (purged, trashed) or whose kind this client does
+// not draw is skipped - never a broken row.
+describe('AppSidebar favorites — every kind of pinned node, with its kind icon', () => {
+  const at = (id: string, kind: string, name: string, parentId: string | null = null): TreeNode =>
+    treeNode({
+      id, name, kind, parentId, orderIndex: 0, epoch: 0, wrappedContentKey: 'k', wrappedMeta: null, metaVersion: 0, placementVersion: 0,
+    })
 
   beforeEach(() => {
-    treeStore.nodes = [MEMORY]
-    favoritesStore.ids = new Set(['n1'])
-    storeCovers.map = new Map([['n1', { url: 'blob:cover-1', crop: { x: 0, y: 0, width: 1, height: 1 } }]])
+    treeStore.nodes = [
+      at('f1', 'FOLDER', 'Reisen'),
+      at('m1', 'MEMORY', 'Rom 2026', 'f1'),
+      at('d1', 'FILE', 'Plan.pdf', 'f1'),
+      at('b1', 'FILES_DROPBOX', 'Einreichungen'),
+      at('x1', 'FUTURE_KIND', 'Unbekannt'),
+    ]
   })
   afterEach(() => {
     treeStore.nodes = []
     favoritesStore.ids = new Set()
-    storeCovers.map = new Map()
   })
 
-  it('renders the cover image in the desktop rail, not a glyph', async () => {
+  it('lists a folder, a Memory, a file and a drop box, each with its registry icon and name', async () => {
+    favoritesStore.ids = new Set(['f1', 'm1', 'd1', 'b1'])
     const wrapper = await mountAt('')
-    const tile = wrapper.get('.sidebar-favorite-link .sidebar-favorite-cover')
-    const img = tile.find('img')
-    expect(img.exists()).toBe(true)
-    expect(img.attributes('src')).toBe('blob:cover-1')
-    expect(img.attributes('alt')).toBe('Rom 2026')
+    const rows = wrapper.findAll('.sidebar-favorite-link')
+    expect(rows.map((r) => r.text())).toEqual(['Reisen', 'Rom 2026', 'Plan.pdf', 'Einreichungen'])
+    expect(rows.map((r) => r.attributes('data-kind'))).toEqual(['FOLDER', 'MEMORY', 'FILE', 'FILES_DROPBOX'])
+    for (const [i, kind] of ['FOLDER', 'MEMORY', 'FILE', 'FILES_DROPBOX'].entries()) {
+      const info = registry.kind(kind)
+      expect(info.supported, kind).toBe(true)
+      if (info.supported) expect(rows[i].find('.sidebar-favorite-cover span').classes().join(' '), kind).toBe(info.icon)
+    }
   })
 
-  it('falls back to the placeholder for a favorite with no cover — E1, no auto-cover', async () => {
-    storeCovers.map = new Map()
+  it('opens the node by its readable fragment path (hashForNode), not a hand-built one', async () => {
+    favoritesStore.ids = new Set(['m1'])
     const wrapper = await mountAt('')
-    const tile = wrapper.get('.sidebar-favorite-link .sidebar-favorite-cover')
-    expect(tile.find('img').exists()).toBe(false)
-    expect(tile.find('.memory-cover-image').exists()).toBe(true) // the component's own placeholder, not a branch here
+    const href = wrapper.get('.sidebar-favorite-link').attributes('href')
+    expect(href).toContain(hashForNode(treeStore.nodes, 'm1', ''))
   })
 
-  // The trigger half of the staleness rule, and the one a mocked store CAN see. The store re-resolves when a
-  // node's sealed meta changes — but only if somebody asks it to. `patchNodeMeta` mutates `wrappedMeta` IN
-  // PLACE, so a watch keyed on the favorites' ids, the epoch and the node COUNT never fires, and a cover set in
-  // the detail header leaves the rail showing the old one. Found by the hand pass, which is what it is for.
-  it('asks the store again when a favorite’s sealed meta changes', async () => {
-    const { ensureCovers } = await import('../../features/memory/coverStore')
+  it('skips a pinned id that does not resolve and a kind this client does not draw', async () => {
+    favoritesStore.ids = new Set(['gone', 'x1', 'm1'])
     const wrapper = await mountAt('')
-    wrapper.get('.sidebar-favorite-link') // throws if the rail never rendered the favorite at all
-    const before = vi.mocked(ensureCovers).mock.calls.length
-
-    treeStore.nodes[0].wrappedMeta = 'm2' // exactly what setting a cover does
-    await flushPromises()
-
-    expect(vi.mocked(ensureCovers).mock.calls.length).toBeGreaterThan(before)
-    expect(vi.mocked(ensureCovers).mock.calls.at(-1)![0]).toEqual(['n1'])
+    expect(wrapper.findAll('.sidebar-favorite-link').map((r) => r.text())).toEqual(['Rom 2026'])
   })
 
-  it('the mobile row carries the cover tile and the class its stylesheet has been waiting for', async () => {
+  it('renders no section at all when nothing resolves', async () => {
+    favoritesStore.ids = new Set(['gone'])
+    const wrapper = await mountAt('')
+    expect(wrapper.find('.sidebar-favorites-section').exists()).toBe(false)
+  })
+
+  it('the mobile row carries the kind tile and the class its stylesheet has been waiting for', async () => {
+    favoritesStore.ids = new Set(['d1'])
     const wrapper = await mountAt('')
     await wrapper.get('.mobile-navigation-button').trigger('click')
     await flushPromises()
 
-    const row = wrapper.findAll('.mobile-nav-item').find((i) => i.text().includes('Rom 2026'))!
+    const row = wrapper.findAll('.mobile-nav-item').find((i) => i.text().includes('Plan.pdf'))!
     expect(row.classes()).toContain('mobile-nav-favorite')
-    expect(row.get('.sidebar-favorite-cover img').attributes('src')).toBe('blob:cover-1')
+    expect(row.get('.sidebar-favorite-cover span').classes()).toContain('pi')
   })
 })
 

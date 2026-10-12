@@ -6,7 +6,8 @@ the rejected alternatives). German: *Anwendung*. Never "plugin" or "app".
 
 **What the platform is.** veyq is a platform for sealed, shareable objects. The core provides:
 - **who**: tenants, central users, groups and personal scopes, memberships, invitations, keys, devices;
-- **what**: nodes as a tree inside a scope, with parents, order, trash and a content key per node; and
+- **what**: nodes as a tree inside a scope, with parents, order, trash and a content key per node, and a member's
+  private **favorites** of any node (a sealed set per user and scope, the heart on every row and header); and
   *attachments*, sealed files on a node that can be uploaded and downloaded, with size and storage quota;
 - **with whom**: links with `READ`, `READ_WRITE` or `WRITE_ONLY` access, with password, expiry and consent;
 - **in the background**: tasks, rate limits, the admin channel and operator-blindness.

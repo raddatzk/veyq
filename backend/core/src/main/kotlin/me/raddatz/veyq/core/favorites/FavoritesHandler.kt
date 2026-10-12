@@ -1,4 +1,4 @@
-package me.raddatz.veyq.memories.favorites
+package me.raddatz.veyq.core.favorites
 
 import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.http.HttpFailure
@@ -22,7 +22,7 @@ sealed interface PutFavoritesOutcome {
 }
 
 /**
- * Use-case logic for per-(user, scope) favorites (cr-0031). Scope access is the one gate,
+ * Use-case logic for per-(user, scope) node pins (ADR 0068). Scope access is the one gate,
  * [ScopeAccess], asked first (uc.spaces.scope-access): a non-member sees a 404, not a reveal. The handler never inspects the blob.
  */
 @ApplicationScoped

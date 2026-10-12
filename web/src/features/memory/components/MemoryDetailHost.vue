@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // The Memories application's adapter between the host's generic node-detail context (core/applications/registry:
 // `NodeDetailProps`) and the props/events `MemoryDetail` takes (ADR 0079): everything Memories-shaped — the pin
-// (favorite) state, the item-mark key, the personal-scope flag, the chapters bucket, the meta patch — is resolved here,
+// state, the item-mark key, the personal-scope flag, the chapters bucket, the meta patch — is resolved here,
 // inside the application, and so are the CAPABILITIES (inbox #401): Memories' own fail-closed matrix over the host's
 // `access` and the opened node (`../capabilities.ts`), which `MemoryDetail` narrows to its data source's doors.
 //
@@ -15,7 +15,8 @@ import { computed } from 'vue'
 import type { NodeDetailProps, NodeDetailEmits } from '../../../core/applications/registry'
 import { CHAPTER_KIND } from '../kinds'
 import { activeSpace, activeEpochKeys } from '../../../app/activeSpace'
-import { isFavorite, toggleFavorite } from '../favoritesStore'
+import { favoriteHeaderActions } from '../../../core/favorites/favoriteActions'
+import { useI18n } from 'vue-i18n'
 import { patchNodeMeta } from '../../../core/node/treeStore'
 import { keyAt } from '../../spaces/epochs'
 import { memoryCapabilities } from '../capabilities'
@@ -46,11 +47,10 @@ const itemMarkKey = computed<Uint8Array | null>(() => {
   return eks ? keyAt(eks, 0) : null
 })
 const personalScope = computed(() => !guest && activeSpace.kind === 'PERSONAL')
-const favorite = computed(() => !guest && isFavorite(props.node.id))
+const { t } = useI18n()
+// Core's heart (inbox #409): the same action every kind's header gets; a guest's list is empty.
+const coreActions = computed(() => favoriteHeaderActions(t, props.access, props.node))
 
-function onToggleFavorite() {
-  if (!guest && activeSpace.scopeId) void toggleFavorite(props.node.id, activeSpace.scopeId)
-}
 function onMetaUpdated(e: { nodeId: string; wrappedMeta: string | null; metaVersion: number }) {
   if (!guest) patchNodeMeta(e.nodeId, e.wrappedMeta, e.metaVersion)
 }
@@ -63,11 +63,10 @@ function onMetaUpdated(e: { nodeId: string; wrappedMeta: string | null; metaVers
     :memory-key="contentKey"
     :scope-key="itemMarkKey"
     :personal-scope="personalScope"
-    :favorite="favorite"
+    :core-actions="coreActions"
     :chapters="chapters"
     :caps="caps"
     :source="source"
-    @toggle-favorite="onToggleFavorite"
     @rename="emit('rename')"
     @move="emit('move', node)"
     @delete="emit('delete')"

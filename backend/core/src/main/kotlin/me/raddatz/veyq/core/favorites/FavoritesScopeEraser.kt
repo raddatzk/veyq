@@ -1,9 +1,9 @@
-package me.raddatz.veyq.memories.favorites
+package me.raddatz.veyq.core.favorites
 
 import me.raddatz.veyq.core.scope.ScopeEraser
 import jakarta.enterprise.context.ApplicationScoped
 
-/** The favorites rows of an erased group. Phase 600: references only the scope row, so any phase before core's scope delete would do. */
+/** The pin rows of an erased group. Phase 600: references only the scope row, so any phase before core's scope delete would do. */
 @ApplicationScoped
 class FavoritesScopeEraser : ScopeEraser {
     override val phase = 600

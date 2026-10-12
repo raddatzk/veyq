@@ -5,9 +5,9 @@
 // full navigation to that tenant's domain, and the bottom is the ProfileMenu (theme + language + settings +
 // sign-out — the shell's one door into the hub).
 //
-// The rail also carries the **groups** section and, below the space switcher, whatever an application pins into
-// the `sidebarPins` list slot (the Memories favorites, with their covers — ADR 0079: the shell names no application
-// kind). It imports no key API at all — the epoch chain that opens a node's `K_mem` has no business in an
+// The rail also carries the **groups** section and, below the space switcher, the **Favorites** section (core's
+// `PinnedNodes`: every pinned node, each with its kind's icon - inbox #409) and whatever an application pins into the
+// `sidebarPins` list slot (none today — ADR 0079: the shell names no application kind). It imports no key API at all — the epoch chain that opens a node's `K_mem` has no business in an
 // always-mounted rail, and keeping it out is a property worth preserving, not an accident of one diff.
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -34,6 +34,7 @@ import { slugify } from '../../shared/naming'
 import { TenantStatus, type MyTenant } from '../../api/generated/scopes'
 import { suspensionSignals } from '../../app/tenantSuspension'
 import ProfileMenu from './ProfileMenu.vue'
+import PinnedNodes from '../../core/favorites/PinnedNodes.vue'
 
 const { t } = useI18n()
 const { hasCapability } = useCapabilities()
@@ -216,7 +217,7 @@ const activeTenant = computed(
 // member belongs to and switches on select. Shown only when there is more than one tenant to switch between.
 const tenantOverview = ref<InstanceType<typeof Popover> | null>(null)
 
-// What the applications pinned into the rail (the Memories favorites), in their `order`; none → no section, no gap.
+// What the applications pinned into the rail, in their `order`; none → no section, no gap.
 const sidebarPins = registry.slotItems('sidebarPins')
 
 onMounted(async () => {
@@ -361,6 +362,7 @@ function closeMobileMenu() {
       </RouterLink>
     </nav>
 
+    <PinnedNodes variant="rail" />
     <component :is="pin.component" v-for="pin in sidebarPins" :key="pin.id" variant="rail" />
 
     <!-- Groups (en.spaces.group-scope, cr-0032). The header + "＋" is always present so the first group is
@@ -531,6 +533,7 @@ function closeMobileMenu() {
           </div>
         </section>
 
+        <PinnedNodes variant="sheet" @navigate="closeMobileMenu" />
         <component :is="pin.component" v-for="pin in sidebarPins" :key="pin.id" variant="sheet" @navigate="closeMobileMenu" />
       </div>
     </Dialog>

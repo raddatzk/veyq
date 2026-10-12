@@ -12,6 +12,7 @@ import type { FileListPage } from '../../../api/generated/files'
 
 const keys = vi.hoisted(() => new Map<string, Uint8Array>())
 vi.mock('../api', () => ({ filesApi: vi.fn() }))
+vi.mock('../../../core/favorites/favoritesStore', () => ({ isFavorite: vi.fn(() => false), toggleFavorite: vi.fn() }))
 vi.mock('../download', async (importOriginal) => ({ ...(await importOriginal<typeof import('../download')>()), downloadFile: vi.fn() }))
 const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }))
 vi.mock('../../../shared/state/useToast', () => ({
@@ -42,6 +43,7 @@ import { loadTree } from '../../../core/node/treeStore'
 import { clearUploads, useUploadQueue } from '../../../core/blob/queue'
 import { confirmRequest, settleConfirm } from '../../../shared/state/useConfirm'
 import { formatBytes } from '../../../shared/formatBytes'
+import { isFavorite, toggleFavorite } from '../../../core/favorites/favoritesStore'
 import { epochsOf } from '../../spaces/epochsTestUtil'
 import { realI18n, t } from '../../../test/i18n'
 import { SaveTooLarge } from '../../../shared/saveStream'
@@ -125,6 +127,23 @@ describe('an opened file: its page for a member', () => {
       t('share.share'), t('node.rename'), t('node.move.action'), t('node.delete'),
       t('files.download', { name: 'Report.pdf' }), t('files.replace', { name: 'Report.pdf' }),
     ]))
+  })
+
+  it('core\'s heart is in the header, first: a real click toggles THIS file in the access\'s scope, and a pinned file shows it pressed', async () => {
+    const w = mountDetail()
+    await flushPromises()
+    const heart = () => w.find('.veyq-node-header-actions button[data-action="favorite"]')
+    expect(w.findAll('.veyq-node-header-actions button')[0].attributes('data-action')).toBe('favorite')
+    expect(heart().attributes('aria-label')).toBe(t('node.favorite'))
+    await heart().trigger('click')
+    expect(toggleFavorite).toHaveBeenCalledWith(R, SCOPE)
+    vi.mocked(isFavorite).mockImplementation((id) => id === R)
+    const pinned = mountDetail()
+    await flushPromises()
+    const pressed = pinned.find('.veyq-node-header-actions button[data-action="favorite"]')
+    expect(pressed.attributes('aria-pressed')).toBe('true')
+    expect(pressed.attributes('aria-label')).toBe(t('node.unfavorite'))
+    vi.mocked(isFavorite).mockReturnValue(false)
   })
 
   it('the card\'s buttons reach the host: share, rename, delete and move as real clicks', async () => {

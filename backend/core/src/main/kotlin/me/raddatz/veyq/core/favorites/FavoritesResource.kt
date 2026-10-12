@@ -1,8 +1,8 @@
-package me.raddatz.veyq.memories.favorites
+package me.raddatz.veyq.core.favorites
 
-import me.raddatz.veyq.memories.generated.api.FavoritesApi
-import me.raddatz.veyq.memories.generated.model.Favorites
-import me.raddatz.veyq.memories.generated.model.PutFavoritesRequest
+import me.raddatz.veyq.core.generated.api.FavoritesApi
+import me.raddatz.veyq.core.generated.model.Favorites
+import me.raddatz.veyq.core.generated.model.PutFavoritesRequest
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpError
 import io.quarkus.security.Authenticated
@@ -12,10 +12,12 @@ import java.util.UUID
 import me.raddatz.veyq.core.ratelimit.RateLimitExempt
 
 /**
- * HTTP adapter for per-(user, scope) favorites (en.memory.favorites, cr-0031). Implements the generated
+ * HTTP adapter for per-(user, scope) node pins (en.memory.favorites, ADR 0068). Core's: the pin names a node of any
+ * kind, so no application owns it. No guest route exists, by design: a share guest has no pins (share view = member
+ * view loses only functions). Implements the generated
  * [FavoritesApi]; thin (ADR 0001) — delegates to [FavoritesHandler]. `@Authenticated`; the caller (from the
  * `SecurityIdentity` principal) must hold a grant for the scope (a non-member gets 404). Operator-blind: only
- * the caller's sealed ciphertext crosses; the server never sees which Memories are pinned.
+ * the caller's sealed ciphertext crosses; the server never sees which nodes are pinned.
  */
 @Authenticated
 @RateLimitExempt(
