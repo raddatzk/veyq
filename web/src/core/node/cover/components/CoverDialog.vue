@@ -94,7 +94,7 @@ function remove() {
 <template>
   <Dialog :visible="true" :header="t('node.cover.dialogTitle')" modal @update:visible="emit('close')">
     <div class="veyq-form veyq-cover-dialog">
-      <p class="veyq-cover-copy">{{ t('node.cover.copy') }}<template v-if="hint"> {{ hint }}</template></p>
+      <p class="veyq-cover-copy">{{ hint ? `${t('node.cover.copy')} ${hint}` : t('node.cover.copy') }}</p>
 
       <div class="veyq-cover-sources">
         <Button type="button" :label="t('node.cover.choose')" icon="pi pi-upload" severity="secondary" outlined @click="chooseUpload" />

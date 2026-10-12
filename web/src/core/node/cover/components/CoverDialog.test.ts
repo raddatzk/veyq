@@ -201,6 +201,12 @@ describe('the application\'s own source (a photo chosen in the gallery)', () => 
     expect(cropperImg()!.getAttribute('src')).toBe('blob:photo')
   })
 
+  it('the application\'s hint follows the core text after a space, never glued to its full stop', async () => {
+    await mountDialog({ source: { id: 'm7', src: 'blob:photo', crop: null }, hint: 'Or use a gallery photo.' })
+    await new Promise((r) => setTimeout(r))
+    expect(body().textContent).toContain(`${t('node.cover.copy')} Or use a gallery photo.`)
+  })
+
   it('without a source there is no hint line of the application\'s', async () => {
     await mountDialog()
     await new Promise((r) => setTimeout(r))
