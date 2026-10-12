@@ -8,7 +8,9 @@ title: Memory cover — a chosen, cropped cover shown everywhere
 # sidebar's Favorites entry was a fourth until core took the section over, inbox #409). cr-0072 built the existing-media source (web, no backend); cr-0073 added the
 # new-upload source — a standalone cover blob (contract + backend + web) committed with no `veyq_media` row; the
 # sidebar surface and the shared cover store came last, and the store is why a fifth surface would cost a read
-# rather than a decrypt.
+# rather than a decrypt. Since inbox #411 the store, the crop model, the upload and the one-request write are CORE's
+# (uc.platform.node-cover) and the sidebar's Favorites tile shows the cover again, for every kind that has one; the Memory
+# keeps its own source UI (the dialog) and its second source (one of its photos, `coverLoad.ts`).
 acceptanceCriteria:
   - id: sealed-cover-on-node
     text: A MEMORY/CHAPTER node's `wrappedMeta.cover` carries ONE cover — a source (an existing media `mediaId`, or a standalone uploaded blob ref) + a `crop {x,y,width,height}` normalized to 0..1 of the source image — sealed under K_mem in the same client-versioned blob as the date + location (no contract change for the media source), set via the partial updateNode and returned on listNodes. The operator-blind server never sees which image or the crop.
@@ -28,14 +30,14 @@ acceptanceCriteria:
           - src/features/memory/components/MemoryCard.test.ts
           - src/components/app/AppSidebar.test.ts
   - id: covers-resolved-once-per-scope
-    text: One store resolves a Memory's cover for EVERY surface that shows one — a thumbnail is decrypted once per Memory per scope, not once per surface — re-resolves it when the node's sealed meta changes (the cache is keyed on `wrappedMeta`, so a cover edited on one surface cannot leave a stale image on another), and releases every decrypted object URL when the active space is left, rotated or cleared. The surfaces read the result and hold no key material — the epoch chain that opens a node's K_mem stays out of the always-mounted rail.
+    text: One store resolves a Memory's cover for EVERY surface that shows one — a thumbnail is decrypted once per Memory per scope, not once per surface — re-resolves it when the node's sealed meta changes (the cache is keyed on `wrappedMeta`, so a cover edited on one surface cannot leave a stale image on another), and releases every decrypted object URL when the active space is left, rotated or cleared. The store is core's (`core/node/cover/coverStore.ts`, a member's singleton and a guest page's own); the surfaces read the result and hold no key material — the epoch chain that opens a node's K_mem stays out of the always-mounted rail.
     # Both halves are bitten by injection, since the store is new and neither defect is live: keying the entry on
     # the nodeId alone reddens the stale-cover and removed-cover cases, and deleting the reset from
     # clearActiveSpace reddens the release case.
     coverage:
       web:
         unit:
-          - src/features/memory/coverStore.test.ts
+          - src/core/node/cover/coverStore.test.ts
   - id: one-crop-everywhere
     text: One stored normalized crop renders identically at any container size — a sidebar rail tile, the browse card, the detail header, the map pin — via one shared display formula (expand the decrypted thumbnail inside an overflow-hidden box + offset by the crop). No per-surface crop, no cropped-image upload for the existing-media source. Note what is one shared FORMULA and not one shared component — SpaceMap applies `coverImageStyle` inline rather than mounting MemoryCoverImage, so the formula is the invariant and the component is not.
     coverage:
@@ -58,7 +60,7 @@ acceptanceCriteria:
       backend:
         integration: [NodeCoverMemoriesSliceTest.aMemoryAndAChapterTakeACoverWithoutTouchingTheGallery, NodeCoverMemoriesSliceTest.switchingToAPhotoCoverIsARemovalThatWritesTheNewMetaAndFreesTheUpload, NodeCoverMemoriesSliceTest.aShareGuestReadsTheSharedMemorysCoverOnlyAndNothingAfterItsRemoval, NodeCoverCoreSliceTest.setThenReplaceThenRemoveLeavesNoRowNoBlobNoSessionAndTheQuotaWhereItStarted, NodeCoverCoreSliceTest.aSlotAnotherWriterFilledIsCoverStaleAndTheLoserIsFreed, NodeCoverCoreSliceTest.aMetaThatMovedWritesNothingAndKeepsTheUploadOpenForTheRetry, NodeCoverCoreSliceTest.twoWritersRacingForAnEmptySlotLeaveExactlyOneCover, NodeCoverCoreSliceTest.aTrashedNodeKeepsItsCoverForTheRestoreAndThePurgeFreesIt]
       web:
-        unit: [src/features/memory/media.test.ts, src/features/memory/memoryCover.test.ts, src/features/memory/components/MemoryCoverDialog.test.ts]
+        unit: [src/core/node/cover/coverWrite.test.ts, src/features/memory/uploadWire.characterisation.test.ts, src/features/memory/memoryCover.test.ts, src/features/memory/useMemoryCover.test.ts, src/features/memory/components/MemoryCoverDialog.test.ts, src/features/memory/components/MemoryDetailHost.cover.test.ts]
         # live smoke DONE (cr-0073, not scripted): re-seeded 127.0.0.1 instance + Garage --profile s3, browse origin
         # 127.0.0.1:8089 = store public endpoint. Uploaded a new image into a media-less Memory → blob-uploads-batch
         # → PUT /veyq → commitCoverBlob → downloaded back; cropped cover rendered on the detail header + browse card;

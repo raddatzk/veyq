@@ -166,6 +166,22 @@ here; the server is blind.
   fewer actions, never a guest-only one. Core's own actions (the favorite heart of inbox #409) plug in as the
   level's `coreRowActions`, merged around the application's by `mergeRowActions`, with no change to any application.
 
+  **Covers are core's (inbox #411, `core/node/cover/`).** Any node whose kind carries a `cover` descriptor (`KindDescriptor.cover`: FOLDER
+  pre-registered by core, Files' drop box, Memories' MEMORY and CHAPTER - the server's `NodeKindRules.takesCover` is the authority and must
+  agree; a file takes none) has one image its owner uploads as the node's own `COVER` blob. `coverModel.ts` is the pure model (the
+  `cover` field of the sealed `wrappedMeta` - `core/node/nodeMeta.ts`, moved from Memories - in the shape every Memory cover already
+  had: crop, display formula, ref, `uploadedCover`), `coverWrite.ts` the I/O (`uploadCoverImage`: the existing derive pipeline, ONE JPEG at
+  `COVER_SPEC`, sealed as the node's blob; `writeNodeCover`: ONE request that sends the blob step AND the meta - `setNodeCover`,
+  `removeNodeCover` or a plain `updateNode`, chosen from the cover being replaced as the server hands it back on a `409`), `coverStore.ts` the
+  decrypted covers (a member's singleton cleared by `activeSpace`, a guest page's own through the link's gated presign, keyed on the sealed
+  meta so a replaced or removed cover drops its object URL at once; a source core cannot open - Memories' photo - is the kind's
+  `cover.load`), `capabilities.ts` the fail-closed `coverCapabilities` (a writer on a scope that is not pending deletion, keys loaded, an opted-in
+  kind, not a guest's identity folder; no guest role), and `useNodeCover` the view's door: the covers it draws and the core actions
+  `cover` (Set / Change) and `cover-remove` for `NodeHeader`'s `coreActions` and the level's `coreRowActions` (both in the row's menu), the pick
+  (`pickImage.ts`, a programmatic `image/*` input, 40 MB) run as a job of the core upload queue. A kind with its own source UI hands the header
+  action `choose` (Memories: its dialog); the level resolves every node's cover once and hands it to the row factories (`LevelRowsHost.covers`,
+  `ensureCovers`). Display: the row/tile leading visual (`NodeCoverImage`), the header's leading slot, the sidebar's Favorites; the icon is the default.
+
   **Favorites are core's (inbox #409, [ADR 0068](../docs/decisions/0068-favorites-two-confidentiality-levels.md) §10).** The member's private pin of
   a node of ANY kind - folder, file, Memory, drop box - lives in `src/core/favorites/`: `favorites.ts` (the sealed data layer, purpose
   `favorites` under the Master Key, the generated `favoritesApi()` of `api/client.ts`), `favoritesStore.ts` (the reactive set, optimistic
@@ -270,7 +286,7 @@ here; the server is blind.
   `guestTreeSource` (`core/sharing/guestAccess.ts`: a served `ShareNode` as a `TreeNode` — `createdAt` 0, so equal
   names number by node id; `metaVersion` 0; `wrappedMeta` as served). A row factory built for a guest reads nothing of
   the member's world (`treeStore`, `activeSpace`, the cover and pin stores) — Memories' rows read their dates, covers
-  and map from the guest's tree (`features/memory/guestCover.ts`), Files' rows read and write through Files' data
+  and map from the guest's tree (the covers are core's, `core/node/cover/`, resolved by the level), Files' rows read and write through Files' data
   source (`features/files/source.ts`: the member's or the guest's, fixed at mount; a write is offered where the matrix
   grants it AND the source carries it — `sourceCapabilities` — and the guest's source has no delete, no rename), and so
   does Memories' detail (`features/memory/source.ts`, picked by `MemoryDetailHost`: the detail, its composables, the

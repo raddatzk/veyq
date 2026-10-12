@@ -131,8 +131,9 @@ on their own.
   structure, attachments and guests, and the user interface. `READ`/`READ_WRITE`/`WRITE_ONLY` are the wire values
   (`ShareRole`, renamed from `VIEWER`/`CONTRIBUTOR`/`UPLOADER` on 2026-10-06).
   Attachments are core's since cr-files-application P3 (`veyq_node_attachment`, written only by
-  `AttachmentStore`), and Files is the first application on them (a `FILE` holds one blob in its slot), Memories'
-  cover the second (its `COVER` slot, inbox #341); what a verified upload becomes is still each application's
+  `AttachmentStore`), and Files is the first application on them (a `FILE` holds one blob in its slot), the node
+  cover the second (its `COVER` slot, inbox #341 - core's own feature since inbox #411: any node of a kind that opts in
+  carries one, see below); what a verified upload becomes is still each application's
   (`UploadCompletion`), and Memories' media and gallery counters keep their own tables. Files, the second application, needed them and
   nothing else of a blob's; whether every application does, the next one shows. Files is an application on core's
   attachments, never a dependency of another application (Decision 4: an application depends on core only).
@@ -257,13 +258,22 @@ on their own.
   Core's attachments, built with Files (cr-files-application P3): `veyq_node_attachment` (one blob per node slot, the slot
   being the application's role token; foreign keys to scope, node, blob and guest identity, none cascading, so a
   row goes only through core's erasers and `deleteBlobRow`), written only by `AttachmentStore` (`attach`, and
-  `detach` for an application's own remove — Memories' `deleteCoverBlob`) and counted as
+  `detach` for an owner's own remove — core's `NodeCoverStore` since #411, Memories' `deleteCoverBlob` before it) and counted as
   core's own term of a link's usage — `validate_blob_reference_arity` pins the `veyq_blob` arms, all three foreign-key
   backed since the cover column left; and `BlobRole`,
   an open token (`^[A-Z][A-Z0-9_]{0,15}$`, like `NodeKind`) in the contract's `_common` and in the crypto package,
   core stores and compares it and names none (`validate_kernel_imports_no_slices.py` reads Memories' four roles
   as it reads its kinds), and Memories holds its own (`MemoryBlobRoles`, `MemoryBlobRole`) and refuses a guest's
   `COVER` through `ShareGuestWrites.admitsGuestRole`.
+  **A cover is a node feature, core's** (inbox #411, 2026-10-12): any node whose kind opts in (`NodeKindRules.takesCover`:
+  core's `FOLDER`, Files' drop box, Memories' two kinds; not a `FILE`) carries one image its owner uploads as the node's own
+  blob in the `COVER` slot, written by core's `setNodeCover` / `removeNodeCover` - the blob step (`AttachmentStore` attach
+  with a compare on the blob replaced, or detach) and the node's re-sealed `wrappedMeta` (the `cover` field, ADR 0077
+  version-checked) in ONE transaction, so the slot and the meta that names it never part. `COVER` is a role core declares
+  (`CoreMemberBlobRoles`) and the opt-in is a seam on each kind's own placement rules, so core names no application kind. The web
+  mechanism (`core/node/cover/`: the model, the upload, the one writer, the store, the action and the display) serves every kind;
+  an application adds only what is its own - Memories' second source (one of its photos, `cover.load`) and its dialog (the
+  action's `choose`). A guest sees the cover through the share's gated blob route and gets no action in this step.
   **The web side is separated by import direction, not by name or by kind:** `web/src/features/memory` is the
   application, and no core file imports it except the composition root `web/src/applications.ts`; the shell asks a
   build-time registry (`web/src/core/applications/registry.ts`) what to render for a node kind, which slot an
@@ -322,7 +332,7 @@ on their own.
   its composables, the lightbox and the organizer touch no API but through it; `MemoryDetailHost` picks the source by
   `access.mode` and reads nothing of the member's world for a guest). A view shows a right where the matrix grants it
   AND the source carries the door (`sourceCapabilities`); the lightbox takes its loaders as required props and each
-  write per capability (`canSetCover`, `canDelete` per item, the source's `mediaMeta` door). Memories' share body is the
+  write per capability (`canDelete` per item; a node's cover is core's, `coverCapabilities`, the source's `mediaMeta` door). Memories' share body is the
   drop page alone: the grouped-chapters guest gallery of #356, its lightbox wiring and its own-delete are deleted, and a
   contributor uploads into the chapter it navigated to (the chapter named as the target, sealed under its own key; the
   server creates the guest's own bucket there). A guest's Memory view shows the date and place the members sealed but

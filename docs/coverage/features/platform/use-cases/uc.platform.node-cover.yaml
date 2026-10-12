@@ -1,0 +1,59 @@
+useCase: uc.platform.node-cover
+feature: platform
+title: A cover for any node - an image the owner uploads, core's feature
+# Built by inbox #411 (the owner's option 1b): the cover is the node's own blob in core's COVER attachment slot, written with the
+# sealed meta that names it in ONE transaction (setNodeCover / removeNodeCover). Kinds opt in (NodeKindRules.takesCover on the
+# server, the descriptor's `cover` on the web). Memories moved onto the same mechanism; its second source (one of its own photos)
+# is its own reader. A guest sees covers, never sets one.
+acceptanceCriteria:
+  - id: set-replace-remove-leaves-nothing-behind
+    text: A cover set, replaced and removed leaves no attachment, no blob, no upload session, the tenant's quota where it started, and a reclaim row for EACH blob's storage key; the sweep (the only deleter) then hands every chunk of both blobs to the store.
+    coverage:
+      backend:
+        integration: [NodeCoverCoreSliceTest.setThenReplaceThenRemoveLeavesNoRowNoBlobNoSessionAndTheQuotaWhereItStarted]
+  - id: kinds-opt-in-core-names-none
+    text: Which kinds take a cover is each kind's own rule (FOLDER core's, a drop box Files', a Memory and a Chapter Memories'; a file and an unknown kind take none), asked of the one rule that handles the kind; core names no application kind.
+    coverage:
+      backend:
+        integration: [CoreAloneSliceTest.onlyAFolderTakesACoverWithCoreAlone, ModuleCompositionTest.everyKindThatTakesACoverIsOptedInByItsOwnRule, NodeCoverCoreSliceTest.aKindNoRuleOptedInTakesNoCover, NodeCoverFilesSliceTest.aFileTakesNoCoverAndAnUploadThatDoesNotFitTheDeclarationIsRefused]
+      web:
+        unit: [src/core/node/cover/capabilities.test.ts]
+  - id: writers-only-fail-closed
+    text: Only a member who may write the scope sets or removes a cover - never a reader, a guest of any role, a pending deletion, locked keys or a guest's identity folder; the server refuses a stranger, an anonymous caller, another tenant's member and another member's upload.
+    coverage:
+      backend:
+        integration: [NodeCoverFilesSliceTest.aMemberWhoMayOnlyReadSetsNoCover, NodeCoverCoreSliceTest.aStrangerAnAnonymousCallerAndAnotherTenantsMemberReachNothing, NodeCoverCoreSliceTest.anotherMembersOpenUploadIsNotFound, NodeCoverCoreSliceTest.aSpacePendingDeletionIsReadOnlyForACover, NodeCoverMemoriesSliceTest.noGuestRouteSetsOrRemovesACover]
+      web:
+        unit: [src/core/node/cover/capabilities.test.ts, src/core/node/cover/cover.dom.test.ts]
+  - id: one-write-no-half-state
+    text: The blob step and the sealed meta that names it are ONE transaction - a slot another writer changed is `cover_stale` (nothing attached, the upload spent and freed), a meta that moved is `stale_version` with nothing written and the upload still open; a failed new cover leaves the old cover, its blob and its meta exactly as they were; two writers racing for an empty slot leave exactly one cover.
+    coverage:
+      backend:
+        integration: [NodeCoverCoreSliceTest.aSlotAnotherWriterFilledIsCoverStaleAndTheLoserIsFreed, NodeCoverCoreSliceTest.aMetaThatMovedWritesNothingAndKeepsTheUploadOpenForTheRetry, NodeCoverCoreSliceTest.aRemovalWithAStaleMetaUndoesTheDetach, NodeCoverCoreSliceTest.aRemovalNamingAReplacedCoverIsRefusedAndTheReplacementKept, NodeCoverCoreSliceTest.aRemovalIsIdempotentAndHealsAMetaThatNamedAGoneBlob, NodeCoverCoreSliceTest.twoWritersRacingForAnEmptySlotLeaveExactlyOneCover]
+      web:
+        unit: [src/core/node/cover/coverWrite.test.ts]
+  - id: trash-keeps-purge-frees
+    text: A trashed node keeps its cover for a restore, a set on a trashed node is not found, and the purge frees the cover (attachment, blob row, a reclaim record for its objects).
+    coverage:
+      backend:
+        integration: [NodeCoverCoreSliceTest.aTrashedNodeKeepsItsCoverForTheRestoreAndThePurgeFreesIt]
+  - id: derive-seal-binds-the-node
+    text: The client derives the cover size with the existing pipeline (one JPEG, long edge 2048) and seals it as the node's own blob - wrapped under the node's key, bound to blob, node and role COVER, blob meta the JPEG type - refusing an unreadable image on a folder or drop box, and states its 40 MB limit; the upload bodies are sealed (no plaintext, the cover meta opens only under that node's key) and byte for byte what Memories' covers sent.
+    coverage:
+      web:
+        unit: [src/core/node/cover/coverWrite.test.ts, src/core/node/cover/pickImage.test.ts, src/features/memory/uploadWire.characterisation.test.ts]
+  - id: stored-memory-covers-still-open
+    text: Every cover a Memory already stored (the `cover` field of its sealed meta) opens through core's reader and is written with the same keys in the same order.
+    coverage:
+      web:
+        unit: [src/core/node/cover/coverModel.test.ts]
+  - id: display-and-fallback
+    text: A node's cover is the leading visual of its row and tile, its header and the sidebar's Favorites, the kind's icon the default; a cover that is missing or fails to open is the icon, silently; a replaced or removed cover drops its old image and object URL at once; a share guest sees the covers through the link's own gated reads and gets no action.
+    coverage:
+      web:
+        unit: [src/core/node/cover/coverStore.test.ts, src/core/node/cover/cover.dom.test.ts, src/components/app/AppSidebar.test.ts, src/features/files/components/DropBoxDetail.test.ts]
+  - id: memory-keeps-its-own-source-ui
+    text: The Memory page's header carries core's cover action and hands it its own dialog (a photo of the Memory, an upload, a crop); a cover chosen from the Memory's own photos is read by the Memory's reader; the Memory's rows draw the cover core resolved.
+    coverage:
+      web:
+        unit: [src/features/memory/components/MemoryDetailHost.cover.test.ts, src/features/memory/useMemoryCover.test.ts, src/features/memory/memoryCover.test.ts, src/features/memory/levelRows.test.ts, src/features/memory/levelRows.guest.test.ts]

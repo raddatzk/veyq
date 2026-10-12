@@ -1,4 +1,4 @@
-<!-- speaks-for: docs/features/files/use-cases/uc.files.member-files.md, docs/features/memory/use-cases/uc.memory.move-node.md, docs/features/memory/use-cases/uc.memory.delete-node.md, docs/features/memory/use-cases/uc.memory.browse.md; pair: en/files.md -->
+<!-- speaks-for: docs/features/platform/use-cases/uc.platform.node-cover.md, docs/features/files/use-cases/uc.files.member-files.md, docs/features/memory/use-cases/uc.memory.move-node.md, docs/features/memory/use-cases/uc.memory.delete-node.md, docs/features/memory/use-cases/uc.memory.browse.md; pair: en/files.md -->
 # Dateien — und wie du dich zurechtfindest
 
 Eine verständliche Ergänzung zu [Sind meine Daten sicher?](sind-meine-daten-sicher.md). veyq ist eine Plattform
@@ -52,6 +52,17 @@ Herz).
 
 Liegt in einem Ordner mehr als eine Art von Dingen, zeigen dir Tabs über der Liste — **Alle**, **Erinnerungen**,
 **Dateien**, **Briefkästen** — nur eine Art. Unterordner bleiben in jedem Tab sichtbar, damit du weiter navigieren kannst.
+
+## Einem Ordner ein Cover geben
+
+Ein Ordner, ein Briefkasten oder eine Erinnerung kann ein **Cover** haben: ein Bild deiner Wahl, das in der Liste, auf der
+Seite des Eintrags und in deinen Favoriten sein Symbol ersetzt. Öffne das **⋯**-Menü des Eintrags (oder die Schaltflächen oben
+auf seiner Seite) und wähle **Cover festlegen**, dann ein Bild von deinem Gerät. Das Bild wird auf deinem Gerät verkleinert und
+mit dem eigenen Schlüssel des Eintrags verschlüsselt, bevor es das Gerät verlässt — wie alles andere auch; der Server speichert
+nur verschlüsselte Daten. **Cover ändern** tauscht es aus, **Cover entfernen** nimmt es weg; das alte Bild wird aus dem Speicher
+des Servers gelöscht (Kopien, die andere Browser schon haben, oder ein bereits verteilter Link lassen sich nicht zurückholen —
+sie laufen von selbst ab). Es ist ein Bild für den Eintrag, keine Datei im Ordner, und nur wer den Raum ändern darf, kann es
+festlegen. Wer nur einen Link bekommt, sieht die Cover, kann sie aber nicht ändern. Eine Datei hat kein Cover.
 
 ## Raster und Liste
 
