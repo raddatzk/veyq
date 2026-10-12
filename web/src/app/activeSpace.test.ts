@@ -202,7 +202,7 @@ describe('refreshActiveScope — reactive epoch swap after a rotation (cr-0089)'
     expect(activeScopeKey()).toBe(e2)
   })
 
-  it('drops the application state of the old epoch and has each application re-load its per-scope state (Memories: the pin set)', async () => {
+  it('drops the state of the old epoch and re-loads the core pin set (and each application per-scope state)', async () => {
     const e0 = new Uint8Array(32).fill(4)
     vi.mocked(openGroupByToken).mockResolvedValue(opened('g-1', ScopeKind.Group, e0))
     await enterScope('@g-1')
@@ -213,8 +213,8 @@ describe('refreshActiveScope — reactive epoch swap after a rotation (cr-0089)'
 
     await refreshActiveScope()
 
-    expect(favoritesStore.loaded).toBe(false) // onScopeReset ran (the load itself is the stubbed loader)…
-    expect(loadFavoritesFor).toHaveBeenCalledWith('g-1') // …and onScopeEntered asked for the reload
+    expect(favoritesStore.loaded).toBe(false) // the reset ran (the load itself is the stubbed loader)…
+    expect(loadFavoritesFor).toHaveBeenCalledWith('g-1') // …and core asked for the reload
   })
 })
 
