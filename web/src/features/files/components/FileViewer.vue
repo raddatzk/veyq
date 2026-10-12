@@ -48,6 +48,41 @@ const unsupportedKey = computed(() => {
   return s.status === 'unsupported' ? `files.viewer.unsupported.${s.reason}` : ''
 })
 
+// --- plain text: copy and wrap ---------------------------------------------------------------------------------------------
+// The text is ordinary selectable page text (nothing here sets user-select, and it is `textContent`, never markup); these two
+// buttons only add convenience. Copy writes exactly what is SHOWN (a truncated text copies its shown part, and the button and
+// its note say so). Where the clipboard is not available (an insecure page, a refusal) the text is selected instead and the
+// note tells the user to press Ctrl/Cmd+C: no copy ever fails silently.
+const textEl = ref<HTMLElement | null>(null)
+const wrap = ref(true)
+const copyNote = ref('')
+let copyNoteTimer: ReturnType<typeof setTimeout> | undefined
+
+function selectShownText(): void {
+  const el = textEl.value
+  const sel = typeof window !== 'undefined' ? window.getSelection() : null
+  if (el && sel) sel.selectAllChildren(el)
+}
+async function copyText(text: string, truncated: boolean): Promise<void> {
+  clearTimeout(copyNoteTimer)
+  try {
+    await navigator.clipboard.writeText(text) // throws where there is no clipboard (an insecure page) or the browser refuses
+    copyNote.value = truncated ? 'files.viewer.text.copiedShown' : 'files.viewer.text.copied'
+  } catch {
+    selectShownText()
+    copyNote.value = 'files.viewer.text.copyManual'
+  }
+  copyNoteTimer = setTimeout(() => (copyNote.value = ''), 6000)
+}
+watch(
+  () => (state.value.status === 'ready' && state.value.view.kind === 'text' ? state.value.view.text : null),
+  () => {
+    clearTimeout(copyNoteTimer)
+    copyNote.value = ''
+  },
+)
+onBeforeUnmount(() => clearTimeout(copyNoteTimer))
+
 // --- the password of a protected PDF --------------------------------------------------------------------------------------
 // The field's value goes to pdf.js and nowhere else (`useFileViewer.submitPassword` -> the engine's `onPassword`): it is not
 // stored, logged, sent, or kept in the state; it is cleared from this component the moment it is submitted, when the prompt
@@ -146,7 +181,38 @@ onBeforeUnmount(() => {
         @error="imageFailed"
       />
       <template v-else-if="ready?.kind === 'text'">
-        <pre class="file-viewer-text" tabindex="0" :aria-label="t('files.viewer.textLabel', { name })">{{ ready.text }}</pre>
+        <div class="file-viewer-text-tools" role="toolbar" :aria-label="t('files.viewer.text.toolbar')">
+          <Button
+            type="button"
+            class="file-viewer-text-copy"
+            icon="pi pi-copy"
+            :label="t('files.viewer.text.copy')"
+            :aria-label="ready.truncated ? t('files.viewer.text.copyShown') : t('files.viewer.text.copy')"
+            size="small"
+            severity="secondary"
+            outlined
+            @click="copyText(ready.text, ready.truncated)"
+          />
+          <Button
+            type="button"
+            class="file-viewer-text-wrap"
+            icon="pi pi-align-left"
+            :label="t('files.viewer.text.wrap')"
+            :aria-pressed="wrap"
+            size="small"
+            severity="secondary"
+            :outlined="!wrap"
+            @click="wrap = !wrap"
+          />
+          <span v-if="copyNote" class="file-viewer-text-note" role="status">{{ t(copyNote) }}</span>
+        </div>
+        <pre
+          ref="textEl"
+          class="file-viewer-text"
+          :class="{ 'file-viewer-text-nowrap': !wrap }"
+          tabindex="0"
+          :aria-label="t('files.viewer.textLabel', { name })"
+        >{{ ready.text }}</pre>
       </template>
       <PdfPages v-else-if="ready?.kind === 'pdf'" :doc="ready.doc" :name="name" />
       <video
@@ -300,6 +366,20 @@ onBeforeUnmount(() => {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   tab-size: 4;
+}
+.file-viewer-text-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.5rem;
+}
+.file-viewer-text-note {
+  color: var(--app-muted);
+}
+.file-viewer-text.file-viewer-text-nowrap {
+  white-space: pre;
+  overflow-wrap: normal;
 }
 .file-viewer-hint {
   margin: 0.5rem 0 0;

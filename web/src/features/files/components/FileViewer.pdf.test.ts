@@ -25,6 +25,7 @@ import { PDF_CAP } from '../view'
 import type { ViewerTarget } from '../useFileViewer'
 import { PDF_BYTES, providerOf, type FakeProvider } from '../../../test/fileChunks'
 import { realI18n, t } from '../../../test/i18n'
+import { unselectableBy } from '../../../test/userSelect'
 import { formatBytes } from '../../../shared/formatBytes'
 
 // --- the stubs ---------------------------------------------------------------------------------------------------------
@@ -522,6 +523,19 @@ describe('the text layer (select and copy)', () => {
     const layer = hostOf(w, 1)
     expect(layer.findAll('*').every((e) => e.element.tagName === 'SPAN')).toBe(true)
     expect(layer.find('a, button, [href], [tabindex], [onclick]').exists()).toBe(false)
+  })
+
+  it('nothing makes the text unselectable: no user-select:none rule reaches a text span, the layer or the page', async () => {
+    const { w } = await openReady(1)
+    intersect(nearObserver(), { 1: true })
+    await flushPromises()
+    const span = hostOf(w, 1).find('span').element
+    for (const el of [span, hostOf(w, 1).element, w.find('.pdf-page').element, w.find('.pdf-scroll').element]) expect(unselectableBy(el)).toEqual([])
+    // ... except the layer's end marker, which is deliberately not text (the check does see a rule when one applies)
+    const end = document.createElement('div')
+    end.className = 'pdf-text-end'
+    hostOf(w, 1).element.append(end)
+    expect(unselectableBy(end).map((r) => r.file)).toEqual(['styles/pdf.css'])
   })
 
   it('a drag that starts in a page marks that layer as selecting until the pointer is released anywhere', async () => {
