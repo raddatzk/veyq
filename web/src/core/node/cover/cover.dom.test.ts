@@ -2,13 +2,14 @@
 // A node's cover in a level, by real clicks and a real DOM (inbox #411): core's real `LevelView` with the real registry as
 // `main.ts` fills it (Memories' and Files' real row factories), a folder, a Memory, a file and a drop box in one level.
 //
-// Pinned here: the action - `Set cover` / `Change cover` / `Remove cover`, core's, in the row's menu and in the header - is
-// offered exactly where the capability function says (a writer, on the kinds that opted in; never a file, never a guest, never
-// a pending deletion, never while the keys are locked), and a click runs core's flow (the picker, the upload, ONE write with the
-// meta); the cover is the leading visual of the row, the tile and the header, the kind's icon the fallback when it is missing
-// or fails to open; and a share guest sees the cover through the link's own reads but gets no action. The picker, the derive
-// and the write are mocked at their module boundary (`pickImage`, `coverWrite` - their own tests are `coverWrite.test.ts`
-// and the wire characterisation); the queue, the store, the registry and the components are real.
+// Pinned here: the ONE action - `Set cover` / `Change cover`, core's, in the row's menu and in the header; removal lives in the
+// dialog it opens - is offered exactly where the capability function says (a writer, on the kinds that opted in; never a file,
+// never a guest, never a pending deletion, never while the keys are locked), and a click opens core's dialog, whose Save runs
+// core's flow (the derive and upload, ONE write with the meta, the crop it was framed with); the cover is the leading visual
+// of the row, the tile and the header, the kind's icon the fallback when it is missing or fails to open; and a share guest sees
+// the cover through the link's own reads but gets no action. The derive and the write are mocked at their module boundary
+// (`coverWrite` - its own test is `coverWrite.test.ts`, and the wire characterisation); the dialog, the queue, the store, the
+// registry and the components are real.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import PrimeVue from 'primevue/config'
@@ -24,7 +25,6 @@ vi.mock('../../../app/vault', () => ({ masterKey: vi.fn() }))
 vi.mock('../../../features/files/api', () => ({ filesApi: vi.fn() }))
 vi.mock('../../blob/transport', async (orig) => ({ ...(await orig<object>()), openBlob: vi.fn(), openBlobFromUrls: vi.fn() }))
 vi.mock('../../sharing/guestBlob', async (orig) => ({ ...(await orig<object>()), shareChunkUrls: vi.fn(async () => ['https://store.test/c0']) }))
-vi.mock('./pickImage', async (orig) => ({ ...(await orig<object>()), pickImageFile: vi.fn() }))
 vi.mock('./coverWrite', async (orig) => ({ ...(await orig<object>()), uploadCoverImage: vi.fn(), writeNodeCover: vi.fn() }))
 
 import LevelView from '../LevelView.vue'
@@ -34,7 +34,6 @@ import type { TreeNode } from '../tree'
 import { clearUploads } from '../../blob/queue'
 import { openBlob, openBlobFromUrls } from '../../blob/transport'
 import { shareChunkUrls } from '../../sharing/guestBlob'
-import { pickImageFile } from './pickImage'
 import { uploadCoverImage, writeNodeCover } from './coverWrite'
 import { uploadedCover } from './coverModel'
 import { resetCovers } from './coverStore'
@@ -80,6 +79,34 @@ function mountLevel(folder: TreeNode | null, o: { access?: ReturnType<typeof mem
 const headerAction = (w: VueWrapper, action: string) => w.find(`.veyq-node-header-actions [data-action="${action}"]`)
 const png = () => new File([new Uint8Array([1, 2, 3])], 'cover.png', { type: 'image/png' })
 
+// --- the dialog, as a user drives it: it is PrimeVue's, teleported into the body ---------------------------------------------
+const dialog = () => document.body.querySelector<HTMLElement>('[role="dialog"]')
+const dialogButton = (label: string) => [...document.body.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((b) => b.textContent?.trim() === label)
+const openedDialog = async () => { await vi.waitFor(() => expect(dialog(), 'the cover dialog is open').not.toBeNull()) }
+const cropperImg = () => document.body.querySelector<HTMLImageElement>('[role="dialog"] .memory-cover-cropper img')
+async function pickInDialog(file: File) {
+  const input = document.body.querySelector<HTMLInputElement>('[role="dialog"] input[type="file"]')!
+  Object.defineProperty(input, 'files', { configurable: true, value: [file] })
+  input.dispatchEvent(new Event('change'))
+  await flushPromises()
+}
+async function frame(natW = 800, natH = 450) {
+  const img = cropperImg()!
+  Object.defineProperty(img, 'naturalWidth', { configurable: true, value: natW })
+  Object.defineProperty(img, 'naturalHeight', { configurable: true, value: natH })
+  img.dispatchEvent(new Event('load'))
+  await flushPromises()
+}
+/** Upload `file` through the dialog opened by `open` and press Save. */
+async function setCoverVia(open: () => Promise<unknown> | unknown, file: File = png(), nat: [number, number] = [800, 450]) {
+  await open()
+  await openedDialog()
+  await pickInDialog(file)
+  if (cropperImg()) await frame(...nat)
+  dialogButton(t('node.cover.save'))?.click()
+  await flushPromises()
+}
+
 let n = 0
 beforeEach(() => {
   vi.clearAllMocks()
@@ -90,7 +117,6 @@ beforeEach(() => {
   Object.assign(URL, { createObjectURL: vi.fn(() => `blob:cover-${++n}`), revokeObjectURL: vi.fn() })
   vi.mocked(openBlob).mockResolvedValue(new Uint8Array([1, 2, 3]))
   vi.mocked(openBlobFromUrls).mockResolvedValue(new Uint8Array([4, 5, 6]))
-  vi.mocked(pickImageFile).mockResolvedValue(png())
   vi.mocked(uploadCoverImage).mockResolvedValue({ uploadId: 'up-1', plan: { blobId: 'new-blob', chunkCount: 1, byteSize: 300, wrappedBlobKey: 'd3JhcA==', ownerId: SUB.id } })
   vi.mocked(writeNodeCover).mockResolvedValue({ wrappedMeta: 'bmV3', metaVersion: 5, replaced: null })
   stubApi(filesApi, { listFiles: { items: [] } satisfies FileListPage })
@@ -104,17 +130,33 @@ describe('who is offered the cover action, and on which kinds (capability matrix
     for (const title of ['Sub', 'Rome', 'Inbox']) expect(await actionIdsOf(w, title), title).toContain('cover')
     expect(await actionIdsOf(w, 'Plan.pdf')).not.toContain('cover')
     expect(await actionLabel(w, 'Sub', 'cover')).toBe(t('node.cover.set'))
-    expect(await actionIdsOf(w, 'Sub'), 'no cover yet, so nothing to remove').not.toContain('cover-remove')
     expect(headerAction(w, 'cover').attributes('aria-label')).toBe(t('node.cover.set')) // the folder on screen: in its header too
   })
 
-  it('a node that has a cover says Change, and offers Remove beside it', async () => {
+  it('it is ONE entry: the row menu and the header carry a single cover action each, and no separate Remove', async () => {
+    TREE = [TRIPS, ROME, PLAN, BOX, node(5, FOLDER_KIND, 'Sub', TRIPS.id, sealCover(id(5), 'b-5'))]
+    const w = mountLevel(node(1, FOLDER_KIND, 'Trips', null, sealCover(id(1), 'b-1')))
+    await flushPromises()
+    for (const title of ['Sub', 'Rome', 'Inbox']) {
+      const ids = (await actionIdsOf(w, title)).filter((a) => a.startsWith('cover'))
+      expect(ids, title).toEqual(['cover'])
+    }
+    expect(w.findAll('.veyq-node-header-actions [data-action^="cover"]').map((b) => b.attributes('data-action'))).toEqual(['cover'])
+    expect(w.find('[data-action="cover-remove"]').exists()).toBe(false)
+  })
+
+  it('the action and the icon are one image icon, not two look-alikes', async () => {
+    const w = mountLevel(TRIPS)
+    await flushPromises()
+    expect(headerAction(w, 'cover').find('.pi-image').exists()).toBe(true)
+  })
+
+  it('a node that has a cover says Change; one without says Set', async () => {
     TREE = [TRIPS, ROME, PLAN, BOX, node(5, FOLDER_KIND, 'Sub', TRIPS.id, sealCover(id(5), 'b-5'))]
     const w = mountLevel(TRIPS)
     await flushPromises()
     expect(await actionLabel(w, 'Sub', 'cover')).toBe(t('node.cover.change'))
-    expect(await actionLabel(w, 'Sub', 'cover-remove')).toBe(t('node.cover.remove'))
-    expect(await actionLabel(w, 'Inbox', 'cover-remove'), 'a node without one has no Remove').toBeNull()
+    expect(await actionLabel(w, 'Inbox', 'cover')).toBe(t('node.cover.set'))
   })
 
   it.each([
@@ -137,23 +179,23 @@ describe('who is offered the cover action, and on which kinds (capability matrix
     }
     expect(headerAction(w, 'cover').exists()).toBe(false)
     expect(w.find('[data-action^="cover"]').exists()).toBe(false)
-    expect(pickImageFile).not.toHaveBeenCalled()
+    expect(dialog(), 'no dialog for a guest').toBeNull()
     expect(authenticatedCalls).toEqual([])
   })
 })
 
-describe('Set cover, by a real click: the picker, the derive and upload, ONE write', () => {
-  it.each([['row', 'Sub', SUB], ['row', 'Inbox', BOX], ['row', 'Rome', ROME]])('%s %s: the flow runs for the node clicked', async (_where, title, target) => {
+describe('the cover dialog, by a real click: choose, crop, Save - the derive and upload, ONE write', () => {
+  it.each([['Sub', SUB], ['Inbox', BOX], ['Rome', ROME]])('row %s: the action opens the dialog; Save runs the flow for the node clicked, with the crop', async (title, target) => {
     const w = mountLevel(TRIPS)
     await flushPromises()
     await clickAction(w, title, 'cover')
-    if (target === ROME) {
-      // a Memory in a ROW takes core's plain picker too (its own dialog is the detail header's, below)
-      expect(pickImageFile).toHaveBeenCalledOnce()
-    }
+    await openedDialog()
+    expect(dialogButton(t('node.cover.remove')), 'no cover yet: nothing to remove').toBeUndefined()
+    await pickInDialog(png())
+    await frame(1000, 1000) // a square image: the 16:9 window is what is stored
+    dialogButton(t('node.cover.save'))!.click()
     await vi.waitFor(() => expect(writeNodeCover).toHaveBeenCalledOnce())
 
-    expect(pickImageFile).toHaveBeenCalledOnce()
     const [scopeId, nodeId, nodeKey, source, deriver, opts] = vi.mocked(uploadCoverImage).mock.calls[0]
     expect([scopeId, nodeId]).toEqual([SCOPE, target.id])
     expect(Array.from(nodeKey)).toEqual(Array.from(KEY))
@@ -162,52 +204,87 @@ describe('Set cover, by a real click: the picker, the derive and upload, ONE wri
     expect(opts).toMatchObject({ strict: true }) // an unreadable image is refused, never sealed as a cover
     const write = vi.mocked(writeNodeCover).mock.calls[0][0]
     expect(write).toMatchObject({ scopeId: SCOPE, nodeId: target.id, uploadId: 'up-1', surfaceConflict: false, current: { wrappedMeta: target.wrappedMeta, metaVersion: target.metaVersion } })
-    expect(write.cover).toEqual(uploadedCover({ blobId: 'new-blob', chunkCount: 1, byteSize: 300, wrappedBlobKey: 'd3JhcA==', ownerId: SUB.id }))
+    const stored = uploadedCover({ blobId: 'new-blob', chunkCount: 1, byteSize: 300, wrappedBlobKey: 'd3JhcA==', ownerId: SUB.id })
+    expect(write.cover).toMatchObject({ source: stored.source })
+    const crop = (write.cover as { crop: { x: number; y: number; width: number; height: number } }).crop
+    expect(crop.width).toBeCloseTo(1)
+    expect(crop.height).toBeCloseTo(9 / 16) // the framed window, not the full frame
+    expect(dialog(), 'the dialog closed on Save').toBeNull()
   })
 
   it('the folder on screen sets its cover from its header', async () => {
     const w = mountLevel(TRIPS)
     await flushPromises()
-    await headerAction(w, 'cover').trigger('click')
+    await setCoverVia(() => headerAction(w, 'cover').trigger('click'))
     await vi.waitFor(() => expect(writeNodeCover).toHaveBeenCalledOnce())
     expect(vi.mocked(writeNodeCover).mock.calls[0][0]).toMatchObject({ nodeId: TRIPS.id })
   })
 
-  it('a cancelled dialog does nothing', async () => {
-    vi.mocked(pickImageFile).mockResolvedValue(null)
+  it('Cancel does nothing: no upload, no write', async () => {
     const w = mountLevel(TRIPS)
     await flushPromises()
     await clickAction(w, 'Sub', 'cover')
+    await openedDialog()
+    await pickInDialog(png())
+    await frame()
+    dialogButton(t('common.cancel'))!.click()
     await flushPromises()
+    expect(dialog()).toBeNull()
     expect(uploadCoverImage).not.toHaveBeenCalled()
     expect(writeNodeCover).not.toHaveBeenCalled()
   })
 
-  it('a file that is no image, or too large, is refused with a clear message, before anything is read or uploaded', async () => {
+  it('a file that is no image, or too large, is refused in the dialog before anything is read or uploaded', async () => {
     const w = mountLevel(TRIPS)
     await flushPromises()
-    vi.mocked(pickImageFile).mockResolvedValue(new File([new Uint8Array([1])], 'plan.pdf', { type: 'application/pdf' }))
     await clickAction(w, 'Sub', 'cover')
-    await flushPromises()
-    expect(toastError).toHaveBeenLastCalledWith(t('node.cover.notImage'))
+    await openedDialog()
+    await pickInDialog(new File([new Uint8Array([1])], 'plan.pdf', { type: 'application/pdf' }))
+    expect(dialog()!.querySelector('[role="alert"]')?.textContent).toBe(t('node.cover.notImage'))
     const huge = new File([new Uint8Array([1])], 'huge.png', { type: 'image/png' })
     Object.defineProperty(huge, 'size', { value: 41 * 1024 * 1024 })
-    vi.mocked(pickImageFile).mockResolvedValue(huge)
-    await clickAction(w, 'Sub', 'cover')
-    await flushPromises()
-    expect(toastError).toHaveBeenLastCalledWith(t('node.cover.tooLarge', { max: '40 MB' }))
+    await pickInDialog(huge)
+    expect(dialog()!.querySelector('[role="alert"]')?.textContent).toBe(t('node.cover.tooLarge', { max: '40 MB' }))
+    expect(dialogButton(t('node.cover.save'))!.disabled).toBe(true)
     expect(uploadCoverImage).not.toHaveBeenCalled()
     expect(writeNodeCover).not.toHaveBeenCalled()
   })
 
-  it('Remove cover is ONE write with no cover, for the node clicked', async () => {
+  it('Remove, in the dialog of a node that has a cover, is ONE write with no cover, for the node clicked', async () => {
     TREE = [TRIPS, ROME, PLAN, BOX, node(5, FOLDER_KIND, 'Sub', TRIPS.id, sealCover(id(5), 'b-5'))]
     const w = mountLevel(TRIPS)
     await flushPromises()
-    await clickAction(w, 'Sub', 'cover-remove')
+    await clickAction(w, 'Sub', 'cover')
+    await openedDialog()
+    dialogButton(t('node.cover.remove'))!.click()
     await vi.waitFor(() => expect(writeNodeCover).toHaveBeenCalledOnce())
     expect(vi.mocked(writeNodeCover).mock.calls[0][0]).toMatchObject({ nodeId: id(5), cover: null, surfaceConflict: false })
     expect(uploadCoverImage).not.toHaveBeenCalled()
+    expect(dialog()).toBeNull()
+  })
+
+  it('Change on a node with a cover re-crops it in place: its crop is restored and Save writes the same image with the moved crop', async () => {
+    const crop = { x: 0.1, y: 0.2, width: 0.5, height: 0.5 }
+    const framed = b64std(v1.seal({ purpose: 'node-meta', scopeId: SCOPE, nodeId: id(5) }, KEY, new TextEncoder().encode(JSON.stringify({
+      v: 1, cover: uploadedCover({ blobId: 'b-5', chunkCount: 1, byteSize: 300, wrappedBlobKey: 'd3JhcA==', ownerId: id(5) }, crop),
+    }))))
+    TREE = [TRIPS, ROME, PLAN, BOX, node(5, FOLDER_KIND, 'Sub', TRIPS.id, framed)]
+    const w = mountLevel(TRIPS)
+    await flushPromises()
+    await vi.waitFor(() => expect(rowOf(w, 'Sub').find('.veyq-level-item-visual img').exists()).toBe(true))
+    await clickAction(w, 'Sub', 'cover')
+    await openedDialog()
+    await vi.waitFor(() => expect(cropperImg()).not.toBeNull())
+    await frame(3200, 1800)
+    dialogButton(t('node.cover.save'))!.click()
+    await vi.waitFor(() => expect(writeNodeCover).toHaveBeenCalledOnce())
+    const write = vi.mocked(writeNodeCover).mock.calls[0][0]
+    expect(uploadCoverImage, 'no new image').not.toHaveBeenCalled()
+    expect(write.uploadId).toBeUndefined()
+    const cover = write.cover as { source: { kind: string; ref: { blobId: string } }; crop: typeof crop }
+    expect(cover.source.ref.blobId).toBe('b-5') // the stored image is kept
+    expect(cover.crop.x).toBeCloseTo(crop.x)
+    expect(cover.crop.width).toBeCloseTo(crop.width)
   })
 
   it.each([
@@ -219,7 +296,7 @@ describe('Set cover, by a real click: the picker, the derive and upload, ONE wri
     vi.mocked(uploadCoverImage).mockRejectedValue(new Error(code))
     const w = mountLevel(TRIPS)
     await flushPromises()
-    await clickAction(w, 'Sub', 'cover')
+    await setCoverVia(() => clickAction(w, 'Sub', 'cover'))
     await vi.waitFor(() => expect(toastError).toHaveBeenCalledWith(t(message)))
     expect(writeNodeCover).not.toHaveBeenCalled()
   })
@@ -228,7 +305,7 @@ describe('Set cover, by a real click: the picker, the derive and upload, ONE wri
     vi.mocked(writeNodeCover).mockRejectedValue(new Error('cover_stale'))
     const w = mountLevel(TRIPS)
     await flushPromises()
-    await clickAction(w, 'Sub', 'cover')
+    await setCoverVia(() => clickAction(w, 'Sub', 'cover'))
     await vi.waitFor(() => expect(toastError).toHaveBeenCalledWith(t('node.cover.stale')))
     expect(w.find('li.veyq-level-item .veyq-level-item-visual img').exists()).toBe(false)
   })

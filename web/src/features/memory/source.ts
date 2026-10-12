@@ -52,7 +52,6 @@ import {
   renameBucket,
   deleteBucket,
   moveBucketMedia,
-  type AddMediaSource,
   type BlobRef,
   type BucketItem,
   type MediaExif,
@@ -64,7 +63,6 @@ import {
 } from './media'
 import { setMemoryDate, reconcileMemoryDate, type MemoryDate } from './memoryDate'
 import { setMemoryLocation, type MemoryLocation } from './memoryLocation'
-import { setMemoryCover, setMemoryCoverUpload, type CoverCrop, type MemoryCover } from './memoryCover'
 import { writeNodeMeta } from '../../core/node/nodeMetaWrite'
 import { loadItemFavoritesFor, toggleItemFavorite } from './itemFavoritesStore'
 import {
@@ -147,14 +145,6 @@ export interface NodeMetaDoor {
   ) => ReturnType<typeof writeNodeMeta>
 }
 
-/** The node's cover (cr-0072/0073; the blob step is core's since inbox #411): the sealed choice, and a new uploaded image. Both
- *  are ONE write with the blob they imply - an uploaded cover replaced by a photo, or removed, frees its blob in the same
- *  request (`core/node/cover/coverWrite.ts`), so there is no separate blob door. */
-export interface CoverDoor {
-  set(nodeId: string, key: Uint8Array, cover: MemoryCover | null, current: SealedMetaState, surfaceConflict: boolean): Promise<SealedMetaState & { replaced: MemoryCover | null }>
-  setUpload(nodeId: string, key: Uint8Array, source: AddMediaSource, crop: CoverCrop, current: SealedMetaState): Promise<SealedMetaState & { replaced: MemoryCover | null; cover: MemoryCover }>
-}
-
 /** A medium's own meta writes from the lightbox (capture-time correction, the resolved place name). */
 export interface MediaMetaDoor {
   set(target: MediaMetaTarget, key: Uint8Array, overrideMs: number | null): Promise<MediaMetaWrite>
@@ -200,8 +190,6 @@ export interface MemorySource {
   readonly trash?: MediaTrashDoor
   /** The node's date and place, their automatic reconcile included. Absent: read-only meta, no reconcile. */
   readonly nodeMeta?: NodeMetaDoor
-  /** The node's cover. Absent: shown, never set. */
-  readonly cover?: CoverDoor
   /** A medium's capture-time correction and place-name backfill. Absent: the lightbox is read-only. */
   readonly mediaMeta?: MediaMetaDoor
   /** The item marks. Absent: none shown, none loaded. */
@@ -218,7 +206,6 @@ export function sourceCapabilities(caps: MemoryCapabilities, source: MemorySourc
     upload: caps.upload && !!source.upload,
     deleteMedia: caps.deleteMedia !== 'none' && source.deleteMedia?.reach === caps.deleteMedia ? caps.deleteMedia : 'none',
     editMeta: caps.editMeta && !!source.nodeMeta,
-    setCover: caps.setCover && !!source.cover,
     mark: caps.mark && !!source.marks,
     mediaTrash: caps.mediaTrash && !!source.trash,
     buckets: caps.buckets && !!source.buckets,
@@ -288,10 +275,6 @@ export function memberMemorySource(from: { scopeId: () => string }): MemorySourc
       reconcileDate: (nodeId, key, items, current) => reconcileMemoryDate(scope(), nodeId, key, items, current),
       setLocation: (nodeId, key, location, current) => setMemoryLocation(scope(), nodeId, key, location, current),
       write: (nodeId, key, current, edit) => writeNodeMeta(scope(), nodeId, key, current, edit),
-    },
-    cover: {
-      set: (nodeId, key, cover, current, surfaceConflict) => setMemoryCover(scope(), nodeId, key, cover, current, surfaceConflict),
-      setUpload: (nodeId, key, source, crop, current) => setMemoryCoverUpload(scope(), nodeId, key, source, crop, current),
     },
     mediaMeta: {
       set: (target, key, overrideMs) => setMediaMeta(scope(), target, key, overrideMs),

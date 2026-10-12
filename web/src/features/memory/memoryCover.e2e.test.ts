@@ -8,7 +8,8 @@ import { listTree } from '../../core/node/tree'
 import { createMemory } from './memoryNodes'
 import { setMemoryDate, unsealMemoryDate } from './memoryDate'
 import { setMemoryLocation, unsealMemoryLocation } from './memoryLocation'
-import { setMemoryCover, unsealMemoryCover, type MemoryCover } from './memoryCover'
+import { memoryPhotoSource, unsealMemoryCover, type MemoryCover } from './memoryCover'
+import { writeNodeCover } from '../../core/node/cover/coverWrite'
 import { unsealNodeMeta } from '../../core/node/nodeMeta'
 
 /**
@@ -47,11 +48,11 @@ describe.skipIf(!process.env.VEYQ_E2E)('memory cover e2e (live, operator-blind r
     const date = { mode: 'range' as const, from: '2026-05-01', to: '2026-05-09' }
     // Not plain 'Teneriffa': nine base64-alphabet letters are a canary random ciphertext can contain (inbox #323)
     const location = { name: 'Teneriffa Süd', nameSource: 'manual' as const, derivedMode: 'fixed' as const }
-    const cover: MemoryCover = { source: { kind: 'media', mediaId: 'smoke-media-id' }, crop: { x: 0.1, y: 0.2, width: 0.5, height: 0.28125 } }
+    const cover = memoryPhotoSource.seal('smoke-media-id', { x: 0.1, y: 0.2, width: 0.5, height: 0.28125 }) as MemoryCover // the dialog's seam: the stored shape
 
     let meta = await setMemoryDate(scopeId, nodeId, memoryKey, date, { wrappedMeta: null, metaVersion: 0 })
     meta = await setMemoryLocation(scopeId, nodeId, memoryKey, location, meta)
-    await setMemoryCover(scopeId, nodeId, memoryKey, cover, meta)
+    await writeNodeCover({ scopeId, nodeId, nodeKey: memoryKey, current: meta, cover })
 
     // All three sub-objects come back on the server-stored blob — the cover never clobbered the date/location.
     const withCover = await readBack()
@@ -79,7 +80,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('memory cover e2e (live, operator-blind r
     // Remove the cover (read-modify-write against the live blob) — only the cover drops; date + location remain.
     // The live blob is at version 3 (three meta writes), and the server says so on the listing.
     expect(withCover.metaVersion).toBe(3)
-    await setMemoryCover(scopeId, nodeId, memoryKey, null, { wrappedMeta: withCover.wrappedMeta, metaVersion: withCover.metaVersion })
+    await writeNodeCover({ scopeId, nodeId, nodeKey: memoryKey, current: { wrappedMeta: withCover.wrappedMeta, metaVersion: withCover.metaVersion }, cover: null })
     const withoutCover = await readBack()
     expect(unsealMemoryCover(scopeId, memoryKey, withoutCover)).toBeNull()
     expect(unsealMemoryDate(scopeId, memoryKey, withoutCover)).toEqual(date)

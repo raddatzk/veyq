@@ -17,6 +17,7 @@ import { GRID_VIEW, LIST_VIEW, type LevelViewOption } from '../../core/node/leve
 import MemoryDetailHost from './components/MemoryDetailHost.vue'
 import { memoryRows } from './levelRows'
 import { loadMemoryPhotoCover } from './coverLoad'
+import { memoryPhotoSource } from './memoryCover'
 import MemoryNodeDialog from './components/MemoryNodeDialog.vue'
 import ShareDialog from './components/ShareDialog.vue'
 import MemoryShareBody from './components/MemoryShareBody.vue'
@@ -45,9 +46,9 @@ export function registerMemories(registry: Registry): void {
   const list = { rows: memoryRows, tabLabel: 'memory.memories', views: [GRID_VIEW, LIST_VIEW, MAP_VIEW], emptyText: () => 'memory.memoryEmpty' }
   const memories = {
     detail: MemoryDetailHost, icon: 'pi pi-images', shareable: true, list, createDialog: MemoryNodeDialog, shareDialog: ShareDialog,
-    // Both carry a cover (inbox #411: core's action, picker, upload and display). Core reads an uploaded cover itself; the
-    // Memory's OTHER source - one of its own photos - is read here.
-    cover: { load: loadMemoryPhotoCover },
+    // Both carry a cover (inbox #411: core's action, dialog, upload and display). Core reads an uploaded cover itself; the
+    // Memory's OTHER source - one of its own photos - is read here and offered to core's dialog as its extra source.
+    cover: { load: loadMemoryPhotoCover, extraSource: memoryPhotoSource },
   }
   // Where each may be moved (core's move dialog, inbox #358) mirrors the backend's `MemoryNodeKindRules`: a Memory at the
   // root or in a folder, a chapter only directly in a Memory.

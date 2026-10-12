@@ -23,13 +23,14 @@ import {
   normalizeCoverCrop,
   normalizeMemoryCover,
   unsealMemoryCover,
-  setMemoryCover,
-  sameMemoryCover,
+  memoryPhotoSource,
   coverImageStyle,
   FULL_FRAME,
   type MemoryCover,
 } from './memoryCover'
 import { loadMemoryPhotoCover } from './coverLoad'
+import { writeNodeCover } from '../../core/node/cover/coverWrite'
+import type { SealedMetaState } from '../../core/node/sealedMetaWrite'
 import { contentApi } from '../../api/client'
 import { MetaConflictError } from '../../core/node/sealedMetaWrite'
 import { listMedia, openGrid, hasDerivatives } from './media'
@@ -161,6 +162,15 @@ describe('unsealMemoryCover', () => {
   })
 })
 
+// A Memory cover's meta write is core's `writeNodeCover` since inbox #411 (the one writer for every kind); what is pinned here is
+// that the Memory's stored shapes (a photo, an upload, the siblings beside them) go through it unchanged, byte for byte.
+const setMemoryCover = async (
+  scopeId: string, nodeId: string, key: Uint8Array, cover: MemoryCover | null, current: SealedMetaState, surfaceConflict = true,
+) => {
+  const { replaced, ...state } = await writeNodeCover({ scopeId, nodeId, nodeKey: key, current, cover, surfaceConflict })
+  return { ...state, replaced: normalizeMemoryCover(replaced, nodeId) }
+}
+
 describe('setMemoryCover', () => {
   it('re-seals under K_mem and PATCHes wrappedMeta via updateNode', async () => {
     const { updateNode } = stubApi(contentApi, { updateNode: undefined })
@@ -270,22 +280,25 @@ describe('setMemoryCover', () => {
   })
 })
 
-describe('sameMemoryCover', () => {
-  it('compares the source + all four crop fields', () => {
-    const a: MemoryCover = { source: { kind: 'media', mediaId: 'm1' }, crop: { x: 0.1, y: 0.2, width: 0.5, height: 0.3 } }
-    expect(sameMemoryCover(a, { source: { kind: 'media', mediaId: 'm1' }, crop: { x: 0.1, y: 0.2, width: 0.5, height: 0.3 } })).toBe(true)
-    expect(sameMemoryCover(a, { source: { kind: 'media', mediaId: 'm2' }, crop: a.crop })).toBe(false)
-    expect(sameMemoryCover(a, { source: { kind: 'media', mediaId: 'm1' }, crop: { ...a.crop, x: 0.15 } })).toBe(false)
-    expect(sameMemoryCover(null, null)).toBe(true)
-    expect(sameMemoryCover(a, null)).toBe(false)
+// The Memory's extra source in core's cover dialog (`KindCover.extraSource`, registered for MEMORY and CHAPTER).
+describe('memoryPhotoSource - the Memory\'s second source for core\'s dialog', () => {
+  it('seals a photo as the exact stored shape every Memory cover has had (key order included)', () => {
+    const crop = { x: 0.1, y: 0.2, width: 0.5, height: 0.28125 }
+    const sealed = memoryPhotoSource.seal('m-3', crop)
+    expect(JSON.stringify(sealed)).toBe('{"source":{"kind":"media","mediaId":"m-3"},"crop":{"x":0.1,"y":0.2,"width":0.5,"height":0.28125}}')
+    expect(normalizeMemoryCover(sealed, NODE_ID)).toEqual({ source: { kind: 'media', mediaId: 'm-3' }, crop })
   })
 
-  it('distinguishes source kinds + compares upload covers by blob id', () => {
-    const media: MemoryCover = { source: { kind: 'media', mediaId: 'm1' }, crop: FULL_FRAME }
-    const up: MemoryCover = { source: { kind: 'upload', ref: UPLOAD_REF }, crop: FULL_FRAME }
-    expect(sameMemoryCover(media, up)).toBe(false) // different kinds are never equal
-    expect(sameMemoryCover(up, { source: { kind: 'upload', ref: { ...UPLOAD_REF } }, crop: FULL_FRAME })).toBe(true)
-    expect(sameMemoryCover(up, { source: { kind: 'upload', ref: { ...UPLOAD_REF, blobId: 'other' } }, crop: FULL_FRAME })).toBe(false)
+  it('names the photo a stored cover already is - the new shape, the cr-0072 flat one - and no other source', () => {
+    expect(memoryPhotoSource.idOf({ source: { kind: 'media', mediaId: 'm-3' }, crop: FULL_FRAME })).toBe('m-3')
+    expect(memoryPhotoSource.idOf({ mediaId: 'm-legacy', crop: FULL_FRAME })).toBe('m-legacy')
+    expect(memoryPhotoSource.idOf({ source: { kind: 'upload', ref: UPLOAD_REF }, crop: FULL_FRAME })).toBeNull()
+    expect(memoryPhotoSource.idOf(null)).toBeNull()
+    expect(memoryPhotoSource.idOf('x')).toBeNull()
+  })
+
+  it('points at its hint in the Memory\'s own namespace, which core resolves without reading it', () => {
+    expect(memoryPhotoSource.hintKey).toBe('memory.cover.galleryHint')
   })
 })
 

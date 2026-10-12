@@ -19,22 +19,18 @@
 // A cover is **never auto-derived** — it is a deliberate per-Memory "set cover" choice; unset ⇒ the placeholder.
 // The `crop` is normalized `0..1` so **one stored crop renders identically at any size** — the browse card, the
 // detail header, the map pin and the sidebar's Favorites tile — via the pure `coverImageStyle` display formula.
-import type { AddMediaSource, MediaDeriver } from '../../shared/image/mediaDeriver'
+import type { CoverExtraSource } from '../../core/applications/registry'
 import {
   FULL_FRAME,
   coverImageStyle,
   normalizeCoverBlobRef,
   normalizeCoverCrop,
-  sameCrop,
-  uploadedCover,
   type CoverCrop,
   type CoverImageStyle,
   type DecryptedCover,
   type LoadedCover,
 } from '../../core/node/cover/coverModel'
-import { uploadCoverImage, writeNodeCover } from '../../core/node/cover/coverWrite'
 import { unsealNodeMeta } from '../../core/node/nodeMeta'
-import type { SealedMetaState } from '../../core/node/sealedMetaWrite'
 import type { BlobRef } from './media'
 
 export { FULL_FRAME, coverImageStyle, normalizeCoverCrop }
@@ -51,19 +47,6 @@ export type MemoryCoverSource =
 
 /** A Memory's chosen cover: an image `source` framed by a normalized `crop`. */
 export type MemoryCover = { source: MemoryCoverSource; crop: CoverCrop }
-
-/**
- * What the (crypto/network-free) cover dialog emits on save — the parent turns it into a sealed [MemoryCover]:
- * - `media` — an existing Memory media was chosen (re-seal only, no blob work);
- * - `upload` — a brand-new image file (the parent uploads + commits it as a standalone cover blob, cr-0073);
- * - `keep` — the current source is unchanged, only the crop moved (re-seal the stored source, no re-upload);
- * - `remove` — drop the cover.
- */
-export type CoverSaveIntent =
-  | { kind: 'media'; mediaId: string; crop: CoverCrop }
-  | { kind: 'upload'; file: File; crop: CoverCrop }
-  | { kind: 'keep'; crop: CoverCrop }
-  | { kind: 'remove' }
 
 /**
  * Normalize a loosely-typed `cover` payload to a valid [MemoryCover], or **null** for the "no cover" state.
@@ -108,64 +91,15 @@ export function unsealMemoryCover(
 }
 
 /**
- * The cover EDITOR's meta save: **read-modify-write** the node-meta blob — set (or, for `null`, **remove**) only the
- * `cover`, re-seal, send with the `metaVersion` it was built from (cr-0072, ADR 0077). **Preserves the sibling
- * `date`/`location`** in every case, including ones a peer wrote meanwhile. A peer's change to the COVER itself
- * throws `MetaConflictError` — unless `surfaceConflict` is false. Returns the state the server confirmed, and the cover the
- * landed write `replaced` — read from the blob the server accepted the write over (`current`, or the 409's current
- * blob on a re-run), so the caller decides from the server's state, not from its own copy (#284).
- *
- * Core's `writeNodeCover` does the blob step in the same request when the replaced cover was an UPLOAD the new one does not
- * keep (a switch to a photo, or no cover): the old blob is freed with the meta write, atomically (inbox #411) — there is no
- * second call to forget.
+ * Memories' SECOND cover source, registered as the Memory and Chapter kinds' `cover.extraSource` (`register.ts`): core's cover
+ * dialog crops a photo of the Memory the gallery hands it and asks this for the value to store (the shape above, unchanged byte
+ * for byte), and for which photo a stored cover already is, so the dialog restores that photo's stored crop and no other's.
  */
-export async function setMemoryCover(
-  scopeId: string,
-  nodeId: string,
-  nodeKey: Uint8Array,
-  cover: MemoryCover | null,
-  current: SealedMetaState,
-  surfaceConflict = true,
-): Promise<SealedMetaState & { replaced: MemoryCover | null }> {
-  const { replaced, ...state } = await writeNodeCover({ scopeId, nodeId, nodeKey, current, cover, surfaceConflict })
-  return { ...state, replaced: normalizeMemoryCover(replaced, nodeId) }
-}
-
-/**
- * Upload a brand-new image as the Memory's **standalone cover blob** and make it the cover, framed by `crop`
- * (cr-0073, uc.memory.cover second source): downscale on device to one cover-sized JPEG, seal it under a fresh `K_blob`
- * (wrapped under the node's key), upload the chunks direct-to-store and attach it with the meta that names it in one
- * request (core, inbox #411). The replaced uploaded cover, if any, is freed in the same write. An undecodable source seals
- * its pristine bytes rather than fail (uc.memory.upload E4). `surfaceConflict` is always false here: this write moves the
- * node's one cover blob, so it re-applies its own cover over a peer's change.
- */
-export async function setMemoryCoverUpload(
-  scopeId: string,
-  nodeId: string,
-  nodeKey: Uint8Array,
-  source: AddMediaSource,
-  crop: CoverCrop,
-  current: SealedMetaState,
-  deriver?: MediaDeriver,
-): Promise<SealedMetaState & { replaced: MemoryCover | null; cover: MemoryCover }> {
-  const up = await uploadCoverImage(scopeId, nodeId, nodeKey, source, deriver)
-  const cover = uploadedCover(up.plan, crop) as MemoryCover
-  const { replaced, ...state } = await writeNodeCover({
-    scopeId, nodeId, nodeKey, current, cover, uploadId: up.uploadId, surfaceConflict: false,
-  })
-  return { ...state, replaced: normalizeMemoryCover(replaced, nodeId), cover }
-}
-
-/** Whether two covers are equal (same source + all four crop fields) — the editor re-seals only when this is false. */
-export function sameMemoryCover(a: MemoryCover | null, b: MemoryCover | null): boolean {
-  if (a === b) return true
-  if (!a || !b) return false
-  return sameCoverSource(a.source, b.source) && sameCrop(a.crop, b.crop)
-}
-
-/** Two sources are equal when they name the same media, or the same committed cover blob. */
-function sameCoverSource(a: MemoryCoverSource, b: MemoryCoverSource): boolean {
-  if (a.kind === 'media' && b.kind === 'media') return a.mediaId === b.mediaId
-  if (a.kind === 'upload' && b.kind === 'upload') return a.ref.blobId === b.ref.blobId
-  return false
+export const memoryPhotoSource: CoverExtraSource = {
+  hintKey: 'memory.cover.galleryHint',
+  seal: (mediaId, crop) => ({ source: { kind: 'media', mediaId }, crop }) satisfies MemoryCover,
+  idOf: (cover) => {
+    const read = normalizeMemoryCover(cover, '')
+    return read?.source.kind === 'media' ? read.source.mediaId : null
+  },
 }

@@ -92,7 +92,7 @@ import type { TreeNode } from '../node/tree'
 import type { Level } from '../node/browse'
 import type { LevelViewOption } from '../node/levelViews'
 import type { LevelRowsFactory } from '../node/levelRow'
-import type { DecryptedCover } from '../node/cover/coverModel'
+import type { CoverCrop, DecryptedCover } from '../node/cover/coverModel'
 import type { EpochKeys } from '../../features/spaces/epochs'
 import type { PublicShareHead } from '../sharing/resolvePublicShare'
 import type { Access, GuestAccess, TreeSource } from '../access'
@@ -180,6 +180,22 @@ export interface KindCover {
   /** Decrypt the image of a cover whose source core cannot open (any but `upload`). Best-effort: null for none or on any
    *  failure - the node then shows its icon. A guest gets the same function with `guest` set. */
   load?(ctx: CoverLoadContext): Promise<DecryptedCover | null>
+  /** ANOTHER source the cover dialog offers beside the upload (Memories: a photo of the Memory, chosen in its gallery). Core owns
+   *  the dialog, the crop and the write; the kind only says how its source is written, read back and described. */
+  extraSource?: CoverExtraSource
+}
+
+/** The seam by which an application adds a source to core's cover dialog (inbox #411). */
+export interface CoverExtraSource {
+  /** The i18n key (the application's own namespace, resolved by core's dialog without reading it) of the one line the
+   *  dialog shows to point at the source ("...or open a photo in the gallery and choose Set as cover"). */
+  hintKey: string
+  /** The `cover` value to store for the source `id` the application handed the dialog, framed by `crop`. The shape is the
+   *  application's (core carries it untouched, `coverModel.ts`). */
+  seal(id: string, crop: CoverCrop): unknown
+  /** The id of this source in a stored `cover` value (as `seal` wrote it), or null when the cover is not of this source: the
+   *  dialog restores the stored crop only for the very source already set. */
+  idOf(cover: unknown): string | null
 }
 
 /** What a kind's `cover.load` is handed: the node's cover field as sealed, under the node's own key. */

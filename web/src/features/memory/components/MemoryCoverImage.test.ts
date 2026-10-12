@@ -2,7 +2,8 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import MemoryCoverImage from './MemoryCoverImage.vue'
-import { FULL_FRAME } from '../memoryCover'
+import NodeCoverImage from '../../../core/node/cover/components/NodeCoverImage.vue'
+import { FULL_FRAME, coverImageStyle } from '../memoryCover'
 
 describe('MemoryCoverImage', () => {
   it('renders the source image with the crop-offset styles', () => {
@@ -44,5 +45,22 @@ describe('MemoryCoverImage', () => {
     })
     expect(w.find('.memory-cover-image-ph').exists()).toBe(false)
     expect(w.find('.custom-ph').exists()).toBe(true)
+  })
+})
+
+// The cover as every surface draws it (inbox #411): a folder framed in core's dialog must look the same in a core row, tile, header
+// and pin (`NodeCoverImage`) as a Memory does in its page header and map pin (this component). Both read the one formula.
+describe('MemoryCoverImage and core\'s NodeCoverImage frame a cover identically', () => {
+  const styleOf = (component: typeof NodeCoverImage | typeof MemoryCoverImage, crop: Parameters<typeof coverImageStyle>[0]) =>
+    mount(component, { props: { src: 'blob:x', crop } }).find('img').attributes('style')
+
+  it.each([
+    ['a framed crop', { x: 0.1, y: 0.2, width: 0.5, height: 0.28125 }],
+    ['a corner crop', { x: 0.5, y: 0.5, width: 0.5, height: 0.5 }],
+    ['the full frame', { x: 0, y: 0, width: 1, height: 1 }],
+    ['no crop (a centred 16:9 fit)', null],
+  ])('%s', (_what, crop) => {
+    expect(styleOf(NodeCoverImage, crop)).toBe(styleOf(MemoryCoverImage, crop))
+    expect(styleOf(NodeCoverImage, crop)).toContain(`object-fit: ${coverImageStyle(crop).objectFit}`)
   })
 })

@@ -6,9 +6,10 @@
   and shown identically wherever the Memory appears: its **browse card**, its **detail header**, its **map pin**
   ([uc.memory.place](uc.memory.place.md)) and its entry in the **sidebar's Favorites**. **A cover is core's since inbox
    #411** ([uc.platform.node-cover](../../platform/use-cases/uc.platform.node-cover.md)): the action ("Set cover" /
-  "Change cover" / "Remove cover" — in the page's header and in the Memory's row menu), the upload, the one-request write and
-  the display are the platform's, the same for a folder and a drop box; what stays the Memory's is its **own source UI** (this
-  page's dialog) and its **second source**, one of its own photos. The sidebar showed the cover until the Favorites section
+  "Change cover" — in the page's header and in the Memory's row menu), the **dialog** (choose, crop, re-crop, Remove), the upload,
+  the one-request write and the display are the platform's, the same for a folder and a drop box; what stays the Memory's is
+  its **second source**, one of its own photos, which it adds to core's dialog through the kind's `cover.extraSource`
+  (`memoryPhotoSource` in `memoryCover.ts`) and the gallery's **Set as cover** that feeds it. The sidebar showed the cover until the Favorites section
   became core's and drew each kind's icon (#409); #411 restored it, for every kind that has one.
   **Operator-blind** — the server never sees which image, or the crop.
 - **Preconditions:** The vault is unlocked and the Memory is open (its **`K_mem`** is held). The node already carries
@@ -42,8 +43,9 @@ and offsets it.
      the crop source — the exact tier the cover renders from), with the **lightbox staying open underneath** (its
      keyboard suspended) so the user keeps browsing after saving. The user frames the 16:9 crop and saves; if the
      photo is **already the cover**, its stored crop is pre-loaded to fine-tune. The button marks the current cover.
-   - **A brand-new image, or re-cropping the current cover:** the header's **"set cover"** opens the editor —
-     **"Upload a photo"** (an `<input type=file accept=image/*>`), or the current cover pre-loaded to re-frame.
+   - **A brand-new image, or re-cropping the current cover:** the header's **Cover** action (or the cover tile) opens core's
+     dialog — **"Choose an image"** (an `<input type=file accept=image/*>`), or the current cover pre-loaded to re-frame.
+     **Remove cover** is a button of the same dialog, offered where a cover exists.
 2. In the editor a **16:9 crop viewport** (filling the dialog width) shows the source — a **Memory photo picked in
    the lightbox**, an **uploaded image**, or the **current cover re-framed**; the user **drag-pans** and **zooms**
    (1–3×) to frame it. Save normalizes the pan/zoom back to the `0..1` crop rectangle.
@@ -89,7 +91,7 @@ and offsets it.
   its absence is an honest placeholder rather than a guessed photo. (This retires the cr-0071 stopgap where the map
   pin auto-picked the media nearest the place.)
 - **Reuse the existing UI/UX — never invent.** The picker + hand-rolled pan/zoom crop + the crop-display formula
-  are existing components (`MemoryCoverDialog` / `MemoryCoverImage` / `CoverCrop`);
+  are existing components (core's `CoverDialog` with the shared `ImageCropper`, `MemoryCoverImage`, `CoverCrop`);
   only the data layer is swapped to the contracts client + `K_mem` sealing. No crop library is added.
 
 ## What this means for you / Was das für dich bedeutet
@@ -114,7 +116,8 @@ Gerät verschlüsselt; der Server speichert nur verschlüsselte Daten.
 - Decisions: [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (K_mem seals node content)
 - Core's feature: [uc.platform.node-cover](../../platform/use-cases/uc.platform.node-cover.md) (inbox #411 — Memories' two
   cover endpoints became core's `setNodeCover` / `removeNodeCover`; the crop model, the store and the writer moved to
-  `core/node/cover/`, the Memory keeps its photo source and its dialog)
+  `core/node/cover/`; the follow-up of 2026-10-12 moved the dialog there too — the Memory keeps its photo source and the lightbox
+  flow that feeds it, nothing else)
 - Built: the existing-media source (web, cr-0072) and the **new-upload** source (a standalone cover blob —
   contract + backend + web, cr-0073). cr-0073 generalized the cr-0072 **`mediaId`-only** `cover` shape into a
   discriminated **`source` (media | upload blob ref)** — with a backward-compatible `normalizeMemoryCover` so

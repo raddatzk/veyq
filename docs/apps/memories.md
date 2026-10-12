@@ -26,7 +26,7 @@ Gradle module of its own; the web half is separated by import direction only (se
   `node_id` (measured: `grep -n "node_id" backend/apps/memories/src/main/resources/db/migration/V*__memories_baseline.sql`).
   A cover is core's feature (inbox #341, #411): the node's `COVER` attachment in `veyq_node_attachment`, written by core's
   `setNodeCover` / `removeNodeCover` together with the sealed meta that names it; Memories opts its two kinds in
-  (`MemoryNodeKindRules.takesCover`), keeps its second source (one of its photos) and its dialog; core's `veyq_node` carries no Memories column. Memories' configuration is its own
+  (`MemoryNodeKindRules.takesCover`), keeps only its second source (one of its photos, offered to core's one cover dialog through the kind's `cover.extraSource`, inbox #411 follow-up); core's `veyq_node` carries no Memories column. Memories' configuration is its own
   mapping, `veyq.media.*` (`MemoriesMediaConfig`, inbox #342).
 - **Screens and behaviour:** gallery and lightbox, upload with client-generated derivatives, covers, date and
   place curation, the map, live updates. Their state is the use-cases and enablers under
@@ -185,7 +185,7 @@ by import direction only**: `features/memory` is the application (core imports i
 and asks a registry for what to render; the folder level view is core's, Memories contributes ROW DATA, not a section
 (inbox #407): its row factory `memoryRows` answers, for each MEMORY and CHAPTER at the level, a row — the cover as the
 leading visual (large on a tile; core resolves the cover, `host.covers`, inbox #411), the name, the meta line "Memory · date range", a primary click that opens it, rename and move in
-the row's menu (the favorite heart on the row is core's own action, the same for every kind, inbox #409, and so are "Set cover" / "Change cover" / "Remove cover", inbox #411) —
+the row's menu (the favorite heart on the row is core's own action, the same for every kind, inbox #409, and so is the ONE "Cover" action - "Set cover" / "Change cover" - that opens core's cover dialog, where the image is chosen, cropped and removed, inbox #411) —
 and the map as its own presentation; core draws the list, orders it (folders first, then everything by name, mixed with
 files and drop boxes) and offers the presentations grid, list and map in the level's toolbar, inbox #370), and its create and share dialogs ride on its kinds
 (a rename is core's, as a folder's create is), though its directory name is still Memories-shaped (the top-bar tray and

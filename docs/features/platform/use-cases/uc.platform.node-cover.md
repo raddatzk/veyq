@@ -4,8 +4,8 @@
 - **Primary actor:** A member who may write the space (a member with write access on the scope, keys unlocked).
 - **Goal:** Give a **folder**, a **drop box** or a **Memory** a **cover** — an image the member uploads directly — shown as the
   node's leading visual in the level list and tiles, in the node's header and in the sidebar's Favorites, with the kind's icon as
-  the default. Core's feature (inbox #411): the action, the picker, the derive, the upload, the write and the display belong
-  to the platform; a kind only **opts in** (`NodeKindRules.takesCover` on the server, `cover` on the web descriptor).
+  the default. Core's feature (inbox #411): the action, **the dialog (choose, crop, remove)**, the derive, the upload, the write and
+  the display belong to the platform; a kind only **opts in** (`NodeKindRules.takesCover` on the server, `cover` on the web descriptor).
 - **Preconditions:** The scope is unlocked (the epoch keys are loaded), not pending deletion, the member may write it, and the
   node's kind opted in (FOLDER — core's own, `FILES_DROPBOX`, `MEMORY`, `CHAPTER`; **not** `FILE`: a file's own thumbnail is a
   different idea, it needs the client to understand many formats). The node is not a guest's identity folder.
@@ -15,31 +15,42 @@
 
 ## Main flow
 
-1. In the row's **⋯** menu (or the header's buttons) the member chooses **Set cover** (**Change cover** where one exists).
-   The action is core's — one id `cover`, placed by `coverRowActions` / `coverActions` beside the favorite heart — and gated by
-   `coverCapabilities` (fail closed).
-2. Core's hidden `image/*` picker opens. The chosen file is checked (an image, not empty, up to **40 MB**; otherwise a clear
-   message and nothing happens).
-3. The client **derives** the cover size with the existing pipeline — one JPEG, long edge 2048, quality 0.85, exactly what
-   Memories' covers always used — and seals it as the node's own blob: a fresh `K_blob` wrapped under the **node's content
-   key**, bound to blob, node and role `COVER` ([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)), the blob meta
-   `{type: image/jpeg}` under `K_blob`. The upload runs as a job of the core upload queue (progress and failure show in the
-   tray; a quota refusal says so).
-4. One request, `setNodeCover`, hands the open upload **and** the node's re-sealed `wrappedMeta` (the `cover` field, version-
-   checked, [ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md)). The server verifies the upload,
-   attaches it in the slot — freeing, in the same transaction, the blob the member replaces (`expectedBlobId`) — and
-   compare-and-sets the meta. Either both land or neither does.
+1. In the row's **⋯** menu (or the node's header) the member chooses **Cover** — labelled **Set cover** where the node has none,
+   **Change cover** where it has one. It is **ONE action** (one id `cover`, the image icon, in the header and in the row menu
+   beside the favorite heart) gated by `coverCapabilities` (fail closed); there is **no separate Remove entry** — removal lives
+   in the dialog.
+2. Core's **cover dialog** (`core/node/cover/components/CoverDialog.vue`) opens — the same one for a folder, a drop box and a
+   Memory. It offers **Choose an image** (a hidden `image/*` input: an image, not empty, up to **40 MB**, otherwise a clear
+   message inside the dialog and nothing is read), the shared **16:9 crop** (drag to pan, zoom 1–3×), **Remove cover** (only where
+   the node has one — a cover that could not be opened can still be removed), **Cancel** and **Save cover**. Opened on a node
+   that has a cover, it shows that image with its **stored crop restored**, so the member can re-frame it without uploading
+   again.
+3. **Save** emits what was decided and core writes it (`useNodeCover.save`): a **new image** is derived with the existing
+   pipeline — one JPEG, long edge 2048, quality 0.85, exactly what Memories' covers always used — and sealed as the node's own
+   blob: a fresh `K_blob` wrapped under the **node's content key**, bound to blob, node and role `COVER`
+   ([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)), the blob meta `{type: image/jpeg}` under `K_blob`. The upload
+   runs as a job of the core upload queue (progress and failure show in the tray; a quota refusal says so).
+4. One request hands the open upload **and** the node's re-sealed `wrappedMeta` (the `cover` field `{ source, crop }`, version-
+   checked, [ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md)): `setNodeCover` attaches the upload,
+   freeing in the same transaction the blob it replaces (`expectedBlobId`) and compare-and-setting the meta. Either both land or
+   neither does. A **re-crop** of the current cover is a plain meta write (the stored image, a moved crop); a **photo** the
+   application supplied (A1) is a meta write naming it.
 5. The member's tree is patched with the new meta; every surface that draws the node (the level's row or tile, the header, the
    sidebar's Favorites) re-resolves: the cover store is keyed on the sealed meta, so the new image appears and the old object URL
-   is revoked at once.
-6. **Remove cover** is `removeNodeCover`: the blob is freed and the meta re-sealed without the cover, again one write. A node
-   whose cover could not be opened can still be removed.
+   is revoked at once. **The crop is applied everywhere** by one display formula (`coverImageStyle`, drawn by `NodeCoverImage`; the
+   Memory's own tile reads the same formula), so a cover framed in the dialog looks the same in a row, a tile, the header and the
+   sidebar; a cover without a stored crop shows a centred 16:9 fit.
+6. **Remove cover** (in the dialog) is `removeNodeCover`: the blob is freed and the meta re-sealed without the cover, again one write.
 
 ## Alternate / exception flows
 
-- **A1 — a Memory (its own source UI):** the Memory's page hands the cover action its own dialog (a photo of the Memory, an
-  upload, a crop) instead of the plain picker; the dialog saves through the same core write. A cover chosen from the Memory's own
-  photos is a second *source* in the same sealed field that core carries untouched and the Memory's `cover.load` reads.
+- **A1 — a Memory adds one source to the same dialog:** the Memory's page opens core's dialog from its header action, its cover
+  tile and the gallery lightbox's **Set as cover**; the lightbox hands the picked photo (its decrypted thumbnail) to the dialog,
+  which frames it at once. The seam is the kind's `cover.extraSource` (`hintKey`: the line pointing at the gallery, in the
+  application's own i18n namespace, which core resolves without reading; `seal(id, crop)`: the stored value; `idOf(cover)`: which
+  photo a stored cover already is, so only that photo's stored crop is restored). A cover chosen from the Memory's own photos is a
+  second *source* in the same sealed field that core carries untouched and the Memory's `cover.load` reads. Core's dialog, crop and
+  write are the only ones — the Memory has no dialog of its own.
 - **E1 — a peer changed the cover meanwhile:** `409 cover_stale` — nothing was attached, the old cover is intact, the upload was
   spent and freed; the member is told and may try again. A meta that moved is `409 stale_version`: nothing written, the upload
   still open, the client re-applies its change on the current meta and sends the same upload again.
@@ -73,23 +84,24 @@
 
 ## What this means for you / Was das für dich bedeutet
 
-**EN —** Give a folder, a drop box or a memory a **face**: choose **Set cover** in its menu and pick any picture from your
-device. It replaces the icon in the list, on the page and in your favorites. The picture is locked on your device with the
-entry's own key; the server only stores scrambled data. Changing or removing the cover really deletes the old picture from the
+**EN —** Give a folder, a drop box or a memory a **face**: choose **Set cover** in its menu, pick any picture from your
+device and frame it — the same window everywhere. It replaces the icon in the list, on the page and in your favorites. The picture is locked on your device with the
+entry's own key; the server only stores scrambled data. **Change cover** re-frames or swaps it, and **Remove cover** inside the same window takes it away; either really deletes the old picture from the
 server's storage — only copies other people's browsers already hold cannot be taken back. People you share a link with can see
 the covers but cannot set them.
 
-**DE —** Gib einem Ordner, einem Briefkasten oder einer Erinnerung ein **Gesicht**: Wähle im Menü **Cover festlegen** und such ein
-beliebiges Bild von deinem Gerät aus. Es ersetzt das Symbol in der Liste, auf der Seite und in deinen Favoriten. Das Bild wird
-auf deinem Gerät mit dem eigenen Schlüssel des Eintrags verschlüsselt; der Server speichert nur verschlüsselte Daten. Wenn du das
-Cover änderst oder entfernst, wird das alte Bild wirklich aus dem Speicher des Servers gelöscht — nur Kopien, die andere Browser
+**DE —** Gib einem Ordner, einem Briefkasten oder einer Erinnerung ein **Gesicht**: Wähle im Menü **Cover festlegen**, such ein
+beliebiges Bild von deinem Gerät aus und wähle den Ausschnitt — überall derselbe. Es ersetzt das Symbol in der Liste, auf der Seite und in deinen Favoriten. Das Bild wird
+auf deinem Gerät mit dem eigenen Schlüssel des Eintrags verschlüsselt; der Server speichert nur verschlüsselte Daten. Mit
+**Cover ändern** richtest du den Ausschnitt neu ein oder tauschst das Bild, mit **Cover entfernen** im selben Fenster nimmst du es weg;
+beides löscht das alte Bild wirklich aus dem Speicher des Servers gelöscht — nur Kopien, die andere Browser
 schon geladen haben, lassen sich nicht zurückholen. Wer nur einen Link bekommt, sieht die Cover, kann sie aber nicht festlegen.
 
 ## Related
 
 - Feature: [Platform](../_index.md)
 - End-user view (wiki): [Files — and finding your way around](../../../../wiki/en/files.md)
-- Use-cases: [uc.memory.cover](../../memory/use-cases/uc.memory.cover.md) (a Memory's own source UI and its crop),
+- Use-cases: [uc.memory.cover](../../memory/use-cases/uc.memory.cover.md) (a Memory's own second source and its gallery flow),
   [uc.files.drop-box](../../files/use-cases/uc.files.drop-box.md) (a drop box carries one),
   [uc.memory.delete-node](../../memory/use-cases/uc.memory.delete-node.md) (the trash keeps a cover for a restore, the purge frees it)
 - Enabler: [en.memory.node-meta](../../memory/enablers/en.memory.node-meta.md) (the sealed `wrappedMeta` envelope the cover field lives in)

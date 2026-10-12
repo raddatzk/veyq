@@ -57,9 +57,11 @@ Liegt in einem Ordner mehr als eine Art von Dingen, zeigen dir Tabs über der Li
 
 Ein Ordner, ein Briefkasten oder eine Erinnerung kann ein **Cover** haben: ein Bild deiner Wahl, das in der Liste, auf der
 Seite des Eintrags und in deinen Favoriten sein Symbol ersetzt. Öffne das **⋯**-Menü des Eintrags (oder die Schaltflächen oben
-auf seiner Seite) und wähle **Cover festlegen**, dann ein Bild von deinem Gerät. Das Bild wird auf deinem Gerät verkleinert und
+auf seiner Seite) und wähle **Cover festlegen** (hat der Eintrag schon eins, heißt es **Cover ändern**). Es öffnet sich ein Fenster: Such ein Bild von
+deinem Gerät aus und zieh oder zoome es in den Ausschnitt, den du möchtest — dasselbe Fenster für Ordner, Briefkasten und
+Erinnerung, und der Ausschnitt sieht überall gleich aus. Das Bild wird auf deinem Gerät verkleinert und
 mit dem eigenen Schlüssel des Eintrags verschlüsselt, bevor es das Gerät verlässt — wie alles andere auch; der Server speichert
-nur verschlüsselte Daten. **Cover ändern** tauscht es aus, **Cover entfernen** nimmt es weg; das alte Bild wird aus dem Speicher
+nur verschlüsselte Daten. Über **Cover ändern** richtest du den Ausschnitt neu ein oder tauschst das Bild; **Cover entfernen** im selben Fenster nimmt es weg; das alte Bild wird aus dem Speicher
 des Servers gelöscht (Kopien, die andere Browser schon haben, oder ein bereits verteilter Link lassen sich nicht zurückholen —
 sie laufen von selbst ab). Es ist ein Bild für den Eintrag, keine Datei im Ordner, und nur wer den Raum ändern darf, kann es
 festlegen. Wer nur einen Link bekommt, sieht die Cover, kann sie aber nicht ändern. Eine Datei hat kein Cover.

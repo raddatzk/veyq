@@ -123,31 +123,28 @@ describe('MemoryDetail follows caps', () => {
     expect(updateNode).toHaveBeenCalled()
   })
 
-  // The cover's save writes only through the door the capabilities open (inbox #401 S4): the lightbox offers "set as
-  // cover" exactly where `setCover` holds (S5 split its one `readonly` per capability), and even a pick forced from it
-  // without `setCover` reaches no write.
-  it('a cover picked in the lightbox is written only with setCover', async () => {
+  // The cover is edited in core's dialog, which the host mounts (inbox #411): this page only ASKS for it, and only where the
+  // capabilities grant `setCover` - the lightbox offers "set as cover" exactly there (S5 split its one `readonly` per
+  // capability), and even a pick forced from it without `setCover` asks for nothing and reaches no write.
+  it('a cover picked in the lightbox asks for the dialog only with setCover; the tile likewise', async () => {
     const memoryKey = v1.randomBytes(32)
     await seedDated(memoryKey)
     const LightboxStub = { props: ['canSetCover'], emits: ['setCover'], template: `<button class="stub-set-cover" @click="$emit('setCover', { mediaId: 'x' })" />` }
-    const CoverStub = {
-      emits: ['save', 'close'],
-      template: `<button class="stub-cover-save" @click="$emit('save', { kind: 'media', mediaId: 'x', crop: { x: 0, y: 0, width: 1, height: 1 } })" />`,
-    }
     for (const setCover of [false, true]) {
       updateNode.mockClear()
       const w = mount(MemoryDetail, {
         props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(), scopeId: SCOPE_ID, memoryKey, caps: { ...memberMemoryCaps(), editMeta: false, setCover } },
-        global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { MediaLightbox: LightboxStub, MemoryCoverDialog: CoverStub } },
+        global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { MediaLightbox: LightboxStub } },
       })
       await vi.waitFor(() => expect(w.find('[data-media-id] button').exists()).toBe(true))
       await w.find('[data-media-id] button').trigger('click')
       expect(w.findComponent(LightboxStub).props('canSetCover'), 'offered in the lightbox').toBe(setCover)
       await w.find('.stub-set-cover').trigger('click')
+      await w.find('.memory-cover-preview').trigger('click')
       await flushPromises()
-      if (w.find('.stub-cover-save').exists()) await w.find('.stub-cover-save').trigger('click')
-      await flushPromises()
-      expect(updateNode.mock.calls.length > 0, `setCover ${setCover}`).toBe(setCover)
+      expect(w.emitted('coverFromPhoto')?.length ?? 0, `photo, setCover ${setCover}`).toBe(setCover ? 1 : 0)
+      expect(w.emitted('editCover')?.length ?? 0, `tile, setCover ${setCover}`).toBe(setCover ? 1 : 0)
+      expect(updateNode, 'this page writes no cover itself').not.toHaveBeenCalled()
       w.unmount()
     }
   })

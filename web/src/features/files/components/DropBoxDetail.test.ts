@@ -21,6 +21,7 @@ vi.mock('../../../core/node/treeStore', async () => {
 vi.mock('../../../core/blob/transport', async (orig) => ({ ...(await orig<object>()), openBlob: vi.fn(async () => new Uint8Array([1, 2, 3])) }))
 
 import DropBoxDetail from './DropBoxDetail.vue'
+import PrimeVue from 'primevue/config'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 import { resetCovers } from '../../../core/node/cover/coverStore'
@@ -161,14 +162,14 @@ describe('DropBoxDetail - its cover', () => {
       access: memberAccessOf({ scopeId: SCOPE, epochs: epochsOf(new Uint8Array(32).fill(4)), ...over }),
       tree: { ...memberTreeOf(() => treeStore.nodes, { scopeId: SCOPE }), keyOf: () => KEY },
     },
-    global: { plugins: [realI18n()] },
+    global: { plugins: [realI18n(), PrimeVue] },
   })
   beforeEach(() => {
     resetCovers()
     Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:box-cover'), revokeObjectURL: vi.fn() })
   })
 
-  it('a writer with the keys has Set cover in the header; with a cover, Change and Remove; the folder icon without one', async () => {
+  it('a writer with the keys has Set cover in the header; with a cover, Change (and no separate Remove); the folder icon without one', async () => {
     const plain = mountWith(BOX)
     await flushPromises()
     expect(plain.find('.veyq-node-header-actions button[data-action="cover"]').attributes('aria-label')).toBe(t('node.cover.set'))
@@ -179,7 +180,26 @@ describe('DropBoxDetail - its cover', () => {
     await flushPromises()
     await vi.waitFor(() => expect(covered.find('.veyq-node-header-cover img').attributes('src')).toBe('blob:box-cover'))
     expect(covered.find('button[data-action="cover"]').attributes('aria-label')).toBe(t('node.cover.change'))
-    expect(covered.find('button[data-action="cover-remove"]').attributes('aria-label')).toBe(t('node.cover.remove'))
+    expect(covered.find('button[data-action="cover-remove"]').exists(), 'removal lives in the dialog').toBe(false)
+  })
+
+  it('the header action, clicked, opens core\'s cover dialog - Remove inside it only where the box has a cover', async () => {
+    const plain = mountWith(BOX)
+    await flushPromises()
+    await plain.find('.veyq-node-header-actions button[data-action="cover"]').trigger('click')
+    await vi.waitFor(() => expect(document.body.querySelector('[role="dialog"]')).not.toBeNull())
+    const buttons = () => [...document.body.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].map((b) => b.textContent?.trim())
+    expect(buttons()).toContain(t('node.cover.choose'))
+    expect(buttons(), 'no cover yet: nothing to remove').not.toContain(t('node.cover.remove'))
+    plain.unmount()
+    await vi.waitFor(() => expect(document.body.querySelector('[role="dialog"]')).toBeNull())
+
+    const covered = mountWith(withCover())
+    await flushPromises()
+    await covered.find('.veyq-node-header-actions button[data-action="cover"]').trigger('click')
+    await vi.waitFor(() => expect(document.body.querySelector('[role="dialog"]')).not.toBeNull())
+    expect(buttons()).toContain(t('node.cover.remove'))
+    expect(document.body.querySelector('[role="dialog"]')!.textContent, 'no application hint on a drop box').not.toContain(t('memory.cover.galleryHint'))
   })
 
   it('locked keys or a pending deletion offer none, and the drop box still shows the cover it has', async () => {

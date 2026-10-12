@@ -1,167 +1,116 @@
 // @vitest-environment happy-dom
-// uc.admin.tenant-storage-quota (web) — a cover upload refused `quota_exceeded` says there is no space left, as the
-// uploads tray does (ADR 0073 §6); every other cover failure stays the silent best-effort it was.
-//
-// Since inbox #411 the cover's blob step is core's and travels WITH the meta write (`core/node/cover/coverWrite.ts`): this
-// slice makes one call per save (`setUpload` for a new image, `set` for the rest) and no longer deletes a blob of its own, so
-// what is pinned here is which call a save makes, with which conflict rule, and what the user hears when it fails. What the
-// write sends (the blob compare, the removal, the atomicity) is `core/node/cover/coverWrite.test.ts`.
+// uc.memory.cover (web) — the Memory's cover DISPLAY slice. Since inbox #411 the editing (dialog, crop, upload, write, failure
+// wording) is core's (`core/node/cover/useNodeCover.test.ts`, `components/CoverDialog.test.ts`); what stays here is how the page
+// reads the cover it shows: the stored cover, which image that is (a photo's thumbnail, or the uploaded blob opened on demand), which
+// photo the lightbox marks, and the photo the gallery hands to core's dialog.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { defineComponent, h, ref } from 'vue'
-import { mount } from '@vue/test-utils'
-
-const error = vi.fn()
-vi.mock('../../shared/state/useToast', () => ({
-  useToast: () => ({ success: vi.fn(), error, showUndo: vi.fn(), dismissUndo: vi.fn() }),
-}))
-vi.mock('./media', () => ({ openBlob: vi.fn() }))
-vi.mock('./memoryCover', () => ({
-  unsealMemoryCover: vi.fn(),
-  setMemoryCover: vi.fn(),
-  setMemoryCoverUpload: vi.fn(),
-  FULL_FRAME: { x: 0, y: 0, width: 1, height: 1 },
-}))
-
-import { setMemoryCover, setMemoryCoverUpload, unsealMemoryCover, type MemoryCover } from './memoryCover'
+import { defineComponent, h, ref, type Ref } from 'vue'
+import { mount, flushPromises } from '@vue/test-utils'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std } from '@veyq/crypto/base64'
 import { useMemoryCover } from './useMemoryCover'
-import { memberMemorySource } from './source'
-import { MetaConflictError, MetaUnreadableError } from '../../core/node/sealedMetaWrite'
-import { CoverStaleError } from '../../core/node/cover/coverWrite'
-import { i18n } from '../../i18n'
+import type { MediaLoaders } from './source'
 import type { TreeNode } from '../../core/node/tree'
 
-/** The cover the harness's tree copy holds — what the editor opened with, possibly stale. */
-let treeCover: MemoryCover | null = null
+const SCOPE = '5c09e000-0000-4000-8000-0000000000cc'
+const NODE = '5c09e000-0000-4000-8000-0000000000c1'
+const KEY = v1.randomBytes(32)
+const REF = { blobId: 'b-1', chunkCount: 1, byteSize: 9, wrappedBlobKey: 'd3JhcA==', ownerId: NODE, role: 'COVER' }
+const crop = { x: 0.1, y: 0.2, width: 0.5, height: 0.28125 }
+const sealed = (cover: object | null) =>
+  b64std(v1.seal({ purpose: 'node-meta', scopeId: SCOPE, nodeId: NODE }, KEY, new TextEncoder().encode(JSON.stringify({ v: 1, ...(cover ? { cover } : {}) }))))
 
-function harness(onMetaUpdated = vi.fn()) {
-  vi.mocked(unsealMemoryCover).mockImplementation(() => treeCover)
-  const wrapper = mount(
+const coverBlob = vi.fn()
+
+function harness(wrappedMeta: string | null, thumbs = new Map<string, string>(), key: Uint8Array | null = KEY) {
+  const meta = ref(wrappedMeta)
+  const thumbsRef: Ref<Map<string, string>> = ref(thumbs)
+  let api!: ReturnType<typeof useMemoryCover>
+  mount(
     defineComponent({
-      setup: (_, { expose }) => {
-        expose({
-          api: useMemoryCover({
-            scopeId: () => 's',
-            node: () => ({ id: 'n', wrappedMeta: null, metaVersion: 4 }) as TreeNode,
-            memoryKey: () => new Uint8Array(32),
-            loaders: memberMemorySource({ scopeId: () => 's' }).loaders,
-            write: () => memberMemorySource({ scopeId: () => 's' }).cover ?? null,
-            thumbs: ref(new Map()),
-            onMetaUpdated,
-            noSpaceMessage: () => 'No space left.',
-            coverStaleMessage: () => 'Cover changed meanwhile.',
-          }),
+      setup() {
+        api = useMemoryCover({
+          scopeId: () => SCOPE,
+          node: () => ({ id: NODE, wrappedMeta: meta.value }) as TreeNode,
+          memoryKey: () => key,
+          loaders: { coverBlob } as unknown as MediaLoaders,
+          thumbs: thumbsRef,
         })
         return () => h('div')
       },
     }),
-    { global: { plugins: [i18n] } },
   )
-  return (wrapper.vm as unknown as { api: ReturnType<typeof useMemoryCover> }).api
+  return { api, meta, thumbs: thumbsRef }
 }
-
-const crop = { x: 0, y: 0, width: 1, height: 1 }
-const upload = { kind: 'upload', file: new File([new Uint8Array([1])], 'c.jpg', { type: 'image/jpeg' }), crop } as const
-const uploaded = (blobId: string): MemoryCover => ({ source: { kind: 'upload', ref: { blobId, chunkCount: 1, byteSize: 1, wrappedBlobKey: 'k', ownerId: 'n', role: 'COVER' } }, crop })
-const landed = (extra: object = {}) => ({ wrappedMeta: 'bmV3', metaVersion: 5, replaced: null, ...extra })
 
 beforeEach(() => {
   vi.clearAllMocks()
-  treeCover = null
+  Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:uploaded'), revokeObjectURL: vi.fn() })
+  coverBlob.mockResolvedValue(new Uint8Array([1, 2, 3]))
 })
 
-describe('useMemoryCover — a cover refused for lack of room', () => {
-  it('tells the user there is no space left', async () => {
-    vi.mocked(setMemoryCoverUpload).mockRejectedValue(new Error('quota_exceeded'))
-    await harness().onCoverSave(upload)
-    expect(error).toHaveBeenCalledWith('No space left.')
+describe('useMemoryCover - the cover the page shows', () => {
+  it('no cover: nothing stored, no image, no marked photo', () => {
+    const { api } = harness(sealed(null))
+    expect(api.storedCover.value).toBeNull()
+    expect(api.coverSrc.value).toBeNull()
+    expect(api.coverMediaId.value).toBeNull()
   })
 
-  it('control: any other failure stays silent', async () => {
-    vi.mocked(setMemoryCoverUpload).mockRejectedValue(new Error('chunk_put_failed:500'))
-    await harness().onCoverSave(upload)
-    expect(setMemoryCoverUpload).toHaveBeenCalledOnce()
-    expect(error).not.toHaveBeenCalled()
+  it('a photo cover shows that photo\'s already-decrypted thumbnail with its crop, and the lightbox marks it', () => {
+    const { api } = harness(sealed({ source: { kind: 'media', mediaId: 'm-7' }, crop }), new Map([['m-7', 'blob:thumb-7']]))
+    expect(api.storedCover.value).toEqual({ source: { kind: 'media', mediaId: 'm-7' }, crop })
+    expect(api.coverSrc.value).toBe('blob:thumb-7')
+    expect(api.coverMediaId.value).toBe('m-7')
+    expect(coverBlob, 'a photo needs no blob of its own').not.toHaveBeenCalled()
   })
 
-  it('a cover another writer replaced meanwhile is said so (nothing was written; the old cover is intact)', async () => {
-    vi.mocked(setMemoryCoverUpload).mockRejectedValue(new CoverStaleError())
-    await harness().onCoverSave(upload)
-    expect(error).toHaveBeenCalledWith('Cover changed meanwhile.')
-  })
-})
-
-/**
- * W10 (ADR 0077, D9): which saves surface a same-field conflict. A new upload re-applies its own cover over a peer's change
- * (core's write passes `surfaceConflict` false for it: this save moves the node's one cover blob); a save that moves no
- * blob - a removal, a photo, a crop-only `keep` - surfaces it.
- */
-describe('useMemoryCover — a peer changed the cover meanwhile', () => {
-  it('an upload is ONE call with the meta it was built from, and re-applies its own cover on a conflict', async () => {
-    vi.mocked(setMemoryCoverUpload).mockResolvedValue({ ...landed(), cover: uploaded('b') })
-    const onMetaUpdated = vi.fn()
-    await harness(onMetaUpdated).onCoverSave(upload)
-    expect(setMemoryCover).not.toHaveBeenCalled()
-    const [, nodeId, , source, cropArg, current] = vi.mocked(setMemoryCoverUpload).mock.calls[0] as unknown as [string, string, unknown, { name: string }, typeof crop, unknown]
-    expect(nodeId).toBe('n')
-    expect(source.name).toBe('c.jpg')
-    expect(cropArg).toEqual(crop)
-    expect(current).toEqual({ wrappedMeta: null, metaVersion: 4 })
-    expect(onMetaUpdated).toHaveBeenCalledWith({ nodeId: 'n', wrappedMeta: 'bmV3', metaVersion: 5 })
+  it('a photo whose thumbnail is not there yet shows no image (the placeholder), still marked', () => {
+    const { api } = harness(sealed({ source: { kind: 'media', mediaId: 'm-7' }, crop }))
+    expect(api.coverSrc.value).toBeNull()
+    expect(api.coverMediaId.value).toBe('m-7')
   })
 
-  it('a conflict re-opens the editor on the current value and says so', async () => {
-    const onMetaUpdated = vi.fn()
-    const api = harness(onMetaUpdated)
-    vi.mocked(setMemoryCover).mockRejectedValue(new MetaConflictError({ wrappedMeta: 'cGVlcg==', metaVersion: 6 }))
-    await api.onCoverSave({ kind: 'remove' })
-    expect(vi.mocked(setMemoryCover).mock.calls[0][5]).toBe(true) // no blob moved: the conflict surfaces
-    expect(onMetaUpdated).toHaveBeenCalledWith({ nodeId: 'n', wrappedMeta: 'cGVlcg==', metaVersion: 6 })
-    expect(api.coverEditorOpen.value).toBe(true)
-    expect(error).toHaveBeenCalledWith(i18n.global.t('memory.meta.conflict'))
+  it('an uploaded cover opens its own blob on demand; no photo is marked', async () => {
+    const { api } = harness(sealed({ source: { kind: 'upload', ref: REF }, crop }))
+    await flushPromises()
+    expect(coverBlob).toHaveBeenCalledWith(expect.objectContaining({ blobId: 'b-1' }), KEY)
+    expect(api.coverSrc.value).toBe('blob:uploaded')
+    expect(api.coverMediaId.value).toBeNull()
   })
 
-  // inbox #290: a blob that does not open is refused, never rebuilt (ADR 0077 point 4, no reset) — and the refusal
-  // says so in words, rather than leaving an editor that silently does nothing.
-  it('a details blob that does not open says it cannot be changed, and sends no upload', async () => {
-    const api = harness()
-    vi.mocked(setMemoryCover).mockRejectedValue(new MetaUnreadableError())
-    await api.onCoverSave({ kind: 'remove' })
-    expect(error).toHaveBeenCalledWith(i18n.global.t('memory.meta.unreadable'))
-    expect(setMemoryCoverUpload).not.toHaveBeenCalled()
+  it('an uploaded cover that does not open is the placeholder - best effort, never a throw', async () => {
+    coverBlob.mockRejectedValue(new Error('offline'))
+    const { api } = harness(sealed({ source: { kind: 'upload', ref: REF }, crop }))
+    await flushPromises()
+    expect(api.coverSrc.value).toBeNull()
+  })
+
+  it('a replaced cover drops the previous object URL', async () => {
+    const { api, meta } = harness(sealed({ source: { kind: 'upload', ref: REF }, crop }))
+    await flushPromises()
+    expect(api.coverSrc.value).toBe('blob:uploaded')
+    meta.value = sealed(null)
+    await flushPromises()
+    expect(api.coverSrc.value).toBeNull()
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:uploaded')
+  })
+
+  it('locked keys show no cover', () => {
+    const { api } = harness(sealed({ source: { kind: 'media', mediaId: 'm-7' }, crop }), new Map([['m-7', 'blob:thumb-7']]), null)
+    expect(api.storedCover.value).toBeNull()
+    expect(api.coverSrc.value).toBeNull()
   })
 })
 
-/**
- * inbox #411: a switch from an uploaded cover to a photo, or to none, is ONE meta call too - core's write frees the old
- * blob in the same request (`removeNodeCover`), decided from the cover the server accepted the write over (inbox #284), so
- * this slice neither reads the tree copy to decide it nor makes a second call that could be forgotten or fail alone.
- */
-describe('useMemoryCover — the old uploaded cover goes with the write that replaces it', () => {
-  it('a photo replaces an uploaded cover in ONE call, with the conflict rule of a save that moves no blob here', async () => {
-    treeCover = uploaded('mine-old')
-    vi.mocked(setMemoryCover).mockResolvedValue(landed({ replaced: uploaded('mine-old') }))
-    const onMetaUpdated = vi.fn()
-    await harness(onMetaUpdated).onCoverSave({ kind: 'media', mediaId: 'm', crop })
-    expect(setMemoryCover).toHaveBeenCalledOnce()
-    expect(vi.mocked(setMemoryCover).mock.calls[0][3]).toEqual({ source: { kind: 'media', mediaId: 'm' }, crop })
-    expect(setMemoryCoverUpload).not.toHaveBeenCalled()
-    expect(onMetaUpdated).toHaveBeenCalledWith({ nodeId: 'n', wrappedMeta: 'bmV3', metaVersion: 5 })
+describe('useMemoryCover - the photo the gallery hands to core\'s dialog', () => {
+  it('is the photo\'s decrypted thumbnail (the exact tier the cover renders from)', () => {
+    const { api } = harness(sealed(null), new Map([['m-7', 'blob:thumb-7']]))
+    expect(api.coverSourceOf('m-7')).toEqual({ mediaId: 'm-7', src: 'blob:thumb-7' })
   })
 
-  it('a removal is one call with a null cover; a crop-only keep re-seals the stored source', async () => {
-    treeCover = uploaded('mine-old')
-    vi.mocked(setMemoryCover).mockResolvedValue(landed())
-    const api = harness()
-    await api.onCoverSave({ kind: 'remove' })
-    expect(vi.mocked(setMemoryCover).mock.calls[0][3]).toBeNull()
-    await api.onCoverSave({ kind: 'keep', crop: { x: 0.1, y: 0.1, width: 0.5, height: 0.5 } })
-    expect(vi.mocked(setMemoryCover).mock.calls[1][3]).toEqual({ source: uploaded('mine-old').source, crop: { x: 0.1, y: 0.1, width: 0.5, height: 0.5 } })
-    expect(setMemoryCoverUpload).not.toHaveBeenCalled()
-  })
-
-  it('a keep with no stored cover writes nothing', async () => {
-    await harness().onCoverSave({ kind: 'keep', crop })
-    expect(setMemoryCover).not.toHaveBeenCalled()
-    expect(setMemoryCoverUpload).not.toHaveBeenCalled()
+  it('a photo with no thumbnail yet has no source to crop (the host sets it full-frame)', () => {
+    const { api } = harness(sealed(null))
+    expect(api.coverSourceOf('m-9')).toEqual({ mediaId: 'm-9', src: null })
   })
 })

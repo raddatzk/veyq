@@ -176,11 +176,19 @@ here; the server is blind.
   decrypted covers (a member's singleton cleared by `activeSpace`, a guest page's own through the link's gated presign, keyed on the sealed
   meta so a replaced or removed cover drops its object URL at once; a source core cannot open - Memories' photo - is the kind's
   `cover.load`), `capabilities.ts` the fail-closed `coverCapabilities` (a writer on a scope that is not pending deletion, keys loaded, an opted-in
-  kind, not a guest's identity folder; no guest role), and `useNodeCover` the view's door: the covers it draws and the core actions
-  `cover` (Set / Change) and `cover-remove` for `NodeHeader`'s `coreActions` and the level's `coreRowActions` (both in the row's menu), the pick
-  (`pickImage.ts`, a programmatic `image/*` input, 40 MB) run as a job of the core upload queue. A kind with its own source UI hands the header
-  action `choose` (Memories: its dialog); the level resolves every node's cover once and hands it to the row factories (`LevelRowsHost.covers`,
-  `ensureCovers`). Display: the row/tile leading visual (`NodeCoverImage`), the header's leading slot, the sidebar's Favorites; the icon is the default.
+  kind, not a guest's identity folder; no guest role), and `useNodeCover` the view's door: the covers it draws and ONE core action `cover`
+  (Set / Change, `pi-image`) for `NodeHeader`'s `coreActions` and the level's `coreRowActions` (the row's menu) - there is no remove action;
+  it opens THE dialog, `components/CoverDialog.vue` (choose an image, the shared 16:9 `ImageCropper`, re-crop of the current cover with its
+  stored crop, Remove where a cover exists, Save/Cancel; a non-image, empty or over-40-MB file is refused inside it, `pickImage.ts`
+  `coverFileProblem`), which each view mounts once beside its content as `<CoverEditor :cover="cover" />` (`LevelView`, `DropBoxDetail`,
+  `MemoryDetailHost`). Save is `useNodeCover.save(node, intent)` for every kind: the intents are `upload` (a job of the core upload queue + the
+  one `setNodeCover` write), `keep` (the stored value with only its crop moved), `media` (the application's source) and `remove`. A kind that
+  adds a source says so in its descriptor, `cover.extraSource` (`CoverExtraSource`: `hintKey` - an i18n key of ITS OWN namespace that core
+  resolves without reading it by name -, `seal(id, crop)`, `idOf(cover)`; Memories: `memoryPhotoSource`) and feeds the same dialog through
+  `cover.open(node, { source })` (the lightbox's "Set as cover"); core owns the dialog, the application only adds the source. The level
+  resolves every node's cover once and hands it to the row factories (`LevelRowsHost.covers`, `ensureCovers`). Display: the row/tile leading
+  visual (`NodeCoverImage`; the Memory's page draws `MemoryCoverImage` - the same `coverImageStyle` formula, pinned identical by a parity
+  test), the header's leading slot, the sidebar's Favorites; the icon is the default and a cover without a stored crop is a centred fit.
 
   **Favorites are core's (inbox #409, [ADR 0068](../docs/decisions/0068-favorites-two-confidentiality-levels.md) §10).** The member's private pin of
   a node of ANY kind - folder, file, Memory, drop box - lives in `src/core/favorites/`: `favorites.ts` (the sealed data layer, purpose

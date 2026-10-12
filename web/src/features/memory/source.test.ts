@@ -32,7 +32,6 @@ vi.mock('./media', async (orig) => {
 })
 vi.mock('./memoryDate', async (orig) => ({ ...(await orig<object>()), setMemoryDate: vi.fn(), reconcileMemoryDate: vi.fn() }))
 vi.mock('./memoryLocation', async (orig) => ({ ...(await orig<object>()), setMemoryLocation: vi.fn() }))
-vi.mock('./memoryCover', async (orig) => ({ ...(await orig<object>()), setMemoryCover: vi.fn(), setMemoryCoverUpload: vi.fn() }))
 vi.mock('../../core/node/nodeMetaWrite', () => ({ writeNodeMeta: vi.fn() }))
 vi.mock('./itemFavoritesStore', async (orig) => ({ ...(await orig<object>()), loadItemFavoritesFor: vi.fn(), toggleItemFavorite: vi.fn() }))
 vi.mock('../spaces/members', () => ({ listScopeMembers: vi.fn() }))
@@ -48,7 +47,6 @@ import * as share from './share'
 import * as media from './media'
 import { setMemoryDate, reconcileMemoryDate } from './memoryDate'
 import { setMemoryLocation } from './memoryLocation'
-import { setMemoryCover, setMemoryCoverUpload } from './memoryCover'
 import { writeNodeMeta } from '../../core/node/nodeMetaWrite'
 import { loadItemFavoritesFor, toggleItemFavorite } from './itemFavoritesStore'
 import { listScopeMembers } from '../spaces/members'
@@ -117,8 +115,7 @@ beforeEach(() => {
 })
 
 /** Every door a member's source carries and a guest's must not, by name. */
-const FULL_CROP = { x: 0, y: 0, width: 1, height: 1 }
-const MEMBER_ONLY = ['poll', 'trash', 'nodeMeta', 'cover', 'mediaMeta', 'marks', 'buckets'] as const
+const MEMBER_ONLY = ['poll', 'trash', 'nodeMeta', 'mediaMeta', 'marks', 'buckets'] as const
 
 describe("the guest's source reads the link, and only the link", () => {
   for (const role of [ShareRole.Read, ShareRole.ReadWrite]) {
@@ -251,7 +248,6 @@ describe("the member's source is today's calls, with its scope", () => {
   const item = mediaItem({ mediaId: 'm-1' })
   const state = { wrappedMeta: null, metaVersion: 0 }
   const src = memberMemorySource({ scopeId: () => S })
-  const file = { blob: new Blob([]), mediaType: 'image/png' }
   const edit = () => null
   // [what the view calls, the module function it must reach, the arguments it must reach it with]
   const doors: [string, () => unknown, (...a: never[]) => unknown, unknown[]][] = [
@@ -272,8 +268,6 @@ describe("the member's source is today's calls, with its scope", () => {
     ['nodeMeta.reconcileDate', () => src.nodeMeta!.reconcileDate('n', key, [item], state), reconcileMemoryDate, [S, 'n', key, [item], state]],
     ['nodeMeta.setLocation', () => src.nodeMeta!.setLocation('n', key, null, state), setMemoryLocation, [S, 'n', key, null, state]],
     ['nodeMeta.write', () => src.nodeMeta!.write('n', key, state, edit), writeNodeMeta, [S, 'n', key, state, edit]],
-    ['cover.set', () => src.cover!.set('n', key, null, state, false), setMemoryCover, [S, 'n', key, null, state, false]],
-    ['cover.setUpload', () => src.cover!.setUpload('n', key, file, FULL_CROP, state), setMemoryCoverUpload, [S, 'n', key, file, FULL_CROP, state]],
     ['mediaMeta.set', () => src.mediaMeta!.set(item, key, 5), media.setMediaMeta, [S, item, key, 5]],
     ['mediaMeta.backfillPlace', () => src.mediaMeta!.backfillPlace(item, key, 'Rom', 'city'), media.backfillPlaceName, [S, item, key, 'Rom', 'city']],
     ['marks.load', () => src.marks!.load('n', key), loadItemFavoritesFor, [S, 'n', key]],
@@ -310,7 +304,7 @@ describe('no door, no capability (the invariant every view rests on)', () => {
   const member = memberMemorySource({ scopeId: () => SCOPE })
   // [the capability, the door it rests on]
   const rests: [keyof MemoryCapabilities, keyof MemorySource][] = [
-    ['upload', 'upload'], ['deleteMedia', 'deleteMedia'], ['editMeta', 'nodeMeta'], ['setCover', 'cover'], ['mark', 'marks'],
+    ['upload', 'upload'], ['deleteMedia', 'deleteMedia'], ['editMeta', 'nodeMeta'], ['mark', 'marks'],
     ['mediaTrash', 'trash'], ['buckets', 'buckets'],
   ]
   for (const [cap, door] of rests) {
@@ -332,10 +326,12 @@ describe('no door, no capability (the invariant every view rests on)', () => {
 
   it('the rights no source door carries pass through unchanged (they are the host\'s dialogs and the tree\'s links)', () => {
     const narrowed = sourceCapabilities(ALL, guest(ShareRole.Read).source)
-    for (const k of ['navigate', 'download', 'createMemory', 'createChapter', 'share', 'shareUpload', 'rename', 'deleteNode'] as const) {
+    // `setCover` rests on no source door since inbox #411: the write is core's (member-only by `coverCapabilities`), and the guest's
+    // column of the matrix is false (`capabilities.test.ts`).
+    for (const k of ['navigate', 'download', 'createMemory', 'createChapter', 'share', 'shareUpload', 'rename', 'deleteNode', 'setCover'] as const) {
       expect(narrowed[k], k).toBe(true)
     }
-    for (const k of ['upload', 'editMeta', 'setCover', 'mark', 'mediaTrash', 'buckets'] as const) expect(narrowed[k], k).toBe(false)
+    for (const k of ['upload', 'editMeta', 'mark', 'mediaTrash', 'buckets'] as const) expect(narrowed[k], k).toBe(false)
     expect(narrowed.deleteMedia).toBe('none')
   })
 })
