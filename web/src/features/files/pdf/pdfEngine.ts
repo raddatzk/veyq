@@ -131,7 +131,7 @@ export async function openPdf(bytes: Uint8Array, signal?: AbortSignal, onPasswor
       // The layer is laid out in the page's UNROTATED space (`rawDims`) and turned into place by `[data-main-rotation]` in
       // `styles/pdf.css`, so its box is the raw page at this scale - not the (rotated) page box. pdf.js writes the same size
       // with the CSS `round()` function, which not every browser has; this is the plain px the page needs.
-      const { pageWidth, pageHeight } = viewport.rawDims
+      const { pageWidth, pageHeight } = viewport.rawDims as { pageWidth: number; pageHeight: number } // typed as `object` upstream
       host.style.width = `${pageWidth * cssScale}px`
       host.style.height = `${pageHeight * cssScale}px`
       await layer.render()

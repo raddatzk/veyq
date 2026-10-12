@@ -157,7 +157,7 @@ describe('Copy', () => {
 
   it('an execCommand that throws or refuses is the same visible fallback', async () => {
     setClipboard(undefined)
-    const exec = vi.fn(() => {
+    const exec = vi.fn((): boolean => {
       throw new Error('unsupported')
     })
     Object.defineProperty(document, 'execCommand', { value: exec, configurable: true })
