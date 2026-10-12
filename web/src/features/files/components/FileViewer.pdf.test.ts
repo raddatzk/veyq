@@ -7,6 +7,7 @@
 // puts nothing in the page that a PDF could use to act: no frame/object/embed, no link, no raw HTML.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import PrimeVue from 'primevue/config'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -96,7 +97,7 @@ function mountViewer(tg: ViewerTarget | null, o: { canDownload?: boolean; name?:
   const w = mount(FileViewer, {
     props: { target: tg, name: o.name ?? 'Report.pdf', canDownload: o.canDownload ?? true },
     attachTo: document.body,
-    global: { plugins: [realI18n()] },
+    global: { plugins: [realI18n(), PrimeVue] },
   })
   mounted.push(w)
   return w
@@ -538,5 +539,259 @@ describe('the text layer (select and copy)', () => {
     const { w } = await openReady(1)
     w.find('.pdf-scroll').element.dispatchEvent(new Event('pointerdown', { bubbles: true }))
     expect(w.find('.pdf-text-selecting').exists()).toBe(false)
+  })
+})
+
+// --- the password prompt -------------------------------------------------------------------------------------------------------
+describe('a password-protected PDF asks for its password', () => {
+  const SECRET = 'correct horse 7'
+  const WRONG = 'hunter2-not-it'
+
+  /** An engine for a protected document: asks `onPassword` until the answer is `correct`; a decline is the failure the real one throws. */
+  function protectedEngine(correct: string, fake: ReturnType<typeof fakeDocument>, gate: () => Promise<void> = async () => {}) {
+    const asked: boolean[] = []
+    vi.mocked(openPdf).mockImplementation(async (_bytes, _signal, onPassword) => {
+      let wrong = false
+      for (;;) {
+        const given = await onPassword!(wrong)
+        if (given === null) throw new PdfOpenError('password')
+        asked.push(wrong)
+        await gate()
+        if (given === correct) return fake.doc
+        wrong = true
+      }
+    })
+    return asked
+  }
+  const field = (w: W) => w.find('input[type="password"]')
+  const form = (w: W) => w.find('form.file-viewer-password')
+  async function typeAndSubmit(w: W, value: string) {
+    await field(w).setValue(value)
+    await form(w).trigger('submit')
+    await flushPromises()
+  }
+
+  /** Every place the password could be left behind in the component: the DOM, its attributes and every value of its state. */
+  function leaks(w: W, secret: string): string[] {
+    const found: string[] = []
+    if (document.body.innerHTML.includes(secret)) found.push('document html')
+    if (w.html().includes(secret)) found.push('component html')
+    for (const el of document.body.querySelectorAll('input')) if ((el as HTMLInputElement).value.includes(secret)) found.push('input value')
+    const setup = (w.vm as unknown as { $: { setupState: Record<string, unknown> } }).$.setupState
+    for (const [key, value] of Object.entries(setup)) {
+      let text = ''
+      try {
+        text = typeof value === 'string' ? value : typeof value === 'function' ? '' : (JSON.stringify(value) ?? '')
+      } catch {
+        text = ''
+      }
+      if (text.includes(secret)) found.push(`state.${key}`)
+    }
+    return found
+  }
+
+  it('shows a labelled password field, focused, with the reason', async () => {
+    protectedEngine(SECRET, fakeDocument(2))
+    const w = mountViewer(target(providerOf(PDF_BYTES)))
+    await flushPromises()
+    expect(form(w).exists()).toBe(true)
+    expect(w.text()).toContain(t('files.viewer.pdf.passwordTitle', { name: 'Report.pdf' }))
+    const input = field(w)
+    expect(input.attributes('autocomplete')).toBe('off')
+    expect(input.attributes('type')).toBe('password')
+    const label = w.find('label.file-viewer-password-label')
+    expect(label.text()).toBe(t('files.viewer.pdf.passwordLabel'))
+    expect(label.attributes('for')).toBe(input.attributes('id'))
+    expect(document.activeElement).toBe(input.element)
+    expect(input.attributes('aria-describedby')).toContain(`${input.attributes('id')}-hint`)
+    expect(w.text()).toContain(t('files.viewer.pdf.passwordHint'))
+    expect(w.find('.pdf-viewer').exists()).toBe(false)
+    expect(w.find('.p-message-error').exists()).toBe(false)
+    // Submit needs a value; Cancel is always there.
+    expect(w.find('button[type="submit"]').attributes('disabled')).toBeDefined()
+    expect(w.find('button.file-viewer-password-cancel').exists()).toBe(true)
+  })
+
+  it('the engine is given a prompt, and asks it with wrong=false first', async () => {
+    const asked = protectedEngine(SECRET, fakeDocument(1))
+    const w = mountViewer(target(providerOf(PDF_BYTES)))
+    await flushPromises()
+    expect(typeof vi.mocked(openPdf).mock.calls[0][2]).toBe('function')
+    await typeAndSubmit(w, SECRET)
+    expect(asked).toEqual([false])
+  })
+
+  it('the right password opens the document: the pages replace the prompt and nothing of the password is left', async () => {
+    const fake = fakeDocument(3)
+    protectedEngine(SECRET, fake)
+    const w = mountViewer(target(providerOf(PDF_BYTES)))
+    await flushPromises()
+    await typeAndSubmit(w, SECRET)
+    expect(form(w).exists()).toBe(false)
+    expect(w.findAll('.pdf-page')).toHaveLength(3)
+    expect(leaks(w, SECRET)).toEqual([])
+  })
+
+  it('a wrong password says so inline, stays on the prompt, clears and refocuses the field - and a retry can succeed', async () => {
+    const fake = fakeDocument(2)
+    const asked = protectedEngine(SECRET, fake)
+    const w = mountViewer(target(providerOf(PDF_BYTES)))
+    await flushPromises()
+    await typeAndSubmit(w, WRONG)
+    expect(asked).toEqual([false])
+    expect(form(w).exists()).toBe(true)
+    const alert = w.find('[role="alert"]')
+    expect(alert.text()).toBe('Wrong password, try again')
+    expect(alert.text()).toBe(t('files.viewer.pdf.passwordWrong'))
+    expect((field(w).element as HTMLInputElement).value).toBe('') // not left in the field
+    expect(field(w).attributes('aria-invalid')).toBe('true')
+    expect(field(w).attributes('aria-describedby')).toContain(alert.attributes('id'))
+    expect(document.activeElement).toBe(field(w).element)
+    expect(leaks(w, WRONG)).toEqual([])
+    await typeAndSubmit(w, SECRET)
+    expect(asked).toEqual([false, true]) // the engine was told the first answer was refused
+    expect(w.findAll('.pdf-page')).toHaveLength(2)
+    expect(w.find('[role="alert"]').exists()).toBe(false)
+    expect(leaks(w, SECRET)).toEqual([])
+    expect(leaks(w, WRONG)).toEqual([])
+  })
+
+  it('while the engine tries an answer the field is locked and the page says so; a second submit does nothing', async () => {
+    let release: () => void = () => {}
+    const gate = () => new Promise<void>((r) => (release = r))
+    const asked = protectedEngine(SECRET, fakeDocument(1), gate)
+    const w = mountViewer(target(providerOf(PDF_BYTES)))
+    await flushPromises()
+    await typeAndSubmit(w, SECRET)
+    expect(field(w).attributes('disabled')).toBeDefined()
+    expect(w.text()).toContain(t('files.viewer.pdf.passwordChecking'))
+    await form(w).trigger('submit')
+    release()
+    await flushPromises()
+    expect(asked).toEqual([false])
+    expect(w.findAll('.pdf-page')).toHaveLength(1)
+  })
+
+  it('an empty password is not submitted', async () => {
+    const asked = protectedEngine(SECRET, fakeDocument(1))
+    const w = mountViewer(target(providerOf(PDF_BYTES)))
+    await flushPromises()
+    await form(w).trigger('submit')
+    await flushPromises()
+    expect(asked).toEqual([])
+    expect(form(w).exists()).toBe(true)
+  })
+
+  it('Cancel keeps the PDF closed and offers the download, as the protected message did', async () => {
+    const asked = protectedEngine(SECRET, fakeDocument(1))
+    const w = mountViewer(target(providerOf(PDF_BYTES)))
+    await flushPromises()
+    await field(w).setValue('half typed')
+    await w.find('button.file-viewer-password-cancel').trigger('click')
+    await flushPromises()
+    expect(asked).toEqual([]) // declined: the engine got null, not an attempt
+    expect(form(w).exists()).toBe(false)
+    expect(w.text()).toContain(t('files.viewer.unsupported.pdf-password'))
+    expect(leaks(w, 'half typed')).toEqual([])
+    await downloadButton(w).trigger('click')
+    expect(w.emitted('download')).toHaveLength(1)
+  })
+
+  it('Escape in the field cancels the prompt', async () => {
+    protectedEngine(SECRET, fakeDocument(1))
+    const w = mountViewer(target(providerOf(PDF_BYTES)))
+    await flushPromises()
+    await field(w).trigger('keydown', { key: 'Escape' })
+    await flushPromises()
+    expect(form(w).exists()).toBe(false)
+    expect(w.text()).toContain(t('files.viewer.unsupported.pdf-password'))
+  })
+
+  it('Enter submits: the field and the submit button are in one real form', async () => {
+    protectedEngine(SECRET, fakeDocument(1))
+    const w = mountViewer(target(providerOf(PDF_BYTES)))
+    await flushPromises()
+    expect(form(w).element.querySelector('input[type="password"]')).toBe(field(w).element)
+    expect(form(w).element.querySelector('button[type="submit"]')).not.toBeNull()
+    expect(w.findAll('form')).toHaveLength(1)
+    expect(w.find('button.file-viewer-password-cancel').attributes('type')).toBe('button') // Cancel must not be the default button
+  })
+
+  it('unmounting during the prompt answers it with a decline (the engine is not left waiting) and drops what was typed', async () => {
+    let answer: Promise<string | null> = Promise.resolve('unset')
+    vi.mocked(openPdf).mockImplementation(async (_b, _s, onPassword) => {
+      answer = onPassword!(false)
+      return new Promise(() => {})
+    })
+    const w = mountViewer(target(providerOf(PDF_BYTES)))
+    await flushPromises()
+    await field(w).setValue('typed but never sent')
+    const setup = (w.vm as unknown as { $: { setupState: { password: string } } }).$.setupState
+    expect(setup.password).toBe('typed but never sent')
+    w.unmount()
+    expect(await answer).toBeNull()
+    expect(document.body.innerHTML).not.toContain('typed but never sent')
+    expect(setup.password).toBe('') // the component let go of it too
+  })
+
+  it('a prompt that a superseded open raises late is declined and does not replace what the page shows now', async () => {
+    let stale: (wrong: boolean) => Promise<string | null> = async () => 'unset'
+    vi.mocked(openPdf).mockImplementationOnce(async (_b, _s, onPassword) => {
+      stale = onPassword!
+      return new Promise(() => {})
+    })
+    const second = fakeDocument(2)
+    vi.mocked(openPdf).mockResolvedValueOnce(second.doc)
+    const w = mountViewer(target(providerOf(PDF_BYTES), 'blob-1'))
+    await flushPromises()
+    await w.setProps({ target: target(providerOf(PDF_BYTES), 'blob-2') })
+    await flushPromises()
+    expect(await stale(false)).toBeNull()
+    await flushPromises()
+    expect(form(w).exists()).toBe(false)
+    expect(w.findAll('.pdf-page')).toHaveLength(2)
+  })
+
+  it('a new file while the prompt is open closes it, drops the typed password and opens the new file', async () => {
+    const second = fakeDocument(4)
+    protectedEngine(SECRET, fakeDocument(1))
+    const w = mountViewer(target(providerOf(PDF_BYTES), 'blob-1'))
+    await flushPromises()
+    await field(w).setValue('typed for the old file')
+    vi.mocked(openPdf).mockReset()
+    vi.mocked(openPdf).mockResolvedValue(second.doc)
+    await w.setProps({ target: target(providerOf(PDF_BYTES), 'blob-2') })
+    await flushPromises()
+    expect(form(w).exists()).toBe(false)
+    expect(w.findAll('.pdf-page')).toHaveLength(4)
+    expect(leaks(w, 'typed for the old file')).toEqual([])
+  })
+
+  it('the password goes nowhere but the prompt: no storage, no console, no network', async () => {
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+    const logged: unknown[][] = []
+    for (const m of ['log', 'info', 'warn', 'error', 'debug'] as const) vi.spyOn(console, m).mockImplementation((...a: unknown[]) => void logged.push(a))
+    protectedEngine(SECRET, fakeDocument(1))
+    const w = mountViewer(target(providerOf(PDF_BYTES)))
+    await flushPromises()
+    await typeAndSubmit(w, WRONG)
+    await typeAndSubmit(w, SECRET)
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(JSON.stringify(logged)).not.toContain(SECRET)
+    expect(JSON.stringify(logged)).not.toContain(WRONG)
+    for (const store of [localStorage, sessionStorage]) {
+      const dump = JSON.stringify(Object.fromEntries(Object.entries(store)))
+      expect(dump).not.toContain(SECRET)
+      expect(dump).not.toContain(WRONG)
+    }
+  })
+
+  it('a PDF the engine refuses without asking (broken, too long) never shows the prompt', async () => {
+    vi.mocked(openPdf).mockRejectedValue(new PdfOpenError('broken'))
+    const w = mountViewer(target(providerOf(PDF_BYTES)))
+    await flushPromises()
+    expect(form(w).exists()).toBe(false)
+    expect(w.text()).toContain(t('files.viewer.unsupported.pdf-broken'))
   })
 })

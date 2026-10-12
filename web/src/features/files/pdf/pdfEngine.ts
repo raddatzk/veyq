@@ -53,16 +53,45 @@ function abortError(signal: AbortSignal): unknown {
   return signal.reason ?? new DOMException('Cancelled', 'AbortError')
 }
 
+/** pdf.js' `PasswordResponses.INCORRECT_PASSWORD` (1 is NEED_PASSWORD); `pdfEngine.real.test.ts` pins both against the library. */
+const INCORRECT_PASSWORD = 2
+
+/**
+ * Asks for the document's password; `wrong` is true when the one given before was refused. Resolves the password, or `null`
+ * when the user declines. The engine hands the answer to pdf.js and keeps no copy: it never stores, logs or sends it.
+ */
+export type PdfPasswordPrompt = (wrong: boolean) => Promise<string | null>
+
 /**
  * Open `bytes` (taken over: pdf.js transfers the buffer to its worker). Throws {@link PdfOpenError} for a password, an
  * unreadable document or more than {@link PDF_MAX_PAGES} pages, the signal's reason when aborted, and whatever the loader
- * threw (a chunk that did not load) otherwise.
+ * threw (a chunk that did not load) otherwise. A protected document asks `onPassword` (again after a wrong answer) while the
+ * same loading task waits - the buffer stays in pdf.js, no second copy is made; without a prompt, or when it answers `null`,
+ * the failure is `PdfOpenError('password')`.
  */
-export async function openPdf(bytes: Uint8Array, signal?: AbortSignal): Promise<PdfDocument> {
+export async function openPdf(bytes: Uint8Array, signal?: AbortSignal, onPassword?: PdfPasswordPrompt): Promise<PdfDocument> {
   const { getDocument, TextLayer } = await import('./pdfjsRuntime')
   if (signal?.aborted) throw abortError(signal)
-  // No `onPassword`: pdf.js then rejects with a PasswordException, which is the "protected" message (no prompt in this cut).
   const task = getDocument(bytes)
+  let declined = false
+  // Without a handler pdf.js rejects with a PasswordException, which is the "protected" statement and the download.
+  if (onPassword) {
+    task.onPassword = (update: (password: string) => void, reason: number) => {
+      onPassword(reason === INCORRECT_PASSWORD).then(
+        (password) => {
+          if (signal?.aborted) return
+          if (password === null) {
+            declined = true
+            void task.destroy().catch(() => {})
+          } else update(password)
+        },
+        () => {
+          declined = true
+          void task.destroy().catch(() => {})
+        },
+      )
+    }
+  }
   const onAbort = () => void task.destroy().catch(() => {})
   signal?.addEventListener('abort', onAbort, { once: true })
   let doc
@@ -70,6 +99,7 @@ export async function openPdf(bytes: Uint8Array, signal?: AbortSignal): Promise<
     doc = await task.promise
   } catch (e) {
     if (signal?.aborted) throw abortError(signal)
+    if (declined) throw new PdfOpenError('password')
     await task.destroy().catch(() => {})
     if (PASSWORD.has(nameOf(e))) throw new PdfOpenError('password')
     if (BROKEN.has(nameOf(e))) throw new PdfOpenError('broken')

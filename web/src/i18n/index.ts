@@ -1079,6 +1079,14 @@ const en = {
         zoomOut: 'Zoom out',
         zoomIn: 'Zoom in',
         fitWidth: 'Fit to width',
+        // The prompt for a password-protected PDF: the password goes to the PDF reader on this device and nowhere else.
+        passwordTitle: '{name} is password protected',
+        passwordLabel: 'Password',
+        passwordHint: 'The password is only used on this device to open the PDF. It is not stored or sent anywhere.',
+        passwordChecking: 'Checking the password…',
+        passwordWrong: 'Wrong password, try again',
+        passwordOpen: 'Open',
+        passwordCancel: 'Cancel',
       },
       unsupported: {
         format: 'This file cannot be shown in your browser. You can download it.',
@@ -2437,6 +2445,13 @@ const de: typeof en = {
         zoomOut: 'Verkleinern',
         zoomIn: 'Vergrößern',
         fitWidth: 'An Breite anpassen',
+        passwordTitle: '{name} ist passwortgeschützt',
+        passwordLabel: 'Passwort',
+        passwordHint: 'Das Passwort wird nur auf diesem Gerät zum Öffnen des PDFs verwendet. Es wird weder gespeichert noch irgendwohin gesendet.',
+        passwordChecking: 'Das Passwort wird geprüft…',
+        passwordWrong: 'Falsches Passwort, bitte erneut versuchen',
+        passwordOpen: 'Öffnen',
+        passwordCancel: 'Abbrechen',
       },
       unsupported: {
         format: 'Diese Datei kann in deinem Browser nicht angezeigt werden. Du kannst sie herunterladen.',
