@@ -9,6 +9,7 @@
 // loop resumes when it shows); an open dialog pauses it; an unmount stops it; and a poll that began before a write's own
 // re-read of the tree never overwrites it.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { LIVE_POLL } from '../core/node/useLevelLive'
 import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { createRouter, createMemoryHistory } from 'vue-router'
@@ -91,7 +92,8 @@ const settle = async (ms: number) => {
   await vi.advanceTimersByTimeAsync(ms)
   await nextTick()
 }
-const OVER_ONE_INTERVAL = 19_000 // 15 s, +20 % jitter at most
+// One poll interval and the jitter's widest draw, so the tests follow the cadence instead of a copied number.
+const OVER_ONE_INTERVAL = Math.ceil(LIVE_POLL.intervalMs * (1 + LIVE_POLL.jitter)) + 500
 
 async function mountLevel() {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'home', component: { template: '<div />' } }] })
@@ -103,6 +105,7 @@ async function mountLevel() {
 }
 
 beforeEach(async () => {
+  vi.spyOn(Math, 'random').mockReturnValue(0.5) // the loop's delay is jittered: pin the draw so the windows below are exact
   vi.useFakeTimers()
   setVisibility('visible')
   resetTree()
@@ -119,6 +122,7 @@ beforeEach(async () => {
 })
 afterEach(() => {
   vi.useRealTimers()
+  vi.mocked(Math.random).mockRestore()
 })
 
 describe('the member level view, live', () => {

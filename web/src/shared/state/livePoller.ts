@@ -9,7 +9,7 @@
 // - **Only while the tab is visible.** A hidden tab asks nothing: its timer is cleared when it hides and nothing is
 //   scheduled until it shows again. On the return to visible — and on window focus, which a tab switch inside one
 //   window does not always pair with a visibility change — it ticks at once (a returning viewer catches up now, not
-//   in 15 s), unless a tick ran within `minGapMs` (the two events arrive together; one tick, not two).
+//   in 5 s), unless a tick ran within `minGapMs` (the two events arrive together; one tick, not two).
 // - **One tick at a time, and a stop fences it.** A trigger while a tick is in flight is dropped. `stop()` aborts the
 //   signal each tick was handed; a tick checks it after every await before applying anything. A stopped poller
 //   schedules nothing, whatever a late settle says.

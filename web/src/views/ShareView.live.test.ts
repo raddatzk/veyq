@@ -8,6 +8,7 @@
 // leaves the page standing; a link that is GONE (revoked, expired, deleted, its root trashed) flips the page to its
 // unavailable state and ends the loop; a changed password flips it to the gate; an unmount stops the loop.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { LIVE_POLL } from '../core/node/useLevelLive'
 import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { createRouter, createMemoryHistory } from 'vue-router'
@@ -91,7 +92,8 @@ const settle = async (ms: number) => {
   await vi.advanceTimersByTimeAsync(ms)
   await nextTick()
 }
-const OVER_ONE_INTERVAL = 19_000
+// One poll interval and the jitter's widest draw, so the tests follow the cadence instead of a copied number.
+const OVER_ONE_INTERVAL = Math.ceil(LIVE_POLL.intervalMs * (1 + LIVE_POLL.jitter)) + 500
 
 async function mountPage() {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/s/:shareId', component: ShareView }] })

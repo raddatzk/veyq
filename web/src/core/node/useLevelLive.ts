@@ -9,14 +9,14 @@
 // upload's completion does (it bumps the scope's tree revision) — and re-reads its own, cheap, part. A 304 ticks
 // nothing. A section with nothing beside the tree ignores it.
 //
-// **Cadence** (`LIVE_POLL`): ~15 s ± 20 %, only while the tab is visible, at once on the return to visible or focus,
+// **Cadence** (`LIVE_POLL`): ~5 s ± 20 % (a poll that nothing changed costs one `304`, ADR 0081), only while the tab is visible, at once on the return to visible or focus,
 // doubling to 2 min on errors (`shared/state/livePoller.ts`). **Never over a write**: `paused` is the host's "a dialog
 // is open / a write is in flight" — a paused tick asks the server nothing and the next interval tries again; and a read
 // that began before a write's own re-read is dropped by the host's read (`treeStore.pollTree`'s generation).
 import { onBeforeUnmount, readonly, ref, watch, type Ref } from 'vue'
 import { createLivePoller, type LivePollerOptions } from '../../shared/state/livePoller'
 
-export const LIVE_POLL: LivePollerOptions = { intervalMs: 15_000, maxBackoffMs: 120_000, jitter: 0.2, minGapMs: 2_000 }
+export const LIVE_POLL: LivePollerOptions = { intervalMs: 5_000, maxBackoffMs: 120_000, jitter: 0.2, minGapMs: 2_000 }
 
 export interface LevelLiveOptions {
   /** Whether a folder level is on screen now (the host shows a detail or a state instead otherwise): polls only then. */
