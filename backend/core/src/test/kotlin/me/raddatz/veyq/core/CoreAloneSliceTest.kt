@@ -19,6 +19,7 @@ import me.raddatz.veyq.core.crypto.Tokens
 import me.raddatz.veyq.core.node.FolderNodeRules
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.node.NodeKindRules
+import me.raddatz.veyq.core.favorites.FavoritesScopeEraser
 import me.raddatz.veyq.core.node.NodeScopeEraser
 import me.raddatz.veyq.core.node.NodeSubtreeEraser
 import me.raddatz.veyq.core.quota.StorageQuota
@@ -76,7 +77,7 @@ import org.junit.jupiter.api.Test
  * config key only an application defines (the boot fails), or a seam whose empty collection fails *open* — admits a
  * link, places a kind, completes an upload — instead of refusing. So:
  *
- * 1. **Every seam holds exactly core's own implementations**: `ScopeEraser` core's three (attachments, nodes, shares),
+ * 1. **Every seam holds exactly core's own implementations**: `ScopeEraser` core's four (attachments, pins, nodes, shares),
  *    `NodeKindRules` and `ShareRoots` core's `FOLDER` answers, `NodeSubtreeEraser`, `GuestIdentityUsage` and
  *    `SharedSubtreeContributor` core's attachment one each (cr-files-application P3-S3), and every other seam —
  *    `MembershipEraser`, `ShareGuestWrites`, `UploadCompletion`, `UploadAdmission`, `WriteOnlyGuestKinds`,
@@ -144,8 +145,8 @@ class CoreAloneSliceTest {
 
     @Test
     fun everySeamHoldsExactlyCoresOwnImplementations() {
-        assertEquals(setOf(AttachmentScopeEraser::class.java, NodeScopeEraser::class.java, ShareScopeEraser::class.java),
-            classes(scopeErasers), "ScopeEraser: core's own three, and no application's")
+        assertEquals(setOf(AttachmentScopeEraser::class.java, FavoritesScopeEraser::class.java, NodeScopeEraser::class.java, ShareScopeEraser::class.java),
+            classes(scopeErasers), "ScopeEraser: core's own four, and no application's")
         assertEquals(setOf(AttachmentNodeSubtreeEraser::class.java), classes(subtreeErasers), "NodeSubtreeEraser: core's attachments only")
         assertEquals(setOf(AttachmentGuestIdentityUsage::class.java, NodeGuestIdentityUsage::class.java), classes(identityUsages),
             "GuestIdentityUsage: core's attachments and identity folders only")

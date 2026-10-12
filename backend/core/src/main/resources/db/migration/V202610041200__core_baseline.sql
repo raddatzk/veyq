@@ -305,6 +305,17 @@ CREATE TABLE veyq_scope_epoch (
 );
 CREATE UNIQUE INDEX ux_scope_epoch ON veyq_scope_epoch (scope_id, epoch);
 
+-- Per-(user, scope) pinned-node set (ADR 0068; core's since the pin names a node of any kind), sealed under the
+-- member's master key, never K_SC. The natural key is one synthetic id (`userId|scopeId`) so an upsert is a
+-- primary-key lookup. No foreign key: the scope eraser (phase 600) deletes it with the scope.
+CREATE TABLE veyq_scope_favorites (
+    id         VARCHAR(73)  NOT NULL,
+    user_id    UUID  NOT NULL,
+    scope_id   UUID  NOT NULL,
+    ciphertext MEDIUMTEXT   NOT NULL,
+    PRIMARY KEY (id)
+);
+
 -- The sealed identity-pin store (ADR 0028); version is the compare-and-set counter. 1 MiB cap: MEDIUMTEXT.
 CREATE TABLE veyq_identity_pins (
     account_id  UUID NOT NULL PRIMARY KEY,

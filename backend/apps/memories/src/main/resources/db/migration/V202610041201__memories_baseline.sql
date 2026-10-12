@@ -4,17 +4,7 @@
 -- MEDIUMTEXT where a contract cap passes the 65 535-byte TEXT ceiling (scripts/validate_maxlength_storage.py).
 -- Every id and id reference is the native UUID type (see the core baseline's header; inbox #387); the synthetic
 -- composite keys and owner_key stay VARCHAR.
--- Operator-blind: names, dates, places, EXIF and favorites are sealed under keys the server never holds.
-
--- Per-(user, scope) pinned-Memory set, sealed under K_SC. The natural key is one synthetic id
--- (`userId|scopeId`) so an upsert is a primary-key lookup.
-CREATE TABLE veyq_scope_favorites (
-    id         VARCHAR(73)  NOT NULL,
-    user_id    UUID  NOT NULL,
-    scope_id   UUID  NOT NULL,
-    ciphertext MEDIUMTEXT   NOT NULL,
-    PRIMARY KEY (id)
-);
+-- Operator-blind: names, dates, places, EXIF and item favorites are sealed under keys the server never holds.
 
 -- Per-uploader buckets within a Memory (ADR 0034), keyed by an opaque owner_key ("user:{userId}" |
 -- "share:{shareIdentityId}"). One primary per (node_id, owner_key) is held by the node row's lock in code
