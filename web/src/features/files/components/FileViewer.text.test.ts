@@ -28,8 +28,10 @@ afterEach(() => {
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
   Object.defineProperty(navigator, 'clipboard', { value: realClipboard, configurable: true })
+  Object.defineProperty(document, 'execCommand', { value: realExec, configurable: true })
 })
 const realClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard')?.value
+const realExec = document.execCommand
 function setClipboard(value: unknown): void {
   Object.defineProperty(navigator, 'clipboard', { value, configurable: true })
 }
@@ -138,6 +140,36 @@ describe('Copy', () => {
     await flushPromises()
     expect(note(w).text()).toBe(t('files.viewer.text.copyManual'))
     expect(window.getSelection()!.toString()).toBe('Hallo Welt')
+  })
+
+  it('without a clipboard API the selection is copied through the older route where the browser allows it - and says "copied"', async () => {
+    setClipboard(undefined)
+    const exec = vi.fn(() => true)
+    Object.defineProperty(document, 'execCommand', { value: exec, configurable: true })
+    const w = mountText('Hallo Welt')
+    await flushPromises()
+    await copyButton(w).trigger('click')
+    await flushPromises()
+    expect(exec).toHaveBeenCalledWith('copy')
+    expect(window.getSelection()!.toString()).toBe('Hallo Welt') // the command copies this selection
+    expect(note(w).text()).toBe(t('files.viewer.text.copied'))
+  })
+
+  it('an execCommand that throws or refuses is the same visible fallback', async () => {
+    setClipboard(undefined)
+    const exec = vi.fn(() => {
+      throw new Error('unsupported')
+    })
+    Object.defineProperty(document, 'execCommand', { value: exec, configurable: true })
+    const w = mountText('Hallo Welt')
+    await flushPromises()
+    await copyButton(w).trigger('click')
+    await flushPromises()
+    expect(note(w).text()).toBe(t('files.viewer.text.copyManual'))
+    exec.mockImplementation(() => false)
+    await copyButton(w).trigger('click')
+    await flushPromises()
+    expect(note(w).text()).toBe(t('files.viewer.text.copyManual'))
   })
 
   it('a clipboard that refuses (permission, no focus) is the same visible fallback, never a silent failure or an unhandled rejection', async () => {

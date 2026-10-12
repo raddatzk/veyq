@@ -51,8 +51,9 @@ const unsupportedKey = computed(() => {
 // --- plain text: copy and wrap ---------------------------------------------------------------------------------------------
 // The text is ordinary selectable page text (nothing here sets user-select, and it is `textContent`, never markup); these two
 // buttons only add convenience. Copy writes exactly what is SHOWN (a truncated text copies its shown part, and the button and
-// its note say so). Where the clipboard is not available (an insecure page, a refusal) the text is selected instead and the
-// note tells the user to press Ctrl/Cmd+C: no copy ever fails silently.
+// its note say so). Where the clipboard API is not available (an insecure page, a refusal) the text is selected and the
+// browser asked to copy the selection; if that is refused too, the note tells the user to press Ctrl/Cmd+C: no copy ever
+// fails silently.
 const textEl = ref<HTMLElement | null>(null)
 const wrap = ref(true)
 const copyNote = ref('')
@@ -63,14 +64,23 @@ function selectShownText(): void {
   const sel = typeof window !== 'undefined' ? window.getSelection() : null
   if (el && sel) sel.selectAllChildren(el)
 }
+const copiedNote = (truncated: boolean) => (truncated ? 'files.viewer.text.copiedShown' : 'files.viewer.text.copied')
 async function copyText(text: string, truncated: boolean): Promise<void> {
   clearTimeout(copyNoteTimer)
   try {
     await navigator.clipboard.writeText(text) // throws where there is no clipboard (an insecure page) or the browser refuses
-    copyNote.value = truncated ? 'files.viewer.text.copiedShown' : 'files.viewer.text.copied'
+    copyNote.value = copiedNote(truncated)
   } catch {
+    // The older route for the same thing: select the shown text and ask the browser to copy the selection. Where that is
+    // refused too, the text stays selected and the note says to press Ctrl/Cmd+C.
     selectShownText()
-    copyNote.value = 'files.viewer.text.copyManual'
+    let copied = false
+    try {
+      copied = document.execCommand('copy')
+    } catch {
+      copied = false
+    }
+    copyNote.value = copied ? copiedNote(truncated) : 'files.viewer.text.copyManual'
   }
   copyNoteTimer = setTimeout(() => (copyNote.value = ''), 6000)
 }
