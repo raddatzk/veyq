@@ -13,16 +13,23 @@ Beide liegen in denselben Ordnern deines Bereichs, Seite an Seite.
 - **Herunterladen** — die Herunterladen-Schaltfläche in der Zeile der Datei gibt dir die Datei genau so zurück, wie
   du sie abgelegt hast, unter dem Namen, den sie in veyq hat. Ein Klick auf die Zeile selbst öffnet die Seite der Datei.
 - **Ansehen** — klicke auf die Zeile der Datei, und ihre Seite öffnet sich mit der Datei selbst darauf: ein **Bild**
-  wird angezeigt, ein **Text** (reiner Text, Markdown, Code, JSON, CSV …) wird als Text angezeigt, eine **PDF-Datei**
+  wird angezeigt, ein **Text** (reiner Text, Markdown, Code, JSON, CSV …) wird als Text angezeigt (markiere ihn nach Belieben oder nutze
+  die Schaltfläche **Kopieren**; mit **Zeilen umbrechen** schaltest du den Zeilenumbruch ein und aus), eine **PDF-Datei**
   wird Seite für Seite angezeigt (mit Seitenzahl und Schaltflächen zum Vergrößern, Verkleinern und Anpassen an die
   Breite), und ein **Video** oder eine **Audiodatei** wird abgespielt, mit einer Schaltfläche für den
   **Vollbildmodus**. Die Datei wird auf deinem Gerät entschlüsselt, während du sie ansiehst, es wird nichts Zusätzliches
   gespeichert, und wer die Datei von dir freigegeben bekommen hat, sieht genau dasselbe. Manches zeigt die Seite nicht
-  an: eine PDF, die **mit einem Passwort geschützt** ist (die Seite sagt es; öffne sie über den Download), ein Format,
+  an: ein Format,
   das dein Browser nicht darstellen kann, und sehr große Bilder oder PDFs (über 64 MB) — und von einem langen Text
-  erscheint nur das erste Megabyte. In einer PDF lässt sich der Text noch nicht markieren oder durchsuchen, Links darin
-  tun nichts, und **eingescannte Seiten** (manche Scanner speichern die Seite in einem Bildformat, das veyq nicht
-  zeichnet) können Lücken zeigen. In all diesen Fällen ist die Schaltfläche zum Herunterladen gleich daneben.
+  erscheint nur das erste Megabyte (**Kopieren** kopiert dann nur den angezeigten Teil und sagt es dazu). Eine PDF, die
+  **mit einem Passwort geschützt** ist, fragt direkt auf der Seite danach: Das Passwort wird nur auf deinem Gerät zum
+  Öffnen der PDF verwendet und weder gespeichert noch irgendwohin gesendet; brichst du ab, wird stattdessen der Download
+  angeboten. In einer PDF kannst du den **Text** der Seiten auf dem Bildschirm mit Maus oder Tastatur **markieren und
+  kopieren**; Links darin tun nichts (sie sind nicht anklickbar, eine PDF kann dich also nie woandershin schicken),
+  Anmerkungen und Formularfelder werden nicht als bedienbare Elemente gezeigt, und **eingescannte Seiten** (manche
+  Scanner speichern die Seite in einem Bildformat, das veyq nicht zeichnet) können Lücken zeigen — und haben keinen
+  Text zum Markieren, außer der Scanner hat ihn mitgespeichert. Wenn etwas nicht angezeigt werden kann, ist die
+  Schaltfläche zum Herunterladen gleich daneben.
 - **Ersetzen** — lege eine neuere Fassung an die Stelle der Datei. Der Name bleibt. veyq **fragt vorher nach**, denn
   es gibt **keinen Versionsverlauf**: Der alte Inhalt lässt sich nicht zurückholen. Dieselbe Frage kommt, wenn du eine
   Datei hochlädst, deren Name in dem Ordner schon vergeben ist.

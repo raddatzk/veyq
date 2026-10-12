@@ -382,8 +382,9 @@ here; the server is blind.
   `npm run verify:pdf-worker` pin it, with the worker a same-origin hashed asset for `worker-src 'self'`, no `eval`/`new
   Function` in the emitted files, no `.wasm`); `pdfOptions.ts` is the option set - the document is `{data}` (never a URL),
   `useWasm: false` (the WASM decoders need `'wasm-unsafe-eval'`, which the policy does not grant: JBIG2/JPEG 2000 scan
-  images render blank - a documented gap, a policy decision to change), `enableXfa: false`, no scripting, no annotation or
-  text layer; CMaps, standard fonts and ICC profiles are same-origin copies under `assets/pdfjs-<version>/`
+  images render blank - a documented gap, a policy decision to change), `enableXfa: false`, no scripting, no annotation
+  layer (a text layer yes - spans only, selectable and copyable - and a password prompt that hands the password to pdf.js
+  only: never state, log, storage or network); CMaps, standard fonts and ICC profiles are same-origin copies under `assets/pdfjs-<version>/`
   (`vite.config.ts`'s `pdfjsAssetsPlugin`), `connect-src 'self'` carries them. **Bumping `pdfjs-dist` re-runs the real-library
   test and `verify:pdf-worker`; check that its options still exist** (v6 dropped `isEvalSupported`). The member and the guest
   mount the same component.
