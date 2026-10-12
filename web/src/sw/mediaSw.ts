@@ -30,7 +30,7 @@ import {
   DOWNLOAD_PATH_PREFIX,
   MEDIA_PATH_PREFIX,
   PROTOCOL_VERSION,
-  isVideoMediaType,
+  isStreamableMediaType,
   type ChunkReply,
   type EndSessionAck,
   type PageToSwMessage,
@@ -261,9 +261,9 @@ export function handleMessage(registry: PlaybackRegistry, data: unknown, ports: 
   if (msg.type === 'veyq-handshake') {
     ports[0]?.postMessage({ type: 'veyq-handshake-ack', version: PROTOCOL_VERSION })
   } else if (msg.type === 'veyq-register-playback') {
-    // The shim serves `mediaType` as Content-Type, and the uploader sealed it: anything but one video essence
+    // The shim serves `mediaType` as Content-Type, and the uploader sealed it: anything but one video or audio essence
     // never gets a handle — whatever the page's own gate did.
-    if (ports[0] && isVideoMediaType(msg.mediaType)) {
+    if (ports[0] && isStreamableMediaType(msg.mediaType)) {
       registry.register(msg.handle, new PlaybackSession(msg.chunkCount, msg.byteSize, ports[0], msg.mediaType))
     }
   } else if (msg.type === 'veyq-register-download') {

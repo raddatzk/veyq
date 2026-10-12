@@ -11,6 +11,7 @@
 // Operator-blind as the views: every name, size and date is opened by the view under keys the tree holds; the sources
 // move ids, sealed sizes and ciphertext.
 import type { UploadJob } from '../../core/blob/queue'
+import type { BlobChunkProvider } from '../../core/blob/transport'
 import type { GuestAccess } from '../../core/access'
 import { deleteNode, restoreNode, type NodeParent, type TreeNode } from '../../core/node/tree'
 import { loadTree, treeStore } from '../../core/node/treeStore'
@@ -21,7 +22,7 @@ import type { EpochKeys } from '../spaces/epochs'
 import type { FileBlobRef } from '../../api/generated/files'
 import { ShareRole } from '../../api/generated/sharing'
 import { filesApi, publicShareFilesApi } from './api'
-import { downloadFile } from './download'
+import { downloadFile, fileChunkProvider } from './download'
 import { fileUploadJob, type FileJobExtra, type FileReplace, type FileUploadResult } from './uploadFile'
 import { guestFileUploadJob } from './shareUpload'
 import type { FilesCapabilities } from './capabilities'
@@ -64,6 +65,10 @@ export interface FilesSource {
   /** Save one file: decrypted under `key`, saved as `name`. Starts its save picker before anything else is awaited (the
    *  click's activation). */
   download(key: Uint8Array, nodeId: string, blob: FileBlobRef, name: string): Promise<void>
+  /** The reader the file page's viewer opens a file with (inbox #412): the file's chunks decrypted under `key`, presigned
+   *  through the session's own door. Nothing is fetched before the first read; throws `OpenRefused` for a ref that is not
+   *  this node's. */
+  chunks(key: Uint8Array, nodeId: string, blob: FileBlobRef): BlobChunkProvider
   /** The upload-queue batch of a level's uploads (one per level and session). */
   batchKey(folderId: string | null): string
   /** After a write: re-read what the write changed (the tree; a guest's link), then `reloadBlobs` where the listing does
@@ -118,6 +123,11 @@ export function memberFilesSource(from: {
     download(key, nodeId, blob, name) {
       const scopeId = from.scopeId()
       return scopeId ? downloadFile(scopeId, key, nodeId, blob, name) : Promise.resolve()
+    },
+    chunks(key, nodeId, blob) {
+      const scopeId = from.scopeId()
+      if (!scopeId) throw new Error('scope_locked')
+      return fileChunkProvider(scopeId, key, nodeId, blob)
     },
     batchKey: (folderId) => `files:${from.scopeId() ?? ''}:${folderId ?? ''}`,
     refresh(reloadBlobs) {
@@ -188,6 +198,10 @@ export function guestFilesSource(access: () => GuestAccess, host: { move?: (node
     download(key, nodeId, blob, name) {
       const a = access()
       return downloadFile(a.head.scopeId, key, nodeId, blob, name, (blobId) => shareChunkUrls(a.shareId, blobId, a.pwToken))
+    },
+    chunks(key, nodeId, blob) {
+      const a = access()
+      return fileChunkProvider(a.head.scopeId, key, nodeId, blob, (blobId) => shareChunkUrls(a.shareId, blobId, a.pwToken))
     },
     batchKey: (folderId) => `files-share:${access().shareId}:${folderId ?? ''}`,
     refresh() {
