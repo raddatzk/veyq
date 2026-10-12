@@ -18,6 +18,8 @@ import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url } from '@veyq/crypto/base64'
 
 vi.mock('../../../api/client', async (orig) => (await import('../../../test/guestMode')).guardedClients(await orig<object>()))
+// A PDF is drawn by pdf.js, which `pdf/pdfEngine` loads: no suite of a file page loads it (`FileViewer.pdf.test.ts` has the viewer).
+vi.mock('../pdf/pdfEngine', async (orig) => ({ ...(await orig<typeof import('../pdf/pdfEngine')>()), openPdf: vi.fn() }))
 vi.mock('../api', async (orig) => (await import('../../../test/guestMode')).guardedClients(await orig<object>()))
 const memberReads = vi.hoisted(() => [] as string[])
 vi.mock('../../../app/activeSpace', () => ({
@@ -43,6 +45,7 @@ vi.mock('../../../core/sharing/guestTree', async (orig) => ({
 import ShareTreePage from '../../../core/sharing/ShareTreePage.vue'
 import { publicShareFilesApi } from '../api'
 import { downloadFile, fileChunkProvider } from '../download'
+import { openPdf, PdfOpenError, type PdfDocument } from '../pdf/pdfEngine'
 import { PDF_BYTES, PNG_BYTES, providerOf } from '../../../test/fileChunks'
 import { guestFileUploadJob, type GuestFileTarget } from '../shareUpload'
 import { shareChunkUrls } from '../../../core/sharing/guestBlob'
@@ -123,6 +126,9 @@ function expectNoMemberWorld() {
   expect(deleteNode, 'no member node operation').not.toHaveBeenCalled()
 }
 
+const UNKNOWN_BYTES = Uint8Array.from({ length: 300 }, (_, i) => (i * 7) % 250)
+const fakePdf = (): PdfDocument => ({ numPages: 2, pageSize: vi.fn(async () => ({ width: 200, height: 100 })), render: vi.fn(() => ({ done: new Promise<boolean>(() => {}), cancel: vi.fn() })), destroy: vi.fn(async () => {}) })
+
 beforeEach(() => {
   authenticatedCalls.length = 0
   memberReads.length = 0
@@ -131,7 +137,7 @@ beforeEach(() => {
   listShareFiles = stubApi(publicShareFilesApi, { listShareFiles: { items: [{ nodeId: FILE, fileBlob: BLOB }] } satisfies ShareFileListing }).listShareFiles
   vi.mocked(guestFileUploadJob).mockReset().mockImplementation((_t, file) => ({ name: file.name, sizeBytes: 1, run: vi.fn(async () => ({ nodeId: FILE })), extra: { file } }))
   vi.mocked(downloadFile).mockReset().mockResolvedValue(undefined)
-  vi.mocked(fileChunkProvider).mockReset().mockImplementation(() => providerOf(PDF_BYTES))
+  vi.mocked(fileChunkProvider).mockReset().mockImplementation(() => providerOf(UNKNOWN_BYTES))
   toastError.mockClear()
   router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/s/:id', component: { render: () => null } }] })
 })
@@ -156,9 +162,31 @@ describe.each([ShareRole.Read, ShareRole.ReadWrite])('the viewer for a %s guest 
     expectNoMemberWorld()
   })
 
+  it('a PDF is shown on the page, drawn by the same viewer as the member\'s (no frame, no link)', async () => {
+    vi.mocked(fileChunkProvider).mockImplementation(() => providerOf(PDF_BYTES))
+    vi.mocked(openPdf).mockResolvedValue(fakePdf())
+    const w = await mountPage(role)
+    expect(w.find('.file-viewer .pdf-viewer').exists()).toBe(true)
+    expect(w.findAll('.file-viewer .pdf-page')).toHaveLength(2)
+    expect(w.find('.file-viewer iframe, .file-viewer object, .file-viewer embed').exists()).toBe(false)
+    expect(w.find('.file-viewer-fullscreen').exists()).toBe(true)
+    expectNoMemberWorld()
+  })
+
+  it('a password-protected PDF offers the guest\'s download instead', async () => {
+    vi.mocked(fileChunkProvider).mockImplementation(() => providerOf(PDF_BYTES))
+    vi.mocked(openPdf).mockRejectedValue(new PdfOpenError('password'))
+    const w = await mountPage(role)
+    expect(w.find('.file-viewer').text()).toContain(t('files.viewer.unsupported.pdf-password'))
+    await w.find('.file-viewer button.file-viewer-download').trigger('click')
+    await flushPromises()
+    expect(downloadFile).toHaveBeenCalledTimes(1)
+    expectNoMemberWorld()
+  })
+
   it('a file the viewer cannot show offers the guest\'s download (the matrix grants it to both roles)', async () => {
     const w = await mountPage(role)
-    expect(w.find('.file-viewer').text()).toContain(t('files.viewer.unsupported.pdf'))
+    expect(w.find('.file-viewer').text()).toContain(t('files.viewer.unsupported.format'))
     await w.find('.file-viewer button.file-viewer-download').trigger('click')
     await flushPromises()
     expect(downloadFile).toHaveBeenCalledTimes(1)

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 // The viewer of an opened file (inbox #412): the file's own content, decrypted when the page opens and shown in the page
-// or full screen - an image, a text, a video or audio through the service worker's media route (ADR 0047), and for anything
-// else (a PDF, a format the browser cannot decode, a file over its cap) a plain statement and the download. Files makes no
+// or full screen - an image, a text, a PDF drawn page by page onto canvases by pdf.js (`PdfPages`, loaded on the first PDF),
+// a video or audio through the service worker's media route (ADR 0047), and for anything else (a format the browser cannot
+// decode, a protected PDF, a file over its cap) a plain statement and the download. Files makes no
 // thumbnail and no preview blob: this reads the file itself.
 //
 // **What is rendered, and how** (every rule is a security rule - the bytes are a peer's):
@@ -9,6 +10,8 @@
 // - an image is an `<img>` on an object URL typed with the SNIFFED type (SVG included: never inline, never `<object>`/
 //   `<iframe>`); a decode failure (`error`) is the "cannot be shown" message, not an exception;
 // - a text is interpolated (`textContent`), never `innerHTML`: markup in it stays visible characters;
+// - a PDF is never handed to the browser's own viewer (no <iframe>/<object>/<embed>: the policy forbids them): pdf.js draws
+//   it onto <canvas> elements, with no text layer, no annotation layer and no script - a link inside it is not clickable;
 // - a video/audio plays from the service worker's `/__media/<handle>` (the page holds the key, the worker none); no worker,
 //   no playback;
 // - nothing is logged and nothing leaves the client; the object URL and the playback handle are revoked on a new file, on
@@ -21,6 +24,7 @@ import Button from 'primevue/button'
 import Message from 'primevue/message'
 import { formatBytes } from '../../../shared/formatBytes'
 import { useFileViewer, type ViewerTarget } from '../useFileViewer'
+import PdfPages from './PdfPages.vue'
 import { TEXT_CAP } from '../view'
 
 const props = defineProps<{
@@ -109,6 +113,7 @@ onBeforeUnmount(() => {
       <template v-else-if="ready?.kind === 'text'">
         <pre class="file-viewer-text" tabindex="0" :aria-label="t('files.viewer.textLabel', { name })">{{ ready.text }}</pre>
       </template>
+      <PdfPages v-else-if="ready?.kind === 'pdf'" :doc="ready.doc" :name="name" />
       <video
         v-else-if="ready?.kind === 'stream' && ready.element === 'video'"
         class="file-viewer-video"

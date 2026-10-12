@@ -11,6 +11,8 @@ import * as v1 from '@veyq/crypto/v1'
 import type { FileListPage } from '../../../api/generated/files'
 
 const keys = vi.hoisted(() => new Map<string, Uint8Array>())
+// A PDF is drawn by pdf.js, which `pdf/pdfEngine` loads: no suite of a file page loads it (`FileViewer.pdf.test.ts` has the viewer).
+vi.mock('../pdf/pdfEngine', async (orig) => ({ ...(await orig<typeof import('../pdf/pdfEngine')>()), openPdf: vi.fn() }))
 vi.mock('../api', () => ({ filesApi: vi.fn() }))
 vi.mock('../../../core/favorites/favoritesStore', () => ({ isFavorite: vi.fn(() => false), toggleFavorite: vi.fn() }))
 vi.mock('../download', async (importOriginal) => ({
@@ -36,6 +38,7 @@ vi.mock('../../../core/node/treeStore', async () => {
 import FileDetail from './FileDetail.vue'
 import { filesApi } from '../api'
 import { downloadFile, fileChunkProvider } from '../download'
+import { openPdf, PdfOpenError, type PdfDocument } from '../pdf/pdfEngine'
 import { PDF_BYTES, PNG_BYTES, providerOf, utf8 } from '../../../test/fileChunks'
 import { fileUploadJob, StaleFileError, type FileUploadTarget } from '../uploadFile'
 import { planBlob } from '../../../core/blob/transport'
@@ -99,11 +102,14 @@ async function pick(w: Wrapper, name: string) {
 }
 const targets = () => vi.mocked(fileUploadJob).mock.calls.map(([target, file]) => ({ target: target as FileUploadTarget, name: file.name }))
 
+const UNKNOWN_BYTES = Uint8Array.from({ length: 300 }, (_, i) => (i * 7) % 250)
+const fakePdf = (): PdfDocument => ({ numPages: 2, pageSize: vi.fn(async () => ({ width: 200, height: 100 })), render: vi.fn(() => ({ done: new Promise<boolean>(() => {}), cancel: vi.fn() })), destroy: vi.fn(async () => {}) })
+
 beforeEach(() => {
   keyFor(R)
   listFiles = stubApi(filesApi, { listFiles: { items: [{ nodeId: R, fileBlob: BLOB }] } satisfies FileListPage }).listFiles
   vi.mocked(downloadFile).mockReset().mockResolvedValue(undefined)
-  vi.mocked(fileChunkProvider).mockReset().mockImplementation(() => providerOf(PDF_BYTES))
+  vi.mocked(fileChunkProvider).mockReset().mockImplementation(() => providerOf(UNKNOWN_BYTES))
   vi.mocked(fileUploadJob).mockReset().mockImplementation((_t, file) => ({ name: file.name, sizeBytes: file.size, run: async () => ({ nodeId: R }), extra: { file } }))
   vi.mocked(loadTree).mockClear()
   toastError.mockClear()
@@ -148,10 +154,26 @@ describe('an opened file: the viewer on its page (inbox #412)', () => {
   it('a PDF is not rendered: the page says so and its fallback download is the page\'s own download', async () => {
     const w = mountDetail()
     await flushPromises()
-    expect(w.find('.file-viewer').text()).toContain(t('files.viewer.unsupported.pdf'))
+    expect(w.find('.file-viewer').text()).toContain(t('files.viewer.unsupported.format'))
     await w.find('.file-viewer button.file-viewer-download').trigger('click')
     expect(downloadFile).toHaveBeenCalledTimes(1)
     expect(vi.mocked(downloadFile).mock.calls[0][2]).toBe(R)
+  })
+
+  it('a PDF is shown on the page: pages drawn by the viewer, and a protected one offers the page\'s own download', async () => {
+    vi.mocked(fileChunkProvider).mockImplementation(() => providerOf(PDF_BYTES))
+    vi.mocked(openPdf).mockResolvedValueOnce(fakePdf())
+    const w = mountDetail()
+    await flushPromises()
+    expect(w.findAll('.file-viewer .pdf-page')).toHaveLength(2)
+    expect(w.find('.file-viewer iframe, .file-viewer object, .file-viewer embed').exists()).toBe(false)
+    w.unmount()
+    vi.mocked(openPdf).mockRejectedValueOnce(new PdfOpenError('password'))
+    const p = mountDetail()
+    await flushPromises()
+    expect(p.find('.file-viewer').text()).toContain(t('files.viewer.unsupported.pdf-password'))
+    await p.find('.file-viewer button.file-viewer-download').trigger('click')
+    expect(downloadFile).toHaveBeenCalledTimes(1)
   })
 
   it('an empty file shows no viewer', async () => {
