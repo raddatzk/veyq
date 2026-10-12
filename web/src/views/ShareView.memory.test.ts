@@ -13,8 +13,9 @@
 //  - WRITE_ONLY: the drop page, no gallery, no tree.
 // And on every guest page, the security review's half (inbox #401): no AUTHENTICATED client is called (each throws and is
 // recorded, `test/guestMode.ts`), and nothing of the member's world is read or written — the active scope (`activeSpace`),
-// the node tree (`treeStore`), the pins (`favoritesStore`), the item marks (`itemFavoritesStore`), the covers
-// (`coverStore`): every export of those modules is recorded here, and the record must stay empty.
+// the node tree (`treeStore`), the pins (`favoritesStore`), the item marks (`itemFavoritesStore`), the member's covers
+// (`core/node/cover/coverStore`'s `memberCoverStore`, `covers`, `declaredCovers`, `resetCovers` - the guest's own store is the
+// page's, `useCovers`): every export of those modules is recorded here, and the record must stay empty.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
@@ -55,7 +56,11 @@ vi.mock('../app/activeSpace', async (orig) => recording('activeSpace', await ori
 vi.mock('../core/node/treeStore', async (orig) => recording('treeStore', await orig<Record<string, unknown>>()))
 vi.mock('../core/favorites/favoritesStore', async (orig) => recording('favoritesStore', await orig<Record<string, unknown>>()))
 vi.mock('../features/memory/itemFavoritesStore', async (orig) => recording('itemFavoritesStore', await orig<Record<string, unknown>>()))
-vi.mock('../features/memory/coverStore', async (orig) => recording('coverStore', await orig<Record<string, unknown>>()))
+vi.mock('../core/node/cover/coverStore', async (orig) => {
+  const mod = await orig<Record<string, unknown>>()
+  const { memberCoverStore, covers, declaredCovers, resetCovers } = mod
+  return { ...mod, ...recording('coverStore', { memberCoverStore, covers, declaredCovers, resetCovers }) }
+})
 // The guest's upload is recorded at the share helper (its wire is `features/memory/source.wire.test.ts`'s).
 vi.mock('../features/memory/share', async (orig) => ({ ...(await orig<typeof import('../features/memory/share')>()), addSharePhoto: vi.fn() }))
 vi.mock('../core/sharing/resolvePublicShare', async (importOriginal) => {

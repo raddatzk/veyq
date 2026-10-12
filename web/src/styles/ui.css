@@ -597,6 +597,16 @@
   align-items: center;
 }
 
+/* A node's cover in the header's leading slot (inbox #411): a small 16:9 frame; the kind's icon tile is the default without one. */
+.veyq-node-header-cover {
+  display: block;
+  width: 5.5rem;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--app-info-soft);
+}
+
 /* Two classes on purpose: PrimeIcons' own `.pi` (display, font-size) is loaded after this sheet and would otherwise win,
    leaving a 16 px glyph in the corner of a tile that is meant to centre a 20 px one (seen in a real browser). */
 .veyq-node-header .veyq-node-header-icon {

@@ -70,6 +70,8 @@ import { FOLDER_VIEWS, effectiveViewMode, unionViews } from './levelViews'
 import { ALL_TAB, effectiveTab, kindVisible, offeredTabs, showTabBar } from './levelTabs'
 import type { CoreRowAction, LevelRow, LevelRowsContext, LevelRowsHost } from './levelRow'
 import { favoriteHeaderActions, favoriteRowActions } from '../favorites/favoriteActions'
+import { useNodeCover } from './cover/useNodeCover'
+import NodeCoverImage from './cover/components/NodeCoverImage.vue'
 import ViewModeToggle from './ViewModeToggle.vue'
 import NodeHeader from './components/NodeHeader.vue'
 import LevelRowItem from './components/LevelRowItem.vue'
@@ -201,6 +203,18 @@ const showViews = computed(() => views.value.length > 1)
 // The mode this level shows: the stored one clamped to what is on screen (inbox #404); the stored one is not touched.
 const mode = computed(() => effectiveViewMode(viewMode.value, views.value))
 
+// --- the covers (inbox #411) ----------------------------------------------------------------------------------------------
+// ONE cover mechanism for the whole level: the covers of the folder on screen and of every node at this level (whatever its
+// kind, whichever tab is shown) are resolved here - a member's from the shared store, a guest's through the link's own reads -
+// and handed to the row factories (`host.covers`), so an application that draws its own leading visual (Memories) reads the
+// same decrypted image instead of loading its own.
+const levelNodes = computed<TreeNode[]>(() => [
+  ...(props.folder ? [props.folder] : []),
+  ...props.level.folders,
+  ...[...props.level.byKind.values()].flat(),
+])
+const cover = useNodeCover(() => props.access, () => props.tree, () => levelNodes.value)
+
 // --- the applications' row sources -------------------------------------------------------------------------------------
 const disposers: (() => void)[] = []
 onBeforeUnmount(() => disposers.forEach((dispose) => dispose()))
@@ -209,6 +223,8 @@ const host: LevelRowsHost = {
   rename: (node) => emit('renameNode', node),
   move: (node) => emit('moveNode', node),
   registerAction: (id, handler) => disposers.push(levelActions.register(id, handler)),
+  covers: cover.covers,
+  ensureCovers: cover.ensure,
 }
 const epochs = computed(() => (props.access.mode === 'member' ? props.access.epochs : null))
 // One source per row factory, in `lists` order. Called once: a factory sets up its own watchers and loaders here.
@@ -231,36 +247,49 @@ const sourceOfKind = new Map(lists.flatMap((list, i) => list.kinds.map((k) => [k
 const folderLabels = computed(() => displayNamesOf(props.level.folders, (n) => n.name, compareByCreation))
 
 interface Item { key: string; node: TreeNode; kind: NodeKind; row: LevelRow; folder: boolean; unsupported: boolean }
+// A node's cover is the leading visual of its row or tile wherever its application did not supply one (a Memory's row draws its
+// own, from the same covers): the image with its crop; the kind's icon stays the default (inbox #411).
+function withCover(item: Item): Item {
+  const loaded = item.row.leading ? null : cover.covers.value.get(item.node.id)
+  if (!loaded) return item
+  return { ...item, row: { ...item.row, leading: { component: NodeCoverImage, props: { src: loaded.url, crop: loaded.crop, alt: '' } } } }
+}
 const items = computed<Item[]>(() => {
   const ordered = orderLevel(showFolders.value ? props.level.folders : [], visibleNodes.value, locale.value)
-  return ordered.map((node): Item => {
-    if (node.kind === FOLDER_KIND) {
-      const label = folderLabels.value.get(node.id) ?? node.name
-      return {
-        key: node.id, node, kind: node.kind, folder: true, unsupported: false,
-        row: { icon: 'pi pi-folder', title: label, meta: t('node.kindFolder'), primary: { label, onClick: () => emit('openNode', node) }, actions: [] },
-      }
-    }
-    const row = sourceOfKind.get(node.kind)?.row(node) ?? null
-    if (row) return { key: node.id, node, kind: node.kind, folder: false, unsupported: false, row }
-    // A kind no application serves (or one its source has no row for): listed, never dropped, and said plainly that this
-    // client cannot show it. Not clickable - opening one lands on the host's same unsupported state.
-    const info = registry.kind(node.kind)
-    return {
-      key: node.id, node, kind: node.kind, folder: false, unsupported: true,
-      row: {
-        icon: info.supported ? info.icon : 'pi pi-question-circle', title: node.name, meta: `${node.kind} · ${t('home.unsupportedKind')}`,
-        primary: { label: node.name, onClick: () => {} }, actions: [],
-      },
-    }
-  })
+  return ordered.map((node): Item => withCover(rawItem(node)))
 })
+function rawItem(node: TreeNode): Item {
+  if (node.kind === FOLDER_KIND) {
+    const label = folderLabels.value.get(node.id) ?? node.name
+    return {
+      key: node.id, node, kind: node.kind, folder: true, unsupported: false,
+      row: { icon: 'pi pi-folder', title: label, meta: t('node.kindFolder'), primary: { label, onClick: () => emit('openNode', node) }, actions: [] },
+    }
+  }
+  const row = sourceOfKind.get(node.kind)?.row(node) ?? null
+  if (row) return { key: node.id, node, kind: node.kind, folder: false, unsupported: false, row }
+  // A kind no application serves (or one its source has no row for): listed, never dropped, and said plainly that this
+  // client cannot show it. Not clickable - opening one lands on the host's same unsupported state.
+  const info = registry.kind(node.kind)
+  return {
+    key: node.id, node, kind: node.kind, folder: false, unsupported: true,
+    row: {
+      icon: info.supported ? info.icon : 'pi pi-question-circle', title: node.name, meta: `${node.kind} · ${t('home.unsupportedKind')}`,
+      primary: { label: node.name, onClick: () => {} }, actions: [],
+    },
+  }
+}
 // Core's own row actions: the favorite heart of inbox #409, gated by `favoriteCapabilities` (member only, fail closed) and
 // merged around the application's, for EVERY kind and the folders, with no change to any application. An unsupported row
 // (a kind nobody draws) gets none.
-const coreRowActions = (item: Item): CoreRowAction[] => (item.unsupported ? [] : favoriteRowActions(t, props.access, item.node))
-// The folder on screen is a node too: its header carries the same heart (the scope root is no node and has none).
-const folderCoreActions = computed(() => favoriteHeaderActions(t, props.access, props.folder))
+// The cover of inbox #411 is core's second row action, merged around the application's the same way: "Set cover" / "Change
+// cover" / "Remove cover" in the row's menu, gated by `coverCapabilities` (a writer, a kind that opted in; a guest none).
+const coreRowActions = (item: Item): CoreRowAction[] =>
+  item.unsupported ? [] : [...favoriteRowActions(t, props.access, item.node), ...cover.rowActions(item.node)]
+// The folder on screen is a node too: its header carries the same heart and cover action (the scope root is no node and
+// has neither).
+const folderCoreActions = computed(() => [...favoriteHeaderActions(t, props.access, props.folder), ...cover.headerActions(props.folder)])
+const folderCover = computed(() => (props.folder ? (cover.covers.value.get(props.folder.id) ?? null) : null))
 const itemMode = computed<'grid' | 'list'>(() => (mode.value === 'list' ? 'list' : 'grid'))
 
 // The application's own presentation of the mode (Memories' map), in place of the list.
@@ -334,7 +363,12 @@ function onDrop(e: DragEvent): void {
       <ViewModeToggle v-if="showViews" :views="views" />
     </div>
     <!-- The folder's header, core's one (`NodeHeader`): a container kind's detail opens with it too. -->
-    <NodeHeader v-if="folder" icon="pi pi-folder" :title="folderName ?? folder.name" :actions="folderActions" :core-actions="folderCoreActions" />
+    <NodeHeader v-if="folder" icon="pi pi-folder" :title="folderName ?? folder.name" :actions="folderActions" :core-actions="folderCoreActions">
+      <!-- The folder's cover (inbox #411) in the header's leading slot; the folder icon stays the default without one. -->
+      <template v-if="folderCover" #leading>
+        <span class="veyq-node-header-cover"><NodeCoverImage :src="folderCover.url" :crop="folderCover.crop" /></span>
+      </template>
+    </NodeHeader>
 
     <!-- The application tabs (inbox #348): a filter over this folder's children, the folders in every tab; real buttons
          (PrimeVue Tab), arrow keys move between them. -->

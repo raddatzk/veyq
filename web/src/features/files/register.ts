@@ -88,6 +88,8 @@ export function registerFiles(registry: Registry): void {
   registry.registerKind({
     kind: DROPBOX_KIND,
     icon: 'pi pi-inbox',
+    // A drop box carries a cover (inbox #411: core's action, picker, upload and display); a file does not.
+    cover: {},
     shareable: true,
     detail: DropBoxDetail,
     // Core's delete dialog (the detail's delete): "Delete drop box", the detail's own button label.

@@ -2,19 +2,22 @@
 // notice components (the application's rows without the rest of the level), and drive a row's actions the way a person
 // does - a real click on its button, or on its entry in the real "more" menu.
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
-import { computed, defineComponent, h, reactive } from 'vue'
+import { computed, defineComponent, h, reactive, ref, type Ref } from 'vue'
 import LevelRowItem from '../core/node/components/LevelRowItem.vue'
 import LevelNotices from '../core/node/components/LevelNotices.vue'
 import { orderLevel } from '../core/node/levelList'
 import type { LevelNotice, LevelRowsContext, LevelRowsFactory, LevelRowSource } from '../core/node/levelRow'
 import type { LevelActionHandler } from '../core/node/levelActions'
 import type { TreeNode } from '../core/node/tree'
+import type { LoadedCover } from '../core/node/cover/coverModel'
 import { realI18n } from './i18n'
 
 export interface RowsHarness {
   w: VueWrapper
   /** What the factory asked of the host. */
-  events: { open: TreeNode[]; rename: TreeNode[]; move: TreeNode[] }
+  events: { open: TreeNode[]; rename: TreeNode[]; move: TreeNode[]; ensuredCovers: TreeNode[] }
+  /** The decrypted covers core's level hands the factory (`host.covers`); a test sets what the level would have resolved. */
+  covers: Ref<Map<string, LoadedCover>>
   /** The level actions the factory registered. */
   actions: Map<string, LevelActionHandler>
   /** The source the factory returned. */
@@ -31,7 +34,8 @@ export function mountRows(
   mode: 'grid' | 'list' = 'list',
   options: { stubs?: Record<string, unknown> } = {},
 ): RowsHarness {
-  const events = { open: [] as TreeNode[], rename: [] as TreeNode[], move: [] as TreeNode[] }
+  const events = { open: [] as TreeNode[], rename: [] as TreeNode[], move: [] as TreeNode[], ensuredCovers: [] as TreeNode[] }
+  const covers = ref(new Map<string, LoadedCover>())
   const actions = new Map<string, LevelActionHandler>()
   const state = reactive({ ...ctx }) as LevelRowsContext
   let source!: LevelRowSource
@@ -42,6 +46,8 @@ export function mountRows(
         rename: (n) => events.rename.push(n),
         move: (n) => events.move.push(n),
         registerAction: (id, handler) => actions.set(id, handler),
+        covers,
+        ensureCovers: (nodes) => events.ensuredCovers.push(...nodes),
       })
       return () => {
         // The application's own presentation of the mode (Memories' map) replaces the list, as core's level view does.
@@ -62,7 +68,7 @@ export function mountRows(
     },
   })
   const w = mount(Host, { global: { plugins: [realI18n()], directives: { tooltip: {} }, stubs: options.stubs as never } })
-  return { w, events, actions, source: () => source, setCtx: async (over) => { Object.assign(state, over); await flushPromises() } }
+  return { w, events, covers, actions, source: () => source, setCtx: async (over) => { Object.assign(state, over); await flushPromises() } }
 }
 
 const rowOf = (w: VueWrapper, title: string) => {

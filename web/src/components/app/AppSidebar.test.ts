@@ -21,6 +21,8 @@ vi.mock('../../features/account/profile/profile', async (importOriginal) => ({
   getMyProfile: vi.fn(),
 }))
 
+vi.mock('../../core/blob/transport', async (orig) => ({ ...(await orig<object>()), openBlob: vi.fn() }))
+
 import AppSidebar from './AppSidebar.vue'
 import { listMyTenants, listMyGroups, openMyTenantIcon, type GroupSpace } from '../../features/spaces/scopes'
 import type { CompromiseRotation } from '../../api/generated/scopes'
@@ -31,6 +33,11 @@ import type { TreeNode } from '../../core/node/tree'
 import { favoritesStore } from '../../core/favorites/favoritesStore'
 import { registry } from '../../core/applications/registry'
 import { hashForNode } from '../../core/node/location'
+import { memberCoverStore, resetCovers } from '../../core/node/cover/coverStore'
+import { uploadedCover } from '../../core/node/cover/coverModel'
+import { openBlob } from '../../core/blob/transport'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std } from '@veyq/crypto/base64'
 
 import { realI18n, t } from '../../test/i18n'
 import { memberProfile, myTenant, treeNode } from '../../test/models'
@@ -273,6 +280,73 @@ describe('AppSidebar favorites — every kind of pinned node, with its kind icon
     const row = wrapper.findAll('.mobile-nav-item').find((i) => i.text().includes('Plan.pdf'))!
     expect(row.classes()).toContain('mobile-nav-favorite')
     expect(row.get('.sidebar-favorite-cover span').classes()).toContain('pi')
+  })
+})
+
+// The Favorites tile shows the node's COVER wherever it has one (inbox #411) - the Memory cover the rail lost when the pins became
+// core's (#409) is back, and a folder's and a drop box's are new - and the kind's icon whenever it has none or it does not open.
+describe('AppSidebar favorites — the cover of a pinned node', () => {
+  const SCOPE = '5c09e000-0000-4000-8000-0000000000dd'
+  const KEY = v1.randomBytes(32)
+  const sealed = (nodeId: string, blobId: string) =>
+    b64std(v1.seal({ purpose: 'node-meta', scopeId: SCOPE, nodeId }, KEY, new TextEncoder().encode(JSON.stringify({
+      v: 1, cover: uploadedCover({ blobId, chunkCount: 1, byteSize: 300, wrappedBlobKey: 'd3JhcA==', ownerId: nodeId }, { x: 0, y: 0, width: 0.5, height: 1 }),
+    }))))
+  const at = (id: string, kind: string, name: string, wrappedMeta: string | null): TreeNode =>
+    treeNode({ id, name, kind, parentId: null, wrappedMeta, metaVersion: wrappedMeta ? 2 : 0 })
+
+  beforeEach(() => {
+    let n = 0
+    Object.assign(URL, { createObjectURL: vi.fn(() => `blob:rail-${++n}`), revokeObjectURL: vi.fn() })
+    vi.mocked(openBlob).mockResolvedValue(new Uint8Array([1, 2, 3]))
+    resetCovers()
+    treeStore.nodes = [
+      at('e0000000-0000-4000-8000-000000000001', 'FOLDER', 'Reisen', sealed('e0000000-0000-4000-8000-000000000001', 'b-f')),
+      at('e0000000-0000-4000-8000-000000000002', 'MEMORY', 'Rom 2026', sealed('e0000000-0000-4000-8000-000000000002', 'b-m')),
+      at('e0000000-0000-4000-8000-000000000003', 'FILES_DROPBOX', 'Einreichungen', null),
+      at('e0000000-0000-4000-8000-000000000004', 'FILE', 'Plan.pdf', sealed('e0000000-0000-4000-8000-000000000004', 'b-d')), // a file takes no cover: its icon, whatever the meta holds
+    ]
+    favoritesStore.ids = new Set(['e0000000-0000-4000-8000-000000000001', 'e0000000-0000-4000-8000-000000000002', 'e0000000-0000-4000-8000-000000000003', 'e0000000-0000-4000-8000-000000000004'])
+  })
+  afterEach(() => {
+    treeStore.nodes = []
+    favoritesStore.ids = new Set()
+    resetCovers()
+  })
+
+  const resolveAll = async () => {
+    memberCoverStore.ensure(SCOPE, treeStore.nodes, () => KEY)
+    await vi.waitFor(() => expect(memberCoverStore.covers.value.size).toBe(2))
+  }
+
+  it('a folder and a Memory show their cover in the rail (with its crop); a drop box without one and a file keep the kind icon', async () => {
+    await resolveAll()
+    const wrapper = await mountAt('')
+    const cell = (kind: string) => wrapper.get(`.sidebar-favorite-link[data-kind="${kind}"] .sidebar-favorite-cover`)
+    for (const kind of ['FOLDER', 'MEMORY']) {
+      const img = cell(kind).find('img')
+      expect(img.exists(), kind).toBe(true)
+      expect(img.attributes('src'), kind).toMatch(/^blob:rail-/)
+      expect(img.attributes('style'), 'the crop is applied, as on every other surface').toContain('200%')
+    }
+    expect(cell('FILES_DROPBOX').find('img').exists()).toBe(false)
+    expect(cell('FILES_DROPBOX').find('.pi-inbox').exists()).toBe(true)
+    expect(cell('FILE').find('img').exists()).toBe(false)
+    expect(cell('FILE').find('.pi-file').exists()).toBe(true)
+  })
+
+  it('the mobile sheet shows them too, and a cover that failed to open is the icon', async () => {
+    await resolveAll()
+    memberCoverStore.reset()
+    vi.mocked(openBlob).mockRejectedValue(new Error('offline'))
+    memberCoverStore.ensure(SCOPE, treeStore.nodes, () => KEY)
+    await flushPromises()
+    const wrapper = await mountAt('')
+    await wrapper.get('.mobile-navigation-button').trigger('click')
+    await flushPromises()
+    const row = wrapper.findAll('.mobile-nav-item').find((i) => i.text().includes('Reisen'))!
+    expect(row.find('.sidebar-favorite-cover img').exists()).toBe(false)
+    expect(row.find('.sidebar-favorite-cover .pi-folder').exists()).toBe(true)
   })
 })
 

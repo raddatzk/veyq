@@ -18,7 +18,13 @@ vi.mock('../../../core/node/treeStore', async () => {
   return { treeStore: reactive({ nodes: [], loaded: true, error: false }), loadTree: vi.fn(async () => {}) }
 })
 
+vi.mock('../../../core/blob/transport', async (orig) => ({ ...(await orig<object>()), openBlob: vi.fn(async () => new Uint8Array([1, 2, 3])) }))
+
 import DropBoxDetail from './DropBoxDetail.vue'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std } from '@veyq/crypto/base64'
+import { resetCovers } from '../../../core/node/cover/coverStore'
+import { uploadedCover } from '../../../core/node/cover/coverModel'
 import type { NodeDetailProps } from '../../../core/applications/registry'
 import { deleteNode, restoreNode, type TreeNode } from '../../../core/node/tree'
 import { treeStore, loadTree } from '../../../core/node/treeStore'
@@ -137,5 +143,51 @@ describe('DropBoxDetail', () => {
     showUndo.mock.calls[0][0].onUndo()
     await flushPromises()
     expect(vi.mocked(restoreNode).mock.calls.map((c) => [c[0], (c[3] as TreeNode).id])).toEqual([[SCOPE, BEN.id]])
+  })
+})
+
+// A drop box carries a cover (inbox #411): core's action in its header, the image in the header's leading slot.
+describe('DropBoxDetail - its cover', () => {
+  const KEY = v1.randomBytes(32)
+  const withCover = (): TreeNode => node(BOX.id, DROPBOX_KIND, 'Einsendungen', null, {
+    metaVersion: 2,
+    wrappedMeta: b64std(v1.seal({ purpose: 'node-meta', scopeId: SCOPE, nodeId: BOX.id }, KEY, new TextEncoder().encode(JSON.stringify({
+      v: 1, cover: uploadedCover({ blobId: 'b-1', chunkCount: 1, byteSize: 300, wrappedBlobKey: 'd3JhcA==', ownerId: BOX.id }),
+    })))),
+  })
+  const mountWith = (box: TreeNode, over: Partial<ReturnType<typeof memberAccessOf>> = {}) => mount(DropBoxDetail, {
+    props: {
+      node: box, scopeId: SCOPE, epochs: epochsOf(new Uint8Array(32).fill(4)), contentKey: null, children: { byKind: {}, folders: [] } as unknown as NodeDetailProps['children'],
+      access: memberAccessOf({ scopeId: SCOPE, epochs: epochsOf(new Uint8Array(32).fill(4)), ...over }),
+      tree: { ...memberTreeOf(() => treeStore.nodes, { scopeId: SCOPE }), keyOf: () => KEY },
+    },
+    global: { plugins: [realI18n()] },
+  })
+  beforeEach(() => {
+    resetCovers()
+    Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:box-cover'), revokeObjectURL: vi.fn() })
+  })
+
+  it('a writer with the keys has Set cover in the header; with a cover, Change and Remove; the folder icon without one', async () => {
+    const plain = mountWith(BOX)
+    await flushPromises()
+    expect(plain.find('.veyq-node-header-actions button[data-action="cover"]').attributes('aria-label')).toBe(t('node.cover.set'))
+    expect(plain.find('.veyq-node-header-actions button[data-action="cover-remove"]').exists()).toBe(false)
+    expect(plain.find('.veyq-node-header-icon.pi-inbox').exists()).toBe(true)
+
+    const covered = mountWith(withCover())
+    await flushPromises()
+    await vi.waitFor(() => expect(covered.find('.veyq-node-header-cover img').attributes('src')).toBe('blob:box-cover'))
+    expect(covered.find('button[data-action="cover"]').attributes('aria-label')).toBe(t('node.cover.change'))
+    expect(covered.find('button[data-action="cover-remove"]').attributes('aria-label')).toBe(t('node.cover.remove'))
+  })
+
+  it('locked keys or a pending deletion offer none, and the drop box still shows the cover it has', async () => {
+    for (const over of [{ epochs: null }, { readonly: true }]) {
+      const w = mountWith(withCover(), over)
+      await flushPromises()
+      expect(w.find('button[data-action="cover"]').exists()).toBe(false)
+      await vi.waitFor(() => expect(w.find('.veyq-node-header-cover img').exists()).toBe(true))
+    }
   })
 })

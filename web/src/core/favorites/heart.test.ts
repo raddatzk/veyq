@@ -12,11 +12,6 @@ vi.mock('leaflet', () => ({ default: {} }))
 vi.mock('./favorites', () => ({ loadFavorites: vi.fn(), saveFavorites: vi.fn(), resealFavoritesUnderNewMasterKey: vi.fn() }))
 vi.mock('../../app/vault', () => ({ masterKey: vi.fn() }))
 vi.mock('../../features/files/api', () => ({ filesApi: vi.fn() }))
-vi.mock('../../features/memory/coverStore', () => ({
-  covers: { get value() { return new Map() } },
-  ensureCovers: vi.fn(),
-  resetCovers: vi.fn(),
-}))
 
 import LevelView from '../node/LevelView.vue'
 import { childrenOf } from '../node/browse'

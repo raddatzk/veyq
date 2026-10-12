@@ -25,6 +25,7 @@ import type { Access, TreeSource } from '../access'
 import type { ViewMode } from '../../shared/state/useViewMode'
 import type { CoreHeaderAction, NodeHeaderAction } from './nodeHeader'
 import type { LevelActionHandler } from './levelActions'
+import type { LoadedCover } from './cover/coverModel'
 
 /** How many `first` actions a row shows as buttons; further ones fall into the overflow menu. */
 export const MAX_FIRST_ACTIONS = 2
@@ -87,6 +88,12 @@ export interface LevelRowsHost {
   move(node: TreeNode): void
   /** Register the handler of a level action (a "New" menu entry that is no create dialog) for the level's life. */
   registerAction(id: string, handler: LevelActionHandler): void
+  /** The decrypted covers of the nodes at this level (inbox #411), whatever their kind: core resolves them for the level
+   *  (a member's from the shared store, a guest's through the link's own reads), so a row source that draws its own
+   *  leading visual (Memories' cover tile) reads the very image core draws elsewhere and loads none of its own. */
+  covers: Readonly<Ref<ReadonlyMap<string, LoadedCover>>>
+  /** Resolve the covers of further nodes the source draws that are not at this level (a map's pins across the subtree). */
+  ensureCovers(nodes: readonly TreeNode[]): void
 }
 
 /** A message the application shows above the list, e.g. why a file was not uploaded. */
