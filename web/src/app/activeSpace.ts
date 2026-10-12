@@ -13,6 +13,7 @@ import { isHttpStatus, HttpStatus } from '../shared/httpError'
 import { resetTree, loadTree } from '../core/node/treeStore'
 import { registry } from '../core/applications/registry'
 import { clearFavorites, favoritesStore, loadFavoritesFor } from '../core/favorites/favoritesStore'
+import { resetCovers } from '../core/node/cover/coverStore'
 import { startGrantDeliveryPolling, stopGrantDeliveryPolling } from '../features/tasks/grantDeliveryPolling'
 import { startScopeRotationPolling, stopScopeRotationPolling } from '../features/tasks/scopeRotationPolling'
 import { refreshMyInvitations, clearMyInvitations } from '../features/spaces/invitations'
@@ -132,6 +133,7 @@ export async function enterScope(token: string): Promise<void> {
     activeSpace.name = opened.name ?? null
     resetTree() // no stale tree bleeds across scopes — the view reloads for the new scope
     clearFavorites() // no stale pins bleed across scopes (core's: a pin names a node of any kind, ADR 0068)
+    resetCovers() // …nor covers: every decrypted cover URL is revoked (core's, inbox #411)
     registry.scopeReset() // …and each application drops what it held for the old scope (Memories: covers)
     activeSpace.status = 'ready'
     // cr-0114: refresh the tenant's terms status so the router accept-gate knows if a (re-)accept is due. The
@@ -181,6 +183,7 @@ export async function refreshActiveScope(): Promise<void> {
   activeSpace.name = opened.name ?? null
   resetTree()
   clearFavorites()
+  resetCovers() // the covers were decrypted under the old epoch keys (core's, inbox #411)
   registry.scopeReset() // a rotation swaps the epoch keys: every held cover was decrypted under the old ones
   await loadTree()
   // The pin set (core's) and an application's per-scope state survive a rotation untouched (the pins seal under the
@@ -210,6 +213,7 @@ export function clearActiveSpace(): void {
   epochKeys = null
   scopeKey = null
   clearFavorites() // sign-out / re-lock: the decrypted pin set must not outlive the keys
+  resetCovers() // …nor the decrypted covers (core's, inbox #411)
   registry.scopeReset() // …nor what an application decrypted (Memories' covers)
 }
 

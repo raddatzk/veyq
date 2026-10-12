@@ -4,7 +4,7 @@
 import { contentApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import { openNodeMetaForWrite, sealNodeMeta, type RawNodeMeta } from './nodeMeta'
-import { writeSealedMeta, type MetaEditContext, type SealedMetaResult, type SealedMetaState } from '../../core/node/sealedMetaWrite'
+import { writeSealedMeta, type MetaEditContext, type SealedMetaResult, type SealedMetaState } from './sealedMetaWrite'
 
 /**
  * Write a node's sealed meta, version-checked (ADR 0077): open the blob at `base`, apply `edit`, seal, and PATCH
@@ -17,6 +17,7 @@ export function writeNodeMeta(
   nodeKey: Uint8Array,
   base: SealedMetaState,
   edit: (meta: RawNodeMeta, ctx: MetaEditContext) => RawNodeMeta | null | Promise<RawNodeMeta | null>,
+  send?: (wrappedMeta: string | null, metaVersion: number) => Promise<void>,
 ): Promise<SealedMetaResult<RawNodeMeta>> {
   const address = { scopeId, nodeId }
   return writeSealedMeta<RawNodeMeta>(
@@ -24,11 +25,15 @@ export function writeNodeMeta(
     {
       open: (wrappedMeta) => openNodeMetaForWrite(nodeKey, address, wrappedMeta),
       seal: (meta) => sealNodeMeta(nodeKey, address, meta),
-      send: async (wrappedMeta, metaVersion) => {
-        await withRefresh(() =>
-          contentApi().updateNode({ scopeId, nodeId, updateNodeRequest: { wrappedMeta: wrappedMeta!, metaVersion } }),
-        )
-      },
+      // `send` is the plain `updateNode` unless a writer carries more in the same request: a node's cover write sends the
+      // blob step with the meta it names (`cover/coverWrite.ts`), so the two can never part.
+      send:
+        send ??
+        (async (wrappedMeta, metaVersion) => {
+          await withRefresh(() =>
+            contentApi().updateNode({ scopeId, nodeId, updateNodeRequest: { wrappedMeta: wrappedMeta!, metaVersion } }),
+          )
+        }),
     },
     edit,
   )

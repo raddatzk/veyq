@@ -92,6 +92,7 @@ import type { TreeNode } from '../node/tree'
 import type { Level } from '../node/browse'
 import type { LevelViewOption } from '../node/levelViews'
 import type { LevelRowsFactory } from '../node/levelRow'
+import type { DecryptedCover } from '../node/cover/coverModel'
 import type { EpochKeys } from '../../features/spaces/epochs'
 import type { PublicShareHead } from '../sharing/resolvePublicShare'
 import type { Access, GuestAccess, TreeSource } from '../access'
@@ -166,6 +167,31 @@ export interface KindDescriptor {
    *  `illegal_structure` is explained by name when the two disagree). Omitted: the move dialog offers no destination for
    *  a node of the kind (fail closed). */
   placement?: KindPlacement
+  /** A node of this kind can carry a COVER (inbox #411): an image the owner uploads as the node's own, shown as the node's
+   *  leading visual wherever one is drawn. Core owns the action ("Set cover" / "Change cover" / "Remove cover"), the
+   *  picker, the upload, the display and the guest read; the kind only opts in - the server's `NodeKindRules.takesCover`
+   *  is the authority and must agree. Omitted: no cover, no action. FOLDER's is core's own, pre-registered. */
+  cover?: KindCover
+}
+
+/** What a kind that carries a cover may add to core's mechanism (inbox #411). Core reads one source, the uploaded image; a
+ *  kind that writes ANOTHER source into the same sealed `cover` field (Memories: one of its own photos) says how to read it. */
+export interface KindCover {
+  /** Decrypt the image of a cover whose source core cannot open (any but `upload`). Best-effort: null for none or on any
+   *  failure - the node then shows its icon. A guest gets the same function with `guest` set. */
+  load?(ctx: CoverLoadContext): Promise<DecryptedCover | null>
+}
+
+/** What a kind's `cover.load` is handed: the node's cover field as sealed, under the node's own key. */
+export interface CoverLoadContext {
+  scopeId: string
+  /** The node's own content key (the chain's), never held reactively. */
+  nodeKey: Uint8Array
+  node: { id: string; wrappedMeta: string | null }
+  /** The node's `cover` field value, opened (an object core does not read the source of). */
+  cover: unknown
+  /** The share guest reading it (the link's own reads), or null for a member. */
+  guest: GuestAccess | null
 }
 
 /** What an entry of the level view's "New" menu is told about the level: who looks, the tree as that session reads it, the
@@ -443,7 +469,7 @@ export function createRegistry(): Registry {
     // A folder lives at the root or in another folder (the server's `FolderNodeRules`).
     [FOLDER_KIND, {
       kind: FOLDER_KIND, icon: 'pi pi-folder', shareable: true, shareDialog: FolderShareDialog, nounWithArticle: 'node.aFolder',
-      placement: { root: true, parents: [FOLDER_KIND] },
+      placement: { root: true, parents: [FOLDER_KIND] }, cover: {},
     }],
   ])
   const lists = new Map<ListSlotName, { id: string; component: Component; order: number }[]>()
