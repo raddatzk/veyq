@@ -3,7 +3,7 @@
 // identity, each named by its guest (its entry opened through the drop box's drop key, core's tree) — with how many
 // files each holds. A folder opens to core's level view, read-only there (a member places nothing in a guest's identity
 // folder) but for a delete per file (inbox #391); a member deletes a folder here, or the drop box, and shares it
-// (`DropBoxShareDialog`) from core's header card, the one a folder opens with (`NodeOverviewCard`, inbox #385 (b)) — each
+// (`DropBoxShareDialog`) from core's header card, the one a folder opens with (`NodeHeader`, inbox #385 (b), #406) — each
 // where Files' capability matrix says so (`../capabilities.ts`, inbox #401: the share with
 // the instance's public links, the deletes not during a pending deletion). Two guests of one name are told apart at
 // display time, never stored ("Anna", "Anna (2)",
@@ -34,7 +34,8 @@ import { compareByCreation, displayNamesOf } from '../../../core/node/location'
 import { useConfirm } from '../../../shared/state/useConfirm'
 import { useToast } from '../../../shared/state/useToast'
 import { FILE_KIND } from '../kinds'
-import NodeOverviewCard from '../../../core/node/components/NodeOverviewCard.vue'
+import NodeHeader from '../../../core/node/components/NodeHeader.vue'
+import { standardNodeActions } from '../../../core/node/nodeHeader'
 import { useTrashUndo } from '../../../core/node/trashUndo'
 import { filesCapabilities } from '../capabilities'
 import { targetOf, type GuestAccess } from '../../../core/access'
@@ -62,6 +63,14 @@ const source: FilesSource = guest
       move: (node) => emit('move', node),
     })
 const caps = computed(() => sourceCapabilities(filesCapabilities(props.access, targetOf(props.tree, props.node)), source))
+/** The header's actions: share, move, delete — each only where the capability matrix grants it (a drop box is never renamed here). */
+const headerActions = computed(() =>
+  standardNodeActions(
+    t,
+    { share: caps.value.share, move: caps.value.moveNode, remove: caps.value.deleteNode, shareLabel: t('files.dropBox.share'), deleteLabel: t('files.dropBox.delete') },
+    { share: () => emit('share'), move: () => source.move?.(props.node), remove: () => emit('delete') },
+  ),
+)
 
 /** The guests' folders, each with its display name (a repeated name numbered) and its file count. */
 const folders = computed(() => {
@@ -99,20 +108,9 @@ async function removeFolder(folder: TreeNode, label: string) {
 </script>
 
 <template>
-  <!-- Opens like a folder (inbox #385 (b)): core's header card with the drop box's share and delete, then its folders. -->
+  <!-- Opens like a folder (inbox #385 (b)): core's `NodeHeader` with the drop box's share and delete, then its folders. -->
   <div class="veyq-level-view">
-    <NodeOverviewCard
-      icon="pi pi-inbox"
-      :name="node.name"
-      :share="caps.share"
-      :remove="caps.deleteNode"
-      :move="caps.moveNode"
-      :share-label="t('files.dropBox.share')"
-      :delete-label="t('files.dropBox.delete')"
-      @share="emit('share')"
-      @delete="emit('delete')"
-      @move="source.move?.(node)"
-    />
+    <NodeHeader icon="pi pi-inbox" :title="node.name" :level="1" :actions="headerActions" />
     <section class="veyq-section dropbox-detail">
       <div class="veyq-section-header">
         <h2>{{ t('node.folders') }}</h2>

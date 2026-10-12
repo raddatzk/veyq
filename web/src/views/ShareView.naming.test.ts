@@ -31,6 +31,7 @@ import { publicShareMediaApi } from '../features/memory/api'
 import { publicShareFilesApi } from '../features/files/api'
 import { stubApi } from '../test/apiMock'
 import { realI18n, t } from '../test/i18n'
+import { chooseNew, hasNewMenu } from '../test/newMenu'
 import { mountConfirmDialog } from '../test/confirmDialog'
 import { authenticatedCalls } from '../test/guestMode'
 import { confirmRequest, settleConfirm } from '../shared/state/useConfirm'
@@ -65,11 +66,11 @@ async function mountPage(role: ShareRole) {
   vi.mocked(resolvePublicShare).mockResolvedValue(folderHead(role))
   const w = mount(ShareView, { global: { plugins: [router, realI18n(), PrimeVue], stubs, directives: { tooltip: {} } } })
   await flushPromises()
-  await vi.waitFor(() => expect(w.find('.veyq-folder-overview-card').exists()).toBe(true)) // the folder body loads lazily
+  await vi.waitFor(() => expect(w.find('.veyq-node-header').exists()).toBe(true)) // the folder body loads lazily
   return w
 }
 type Page = Awaited<ReturnType<typeof mountPage>>
-const createCard = (w: Page) => w.find(`.veyq-create-card[aria-label="${t('node.folderCreate')}"]`)
+const createFolder = (w: Page) => chooseNew(w, t('node.folderCreate'))
 const identityLine = (w: Page) => w.find('.guest-naming-identity')
 
 beforeEach(async () => {
@@ -91,7 +92,7 @@ describe("the share page's one naming flow", () => {
     const w = await mountPage(ShareRole.ReadWrite)
     expect(identityLine(w).exists(), 'nobody named yet').toBe(false)
 
-    await createCard(w).trigger('click')
+    await createFolder(w)
     await flushPromises()
     expect(w.find('.dialog-stub .header').text()).toBe(t('share.guest.nameTitle'))
     expect(w.find('.dialog-stub').text()).toContain(t('share.guest.nameHint'))
@@ -112,14 +113,14 @@ describe("the share page's one naming flow", () => {
     saveGuestSession(SHARE_ID, { identityId: 'id-0', contributorToken: 'tok-0', displayName: 'Anna' })
     const w = await mountPage(ShareRole.ReadWrite)
     expect(identityLine(w).text()).toContain(t('share.guest.as', { name: 'Anna' }))
-    await createCard(w).trigger('click')
+    await createFolder(w)
     await flushPromises()
     expect(w.find('.dialog-stub .header').text()).toBe(t('share.folder.newFolderTitle'))
   })
 
   it('a visitor who closes the name dialog is not named, and the view opens nothing', async () => {
     const w = await mountPage(ShareRole.ReadWrite)
-    await createCard(w).trigger('click')
+    await createFolder(w)
     await flushPromises()
     await w.findAll('.dialog-stub button').find((b) => b.text() === t('common.cancel'))!.trigger('click')
     await flushPromises()
@@ -145,7 +146,7 @@ describe("the share page's one naming flow", () => {
     expect(loadGuestSession(SHARE_ID)).toBeNull()
     expect(identityLine(w).exists()).toBe(false)
     expect(document.body.textContent).not.toContain(t('share.guest.nameTitle'))
-    await createCard(w).trigger('click')
+    await createFolder(w)
     await flushPromises()
     // (the real confirmation dialog is mounted beside the page, so PrimeVue's Dialog renders for real here: teleported)
     expect(document.body.textContent, 'asked afresh').toContain(t('share.guest.nameTitle'))
@@ -155,6 +156,6 @@ describe("the share page's one naming flow", () => {
     saveGuestSession(SHARE_ID, { identityId: 'id-0', contributorToken: 'tok-0', displayName: 'Anna' })
     const w = await mountPage(ShareRole.Read)
     expect(identityLine(w).exists()).toBe(false)
-    expect(createCard(w).exists()).toBe(false)
+    expect(hasNewMenu(w)).toBe(false)
   })
 })

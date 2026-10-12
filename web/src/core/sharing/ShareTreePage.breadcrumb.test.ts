@@ -99,7 +99,7 @@ describe('ShareTreePage: a breadcrumb click keeps the share key', () => {
     expect(click.defaultPrevented).toBe(true)
     expect(router.currentRoute.value.hash).toBe(HASH)
     expect(router.currentRoute.value.query.node).toBeUndefined()
-    expect(w.find('.veyq-folder-overview-card h2').text()).toBe('Familie')
+    expect(w.find('.veyq-node-header-title').text()).toBe('Familie')
   })
 
   it('a MIDDLE crumb navigates to that folder, the fragment kept, the anchor default prevented', async () => {
@@ -108,7 +108,7 @@ describe('ShareTreePage: a breadcrumb click keeps the share key', () => {
     expect(click.defaultPrevented).toBe(true)
     expect(router.currentRoute.value.hash).toBe(HASH)
     expect(router.currentRoute.value.query.node).toBe(LETTERS)
-    expect(w.find('.veyq-folder-overview-card h2').text()).toBe('Briefe')
+    expect(w.find('.veyq-node-header-title').text()).toBe('Briefe')
   })
 
   it('a modified click is left to the browser (open the real href elsewhere): not prevented, no navigation here', async () => {

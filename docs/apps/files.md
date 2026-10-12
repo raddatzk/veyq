@@ -275,7 +275,7 @@ one per guest identity, which are core `FOLDER`s carrying `veyq_node.share_ident
 - **The member** (`components/DropBoxSection.vue`, `DropBoxDetail.vue`, `DropBoxCreateDialog.vue`,
   `DropBoxShareDialog.vue`): creates a drop box from a folder level, mints, copies, switches off (after a question) and
   on again (core's `reactivateShare`; a link a departed member may hold says to make a new one) and deletes its links,
-  opens it to its guests' folders — under core's header card (`NodeOverviewCard`, the one a folder opens with: the
+  opens it to its guests' folders — under core's header (`NodeHeader`, the one a folder opens with: the
   drop box's name, its share and delete; inbox #385 (b)) — (a repeated guest name numbered at display time, never stored: `Anna`, `Anna (2)` in
   creation order — the server-observed `createdAt` of core's listing, then the node id for one millisecond, core's
   `compareByCreation`, by core's `displayNamesOf`, which the folder's heading and breadcrumb use too; the same two folders' URL segments are `anna`, `anna-2` by the same order,
@@ -304,7 +304,7 @@ one per guest identity, which are core `FOLDER`s carrying `veyq_node.share_ident
   mounts for the drop box's own `WRITE_ONLY` link only): the guests' folders with their file counts, a repeated name numbered in node-id order (the
   guest's tree serves no `createdAt`, so `compareByCreation` falls to its id tie-break and the numbers can differ from the
   member's creation order), in the guest's words (`files.dropBox.sharedHint`: only the owner deletes or moves); a folder
-  opens on core's folder page, which inside an identity folder offers no guest a write (no 'New folder', Files' section
+  opens on core's folder page, which inside an identity folder offers no guest a write (no "New" menu, Files' section
   only downloads), so it lists the files with their download only. No send form, no upload, no replace, no share, no
   delete, no move — the guest's source carries no delete and the matrix grants a guest neither share nor delete; the
   server refuses each anyway (a create inside an identity folder `illegal_structure` for anyone but its identity, a

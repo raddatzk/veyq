@@ -89,7 +89,7 @@ describe('DropBoxDetail', () => {
   it('hands the move of a guest\'s folder out, and of the drop box, to the host', async () => {
     const w = mountDetail()
     await w.find(`button[aria-label="${t('files.dropBox.moveFolder', { name: 'Anna (2)' })}"]`).trigger('click')
-    await w.find(`.veyq-folder-overview-card button[aria-label="${t('node.move.action')}"]`).trigger('click')
+    await w.find(`.veyq-node-header button[aria-label="${t('node.move.action')}"]`).trigger('click')
     expect(w.emitted('move')).toEqual([[ANNA_2], [BOX]])
   })
 
@@ -98,8 +98,8 @@ describe('DropBoxDetail', () => {
     await w.find('button[aria-label="Open Anna (2)"]').trigger('click')
     expect(w.emitted('openNode')).toEqual([[ANNA_2]])
     // inbox #385 (b): both sit on core's header card, the one a folder opens with — the drop box's icon and name on it
-    const card = w.find('.veyq-folder-overview-card')
-    expect(card.find('h2').text()).toBe(BOX.name)
+    const card = w.find('.veyq-node-header')
+    expect(card.find('.veyq-node-header-title').text()).toBe(BOX.name)
     expect(card.find('.pi-inbox').exists()).toBe(true)
     await card.find('button[aria-label="Share link"]').trigger('click')
     await card.find('button[aria-label="Delete drop box"]').trigger('click')

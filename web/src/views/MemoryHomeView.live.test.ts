@@ -60,7 +60,8 @@ import { httpError } from '../test/httpError'
 import type { ContentApi, NodeSummary } from '../api/generated/content'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
-import { realI18n } from '../test/i18n'
+import { realI18n, t } from '../test/i18n'
+import { chooseNew } from '../test/newMenu'
 import PrimeVue from 'primevue/config'
 
 const sealed = (nodeId: string, name: string) => ({
@@ -153,7 +154,7 @@ describe('the member level view, live', () => {
 
   it('asks the server nothing while a dialog of the page is open', async () => {
     const w = await mountLevel()
-    await w.find(`button.veyq-create-card`).trigger('click') // core's new-folder dialog
+    await chooseNew(w, t('node.folderCreate')) // core's new-folder dialog
     await settle(OVER_ONE_INTERVAL * 2)
     expect(listNodes).not.toHaveBeenCalled()
     w.unmount()

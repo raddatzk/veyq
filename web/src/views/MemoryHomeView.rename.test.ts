@@ -113,7 +113,7 @@ async function click(el: Element) {
   await flushPromises()
 }
 const byLabel = (label: string) => [...document.body.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.getAttribute('aria-label') === label)
-const heading = () => document.body.querySelector('.veyq-folder-overview-card h2')?.textContent ?? null
+const heading = () => document.body.querySelector('.veyq-node-header-title')?.textContent ?? null
 /** Type the new name into core's open name dialog and press its Save. */
 async function renameTo(name: string) {
   const input = document.body.querySelector<HTMLInputElement>('.veyq-form input')!

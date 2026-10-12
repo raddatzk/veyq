@@ -446,3 +446,37 @@ describe('registry: route slugs', () => {
     expect(r.routeSlugs()).toEqual([])
   })
 })
+
+describe('registry: the level "New" menu (inbox #406)', () => {
+  const allow = () => true
+  const entry = (order: number, label = 'k.label') => ({ label, icon: 'pi pi-plus', order, allowed: allow })
+
+  it('is empty until a kind brings an entry', () => {
+    const r = createRegistry()
+    r.registerKind({ kind: 'A', icon: 'x', shareable: false })
+    expect(r.levelMenu()).toEqual([])
+  })
+
+  it('lists every create entry (id create:<KIND>) and level action by order, a tie in registration order', () => {
+    const r = createRegistry()
+    r.registerKind({ kind: 'B', icon: 'x', shareable: false, createDialog: Stub, createEntry: entry(20, 'b.new') })
+    r.registerKind({ kind: 'A', icon: 'x', shareable: false, createDialog: Stub, createEntry: entry(10, 'a.new'), levelActions: [{ id: 'a.up', ...entry(30, 'a.up') }] })
+    r.registerKind({ kind: 'C', icon: 'x', shareable: false, createDialog: Stub, createEntry: entry(20, 'c.new') })
+    expect(r.levelMenu().map((e) => [e.id, e.create ?? null])).toEqual([['create:A', 'A'], ['create:B', 'B'], ['create:C', 'C'], ['a.up', null]])
+  })
+
+  it('refuses a create entry without a createDialog to open, and registers nothing', () => {
+    const r = createRegistry()
+    expect(() => r.registerKind({ kind: 'A', icon: 'x', shareable: false, createEntry: entry(1) })).toThrow(/no createDialog/)
+    expect(r.kind('A')).toEqual({ supported: false, kind: 'A' })
+  })
+
+  it('is write-once for level action ids: a taken id, a duplicate within a kind and the reserved create: prefix throw', () => {
+    const r = createRegistry()
+    r.registerKind({ kind: 'A', icon: 'x', shareable: false, levelActions: [{ id: 'a.up', ...entry(1) }] })
+    expect(() => r.registerKind({ kind: 'B', icon: 'x', shareable: false, levelActions: [{ id: 'a.up', ...entry(2) }] })).toThrow(/already registered/)
+    expect(() => r.registerKind({ kind: 'C', icon: 'x', shareable: false, levelActions: [{ id: 'c.1', ...entry(1) }, { id: 'c.1', ...entry(2) }] })).toThrow(/already registered/)
+    expect(() => r.registerKind({ kind: 'D', icon: 'x', shareable: false, levelActions: [{ id: 'create:FOLDER', ...entry(1) }] })).toThrow(/already registered/)
+    expect(r.levelMenu().map((e) => e.id)).toEqual(['a.up'])
+  })
+})

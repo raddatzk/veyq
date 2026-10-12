@@ -156,6 +156,7 @@ import { FILE_KIND } from '../features/files/kinds'
 import { capabilityState } from '../shared/state/capabilities'
 import { SHARING_PUBLIC_LINKS } from '../features/platform/capabilities'
 import { realI18n, t } from '../test/i18n'
+import { chooseNew } from '../test/newMenu'
 import PrimeVue from 'primevue/config'
 import { registry } from '../core/applications/registry'
 import { treeNode } from '../test/models'
@@ -205,7 +206,7 @@ describe('MemoryHomeView over the real registry', () => {
     const w = await mountAt('#~me/trips')
     expect(w.find('.section-stub').text()).toBe('folder=Trips|memories=Italy')
     expect(folderCards(w)).toEqual([])
-    expect(w.find('.veyq-folder-overview-card h2').text()).toBe('Trips')
+    expect(w.find('.veyq-node-header-title').text()).toBe('Trips')
     expect(w.find('.section-stub').attributes('data-readonly')).toBe('false')
   })
 
@@ -273,10 +274,10 @@ describe('MemoryHomeView over the real registry', () => {
       node({ id: 'anna-early', kind: FOLDER_KIND, name: 'Anna', parentId: 'trips', shareIdentityId: 'identity-1', createdAt: 1000 }),
     ]
     const second = await mountAt('#~me/trips/anna-2')
-    expect(second.find('.veyq-folder-overview-card h2').text()).toBe('Anna (2)')
+    expect(second.find('.veyq-node-header-title').text()).toBe('Anna (2)')
     expect(breadcrumb.trail.at(-1)).toMatchObject({ id: 'anna-late', name: 'Anna (2)' })
     const first = await mountAt('#~me/trips/anna')
-    expect(first.find('.veyq-folder-overview-card h2').text()).toBe('Anna')
+    expect(first.find('.veyq-node-header-title').text()).toBe('Anna')
   })
 
   // Files registers FILE with its own section (F1b): a file in a folder is listed there, after Memories' section, and no
@@ -368,16 +369,16 @@ describe('MemoryHomeView over the real registry', () => {
     const w = await mountAt('#~me')
     const section = w.findComponent({ name: 'MemoriesSectionStub' })
 
-    section.vm.$emit('create', MEMORY_KIND)
+    await chooseNew(w, t('memory.create')) // the real registry's entry of the Memory kind
     await flushPromises()
     expect(w.find('.create-stub').text()).toBe('MEMORY|-')
     expect(w.find('.name-stub').exists()).toBe(false)
-    await w.find('.veyq-level-grid .veyq-create-card').trigger('click')
+    await chooseNew(w, t('node.folderCreate'))
     await flushPromises()
     expect(w.find('.name-stub').text()).toBe('create|-|-')
     expect(w.find('.create-stub').exists(), 'the Memory dialog gives way').toBe(false)
 
-    await w.find('.veyq-level-toolbar button').trigger('click')
+    await w.find(`.veyq-level-toolbar button[aria-label="${t('node.trash.open')}"], .veyq-level-toolbar button:not(.veyq-new-menu-button)`).trigger('click')
     await flushPromises()
     expect(w.find('.trash-stub').exists()).toBe(true)
 
@@ -432,7 +433,7 @@ describe('MemoryHomeView over the real registry', () => {
 // exactly as a Memory's detail does — descriptor AND capability — and the share opens FOLDER's share dialog (core's,
 // pre-registered by the registry, P4c) with the folder's own key from the chain, never Memories' dialog.
 describe('MemoryHomeView sharing a folder', () => {
-  const shareButton = (w: Mounted) => w.find(`.veyq-folder-overview-card button[aria-label="${t('share.share')}"]`)
+  const shareButton = (w: Mounted) => w.find(`.veyq-node-header button[aria-label="${t('share.share')}"]`)
 
   it("offers the share on the folder overview card, and it opens core's dialog for the folder itself", async () => {
     const w = await mountAt('#~me/trips')
@@ -451,7 +452,7 @@ describe('MemoryHomeView sharing a folder', () => {
 
   it('offers no share at the scope root (no node to share, no overview card)', async () => {
     const w = await mountAt('#~me')
-    expect(w.find('.veyq-folder-overview-card').exists()).toBe(false)
+    expect(w.find('.veyq-node-header').exists()).toBe(false)
     expect(w.find(`button[aria-label="${t('share.share')}"]`).exists()).toBe(false)
   })
 
@@ -459,7 +460,7 @@ describe('MemoryHomeView sharing a folder', () => {
     capabilityState.ids = []
     const w = await mountAt('#~me/trips')
     expect(shareButton(w).exists()).toBe(false)
-    expect(w.find(`.veyq-folder-overview-card button[aria-label="${t('node.rename')}"]`).exists(), 'control: the card renders').toBe(true)
+    expect(w.find(`.veyq-node-header button[aria-label="${t('node.rename')}"]`).exists(), 'control: the card renders').toBe(true)
   })
 })
 

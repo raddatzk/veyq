@@ -7,6 +7,8 @@
 // instead of a key chain) and `loadTree`.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { defineComponent, h } from 'vue'
+import { provideLevelActions, type LevelActions } from '../../../core/node/levelActions'
 import * as v1 from '@veyq/crypto/v1'
 import type { FileListPage } from '../../../api/generated/files'
 
@@ -205,12 +207,58 @@ describe('FilesSection', () => {
     expect(w.find('.veyq-section-header span').text()).toBe('1')
   })
 
-  it('an empty folder: the empty state and the upload action, and no request at all', async () => {
+  it('an empty folder: plain empty-state text pointing at "New", no header button, and no request at all', async () => {
     const w = mountSection({ nodes: [] })
     await flushPromises()
     expect(w.find('.veyq-empty').text()).toBe(t('files.empty'))
-    expect(w.find('.files-toolbar button').text()).toBe(t('files.upload'))
+    expect(w.find('.veyq-section-header button').exists(), 'the upload action is core\'s "New" menu (inbox #406)').toBe(false)
     expect(listFiles).not.toHaveBeenCalled()
+  })
+
+  it('where nothing can be uploaded (a pending deletion) the empty text does not point at a "New" menu that is not there', async () => {
+    const w = mountSection({ nodes: [], pending: true })
+    await flushPromises()
+    expect(w.find('.veyq-empty').text()).toBe(t('files.emptyReadOnly'))
+    expect(w.find('.veyq-empty').text()).not.toContain(t('node.new'))
+  })
+
+  // inbox #406: the menu entry "Upload files" runs the handler this section registers with the level while mounted.
+  describe('the level action "files.upload" (core\'s "New" menu)', () => {
+    function mountInLevel(over: { pending?: boolean } = {}) {
+      let actions!: LevelActions
+      const epochs = epochsOf(v1.randomBytes(32))
+      const tree = memberTreeOf(() => [DOCS], { scopeId: SCOPE, epochs })
+      const Host = defineComponent({
+        setup() {
+          actions = provideLevelActions()
+          return () => h(FilesSection, {
+            folder: DOCS, nodes: [], epochs, viewMode: 'grid' as ViewMode, tree: { ...tree, inIdentityFolder: () => false },
+            access: memberAccessOf({ scopeId: SCOPE, epochs, readonly: over.pending ?? false }),
+          })
+        },
+      })
+      const w = mount(Host, { global: { plugins: [realI18n()], directives: { tooltip: {} } } })
+      return { w, actions }
+    }
+
+    it('registers while mounted; running it opens the multi-file picker; gone once unmounted', async () => {
+      const { w, actions } = mountInLevel()
+      await flushPromises()
+      const handler = actions.get('files.upload')!
+      expect(handler.enabled()).toBe(true)
+      const picker = w.find('input[type="file"][multiple]')
+      const click = vi.spyOn(picker.element as HTMLInputElement, 'click')
+      handler.run()
+      expect(click).toHaveBeenCalledOnce()
+      w.unmount()
+      expect(actions.get('files.upload')).toBeUndefined()
+    })
+
+    it('is not enabled where the matrix grants no upload (a pending deletion)', async () => {
+      const { actions } = mountInLevel({ pending: true })
+      await flushPromises()
+      expect(actions.get('files.upload')!.enabled()).toBe(false)
+    })
   })
 
   it('read-only (pending deletion): download stays, no upload, replace, rename or delete', async () => {

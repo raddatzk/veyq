@@ -14,11 +14,12 @@ div.veyq-node-host
           span.pi.pi-bars
         button.view-mode-button [aria-label="Map view"] [aria-pressed="false"]
           span.pi.pi-map
-    section.veyq-section
-      div.veyq-section-header
-        div.veyq-card.veyq-folder-card.veyq-folder-overview-card
-          span.pi.pi-folder
-          h2
+    header.veyq-node-header
+      div.veyq-node-header-leading
+        span.pi.pi-folder.veyq-node-header-icon
+      div.veyq-node-header-body
+        div.veyq-node-header-titlerow
+          h2.veyq-node-header-title
             "Trips"
     div.p-component.p-tabs.veyq-level-tabs
       div.p-tablist
@@ -64,7 +65,7 @@ div.veyq-node-host
         span
           "0"
       p.veyq-empty.veyq-empty-inline
-        "No files yet — upload the first one."
+        "No files yet."
     section.veyq-section
       div.veyq-level-section-header.veyq-section-header
         h2

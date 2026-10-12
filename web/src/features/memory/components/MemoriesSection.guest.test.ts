@@ -156,12 +156,10 @@ describe('MemoriesSection for a share guest', () => {
     expect(authenticatedCalls).toEqual([])
   })
 
-  it('a READ guest gets no create card; a READ_WRITE guest of a folder link does (core creates it as the guest)', async () => {
-    expect(mountGuest(ShareRole.Read).find('.memory-create-card-memory').exists()).toBe(false)
-    const rw = mountGuest(ShareRole.ReadWrite)
-    expect(rw.find('.memory-create-card-memory').exists()).toBe(true)
-    await rw.find('.memory-create-card-memory').trigger('click')
-    expect(rw.emitted('create')).toEqual([[MEMORY_KIND]])
+  it('no role gets a create tile from the section: the entry is core\'s "New" menu, gated by the same matrix (inbox #406)', () => {
+    for (const role of [ShareRole.Read, ShareRole.ReadWrite]) {
+      expect(mountGuest(role).find('.veyq-create-card').exists()).toBe(false)
+    }
   })
 
   it("the map spans the opened subtree — a sub-folder's Memory too — keyed by the chain, and a pin opens its node", async () => {

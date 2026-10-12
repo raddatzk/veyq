@@ -29,6 +29,7 @@ import { openGuestTreeParts } from '../../../core/sharing/guestTree'
 import type { PublicShareHead } from '../../../core/sharing/resolvePublicShare'
 import { ShareRole, type PublicShare, type ShareNode } from '../../../api/generated/sharing'
 import { realI18n, t } from '../../../test/i18n'
+import { hasNewMenu, newMenuLabels } from '../../../test/newMenu'
 import { stubApi } from '../../../test/apiMock'
 import { publicShareFilesApi } from '../api'
 import { downloadFile } from '../download'
@@ -112,7 +113,7 @@ const tiles = (w: Body) => [
 ]
 const tile = (w: Body, name: string) => tiles(w).find((c) => c.name === name)?.el
 const tileNames = (w: Body) => tiles(w).map((c) => c.name)
-const heading = (w: Body) => w.find('.veyq-folder-overview-card h2').text()
+const heading = (w: Body) => w.find('.veyq-node-header-title').text()
 async function click(el: Element) {
   el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
   await flushPromises()
@@ -122,7 +123,7 @@ async function click(el: Element) {
 function expectNoWriteControl(w: Body) {
   expect(authenticatedCalls, 'no authenticated client').toEqual([])
   expect(w.findAll('input[type="file"]'), 'no file input').toHaveLength(0)
-  expect(w.find('.veyq-create-card').exists(), "no 'New folder', no new Memory").toBe(false)
+  expect(hasNewMenu(w), "no 'New' menu: no new folder, Memory or upload").toBe(false)
   expect(w.text()).not.toContain(t('files.upload'))
   expect(w.text()).not.toContain(t('files.dropBox.guestPick'))
   expect(w.text()).not.toContain(t('files.dropBox.guestTitle'))
@@ -145,7 +146,7 @@ describe("a drop box inside a folder share is the member's detail, read-only (in
       const w = await mountBody(role)
       expect(tileNames(w).sort()).toEqual(['Briefe', 'Postfach'])
       // control: at the share root a contributor does get 'New folder' and the upload
-      if (role === ShareRole.ReadWrite) expect(w.find(`.veyq-create-card[aria-label="${t('node.folderCreate')}"]`).exists()).toBe(true)
+      if (role === ShareRole.ReadWrite) expect(await newMenuLabels(w)).toContain(t('node.folderCreate'))
 
       await click(tile(w, 'Postfach')!.element)
       expect(router.currentRoute.value.query.node).toBe(DROP)

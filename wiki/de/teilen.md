@@ -38,7 +38,7 @@ Zwei ehrliche Einzelheiten:
 ## Ein Briefkasten für Dateien
 
 Ein **Briefkasten** (in Dateien) ist ein eigener Ort, der Dateien von Personen ohne Konto einsammelt. Lege ihn mit
-**Neuer Briefkasten** an und erstelle dann einen Link. Wer den Link nutzt, bekommt darin **einen eigenen Ordner** —
+**Neu** → **Neuer Briefkasten** an und erstelle dann einen Link. Wer den Link nutzt, bekommt darin **einen eigenen Ordner** —
 niemand sieht also, was andere gesendet haben —, und du und die anderen Mitglieder deines Bereichs seht alles an
 einem Ort. Schaltest du den Link ab, bleibt alles erhalten, was schon angekommen ist. Willst du den Ordner einer
 Person behalten, kannst du ihn als gewöhnlichen Ordner herausverschieben; die Person kann dann nichts mehr

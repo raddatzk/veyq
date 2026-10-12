@@ -1,6 +1,10 @@
 div.veyq-node-host
   div.veyq-level-view
     div.veyq-level-toolbar
+      button.p-button.p-button-sm.p-component.veyq-new-menu-button [aria-label="New"]
+        span.p-button-icon.p-button-icon-left.pi.pi-plus
+        span.p-button-label
+          "New"
       button.p-button.p-button-outlined.p-button-secondary.p-button-sm.p-component [aria-label="Trash"]
         span.p-button-icon.p-button-icon-left.pi.pi-trash
         span.p-button-label
@@ -75,38 +79,24 @@ div.veyq-node-host
                     "Beach"
               button.memory-card-pin [aria-label="Favorite"] [aria-pressed="false"]
                 span.pi.pi-heart
-        button.memory-create-card-memory.veyq-card.veyq-card-interactive.veyq-create-card [aria-label="New Memory"]
-          span.pi.pi-plus
-          strong
-            "New Memory"
     section.files-section.veyq-section
       div.veyq-section-header
         h2
           "Files"
         span
           "0"
-        div.files-toolbar
-          button.p-button.p-button-outlined.p-button-secondary.p-button-sm.p-component [aria-label="Upload files"]
-            span.p-button-icon.p-button-icon-left.pi.pi-upload
-            span.p-button-label
-              "Upload files"
       input.files-picker
       input.files-picker
       p.veyq-empty.veyq-empty-inline
-        "No files yet — upload the first one."
+        "No files yet — choose New to upload the first one."
     section.dropbox-section.veyq-section
       div.veyq-section-header
         h2
           "Drop boxes"
         span
           "0"
-        div.dropbox-toolbar
-          button.p-button.p-button-outlined.p-button-secondary.p-button-sm.p-component [aria-label="New drop box"]
-            span.p-button-icon.p-button-icon-left.pi.pi-inbox
-            span.p-button-label
-              "New drop box"
       p.veyq-empty.veyq-empty-inline
-        "No drop boxes yet. A drop box collects files from people without an account."
+        "No drop boxes yet. Choose New to create one — a drop box collects files from people without an account."
     section.veyq-section
       div.veyq-level-section-header.veyq-section-header
         h2
@@ -122,7 +112,3 @@ div.veyq-node-host
           span.pi.pi-folder
           strong
             "Empty"
-        button.veyq-card.veyq-card-interactive.veyq-create-card [aria-label="New folder"]
-          span.pi.pi-plus
-          strong
-            "New folder"

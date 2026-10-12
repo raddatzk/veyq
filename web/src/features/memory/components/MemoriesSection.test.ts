@@ -102,27 +102,22 @@ describe('MemoriesSection', () => {
     expect(wrapper.emitted('openNode')?.[0]?.[0]).toMatchObject({ id: 'm1' })
   })
 
-  it('shows its empty state beside the create card when the level has no Memory', () => {
+  it('shows plain empty-state text when the level has no Memory, with no create tile (the "New" menu creates, inbox #406)', () => {
     const wrapper = mountSection({ nodes: [] })
     expect(wrapper.text()).toContain(t('memory.memoryEmpty'))
-    expect(wrapper.text()).toContain(t('memory.create'))
+    expect(wrapper.find('.veyq-create-card').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain(t('memory.create'))
   })
 
-  it('emits the create mode its dialog understands; the space\'s trash is not its button (core\'s level view, inbox #385)', async () => {
+  it('has no create control and no trash button: both are core\'s level toolbar (inbox #385, #406)', () => {
     const wrapper = mountSection({ nodes: [] })
-    await wrapper.find('.memory-create-card-memory').trigger('click')
-    expect(wrapper.emitted('create')).toEqual([[MEMORY_KIND]])
-    // named by its text alone, its icon hidden from assistive technology (inbox #385)
-    expect(wrapper.find('.memory-create-card-memory').text()).toBe(t('memory.create'))
-    expect(wrapper.find('.memory-create-card-memory').attributes('aria-label')).toBe(t('memory.create'))
-    expect(wrapper.find('.memory-create-card-memory .pi').attributes('aria-hidden')).toBe('true')
+    expect(wrapper.find('button').exists()).toBe(false)
     expect(wrapper.find('.pi-trash').exists()).toBe(false)
     expect(wrapper.text()).not.toContain(t('node.trash.open'))
   })
 
-  it('read-only (a scope pending deletion): no create card, the cards stay', () => {
+  it('read-only (a scope pending deletion): the cards stay', () => {
     const wrapper = mountSection({ nodes: [node('m1', MEMORY_KIND, 'Solo')], pending: true })
-    expect(wrapper.find('.memory-create-card-memory').exists()).toBe(false)
     expect(wrapper.text()).toContain('Solo')
   })
 

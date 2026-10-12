@@ -92,7 +92,7 @@ type Page = Awaited<ReturnType<typeof mountPage>>
 function expectNoMemberControl(w: Page) {
   expect(w.find('.memory-card-pin').exists(), 'pin').toBe(false)
   expect(w.find(`.veyq-level-toolbar button[aria-label="${t('node.trash.open')}"]`).exists(), "the space's trash").toBe(false)
-  expect(w.find('.veyq-folder-overview-actions').exists(), 'share, rename, delete of the folder').toBe(false)
+  expect(w.find('.veyq-node-header-actions').exists(), 'share, rename, delete of the folder').toBe(false)
   for (const label of [
     t('memory.favorite'), t('memory.unfavorite'), t('media.marks.mark'), t('share.share'), t('share.uploadRequest'), t('node.rename'),
     t('node.delete'), t('node.trash.open'), t('memory.cover.set'), t('memory.cover.edit'), t('memory.createChapterTitle'),
@@ -106,7 +106,7 @@ describe("a folder link's guest page is the member's level (inbox #401 S2)", () 
   for (const role of [ShareRole.Read, ShareRole.ReadWrite]) {
     it(`${role}: the Memory is a MemoryCard, the sub-folder a folder card, the file Files' row — nothing of a member's`, async () => {
       const w = await mountPage(role)
-      expect(w.find('.veyq-folder-overview-card h2').text()).toBe('Familie')
+      expect(w.find('.veyq-node-header-title').text()).toBe('Familie')
       expect(w.find('.memory-card strong').text()).toBe('Rom 2026')
       expect(w.findAll('button.veyq-folder-card').map((c) => c.find('strong').text())).toEqual(['Briefe'])
       expect(w.find('.veyq-row-title').text()).toBe('rezept.pdf')
@@ -123,8 +123,8 @@ describe("a folder link's guest page is the member's level (inbox #401 S2)", () 
     await flushPromises()
     expect(router.currentRoute.value.query.node).toBe(MEMORY)
     expect(router.currentRoute.value.hash, 'the share key stays in the URL').toBe(HASH)
-    await vi.waitFor(() => expect(w.find('.gallery-title').exists()).toBe(true))
-    expect(w.find('.gallery-title').text()).toBe('Rom 2026')
+    await vi.waitFor(() => expect(w.find('.veyq-node-header-title').exists()).toBe(true))
+    expect(w.find('.veyq-node-header-title').text()).toBe('Rom 2026')
     expect(w.find('.memory-detail').exists(), "the member's Memory detail, not a guest body").toBe(true)
     expect(w.findAll('a.p-breadcrumb-item-link').map((a) => a.text())).toEqual(['Familie', 'Rom 2026'])
     expect(authenticatedCalls).toEqual([])

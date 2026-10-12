@@ -763,6 +763,8 @@ const en = {
     folders: 'Folders',
     folderEmpty: 'No folders here yet.',
     folderCreate: 'New folder',
+    // The level toolbar's menu of everything that can be created or uploaded here (inbox #406).
+    new: 'New',
     // A level where empty sections are left out (a guest's folder in a drop box) and nothing is left to show.
     levelEmpty: 'Nothing here yet.',
     createFolderTitle: 'Create a folder',
@@ -992,7 +994,9 @@ const en = {
   files: {
     title: 'Files',
     upload: 'Upload files',
-    empty: 'No files yet — upload the first one.',
+    empty: 'No files yet — choose New to upload the first one.',
+    // Where nothing can be uploaded (a pending deletion): no pointer to the "New" menu, which is not there.
+    emptyReadOnly: 'No files yet.',
     notUploaded: 'Not uploaded yet',
     // A file's noun with its article, for core's `node.nameTakenBy` (the registry's `nounWithArticle`).
     aFile: 'a file',
@@ -1071,7 +1075,7 @@ const en = {
       createTitle: 'New drop box',
       aDropBox: 'a drop box',
       createHint: 'A drop box collects files from people without an account. Share a link: everyone who uses it gets a folder of their own here, and nobody sees what others sent.',
-      sectionEmpty: 'No drop boxes yet. A drop box collects files from people without an account.',
+      sectionEmpty: 'No drop boxes yet. Choose New to create one — a drop box collects files from people without an account.',
       createFailed: 'The drop box could not be created. Please try again.',
       open: 'Open {name}',
       empty: 'Nobody has dropped anything yet. Share a link to collect files.',
@@ -2097,6 +2101,7 @@ const de: typeof en = {
     folders: 'Ordner',
     folderEmpty: 'Hier gibt es noch keine Ordner.',
     folderCreate: 'Neuer Ordner',
+    new: 'Neu',
     levelEmpty: 'Hier ist noch nichts.',
     createFolderTitle: 'Ordner anlegen',
     renameTitle: 'Umbenennen',
@@ -2301,7 +2306,8 @@ const de: typeof en = {
   files: {
     title: 'Dateien',
     upload: 'Dateien hochladen',
-    empty: 'Noch keine Dateien — lade die erste hoch.',
+    empty: 'Noch keine Dateien — mit „Neu“ lädst du die erste hoch.',
+    emptyReadOnly: 'Noch keine Dateien.',
     aFile: 'eine Datei',
     notUploaded: 'Noch nicht hochgeladen',
     modified: 'Geändert {date}',
@@ -2365,7 +2371,7 @@ const de: typeof en = {
       createTitle: 'Neuer Briefkasten',
       aDropBox: 'einen Briefkasten',
       createHint: 'Ein Briefkasten sammelt Dateien von Personen ohne Konto. Teile einen Link: Wer ihn nutzt, bekommt hier einen eigenen Ordner, und niemand sieht, was andere eingeworfen haben.',
-      sectionEmpty: 'Noch keine Briefkästen. Ein Briefkasten sammelt Dateien von Personen ohne Konto.',
+      sectionEmpty: 'Noch keine Briefkästen. Mit „Neu“ legst du einen an — ein Briefkasten sammelt Dateien von Personen ohne Konto.',
       createFailed: 'Der Briefkasten konnte nicht angelegt werden. Bitte versuche es erneut.',
       open: '{name} öffnen',
       empty: 'Noch hat niemand etwas eingeworfen. Teile einen Link, um Dateien einzusammeln.',

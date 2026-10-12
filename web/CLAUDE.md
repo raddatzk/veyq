@@ -141,6 +141,16 @@ here; the server is blind.
   core serves every application's nodes, so its strings are `node.*`/`common.*` and a kind's noun comes from its descriptor). The one exempt file is `src/applications.ts`, the composition root (by exact path, never a
   directory); `main.ts` calls its `registerApplications()` before `boot()`. Build-time only: no glob, no computed
   `import()`, no loading after the fact (ADR 0079 Decision 5, ADR 0026) — registered code runs with every unlocked key.
+  **One header for every node (inbox #406).** `core/node/components/NodeHeader.vue` is the header of a folder's level, a file, a drop box and a
+  Memory: a leading visual (the kind's `icon`, or the application's `leading` slot — Memories' cover button), the title (`level` 1 on a
+  node's own page), an optional `subtitle` and `meta` slot, and the actions on the right. The application only feeds data: its action list
+  (`NodeHeaderAction` in `core/node/nodeHeader.ts`: id, label = aria-label + tooltip, icon, handler, `severity` primary|danger, `shown`,
+  `disabled`, `pressed`), each `shown` by its capability function — fail closed, a share guest gets this very header with fewer actions
+  (inbox #401), never a guest-only one; `standardNodeActions` builds the share/rename/move/delete four. Core owns the look, the wrap
+  (the title row wraps, so every action is visible at every width), the keyboard (real labelled buttons) and the dark mode (tokens). Core's
+  own actions (a future favorite heart for every node) plug in as `coreActions` (`CoreHeaderAction`, `placement` before|after,
+  merged by `mergeHeaderActions`), gated by a core capability function, with no change to any application.
+
   **What an application registers** (its `register.ts`; the registry is write-once, a second registration throws):
   `registerKind` per node kind (detail component, icon, shareable, `deleteTitle` — the i18n key core's delete dialog
   titles a node of the kind with, else a neutral "Delete", and `deleteCopy`, its sentence — `nounWithArticle`, the noun core's
@@ -149,7 +159,15 @@ here; the server is blind.
   selection on a name, e.g. a file's before its extension — `placement`, where a node of the kind may be moved (`{ root,
   parents }`, a hint mirroring the backend's `NodeKindRules`; core's move dialog offers nothing for a kind without one,
   inbox #358) — and its `section` of the folder level view —
-  `{ order, component, views?, tabLabel? }`; the level view is core's, `core/node/LevelView.vue`: its toolbar (the space's trash, and
+  `{ order, component, views?, tabLabel? }` — and, for the level's "New" menu (inbox #406), `createEntry` (`{ label, icon, order,
+  allowed(ctx), enabled?(ctx) }`: the kind's menu entry, its label an i18n key of the application's own namespace, `allowed` its
+  fail-closed capability function, and it needs a `createDialog`, which `registerKind` checks) and `levelActions` (entries that are no
+  create dialog — Files' "Upload files"; ids write-once, `create:` reserved). The level view is core's, `core/node/LevelView.vue`: its toolbar (the
+  "New" menu — `registry.levelMenu()` plus core's own folder entry, one PrimeVue button + popup `Menu`, each entry only where its own
+  capability function says yes, so a READ guest has none; a create entry emits `create(kind)` and the host mounts the `createDialog`, an action
+  runs the handler the application's MOUNTED section registered with `useLevelAction(id, { enabled, run })`
+  (`core/node/levelActions.ts`; no handler mounted — another application's tab is shown — greys the entry out; the sections' own create
+  buttons and tiles are retired, an empty section says so in plain text), the space's trash, and
   the view switch over the union of the shown sections' `views` and the folders' grid and list — `core/node/levelViews.ts`,
   inbox #370; no section draws a toggle; the level shows the stored mode only where that union offers it, else the grid,
   without rewriting the stored preference, and hands that mode to every section as `LevelSectionProps.viewMode` — a
@@ -169,8 +187,7 @@ here; the server is blind.
   the state MOVED and the host's `useLevelLive` hands every section `LevelSectionProps.liveTick` only then, which Files'
   section answers with a blob re-read — an upload completing moves the revision and changes no row; the tree itself is
   replaced only when the rows' fingerprint differs. A guest poll that meets the link gone (`404`) flips `ShareView` to its
-  unavailable state, a changed password to the gate; a network error, `429` or `5xx` only backs the loop off), the folder's overview card (core's `NodeOverviewCard`, which an application's
-  container detail opens with too — the drop box), the
+  unavailable state, a changed password to the gate; a network error, `429` or `5xx` only backs the loop off), the folder's header (core's `NodeHeader`, which every node page opens with too — see below), the
   sections sorted by `order`, a fallback section for a child whose kind no section serves, then the sub-folders; kinds
   naming the same component share one section, rendered once with the children of all of them, and naming it with two
   different `order`s, `views` or `tabLabel`s throws; its `createDialog` — props `NodeCreateDialogProps` `{kind, scopeId, epochs, parentId,

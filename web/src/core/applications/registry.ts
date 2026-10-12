@@ -74,6 +74,12 @@
 // slug is RESERVED in that namespace: a folder (or a file) whose name folds to it is numbered (`memories-2`) by
 // `location.ts`. A kind nobody claimed has no segment either and is numbered among the plain names of the application that has none.
 //
+// **The level view's "New" menu (inbox #406).** The creation entries leave the sections' headers and tiles for ONE menu in
+// core's level toolbar, derived from here: a kind's `createEntry` (label key of its own namespace, icon, order, the
+// capability function that decides whether it shows) opens that kind's `createDialog`; a kind's `levelActions` are entries
+// that are no create dialog (Files' "Upload files"), run through a handler the application's mounted section registers
+// with the level (`core/node/levelActions.ts`). `levelMenu()` lists them; core adds the folder entry itself.
+//
 // **Fail closed.** `kind()` never returns `undefined`: a node kind nobody registered resolves to
 // `{ supported: false }`, which the host renders as an explicit unsupported state, never as an empty region. The kind
 // is an open string token (`core/node/kind.ts`), so no compiler checks that every kind is handled: this answer and its
@@ -139,6 +145,16 @@ export interface KindDescriptor {
    *  mounted by the shell when a section emits `create` or a detail emits `createChild` with this kind. Omitted: a
    *  create of the kind opens nothing. FOLDER has none: its create is core's `FolderNameDialog`. */
   createDialog?: Component
+  /** The entry this kind adds to the level view's "New" menu (`core/node/LevelView.vue`, inbox #406): its label (an i18n
+   *  key of its own application namespace), icon and order, and `allowed` - the application's fail-closed capability
+   *  answer for the level on screen, so a menu entry shows exactly where the old section button did. Choosing it asks the
+   *  host for this kind's `createDialog` (which therefore must exist: `registerKind` throws without). Omitted: the kind
+   *  is not created from a level (a chapter is created inside its Memory). */
+  createEntry?: LevelMenuEntry
+  /** Further entries of the "New" menu that are no create dialog - Files' "Upload files". Each runs a handler the
+   *  application's mounted section registers with the level (`core/node/levelActions.ts`), so core stays
+   *  application-agnostic. Ids are write-once across the registry. */
+  levelActions?: readonly (LevelMenuEntry & { id: string })[]
   /** The share management dialog of a node of this kind (props `NodeShareDialogProps`, emits `close`). Omitted: the
    *  kind offers no share, whatever `shareable` says. FOLDER's is core's own `FolderShareDialog`, pre-registered. */
   shareDialog?: Component
@@ -148,6 +164,34 @@ export interface KindDescriptor {
    *  `illegal_structure` is explained by name when the two disagree). Omitted: the move dialog offers no destination for
    *  a node of the kind (fail closed). */
   placement?: KindPlacement
+}
+
+/** What an entry of the level view's "New" menu is told about the level: who looks, the tree as that session reads it, the
+ *  folder on screen (`null`: the scope root) and the member's epoch keys (`null` for a guest). */
+export interface LevelActionContext {
+  access: Access
+  tree: TreeSource
+  folder: TreeNode | null
+  epochs: EpochKeys | null
+}
+
+/** One entry of the "New" menu, declared by an application on its kind. `allowed` is the capability answer (fail closed:
+ *  an entry whose function says no is not drawn); `enabled` (default: always) greys an allowed entry out while something
+ *  else is not ready (the member's epoch keys for a create). Entries sort by `order` ascending. */
+export interface LevelMenuEntry {
+  /** The i18n key of the entry's label, in the application's own namespace (core names none). */
+  label: string
+  icon: string
+  order: number
+  allowed(ctx: LevelActionContext): boolean
+  enabled?(ctx: LevelActionContext): boolean
+}
+
+/** A menu entry as the level view draws it: `create` is the kind to create (the host mounts its `createDialog`), absent
+ *  for an application action, which runs the handler registered under `id`. */
+export interface LevelMenuItem extends LevelMenuEntry {
+  id: string
+  create?: NodeKind
 }
 
 /** Where a kind may live in the tree ({@link KindDescriptor.placement}). */
@@ -387,6 +431,9 @@ export interface Registry {
    *  each section was first named); empty when no kind registered one (the level view still renders the overview, the
    *  fallback and the folders). */
   sections(): readonly LevelSection[]
+  /** The applications' entries of the level view's "New" menu, sorted by `order` (stable): every kind's `createEntry`
+   *  (id `create:<KIND>`, `create` set) and every `levelActions` entry. Core adds its own folder entry. */
+  levelMenu(): readonly LevelMenuItem[]
 }
 
 /** How a kind is addressed in the URL path ({@link Registry.routeOf}). */
@@ -471,6 +518,16 @@ export function createRegistry(): Registry {
       if (kinds.has(descriptor.kind)) throw new Error(`node kind ${descriptor.kind} is already registered`)
       // Checked before anything is stored, so a contradiction registers nothing.
       const join = sectionJoin(sections, descriptor.kind, descriptor.section)
+      if (descriptor.createEntry && !descriptor.createDialog) {
+        throw new Error(`node kind ${descriptor.kind} has a create menu entry but no createDialog to open`)
+      }
+      const own = descriptor.levelActions ?? []
+      for (const a of own) {
+        const taken = a.id.startsWith('create:') || [...kinds.values()].some((k) => k.levelActions?.some((x) => x.id === a.id))
+        if (taken || own.filter((x) => x.id === a.id).length > 1) {
+          throw new Error(`level action ${a.id} is already registered (or reserved)`)
+        }
+      }
       kinds.set(descriptor.kind, { ...descriptor })
       join()
     },
@@ -518,6 +575,14 @@ export function createRegistry(): Registry {
       return parentKind === null ? p.root : p.parents.includes(parentKind)
     },
     sections: () => sortedSections(sections),
+    levelMenu() {
+      const items: LevelMenuItem[] = []
+      for (const d of kinds.values()) {
+        if (d.createEntry) items.push({ ...d.createEntry, id: `create:${d.kind}`, create: d.kind })
+        for (const a of d.levelActions ?? []) items.push({ ...a })
+      }
+      return items.sort((a, b) => a.order - b.order) // stable (ES2019): a tie keeps registration order
+    },
   }
 }
 

@@ -48,6 +48,8 @@ import MemoryLocationEditor from './MemoryLocationEditor.vue'
 import MemoryCoverImage from './MemoryCoverImage.vue'
 import MemoryCoverDialog from './MemoryCoverDialog.vue'
 import MemoryCard from './MemoryCard.vue'
+import NodeHeader from '../../../core/node/components/NodeHeader.vue'
+import type { NodeHeaderAction } from '../../../core/node/nodeHeader'
 import ViewModeToggle from '../../../core/node/ViewModeToggle.vue'
 import { GRID_VIEW, LIST_VIEW } from '../../../core/node/levelViews'
 import Dialog from 'primevue/dialog'
@@ -96,6 +98,27 @@ const toast = useToast()
 /** What this view offers: the matrix's grant AND the source's door (see the header). */
 const can = computed(() => sourceCapabilities(props.caps, props.source))
 provideMemoryView({ source: props.source, caps: can })
+
+/** The header's actions (core's `NodeHeader`): each is shown only where `can` grants it; a share guest gets the same list
+ *  with fewer entries. The uploader (drop-box) link is its own action with its own dialog (no role switcher). */
+const headerActions = computed<NodeHeaderAction[]>(() => [
+  { id: 'upload', label: t('media.upload'), icon: 'pi pi-cloud-upload', severity: 'primary', shown: can.value.upload, disabled: !props.memoryKey, onClick: () => triggerUpload() },
+  { id: 'share', label: t('share.share'), icon: 'pi pi-share-alt', shown: can.value.share, disabled: !props.memoryKey, onClick: () => emit('share') },
+  { id: 'shareUpload', label: t('share.uploadRequest'), icon: 'pi pi-user-plus', shown: can.value.shareUpload, disabled: !props.memoryKey, onClick: () => emit('shareUpload') },
+  {
+    id: 'favorite',
+    label: props.favorite ? t('memory.unfavorite') : t('memory.favorite'),
+    icon: props.favorite ? 'pi pi-heart-fill' : 'pi pi-heart',
+    shown: can.value.favorite,
+    pressed: !!props.favorite,
+    class: 'memory-detail-fav',
+    onClick: () => emit('toggleFavorite'),
+  },
+  { id: 'rename', label: t('node.rename'), icon: 'pi pi-pencil', shown: can.value.rename, onClick: () => emit('rename') },
+  // Core's move dialog (inbox #358): a Memory to the root or a folder, a chapter into another Memory.
+  { id: 'move', label: t('node.move.action'), icon: 'pi pi-file-export', shown: can.value.move, onClick: () => emit('move') },
+  { id: 'delete', label: t('node.delete'), icon: 'pi pi-trash', severity: 'danger', shown: can.value.deleteNode, onClick: () => emit('delete') },
+])
 
 // --- item favorites (ADR 0068) ---
 // The marks inside this Memory, shared with the scope. The filter is declared BEFORE the gallery core because
@@ -415,38 +438,28 @@ watch(
 
 <template>
   <div class="memory-route-surface memory-detail">
-    <header class="gallery-header">
-      <button
-        type="button"
-        class="memory-cover-preview"
-        :class="{ 'is-empty': !coverSrc }"
-        :disabled="!memoryKey || !can.setCover"
-        :aria-label="storedCover ? t('memory.cover.edit') : t('memory.cover.set')"
-        :title="storedCover ? t('memory.cover.edit') : t('memory.cover.set')"
-        @click="openCoverEditor"
-      >
-        <MemoryCoverImage :src="coverSrc" :crop="storedCover?.crop ?? null" :alt="node.name" />
-        <span class="memory-cover-preview-hint">
-          <span class="pi pi-image" />
-          <span>{{ storedCover ? t('memory.cover.edit') : t('memory.cover.set') }}</span>
-        </span>
-      </button>
-      <!-- Body column beside the cover: row 1 = title + actions, row 2 = count, row 3 = date + location. Because
-           each row spans the body width (not squeezed by the actions, which live only in row 1), the date +
-           location chips sit side by side at any width. -->
-      <div class="gallery-header-body">
-        <div class="gallery-header-titlerow">
-          <h1 class="gallery-title">{{ node.name }}</h1>
-          <div class="gallery-header-actions">
-        <Button
-          v-if="can.upload"
-          v-tooltip.bottom="t('media.upload')"
+    <!-- Core's header (`NodeHeader`, inbox #406): the cover is the leading visual — it IS the "set / edit cover" button —
+         the count is the subtitle, the date and place chips the meta row, and the actions are the capability answers
+         below (`headerActions`), the same list a share guest gets with fewer entries. -->
+    <NodeHeader :title="node.name" :subtitle="t('media.itemCount', { count: items.length }, items.length)" :level="1" :actions="headerActions">
+      <template #leading>
+        <button
           type="button"
-          :aria-label="t('media.upload')"
-          icon="pi pi-cloud-upload"
-          :disabled="!memoryKey"
-          @click="triggerUpload"
-        />
+          class="memory-cover-preview"
+          :class="{ 'is-empty': !coverSrc }"
+          :disabled="!memoryKey || !can.setCover"
+          :aria-label="storedCover ? t('memory.cover.edit') : t('memory.cover.set')"
+          :title="storedCover ? t('memory.cover.edit') : t('memory.cover.set')"
+          @click="openCoverEditor"
+        >
+          <MemoryCoverImage :src="coverSrc" :crop="storedCover?.crop ?? null" :alt="node.name" />
+          <span class="memory-cover-preview-hint">
+            <span class="pi pi-image" />
+            <span>{{ storedCover ? t('memory.cover.edit') : t('memory.cover.set') }}</span>
+          </span>
+        </button>
+      </template>
+      <template #meta>
         <input
           v-if="can.upload"
           ref="fileInput"
@@ -456,75 +469,6 @@ watch(
           class="visually-hidden"
           @change="onFilesPicked"
         />
-        <Button
-          v-if="can.share"
-          v-tooltip.bottom="t('share.share')"
-          type="button"
-          :aria-label="t('share.share')"
-          icon="pi pi-share-alt"
-          severity="secondary"
-          text
-          :disabled="!memoryKey"
-          @click="$emit('share')"
-        />
-        <!-- The uploader (drop-box) link is its own action + own dialog (no role switcher) — capability-gated. -->
-        <Button
-          v-if="can.shareUpload"
-          v-tooltip.bottom="t('share.uploadRequest')"
-          type="button"
-          :aria-label="t('share.uploadRequest')"
-          icon="pi pi-user-plus"
-          severity="secondary"
-          text
-          :disabled="!memoryKey"
-          @click="$emit('shareUpload')"
-        />
-        <Button
-          v-if="can.favorite"
-          v-tooltip.bottom="favorite ? t('memory.unfavorite') : t('memory.favorite')"
-          type="button"
-          class="memory-detail-fav"
-          :class="{ 'is-favorite': favorite }"
-          :aria-label="favorite ? t('memory.unfavorite') : t('memory.favorite')"
-          :icon="favorite ? 'pi pi-heart-fill' : 'pi pi-heart'"
-          severity="secondary"
-          text
-          @click="$emit('toggleFavorite')"
-        />
-        <Button
-          v-if="can.rename"
-          v-tooltip.bottom="t('node.rename')"
-          type="button"
-          :aria-label="t('node.rename')"
-          icon="pi pi-pencil"
-          severity="secondary"
-          text
-          @click="$emit('rename')"
-        />
-        <!-- Core's move dialog (inbox #358): a Memory to the root or a folder, a chapter into another Memory. -->
-        <Button
-          v-if="can.move"
-          v-tooltip.bottom="t('node.move.action')"
-          type="button"
-          :aria-label="t('node.move.action')"
-          icon="pi pi-file-export"
-          severity="secondary"
-          text
-          @click="$emit('move')"
-        />
-        <Button
-          v-if="can.deleteNode"
-          v-tooltip.bottom="t('node.delete')"
-          type="button"
-          :aria-label="t('node.delete')"
-          icon="pi pi-trash"
-          severity="danger"
-          text
-          @click="$emit('delete')"
-        />
-          </div>
-        </div>
-        <span class="gallery-count">{{ t('media.itemCount', { count: items.length }, items.length) }}</span>
         <div class="memory-meta-row">
           <button
             type="button"
@@ -551,8 +495,8 @@ watch(
             <span>{{ locationLabel || t('memory.place.set') }}</span>
           </button>
         </div>
-      </div>
-    </header>
+      </template>
+    </NodeHeader>
 
     <!-- Tabbed detail (cr-0061, ported from the design source): Gallery (the media grid) + Chapters (the
          nested Memories). Other design tabs — journal / map / playlists — arrive with their features. -->
@@ -910,32 +854,6 @@ watch(
 .memory-detail {
   container: memory-detail-surface / inline-size;
 }
-/* Cover on the left, the body column beside it. */
-.gallery-header {
-  display: flex;
-  align-items: flex-start;
-  gap: 1rem;
-  padding-bottom: 1.15rem;
-  border-bottom: 1px solid var(--app-line);
-}
-/* The body column: row 1 = title + actions, row 2 = count, row 3 = date · location. Grows to fill; each row
-   spans its full width, so the count + meta rows are never squeezed by the action bar (which lives in row 1). */
-.gallery-header-body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  flex: 1 1 auto;
-  min-width: 0;
-}
-/* Row 1: title on the left, the action bar pushed to the right (wraps under the title only on a tiny header). */
-.gallery-header-titlerow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.5rem 1rem;
-}
-
 /* The Memory cover (cr-0072): a 16:9 tile showing the chosen, cropped cover (or the placeholder). It IS the
    "set/edit cover" button — clicking it opens the crop dialog. A hint label sits over it (always when empty,
    on hover once a cover is set). */
@@ -1030,26 +948,6 @@ watch(
 }
 .memory-date-chip.is-empty .pi {
   color: var(--app-muted);
-}
-.gallery-header-actions {
-  display: flex;
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 0.5rem;
-}
-/* Genuinely narrow header (mobile): stack the cover above the body so the body (title/count/meta) gets the full
-   width. The action bar stays in the title row; the title font eases down. */
-@container memory-detail-surface (max-width: 540px) {
-  .gallery-header {
-    flex-direction: column;
-  }
-  .gallery-title {
-    font-size: 1.5rem;
-  }
-}
-.memory-detail-fav.is-favorite :deep(.p-button-icon) {
-  color: var(--app-favorite);
 }
 
 /* The Chapters tab's view toggle, right-aligned above the card grid. */
