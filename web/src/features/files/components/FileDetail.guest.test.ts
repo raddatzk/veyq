@@ -28,7 +28,7 @@ vi.mock('../../../core/node/treeStore', async () => {
   return { treeStore: reactive({ nodes: [], loaded: true, error: false }), loadTree: vi.fn(async () => {}) }
 })
 vi.mock('../../../core/node/tree', async (orig) => ({ ...(await orig<typeof import('../../../core/node/tree')>()), deleteNode: vi.fn() }))
-vi.mock('../download', async (orig) => ({ ...(await orig<typeof import('../download')>()), downloadFile: vi.fn() }))
+vi.mock('../download', async (orig) => ({ ...(await orig<typeof import('../download')>()), downloadFile: vi.fn(), fileChunkProvider: vi.fn() }))
 const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }))
 vi.mock('../../../shared/state/useToast', () => ({
   useToast: () => ({ success: vi.fn(), error: toastError, showUndo: vi.fn(), dismissUndo: vi.fn() }),
@@ -42,7 +42,8 @@ vi.mock('../../../core/sharing/guestTree', async (orig) => ({
 
 import ShareTreePage from '../../../core/sharing/ShareTreePage.vue'
 import { publicShareFilesApi } from '../api'
-import { downloadFile } from '../download'
+import { downloadFile, fileChunkProvider } from '../download'
+import { PDF_BYTES, PNG_BYTES, providerOf } from '../../../test/fileChunks'
 import { guestFileUploadJob, type GuestFileTarget } from '../shareUpload'
 import { shareChunkUrls } from '../../../core/sharing/guestBlob'
 import { planBlob } from '../../../core/blob/transport'
@@ -103,7 +104,8 @@ async function mountPage(role: ShareRole, o: { requestGuest?: () => Promise<Gues
   return w
 }
 type Page = Awaited<ReturnType<typeof mountPage>>
-const labels = (w: Page) => w.findAll('button').map((b) => b.attributes('aria-label') ?? b.text())
+// The viewer's own controls are `FileViewer.test.ts`'s; this counts the page's.
+const labels = (w: Page) => w.findAll('button').filter((b) => !b.element.closest('.file-viewer')).map((b) => b.attributes('aria-label') ?? b.text())
 const downloadButton = (w: Page) => w.find('button.file-detail-download')
 /** Pick `name` into the page's one replace input (the real change event). */
 async function pick(w: Page, name: string) {
@@ -129,12 +131,39 @@ beforeEach(() => {
   listShareFiles = stubApi(publicShareFilesApi, { listShareFiles: { items: [{ nodeId: FILE, fileBlob: BLOB }] } satisfies ShareFileListing }).listShareFiles
   vi.mocked(guestFileUploadJob).mockReset().mockImplementation((_t, file) => ({ name: file.name, sizeBytes: 1, run: vi.fn(async () => ({ nodeId: FILE })), extra: { file } }))
   vi.mocked(downloadFile).mockReset().mockResolvedValue(undefined)
+  vi.mocked(fileChunkProvider).mockReset().mockImplementation(() => providerOf(PDF_BYTES))
   toastError.mockClear()
   router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/s/:id', component: { render: () => null } }] })
 })
 afterEach(() => {
   if (confirmRequest.value) settleConfirm(false)
   clearUploads()
+})
+
+describe.each([ShareRole.Read, ShareRole.ReadWrite])('the viewer for a %s guest of a single-file link (inbox #412)', (role) => {
+  it('opens the file through the LINK (the share\'s presign with the password token) and shows it, with no authenticated call', async () => {
+    vi.mocked(fileChunkProvider).mockImplementation(() => providerOf(PNG_BYTES))
+    const w = await mountPage(role)
+    const [scopeId, key, nodeId, blob, presign] = vi.mocked(fileChunkProvider).mock.calls[0]
+    expect([scopeId, nodeId, blob.blobId]).toEqual([SCOPE, FILE, BLOB.blobId])
+    expect(Array.from(key)).toEqual(Array.from(fileKey))
+    await presign!(BLOB.blobId)
+    expect(shareChunkUrls).toHaveBeenCalledWith(SHARE, BLOB.blobId, PW)
+    const img = w.find('.file-viewer img')
+    expect(img.exists()).toBe(true)
+    expect(img.attributes('alt')).toBe('Report.pdf')
+    expect(w.find('.file-viewer-fullscreen').exists()).toBe(true) // the same controls as the member's
+    expectNoMemberWorld()
+  })
+
+  it('a file the viewer cannot show offers the guest\'s download (the matrix grants it to both roles)', async () => {
+    const w = await mountPage(role)
+    expect(w.find('.file-viewer').text()).toContain(t('files.viewer.unsupported.pdf'))
+    await w.find('.file-viewer button.file-viewer-download').trigger('click')
+    await flushPromises()
+    expect(downloadFile).toHaveBeenCalledTimes(1)
+    expectNoMemberWorld()
+  })
 })
 
 describe('the guest of a single-file link sees the member\'s file view', () => {
