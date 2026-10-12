@@ -109,7 +109,7 @@ const hideEmptySections = computed(() => inIdentityFolder.value)
 // An application action (Files' upload) runs the handler its mounted section registered (`levelActions.ts`); with none
 // mounted (another application's tab is shown) the entry is disabled, never a click that does nothing.
 const levelActions = provideLevelActions()
-const FOLDER_ENTRY: LevelMenuItem = { id: 'create:FOLDER', create: FOLDER_KIND, label: 'node.folderCreate', icon: 'pi pi-folder', order: 0, allowed: () => true }
+const FOLDER_ENTRY: LevelMenuItem = { id: 'create:FOLDER', create: FOLDER_KIND, label: 'node.folderCreate', icon: 'pi pi-folder', order: 0, allowed: () => true, kind: FOLDER_KIND }
 const registryMenu = registry.levelMenu()
 const menuCtx = computed<LevelActionContext>(() => ({
   access: props.access,

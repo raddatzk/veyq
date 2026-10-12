@@ -40,3 +40,23 @@ export function sectionVisible(shown: string, id: string | undefined): boolean {
 export function fallbacksVisible(shown: string): boolean {
   return shown === ALL_TAB
 }
+
+// --- the tabs as a pure FILTER over one list (inbox #407) --------------------------------------------------------------
+
+/** A tab as the registry derives it (`registry.tabs()`): its id (the first kind that named the label), its label key and
+ *  every kind it filters to. */
+export interface KindTab extends LevelTab {
+  readonly kinds: readonly string[]
+}
+
+/** The tabs this level offers: one whose kinds have a node here, or whose application the viewer may add to (a kind with an
+ *  allowed "New" entry) - so a reader is not shown an empty "Briefkästen" tab, a writer is shown every place to start. */
+export function offeredTabs<T extends KindTab>(specs: readonly T[], present: ReadonlySet<string>, creatable: ReadonlySet<string>): T[] {
+  return specs.filter((t) => t.kinds.some((k) => present.has(k) || creatable.has(k)))
+}
+
+/** Whether a node of `kind` is drawn under the `shown` tab: everything under `All` (a kind with no tab included), else only
+ *  the kinds of that tab. FOLDERS are not asked: they are drawn under every tab. */
+export function kindVisible(shown: string, tabs: readonly KindTab[], kind: string): boolean {
+  return shown === ALL_TAB || tabs.some((t) => t.id === shown && t.kinds.includes(kind))
+}

@@ -765,8 +765,15 @@ const en = {
     folderCreate: 'New folder',
     // The level toolbar's menu of everything that can be created or uploaded here (inbox #406).
     new: 'New',
-    // A level where empty sections are left out (a guest's folder in a drop box) and nothing is left to show.
+    // A level with nothing to show (also a guest's folder in a drop box): said once. `levelEmptyNew` is the same sentence for a
+    // viewer who may add something; `{entries}` names what the "New" menu offers them (their own labels).
     levelEmpty: 'Nothing here yet.',
+    levelEmptyNew: 'Nothing here yet. Choose New to add something ({entries}).',
+    // An application tab with nothing in it and no application text of its own (the unified level list, inbox #407).
+    tabEmpty: 'Nothing here yet.',
+    // The unified level list: a row's overflow menu button (`{name}` is the row's name), and a folder's meta line.
+    rowMore: 'More actions for “{name}”',
+    kindFolder: 'Folder',
     createFolderTitle: 'Create a folder',
     renameTitle: 'Rename',
     nameLabel: 'Name',
@@ -2103,6 +2110,10 @@ const de: typeof en = {
     folderCreate: 'Neuer Ordner',
     new: 'Neu',
     levelEmpty: 'Hier ist noch nichts.',
+    levelEmptyNew: 'Hier ist noch nichts. Wähle „Neu“, um etwas hinzuzufügen ({entries}).',
+    tabEmpty: 'Hier ist noch nichts.',
+    rowMore: 'Weitere Aktionen für „{name}“',
+    kindFolder: 'Ordner',
     createFolderTitle: 'Ordner anlegen',
     renameTitle: 'Umbenennen',
     nameLabel: 'Name',

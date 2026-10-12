@@ -480,3 +480,58 @@ describe('registry: the level "New" menu (inbox #406)', () => {
     expect(r.levelMenu().map((e) => e.id)).toEqual(['a.up'])
   })
 })
+
+// inbox #407: the unified level list - a kind names its row factory, its tab and its views; the registry derives the row
+// sources and the tabs.
+describe('registry: the unified level list', () => {
+  const rowsA = () => ({ row: () => null })
+  const rowsB = () => ({ row: () => null })
+  const map = { mode: 'map', icon: 'pi pi-map', label: 'x.map' } as const
+
+  it('is empty until a kind names a row factory', () => {
+    const r = createRegistry()
+    expect(r.lists()).toEqual([])
+    expect(r.tabs()).toEqual([])
+  })
+
+  it('keys a row source by its function: two kinds naming one factory are ONE source carrying both, in registration order', () => {
+    const r = createRegistry()
+    r.registerKind({ kind: MEMORY_KIND, icon: 'x', shareable: true, list: { rows: rowsA, views: [GRID_VIEW, map] } })
+    r.registerKind({ kind: 'OTHER', icon: 'x', shareable: false, list: { rows: rowsB } })
+    r.registerKind({ kind: CHAPTER_KIND, icon: 'x', shareable: true, list: { rows: rowsA, views: [GRID_VIEW, map] } })
+    expect(r.lists()).toEqual([
+      { rows: rowsA, kinds: [MEMORY_KIND, CHAPTER_KIND], views: [GRID_VIEW, map] },
+      { rows: rowsB, kinds: ['OTHER'], views: [] },
+    ])
+  })
+
+  it('refuses a kind naming a shared factory with other views, and registers nothing of it', () => {
+    const r = createRegistry()
+    r.registerKind({ kind: MEMORY_KIND, icon: 'x', shareable: true, list: { rows: rowsA, views: [GRID_VIEW, map] } })
+    expect(() => r.registerKind({ kind: CHAPTER_KIND, icon: 'x', shareable: true, list: { rows: rowsA, views: [GRID_VIEW] } }))
+      .toThrow(/CHAPTER names the row source of MEMORY with views \[grid\], not \[grid, map\]/)
+    expect(r.kind(CHAPTER_KIND)).toEqual({ supported: false, kind: CHAPTER_KIND })
+    expect(r.lists()).toHaveLength(1)
+  })
+
+  it('derives one tab per distinct label, in registration order: kinds sharing a label share a tab, the id is its first kind', () => {
+    const r = createRegistry()
+    r.registerKind({ kind: MEMORY_KIND, icon: 'x', shareable: true, list: { rows: rowsA, tabLabel: 'x.mem' } })
+    r.registerKind({ kind: 'FILE', icon: 'x', shareable: true, list: { rows: rowsB, tabLabel: 'x.files' } })
+    r.registerKind({ kind: CHAPTER_KIND, icon: 'x', shareable: true, list: { rows: rowsA, tabLabel: 'x.mem' } })
+    r.registerKind({ kind: 'NOTAB', icon: 'x', shareable: false, list: { rows: rowsB } })
+    expect(r.tabs().map((t) => ({ id: t.id, label: t.label, kinds: t.kinds }))).toEqual([
+      { id: MEMORY_KIND, label: 'x.mem', kinds: [MEMORY_KIND, CHAPTER_KIND] },
+      { id: 'FILE', label: 'x.files', kinds: ['FILE'] },
+    ])
+  })
+
+  it('gives every menu entry the kind that declared it', () => {
+    const r = createRegistry()
+    r.registerKind({
+      kind: 'FILE', icon: 'x', shareable: true,
+      levelActions: [{ id: 'f.up', label: 'x', icon: 'x', order: 1, allowed: () => true, acceptsDrop: true }],
+    })
+    expect(r.levelMenu().map((e) => ({ id: e.id, kind: e.kind, acceptsDrop: e.acceptsDrop }))).toEqual([{ id: 'f.up', kind: 'FILE', acceptsDrop: true }])
+  })
+})

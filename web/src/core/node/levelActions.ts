@@ -13,6 +13,8 @@ export interface LevelActionHandler {
   /** Whether the action can run right now (e.g. the session's keys are unlocked). */
   enabled: () => boolean
   run: () => void
+  /** Files dropped onto the level (the entry declared `acceptsDrop`): core calls it only while `enabled()` says yes. */
+  drop?: (files: File[]) => void
 }
 
 export interface LevelActions {

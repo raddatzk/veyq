@@ -1,6 +1,6 @@
 // The pure selection rules of the level view's application tabs (inbox #348), levelViews-style.
 import { describe, it, expect } from 'vitest'
-import { ALL_TAB, effectiveTab, fallbacksVisible, sectionVisible, showTabBar, type LevelTab } from './levelTabs'
+import { ALL_TAB, effectiveTab, fallbacksVisible, kindVisible, offeredTabs, sectionVisible, showTabBar, type KindTab, type LevelTab } from './levelTabs'
 
 const A: LevelTab = { id: 'ALPHA', label: 'x.a' }
 const B: LevelTab = { id: 'BETA', label: 'x.b' }
@@ -38,5 +38,33 @@ describe('what a tab draws', () => {
   it('the fallback sections belong to All', () => {
     expect(fallbacksVisible(ALL_TAB)).toBe(true)
     expect(fallbacksVisible('ALPHA')).toBe(false)
+  })
+})
+
+// inbox #407: the tabs are a pure filter over ONE list of nodes.
+describe('offeredTabs and kindVisible (the unified list)', () => {
+  const mem: KindTab = { id: 'MEMORY', label: 'x.mem', kinds: ['MEMORY', 'CHAPTER'] }
+  const files: KindTab = { id: 'FILE', label: 'x.files', kinds: ['FILE'] }
+  const boxes: KindTab = { id: 'DROP', label: 'x.boxes', kinds: ['DROP'] }
+  const tabs = [mem, files, boxes]
+
+  it('offers a tab where its kinds have a node here or the viewer may add one - a reader gets no empty tab', () => {
+    expect(offeredTabs(tabs, new Set(['FILE']), new Set()).map((t) => t.id)).toEqual(['FILE'])
+    expect(offeredTabs(tabs, new Set(['CHAPTER']), new Set()).map((t) => t.id)).toEqual(['MEMORY'])
+    expect(offeredTabs(tabs, new Set(), new Set(['MEMORY', 'FILE', 'DROP'])).map((t) => t.id)).toEqual(['MEMORY', 'FILE', 'DROP'])
+    expect(offeredTabs(tabs, new Set(), new Set())).toEqual([])
+  })
+
+  it("draws every kind under All - one without a tab too - and under a tab only that tab's kinds", () => {
+    expect(kindVisible(ALL_TAB, tabs, 'NO_TAB')).toBe(true)
+    expect(kindVisible('FILE', tabs, 'FILE')).toBe(true)
+    expect(kindVisible('FILE', tabs, 'MEMORY')).toBe(false)
+    expect(kindVisible('FILE', tabs, 'NO_TAB')).toBe(false)
+    // kinds sharing a label share a tab
+    expect(kindVisible('MEMORY', tabs, 'CHAPTER')).toBe(true)
+  })
+
+  it('draws nothing under a tab id nobody offers (the caller shows All for it, effectiveTab)', () => {
+    expect(kindVisible('GONE', tabs, 'FILE')).toBe(false)
   })
 })
