@@ -60,13 +60,12 @@ describe('reconcileItems', () => {
   })
 
   it('does not re-add a skipped item, and tells onIds what the server lists before dropping', () => {
+    const skip = (id: string) => id === 'z' // an optimistic removal the server has not confirmed
+    // a delta alone (no id set) would re-add it: only the skip keeps it out
+    expect(reconcileItems([task('a')], [task('z')], null, { ...hooks, skip }).map((t) => t.id)).toEqual(['a'])
+    expect(reconcileItems([task('a')], [task('z')], null, hooks).map((t) => t.id)).toEqual(['a', 'z']) // control
     const seen: string[][] = []
-    const out = reconcileItems([task('a')], [task('z')], ['a'], {
-      ...hooks,
-      skip: (id) => id === 'z', // an optimistic removal the server has not confirmed
-      onIds: (listed) => seen.push([...listed]),
-    })
-    expect(out.map((t) => t.id)).toEqual(['a'])
+    reconcileItems([task('a')], [], ['a'], { ...hooks, onIds: (listed) => seen.push([...listed]) })
     expect(seen).toEqual([['a']])
   })
 })
