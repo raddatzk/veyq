@@ -4,9 +4,12 @@
 // canvas freed again when it is far away, so a 500-page PDF holds a handful of bitmaps, not 500. The page count and the
 // current page, zoom out / in / fit-width are real labelled buttons (keyboard, screen reader).
 //
-// What this is NOT, on purpose: no text layer (the text cannot be selected or searched in this cut - the download stays),
-// no annotation layer (a link in a PDF is ink on a canvas, never an element: a PDF cannot navigate this app), no form
-// fields, no password prompt. The document and its worker belong to `useFileViewer` and are destroyed there; this component
+// Over each drawn canvas sits pdf.js' text layer (transparent, positioned <span>s): the text can be selected with the mouse or
+// the keyboard and copied (Ctrl/Cmd+C), and browser find sees it. It is built with the page's drawing, re-laid at every zoom,
+// and emptied when the page is freed - one per drawn page, never more. A page without extractable text (a scan) has none.
+//
+// What this is NOT, on purpose: no annotation layer (a link in a PDF is ink on a canvas, never an element: a PDF cannot
+// navigate this app - the text layer is spans only), no form fields. The document and its worker belong to `useFileViewer` and are destroyed there; this component
 // only borrows them and cancels its own drawing when it goes.
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -45,6 +48,27 @@ function setCanvas(n: number, el: unknown): void {
   if (el instanceof HTMLCanvasElement) canvases.set(n, el)
   else canvases.delete(n)
 }
+/** The element each page's text layer is built in (the engine fills it, `free` empties it). */
+const textHosts = new Map<number, HTMLElement>()
+function setTextHost(n: number, el: unknown): void {
+  if (el instanceof HTMLElement) textHosts.set(n, el)
+  else textHosts.delete(n)
+}
+
+// While a drag selects text, the layer's end marker covers the page so the drag cannot jump over a gap (pdf.js' own viewer
+// does the same with `.selecting`); it is undone by the first pointer-up anywhere or when the window loses focus.
+let selectingLayer: HTMLElement | null = null
+function stopSelecting(): void {
+  selectingLayer?.classList.remove('pdf-text-selecting')
+  selectingLayer = null
+}
+function startSelecting(e: PointerEvent): void {
+  const layer = (e.target as Element | null)?.closest?.<HTMLElement>('.pdf-text-layer') ?? null
+  if (!layer) return
+  stopSelecting()
+  selectingLayer = layer
+  layer.classList.add('pdf-text-selecting')
+}
 
 // --- drawing near the viewport ---------------------------------------------------------------------------------------
 const near = new Set<number>()
@@ -72,7 +96,7 @@ async function draw(n: number): Promise<void> {
   if (drawn.get(n) === key || jobs.get(n)?.key === key) return
   jobs.get(n)?.job.cancel()
   drawn.delete(n) // the engine resizes the canvas as it starts, which clears what was drawn at the old width
-  const job = props.doc.render(n, canvas, cssWidth.value, ratio)
+  const job = props.doc.render(n, canvas, cssWidth.value, ratio, textHosts.get(n) ?? null)
   jobs.set(n, { job, key })
   try {
     const ok = await job.done
@@ -97,6 +121,7 @@ function free(n: number): void {
     canvas.width = 0
     canvas.height = 0
   }
+  textHosts.get(n)?.replaceChildren() // the text layer goes with the bitmap
 }
 
 let nearObserver: IntersectionObserver | null = null
@@ -173,15 +198,21 @@ onMounted(() => {
     }
   }
   observe()
+  document.addEventListener('pointerup', stopSelecting)
+  window.addEventListener('blur', stopSelecting)
 })
 onBeforeUnmount(() => {
   alive = false
+  document.removeEventListener('pointerup', stopSelecting)
+  window.removeEventListener('blur', stopSelecting)
+  stopSelecting()
   nearObserver?.disconnect()
   currentObserver?.disconnect()
   resizeObserver?.disconnect()
   for (const n of [...jobs.keys()]) free(n)
   for (const n of [...canvases.keys()]) free(n)
   canvases.clear()
+  textHosts.clear()
 })
 
 // --- zoom --------------------------------------------------------------------------------------------------------------
@@ -250,7 +281,7 @@ function fit(): void {
         />
       </span>
     </div>
-    <div ref="scroller" class="pdf-scroll" tabindex="0" role="group" :aria-label="t('files.viewer.pdf.pages', { name })">
+    <div ref="scroller" class="pdf-scroll" tabindex="0" role="group" :aria-label="t('files.viewer.pdf.pages', { name })" @pointerdown="startSelecting">
       <div v-for="n in pageNumbers" :key="n" class="pdf-page" :data-page="n" :style="pageStyle(n)">
         <canvas
           :ref="(el) => setCanvas(n, el)"
@@ -258,6 +289,7 @@ function fit(): void {
           role="img"
           :aria-label="t('files.viewer.pdf.page', { page: n, total: doc.numPages })"
         />
+        <div :ref="(el) => setTextHost(n, el)" class="pdf-text-layer" />
         <span v-if="failed[n]" class="pdf-page-failed" role="note">{{ t('files.viewer.pdf.pageFailed', { page: n }) }}</span>
       </div>
     </div>

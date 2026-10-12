@@ -1,0 +1,80 @@
+/* The text layer of a PDF page (features/files/components/PdfPages.vue, inbox #412): pdf.js builds transparent, absolutely
+   positioned <span>s over the page's canvas so its text can be selected and copied. These are the rules of pdf.js' own
+   `pdf_viewer.css` (`.textLayer`, 6.4.x) that the layer needs, kept to those and rewritten with our tokens; the annotation
+   layer, highlights and editors are not used and not styled (a PDF's link is never a live element). The spans carry no class
+   of their own, so the rules reach them through `.pdf-text-layer`; each is a two-class selector or longer so no framework rule
+   (a PrimeVue / PrimeIcons `span`, `.pi`) can win over it. The host gets its custom properties from the engine:
+   `--total-scale-factor` (CSS px per PDF point), `--min-font-size` (measured by pdf.js), and per span `--font-height`,
+   `--scale-x`, `--rotate`. Its box is the page's (`.pdf-page` is sized in px), so the percentages pdf.js writes line up at
+   every zoom. A page is paper in every theme (white), so the layer is `color-scheme: only light`. */
+.pdf-page .pdf-text-layer {
+  position: absolute;
+  inset: 0;
+  /* pdf.js writes a width/height with the CSS round() function inline; the page box is the truth, in every browser. */
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 1;
+  overflow: clip;
+  color-scheme: only light;
+  text-align: initial;
+  line-height: 1;
+  letter-spacing: normal;
+  word-spacing: normal;
+  text-size-adjust: none;
+  -webkit-text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  caret-color: CanvasText;
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+}
+
+.pdf-text-layer :is(span, br) {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.pdf-text-layer > :not(.markedContent),
+.pdf-text-layer .markedContent span:not(.markedContent) {
+  z-index: 1;
+  --font-height: 0;
+  --scale-x: 1;
+  --rotate: 0deg;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+
+.pdf-text-layer .markedContent {
+  display: contents;
+}
+
+.pdf-text-layer ::selection {
+  background: color-mix(in srgb, var(--app-accent) 35%, transparent);
+  color: transparent;
+}
+
+.pdf-text-layer br::selection {
+  background: transparent;
+}
+
+/* Closes the layer: while a drag is selecting (`.pdf-text-selecting`, set by PdfPages) it covers the page so the selection
+   cannot jump over the gaps between text runs and select the whole page. */
+.pdf-text-layer .pdf-text-end {
+  display: block;
+  position: absolute;
+  inset: 100% 0 0;
+  z-index: 0;
+  cursor: default;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.pdf-text-layer.pdf-text-selecting .pdf-text-end {
+  top: 0;
+}

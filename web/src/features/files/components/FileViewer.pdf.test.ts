@@ -63,17 +63,24 @@ function intersect(o: Observed, pages: Record<number, boolean | number>): void {
   o.callback(entries, {} as IntersectionObserver)
 }
 
-type FakeJob = { page: number; cssWidth: number; pixelRatio: number; canvas: HTMLCanvasElement; cancel: ReturnType<typeof vi.fn>; finish: () => void }
+type FakeJob = { page: number; cssWidth: number; pixelRatio: number; canvas: HTMLCanvasElement; textHost: HTMLElement | null; cancel: ReturnType<typeof vi.fn>; finish: () => void }
 function fakeDocument(numPages: number, size = { width: 200, height: 100 }) {
   const jobs: FakeJob[] = []
   const doc = {
     numPages,
     pageSize: vi.fn(async () => size),
-    render: vi.fn((page: number, canvas: HTMLCanvasElement, cssWidth: number, pixelRatio: number) => {
+    render: vi.fn((page: number, canvas: HTMLCanvasElement, cssWidth: number, pixelRatio: number, textHost?: HTMLElement | null) => {
+      // As the engine does: the host is emptied and the page's text goes in it as <span>s (a layer per render).
+      if (textHost) {
+        textHost.replaceChildren()
+        const span = document.createElement('span')
+        span.textContent = `text of page ${page}`
+        textHost.append(span)
+      }
       let finish: (ok: boolean) => void = () => {}
       const done = new Promise<boolean>((r) => (finish = r))
       const cancel = vi.fn(() => finish(false))
-      jobs.push({ page, cssWidth, pixelRatio, canvas, cancel, finish: () => finish(true) })
+      jobs.push({ page, cssWidth, pixelRatio, canvas, textHost: textHost ?? null, cancel, finish: () => finish(true) })
       canvas.width = 50 // as the engine sets it
       canvas.height = 50
       return { done, cancel }
@@ -426,5 +433,110 @@ describe('the page holds nothing a PDF could act through', () => {
       expect(src, file).not.toMatch(/import\s+[^(]*from\s+['"][^'"]*pdfjsRuntime/)
     }
     expect(readFileSync(join(base, 'pdf/pdfEngine.ts'), 'utf8')).toMatch(/await import\('\.\/pdfjsRuntime'\)/)
+  })
+})
+
+// --- the text layer ------------------------------------------------------------------------------------------------------------
+describe('the text layer (select and copy)', () => {
+  const hostOf = (w: W, n: number) => w.findAll('.pdf-page')[n - 1].find('.pdf-text-layer')
+
+  it('every page has a text host over its canvas, empty until the page is drawn', async () => {
+    const { w } = await openReady(3)
+    expect(w.findAll('.pdf-text-layer')).toHaveLength(3)
+    for (const n of [1, 2, 3]) {
+      const page = w.findAll('.pdf-page')[n - 1]
+      const kids = page.element.children
+      expect([...kids].findIndex((e) => e.tagName === 'CANVAS')).toBeLessThan([...kids].findIndex((e) => e.classList.contains('pdf-text-layer')))
+      expect(hostOf(w, n).element.childElementCount).toBe(0)
+    }
+  })
+
+  it('draws the layer with the page: one text layer per drawn page, handed to the engine with the canvas', async () => {
+    const { w, fake } = await openReady(5)
+    intersect(nearObserver(), { 1: true, 2: true })
+    await flushPromises()
+    const drawn = fake.doc.render.mock.calls.length
+    expect(drawn).toBe(2)
+    expect(fake.doc.render.mock.calls.filter((c) => c[4] instanceof HTMLElement)).toHaveLength(drawn) // as many layers as drawn pages
+    expect(fake.jobs.find((j) => j.page === 1)!.textHost).toBe(hostOf(w, 1).element)
+    expect(fake.jobs.find((j) => j.page === 2)!.textHost).toBe(hostOf(w, 2).element)
+    expect(hostOf(w, 1).text()).toBe('text of page 1')
+    expect(hostOf(w, 3).element.childElementCount).toBe(0) // far away: nothing built
+  })
+
+  it('tears the layer down with the page: far away, the host is emptied together with the bitmap', async () => {
+    const { w, fake } = await openReady(4)
+    intersect(nearObserver(), { 1: true })
+    await flushPromises()
+    fake.jobs[0].finish()
+    await flushPromises()
+    expect(hostOf(w, 1).element.childElementCount).toBe(1)
+    intersect(nearObserver(), { 1: false })
+    await flushPromises()
+    expect(hostOf(w, 1).element.childElementCount).toBe(0)
+    expect(fake.jobs[0].canvas.width).toBe(0)
+  })
+
+  it('a page still being drawn when it leaves the neighbourhood is cancelled together with its layer', async () => {
+    const { w, fake } = await openReady(3)
+    intersect(nearObserver(), { 1: true })
+    await flushPromises()
+    intersect(nearObserver(), { 1: false })
+    await flushPromises()
+    expect(fake.jobs[0].cancel).toHaveBeenCalled()
+    expect(hostOf(w, 1).element.childElementCount).toBe(0)
+  })
+
+  it('zoom lays the layer out again: one more layer per redrawn page, at the new width', async () => {
+    const { w, fake } = await openReady(3)
+    intersect(nearObserver(), { 1: true })
+    await flushPromises()
+    fake.jobs[0].finish()
+    await flushPromises()
+    await w.find(`button[aria-label="${t('files.viewer.pdf.zoomIn')}"]`).trigger('click')
+    await flushPromises()
+    expect(fake.doc.render).toHaveBeenCalledTimes(2)
+    const layers = fake.doc.render.mock.calls.filter((c) => c[4] instanceof HTMLElement)
+    expect(layers).toHaveLength(2)
+    expect(layers[1][2]).toBe(998)
+    expect(layers[1][4]).toBe(hostOf(w, 1).element) // the same host, rebuilt (emptied first), not a second one on top
+    expect(hostOf(w, 1).element.childElementCount).toBe(1)
+  })
+
+  it('unmounting empties every host and drops the layers', async () => {
+    const { w, fake } = await openReady(3)
+    intersect(nearObserver(), { 1: true, 2: true })
+    await flushPromises()
+    fake.jobs.forEach((j) => j.finish())
+    await flushPromises()
+    const hosts = w.findAll('.pdf-text-layer').map((h) => h.element)
+    w.unmount()
+    expect(hosts.every((h) => h.childElementCount === 0)).toBe(true)
+  })
+
+  it('is spans only: no link, no handler, nothing focusable - a PDF\'s link text is selectable, never clickable', async () => {
+    const { w } = await openReady(2)
+    intersect(nearObserver(), { 1: true, 2: true })
+    await flushPromises()
+    const layer = hostOf(w, 1)
+    expect(layer.findAll('*').every((e) => e.element.tagName === 'SPAN')).toBe(true)
+    expect(layer.find('a, button, [href], [tabindex], [onclick]').exists()).toBe(false)
+  })
+
+  it('a drag that starts in a page marks that layer as selecting until the pointer is released anywhere', async () => {
+    const { w } = await openReady(2)
+    intersect(nearObserver(), { 1: true, 2: true })
+    await flushPromises()
+    const span = hostOf(w, 1).find('span').element
+    span.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    expect(hostOf(w, 1).classes()).toContain('pdf-text-selecting')
+    document.body.dispatchEvent(new Event('pointerup', { bubbles: true }))
+    expect(hostOf(w, 1).classes()).not.toContain('pdf-text-selecting')
+  })
+
+  it('a pointer-down outside any text layer (the toolbar, the canvas margin) marks nothing', async () => {
+    const { w } = await openReady(1)
+    w.find('.pdf-scroll').element.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    expect(w.find('.pdf-text-selecting').exists()).toBe(false)
   })
 })
