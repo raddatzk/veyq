@@ -680,7 +680,9 @@
   align-items: center;
 }
 
-.veyq-node-header-icon {
+/* Two classes on purpose: PrimeIcons' own `.pi` (display, font-size) is loaded after this sheet and would otherwise win,
+   leaving a 16 px glyph in the corner of a tile that is meant to centre a 20 px one (seen in a real browser). */
+.veyq-node-header .veyq-node-header-icon {
   display: grid;
   place-items: center;
   width: 42px;
