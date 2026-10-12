@@ -141,7 +141,7 @@ describe('the guest of a single-file link sees the member\'s file view', () => {
   it('renders FILE\'s detail at the link\'s root: the file\'s name, size, type and date opened under its key, read through the link only', async () => {
     const w = await mountPage(ShareRole.Read)
     expect(w.emitted('unavailable')).toBeUndefined()
-    expect(w.find('.veyq-folder-overview-card h2').text()).toBe('Report.pdf')
+    expect(w.find('.veyq-node-header-title').text()).toBe('Report.pdf')
     const facts = w.find('.file-detail-facts').text()
     expect(facts).toContain(formatBytes(123_456, 'en')) // the blob's sealed size, less every frame's overhead
     expect(facts).toContain('application/pdf') // the blob's sealed meta

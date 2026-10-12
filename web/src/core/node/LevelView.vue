@@ -2,7 +2,7 @@
 // The folder level view (cr-files-application P4b, ADR 0079): what a member sees at the scope root or inside a folder.
 // Core's, and it names no application: in this order it renders its TOOLBAR (the space's node trash, which holds every
 // application's nodes, and the view-mode switch — both were Memories' section's until Files needed them too, inbox
-// #370/#385), the folder's OVERVIEW card (name, share, rename,
+// #370/#385), the folder's HEADER (core's `NodeHeader`: name, share, rename,
 // move, delete — a folder is core's kind since cr-node-key-hierarchy 5b.3; the move is core's `MoveNodeDialog`, which
 // the host mounts on `moveNode`, inbox #358), then one SECTION per application as the registry
 // lists them (`registry.sections()`, sorted by `order`; a section renders its own `<section>`: heading, create action,
@@ -61,7 +61,8 @@ import { compareByCreation, displayNamesOf } from './location'
 import { FOLDER_VIEWS, effectiveViewMode, unionViews } from './levelViews'
 import { ALL_TAB, effectiveTab, fallbacksVisible, sectionVisible, showTabBar, type LevelTab } from './levelTabs'
 import ViewModeToggle from './ViewModeToggle.vue'
-import NodeOverviewCard from './components/NodeOverviewCard.vue'
+import NodeHeader from './components/NodeHeader.vue'
+import { standardNodeActions } from './nodeHeader'
 
 const props = defineProps<{
   folder: TreeNode | null
@@ -99,6 +100,19 @@ const { levelTab } = useLevelTab()
 const inIdentityFolder = computed(() => props.tree.inIdentityFolder(props.folder?.id ?? null))
 const caps = computed(() => folderCapabilities(props.access, targetOf(props.tree, props.folder)))
 const hideEmptySections = computed(() => inIdentityFolder.value)
+// The folder header's actions: the capability answers for the folder on screen, in the header's fixed order.
+const folderActions = computed(() =>
+  standardNodeActions(
+    t,
+    { share: caps.value.share, rename: caps.value.rename, move: caps.value.move, remove: caps.value.deleteNode },
+    {
+      share: () => emit('share'),
+      rename: () => emit('renameFolder'),
+      move: () => props.folder && emit('moveNode', props.folder),
+      remove: () => emit('deleteFolder'),
+    },
+  ),
+)
 // The member's epoch keys, for the sections' sealed reads; a guest's keys come through the tree.
 const epochs = computed(() => (props.access.mode === 'member' ? props.access.epochs : null))
 
@@ -171,20 +185,8 @@ const shownFallbacks = computed(() => (fallbacksVisible(shownTab.value) ? fallba
       />
       <ViewModeToggle v-if="showViews" :views="views" />
     </div>
-    <!-- The folder's header card, core's one (`NodeOverviewCard`): a container kind's detail opens with it too. -->
-    <NodeOverviewCard
-      v-if="folder"
-      icon="pi pi-folder"
-      :name="folderName ?? folder.name"
-      :share="caps.share"
-      :rename="caps.rename"
-      :remove="caps.deleteNode"
-      :move="caps.move"
-      @share="emit('share')"
-      @rename="emit('renameFolder')"
-      @move="emit('moveNode', folder)"
-      @delete="emit('deleteFolder')"
-    />
+    <!-- The folder's header, core's one (`NodeHeader`): a container kind's detail opens with it too. -->
+    <NodeHeader v-if="folder" icon="pi pi-folder" :title="folderName ?? folder.name" :actions="folderActions" />
 
     <!-- The application tabs (inbox #348): a filter over this folder's children; real buttons (PrimeVue Tab), arrow keys
          move between them. -->

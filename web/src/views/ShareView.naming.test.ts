@@ -65,7 +65,7 @@ async function mountPage(role: ShareRole) {
   vi.mocked(resolvePublicShare).mockResolvedValue(folderHead(role))
   const w = mount(ShareView, { global: { plugins: [router, realI18n(), PrimeVue], stubs, directives: { tooltip: {} } } })
   await flushPromises()
-  await vi.waitFor(() => expect(w.find('.veyq-folder-overview-card').exists()).toBe(true)) // the folder body loads lazily
+  await vi.waitFor(() => expect(w.find('.veyq-node-header').exists()).toBe(true)) // the folder body loads lazily
   return w
 }
 type Page = Awaited<ReturnType<typeof mountPage>>

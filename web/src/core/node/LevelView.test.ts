@@ -91,7 +91,7 @@ function blocks(w: ReturnType<typeof mountLevel>): string[] {
     if (el.classList.contains('veyq-empty')) return `empty:${el.textContent?.trim()}`
     if (el.classList.contains('stub-section')) return `section:${el.getAttribute('data-name')}`
     if (el.classList.contains('veyq-level-fallback')) return `fallback:${el.querySelector('h2')?.textContent}`
-    if (el.querySelector('.veyq-folder-overview-card')) return 'overview'
+    if (el.classList.contains('veyq-node-header')) return 'overview'
     if (el.querySelector('h2')?.textContent === t('node.folders')) return 'folders'
     return `?${el.className}`
   })
@@ -255,8 +255,8 @@ describe('LevelView: the folder overview card', () => {
 
   // Inbox #393 (b): the heading says what the list said ("Anna (2)"), when the host knows it; else the folder's name.
   it('heads the card with the host\'s display name, else the folder\'s own', () => {
-    expect(mountLevel([TRIPS], { folder: TRIPS, folderName: 'Trips (2)' }).find('.veyq-folder-overview-card h2').text()).toBe('Trips (2)')
-    expect(mountLevel([TRIPS], { folder: TRIPS }).find('.veyq-folder-overview-card h2').text()).toBe('Trips')
+    expect(mountLevel([TRIPS], { folder: TRIPS, folderName: 'Trips (2)' }).find('.veyq-node-header-title').text()).toBe('Trips (2)')
+    expect(mountLevel([TRIPS], { folder: TRIPS }).find('.veyq-node-header-title').text()).toBe('Trips')
   })
 
   it('shows no overview card at the scope root', () => {
@@ -290,7 +290,7 @@ describe('LevelView: the folder overview card', () => {
   // layout, so the contract pinned is the DOM one: no width-hiding class on any of them.
   it('keeps share, rename, move and delete free of any width-hiding class (the card has no overflow menu)', () => {
     const w = mountLevel([TRIPS], { folder: TRIPS, publicLinks: true })
-    const actions = w.findAll('.veyq-folder-overview-actions button')
+    const actions = w.findAll('.veyq-node-header-actions button')
     expect(actions.map((b) => b.attributes('aria-label'))).toEqual([t('share.share'), t('node.rename'), t('node.move.action'), t('node.delete')])
     for (const b of actions) {
       expect(b.classes()).not.toContain('memory-action-collapsible')
@@ -308,7 +308,7 @@ describe('LevelView: the folder overview card', () => {
   // share, rename or delete; its one action is the move OUT of the drop box (inbox #358, #377 (a)).
   it('offers only the move out on a guest\'s identity folder', async () => {
     const w = mountLevel([TRIPS], { folder: TRIPS, publicLinks: true, identityFolder: true })
-    const actions = w.findAll('.veyq-folder-overview-actions button')
+    const actions = w.findAll('.veyq-node-header-actions button')
     expect(actions.map((b) => b.attributes('aria-label'))).toEqual([t('node.move.action')])
     await actions[0].trigger('click')
     expect(w.emitted('moveNode')).toEqual([[TRIPS]])

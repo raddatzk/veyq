@@ -99,7 +99,7 @@ async function click(el: Element) {
   el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
   await flushPromises()
 }
-const moveCardButton = () => document.body.querySelector(`.veyq-folder-overview-actions button[aria-label="${t('node.move.action')}"]`)
+const moveCardButton = () => document.body.querySelector(`.veyq-node-header-actions button[aria-label="${t('node.move.action')}"]`)
 const rows = () => [...document.body.querySelectorAll('.move-destination')].map((l) => [
   l.querySelector('.move-destination-name')!.textContent, l.querySelector('input')!.disabled,
 ])
@@ -169,7 +169,7 @@ describe('a READ_WRITE guest moves inside its share', () => {
   // key, which this subtree has none of.)
   it('the link\'s root offers no move: its parent lies above the link', async () => {
     await mountAt(ShareRole.ReadWrite)
-    expect(document.body.querySelector('.veyq-folder-overview-card h2')!.textContent).toBe('Familie')
+    expect(document.body.querySelector('.veyq-node-header-title')!.textContent).toBe('Familie')
     expect(moveCardButton()).toBeNull()
   })
 })

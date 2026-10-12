@@ -112,7 +112,7 @@ const tiles = (w: Body) => [
 ]
 const tile = (w: Body, name: string) => tiles(w).find((c) => c.name === name)?.el
 const tileNames = (w: Body) => tiles(w).map((c) => c.name)
-const heading = (w: Body) => w.find('.veyq-folder-overview-card h2').text()
+const heading = (w: Body) => w.find('.veyq-node-header-title').text()
 async function click(el: Element) {
   el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
   await flushPromises()

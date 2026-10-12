@@ -86,7 +86,8 @@
     color: var(--app-accent);
   }
 
-  .veyq-folder-card > .pi {
+  .veyq-folder-card > .pi,
+  .veyq-node-header-icon {
     background: var(--app-info-soft);
     color: var(--app-info-text);
   }

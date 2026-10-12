@@ -661,33 +661,101 @@
   color: var(--app-info-text);
 }
 
-.veyq-folder-overview-card {
-  grid-template-columns: 42px minmax(0, 1fr) auto;
-  cursor: default;
+/* The node header (core/node/components/NodeHeader.vue, inbox #405): leading visual, name (+ subtitle + meta), actions on
+   the right. Every action is visible at EVERY width (a width-hidden button is a lost action): the title row wraps, so on
+   a narrow screen the actions take their own row. Tokens only, so the dark theme needs no rule of its own beyond the icon
+   tile's (dark.css). */
+.veyq-node-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  min-width: 0;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--app-line);
 }
 
-.veyq-folder-overview-card h2 {
+.veyq-node-header-leading {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.veyq-node-header-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: var(--app-info-soft);
+  color: var(--app-info-text);
+  font-size: 1.25rem;
+}
+
+.veyq-node-header-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.veyq-node-header-titlerow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  min-height: 42px;
+}
+
+.veyq-node-header-title {
+  flex: 1 1 12rem;
+  min-width: 0;
   margin: 0;
-  overflow: hidden;
   color: var(--app-text);
-  font-size: 1.05rem;
+  font-size: 1.15rem;
   line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
-.veyq-folder-overview-actions {
-  display: inline-flex;
-  flex-wrap: nowrap;
+.veyq-node-header.has-visual .veyq-node-header-title {
+  font-size: 2rem;
+  line-height: 1.1;
+}
+
+.veyq-node-header-subtitle {
+  margin: 0;
+  color: var(--app-muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.veyq-node-header-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
   gap: 0.45rem;
   align-items: center;
-  justify-self: end;
-  min-width: max-content;
+  justify-content: flex-end;
+  max-width: 100%;
 }
 
-.veyq-folder-overview-actions .p-button,
-.veyq-folder-overview-actions button {
-  flex: 0 0 auto;
+.veyq-node-header-action.is-pressed .p-button-icon {
+  color: var(--app-favorite);
+}
+
+@media (max-width: 540px) {
+  .veyq-node-header.has-visual {
+    flex-direction: column;
+  }
+
+  .veyq-node-header.has-visual .veyq-node-header-title {
+    font-size: 1.5rem;
+  }
+
+  .veyq-node-header-actions {
+    justify-content: flex-start;
+  }
 }
 
 .veyq-danger-action.p-button,
@@ -735,15 +803,5 @@
   .veyq-level-grid {
     grid-template-columns: 1fr;
     max-width: none;
-  }
-
-  .veyq-folder-overview-card {
-    grid-template-columns: 42px minmax(0, 1fr);
-  }
-
-  .veyq-folder-overview-actions {
-    grid-column: 1 / -1;
-    justify-self: start;
-    padding-top: 0.15rem;
   }
 }

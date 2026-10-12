@@ -169,8 +169,8 @@ describe('MemoryDetail (gallery grid + header)', () => {
     await flushPromises()
     await flushPromises()
 
-    expect(wrapper.find('.gallery-title').text()).toBe('Rom 2026')
-    expect(wrapper.find('.gallery-count').text()).toBe('2 items')
+    expect(wrapper.find('.veyq-node-header-title').text()).toBe('Rom 2026')
+    expect(wrapper.find('.veyq-node-header-subtitle').text()).toBe('2 items')
     // two derivable items → two <img> thumbnail tiles, each backed by a decrypted object URL
     const imgs = wrapper.findAll('.media-tile img')
     expect(imgs).toHaveLength(2)

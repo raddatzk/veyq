@@ -158,7 +158,7 @@ async function openChapter(w: Page) {
   await flushPromises()
   click(w.find('.memory-card .memory-card-main').element)
   await flushPromises()
-  await vi.waitFor(() => expect(w.find('.gallery-title').text()).toBe('Tag 1'))
+  await vi.waitFor(() => expect(w.find('.veyq-node-header-title').text()).toBe('Tag 1'))
 }
 async function pick(w: Page, name: string) {
   const input = w.find('input[type="file"]')
@@ -181,7 +181,7 @@ describe('a Memory link is the member\'s Memory detail (inbox #401 S5)', () => {
       const w = await mountPage(head(role))
       await vi.waitFor(() => expect(tiles(w)).toEqual(['m-1']))
       expect(w.find('.share-view-unavailable').exists()).toBe(false)
-      expect(w.find('.memory-detail .gallery-title').text()).toBe('Rom 2026')
+      expect(w.find('.memory-detail .veyq-node-header-title').text()).toBe('Rom 2026')
       expect(w.find('.markdown-body').text()).toContain('Curator note')
       expect(w.find('.share-folder-badge').text()).toBe(t(role === ShareRole.Read ? 'share.readonly' : 'share.contributorBadge'))
       expect(w.findAll('a.p-breadcrumb-item-link').map((a) => a.text())).toEqual(['Rom 2026'])
@@ -204,7 +204,7 @@ describe('a Memory link is the member\'s Memory detail (inbox #401 S5)', () => {
       await flushPromises()
       expect(router.currentRoute.value.query.node).toBeUndefined()
       expect(router.currentRoute.value.hash).toBe(HASH)
-      await vi.waitFor(() => expect(w.find('.gallery-title').text()).toBe('Rom 2026'))
+      await vi.waitFor(() => expect(w.find('.veyq-node-header-title').text()).toBe('Rom 2026'))
       expectGuestOnly(w)
       w.unmount()
     })
@@ -268,7 +268,7 @@ describe('a Memory link is the member\'s Memory detail (inbox #401 S5)', () => {
     fakeApi(publicSharesApi, { resolveShareBlob: async () => { throw new Error('no store here') } })
     const w = await mountPage(head(ShareRole.ReadWrite, { chapterRoot: true }))
     await vi.waitFor(() => expect(tiles(w)).toEqual(['c-1']))
-    expect(w.find('.gallery-title').text()).toBe('Tag 1')
+    expect(w.find('.veyq-node-header-title').text()).toBe('Tag 1')
     await pick(w, 'tag.jpg')
     await vi.waitFor(() => expect(addSharePhoto).toHaveBeenCalledTimes(1))
     const [session] = vi.mocked(addSharePhoto).mock.calls[0]

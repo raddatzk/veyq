@@ -131,7 +131,7 @@ async function mountBody(h0: PublicShareHead, o: { reload?: () => Promise<void>;
   return w
 }
 type Body = Awaited<ReturnType<typeof mountBody>>
-const heading = (w: Body) => w.find('.veyq-folder-overview-card h2').text()
+const heading = (w: Body) => w.find('.veyq-node-header-title').text()
 const folderCards = (w: Body) => w.findAll('button.veyq-folder-card').map((c) => c.find('strong').text())
 const createFolderCard = (w: Body) => w.find(`.veyq-create-card[aria-label="${t('node.folderCreate')}"]`)
 /** Click as a user does; the event says whether the element's default action ran. */
@@ -227,7 +227,7 @@ describe("ShareTreePage browses a shared folder with core's level view", () => {
     expect(w.find(`.veyq-level-toolbar button[aria-label="${t('node.trash.open')}"]`).exists(), "the space's trash").toBe(false)
     // …while the view switch is the guest's too (inbox #370: a share view is the member view)
     expect(w.find('.veyq-level-toolbar .view-mode-toggle').exists()).toBe(true)
-    expect(w.find('.veyq-folder-overview-actions').exists(), 'share, rename, delete').toBe(false)
+    expect(w.find('.veyq-node-header-actions').exists(), 'share, rename, delete').toBe(false)
     expect(w.find('.veyq-create-card').exists()).toBe(false)
     expect(w.find('.share-folder-badge').text()).toBe(t('share.readonly'))
     expect(authenticatedCalls).toEqual([])

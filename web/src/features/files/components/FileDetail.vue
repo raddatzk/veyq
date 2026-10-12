@@ -24,7 +24,8 @@ import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
 import type { NodeDetailEmits, NodeDetailProps } from '../../../core/applications/registry'
-import NodeOverviewCard from '../../../core/node/components/NodeOverviewCard.vue'
+import NodeHeader from '../../../core/node/components/NodeHeader.vue'
+import { standardNodeActions } from '../../../core/node/nodeHeader'
 import { enqueue, removeFile, useUploadQueue, QUOTA_EXCEEDED, type UploadItem } from '../../../core/blob/queue'
 import { useConfirm } from '../../../shared/state/useConfirm'
 import { useToast } from '../../../shared/state/useToast'
@@ -63,6 +64,14 @@ const source: FilesSource = guest
       move: (node) => emit('move', node),
     })
 const caps = computed(() => sourceCapabilities(filesCapabilities(props.access, targetOf(props.tree, props.node)), source))
+/** The header's actions: share, rename, move, delete — each only where the capability matrix grants it. */
+const headerActions = computed(() =>
+  standardNodeActions(
+    t,
+    { share: caps.value.share, rename: caps.value.rename, move: caps.value.moveNode, remove: caps.value.deleteNode },
+    { share: () => emit('share'), rename: () => emit('rename'), move: () => source.move?.(props.node), remove: () => emit('delete') },
+  ),
+)
 const key = computed(() => props.contentKey ?? props.tree.keyOf(props.node.id))
 const writeReady = computed(() => source.upload?.ready() ?? false)
 
@@ -185,20 +194,9 @@ async function replaceAnyway(n: Notice) {
 </script>
 
 <template>
-  <!-- Opens like a folder (inbox #385 (b)): core's header card with the file's own actions, then what it holds. -->
+  <!-- Opens like a folder (inbox #385 (b)): core's `NodeHeader` with the file's own actions, then what it holds. -->
   <div class="veyq-level-view">
-    <NodeOverviewCard
-      icon="pi pi-file"
-      :name="node.name"
-      :share="caps.share"
-      :rename="caps.rename"
-      :move="caps.moveNode"
-      :remove="caps.deleteNode"
-      @share="emit('share')"
-      @rename="emit('rename')"
-      @move="source.move?.(node)"
-      @delete="emit('delete')"
-    />
+    <NodeHeader icon="pi pi-file" :title="node.name" :level="1" :actions="headerActions" />
     <section class="veyq-section file-detail">
       <Message v-for="n in notices" :key="n.key" severity="error" :closable="false" class="files-notice">
         <span class="file-detail-notice">

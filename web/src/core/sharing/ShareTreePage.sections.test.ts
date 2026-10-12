@@ -90,7 +90,7 @@ function mountBody(h0: PublicShareHead, access = guestAccessFor(h0)) {
     global: { plugins: [realI18n()], stubs },
   })
 }
-const cardNames = (w: ReturnType<typeof mountBody>) => w.findAll('.veyq-folder-card:not(.veyq-folder-overview-card) strong').map((c) => c.text())
+const cardNames = (w: ReturnType<typeof mountBody>) => w.findAll('.veyq-folder-card:not(.veyq-node-header) strong').map((c) => c.text())
 
 beforeEach(() => {
   localStorage.clear()

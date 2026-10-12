@@ -119,7 +119,7 @@ beforeEach(() => {
 describe('a member moves a folder from its card', () => {
   it('Move to… opens core\'s dialog, the pick goes through moveNode, the URL follows the folder on screen, Undo moves it back', async () => {
     await mountAt('#~me/trips/rome/')
-    expect(document.body.querySelector('.veyq-folder-overview-card h2')!.textContent).toBe('Rome')
+    expect(document.body.querySelector('.veyq-node-header-title')!.textContent).toBe('Rome')
     await click(byLabel(t('node.move.action'))!)
     expect(dialogOpen()).toBe(true)
     expect(rows(), 'the space\'s root, the folders; no drop box, no guest folder').toEqual([t('shell.personal'), 'Archive', 'Trips', 'Rome'])
@@ -180,7 +180,7 @@ describe('a member moves a guest\'s folder out of a drop box', () => {
 
   it('from the guest\'s folder itself: its card offers the move out, and nothing else', async () => {
     await mountAt('#~me/inbox/anna/')
-    const actions = [...document.body.querySelectorAll('.veyq-folder-overview-actions button')].map((b) => b.getAttribute('aria-label'))
+    const actions = [...document.body.querySelectorAll('.veyq-node-header-actions button')].map((b) => b.getAttribute('aria-label'))
     expect(actions).toEqual([t('node.move.action')])
   })
 

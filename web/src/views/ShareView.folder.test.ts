@@ -73,9 +73,9 @@ describe('ShareView: a link rooted at a FOLDER', () => {
   it("renders core's page — the folder's level — not the unavailable state", async () => {
     const w = mountShareView()
     await flushPromises()
-    await vi.waitFor(() => expect(w.find('.veyq-folder-overview-card h2').exists()).toBe(true))
+    await vi.waitFor(() => expect(w.find('.veyq-node-header-title').exists()).toBe(true))
     expect(w.find('.share-view-unavailable').exists()).toBe(false)
-    expect(w.find('.veyq-folder-overview-card h2').text()).toBe('Familie')
+    expect(w.find('.veyq-node-header-title').text()).toBe('Familie')
     expect(w.find('.memory-card strong').text(), "a Memory is the member's MemoryCard").toBe('Rom 2026')
     expect(authenticatedCalls).toEqual([])
   })
@@ -84,9 +84,9 @@ describe('ShareView: a link rooted at a FOLDER', () => {
     route.query = { node: MEMORY }
     const w = mountShareView()
     await flushPromises()
-    await vi.waitFor(() => expect(w.find('.gallery-title').exists()).toBe(true))
+    await vi.waitFor(() => expect(w.find('.veyq-node-header-title').exists()).toBe(true))
     expect(w.find('.share-view-unavailable').exists()).toBe(false)
-    expect(w.find('.gallery-title').text()).toBe('Rom 2026')
+    expect(w.find('.veyq-node-header-title').text()).toBe('Rom 2026')
     expect(w.find('.memory-detail').exists()).toBe(true)
     expect(authenticatedCalls).toEqual([])
   })

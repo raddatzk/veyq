@@ -170,7 +170,7 @@ describe("the member's Memory detail for a share guest (inbox #401 S4/S5)", () =
   for (const role of [ShareRole.Read, ShareRole.ReadWrite]) {
     it(`${role}: the gallery of the node on screen, its chapters, and nothing of a member's`, async () => {
       const w = await mountPage(role)
-      expect(w.find('.gallery-title').text()).toBe('Rom 2026')
+      expect(w.find('.veyq-node-header-title').text()).toBe('Rom 2026')
       expect(tiles(w)).toEqual(['m-1', 'm-own'])
       expectGuestOnly(w)
       expect(byLabel(w, t('media.upload')).exists(), 'upload').toBe(role === ShareRole.ReadWrite)
@@ -200,7 +200,7 @@ describe("the member's Memory detail for a share guest (inbox #401 S4/S5)", () =
       await flushPromises()
       expect(router.currentRoute.value.query.node).toBe(CHAPTER)
       expect(router.currentRoute.value.hash, 'the share key stays in the URL').toBe(HASH)
-      await vi.waitFor(() => expect(w.find('.gallery-title').text()).toBe('Tag 1'))
+      await vi.waitFor(() => expect(w.find('.veyq-node-header-title').text()).toBe('Tag 1'))
       await vi.waitFor(() => expect(tiles(w)).toEqual(['c-1']))
       expectGuestOnly(w)
       w.unmount()
@@ -277,7 +277,7 @@ describe("the member's Memory detail for a share guest (inbox #401 S4/S5)", () =
     saveGuestSession(SHARE, GUEST)
     await router.push(`/s/${SHARE}?node=${CHAPTER}${HASH}`)
     const w = await mountPage(ShareRole.ReadWrite)
-    expect(w.find('.gallery-title').text()).toBe('Tag 1')
+    expect(w.find('.veyq-node-header-title').text()).toBe('Tag 1')
     const input = w.find('input[type="file"]')
     const file = new File([new Uint8Array(4)], 'neu.jpg', { type: 'image/jpeg' })
     Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
