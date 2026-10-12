@@ -82,54 +82,6 @@
 /* The card grid of a node list outside an application — the same track rule as Memories' `.memory-card-grid`: the
    level view's sub-folders (core/node/LevelView.vue, with `.veyq-level-grid` and `.veyq-folder-card` at the end of this
    sheet) and its fallback section's `.veyq-node-card` tiles — a member's level and a share guest's alike (inbox #401). */
-.veyq-card-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 260px));
-  align-items: stretch;
-  min-width: 0;
-  max-width: 100%;
-  gap: 1rem;
-}
-
-.veyq-node-card {
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  align-items: center;
-  gap: 0.8rem;
-  width: 100%;
-  min-height: 82px;
-  padding: 1rem;
-  color: var(--app-text);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.veyq-node-card > .pi {
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 10px;
-  background: var(--app-accent-soft);
-  color: var(--app-accent);
-  font-size: 1.25rem;
-}
-
-/* A child of a kind no level section serves (core/node/LevelView.vue's fallback): listed, not openable. */
-.veyq-node-card-unsupported {
-  cursor: default;
-}
-
-.veyq-node-card-text {
-  display: grid;
-  gap: 0.15rem;
-  min-width: 0;
-}
-
-.veyq-node-card-text small {
-  color: var(--app-muted);
-}
 
 .veyq-empty {
   display: flex;
@@ -527,8 +479,9 @@
   }
 }
 
-/* The folder level view (core/node/LevelView.vue, cr-files-application P4d): the folder's overview card, the
-   sub-folders section, its folder cards and its new-folder card. Moved from Memories' `memory.css`, where this
+/* The folder level view (core/node/LevelView.vue, cr-files-application P4d; its list is the unified one at the end of this
+   sheet since inbox #407): the toolbar, the application tabs and the create card Memories' detail still uses. Moved from
+   Memories' `memory.css`, where this
    markup's `memory-folder-*`/`memory-create-card`/`memory-card-grid` rules lived, with the same declarations in
    the same order. They sit at the END of this sheet on purpose: in `memory.css` they came after every rule of
    `ui.css`, `layout.css` and `forms.css`, and some of those tie with them on specificity and lose by source order
@@ -538,24 +491,7 @@
    `memory.css` twin, the same declarations in the same order): Memories adds only `.memory-create-card-memory` and
    its list variant in `memory.css`, which come after these and win where they differ — the one place the twin's later
    position had decided anything, `white-space: nowrap` on the label beating the modifier's `normal`, is kept by the
-   modifier no longer saying `normal`. The grid is `.veyq-card-grid` (the identical track rule) plus `.veyq-level-grid` for the
-   list variant and the narrow-screen column. The dark counterparts are in `dark.css`. */
-.veyq-level-section-header h2 {
-  font-size: 1rem;
-}
-
-.veyq-level-section-header span {
-  display: inline-grid;
-  place-items: center;
-  min-width: 1.75rem;
-  min-height: 1.55rem;
-  padding: 0.12rem 0.5rem;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--app-muted);
-  font-size: 0.9rem;
-  font-weight: 700;
-}
+   modifier no longer saying `normal`. The dark counterparts are in `dark.css`. */
 
 .veyq-level-view {
   display: grid;
@@ -612,18 +548,6 @@
   background: var(--app-accent);
 }
 
-.veyq-level-grid.is-list {
-  grid-template-columns: 1fr;
-  gap: 0.4rem;
-}
-
-.veyq-level-grid.is-list .veyq-folder-card,
-.veyq-level-grid.is-list .veyq-create-card {
-  min-height: 0;
-  padding: 0.6rem 0.75rem;
-}
-
-.veyq-folder-card,
 .veyq-create-card {
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr);
@@ -637,7 +561,6 @@
   cursor: pointer;
 }
 
-.veyq-folder-card > .pi,
 .veyq-create-card .pi {
   display: grid;
   place-items: center;
@@ -650,15 +573,9 @@
   font-size: 1.25rem;
 }
 
-.veyq-folder-card > .pi,
 .veyq-create-card .pi {
   width: 42px;
   height: 42px;
-}
-
-.veyq-folder-card > .pi {
-  background: var(--app-info-soft);
-  color: var(--app-info-text);
 }
 
 /* The node header (core/node/components/NodeHeader.vue, inbox #406): leading visual, name (+ subtitle + meta), actions on
@@ -794,7 +711,6 @@
   color: var(--app-control-text);
 }
 
-.veyq-folder-card strong,
 .veyq-create-card strong {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -802,8 +718,223 @@
 }
 
 @media (max-width: 520px) {
-  .veyq-level-grid {
-    grid-template-columns: 1fr;
+}
+
+/* The unified level list (core/node/LevelView.vue + core/node/components/LevelRowItem.vue, inbox #407): ONE list of
+   folders, Memories, files and drop boxes, drawn by core from the applications' row data. `is-grid` items are tiles
+   (visual on top, name, meta, actions), `is-list` items rows. Tokens only, so the dark theme needs no rule of its own.
+   The icon glyph is styled through TWO classes (`.veyq-level-item-visual > .veyq-level-item-icon`): PrimeIcons' own `.pi`
+   rule (display and font-size) loads earlier but ties a single-class rule on specificity, and a glyph that kept its
+   `.pi` size sat off-centre in its tile (seen in a real browser, 2026-10-12, on the node header's icon tile). */
+.veyq-level-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 260px));
+  align-items: stretch;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  gap: 1rem;
+  list-style: none;
+}
+
+.veyq-level-list.is-list {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.4rem;
+}
+
+.veyq-level-item {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--app-line) 78%, transparent);
+  border-radius: 12px;
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-card);
+  color: var(--app-text);
+}
+
+.veyq-level-item:hover,
+.veyq-level-item:focus-within {
+  border-color: color-mix(in srgb, var(--app-accent) 28%, var(--app-line));
+}
+
+.veyq-level-item-main {
+  display: grid;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+div.veyq-level-item-main,
+.veyq-level-item-main:disabled {
+  cursor: default;
+}
+
+.veyq-level-item-main:focus-visible {
+  outline: 2px solid var(--app-focus);
+  outline-offset: 2px;
+  border-radius: var(--app-radius-sm);
+}
+
+.veyq-level-item-visual {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--app-accent-soft);
+  color: var(--app-accent);
+}
+
+.veyq-level-item-visual > .veyq-level-item-icon {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.veyq-level-item.is-folder .veyq-level-item-visual {
+  background: var(--app-info-soft);
+  color: var(--app-info-text);
+}
+
+.veyq-level-item-text {
+  display: grid;
+  gap: 0.2rem;
+  align-content: center;
+  min-width: 0;
+}
+
+.veyq-level-item-title {
+  overflow: hidden;
+  color: var(--app-text);
+  font-weight: 700;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.veyq-level-item-meta {
+  overflow: hidden;
+  color: var(--app-muted);
+  font-size: 0.85rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.veyq-level-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* A row: visual left, text, the actions at the right edge. */
+.veyq-level-item.is-list {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.veyq-level-item.is-list .veyq-level-item-main {
+  grid-template-columns: 2.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.veyq-level-item.is-list .veyq-level-item-visual {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 8px;
+}
+
+.veyq-level-item.is-list.has-cover .veyq-level-item-main {
+  grid-template-columns: 4rem minmax(0, 1fr);
+}
+
+.veyq-level-item.is-list.has-cover .veyq-level-item-visual {
+  width: 4rem;
+}
+
+/* A tile: the visual on top (a cover across the whole width, an icon in a square tile), then the text, then the actions. */
+.veyq-level-item.is-grid {
+  grid-template-rows: 1fr auto;
+  gap: 0.25rem;
+  padding: 0.75rem;
+}
+
+.veyq-level-item.is-grid .veyq-level-item-main {
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0.7rem;
+  min-height: 7rem;
+}
+
+.veyq-level-item.is-grid .veyq-level-item-visual {
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 12px;
+}
+
+.veyq-level-item.is-grid.has-cover {
+  padding: 0 0 0.5rem;
+}
+
+.veyq-level-item.is-grid.has-cover .veyq-level-item-visual {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px 12px 0 0;
+}
+
+.veyq-level-item.is-grid.has-cover .veyq-level-item-text,
+.veyq-level-item.is-grid.has-cover .veyq-level-item-actions {
+  padding: 0 0.75rem;
+}
+
+.veyq-level-item.is-grid .veyq-level-item-actions {
+  justify-content: flex-end;
+}
+
+.veyq-level-item.is-unsupported {
+  opacity: 0.85;
+}
+
+.veyq-row-menu-item.is-danger .p-menu-item-label,
+.veyq-row-menu-item.is-danger .p-menu-item-icon {
+  color: var(--app-danger);
+}
+
+.veyq-level-notice {
+  margin: 0;
+}
+
+.veyq-level-notice-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+@media (max-width: 520px) {
+  .veyq-level-list {
+    grid-template-columns: minmax(0, 1fr);
     max-width: none;
   }
+}
+
+/* A toggle action on an item (the Memory's heart, inbox #409 moves it to core): pressed = the accent-soft tile with the
+   filled favourite heart, the same purple tile the sidebar icons use. Two classes, so it beats PrimeVue's outlined button. */
+.veyq-level-item-action.is-pressed {
+  border-color: color-mix(in srgb, var(--app-favorite) 30%, var(--app-line));
+  background: var(--app-accent-soft);
+  color: var(--app-favorite);
 }

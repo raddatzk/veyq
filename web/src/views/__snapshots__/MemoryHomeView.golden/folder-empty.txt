@@ -48,39 +48,5 @@ div.veyq-node-host
         button.p-tablist-nav-button.p-tablist-next-button [aria-label="Next"]
           svg.p-icon
             path
-    section.memory-section.veyq-section
-      div.memory-section-header.veyq-section-header
-        h2
-          "Memories"
-        span
-          "0"
-      div.memory-card-grid
-        p.veyq-empty.veyq-empty-inline
-          "No Memories here yet."
-    section.files-section.veyq-section
-      div.veyq-section-header
-        h2
-          "Files"
-        span
-          "0"
-      input.files-picker
-      input.files-picker
-      p.veyq-empty.veyq-empty-inline
-        "No files yet — choose New to upload the first one."
-    section.dropbox-section.veyq-section
-      div.veyq-section-header
-        h2
-          "Drop boxes"
-        span
-          "0"
-      p.veyq-empty.veyq-empty-inline
-        "No drop boxes yet. Choose New to create one — a drop box collects files from people without an account."
-    section.veyq-section
-      div.veyq-level-section-header.veyq-section-header
-        h2
-          "Folders"
-        span
-          "0"
-      div.veyq-card-grid.veyq-level-grid
-        p.veyq-empty.veyq-empty-inline
-          "No folders here yet."
+    p.veyq-empty.veyq-empty-inline
+      "Nothing here yet. Choose New to add something (New folder, New Memory, New drop box, Upload files)."

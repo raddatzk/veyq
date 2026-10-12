@@ -1,45 +1,48 @@
 // @vitest-environment happy-dom
-// Memories' level section mounted for a SHARE GUEST (inbox #401 S2): the member's section, handed a guest's access and
-// the tree its link opened (`guestTreeSource` over real crypto). The guest sees what a member sees — the MemoryCards
-// with their sealed dates and covers, the map of the opened subtree — with every member-only function removed (no heart:
+// Memories' rows of the unified level list for a SHARE GUEST (inbox #401 S2, #407): the member's row factory, handed a guest's
+// access and the tree its link opened (`guestTreeSource` over real crypto). It replaces `MemoriesSection.guest.test.ts`. The
+// guest sees what a member sees — the rows with their sealed dates and covers, the map of the opened subtree — with every
+// member-only function removed (no heart:
 // pins are the member's own, sealed under the Master Key) and NOTHING of the member's world touched: every authenticated
 // client throws (`test/guestMode.ts`), and the member's cover and pin stores must not be asked. Covers come through the
 // link's own reads; only their transport (the presigned GETs) is stubbed.
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { flushPromises } from '@vue/test-utils'
 import { reactive } from 'vue'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url } from '@veyq/crypto/base64'
 
 vi.mock('leaflet', () => ({ default: {} }))
-vi.mock('../../../api/client', async (orig) => (await import('../../../test/guestMode')).guardedClients(await orig<object>()))
-vi.mock('../api', async (orig) => (await import('../../../test/guestMode')).guardedClients(await orig<object>()))
-vi.mock('../favoritesStore', () => ({ isFavorite: vi.fn(), toggleFavorite: vi.fn() }))
-vi.mock('../coverStore', async (orig) => ({ ...(await orig<typeof import('../coverStore')>()), ensureCovers: vi.fn() }))
-vi.mock('../../../core/sharing/guestBlob', async (orig) => ({ ...(await orig<object>()), shareChunkUrls: vi.fn(async () => ['https://store/c0']) }))
-vi.mock('../../../core/blob/transport', async (orig) => ({ ...(await orig<object>()), openBlobFromUrls: vi.fn(async () => new Uint8Array([1, 2, 3])) }))
-vi.mock('../share', async (orig) => ({ ...(await orig<typeof import('../share')>()), openShareGrid: vi.fn() }))
+vi.mock('../../api/client', async (orig) => (await import('../../test/guestMode')).guardedClients(await orig<object>()))
+vi.mock('./api', async (orig) => (await import('../../test/guestMode')).guardedClients(await orig<object>()))
+vi.mock('./favoritesStore', () => ({ isFavorite: vi.fn(), toggleFavorite: vi.fn() }))
+vi.mock('./coverStore', async (orig) => ({ ...(await orig<typeof import('./coverStore')>()), ensureCovers: vi.fn() }))
+vi.mock('../../core/sharing/guestBlob', async (orig) => ({ ...(await orig<object>()), shareChunkUrls: vi.fn(async () => ['https://store/c0']) }))
+vi.mock('../../core/blob/transport', async (orig) => ({ ...(await orig<object>()), openBlobFromUrls: vi.fn(async () => new Uint8Array([1, 2, 3])) }))
+vi.mock('./share', async (orig) => ({ ...(await orig<typeof import('./share')>()), openShareGrid: vi.fn() }))
 
-import MemoriesSection from './MemoriesSection.vue'
-import MemoryCard from './MemoryCard.vue'
-import { FOLDER_KIND } from '../../../core/node/kind'
-import { sealName, wrapContentKey, type TreeNode } from '../../../core/node/tree'
-import { guestTreeSource } from '../../../core/sharing/guestAccess'
-import type { PublicShareHead } from '../../../core/sharing/resolvePublicShare'
-import { shareChunkUrls } from '../../../core/sharing/guestBlob'
-import { openBlobFromUrls } from '../../../core/blob/transport'
-import { ShareRole, type PublicShare, type ShareNode } from '../../../api/generated/sharing'
-import { MEMORY_KIND } from '../kinds'
-import { sealNodeMeta } from '../nodeMeta'
-import { publicShareMediaApi } from '../api'
-import { openShareGrid } from '../share'
-import { isFavorite, toggleFavorite } from '../favoritesStore'
-import { ensureCovers } from '../coverStore'
-import type { ViewMode } from '../../../shared/state/useViewMode'
-import { stubApi } from '../../../test/apiMock'
-import { realI18n, t } from '../../../test/i18n'
-import { guestAccessFor } from '../../../test/models'
-import { authenticatedCalls } from '../../../test/guestMode'
+import { memoryRows } from './levelRows'
+import MemoryRowCover from './components/MemoryRowCover.vue'
+import { FOLDER_KIND } from '../../core/node/kind'
+import { sealName, wrapContentKey, type TreeNode } from '../../core/node/tree'
+import { guestTreeSource } from '../../core/sharing/guestAccess'
+import type { PublicShareHead } from '../../core/sharing/resolvePublicShare'
+import { shareChunkUrls } from '../../core/sharing/guestBlob'
+import { openBlobFromUrls } from '../../core/blob/transport'
+import { ShareRole, type PublicShare, type ShareNode } from '../../api/generated/sharing'
+import { MEMORY_KIND } from './kinds'
+import { sealNodeMeta } from './nodeMeta'
+import { publicShareMediaApi } from './api'
+import { openShareGrid } from './share'
+import { isFavorite, toggleFavorite } from './favoritesStore'
+import { ensureCovers } from './coverStore'
+import type { ViewMode } from '../../shared/state/useViewMode'
+import { formatClosedRange } from './memoryDateRange'
+import { stubApi } from '../../test/apiMock'
+import { t } from '../../test/i18n'
+import { guestAccessFor } from '../../test/models'
+import { authenticatedCalls } from '../../test/guestMode'
+import { actionIdsOf, clickAction, mountRows, rowOf, titlesOf, type RowsHarness } from '../../test/levelRows'
 
 const SCOPE_ID = '77777777-7777-4777-8777-777777777777'
 const SHARE_ID = 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_g'
@@ -89,19 +92,26 @@ function head(role: ShareRole): PublicShareHead {
   }
 }
 
-const SpaceMapStub = { props: ['pins', 'covers'], emits: ['open'], template: '<div class="space-map-stub">{{ pins.length }}</div>' }
+const SpaceMapStub = { name: 'SpaceMap', props: ['pins', 'covers'], emits: ['open'], template: '<div class="space-map-stub">{{ pins.length }}</div>' }
 
+let harness: RowsHarness | null = null
 /** `viewMode`: the mode the level hands in (inbox #404). */
 function mountGuest(role: ShareRole, viewMode: ViewMode = 'grid') {
   const h = head(role)
   const tree = guestTreeSource(h, reactive({ hash: `#k=${b64url(K_SHARE)}` }))
   const root = tree.node(ROOT)!
   const nodes = tree.children(ROOT).filter((n) => n.kind === MEMORY_KIND)
-  return mount(MemoriesSection, {
-    props: { folder: root, nodes, epochs: null, access: guestAccessFor(h), tree, viewMode },
-    global: { plugins: [realI18n()], directives: { tooltip: {} }, stubs: { SpaceMap: SpaceMapStub } },
+  harness = mountRows(memoryRows, { folder: root, nodes, epochs: null, access: guestAccessFor(h), tree, viewMode, liveTick: undefined }, 'grid', {
+    stubs: { SpaceMap: SpaceMapStub },
   })
+  return harness
 }
+const metaOf = (h: RowsHarness, title: string) => rowOf(h.w, title).find('.veyq-level-item-meta').text()
+
+afterEach(() => {
+  harness?.w.unmount()
+  harness = null
+})
 
 beforeEach(() => {
   authenticatedCalls.length = 0
@@ -122,15 +132,16 @@ beforeEach(() => {
   })
 })
 
-describe('MemoriesSection for a share guest', () => {
+describe('Memories rows for a share guest', () => {
   for (const role of [ShareRole.Read, ShareRole.ReadWrite]) {
-    it(`${role}: MemoryCards with their sealed dates, newest first, opened under the chain's keys — no heart`, async () => {
-      const w = mountGuest(role)
+    it(`${role}: rows with their sealed dates, opened under the chain's keys — no heart, no rename, no move`, async () => {
+      const h = mountGuest(role)
       await flushPromises()
-      const cards = w.findAllComponents(MemoryCard)
-      expect(cards.map((c) => (c.props('memory') as TreeNode).name)).toEqual(['Rom', 'Ostsee'])
-      expect(cards.map((c) => (c.props('date') as { from?: string } | null)?.from)).toEqual(['2024-04-02', '2019-07-01'])
-      expect(w.find('.memory-card-pin').exists(), 'no pin: the member’s own, under the Master Key').toBe(false)
+      expect(titlesOf(h.w)).toEqual(['Ostsee', 'Rom'])
+      expect(metaOf(h, 'Rom')).toBe(`${t('memory.kindMemory')} · ${formatClosedRange('2024-04-02', '2024-04-02', 'en')}`)
+      expect(metaOf(h, 'Ostsee')).toBe(`${t('memory.kindMemory')} · ${formatClosedRange('2019-07-01', '2019-07-01', 'en')}`)
+      // no pin (the member’s own, under the Master Key), no rename; a contributor may move a Memory a folder holds
+      expect(await actionIdsOf(h.w, 'Rom')).toEqual(role === ShareRole.Read ? [] : ['move'])
       expect(isFavorite).not.toHaveBeenCalled()
       expect(ensureCovers, "the member's cover store is not asked").not.toHaveBeenCalled()
       expect(authenticatedCalls).toEqual([])
@@ -138,9 +149,9 @@ describe('MemoriesSection for a share guest', () => {
   }
 
   it("resolves each cover through the link's own reads: an uploaded cover blob, a chosen photo's thumbnail", async () => {
-    const w = mountGuest(ShareRole.Read)
+    const h = mountGuest(ShareRole.Read)
     await flushPromises()
-    await vi.waitFor(() => expect(w.findAllComponents(MemoryCard).every((c) => c.props('coverSrc'))).toBe(true))
+    await vi.waitFor(() => expect(h.w.findAllComponents(MemoryRowCover).every((c) => c.props('src'))).toBe(true))
     // The uploaded cover: the gated share presign of its blob, opened under the Memory's key from the chain.
     expect(shareChunkUrls).toHaveBeenCalledWith(SHARE_ID, 'cover-blob', undefined)
     const [scope, key, ref] = vi.mocked(openBlobFromUrls).mock.calls[0]
@@ -156,33 +167,36 @@ describe('MemoriesSection for a share guest', () => {
     expect(authenticatedCalls).toEqual([])
   })
 
-  it('no role gets a create tile from the section: the entry is core\'s "New" menu, gated by the same matrix (inbox #406)', () => {
+  it('no role gets a create tile from the rows: the entry is core\'s "New" menu, gated by the same matrix (inbox #406)', () => {
     for (const role of [ShareRole.Read, ShareRole.ReadWrite]) {
-      expect(mountGuest(role).find('.veyq-create-card').exists()).toBe(false)
+      expect(mountGuest(role).w.find('.veyq-create-card').exists()).toBe(false)
     }
   })
 
   it("the map spans the opened subtree — a sub-folder's Memory too — keyed by the chain, and a pin opens its node", async () => {
-    const w = mountGuest(ShareRole.Read, 'map')
+    const h = mountGuest(ShareRole.Read, 'map')
     await flushPromises()
-    const map = w.findComponent(SpaceMapStub)
+    const map = h.w.findComponent(SpaceMapStub)
     expect((map.props('pins') as { node: TreeNode }[]).map((p) => p.node.name).sort()).toEqual(['Rom', 'Wien'])
     map.vm.$emit('open', DEEP)
     await flushPromises()
-    expect((w.emitted('openNode')?.[0]?.[0] as TreeNode).id).toBe(DEEP)
+    expect(h.events.open[0].id).toBe(DEEP)
     expect(authenticatedCalls).toEqual([])
   })
 
-  it('a card click asks the host to open the node (the host links it through the tree)', async () => {
-    const w = mountGuest(ShareRole.Read)
-    await w.find('.memory-card-main').trigger('click')
-    expect((w.emitted('openNode')?.[0]?.[0] as TreeNode).id).toBe(NEW)
+  it('a row click asks the host to open the node (the host links it through the tree)', async () => {
+    const h = mountGuest(ShareRole.Read)
+    await rowOf(h.w, 'Rom').find('button.veyq-level-item-main').trigger('click')
+    expect(h.events.open[0].id).toBe(NEW)
     expect(toggleFavorite).not.toHaveBeenCalled()
   })
 
-  it("is the member's section: its heading and its count of the level's Memories", () => {
-    const w = mountGuest(ShareRole.Read)
-    expect(w.find('h2').text()).toBe(t('memory.memories'))
-    expect(w.find('.memory-section-header > span').text()).toBe('2')
+  // inbox #358: a contributor moves a Memory of a folder (core's move dialog, the host's - asked through the host); a READ
+  // guest has no such action (the loop above lists every action a row has).
+  it('a contributor\'s row offers the move, which asks the host for core\'s move dialog', async () => {
+    const h = mountGuest(ShareRole.ReadWrite)
+    await clickAction(h.w, 'Rom', 'move')
+    expect(h.events.move.map((n) => n.id)).toEqual([NEW])
+    expect(authenticatedCalls).toEqual([])
   })
 })

@@ -1,13 +1,15 @@
 // @vitest-environment happy-dom
-// Core's folder page of a public share renders each kind's LEVEL section for a guest, as the member's level does (inbox
-// #401: S2 the page became core's level view, S3 retired the guest-only `shareSection`): the section gets the folder on
-// screen, that kind's children, the guest's `access` — its role and the page's one naming flow, the shell's
-// (`GuestAccess.requestGuest`) — and the guest's `tree` with the chain's keys and names. Harness: a stubbed registry (a
-// fresh `createRegistry()` behind a Proxy), real crypto for the subtree, a stub level section that records its props.
+// Core's folder page of a public share draws each kind's ROWS for a guest, as the member's level does (inbox #401: S2 the
+// page became core's level view, S3 retired the guest-only `shareSection`; inbox #407: the sections became row factories,
+// the level one unified list): a kind's row factory gets the level's context - the folder on screen, that kind's children,
+// the guest's `access` (its role and the page's one naming flow, the shell's `GuestAccess.requestGuest`) and the guest's
+// `tree` with the chain's keys and names. (File name kept from the section days; the intent is the same.) Harness: a
+// stubbed registry (a fresh `createRegistry()` behind a Proxy), real crypto for the subtree, a stub row factory that records
+// its context.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { guestAccessFor } from '../../test/models'
 import { mount, flushPromises } from '@vue/test-utils'
-import { defineComponent, h, reactive } from 'vue'
+import { reactive } from 'vue'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url } from '@veyq/crypto/base64'
 
@@ -27,7 +29,8 @@ const nav = vi.hoisted(() => ({ route: null as null | { query: Record<string, st
 vi.mock('vue-router', () => ({ useRoute: () => nav.route, useRouter: () => ({ push: vi.fn(), resolve: () => ({ href: '/s/stub' }) }) }))
 
 import ShareTreePage from './ShareTreePage.vue'
-import { createRegistry, type LevelSectionProps } from '../applications/registry'
+import { createRegistry } from '../applications/registry'
+import type { LevelRowsContext, LevelRowsFactory } from '../node/levelRow'
 import { FOLDER_KIND } from '../node/kind'
 import { sealName, wrapContentKey } from '../node/tree'
 import type { PublicShareHead } from './resolvePublicShare'
@@ -64,15 +67,13 @@ function head(role: ShareRole): PublicShareHead {
   }
 }
 
-/** The props the section was last handed, for the test to read. */
-const seen = vi.hoisted(() => ({ props: null as null | LevelSectionProps }))
-/** A kind's level section (what a member sees): lists its nodes, records its props. */
-const LevelStub = defineComponent({
-  name: 'LevelStub',
-  props: ['folder', 'nodes', 'epochs', 'access', 'tree'],
-  setup: (p) => () => {
-    seen.props = p as unknown as LevelSectionProps
-    return h('div', { class: 'level-stub' }, (p.nodes as { id: string }[]).map((n) => n.id).join(','))
+/** The level context the row factory was last handed, for the test to read (the reactive ref is read at the call). */
+const seen = vi.hoisted(() => ({ props: null as null | LevelRowsContext }))
+/** A kind's row factory (what a member sees): one row per node of its kind, records its context. */
+const stubRows: LevelRowsFactory = (ctx) => ({
+  row: (node) => {
+    seen.props = ctx.value
+    return { icon: 'pi pi-file', title: node.name, meta: 'stub', primary: { label: node.name, onClick: () => {} }, actions: [] }
   },
 })
 
@@ -90,23 +91,26 @@ function mountBody(h0: PublicShareHead, access = guestAccessFor(h0)) {
     global: { plugins: [realI18n()], stubs },
   })
 }
-const cardNames = (w: ReturnType<typeof mountBody>) => w.findAll('.veyq-folder-card:not(.veyq-node-header) strong').map((c) => c.text())
+const cardNames = (w: ReturnType<typeof mountBody>) => w.findAll('li.veyq-level-item.is-folder .veyq-level-item-title').map((c) => c.text())
+/** The ids of the nodes the factory was handed (its kind's children at the folder on screen). */
+const handedIds = () => (seen.props?.nodes ?? []).map((n) => n.id)
 
 beforeEach(() => {
   localStorage.clear()
   seen.props = null
   const r = createRegistry()
-  r.registerKind({ kind: DOC_KIND, icon: 'pi pi-file', shareable: false, section: { order: 20, component: LevelStub } })
+  r.registerKind({ kind: DOC_KIND, icon: 'pi pi-file', shareable: false, list: { rows: stubRows } })
   holder.reg = r
   nav.route = reactive({ query: {} as Record<string, string>, hash: `#k=${b64url(K_SHARE)}` })
 })
 
-describe("ShareTreePage renders the registered kinds' level sections for a guest", () => {
-  it("hands a section its kind's children at the folder on screen — never as cards — with the guest's access and tree", async () => {
+describe("ShareTreePage draws the registered kinds' rows for a guest", () => {
+  it("hands a kind's row factory its children at the folder on screen - drawn as items beside the folder, not as folders - with the guest's access and tree", async () => {
     const w = mountBody(head(ShareRole.Read))
     await flushPromises()
-    expect(cardNames(w), "the DOC child is the section's, not a folder card").toEqual(['Briefe'])
-    expect(w.find('.level-stub').text()).toBe(DOC)
+    expect(cardNames(w), 'the DOC child is a plain item, not a folder item').toEqual(['Briefe'])
+    expect(handedIds()).toEqual([DOC])
+    expect(w.findAll('.veyq-level-item-title').map((t) => t.text()), 'folders first, then the others by name').toEqual(['Briefe', 'Rezept.pdf'])
     const p = seen.props!
     expect(p.folder?.id).toBe(ROOT)
     expect(p.epochs, 'a guest has no epoch keys: its keys come through the tree').toBeNull()
@@ -116,20 +120,21 @@ describe("ShareTreePage renders the registered kinds' level sections for a guest
     expect(p.tree.linkTo(DOC), 'a link keeps the share key').toEqual({ query: { node: DOC }, hash: `#k=${b64url(K_SHARE)}` })
   })
 
-  it('renders the section in a sub-folder with ITS children, handed the link as it is (READ_WRITE)', async () => {
+  it('draws the rows in a sub-folder with ITS children, handed the link as it is (READ_WRITE)', async () => {
     nav.route!.query = { node: SUB }
     const h0 = head(ShareRole.ReadWrite)
     const w = mountBody(h0)
     await flushPromises()
-    expect(w.find('.level-stub').text()).toBe(DEEP)
+    expect(handedIds()).toEqual([DEEP])
+    expect(w.findAll('.veyq-level-item-title').map((t) => t.text())).toEqual(['Tief.txt'])
     expect(seen.props!.folder?.id).toBe(SUB)
     expect(seen.props!.access.mode === 'guest' && seen.props!.access.role).toBe(ShareRole.ReadWrite)
     expect(cardNames(w)).toEqual([])
   })
 })
 
-describe("ShareTreePage: a section's requestGuest is the page's one naming flow", () => {
-  it("hands the section the shell's flow (GuestAccess.requestGuest) — no dialog of the body's own", async () => {
+describe("ShareTreePage: a row factory's requestGuest is the page's one naming flow", () => {
+  it("hands the factory the shell's flow (GuestAccess.requestGuest) — no dialog of the body's own", async () => {
     const requestGuest = vi.fn(async () => ({ identityId: 'id-0', contributorToken: 'tok-0' }))
     const h0 = head(ShareRole.ReadWrite)
     const w = mountBody(h0, guestAccessFor(h0, { requestGuest }))

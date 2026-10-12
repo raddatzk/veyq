@@ -761,12 +761,18 @@ const en = {
   // wording where it names a Memory (`memory.slugTaken`, `memory.deleteMemoryTitle`).
   node: {
     folders: 'Folders',
-    folderEmpty: 'No folders here yet.',
     folderCreate: 'New folder',
     // The level toolbar's menu of everything that can be created or uploaded here (inbox #406).
     new: 'New',
-    // A level where empty sections are left out (a guest's folder in a drop box) and nothing is left to show.
+    // A level with nothing to show (also a guest's folder in a drop box): said once. `levelEmptyNew` is the same sentence for a
+    // viewer who may add something; `{entries}` names what the "New" menu offers them (their own labels).
     levelEmpty: 'Nothing here yet.',
+    levelEmptyNew: 'Nothing here yet. Choose New to add something ({entries}).',
+    // An application tab with nothing in it and no application text of its own (the unified level list, inbox #407).
+    tabEmpty: 'Nothing here yet.',
+    // The unified level list: a row's overflow menu button (`{name}` is the row's name), and a folder's meta line.
+    rowMore: 'More actions for “{name}”',
+    kindFolder: 'Folder',
     createFolderTitle: 'Create a folder',
     renameTitle: 'Rename',
     nameLabel: 'Name',
@@ -784,6 +790,8 @@ const en = {
     viewList: 'List view',
     // The level view's application tabs (`core/node/LevelView.vue`, inbox #348): the tablist's name and the whole-level tab.
     tabs: 'Applications',
+    // The dismiss button of a notice an application shows above the level list (`LevelNotices.vue`).
+    dismiss: 'Dismiss',
     tabAll: 'All',
     illegalStructure: 'That isn’t allowed here.',
     saveFailed: 'That didn’t work. Please try again.',
@@ -852,6 +860,9 @@ const en = {
   memory: {
     memories: 'Memories',
     memoryEmpty: 'No Memories here yet.',
+    // The noun that leads a row's meta line in the unified level list (inbox #407): "Memory · 1 Jun – 30 Jun 2024".
+    kindMemory: 'Memory',
+    kindChapter: 'Chapter',
     create: 'New Memory',
     createMemoryTitle: 'Create a Memory',
     createChapterTitle: 'Create a chapter',
@@ -927,7 +938,7 @@ const en = {
       remove: 'Remove cover',
       save: 'Save cover',
     },
-    // The toolbar button in Memories' section that opens core's node trash (`node.trash.*`).
+    // The toolbar button in the level view that opens core's node trash (`node.trash.*`).
     trash: {
       title: 'Trash',
       empty: 'The trash is empty.',
@@ -998,6 +1009,8 @@ const en = {
     // Where nothing can be uploaded (a pending deletion): no pointer to the "New" menu, which is not there.
     emptyReadOnly: 'No files yet.',
     notUploaded: 'Not uploaded yet',
+    // The noun that leads a row's meta line in the unified level list (inbox #407): "File · 157 B · Modified …".
+    kindFile: 'File',
     // A file's noun with its article, for core's `node.nameTakenBy` (the registry's `nounWithArticle`).
     aFile: 'a file',
     modified: 'Modified {date}',
@@ -1056,7 +1069,7 @@ const en = {
       quota_exceeded: '“{name}” was not uploaded: there is no space left. Deleted files only free space once the trash is emptied.',
       failed: '“{name}” could not be uploaded.',
     },
-    // A guest's words in Files' section on a shared folder (components/FilesSection.vue, F2): no trash to point at, a link has
+    // A guest's words in Files' rows on a shared folder (levelRows.ts, F2): no trash to point at, a link has
     // a limit of its own (the code does not say which limit was reached, ADR 0073 §6).
     guest: {
       empty: 'No files here.',
@@ -1071,6 +1084,9 @@ const en = {
     // The drop box (cr-files-application F3): a member's section, detail, create and share dialogs; a guest's page.
     dropBox: {
       section: 'Drop boxes',
+      // A drop box's row meta line: "Drop box · 3 people" (the guests who have a folder in it).
+      kind: 'Drop box',
+      people: 'Nobody yet | 1 person | {count} people',
       create: 'New drop box',
       createTitle: 'New drop box',
       aDropBox: 'a drop box',
@@ -2099,10 +2115,13 @@ const de: typeof en = {
   },
   node: {
     folders: 'Ordner',
-    folderEmpty: 'Hier gibt es noch keine Ordner.',
     folderCreate: 'Neuer Ordner',
     new: 'Neu',
     levelEmpty: 'Hier ist noch nichts.',
+    levelEmptyNew: 'Hier ist noch nichts. Wähle „Neu“, um etwas hinzuzufügen ({entries}).',
+    tabEmpty: 'Hier ist noch nichts.',
+    rowMore: 'Weitere Aktionen für „{name}“',
+    kindFolder: 'Ordner',
     createFolderTitle: 'Ordner anlegen',
     renameTitle: 'Umbenennen',
     nameLabel: 'Name',
@@ -2116,6 +2135,7 @@ const de: typeof en = {
     viewGrid: 'Rasteransicht',
     viewList: 'Listenansicht',
     tabs: 'Anwendungen',
+    dismiss: 'Ausblenden',
     tabAll: 'Alle',
     illegalStructure: 'Das ist hier nicht erlaubt.',
     saveFailed: 'Das hat nicht geklappt. Bitte versuche es erneut.',
@@ -2174,6 +2194,8 @@ const de: typeof en = {
   memory: {
     memories: 'Erinnerungen',
     memoryEmpty: 'Hier gibt es noch keine Erinnerungen.',
+    kindMemory: 'Erinnerung',
+    kindChapter: 'Kapitel',
     create: 'Neue Erinnerung',
     createMemoryTitle: 'Erinnerung anlegen',
     createChapterTitle: 'Kapitel anlegen',
@@ -2310,6 +2332,7 @@ const de: typeof en = {
     emptyReadOnly: 'Noch keine Dateien.',
     aFile: 'eine Datei',
     notUploaded: 'Noch nicht hochgeladen',
+    kindFile: 'Datei',
     modified: 'Geändert {date}',
     download: '{name} herunterladen',
     replace: 'Inhalt von {name} ersetzen — der Name bleibt',
@@ -2367,6 +2390,8 @@ const de: typeof en = {
     },
     dropBox: {
       section: 'Briefkästen',
+      kind: 'Briefkasten',
+      people: 'Noch niemand | 1 Person | {count} Personen',
       create: 'Neuer Briefkasten',
       createTitle: 'Neuer Briefkasten',
       aDropBox: 'einen Briefkasten',

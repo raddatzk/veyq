@@ -32,83 +32,67 @@ div.veyq-node-host
         button.p-tablist-nav-button.p-tablist-next-button [aria-label="Next"]
           svg.p-icon
             path
-    section.memory-section.veyq-section
-      div.memory-section-header.veyq-section-header
-        h2
-          "Memories"
-        span
-          "3"
-      div.is-list.memory-card-grid
-        div.memory-card.p-card.p-component.veyq-card.veyq-card-interactive
-          div.p-card-body
-            div.p-card-content
-              button.memory-card-main
-                span.memory-card-cover
-                  span.memory-cover-image
-                    span.memory-card-icon.pi.pi-images
-                span.memory-card-text
-                  strong
-                    "Summer"
-                  small.memory-card-date
-                    "06/01/2024 – 06/30/2024"
-              button.memory-card-pin [aria-label="Favorite"] [aria-pressed="false"]
-                span.pi.pi-heart
-        div.memory-card.p-card.p-component.veyq-card.veyq-card-interactive
-          div.p-card-body
-            div.p-card-content
-              button.memory-card-main
-                span.memory-card-cover
-                  span.memory-cover-image
-                    span.memory-card-icon.pi.pi-images
-                span.memory-card-text
-                  strong
-                    "Solo"
-                  small.memory-card-date
-                    "03/04/2023"
-              button.is-favorite.memory-card-pin [aria-label="Remove favorite"] [aria-pressed="true"]
-                span.pi.pi-heart-fill
-        div.memory-card.p-card.p-component.veyq-card.veyq-card-interactive
-          div.p-card-body
-            div.p-card-content
-              button.memory-card-main
-                span.memory-card-cover
-                  span.memory-cover-image
-                    span.memory-card-icon.pi.pi-images
-                span.memory-card-text
-                  strong
-                    "Beach"
-              button.memory-card-pin [aria-label="Favorite"] [aria-pressed="false"]
-                span.pi.pi-heart
-    section.files-section.veyq-section
-      div.veyq-section-header
-        h2
-          "Files"
-        span
-          "0"
-      input.files-picker
-      input.files-picker
-      p.veyq-empty.veyq-empty-inline
-        "No files yet — choose New to upload the first one."
-    section.dropbox-section.veyq-section
-      div.veyq-section-header
-        h2
-          "Drop boxes"
-        span
-          "0"
-      p.veyq-empty.veyq-empty-inline
-        "No drop boxes yet. Choose New to create one — a drop box collects files from people without an account."
-    section.veyq-section
-      div.veyq-level-section-header.veyq-section-header
-        h2
-          "Folders"
-        span
-          "2"
-      div.is-list.veyq-card-grid.veyq-level-grid
-        button.veyq-card.veyq-card-interactive.veyq-folder-card
-          span.pi.pi-folder
-          strong
-            "Trips"
-        button.veyq-card.veyq-card-interactive.veyq-folder-card
-          span.pi.pi-folder
-          strong
-            "Empty"
+    ul.is-list.veyq-level-list
+      li.is-folder.is-list.veyq-level-item
+        button.veyq-level-item-main [aria-label="Empty"]
+          span.veyq-level-item-visual
+            span.pi.pi-folder.veyq-level-item-icon
+          span.veyq-level-item-text
+            strong.veyq-level-item-title
+              "Empty"
+            small.veyq-level-item-meta
+              "Folder"
+      li.is-folder.is-list.veyq-level-item
+        button.veyq-level-item-main [aria-label="Trips"]
+          span.veyq-level-item-visual
+            span.pi.pi-folder.veyq-level-item-icon
+          span.veyq-level-item-text
+            strong.veyq-level-item-title
+              "Trips"
+            small.veyq-level-item-meta
+              "Folder"
+      li.has-cover.is-list.veyq-level-item
+        button.veyq-level-item-main [aria-label="Beach"]
+          span.veyq-level-item-visual
+            span.memory-cover-image
+              span.memory-cover-image-ph.pi.pi-images
+          span.veyq-level-item-text
+            strong.veyq-level-item-title
+              "Beach"
+            small.veyq-level-item-meta
+              "Memory"
+        span.veyq-level-item-actions
+          button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-level-item-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
+            span.p-button-icon.pi.pi-heart
+          button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-level-item-more.veyq-prime-icon-button [aria-label="More actions for “Beach”"]
+            span.p-button-icon.pi.pi-ellipsis-h
+      li.has-cover.is-list.veyq-level-item
+        button.veyq-level-item-main [aria-label="Solo"]
+          span.veyq-level-item-visual
+            span.memory-cover-image
+              span.memory-cover-image-ph.pi.pi-images
+          span.veyq-level-item-text
+            strong.veyq-level-item-title
+              "Solo"
+            small.veyq-level-item-meta
+              "Memory · 03/04/2023"
+        span.veyq-level-item-actions
+          button.is-pressed.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-level-item-action.veyq-prime-icon-button [aria-label="Remove favorite"] [aria-pressed="true"]
+            span.p-button-icon.pi.pi-heart-fill
+          button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-level-item-more.veyq-prime-icon-button [aria-label="More actions for “Solo”"]
+            span.p-button-icon.pi.pi-ellipsis-h
+      li.has-cover.is-list.veyq-level-item
+        button.veyq-level-item-main [aria-label="Summer"]
+          span.veyq-level-item-visual
+            span.memory-cover-image
+              span.memory-cover-image-ph.pi.pi-images
+          span.veyq-level-item-text
+            strong.veyq-level-item-title
+              "Summer"
+            small.veyq-level-item-meta
+              "Memory · 06/01/2024 – 06/30/2024"
+        span.veyq-level-item-actions
+          button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-level-item-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
+            span.p-button-icon.pi.pi-heart
+          button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-level-item-more.veyq-prime-icon-button [aria-label="More actions for “Summer”"]
+            span.p-button-icon.pi.pi-ellipsis-h

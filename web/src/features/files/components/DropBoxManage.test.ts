@@ -1,12 +1,14 @@
 // @vitest-environment happy-dom
 // A member's drop-box surfaces, the wording and the one confirmation inbox #385 (c) asked for: the create dialog says
-// what a drop box is before it asks a name, and submits with "Create"; the level section with no drop box says what one
-// is; deleting a link asks first, as core's folder share dialog does (declined → nothing deleted). The data layer
+// what a drop box is before it asks a name, and submits with "Create"; the drop-box tab with no drop box says what one
+// is (inbox #407: the application's `emptyText` on core's unified level list, which replaced the drop-box section), and
+// a drop box is a core item whose row data is Files'; deleting a link asks first, as core's folder share dialog does (declined → nothing deleted). The data layer
 // (`dropBox.ts`, core's `manageShares`/`shareLink`) is stubbed; the real i18n catalog and PrimeVue render.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import PrimeVue from 'primevue/config'
 
+vi.mock('../api', () => ({ filesApi: vi.fn() }))
 vi.mock('../dropBox', () => ({ createDropBox: vi.fn(), mintDropBoxLink: vi.fn() }))
 vi.mock('../../../core/sharing/manageShares', async (importOriginal) => ({
   isReissueRequired: (await importOriginal<typeof import('../../../core/sharing/manageShares')>()).isReissueRequired,
@@ -15,13 +17,17 @@ vi.mock('../../../core/sharing/manageShares', async (importOriginal) => ({
 vi.mock('../../../core/sharing/shareLink', () => ({ buildShareLink: vi.fn(), recoverShareLink: vi.fn(() => 'https://x/s/1#k=a') }))
 
 import DropBoxCreateDialog from './DropBoxCreateDialog.vue'
-import DropBoxSection from './DropBoxSection.vue'
 import DropBoxShareDialog from './DropBoxShareDialog.vue'
 import { deleteShare, listSharesFor, reactivateShare, revokeShare, type ManagedShare } from '../../../core/sharing/manageShares'
 import { confirmRequest, settleConfirm } from '../../../shared/state/useConfirm'
 import { ShareRole } from '../../../api/generated/sharing'
 import type { TreeNode } from '../../../core/node/tree'
 import { DROPBOX_KIND } from '../kinds'
+import { registry } from '../../../core/applications/registry'
+import { filesRows } from '../levelRows'
+import { filesApi } from '../api'
+import { stubApi } from '../../../test/apiMock'
+import { mountRows, titlesOf } from '../../../test/levelRows'
 import { realI18n, t } from '../../../test/i18n'
 import { epochsOf } from '../../spaces/epochsTestUtil'
 import { treeNode, memberAccessOf, memberTreeOf } from '../../../test/models'
@@ -42,19 +48,28 @@ describe('the drop box create dialog', () => {
   })
 })
 
-describe('the drop boxes section', () => {
+describe('the drop boxes in the unified level list', () => {
   const box: TreeNode = treeNode({ id: 'b1', kind: DROPBOX_KIND, name: 'Einsendungen', parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
-  const section = (nodes: TreeNode[]) =>
-    mount(DropBoxSection, {
-      props: { folder: null, nodes, epochs: EPOCHS, viewMode: 'grid', access: memberAccessOf({ scopeId: SCOPE, epochs: EPOCHS }), tree: memberTreeOf(() => nodes, { scopeId: SCOPE, epochs: EPOCHS }) },
-      global,
-    })
+  const ctx = (nodes: TreeNode[]) => ({
+    folder: null, nodes, epochs: EPOCHS, viewMode: 'grid' as const, liveTick: undefined,
+    access: memberAccessOf({ scopeId: SCOPE, epochs: EPOCHS }), tree: memberTreeOf(() => nodes, { scopeId: SCOPE, epochs: EPOCHS }),
+  })
 
-  it('with none yet, says what a drop box is; with one, lists it instead', () => {
-    expect(section([]).find('.veyq-empty').text()).toBe(t('files.dropBox.sectionEmpty'))
-    const listed = section([box])
-    expect(listed.find('.veyq-empty').exists()).toBe(false)
-    expect(listed.find('.veyq-row-title').text()).toBe('Einsendungen')
+  it('the drop-box tab with none yet says what a drop box is (the registered tab text)', () => {
+    const tab = registry.tabs().find((x) => x.kinds.includes(DROPBOX_KIND))!
+    expect(tab.label).toBe('files.dropBox.section')
+    const nodes: TreeNode[] = []
+    const text = tab.emptyText!({ access: memberAccessOf({ scopeId: SCOPE, epochs: EPOCHS }), tree: memberTreeOf(() => nodes, { scopeId: SCOPE, epochs: EPOCHS }), folder: null, epochs: EPOCHS })
+    expect(t(text)).toContain('a drop box collects files from people without an account')
+  })
+
+  it('with one, core draws it as an item with its name and the drop-box kind', async () => {
+    stubApi(filesApi, { listFiles: { items: [] } })
+    const h = mountRows(filesRows, ctx([box]), 'grid', { stubs: global.stubs })
+    await flushPromises()
+    expect(titlesOf(h.w)).toEqual(['Einsendungen'])
+    expect(h.w.find('.veyq-level-item-meta').text()).toContain(t('files.dropBox.kind'))
+    expect(h.w.find('button.veyq-level-item-main').attributes('aria-label')).toBe(t('files.dropBox.open', { name: 'Einsendungen' }))
   })
 })
 

@@ -32,9 +32,5 @@ div.veyq-node-host
         button.p-tablist-nav-button.p-tablist-next-button [aria-label="Next"]
           svg.p-icon
             path
-    section.memory-section.veyq-section
-      div.memory-section-header.veyq-section-header
-        h2
-          "Memories"
-      div.space-map-stub
-        "Beach, Italy"
+    div.space-map-stub
+      "Beach, Italy"

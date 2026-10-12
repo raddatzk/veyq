@@ -136,7 +136,7 @@ grants nothing. On an opened `MEMORY` or `CHAPTER` (the detail):
 | pin, item marks, media trash, contributions organizer | ✓ | ✓ | ✗ | ✗ | ✗ |
 | share (and the uploader link) | the instance's public (and uploader) links | the same | ✗ | ✗ | ✗ |
 
-At a folder level (Memories' section): a member creates a Memory (not during a pending deletion, never in a guest's
+At a folder level (Memories' rows in core's one list): a member creates a Memory (not during a pending deletion, never in a guest's
 identity folder) and pins; a `READ_WRITE` guest of a folder link creates a Memory there; every role that reads opens
 one. A share right also needs the kind's descriptor to bring a share dialog (`targetOf`, core's), and a guest's move
 the node's parent to be a folder the link serves (`targetOf`'s `parentKind`: unknown at the link's root). These are the matrix
@@ -150,8 +150,8 @@ marks, the organizer, the live poll or the heavy EXIF — so a guest's view re-r
 upload or delete, and sees another guest's upload on its next open; a `WRITE_ONLY` link uploads and deletes through its
 drop page, never this source.
 
-**A guest sees the member's views (inbox #401).** At a folder level `MemoriesSection`, handed a guest's access and tree,
-shows the Memories of a shared folder as MemoryCards, each date and place unsealed under the node's key the link's
+**A guest sees the member's views (inbox #401).** At a folder level `memoryRows` (`web/src/features/memory/levelRows.ts`), handed a guest's access and tree,
+gives core's list the Memories of a shared folder as rows and tiles (a cover tile in the grid), each date and place unsealed under the node's key the link's
 chain opened, each cover through the link's own reads (`guestCover.ts`: a chosen photo's thumbnail from
 `listShareMedia`, read once and only when a cover needs it; an uploaded cover blob through `resolveShareBlob`, which
 serves a node's cover blob below the share), the map over the opened subtree. A Memory or a chapter — below a shared
@@ -181,9 +181,12 @@ only `FOLDER`), declares that a `MEMORY` and a `CHAPTER` may be the root of a sh
 `ShareRoots` and takes guest writes under both through `ShareGuestWrites` (one set, `MemoriesNodeKinds.SHARE_ROOTS`). Memories' tests run in `:apps:memories`, beside the
 core tests that need an application at runtime; `:core`'s own run with no application at all. **The web is separated
 by import direction only**: `features/memory` is the application (core imports it nowhere but the composition root
-and asks a registry for what to render; the folder level view is core's, Memories contributes its section —
-`MemoriesSection`, the cards and the map — for both its kinds — and names its presentations, grid, list and map, which
-core's level toolbar offers, inbox #370), and its create and share dialogs ride on its kinds
+and asks a registry for what to render; the folder level view is core's, Memories contributes ROW DATA, not a section
+(inbox #407): its row factory `memoryRows` answers, for each MEMORY and CHAPTER at the level, a row — the cover as the
+leading visual (large on a tile), the name, the meta line "Memory · date range", a primary click that opens it, the heart
+as its one first-class action (a member's own pin, inbox #409 moves it to core) and rename and move in the row's menu —
+and the map as its own presentation; core draws the list, orders it (folders first, then everything by name, mixed with
+files and drop boxes) and offers the presentations grid, list and map in the level's toolbar, inbox #370), and its create and share dialogs ride on its kinds
 (a rename is core's, as a folder's create is), though its directory name is still Memories-shaped (the top-bar tray and
 the sidebar pins are ordered lists; the upload status in the top bar is core's, not Memories' tray item, and lists Memories'
 batches with every other application's). What core still knows of Memories, and what is open on both sides,

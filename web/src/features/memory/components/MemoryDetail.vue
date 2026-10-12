@@ -603,7 +603,7 @@ watch(
         </TabPanel>
 
         <TabPanel v-if="can.navigate" value="chapters">
-          <!-- Chapters as a MemoryCard grid + a create card, like the browse Memories section (design source).
+          <!-- Chapters as a MemoryCard grid + a create card, like the level's Memories (design source).
                Each chapter opens to its own gallery; its media is sealed under the chapter's own K_mem. -->
           <div class="chapters-toolbar">
             <ViewModeToggle :views="[GRID_VIEW, LIST_VIEW]" />

@@ -5,7 +5,8 @@
 // own path — and a restore of an older sibling of one plain segment renumbers it: the URL must follow it, or the old path
 // resolves to nothing and the view collapses to the scope root (found by the read-only assessment of inbox #328). The
 // writes are recorders (`renameNode`, `restoreNode`; their wire is `core/node/tree.wire.test.ts`'s) and the re-read is
-// `loadTree`'s stub. Only the heavy Memories views and Files' file list are stubs exposing the events the host listens to.
+// `loadTree`'s stub. Only the heavy Memories detail is a stub exposing the events the host listens to; the level's rows
+// (inbox #407: one list, the applications' real row factories) are real, Files' blob listing is an empty stub.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
@@ -38,6 +39,7 @@ vi.mock('../core/node/tree', async (importOriginal) => ({
   listTrash: vi.fn(async () => []),
   restoreNode: vi.fn(async () => {}),
   nodeContentKey: () => new Uint8Array(32).fill(9),
+  parentContentKey: () => new Uint8Array(32).fill(9), // the key a Memory row opens its meta under
 }))
 vi.mock('../core/sharing/manageShares', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../core/sharing/manageShares')>()),
@@ -55,21 +57,7 @@ vi.mock('../features/memory/components/MemoryDetail.vue', async () => {
     }),
   }
 })
-vi.mock('../features/memory/components/MemoriesSection.vue', async () => {
-  const { defineComponent, h } = await import('vue')
-  return { default: defineComponent({ props: ['folder', 'nodes', 'epochs', 'access', 'tree', 'viewMode'], setup: () => () => h('section', { class: 'memories-stub' }) }) }
-})
-vi.mock('../features/files/components/FilesSection.vue', async () => {
-  const { defineComponent, h } = await import('vue')
-  return {
-    default: defineComponent({
-      props: ['folder', 'nodes', 'epochs', 'access', 'tree', 'viewMode'],
-      emits: ['rename'],
-      setup: (p, { emit }) => () => h('section', { class: 'files-stub' },
-        (p.nodes as { id: string; name: string }[]).map((n) => h('button', { class: 'file-rename', 'data-id': n.id, onClick: () => emit('rename', n) }, n.name))),
-    }),
-  }
-})
+vi.mock('../features/files/api', () => ({ filesApi: vi.fn() }))
 
 import MemoryHomeView from './MemoryHomeView.vue'
 import { treeStore, loadTree } from '../core/node/treeStore'
@@ -81,6 +69,9 @@ import { realI18n, t } from '../test/i18n'
 import { treeNode } from '../test/models'
 import { listMyTenants } from '../features/spaces/scopes'
 import { isFavorite } from '../features/memory/favoritesStore'
+import { stubApi } from '../test/apiMock'
+import { filesApi } from '../features/files/api'
+import { clickAction, titlesOf } from '../test/levelRows'
 
 const node = (id: string, kind: string, parentId: string | null, name: string, createdAt: number): TreeNode =>
   treeNode({ id, kind, name, parentId, createdAt })
@@ -127,6 +118,7 @@ beforeEach(() => {
   document.body.innerHTML = ''
   vi.mocked(listMyTenants).mockResolvedValue([])
   vi.mocked(isFavorite).mockReturnValue(false)
+  stubApi(filesApi, { listFiles: { items: [] } })
   treeStore.nodes = TREE()
   vi.mocked(renameNode).mockReset()
   vi.mocked(restoreNode).mockReset()
@@ -210,12 +202,14 @@ describe('a restore that renumbers an ancestor of the open node', () => {
 
 describe('a rename of a row on the level', () => {
   it('leaves the level where it is', async () => {
-    await mountAt('#~me/trips/')
-    await click(document.body.querySelector('.file-rename[data-id="xy"]')!)
+    const w = await mountAt('#~me/trips/')
+    await clickAction(w, 'x.y', 'rename') // Files' row: a real click on its entry in the row's menu
     serverRenames({ xy: 'notes.txt' })
     await renameTo('notes.txt')
     expect(renameNode).toHaveBeenCalledWith('scope-1', expect.anything(), expect.any(Array), 'xy', 'notes.txt')
     expect(router.currentRoute.value.hash).toBe('#~me/trips/')
     expect(heading()).toBe('Trips')
+    // the list mixes the non-folders by name now (the Memory beside the file), the folder first
+    expect(titlesOf(w)).toEqual(['Rome', 'Italy', 'notes.txt'])
   })
 })

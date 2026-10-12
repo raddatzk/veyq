@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
 // The guest's folder page as it ships (inbox #401 S2): core's `ShareTreePage` with the app's REAL registry (Memories
 // and Files, filled by `src/test/setup.ts`), the real PrimeVue and the real vue-router, every step a DOM click on the
-// rendered element. The folder level is core's member `LevelView`: a Memory is the member's MemoryCard, the sub-folder
-// a folder card, the files Files' list — and nothing a member alone may do is on the page (pins, marks, the trash,
-// share, rename, delete, a cover, a chapter), while every authenticated client throws (`test/guestMode.ts`). A card
+// rendered element. The folder level is core's member `LevelView` (inbox #407: ONE unified list, every item core's
+// `LevelRowItem`): a Memory, the sub-folder and the file are items of that list, the rows' data the applications' own
+// — and nothing a member alone may do is on the page (pins, marks, the trash,
+// share, rename, delete, a cover, a chapter), while every authenticated client throws (`test/guestMode.ts`). An item
 // click keeps the `#k=` fragment that carries the share key, and the Memory opens in the member's detail (inbox #401
 // S5; what that detail offers a guest is `MemoryDetail.guest.test.ts`).
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -104,20 +105,24 @@ function expectNoMemberControl(w: Page) {
 
 describe("a folder link's guest page is the member's level (inbox #401 S2)", () => {
   for (const role of [ShareRole.Read, ShareRole.ReadWrite]) {
-    it(`${role}: the Memory is a MemoryCard, the sub-folder a folder card, the file Files' row — nothing of a member's`, async () => {
+    it(`${role}: the Memory, the sub-folder and the file are items of ONE list - nothing of a member's`, async () => {
       const w = await mountPage(role)
       expect(w.find('.veyq-node-header-title').text()).toBe('Familie')
-      expect(w.find('.memory-card strong').text()).toBe('Rom 2026')
-      expect(w.findAll('button.veyq-folder-card').map((c) => c.find('strong').text())).toEqual(['Briefe'])
-      expect(w.find('.veyq-row-title').text()).toBe('rezept.pdf')
+      expect(w.findAll('ul.veyq-level-list')).toHaveLength(1)
+      // Folders first, then the rest mixed by name (the Memory and the file no longer sit in their own sections).
+      expect(w.findAll('.veyq-level-item-title').map((c) => c.text())).toEqual(['Briefe', 'rezept.pdf', 'Rom 2026'])
+      expect(w.findAll('li.veyq-level-item.is-folder .veyq-level-item-title').map((c) => c.text())).toEqual(['Briefe'])
+      expect(w.find('li.veyq-level-item[data-kind="MEMORY"] .veyq-level-item-main').attributes('aria-label')).toBe('Rom 2026')
+      expect(w.find('li.veyq-level-item[data-kind="MEMORY"] .veyq-level-item-meta').text()).toContain(t('memory.kindMemory'))
+      expect(w.find('li.veyq-level-item[data-kind="FILE"] .veyq-level-item-meta').text()).toContain(t('files.kindFile'))
       expectNoMemberControl(w)
       expect(authenticatedCalls).toEqual([])
     })
   }
 
-  it('a click on the MemoryCard opens the Memory with the real router, the #k= fragment kept', async () => {
+  it('a click on the Memory item opens the Memory with the real router, the #k= fragment kept', async () => {
     const w = await mountPage(ShareRole.Read)
-    const open = w.find('.memory-card .memory-card-main')
+    const open = w.find('li.veyq-level-item[data-kind="MEMORY"] button.veyq-level-item-main')
     const click = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })
     open.element.dispatchEvent(click)
     await flushPromises()

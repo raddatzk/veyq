@@ -8,14 +8,14 @@ Beide liegen in denselben Ordnern deines Bereichs, Seite an Seite.
 
 ## Was du mit einer Datei tun kannst
 
-- **Hochladen** — wähle Dateien aus oder lege sie auf einen Ordner. Das Hochladen läuft im Hintergrund; das
-  Status-Menü in der oberen Leiste zeigt, wie weit es ist.
-- **Herunterladen** — du bekommst die Datei genau so zurück, wie du sie abgelegt hast, unter dem Namen, den sie in
-  veyq hat.
+- **Hochladen** — wähle **Neu → Dateien hochladen** oder lege Dateien auf den Ordner. Das Hochladen läuft im
+  Hintergrund; das Status-Menü in der oberen Leiste zeigt, wie weit es ist.
+- **Herunterladen** — die Herunterladen-Schaltfläche in der Zeile der Datei gibt dir die Datei genau so zurück, wie
+  du sie abgelegt hast, unter dem Namen, den sie in veyq hat. Ein Klick auf die Zeile selbst öffnet die Seite der Datei.
 - **Ersetzen** — lege eine neuere Fassung an die Stelle der Datei. Der Name bleibt. veyq **fragt vorher nach**, denn
   es gibt **keinen Versionsverlauf**: Der alte Inhalt lässt sich nicht zurückholen. Dieselbe Frage kommt, wenn du eine
   Datei hochlädst, deren Name in dem Ordner schon vergeben ist.
-- **Umbenennen und verschieben** — benenne eine Datei in ihrer Zeile um. **Verschieben nach …** öffnet eine Liste von
+- **Umbenennen und verschieben** — beides findest du im **⋯**-Menü der Zeile einer Datei. **Verschieben nach …** öffnet eine Liste von
   Orten; wähle einen, und die Datei geht dorthin (mehr dazu unten).
 - **Löschen, mit Rückgängig** — eine gelöschte Datei kommt in den **Papierkorb**, und eine Meldung bietet dir sofort
   **Rückgängig** an. Später kannst du sie noch aus dem Papierkorb wiederherstellen, bis sie endgültig entfernt wird;
@@ -39,10 +39,23 @@ abgelehnt, statt mittendrin zu scheitern.
 Briefkasten: Wähle den neuen Ort aus einer Liste, und alles darin kommt mit und bleibt lesbar. Hat dir jemand einen Ordner freigegeben, in dem du mitwirken darfst, kannst du
 Dinge **darin** verschieben — aber nicht hinaus.
 
+## Eine Liste für alles in einem Ordner
+
+Ein Ordner zeigt **eine Liste** von allem, was darin liegt: Unterordner, Erinnerungen, Dateien und Briefkästen
+gemeinsam. Zuerst kommen die Ordner, danach alles andere in alphabetischer Reihenfolge, egal was es ist (Zahlen zählen
+als Zahlen, *Foto 2* steht also vor *Foto 10*). Jeder Eintrag sagt, was er ist — zum Beispiel *Datei · 157 B · geändert …*
+oder *Erinnerung · Juni 2024* — und hat eigene Schaltflächen: die wichtigste (bei einer Datei das Herunterladen, bei
+einer Erinnerung das Herz) sitzt direkt am Eintrag, die übrigen im **⋯**-Menü. Was du nicht darfst, hat schlicht keine
+Schaltfläche.
+
+Liegt in einem Ordner mehr als eine Art von Dingen, zeigen dir Tabs über der Liste — **Alle**, **Erinnerungen**,
+**Dateien**, **Briefkästen** — nur eine Art. Unterordner bleiben in jedem Tab sichtbar, damit du weiter navigieren kannst.
+
 ## Raster und Liste
 
-In einem Ordner wechselst du mit den Schaltflächen oben zwischen **Rasteransicht** und **Listenansicht**. Die Wahl
-gehört dir und wird gemerkt; derselbe Schalter gilt für alles im Ordner.
+In einem Ordner wechselst du mit den Schaltflächen oben zwischen **Rasteransicht** und **Listenansicht** (und
+**Kartenansicht**, wo Erinnerungen Orte haben). Die Wahl gehört dir und wird gemerkt; derselbe Schalter gilt für alles
+im Ordner.
 
 ## Adressen zum Merken
 

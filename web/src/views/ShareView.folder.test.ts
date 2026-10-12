@@ -28,8 +28,9 @@ import { MEMORY_KIND } from '../features/memory/kinds'
 import { publicShareMediaApi } from '../features/memory/api'
 import { ShareRole, type PublicShare } from '../api/generated/sharing'
 import { stubApi } from '../test/apiMock'
-import { realI18n } from '../test/i18n'
+import { realI18n, t } from '../test/i18n'
 import { authenticatedCalls } from '../test/guestMode'
+import { titlesOf } from '../test/levelRows'
 
 const SCOPE_ID = '66666666-6666-4666-8666-666666666666'
 const ROOT = '6e5a0000-0000-4000-8000-0000000000e0'
@@ -76,7 +77,8 @@ describe('ShareView: a link rooted at a FOLDER', () => {
     await vi.waitFor(() => expect(w.find('.veyq-node-header-title').exists()).toBe(true))
     expect(w.find('.share-view-unavailable').exists()).toBe(false)
     expect(w.find('.veyq-node-header-title').text()).toBe('Familie')
-    expect(w.find('.memory-card strong').text(), "a Memory is the member's MemoryCard").toBe('Rom 2026')
+    expect(titlesOf(w), "a Memory is the member's row of the one list").toEqual(['Rom 2026'])
+    expect(w.find('li.veyq-level-item[data-kind="MEMORY"] .veyq-level-item-meta').text()).toContain(t('memory.kindMemory'))
     expect(authenticatedCalls).toEqual([])
   })
 

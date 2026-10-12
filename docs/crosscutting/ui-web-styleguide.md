@@ -147,7 +147,7 @@ or a one-off `1rem` label sitting in them.
   moves the kit import and its jsQR dependency, not a file — it is not a precedent. **Core and application:**
   what is platform lives outside `features/memory/` — in `core/` (`core/node/` the node tree, the folder level view
   `LevelView.vue` and its delete/trash dialogs, `core/applications/` the registry, `core/sharing/`), `shared/`,
-  `components/app/` or `views/`; what is Memories' (media, gallery, covers, its level section, its dialogs and share
+  `components/app/` or `views/`; what is Memories' (media, gallery, covers, its level rows, its dialogs and share
   body) lives under `features/memory/`. Core renders an application's component only through the registry (a kind's
   detail or level section, a slot) and never imports it
   ([web/CLAUDE.md](../../web/CLAUDE.md) says what an application registers; the guard enforces the direction).

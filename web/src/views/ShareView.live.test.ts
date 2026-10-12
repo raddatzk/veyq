@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
 // A share guest's folder page picks up what the owner or a peer changed WITHOUT a reload (inbox #408), and stores its
 // own view preferences. The real shell (`ShareView`), the real page (`ShareTreePage`), the real level view and the real
-// guest tree over sealed rows, with the resolve faked and the heavy sections stubbed to print the nodes they are handed.
+// guest tree over sealed rows, with the resolve faked and Files' guest blob listing (`listShareFiles`) a counting stub - its
+// call count is how the rows' "look again" cue (the level's live tick) is read.
 // The poll is conditional (ADR 0081): the faked resolve keeps a tag like the server's digest, answers `null` (a 304) to an
 // echo of it, and the page does nothing with that. Each case has its control: a changed share appears after one poll
-// interval; an idle one is a 304 and tells the sections nothing; nothing is requested while hidden; a failed resolve
+// interval; an idle one is a 304 and tells the rows nothing; nothing is requested while hidden; a failed resolve
 // leaves the page standing; a link that is GONE (revoked, expired, deleted, its root trashed) flips the page to its
 // unavailable state and ends the loop; a changed password flips it to the gate; an unmount stops the loop.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -23,20 +24,6 @@ vi.mock('../core/sharing/resolvePublicShare', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../core/sharing/resolvePublicShare')>()
   return { ...actual, resolvePublicShare: vi.fn(), pollPublicShare: vi.fn(), fetchShareTerms: vi.fn() }
 })
-vi.mock('../features/memory/components/MemoriesSection.vue', async () => {
-  const { defineComponent, h } = await import('vue')
-  return { default: defineComponent({ props: ['nodes', 'folder', 'epochs', 'access', 'tree', 'viewMode', 'liveTick'], setup: (p) => () => h('section', { class: 'memories-stub' }, p.nodes.map((n: { name: string }) => n.name).join(',')) }) }
-})
-vi.mock('../features/files/components/FilesSection.vue', async () => {
-  const { defineComponent, h } = await import('vue')
-  return {
-    default: defineComponent({
-      props: ['nodes', 'folder', 'epochs', 'access', 'tree', 'viewMode', 'liveTick'],
-      setup: (p) => () => h('section', { class: 'files-stub', 'data-tick': String(p.liveTick) }, p.nodes.map((n: { name: string }) => n.name).join(',')),
-    }),
-  }
-})
-
 import ShareView from './ShareView.vue'
 import {
   resolvePublicShare,
@@ -51,6 +38,10 @@ import { ShareRole, type PublicShare, type ShareNode } from '../api/generated/sh
 import { FOLDER_KIND } from '../core/node/kind'
 import { FILE_KIND } from '../features/files/kinds'
 import { authenticatedCalls } from '../test/guestMode'
+import { publicShareFilesApi } from '../features/files/api'
+import type { ShareFilesApi } from '../api/generated/files'
+import { fakeApi } from '../test/apiMock'
+import { titlesOf } from '../test/levelRows'
 import { realI18n } from '../test/i18n'
 import { viewModeStorageKey, setViewMode } from '../shared/state/useViewMode'
 import { levelTabStorageKey } from '../shared/state/useLevelTab'
@@ -78,6 +69,7 @@ function head(files: ShareNode[]): PublicShareHead {
 }
 
 let served: PublicShareHead
+let listShareFiles: ReturnType<typeof vi.fn<ShareFilesApi['listShareFiles']>>
 let servedTag: string // the digest the faked server holds for `served`; every change of it moves the tag
 const serve = (next: PublicShareHead) => {
   served = next
@@ -114,6 +106,8 @@ beforeEach(() => {
   localStorage.clear()
   authenticatedCalls.length = 0
   serve(head([]))
+  listShareFiles = vi.fn<ShareFilesApi['listShareFiles']>(async () => ({ items: [] }))
+  fakeApi(publicShareFilesApi, { listShareFiles })
   vi.mocked(resolvePublicShare).mockReset().mockImplementation(async () => served)
   vi.mocked(pollPublicShare).mockReset().mockImplementation(async (_id, _key, _pw, ifNoneMatch) =>
     ifNoneMatch === servedTag ? null : { head: served, etag: servedTag },
@@ -128,12 +122,12 @@ afterEach(() => {
 describe("a share guest's folder page, live", () => {
   it("shows a peer's new file after one poll interval, with no reload", async () => {
     const w = await mountPage()
-    expect(w.find('.files-stub').text()).toBe('')
+    expect(titlesOf(w)).toEqual([])
     vi.mocked(pollPublicShare).mockClear()
     serve(head([fileOf('6e5a0000-0000-4000-8000-0000000009a1', 'foto.png')]))
     await settle(OVER_ONE_INTERVAL)
     expect(pollPublicShare).toHaveBeenCalled()
-    expect(w.find('.files-stub').text()).toBe('foto.png')
+    expect(titlesOf(w)).toEqual(['foto.png'])
     expect(authenticatedCalls).toEqual([])
     w.unmount()
   })
@@ -148,7 +142,7 @@ describe("a share guest's folder page, live", () => {
     setVisibility('visible')
     await settle(0)
     expect(pollPublicShare).toHaveBeenCalledTimes(1)
-    expect(w.find('.files-stub').text()).toBe('foto.png')
+    expect(titlesOf(w)).toEqual(['foto.png'])
     w.unmount()
   })
 
@@ -158,14 +152,16 @@ describe("a share guest's folder page, live", () => {
     await settle(OVER_ONE_INTERVAL)
     expect(vi.mocked(pollPublicShare)).toHaveBeenCalledTimes(1)
     expect(w.find('.share-view-unavailable').exists()).toBe(false)
-    expect(w.find('.files-stub').exists()).toBe(true)
+    expect(w.find('.veyq-level-view').exists(), 'the level stands').toBe(true)
     await settle(OVER_ONE_INTERVAL)
     expect(vi.mocked(pollPublicShare)).toHaveBeenCalledTimes(1)
     w.unmount()
   })
 
-  it('echoes the last response\'s tag; an idle link is a 304 that swaps nothing and tells the sections nothing', async () => {
+  it('echoes the last response\'s tag; an idle link is a 304 that swaps nothing and tells the rows nothing', async () => {
+    serve(head([fileOf('6e5a0000-0000-4000-8000-0000000009a1', 'foto.png')])) // a level with a file: only then do the rows re-read
     const w = await mountPage()
+    expect(titlesOf(w)).toEqual(['foto.png'])
     vi.mocked(pollPublicShare).mockClear()
     await settle(OVER_ONE_INTERVAL) // the load's response carried no tag the page holds: this first poll is a full read
     await settle(OVER_ONE_INTERVAL * 2)
@@ -173,7 +169,8 @@ describe("a share guest's folder page, live", () => {
     expect(calls.length).toBeGreaterThanOrEqual(3)
     expect(calls[0][3]).toBeNull()
     for (const call of calls.slice(1)) expect(call[3]).toBe(servedTag) // every later poll echoes it
-    expect(Number(w.find('.files-stub').attributes('data-tick'))).toBe(1) // only the first, full read told the sections
+    // only the first, full read told the rows (one more read of the blob listing, after the mount's own); the 304s said nothing
+    expect(listShareFiles).toHaveBeenCalledTimes(2)
     w.unmount()
   })
 
@@ -183,7 +180,7 @@ describe("a share guest's folder page, live", () => {
     vi.mocked(pollPublicShare).mockReset().mockRejectedValue(new ShareUnavailableError('not_found'))
     await settle(OVER_ONE_INTERVAL)
     expect(w.find('.share-view-unavailable').exists()).toBe(true)
-    expect(w.find('.files-stub').exists()).toBe(false)
+    expect(w.find('.veyq-level-view').exists()).toBe(false)
     await settle(OVER_ONE_INTERVAL * 3)
     expect(vi.mocked(pollPublicShare)).toHaveBeenCalledTimes(1) // nothing is asked of a link that is gone
     w.unmount()

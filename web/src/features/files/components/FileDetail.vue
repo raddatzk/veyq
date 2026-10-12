@@ -45,7 +45,7 @@ const { ask } = useConfirm()
 const toast = useToast()
 const { batches } = useUploadQueue()
 
-// One session for the view's life (see FilesSection): the member's source or the link's, fixed at mount.
+// One session for the view's life (see `../levelRows.ts`): the member's source or the link's, fixed at mount.
 const guest = props.access.mode === 'guest'
 const source: FilesSource = guest
   ? guestFilesSource(

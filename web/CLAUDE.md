@@ -122,8 +122,8 @@ here; the server is blind.
   transient `M` files + stray `stryker-setup-*.js` — never run other `web/` work (git ops, `npm run check`, an
   edit) against the tree while a mutation run is live; wait for it to finish and restore.
 - **Core and application ([ADR 0079](../docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)).**
-  The applications are `src/features/memory/` (Memories) and `src/features/files/` (Files: the `FILE` and `FILES_DROPBOX` kinds, their level
-  sections, upload, download, the drop box — [docs/apps/files.md](../docs/apps/files.md)) — the guard's `APPLICATIONS`, keyed by owner;
+  The applications are `src/features/memory/` (Memories) and `src/features/files/` (Files: the `FILE` and `FILES_DROPBOX` kinds, their rows in
+  the level list, upload, download, the drop box — [docs/apps/files.md](../docs/apps/files.md)) — the guard's `APPLICATIONS`, keyed by owner;
   **core is everything else** under `src/` —
   `app/`, `shared/`, `sw/`, `views/`, `components/app/`, every other `features/*`, and `core/`: `core/node/` (the
   node tree: `tree`, `treeStore`, `location`, `browse`, the delete/trash dialogs, the sealed-meta write loop
@@ -151,54 +151,81 @@ here; the server is blind.
   own actions (a future favorite heart for every node) plug in as `coreActions` (`CoreHeaderAction`, `placement` before|after,
   merged by `mergeHeaderActions`), gated by a core capability function, with no change to any application.
 
+  **One list for the level (inbox #407).** The folder level (`core/node/LevelView.vue`) is ONE list - or one set of tiles - of
+  everything at the level: the folders, the Memories, the files, the drop boxes, every kind, with no section headers. **Core
+  draws every row and tile** (`core/node/components/LevelRowItem.vue`); an application only supplies ROW DATA. **The order**
+  (`core/node/levelList.ts`, a pure function): folders first, then ALL other nodes mixed by name - natural (`Foto 2` before
+  `Foto 10`), locale-aware and case-insensitive (`Intl.Collator`), equal names in `compareByCreation` order; the Memory's date
+  no longer sorts. A row is `{ icon, leading?, title, meta, primary, actions }` (`LevelRow`, `core/node/levelRow.ts`): the
+  leading visual (the kind's icon, or an application component with props - Memories' cover), the name, ONE meta line ("File
+  - 157 B - Modified ...", "Memory - date range", "Drop box - 3 people"), the PRIMARY click (what a plain click does: it opens
+  the node) and the actions. An action is the header's model (`NodeHeaderAction`: id, label = aria-label, icon, onClick,
+  severity, shown, disabled, pressed) plus `first` and `loading`: AT MOST TWO actions marked `first` are real buttons on the
+  row (Files: download, Memories: the heart), every other shown action sits in ONE "more" menu (a PrimeVue `Menu`, entries
+  `veyq-row-action-<id>`), `shown` by the application's fail-closed capability function - a share guest gets this very row with
+  fewer actions, never a guest-only one (inbox #401). Core's own actions (the favourite heart of inbox #409) plug in as the
+  level's `coreRowActions`, merged around the application's by `mergeRowActions`, with no change to any application.
+  **The tabs are a pure FILTER** (inbox #348, `core/node/levelTabs.ts`): `All | one tab per application`, the tab named by
+  its kinds' `list.tabLabel` (kinds sharing a label share a tab, its id the first kind - what `shared/state/useLevelTab`
+  stores, per account, one for every share-guest page, never one for the browser, no value written while the account id is
+  unknown), over the CURRENT folder's children only; the FOLDERS stay in every tab; a tab is offered where its kinds have a
+  node here or the viewer may add one (a kind with an allowed "New" entry), the bar only with two or more tabs; a stored tab
+  the level lacks shows as `All` without rewriting it. A tab with nothing says so in its application's own words
+  (`list.emptyText`, an i18n key function over the level context), and a level with nothing at all says so ONCE in plain text
+  composed from what the viewer may create (`node.levelEmptyNew`), or `node.levelEmpty` - no create tile.
+
   **What an application registers** (its `register.ts`; the registry is write-once, a second registration throws):
-  `registerKind` per node kind (detail component, icon, shareable, `deleteTitle` — the i18n key core's delete dialog
-  titles a node of the kind with, else a neutral "Delete", and `deleteCopy`, its sentence — `nounWithArticle`, the noun core's
-  create and rename dialogs name a colliding sibling of the kind with ("There is already a file named …", else "an item") — `emptyInTrash`, the note core's
-  trash shows on a node of the kind that holds no attachment — `renameSelectionEnd`, where core's rename dialog ends the
-  selection on a name, e.g. a file's before its extension — `placement`, where a node of the kind may be moved (`{ root,
+  `registerKind` per node kind (detail component, icon, shareable, `deleteTitle` - the i18n key core's delete dialog
+  titles a node of the kind with, else a neutral "Delete", and `deleteCopy`, its sentence - `nounWithArticle`, the noun core's
+  create and rename dialogs name a colliding sibling of the kind with ("There is already a file named ...", else "an item") - `emptyInTrash`, the note core's
+  trash shows on a node of the kind that holds no attachment - `renameSelectionEnd`, where core's rename dialog ends the
+  selection on a name, e.g. a file's before its extension - `placement`, where a node of the kind may be moved (`{ root,
   parents }`, a hint mirroring the backend's `NodeKindRules`; core's move dialog offers nothing for a kind without one,
-  inbox #358) — and its `section` of the folder level view —
-  `{ order, component, views?, tabLabel? }` — and, for the level's "New" menu (inbox #406), `createEntry` (`{ label, icon, order,
-  allowed(ctx), enabled?(ctx) }`: the kind's menu entry, its label an i18n key of the application's own namespace, `allowed` its
-  fail-closed capability function, and it needs a `createDialog`, which `registerKind` checks) and `levelActions` (entries that are no
-  create dialog — Files' "Upload files"; ids write-once, `create:` reserved). The level view is core's, `core/node/LevelView.vue`: its toolbar (the
-  "New" menu — `registry.levelMenu()` plus core's own folder entry, one PrimeVue button + popup `Menu`, each entry only where its own
-  capability function says yes, so a READ guest has none; a create entry emits `create(kind)` and the host mounts the `createDialog`, an action
-  runs the handler the application's MOUNTED section registered with `useLevelAction(id, { enabled, run })`
-  (`core/node/levelActions.ts`; no handler mounted — another application's tab is shown — greys the entry out; the sections' own create
-  buttons and tiles are retired, an empty section says so in plain text), the space's trash, and
-  the view switch over the union of the shown sections' `views` and the folders' grid and list — `core/node/levelViews.ts`,
-  inbox #370; no section draws a toggle; the level shows the stored mode only where that union offers it, else the grid,
-  without rewriting the stored preference, and hands that mode to every section as `LevelSectionProps.viewMode` — a
-  section never reads `useViewMode`, inbox #404), the application TABS (inbox #348: `All | one tab per section` under the overview
-  card, from the section's `tabLabel` — an i18n key of its own application; `core/node/levelTabs.ts`, a stable client setting
-  `shared/state/useLevelTab` — one per account (`veyq:level-tab:u:<userId>`, `account.userId`, set by every unlock path) and one
-  for every share-guest page (`…:guest`, declared by `views/ShareView.vue`), never one for the browser; `useViewMode` is
-  keyed the same way, both through `shared/state/scopedPreference.ts`; per browser, not synced, no value written while the
-  account id is unknown; a filter over the CURRENT folder's children only, sub-folders in every tab, the bar only with
-  two or more tabbed sections, a stored tab the level lacks shown as `All` without rewriting it), the LIVE REFRESH (inbox #408: `core/node/useLevelLive.ts` over `shared/state/livePoller.ts`, started by the two hosts
-  while a folder level is on screen — the member's `MemoryHomeView` through `treeStore.pollTree`, the guest's `ShareView`
-  through `GuestAccess.poll` — about every 5 s, only while the tab is visible, paused while a dialog is open, one request
+  inbox #358) - and its `list` of the level list - `{ rows, tabLabel?, views?, emptyText? }`. `rows` is a FACTORY
+  (`LevelRowsFactory`): the level calls it ONCE per view, in its setup, with the level's reactive context (`LevelRowsContext`:
+  `folder`, `nodes` of every kind that names the factory, `epochs`, `access`, `tree`, the clamped `viewMode`, `liveTick`) and a
+  host (`LevelRowsHost`: `open`, `rename`, `move`, `registerAction`), and it returns a `LevelRowSource`: `row(node)` (a row,
+  or `null` for a node it cannot draw - core then shows the explicit unsupported row), `notices` (what only the application
+  can explain, drawn above the list by `LevelNotices`; Files: why an upload failed) and `presentation(mode)` (the
+  application's own presentation of a mode core does not draw, in place of the list: Memories' map - `views` names it, so the
+  toggle offers it exactly where a shown tab includes the kind). The factory owns the DATA a row needs and the flows behind its
+  actions (Files: the blob listing, re-read on `liveTick`, the upload and replace flows with their confirmation and the
+  picker it builds; Memories: covers, dates, the heart), so none of that depends on which tab is shown. Kinds naming the
+  same `rows` function share one row source and must agree on `views` (else `registerKind` throws). A kind registered
+  without a `list`, or not registered at all, is an unsupported row. For the level's "New" menu (inbox #406) a kind brings
+  `createEntry` (`{ label, icon, order, allowed(ctx), enabled?(ctx) }`: the kind's menu entry, its label an i18n key of the
+  application's own namespace, `allowed` its fail-closed capability function, and it needs a `createDialog`, which
+  `registerKind` checks) and `levelActions` (entries that are no create dialog - Files' "Upload files"; ids write-once,
+  `create:` reserved; `acceptsDrop` makes the level hand it the files dropped onto it). The factory registers the action's
+  handler with `host.registerAction(id, { enabled, run, drop? })` (`core/node/levelActions.ts`) for the level's life; an entry
+  whose handler is not `enabled` is disabled, and a DROP reaches `drop` only while the entry is `allowed` AND its handler
+  `enabled` (a drop is never more than the menu entry). The level's toolbar is core's: the "New" menu
+  (`registry.levelMenu()` plus core's own folder entry, one PrimeVue button + popup `Menu`, each entry only where its own
+  capability function says yes, so a READ guest has none; a create entry emits `create(kind)` and the host mounts the
+  `createDialog`), the space's trash, and the view switch over the union of the presentations on screen - core's grid and
+  list for every row, plus the shown kinds' `views` (`core/node/levelViews.ts`, inbox #370); the level shows the stored mode
+  only where that union offers it, else the grid, without rewriting the stored preference, and hands that mode to every
+  factory as `LevelRowsContext.viewMode` - a factory never reads `useViewMode` (inbox #404), `useViewMode` is keyed like the
+  tab (`shared/state/scopedPreference.ts`; per browser, not synced). The LIVE REFRESH (inbox #408: `core/node/useLevelLive.ts` over `shared/state/livePoller.ts`, started by the two hosts
+  while a folder level is on screen - the member's `MemoryHomeView` through `treeStore.pollTree`, the guest's `ShareView`
+  through `GuestAccess.poll` - about every 5 s, only while the tab is visible, paused while a dialog is open, one request
   per level, and a CONDITIONAL one, [ADR 0081](../docs/decisions/0081-a-scopes-tree-revision-is-the-level-views-change-signal.md):
   the member's `fetchTree` (`listNodesRaw`, the scope's tree revision as `ETag`/`If-None-Match`) and the guest's
-  `pollPublicShare` (`resolveShareRaw`, a digest of what the link serves — never the scope revision, which would tell a guest
+  `pollPublicShare` (`resolveShareRaw`, a digest of what the link serves - never the scope revision, which would tell a guest
   when the rest of the space changes) read a `304` as "nothing moved": no parse, no decryption, no tick. `read` resolves whether
-  the state MOVED and the host's `useLevelLive` hands every section `LevelSectionProps.liveTick` only then, which Files'
-  section answers with a blob re-read — an upload completing moves the revision and changes no row; the tree itself is
+  the state MOVED and the host's `useLevelLive` hands every row factory `LevelRowsContext.liveTick` only then, which Files'
+  factory answers with a blob re-read - an upload completing moves the revision and changes no row; the tree itself is
   replaced only when the rows' fingerprint differs. A guest poll that meets the link gone (`404`) flips `ShareView` to its
-  unavailable state, a changed password to the gate; a network error, `429` or `5xx` only backs the loop off), the folder's header (core's `NodeHeader`, which every node page opens with too — see below), the
-  sections sorted by `order`, a fallback section for a child whose kind no section serves, then the sub-folders; kinds
-  naming the same component share one section, rendered once with the children of all of them, and naming it with two
-  different `order`s, `views` or `tabLabel`s throws; its `createDialog` — props `NodeCreateDialogProps` `{kind, scopeId, epochs, parentId,
-  parentKey}`, mounted by the shell when a section emits `create` or a detail `createChild` with that KIND; and its
-  `shareDialog` — props `NodeShareDialogProps` `{scopeId, nodeId, nodeKey, epochs, nodeName, nodeKind, uploader?}`; a
-  kind without one offers no share. There is no guest-only section or detail: core's page of a `READ`/`READ_WRITE` public
-  share (`core/sharing/ShareTreePage.vue`) is core's `LevelView` at a folder and the kind's `detail` at any other node —
-  the link's root included — handed the guest's access and tree (inbox #401). Core owns the rest: a folder's create and every node's rename are
+  unavailable state, a changed password to the gate; a network error, `429` or `5xx` only backs the loop off), the folder's
+  header (core's `NodeHeader`, which every node page opens with too - see above). Its `createDialog` - props `NodeCreateDialogProps` `{kind, scopeId, epochs, parentId,
+  parentKey}`, mounted by the shell when the "New" menu or a detail `createChild` emits that KIND; and its
+  `shareDialog` - props `NodeShareDialogProps` `{scopeId, nodeId, nodeKey, epochs, nodeName, nodeKind, uploader?}`; a
+  kind without one offers no share. There is no guest-only list or detail: core's page of a `READ`/`READ_WRITE` public
+  share (`core/sharing/ShareTreePage.vue`) is core's `LevelView` at a folder and the kind's `detail` at any other node -
+  the link's root included - handed the guest's access and tree (inbox #401). Core owns the rest: a folder's create and every node's rename are
   `core/node/FolderNameDialog.vue`, which derives the slug by the renamed node's kind; every node's move is
-  `core/node/MoveNodeDialog.vue` (inbox #358), mounted by both hosts when a section or a detail emits `move` with the
-  node, moving through the session's one door (`core/node/move.ts` `nodeMover`: the member's `moveNode`, a `READ_WRITE`
+  `core/node/MoveNodeDialog.vue` (inbox #358), mounted by both hosts when a row factory or a detail asks the host to move
+  the node, moving through the session's one door (`core/node/move.ts` `nodeMover`: the member's `moveNode`, a `READ_WRITE`
   guest's `placeShareNodeAsGuest`, none otherwise) and explaining each server refusal by its code; and FOLDER's share dialog
   `core/sharing/FolderShareDialog.vue` is pre-registered); `addSlotItem(slot, id, component, order?)` for the two list slots `topbarTray`
   and `sidebarPins` (an id namespaced by the application, e.g. `memories.pinned`; write-once per (slot, id); the shell
@@ -219,7 +246,7 @@ here; the server is blind.
   `onMasterKeyRotated` — `rotateKeys` refuses to start when none is registered, because material sealed under the
   Master Key (Memories' pins) is otherwise undecryptable after a rotation. A kind or share nobody registered renders
   an explicit unsupported/unavailable state, never an empty region. **Who looks** (inbox #401, `core/access.ts`): a
-  `detail` (`NodeDetailProps`) and a `section` (`LevelSectionProps`, which also carries the level's `viewMode`) are handed `access` — `Access`, a member
+  `detail` (`NodeDetailProps`) and a row factory (`LevelRowsContext`, which also carries the level's `viewMode`) are handed `access` — `Access`, a member
   (`scopeId`, `epochs`, `readonly` = pending deletion, the instance's `publicLinks`/`uploaderLinks`) or a share guest
   (`shareId`, `role`, `head`, `pwToken`, `fragmentKey`, `requestGuest`, `reload` — `guestAccess`, built by
   `views/ShareView.vue`, which owns the re-resolve after a guest's write and the page's one naming flow, core's `core/sharing/GuestNaming.vue` with its "Not you?"; every naming place uses that one
@@ -227,9 +254,9 @@ here; the server is blind.
   `children`, `keyOf`, `nameOf`, `inIdentityFolder`, `linkTo`: every navigation goes through it, so a guest's link keeps
   `#k=`); the member's come from `memberAccess`/`memberTreeSource`, built by the host, the guest's tree from
   `guestTreeSource` (`core/sharing/guestAccess.ts`: a served `ShareNode` as a `TreeNode` — `createdAt` 0, so equal
-  names number by node id; `metaVersion` 0; `wrappedMeta` as served). A section mounted for a guest reads nothing of
-  the member's world (`treeStore`, `activeSpace`, the cover and pin stores) — Memories' section reads its dates, covers
-  and map from the guest's tree (`features/memory/guestCover.ts`), Files' views read and write through Files' data
+  names number by node id; `metaVersion` 0; `wrappedMeta` as served). A row factory built for a guest reads nothing of
+  the member's world (`treeStore`, `activeSpace`, the cover and pin stores) — Memories' rows read their dates, covers
+  and map from the guest's tree (`features/memory/guestCover.ts`), Files' rows read and write through Files' data
   source (`features/files/source.ts`: the member's or the guest's, fixed at mount; a write is offered where the matrix
   grants it AND the source carries it — `sourceCapabilities` — and the guest's source has no delete, no rename), and so
   does Memories' detail (`features/memory/source.ts`, picked by `MemoryDetailHost`: the detail, its composables, the
@@ -252,7 +279,7 @@ here; the server is blind.
   (`*ShareBody.vue`, claimed — `scripts/validate_web_share_bodies_are_drop_pages.py`). Every other separate guest body
   drifted from its member twin (#356, #361, #363) and was deleted. **Limits, stated:** no slot is single-claim any
   more (the dialogs are per kind since cr-files-application P4c; the two slots `topbarTray`, `sidebarPins` are ordered
-  lists); the level view and core's `FolderNameDialog` carry core `veyq-*` classes (`styles/ui.css`, dark twins in
+  lists); the level view (its list items `veyq-level-item`) and core's `FolderNameDialog` carry core `veyq-*` classes (`styles/ui.css`, dark twins in
   `dark.css`) and core `node.*` i18n keys since cr-files-application P4d, which Memories' own dialogs and detail read
   too for the shared labels; the kind is an open string token (the generated client has no `NodeKind` enum), so core names its one
   `FOLDER_KIND` (`core/node/kind.ts`), each application its own (`features/memory/kinds.ts`, `features/files/kinds.ts`), and no compiler lists the

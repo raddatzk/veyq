@@ -2,12 +2,12 @@
 // A share guest's move (inbox #358) on core's page of a public link: the member's level view, core's move dialog and the
 // guest's door (`placeShareNodeAsGuest` after the page's naming flow) — real crypto for the subtree, the real router and
 // PrimeVue, the clients guarded (`test/guestMode.ts`: an authenticated one throws and is recorded), every step a DOM
-// click. The registry is a fresh one (FOLDER is core's) with one kind "an application" registers, its section exposing
-// a move per node (as Files' rows do). Pinned: a READ_WRITE guest moves within its subtree only, through its link, the
+// click. The registry is a fresh one (FOLDER is core's) with one kind "an application" registers, its row factory exposing
+// a move action per node where its capability says (as Files' rows do; inbox #407: a folder's own move is its NodeHeader
+// action once it is open, not an action on its list item). Pinned: a READ_WRITE guest moves within its subtree only, through its link, the
 // request carrying the re-wrapped key and the version it was built on; a READ guest, and the link's root, offer none.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { defineComponent, h } from 'vue'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
 import PrimeVue from 'primevue/config'
 import * as v1 from '@veyq/crypto/v1'
@@ -40,6 +40,8 @@ import { stubApi } from '../../test/apiMock'
 import { realI18n, t } from '../../test/i18n'
 import { guestAccessFor } from '../../test/models'
 import { authenticatedCalls } from '../../test/guestMode'
+import { actionIdsOf, clickAction } from '../../test/levelRows'
+import type { LevelRowsFactory } from '../node/levelRow'
 
 const SCOPE_ID = '55555555-5555-4555-8555-555555555555'
 const SHARE_ID = 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_2'
@@ -72,14 +74,12 @@ function head(role: ShareRole): PublicShareHead {
   }
 }
 
-/** An application's section: a move button per node, shown where its capability says (here: a READ_WRITE guest). */
-const MoveSection = defineComponent({
-  props: ['folder', 'nodes', 'epochs', 'access', 'tree', 'viewMode'],
-  emits: ['openNode', 'create', 'rename', 'move'],
-  setup: (p, { emit }) => () => h('section', { class: 'note-section' },
-    p.access.role === ShareRole.ReadWrite
-      ? (p.nodes as { id: string; name: string }[]).map((n) => h('button', { class: 'note-move', 'data-id': n.id, onClick: () => emit('move', n) }, n.name))
-      : []),
+/** An application's row factory: a move action per node, shown where its capability says (here: a READ_WRITE guest). */
+const moveRows: LevelRowsFactory = (ctx, host) => ({
+  row: (node) => ({
+    icon: 'pi pi-file', title: node.name, meta: 'note', primary: { label: node.name, onClick: () => host.open(node) },
+    actions: [{ id: 'move', label: 'Move', icon: 'pi pi-arrows-alt', shown: ctx.value.access.mode === 'guest' && ctx.value.access.role === ShareRole.ReadWrite, onClick: () => host.move(node) }],
+  }),
 })
 
 let router: Router
@@ -114,7 +114,7 @@ beforeEach(async () => {
   authenticatedCalls.length = 0
   for (const f of Object.values(toast)) f.mockClear()
   const r = createRegistry()
-  r.registerKind({ kind: NOTE_KIND, icon: 'pi pi-file', shareable: false, section: { order: 10, component: MoveSection }, placement: { root: true, parents: [FOLDER_KIND] } })
+  r.registerKind({ kind: NOTE_KIND, icon: 'pi pi-file', shareable: false, list: { rows: moveRows }, placement: { root: true, parents: [FOLDER_KIND] } })
   holder.reg = r
   router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/s/:id', component: { render: () => null } }] })
   await router.push(`/s/${SHARE_ID}${HASH}`)
@@ -122,7 +122,7 @@ beforeEach(async () => {
 })
 
 describe('a READ_WRITE guest moves inside its share', () => {
-  it('a folder from its card: only the subtree\'s folders, through its link, the key re-wrapped under the destination', async () => {
+  it('a folder from its header (opened first): only the subtree\'s folders, through its link, the key re-wrapped under the destination', async () => {
     const updateShareNode = stubApi(publicSharesApi, { updateShareNode: undefined }).updateShareNode
     const requestGuest = vi.fn(async () => guest)
     const reload = vi.fn(async () => {})
@@ -145,10 +145,10 @@ describe('a READ_WRITE guest moves inside its share', () => {
     expect(authenticatedCalls).toEqual([])
   })
 
-  it('a node a section lists (a contributor\'s note) into a folder', async () => {
+  it('a node an application lists (a contributor\'s note) into a folder, from the real "more" menu of its row', async () => {
     const updateShareNode = stubApi(publicSharesApi, { updateShareNode: undefined }).updateShareNode
-    await mountAt(ShareRole.ReadWrite, undefined, { requestGuest: async () => guest })
-    await click(document.body.querySelector(`.note-move[data-id="${NOTE}"]`)!)
+    const w = await mountAt(ShareRole.ReadWrite, undefined, { requestGuest: async () => guest })
+    await clickAction(w, 'Notizen', 'move')
     expect(rows()).toEqual([['Familie', true], ['Briefe', false], ['Feldpost', false]])
     await pickAndMove('Briefe')
     expect(updateShareNode.mock.calls[0][0].updateShareNodeRequest).toMatchObject({ parentId: LETTERS, placementVersion: 0 })
@@ -175,10 +175,15 @@ describe('a READ_WRITE guest moves inside its share', () => {
 })
 
 describe('a guest without the right moves nothing', () => {
-  it('READ: no move on any folder card, no section move, no dialog', async () => {
-    await mountAt(ShareRole.Read, NESTED)
+  it('READ: no move on a folder\'s header, none on a row, no dialog', async () => {
+    const w = await mountAt(ShareRole.Read, NESTED)
     expect(moveCardButton()).toBeNull()
-    expect(document.body.querySelector('.note-move')).toBeNull()
+    expect(authenticatedCalls).toEqual([])
+    w.unmount()
+    // (the folder level above holds no note: the root does)
+    const root = await mountAt(ShareRole.Read)
+    expect(root.findAll('.veyq-level-item-title').map((x) => x.text())).toContain('Notizen')
+    expect(await actionIdsOf(root, 'Notizen')).toEqual([])
     expect(authenticatedCalls).toEqual([])
   })
 

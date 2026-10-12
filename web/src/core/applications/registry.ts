@@ -21,25 +21,25 @@
 // token by the node's kind (`slugFor`), whatever application it belongs to. A kind with no `shareDialog` offers no
 // share; a create for a kind with no `createDialog` opens nothing. Every shell slot is a list slot (below).
 //
-// **Level sections (`KindDescriptor.section`).** The folder level view is core's (`core/node/LevelView.vue`, cr-files-
-// application P4b): the folder's overview card, then one SECTION per application, then the sub-folders. A kind brings
-// its section with its descriptor — a component that renders its own `<section>` (heading, create action, its body in
-// the view mode the LEVEL hands it, `LevelSectionProps.viewMode`: the stored preference clamped to what is on screen,
-// inbox #404 — a section never reads the stored value itself) from `LevelSectionProps`, and names the presentations it switches between (`views`): the
-// level's toolbar, core's, offers their union with the folders' grid and list (inbox #370) — no section draws a toggle. Several kinds may name the SAME component (Memories: MEMORY and CHAPTER): a section is keyed
-// by its component's identity, rendered once, and handed the children of every kind that names it (in the order the
-// kinds were registered). `sections()` lists them sorted by `order`, a tie in the order the section was first named.
-// Two kinds naming one component with two different `order`s, `views` or `tabLabel`s is a contradiction, so that `registerKind` throws (and
-// registers nothing). A child whose kind no section serves — registered without one, or not registered at all — is
-// not dropped: the level view renders core's fallback section for it (its icon, its name, the explicit unsupported
-// state), never an empty area. A section's `tabLabel` (an i18n key of its application) puts it on the level view's tab
-// bar (`core/node/levelTabs.ts`); a section without one shows in the `All` tab only.
+// **The unified level list (`KindDescriptor.list`, inbox #407).** The folder level view is core's (`core/node/LevelView.vue`):
+// the folder's header, the application tabs, then ONE list (or one set of tiles) of every node at the level - folders,
+// Memories, files, drop boxes - that CORE draws. An application no longer draws a section of its own: a kind brings, with its
+// descriptor, a `list` - `rows`, a factory (`core/node/levelRow.ts`) the level calls once per view with its reactive context and
+// a host, answering for each node of the kind a `LevelRow` (leading icon or cover, title, meta line, primary click, actions;
+// each action `shown` by the application's fail-closed capability function) plus the notices and presentation only the
+// application can supply - and `tabLabel` (the i18n key of its tab; kinds sharing a label share a tab, the tab a pure FILTER with
+// the folders in every tab), `views` (the presentations beyond core's grid and list that its factory draws: Memories' map) and
+// `emptyText` (what its tab says when it has nothing). Several kinds may name the SAME factory (Memories: MEMORY and CHAPTER; Files:
+// FILE and FILES_DROPBOX): it is one row source, called once, handed the nodes of every kind that names it; two kinds naming one
+// factory with different `views` is a contradiction, so `registerKind` throws (and registers nothing). `lists()` and `tabs()` list
+// what the level builds from; a child whose kind nobody lists - or for which the factory has no row - is not dropped: core
+// shows the explicit unsupported row, never an empty area.
 //
-// **Who looks (`core/access.ts`).** A `detail` and a `section` are handed `access` (a member, or a share guest)
+// **Who looks (`core/access.ts`).** A `detail` and a row factory are handed `access` (a member, or a share guest)
 // and `tree` (the tree as that session reads it), and offer what their application's fail-closed capability function
 // answers for them — one view per kind in both modes, never a flag the host decides. The guest's page of a public share
 // (`core/sharing/ShareTreePage.vue`, inbox #401) is core's level view at a folder and the kind's `detail` at any other
-// node, whatever the link's root kind, so a kind's `section` and `detail` serve it as they serve a member; no guest-only
+// node, whatever the link's root kind, so a kind's rows and `detail` serve it as they serve a member; no guest-only
 // list or body per kind exists (`shareSection` was retired in S3, the embedded Memories body in S5).
 //
 // **List slots (`addSlotItem`).** The top-bar tray and the sidebar pins are places where several applications each add
@@ -77,8 +77,10 @@
 // **The level view's "New" menu (inbox #406).** The creation entries leave the sections' headers and tiles for ONE menu in
 // core's level toolbar, derived from here: a kind's `createEntry` (label key of its own namespace, icon, order, the
 // capability function that decides whether it shows) opens that kind's `createDialog`; a kind's `levelActions` are entries
-// that are no create dialog (Files' "Upload files"), run through a handler the application's mounted section registers
-// with the level (`core/node/levelActions.ts`). `levelMenu()` lists them; core adds the folder entry itself.
+// that are no create dialog (Files' "Upload files"), run through a handler the application's row factory registers with the
+// level (`core/node/levelActions.ts`) for the level's whole life, whichever tab is shown - and an entry declaring `acceptsDrop`
+// also takes the files dropped onto the level. `levelMenu()` lists them (each with the kind that declared it); core adds the
+// folder entry itself.
 //
 // **Fail closed.** `kind()` never returns `undefined`: a node kind nobody registered resolves to
 // `{ supported: false }`, which the host renders as an explicit unsupported state, never as an empty region. The kind
@@ -89,7 +91,7 @@ import { FOLDER_KIND, type NodeKind } from '../node/kind'
 import type { TreeNode } from '../node/tree'
 import type { Level } from '../node/browse'
 import type { LevelViewOption } from '../node/levelViews'
-import type { ViewMode } from '../../shared/state/useViewMode'
+import type { LevelRowsFactory } from '../node/levelRow'
 import type { EpochKeys } from '../../features/spaces/epochs'
 import type { PublicShareHead } from '../sharing/resolvePublicShare'
 import type { Access, GuestAccess, TreeSource } from '../access'
@@ -137,12 +139,12 @@ export interface KindDescriptor {
    *  field takes focus: the length of the part a rename usually changes (a file: the name without its extension, inbox
    *  #385). Omitted: no selection, the caret at the end. */
   renameSelectionEnd?: (name: string) => number
-  /** The section the folder level view renders for this kind's children (see the header): `component` takes
-   *  `LevelSectionProps` and emits `LevelSectionEmits`; `order` sorts the sections (ascending). Omitted: a child of the
-   *  kind shows in core's fallback section. Kinds naming the same component share ONE section. */
-  section?: KindSection
+  /** How this kind's nodes are drawn in the unified level list (inbox #407): the application supplies ROW DATA
+   *  (`rows`), core draws the list. Omitted: a child of the kind shows as core's explicit unsupported row. Kinds naming the same
+   *  `rows` function share ONE row source. */
+  list?: KindList
   /** The dialog that creates a node of this kind (props `NodeCreateDialogProps`, emits `NodeCreateDialogEmits`),
-   *  mounted by the shell when a section emits `create` or a detail emits `createChild` with this kind. Omitted: a
+   *  mounted by the shell when the level's "New" menu or a detail emits `create` / `createChild` with this kind. Omitted: a
    *  create of the kind opens nothing. FOLDER has none: its create is core's `FolderNameDialog`. */
   createDialog?: Component
   /** The entry this kind adds to the level view's "New" menu (`core/node/LevelView.vue`, inbox #406): its label (an i18n
@@ -152,7 +154,7 @@ export interface KindDescriptor {
    *  is not created from a level (a chapter is created inside its Memory). */
   createEntry?: LevelMenuEntry
   /** Further entries of the "New" menu that are no create dialog - Files' "Upload files". Each runs a handler the
-   *  application's mounted section registers with the level (`core/node/levelActions.ts`), so core stays
+   *  application's row factory registers with the level (`core/node/levelActions.ts`), so core stays
    *  application-agnostic. Ids are write-once across the registry. */
   levelActions?: readonly (LevelMenuEntry & { id: string })[]
   /** The share management dialog of a node of this kind (props `NodeShareDialogProps`, emits `close`). Omitted: the
@@ -185,6 +187,10 @@ export interface LevelMenuEntry {
   order: number
   allowed(ctx: LevelActionContext): boolean
   enabled?(ctx: LevelActionContext): boolean
+  /** An action entry that takes FILES dropped onto the level (Files' upload): core hands the dropped files to the
+   *  handler registered under the entry's id (`LevelActionHandler.drop`), and only while the entry is `allowed` and the
+   *  handler `enabled` - a drop is never more than the menu entry would be. Ignored on a create entry. */
+  acceptsDrop?: boolean
 }
 
 /** A menu entry as the level view draws it: `create` is the kind to create (the host mounts its `createDialog`), absent
@@ -192,6 +198,8 @@ export interface LevelMenuEntry {
 export interface LevelMenuItem extends LevelMenuEntry {
   id: string
   create?: NodeKind
+  /** The kind whose descriptor declared the entry. */
+  kind: NodeKind
 }
 
 /** Where a kind may live in the tree ({@link KindDescriptor.placement}). */
@@ -200,27 +208,35 @@ export interface KindPlacement {
   parents: readonly NodeKind[]
 }
 
-/** A kind's level section: the component, where it sorts among the sections, and the presentations it switches between
- *  (`views`, inbox #370) — core's level-view toolbar offers the union of what is on screen (`core/node/levelViews.ts`).
- *  Omitted: the section has one presentation and adds no view. */
-export interface KindSection {
-  order: number
-  component: Component
-  views?: readonly LevelViewOption[]
-  /** The i18n key of the section's TAB on the level view's tab bar (`core/node/levelTabs.ts`): the application's own
-   *  word, as a kind's noun is (core names none). Omitted: the section has no tab and shows in the `All` tab only. */
+/** A kind's part in the unified level list (inbox #407). `rows` is the application's row factory
+ *  (`core/node/levelRow.ts`); kinds naming the SAME function share one row source, called once per level view. */
+export interface KindList {
+  rows: LevelRowsFactory
+  /** The i18n key of the kind's TAB on the level view's tab bar (`core/node/levelTabs.ts`), the application's own word.
+   *  Kinds sharing a label share one tab. Omitted: no tab - the kind shows under `All` only. */
   tabLabel?: string
+  /** The presentations beyond core's grid and list that the factory's `presentation(mode)` draws (Memories: the map). The
+   *  factory's kinds must agree: one function renders one way. */
+  views?: readonly LevelViewOption[]
+  /** The i18n key of the plain text an application tab shows when it has nothing, per the viewer's capabilities
+   *  (a writer is pointed at "New", a reader is not). Omitted: the neutral `node.tabEmpty`. */
+  emptyText?: (ctx: LevelActionContext) => string
 }
 
-/** A level section as the level view renders it: the component, its order, its presentations (`[]`: one), and every
- *  kind that named it (in registration order) — the section receives the children of all of them. */
-export interface LevelSection {
-  component: Component
-  order: number
-  views: readonly LevelViewOption[]
-  /** The i18n key of its tab (`KindSection.tabLabel`); undefined: no tab. */
-  tabLabel?: string
+/** One row source of the level: the factory, every kind that named it (in registration order) and its presentations. */
+export interface LevelList {
+  rows: LevelRowsFactory
   kinds: readonly NodeKind[]
+  views: readonly LevelViewOption[]
+}
+
+/** One tab of the level view's bar: the id (the first kind that named the label - stable across levels and what the
+ *  per-user preference stores), the label key, and every kind it filters to. */
+export interface LevelTabSpec {
+  id: string
+  label: string
+  kinds: readonly NodeKind[]
+  emptyText?: (ctx: LevelActionContext) => string
 }
 
 export type KindLookup = ({ supported: true } & KindDescriptor) | { supported: false; kind: NodeKind }
@@ -257,39 +273,6 @@ export interface NodeDetailEmits {
   openNode: [node: TreeNode]
   share: []
   shareUpload: []
-}
-
-/** What the folder level view (`core/node/LevelView.vue`) hands an application's section: the folder (or the scope
- *  root, `folder` null) and the children of every kind that names the section, the scope's epoch keys (null for a
- *  guest, whose keys come through `tree`), who looks (`access`) and the tree as that session reads it. What the section
- *  offers is its application's capability function over `access` and the folder (`core/access.ts`): no write during a
- *  pending deletion, no placement in a guest's identity folder — where a member still deletes what a guest sent
- *  (inbox #391). `viewMode` is the mode the level shows (inbox #404): the app-wide preference where a section or the
- *  folders on screen offer it, else the grid — a section draws that and never reads `useViewMode` itself, so a stored
- *  map in a level whose map-drawing section is left out does not blank the rest. */
-export interface LevelSectionProps {
-  folder: TreeNode | null
-  nodes: readonly TreeNode[]
-  epochs: EpochKeys | null
-  access: Access
-  tree: TreeSource
-  viewMode: ViewMode
-  /** The count of the level's live refreshes completed so far (inbox #408, `core/node/useLevelLive.ts`), changed or
-   *  not. The tree arrives through `nodes` on its own; a section that keeps data BESIDE the tree (Files' blob listing:
-   *  a peer's upload completes without the tree changing) re-reads it when this moves. Absent where the host does not
-   *  poll. */
-  liveTick?: number
-}
-/** Events a section emits to the level view: `openNode` (a child), `create` (the KIND to create at this level, e.g.
- *  Memories' MEMORY: the host mounts that kind's `createDialog`), `rename` (a child renamed in place, for a kind that
- *  does not open — Files' file: the host mounts core's `FolderNameDialog` in rename mode for it). The scope's node trash
- *  is the level view's own toolbar button, no section's (inbox #370, #385). */
-export interface LevelSectionEmits {
-  openNode: [node: TreeNode]
-  create: [kind: NodeKind]
-  rename: [node: TreeNode]
-  /** A child moved elsewhere (inbox #358): the host mounts core's `MoveNodeDialog` for it. */
-  move: [node: TreeNode]
 }
 
 /** What the host hands a kind's `createDialog`: the kind to create (one component may serve several kinds), the scope,
@@ -397,7 +380,7 @@ export interface Registry {
    *  without it (fail closed — see the header). */
   assertRotationHooks(): void
   /** Register a node kind. Throws if the kind is already registered (the platform's own FOLDER included), or if its
-   *  `section` names a component another kind already named with a different `order`. */
+   *  `list` names a row factory another kind already named with different `views`. */
   registerKind(descriptor: KindDescriptor): void
   /** Add an item to a list slot under `id`. Throws if that slot already holds an item with this id. `order` sorts the
    *  list (ascending); omitted, the item's registration index is used. Ties keep registration order. */
@@ -427,13 +410,14 @@ export interface Registry {
   placementAllows(kind: NodeKind, parentKind: NodeKind | null): boolean
   /** The items of a list slot, sorted by `order` (stable); empty when nobody added one (the shell renders nothing). */
   slotItems(slot: ListSlotName): readonly SlotItem[]
-  /** The level sections, one per distinct section component, sorted by `order` (stable: a tie keeps the order in which
-   *  each section was first named); empty when no kind registered one (the level view still renders the overview, the
-   *  fallback and the folders). */
-  sections(): readonly LevelSection[]
   /** The applications' entries of the level view's "New" menu, sorted by `order` (stable): every kind's `createEntry`
-   *  (id `create:<KIND>`, `create` set) and every `levelActions` entry. Core adds its own folder entry. */
+   *  (id `create:<KIND>`, `create` set) and every `levelActions` entry, each with the kind that declared it. Core adds its own
+   *  folder entry. */
   levelMenu(): readonly LevelMenuItem[]
+  /** The row sources of the unified level list, one per distinct `list.rows` function, in registration order. */
+  lists(): readonly LevelList[]
+  /** The tabs of the level view's bar, one per distinct `list.tabLabel`, in registration order. */
+  tabs(): readonly LevelTabSpec[]
 }
 
 /** How a kind is addressed in the URL path ({@link Registry.routeOf}). */
@@ -464,8 +448,9 @@ export function createRegistry(): Registry {
   ])
   const lists = new Map<ListSlotName, { id: string; component: Component; order: number }[]>()
   const lifecycles = new Map<string, LifecycleHooks>()
-  // One entry per distinct section component, in the order each was first named (the stable sort's tie-break).
-  const sections: SectionEntry[] = []
+  // The unified list's row sources and tabs (inbox #407), in registration order.
+  const listEntries: { rows: LevelRowsFactory; views: readonly LevelViewOption[]; kinds: NodeKind[] }[] = []
+  const tabEntries: LevelTabSpec[] = []
   const shareBodies = new Map<NodeKind, Component>()
   // kind → its application's route slug, or null for the application with no segment.
   const routes = new Map<NodeKind, string | null>()
@@ -517,7 +502,7 @@ export function createRegistry(): Registry {
     registerKind(descriptor) {
       if (kinds.has(descriptor.kind)) throw new Error(`node kind ${descriptor.kind} is already registered`)
       // Checked before anything is stored, so a contradiction registers nothing.
-      const join = sectionJoin(sections, descriptor.kind, descriptor.section)
+      const joinList = listJoin(listEntries, tabEntries, descriptor.kind, descriptor.list)
       if (descriptor.createEntry && !descriptor.createDialog) {
         throw new Error(`node kind ${descriptor.kind} has a create menu entry but no createDialog to open`)
       }
@@ -529,7 +514,7 @@ export function createRegistry(): Registry {
         }
       }
       kinds.set(descriptor.kind, { ...descriptor })
-      join()
+      joinList()
     },
     addSlotItem(slot, id, component, order) {
       if (!LIST_SLOTS.includes(slot)) throw new Error(`slot ${slot} is not a list slot`)
@@ -574,47 +559,43 @@ export function createRegistry(): Registry {
       if (!p) return false
       return parentKind === null ? p.root : p.parents.includes(parentKind)
     },
-    sections: () => sortedSections(sections),
     levelMenu() {
       const items: LevelMenuItem[] = []
       for (const d of kinds.values()) {
-        if (d.createEntry) items.push({ ...d.createEntry, id: `create:${d.kind}`, create: d.kind })
-        for (const a of d.levelActions ?? []) items.push({ ...a })
+        if (d.createEntry) items.push({ ...d.createEntry, id: `create:${d.kind}`, create: d.kind, kind: d.kind })
+        for (const a of d.levelActions ?? []) items.push({ ...a, kind: d.kind })
       }
       return items.sort((a, b) => a.order - b.order) // stable (ES2019): a tie keeps registration order
     },
+    lists: () => listEntries.map((l) => ({ rows: l.rows, kinds: [...l.kinds], views: [...l.views] })),
+    tabs: () => tabEntries.map((t) => ({ ...t, kinds: [...t.kinds] })),
   }
 }
-
-type SectionEntry = { component: Component; order: number; views: readonly LevelViewOption[]; tabLabel?: string; kinds: NodeKind[] }
 
 const modesOf = (views: readonly LevelViewOption[]) => views.map((v) => v.mode).join(', ')
 
-/** Check that `kind` may join `list` with `section` (a component already named with another `order`, or other `views`,
- *  throws: one component renders one way) and return the join, to run once every check of the registration passed. */
-function sectionJoin(list: SectionEntry[], kind: NodeKind, section: KindSection | undefined): () => void {
-  if (!section) return () => {}
-  const shared = list.find((s) => s.component === section.component)
-  if (shared && shared.order !== section.order) {
-    throw new Error(`node kind ${kind} names the section of ${shared.kinds.join(', ')} with order ${section.order}, not ${shared.order}`)
-  }
-  const views = [...(section.views ?? [])]
+/** Check that `kind` may join the list `list` (a row factory already named with other `views` throws: one function renders one
+ *  way) and return the join - the factory's entry and the kind's tab - to run once every check of the registration passed. */
+function listJoin(
+  lists: { rows: LevelRowsFactory; views: readonly LevelViewOption[]; kinds: NodeKind[] }[],
+  tabs: LevelTabSpec[],
+  kind: NodeKind,
+  list: KindList | undefined,
+): () => void {
+  if (!list) return () => {}
+  const shared = lists.find((l) => l.rows === list.rows)
+  const views = [...(list.views ?? [])]
   if (shared && modesOf(shared.views) !== modesOf(views)) {
-    throw new Error(`node kind ${kind} names the section of ${shared.kinds.join(', ')} with views [${modesOf(views)}], not [${modesOf(shared.views)}]`)
-  }
-  if (shared && shared.tabLabel !== section.tabLabel) {
-    throw new Error(`node kind ${kind} names the section of ${shared.kinds.join(', ')} with tab label ${section.tabLabel}, not ${shared.tabLabel}`)
+    throw new Error(`node kind ${kind} names the row source of ${shared.kinds.join(', ')} with views [${modesOf(views)}], not [${modesOf(shared.views)}]`)
   }
   return () => {
     if (shared) shared.kinds.push(kind)
-    else list.push({ component: section.component, order: section.order, views, tabLabel: section.tabLabel, kinds: [kind] })
+    else lists.push({ rows: list.rows, views, kinds: [kind] })
+    if (list.tabLabel === undefined) return
+    const tab = tabs.find((t) => t.label === list.tabLabel)
+    if (tab) (tab.kinds as NodeKind[]).push(kind)
+    else tabs.push({ id: kind, label: list.tabLabel, kinds: [kind], emptyText: list.emptyText })
   }
-}
-
-function sortedSections(list: readonly SectionEntry[]): LevelSection[] {
-  return [...list]
-    .sort((a, b) => a.order - b.order) // stable (ES2019): a tie keeps the order each section was first named
-    .map((s) => ({ component: s.component, order: s.order, views: [...s.views], tabLabel: s.tabLabel, kinds: [...s.kinds] }))
 }
 
 /** The app's registry, filled once by `registerApplications()` (web/src/applications.ts) before the first route

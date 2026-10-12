@@ -2,7 +2,8 @@
 // The host's fail-closed rules, proven against a STUBBED registry (a fresh `createRegistry()` per test behind a
 // delegating `registry` export), so each test chooses exactly what the application "registered". The real
 // registry + real adapters are covered in `MemoryHomeView.test.ts`. Every negative here has its live control: the
-// same node with the component registered renders it.
+// same node with the component registered renders it. Since inbox #407 the level is core's one list: an application
+// registers a ROW FACTORY (`list.rows`) instead of a section component, and a kind without one is an explicit unsupported row.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
@@ -60,6 +61,8 @@ import { SHARING_PUBLIC_LINKS } from '../features/platform/capabilities'
 import { realI18n, t } from '../test/i18n'
 import { treeNode } from '../test/models'
 import { targetOf, type Access, type TreeSource } from '../core/access'
+import type { LevelRowsFactory } from '../core/node/levelRow'
+import { titlesOf } from '../test/levelRows'
 
 // A detail renders whether a share is POSSIBLE for it, from what the host handed it: the instance's public links (the
 // access) AND its kind's descriptor (the capability target core builds from the registry) — every application's
@@ -68,7 +71,10 @@ const Detail = defineComponent({
   props: ['node', 'access', 'tree'],
   setup: (p) => () => h('div', { class: 'detail' }, `${p.node.name}|${(p.access as Access).mode === 'member' && (p.access as Access & { mode: 'member' }).publicLinks && targetOf(p.tree as TreeSource, p.node).shareable}`),
 })
-const Section = defineComponent({ props: ['nodes'], setup: (p) => () => h('section', { class: 'level' }, `memories=${p.nodes.length}`) })
+// The smallest row factory: one plain row per node (core draws it as its `li.veyq-level-item`).
+const rows: LevelRowsFactory = () => ({
+  row: (n) => ({ icon: 'pi pi-images', title: n.name, meta: '', primary: { label: n.name, onClick: () => {} }, actions: [] }),
+})
 const Share = defineComponent({ props: ['nodeId'], setup: (p) => () => h('div', { class: 'share' }, p.nodeId) })
 
 function node(over: Partial<TreeNode> & Pick<TreeNode, 'id' | 'kind'>): TreeNode {
@@ -76,12 +82,12 @@ function node(over: Partial<TreeNode> & Pick<TreeNode, 'id' | 'kind'>): TreeNode
 }
 
 /** The registry a well-formed application would leave: both kinds with a detail, shareable with a share dialog (as
- *  Memories registers them), both naming one level section. */
+ *  Memories registers them), both naming one row factory. */
 function fullRegistry(): Registry {
   const r = createRegistry()
-  const section = { order: 10, component: Section }
-  r.registerKind({ kind: MEMORY_KIND, detail: Detail, icon: 'pi pi-images', shareable: true, section, shareDialog: Share })
-  r.registerKind({ kind: CHAPTER_KIND, detail: Detail, icon: 'pi pi-images', shareable: true, section, shareDialog: Share })
+  const list = { rows }
+  r.registerKind({ kind: MEMORY_KIND, detail: Detail, icon: 'pi pi-images', shareable: true, list, shareDialog: Share })
+  r.registerKind({ kind: CHAPTER_KIND, detail: Detail, icon: 'pi pi-images', shareable: true, list, shareDialog: Share })
   return r
 }
 
@@ -105,9 +111,9 @@ beforeEach(() => {
 })
 
 describe('MemoryHomeView fail-closed rules', () => {
-  it('control: with everything registered, a chapter opens its detail and the root shows the application section', async () => {
+  it('control: with everything registered, a chapter opens its detail and the root lists the application\'s row', async () => {
     expect((await mountAt('#~me/mem/chap')).find('.detail').text()).toBe('Chap|true')
-    expect((await mountAt('#~me')).find('.level').text()).toBe('memories=1')
+    expect(titlesOf(await mountAt('#~me'))).toEqual(['Mem'])
   })
 
   it('a kind registered WITHOUT a detail shows the explicit unsupported state, not the level view', async () => {
@@ -118,7 +124,7 @@ describe('MemoryHomeView fail-closed rules', () => {
     const w = await mountAt('#~me/mem/chap')
     expect(w.text()).toContain(t('home.unsupportedKind'))
     expect(w.find('.detail').exists()).toBe(false)
-    expect(w.find('.level').exists()).toBe(false)
+    expect(w.find('.veyq-level-view').exists()).toBe(false)
   })
 
   it('a kind nobody registered shows the unsupported state too', async () => {
@@ -128,11 +134,12 @@ describe('MemoryHomeView fail-closed rules', () => {
     expect(w.text()).toContain(t('home.unsupportedKind'))
   })
 
-  // Since P4b the level view is core's: with no section registered, folders are still walkable, and the children of
-  // a kind nobody sections (registered or not) show in core's fallback section, never as a blank level.
-  it('no section registered: folders are still walkable, children of unsectioned kinds show the fallback', async () => {
+  // The level view is core's: with no row factory registered, folders are still walkable, and the children of a kind nobody
+  // lists (registered or not) show as core's explicit unsupported rows (not clickable, said plainly), never a blank level.
+  // (Before inbox #407 these were per-kind fallback sections with a heading; now they are rows of the one list.)
+  it('no row factory registered: folders are still walkable, children of unlisted kinds show as unsupported rows', async () => {
     const r = createRegistry()
-    r.registerKind({ kind: MEMORY_KIND, detail: Detail, icon: 'pi pi-images', shareable: true }) // no section
+    r.registerKind({ kind: MEMORY_KIND, detail: Detail, icon: 'pi pi-images', shareable: true }) // no list
     holder.reg = r
     treeStore.nodes = [
       node({ id: 'trips', kind: FOLDER_KIND, name: 'Trips' }),
@@ -140,17 +147,19 @@ describe('MemoryHomeView fail-closed rules', () => {
       node({ id: 'odd', kind: 'UNKNOWN_KIND', name: 'Odd', parentId: 'trips' }),
     ]
     const root = await mountAt('#~me')
-    expect(root.find('.level').exists()).toBe(false)
-    const folder = root.findAll('button.veyq-folder-card').find((b) => b.text() === 'Trips')
-    expect(folder, 'the folder card renders without any application section').toBeDefined()
-    await folder!.trigger('click')
+    expect(root.find('li.veyq-level-item').exists(), 'the folder row renders without any application list').toBe(true)
+    await root.find('li.is-folder button.veyq-level-item-main').trigger('click')
     await flushPromises()
 
-    const fallbacks = root.findAll('.veyq-level-fallback')
-    expect(fallbacks.map((f) => f.find('h2').text())).toEqual([MEMORY_KIND, 'UNKNOWN_KIND'])
-    expect(fallbacks.map((f) => f.find('strong').text())).toEqual(['Mem', 'Odd'])
-    for (const f of fallbacks) expect(f.text()).toContain(t('home.unsupportedKind'))
-    expect(fallbacks[0].find('.pi-images').exists(), 'a registered kind keeps its icon').toBe(true)
+    const unsupported = root.findAll('li.veyq-level-item.is-unsupported')
+    expect(titlesOf(root)).toEqual(['Mem', 'Odd'])
+    expect(unsupported.map((f) => f.find('.veyq-level-item-title').text())).toEqual(['Mem', 'Odd'])
+    expect(unsupported.map((f) => f.attributes('data-kind'))).toEqual([MEMORY_KIND, 'UNKNOWN_KIND'])
+    for (const f of unsupported) {
+      expect(f.find('.veyq-level-item-meta').text()).toContain(t('home.unsupportedKind'))
+      expect(f.find('button').exists(), 'not clickable').toBe(false)
+    }
+    expect(unsupported[0].find('.pi-images').exists(), 'a registered kind keeps its icon').toBe(true)
   })
 
   it('shareable comes from the descriptor AND the capability: a descriptor that says no wins over the capability', async () => {

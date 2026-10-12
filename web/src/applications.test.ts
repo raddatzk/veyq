@@ -7,9 +7,8 @@ import { DROPBOX_KIND, FILE_KIND } from './features/files/kinds'
 import { fileNameSlug } from './shared/naming'
 import { favoritesStore } from './features/memory/favoritesStore'
 import PinnedMemories from './features/memory/components/PinnedMemories.vue'
-import MemoriesSection from './features/memory/components/MemoriesSection.vue'
-import FilesSection from './features/files/components/FilesSection.vue'
-import DropBoxSection from './features/files/components/DropBoxSection.vue'
+import { memoryRows } from './features/memory/levelRows'
+import { filesRows } from './features/files/levelRows'
 import FileDetail from './features/files/components/FileDetail.vue'
 import FileShareDialog from './features/files/components/FileShareDialog.vue'
 import MemoryNodeDialog from './features/memory/components/MemoryNodeDialog.vue'
@@ -54,14 +53,26 @@ describe('composition root', () => {
     expect(registry.shareBody(CHAPTER_KIND)).toBe(registry.shareBody(MEMORY_KIND))
   })
 
-  // The level view is core's (P4b): Memories' one section serves both its kinds; Files' section (F1b) serves FILE, after it.
-  it('gives the level view two sections: Memories\' for MEMORY and CHAPTER, then Files\' for FILE', () => {
+  // The level view is core's (P4b) and draws ONE list (inbox #407): Memories' row factory serves both its kinds, Files' serves
+  // FILE and the drop box; each kind has its tab, in registration order (Memories first).
+  it('gives the level view two row sources: Memories\' for MEMORY and CHAPTER, then Files\' for FILE and the drop box', () => {
     // Memories names the grid, the list and its map as its presentations (inbox #370): core's level toolbar offers them.
-    expect(registry.sections().map((s) => ({ ...s, views: s.views.map((v) => v.mode) }))).toEqual([
-      { component: MemoriesSection, order: 10, views: ['grid', 'list', 'map'], tabLabel: 'memory.memories', kinds: [MEMORY_KIND, CHAPTER_KIND] },
-      { component: FilesSection, order: 20, views: [], tabLabel: 'files.title', kinds: [FILE_KIND] },
-      { component: DropBoxSection, order: 21, views: [], tabLabel: 'files.dropBox.section', kinds: [DROPBOX_KIND] },
+    expect(registry.lists().map((l) => ({ ...l, views: l.views.map((v) => v.mode) }))).toEqual([
+      { rows: memoryRows, views: ['grid', 'list', 'map'], kinds: [MEMORY_KIND, CHAPTER_KIND] },
+      { rows: filesRows, views: [], kinds: [FILE_KIND, DROPBOX_KIND] },
     ])
+  })
+
+  it('gives the level view its tabs: Memories, Files, Drop boxes - the filter of the one list', () => {
+    expect(registry.tabs().map((t) => ({ id: t.id, label: t.label, kinds: t.kinds }))).toEqual([
+      { id: MEMORY_KIND, label: 'memory.memories', kinds: [MEMORY_KIND, CHAPTER_KIND] },
+      { id: FILE_KIND, label: 'files.title', kinds: [FILE_KIND] },
+      { id: DROPBOX_KIND, label: 'files.dropBox.section', kinds: [DROPBOX_KIND] },
+    ])
+  })
+
+  it('lets Files\' upload take dropped files, and nothing else', () => {
+    expect(registry.levelMenu().filter((e) => e.acceptsDrop).map((e) => e.id)).toEqual(['files.upload'])
   })
 
   // The tray and the pins are list slots (P4a). The upload status is core's since B3 (the top bar mounts it itself), so

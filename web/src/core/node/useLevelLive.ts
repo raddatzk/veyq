@@ -1,13 +1,13 @@
 // The level view's live refresh (inbox #408): while a folder level is on screen, pick up what others changed — a share
 // guest's upload into the folder, a peer's new Memory or folder — without a reload. Core's, host-side: the HOST owns
 // where the level's tree comes from (the member's `treeStore`, the guest's re-resolve), so it passes the one read;
-// this composable owns the lifecycle and the cadence, and the level hands the resulting `ticks` on to its sections.
+// this composable owns the lifecycle and the cadence, and the level hands the resulting `ticks` on to its row sources.
 //
-// **One request per level, not per section.** The read is the tree's (one conditional list, ADR 0081: an idle scope is a
-// `304`, no work); a section whose data lives beside the tree (Files' blob listing, whose rows change when an upload
+// **One request per level, not per row source.** The read is the tree's (one conditional list, ADR 0081: an idle scope is a
+// `304`, no work); a row source whose data lives beside the tree (Files' blob listing, whose rows change when an upload
 // COMPLETES, without the tree changing) watches `ticks` — the count of reads that found the scope MOVED, which an
 // upload's completion does (it bumps the scope's tree revision) — and re-reads its own, cheap, part. A 304 ticks
-// nothing. A section with nothing beside the tree ignores it.
+// nothing. A row source with nothing beside the tree ignores it.
 //
 // **Cadence** (`LIVE_POLL`): ~5 s ± 20 % (a poll that nothing changed costs one `304`, ADR 0081), only while the tab is visible, at once on the return to visible or focus,
 // doubling to 2 min on errors (`shared/state/livePoller.ts`). **Never over a write**: `paused` is the host's "a dialog
@@ -24,7 +24,7 @@ export interface LevelLiveOptions {
   /** The host's "do not refresh over this": a dialog is open, a write is in flight. */
   paused: () => boolean
   /** The one read of the level's tree (a conditional GET, ADR 0081). Resolves whether the server's state MOVED — `false`
-   *  for a `304`, a dropped read or nothing to do, which tells the sections nothing; rejects on failure. It gets the
+   *  for a `304`, a dropped read or nothing to do, which tells the row sources nothing; rejects on failure. It gets the
    *  poller's signal and must check it before applying anything. */
   read: (signal: AbortSignal) => Promise<boolean>
   /** Overrides {@link LIVE_POLL} (tests). */

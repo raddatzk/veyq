@@ -106,7 +106,7 @@ acceptanceCriteria:
       backend:
         integration: [CoreAloneSliceTest.aFolderIsSharedToReadOrContributeAndNothingElseIs, CoreAloneSliceTest.aGuestOfAFolderShareResolvesTheSubtreeUnderIt]
       web:
-        unit: [src/core/sharing/folderShare.wire.test.ts, src/core/sharing/FolderShareDialog.test.ts, src/core/sharing/ShareTreePage.test.ts, src/core/sharing/ShareTreePage.breadcrumb.test.ts, src/core/sharing/guestAccess.test.ts, src/features/memory/components/FolderShareGuest.test.ts, src/features/memory/components/MemoriesSection.guest.test.ts, src/features/memory/components/MemoryDetail.guest.test.ts, src/views/ShareView.folder.test.ts]
+        unit: [src/core/sharing/folderShare.wire.test.ts, src/core/sharing/FolderShareDialog.test.ts, src/core/sharing/ShareTreePage.test.ts, src/core/sharing/ShareTreePage.breadcrumb.test.ts, src/core/sharing/guestAccess.test.ts, src/features/memory/components/FolderShareGuest.test.ts, src/features/memory/levelRows.guest.test.ts, src/features/memory/components/MemoryDetail.guest.test.ts, src/views/ShareView.folder.test.ts]
         e2e: [src/features/memory/folderShare.e2e.test.ts]
   - id: chapter-share-root
     text: >-
