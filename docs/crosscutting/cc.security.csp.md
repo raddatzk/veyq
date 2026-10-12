@@ -61,6 +61,10 @@ Why each non-obvious source is there:
   accepted gap.
 - **`frame-ancestors 'none'`.** This is the anti-clickjacking rule: no page on any origin may frame the app. It
   only works in a header, which is one reason the policy is not a `<meta>`.
+- **`object-src 'none'` / `frame-src 'none'`.** The app embeds nothing, and a decrypted file is never given a frame: Files
+  shows a PDF as a message plus the download for exactly this reason, because the browser's viewer needs a frame on a
+  `blob:` URL ([Files § The viewer](../apps/files.md#the-viewer-filedetail--fileviewer-inbox-412)). Widening either is a
+  decision, not a tweak.
 - **`img-src data: blob:` / `media-src blob:`.** These cover the favicon SVG and QR `data:` URLs, and the object
   URLs of decrypted media.
 - **`connect-src https://api.pwnedpasswords.com`.** This is the client-direct HIBP k-anonymity password check:

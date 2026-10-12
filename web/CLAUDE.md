@@ -367,4 +367,15 @@ here; the server is blind.
   against the contract-pinned `[A-Za-z0-9+/]*={0,2}`. **Revisit on any of three triggers:** we need to decode
   a *foreign* QR code, jsQR gets a CVE, or `BarcodeDetector` reaches Firefox and desktop Chrome.
 
+- **A file page shows the file when it is opened** (inbox #412, `features/files/components/FileViewer.vue` +
+  `useFileViewer.ts` + `view.ts`; the rules and caps are `docs/apps/files.md` § The viewer). Files makes **no thumbnail or
+  preview blob**. Four rules bind a change here: (1) **the decrypted bytes decide the kind** (`core/blob/sniff.ts`), the
+  sealed type and the name only narrow - a test per claim-vs-bytes case; (2) **never render a peer's bytes as markup or code**:
+  text is `textContent`, an image an `<img>` on an object URL owned by `useObjectUrl` and typed with the SNIFFED type (SVG
+  too - never inline, `<object>` or `<iframe>`); (3) **video/audio go through the service worker's media route** with the
+  chunk provider the download uses (the worker holds no key; protocol 4 accepts `audio/*`), never a whole-file decrypt;
+  (4) **everything the viewer made is undone** on a new file, on navigation and on unmount (object URL, playback handle,
+  the `AbortSignal` into the stream pump). A PDF is deliberately **not** rendered: `frame-src`/`object-src` are `'none'`,
+  and widening the CSP is the owner's decision (inbox #412). The member and the guest mount the same component.
+
 Stack: Vue 3, PrimeVue, vue-router. Working rules: [`../docs/ai/README.md`](../docs/ai/README.md).
