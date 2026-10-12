@@ -166,6 +166,16 @@ here; the server is blind.
   fewer actions, never a guest-only one. Core's own actions (the favorite heart of inbox #409) plug in as the
   level's `coreRowActions`, merged around the application's by `mergeRowActions`, with no change to any application.
 
+  **A revisioned list inside a node is core's (inbox #410, `core/items/itemsLive.ts`, [ADR 0033](../docs/decisions/0033-live-media-updates-revision-polling.md)).**
+  The client half of the backend's `NodeItemsRevisions`: `itemsPollTick({ cursor, fetch, apply, isCurrent? })` is one tick for
+  `createLivePoller(ITEMS_POLL)` (`shared/state/livePoller.ts`: 20 s +- 20 %, only while the tab is visible, an immediate catch-up on
+  the return to visible or focus, doubling to 2 min on errors, fenced on stop) - it asks nothing when `cursor()` is null, treats
+  `{ notModified: true }` (a `304`) as no work, drops a result for a view that moved on, and lets a failed `fetch` reject so the loop
+  backs off; `reconcileItems` merges the keyset delta by id (a known item is patched in place through the application's `patch`, a
+  `skip` keeps an optimistic removal out) and drops what the id set no longer lists; `newestItemsCursor` is the `since` the next poll
+  echoes. An application supplies only its FETCH (its generated client) and its REDUCER: Memories' gallery
+  (`useMediaGalleryLive`, bound to the loop by `mediaRevisionPolling.ts`) is the first user. Core imports no application.
+
   **Covers are core's (inbox #411, `core/node/cover/`).** Any node whose kind carries a `cover` descriptor (`KindDescriptor.cover`: FOLDER
   pre-registered by core, Files' drop box, Memories' MEMORY and CHAPTER - the server's `NodeKindRules.takesCover` is the authority and must
   agree; a file takes none) has one image its owner uploads as the node's own `COVER` blob. `coverModel.ts` is the pure model (the

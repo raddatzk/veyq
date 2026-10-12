@@ -247,10 +247,14 @@ on their own.
   one stand-in, `CoreTestMemberBlobRoles` (the roles core's own upload tests start in), which `CoreAloneSliceTest`
   excludes.
   **Core's schema and config name no Memories concept** (inbox #341, #342, 2026-10-10): a Memory's uploaded cover is
-  the node's `COVER` attachment (below), its gallery counters (`media_revision`, `delete_revision`, ADR 0033) are
-  Memories' own `veyq_media_revision` row per node (a foreign key onto `veyq_node`, not cascading, erased by
-  Memories' node-subtree and scope erasers; the node's first gallery change births it under the node row's lock),
-  and the never-read `cover_byte_size` is gone (a blob's size is its row's). Core's upload-session keys are
+  the node's `COVER` attachment (below), its gallery counters (`revision`, `delete_revision`, ADR 0033) were
+  Memories' own `veyq_media_revision` row per node until inbox #410 lifted the mechanism into core: the table is now
+  core's `veyq_node_items_revision` (a foreign key onto `veyq_node`, not cascading, erased by core's node-subtree
+  eraser at phase 300 and the scope's node eraser; the node's first item change births it under the node row's lock),
+  written through core's `NodeItemsRevisions.bump`, read through its `read` (the `304` / delta / delete-gated id set),
+  with the shared wire pieces in `_common.openapi.yaml` and the client half in `web/src/core/items/` - the platform's way
+  for **any** application to publish a list of records inside a node, Memories' media its first user (Expenses' entries
+  and Inventory's items the next); and the never-read `cover_byte_size` is gone (a blob's size is its row's). Core's upload-session keys are
   `veyq.blob.upload.*`; Memories' trash keys keep `veyq.media.trash.*` under its own `@ConfigMapping`
   (`MemoriesMediaConfig`), whose `@WithDefault`s are their only defaults — SmallRye refuses a `veyq.*` key no
   mapping claims, so a line in core's base config would fail core's boot without Memories. The drop key

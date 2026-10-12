@@ -17,7 +17,7 @@
 ## Main flow
 
 1. **Open a Memory.** The gallery lists its media once (full list) and caches the media **plus** the node's
-   `media_revision` (the ETag) and the newest `(updatedAt, mediaId)` as its cursor.
+   the node's item revision (the ETag; core's, `veyq_node_items_revision`) and the newest `(updatedAt, mediaId)` as its cursor.
 2. **While open, poll.** On an interval — **only while the tab is foregrounded** — the client re-requests
    `listNodeMedia` with `If-None-Match: <cached revision>`.
 3. **Nothing changed ⇒ `304`.** The client does nothing; no media query ran server-side.
@@ -57,7 +57,7 @@
   adds/edits (a second `delete_revision` counter gates it —
   [ADR 0033](../../../decisions/0033-live-media-updates-revision-polling.md)).
 - **Tightens the `auto`-date self-heal.** New media surfacing into an open grid lets the cr-0067 `auto`-date
-  reconcile ([uc.memory.date](uc.memory.date.md) E5) see others' additions sooner — the same `media_revision` the
+  reconcile ([uc.memory.date](uc.memory.date.md) E5) see others' additions sooner — the same item revision the
   date use-case foreshadowed as the blind-safe upgrade.
 - **Reuse the grid — never invent.** Auto-insert reuses the optimistic-tile grid + `mergeItems` reconcile
   (cr-0074); the poll loop is the client's one `createVisibilityPoller` (`web/src/shared/state/`: interval +
@@ -82,7 +82,7 @@ Erinnerung auf deinem Gerät verschlüsselt; der Server bewegt nur verschlüssel
 
 - Feature: [Memory](../_index.md)
 - Use-cases: [uc.memory.gallery](uc.memory.gallery.md) (the media list this keeps live), [uc.memory.date](uc.memory.date.md)
-  (its `auto` self-heal that the same `media_revision` tightens)
+  (its `auto` self-heal that the same item revision tightens)
 - Decisions: [ADR 0033](../../../decisions/0033-live-media-updates-revision-polling.md) (the revision counter +
   conditional GET + keyset delta + delete-reconcile, short-poll v1), [ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md)
   (the media transport the tiles fetch through)
