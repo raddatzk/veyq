@@ -11,7 +11,7 @@ vi.mock('../features/spaces/scopes', () => ({
 // Stub only the async loaders refreshActiveScope drives (they hit the content/favorites APIs) — keep the rest of
 // the stores real so the other tests still assert on treeStore/favoritesStore.
 vi.mock('../core/node/treeStore', async (orig) => ({ ...(await orig<object>()), loadTree: vi.fn() }))
-vi.mock('../features/memory/favoritesStore', async (orig) => ({ ...(await orig<object>()), loadFavoritesFor: vi.fn() }))
+vi.mock('../core/favorites/favoritesStore', async (orig) => ({ ...(await orig<object>()), loadFavoritesFor: vi.fn() }))
 vi.mock('../features/account/instance/instance', () => ({ getSetupStatus: vi.fn() }))
 
 import { activeSpace, activeScopeKey, activeEpochKeys, enterScope, refreshActiveScope, clearActiveSpace } from './activeSpace'
@@ -22,7 +22,7 @@ import { TrustStateRefused } from '../features/account/trustMarks'
 
 const PERSONAL_SCOPE = '~me'
 import { treeStore, resetTree } from '../core/node/treeStore'
-import { favoritesStore, clearFavorites, loadFavoritesFor } from '../features/memory/favoritesStore'
+import { favoritesStore, clearFavorites, loadFavoritesFor } from '../core/favorites/favoritesStore'
 import { registry } from '../core/applications/registry'
 import { memoriesLifecycle } from '../features/memory/lifecycle'
 import { getSetupStatus } from '../features/account/instance/instance'

@@ -120,6 +120,7 @@ async function click(el: Element) {
  *  and nothing reached an authenticated client. */
 function expectNoWriteControl(w: Body) {
   expect(authenticatedCalls, 'no authenticated client').toEqual([])
+  expect(w.find('[data-action="favorite"]').exists(), "no heart: a guest has no pins").toBe(false)
   expect(w.findAll('input[type="file"]'), 'no file input').toHaveLength(0)
   expect(hasNewMenu(w), "no 'New' menu: no new folder, Memory or upload").toBe(false)
   expect(w.text()).not.toContain(t('files.upload'))

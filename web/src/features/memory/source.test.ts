@@ -304,7 +304,7 @@ describe("the member's source is today's calls, with its scope", () => {
 describe('no door, no capability (the invariant every view rests on)', () => {
   const ALL: MemoryCapabilities = {
     ...NO_MEMORY_CAPABILITIES, navigate: true, download: true, upload: true, deleteMedia: 'any', createMemory: true, createChapter: true,
-    editMeta: true, setCover: true, favorite: true, mark: true, share: true, shareUpload: true, rename: true, deleteNode: true,
+    editMeta: true, setCover: true, mark: true, share: true, shareUpload: true, rename: true, deleteNode: true,
     mediaTrash: true, buckets: true,
   }
   const member = memberMemorySource({ scopeId: () => SCOPE })
@@ -332,7 +332,7 @@ describe('no door, no capability (the invariant every view rests on)', () => {
 
   it('the rights no source door carries pass through unchanged (they are the host\'s dialogs and the tree\'s links)', () => {
     const narrowed = sourceCapabilities(ALL, guest(ShareRole.Read).source)
-    for (const k of ['navigate', 'download', 'createMemory', 'createChapter', 'favorite', 'share', 'shareUpload', 'rename', 'deleteNode'] as const) {
+    for (const k of ['navigate', 'download', 'createMemory', 'createChapter', 'share', 'shareUpload', 'rename', 'deleteNode'] as const) {
       expect(narrowed[k], k).toBe(true)
     }
     for (const k of ['upload', 'editMeta', 'setCover', 'mark', 'mediaTrash', 'buckets'] as const) expect(narrowed[k], k).toBe(false)

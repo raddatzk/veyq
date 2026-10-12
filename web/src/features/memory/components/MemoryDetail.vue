@@ -49,7 +49,7 @@ import MemoryCoverImage from './MemoryCoverImage.vue'
 import MemoryCoverDialog from './MemoryCoverDialog.vue'
 import MemoryCard from './MemoryCard.vue'
 import NodeHeader from '../../../core/node/components/NodeHeader.vue'
-import type { NodeHeaderAction } from '../../../core/node/nodeHeader'
+import type { CoreHeaderAction, NodeHeaderAction } from '../../../core/node/nodeHeader'
 import ViewModeToggle from '../../../core/node/ViewModeToggle.vue'
 import { GRID_VIEW, LIST_VIEW } from '../../../core/node/levelViews'
 import Dialog from 'primevue/dialog'
@@ -65,7 +65,6 @@ const props = defineProps<{
   node: TreeNode
   scopeId: string
   memoryKey: Uint8Array | null
-  favorite?: boolean
   // The scope content key at the BASE epoch — what item marks seal under (ADR 0068). Not `memoryKey`: marks
   // belong to the scope's members, not to this Memory's content grain.
   scopeKey?: Uint8Array | null
@@ -77,9 +76,10 @@ const props = defineProps<{
   caps: MemoryCapabilities
   /** The session's data source (see the header). Required: there is no default door to fall back to. */
   source: MemorySource
+  /** Core's actions of the header (the favorite heart, inbox #409), built by the host from its `access`. */
+  coreActions?: readonly CoreHeaderAction[]
 }>()
 const emit = defineEmits<{
-  toggleFavorite: []
   rename: []
   move: []
   delete: []
@@ -105,15 +105,6 @@ const headerActions = computed<NodeHeaderAction[]>(() => [
   { id: 'upload', label: t('media.upload'), icon: 'pi pi-cloud-upload', severity: 'primary', shown: can.value.upload, disabled: !props.memoryKey, onClick: () => triggerUpload() },
   { id: 'share', label: t('share.share'), icon: 'pi pi-share-alt', shown: can.value.share, disabled: !props.memoryKey, onClick: () => emit('share') },
   { id: 'shareUpload', label: t('share.uploadRequest'), icon: 'pi pi-user-plus', shown: can.value.shareUpload, disabled: !props.memoryKey, onClick: () => emit('shareUpload') },
-  {
-    id: 'favorite',
-    label: props.favorite ? t('memory.unfavorite') : t('memory.favorite'),
-    icon: props.favorite ? 'pi pi-heart-fill' : 'pi pi-heart',
-    shown: can.value.favorite,
-    pressed: !!props.favorite,
-    class: 'memory-detail-fav',
-    onClick: () => emit('toggleFavorite'),
-  },
   { id: 'rename', label: t('node.rename'), icon: 'pi pi-pencil', shown: can.value.rename, onClick: () => emit('rename') },
   // Core's move dialog (inbox #358): a Memory to the root or a folder, a chapter into another Memory.
   { id: 'move', label: t('node.move.action'), icon: 'pi pi-file-export', shown: can.value.move, onClick: () => emit('move') },
@@ -441,7 +432,7 @@ watch(
     <!-- Core's header (`NodeHeader`, inbox #406): the cover is the leading visual — it IS the "set / edit cover" button —
          the count is the subtitle, the date and place chips the meta row, and the actions are the capability answers
          below (`headerActions`), the same list a share guest gets with fewer entries. -->
-    <NodeHeader :title="node.name" :subtitle="t('media.itemCount', { count: items.length }, items.length)" :level="1" :actions="headerActions">
+    <NodeHeader :title="node.name" :subtitle="t('media.itemCount', { count: items.length }, items.length)" :level="1" :actions="headerActions" :core-actions="coreActions">
       <template #leading>
         <button
           type="button"
@@ -618,7 +609,6 @@ watch(
               :key="chapter.id"
               :memory="chapter"
               :date="date"
-              :favoritable="false"
               @open="$emit('openChapter', $event)"
             />
             <button

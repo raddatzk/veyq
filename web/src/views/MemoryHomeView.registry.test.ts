@@ -35,9 +35,11 @@ vi.mock('../app/activeSpace', async () => {
     activeEpochKeys: () => ({ current: 0, keys: new Map([[0, new Uint8Array(32).fill(1)]]) }),
   }
 })
-vi.mock('../features/memory/favoritesStore', () => ({
+vi.mock('../core/favorites/favoritesStore', () => ({
   favoritesStore: { loaded: true, ids: new Set<string>() },
   loadFavoritesFor: vi.fn(),
+  isFavorite: vi.fn(() => false),
+  toggleFavorite: vi.fn(),
 }))
 vi.mock('../features/spaces/scopes', () => ({ listMyTenants: vi.fn() }))
 vi.mock('../core/node/treeStore', async () => {

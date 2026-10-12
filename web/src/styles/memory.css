@@ -256,13 +256,6 @@
   gap: 0.75rem;
   min-height: 0;
 }
-/* In list view the favorite pin leaves its over-the-cover corner and sits in a right-hand actions area. */
-.memory-card-grid.is-list .memory-card-pin {
-  position: static;
-  flex: 0 0 auto;
-  transform: none;
-  box-shadow: none;
-}
 .memory-card-grid.is-list .memory-card-cover {
   width: 40px;
   height: 40px;

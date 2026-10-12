@@ -132,7 +132,7 @@ here; the server is blind.
   core, never back and never application → application, and `scripts/validate_web_core_imports_no_applications.py`
   (no allowlist) is red on a core file that imports an application or one of its generated clients, and on an
   application file that imports another application or its clients (every `generate:api` output whose `-i` lies in an
-  application's directory `contracts/api/<app>/`, read from `package.json` — today `generated/media`, `generated/favorites`,
+  application's directory `contracts/api/<app>/`, read from `package.json` — today `generated/media`, `generated/item-favorites`,
   `generated/share-media` (Memories) and `generated/files` (Files); so their
   factories are each application's `api.ts`, not `api/client.ts`'s, and a core helper types from core's own client or
   from a literal union of its own, e.g. `mediaDeriver`'s tiers, since core's `BlobRole` is an open token), uses `import.meta.glob`, or names `NodeKind.Memory|Chapter|File` / `'MEMORY'` /
@@ -148,7 +148,7 @@ here; the server is blind.
   `disabled`, `pressed`), each `shown` by its capability function — fail closed, a share guest gets this very header with fewer actions
   (inbox #401), never a guest-only one; `standardNodeActions` builds the share/rename/move/delete four. Core owns the look, the wrap
   (the title row wraps, so every action is visible at every width), the keyboard (real labelled buttons) and the dark mode (tokens). Core's
-  own actions (a future favorite heart for every node) plug in as `coreActions` (`CoreHeaderAction`, `placement` before|after,
+  own actions (the favorite heart of every node, `core/favorites`) plug in as `coreActions` (`CoreHeaderAction`, `placement` before|after,
   merged by `mergeHeaderActions`), gated by a core capability function, with no change to any application.
 
   **One list for the level (inbox #407).** The folder level (`core/node/LevelView.vue`) is ONE list - or one set of tiles - of
@@ -161,10 +161,24 @@ here; the server is blind.
   - 157 B - Modified ...", "Memory - date range", "Drop box - 3 people"), the PRIMARY click (what a plain click does: it opens
   the node) and the actions. An action is the header's model (`NodeHeaderAction`: id, label = aria-label, icon, onClick,
   severity, shown, disabled, pressed) plus `first` and `loading`: AT MOST TWO actions marked `first` are real buttons on the
-  row (Files: download, Memories: the heart), every other shown action sits in ONE "more" menu (a PrimeVue `Menu`, entries
+  row (Files: download, every kind: core's heart), every other shown action sits in ONE "more" menu (a PrimeVue `Menu`, entries
   `veyq-row-action-<id>`), `shown` by the application's fail-closed capability function - a share guest gets this very row with
-  fewer actions, never a guest-only one (inbox #401). Core's own actions (the favourite heart of inbox #409) plug in as the
+  fewer actions, never a guest-only one. Core's own actions (the favorite heart of inbox #409) plug in as the
   level's `coreRowActions`, merged around the application's by `mergeRowActions`, with no change to any application.
+
+  **Favorites are core's (inbox #409, [ADR 0068](../docs/decisions/0068-favorites-two-confidentiality-levels.md) §10).** The member's private pin of
+  a node of ANY kind - folder, file, Memory, drop box - lives in `src/core/favorites/`: `favorites.ts` (the sealed data layer, purpose
+  `favorites` under the Master Key, the generated `favoritesApi()` of `api/client.ts`), `favoritesStore.ts` (the reactive set, optimistic
+  toggle, refused until loaded), `capabilities.ts` (`favoriteCapabilities(access, node)`: member only, fail closed, no scope root, no
+  unsupported kind; kept during a pending deletion), `favoriteActions.ts` (the heart as a `CoreHeaderAction` / `CoreRowAction`, `first`,
+  placed before the application's own) and `PinnedNodes.vue` (the sidebar section: every kind's pinned node with its registry icon and
+  name, opened by `hashForNode`; an id that does not resolve or a kind this client cannot draw is skipped). `LevelView` contributes the
+  heart to every row (not the unsupported ones) and to the folder header; each node page passes `favoriteHeaderActions(...)` as the
+  header's `core-actions` (`FileDetail`, `DropBoxDetail`, `MemoryDetailHost`), so an application that draws `NodeHeader` adds one line
+  and no heart of its own. `app/activeSpace` clears and loads the set with the scope and `rotateKeys` re-seals it - both directly, not
+  through an application's lifecycle hook. A share guest's list is empty and the store is never read for it. The item MARKS inside a
+  Memory stay Memories' (`features/memory/itemFavorites*`, `generated/item-favorites`).
+
   **The tabs are a pure FILTER** (inbox #348, `core/node/levelTabs.ts`): `All | one tab per application`, the tab named by
   its kinds' `list.tabLabel` (kinds sharing a label share a tab, its id the first kind - what `shared/state/useLevelTab`
   stores, per account, one for every share-guest page, never one for the browser, no value written while the account id is
@@ -228,7 +242,7 @@ here; the server is blind.
   the node, moving through the session's one door (`core/node/move.ts` `nodeMover`: the member's `moveNode`, a `READ_WRITE`
   guest's `placeShareNodeAsGuest`, none otherwise) and explaining each server refusal by its code; and FOLDER's share dialog
   `core/sharing/FolderShareDialog.vue` is pre-registered); `addSlotItem(slot, id, component, order?)` for the two list slots `topbarTray`
-  and `sidebarPins` (an id namespaced by the application, e.g. `memories.pinned`; write-once per (slot, id); the shell
+  and `sidebarPins` (an id namespaced by the application; none today - the Favorites section is core's, `core/favorites/PinnedNodes.vue`; write-once per (slot, id); the shell
   renders `slotItems(slot)` sorted by `order`, ties in registration order — the top bar after core's own upload status
   menu, `core/blob/UploadStatusMenu.vue`, which lists every application's batches of the one core queue and is no
   application's item, so today no application adds to `topbarTray`); `claimRouteSlug(slug, kinds)` — the application's segment in a node's URL fragment path (`#foo/memories/rom`; Memories claims
@@ -244,7 +258,7 @@ here; the server is blind.
   guest a write;
   `registerLifecycle(id, hooks)` with `onScopeReset` / `onScopeEntered` and the **required**
   `onMasterKeyRotated` — `rotateKeys` refuses to start when none is registered, because material sealed under the
-  Master Key (Memories' pins) is otherwise undecryptable after a rotation. A kind or share nobody registered renders
+  Master Key (Memories' item marks; the node pins are core's, re-sealed by `rotateKeys` itself) is otherwise unverifiable after a rotation. A kind or share nobody registered renders
   an explicit unsupported/unavailable state, never an empty region. **Who looks** (inbox #401, `core/access.ts`): a
   `detail` (`NodeDetailProps`) and a row factory (`LevelRowsContext`, which also carries the level's `viewMode`) are handed `access` — `Access`, a member
   (`scopeId`, `epochs`, `readonly` = pending deletion, the instance's `publicLinks`/`uploaderLinks`) or a share guest

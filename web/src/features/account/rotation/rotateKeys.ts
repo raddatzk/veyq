@@ -25,6 +25,7 @@ import { registerDocument } from '../deviceRegister'
 import { carryMarks, raiseMarks, TrustStateRefused, type AccountDocumentStore } from '../trustMarks'
 import { commitRotation } from '../../spaces/scopes'
 import { listScopeMembers } from '../../spaces/members'
+import { resealFavoritesUnderNewMasterKey } from '../../../core/favorites/favorites'
 
 const ARGON = v1.ARGON
 
@@ -83,7 +84,7 @@ export async function requeueQueuedRotation(scopeId: string): Promise<RotationSc
 
 /**
  * Rotate. Mints `MK'` and a fresh identity on-device, publishes the account half — the pin store and the device
- * register re-sealed under `MK'` included — in one server transaction, re-seals the Memory favorites, re-keys
+ * register re-sealed under `MK'` included — in one server transaction, re-seals the node pins, re-keys
  * every scope the caller is alone in, and finally swaps the vault over.
  *
  * **The order is the design.** The publish is the irreversible commit, and everything after it is repair that a
@@ -204,7 +205,7 @@ export async function rotateKeys(password: string, secretKeyB64: string): Promis
     // once the vault switches (the rest of its marks are carried across below).
     await raiseMarks(newMasterKey, { pins: sealed.pins.version + 1, register: sealed.register.version + 1 })
 
-    // Memory favorites are re-sealed after the publish, best-effort on purpose, and stay out of the request: one
+    // Node pins are re-sealed after the publish, best-effort on purpose, and stay out of the request: one
     // blob per scope, and an unreadable set degrades to empty by ADR 0068 (an unpinned Memory is still there to
     // re-pin) — it is not trust state, so failing a published rotation over it would buy nothing. Their two lists
     // partition the caller's scopes, so the union is every scope a pin set can exist in. Item marks ride here too:
@@ -262,10 +263,15 @@ async function resealUnderNewKey<T>(
 
 /**
  * The Master-Key-sealed blobs re-sealed AFTER the publish, each swallowing its failure — see `rotateKeys` on why
- * none may fail it: the Memory favorites and the item marks' self-tags. Trust state never belongs here: the pin store and the
+ * none may fail it: the node pins and the item marks' self-tags. Trust state never belongs here: the pin store and the
  * device register ride inside the publish, because one left under the retired key is refused, not empty.
  */
 async function resealBestEffort(oldMk: Uint8Array, newMk: Uint8Array, scopeIds: string[]): Promise<void> {
+  try {
+    await resealFavoritesUnderNewMasterKey(oldMk, newMk, scopeIds) // core's: the node pins of every scope
+  } catch {
+    /* an unreadable pin set is an empty one (the nodes are all still there, just no longer pinned) */
+  }
   try {
     await registry.masterKeyRotated(oldMk, newMk, scopeIds)
   } catch {

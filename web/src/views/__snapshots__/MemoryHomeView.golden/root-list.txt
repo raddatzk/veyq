@@ -42,6 +42,9 @@ div.veyq-node-host
               "Empty"
             small.veyq-level-item-meta
               "Folder"
+        span.veyq-level-item-actions
+          button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-level-item-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
+            span.p-button-icon.pi.pi-heart
       li.is-folder.is-list.veyq-level-item
         button.veyq-level-item-main [aria-label="Trips"]
           span.veyq-level-item-visual
@@ -51,6 +54,9 @@ div.veyq-node-host
               "Trips"
             small.veyq-level-item-meta
               "Folder"
+        span.veyq-level-item-actions
+          button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-level-item-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
+            span.p-button-icon.pi.pi-heart
       li.has-cover.is-list.veyq-level-item
         button.veyq-level-item-main [aria-label="Beach"]
           span.veyq-level-item-visual

@@ -4,7 +4,7 @@
 // § What a guest may do (ADR 0080 decision 6); this is its code. Every field defaults to false: an unknown mode, role or
 // kind grants nothing, so a new kind or a new role never inherits a right by accident.
 //
-// Member-only by construction (rule 2 of #401): pins (sealed under the Master Key), item marks (`K_SC` at `E_0`), the
+// Member-only by construction (rule 2 of #401): item marks (`K_SC` at `E_0`), the
 // node's sealed meta (date, place, cover), the media trash and the contributions organizer (`MemoryBuckets`, member
 // globals) — no guest role grants them, whatever a source implements.
 import { FOLDER_KIND } from '../../core/node/kind'
@@ -30,8 +30,6 @@ export interface MemoryCapabilities {
   editMeta: boolean
   /** Choose the node's cover. */
   setCover: boolean
-  /** Pin a Memory (the member's own pin set, sealed under the Master Key). */
-  favorite: boolean
   /** Mark media and filter by marks (shared with the scope, sealed under `K_SC` at `E_0`, ADR 0068). */
   mark: boolean
   /** Manage the node's public links (READ / READ_WRITE). */
@@ -60,7 +58,6 @@ export const NO_MEMORY_CAPABILITIES: Readonly<MemoryCapabilities> = Object.freez
   createChapter: false,
   editMeta: false,
   setCover: false,
-  favorite: false,
   mark: false,
   share: false,
   shareUpload: false,
@@ -86,16 +83,14 @@ export function memoryCapabilities(access: Access, at: CapabilityTarget): Memory
 function memberCapabilities(readonly: boolean, publicLinks: boolean, uploaderLinks: boolean, at: CapabilityTarget): MemoryCapabilities {
   const write = !readonly
   if (isLevel(at.kind)) {
-    // Pins are the member's own, not a scope write: the heart stays during a pending deletion. A guest's identity folder
-    // (Files' drop box) takes no Memory.
-    return { ...NO_MEMORY_CAPABILITIES, navigate: true, favorite: true, createMemory: write && !at.inIdentityFolder }
+    // A guest's identity folder (Files' drop box) takes no Memory. (The favorite heart is core's: `core/favorites`.)
+    return { ...NO_MEMORY_CAPABILITIES, navigate: true, createMemory: write && !at.inIdentityFolder }
   }
   if (!isMemoriesNode(at.kind)) return NO_MEMORY_CAPABILITIES
   return {
     ...NO_MEMORY_CAPABILITIES,
     navigate: true,
     download: true,
-    favorite: true,
     mark: true,
     // Listing and copying links is a read: a pending deletion keeps them (a new link is refused server-side).
     share: publicLinks && at.shareable,

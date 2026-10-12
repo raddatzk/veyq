@@ -21,7 +21,7 @@ vi.mock('../app/activeSpace', async () => {
     activeEpochKeys: () => ({ current: 0, keys: new Map([[0, new Uint8Array(32).fill(1)]]) }),
   }
 })
-vi.mock('../features/memory/favoritesStore', () => ({
+vi.mock('../core/favorites/favoritesStore', () => ({
   favoritesStore: { loaded: true, ids: new Set<string>() }, loadFavoritesFor: vi.fn(), isFavorite: vi.fn(), toggleFavorite: vi.fn(),
 }))
 vi.mock('../features/spaces/scopes', () => ({ listMyTenants: vi.fn() }))
@@ -61,7 +61,7 @@ import { treeNode } from '../test/models'
 import { mountConfirmDialog } from '../test/confirmDialog'
 import { hashForNode } from '../core/node/location'
 import { listMyTenants } from '../features/spaces/scopes'
-import { isFavorite } from '../features/memory/favoritesStore'
+import { isFavorite } from '../core/favorites/favoritesStore'
 import { stubApi } from '../test/apiMock'
 import { filesApi } from '../features/files/api'
 import { clickAction } from '../test/levelRows'
@@ -170,10 +170,10 @@ describe('a member moves a guest\'s folder out of a drop box', () => {
     expect(toast.showUndo).not.toHaveBeenCalled()
   })
 
-  it('from the guest\'s folder itself: its card offers the move out, and nothing else', async () => {
+  it('from the guest\'s folder itself: its card offers the move out (and core\'s heart), and nothing else', async () => {
     await mountAt('#~me/inbox/anna/')
     const actions = [...document.body.querySelectorAll('.veyq-node-header-actions button')].map((b) => b.getAttribute('aria-label'))
-    expect(actions).toEqual([t('node.move.action')])
+    expect(actions).toEqual([t('node.favorite'), t('node.move.action')])
   })
 
   it('the drop box itself moves from its card, like any node', async () => {

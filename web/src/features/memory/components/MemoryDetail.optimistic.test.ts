@@ -100,7 +100,7 @@ function pushBatch(files: unknown[], nodeId = NODE_ID) {
 
 function mountDetail(memoryKey: Uint8Array) {
   return mount(MemoryDetail, {
-    props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey, favorite: false, caps: memberMemoryCaps() },
+    props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey, caps: memberMemoryCaps() },
     global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
   })
 }

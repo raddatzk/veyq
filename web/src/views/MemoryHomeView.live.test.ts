@@ -30,7 +30,7 @@ vi.mock('../app/activeSpace', async () => {
   }
 })
 vi.mock('../api/client', async (importOriginal) => ({ ...(await importOriginal<typeof import('../api/client')>()), contentApi: vi.fn() }))
-vi.mock('../features/memory/favoritesStore', () => ({
+vi.mock('../core/favorites/favoritesStore', () => ({
   favoritesStore: { loaded: true, ids: new Set<string>() },
   loadFavoritesFor: vi.fn(),
   isFavorite: vi.fn(),

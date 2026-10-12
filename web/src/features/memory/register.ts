@@ -6,8 +6,8 @@
 // the row factory once and draws every Memory as a row or a tile of the one list (cr-files-application P4b). So do its dialogs
 // (P4c): `MemoryNodeDialog` creates a Memory or a chapter (the kind picks which), `ShareDialog` manages a Memory's or a
 // chapter's links (its uploader variant included); a rename of either is core's `FolderNameDialog`. The same detail
-// serves a member and a share guest (inbox #401): the host picks the data source by `access.mode`. The pinned rail in the sidebar is a list slot: Memories adds one item
-// to it, under an id namespaced by the application. The top bar's upload status is core's (`core/blob/UploadStatusMenu.vue`,
+// serves a member and a share guest (inbox #401): the host picks the data source by `access.mode`. The sidebar's Favorites section is core's (`core/favorites/PinnedNodes.vue`, inbox #409), so Memories adds nothing to the
+// `sidebarPins` list. The top bar's upload status is core's (`core/blob/UploadStatusMenu.vue`,
 // cr-files-application B3) and lists Memories' batches with every other application's, so Memories adds nothing to the
 // `topbarTray` list.
 import { MEMORY_KIND, CHAPTER_KIND } from './kinds'
@@ -18,7 +18,6 @@ import MemoryDetailHost from './components/MemoryDetailHost.vue'
 import { memoryRows } from './levelRows'
 import MemoryNodeDialog from './components/MemoryNodeDialog.vue'
 import ShareDialog from './components/ShareDialog.vue'
-import PinnedMemories from './components/PinnedMemories.vue'
 import MemoryShareBody from './components/MemoryShareBody.vue'
 import { memoriesLifecycle } from './lifecycle'
 import { memoryCapabilities } from './capabilities'
@@ -67,7 +66,6 @@ export function registerMemories(registry: Registry): void {
   // extend that (`…/rom/tag-1`). The slug is reserved in the unprefixed namespace: a folder called "Memories" is
   // `memories-2` (`core/node/location.ts`, inbox #328).
   registry.claimRouteSlug(MEMORIES_ROUTE_SLUG, [MEMORY_KIND, CHAPTER_KIND])
-  registry.addSlotItem('sidebarPins', 'memories.pinned', PinnedMemories)
   // The drop page of a WRITE_ONLY link rooted at a MEMORY or a CHAPTER (`PublicShare.rootKind`): its guest holds no key,
   // so it is the one page Memories draws for a guest alone. A viewer's or contributor's link is the detail above, for a
   // guest through core's share page (inbox #401).

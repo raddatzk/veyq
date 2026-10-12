@@ -36,6 +36,7 @@ import { useToast } from '../../../shared/state/useToast'
 import { FILE_KIND } from '../kinds'
 import NodeHeader from '../../../core/node/components/NodeHeader.vue'
 import { standardNodeActions } from '../../../core/node/nodeHeader'
+import { favoriteHeaderActions } from '../../../core/favorites/favoriteActions'
 import { useTrashUndo } from '../../../core/node/trashUndo'
 import { filesCapabilities } from '../capabilities'
 import { targetOf, type GuestAccess } from '../../../core/access'
@@ -44,6 +45,8 @@ import { guestFilesSource, memberFilesSource, sourceCapabilities, type FilesSour
 const props = defineProps<NodeDetailProps>()
 const emit = defineEmits<NodeDetailEmits>()
 const { t } = useI18n()
+// Core's heart (inbox #409): the same for every kind; a guest gets none.
+const coreActions = computed(() => favoriteHeaderActions(t, props.access, props.node))
 const { ask } = useConfirm()
 const toast = useToast()
 const offerUndo = useTrashUndo()
@@ -110,7 +113,7 @@ async function removeFolder(folder: TreeNode, label: string) {
 <template>
   <!-- Opens like a folder (inbox #385 (b)): core's `NodeHeader` with the drop box's share and delete, then its folders. -->
   <div class="veyq-level-view">
-    <NodeHeader icon="pi pi-inbox" :title="node.name" :level="1" :actions="headerActions" />
+    <NodeHeader icon="pi pi-inbox" :title="node.name" :level="1" :actions="headerActions" :core-actions="coreActions" />
     <section class="veyq-section dropbox-detail">
       <div class="veyq-section-header">
         <h2>{{ t('node.folders') }}</h2>

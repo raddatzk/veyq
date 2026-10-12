@@ -36,7 +36,7 @@ vi.mock('../../../app/activeSpace', () => {
     termsStale: read('termsStale'),
   }
 })
-vi.mock('../favoritesStore', async (orig) => ({ ...(await orig<object>()), isFavorite: vi.fn(), toggleFavorite: vi.fn() }))
+vi.mock('../../../core/favorites/favoritesStore', async (orig) => ({ ...(await orig<object>()), isFavorite: vi.fn(), toggleFavorite: vi.fn() }))
 vi.mock('../itemFavoritesStore', async (orig) => ({ ...(await orig<object>()), loadItemFavoritesFor: vi.fn(), toggleItemFavorite: vi.fn() }))
 // The guest's upload is recorded at the share helper (its wire is `source.wire.test.ts`'s).
 vi.mock('../share', async (orig) => ({ ...(await orig<typeof import('../share')>()), addSharePhoto: vi.fn() }))
@@ -52,7 +52,7 @@ import { publicSharesApi } from '../../../api/client'
 import { MEMORY_KIND, CHAPTER_KIND } from '../kinds'
 import { publicShareMediaApi } from '../api'
 import { addSharePhoto } from '../share'
-import { isFavorite } from '../favoritesStore'
+import { isFavorite } from '../../../core/favorites/favoritesStore'
 import { loadItemFavoritesFor } from '../itemFavoritesStore'
 import { rememberOwnShareMedia } from '../ownShareMedia'
 import { clearUploads } from '../uploadQueue'
@@ -144,7 +144,7 @@ const byLabel = (w: Page, label: string) => w.find(`[aria-label="${label}"]`)
 /** Nothing a member alone may do is on the page, nothing reached the member's world or an authenticated client. */
 function expectGuestOnly(w: Page) {
   for (const label of [
-    t('share.share'), t('share.uploadRequest'), t('memory.favorite'), t('memory.unfavorite'), t('node.rename'), t('node.delete'),
+    t('share.share'), t('share.uploadRequest'), t('node.favorite'), t('node.unfavorite'), t('node.rename'), t('node.delete'),
     t('media.marks.mark'), t('media.marks.unmark'), t('memory.addChapter'),
   ]) {
     expect(byLabel(w, label).exists(), label).toBe(false)

@@ -21,24 +21,24 @@ const WO = guestAccessOf('WRITE_ONLY')
 
 /** A member on an opened Memory or chapter, as the detail has always offered it (cr-0049 … cr-0113). */
 const MEMBER_ON_NODE: Grant = {
-  navigate: true, download: true, upload: true, deleteMedia: 'any', editMeta: true, setCover: true, favorite: true, mark: true,
+  navigate: true, download: true, upload: true, deleteMedia: 'any', editMeta: true, setCover: true, mark: true,
   share: true, shareUpload: true, rename: true, deleteNode: true, move: true, mediaTrash: true, buckets: true,
 }
 
 const rows: [string, Access, CapabilityTarget, Grant][] = [
   // --- member, at a level (the section) ---
-  ['member at the scope root', member, at(null), { navigate: true, favorite: true, createMemory: true }],
-  ['member in a folder', member, at(FOLDER_KIND), { navigate: true, favorite: true, createMemory: true }],
-  ['member in a guest\'s identity folder: no Memory there', member, at(FOLDER_KIND, { inIdentityFolder: true }), { navigate: true, favorite: true }],
-  ['member, pending deletion, in a folder: the pin stays', pending, at(FOLDER_KIND), { navigate: true, favorite: true }],
+  ['member at the scope root', member, at(null), { navigate: true, createMemory: true }],
+  ['member in a folder', member, at(FOLDER_KIND), { navigate: true, createMemory: true }],
+  ['member in a guest\'s identity folder: no Memory there', member, at(FOLDER_KIND, { inIdentityFolder: true }), { navigate: true }],
+  ['member, pending deletion, in a folder: reads only', pending, at(FOLDER_KIND), { navigate: true }],
   // --- member, on a node (the detail) ---
   ['member on a Memory', member, at(MEMORY_KIND), { ...MEMBER_ON_NODE, createChapter: true }],
   ['member on a chapter: no chapter inside a chapter', member, at(CHAPTER_KIND), MEMBER_ON_NODE],
   ['member, public links off', memberAccessOf({ publicLinks: false }), at(MEMORY_KIND), { ...MEMBER_ON_NODE, createChapter: true, share: false, shareUpload: false }],
   ['member, uploader links off', memberAccessOf({ uploaderLinks: false }), at(MEMORY_KIND), { ...MEMBER_ON_NODE, createChapter: true, shareUpload: false }],
   ['member, a kind the registry will not share', member, at(MEMORY_KIND, { shareable: false }), { ...MEMBER_ON_NODE, createChapter: true, share: false, shareUpload: false }],
-  ['member, pending deletion, on a Memory: reads, links, pins, marks only', pending, at(MEMORY_KIND), {
-    navigate: true, download: true, favorite: true, mark: true, share: true, shareUpload: true, mediaTrash: true, buckets: true,
+  ['member, pending deletion, on a Memory: reads, links, marks only', pending, at(MEMORY_KIND), {
+    navigate: true, download: true, mark: true, share: true, shareUpload: true, mediaTrash: true, buckets: true,
   }],
   ['member on another application\'s kind', member, at(FILE), {}],
   ['member on an unknown kind', member, at('ZULU'), {}],
@@ -77,11 +77,11 @@ describe('memoryCapabilities: the matrix', () => {
   })
 })
 
-// Rule 2 of #401: pins (Master Key), item marks (K_SC at E_0), the node's sealed meta, the media trash, the organizer, the
+// Rule 2 of #401: item marks (K_SC at E_0), the node's sealed meta, the media trash, the organizer, the
 // links and the node's own rename/delete never reach a guest — in any role, at any kind, wherever it stands.
 describe('memoryCapabilities: member-only functions', () => {
   const MEMBER_ONLY: (keyof MemoryCapabilities)[] = [
-    'favorite', 'mark', 'editMeta', 'setCover', 'share', 'shareUpload', 'rename', 'deleteNode', 'mediaTrash', 'buckets', 'createChapter',
+    'mark', 'editMeta', 'setCover', 'share', 'shareUpload', 'rename', 'deleteNode', 'mediaTrash', 'buckets', 'createChapter',
   ]
   it('no guest role grants any of them', () => {
     for (const role of ['READ', 'READ_WRITE', 'WRITE_ONLY', 'X']) {

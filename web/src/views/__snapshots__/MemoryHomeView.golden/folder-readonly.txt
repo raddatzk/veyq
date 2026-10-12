@@ -22,6 +22,8 @@ div.veyq-node-host
           h2.veyq-node-header-title
             "Trips"
           div.veyq-node-header-actions
+            button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
+              span.p-button-icon.pi.pi-heart
             button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Share"]
               span.p-button-icon.pi.pi-share-alt
     ul.veyq-level-list
@@ -34,6 +36,9 @@ div.veyq-node-host
               "Rome"
             small.veyq-level-item-meta
               "Folder"
+        span.veyq-level-item-actions
+          button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-level-item-action.veyq-prime-icon-button [aria-label="Favorite"] [aria-pressed="false"]
+            span.p-button-icon.pi.pi-heart
       li.has-cover.is-grid.veyq-level-item
         button.veyq-level-item-main [aria-label="Italy"]
           span.veyq-level-item-visual

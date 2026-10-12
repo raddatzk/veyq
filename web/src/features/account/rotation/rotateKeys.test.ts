@@ -42,7 +42,7 @@ vi.mock('../../../app/vault', () => ({
   unlockOrigin: vi.fn(),
   identityPrivate: vi.fn(),
 }))
-vi.mock('../../memory/favorites', () => ({ resealFavoritesUnderNewMasterKey: vi.fn() }))
+vi.mock('../../../core/favorites/favorites', () => ({ resealFavoritesUnderNewMasterKey: vi.fn() }))
 vi.mock('../../memory/itemFavorites', () => ({ retagItemMarksUnderNewMasterKey: vi.fn() }))
 vi.mock('../../spaces/members', () => ({ listScopeMembers: vi.fn() }))
 
@@ -73,7 +73,7 @@ import {
 import { identityPrivate, masterKey, setUnlocked, unlockOrigin } from '../../../app/vault'
 import { getPin } from '../identityPins'
 import { readRegisterView } from '../deviceRegister'
-import { resealFavoritesUnderNewMasterKey } from '../../memory/favorites'
+import { resealFavoritesUnderNewMasterKey } from '../../../core/favorites/favorites'
 import { retagItemMarksUnderNewMasterKey } from '../../memory/itemFavorites'
 import { httpError } from '../../../test/httpError'
 import { registry } from '../../../core/applications/registry'

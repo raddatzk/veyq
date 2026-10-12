@@ -9,8 +9,6 @@
 //   is part of the watched key for the same reason it is in the sidebar rail: a cover edit patches `wrappedMeta` in place.
 // - **The sealed date range** (the meta line) from each node's `wrappedMeta` under the key its parent's chain opens - read from
 //   the tree, no media load. A rotated scope mixes epochs across the level; locked (`epochs` null) means no dates.
-// - **The heart** (inbox #409 moves it to core): the member's own pin set, sealed under the Master Key (`favoritesStore`), a
-//   first-class action of the row. A guest has none (the capability matrix, `./capabilities.ts`).
 // - **The map** (the third presentation, `register.ts` names it among the kinds' `views`): core asks `presentation('map')`
 //   and draws the component handed back in place of the list. Its pins span the whole subtree (folders included), unsealed on
 //   device from the `wrappedMeta` the tree already holds (operator-blind - there is no locations API), a guest's from the
@@ -29,7 +27,6 @@ import { targetOf, type TreeSource } from '../../core/access'
 import { sortNodesByDate, type MemoryDate } from './memoryDate'
 import { collectLocatedPins, collectLocatedPinsBy } from './spaceMap'
 import { covers, ensureCovers } from './coverStore'
-import { isFavorite, toggleFavorite } from './favoritesStore'
 import { memoryCapabilities } from './capabilities'
 import { useGuestCovers } from './guestCover'
 import { formatClosedRange, formatDay } from './memoryDateRange'
@@ -107,9 +104,6 @@ export function memoryRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRows
   const viewMode = computed(() => ctx.value.viewMode)
   watch([viewMode, pins, metaKey], syncCovers, { immediate: true })
 
-  /** A member's own pin of a Memory; never a guest's (pins are sealed under the member's Master Key). */
-  const favorite = (node: TreeNode, allowed: boolean) => allowed && isFavorite(node.id)
-
   function dateLabel(date: MemoryDate | null | undefined): string {
     if (!date) return ''
     if (date.mode === 'ongoing') return date.from ? t('memory.date.since', { day: formatDay(date.from, locale.value) }) : ''
@@ -117,18 +111,11 @@ export function memoryRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRows
   }
 
   function memoryRow(node: TreeNode): LevelRow {
-    // The matrix for THIS node: the heart, the rename and the move are about the Memory the row stands for.
+    // The matrix for THIS node: the rename and the move are about the Memory the row stands for. (The heart is core's
+    // row action, `core/favorites`: one for every kind.)
     const c = memoryCapabilities(ctx.value.access, targetOf(ctx.value.tree, node))
-    const pinned = favorite(node, c.favorite)
     const cover = coverMap.value.get(node.id)
     const actions: LevelRowAction[] = [
-      {
-        id: 'favorite', label: pinned ? t('memory.unfavorite') : t('memory.favorite'), icon: pinned ? 'pi pi-heart-fill' : 'pi pi-heart',
-        first: true, pressed: pinned, shown: c.favorite,
-        onClick: () => {
-          if (c.favorite && activeSpace.scopeId) void toggleFavorite(node.id, activeSpace.scopeId)
-        },
-      },
       { id: 'rename', label: t('node.rename'), icon: 'pi pi-pencil', shown: c.rename, onClick: () => host.rename(node) },
       { id: 'move', label: t('node.move.action'), icon: 'pi pi-file-export', shown: c.move, onClick: () => host.move(node) },
     ]

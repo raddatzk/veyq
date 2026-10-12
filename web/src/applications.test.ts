@@ -5,8 +5,6 @@ import { registry } from './core/applications/registry'
 import { MEMORY_KIND, CHAPTER_KIND } from './features/memory/kinds'
 import { DROPBOX_KIND, FILE_KIND } from './features/files/kinds'
 import { fileNameSlug } from './shared/naming'
-import { favoritesStore } from './features/memory/favoritesStore'
-import PinnedMemories from './features/memory/components/PinnedMemories.vue'
 import { memoryRows } from './features/memory/levelRows'
 import { filesRows } from './features/files/levelRows'
 import FileDetail from './features/files/components/FileDetail.vue'
@@ -75,25 +73,17 @@ describe('composition root', () => {
     expect(registry.levelMenu().filter((e) => e.acceptsDrop).map((e) => e.id)).toEqual(['files.upload'])
   })
 
-  // The tray and the pins are list slots (P4a). The upload status is core's since B3 (the top bar mounts it itself), so
-  // no installed application adds to the tray; Memories adds its pinned Memories, under an id namespaced by it.
-  it('adds nothing to the top-bar tray and the pinned Memories to the sidebar pins', () => {
+  // The tray and the pins are list slots (P4a). The upload status is core's since B3 (the top bar mounts it itself) and so is
+  // the Favorites section since inbox #409 (`core/favorites/PinnedNodes.vue`), so no installed application adds to either.
+  it('adds nothing to the top-bar tray and nothing to the sidebar pins', () => {
     expect(registry.slotItems('topbarTray')).toEqual([])
-    expect(registry.slotItems('sidebarPins')).toEqual([{ id: 'memories.pinned', component: PinnedMemories }])
+    expect(registry.slotItems('sidebarPins')).toEqual([])
   })
 
   // The rotation hook is REQUIRED (the registry's header): this is the test that goes red when the composition root
   // (or Memories' registration) stops registering it, which rotateKeys.test.ts cannot see (it registers its own).
   it('registers the Memories lifecycle, so the rotation gate is open on the real build', () => {
     expect(() => registry.assertRotationHooks()).not.toThrow()
-  })
-
-  it('registers the Memories reset hook: a scope reset drops the pins', () => {
-    favoritesStore.ids = new Set(['m1'])
-    favoritesStore.loaded = true
-    registry.scopeReset()
-    expect(favoritesStore.loaded).toBe(false)
-    expect(favoritesStore.ids.size).toBe(0)
   })
 
   it('is write-once end to end: registering the applications a second time throws', () => {

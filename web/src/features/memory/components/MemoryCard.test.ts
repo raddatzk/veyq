@@ -11,32 +11,16 @@ import { treeNode } from '../../../test/models'
 
 const memory: TreeNode = treeNode({ id: 'm1', kind: MEMORY_KIND, name: 'Rom', parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaVersion: 0, placementVersion: 0 })
 
-const mountCard = (favorite: boolean) =>
-  mount(MemoryCard, { props: { memory, favorite }, global: { plugins: [realI18n()] } })
+const mountCard = () => mount(MemoryCard, { props: { memory }, global: { plugins: [realI18n()] } })
 
-describe('MemoryCard favorite pin', () => {
-  it('shows an outline heart when not favorited', () => {
-    const w = mountCard(false)
-    expect(w.find('.memory-card-pin').exists()).toBe(true)
-    expect(w.find('.memory-card-pin.is-favorite').exists()).toBe(false)
-    expect(w.find('.memory-card-pin .pi-heart').exists()).toBe(true)
-  })
-
-  it('shows a filled accent heart when favorited', () => {
-    const w = mountCard(true)
-    expect(w.find('.memory-card-pin.is-favorite').exists()).toBe(true)
-    expect(w.find('.memory-card-pin .pi-heart-fill').exists()).toBe(true)
-  })
-
-  it('toggles favorite on pin click WITHOUT opening the Memory', async () => {
-    const w = mountCard(false)
-    await w.find('.memory-card-pin').trigger('click')
-    expect(w.emitted('toggleFavorite')?.[0]?.[0]).toMatchObject({ id: 'm1' })
-    expect(w.emitted('open')).toBeFalsy()
+describe('MemoryCard', () => {
+  it('carries no favorite pin: the heart is core\'s action (inbox #409), a chapter\'s lives in its header', () => {
+    expect(mountCard().find('.memory-card-pin').exists()).toBe(false)
+    expect(mountCard().find('.pi-heart').exists()).toBe(false)
   })
 
   it('opens the Memory on the card body click', async () => {
-    const w = mountCard(false)
+    const w = mountCard()
     await w.find('.memory-card-main').trigger('click')
     expect(w.emitted('open')?.[0]?.[0]).toMatchObject({ id: 'm1' })
   })

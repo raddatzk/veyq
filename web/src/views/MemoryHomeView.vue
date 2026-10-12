@@ -43,6 +43,7 @@ import LevelView from '../core/node/LevelView.vue'
 import MoveNodeDialog from '../core/node/MoveNodeDialog.vue'
 import { nodeMover } from '../core/node/move'
 import { registry } from '../core/applications/registry'
+import { favoritesStore, loadFavoritesFor } from '../core/favorites/favoritesStore'
 import { memberAccess, memberTreeSource } from '../core/access'
 import TrustResetLink from '../features/account/trustReset/TrustResetLink.vue'
 
@@ -203,8 +204,11 @@ watch(
 async function reenter(scope: string) {
   await enterScope(scope)
   if (activeSpace.status === 'ready' && !treeStore.loaded) await loadTree()
-  // Each application loads its own per-scope state (Memories: the pin set); the hook is idempotent per reset.
-  if (activeSpace.status === 'ready' && activeSpace.scopeId) await registry.scopeEntered(activeSpace.scopeId)
+  // Core loads the member's pin set, each application its own per-scope state; both are idempotent per reset.
+  if (activeSpace.status === 'ready' && activeSpace.scopeId) {
+    if (!favoritesStore.loaded) await loadFavoritesFor(activeSpace.scopeId) // once per reset
+    await registry.scopeEntered(activeSpace.scopeId)
+  }
 }
 watch(currentScope, (scope) => void reenter(scope), { immediate: true })
 // A space in another, suspended tenant (uc.spaces.scope-access A7): leave it for this domain's own home. (The home

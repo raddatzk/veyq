@@ -3,33 +3,19 @@
 // reset, a scope is entered, the Master Key rotates.
 import type { LifecycleHooks } from '../../core/applications/registry'
 import { resetCovers } from './coverStore'
-import { clearFavorites, favoritesStore, loadFavoritesFor } from './favoritesStore'
-import { resealFavoritesUnderNewMasterKey } from './favorites'
 import { retagItemMarksUnderNewMasterKey } from './itemFavorites'
 
 export const memoriesLifecycle: LifecycleHooks = {
-  // No stale pins or covers bleed across scopes; every decrypted cover URL is revoked rather than left dangling.
+  // No stale covers bleed across scopes; every decrypted cover URL is revoked rather than left dangling. (The node pins
+  // are core's since inbox #409: `app/activeSpace` clears and loads them, `rotateKeys` re-seals them.)
   onScopeReset() {
-    clearFavorites()
     resetCovers()
   },
 
-  // The pin set seals under the member's MASTER key (ADR 0068), which does not rotate with the scope, so no epoch key
-  // is needed here. Loads once per reset: a reset puts `loaded` back to false, a second entry is a no-op.
-  async onScopeEntered(scopeId) {
-    if (!favoritesStore.loaded) await loadFavoritesFor(scopeId)
-  },
-
-  // Pins and item marks are sealed/tagged under the master key, so a rotation that skipped them would leave them
-  // undecryptable. Each runs on its own and is best-effort exactly as before: an unreadable pin set is an empty one
-  // (the Memories are all still there, just no longer pinned), and an item mark whose tag the new key does not verify
-  // counts as someone else's set (ADR 0068 §9) — neither may abort the rest of the rotation.
-  async onMasterKeyRotated(oldMk, newMk, scopeIds) {
-    try {
-      await resealFavoritesUnderNewMasterKey(oldMk, newMk, scopeIds)
-    } catch {
-      /* see above */
-    }
+  // Item marks are tagged under the master key, so a rotation that skipped them would leave them unverifiable. Best-effort:
+  // a mark whose tag the new key does not verify counts as someone else's set (ADR 0068 §9) and may not abort the rest of
+  // the rotation. The member's node pins (ADR 0068) are core's and re-sealed by `rotateKeys` itself.
+  async onMasterKeyRotated(oldMk, newMk) {
     try {
       await retagItemMarksUnderNewMasterKey(oldMk, newMk)
     } catch {

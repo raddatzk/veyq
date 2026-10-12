@@ -63,7 +63,7 @@ async function seedDated(memoryKey: Uint8Array) {
 
 async function mountDetail(caps: MemoryCapabilities, kind = MEMORY_KIND) {
   const w = mount(MemoryDetail, {
-    props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(kind), scopeId: SCOPE_ID, memoryKey: v1.randomBytes(32), scopeKey: v1.randomBytes(32), personalScope: false, favorite: false, chapters: [chapter], caps },
+    props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(kind), scopeId: SCOPE_ID, memoryKey: v1.randomBytes(32), scopeKey: v1.randomBytes(32), personalScope: false, chapters: [chapter], caps },
     global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
   })
   await flushPromises()
@@ -71,7 +71,7 @@ async function mountDetail(caps: MemoryCapabilities, kind = MEMORY_KIND) {
   return w
 }
 
-const HEADER = ['media.upload', 'share.share', 'share.uploadRequest', 'memory.favorite', 'node.rename', 'node.move.action', 'node.delete'] as const
+const HEADER = ['media.upload', 'share.share', 'share.uploadRequest', 'node.rename', 'node.move.action', 'node.delete'] as const
 const header = (w: Awaited<ReturnType<typeof mountDetail>>) =>
   HEADER.filter((key) => w.find(`.veyq-node-header-actions button[aria-label="${t(key)}"]`).exists())
 const tabs = (w: Awaited<ReturnType<typeof mountDetail>>) => w.findAll('[role="tab"]').map((tab) => tab.text().replace(/\d+$/, ''))
@@ -107,7 +107,7 @@ describe('MemoryDetail follows caps', () => {
     const memoryKey = v1.randomBytes(32)
     await seedDated(memoryKey)
     mount(MemoryDetail, {
-      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(), scopeId: SCOPE_ID, memoryKey, favorite: false, caps: { ...memberMemoryCaps(), editMeta: false } },
+      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(), scopeId: SCOPE_ID, memoryKey, caps: { ...memberMemoryCaps(), editMeta: false } },
       global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
     })
     await flushPromises()
@@ -115,7 +115,7 @@ describe('MemoryDetail follows caps', () => {
     expect(updateNode).not.toHaveBeenCalled()
     // control: the same Memory with editMeta self-heals its date on open
     mount(MemoryDetail, {
-      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(), scopeId: SCOPE_ID, memoryKey, favorite: false, caps: memberMemoryCaps() },
+      props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(), scopeId: SCOPE_ID, memoryKey, caps: memberMemoryCaps() },
       global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
     })
     await flushPromises()
@@ -137,7 +137,7 @@ describe('MemoryDetail follows caps', () => {
     for (const setCover of [false, true]) {
       updateNode.mockClear()
       const w = mount(MemoryDetail, {
-        props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(), scopeId: SCOPE_ID, memoryKey, favorite: false, caps: { ...memberMemoryCaps(), editMeta: false, setCover } },
+        props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(), scopeId: SCOPE_ID, memoryKey, caps: { ...memberMemoryCaps(), editMeta: false, setCover } },
         global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { MediaLightbox: LightboxStub, MemoryCoverDialog: CoverStub } },
       })
       await vi.waitFor(() => expect(w.find('[data-media-id] button').exists()).toBe(true))
@@ -152,9 +152,9 @@ describe('MemoryDetail follows caps', () => {
     }
   })
 
-  it('a pending deletion: share and the pin stay, every write goes', async () => {
+  it('a pending deletion: share stays, every write goes', async () => {
     const w = await mountDetail(memberMemoryCaps({ readonly: true }))
-    expect(header(w)).toEqual(['share.share', 'share.uploadRequest', 'memory.favorite'])
+    expect(header(w)).toEqual(['share.share', 'share.uploadRequest'])
     expect(disabled(w, '.memory-date-chip')).toBe(true)
     await w.findAll('[role="tab"]')[1].trigger('click')
     await flushPromises()

@@ -23,7 +23,7 @@ vi.mock('../app/activeSpace', async () => {
     activeEpochKeys: () => ({ current: 0, keys: new Map([[0, new Uint8Array(32).fill(1)]]) }),
   }
 })
-vi.mock('../features/memory/favoritesStore', () => ({
+vi.mock('../core/favorites/favoritesStore', () => ({
   favoritesStore: { loaded: true, ids: new Set<string>() }, loadFavoritesFor: vi.fn(), isFavorite: vi.fn(), toggleFavorite: vi.fn(),
 }))
 vi.mock('../features/spaces/scopes', () => ({ listMyTenants: vi.fn() }))
@@ -68,7 +68,7 @@ import { FILE_KIND } from '../features/files/kinds'
 import { realI18n, t } from '../test/i18n'
 import { treeNode } from '../test/models'
 import { listMyTenants } from '../features/spaces/scopes'
-import { isFavorite } from '../features/memory/favoritesStore'
+import { isFavorite } from '../core/favorites/favoritesStore'
 import { stubApi } from '../test/apiMock'
 import { filesApi } from '../features/files/api'
 import { clickAction, titlesOf } from '../test/levelRows'

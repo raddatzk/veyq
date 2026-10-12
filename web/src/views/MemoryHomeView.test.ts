@@ -25,7 +25,7 @@ vi.mock('../app/activeSpace', async () => {
     activeEpochKeys: () => ({ current: 0, keys: new Map([[0, new Uint8Array(32).fill(1)]]) }),
   }
 })
-vi.mock('../features/memory/favoritesStore', () => ({
+vi.mock('../core/favorites/favoritesStore', () => ({
   favoritesStore: { loaded: true, ids: new Set<string>() },
   loadFavoritesFor: vi.fn(),
   isFavorite: vi.fn(),
@@ -120,7 +120,7 @@ vi.mock('../core/node/components/SpaceTrashDialog.vue', async () => {
 import MemoryHomeView from './MemoryHomeView.vue'
 import { treeStore, loadTree } from '../core/node/treeStore'
 import { listMyTenants } from '../features/spaces/scopes'
-import { isFavorite } from '../features/memory/favoritesStore'
+import { isFavorite } from '../core/favorites/favoritesStore'
 import { restoreNode, type TreeNode } from '../core/node/tree'
 import { FOLDER_KIND } from '../core/node/kind'
 import { MEMORY_KIND, CHAPTER_KIND } from '../features/memory/kinds'
