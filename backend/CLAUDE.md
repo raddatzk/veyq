@@ -53,6 +53,13 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   is red on a writer of those rows that is neither listed nor exempt; `TreeRevisionCoreSliceTest` / `FilesTreeRevisionSliceTest`
   pin each path's one bump and a refusal's none. A guest's `resolveShare` tag is NOT this revision (it would leak the rest
   of the space's activity): `ShareETag` digests what the response serves.
+- **A node's cover is core's write, in ONE transaction** (inbox #411, `core/content/NodeCover*.kt`): `setNodeCover` / `removeNodeCover` attach or detach
+  the `COVER` blob through `AttachmentStore` (compare-and-set on the blob replaced; a refused slot COMMITS the loser's freed upload) and then
+  write the node's re-sealed `wrappedMeta` through `NodesStore.applyUpdate` (ADR 0077 version check; a stale meta ROLLS the attach back so the
+  upload stays open). Which kinds take a cover is `NodeKindRules.takesCover`, answered by the rule that already handles the kind - core names
+  none; `COVER` is a role core declares (`CoreMemberBlobRoles`), so core alone admits it. Two bumps of the tree revision per request is
+  harmless. The zero-residue proof (set, replace, remove: no row, no blob, no session, quota back, a reclaim row per storage key, the sweep
+  hands every chunk to the store) is `NodeCoverCoreSliceTest`.
 - **A change to a lock, a gate or a transaction boundary also runs `python3 scripts/run_backend_races_on_mariadb.py`**
   (Docker; CI's `backend-races` job runs it too): every race class on a throwaway MariaDB of the pinned image. H2 cannot show what the production engine
   does under overlap — on 2026-10-03 three races green on H2 were red there ([ADR 0078](../docs/decisions/0078-production-reads-committed-like-its-tests.md)).

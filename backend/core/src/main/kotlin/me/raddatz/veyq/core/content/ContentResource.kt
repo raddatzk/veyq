@@ -93,7 +93,7 @@ class ContentResource(
         coverResponse(
             covers.set(
                 identity.principal.name, scopeId.toString(), nodeId.toString(), setNodeCoverRequest.uploadId.toString(),
-                setNodeCoverRequest.expectedBlobId?.toString(), setNodeCoverRequest.wrappedMeta.validated(),
+                setNodeCoverRequest.expectedBlobId?.toString(), setNodeCoverRequest.wrappedMeta,
                 setNodeCoverRequest.metaVersion.validated(),
             ),
         )
@@ -102,7 +102,7 @@ class ContentResource(
         coverResponse(
             covers.remove(
                 identity.principal.name, scopeId.toString(), nodeId.toString(), removeNodeCoverRequest.blobId.toString(),
-                removeNodeCoverRequest.wrappedMeta.validated(), removeNodeCoverRequest.metaVersion.validated(),
+                removeNodeCoverRequest.wrappedMeta, removeNodeCoverRequest.metaVersion.validated(),
             ),
         )
 

@@ -25,7 +25,7 @@ import java.util.UUID
 /**
  * HTTP adapter for the generic blob transfer (the core `blob` tag, ADR 0079): start uploads, presign each next
  * window, presign downloads. Implements the generated [BlobApi]; thin (ADR 0001) — delegates to [BlobUploadHandler].
- * Completing an upload is the owning application's operation (Memories' `completeMedia`, `commitCoverBlob`), not
+ * Completing an upload is the owning application's operation (Memories' `completeMedia`; core's own for a node's cover, `setNodeCover`), not
  * this resource's. `@Authenticated`; the caller (from the `SecurityIdentity` principal) must hold a grant for the
  * scope (a non-member gets 404). Operator-blind: only ciphertext wraps + opaque metadata + presigned URLs cross.
  * Batch-shaped: 200 with per-item results (partial success); only access/auth failures are top-level.

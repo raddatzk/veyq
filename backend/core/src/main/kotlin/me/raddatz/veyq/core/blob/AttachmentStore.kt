@@ -131,7 +131,7 @@ class AttachmentStore(private val nodes: NodesStore, private val blobs: BlobUplo
     /**
      * Empty [slot] of [nodeId] — a live node of [scopeId] — only while it still holds [expectedBlobId] (ADR 0077: a
      * write carries the version it read), freeing the blob in the same transaction ([BlobUploadStore.deleteBlobRow]).
-     * The application's own remove operation (Memories' `deleteCoverBlob`, inbox #341); the erasers empty slots with
+     * An owner's own remove operation (core's `NodeCoverStore.remove` since inbox #411, Memories' `deleteCoverBlob` before it); the erasers empty slots with
      * their node, not through here.
      *
      * Under the scope row's lock, as [attach] and both erasers take it first, so a peer's attach of this slot has

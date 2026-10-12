@@ -682,12 +682,12 @@ components:
             slot that holds anything else is `409 cover_stale`.
           example: null
         wrappedMeta:
-          type: [string, "null"]
+          type: string
           description: The node's sealed payload, re-sealed under its content key with the cover ref (see `NodeSummary.wrappedMeta`). Opaque base64.
           contentEncoding: base64
           maxLength: 8192
           example: d3JhcHBlZC1tZXRh
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         metaVersion:
           x-veyq-visibility: structure
           type: [integer, "null"]
@@ -710,12 +710,12 @@ components:
           example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
         wrappedMeta:
-          type: [string, "null"]
+          type: string
           description: The node's sealed payload, re-sealed without the cover. Opaque base64.
           contentEncoding: base64
           maxLength: 8192
           example: d3JhcHBlZC1tZXRh
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         metaVersion:
           x-veyq-visibility: structure
           type: [integer, "null"]
