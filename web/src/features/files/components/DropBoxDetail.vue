@@ -39,6 +39,7 @@ import { standardNodeActions } from '../../../core/node/nodeHeader'
 import { favoriteHeaderActions } from '../../../core/favorites/favoriteActions'
 import { useNodeCover } from '../../../core/node/cover/useNodeCover'
 import NodeCoverImage from '../../../core/node/cover/components/NodeCoverImage.vue'
+import CoverEditor from '../../../core/node/cover/components/CoverEditor.vue'
 import { useTrashUndo } from '../../../core/node/trashUndo'
 import { filesCapabilities } from '../capabilities'
 import { targetOf, type GuestAccess } from '../../../core/access'
@@ -168,6 +169,7 @@ async function removeFolder(folder: TreeNode, label: string) {
         </li>
       </ul>
     </section>
+    <CoverEditor :cover="cover" />
   </div>
 </template>
 

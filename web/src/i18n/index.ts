@@ -777,11 +777,16 @@ const en = {
     cover: {
       set: 'Set cover',
       change: 'Change cover',
+      dialogTitle: 'Cover',
+      copy: 'Upload an image as the cover, then drag and zoom to frame it.',
+      choose: 'Choose an image',
       remove: 'Remove cover',
+      save: 'Save cover',
       batchLabel: 'Cover for “{name}”',
       notImage: 'Choose an image file (JPEG, PNG, WebP or similar) as the cover.',
       tooLarge: 'This image is too large for a cover (up to {max}).',
       unreadable: 'This image could not be read. Try a JPEG or PNG.',
+      metaUnreadable: 'The details of this item can’t be opened, so its cover can’t be changed.',
       locked: 'Unlock this space first, then set the cover.',
       noSpace: 'There is no room left for the cover.',
       stale: 'The cover was changed by someone else meanwhile. Try again.',
@@ -941,16 +946,9 @@ const en = {
       places: '{count} places',
     },
     cover: {
-      set: 'Set cover',
-      edit: 'Edit cover',
-      choose: 'Choose a cover',
-      copy: 'Upload a photo as the cover — or open a photo in the gallery and choose “Set as cover”.',
-      copyNoMedia: 'Upload a photo as the cover.',
-      upload: 'Upload a photo',
+      galleryHint: 'Or open a photo in the gallery and choose “Set as cover”.',
       setFromPhoto: 'Set as cover',
       isCover: 'Current cover',
-      remove: 'Remove cover',
-      save: 'Save cover',
     },
     // The toolbar button in the level view that opens core's node trash (`node.trash.*`).
     trash: {
@@ -1002,7 +1000,7 @@ const en = {
   },
   // The platform's upload status menu in the top bar (core/blob/UploadStatusMenu.vue, cr-files-application B3): every
   // application's batches. `status`, `retry` and `close` repeat `media.*` values Memories' own tiles and lightbox still
-  // read; `noSpace` is the neutral wording (P4d) — Memories' photo-specific one stays `media.uploadNoSpace` (its cover).
+  // read; `noSpace` is the neutral wording (P4d).
   upload: {
     title: 'Uploads',
     active: '{count} active',
@@ -1165,7 +1163,6 @@ const en = {
     uploadStatus: { queued: 'Queued', preparing: 'Preparing…', uploading: 'Uploading…', done: 'Done', failed: 'Failed', cancelled: 'Cancelled' },
     uploadTileFailed: 'Upload failed',
     uploadTileLinkFull: 'This link isn’t taking more uploads right now',
-    uploadNoSpace: 'No space left. Deleted photos only free space once the trash is emptied.',
     itemCount: 'No items | {count} item | {count} items',
     itemPosition: '{index} of {count}',
     openItem: 'Open item {index}',
@@ -2139,11 +2136,16 @@ const de: typeof en = {
     cover: {
       set: 'Cover festlegen',
       change: 'Cover ändern',
+      dialogTitle: 'Cover',
+      copy: 'Lade ein Bild als Cover hoch und ziehe und zoome es dann in den Ausschnitt.',
+      choose: 'Bild auswählen',
       remove: 'Cover entfernen',
+      save: 'Cover speichern',
       batchLabel: 'Cover für „{name}“',
       notImage: 'Wähle eine Bilddatei (JPEG, PNG, WebP o. Ä.) als Cover.',
       tooLarge: 'Dieses Bild ist als Cover zu groß (bis {max}).',
       unreadable: 'Dieses Bild konnte nicht gelesen werden. Versuche ein JPEG oder PNG.',
+      metaUnreadable: 'Die Details dieses Eintrags lassen sich nicht öffnen, daher kann sein Cover nicht geändert werden.',
       locked: 'Entsperre zuerst diesen Bereich, dann lege das Cover fest.',
       noSpace: 'Für das Cover ist kein Platz mehr.',
       stale: 'Das Cover wurde inzwischen von jemand anderem geändert. Versuche es noch einmal.',
@@ -2283,16 +2285,9 @@ const de: typeof en = {
       places: '{count} Orte',
     },
     cover: {
-      set: 'Cover festlegen',
-      edit: 'Cover bearbeiten',
-      choose: 'Cover wählen',
-      copy: 'Lade ein Foto als Coverbild hoch — oder öffne ein Foto in der Galerie und wähle „Als Cover festlegen“.',
-      copyNoMedia: 'Lade ein Foto als Coverbild hoch.',
-      upload: 'Foto hochladen',
+      galleryHint: 'Oder öffne ein Foto in der Galerie und wähle „Als Cover festlegen“.',
       setFromPhoto: 'Als Cover festlegen',
       isCover: 'Aktuelles Cover',
-      remove: 'Cover entfernen',
-      save: 'Cover speichern',
     },
     trash: {
       title: 'Papierkorb',
@@ -2478,7 +2473,6 @@ const de: typeof en = {
     uploadStatus: { queued: 'In Warteschlange', preparing: 'Wird vorbereitet …', uploading: 'Lädt hoch …', done: 'Fertig', failed: 'Fehlgeschlagen', cancelled: 'Abgebrochen' },
     uploadTileFailed: 'Upload fehlgeschlagen',
     uploadTileLinkFull: 'Dieser Link nimmt gerade keine Uploads mehr an',
-    uploadNoSpace: 'Kein Speicherplatz mehr frei. Gelöschte Fotos geben erst Platz frei, wenn der Papierkorb geleert ist.',
     itemCount: 'Keine Objekte | {count} Objekt | {count} Objekte',
     itemPosition: '{index} von {count}',
     openItem: 'Objekt {index} öffnen',

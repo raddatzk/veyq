@@ -46,7 +46,6 @@ import MediaLightbox from './MediaLightbox.vue'
 import MemoryDateEditor from './MemoryDateEditor.vue'
 import MemoryLocationEditor from './MemoryLocationEditor.vue'
 import MemoryCoverImage from './MemoryCoverImage.vue'
-import MemoryCoverDialog from './MemoryCoverDialog.vue'
 import MemoryCard from './MemoryCard.vue'
 import NodeHeader from '../../../core/node/components/NodeHeader.vue'
 import type { CoreHeaderAction, NodeHeaderAction } from '../../../core/node/nodeHeader'
@@ -78,6 +77,8 @@ const props = defineProps<{
   source: MemorySource
   /** Core's actions of the header (the favorite heart, inbox #409), built by the host from its `access`. */
   coreActions?: readonly CoreHeaderAction[]
+  /** Core's cover dialog is open over this page (the host mounts it): the lightbox then leaves the keyboard to it. */
+  coverEditing?: boolean
 }>()
 const emit = defineEmits<{
   rename: []
@@ -88,6 +89,10 @@ const emit = defineEmits<{
   share: []
   shareUpload: []
   metaUpdated: [NodeMetaUpdate]
+  /** The cover tile: open core's cover dialog (the host mounts it). */
+  editCover: []
+  /** The lightbox's "Set as cover": open it on this photo (`src`: its decrypted thumbnail, null while it has none). */
+  coverFromPhoto: [{ mediaId: string; src: string | null }]
 }>()
 
 const { t } = useI18n()
@@ -270,32 +275,20 @@ const {
 // image + a 16:9 crop, sealed in the SAME node `wrappedMeta` blob as the date/location (read-modify-write). The
 // source is a Memory photo (reusing its decrypted `thumbs` entry) or an uploaded standalone blob (decrypted on
 // demand; the composable owns that object-URL's lifecycle incl. unmount cleanup). Props passed as getters.
-const {
-  coverEditorOpen,
-  coverEditorMedia,
-  storedCover,
-  coverSrc,
-  coverExistingSrc,
-  coverMediaId,
-  onSetCoverFromPhoto,
-  openCoverEditor,
-  closeCoverEditor,
-  onCoverSave,
-} = useMemoryCover({
+const { storedCover, coverSrc, coverMediaId, coverSourceOf } = useMemoryCover({
   scopeId: () => props.scopeId,
   node: () => props.node,
   memoryKey: () => props.memoryKey,
   loaders: props.source.loaders,
-  write: () => (can.value.setCover ? (props.source.cover ?? null) : null),
   thumbs,
-  onMetaUpdated: (payload) => emit('metaUpdated', payload),
-  noSpaceMessage: () => t('media.uploadNoSpace'),
-  coverStaleMessage: () => t('node.cover.stale'),
 })
 
-// Core's "Set cover" action in this header (inbox #411) opens THIS dialog - a Memory's own source UI (a photo of the Memory,
-// an upload, a crop) - instead of core's plain image picker: the host hands the action `choose` through this handle.
-defineExpose({ openCoverEditor })
+// The cover is EDITED in core's dialog (inbox #411), mounted by the host: the tile asks for it, and the lightbox's "Set as
+// cover" hands it the picked photo as the Memory's extra source. Only where the capability grants it.
+function onSetCoverFromPhoto(payload: { mediaId: string }) {
+  if (!can.value.setCover) return
+  emit('coverFromPhoto', coverSourceOf(payload.mediaId))
+}
 
 /** The reconcile settle point `useMediaGalleryLive` calls after each list refresh: auto-date first, then
  *  auto-location (which reads the date-reconciled wrappedMeta patched in place → read-modify-write safe). Both WRITE the
@@ -444,14 +437,14 @@ watch(
           class="memory-cover-preview"
           :class="{ 'is-empty': !coverSrc }"
           :disabled="!memoryKey || !can.setCover"
-          :aria-label="storedCover ? t('memory.cover.edit') : t('memory.cover.set')"
-          :title="storedCover ? t('memory.cover.edit') : t('memory.cover.set')"
-          @click="openCoverEditor"
+          :aria-label="storedCover ? t('node.cover.change') : t('node.cover.set')"
+          :title="storedCover ? t('node.cover.change') : t('node.cover.set')"
+          @click="emit('editCover')"
         >
           <MemoryCoverImage :src="coverSrc" :crop="storedCover?.crop ?? null" :alt="node.name" />
           <span class="memory-cover-preview-hint">
             <span class="pi pi-image" />
-            <span>{{ storedCover ? t('memory.cover.edit') : t('memory.cover.set') }}</span>
+            <span>{{ storedCover ? t('node.cover.change') : t('node.cover.set') }}</span>
           </span>
         </button>
       </template>
@@ -717,7 +710,7 @@ watch(
       :start-index="lightboxIndex"
       :memory-name="node.name"
       :cover-media-id="coverMediaId"
-      :suspend-keys="coverEditorOpen"
+      :suspend-keys="coverEditing"
       :can-set-cover="can.setCover"
       :can-delete="canDeleteInLightbox"
       :media-meta="source.mediaMeta"
@@ -748,16 +741,6 @@ watch(
       :points="gpsPoints"
       @save="onLocationSave"
       @close="locationEditorOpen = false"
-    />
-
-    <MemoryCoverDialog
-      v-if="coverEditorOpen && memoryKey"
-      :cover="storedCover"
-      :existing-src="coverExistingSrc"
-      :media-source="coverEditorMedia"
-      :has-media="items.length > 0"
-      @save="onCoverSave"
-      @close="closeCoverEditor"
     />
 
     <Dialog

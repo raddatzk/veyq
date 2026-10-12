@@ -96,7 +96,7 @@ function expectNoMemberControl(w: Page) {
   expect(w.find('.veyq-node-header-actions').exists(), 'share, rename, delete of the folder').toBe(false)
   for (const label of [
     t('node.favorite'), t('node.unfavorite'), t('media.marks.mark'), t('share.share'), t('share.uploadRequest'), t('node.rename'),
-    t('node.delete'), t('node.trash.open'), t('memory.cover.set'), t('memory.cover.edit'), t('memory.createChapterTitle'),
+    t('node.delete'), t('node.trash.open'), t('node.cover.set'), t('node.cover.change'), t('memory.createChapterTitle'),
   ]) {
     expect(w.find(`[aria-label="${label}"]`).exists(), label).toBe(false)
     expect(w.findAll('button').some((b) => b.text() === label), label).toBe(false)

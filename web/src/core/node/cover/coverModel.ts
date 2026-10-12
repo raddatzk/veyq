@@ -133,3 +133,17 @@ export type LoadedCover = { url: string; crop: CoverCrop }
 
 /** A cover's decrypted image as **bytes** (not yet an object URL) and its crop - the store mints and owns the URL. */
 export type DecryptedCover = { blob: Blob; crop: CoverCrop }
+
+/**
+ * What core's cover dialog emits on save (inbox #411) - the view seals it:
+ * - `upload` - a brand-new image file (uploaded as the node's own cover blob, then framed by `crop`);
+ * - `media` - the application's OWN source was chosen (Memories: one of its photos, by the id the application gave); core only
+ *   carries the id and asks the kind's `cover.extraSource.seal` for the value to store;
+ * - `keep` - the current cover's image is unchanged, only the crop moved;
+ * - `remove` - drop the cover.
+ */
+export type CoverSaveIntent =
+  | { kind: 'upload'; file: File; crop: CoverCrop }
+  | { kind: 'media'; mediaId: string; crop: CoverCrop }
+  | { kind: 'keep'; crop: CoverCrop }
+  | { kind: 'remove' }

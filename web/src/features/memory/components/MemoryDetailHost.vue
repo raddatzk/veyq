@@ -11,12 +11,14 @@
 // scope kind), no pin store, no `treeStore` patch — the guest's capabilities grant none of them, and the guest's source
 // carries no door to them. A guest gets it from core's share page (`core/sharing/ShareTreePage.vue`) for every Memory and
 // chapter of a `READ` or `READ_WRITE` link, the link's root included (inbox #401 S5).
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import type { NodeDetailProps, NodeDetailEmits } from '../../../core/applications/registry'
 import { CHAPTER_KIND } from '../kinds'
 import { activeSpace, activeEpochKeys } from '../../../app/activeSpace'
 import { favoriteHeaderActions } from '../../../core/favorites/favoriteActions'
 import { useNodeCover } from '../../../core/node/cover/useNodeCover'
+import CoverEditor from '../../../core/node/cover/components/CoverEditor.vue'
+import { FULL_FRAME } from '../../../core/node/cover/coverModel'
 import { useI18n } from 'vue-i18n'
 import { patchNodeMeta } from '../../../core/node/treeStore'
 import { keyAt } from '../../spaces/epochs'
@@ -50,14 +52,16 @@ const itemMarkKey = computed<Uint8Array | null>(() => {
 const personalScope = computed(() => !guest && activeSpace.kind === 'PERSONAL')
 const { t } = useI18n()
 // Core's heart (inbox #409) and cover action (inbox #411): the same actions every kind's header gets; a guest's list is empty.
-// A Memory's cover has a source UI of its own (a photo of the Memory, an upload, a crop - its dialog), so the cover action
-// hands `choose` the dialog `MemoryDetail` opens; core owns the action's id and place, the Memory supplies the way to choose.
-const detail = ref<InstanceType<typeof MemoryDetail> | null>(null)
+// The cover DIALOG is core's too (`CoverEditor`, mounted below); the Memory only adds its extra source to it - a photo chosen
+// in the gallery lightbox (`coverFromPhoto`) - through its descriptor's `cover.extraSource`.
 const cover = useNodeCover(() => props.access, () => props.tree, () => [props.node])
-const coreActions = computed(() => [
-  ...favoriteHeaderActions(t, props.access, props.node),
-  ...cover.headerActions(props.node, { choose: () => detail.value?.openCoverEditor() }),
-])
+const coreActions = computed(() => [...favoriteHeaderActions(t, props.access, props.node), ...cover.headerActions(props.node)])
+
+/** The lightbox's "Set as cover": crop that photo in the dialog; a photo with no thumbnail yet is set full-frame at once. */
+function onCoverFromPhoto(p: { mediaId: string; src: string | null }) {
+  if (p.src) cover.open(props.node, { source: { id: p.mediaId, src: p.src } })
+  else cover.save(props.node, { kind: 'media', mediaId: p.mediaId, crop: { ...FULL_FRAME } })
+}
 
 function onMetaUpdated(e: { nodeId: string; wrappedMeta: string | null; metaVersion: number }) {
   if (!guest) patchNodeMeta(e.nodeId, e.wrappedMeta, e.metaVersion)
@@ -66,13 +70,13 @@ function onMetaUpdated(e: { nodeId: string; wrappedMeta: string | null; metaVers
 
 <template>
   <MemoryDetail
-    ref="detail"
     :node="node"
     :scope-id="scopeId"
     :memory-key="contentKey"
     :scope-key="itemMarkKey"
     :personal-scope="personalScope"
     :core-actions="coreActions"
+    :cover-editing="cover.editor.value !== null"
     :chapters="chapters"
     :caps="caps"
     :source="source"
@@ -84,5 +88,8 @@ function onMetaUpdated(e: { nodeId: string; wrappedMeta: string | null; metaVers
     @share="emit('share')"
     @share-upload="emit('shareUpload')"
     @meta-updated="onMetaUpdated"
+    @edit-cover="cover.open(node)"
+    @cover-from-photo="onCoverFromPhoto"
   />
+  <CoverEditor :cover="cover" />
 </template>

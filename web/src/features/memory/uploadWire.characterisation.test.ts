@@ -37,8 +37,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 vi.mock('exifr', () => ({ default: { parse: vi.fn(async () => undefined) } }))
 
 import { addMedia, CHUNK_SIZE, type MediaDeriver, type AddMediaSource } from './media'
-import { setMemoryCoverUpload } from './memoryCover'
-import { FULL_FRAME } from '../../core/node/cover/coverModel'
+import { FULL_FRAME, uploadedCover } from '../../core/node/cover/coverModel'
+import { uploadCoverImage, writeNodeCover } from '../../core/node/cover/coverWrite'
 import { unsealNodeMeta } from '../../core/node/nodeMeta'
 import { addSharePhoto } from './share'
 import { session } from '../../app/session'
@@ -255,15 +255,17 @@ describe('the Memories upload pipeline on the wire (characterisation, cr-files-a
   })
 
   // A cover is core's since inbox #411: the same upload and the same one-request write (`setNodeCover`) for a Memory's, a
-  // folder's and a drop box's. This scenario is the Memories path (`setMemoryCoverUpload` -> core's `uploadCoverImage` +
-  // `writeNodeCover`). The blob's declare and its PUTs are byte for byte what `uploadCoverBlob` sent; only the last request
+  // folder's and a drop box's, and since the cover dialog moved to core (inbox #411, follow-up) it is ONE save path. This scenario
+  // is that path as the dialog's `upload` intent runs it with a Memory's key (core's `uploadCoverImage` + `writeNodeCover`). The blob's declare and its PUTs are byte for byte what `uploadCoverBlob` sent; only the last request
   // moved: the commit `POST .../cover-blob` became `PUT .../cover`, carrying the node's sealed meta that names the cover.
   it('a derived multi-chunk cover - the blob, then ONE setNodeCover with the meta that names it', async () => {
     const wire = await expectWire('uploadCoverBlob', 3, () =>
-      setMemoryCoverUpload(
-        SCOPE_ID, NODE_ID, memoryKey(), imageSource(5000, 3), { ...FULL_FRAME }, { wrappedMeta: null, metaVersion: 0 },
-        fixedDeriver({ preview: 0, thumbnail: 0, cover: 2 * CHUNK_SIZE + 5 }),
-      ).then((r) => ({ wrappedMeta: r.wrappedMeta, metaVersion: r.metaVersion })),
+      uploadCoverImage(
+        SCOPE_ID, NODE_ID, memoryKey(), imageSource(5000, 3), fixedDeriver({ preview: 0, thumbnail: 0, cover: 2 * CHUNK_SIZE + 5 }),
+      ).then((up) => writeNodeCover({
+        scopeId: SCOPE_ID, nodeId: NODE_ID, nodeKey: memoryKey(), current: { wrappedMeta: null, metaVersion: 0 },
+        cover: uploadedCover(up.plan, { ...FULL_FRAME }), uploadId: up.uploadId, surfaceConflict: false,
+      })).then((r) => ({ wrappedMeta: r.wrappedMeta, metaVersion: r.metaVersion })),
     )
     expect(wire.requests.filter((r) => r.bytes).length, 'the three frames of the blob, then the write (also a PUT)').toBe(3)
     expect(wire.putCount).toBe(4)

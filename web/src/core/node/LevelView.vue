@@ -72,6 +72,7 @@ import type { CoreRowAction, LevelRow, LevelRowsContext, LevelRowsHost } from '.
 import { favoriteHeaderActions, favoriteRowActions } from '../favorites/favoriteActions'
 import { useNodeCover } from './cover/useNodeCover'
 import NodeCoverImage from './cover/components/NodeCoverImage.vue'
+import CoverEditor from './cover/components/CoverEditor.vue'
 import ViewModeToggle from './ViewModeToggle.vue'
 import NodeHeader from './components/NodeHeader.vue'
 import LevelRowItem from './components/LevelRowItem.vue'
@@ -282,7 +283,7 @@ function rawItem(node: TreeNode): Item {
 // Core's own row actions: the favorite heart of inbox #409, gated by `favoriteCapabilities` (member only, fail closed) and
 // merged around the application's, for EVERY kind and the folders, with no change to any application. An unsupported row
 // (a kind nobody draws) gets none.
-// The cover of inbox #411 is core's second row action, merged around the application's the same way: "Set cover" / "Change
+// The cover of inbox #411 is core's second row action, merged around the application's the same way: "Set cover" /
 // cover" / "Remove cover" in the row's menu, gated by `coverCapabilities` (a writer, a kind that opted in; a guest none).
 const coreRowActions = (item: Item): CoreRowAction[] =>
   item.unsupported ? [] : [...favoriteRowActions(t, props.access, item.node), ...cover.rowActions(item.node)]
@@ -398,5 +399,7 @@ function onDrop(e: DragEvent): void {
         :core-actions="coreRowActions(item)"
       />
     </ul>
+    <!-- The one cover dialog (inbox #411): opened by the cover action of a row or of the folder's header. -->
+    <CoverEditor :cover="cover" />
   </div>
 </template>
