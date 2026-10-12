@@ -133,6 +133,49 @@ reads).
   message rather than built as a multi-GB Blob. Proven in unit tests only; no real browser has streamed a large file yet
   (inbox #371).
 
+## The viewer (`FileDetail` → `FileViewer`, inbox #412)
+
+**Files makes no thumbnail and no preview blob** (a Memory keeps its derived tiers; a cover for a file is a different
+idea, inbox #411). The file's own page reads the file when it is opened — never for a list row — and shows it above its
+facts, in the page or full screen. It is the same component for a member and for a share guest of either role (a
+share looks like the member view, inbox #401); it reads through the source's `chunks()` (the member's scope READ gate,
+a guest's link presign) with the chunk provider the download uses (`fileChunkProvider`).
+
+| What the bytes are | Shown as | Cap |
+|---|---|---|
+| JPEG, PNG, GIF, WebP, AVIF, BMP, SVG (HEIC is tried) | `<img>` on an object URL typed with the **sniffed** type (`useObjectUrl`, revoked on replace/unmount) | 64 MiB, then the download |
+| text: valid UTF-8 (BOM dropped) or UTF-16 with a BOM, no NUL or other control byte, and a text-ish type or extension | `<pre>` through `textContent`, monospace, wrapping | first 1 MiB, a note says so |
+| MP4, MOV, WebM, Matroska, Ogg, MP3, AAC, WAV, FLAC, M4A | `<video controls playsinline>` / `<audio controls>` on the service worker's `/__media/<handle>` ([ADR 0047](../decisions/0047-inline-video-playback-range-streaming.md); the page holds the key, the worker none) | none: streamed |
+| PDF | not rendered (below): message + download | — |
+| anything else, a text in another encoding, an image the browser cannot decode (`<img>` `error`), a codec it lacks, no usable worker | message + download | — |
+
+- **The bytes decide** (`core/blob/sniff.ts`, `view.ts`): the first chunk is opened and sniffed; the blob's sealed type
+  and the name only *narrow*. A PNG claimed as `text/plain` is an image; a binary claimed as `image/png` shows nothing;
+  an SVG is an image only when its markup (first element `<svg`) **and** the type/extension say so — any other markup is
+  text. Legacy 8-bit encodings are not guessed (they are not valid UTF-8, so the file is not shown as text).
+- **Security rules.** Never render untrusted bytes as HTML or script: text is `textContent`, an image an `<img>` (an SVG
+  too — never inline, never in `<object>`/`<iframe>`), blob URL types are the sniffed ones, and the media route sets
+  `Content-Type` from the sniffed container (protocol 4 accepts `audio/*` besides `video/*`, same one-essence rule).
+  Nothing is logged, no new network origin is used, and the object URL, the playback handle and the read in flight
+  (an `AbortSignal` into the stream pump) are released on a new file, on navigation and on unmount. A blob URL document
+  opened by the user in a tab inherits the app's CSP (`script-src 'self'`), so an SVG's script cannot run there either
+  (remembered from the specification, not measured in a browser).
+- **Memory.** Per-kind caps above; a file of another kind is read no further than its first chunk. Images and text are
+  collected chunk by chunk (four frames in flight) into one `Blob`/string.
+- **A PDF is not rendered in this cut.** The browser's own viewer needs an `<iframe>`/`<object>` on a `blob:` URL; the
+  app's policy is `object-src 'none'; frame-src 'none'` (`web/src/shared/security/csp.ts`, pinned by `csp.test.ts`,
+  emitted to `dist/content-security-policy.txt` and served as the header by the backend's app shell —
+  [cc.security.csp](../crosscutting/cc.security.csp.md)), and a viewer frame would also be a same-origin `blob:` document
+  next to the keys. Showing one would mean widening the policy — the owner's decision, not made. The page says so and
+  offers the download. Follow-ups, recorded in inbox #412: open the PDF in a new tab from a `blob:` URL (a top-level
+  navigation is no frame, so no policy change; it needs the whole file decrypted before the click) and pdf.js
+  (Apache-2.0, a lazily loaded chunk and a same-origin worker, which `worker-src 'self'` already allows; its optional
+  WASM image decoders would need `'wasm-unsafe-eval'`, which is a policy change again).
+- **Full screen.** A button toggles the Fullscreen API on the viewer's container (Escape leaves, which the browser
+  handles); where the API is missing or refused (an iPhone's Safari has no element fullscreen) a fixed-position overlay
+  stands in, left by the button or Escape.
+- **Not proven in a real browser yet:** video/audio through the worker for a FILE, fullscreen, mobile Safari, HEIC.
+
 ## Guests (a folder share)
 
 A file is shared through a `FOLDER` link above it, `READ` or `READ_WRITE` (or on its own, § A single file as a share
@@ -345,8 +388,9 @@ folder and its files, and when.
 
 ## Open questions
 
-- Preview or thumbnail for images: a Files feature (later a derivative through another attachment slot), or out of
-  scope?
+- A thumbnail or cover for a file: out of scope for the viewer (inbox #412 decided Files makes no preview blobs); a cover
+  for a file is inbox #411.
+- Showing a PDF on the page (needs the owner's decision on the CSP, or pdf.js): § The viewer, inbox #412.
 - An operator-configurable per-file size cap (the quota only, at first).
 - The other reversible choices made while building Files wait for the owner's review: inbox #378. (Where the drop box
   differed from ADR 0080 decision 11, inbox #377, the owner ruled 2026-10-08 — § The drop box.)

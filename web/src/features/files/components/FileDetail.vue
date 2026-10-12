@@ -18,6 +18,11 @@
 // download through the session's own door. The replace is a compare-and-set against the blob this page read
 // (`expectedBlobId`): a peer's replace in the meantime refuses it (`stale_file`) and the page offers "replace anyway".
 //
+// **The file is shown when its page opens** (inbox #412, `FileViewer`): an image, a text, a video or audio through the service
+// worker's media route, the download offered for anything else; Files makes no thumbnail or preview blob. It reads the blob
+// through the source's `chunks` (a member's scope READ gate, a guest's link), so a guest of either role sees the member's
+// viewer; nothing about it is a capability of its own beyond the download it offers where the matrix grants one.
+//
 // Operator-blind as the section: every name, size and date is opened here under keys the tree holds.
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -38,6 +43,9 @@ import { filesCapabilities } from '../capabilities'
 import { guestFilesSource, memberFilesSource, sourceCapabilities, type FilesSource } from '../source'
 import { deliveredSince, FileUploadError, type FileJobExtra, type FileUploadResult } from '../uploadFile'
 import { fileFacts } from '../download'
+import { extensionOf } from '../../../core/blob/sniff'
+import type { ViewerTarget } from '../useFileViewer'
+import FileViewer from './FileViewer.vue'
 
 const props = defineProps<NodeDetailProps>()
 const emit = defineEmits<NodeDetailEmits>()
@@ -102,9 +110,24 @@ const facts = computed(() => {
   const b = blob.value
   if (!b) return null
   const opened = key.value && scopeId ? fileFacts(scopeId, key.value, props.node.id, b) : null
-  return { size: opened?.size ?? 0, type: opened?.meta?.type || null, modifiedAt: opened?.meta?.modifiedAt ?? null }
+  return { size: opened?.size ?? 0, type: opened?.meta?.type || null, modifiedAt: opened?.meta?.modifiedAt ?? null, uploadedName: opened?.meta?.name ?? null }
 })
 const empty = computed(() => blob.value === null)
+
+/** What the viewer opens: this blob, read through the session's own door. The claims (sealed type; the node's name, else the
+ *  uploaded one when the node's has no extension) only narrow what the decrypted bytes already allow (`view.ts`). Null until
+ *  the blob is read, or when its ref is not this node's (`OpenRefused`: nothing is shown, as the facts show none). */
+const viewTarget = computed<ViewerTarget | null>(() => {
+  const b = blob.value
+  const k = key.value
+  if (!b || !k || !source.scopeId()) return null
+  try {
+    const name = extensionOf(props.node.name) ? props.node.name : (facts.value?.uploadedName ?? props.node.name)
+    return { id: b.blobId, source: source.chunks(k, props.node.id, b), hints: { type: facts.value?.type, name } }
+  } catch {
+    return null
+  }
+})
 
 // --- download --------------------------------------------------------------------------------------------------------
 
@@ -219,6 +242,8 @@ async function replaceAnyway(n: Notice) {
         </span>
       </Message>
 
+      <!-- The file itself, above its facts (inbox #412). -->
+      <FileViewer v-if="!empty" :target="viewTarget" :name="node.name" :can-download="caps.download" @download="download" />
       <p v-if="empty" class="veyq-empty veyq-empty-inline">{{ t('files.notUploaded') }}</p>
       <dl v-else-if="facts" class="file-detail-facts">
         <dt>{{ t('files.detail.size') }}</dt>

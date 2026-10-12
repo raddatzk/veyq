@@ -209,3 +209,11 @@ The download is whole-blob and sequential, so it adds no access pattern beyond w
 The page must stay open while it runs, since it holds the key. What only a browser can prove (memory flat at
 gigabyte scale, the SW's lifetime during a long download, Safari and iOS) is still open in inbox #371.
 
+
+## Addendum: audio, and Files (inbox #412)
+
+The media route also serves **audio**: a playback may be registered under one well-formed `audio/<subtype>` essence as well as a
+`video/<subtype>` one (the same one-essence rule, `isStreamableMediaType`), and `PROTOCOL_VERSION` is 4, so a still-controlling
+worker that predates it fails the handshake and the page falls back as before. Files' file page is a second caller: it
+registers the sniffed container of a file (never the claimed type) with the same page-side chunk provider the download uses.
+Nothing else of this decision changes - the worker holds no key and no plaintext at rest.

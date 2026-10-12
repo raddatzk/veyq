@@ -10,7 +10,7 @@
 // into the save target `shared/saveStream.ts` opens (a picked file, the Service Worker's download route, or — only up
 // to its cap — an in-memory Blob), each dropped once written. So the tab holds a few frames, not the file. Measured
 // only in unit tests: no multi-GB download has run in a real browser yet (#371 keeps that open).
-import { makeChunkProvider, presignAllChunks, readBlobMeta } from '../../core/blob/transport'
+import { makeChunkProvider, presignAllChunks, readBlobMeta, type BlobChunkProvider } from '../../core/blob/transport'
 import { streamBlob, type ByteSink } from '../../core/blob/stream'
 import { downloadName, type OpenedBlobMeta } from '../../core/blob/meta'
 import type { BlobRef } from '../../core/blob/types'
@@ -57,6 +57,15 @@ function fileChunks(scopeId: string, nodeKey: Uint8Array, nodeId: string, blob: 
   const ref = fileBlobRef(nodeId, blob)
   const provider = makeChunkProvider(scopeId, nodeKey, ref, () => (presign ?? ((id) => presignAllChunks(scopeId, id)))(ref.blobId))
   return { ref, provider }
+}
+
+/** The chunk provider the file page's viewer reads (inbox #412): the same one a download streams from, so the key
+ *  unwrap, the presign and the per-frame open are the code the download proves. Throws `OpenRefused` for a ref that is not
+ *  this node's. */
+export function fileChunkProvider(
+  scopeId: string, nodeKey: Uint8Array, nodeId: string, blob: FileBlobRef, presign?: PresignFileChunks,
+): BlobChunkProvider {
+  return fileChunks(scopeId, nodeKey, nodeId, blob, presign).provider
 }
 
 /**

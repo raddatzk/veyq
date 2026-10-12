@@ -5,11 +5,11 @@
 // indices and plaintext, never a key or an auth token.
 
 /**
- * Protocol version. Bump on ANY breaking change to the messages below. register.ts sends it in the handshake; a
+ * Protocol version. Bump on ANY breaking change to the messages below (4: a playback may be `audio/*` too, inbox #412). register.ts sends it in the handshake; a
  * controlling SW built at a different version answers a mismatch (or nothing), and the page falls back to the
  * Slice-1 full-blob path. This is what lets a freshly-deployed page detect a stale still-controlling SW.
  */
-export const PROTOCOL_VERSION = 3
+export const PROTOCOL_VERSION = 4
 
 /** The synthetic in-origin path the SW intercepts. `<handle>` is opaque + per-playback — never a blobId (ADR 0047). */
 export const MEDIA_PATH_PREFIX = '/__media/'
@@ -18,8 +18,10 @@ export const MEDIA_PATH_PREFIX = '/__media/'
  *  with the bytes the page streams over the registered port, as an attachment. `<handle>` is opaque and one-shot. */
 export const DOWNLOAD_PATH_PREFIX = '/__download/'
 
-/** One `video/<subtype>` MIME essence: no list, no parameters, no whitespace — the subtype is an RFC 9110 token. */
+/** One `video/<subtype>` or `audio/<subtype>` MIME essence: no list, no parameters, no whitespace — the subtype is an
+ *  RFC 9110 token. */
 const VIDEO_ESSENCE = /^video\/[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/
+const AUDIO_ESSENCE = /^audio\/[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/
 
 /**
  * Whether a sealed `mediaType` names a video — the signal for the tile play badge, the lightbox `<video>` branch
@@ -30,6 +32,15 @@ const VIDEO_ESSENCE = /^video\/[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/
  */
 export function isVideoMediaType(mediaType: string | undefined): boolean {
   return typeof mediaType === 'string' && VIDEO_ESSENCE.test(mediaType)
+}
+
+/**
+ * Whether `mediaType` is one well-formed audio or video essence - what the SW may serve a playback under (inbox #412 added
+ * audio: Files plays an `<audio>` through the same route). The same rule as [isVideoMediaType]: the value is a peer's, and
+ * the shim serves it as `Content-Type` on the app origin, so a list or a parameter never passes.
+ */
+export function isStreamableMediaType(mediaType: string | undefined): boolean {
+  return isVideoMediaType(mediaType) || (typeof mediaType === 'string' && AUDIO_ESSENCE.test(mediaType))
 }
 
 /** A per-blob source of decrypted plaintext chunks, addressed by chunk index. Backs the SW range layer; the SW
@@ -52,7 +63,7 @@ export type HandshakeAck = { type: 'veyq-handshake-ack'; version: number }
 
 /** Register a playback: hand the SW its metadata + a MessagePort to pull plaintext chunks over. `mediaType` is
  *  the sealed MIME the page already holds — given to the SW only to set the response `Content-Type` so the demuxer
- *  picks the right container, and refused unless [isVideoMediaType]. It is on-device code; the SW never sends it
+ *  picks the right container, and refused unless [isStreamableMediaType]. It is on-device code; the SW never sends it
  *  (or anything) to the operator. */
 export type RegisterMsg = {
   type: 'veyq-register-playback'

@@ -13,7 +13,9 @@ import type { FileListPage } from '../../../api/generated/files'
 const keys = vi.hoisted(() => new Map<string, Uint8Array>())
 vi.mock('../api', () => ({ filesApi: vi.fn() }))
 vi.mock('../../../core/favorites/favoritesStore', () => ({ isFavorite: vi.fn(() => false), toggleFavorite: vi.fn() }))
-vi.mock('../download', async (importOriginal) => ({ ...(await importOriginal<typeof import('../download')>()), downloadFile: vi.fn() }))
+vi.mock('../download', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../download')>()), downloadFile: vi.fn(), fileChunkProvider: vi.fn(),
+}))
 const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }))
 vi.mock('../../../shared/state/useToast', () => ({
   useToast: () => ({ success: vi.fn(), error: toastError, showUndo: vi.fn(), dismissUndo: vi.fn() }),
@@ -33,7 +35,8 @@ vi.mock('../../../core/node/treeStore', async () => {
 
 import FileDetail from './FileDetail.vue'
 import { filesApi } from '../api'
-import { downloadFile } from '../download'
+import { downloadFile, fileChunkProvider } from '../download'
+import { PDF_BYTES, PNG_BYTES, providerOf, utf8 } from '../../../test/fileChunks'
 import { fileUploadJob, StaleFileError, type FileUploadTarget } from '../uploadFile'
 import { planBlob } from '../../../core/blob/transport'
 import { FILE_KIND } from '../kinds'
@@ -86,7 +89,8 @@ function mountDetail(o: { pending?: boolean; publicLinks?: boolean; identityFold
 }
 type Wrapper = ReturnType<typeof mountDetail>
 const byLabel = (w: Wrapper, label: string) => w.find(`button[aria-label="${label}"]`)
-const ariaLabels = (w: Wrapper) => w.findAll('button').map((b) => b.attributes('aria-label') ?? b.text())
+// The viewer's own controls (full screen, a fallback's download) are `FileViewer.test.ts`'s; this counts the page's.
+const ariaLabels = (w: Wrapper) => w.findAll('button').filter((b) => !b.element.closest('.file-viewer')).map((b) => b.attributes('aria-label') ?? b.text())
 async function pick(w: Wrapper, name: string) {
   const input = w.find('input[type="file"]')
   Object.defineProperty(input.element, 'files', { value: [new File(['n'], name)], configurable: true })
@@ -99,6 +103,7 @@ beforeEach(() => {
   keyFor(R)
   listFiles = stubApi(filesApi, { listFiles: { items: [{ nodeId: R, fileBlob: BLOB }] } satisfies FileListPage }).listFiles
   vi.mocked(downloadFile).mockReset().mockResolvedValue(undefined)
+  vi.mocked(fileChunkProvider).mockReset().mockImplementation(() => providerOf(PDF_BYTES))
   vi.mocked(fileUploadJob).mockReset().mockImplementation((_t, file) => ({ name: file.name, sizeBytes: file.size, run: async () => ({ nodeId: R }), extra: { file } }))
   vi.mocked(loadTree).mockClear()
   toastError.mockClear()
@@ -106,6 +111,64 @@ beforeEach(() => {
 afterEach(() => {
   if (confirmRequest.value) settleConfirm(false)
   clearUploads()
+})
+
+describe('an opened file: the viewer on its page (inbox #412)', () => {
+  it('reads the file through the member\'s door when the page opens - the scope, the file\'s key, the listed blob - and shows it ABOVE the facts', async () => {
+    vi.mocked(fileChunkProvider).mockImplementation(() => providerOf(PNG_BYTES))
+    const w = mountDetail()
+    await flushPromises()
+    const [scopeId, key, nodeId, blob, presign] = vi.mocked(fileChunkProvider).mock.calls[0]
+    expect([scopeId, nodeId, blob.blobId, presign]).toEqual([SCOPE, R, BLOB.blobId, undefined]) // no presign override: the scope READ gate
+    expect(Array.from(key)).toEqual(Array.from(keyFor(R)))
+    const img = w.find('.file-viewer img')
+    expect(img.attributes('alt')).toBe('Report.pdf')
+    const facts = w.find('.file-detail-facts').element
+    expect(img.element.compareDocumentPosition(facts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(w.find('.file-viewer').element.compareDocumentPosition(w.find('.file-detail-actions').element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('reads nothing for a list row: only the opened page asks the source for a reader, and not before the blob is known', async () => {
+    const w = mountDetail()
+    expect(fileChunkProvider).not.toHaveBeenCalled() // the blob listing has not answered yet
+    await flushPromises()
+    expect(fileChunkProvider).toHaveBeenCalledTimes(1)
+    w.unmount()
+  })
+
+  it('shows a text file as text (its markup stays characters), typed by what the claim and the bytes agree on', async () => {
+    const html = '<img src=x onerror="alert(1)">'
+    vi.mocked(fileChunkProvider).mockImplementation(() => providerOf(utf8(html)))
+    const w = mountDetail({ file: node(R, FILE_KIND, 'notes.txt') })
+    await flushPromises()
+    expect(w.find('.file-viewer pre').element.textContent).toBe(html)
+    expect(w.find('.file-viewer img').exists()).toBe(false)
+  })
+
+  it('a PDF is not rendered: the page says so and its fallback download is the page\'s own download', async () => {
+    const w = mountDetail()
+    await flushPromises()
+    expect(w.find('.file-viewer').text()).toContain(t('files.viewer.unsupported.pdf'))
+    await w.find('.file-viewer button.file-viewer-download').trigger('click')
+    expect(downloadFile).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(downloadFile).mock.calls[0][2]).toBe(R)
+  })
+
+  it('an empty file shows no viewer', async () => {
+    stubApi(filesApi, { listFiles: { items: [{ nodeId: R, fileBlob: null }] } satisfies FileListPage })
+    const w = mountDetail()
+    await flushPromises()
+    expect(w.find('.file-viewer').exists()).toBe(false)
+    expect(fileChunkProvider).not.toHaveBeenCalled()
+  })
+
+  it('a blob whose ref is not this file\'s opens nothing (the reader refuses at once) and the page stays standing', async () => {
+    vi.mocked(fileChunkProvider).mockImplementation(() => { throw new Error('open_refused') })
+    const w = mountDetail()
+    await flushPromises()
+    expect(w.find('.file-viewer').exists()).toBe(false)
+    expect(w.find('.file-detail-facts').exists()).toBe(true)
+  })
 })
 
 describe('an opened file: its page for a member', () => {

@@ -1,4 +1,4 @@
-<!-- speaks-for: docs/features/platform/use-cases/uc.platform.node-cover.md, docs/features/files/use-cases/uc.files.member-files.md, docs/features/memory/use-cases/uc.memory.move-node.md, docs/features/memory/use-cases/uc.memory.delete-node.md, docs/features/memory/use-cases/uc.memory.browse.md; pair: de/dateien.md -->
+<!-- speaks-for: docs/features/platform/use-cases/uc.platform.node-cover.md, docs/features/files/use-cases/uc.files.member-files.md, docs/features/files/use-cases/uc.files.view-file.md, docs/features/memory/use-cases/uc.memory.move-node.md, docs/features/memory/use-cases/uc.memory.delete-node.md, docs/features/memory/use-cases/uc.memory.browse.md; pair: de/dateien.md -->
 # Files — and finding your way around
 
 A plain-language companion to [Is my data safe?](is-my-data-safe.md). veyq is a platform for sealed, shareable
@@ -12,6 +12,12 @@ space, side by side.
   status menu in the top bar shows how far they are.
 - **Download** — the download button on the file's row gives you the file back exactly as you put it in, under the
   name it has in veyq. Clicking the row itself opens the file's own page.
+- **Look at it** — click the file's row and its page opens with the file itself on it: a **picture** is shown, a
+  **text** (plain text, Markdown, code, JSON, CSV …) is shown as text, and a **video** or a **sound file** plays,
+  with a button for **full screen**. The file is unlocked on your device while you look, nothing extra is stored,
+  and someone you shared the file with sees exactly the same. Some things are not shown on the page: a **PDF** (for
+  now it comes with a note and the download), a format your browser cannot display, and very large pictures (over
+  64 MB) — and a long text shows only its first megabyte. In all of those cases the download button is right there.
 - **Replace** — put a newer version of a file in its place. The name stays. veyq **asks first**, because there is
   **no version history**: the old content cannot be brought back. Uploading a file whose name is already taken in
   that folder asks the same question.

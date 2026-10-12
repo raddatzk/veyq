@@ -238,9 +238,19 @@ describe('handleMessage — handshake / register / revoke / end-session', () => 
     expect(reg.get('h')).toBeUndefined()
   })
 
+  // inbox #412: Files plays an `<audio>` through the same route.
+  it.each(['audio/mpeg', 'audio/ogg', 'audio/mp4', 'video/webm'])('registers a playback under %s', (mediaType) => {
+    const reg = makeRegistry()
+    const { a } = portPair()
+    handleMessage(reg, { type: 'veyq-register-playback', handle: 'h', chunkCount: 1, byteSize: 28, mediaType }, [a])
+    expect(reg.get('h')).toBeDefined()
+  })
+
   // The shim serves the registered mediaType as Content-Type, and that value was sealed by the uploader. Anything
-  // but one well-formed `video/<subtype>` never gets a handle — here, independently of the page's own gate.
+  // but one well-formed `video/<subtype>` or `audio/<subtype>` never gets a handle — here, independently of the page's own gate.
   it.each([
+    ['a listed audio type', 'audio/mpeg, text/html'],
+    ['an audio type with a parameter', 'audio/mpeg; codecs="mp3"'],
     ['a listed type', 'video/mp4, text/html'],
     ['a parameter', 'video/mp4; codecs="avc1"'],
     ['a non-video type', 'text/html'],

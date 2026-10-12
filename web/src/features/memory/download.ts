@@ -11,6 +11,7 @@
 // in-memory Blob), so the tab holds a few chunks, not the original. It used to hold the whole decrypted original.
 import { streamBlob, STREAM_IN_FLIGHT, type ByteSink } from '../../core/blob/stream'
 import { MIME_TO_EXT, downloadName, type BlobMeta } from '../../core/blob/meta'
+import { asciiAt, hasAscii, readEbmlDocType } from '../../core/blob/sniff'
 import { openSaveTarget } from '../../shared/saveStream'
 import type { ChunkProvider } from '../../sw/protocol'
 import { plaintextTotal } from '../../sw/range'
@@ -52,34 +53,6 @@ export function sniffMediaType(bytes: Uint8Array): string | undefined {
  *  [sniffMediaType] returns has its row there. Own rows only: the type is a peer's sealed statement. */
 export function extensionOf(mediaType: string | undefined): string | undefined {
   return mediaType && Object.hasOwn(MIME_TO_EXT, mediaType) ? MIME_TO_EXT[mediaType] : undefined
-}
-
-/**
- * Best-effort read of an EBML file's `DocType` string ("webm" / "matroska"). Scans the header region for the
- * `DocType` element id (`0x42 0x82`), then reads its single-byte-vint length and that many ASCII bytes. Returns
- * undefined if not found in the first 1 KiB (the DocType always sits at the very top of a well-formed file).
- */
-function readEbmlDocType(b: Uint8Array): string | undefined {
-  const end = Math.min(b.length - 1, 1024)
-  for (let i = 4; i < end; i++) {
-    if (b[i] !== 0x42 || b[i + 1] !== 0x82) continue
-    const sizeByte = b[i + 2]
-    if (sizeByte === undefined || (sizeByte & 0x80) === 0) return undefined // only the single-byte vint is expected here
-    const len = sizeByte & 0x7f
-    if (len === 0 || i + 3 + len > b.length) return undefined
-    return asciiAt(b, i + 3, len)
-  }
-  return undefined
-}
-
-function hasAscii(b: Uint8Array, offset: number, ascii: string): boolean {
-  return asciiAt(b, offset, ascii.length) === ascii
-}
-
-function asciiAt(b: Uint8Array, offset: number, length: number): string {
-  let s = ''
-  for (let i = 0; i < length; i++) s += String.fromCharCode(b[offset + i])
-  return s
 }
 
 /** The derived fallback name: the decrypted Memory name + a 1-based index + an extension (e.g. `Rom 2026 3.jpg`). A
