@@ -16,6 +16,7 @@ import PrimeVue from 'primevue/config'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 import MemoryDetailHost from './MemoryDetailHost.vue'
+import MemoryDetail from './MemoryDetail.vue'
 import { MEMORY_KIND } from '../kinds'
 import { addMedia, type MediaDeriver } from '../media'
 import { blobApi } from '../../../api/client'
@@ -166,6 +167,14 @@ describe('the gallery lightbox feeds a photo into the same dialog (the Memory\'s
     expect(write).toMatchObject({ nodeId: ID, surfaceConflict: true })
     expect(write.uploadId, 'a photo needs no blob of its own').toBeUndefined()
     expect(Object.keys(cover)).toEqual(['source', 'crop']) // the stored key order of every Memory cover
+  })
+
+  it('a photo with no thumbnail yet (nothing to crop) is set as the cover full-frame in one step, no dialog', async () => {
+    const w = await mountHost(writer())
+    w.findComponent(MemoryDetail).vm.$emit('coverFromPhoto', { mediaId: 'm-9', src: null })
+    await vi.waitFor(() => expect(writeNodeCover).toHaveBeenCalledOnce())
+    expect(vi.mocked(writeNodeCover).mock.calls[0][0].cover).toEqual({ source: { kind: 'media', mediaId: 'm-9' }, crop: { x: 0, y: 0, width: 1, height: 1 } })
+    expect(dialog()).toBeNull()
   })
 
   it('cancelling the dialog writes nothing and leaves the lightbox to its keys again', async () => {
