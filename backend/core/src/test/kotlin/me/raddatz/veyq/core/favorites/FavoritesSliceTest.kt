@@ -7,6 +7,7 @@ import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import me.raddatz.veyq.core.membership.MembershipEntity
+import me.raddatz.veyq.core.scope.ScopeEntity
 import java.time.Instant
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
@@ -162,6 +163,22 @@ class FavoritesSliceTest {
     // --- helpers ---
 
     /** Seed a user + an ACTIVE tenant + the user's TENANT-scope membership. Returns (userId, scopeId). */
+    @Test
+    fun aPinIsStillAcceptedWhileTheSpaceWaitsForItsDeletion() {
+        val (userId, scopeId) = seedMember()
+        QuarkusTransaction.requiringNew().run {
+            ScopeEntity.findById(scopeId)!!.apply { deletedAt = Instant.now() }.persist()
+        }
+        // A pin is the member's own preference, not a write to the space: the deletion grace does not refuse it.
+        given().header("Authorization", bearer(userId))
+            .contentType(ContentType.JSON).body("""{"ciphertext":"$sealed"}""")
+            .`when`().put("/api/scopes/$scopeId/favorites")
+            .then().statusCode(204)
+        given().header("Authorization", bearer(userId))
+            .`when`().get("/api/scopes/$scopeId/favorites")
+            .then().statusCode(200).body("ciphertext", equalTo(sealed))
+    }
+
     private fun seedMember(): Pair<String, String> {
         val userId = seedUser()
         return userId to seedTenant(owner = userId)

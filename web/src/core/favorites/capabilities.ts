@@ -8,9 +8,8 @@
 // - **A kind this client can draw.** A kind no application registered renders as the explicit unsupported row; a pin on it
 //   would list a thing the sidebar cannot open, so it is refused here, not hidden later.
 // - **A pending deletion keeps the heart.** A pin is the member's own preference, not a write to the scope's tree, and
-//   Memories' matrix kept it through the grace window since cr-0090 (`docs/apps/memories.md`). (The server's put gate is
-//   still the WRITE one, `FavoritesHandler`: a toggle in that window is refused with `scope_deleting` and the optimistic
-//   state reverts - the existing behaviour, kept as it was.)
+//   Memories' matrix kept it through the grace window since cr-0090 (`docs/apps/memories.md`). The server's put takes
+//   the READ gate for the same reason (`FavoritesHandler`, ADR 0068 §10), so the toggle in that window is stored.
 import type { Access } from '../access'
 import { registry } from '../applications/registry'
 import type { NodeKind } from '../node/kind'

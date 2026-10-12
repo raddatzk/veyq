@@ -281,8 +281,11 @@ class OperatorBlindProbeTest {
         )
     }
 
-    /** A POST that reads, and the one write whose `Deleting` is its precondition rather than a refusal. */
-    private val readsByException = setOf("resolveGroupMember", "presignBlobDownloads")
+    /**
+     * A POST that reads, and a PUT that takes the READ gate on purpose: a pin (`putFavorites`) is the member's own sealed
+     * preference, not a change to the scope, so a group waiting for its deletion still stores it (ADR 0068 §10).
+     */
+    private val readsByException = setOf("resolveGroupMember", "presignBlobDownloads", "putFavorites")
     private val deletingIsThePrecondition = setOf("restoreGroup")
 
     // --- the classification guard --------------------------------------------------------------------------

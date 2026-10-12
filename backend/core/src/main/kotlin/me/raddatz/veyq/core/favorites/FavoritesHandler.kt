@@ -3,7 +3,6 @@ package me.raddatz.veyq.core.favorites
 import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.membership.AccessMode.READ
-import me.raddatz.veyq.core.membership.AccessMode.WRITE
 import me.raddatz.veyq.core.membership.ScopeAccess
 import me.raddatz.veyq.core.membership.refusal
 import jakarta.enterprise.context.ApplicationScoped
@@ -17,7 +16,6 @@ sealed interface GetFavoritesOutcome {
 sealed interface PutFavoritesOutcome {
     object Stored : PutFavoritesOutcome
     object Suspended : PutFavoritesOutcome, HttpFailure by Failures.tenantSuspended
-    object Deleting : PutFavoritesOutcome, HttpFailure by Failures.scopeDeleting
     object NoScope : PutFavoritesOutcome, HttpFailure by Failures.scopeNotFound
 }
 
@@ -35,8 +33,10 @@ class FavoritesHandler(private val store: FavoritesStore, private val access: Sc
     }
 
     fun put(userId: String, scopeId: String, ciphertext: String): PutFavoritesOutcome {
-        access.check(userId, scopeId, WRITE)
-            .refusal(PutFavoritesOutcome.NoScope, PutFavoritesOutcome.Suspended, PutFavoritesOutcome.Deleting)?.let { return it }
+        // READ, not WRITE: a pin is the member's own sealed preference, not a change to the scope, so a space waiting for
+        // its deletion keeps accepting it (the heart must not bounce back in that window) — ADR 0068 §10.
+        access.check(userId, scopeId, READ)
+            .refusal(PutFavoritesOutcome.NoScope, PutFavoritesOutcome.Suspended)?.let { return it }
         store.upsert(userId, scopeId, ciphertext)
         return PutFavoritesOutcome.Stored
     }

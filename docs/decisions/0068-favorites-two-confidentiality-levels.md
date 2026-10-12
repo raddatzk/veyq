@@ -195,8 +195,9 @@ object moved **out of the Memories module into the platform's**:
   prune was rejected: it cannot tell "purged" from "not loaded yet", and a prune on the wrong reading is a lost pin. The
   cost is the ceiling (about 1 600 ids), the same as before.
 - **A pending deletion keeps the heart**, as Memories always kept it (a pin is a preference, not a write to the scope's
-  tree). The server's put still takes the WRITE gate, so a toggle in that window is refused with `scope_deleting` and the
-  optimistic state reverts — the existing behaviour, kept.
+  tree). The server's put takes the READ gate (owner decision 2026-10-12; it took WRITE before, so the toggle was refused with
+  `scope_deleting` and the heart bounced back): a pin is the member's own sealed preference, so a space waiting for its
+  deletion still stores it. The put no longer has a `409 scope_deleting`.
 - **The mark stays Memories'** (`item-favorites`): it names a `veyq_media` id and lives only in a Memory's gallery.
 
 ## Consequences
