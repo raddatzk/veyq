@@ -31,8 +31,9 @@ seals its name under the folder's key instead of `K_SC` ([ADR 0080](../../decisi
   attached to a node; **no content dedup** — operator-blind trade-off;
   [ADR 0013](../../decisions/0013-blob-storage-presigned-direct-to-store.md),
   [ADR 0012](../../decisions/0012-content-key-hierarchy.md))
-- ★ [en.memory.favorites](enablers/en.memory.favorites.md) — **built** (pin a Memory: the per-(user, scope)
-  pinned-id set sealed under `K_SC` as one opaque blob — operator-blind, no plaintext favorite flag)
+- ★ [en.memory.favorites](enablers/en.memory.favorites.md) — **built** (pin a node of any kind - core's since inbox #409 -
+  and mark a Memory's items: the per-(user, scope) pinned-id set sealed under the master key as one opaque blob —
+  operator-blind, no plaintext favorite flag)
 - ★ [en.memory.derivatives](enablers/en.memory.derivatives.md) — **refined** (per-item **thumbnail / preview /
   original** tiers — grid = thumbnail, lightbox = preview, download = original; client-generated encrypted
   blobs, **per-blob `K_blob`**, role-tagged on the media record (`original` + `derivatives[{kind, blob}]`), no
@@ -69,8 +70,9 @@ seals its name under the folder's key instead of `K_SC` ([ADR 0080](../../decisi
 - [uc.memory.place](use-cases/uc.memory.place.md) — **planned**: one named location on the same `wrappedMeta`
   (medoid position + typed/reverse-geocoded name), a tenant-wide map; reverse-only, veyq-blind geocoding (ADR 0016)
 - [uc.memory.cover](use-cases/uc.memory.cover.md) — **planned** (cr-0072): a deliberately chosen, cropped cover
-  (`{ mediaId, crop }` on the same `wrappedMeta`), shown on the browse card, the detail header, the map pin and
-  the sidebar's Favorites entry — one decrypt per Memory per scope, shared by all four
+  (`{ mediaId, crop }` on the same `wrappedMeta`), shown on the browse card, the detail header and the map pin
+  — one decrypt per Memory per scope, shared by all three (the sidebar's Favorites entry showed it too until core took the
+  Favorites section over, inbox #409; a cover for any node is inbox #411)
 - [uc.memory.concurrent-curation](use-cases/uc.memory.concurrent-curation.md) — **built**
   ([ADR 0077](../../decisions/0077-a-write-carries-the-version-it-read.md)): two members curate one Memory at once —
   every write of a sealed meta blob (a Memory's date/place/cover, a photo's date/place name/type) states the

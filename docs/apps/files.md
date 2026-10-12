@@ -89,7 +89,7 @@ reads).
   sealed meta" (`download.ts` `fileFacts`; a blob without meta, or one whose meta does not open under this node's key,
   shows its size alone; a file listed without a blob says "not uploaded yet" — none of it reads the node's own payload).
   Its **primary click opens** the file's own page (`FileDetail`); **download is its one first-class action** (a button on
-  the row), and **replace, rename** (core's `FolderNameDialog`, through the host's `rename`), **move** and **delete**
+  the row, beside core's own favorite heart, which every kind's row has - `core/favorites`, ADR 0068 §10), and **replace, rename** (core's `FolderNameDialog`, through the host's `rename`), **move** and **delete**
   (into core's trash, restored from core's trash dialog — or at once from the "moved to the trash" toast's Undo, core's
   `trashUndo.ts`, inbox #385 (c)) sit in the row's one "more" menu, each `shown` by `filesCapabilities` narrowed to the
   doors the session's source carries (fail closed: a guest gets the same row with fewer actions). Files, Memories and

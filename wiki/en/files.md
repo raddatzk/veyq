@@ -43,8 +43,10 @@ folder with you and lets you contribute, you can move things around **inside** t
 A folder shows **one list** of everything in it: sub-folders, Memories, files and drop boxes together. Folders come
 first; everything else follows in alphabetical order, whatever it is (numbers count as numbers, so *Photo 2* comes
 before *Photo 10*). Each entry shows what it is — for example *File · 157 B · modified …* or *Memory · June 2024* —
-and has its own buttons: the most useful one (for a file, download; for a Memory, the heart) sits on the entry, the
-rest are in its **⋯** menu. Where you may not do something, its button is simply not there.
+and has its own buttons: the most useful one (for a file, download) sits on the entry, the rest are in its **⋯** menu.
+Every entry — folder, Memory, file or drop box — also has a **heart**: it adds the entry to your **favorites** in the
+left-hand navigation. Your favorites are yours alone; other members of the space cannot see them, and neither can the
+server. Where you may not do something, its button is simply not there (people you share a link with get no heart).
 
 When a folder holds more than one kind of thing, tabs above the list — **All**, **Memories**, **Files**, **Drop
 boxes** — let you show just one kind. Sub-folders stay visible in every tab so you can keep navigating.

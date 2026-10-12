@@ -44,9 +44,11 @@ Dinge **darin** verschieben — aber nicht hinaus.
 Ein Ordner zeigt **eine Liste** von allem, was darin liegt: Unterordner, Erinnerungen, Dateien und Briefkästen
 gemeinsam. Zuerst kommen die Ordner, danach alles andere in alphabetischer Reihenfolge, egal was es ist (Zahlen zählen
 als Zahlen, *Foto 2* steht also vor *Foto 10*). Jeder Eintrag sagt, was er ist — zum Beispiel *Datei · 157 B · geändert …*
-oder *Erinnerung · Juni 2024* — und hat eigene Schaltflächen: die wichtigste (bei einer Datei das Herunterladen, bei
-einer Erinnerung das Herz) sitzt direkt am Eintrag, die übrigen im **⋯**-Menü. Was du nicht darfst, hat schlicht keine
-Schaltfläche.
+oder *Erinnerung · Juni 2024* — und hat eigene Schaltflächen: die wichtigste (bei einer Datei das Herunterladen) sitzt direkt am Eintrag, die übrigen im
+**⋯**-Menü. Jeder Eintrag — Ordner, Erinnerung, Datei oder Briefkasten — hat außerdem ein **Herz**: Es nimmt den Eintrag in
+deine **Favoriten** in der Navigation links auf. Deine Favoriten gehören nur dir; weder andere Mitglieder des Raums noch
+der Server können sie sehen. Was du nicht darfst, hat schlicht keine Schaltfläche (wer nur einen Link bekommt, hat kein
+Herz).
 
 Liegt in einem Ordner mehr als eine Art von Dingen, zeigen dir Tabs über der Liste — **Alle**, **Erinnerungen**,
 **Dateien**, **Briefkästen** — nur eine Art. Unterordner bleiben in jedem Tab sichtbar, damit du weiter navigieren kannst.

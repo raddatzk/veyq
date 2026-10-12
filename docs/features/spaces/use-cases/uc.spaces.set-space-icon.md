@@ -148,7 +148,7 @@ sequenceDiagram
   **65,535 bytes on MariaDB and effectively unbounded on H2**, so an oversized value passes the entire test
   suite and fails only in production. Two fields of exactly that shape already exist
   (`identity_pins.sealed_blob` declares `@Size(max = 1048576)` over a `TEXT` column;
-  `veyq_scope_favorites.ciphertext` declares `65536` against a 65,535-byte column). The icon must not become
+  `veyq_scope_favorites.ciphertext` (core's since inbox #409) declares `65536` against a 65,535-byte column). The icon must not become
   the third — and because its plaintext is a constant, its `@Size` is the **exact computed base64 length** of
   the sealed constant: one number, provably inside `TEXT`, inherited from neither neighbour.
 - **A derived icon-key, like the name — and for the same reason.** `K_icon_e = HKDF(E_e, "space-icon-key")` is

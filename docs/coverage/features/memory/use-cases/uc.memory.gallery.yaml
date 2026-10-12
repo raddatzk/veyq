@@ -37,18 +37,41 @@ acceptanceCriteria:
       web: { unit: [src/features/memory/components/MediaLightbox.test.ts, src/features/memory/download.stream.test.ts] }
   - id: favorite-toggle
     text: >
-      The header toggle pins/unpins the Memory (operator-blind, via en.memory.favorites), and the pin is
-      PRIVATE to its member: it seals under their master key, in every scope without branching on scope type,
+      The heart pins/unpins a node of ANY kind - in its row of a level and in its own header, one core action
+      (core/favorites, inbox #409), member only and fail closed - operator-blind, via en.memory.favorites. The pin
+      is PRIVATE to its member: it seals under their master key, in every scope without branching on scope type,
       so a co-member holding the shared K_SC cannot open it. Asserted on the typed open refusing, because
       the loader swallows a failed unwrap by design and a bite phrased over it could never redden. The set is
-      carried across a master-key rotation for every scope the member belongs to.
-      cr-favorites-two-objects (ADR 0068 §1-§3, discharging ADR 0014 §7).
+      carried across a master-key rotation for every scope the member belongs to. The server stores it verbatim,
+      last-write-wins, capped at the contract's length, per (user, scope): a co-member never reads or overwrites it,
+      another tenant's member gets 404, a scope's erasure takes it. The request is `{ ciphertext }` and nothing else.
+      cr-favorites-two-objects (ADR 0068 §1-§3, discharging ADR 0014 §7); core's since ADR 0068 §10.
     coverage:
+      backend:
+        integration:
+          - FavoritesSliceTest.getWithoutAnyStoredReturnsNullCiphertext
+          - FavoritesSliceTest.putThenGetReturnsTheVerbatimCiphertext
+          - FavoritesSliceTest.lastWriteWins
+          - FavoritesSliceTest.theCapIsTheContractsAndNotOneCharacterMore
+          - FavoritesSliceTest.aBlankOrNonBase64BodyIs400
+          - FavoritesSliceTest.nonMemberIs404
+          - FavoritesSliceTest.aCoMemberOfTheSameScopeNeverReadsOrOverwritesMyBlob
+          - FavoritesSliceTest.anotherTenantsMemberIs404AndTheirOwnScopeIsUntouched
+          - FavoritesSliceTest.erasingTheScopeTakesItsPinRowsWithIt
+          - FavoritesSliceTest.unauthenticatedIs401
       web:
         unit:
-          - src/features/memory/favoritesStore.test.ts
-          - src/features/memory/favoritesPrivacy.test.ts
-          - src/features/memory/favorites.test.ts
+          - src/core/favorites/favoritesStore.test.ts
+          - src/core/favorites/favoritesPrivacy.test.ts
+          - src/core/favorites/favorites.test.ts
+          - src/core/favorites/favorites.wire.test.ts
+          - src/core/favorites/capabilities.test.ts
+          - src/core/favorites/favoriteActions.test.ts
+          - src/core/favorites/heart.test.ts
+          - src/features/memory/components/MemoryDetailHost.heart.test.ts
+          - src/features/files/components/FileDetail.test.ts
+          - src/features/files/components/DropBoxDetail.test.ts
+          - src/components/app/AppSidebar.test.ts
           - src/features/account/rotation/rotateKeys.test.ts
   - id: operator-blind-fetch
     text: Every tier (thumbnail/preview/original) is fetched as ciphertext via presigned GET and decrypted on device; the server sees no pixel, filename, or content key.

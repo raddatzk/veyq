@@ -9,8 +9,8 @@ client whose `generate:api` run reads an application's spec**: an application ow
 own `contracts/api/<owner>/`. Core is everything else under `web/src` — by exclusion, so a new directory is guarded
 the day it appears. The client half is **derived**, never listed: each `openapi-generator-cli generate` step of
 `web/package.json`'s `generate:api` script is read for its `-i` (spec) and `-o` (output directory), and an output
-whose spec lies in an application's directory is that application's (today `api/generated/favorites`,
-`api/generated/media` and `api/generated/share-media`, all Memories'), so a new application client is covered the day
+whose spec lies in an application's directory is that application's (today `api/generated/item-favorites`,
+`api/generated/media` and `api/generated/share-media`, all Memories'; the node pins' `api/generated/favorites` is core's), so a new application client is covered the day
 its line lands. Core's own clients (`blob`, `content`, …) stay core's: importing them is the point of generating them.
 Dependencies run application → core, never back, and never application → application. Five rules:
 - **import** (core): no core file names an application by an import specifier — `from '…'` (so also
