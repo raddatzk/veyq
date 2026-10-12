@@ -1,8 +1,9 @@
 // The state machine of a file page's viewer (inbox #412): `idle` (nothing to read yet) -> `loading` (a fraction) -> one of
 // `ready` (an image, a text or a media element's source), `too-large`, `unsupported` (and why), `error` or `cancelled`. The
 // reading and the decision are `view.ts`'s; this owns what must be undone: the AbortController of a read in flight, the
-// object URL of an image (core's `useObjectUrl`, revoked on replace, on a new target and on unmount) and the service
-// worker's playback handle (revoked the same way).
+// object URL of an image (core's `useObjectUrl`, revoked on replace, on a new target and on unmount), the service
+// worker's playback handle (revoked the same way) and a PDF's document (`pdf/pdfEngine.ts`: pdf.js, lazily loaded on the
+// first PDF; destroyed - its pages, its worker, its memory - the same way).
 //
 // A new target (the page's file was replaced, or the page moved to another file) cancels the read in flight and starts
 // again; a result that arrives for an old read is dropped, never shown.
@@ -10,17 +11,19 @@ import { onBeforeUnmount, shallowRef, watch, type Ref } from 'vue'
 import type { BlobChunkProvider } from '../../core/blob/transport'
 import { useObjectUrl } from '../../shared/state/useObjectUrls'
 import { handleFromUrl, registerPlayback, revokePlayback } from '../../sw/register'
+import { openPdf, PdfOpenError, type PdfDocument } from './pdf/pdfEngine'
 import { loadFileView, type UnsupportedReason, type ViewHints } from './view'
 
 /** What the viewer opens: `id` changes whenever the content does (the blob's id); the provider reads and decrypts it. */
 export type ViewerTarget = { id: string; source: BlobChunkProvider; hints: ViewHints }
 
 /** Why a file is not shown: {@link UnsupportedReason}, plus what only the browser can tell once it tried. */
-export type ViewerUnsupported = UnsupportedReason | 'codec' | 'no-sw'
+export type ViewerUnsupported = UnsupportedReason | 'codec' | 'no-sw' | 'pdf-password' | 'pdf-broken' | 'pdf-pages'
 
 export type ReadyView =
   | { kind: 'image'; url: string; svg: boolean }
   | { kind: 'text'; text: string; truncated: boolean }
+  | { kind: 'pdf'; doc: PdfDocument }
   | { kind: 'stream'; element: 'video' | 'audio'; type: string; src: string }
 
 export type ViewerState =
@@ -48,10 +51,14 @@ export function useFileViewer(target: () => ViewerTarget | null): {
   let run = 0
   let controller: AbortController | null = null
   let handle: string | null = null
+  let pdf: PdfDocument | null = null
 
   function release(): void {
     controller?.abort()
     controller = null
+    // The document first goes out of the state, so no page component draws on a destroyed one.
+    void pdf?.destroy()
+    pdf = null
     if (handle) revokePlayback(handle)
     handle = null
     image.clear()
@@ -81,6 +88,22 @@ export function useFileViewer(target: () => ViewerTarget | null): {
         state.value = { status: 'ready', view: { kind: 'image', url: image.url.value!, svg: view.type === 'image/svg+xml' } }
       } else if (view.kind === 'text') {
         state.value = { status: 'ready', view: { kind: 'text', text: view.text, truncated: view.truncated } }
+      } else if (view.kind === 'pdf') {
+        // pdf.js (core + worker) is a chunk of its own, fetched here, on the first PDF. A password-protected, unreadable or
+        // endless PDF is a statement and the download, never an error screen; a chunk that fails to load is an error (Try again).
+        try {
+          const doc = await openPdf(view.bytes, ctl.signal)
+          if (mine !== run) {
+            void doc.destroy()
+            return
+          }
+          pdf = doc
+          state.value = { status: 'ready', view: { kind: 'pdf', doc } }
+        } catch (e) {
+          if (!(e instanceof PdfOpenError)) throw e
+          if (mine !== run) return
+          state.value = { status: 'unsupported', reason: `pdf-${e.reason}` }
+        }
       } else if (view.kind === 'stream') {
         // The page holds the key; the service worker only asks it for plaintext chunks (ADR 0047). No SW, no stream.
         const src = await registerPlayback({ chunkCount: t.source.chunkCount, byteSize: t.source.byteSize, mediaType: view.type }, t.source)
