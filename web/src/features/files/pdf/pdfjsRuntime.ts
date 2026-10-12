@@ -18,3 +18,6 @@ if (typeof Worker !== 'undefined') pdfjs.GlobalWorkerOptions.workerSrc = workerU
 const dataBase = typeof document === 'undefined' ? null : pdfDataBase(import.meta.env.BASE_URL, __PDFJS_VERSION__)
 
 export const getDocument = (data: Uint8Array) => pdfjs.getDocument(pdfOpenParameters(data, dataBase))
+
+/** pdf.js' text layer (transparent, positioned text over a page's canvas so it can be selected and copied; no links, no events). */
+export const TextLayer = pdfjs.TextLayer

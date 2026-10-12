@@ -5,7 +5,9 @@
 // and the option set work together. node has no canvas, so nothing is drawn here; drawing is a browser's (docs/apps/files.md).
 import { createHash } from 'node:crypto'
 import { describe, it, expect } from 'vitest'
+import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs'
 import { openPdf, PdfOpenError } from './pdfEngine'
+import { getDocument } from './pdfjsRuntime'
 import { PDF_MAX_PAGES, pdfOpenParameters } from './pdfOptions'
 
 const PAD = Uint8Array.from([
@@ -30,19 +32,27 @@ function rc4(key: Uint8Array, data: Uint8Array): Uint8Array {
 }
 const hex = (b: Uint8Array) => [...b].map((x) => x.toString(16).padStart(2, '0')).join('')
 const padded = (pw: string) => Uint8Array.from([...new TextEncoder().encode(pw), ...PAD].slice(0, 32))
-/** The /Encrypt dictionary (standard handler, RC4 40 bit, revision 2) of a document whose USER password is `pw`: opening it
- *  without the password must be refused. Only the dictionary is real - the document's own strings are left plain, since the
- *  password check happens before any of them is read. */
-function encryptDictionary(pw: string, id: Uint8Array): string {
+/** The /Encrypt dictionary (standard handler, RC4 40 bit, revision 2) of a document whose USER password is `pw`, and the file
+ *  key it derives. The dictionary is what opening without the password must be refused by; the key encrypts the page content
+ *  streams (`objectKey`), so the text of an encrypted page can only be read with the right password. The document has no
+ *  strings outside streams, so there is nothing else to encrypt. */
+function encryptDictionary(pw: string, id: Uint8Array): { dictionary: string; fileKey: Uint8Array } {
   const o = rc4(md5(padded('owner-secret')).subarray(0, 5), padded(pw))
   const p = Uint8Array.from([0xfc, 0xff, 0xff, 0xff]) // -4: every permission
   const key = md5(padded(pw), o, p, id).subarray(0, 5)
   const u = rc4(key, PAD)
-  return `<< /Filter /Standard /V 1 /R 2 /O <${hex(o)}> /U <${hex(u)}> /P -4 >>`
+  return { dictionary: `<< /Filter /Standard /V 1 /R 2 /O <${hex(o)}> /U <${hex(u)}> /P -4 >>`, fileKey: key }
 }
+/** The RC4 key of object `num` (generation 0): MD5(file key + object number as 3 bytes LE + generation as 2 bytes LE), cut to key length + 5. */
+const objectKey = (fileKey: Uint8Array, num: number) =>
+  md5(fileKey, Uint8Array.from([num & 255, (num >> 8) & 255, (num >> 16) & 255, 0, 0])).subarray(0, Math.min(fileKey.length + 5, 16))
+const latin1 = (b: Uint8Array) => Array.from(b, (c) => String.fromCharCode(c)).join('')
 
-/** A valid PDF 1.4 with `pageCount` empty pages of 200 x 100 points (A "Hello" text on each), xref offsets computed. */
-function minimalPdf(pageCount: number, size: [number, number] = [200, 100], userPassword?: string): Uint8Array {
+/** A valid PDF 1.4 with `pageCount` pages of 200 x 100 points, each showing `text` in Helvetica, xref offsets computed. With a
+ *  `userPassword` the document is encrypted: opening needs it, and so does reading the text of a page. */
+function minimalPdf(pageCount: number, size: [number, number] = [200, 100], userPassword?: string, text = 'Hello'): Uint8Array {
+  const id = new Uint8Array(16).fill(7)
+  const enc = userPassword !== undefined ? encryptDictionary(userPassword, id) : null
   const objects: string[] = []
   const pageIds = Array.from({ length: pageCount }, (_, i) => 4 + i * 2)
   objects[1] = '<< /Type /Catalog /Pages 2 0 R >>'
@@ -50,12 +60,12 @@ function minimalPdf(pageCount: number, size: [number, number] = [200, 100], user
   objects[3] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'
   for (const id of pageIds) {
     objects[id] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${size[0]} ${size[1]}] /Resources << /Font << /F1 3 0 R >> >> /Contents ${id + 1} 0 R >>`
-    const body = 'BT /F1 18 Tf 20 40 Td (Hello) Tj ET'
+    const plain = `BT /F1 18 Tf 20 40 Td (${text}) Tj ET`
+    const body = enc ? latin1(rc4(objectKey(enc.fileKey, id + 1), new TextEncoder().encode(plain))) : plain
     objects[id + 1] = `<< /Length ${body.length} >>\nstream\n${body}\nendstream`
   }
-  const id = new Uint8Array(16).fill(7)
   const encryptId = objects.length
-  if (userPassword !== undefined) objects[encryptId] = encryptDictionary(userPassword, id)
+  if (enc) objects[encryptId] = enc.dictionary
   let out = '%PDF-1.4\n'
   const offsets: number[] = []
   for (let id = 1; id < objects.length; id++) {
@@ -65,9 +75,9 @@ function minimalPdf(pageCount: number, size: [number, number] = [200, 100], user
   const xref = out.length
   out += `xref\n0 ${objects.length}\n0000000000 65535 f \n`
   for (let id = 1; id < objects.length; id++) out += `${String(offsets[id]).padStart(10, '0')} 00000 n \n`
-  const encrypt = userPassword !== undefined ? ` /Encrypt ${encryptId} 0 R /ID [<${hex(id)}> <${hex(id)}>]` : ''
+  const encrypt = enc ? ` /Encrypt ${encryptId} 0 R /ID [<${hex(id)}> <${hex(id)}>]` : ''
   out += `trailer\n<< /Size ${objects.length} /Root 1 0 R${encrypt} >>\nstartxref\n${xref}\n%%EOF\n`
-  return new TextEncoder().encode(out)
+  return Uint8Array.from(out, (c) => c.charCodeAt(0)) // every character is one byte: ASCII, or an encrypted stream's latin-1 bytes
 }
 
 describe('the real pdf.js, our options', () => {
@@ -104,6 +114,11 @@ describe('the real pdf.js, our options', () => {
     await expect(openPdf(minimalPdf(2, [200, 100], 'secret'))).rejects.toMatchObject({ name: 'PdfOpenError', reason: 'password' })
   })
 
+  it('names the two password failures the way the engine tells them apart (pdf.js\' PasswordResponses)', () => {
+    expect(pdfjs.PasswordResponses.NEED_PASSWORD).toBe(1)
+    expect(pdfjs.PasswordResponses.INCORRECT_PASSWORD).toBe(2) // the engine\'s INCORRECT_PASSWORD
+  })
+
   it('refuses a PDF with more pages than the cap', async () => {
     await expect(openPdf(minimalPdf(PDF_MAX_PAGES + 1))).rejects.toMatchObject({ reason: 'pages' })
   })
@@ -121,5 +136,114 @@ describe('the real pdf.js, our options', () => {
     expect(o.cMapUrl).toBe('/assets/pdfjs-x/cmaps/')
     expect(o.standardFontDataUrl).toBe('/assets/pdfjs-x/standard_fonts/')
     expect('wasmUrl' in o).toBe(false)
+  })
+})
+
+describe('the password of a protected PDF', () => {
+  const PW = 'open sesame'
+  const protectedPdf = () => minimalPdf(2, [200, 100], PW, 'Secret text')
+
+  it('asks for it once, and opens with the right one - the same loading task, no second copy of the bytes', async () => {
+    const asked: boolean[] = []
+    const doc = await openPdf(protectedPdf(), undefined, async (wrong) => {
+      asked.push(wrong)
+      return PW
+    })
+    try {
+      expect(asked).toEqual([false])
+      expect(doc.numPages).toBe(2)
+    } finally {
+      await doc.destroy()
+    }
+  })
+
+  it('tells the prompt when an answer was wrong, asks again, and opens with the next one', async () => {
+    const answers = ['not it', 'still not', PW]
+    const asked: boolean[] = []
+    const doc = await openPdf(protectedPdf(), undefined, async (wrong) => {
+      asked.push(wrong)
+      return answers.shift() ?? null
+    })
+    try {
+      expect(asked).toEqual([false, true, true]) // the first ask is "need", every later one "wrong"
+      expect(doc.numPages).toBe(2)
+    } finally {
+      await doc.destroy()
+    }
+  })
+
+  it('declining the prompt is the same "password" failure as having no prompt, and leaves nothing open', async () => {
+    await expect(openPdf(protectedPdf(), undefined, async () => null)).rejects.toMatchObject({ name: 'PdfOpenError', reason: 'password' })
+    await expect(openPdf(protectedPdf())).rejects.toMatchObject({ name: 'PdfOpenError', reason: 'password' })
+  })
+
+  it('a prompt that throws is a decline, not a crash', async () => {
+    await expect(
+      openPdf(protectedPdf(), undefined, async () => {
+        throw new Error('prompt closed')
+      }),
+    ).rejects.toMatchObject({ reason: 'password' })
+  })
+
+  it('aborting while the prompt waits ends the open with the signal\'s reason, and a late answer is ignored', async () => {
+    const ctl = new AbortController()
+    let answer: (v: string | null) => void = () => {}
+    const opening = openPdf(protectedPdf(), ctl.signal, () => new Promise((r) => (answer = r)))
+    await new Promise((r) => setTimeout(r, 50)) // the worker has asked
+    ctl.abort()
+    await expect(opening).rejects.toBeTruthy()
+    answer(PW) // nothing is waiting for it any more
+    await new Promise((r) => setTimeout(r, 20))
+  })
+
+  it('an unprotected PDF never asks', async () => {
+    const prompt = async () => PW
+    const spy: string[] = []
+    const doc = await openPdf(minimalPdf(1), undefined, async (w) => {
+      spy.push(String(w))
+      return prompt()
+    })
+    try {
+      expect(spy).toEqual([])
+    } finally {
+      await doc.destroy()
+    }
+  })
+})
+
+describe('the text of a page (what the text layer is built from)', () => {
+  /** The page's text through pdf.js' own `getTextContent`, with our open parameters (the engine does not expose it). */
+  async function textOf(bytes: Uint8Array, page: number, password?: string): Promise<string> {
+    const task = getDocument(bytes.slice()) // pdf.js takes the buffer over, and a test opens one fixture twice
+    if (password !== undefined) task.onPassword = (update: (p: string) => void) => update(password)
+    const doc = await task.promise
+    try {
+      const content = await (await doc.getPage(page)).getTextContent()
+      return content.items.map((i) => ('str' in i ? i.str : '')).join('')
+    } finally {
+      await task.destroy()
+    }
+  }
+
+  it('returns the text drawn on a page', async () => {
+    expect(await textOf(minimalPdf(2, [200, 100], undefined, 'Quarterly report'), 1)).toBe('Quarterly report')
+    expect(await textOf(minimalPdf(2), 2)).toBe('Hello')
+  })
+
+  it('returns the text of an ENCRYPTED page when opened with the right password - and not the cipher', async () => {
+    const bytes = minimalPdf(2, [200, 100], 'open sesame', 'Secret text')
+    expect(await textOf(bytes, 1, 'open sesame')).toBe('Secret text')
+    expect(await textOf(bytes, 2, 'open sesame')).toBe('Secret text')
+  })
+
+  it('the fixture really encrypts: the plaintext is nowhere in the bytes of a protected PDF', () => {
+    const bytes = minimalPdf(1, [200, 100], 'open sesame', 'Secret text')
+    expect(Buffer.from(bytes).includes(Buffer.from('Secret text'))).toBe(false)
+    expect(Buffer.from(minimalPdf(1, [200, 100], undefined, 'Secret text')).includes(Buffer.from('Secret text'))).toBe(true)
+  })
+
+  it('a page without text (a scan) has no text items', async () => {
+    const bytes = new TextEncoder().encode(new TextDecoder().decode(minimalPdf(1)).replace(/BT .* ET/, ''))
+    expect(await textOf(bytes, 1)).toBe('')
   })
 })

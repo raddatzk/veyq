@@ -20,6 +20,13 @@ acceptanceCriteria:
     text: A text is shown in a monospace block through textContent - markup in it stays visible characters and nothing is parsed; a byte-order mark is dropped, the first 1 MiB is shown with a note when the file is longer, and a binary or non-UTF-8 text claiming to be text is not shown.
     coverage:
       web: { unit: [src/features/files/components/FileViewer.test.ts, src/features/files/view.test.ts] }
+  - id: a-text-can-be-selected-copied-and-wrapped
+    text: The shown text is ordinary selectable page text (no user-select none rule reaches it, checked against the real DOM and the real stylesheets); a Copy button writes exactly the shown text to the clipboard (a text cut at 1 MiB copies its shown part and the button and the note say so), where the clipboard API is missing or refuses it copies the selection through the older route or selects the text and tells the user to press Ctrl/Cmd+C - never a silent failure - and a Wrap lines toggle switches between wrapping and sideways scrolling without touching the text.
+    coverage:
+      web: { unit: [src/features/files/components/FileViewer.text.test.ts] }
+    gaps:
+      - surface: web
+        reason: The clipboard API is stubbed in unit tests; in a real browser (the app's own pane, 2026-10-12) the API refused and the fallback ran (the selection was copied through the older route and the text was selected) - no browser that allows the API has run the success path, and what landed on the clipboard was not read back.
   - id: video-and-audio-stream-through-the-service-worker
     text: A video or audio is played by <video controls playsinline> / <audio controls> from the service worker's ranged media route under the container the first chunk sniffs to (the page holds the key, the worker none; nothing past chunk 0 is read by the page for it); with no usable worker or a codec the browser lacks it is a message and the download; the playback handle is revoked on unmount.
     coverage:
@@ -32,15 +39,29 @@ acceptanceCriteria:
     coverage:
       web: { unit: [src/features/files/view.test.ts, src/features/files/components/FileViewer.test.ts, src/features/files/components/FileViewer.pdf.test.ts, src/features/files/pdf/pdfEngine.real.test.ts] }
   - id: a-pdf-is-drawn-inline-page-by-page
-    text: A PDF (%PDF- within the first KiB, decided by the bytes - a text that only mentions the header stays text) is decrypted whole and drawn inside the page by pdf.js onto canvases - no frame, object, embed, link or form element - loaded lazily on the first PDF; only pages near the viewport are drawn and a page far away gives its bitmap back; the page shows "Page n of N" and zoom out, zoom in and fit-width buttons; a password-protected or unreadable PDF is a message and the download; the document is destroyed on a new file, on navigation and on unmount.
+    text: A PDF (%PDF- within the first KiB, decided by the bytes - a text that only mentions the header stays text) is decrypted whole and drawn inside the page by pdf.js onto canvases - no frame, object, embed, link or form element - loaded lazily on the first PDF; only pages near the viewport are drawn and a page far away gives its bitmap back; the page shows "Page n of N" and zoom out, zoom in and fit-width buttons; an unreadable PDF is a message and the download; the document is destroyed on a new file, on navigation and on unmount.
     coverage:
       web:
         unit: [src/features/files/components/FileViewer.pdf.test.ts, src/features/files/pdf/pdfEngine.real.test.ts, src/features/files/view.test.ts, src/core/blob/sniff.test.ts, src/features/files/components/FileDetail.test.ts]
     gaps:
       - surface: web
         reason: The unit tests mock the engine (happy-dom draws no canvas, has no layout and no IntersectionObserver) or run the real library in node without a canvas; the built chunk and worker were run once in a real browser under the real header (docs/apps/files.md § The viewer), but the Vue viewer's scrolling, observer margin, zoom and full screen have not been on a real file page, nor on a phone.
+  - id: the-text-of-a-pdf-can-be-selected-and-copied
+    text: A transparent text layer of selectable spans sits over each drawn PDF page - one per drawn page, built with the page's drawing, rebuilt at a new zoom, emptied when the page is freed and cancelled with the drawing, sized as the raw page and turned into place for a rotated page; a page whose text cannot be read is drawn with an empty layer; the layer is spans only, so a link in a PDF is selectable text and never clickable (there is no annotation layer); and no rule makes the text unselectable.
+    coverage:
+      web: { unit: [src/features/files/components/FileViewer.pdf.test.ts, src/features/files/pdf/pdfEngine.text.test.ts, src/features/files/pdf/pdfEngine.real.test.ts] }
+    gaps:
+      - surface: web
+        reason: happy-dom has no layout and no canvas, so alignment of the text over the drawn glyphs cannot be asserted in a test; it was observed in a real browser (100 %, 200 %, a rotated page) with a mouse drag and a select-all, not on a phone and not in CI.
+  - id: a-protected-pdf-asks-for-its-password
+    text: A password-protected PDF shows an in-page prompt (a labelled password field, autocomplete off, focused, Enter submits, Escape cancels) instead of only the download; a wrong password is an inline error and a retry, the right one shows the pages, Cancel keeps the download offer; the password goes to pdf.js only (a promise value) - it is in no DOM node, component state, storage, console output or request after the attempt, after success and after unmount, and a prompt raised by a superseded or unmounted open is declined.
+    coverage:
+      web: { unit: [src/features/files/components/FileViewer.pdf.test.ts, src/features/files/pdf/pdfEngine.password.test.ts, src/features/files/pdf/pdfEngine.real.test.ts] }
+    gaps:
+      - surface: web
+        reason: The real library is exercised in node (an RC4 40-bit fixture with encrypted content streams - need, wrong, right, declined - and the text of an encrypted page) and once in a real browser by hand; AES-encrypted documents, the other security handlers and a phone are not exercised.
   - id: pdf-js-stays-inside-the-content-security-policy
-    text: pdf.js is a lazy chunk with a same-origin hashed worker and same-origin runtime data, opens the document from the decrypted buffer (never a URL), runs no PDF script and shows no annotation or text layer, builds no code from strings and ships no WebAssembly, so the page's policy (object-src and frame-src none, worker-src self, no unsafe-eval, no wasm-unsafe-eval) is unchanged; a PDF whose images need the WASM decoders shows those images blank.
+    text: pdf.js is a lazy chunk with a same-origin hashed worker and same-origin runtime data, opens the document from the decrypted buffer (never a URL), runs no PDF script and shows no annotation layer (its text layer is plain selectable spans), builds no code from strings and ships no WebAssembly, so the page's policy (object-src and frame-src none, worker-src self, no unsafe-eval, no wasm-unsafe-eval) is unchanged; a PDF whose images need the WASM decoders shows those images blank.
     coverage:
       web: { unit: [src/features/files/pdf/pdfEngine.real.test.ts, src/features/files/components/FileViewer.pdf.test.ts, src/shared/security/csp.test.ts] }
     gaps:

@@ -102,9 +102,13 @@ origin, next to the keys. Its threat note, and what keeps it inside the policy a
 - **No network but the origin:** the document is our decrypted buffer (`{data}`, never a URL); the CMaps, standard fonts
   and ICC profile pdf.js reads on demand are same-origin copies under `assets/pdfjs-<version>/`, and `connect-src 'self'`
   already covers them. No origin was added.
-- **No script, no navigation:** a PDF's JavaScript is never run (no scripting manager, no sandbox file) and no annotation or
-  text layer exists, so a link in a PDF is pixels, not an element; the page holds no frame, object, embed, link or form
-  control for a PDF to use.
+- **No script, no navigation:** a PDF's JavaScript is never run (no scripting manager, no sandbox file) and there is no
+  annotation layer, so a link in a PDF is pixels, not an element; the text layer that makes the text selectable is `<span>`s
+  only (no `<a>`, no handler), so a link's text can be copied and never followed; the page holds no frame, object, embed,
+  link or form control for a PDF to use. The text layer is built by pdf.js through the DOM and CSSOM (`style-src 'self'
+  'unsafe-inline'` already allows it), its rules are in our own stylesheet, and it adds no origin.
+- **A password** typed for a protected PDF goes to pdf.js (`onPassword`) in the worker and nowhere else: never stored,
+  logged or sent.
 - **Bounded:** 64 MiB per file, 1000 pages, 32 M pixels per decoded image, 16 M pixels per page canvas; destroyed (document
   and worker) on a new file, navigation and unmount.
 - **Maintenance (measured 2026-10-12):** 6.4.299, published 2026-10-03, monthly releases, not deprecated; the project rule

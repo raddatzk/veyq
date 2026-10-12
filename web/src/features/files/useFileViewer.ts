@@ -3,7 +3,9 @@
 // reading and the decision are `view.ts`'s; this owns what must be undone: the AbortController of a read in flight, the
 // object URL of an image (core's `useObjectUrl`, revoked on replace, on a new target and on unmount), the service
 // worker's playback handle (revoked the same way) and a PDF's document (`pdf/pdfEngine.ts`: pdf.js, lazily loaded on the
-// first PDF; destroyed - its pages, its worker, its memory - the same way).
+// first PDF; destroyed - its pages, its worker, its memory - the same way). A protected PDF is the `password` state: the engine
+// asks `ask()`, the page answers through `submitPassword`/`cancelPassword`; the answer is only ever a resolved promise's value,
+// never kept in the state.
 //
 // A new target (the page's file was replaced, or the page moved to another file) cancels the read in flight and starts
 // again; a result that arrives for an old read is dropped, never shown.
@@ -30,6 +32,8 @@ export type ViewerState =
   | { status: 'idle' }
   | { status: 'loading'; progress: number }
   | { status: 'ready'; view: ReadyView }
+  /** A protected PDF waits for its password: `wrong` after a refused one, `busy` while the engine tries the one just given. */
+  | { status: 'password'; wrong: boolean; busy: boolean }
   | { status: 'too-large'; limit: number }
   | { status: 'unsupported'; reason: ViewerUnsupported }
   | { status: 'error' }
@@ -41,6 +45,10 @@ export function useFileViewer(target: () => ViewerTarget | null): {
   retry: () => void
   /** Stop a read in flight; the state becomes `cancelled`. */
   cancel: () => void
+  /** The user's answer to the password prompt (state `password`): tried by the engine; the string is not kept here. */
+  submitPassword: (password: string) => void
+  /** The user declines the prompt: the PDF stays closed and the download is offered. */
+  cancelPassword: () => void
   /** The page's `<img>` could not decode what was sniffed as an image (HEIC off Safari, a truncated file). */
   imageFailed: () => void
   /** The page's `<video>`/`<audio>` could not play the stream (a codec the browser lacks, a failed read). */
@@ -52,10 +60,15 @@ export function useFileViewer(target: () => ViewerTarget | null): {
   let controller: AbortController | null = null
   let handle: string | null = null
   let pdf: PdfDocument | null = null
+  // The one pending answer of the password prompt: a resolver, never the password. It is the only way a password gets from the
+  // field to pdf.js - not state, not a log, not a request - and it is gone as soon as it has been called.
+  let answer: ((password: string | null) => void) | null = null
 
   function release(): void {
     controller?.abort()
     controller = null
+    answer?.(null)
+    answer = null
     // The document first goes out of the state, so no page component draws on a destroyed one.
     void pdf?.destroy()
     pdf = null
@@ -89,10 +102,10 @@ export function useFileViewer(target: () => ViewerTarget | null): {
       } else if (view.kind === 'text') {
         state.value = { status: 'ready', view: { kind: 'text', text: view.text, truncated: view.truncated } }
       } else if (view.kind === 'pdf') {
-        // pdf.js (core + worker) is a chunk of its own, fetched here, on the first PDF. A password-protected, unreadable or
-        // endless PDF is a statement and the download, never an error screen; a chunk that fails to load is an error (Try again).
+        // pdf.js (core + worker) is a chunk of its own, fetched here, on the first PDF. A protected PDF asks for its password
+        // (declined: a statement and the download); an unreadable or endless PDF is a statement and the download too, never an error screen; a chunk that fails to load is an error (Try again).
         try {
-          const doc = await openPdf(view.bytes, ctl.signal)
+          const doc = await openPdf(view.bytes, ctl.signal, (wrong) => ask(mine, wrong))
           if (mine !== run) {
             void doc.destroy()
             return
@@ -128,6 +141,25 @@ export function useFileViewer(target: () => ViewerTarget | null): {
     }
   }
 
+  function ask(mine: number, wrong: boolean): Promise<string | null> {
+    return new Promise((resolve) => {
+      if (mine !== run) return resolve(null)
+      answer = resolve
+      state.value = { status: 'password', wrong, busy: false }
+    })
+  }
+  function submitPassword(password: string): void {
+    const give = answer
+    answer = null
+    if (!give || state.value.status !== 'password') return
+    state.value = { status: 'password', wrong: false, busy: true }
+    give(password)
+  }
+  function cancelPassword(): void {
+    const give = answer
+    answer = null
+    give?.(null)
+  }
   function cancel(): void {
     if (state.value.status === 'loading') controller?.abort()
   }
@@ -146,5 +178,5 @@ export function useFileViewer(target: () => ViewerTarget | null): {
     run++ // a read still in flight is dropped when it ends
     release()
   })
-  return { state, retry: () => void open(), cancel, imageFailed, mediaFailed }
+  return { state, retry: () => void open(), cancel, submitPassword, cancelPassword, imageFailed, mediaFailed }
 }

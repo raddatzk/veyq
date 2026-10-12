@@ -1069,6 +1069,16 @@ const en = {
       textTruncated: 'Showing only the first {shown}. Download the file to read all of it.',
       fullscreen: 'Full screen',
       exitFullscreen: 'Exit full screen',
+      // A shown text (components/FileViewer.vue): select it freely; these two buttons only add convenience.
+      text: {
+        toolbar: 'Text options',
+        copy: 'Copy',
+        copyShown: 'Copy the shown text',
+        wrap: 'Wrap lines',
+        copied: 'Copied to the clipboard.',
+        copiedShown: 'Copied the shown part of the text to the clipboard.',
+        copyManual: 'Your browser does not allow copying with the button here. The text is selected: press Ctrl+C (Cmd+C on a Mac) to copy it.',
+      },
       // The PDF viewer (components/PdfPages.vue): drawn by pdf.js onto canvases inside the page.
       pdf: {
         toolbar: 'PDF controls',
@@ -1079,6 +1089,14 @@ const en = {
         zoomOut: 'Zoom out',
         zoomIn: 'Zoom in',
         fitWidth: 'Fit to width',
+        // The prompt for a password-protected PDF: the password goes to the PDF reader on this device and nowhere else.
+        passwordTitle: '{name} is password protected',
+        passwordLabel: 'Password',
+        passwordHint: 'The password is only used on this device to open the PDF. It is not stored or sent anywhere.',
+        passwordChecking: 'Checking the password…',
+        passwordWrong: 'Wrong password, try again',
+        passwordOpen: 'Open',
+        passwordCancel: 'Cancel',
       },
       unsupported: {
         format: 'This file cannot be shown in your browser. You can download it.',
@@ -2428,6 +2446,15 @@ const de: typeof en = {
       textTruncated: 'Angezeigt werden nur die ersten {shown}. Lade die Datei herunter, um alles zu lesen.',
       fullscreen: 'Vollbild',
       exitFullscreen: 'Vollbild beenden',
+      text: {
+        toolbar: 'Textoptionen',
+        copy: 'Kopieren',
+        copyShown: 'Den angezeigten Text kopieren',
+        wrap: 'Zeilen umbrechen',
+        copied: 'In die Zwischenablage kopiert.',
+        copiedShown: 'Den angezeigten Teil des Textes in die Zwischenablage kopiert.',
+        copyManual: 'Dein Browser erlaubt das Kopieren per Schaltfläche hier nicht. Der Text ist markiert: Drücke Strg+C (Cmd+C auf dem Mac), um ihn zu kopieren.',
+      },
       pdf: {
         toolbar: 'PDF-Steuerung',
         pageOf: 'Seite {page} von {total}',
@@ -2437,6 +2464,13 @@ const de: typeof en = {
         zoomOut: 'Verkleinern',
         zoomIn: 'Vergrößern',
         fitWidth: 'An Breite anpassen',
+        passwordTitle: '{name} ist passwortgeschützt',
+        passwordLabel: 'Passwort',
+        passwordHint: 'Das Passwort wird nur auf diesem Gerät zum Öffnen des PDFs verwendet. Es wird weder gespeichert noch irgendwohin gesendet.',
+        passwordChecking: 'Das Passwort wird geprüft…',
+        passwordWrong: 'Falsches Passwort, bitte erneut versuchen',
+        passwordOpen: 'Öffnen',
+        passwordCancel: 'Abbrechen',
       },
       unsupported: {
         format: 'Diese Datei kann in deinem Browser nicht angezeigt werden. Du kannst sie herunterladen.',

@@ -144,10 +144,10 @@ a guest's link presign) with the chunk provider the download uses (`fileChunkPro
 | What the bytes are | Shown as | Cap |
 |---|---|---|
 | JPEG, PNG, GIF, WebP, AVIF, BMP, SVG (HEIC is tried) | `<img>` on an object URL typed with the **sniffed** type (`useObjectUrl`, revoked on replace/unmount) | 64 MiB, then the download |
-| text: valid UTF-8 (BOM dropped) or UTF-16 with a BOM, no NUL or other control byte, and a text-ish type or extension | `<pre>` through `textContent`, monospace, wrapping | first 1 MiB, a note says so |
+| text: valid UTF-8 (BOM dropped) or UTF-16 with a BOM, no NUL or other control byte, and a text-ish type or extension | `<pre>` through `textContent`, monospace, wrapping (a toggle), selectable, with a Copy button | first 1 MiB, a note says so; Copy copies what is shown |
 | MP4, MOV, WebM, Matroska, Ogg, MP3, AAC, WAV, FLAC, M4A | `<video controls playsinline>` / `<audio controls>` on the service worker's `/__media/<handle>` ([ADR 0047](../decisions/0047-inline-video-playback-range-streaming.md); the page holds the key, the worker none) | none: streamed |
 | PDF (`%PDF-` in the first KiB) | drawn page by page onto `<canvas>` elements by pdf.js, in the page (below) | 64 MiB and 1000 pages, then the download |
-| anything else, a text in another encoding, an image the browser cannot decode (`<img>` `error`), a codec it lacks, no usable worker, a password-protected or unreadable PDF | message + download | — |
+| anything else, a text in another encoding, an image the browser cannot decode (`<img>` `error`), a codec it lacks, no usable worker, an unreadable PDF | message + download | — |
 
 - **The bytes decide** (`core/blob/sniff.ts`, `view.ts`): the first chunk is opened and sniffed; the blob's sealed type
   and the name only *narrow*. A PNG claimed as `text/plain` is an image; a binary claimed as `image/png` shows nothing;
@@ -199,24 +199,65 @@ a guest's link presign) with the chunk provider the download uses (`fileChunkPro
     handful of bitmaps. "Page n of N", and zoom out / zoom in / fit width (50 % to 400 % of the fitted width) are labelled
     buttons (`files.viewer.pdf.*`, DE + EN); the scroll area takes focus, so the arrow and page keys scroll. The same
     component serves the member and both guest roles. Full screen is the viewer's, unchanged.
+  - **Text layer (select and copy).** Over each drawn canvas `PdfPages` has a host `<div class="pdf-text-layer">`; the
+    engine's `render(page, canvas, cssWidth, pixelRatio, textHost)` fills it with pdf.js 6's `TextLayer`
+    (`new TextLayer({ textContentSource: page.streamTextContent({ includeMarkedContent: true }), container, viewport })`,
+    `viewport = page.getViewport({ scale: cssWidth / pageWidth })` - the CSS scale, not the canvas' device scale, and
+    `await layer.render()`): transparent, absolutely positioned `<span>`s the browser selects like any text (mouse, touch,
+    Shift+arrows, Ctrl/Cmd+C; browser find sees the pages that are drawn). It is built **with the page's drawing**, so
+    there is exactly one per drawn page; it is emptied (`replaceChildren`) when the page is freed together with the
+    bitmap, rebuilt when the zoom or width changes (the same host, emptied first), cancelled with the drawing
+    (`job.cancel()` cancels both) and `TextLayer.cleanup()` runs when the document is destroyed. A failure to read a
+    page's text leaves an empty layer and the page drawn; a scan without a text layer is simply empty. The host is sized
+    in px as the raw (unrotated) page at the current zoom (`viewport.rawDims`, the plain-px stand-in for the CSS `round()`
+    pdf.js writes) and a page with `/Rotate` is turned into place by `[data-main-rotation]` rules - found wrong by a real
+    browser on the first try. The few rules it needs are in `styles/pdf.css` (tokens, two-class selectors: the spans get
+    `color: transparent`, `user-select: text`, `font-size`/`transform` from the custom properties pdf.js sets, the selection
+    colour from `--app-accent`; the stylesheet pdf.js ships is not imported, so no `new` CSS file and no origin). The
+    `.pdf-text-end` element pdf.js' own viewer appends keeps a drag from selecting the whole page (`.pdf-text-selecting`,
+    toggled on `pointerdown`/`pointerup`). `style-src 'self' 'unsafe-inline'` carries what pdf.js sets through the CSSOM.
   - **What a PDF can never do here.** No `<iframe>`/`<object>`/`<embed>`, no link, button or form element is ever in the
     page: there is **no annotation layer** (a link in a PDF is ink on a canvas, not an element — it cannot navigate the
-    app or open a URL; annotations that carry an appearance are drawn into the page) and **no text layer**.
-  - **Limits and follow-ups** (inbox #412): the text cannot be selected or searched in this cut (the download remains);
-    no password prompt — a protected PDF says so and offers the download; no annotation layer (live links, form filling);
-    the WASM decoders stay off until the owner decides on `'wasm-unsafe-eval'` (the asm.js fallbacks pdf.js ships next to
+    app or open a URL; annotations that carry an appearance are drawn into the page), and the text layer is `<span>`s
+    only - no `<a>`, no handler, nothing focusable. A link's text can be selected; clicking it does nothing.
+  - **A protected PDF asks for its password** (`useFileViewer` state `password`). `openPdf(bytes, signal, onPassword)`
+    keeps ONE pdf.js loading task and answers pdf.js' `onPassword(update, reason)` through the prompt (`reason` 2 =
+    incorrect: `wrong`); the document bytes stay in pdf.js, no second copy is made. The viewer shows a `<form>` with a
+    labelled `<input type="password" autocomplete="off">` (focused when the prompt opens and after a wrong answer, Enter
+    submits, Escape cancels), "Open" and "Cancel"; a wrong answer is an inline `role="alert"` error ("Wrong password, try
+    again") and the prompt stays; the right one shows the pages; Cancel (or Escape) resolves the prompt with `null`, the
+    engine destroys the task and throws `PdfOpenError('password')`, which is the earlier statement and the download. **The
+    password is a function argument and a resolved promise value and nothing else**: it is not in the viewer's state (only
+    `{ wrong, busy }` is), not logged, not stored, not sent; the field is cleared the moment it is submitted, when the
+    prompt closes and on unmount; a prompt raised by a superseded or unmounted open is declined at once. `files.viewer.pdf.password*`
+    (DE + EN).
+  - **Limits and follow-ups** (inbox #412): there is no search across pages that are not drawn (browser find sees the
+    drawn ones); no annotation layer (live links, form filling - both need an owner decision: a link is a navigation and
+    phishing vector, a PDF must not navigate the app); the WASM decoders stay off until the owner decides on `'wasm-unsafe-eval'` (the asm.js fallbacks pdf.js ships next to
     them could be served same-origin instead — not done). More than **1000 pages** is not shown (a message and the
     download): the page tree is a parse cost and a placeholder per page a DOM cost. A page that fails to draw says so
     in its place and leaves the others. Everything pdf.js holds (the document, its pages, its worker) is destroyed on a new
     file, on navigation and on unmount, and a document that finishes opening after the page moved on is destroyed at once.
   - **Tested:** the viewer's wiring with the engine mocked (`FileViewer.pdf.test.ts`: states, lazy drawing with an
     `IntersectionObserver` stub, zoom, destroy on unmount/replace, guest parity); the real library through our engine in node
-    (`pdfEngine.real.test.ts`: page count, page size, a password-protected, a broken and an over-long PDF); and
+    (`pdfEngine.real.test.ts`: page count, page size, a broken and an over-long PDF, the password flow - need / wrong / right /
+    declined - on an RC4-encrypted fixture, and `getTextContent()` of a plain and of an ENCRYPTED page; `pdfEngine.text.test.ts`
+    and `pdfEngine.password.test.ts` pin our side of the text layer and the prompt against a fake pdf.js; `FileViewer.pdf.test.ts`
+    also: one text layer per drawn page, torn down with it, rebuilt on zoom, spans only, the password never in the DOM, the
+    state, storage, the console or the network; `FileViewer.text.test.ts`: Copy, truncated copy, no-clipboard fallback, wrap
+    toggle, and a real-DOM check against the stylesheets that nothing sets `user-select: none` on the text or the layer); and
     `verify:pdf-worker` on the build. **Proven in a real browser** (2026-10-12, a local server serving the built `dist` with
     the built `content-security-policy.txt` as the header): the built pdf.js chunk and its worker ran, three pages of a PDF
     drew with text, a non-embedded standard font was fetched from `assets/pdfjs-<version>/standard_fonts/`, a broken PDF was
-    refused with `InvalidPDFException`, and no `securitypolicyviolation` fired. **Not yet proven:** the Vue viewer on a real
-    file page (scroll, zoom, full screen, the observer's margin) and the dev server's serving of the runtime data.
+    refused with `InvalidPDFException`, and no `securitypolicyviolation` fired. **Proven in a real browser too** (2026-10-12,
+    the real `FileViewer` on the Vite dev server, which sends the real policy header, over a fake chunk provider): a
+    3-page PDF's text selected by a real mouse drag and a select-all, the highlight aligned with the drawn glyphs at 100 % and
+    200 % and on a `/Rotate 90` page, a click on a link annotation's text navigated nowhere (the hit element was a `<span>`),
+    an RC4-encrypted PDF asked for its password, refused a wrong one inline, opened with the right one and its text layer read
+    the encrypted page, Escape offered the download, the password was in no DOM node afterwards, no `securitypolicyviolation`;
+    the plain text's Copy fell back correctly where the pane refuses the clipboard API. **Not yet proven:** the Vue viewer on
+    a real file page behind the app (scroll in a long document, full screen, the observer's margin), a phone, the clipboard
+    API's success path in a browser that allows it (unit-tested with a stub only), and the dev server's serving of the runtime data.
 - **Full screen.** A button toggles the Fullscreen API on the viewer's container (Escape leaves, which the browser
   handles); where the API is missing or refused (an iPhone's Safari has no element fullscreen) a fixed-position overlay
   stands in, left by the button or Escape.
@@ -437,8 +478,10 @@ folder and its files, and when.
 
 - A thumbnail or cover for a file: out of scope for the viewer (inbox #412 decided Files makes no preview blobs); a cover
   for a file is inbox #411.
-- A PDF's text selection and search, a password prompt, live links and form fields (an annotation layer), and the WASM image
-  decoders (a policy decision, `'wasm-unsafe-eval'`): § The viewer, inbox #412.
+- A PDF's live links and form fields (an annotation layer: a link is a navigation and phishing vector, so it needs the
+  owner's decision on a policy for where a click may go) and the WASM image decoders (a policy decision,
+  `'wasm-unsafe-eval'`): § The viewer, inbox #412. (Text selection/copy, the password prompt and a plain text's Copy and
+  wrap toggle are built.)
 - An operator-configurable per-file size cap (the quota only, at first).
 - The other reversible choices made while building Files wait for the owner's review: inbox #378. (Where the drop box
   differed from ADR 0080 decision 11, inbox #377, the owner ruled 2026-10-08 — § The drop box.)

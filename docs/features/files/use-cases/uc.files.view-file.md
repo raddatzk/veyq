@@ -21,25 +21,34 @@
    never inline), up to 64 MiB.
 3. **Text** (plain text, Markdown, code, JSON, CSV …: valid UTF-8, or UTF-16 with a byte-order mark, no control bytes,
    and a text-ish type or extension): the first 1 MiB is shown as text in a monospace block — as characters, never as
-   markup — with a note when the file is longer.
+   markup — with a note when the file is longer. The text is ordinary selectable page text; a **Copy** button copies exactly
+   what is shown (a longer file's shown part, and the note says so; where the browser's clipboard is unavailable the text
+   is selected and the user is told to press Ctrl/Cmd+C), and **Wrap lines** (on by default) toggles wrapping against
+   sideways scrolling.
 4. **Video and audio** (MP4, MOV, WebM, Matroska, Ogg, MP3, AAC, WAV, FLAC, M4A): played by `<video>`/`<audio>` from the
    Service Worker's ranged media route ([ADR 0047](../../../decisions/0047-inline-video-playback-range-streaming.md)),
    which asks the page for decrypted chunks as the player seeks; no cap, because nothing but the player's window is in
    memory.
 5. **PDF** (`%PDF-` within the first KiB): decrypted whole (up to 64 MiB) and drawn **inside the page**, page by page onto
    canvases by pdf.js — loaded as a chunk of its own on the first PDF — with "Page n of N" and zoom out / zoom in / fit
-   width. Only the pages near the viewport are drawn; the others cost nothing. No text can be selected in this cut, and
-   a link inside the PDF is not clickable ([docs/apps/files.md](../../../apps/files.md) § The viewer).
+   width. Only the pages near the viewport are drawn; the others cost nothing. Over each drawn page sits a transparent **text
+   layer**, so the text can be selected with the mouse or keyboard and copied (Ctrl/Cmd+C); a page without extractable
+   text (a scan) has none. A link inside the PDF is not clickable: there is no annotation layer and the text layer holds
+   spans only ([docs/apps/files.md](../../../apps/files.md) § The viewer).
 6. **Full screen:** a button enlarges the viewer (the browser's Fullscreen API, Escape leaves; a fixed overlay where
    the API is missing, e.g. an iPhone's Safari).
 
 ## Alternate / exception flows
 
-- **A1 — a PDF the page cannot draw:** one protected by a password ("this PDF is password protected" — there is no prompt
-  in this cut), one that cannot be read, one over 1000 pages or 64 MiB: a clear message and the download. A page that
+- **A1 — a PDF the page cannot draw:** one that cannot be read, one over 1000 pages or 64 MiB: a clear message and the
+  download. A page that
   fails to draw says so in its place and leaves the others. A scanned page whose image uses the JBIG2 or JPEG 2000
   codec shows that image blank, because their decoders need WebAssembly, which the app's policy does not allow
   ([CSP](../../../crosscutting/cc.security.csp.md)).
+- **A1b — a password-protected PDF:** the page asks for the password in a labelled field (focused, Enter submits, Escape
+  cancels). A wrong one says "Wrong password, try again" in place and asks again; the right one shows the pages; Cancel
+  keeps the PDF closed with the download offered. The password goes to pdf.js only: it is not stored, logged, kept in the
+  component's state or sent anywhere, and it is cleared from the field as soon as it is submitted and when the page goes.
 - **A2 — a format the sniffers do not know, a text in another encoding, or an image the browser cannot decode:** a
   clear message and the download. A claimed type never makes the bytes render as something they are not.
 - **A3 — over the cap** (an image over 64 MiB): not decrypted; the message names the limit and offers the download.
@@ -53,8 +62,8 @@
 
 - **Operator-blind.** The server serves the same ciphertext chunks as for a download; decryption, sniffing and drawing
   happen on the device. Nothing is logged and no new network origin is used.
-- **Never trust the bytes as code.** Text is `textContent`; an image is an `<img>`; a PDF is pixels on a canvas (no
-  frame, no link, no script, no eval, no WebAssembly, no network but the app's origin); no `<iframe>`, `<object>` or inline
+- **Never trust the bytes as code.** Text is `textContent`; an image is an `<img>`; a PDF is pixels on a canvas with a
+  layer of plain text spans over it (no frame, no link, no script, no eval, no WebAssembly, no network but the app's origin); no `<iframe>`, `<object>` or inline
   SVG; the blob URL's type is the sniffed one; the media route sets `Content-Type` from the sniffed container.
 - **Memory is bounded per kind** (image 64 MiB, PDF 64 MiB and 1000 pages, text 1 MiB, media streamed); a larger file is never pulled whole.
 - **A share looks like the member view:** the same component and the same capability rules for every role.
@@ -63,14 +72,14 @@
 
 **EN —** Open a picture, a text file, a video or a sound file and it is simply shown on its page — the same for you and
 for anyone you shared it with. It is decrypted on your device while you look; nothing is saved besides the file itself.
-A PDF opens on its page too, page by page. A password-protected PDF, or a format your browser cannot show, comes with a
-clear note and the download instead.
+A PDF opens on its page too, page by page, and you can select and copy its text; a password-protected PDF asks for its
+password on the page. A format your browser cannot show comes with a clear note and the download instead.
 
 **DE —** Öffne ein Bild, eine Textdatei, ein Video oder eine Audiodatei, und sie wird einfach auf ihrer Seite angezeigt
 — für dich genauso wie für alle, denen du sie freigegeben hast. Sie wird auf deinem Gerät entschlüsselt, während du sie
-ansiehst; außer der Datei selbst wird nichts gespeichert. Auch eine PDF-Datei öffnet sich auf ihrer Seite, Seite für Seite.
-Bei einer passwortgeschützten PDF oder einem Format, das dein Browser nicht anzeigen kann, bekommst du stattdessen
-einen klaren Hinweis und den Download.
+ansiehst; außer der Datei selbst wird nichts gespeichert. Auch eine PDF-Datei öffnet sich auf ihrer Seite, Seite für Seite, und ihren Text kannst du markieren und kopieren;
+eine passwortgeschützte PDF fragt direkt auf der Seite nach ihrem Passwort. Bei einem Format, das dein Browser nicht
+anzeigen kann, bekommst du stattdessen einen klaren Hinweis und den Download.
 
 ## Related
 

@@ -2,7 +2,8 @@
 // The viewer of an opened file (inbox #412): the file's own content, decrypted when the page opens and shown in the page
 // or full screen - an image, a text, a PDF drawn page by page onto canvases by pdf.js (`PdfPages`, loaded on the first PDF),
 // a video or audio through the service worker's media route (ADR 0047), and for anything else (a format the browser cannot
-// decode, a protected PDF, a file over its cap) a plain statement and the download. Files makes no
+// decode, a PDF whose password was declined, a file over its cap) a plain statement and the download. A password-protected PDF
+// asks for its password in the page (a field only pdf.js ever sees; see below) before it is shown. Files makes no
 // thumbnail and no preview blob: this reads the file itself.
 //
 // **What is rendered, and how** (every rule is a security rule - the bytes are a peer's):
@@ -11,16 +12,17 @@
 //   `<iframe>`); a decode failure (`error`) is the "cannot be shown" message, not an exception;
 // - a text is interpolated (`textContent`), never `innerHTML`: markup in it stays visible characters;
 // - a PDF is never handed to the browser's own viewer (no <iframe>/<object>/<embed>: the policy forbids them): pdf.js draws
-//   it onto <canvas> elements, with no text layer, no annotation layer and no script - a link inside it is not clickable;
+//   it onto <canvas> elements with a selectable text layer over each, no annotation layer and no script - a link inside it is not clickable;
 // - a video/audio plays from the service worker's `/__media/<handle>` (the page holds the key, the worker none); no worker,
 //   no playback;
 // - nothing is logged and nothing leaves the client; the object URL and the playback handle are revoked on a new file, on
 //   unmount and on a failure.
 //
 // The same component serves the member and the share guest (inbox #401): it gets a reader and the facts, whoever opened it.
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
+import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import { formatBytes } from '../../../shared/formatBytes'
 import { useFileViewer, type ViewerTarget } from '../useFileViewer'
@@ -38,12 +40,90 @@ const props = defineProps<{
 const emit = defineEmits<{ download: [] }>()
 const { t, locale } = useI18n()
 
-const { state, retry, cancel, imageFailed, mediaFailed } = useFileViewer(() => props.target)
+const { state, retry, cancel, submitPassword, cancelPassword, imageFailed, mediaFailed } = useFileViewer(() => props.target)
 const ready = computed(() => (state.value.status === 'ready' ? state.value.view : null))
 const percent = computed(() => (state.value.status === 'loading' ? Math.round(state.value.progress * 100) : 0))
 const unsupportedKey = computed(() => {
   const s = state.value
   return s.status === 'unsupported' ? `files.viewer.unsupported.${s.reason}` : ''
+})
+
+// --- plain text: copy and wrap ---------------------------------------------------------------------------------------------
+// The text is ordinary selectable page text (nothing here sets user-select, and it is `textContent`, never markup); these two
+// buttons only add convenience. Copy writes exactly what is SHOWN (a truncated text copies its shown part, and the button and
+// its note say so). Where the clipboard API is not available (an insecure page, a refusal) the text is selected and the
+// browser asked to copy the selection; if that is refused too, the note tells the user to press Ctrl/Cmd+C: no copy ever
+// fails silently.
+const textEl = ref<HTMLElement | null>(null)
+const wrap = ref(true)
+const copyNote = ref('')
+let copyNoteTimer: ReturnType<typeof setTimeout> | undefined
+
+function selectShownText(): void {
+  const el = textEl.value
+  const sel = typeof window !== 'undefined' ? window.getSelection() : null
+  if (el && sel) sel.selectAllChildren(el)
+}
+const copiedNote = (truncated: boolean) => (truncated ? 'files.viewer.text.copiedShown' : 'files.viewer.text.copied')
+async function copyText(text: string, truncated: boolean): Promise<void> {
+  clearTimeout(copyNoteTimer)
+  try {
+    await navigator.clipboard.writeText(text) // throws where there is no clipboard (an insecure page) or the browser refuses
+    copyNote.value = copiedNote(truncated)
+  } catch {
+    // The older route for the same thing: select the shown text and ask the browser to copy the selection. Where that is
+    // refused too, the text stays selected and the note says to press Ctrl/Cmd+C.
+    selectShownText()
+    let copied = false
+    try {
+      copied = document.execCommand('copy')
+    } catch {
+      copied = false
+    }
+    copyNote.value = copied ? copiedNote(truncated) : 'files.viewer.text.copyManual'
+  }
+  copyNoteTimer = setTimeout(() => (copyNote.value = ''), 6000)
+}
+watch(
+  () => (state.value.status === 'ready' && state.value.view.kind === 'text' ? state.value.view.text : null),
+  () => {
+    clearTimeout(copyNoteTimer)
+    copyNote.value = ''
+  },
+)
+onBeforeUnmount(() => clearTimeout(copyNoteTimer))
+
+// --- the password of a protected PDF --------------------------------------------------------------------------------------
+// The field's value goes to pdf.js and nowhere else (`useFileViewer.submitPassword` -> the engine's `onPassword`): it is not
+// stored, logged, sent, or kept in the state; it is cleared from this component the moment it is submitted, when the prompt
+// closes and on unmount.
+const password = ref('')
+const passwordInput = ref<{ $el: HTMLInputElement } | null>(null)
+const prompting = computed(() => state.value.status === 'password')
+const passwordWrong = computed(() => state.value.status === 'password' && state.value.wrong)
+const passwordBusy = computed(() => state.value.status === 'password' && state.value.busy)
+const passwordFieldId = `file-viewer-password-${Math.random().toString(36).slice(2, 8)}`
+const passwordDescribedBy = computed(() => `${passwordFieldId}-hint${passwordWrong.value ? ` ${passwordFieldId}-error` : ''}`)
+
+function onSubmitPassword(): void {
+  if (!password.value || passwordBusy.value) return
+  const given = password.value
+  password.value = ''
+  submitPassword(given)
+}
+watch(prompting, (on) => {
+  if (!on) password.value = ''
+})
+// Focus the field when the prompt opens and again after a wrong answer (it is disabled while the engine tries one).
+watch(
+  () => prompting.value && !passwordBusy.value,
+  (ready) => {
+    if (ready) void nextTick(() => passwordInput.value?.$el?.focus())
+  },
+  { immediate: true, flush: 'post' },
+)
+onBeforeUnmount(() => {
+  password.value = ''
 })
 
 // --- full screen -----------------------------------------------------------------------------------------------------
@@ -111,7 +191,38 @@ onBeforeUnmount(() => {
         @error="imageFailed"
       />
       <template v-else-if="ready?.kind === 'text'">
-        <pre class="file-viewer-text" tabindex="0" :aria-label="t('files.viewer.textLabel', { name })">{{ ready.text }}</pre>
+        <div class="file-viewer-text-tools" role="toolbar" :aria-label="t('files.viewer.text.toolbar')">
+          <Button
+            type="button"
+            class="file-viewer-text-copy"
+            icon="pi pi-copy"
+            :label="t('files.viewer.text.copy')"
+            :aria-label="ready.truncated ? t('files.viewer.text.copyShown') : t('files.viewer.text.copy')"
+            size="small"
+            severity="secondary"
+            outlined
+            @click="copyText(ready.text, ready.truncated)"
+          />
+          <Button
+            type="button"
+            class="file-viewer-text-wrap"
+            icon="pi pi-align-left"
+            :label="t('files.viewer.text.wrap')"
+            :aria-pressed="wrap"
+            size="small"
+            severity="secondary"
+            :outlined="!wrap"
+            @click="wrap = !wrap"
+          />
+          <span v-if="copyNote" class="file-viewer-text-note" role="status">{{ t(copyNote) }}</span>
+        </div>
+        <pre
+          ref="textEl"
+          class="file-viewer-text"
+          :class="{ 'file-viewer-text-nowrap': !wrap }"
+          tabindex="0"
+          :aria-label="t('files.viewer.textLabel', { name })"
+        >{{ ready.text }}</pre>
       </template>
       <PdfPages v-else-if="ready?.kind === 'pdf'" :doc="ready.doc" :name="name" />
       <video
@@ -134,6 +245,36 @@ onBeforeUnmount(() => {
         @error="mediaFailed"
       />
 
+      <form
+        v-else-if="state.status === 'password'"
+        class="file-viewer-password"
+        :aria-label="t('files.viewer.pdf.passwordTitle', { name })"
+        @submit.prevent="onSubmitPassword"
+        @keydown.esc.stop.prevent="cancelPassword"
+      >
+        <p class="file-viewer-password-title">{{ t('files.viewer.pdf.passwordTitle', { name }) }}</p>
+        <label class="file-viewer-password-label" :for="passwordFieldId">{{ t('files.viewer.pdf.passwordLabel') }}</label>
+        <InputText
+          :id="passwordFieldId"
+          ref="passwordInput"
+          v-model="password"
+          class="file-viewer-password-input"
+          type="password"
+          autocomplete="off"
+          autocapitalize="off"
+          spellcheck="false"
+          :disabled="passwordBusy"
+          :invalid="passwordWrong"
+          :aria-invalid="passwordWrong"
+          :aria-describedby="passwordDescribedBy"
+        />
+        <p v-if="passwordWrong" :id="passwordFieldId + '-error'" class="file-viewer-password-error" role="alert">{{ t('files.viewer.pdf.passwordWrong') }}</p>
+        <p :id="passwordFieldId + '-hint'" class="file-viewer-hint">{{ passwordBusy ? t('files.viewer.pdf.passwordChecking') : t('files.viewer.pdf.passwordHint') }}</p>
+        <span class="file-viewer-password-actions">
+          <Button type="submit" class="file-viewer-password-open" :label="t('files.viewer.pdf.passwordOpen')" size="small" :disabled="!password || passwordBusy" />
+          <Button type="button" class="file-viewer-password-cancel" :label="t('files.viewer.pdf.passwordCancel')" size="small" severity="secondary" outlined :disabled="passwordBusy" @click="cancelPassword" />
+        </span>
+      </form>
       <Message v-else-if="state.status === 'error'" severity="error" :closable="false" class="file-viewer-message">
         <span class="file-viewer-note">
           <span>{{ t('files.viewer.error') }}</span>
@@ -236,6 +377,20 @@ onBeforeUnmount(() => {
   overflow-wrap: anywhere;
   tab-size: 4;
 }
+.file-viewer-text-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.5rem;
+}
+.file-viewer-text-note {
+  color: var(--app-muted);
+}
+.file-viewer-text.file-viewer-text-nowrap {
+  white-space: pre;
+  overflow-wrap: normal;
+}
 .file-viewer-hint {
   margin: 0.5rem 0 0;
   color: var(--app-muted);
@@ -247,6 +402,30 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 0.5rem;
   width: 100%;
+}
+.file-viewer-password {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  max-width: 24rem;
+}
+.file-viewer-password-title {
+  margin: 0;
+  font-weight: 600;
+}
+.file-viewer-password-input {
+  width: 100%;
+}
+.file-viewer-password-error {
+  margin: 0;
+  color: var(--app-danger);
+}
+.file-viewer-password-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
 }
 /* The overlay stands in where the Fullscreen API is missing; the native :fullscreen state gets the same fill. */
 .file-viewer-full,
