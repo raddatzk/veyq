@@ -17,7 +17,8 @@
     "verify:csp": "node scripts/assert-csp-policy-in-dist.mjs",
     "verify:argon-worker": "node ../packages/crypto/scripts/assert-argon-worker-in-dist.mjs dist",
     "verify:media-worker": "node scripts/assert-media-worker-in-dist.mjs",
-    "check": "npm run lint && npm run typecheck && npm run test && npm run build && npm run verify:no-backdoor && npm run verify:csp && npm run verify:argon-worker && npm run verify:media-worker"
+    "verify:pdf-worker": "node scripts/assert-pdf-worker-in-dist.mjs",
+    "check": "npm run lint && npm run typecheck && npm run test && npm run build && npm run verify:no-backdoor && npm run verify:csp && npm run verify:argon-worker && npm run verify:media-worker && npm run verify:pdf-worker"
   },
   "dependencies": {
     "@primeuix/themes": "^2.0.3",
@@ -26,6 +27,7 @@
     "jspdf": "^4.2.1",
     "jsqr": "^1.4.0",
     "leaflet": "^1.9.4",
+    "pdfjs-dist": "^6.4.299",
     "primeicons": "^7.0.0",
     "primevue": "^4.5.5",
     "qrcode": "^1.5.4",
