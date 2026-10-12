@@ -6,7 +6,7 @@
 import { computed, ref, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { unsealMemoryDate, computeAutoRange, sortNodesByDate, type MemoryDate } from './memoryDate'
-import { nodeMetaState } from './nodeMeta'
+import { nodeMetaState } from '../../core/node/nodeMeta'
 import { useMetaWriteFeedback, type NodeMetaUpdate } from './useMetaWriteFeedback'
 import { formatClosedRange, formatDay } from './memoryDateRange'
 import type { MediaItem } from './media'

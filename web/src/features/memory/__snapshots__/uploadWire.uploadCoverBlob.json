@@ -55,25 +55,24 @@
       }
     },
     {
-      "method": "POST",
-      "path": "/api/scopes/33333333-3333-4333-8333-333333333333/nodes/6e5a0000-0000-4000-8000-0000000000b1/cover-blob",
+      "method": "PUT",
+      "path": "/api/scopes/33333333-3333-4333-8333-333333333333/nodes/6e5a0000-0000-4000-8000-0000000000b1/cover",
       "headers": {
         "authorization": "<present>",
         "content-type": "application/json"
       },
       "body": {
-        "uploadId": "upload-1"
+        "expectedBlobId": null,
+        "metaVersion": 0,
+        "uploadId": "upload-1",
+        "wrappedMeta": "AkB7gJjWqa0wA4ulTk5hpNZGogIyQPdzHF5h+4uQ7bo56hyeMJHiy7NDWZ+BDuQBbcxPKpjUz+jE8Thsd2bwQ4osFDZRgGbpyjjF62bd+tsozi64pcQ7a6YSp9g7NCHmfGnddv//DJRLOPHFeyVHY6Bcly8sJ+eZbqErO6eakjib2vk5l2iSXpXYtVxujV7YnWncl0NR3zBscyjXb3E+uaeMajEY4kBlVzp8GqU6eXcbDoxGy9vL/VaHV2daCyBmIG7LSIx5DFFGg/UGyBR6AtUHgv25LliZOYfBG4FNkUHXGoSvDthndzy8zxpu8ovm9oIQpcRkdtcA8X7EH8EWturiSFWtRdcKEWWvvXeKNqWwU0OylrgZOGbC7g2JqrptWGdlzsjtFr26FFy+h2a7L1y7FjbzHO2ho4AObLeHEB2pvoaAhwMNyorta7NlTwpnOgymiXxyi9WJchfAXFZJYFrBMZeHYfz6r69o3Rj2P4K3IjZ4"
       }
     }
   ],
-  "putCount": 3,
+  "putCount": 4,
   "maxInFlightPuts": 3,
   "result": {
-    "blobId": "00000000-0000-4000-8000-000000000001",
-    "chunkCount": 3,
-    "byteSize": 524377,
-    "wrappedBlobKey": "AtBT3Z7YRZvapZ9Wkcognh3uhz4ssO4zOY9dJVVTTEmR/yLd59PQxen2jKvQuOw+rfuuKMLZWy43Cuu8Qg==",
-    "ownerId": "6e5a0000-0000-4000-8000-0000000000b1",
-    "role": "COVER"
+    "wrappedMeta": "AkB7gJjWqa0wA4ulTk5hpNZGogIyQPdzHF5h+4uQ7bo56hyeMJHiy7NDWZ+BDuQBbcxPKpjUz+jE8Thsd2bwQ4osFDZRgGbpyjjF62bd+tsozi64pcQ7a6YSp9g7NCHmfGnddv//DJRLOPHFeyVHY6Bcly8sJ+eZbqErO6eakjib2vk5l2iSXpXYtVxujV7YnWncl0NR3zBscyjXb3E+uaeMajEY4kBlVzp8GqU6eXcbDoxGy9vL/VaHV2daCyBmIG7LSIx5DFFGg/UGyBR6AtUHgv25LliZOYfBG4FNkUHXGoSvDthndzy8zxpu8ovm9oIQpcRkdtcA8X7EH8EWturiSFWtRdcKEWWvvXeKNqWwU0OylrgZOGbC7g2JqrptWGdlzsjtFr26FFy+h2a7L1y7FjbzHO2ho4AObLeHEB2pvoaAhwMNyorta7NlTwpnOgymiXxyi9WJchfAXFZJYFrBMZeHYfz6r69o3Rj2P4K3IjZ4",
+    "metaVersion": 1
   }
 }

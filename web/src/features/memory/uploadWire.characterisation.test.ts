@@ -36,7 +36,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('exifr', () => ({ default: { parse: vi.fn(async () => undefined) } }))
 
-import { addMedia, uploadCoverBlob, CHUNK_SIZE, type MediaDeriver, type AddMediaSource } from './media'
+import { addMedia, CHUNK_SIZE, type MediaDeriver, type AddMediaSource } from './media'
+import { setMemoryCoverUpload } from './memoryCover'
+import { FULL_FRAME } from '../../core/node/cover/coverModel'
+import { unsealNodeMeta } from '../../core/node/nodeMeta'
 import { addSharePhoto } from './share'
 import { session } from '../../app/session'
 
@@ -166,9 +169,9 @@ function recordingServer() {
       const items = body!.items as { mediaId: string; originalUploadId: string }[]
       return json({ results: items.map((m) => ({ mediaId: m.mediaId, blobId: uploads.get(m.originalUploadId)!.blobId, error: null })) })
     }
-    if (method === 'POST' && path.endsWith('/cover-blob')) {
-      const { blobId, chunkCount, byteSize, wrappedBlobKey } = uploads.get((body as { uploadId: string }).uploadId)!
-      return json({ blobId, chunkCount, byteSize, wrappedBlobKey })
+    if (method === 'PUT' && path.endsWith('/cover')) {
+      if (!uploads.has((body as { uploadId: string }).uploadId)) throw new Error('setNodeCover names an upload nobody opened')
+      return new Response(null, { status: 204 }) // inbox #411: the blob step and the meta naming it, ONE request
     }
     throw new Error(`unexpected request ${method} ${url}`)
   }))
@@ -251,10 +254,33 @@ describe('the Memories upload pipeline on the wire (characterisation, cr-files-a
     expect(wire.maxInFlightPuts).toBeGreaterThan(1) // control: the bound is observable, not a sequential pump
   })
 
-  it('uploadCoverBlob — a derived multi-chunk cover', async () => {
+  // A cover is core's since inbox #411: the same upload and the same one-request write (`setNodeCover`) for a Memory's, a
+  // folder's and a drop box's. This scenario is the Memories path (`setMemoryCoverUpload` -> core's `uploadCoverImage` +
+  // `writeNodeCover`). The blob's declare and its PUTs are byte for byte what `uploadCoverBlob` sent; only the last request
+  // moved: the commit `POST .../cover-blob` became `PUT .../cover`, carrying the node's sealed meta that names the cover.
+  it('a derived multi-chunk cover - the blob, then ONE setNodeCover with the meta that names it', async () => {
     const wire = await expectWire('uploadCoverBlob', 3, () =>
-      uploadCoverBlob(SCOPE_ID, NODE_ID, memoryKey(), imageSource(5000, 3), fixedDeriver({ preview: 0, thumbnail: 0, cover: 2 * CHUNK_SIZE + 5 })))
-    expect(wire.putCount).toBe(3)
+      setMemoryCoverUpload(
+        SCOPE_ID, NODE_ID, memoryKey(), imageSource(5000, 3), { ...FULL_FRAME }, { wrappedMeta: null, metaVersion: 0 },
+        fixedDeriver({ preview: 0, thumbnail: 0, cover: 2 * CHUNK_SIZE + 5 }),
+      ).then((r) => ({ wrappedMeta: r.wrappedMeta, metaVersion: r.metaVersion })),
+    )
+    expect(wire.requests.filter((r) => r.bytes).length, 'the three frames of the blob, then the write (also a PUT)').toBe(3)
+    expect(wire.putCount).toBe(4)
+
+    // The last request is the write, and it is sealed: the cover named in the meta is the blob the first request declared,
+    // the meta opens only under THIS node's key, bound to scope and node (purpose `node-meta`, ADR 0072), and nothing of the
+    // source (its file name, the key) crosses in the clear.
+    const declared = (wire.requests[0].body as { items: { blobId: string; ownerId: string; role: string }[] }).items[0]
+    expect(declared).toMatchObject({ ownerId: NODE_ID, role: 'COVER' })
+    const write = wire.requests[wire.requests.length - 1]
+    expect(write).toMatchObject({ method: 'PUT', path: `/api/scopes/${SCOPE_ID}/nodes/${NODE_ID}/cover` })
+    const body = write.body as { uploadId: string; expectedBlobId: string | null; wrappedMeta: string; metaVersion: number }
+    expect(body).toMatchObject({ uploadId: 'upload-1', expectedBlobId: null, metaVersion: 0 })
+    const cover = unsealNodeMeta(memoryKey(), { scopeId: SCOPE_ID, nodeId: NODE_ID }, body.wrappedMeta).cover as { source: { kind: string; ref: { blobId: string; ownerId: string; role: string } } }
+    expect(cover.source).toMatchObject({ kind: 'upload', ref: { blobId: declared.blobId, ownerId: NODE_ID, role: 'COVER' } })
+    expect(unsealNodeMeta(memoryKey(), { scopeId: SCOPE_ID, nodeId: '6e5a0000-0000-4000-8000-0000000000b2' }, body.wrappedMeta).cover, 'another node cannot open it').toBeUndefined()
+    expect(JSON.stringify(wire.requests.map((r) => r.body))).not.toContain('IMG_0001')
   })
 
   it('addSharePhoto — a guest upload below the share root, behind a share password', async () => {

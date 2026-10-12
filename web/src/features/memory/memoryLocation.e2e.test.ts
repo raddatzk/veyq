@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { birthInstance } from '../../test/e2eBootstrap'
 import { recordCanaries } from '../../test/canaries'
-import { unsealNodeMeta } from './nodeMeta'
+import { unsealNodeMeta } from '../../core/node/nodeMeta'
 import { ensurePersonalScope, listMyScopes, openPersonalScope } from '../spaces/scopes'
 import { epochsOf } from '../spaces/epochsTestUtil'
 import { listTree, openContentKey } from '../../core/node/tree'

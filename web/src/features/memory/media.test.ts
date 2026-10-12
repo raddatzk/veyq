@@ -14,8 +14,6 @@ vi.mock('exifr', () => ({ default: { parse: vi.fn(async () => undefined) } }))
 
 import {
   addMedia,
-  uploadCoverBlob,
-  deleteCoverBlob,
   listMedia,
   listMediaPage,
   newestCursor,
@@ -38,7 +36,6 @@ import {
   EXIF_TEXT_MAX_BYTES,
   CHUNK_SIZE,
   PUMP_IN_FLIGHT,
-  COVER_SPEC,
   TIER_SPECS,
   type MediaDeriver,
   type MediaItem,
@@ -50,7 +47,6 @@ import { blobApi } from '../../api/client'
 import { mediaApi } from './api'
 import {
   ResponseError,
-  type BlobRef,
   type MediaApi,
   type MediaBatchResponse,
   type MediaListPage,
@@ -128,11 +124,9 @@ function fakeStore(opts: { window?: number; forbidFirstPut?: number[]; putDelayM
       return completeItem
     },
     updatedMeta: undefined as string | null | undefined,
-    coverUpload: undefined as { nodeId: string; uploadId: string } | undefined,
-    coverDeletedNode: undefined as string | undefined,
   }
 
-  const blobOf = (uploadId: string): BlobRef => {
+  const blobOf = (uploadId: string) => {
     const s = sessions.get(uploadId)!
     // the blob's sealed meta is served back unchanged beside its wrap, as the backend does (inbox #397)
     return { blobId: s.blobId, chunkCount: s.chunkCount, byteSize: 0, wrappedBlobKey: s.wrappedBlobKey, wrappedBlobMeta: s.wrappedBlobMeta ?? null }
@@ -193,15 +187,6 @@ function fakeStore(opts: { window?: number; forbidFirstPut?: number[]; putDelayM
     updateMediaMeta: vi.fn<MediaApi['updateMediaMeta']>(async ({ mediaMetaUpdate }): Promise<MediaMetaResponse> => {
       captured.updatedMeta = mediaMetaUpdate.wrappedMeta // opaque ciphertext (or null to clear)
       return { wrappedMeta: mediaMetaUpdate.wrappedMeta ?? null }
-    }),
-    // cr-0073: promote one upload session into a standalone cover blob (no media row). The fake returns the
-    // committed ref keyed by the uploadId so a caller can round-trip it through presignBlobDownloads.
-    commitCoverBlob: vi.fn<MediaApi['commitCoverBlob']>(async ({ nodeId, coverBlobCommitRequest }): Promise<BlobRef> => {
-      captured.coverUpload = { nodeId, uploadId: coverBlobCommitRequest.uploadId }
-      return blobOf(coverBlobCommitRequest.uploadId)
-    }),
-    deleteCoverBlob: vi.fn<MediaApi['deleteCoverBlob']>(async ({ nodeId }): Promise<void> => {
-      captured.coverDeletedNode = nodeId
     }),
   }
 
@@ -1148,79 +1133,6 @@ describe('the upload pump — read, seal and send one frame at a time (ADR 0013 
     expect(await openOriginal(SCOPE_ID, key, item)).toEqual(data)
   })
 
-  it('pumps a cover through the same windows — it has no PUT loop of its own', async () => {
-    const store = fakeStore({ window: 2 })
-    fakeApi(mediaApi, store.api)
-    fakeApi(blobApi, store.blob)
-    vi.stubGlobal('fetch', store.fetchStub)
-    const key = v1.randomBytes(32)
-    const data = new Uint8Array(2 * CHUNK_SIZE + 3).fill(9) // not an image: sealed as it is, three frames
-    const ref = await uploadCoverBlob(SCOPE_ID, NODE_ID, key, { blob: new Blob([data]), mediaType: 'application/octet-stream' }, stubDeriver())
-    expect(store.events.filter((e) => e.startsWith('window:'))).toEqual(['window:2'])
-    expect(await openBlob(SCOPE_ID, key, ref)).toEqual(data)
-  })
-})
-
-describe('uploadCoverBlob / deleteCoverBlob — standalone cover blob (cr-0073)', () => {
-  it('downscales an image to one cover-sized JPEG, seals it, commits it, and round-trips via openBlob', async () => {
-    const store = fakeStore()
-    fakeApi(mediaApi, store.api)
-    fakeApi(blobApi, store.blob)
-    vi.stubGlobal('fetch', store.fetchStub)
-    const deriver = stubDeriver()
-
-    const memoryKey = v1.randomBytes(32)
-    const ref = await uploadCoverBlob(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(10).fill(7) as BlobPart]), mediaType: 'image/png' }, deriver)
-
-    // exactly one downscale at the cover spec (no THUMBNAIL/PREVIEW split), one blob started, no media completed
-    expect(deriver.images).toBe(1)
-    expect(deriver.deriveImage).toHaveBeenCalledWith(expect.anything(), COVER_SPEC)
-    expect(store.captured.startItems).toHaveLength(1)
-    expect(store.api.completeMedia).not.toHaveBeenCalled() // NO veyq_media row
-    expect(store.captured.coverUpload).toEqual({ nodeId: NODE_ID, uploadId: 'up-0' })
-    // a cover's blob is owned by its node, in the COVER role — the wrap is sealed to exactly that slot (ADR 0072)
-    expect(store.captured.startItems[0]).toMatchObject({ ownerId: NODE_ID, role: 'COVER' })
-    expect(ref).toMatchObject({ blobId: store.captured.startItems[0].blobId, ownerId: NODE_ID, role: 'COVER' })
-
-    // the committed ref opens back to the downscaled cover bytes (2048-tagged by the stub) under K_mem
-    const opened = await openBlob(SCOPE_ID, memoryKey, ref)
-    expect(Array.from(opened)).toEqual([0xff, 0xd8, 2048 & 0xff, 2048 >> 8])
-    // its blob meta is its type alone — the JPEG it was derived into, not the PNG it came from (inbox #397)
-    expect(readBlobMeta(SCOPE_ID, memoryKey, { ...ref, wrappedBlobMeta: store.captured.startItems[0].wrappedBlobMeta })).toEqual({ v: 1, type: 'image/jpeg' })
-  })
-
-  it('seals the pristine bytes for a non-image source (no downscale)', async () => {
-    const store = fakeStore()
-    fakeApi(mediaApi, store.api)
-    fakeApi(blobApi, store.blob)
-    vi.stubGlobal('fetch', store.fetchStub)
-    const deriver = stubDeriver()
-
-    await uploadCoverBlob(SCOPE_ID, NODE_ID, v1.randomBytes(32), { blob: new Blob([new Uint8Array([1, 2, 3]) as BlobPart]), mediaType: 'application/octet-stream' }, deriver)
-    expect(deriver.images).toBe(0) // non-image ⇒ no downscale attempt
-    expect(store.captured.startItems).toHaveLength(1)
-  })
-
-  it('deleteCoverBlob detaches via the endpoint, naming the blob it expects in the slot', async () => {
-    const store = fakeStore()
-    fakeApi(mediaApi, store.api)
-    fakeApi(blobApi, store.blob)
-    await deleteCoverBlob(SCOPE_ID, NODE_ID, 'blob-old')
-    expect(store.api.deleteCoverBlob).toHaveBeenCalledWith({ scopeId: SCOPE_ID, nodeId: NODE_ID, blobId: 'blob-old' })
-    expect(store.captured.coverDeletedNode).toBe(NODE_ID)
-  })
-
-  // inbox #308: a peer's upload committed into the node's one slot after our meta write already reclaimed the blob
-  // we expected — the server refuses to take the peer's, and there is nothing left for us to delete.
-  it('deleteCoverBlob treats `409 cover_replaced` as nothing to delete, and rethrows any other failure', async () => {
-    const coded = (code: string) => ({ response: new Response(JSON.stringify({ code }), { status: 409 }) })
-    fakeApi(mediaApi, { deleteCoverBlob: vi.fn<MediaApi['deleteCoverBlob']>().mockRejectedValue(coded('cover_replaced')) })
-    await expect(deleteCoverBlob(SCOPE_ID, NODE_ID, 'blob-old')).resolves.toBeUndefined()
-
-    // Control: the same status with another code is a real failure.
-    fakeApi(mediaApi, { deleteCoverBlob: vi.fn<MediaApi['deleteCoverBlob']>().mockRejectedValue(coded('scope_deleting')) })
-    await expect(deleteCoverBlob(SCOPE_ID, NODE_ID, 'blob-old')).rejects.toBeDefined()
-  })
 })
 
 describe('read-back — operator-blind round-trip + tier selection', () => {

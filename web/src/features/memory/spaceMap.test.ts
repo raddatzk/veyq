@@ -10,7 +10,7 @@ vi.mock('../../api/client', () => ({
 
 import { collectLocatedPins, clusterPins, sortPinsByStartDate, type LocatedPin } from './spaceMap'
 import type { MemoryDate } from './memoryDate'
-import { sealNodeMeta } from './nodeMeta'
+import { sealNodeMeta } from '../../core/node/nodeMeta'
 import type { MemoryLocation } from './memoryLocation'
 import { FOLDER_KIND, type NodeKind } from '../../core/node/kind'
 import { MEMORY_KIND, CHAPTER_KIND } from './kinds'

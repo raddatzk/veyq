@@ -25,14 +25,14 @@ import {
   unsealMemoryCover,
   setMemoryCover,
   sameMemoryCover,
-  loadNodeCover,
   coverImageStyle,
   FULL_FRAME,
   type MemoryCover,
 } from './memoryCover'
+import { loadMemoryPhotoCover } from './coverLoad'
 import { contentApi } from '../../api/client'
 import { MetaConflictError } from '../../core/node/sealedMetaWrite'
-import { listMedia, openGrid, openBlob, hasDerivatives } from './media'
+import { listMedia, openGrid, hasDerivatives } from './media'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 
@@ -251,15 +251,20 @@ describe('setMemoryCover', () => {
     const updateNode = vi.fn<ContentApi['updateNode']>()
       .mockRejectedValueOnce(staleWith(sealMeta({ v: 1, cover: peersUpload }), 2))
       .mockResolvedValue(undefined)
-    fakeApi(contentApi, { updateNode })
+    const removeNodeCover = vi.fn<ContentApi['removeNodeCover']>().mockResolvedValue(undefined)
+    fakeApi(contentApi, { updateNode, removeNodeCover })
     const mine: MemoryCover = { source: { kind: 'media', mediaId: 'mine' }, crop: FULL_FRAME }
 
     const state = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, mine, { wrappedMeta: mineOld, metaVersion: 1 }, false)
 
     expect(state.replaced).toEqual(normalizeMemoryCover(peersUpload, NODE_ID))
     expect(state.replaced?.source.kind).toBe('upload')
+    // inbox #411: the peer's uploaded blob is freed in the SAME write that replaces it, decided from the blob the 409 handed
+    // back (the first attempt, built on a copy that named no upload, was a plain meta write)
+    expect(updateNode).toHaveBeenCalledTimes(1)
+    expect(removeNodeCover.mock.calls[0][0].removeNodeCoverRequest).toMatchObject({ blobId: 'peer-blob', metaVersion: 2 })
 
-    stubApi(contentApi, { updateNode: undefined })
+    stubApi(contentApi, { updateNode: undefined, removeNodeCover: undefined })
     const plain = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, null, { wrappedMeta: mineOld, metaVersion: 1 })
     expect(plain.replaced).toEqual({ source: { kind: 'media', mediaId: 'mine-old' }, crop: FULL_FRAME })
   })
@@ -284,44 +289,37 @@ describe('sameMemoryCover', () => {
   })
 })
 
-describe('loadNodeCover', () => {
+// A Memory's cover chosen from its own photos is read here (`coverLoad.ts`, the kinds' `cover.load`); an UPLOADED cover is
+// core's to open (`core/node/cover/coverStore.test.ts`) - inbox #411.
+describe('loadMemoryPhotoCover', () => {
   const SCOPE = '22222222-2222-2222-2222-222222222222'
   const coverBytes = async (blob: Blob) => new Uint8Array(await blob.arrayBuffer())
-
-  it('an upload-source cover opens the standalone blob directly (openBlob), no media list', async () => {
-    vi.mocked(openBlob).mockResolvedValue(new Uint8Array([1, 2, 3]))
-    const crop = { x: 0.1, y: 0.2, width: 0.5, height: 0.28 }
-    const node = { id: NODE_ID, wrappedMeta: sealMeta({ v: 1, cover: { source: { kind: 'upload', ref: UPLOAD_REF_RAW }, crop } }, SCOPE) }
-
-    const loaded = await loadNodeCover(SCOPE, nodeKey, node)
-    expect(loaded?.crop).toEqual(crop)
-    expect(await coverBytes(loaded!.blob)).toEqual(new Uint8Array([1, 2, 3])) // decrypted bytes, not yet an object URL
-    expect(openBlob).toHaveBeenCalledWith(SCOPE, nodeKey, UPLOAD_REF)
-    expect(listMedia).not.toHaveBeenCalled()
-  })
+  const ctx = (cover: unknown) => ({ scopeId: SCOPE, nodeKey, node: { id: NODE_ID, wrappedMeta: null }, cover, guest: null })
 
   it('a media-source cover resolves the chosen media’s thumbnail tier (listMedia + openGrid)', async () => {
     vi.mocked(listMedia).mockResolvedValue([mediaItem({ mediaId: 'm1' })])
     vi.mocked(openGrid).mockResolvedValue(new Uint8Array([9]))
-    const crop = FULL_FRAME
-    const node = { id: NODE_ID, wrappedMeta: sealMeta({ v: 1, cover: { source: { kind: 'media', mediaId: 'm1' }, crop } }, SCOPE) }
-
-    const loaded = await loadNodeCover(SCOPE, nodeKey, node)
-    expect(loaded?.crop).toEqual(crop)
-    expect(await coverBytes(loaded!.blob)).toEqual(new Uint8Array([9]))
+    const loaded = await loadMemoryPhotoCover(ctx({ source: { kind: 'media', mediaId: 'm1' }, crop: FULL_FRAME }))
+    expect(loaded?.crop).toEqual(FULL_FRAME)
+    expect(await coverBytes(loaded!.blob)).toEqual(new Uint8Array([9])) // decrypted bytes, not yet an object URL
     expect(openGrid).toHaveBeenCalled()
-    expect(openBlob).not.toHaveBeenCalled()
+  })
+
+  it('reads no uploaded cover: that source is core’s, never this reader’s', async () => {
+    expect(await loadMemoryPhotoCover(ctx({ source: { kind: 'upload', ref: UPLOAD_REF_RAW }, crop: FULL_FRAME }))).toBeNull()
+    expect(listMedia).not.toHaveBeenCalled()
   })
 
   it('a dangling media source (the chosen media is gone) falls back to null (E2, never a broken tile)', async () => {
     vi.mocked(listMedia).mockResolvedValue([mediaItem({ mediaId: 'other' })])
-    const node = { id: NODE_ID, wrappedMeta: sealMeta({ v: 1, cover: { source: { kind: 'media', mediaId: 'm1' }, crop: FULL_FRAME } }, SCOPE) }
-    expect(await loadNodeCover(SCOPE, nodeKey, node)).toBeNull()
+    expect(await loadMemoryPhotoCover(ctx({ source: { kind: 'media', mediaId: 'm1' }, crop: FULL_FRAME }))).toBeNull()
   })
 
-  it('a node with no cover is null (no transport touched)', async () => {
-    expect(await loadNodeCover(SCOPE, nodeKey, { id: NODE_ID, wrappedMeta: null })).toBeNull()
-    expect(openBlob).not.toHaveBeenCalled()
+  it('a failing read is null too, and a node with no cover touches no transport', async () => {
+    vi.mocked(listMedia).mockRejectedValue(new Error('offline'))
+    expect(await loadMemoryPhotoCover(ctx({ source: { kind: 'media', mediaId: 'm1' }, crop: FULL_FRAME }))).toBeNull()
+    vi.mocked(listMedia).mockClear()
+    expect(await loadMemoryPhotoCover(ctx(undefined))).toBeNull()
     expect(listMedia).not.toHaveBeenCalled()
   })
 })

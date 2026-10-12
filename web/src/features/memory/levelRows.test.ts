@@ -18,7 +18,7 @@ import { FOLDER_KIND, type NodeKind } from '../../core/node/kind'
 import { MEMORY_KIND } from './kinds'
 import { treeStore } from '../../core/node/treeStore'
 import type { ViewMode } from '../../shared/state/useViewMode'
-import { sealNodeMeta } from './nodeMeta'
+import { sealNodeMeta } from '../../core/node/nodeMeta'
 import type { MemoryLocation } from './memoryLocation'
 import type { TreeNode } from '../../core/node/tree'
 import { epochsOf } from '../spaces/epochsTestUtil'
@@ -117,6 +117,21 @@ describe('Memories rows', () => {
     const h = mountSection({ nodes: [node('m1', MEMORY_KIND, 'Solo')] })
     expect(rowOf(h.w, 'Solo').classes()).toContain('has-cover')
     expect(rowOf(h.w, 'Solo').find('.memory-cover-image-ph').exists()).toBe(true)
+  })
+
+  it('draws the cover the level resolved (core\'s store, inbox #411) with its crop - and the placeholder again once it is gone', async () => {
+    const h = mountSection({ nodes: [node('m1', MEMORY_KIND, 'Solo')] })
+    h.covers.value = new Map([['m1', { url: 'blob:solo', crop: { x: 0, y: 0, width: 0.5, height: 1 } }]])
+    await flushPromises()
+    const img = rowOf(h.w, 'Solo').find('.memory-cover-image img')
+    expect(img.attributes('src')).toBe('blob:solo')
+    expect(img.attributes('style')).toContain('200%') // the crop is applied
+    expect(rowOf(h.w, 'Solo').find('.memory-cover-image-ph').exists()).toBe(false)
+    h.covers.value = new Map() // the cover was removed: the level dropped its image
+    await flushPromises()
+    expect(rowOf(h.w, 'Solo').find('.memory-cover-image img').exists()).toBe(false)
+    expect(rowOf(h.w, 'Solo').find('.memory-cover-image-ph').exists()).toBe(true)
+    expect(h.events.ensuredCovers, 'a grid row asks for nothing beyond the level: the level resolved its covers').toEqual([])
   })
 
   it('the tab\'s empty text is the descriptor\'s plain text; there is no create tile and no trash button here (core\'s toolbar, inbox #385, #406)', () => {

@@ -18,7 +18,7 @@ import {
   type MemoryLocation,
 } from './memoryLocation'
 import { unsealMemoryDate, type MemoryDate } from './memoryDate'
-import { sealNodeMeta } from './nodeMeta'
+import { sealNodeMeta } from '../../core/node/nodeMeta'
 import type { MediaItem, MediaMeta } from './media'
 import { contentApi } from '../../api/client'
 import { fakeApi, stubApi } from '../../test/apiMock'

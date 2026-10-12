@@ -3,10 +3,10 @@
 // (`register.ts` names it as both kinds' `list.rows`) and returns what core needs per node (`LevelRowSource`). It replaces
 // the former `MemoriesSection.vue` and `MemoryCard.vue`; what those did beyond drawing lives here:
 //
-// - **The cover** of each Memory (the visual of its row or tile): a member's from the shared `coverStore` (one decrypt per
-//   Memory per scope for every surface), a share guest's from the link's own reads (`./guestCover.ts`). This source only says
-//   WHICH nodes are on screen - the store owns the key chain, the object-URL lifecycle and the staleness rule. The sealed meta
-//   is part of the watched key for the same reason it is in the sidebar rail: a cover edit patches `wrappedMeta` in place.
+// - **The cover** of each Memory (the visual of its row or tile): core's (inbox #411) - the level resolves every node's cover
+//   once (a member's from the shared store, a share guest's through the link's own reads; a photo-of-the-Memory source is read
+//   by `./coverLoad.ts`, the kinds' `cover.load`) and hands the map to this source (`host.covers`), which draws it with the
+//   Memory placeholder tile while there is none.
 // - **The sealed date range** (the meta line) from each node's `wrappedMeta` under the key its parent's chain opens - read from
 //   the tree, no media load. A rotated scope mixes epochs across the level; locked (`epochs` null) means no dates.
 // - **The map** (the third presentation, `register.ts` names it among the kinds' `views`): core asks `presentation('map')`
@@ -26,9 +26,7 @@ import { activeSpace } from '../../app/activeSpace'
 import { targetOf, type TreeSource } from '../../core/access'
 import { sortNodesByDate, type MemoryDate } from './memoryDate'
 import { collectLocatedPins, collectLocatedPinsBy } from './spaceMap'
-import { covers, ensureCovers } from './coverStore'
 import { memoryCapabilities } from './capabilities'
-import { useGuestCovers } from './guestCover'
 import { formatClosedRange, formatDay } from './memoryDateRange'
 import { MEMORY_KIND, CHAPTER_KIND } from './kinds'
 import MemoryRowCover from './components/MemoryRowCover.vue'
@@ -53,7 +51,6 @@ export function memoryRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRows
   const { t, locale } = useI18n()
   // Who looks does not change while the level is mounted (a host mounts its level for one session).
   const guestAccess = ctx.value.access.mode === 'guest' ? ctx.value.access : null
-  const guestCovers = guestAccess ? useGuestCovers(guestAccess) : null
   const folderId = () => ctx.value.folder?.id ?? null
   const treeOf = () => ctx.value.tree as TreeSource<TreeNode>
 
@@ -90,19 +87,14 @@ export function memoryRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRows
     if (node) host.open(node)
   }
 
-  // The covers come from the shared `coverStore` (cr-0072 + the sidebar rail): one decrypt per Memory per scope for every
-  // surface. In the map the pins' nodes are what is on screen, else the level's.
-  function syncCovers() {
-    const nodes = ctx.value.viewMode === 'map' ? pins.value.map((pin) => pin.node) : ctx.value.nodes
-    if (guestCovers) guestCovers.ensure(nodes, (id) => ctx.value.tree.keyOf(id))
-    else ensureCovers(nodes.map((n) => n.id))
-  }
-  const coverMap = computed(() => (guestCovers ? guestCovers.covers.value : covers.value))
-  // The sealed meta is part of the key: a cover edit patches `wrappedMeta` in place, so watching the array (whose identity
-  // does not change) would leave a stale cover on the very row the new one was chosen from.
-  const metaKey = computed(() => ctx.value.nodes.map((n) => `${n.id}:${n.wrappedMeta ?? ''}`).join('|'))
+  // The covers are core's (inbox #411): the level resolves them for its own nodes (`host.covers`, a member's from the shared
+  // store, a guest's through the link's own reads), so a row only READS the decrypted image. The one thing this source adds is
+  // the nodes of its map - its pins span the whole subtree, beyond the level - asked of the same mechanism.
+  const coverMap = computed(() => host.covers.value)
   const viewMode = computed(() => ctx.value.viewMode)
-  watch([viewMode, pins, metaKey], syncCovers, { immediate: true })
+  watch([viewMode, pins], () => {
+    if (ctx.value.viewMode === 'map') host.ensureCovers(pins.value.map((pin) => pin.node))
+  }, { immediate: true })
 
   function dateLabel(date: MemoryDate | null | undefined): string {
     if (!date) return ''
