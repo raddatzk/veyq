@@ -1,7 +1,7 @@
 package me.raddatz.veyq.memories.content
 
 import me.raddatz.veyq.core.node.NodeEntity
-import me.raddatz.veyq.memories.media.MediaStore
+import me.raddatz.veyq.core.items.NodeItemsRevisions
 import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
 import me.raddatz.veyq.core.testing.TestFixtures.bearer
@@ -37,26 +37,26 @@ class NodesSliceTest {
     lateinit var nodes: NodesStore
 
     @Inject
-    lateinit var media: MediaStore
+    lateinit var items: NodeItemsRevisions
 
     @Test
     fun aRenameOverlappingAMediaAddKeepsTheMediaRevision() {
         // The rename reads the Memory before a media add's revision bump commits and flushes after it. A full-row
         // UPDATE wrote the older `mediaRevision` back: the live-updates signal stepped backwards, and a client whose
         // last seen revision was the restored one missed the add (uc.memory.live-updates, inbox #224). Since inbox #341
-        // the counter is no column of the node row at all (Memories' veyq_media_revision), so a node write cannot reach
+        // the counter is no column of the node row at all (core's veyq_node_items_revision), so a node write cannot reach
         // it; this keeps the observable pinned across that move.
         repeat(RACE_ROUNDS) { round ->
             val (_, scopeId) = seedMemberScope()
             val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
             val renamed = "cmVuYW1lZA==" // "renamed"
             whileUncommitted(
-                change = { media.bumpMediaRevision(memory) },
+                change = { items.bump(scopeId, memory) },
                 overlapping = { nodes.applyUpdate(scopeId, memory, rootRename(scopeId, renamed), null, null, null) },
             )
             QuarkusTransaction.requiringNew().run {
                 val node = NodeEntity.findById(memory)!!
-                assertEquals(1, media.revisions(memory).first, "round $round: the rename rolled the media revision back")
+                assertEquals(1, items.revisions(memory).revision, "round $round: the rename rolled the media revision back")
                 // Control: the rename itself landed.
                 assertEquals(renamed, node.encryptedName, "round $round")
             }

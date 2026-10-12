@@ -53,6 +53,19 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   is red on a writer of those rows that is neither listed nor exempt; `TreeRevisionCoreSliceTest` / `FilesTreeRevisionSliceTest`
   pin each path's one bump and a refusal's none. A guest's `resolveShare` tag is NOT this revision (it would leak the rest
   of the space's activity): `ShareETag` digests what the response serves.
+- **A list of records inside a node is core's primitive** (inbox #410, [ADR 0033](../docs/decisions/0033-live-media-updates-revision-polling.md),
+  `core/items/`): the table `veyq_node_items_revision(node_id, revision, delete_revision)` (no row reads 0/0; the first change births it), the
+  seam `NodeItemsRevisions` and the wire helpers `ItemsETag` / `ItemsCursor`. **Every writer of an application's record rows calls
+  `items.bump(scopeId, nodeId, deleted)` in its own transaction**, after the record rows it changed (a removal passes `deleted = true`: both
+  counters move); an application never writes the table (`NodeItemsRevisionBumpsTest` is red on a file that names its entity, on a Memories
+  media writer that does not bump, and on an unclassified new one). **Lock order: record rows -> node row -> revision row.** Unlike
+  `bumpTree` this bump does NOT run under the scope lock (gallery writers lock a media row, not the scope), so the first-bump insert is
+  decided under the NODE row's lock with the UPDATE asked again beneath it; the revision row is a leaf nothing waits behind
+  (`NodeItemsRevisionsCoreSliceTest`, `MediaLockOrderRaceSliceTest`). A list endpoint is `read(nodeId, ifNoneMatch, sinceDelete, delta, ids)`:
+  `NotModified` (a `304`, neither query runs) or `Changed` with the application's own keyset delta and, only when a removal advanced past the
+  client's `sinceDelete`, the id set. Erasure is core's: `NodeItemsRevisionNodeSubtreeEraser` (phase 300) and `NodeScopeEraser` delete the row
+  before the node (`fk_items_revision_node`, no cascade). The scope's tree revision above is the node LIST's signal; this is the items INSIDE a
+  node. How an application adopts it: [docs/apps/README.md](../docs/apps/README.md#how-an-application-publishes-a-revisioned-list).
 - **A node's cover is core's write, in ONE transaction** (inbox #411, `core/content/NodeCover*.kt`): `setNodeCover` / `removeNodeCover` attach or detach
   the `COVER` blob through `AttachmentStore` (compare-and-set on the blob replaced; a refused slot COMMITS the loser's freed upload) and then
   write the node's re-sealed `wrappedMeta` through `NodesStore.applyUpdate` (ADR 0077 version check; a stale meta ROLLS the attach back so the

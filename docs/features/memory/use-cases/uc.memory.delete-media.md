@@ -125,7 +125,7 @@ löscht später verschlüsselte Dateien, die er nicht lesen kann.
 - Decisions: [ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md) (blob store + purge),
   [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (`K_mem` seals content),
   [ADR 0033](../../../decisions/0033-live-media-updates-revision-polling.md) (the revision reconcile)
-- Reference impl: the anonymous share *delete-own* (cr-0102) — the blob-reclaim + `bumpMediaRevision(deleted=true)`
+- Reference impl: the anonymous share *delete-own* (cr-0102) — the blob-reclaim + `NodeItemsRevisions.bump(deleted = true)` (core's item-list revision)
   path the purge parallels. Built: **cr-0110** (contracts → backend → web + the scheduled purge job) + **cr-0111**
   (the member-expedited `purgeMedia` + the Trash-tab redesign — the same `MediaGrid`, batch-select + a 3-dot
   restore/purge menu — and the upload per-file reconcile + the trashed-in-grid tombstone fixes).

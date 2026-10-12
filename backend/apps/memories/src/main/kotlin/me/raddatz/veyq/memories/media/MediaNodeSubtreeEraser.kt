@@ -5,7 +5,7 @@ import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
 
 /**
- * The media, buckets and gallery counters of an erased node subtree. Phase 100 — before core's attachments (200), as
+ * The media and buckets of an erased node subtree. Phase 100 — before core's attachments (200), as
  * the purge always ran it — and, through the caller, before `dropDeadIdentities`, which re-counts the media and
  * buckets this deletes.
  *
@@ -17,9 +17,8 @@ import jakarta.persistence.LockModeType
  * - Media, derivatives and their blobs go one media at a time through the shared FK-ordered
  *   [MediaStore.purgeMediaRows] (derivative -> media -> blob; chunk-key reclaim in the same transaction).
  * - The buckets go after, rows only: every medium that lived in them went above. No revision bump — a trashed node
- *   is already out of every listing, so no open gallery can be watching it — and the counters' own rows
- *   ([MediaRevisionEntity]) go last, before `NodeSubtreePurge` deletes the nodes, which `fk_media_revision_node`
- *   refuses while one remains.
+ *   is already out of every listing, so no open gallery can be watching it; the node's item-list counters are core's
+ *   and go with it (`NodeItemsRevisionNodeSubtreeEraser`, phase 300).
  */
 @ApplicationScoped
 class MediaNodeSubtreeEraser(
@@ -36,7 +35,6 @@ class MediaNodeSubtreeEraser(
             ).toSet()
         media.forEach { mediaStore.purgeMediaRows(it) }
         BucketEntity.delete("nodeId in ?1", nodeIds)
-        MediaRevisionEntity.delete("nodeId in ?1", nodeIds) // before the node rows: fk_media_revision_node
         return guests
     }
 }

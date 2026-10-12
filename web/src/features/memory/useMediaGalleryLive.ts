@@ -10,6 +10,7 @@ import type { TreeNode } from '../../core/node/tree'
 import { hasDerivatives, unsealMeta, effectiveCapturedAt, newestCursor, type MediaItem } from './media'
 import type { MemorySource } from './source'
 import { startMediaRevisionPolling, stopMediaRevisionPolling } from './mediaRevisionPolling'
+import { itemsPollTick, reconcileItems } from '../../core/items/itemsLive'
 import { galleryDisplayAspectRatio } from './mediaGridLayout'
 import { useThumbnailPipeline } from './useThumbnailPipeline'
 import { useOptimisticTiles, type OptimisticTileVM } from './useOptimisticTiles'
@@ -237,60 +238,69 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     }
   }
 
-  /** One live poll (uc.memory.live-updates, cr-0107): a conditional GET keyed on the cached `mediaRevision`. A 304
-   *  is a no-op; a change upserts the keyset delta (new tiles auto-insert), reconciles removals via the id-set, and
-   *  decrypts just the delta's tiles. Errors are swallowed — the last grid stays and the next poll re-syncs in one
-   *  round-trip (E6). Node-race-guarded so a mid-poll navigation can't write into the wrong gallery, and fenced by
-   *  the live poll's `signal` so a poll still in flight when the loop stops (close, lock) writes nothing. */
-  async function pollMedia(signal?: AbortSignal) {
-    const key = ctx.memoryKey()
-    const nodeId = ctx.node().id
-    const poll = ctx.source.poll
-    if (!poll || !key || mediaRevision.value === null) return // no live poll here / not an open, loaded gallery
-    try {
-      const page = await poll(nodeId, {
-        mediaRevision: mediaRevision.value,
-        since: newestCursor(items.value),
+  /** The live poll's tick (uc.memory.live-updates, cr-0107; the conditional read is core's `itemsPollTick`, inbox #410):
+   *  a conditional GET keyed on the cached `mediaRevision`. A 304 is a no-op; a change upserts the keyset delta (new
+   *  tiles auto-insert), reconciles removals via the id-set, and decrypts just the delta's tiles. Node-race-guarded
+   *  (`isCurrent`) so a mid-poll navigation can't write into the wrong gallery, and fenced by the live poll's `signal`
+   *  so a poll still in flight when the loop stops (close, lock) writes nothing. A failed fetch REJECTS: the loop backs
+   *  off and the next successful poll re-syncs in one round-trip (E6) while the last grid stays. */
+  const pollTick = itemsPollTick<MediaItem, string>({
+    cursor: () => {
+      if (!ctx.memoryKey() || !ctx.source.poll || mediaRevision.value === null) return null // no live poll here / not an open, loaded gallery
+      return {
+        key: ctx.node().id,
+        revision: mediaRevision.value,
         deleteRevision: deleteRevision.value,
+        since: newestCursor(items.value),
+      }
+    },
+    fetch: async (cursor) => {
+      const page = await ctx.source.poll!(cursor.key, {
+        mediaRevision: cursor.revision,
+        since: cursor.since,
+        deleteRevision: cursor.deleteRevision,
       })
-      if (signal?.aborted || ctx.node().id !== nodeId || page.notModified) return // stopped / navigated away / nothing changed (304)
-      upsertItems(page.items, page.mediaIds)
-      mediaRevision.value = page.mediaRevision
-      deleteRevision.value = page.deleteRevision
-      await pipeline.decrypt(page.items, () => ctx.node().id === nodeId) // decrypt only the delta's new/changed tiles
-      if (!signal?.aborted && ctx.node().id === nodeId) await ctx.onSettle()
+      return page.notModified
+        ? { notModified: true }
+        : { notModified: false, items: page.items, revision: page.mediaRevision, deleteRevision: page.deleteRevision, ids: page.mediaIds }
+    },
+    isCurrent: (nodeId) => ctx.node().id === nodeId,
+    apply: async (change, cursor, signal) => {
+      upsertItems(change.items, change.ids)
+      mediaRevision.value = change.revision
+      deleteRevision.value = change.deleteRevision
+      await pipeline.decrypt(change.items, () => ctx.node().id === cursor.key) // decrypt only the delta's new/changed tiles
+      if (!signal.aborted && ctx.node().id === cursor.key) await ctx.onSettle()
+    },
+  })
+
+  /** One live poll, errors swallowed (offline/transient: keep the current grid) - for a caller that polls by hand. */
+  async function pollMedia(signal: AbortSignal = new AbortController().signal) {
+    try {
+      await pollTick(signal)
     } catch {
-      // offline/transient: keep the current grid; the revision compare makes the next successful poll a single round-trip
+      // the revision compare makes the next successful poll a single round-trip
     }
   }
 
-  /** Merge a live delta into `items` (cr-0107): upsert each delta media by `mediaId` — a new media auto-inserts, an
-   *  in-place meta edit patches the existing tile (keeping object identity, so an open lightbox snapshot stays
-   *  consistent) — and, **only when the id-set is present** (a delete advanced `delete_revision`), drop any cached
-   *  media absent from it, revoking its thumbnail. Reassigns `items` so the justified grid re-sorts. */
+  /** Merge a live delta into `items` (cr-0107) by core's `reconcileItems`: upsert each delta media by `mediaId` - a new
+   *  media auto-inserts, an in-place meta edit patches the existing tile (keeping object identity, so an open lightbox
+   *  snapshot stays consistent) - and, **only when the id-set is present** (a delete advanced the delete revision),
+   *  drop any cached media absent from it, revoking its thumbnail. Reassigns `items` so the justified grid re-sorts. */
   function upsertItems(delta: MediaItem[], mediaIds: string[] | null) {
-    const byId = new Map(items.value.map((it) => [it.mediaId, it] as const))
-    for (const m of delta) {
-      if (pendingDelete.has(m.mediaId)) continue // cr-0111: don't re-add an optimistically-trashed media (a stale pre-commit read)
-      const existing = byId.get(m.mediaId)
-      if (existing) {
+    items.value = reconcileItems(items.value, delta, mediaIds, {
+      idOf: (m) => m.mediaId,
+      skip: (id) => pendingDelete.has(id), // cr-0111: don't re-add an optimistically-trashed media (a stale pre-commit read)
+      patch: (existing, m) => {
         existing.wrappedMeta = m.wrappedMeta // a meta edit re-sealed the tier; patch in place (shared with the lightbox snapshot)
         existing.metaVersion = m.metaVersion // …and the version it is at, or the next write from here would 409 once
         existing.updatedAt = m.updatedAt
-      } else {
-        byId.set(m.mediaId, m)
-      }
-    }
-    if (mediaIds) {
-      const keep = new Set(mediaIds)
-      for (const id of [...pendingDelete]) if (!keep.has(id)) pendingDelete.delete(id) // cr-0111: server confirmed it's gone → lift the tombstone
-      for (const id of [...byId.keys()]) {
-        if (keep.has(id)) continue
-        pipeline.dropThumb(id)
-        byId.delete(id)
-      }
-    }
-    items.value = [...byId.values()]
+      },
+      onIds: (listed) => {
+        for (const id of [...pendingDelete]) if (!listed.has(id)) pendingDelete.delete(id) // cr-0111: server confirmed it's gone → lift the tombstone
+      },
+      onDrop: (id) => pipeline.dropThumb(id),
+    })
   }
 
   // The live-gallery lifecycle: on a Memory/chapter switch tear down the previous poll, clear the grid, reload, and
@@ -304,7 +314,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
       toast.dismissUndo()
       stopMediaRevisionPolling()
       void load({ reset: true }).then(() => {
-        if (ctx.memoryKey() && ctx.source.poll) startMediaRevisionPolling((signal) => pollMedia(signal))
+        if (ctx.memoryKey() && ctx.source.poll) startMediaRevisionPolling(pollTick)
       })
     },
     { immediate: true },

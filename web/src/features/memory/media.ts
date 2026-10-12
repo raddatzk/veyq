@@ -32,6 +32,7 @@ import {
 import type { BlobDeclare, BlobRef, ReservedUpload, WindowFn } from '../../core/blob/types'
 import type { BlobMeta, OpenedBlobMeta } from '../../core/blob/meta'
 import { sniffMediaType } from './download'
+import { newestItemsCursor } from '../../core/items/itemsLive'
 import { mediaKey, uploaderOriginOf, type UploaderOrigin } from './mediaKey'
 import { MetaConflictError, MetaUnreadableError, writeSealedMeta, type MetaEditContext } from '../../core/node/sealedMetaWrite'
 import type { ChunkProvider } from '../../sw/protocol'
@@ -775,19 +776,7 @@ export async function listMedia(scopeId: string, nodeId: string): Promise<MediaI
  *  when none carry an `updatedAt` (e.g. an empty grid). Millisecond-precision by construction (a JS `Date`), which
  *  round-trips losslessly against the server's `TIMESTAMP(3)` so the same rows are never re-fetched. */
 export function newestCursor(items: readonly MediaItem[]): string | undefined {
-  let bestT = -Infinity
-  let bestId = ''
-  let found = false
-  for (const it of items) {
-    if (!it.updatedAt) continue
-    const t = it.updatedAt.getTime()
-    if (t > bestT || (t === bestT && it.mediaId > bestId)) {
-      bestT = t
-      bestId = it.mediaId
-      found = true
-    }
-  }
-  return found ? `${new Date(bestT).toISOString()},${bestId}` : undefined
+  return newestItemsCursor(items, (it) => it.mediaId, (it) => it.updatedAt)
 }
 
 /**

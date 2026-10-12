@@ -7,6 +7,7 @@ import me.raddatz.veyq.core.blob.UploadOpener
 import me.raddatz.veyq.core.blob.WindowItemResult
 import me.raddatz.veyq.core.blob.WindowRequest
 import me.raddatz.veyq.core.content.NodesStore
+import me.raddatz.veyq.core.items.NodeItemsRevisions
 import me.raddatz.veyq.core.sharing.ShareGuestWrites
 import me.raddatz.veyq.memories.node.MemoriesNodeKinds
 import jakarta.enterprise.context.ApplicationScoped
@@ -25,6 +26,7 @@ class MediaShareGuestWrites(
     private val uploads: BlobUploadHandler,
     private val store: MediaStore,
     private val tree: NodesStore,
+    private val items: NodeItemsRevisions,
 ) : ShareGuestWrites {
 
     // The kinds a guest uploads into — the root of a Memories share, or a Memory or chapter below a share's root (ADR
@@ -73,11 +75,11 @@ class MediaShareGuestWrites(
         if (!supports(kind) || !tree.withinSubtree(scopeId, rootNodeId, media.nodeId)) return false
         val nodeId = media.nodeId // captured before the row is deleted — the node whose gallery must reconcile
         store.purgeMediaRows(media) // derivative → media → blob rows, FK order (shared helper)
-        // cr-0107 (ADR 0033): a media-row removal moves BOTH counters — media_revision (the change signal) and
-        // delete_revision (which gates the id-set), so an open gallery's next poll gets the current mediaId set
+        // cr-0107 (ADR 0033): a media-row removal moves BOTH counters of core's item-list revision (the change signal and
+        // the delete revision (which gates the id-set), so an open gallery's next poll gets the current mediaId set
         // and drops the removed tile. Same transaction ⇒ atomic with the delete. (A LIVE media is removed here —
         // unlike the two trash purges — so it bumps; purgeMediaRows leaves the revision bump to the caller.)
-        store.bumpMediaRevision(nodeId, deleted = true)
+        items.bump(scopeId, nodeId, deleted = true)
         return true
     }
 }

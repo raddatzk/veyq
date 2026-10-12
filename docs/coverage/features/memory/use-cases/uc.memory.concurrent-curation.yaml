@@ -18,7 +18,7 @@ acceptanceCriteria:
         unit:
           - src/features/memory/memoryDate.test.ts
   - id: media-meta-compare-and-set
-    text: updateMediaMeta carries a required metaVersion and is compare-and-set the same way; media_revision moves on the success and not on the 409.
+    text: updateMediaMeta carries a required metaVersion and is compare-and-set the same way; the node's item revision moves on the success and not on the 409.
     coverage:
       backend:
         integration:

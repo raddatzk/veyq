@@ -39,7 +39,7 @@ one-element set over the stored one.
    answers **`409 stale_version` carrying the current blob and its version** (`StaleSealedMeta`) and writes
    nothing — a node update that also renamed is refused whole. A success stores `version + 1`, which the client
    derives, so no success response changes shape.
-2. **The counter is dedicated.** `media_revision` moves on every attach, trash, restore, move and meta change; a
+2. **The counter is dedicated.** A node's item revision (core's, ADR 0033) moves on every attach, trash, restore, move and meta change; a
    compare-and-set on it would turn every concurrent upload into a date-edit conflict.
 3. **The merge is the client's, and it re-applies only its own change.** Each writer is a function from the
    fresh blob to the next one (or to "no write"). On a `409` the client re-runs it on the conflict body's blob and

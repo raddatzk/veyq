@@ -1,6 +1,7 @@
 package me.raddatz.veyq.memories.media
 
 import me.raddatz.veyq.core.blob.BlobEntity
+import me.raddatz.veyq.core.items.NodeItemsRevisions
 import me.raddatz.veyq.core.testing.OVERLAP_HOLD_MS
 import me.raddatz.veyq.core.testing.RACE_ROUNDS
 import me.raddatz.veyq.core.testing.TestBlob
@@ -42,6 +43,7 @@ import org.junit.jupiter.api.Test
 class MediaLockOrderRaceSliceTest {
 
     @Inject lateinit var store: MediaStore
+    @Inject lateinit var items: NodeItemsRevisions
 
     /**
      * A trash's order (media → node) against a sub-bucket delete: the reparent must lock its media BEFORE the
@@ -54,7 +56,7 @@ class MediaLockOrderRaceSliceTest {
             val f = fixture()
             val (held, other) = between(
                 first = { MediaEntity.findById(f.mediaId, LockModeType.PESSIMISTIC_WRITE) }, // trashMedia's first lock
-                second = { store.bumpMediaRevision(f.nodeId, deleted = true) }, // ...and its last, on the node row
+                second = { items.bump(f.scopeId, f.nodeId, deleted = true) }, // ...and its last, on the node row
                 other = { store.deleteBucketReparent(f.subBucketId) },
             )
             assertNull(held, "round $round: the trash's side failed: $held")

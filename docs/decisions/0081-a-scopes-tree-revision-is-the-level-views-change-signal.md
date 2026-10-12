@@ -42,7 +42,7 @@ one Memory's media), and the other reader is an **anonymous guest**, who must no
 
    A refused write (a stale version, a taken slug, a conflicting attach, an already-trashed delete, a no-op update)
    bumps nothing. A scope's erase bumps nothing (the row goes with it). There is no abandon endpoint; an unfinished
-   upload's session purge changes no listing. Memories' own `media_revision` stays as it is (ADR 0033); a Memory
+   upload's session purge changes no listing. A node's item-list revision (core's `veyq_node_items_revision`, ADR 0033) stays as it is; a Memory
    created, renamed, moved or deleted is a node change like any other.
 
 3. **Members: a conditional GET on `listNodes`.** The `200` carries the revision as its `ETag` (`"7"`); `If-None-Match`

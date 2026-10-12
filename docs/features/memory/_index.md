@@ -79,7 +79,7 @@ seals its name under the folder's key instead of `K_SC` ([ADR 0080](../../decisi
   `metaVersion` it read, a stale one answers `409 stale_version` with the current blob, and the writer re-applies
   only its own change; a blob that does not open is never rebuilt from empty
 - [uc.memory.live-updates](use-cases/uc.memory.live-updates.md) — **built (web)** (cr-0107, ADR 0033): an open
-  gallery reflects others' media adds/removes live; a per-node `media_revision` counter → conditional-GET `304` +
+  gallery reflects others' media adds/removes live; core's per-node item revision (ADR 0033) → conditional-GET `304` +
   keyset delta + id-set delete-reconcile (gated by a `delete_revision` counter), short-polled + visibility-gated)
 - [uc.memory.delete-media](use-cases/uc.memory.delete-media.md) — **built (web)** (remove a photo into a recoverable
   per-Memory trash: soft-delete → Trash tab → 30-day retention → scheduled hard-purge; **any member** may

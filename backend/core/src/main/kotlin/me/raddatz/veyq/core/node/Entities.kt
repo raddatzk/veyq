@@ -59,7 +59,7 @@ class NodeEntity : PanacheEntityBase {
     var wrappedMeta: String? = null
 
     /** How many times [wrappedMeta] was replaced (ADR 0077): 0 at birth, bumped only by the compare-and-set in
-     *  `NodesStore.applyUpdate`, which every meta write goes through. Not Memories' gallery counter (`veyq_media_revision`), which every attach and trash also moves. */
+     *  `NodesStore.applyUpdate`, which every meta write goes through. Not a node's item-list revision (`veyq_node_items_revision`), which every attach and trash of an item also moves. */
     @Column(name = "meta_version", nullable = false)
     var metaVersion: Long = 0
 

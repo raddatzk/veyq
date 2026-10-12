@@ -186,7 +186,7 @@ CREATE UNIQUE INDEX ux_membership_user_scope ON veyq_membership (user_id, scope_
 -- it is not a foreign key; slug uniqueness is per parent slot. ux_node_parent_slug spans trashed rows on
 -- purpose: a trash frees the slug by writing the node's own id into slug_token (ADR 0061), because neither
 -- engine pair has a filtered index. No column here is an application's (inbox #341): a Memory's cover is an
--- attachment (veyq_node_attachment, slot COVER) and its gallery counters are Memories' own table. Of this table's
+-- attachment (veyq_node_attachment, slot COVER) and its item-list counters are core's own table (veyq_node_items_revision). Of this table's
 -- times only created_at keeps the millisecond (TIMESTAMP(3)): clients order equal-named siblings by it, then by id
 -- (ADR 0015).
 CREATE TABLE veyq_node (
@@ -221,6 +221,19 @@ CREATE TABLE veyq_scope_tree_revision (
     scope_id UUID NOT NULL PRIMARY KEY,
     revision BIGINT NOT NULL,
     CONSTRAINT fk_tree_revision_scope FOREIGN KEY (scope_id) REFERENCES veyq_scope (id)
+);
+
+-- A node's item-list counters (ADR 0033, inbox #410): the platform's change signal for the records an application keeps
+-- INSIDE a node (Memories' media today), one row per node whose items ever changed. revision moves on every change and
+-- is the list's ETag; delete_revision only on a removal, gating the id-set reconcile. One row, so one read is a
+-- consistent pair. No row reads as 0/0; the first bump inserts it under the node row's lock (NodeItemsRevisions.bump).
+-- Not the tree revision above: that one covers the node list, this one the items inside one node.
+-- fk_items_revision_node is not cascading: the node-subtree and scope erasers delete the row before the node goes.
+CREATE TABLE veyq_node_items_revision (
+    node_id         UUID NOT NULL PRIMARY KEY,
+    revision        INT NOT NULL,
+    delete_revision INT NOT NULL,
+    CONSTRAINT fk_items_revision_node FOREIGN KEY (node_id) REFERENCES veyq_node (id)
 );
 
 -- An open upload session (ADR 0013): bound to its opener (an account or a share identity, never both) and to

@@ -1,7 +1,8 @@
 useCase: uc.memory.live-updates
 feature: memory
 title: Live media updates — others' adds/removes surface into the open gallery
-# Built (web) — cr-0107, ADR 0033. A per-node media_revision counter (bumped on attach/meta-edit/delete, NOT a
+# Built (web) — cr-0107, ADR 0033; the mechanism is core's since inbox #410 (veyq_node_items_revision, NodeItemsRevisions,
+# web/src/core/items), Memories' media its first user. A per-node revision counter (bumped on attach/meta-edit/delete, NOT a
 # cover change) → an ETag conditional GET on listNodeMedia (304 when unchanged); on a change a keyset delta (media
 # past the client's (updatedAt,id) cursor, so an active upload streams new items, never a full re-list) + the
 # current mediaId set for delete-reconcile, gated by a second delete_revision counter (present only when a delete
@@ -10,16 +11,19 @@ title: Live media updates — others' adds/removes surface into the open gallery
 # gallery UI itself is a later CR); the two-member browser auto-insert/drop is the manual live smoke.
 acceptanceCriteria:
   - id: cheap-unchanged-check
-    text: listNodeMedia is a conditional GET keyed on the node's media_revision (an opaque counter, bumped on every gallery-media mutation but NOT on a cover change); a poll/re-open whose revision matches gets a 304 with no body and no media query server-side — so an unchanged gallery costs an O(1) counter compare, not a full list.
+    text: listNodeMedia is a conditional GET keyed on the node's item revision (core's opaque counter, bumped on every gallery-media mutation but NOT on a cover change); a poll/re-open whose revision matches gets a 304 with no body and no media query server-side — so an unchanged gallery costs an O(1) counter compare, not a full list.
     coverage:
       backend:
         integration:
           - MediaSliceTest.unchangedPollIsNotModified
+          - NodeItemsRevisionsCoreSliceTest.anUnchangedRevisionIsANotModifiedAndRunsNeitherQuery
+          - NodeItemsRevisionsCoreSliceTest.anAbsentRowReadsZeroSoAClientHoldingZeroGetsNoBody
           - NodeCoverMemoriesSliceTest.aMemoryAndAChapterTakeACoverWithoutTouchingTheGallery
       web:
         unit:
           - src/features/memory/media.test.ts
           - src/features/memory/mediaRevisionPolling.test.ts
+          - src/core/items/itemsLive.test.ts
   - id: keyset-delta-on-change
     text: On a revision change the server returns only media with updated_at past the client's (updatedAt, mediaId) cursor — a keyset delta, not the whole list — so an active upload by another member streams the few new items each poll. The client upserts by mediaId and advances the cursor. Requires a new veyq_media.updated_at (the attach time at attach, bumped on meta edit; the medium's only creation time since #398).
     coverage:
@@ -27,6 +31,8 @@ acceptanceCriteria:
         integration:
           - MediaSliceTest.attachDeltaCarriesOnlyNewMediaAndNoIdSet
           - MediaSliceTest.metaEditSurfacesViaCursorAndNoIdSet
+          - NodeItemsRevisionsCoreSliceTest.aChangedRevisionIsTheDeltaAndTheIdSetOnlyWhenADeleteAdvancedPastTheClient
+          - NodeItemsRevisionsCoreSliceTest.theEtagAndTheCursorRoundTripLeniently
       web:
         unit:
           - src/features/memory/media.test.ts
@@ -38,8 +44,10 @@ acceptanceCriteria:
         integration:
           - MediaSliceTest.deleteBumpsBothCountersAndIdSetOmitsRemoved
           - MediaSliceTest.netZeroDeleteAddStillCarriesIdSet
+          - NodeItemsRevisionsCoreSliceTest.noRowReadsZeroAndTheFirstBumpBirthsIt
       web:
         unit:
+          - src/core/items/itemsLive.test.ts
           - src/features/memory/media.test.ts
           - src/features/memory/components/MemoryDetail.test.ts
   - id: live-auto-insert
@@ -48,7 +56,8 @@ acceptanceCriteria:
       web:
         unit:
           - src/features/memory/mediaRevisionPolling.test.ts
-          - src/shared/state/visibilityPoller.test.ts
+          - src/core/items/itemsLive.test.ts
+          - src/shared/state/livePoller.test.ts
           - src/features/memory/components/MemoryDetail.test.ts
   - id: operator-blind-live
     text: The server sees only an opaque revision counter, opaque mediaIds, exact timestamps (a medium's updatedAt, to the millisecond), and the poll access-pattern it already sees on reads — never content, never a key. No new operator-visible signal; K_mem/K_share never touch the server.
