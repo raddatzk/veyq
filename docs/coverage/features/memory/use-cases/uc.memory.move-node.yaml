@@ -29,7 +29,7 @@ acceptanceCriteria:
       backend:
         integration: [ShareNodesCoreSliceTest.aGuestMovesAndRenamesInsideTheSubtree, ShareNodesCoreSliceTest.aGuestNeverMovesANodeOutOfTheSubtreeTheRootOrIntoACycle, DropBoxSliceTest.aGuestOfALinkAboveMovesNothingOutOfADropBox]
       web:
-        unit: [src/core/access.test.ts, src/features/files/capabilities.test.ts, src/features/memory/capabilities.test.ts, src/core/sharing/ShareTreePage.move.test.ts, src/views/MemoryHomeView.move.test.ts, src/features/files/components/FilesSection.test.ts, src/features/files/components/FilesSection.guest.test.ts, src/features/files/components/DropBoxDetail.test.ts, src/features/memory/components/MemoryDetail.caps.test.ts, src/core/node/LevelView.test.ts]
+        unit: [src/core/access.test.ts, src/features/files/capabilities.test.ts, src/features/memory/capabilities.test.ts, src/core/sharing/ShareTreePage.move.test.ts, src/views/MemoryHomeView.move.test.ts, src/features/files/levelRows.test.ts, src/features/files/levelRows.guest.test.ts, src/features/files/components/DropBoxDetail.test.ts, src/features/memory/components/MemoryDetail.caps.test.ts, src/core/node/LevelView.test.ts]
 
   - id: refusals-are-explained-by-name
     text: "Each server refusal of a move is said by its code — slug_taken, illegal_structure, illegal_scope, stale_epoch, share_not_contributable, a gone node or link, rate_limited, scope_deleting — and a lost race (stale_placement, after the write's own bounded re-read) re-reads the tree so the next attempt builds on the node as it now is; a guest who declines to name itself sends nothing and is told nothing."

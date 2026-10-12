@@ -62,5 +62,5 @@ acceptanceCriteria:
           - src/features/memory/spaceMap.test.ts
           - src/features/memory/memoryCover.test.ts
           - src/features/memory/components/SpaceMap.test.ts
-          - src/features/memory/components/MemoriesSection.test.ts
+          - src/features/memory/levelRows.test.ts
           - src/core/node/ViewModeToggle.test.ts

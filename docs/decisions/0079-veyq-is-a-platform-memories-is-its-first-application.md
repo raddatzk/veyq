@@ -270,10 +270,12 @@ on their own.
   application fills, which body renders a public share, and what runs when a scope is entered or reset and when the
   Master Key rotates (that hook is required: a rotation refuses to start without it). Not done on the web: the
   directory is still named `features/memory`; the folder level view is core's (`core/node/LevelView.vue`) and each
-  application contributes a section per kind through the registry — naming the presentations it switches between
-  (`views`), whose switch is the level's toolbar, core's (inbox #370); the level shows the stored mode only where a
-  shown section or the folders offer it, else the grid, and hands that mode to every section
-  (`LevelSectionProps.viewMode`, inbox #404: no section reads the stored preference) — and so its create and share dialogs (a folder's
+  application contributes ROW DATA per kind through the registry (inbox #407: the sections are retired, core draws ONE
+  list of the folders and every kind's rows — a factory per application answers a row per node: icon or cover, title,
+  meta line, primary click and capability-gated actions) — naming the presentations it switches between beyond core's grid
+  and list (`views`, Memories' map), whose switch is the level's toolbar, core's (inbox #370); the level shows the stored
+  mode only where something on screen offers it, else the grid, and hands that mode to every row factory
+  (`LevelRowsContext.viewMode`, inbox #404: no factory reads the stored preference) — and so its create and share dialogs (a folder's
   create and every node's rename are core's own dialog, FOLDER's share dialog is core's), while the top-bar tray and
   the sidebar pins are ordered list slots each application adds its own item to (the upload status in the top bar is
   core's own, listing every application's uploads, so no application adds it); the i18n catalog is one file and `styles/memory.css` is global. The kind is a string token on both
@@ -285,7 +287,7 @@ on their own.
 - **One view per kind, for a member and a share guest alike** (owner principle 2026-10-09, inbox #401). A share
   view looks exactly like the member view; a link's role only removes functions. So the registry's contract does not
   know which of the two is looking:
-  - A kind's `detail` and `section` receive `access` — who looks: a member of the unlocked scope (its epoch keys,
+  - A kind's `detail` and its row factory receive `access` — who looks: a member of the unlocked scope (its epoch keys,
     whether it is pending deletion, the instance's sharing capabilities) or a guest of a link (its role, the resolved
     share, the password token, core's one naming flow) — and `tree`, the tree as that session reads it: the member's
     decrypted scope tree or the guest's opened subtree, every navigation through its `linkTo`, so a guest's link keeps
@@ -298,7 +300,7 @@ on their own.
     **and** the session's data source implements the operation: a guest's source simply lacks the member's operations,
     so a function it does not have cannot appear. Member-only state — pins under the Master Key, item marks under `K_SC`
     at `E_0`, a node's sealed meta, the scope's member list — is granted to no guest role.
-  - `shareSection` is retired (a kind's section serves the guest's folder page too), and `claimShareBody` narrows to the
+  - `shareSection` is retired (a kind's rows serve the guest's folder page too), and `claimShareBody` narrows to the
     one page with no member equivalent: a `WRITE_ONLY` link's drop, whose guest holds no key and so has nothing to
     render the member's way. The guest-only shell stays core's: the password and terms gates, one naming flow with
     "Not you?", the curator's note, the role badge.
@@ -315,7 +317,7 @@ on their own.
   root included — with what only a guest's page adds (the breadcrumb up to the root, the curator's note, the role
   badge); a `WRITE_ONLY` link gets the drop page its root kind's application claimed (`claimShareBody`, which no longer
   takes an option, and refuses `FOLDER`). Each application reads and writes through its data source, the member's or the
-  guest's, fixed at mount: Files' `features/files/source.ts` (its `FilesSection` and `DropBoxDetail` serve guests;
+  guest's, fixed at mount: Files' `features/files/source.ts` (its row factory and `DropBoxDetail` serve guests;
   `ShareFilesSection` and `DropBoxSharedView` are deleted) and Memories' `features/memory/source.ts` (`MemoryDetail`,
   its composables, the lightbox and the organizer touch no API but through it; `MemoryDetailHost` picks the source by
   `access.mode` and reads nothing of the member's world for a guest). A view shows a right where the matrix grants it

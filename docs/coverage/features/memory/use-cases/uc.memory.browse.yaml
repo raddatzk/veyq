@@ -23,11 +23,11 @@ acceptanceCriteria:
         unit:
           - src/shared/state/useViewMode.test.ts
           - src/core/node/ViewModeToggle.test.ts
-          - src/features/memory/components/MemoriesSection.test.ts
+          - src/features/memory/levelRows.test.ts
           - src/core/node/LevelView.test.ts
           - src/features/memory/components/SpaceMap.test.ts
   - id: application-tabs
-    text: Where the level shows two or more application sections, a tab bar `All | <one tab per section>` filters the level to one section's nodes of the current folder (sub-folders stay in every tab, no subtree search); the selection is a persisted setting per signed-in account (and one for the share-guest pages), shown as `All` without being overwritten where the level lacks that tab; a share guest gets the same bar (inbox #348).
+    text: Where the level offers two or more application tabs, a tab bar `All | <one tab per application>` filters the ONE list of the current folder (folders first, then every node by name, whatever its kind) to one application's nodes (sub-folders stay in every tab, no subtree search; a tab is offered where its kinds have a node or the viewer may add one); the selection is a persisted setting per signed-in account (and one for the share-guest pages), shown as `All` without being overwritten where the level lacks that tab; a share guest gets the same bar (inbox #348).
     coverage:
       web:
         unit:
@@ -64,14 +64,14 @@ acceptanceCriteria:
           - src/shared/state/livePoller.test.ts
           - src/views/MemoryHomeView.live.test.ts
           - src/views/ShareView.live.test.ts
-          - src/features/files/components/FilesSection.test.ts
+          - src/features/files/levelRows.test.ts
           - src/core/node/treeConditional.wire.test.ts
           - src/core/sharing/pollPublicShare.wire.test.ts
   - id: create-folder-and-memory
     text: Creating a folder/Memory seals the name + blinded slug under the parent's key (K_SC at the scope root) and POSTs only ciphertext (every node births its random key, wrapped under the same parent key).
     coverage:
       backend: { integration: [NodesSliceTest.createTreeThenList] }
-      web: { unit: [src/core/node/tree.test.ts, src/core/node/LevelView.test.ts, src/features/memory/components/MemoriesSection.test.ts, src/core/node/FolderNameDialog.test.ts, src/core/node/FolderNameDialog.slug.test.ts, src/features/memory/components/MemoryNodeDialog.test.ts] }
+      web: { unit: [src/core/node/tree.test.ts, src/core/node/LevelView.test.ts, src/features/memory/levelRows.test.ts, src/core/node/FolderNameDialog.test.ts, src/core/node/FolderNameDialog.slug.test.ts, src/features/memory/components/MemoryNodeDialog.test.ts] }
   - id: rename-and-delete-subtree
     text: Rename re-seals the name + recomputes the slug; delete removes the node and its whole subtree.
     coverage:

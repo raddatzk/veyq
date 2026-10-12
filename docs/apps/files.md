@@ -72,7 +72,7 @@
   ([ADR 0081](../decisions/0081-a-scopes-tree-revision-is-the-level-views-change-signal.md)). Files writes no revision of
   its own: a `FILE` created or deleted (trashed) is a node change, and `completeFile` — member or guest, first upload or
   replace — is `AttachmentStore.attach`, which bumps the scope's tree revision in the transaction that fills the slot.
-  An upload completing changes no node row, so the level's section answers a *moved* poll (`liveTick`) by re-reading
+  An upload completing changes no node row, so the level's row factory answers a *moved* poll (`liveTick`) by re-reading
   `listFiles`, and answers nothing to a `304`. A guest's `resolveShare` tag covers the attachments of the served nodes
   for the same reason.
 
@@ -83,22 +83,31 @@ reads).
 
 ## The web (`web/src/features/files`)
 
-- **Files' section** of core's folder level view (`components/FilesSection.vue`, `section` order 20, after Memories'):
-  in every folder and at the scope root, its FILE children as rows (icon, the node name, the plaintext size the blob's
-  sealed size gives and the modified time from the blob's sealed meta — `download.ts` `fileFacts`; a blob without
-  meta, or one whose meta does not open under this node's key, shows its size alone; a file listed without a blob says
-  "not uploaded yet" — none of it reads the node's own payload), with download, replace, rename (core's
-  `FolderNameDialog`, through the section's `rename` event) and delete (into core's trash, restored from core's trash
-  dialog — or at once from the "moved to the trash" toast's Undo, core's `trashUndo.ts`, inbox #385 (c)). An upload button and a drop onto the section; an empty folder says so. Hidden in map mode, like the
-  folders — the mode the level hands in (`LevelSectionProps.viewMode`), which is the map only where Memories' section is
-  on screen to draw it (inbox #404; a guest's identity folder without Memories shows its files in the grid). Read-only during a pending deletion: download only. The same section is a share guest's (§ Guests).
+- **Files' rows** in core's ONE level list (`levelRows.ts`, the row factory both kinds name as `list.rows`; inbox #407 —
+  there is no Files section any more, core draws the list): a FILE is a row or a tile with the leading file icon, the
+  node name and the meta line "File · the plaintext size the blob's sealed size gives · the modified time from the blob's
+  sealed meta" (`download.ts` `fileFacts`; a blob without meta, or one whose meta does not open under this node's key,
+  shows its size alone; a file listed without a blob says "not uploaded yet" — none of it reads the node's own payload).
+  Its **primary click opens** the file's own page (`FileDetail`); **download is its one first-class action** (a button on
+  the row), and **replace, rename** (core's `FolderNameDialog`, through the host's `rename`), **move** and **delete**
+  (into core's trash, restored from core's trash dialog — or at once from the "moved to the trash" toast's Undo, core's
+  `trashUndo.ts`, inbox #385 (c)) sit in the row's one "more" menu, each `shown` by `filesCapabilities` narrowed to the
+  doors the session's source carries (fail closed: a guest gets the same row with fewer actions). Files, Memories and
+  drop boxes are listed together, folders first and then everything by name (core's order); the tab "Files" filters the
+  list to FILE nodes, the folders stay. **Upload** is a level action (`files.upload`, the "New" menu's "Upload files"),
+  registered with the level by the factory for the level's whole life — so it is available under every tab — and core
+  hands it the files dropped onto the level, only while the action is allowed and enabled. Hidden in map mode like every
+  row (the map is Memories' presentation, drawn where a shown tab offers it; a guest's identity folder without Memories
+  lists its files in the grid, inbox #404). An empty Files tab says so in Files' words (`files.empty` where an upload is
+  possible, `files.emptyReadOnly`, `files.guest.empty`). Read-only during a pending deletion: download only. The same
+  rows are a share guest's (§ Guests).
 - **The upload** is one job of core's upload queue per file (`uploadFile.ts`): create the `FILE` node (or, for a name a
   FILE sibling already holds by `fileNameSlug`, replace that file after the member confirmed — the row's replace asks
   too, naming the file and the picked one, and both questions say the old content cannot be restored, there being no
   version history (owner decision 2026-10-08, inbox #383); "replace anyway" after a peer's replace is itself the
   answer and asks nothing), plan and pump the blob
   under the node's own key with the file's metadata sealed under its `K_blob`, then `completeFile` with
-  `expectedBlobId` — nothing is written after it. The status menu shows progress; a final refusal (`slug_taken`, `illegal_structure`, `stale_file` — the job's `isFinal`, core's queue) fails the item at once and the menu offers no retry for it; the section says why a file of its
+  `expectedBlobId` — nothing is written after it. The status menu shows progress; a final refusal (`slug_taken`, `illegal_structure`, `stale_file` — the job's `isFinal`, core's queue) fails the item at once and the menu offers no retry for it; the level shows, above the list, why a file of its
   folder was not uploaded (a taken name, `stale_file` with "replace anyway", no space). **A name another kind holds is
   not sent** (inbox #400): before anything is asked, every picked name is folded by the file's function and each
   sibling's by its own kind's (core's `collidingSibling`, the dialogs' pre-check), and one that meets a folder, Memory
@@ -155,8 +164,8 @@ shows is `filesCapabilities(access, target)` (`web/src/features/files/capabiliti
 These are the matrix half; a right shows only where the session's data source also implements it
 (`web/src/features/files/source.ts`, `sourceCapabilities`: the guest's source has no delete and no rename, and no upload
 or move unless the link is `READ_WRITE`), so the guest's columns are the most a guest page can ever offer. A move is
-core's (`core/node/MoveNodeDialog.vue`, the host's): the row's or the card's "Move to…" asks the host through the
-section's or the detail's `move` event, and the dialog offers only what `FilesNodeKindRules` takes — a file or a drop
+core's (`core/node/MoveNodeDialog.vue`, the host's): the row's "Move to…" asks the host through the row factory's
+(or the detail's) `move` event, and the dialog offers only what `FilesNodeKindRules` takes — a file or a drop
 box at the root or in a folder (the kinds' `placement`), never into a drop box or a guest's folder.
 
 - **The contract** (tag `share-files` in `files.openapi.yaml`, no auth, behind core's `ShareGuestGate`):
@@ -180,8 +189,8 @@ box at the root or in a folder (the kinds' `placement`), never into a drop box o
   `UploadAdmission` reports 0) against the tenant's per-link limit; core's `AttachmentGuestIdentityUsage` keeps the
   guest's identity while a file names it (Files stores no row of its own naming a guest, so it ships no usage).
 - **The web:** one view per kind for a member and a guest (inbox #401 S3). Core's page of a public share
-  (`core/sharing/ShareTreePage.vue`) is core's member `LevelView` handed the guest's access and tree, so the files are
-  the member's `components/FilesSection.vue` and the drop boxes `DropBoxSection`'s rows; a drop box below the link opens
+  (`core/sharing/ShareTreePage.vue`) is core's member `LevelView` handed the guest's access and tree, so the files and the drop boxes are
+  the member's rows (`levelRows.ts`); a drop box below the link opens
   the member's `DropBoxDetail.vue` (§ The drop box). Every read and write of those views goes through Files' data source
   (`source.ts`): the guest's lists through `listShareFiles`, downloads through the link's presign (`shareChunkUrls`)
   and, for a contributor, uploads one core-queue job per file (`shareUpload.ts`: guest create → guest transport with
@@ -199,7 +208,7 @@ box at the root or in a folder (the kinds' `placement`), never into a drop box o
   No rename and no delete on the guest page (nodes store no authorship); a contributor's move of a file is core's move
   dialog (inbox #358). Inside a guest's identity folder
   (§ The drop box) no guest is offered a write (the capabilities). A guest-mode mount of each view proves it calls no
-  authenticated client and reads nothing of the member's world (`FilesSection.guest.test.ts`,
+  authenticated client and reads nothing of the member's world (`levelRows.guest.test.ts`,
   `DropBoxDetail.guest.test.ts`).
 
 ## A single file as a share root
@@ -226,7 +235,7 @@ the member view with functions removed). Decided with it, small questions answer
   header card (name; share, rename, move, delete where the matrix says), the file's size, type and date from its blob's
   sealed meta, a download and a replace (asks first; the node keeps its name; a compare-and-set on the blob it read, with
   "replace anyway" after a peer's replace; a file that holds no content offers an upload into it). A member opens it from
-  a row's info button in the folder's list (`FilesSection` emits `openNode`); core's page of a public link
+  a click on its row in the folder's list (the row's primary opens it through the host); core's page of a public link
   (`ShareTreePage`) mounts it for the link's root — and for a file *inside* a folder link, which therefore also gets a
   page of its own. Its data source is the same `FilesSource` (`beginReplace` is its one addition: a replace names the
   file, so no folder is asked for). The download name is `downloadName` (the node name, else the blob's sealed name,
@@ -272,7 +281,7 @@ one per guest identity, which are core `FOLDER`s carrying `veyq_node.share_ident
   `404`, or `share_not_contributable`/`share_password_incorrect` at any door — turns the page into "this link no longer
   takes files from you" without a picker, and `dropGuestJob` stops the rest of the batch without a request; a store's own
   refusal (`chunk_put_failed:403`) is a failed file, not a gone link.
-- **The member** (`components/DropBoxSection.vue`, `DropBoxDetail.vue`, `DropBoxCreateDialog.vue`,
+- **The member** (a drop box's row in the level list — icon, name, "Drop box · N people", open on a click, move and delete in its menu —, `DropBoxDetail.vue`, `DropBoxCreateDialog.vue`,
   `DropBoxShareDialog.vue`): creates a drop box from a folder level, mints, copies, switches off (after a question) and
   on again (core's `reactivateShare`; a link a departed member may hold says to make a new one) and deletes its links,
   opens it to its guests' folders — under core's header (`NodeHeader`, the one a folder opens with: the
@@ -281,11 +290,11 @@ one per guest identity, which are core `FOLDER`s carrying `veyq_node.share_ident
   `compareByCreation`, by core's `displayNamesOf`, which the folder's heading and breadcrumb use too; the same two folders' URL segments are `anna`, `anna-2` by the same order,
   core's `segmentsOf` in `core/node/location.ts`, which a future folder export uses for its directory names too), opens a folder
   (core's level view, read-only there: download and a delete per file — a content-less one too — through the level's
-  `deletable`, no share, and no section that has nothing to show — the host's `hideEmptySections`) and deletes a folder. **Members place nothing** in a drop box or
+  `deletable`, no share, and no tab that has nothing to show — core's `hideEmptyTabs`) and deletes a folder. **Members place nothing** in a drop box or
   a guest's folder (core: no rule places into the drop box; a create, move or rename into an identity folder is
   `illegal_structure`, `NodesHandler`), and only delete or move out — a move out re-wraps and re-slugs under the
   target and ends the folder's identity link. **The web offers it** (inbox #358): "Move … out…" on each guest's folder
-  of the drop box's detail, and "Move to…" on the folder's own card (its one action there) — core's
+  of the drop box's detail, and "Move to…" in the folder's own header (its one action there) — core's
   `MoveNodeDialog`, which asks first (the folder becomes an ordinary one, its guest can add nothing more, and nothing
   moves back into a drop box, so the toast offers no undo) and lists no place inside a drop box. The member's move
   re-wraps the folder's own key, opened through the drop key and the guest's `K_up`, under the destination's
@@ -304,8 +313,8 @@ one per guest identity, which are core `FOLDER`s carrying `veyq_node.share_ident
   mounts for the drop box's own `WRITE_ONLY` link only): the guests' folders with their file counts, a repeated name numbered in node-id order (the
   guest's tree serves no `createdAt`, so `compareByCreation` falls to its id tie-break and the numbers can differ from the
   member's creation order), in the guest's words (`files.dropBox.sharedHint`: only the owner deletes or moves); a folder
-  opens on core's folder page, which inside an identity folder offers no guest a write (no "New" menu, Files' section
-  only downloads), so it lists the files with their download only. No send form, no upload, no replace, no share, no
+  opens on core's folder page, which inside an identity folder offers no guest a write (no "New" menu, Files' rows
+  only download), so it lists the files with their download only. No send form, no upload, no replace, no share, no
   delete, no move — the guest's source carries no delete and the matrix grants a guest neither share nor delete; the
   server refuses each anyway (a create inside an identity folder `illegal_structure` for anyone but its identity, a
   guest move out above). Pinned by `DropBoxDetail.guest.test.ts` (the real registry, router and PrimeVue, DOM clicks,

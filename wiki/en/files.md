@@ -8,13 +8,14 @@ space, side by side.
 
 ## What you can do with a file
 
-- **Upload** — pick files or drop them onto a folder. Uploads run in the background, and the status menu in the
-  top bar shows how far they are.
-- **Download** — you get the file back exactly as you put it in, under the name it has in veyq.
+- **Upload** — choose **New → Upload files**, or drop files onto the folder. Uploads run in the background, and the
+  status menu in the top bar shows how far they are.
+- **Download** — the download button on the file's row gives you the file back exactly as you put it in, under the
+  name it has in veyq. Clicking the row itself opens the file's own page.
 - **Replace** — put a newer version of a file in its place. The name stays. veyq **asks first**, because there is
   **no version history**: the old content cannot be brought back. Uploading a file whose name is already taken in
   that folder asks the same question.
-- **Rename and move** — rename a file in its row. **Move to…** opens a list of places; pick one and the file goes
+- **Rename and move** — both are in the **⋯** menu of the file's row. **Move to…** opens a list of places; pick one and the file goes
   there (more on moving below).
 - **Delete, with an undo** — a deleted file goes to the **trash**, and a message at the time offers **Undo** right
   away. Later you can still restore it from the trash until it is removed for good; the trash shows the date. Space
@@ -37,10 +38,22 @@ Where it cannot, a very large file may be refused with a message instead of fail
 list, and everything inside comes along and stays readable. If somebody shared a
 folder with you and lets you contribute, you can move things around **inside** that folder — but not out of it.
 
+## One list for everything in a folder
+
+A folder shows **one list** of everything in it: sub-folders, Memories, files and drop boxes together. Folders come
+first; everything else follows in alphabetical order, whatever it is (numbers count as numbers, so *Photo 2* comes
+before *Photo 10*). Each entry shows what it is — for example *File · 157 B · modified …* or *Memory · June 2024* —
+and has its own buttons: the most useful one (for a file, download; for a Memory, the heart) sits on the entry, the
+rest are in its **⋯** menu. Where you may not do something, its button is simply not there.
+
+When a folder holds more than one kind of thing, tabs above the list — **All**, **Memories**, **Files**, **Drop
+boxes** — let you show just one kind. Sub-folders stay visible in every tab so you can keep navigating.
+
 ## Grid and list
 
-In a folder you can switch between **Grid view** and **List view** with the buttons at the top. The choice is
-yours and is remembered; the same switch works for everything in the folder.
+In a folder you can switch between **Grid view** and **List view** with the buttons at the top (and **Map view**
+where Memories have places). The choice is yours and is remembered; the same switch works for everything in the
+folder.
 
 ## Addresses you can bookmark
 
