@@ -1,0 +1,20 @@
+useCase: uc.memory.participants
+feature: memory
+title: Memory participants — a sealed list, a profile that lists a person's Memories
+status: planned
+# Decided 2026-10-13 (ADR 0083, inbox #20); nothing is built. The participants sub-object rides on the existing
+# `wrappedMeta` write (no backend change), so the backend gap is "no new surface", the web gap is the whole feature.
+acceptanceCriteria:
+  - id: participants-sealed-in-node-meta
+    text: A Memory's participants are a `participants` sub-object of user ids inside its `wrappedMeta` under K_mem, written with the metaVersion compare-and-set; the server stores one opaque blob and no participant relation.
+  - id: guest-sees-no-participants
+    text: The participants sub-object is stripped from every meta re-sealed for a share and the participants capability is false for every share role; no name snapshot is stored.
+  - id: profile-lists-accessible-memories
+    text: A member opens `#/people/<userId>` and sees the person's display name, a letter avatar and the Memories on which they are a participant and the viewer has access, from a client-side index over the tenant and group scopes, with a partial note when capped.
+  - id: former-member-greyed
+    text: A participant who left the scope stays as an id and renders greyed as "former member" without a link; nothing prunes it.
+  - id: uploader-name-in-lightbox
+    text: The photo detail shows the uploader's name; a `user:` owner links to the profile for members, a `share:` owner and any share view show it without a link, and a guest sees no uploader name.
+gaps:
+  web: "The feature is not built: no participants dialog, header chips, profile route (`people` in RESERVED_ROUTE_SEGMENTS, location.ts), index or lightbox attribution; suites owed: memory capabilities.test.ts, location.test.ts, a participants dialog and a profile page test."
+  backend: "No backend change is planned (the sub-object rides the existing wrappedMeta write, ADR 0083); the existing NodesSliceTest wrappedMeta round trip is not claimed for participants until a participants-specific test exists."

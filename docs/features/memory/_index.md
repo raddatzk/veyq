@@ -95,6 +95,11 @@ seals its name under the folder's key instead of `K_SC` ([ADR 0080](../../decisi
   [ADR 0080](../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) decision 3): "Move
   to…" for any node — core's dialog, a member through `moveNode`, a `READ_WRITE` folder guest through its link; one
   re-wrap per move keeps the subtree readable; a drop-box guest's folder moved out by a member ends its identity
+- [uc.memory.participants](use-cases/uc.memory.participants.md) — **planned** (inbox #20,
+  [ADR 0083](../../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md)): who was there — a
+  sealed `participants` list in the Memory's `wrappedMeta` (no server-visible relation), shown in the header for members
+  only (a guest sees none), a member profile at `#/people/<userId>` listing the person's Memories, uploader names in the
+  lightbox
 - [uc.memory.buckets](use-cases/uc.memory.buckets.md) — **built (web)** (cr-0113, curation authz relaxed to
   member-gated by cr-0123) ([ADR 0034](../../decisions/0034-media-uploader-buckets.md),
   on [en.memory.buckets](enablers/en.memory.buckets.md)): group a Memory's media by **who contributed it** — the

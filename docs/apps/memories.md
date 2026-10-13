@@ -133,6 +133,7 @@ grants nothing. On an opened `MEMORY` or `CHAPTER` (the detail):
 | create a chapter | ✓ on a `MEMORY` only | ✗ | ✗ | ✗ | ✗ |
 | date, place, cover (the node's sealed meta; the automatic reconcile too) | ✓ | ✗ | ✗ | ✗ | ✗ |
 | rename, delete the node | ✓ | ✗ | ✗ | ✗ | ✗ |
+| participants (the sealed list in the node's meta; planned, [ADR 0083](../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md)) | ✓ shown and edited; the profile at `#/people/<id>` | ✓ shown | ✗ stripped | ✗ stripped | ✗ stripped |
 | move the node (core's move dialog, inbox #358) | ✓ a Memory to the root or a folder, a chapter into another Memory | ✗ | ✗ | ✓ a Memory a folder of the subtree holds, between the subtree's folders; ✗ a chapter, the link's root | ✗ |
 | item marks, media trash, contributions organizer | ✓ | ✓ | ✗ | ✗ | ✗ |
 | share (and the uploader link) | the instance's public (and uploader) links | the same | ✗ | ✗ | ✗ |
