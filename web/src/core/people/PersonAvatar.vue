@@ -25,3 +25,10 @@ const shown = computed(() => (src.value && src.value !== broken.value ? src.valu
   <Avatar v-if="shown" :image="shown" shape="circle" :size="size" aria-hidden="true" data-avatar-image @error="broken = shown" />
   <Avatar v-else :label="initialOf(name)" shape="circle" :size="size" aria-hidden="true" />
 </template>
+
+<style scoped>
+/* An avatar keeps its size in a flex row: a shrinking circle becomes an oval. */
+.p-avatar {
+  flex: none;
+}
+</style>
