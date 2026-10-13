@@ -87,6 +87,11 @@ function save() {
   border-radius: var(--app-radius-sm);
   cursor: pointer;
 }
+/* `.veyq-form input` makes every input full width; a checkbox keeps its own size, or the name is pushed to the far edge. */
+.memory-participants-option input {
+  width: auto;
+  flex: none;
+}
 .memory-participants-option:hover {
   background: var(--app-hover);
 }
