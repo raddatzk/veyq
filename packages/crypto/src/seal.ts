@@ -73,6 +73,8 @@ export const SEAL_PURPOSES = {
   'item-favorites': [['scopeId', 'id'], ['nodeId', 'id']],
   favorites: [['scopeId', 'id']],
   'member-name': [['scopeId', 'id'], ['userId', 'id']],
+  // A member's profile picture (ADR 0084): its own purpose, so a blob sealed for the name never opens as the picture.
+  'member-avatar': [['scopeId', 'id'], ['userId', 'id']],
   'scope-epoch': [['scopeId', 'id'], ['epoch', 'uint']],
   'group-name': [['scopeId', 'id'], ['nameEpoch', 'uint']],
   'space-icon': [['scopeId', 'id'], ['iconEpoch', 'uint']],

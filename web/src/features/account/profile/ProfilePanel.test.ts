@@ -25,7 +25,7 @@ import { getMyProfile, updateMyProfile, openOwnNameKey, sealName, unsealName } f
 
 const K_TENANT = v1.randomBytes(32)
 const ADDRESS = { scopeId: '5c09e000-0000-4000-8000-0000000000d1', userId: '5c09e000-0000-4000-8000-0000000000d2' }
-const STORED = { username: 'kevin', sealedName: sealName(K_TENANT, ADDRESS, { firstName: 'Kevin', lastName: 'Raddatz' }), requireGroupAddConsent: false }
+const STORED = { username: 'kevin', sealedName: sealName(K_TENANT, ADDRESS, { firstName: 'Kevin', lastName: 'Raddatz' }), avatarVersion: 0, requireGroupAddConsent: false }
 
 const stubs = {
   Button: { props: ['label', 'loading'], template: '<button type="submit">{{ label }}</button>' },

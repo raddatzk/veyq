@@ -12,6 +12,7 @@ import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpFailure
 import me.raddatz.veyq.core.identity.AccountStore
+import me.raddatz.veyq.core.identity.TenantProfileStore
 import me.raddatz.veyq.core.identity.normalizeEmail
 import me.raddatz.veyq.core.membership.AccessMode.READ
 import me.raddatz.veyq.core.membership.Admission
@@ -159,6 +160,7 @@ class TenantHandler(
     private val shares: SharingStore,
     private val ingress: TenantIngressProjector,
     private val accounts: AccountStore,
+    private val profiles: TenantProfileStore,
     private val access: ScopeAccess,
     private val quota: StorageUsage,
     config: VeyqConfig,
@@ -480,6 +482,8 @@ class TenantHandler(
                 plan.steps.filter { it.action != CascadeAction.SOFT_DELETE }.map { it.scopeId }.sorted()
                     .forEach { scopes.lockScope(it) }
                 plan.steps.forEach { execute(it, targetId, now) }
+                // ADR 0084 decision 8: the picture goes with the access, the profile row (and its handle) outlives it
+                profiles.clearAvatar(targetId, tenantId)
                 // ADR 0075 point 5: opted into, every link of the TENANT scope goes off in this same transaction —
                 // never a co-shared group's, which the tenant owner need not see (the removal count marks those)
                 if (revokeLinks) shares.turnOffAllInScope(tenantId)

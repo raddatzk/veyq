@@ -302,6 +302,10 @@ CREATE TABLE veyq_tenant_profile (
     tenant_id   UUID NOT NULL,
     username    VARCHAR(32) NOT NULL,
     sealed_name TEXT,
+    -- The member's profile picture (ADR 0084): one constant-length ciphertext sealed under K_tenant, null = none. The
+    -- version is bumped on every set and clear (it is the avatar read's ETag) and rides the directory, never the bytes.
+    sealed_avatar  TEXT,
+    avatar_version INT NOT NULL DEFAULT 0,
     CONSTRAINT fk_tp_user   FOREIGN KEY (user_id)   REFERENCES veyq_user (id),
     CONSTRAINT fk_tp_tenant FOREIGN KEY (tenant_id) REFERENCES veyq_tenant (id)
 );

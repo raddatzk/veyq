@@ -12,11 +12,20 @@ import jakarta.enterprise.context.ApplicationScoped
 /** Result of a profile read/update (cr-0083). `requireGroupAddConsent` is the account-global consent preference
  *  (cr-0094) surfaced here — the caller's own settings surface. */
 sealed interface ProfileOutcome {
-    data class Found(val username: String, val sealedName: String?, val requireGroupAddConsent: Boolean) : ProfileOutcome
+    data class Found(
+        val username: String, val sealedName: String?, val avatarVersion: Int, val requireGroupAddConsent: Boolean,
+    ) : ProfileOutcome
     // no tenant for the Host, or no profile there → 404
     data object NoTenant : ProfileOutcome, HttpFailure by httpFailure("profile_not_found", NOT_FOUND)
     // the new handle is taken by someone else in this tenant → 409
     data object UsernameTaken : ProfileOutcome, HttpFailure by Failures.usernameTaken
+}
+
+/** Result of setting/clearing the caller's picture (ADR 0084). */
+sealed interface AvatarWriteOutcome {
+    data object Done : AvatarWriteOutcome
+    // no tenant for the Host, or no profile there → 404
+    data object NoTenant : AvatarWriteOutcome, HttpFailure by httpFailure("profile_not_found", NOT_FOUND)
 }
 
 /**
@@ -31,7 +40,7 @@ class AccountProfileHandler(private val profiles: TenantProfileStore) {
         tenantId ?: return ProfileOutcome.NoTenant
         val profile = profiles.find(userId, tenantId) ?: return ProfileOutcome.NoTenant
         val consent = VeyqUser.findById(userId)?.requireGroupAddConsent ?: false
-        return ProfileOutcome.Found(profile.username, profile.sealedName, consent)
+        return ProfileOutcome.Found(profile.username, profile.sealedName, profile.wireAvatarVersion(), consent)
     }
 
     fun update(
@@ -65,6 +74,18 @@ class AccountProfileHandler(private val profiles: TenantProfileStore) {
         if (requireGroupAddConsent != null) VeyqUser.findById(userId)?.let { it.requireGroupAddConsent = requireGroupAddConsent }
         val updated = profiles.find(userId, tenantId)!!
         val consent = VeyqUser.findById(userId)?.requireGroupAddConsent ?: false
-        return ProfileOutcome.Found(updated.username, updated.sealedName, consent)
+        return ProfileOutcome.Found(updated.username, updated.sealedName, updated.wireAvatarVersion(), consent)
+    }
+
+    /** Set (overwrite) the caller's picture; the version bump is the store's one guarded UPDATE. */
+    fun setAvatar(userId: String, tenantId: String?, sealedAvatar: String): AvatarWriteOutcome {
+        tenantId ?: return AvatarWriteOutcome.NoTenant
+        return if (profiles.setAvatar(userId, tenantId, sealedAvatar)) AvatarWriteOutcome.Done else AvatarWriteOutcome.NoTenant
+    }
+
+    /** Clear the caller's picture (idempotent) and bump the version. */
+    fun clearAvatar(userId: String, tenantId: String?): AvatarWriteOutcome {
+        tenantId ?: return AvatarWriteOutcome.NoTenant
+        return if (profiles.clearAvatar(userId, tenantId)) AvatarWriteOutcome.Done else AvatarWriteOutcome.NoTenant
     }
 }

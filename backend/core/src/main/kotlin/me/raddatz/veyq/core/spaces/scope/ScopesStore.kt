@@ -82,6 +82,8 @@ data class ScopeMemberRow(
     val userId: String,
     val username: String,
     val sealedName: String?,
+    /** The picture's version (`0` = none); the bytes never ride the directory (ADR 0084). */
+    val avatarVersion: Int,
     val email: String?,
     val role: String,
     val identityPublicKey: String,
@@ -627,7 +629,7 @@ class ScopesStore(
         val u = VeyqUser.findById(userId) ?: return null
         val p = profiles.byUserInTenant(tenantId)[userId]
         return ScopeMemberRow(
-            userId, p?.username ?: "", p?.sealedName, u.email, m.role, u.identityPublicKey, m.wrappedGrant != null,
+            userId, p?.username ?: "", p?.sealedName, p?.avatarVersion ?: 0, u.email, m.role, u.identityPublicKey, m.wrappedGrant != null,
             m.pendingConsent, m.admission(),
         )
     }
@@ -646,7 +648,7 @@ class ScopesStore(
             VeyqUser.findById(m.userId)?.let { u ->
                 val p = profileByUser[m.userId]
                 ScopeMemberRow(
-                    m.userId, p?.username ?: "", p?.sealedName, u.email, m.role,
+                    m.userId, p?.username ?: "", p?.sealedName, p?.avatarVersion ?: 0, u.email, m.role,
                     u.identityPublicKey, m.wrappedGrant != null, m.pendingConsent, m.admission(),
                 )
             }

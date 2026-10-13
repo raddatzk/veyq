@@ -9,6 +9,7 @@ import me.raddatz.veyq.core.generated.model.CreateTenantRequest
 import me.raddatz.veyq.core.generated.model.InviteRole
 import me.raddatz.veyq.core.generated.model.InviteStatus
 import me.raddatz.veyq.core.generated.model.LocalizedMarkdown
+import me.raddatz.veyq.core.generated.model.MemberAvatar
 import me.raddatz.veyq.core.generated.model.MemberInviteRequest
 import me.raddatz.veyq.core.generated.model.MemberInviteState
 import me.raddatz.veyq.core.generated.model.PendingMemberInvite
@@ -69,6 +70,7 @@ class TenantsResource(
     private val termsHandler: TenantTermsHandler,
     private val mailSettingsHandler: TenantMailSettingsHandler,
     private val storageHandler: TenantStorageHandler,
+    private val avatarHandler: TenantMemberAvatarHandler,
     private val identity: SecurityIdentity,
 ) : TenantsApi {
 
@@ -191,6 +193,17 @@ class TenantsResource(
             is HttpFailure -> httpError(o)
         }
 
+    // A member's sealed picture (ADR 0084): @Authenticated, membership-gated in the handler (a non-member: 404, ADR 0042).
+    // `Cache-Control: private` - the answer is for this signed-in member, never a shared cache.
+    @Authenticated
+    override fun getMemberAvatar(tenantId: UUID, userId: UUID, ifNoneMatch: String?): Response =
+        when (val o = avatarHandler.read(identity.principal.name, tenantId.toString(), userId.toString(), AvatarETag.parse(ifNoneMatch))) {
+            is MemberAvatarOutcome.Found -> Response.ok(MemberAvatar(o.sealedAvatar))
+                .header("ETag", AvatarETag.of(o.version)).header("Cache-Control", "private").build()
+            is MemberAvatarOutcome.NotModified -> Response.notModified().header("ETag", AvatarETag.of(o.version)).header("Cache-Control", "private").build()
+            is HttpFailure -> httpError(o)
+        }
+
     // --- Slice B (cr-0010): invite acceptance / activation. Method-level annotations override the class
     // @RolesAllowed: preview + register are @PermitAll (secret-gated), accept is @Authenticated (any user;
     // the email-match is a domain check, not the Server-Owner role).
@@ -219,6 +232,7 @@ class TenantsResource(
             with(acceptInviteRequest) { OwnerBirth.of(grant, grantSignature, admissionId, admissionEpoch, admissionTag) },
             acceptInviteRequest.username,
             acceptInviteRequest.sealedName,
+            acceptInviteRequest.sealedAvatar,
         )) {
             is AcceptOutcome.Activated ->
                 Response.ok(TenantActivated(UUID.fromString(outcome.tenantId), TenantStatus.ACTIVE)).build()
@@ -240,7 +254,7 @@ class TenantsResource(
         return when (val outcome = acceptHandler.registerAndAccept(
             registerAndAcceptRequest.bootstrapSecret, registerAndAcceptRequest.userId.toString(), account,
             with(registerAndAcceptRequest) { OwnerBirth.of(grant, grantSignature, admissionId, admissionEpoch, admissionTag) },
-            registerAndAcceptRequest.username, registerAndAcceptRequest.sealedName,
+            registerAndAcceptRequest.username, registerAndAcceptRequest.sealedName, registerAndAcceptRequest.sealedAvatar,
         )) {
             is RegisterAcceptOutcome.Activated -> Response.status(Response.Status.CREATED)
                 .entity(TenantActivatedWithUser(UUID.fromString(outcome.tenantId), TenantStatus.ACTIVE, UUID.fromString(outcome.userId)))

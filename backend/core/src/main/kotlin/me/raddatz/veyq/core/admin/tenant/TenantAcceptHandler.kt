@@ -116,12 +116,16 @@ class TenantAcceptHandler(
     /** Existing-user accept: the caller (resolved from the session) must be the invited person. Role-branched
      *  (cr-0077): an OWNER accept cold-activates the tenant (grant required); a MEMBER accept joins the ACTIVE
      *  tenant grant-less (no grant), the key delivered later by a key-holder (cr-0076). */
-    fun accept(userId: String, bootstrapSecret: String, birth: OwnerBirth?, username: String, sealedName: String?): AcceptOutcome =
+    fun accept(
+        userId: String, bootstrapSecret: String, birth: OwnerBirth?, username: String, sealedName: String?, sealedAvatar: String?,
+    ): AcceptOutcome =
         createOrConflict(conflict = { if (handleLost(userId, bootstrapSecret, username)) AcceptOutcome.UsernameTaken else null }) {
-            acceptOnce(userId, bootstrapSecret, birth, username, sealedName)
+            acceptOnce(userId, bootstrapSecret, birth, username, sealedName, sealedAvatar)
         }
 
-    private fun acceptOnce(userId: String, bootstrapSecret: String, birth: OwnerBirth?, username: String, sealedName: String?): AcceptOutcome {
+    private fun acceptOnce(
+        userId: String, bootstrapSecret: String, birth: OwnerBirth?, username: String, sealedName: String?, sealedAvatar: String?,
+    ): AcceptOutcome {
         val invite = store.findInviteByTokenHash(Tokens.hash(bootstrapSecret)) ?: return AcceptOutcome.NotFound
         if (!isLive(invite)) return AcceptOutcome.NoLongerValid
         val tenant = store.findTenant(invite.tenantId) ?: return AcceptOutcome.NotFound
@@ -159,8 +163,9 @@ class TenantAcceptHandler(
             if (tenant.status != TenantEntity.PENDING) return unspend(AcceptOutcome.AlreadyActive)
             if (profiles.usernameTaken(tenant.id, username)) return unspend(AcceptOutcome.UsernameTaken)
             store.activate(tenant.id, userId, b.grant, b.admission)
-            // Owner cold-birth: the caller holds K_tenant here, so an optional sealed name may ride the accept (cr-0106).
-            profiles.create(userId, tenant.id, username, sealedName)
+            // Owner cold-birth: the caller holds K_tenant here, so an optional sealed name may ride the accept (cr-0106),
+            // and so may the picture (ADR 0084 decision 7) - which a MEMBER branch above never stores: it holds no key yet.
+            profiles.create(userId, tenant.id, username, sealedName, sealedAvatar)
             AcceptOutcome.Activated(tenant.id)
         }
     }
@@ -169,13 +174,15 @@ class TenantAcceptHandler(
      *  Role-branched like [accept]: OWNER activates (grant required), MEMBER joins grant-less. */
     fun registerAndAccept(
         bootstrapSecret: String, userId: String, account: NewAccount, birth: OwnerBirth?, username: String, sealedName: String?,
+        sealedAvatar: String?,
     ): RegisterAcceptOutcome =
         createOrConflict(conflict = { if (handleLost(userId, bootstrapSecret, username)) RegisterAcceptOutcome.UsernameTaken else null }) {
-            registerAndAcceptOnce(bootstrapSecret, userId, account, birth, username, sealedName)
+            registerAndAcceptOnce(bootstrapSecret, userId, account, birth, username, sealedName, sealedAvatar)
         }
 
     private fun registerAndAcceptOnce(
         bootstrapSecret: String, userId: String, account: NewAccount, birth: OwnerBirth?, username: String, sealedName: String?,
+        sealedAvatar: String?,
     ): RegisterAcceptOutcome {
         val invite = store.findInviteByTokenHash(Tokens.hash(bootstrapSecret)) ?: return RegisterAcceptOutcome.NotFound
         if (!isLive(invite)) return RegisterAcceptOutcome.NoLongerValid
@@ -215,7 +222,8 @@ class TenantAcceptHandler(
         // The per-tenant identity: the plaintext handle, plus the optional sealed real name when the invitee
         // already holds K_tenant at accept (owner cold-birth / grant-sealed accept — ADR 0023); a grant-less
         // member passes null and seals later via the profile op. The server stores the blob verbatim (blind).
-        profiles.create(userId, tenant.id, username, sealedName)
+        // The picture rides only the OWNER branch (ADR 0084 decision 7): a MEMBER invitee holds no K_tenant yet.
+        profiles.create(userId, tenant.id, username, sealedName, sealedAvatar.takeIf { !member })
         return RegisterAcceptOutcome.Activated(tenant.id, userId)
     }
 

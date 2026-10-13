@@ -242,7 +242,7 @@ class ScopesResource(
 
     /** Map a directory row to the wire DTO — carries `pendingConsent` (cr-0094); the handler already gated its visibility. */
     private fun scopeMember(row: ScopeMemberRow) = ScopeMember(
-        userId = UUID.fromString(row.userId), username = row.username, sealedName = row.sealedName,
+        userId = UUID.fromString(row.userId), username = row.username, sealedName = row.sealedName, avatarVersion = row.avatarVersion,
         email = row.email, role = ScopeMember.Role.valueOf(row.role), identityPublicKey = row.identityPublicKey,
         hasGrant = row.hasGrant, pendingConsent = row.pendingConsent,
         admissionId = row.admission?.let { UUID.fromString(it.id) },

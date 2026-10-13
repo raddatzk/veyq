@@ -1,7 +1,7 @@
 # UC: Set your profile picture in a space
 
 - **ID:** uc.spaces.set-profile-picture
-- **Status:** decided 2026-10-13 ([ADR 0084](../../../decisions/0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md)), not built.
+- **Status:** decided 2026-10-13 ([ADR 0084](../../../decisions/0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md)); contract, `member-avatar` seal purpose and backend built 2026-10-13, the web not yet.
 - **Primary actor:** A member of a tenant space, giving themselves a face there.
 - **Secondary actor:** Every other member of the tenant, who only sees it.
 - **Goal:** Show a chosen picture instead of the letter wherever the member appears (profile page, participant

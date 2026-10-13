@@ -631,6 +631,65 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: last_owner }
 
+  /api/tenants/{tenantId}/members/{userId}/avatar:
+    get:
+      tags: [tenants]
+      operationId: getMemberAvatar
+      summary: Read a tenant member's sealed profile picture.
+      description: >
+        A member's profile picture (uc.spaces.set-profile-picture, [ADR 0084](../../docs/decisions/0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md)):
+        the one constant-length ciphertext they sealed under `K_tenant`, which any tenant member opens on the device.
+        Gated on **tenant membership** like the directory: a caller who is not an accepted member of the tenant gets the
+        `404 tenant_not_found` of [ADR 0042](../../docs/decisions/0042-http-failure-projection.md). Never served to a
+        guest or on a share. The `ETag` is the profile's `avatarVersion` (quoted); a client echoing it as `If-None-Match`
+        gets `304` with no body while the picture is unchanged. `Cache-Control: private`. The operator sees an opaque
+        constant-size blob, never the image.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - { name: userId, in: path, required: true, description: Opaque id of the member whose picture to read., schema: { type: string, format: uuid } }
+        - name: If-None-Match
+          x-veyq-visibility: structure
+          in: header
+          required: false
+          description: >
+            The `ETag` of the client's cached picture (the member's `avatarVersion`, quoted). When it equals the current
+            version the server answers `304`. Omitted on a first load; one that does not parse is no match.
+          schema: { type: string, maxLength: 64, example: "\"3\"" }
+      responses:
+        "200":
+          description: The member's sealed picture.
+          headers:
+            ETag:
+              x-veyq-visibility: structure
+              description: The picture's `avatarVersion`, quoted - echo it as `If-None-Match` on the next read.
+              schema: { type: string, example: "\"3\"" }
+            Cache-Control:
+              x-veyq-visibility: structure
+              description: Always `private` - the picture is for the signed-in member only, never a shared cache.
+              schema: { type: string, example: private }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MemberAvatar" }
+        "304":
+          description: Not Modified - the client's `If-None-Match` equals the member's current `avatarVersion`. No body.
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "404":
+          description: >
+            No picture is set for that member (`avatar_not_found`, also when the user is no member of the tenant); or no
+            such tenant, or the caller is not a member of it (`tenant_not_found`, deliberately indistinguishable, ADR
+            0042: membership is the first gate).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: avatar_not_found }
+
   /api/tenants/{tenantId}:
     delete:
       tags: [tenants]
@@ -2264,6 +2323,31 @@ components:
           maxLength: 8192
           example: c2VhbGVkLW5hbWU=
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        sealedAvatar:
+          type: [string, "null"]
+          description: >
+            OPTIONAL profile picture (uc.spaces.set-profile-picture, ADR 0084) sealed under `K_tenant` with the
+            `member-avatar` purpose, exactly the blob `setMyAvatar` stores (padded to the constant length). Submitted at
+            the join only on the OWNER path, where the invitee holds `K_tenant` at accept; stored verbatim with
+            `avatarVersion` 1. A MEMBER joins grant-less and offers the picture after the first unlock instead. Omitted
+            or null = no picture.
+          contentEncoding: base64
+          maxLength: 10964
+          example: c2VhbGVkLWF2YXRhcg==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 10964) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    MemberAvatar:
+      type: object
+      required: [sealedAvatar]
+      properties:
+        sealedAvatar:
+          type: string
+          description: >
+            The member's profile picture sealed under `K_tenant` with the `member-avatar` purpose bound to (tenant
+            scope, that member's user id): opaque, constant-length base64 the server stores and relays verbatim.
+          contentEncoding: base64
+          maxLength: 10964
+          example: c2VhbGVkLWF2YXRhcg==
 
     TenantActivated:
       type: object
@@ -2394,6 +2478,18 @@ components:
           maxLength: 8192
           example: c2VhbGVkLW5hbWU=
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        sealedAvatar:
+          type: [string, "null"]
+          description: >
+            OPTIONAL profile picture (uc.spaces.set-profile-picture, ADR 0084) sealed under `K_tenant` with the
+            `member-avatar` purpose, exactly the blob `setMyAvatar` stores (padded to the constant length). Submitted at
+            the join only on the OWNER path, where the invitee holds `K_tenant` at accept; stored verbatim with
+            `avatarVersion` 1. A MEMBER joins grant-less and offers the picture after the first unlock instead. Omitted
+            or null = no picture.
+          contentEncoding: base64
+          maxLength: 10964
+          example: c2VhbGVkLWF2YXRhcg==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 10964) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     AccountRegistration:
       type: object
