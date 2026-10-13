@@ -25,6 +25,7 @@ import PersonMemories from './components/PersonMemories.vue'
 import { memoriesLifecycle } from './lifecycle'
 import { memoryCapabilities } from './capabilities'
 import { targetOf } from '../../core/access'
+import { exportMemoryContent, importMemoryContent } from './exportImport'
 
 /** The places map of a level (cr-0071): Memories' own presentation — its pins span the level's whole subtree. */
 const MAP_VIEW: LevelViewOption = { mode: 'map', icon: 'pi pi-map', label: 'memory.viewMap' }
@@ -50,6 +51,7 @@ export function registerMemories(registry: Registry): void {
     // Both carry a cover (inbox #411: core's action, dialog, upload and display). Core reads an uploaded cover itself; the
     // Memory's OTHER source - one of its own photos - is read here and offered to core's dialog as its extra source.
     cover: { load: loadMemoryPhotoCover, extraSource: memoryPhotoSource },
+    exportContent: exportMemoryContent,
   }
   // Where each may be moved (core's move dialog, inbox #358) mirrors the backend's `MemoryNodeKindRules`: a Memory at the
   // root or in a folder, a chapter only directly in a Memory.
@@ -61,11 +63,11 @@ export function registerMemories(registry: Registry): void {
     enabled: (ctx: LevelActionContext) => ctx.epochs !== null,
   }
   registry.registerKind({
-    kind: MEMORY_KIND, ...memories, createEntry: newMemory, deleteTitle: 'memory.deleteMemoryTitle', nounWithArticle: 'memory.aMemory',
+    kind: MEMORY_KIND, ...memories, importContent: importMemoryContent(MEMORY_KIND), createEntry: newMemory, deleteTitle: 'memory.deleteMemoryTitle', nounWithArticle: 'memory.aMemory',
     placement: { root: true, parents: [FOLDER_KIND] },
   })
   registry.registerKind({
-    kind: CHAPTER_KIND, ...memories, deleteTitle: 'memory.deleteChapterTitle', nounWithArticle: 'memory.aChapter',
+    kind: CHAPTER_KIND, ...memories, importContent: importMemoryContent(CHAPTER_KIND), deleteTitle: 'memory.deleteChapterTitle', nounWithArticle: 'memory.aChapter',
     placement: { root: false, parents: [MEMORY_KIND] },
   })
   // Its nodes' URLs carry the application's segment: a Memory `rom` in `reisen` is `#reisen/memories/rom`, its chapters

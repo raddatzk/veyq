@@ -97,31 +97,53 @@ was opted out, so it has none):
       },
       {
         "id": "n3", "kind": "MEMORY", "name": "Lisbon",
-        "cover": { "path": "data/n3/cover.jpg", "size": 90211, "mediaType": "image/jpeg" },
-        "metadata": { "description": "Four days in September" },
         "content": {
           "type": "memories.memory", "schema": 1,
+          "date": { "mode": "range", "from": "2025-09-14", "to": "2025-09-17" },
+          "participants": ["Anna", "Kevin"],
+          "cover": { "mediaIndex": 0, "crop": { "x": 0, "y": 0, "width": 1, "height": 1 } },
           "media": [
             { "file": { "path": "data/n3/IMG_0412.jpg", "size": 3811920, "mediaType": "image/jpeg",
                         "sha256": "1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809" },
-              "name": "IMG_0412.jpg", "chapter": "n4", "capturedAt": "2025-09-14T16:02:11Z",
+              "name": "IMG_0412.jpg", "capturedAt": "2025-09-14T16:02:11Z",
               "location": { "lat": 38.7139, "lon": -9.1394, "place": "Lisbon" },
               "exif": { "Make": "Fujifilm", "Model": "X-T5", "FNumber": 4 },
               "contributor": "Anna" },
             { "file": { "path": "data/n3/IMG_0413.jpg", "size": 4120377, "mediaType": "image/jpeg",
                         "sha256": "f0e1d2c3b4a5968778695a4b3c2d1e0ff0e1d2c3b4a5968778695a4b3c2d1e0f" },
-              "name": "IMG_0413.jpg", "chapter": "n4", "capturedAt": "2025-09-14T16:05:40Z",
+              "name": "IMG_0413.jpg", "capturedAt": "2025-09-14T16:05:40Z",
               "contributor": "Kevin" }
           ]
         },
         "children": [
-          { "id": "n4", "kind": "CHAPTER", "name": "Alfama", "metadata": {}, "children": [] }
+          { "id": "n4", "kind": "CHAPTER", "name": "Alfama",
+            "content": { "type": "memories.chapter", "schema": 1, "media": [] }, "children": [] }
         ]
       }
     ]
   }
 }
 ```
+
+## Addendum (2026-10-13, while building the Memories hooks)
+
+Three things the build found that the decision above did not know, each decided here so the code and the contract agree.
+
+1. **Core carries the tree and the payload bytes; a kind's content carries everything else.** Core's walker neither reads
+   nor writes a node's `cover` or `metadata`. A Memory's date, place, cover and participants therefore travel inside its
+   `content` (`memories.memory`), and **a chapter's media sit in the chapter's own content** (`memories.chapter`), not in the
+   Memory's list: the chapter is a node of its own with its own key, and the Memory's hook returns before the chapter
+   exists. The per-medium `chapter` field is gone from the schema.
+2. **`includeLocation: false` cannot clean the original's bytes.** The export keeps the pristine original, and a photo's own
+   GPS tags are inside it. The option drops what the *manifest* adds (coordinates and place name per medium, the Memory's
+   place, the EXIF copy's locating fields) but not the file's own EXIF; the export dialog must say so, and a member who wants
+   no coordinates anywhere strips them before sharing the file. Re-encoding the originals to remove them is deliberately not
+   done: it would change the bytes the export promises to keep.
+3. **An import restores a coordinate only if the file still carries it.** The upload reads GPS and camera data from the
+   file's bytes, and there is no way to seal a coordinate the file lacks. What an import restores beyond the file: the Memory's
+   date and place, the capture time (via the payload's modified time, or as a correction when the member had corrected it),
+   the per-medium place name, the cover (a photo of the Memory by its position in the list, or an uploaded image, which is
+   re-encoded by the cover upload). Participants are exported as display names and not restored.
 
 ## Consequences
 
