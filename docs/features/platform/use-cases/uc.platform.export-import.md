@@ -1,7 +1,7 @@
 # UC: Take a node and everything under it out as a file, and bring such a file back in
 
 - **ID:** uc.platform.export-import
-- **Status:** built 2026-10-13 ([ADR 0082](../../../decisions/0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md)), web only (the client uses the existing node, blob and quota endpoints; the one new contract artefact is [`contracts/export/veyq-subtree.schema.json`](../../../../contracts/export/veyq-subtree.schema.json)). Seen working in a real browser with a Memory of two photos: exported, imported again as "Urlaub (2)" with both photos, the date and the place. The export dialog was also seen in dark mode at 375 px (no overflow, readable); the import dialog was only measured there (same width, no overflow), not seen. **Not yet seen:** a multi-GB export, a Memory with GPS-tagged photos, a Files folder tree, an uploaded cover, the failure messages and the progress bar.
+- **Status:** built 2026-10-13 ([ADR 0082](../../../decisions/0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md)), web, plus one small backend operation, the quota preflight (`checkTenantStorageFit`); the file format is [`contracts/export/veyq-subtree.schema.json`](../../../../contracts/export/veyq-subtree.schema.json). Seen working in a real browser with a Memory of two photos: exported, imported again as "Urlaub (2)" with both photos, the date and the place. The export dialog was also seen in dark mode at 375 px (no overflow, readable); the import dialog was only measured there (same width, no overflow), not seen. **Not yet seen:** a multi-GB export, a Memory with GPS-tagged photos, a Files folder tree, an uploaded cover, the failure messages and the progress bar.
 - **Primary actor:** A member whose keys are unlocked.
 - **Goal:** Get a folder tree, a file, a Memory with its chapters out as one ZIP that outlives veyq and can be handed to someone, and get such a file back in, as new content that belongs to the importer.
 - **Preconditions:** Signed in and unlocked. Export: any node of a kind that can be exported (a folder, a file, a Memory, a chapter). Import: a place where the member may create (not a read-only scope, not a guest's view).
@@ -19,7 +19,7 @@
 
 1. The member chooses **New → Import an export…**, or drops a file onto the level. A dropped file is recognised **by its content** (a ZIP whose `manifest.json` says `veyq-subtree`), never by its name; any other file is an ordinary upload.
 2. The dialog reads the manifest and says what would be created, how big it is and where it goes; what this version cannot import is listed.
-3. **Import** creates the nodes and uploads the files through the ordinary upload. Every file is checked against its SHA-256 and the ZIP's own checksum before it is uploaded. A name that is taken among the siblings becomes `Name (2)`.
+3. Before anything is written the dialog asks the server one question - would this many bytes still fit the tenant's quota? - and a **no** says so and keeps **Import** shut (E7). **Import** creates the nodes and uploads the files through the ordinary upload. Every file is checked against its SHA-256 and the ZIP's own checksum before it is uploaded. A name that is taken among the siblings becomes `Name (2)`.
 4. The importer is the owner and uploader of everything imported; the tree reloads.
 
 ## Alternate / exception flows
@@ -30,6 +30,7 @@
 - **E4 — a browser that cannot save a file this large** (no file picker, no download route): the dialog says so before anything is written; use a Chromium-based browser on a computer.
 - **E5 — a node a kind cannot export** (a drop box, a kind this build does not know): left out with its subtree and listed.
 - **E6 — a share guest:** sees no Export and no Import for now.
+- **E7 — not enough room:** the preflight (`POST /api/tenants/{tenantId}/storage-fit`, any member, yes or no only) says no: the dialog says there is not enough storage space and offers no import. A question the server could not answer (a rate limit, an outage, an older server) never blocks: the upload that follows decides, and a full quota still ends the import with a rollback (E3).
 
 ## What an import does not carry, by design
 
@@ -40,7 +41,7 @@ Ids, keys and wraps (all fresh), the server-observed times, favourites, shares, 
 - **Operator-blind.** The server sees nothing of an export: the client decrypts, walks and writes. There is no export endpoint. An import is a sequence of ordinary node and blob writes.
 - **No memory wall.** One decrypted chunk window at a time on export; the import reads the ZIP by slice. Checked with a 4.5 GiB entry (ZIP64) against `unzip` and Python's `zipfile`.
 - **Not atomic.** The server has no multi-node transaction; the rollback is best effort and says so when it fails.
-- **Quota.** The dry run shows the size; a member's remaining quota is not readable by a non-owner, so a full quota ends the import with a clear message and a rollback.
+- **Quota, without exposing it.** The preflight is the rule an upload start applies, asked without a lock: the tenant's usage (trash and open uploads included) plus the declared bytes against the quota the Server Owner set; a tenant with no quota fits anything. It answers **yes or no, never a number**, so a member learns no more than a refused upload already tells; because a long run of questions could still be bisected towards the free space, it is rate-limited per member and per tenant (`veyq.ratelimit.storage-fit.*`, default 10 and 60 per minute, `429` with `Retry-After`). It is advisory: another upload may take the room first, and the start stays the one decision.
 
 ## What this means for you / Was das für dich bedeutet
 

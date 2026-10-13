@@ -1,8 +1,8 @@
 useCase: uc.platform.export-import
 feature: platform
 title: Take a node and everything under it out as a file, and bring such a file back in
-# Web only (ADR 0082): the client walks the tree with the member's keys and writes a store-only ZIP; an import is a sequence
-# of ordinary node and blob writes. No backend, no contract under contracts/api.
+# ADR 0082: the client walks the tree with the member's keys and writes a store-only ZIP; an import is a sequence of ordinary
+# node and blob writes. The one backend piece is the member's quota preflight, a yes/no under a rate limit.
 acceptanceCriteria:
   - id: streaming-zip-with-zip64
     text: The archive is a store-only ZIP written and read as a stream, ZIP64 exactly where a field overflows, every entry checked by its CRC-32 and size; a half archive is aborted, never closed.
@@ -34,5 +34,10 @@ acceptanceCriteria:
     coverage:
       web:
         unit: [src/core/export/ExportSubtreeDialog.test.ts, src/core/export/ImportSubtreeDialog.test.ts]
-gaps:
-  backend: "Nothing to test: an export is produced in the client from decrypted data (there is no export endpoint, ADR 0082 decision 2) and an import is a sequence of the existing node and blob writes, which their own use-cases cover."
+  - id: quota-preflight-yes-no-rate-limited
+    text: Any member of a tenant may ask whether N more bytes would still fit its quota and gets a yes or a no and nothing else, by the rule an upload start applies (usage with open sessions plus the bytes against the quota, exact at the boundary, no quota fits anything); a stranger gets 404 and spends nobody's budget, a member past the per-member or the tenant's allowance gets 429 with Retry-After, and a missing or negative count is refused. The import dialog asks once with the dry run's size, a no keeps Import shut, and an unanswerable question never blocks.
+    coverage:
+      backend:
+        integration: [TenantStorageFitSliceTest.aMemberWhoIsNotTheOwnerGetsAYesOrANoAtTheExactQuotaBoundary, TenantStorageFitSliceTest.whatTheTenantAlreadyHoldsCountsOpenSessionsIncluded, TenantStorageFitSliceTest.aTenantWithoutAQuotaFitsAnything, TenantStorageFitSliceTest.theAnswerCarriesNothingButTheYesOrNo, TenantStorageFitSliceTest.aStrangerIsNotFoundAndSpendsNoTokenOfTheTenant, TenantStorageFitSliceTest.aMemberPastItsAllowanceIsThrottledAndAnotherMemberIsNot, TenantStorageFitSliceTest.theTenantsAggregateBoundTripsEvenWhenEachMemberIsWithinItsOwn, TenantStorageFitSliceTest.noTokenOrAMalformedByteCountIsRefusedBeforeAnyAnswer]
+      web:
+        unit: [src/features/tenant/tenantStorageFits.test.ts, src/core/export/ImportSubtreeDialog.test.ts]

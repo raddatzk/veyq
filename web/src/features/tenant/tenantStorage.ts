@@ -18,3 +18,17 @@ export function getTenantStorage(tenantId: string): Promise<TenantStorage> {
 export function updateTenantStorage(tenantId: string, shareLinkLimitBytes: number): Promise<TenantStorage> {
   return tenantsApi().updateTenantStorage({ tenantId, tenantStorageUpdate: { shareLinkLimitBytes } })
 }
+
+/**
+ * Any member: would `bytes` more still fit the tenant's quota? A yes or a no, never the free space (ADR 0082; the server
+ * rate-limits it per member and per tenant). Advisory - the upload that follows is the one decision. Resolves `null` when
+ * the question could not be answered (a limit, an outage, an older server): the caller then goes on and lets the upload
+ * decide, because a preflight that cannot be answered must not block anyone.
+ */
+export async function tenantStorageFits(tenantId: string, bytes: number): Promise<boolean | null> {
+  try {
+    return (await tenantsApi().checkTenantStorageFit({ tenantId, tenantStorageFitRequest: { bytes } })).fits
+  } catch {
+    return null
+  }
+}

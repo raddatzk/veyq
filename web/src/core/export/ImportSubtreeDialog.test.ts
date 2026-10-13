@@ -4,6 +4,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import PrimeVue from 'primevue/config'
 
 vi.mock('./importSubtree', async (orig) => ({ ...(await orig<typeof import('./importSubtree')>()), openExport: vi.fn(), importSubtree: vi.fn() }))
+vi.mock('../../features/tenant/tenantStorage', () => ({ tenantStorageFits: vi.fn() }))
 vi.mock('../node/treeStore', async (orig) => ({ ...(await orig<typeof import('../node/treeStore')>()), loadTree: vi.fn(async () => {}) }))
 
 import ImportSubtreeDialog from './ImportSubtreeDialog.vue'
@@ -12,10 +13,12 @@ import { ExportError, type Manifest } from './manifest'
 import { realI18n, t } from '../../test/i18n'
 import { memberAccessOf } from '../../test/models'
 import { epochsOf } from '../../features/spaces/epochsTestUtil'
+import { tenantStorageFits } from '../../features/tenant/tenantStorage'
+import { activeSpace } from '../../app/activeSpace'
 
 const manifest: Manifest = {
   format: 'veyq-subtree', version: 1, exportedAt: 'x', appVersion: 'x',
-  root: { id: 'n1', kind: 'FOLDER', name: 'Trip', children: [{ id: 'n2', kind: 'ODD', name: 'strange' }] },
+  root: { id: 'n1', kind: 'FOLDER', name: 'Trip', content: { type: 'x.y', file: { path: 'data/n1/a', size: 2048, mediaType: 'x/y' } }, children: [{ id: 'n2', kind: 'ODD', name: 'strange' }] },
 }
 const opened = { zip: {}, manifest } as unknown as OpenedExport
 
@@ -34,6 +37,8 @@ const alerts = () => [...body().querySelectorAll('[data-testid="import-error"]')
 beforeEach(() => {
   document.body.innerHTML = ''
   vi.resetAllMocks()
+  activeSpace.tenantId = 'tenant-1'
+  vi.mocked(tenantStorageFits).mockResolvedValue(true)
 })
 
 describe('ImportSubtreeDialog', () => {
@@ -80,5 +85,37 @@ describe('ImportSubtreeDialog', () => {
     await flushPromises()
     expect(alerts()).toContain(t('export.importQuota'))
     expect(w.emitted('done')).toBeUndefined()
+  })
+
+  describe('the quota preflight (the server\'s yes or no)', () => {
+    const submit = () => body().querySelector<HTMLButtonElement>('[data-testid="import-submit"]')!
+
+    it('asks once with the size of the dry run; a yes leaves the import open', async () => {
+      vi.mocked(openExport).mockResolvedValue(opened)
+      await mountDialog()
+      expect(tenantStorageFits).toHaveBeenCalledTimes(1)
+      expect(vi.mocked(tenantStorageFits).mock.calls[0]).toEqual(['tenant-1', 2048])
+      expect(body().querySelector('[data-testid="import-no-room"]')).toBeNull()
+      expect(submit().disabled).toBe(false)
+    })
+
+    it('a no says there is not enough room and does not let the import start', async () => {
+      vi.mocked(openExport).mockResolvedValue(opened)
+      vi.mocked(tenantStorageFits).mockResolvedValue(false)
+      await mountDialog()
+      expect(body().querySelector('[data-testid="import-no-room"]')?.textContent).toContain(t('export.importNoRoom', { size: '2 kB' }))
+      expect(submit().disabled).toBe(true)
+      submit().click()
+      await flushPromises()
+      expect(importSubtree).not.toHaveBeenCalled()
+    })
+
+    it('a question that could not be answered never blocks: the upload decides', async () => {
+      vi.mocked(openExport).mockResolvedValue(opened)
+      vi.mocked(tenantStorageFits).mockResolvedValue(null)
+      await mountDialog()
+      expect(body().querySelector('[data-testid="import-no-room"]')).toBeNull()
+      expect(submit().disabled).toBe(false)
+    })
   })
 })

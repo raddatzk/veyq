@@ -23,6 +23,7 @@ as **one ZIP file** — and bring such a file back in, into the same veyq or ano
   do not travel with an export. The people named on a Memory come along as plain names in the file, but are not set again.
 - **Big exports.** The ZIP is written straight to disk, so size is no problem on a computer with a Chromium-based browser
   (Chrome, Edge); other browsers download it through a built-in route, and where neither works veyq tells you before it starts.
+- **Enough room?** Before importing, veyq asks the server whether the import still fits your space's storage. If it does not, it tells you and does not start. The answer is only yes or no — nobody learns how much space is left.
 - **If an import stops** (for example because your storage is full), what it created is moved to the trash and you are told
   how far it got.
 - This has been tried with a Memory of two photos in a real browser. Large exports and photos with GPS tags have not been tried yet.

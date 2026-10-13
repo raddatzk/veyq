@@ -13,6 +13,8 @@ import type { NodeParent } from '../node/tree'
 import { loadTree, treeStore } from '../node/treeStore'
 import { formatBytes } from '../../shared/formatBytes'
 import { useToast } from '../../shared/state/useToast'
+import { activeSpace } from '../../app/activeSpace'
+import { tenantStorageFits } from '../../features/tenant/tenantStorage'
 import { ExportError } from './manifest'
 import { ImportFailed, importSubtree, openExport, planImport, type ImportPlan, type OpenedExport } from './importSubtree'
 
@@ -30,6 +32,10 @@ const progress = ref({ nodesDone: 0, nodesTotal: 1 })
 const control = new AbortController()
 onBeforeUnmount(() => control.abort())
 
+// Whether the import would fit the tenant's quota (ADR 0082): the server's yes or no, asked once the dry run is known. `null`:
+// not asked, or not answerable - the upload then decides, so an unanswerable question never blocks an import.
+const fits = ref<boolean | null>(null)
+
 const size = computed(() => formatBytes(plan.value?.bytes ?? 0, locale.value))
 const rootName = computed(() => opened.value?.manifest.root.name ?? '')
 
@@ -38,6 +44,7 @@ onMounted(async () => {
     opened.value = await openExport(props.file)
     plan.value = planImport(opened.value.manifest)
     step.value = 'ready'
+    if (activeSpace.tenantId && plan.value.bytes > 0) fits.value = await tenantStorageFits(activeSpace.tenantId, plan.value.bytes)
   } catch (e) {
     error.value = e instanceof ExportError ? (e.code === 'not_an_export' ? t('export.notExport') : e.code === 'newer_version' ? t('export.newer') : t('export.invalid')) : t('export.invalid')
     step.value = 'invalid'
@@ -100,6 +107,7 @@ function close() {
           <p class="veyq-form-copy">{{ t('export.importSkipped') }}</p>
           <ul class="import-skipped"><li v-for="(s, i) in plan.skipped" :key="i">{{ s.name }} <small>({{ s.kind }})</small></li></ul>
         </div>
+        <Message v-if="fits === false" severity="warn" :closable="false" role="alert" data-testid="import-no-room">{{ t('export.importNoRoom', { size }) }}</Message>
         <p class="veyq-form-copy import-note">{{ t('export.importNotice') }}</p>
         <template v-if="step === 'running'">
           <p class="veyq-form-copy" role="status">{{ t('export.importing', { done: progress.nodesDone, total: progress.nodesTotal }) }}</p>
@@ -109,7 +117,7 @@ function close() {
       <Message v-if="error" severity="error" :closable="false" role="alert" data-testid="import-error">{{ error }}</Message>
       <div class="veyq-dialog-action-row">
         <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined :disabled="step === 'running'" @click="close" />
-        <Button v-if="step !== 'invalid'" type="submit" :label="t('export.importSubmit')" icon="pi pi-upload" :disabled="step === 'reading'" :loading="step === 'running'" data-testid="import-submit" />
+        <Button v-if="step !== 'invalid'" type="submit" :label="t('export.importSubmit')" icon="pi pi-upload" :disabled="step === 'reading' || fits === false" :loading="step === 'running'" data-testid="import-submit" />
       </div>
     </form>
   </Dialog>

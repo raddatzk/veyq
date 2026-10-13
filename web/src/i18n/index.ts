@@ -38,6 +38,7 @@ const en = {
     importFailed: 'The import stopped after {done} of {total} items. What was created has been moved to the trash.',
     importFailedLeft: 'The import stopped after {done} of {total} items and what was created could not be removed. Look for “{name}” and delete it.',
     importQuota: 'There is not enough storage space for this import.',
+    importNoRoom: 'There is not enough storage space for this import ({size}). Free some space, or ask whoever runs your space.',
     importChecksum: 'A file in the export does not match its checksum; the export is damaged.',
   },
   notSetUp: {
@@ -1586,6 +1587,7 @@ const de: typeof en = {
     importFailed: 'Der Import wurde nach {done} von {total} Einträgen abgebrochen. Was angelegt wurde, liegt jetzt im Papierkorb.',
     importFailedLeft: 'Der Import wurde nach {done} von {total} Einträgen abgebrochen, und das Angelegte konnte nicht entfernt werden. Suche „{name}“ und lösche es.',
     importQuota: 'Für diesen Import ist nicht genug Speicherplatz vorhanden.',
+    importNoRoom: 'Für diesen Import ist nicht genug Speicherplatz vorhanden ({size}). Gib Platz frei oder frage die Person, die deinen Bereich betreibt.',
     importChecksum: 'Eine Datei im Export passt nicht zu ihrer Prüfsumme; der Export ist beschädigt.',
   },
   notSetUp: {

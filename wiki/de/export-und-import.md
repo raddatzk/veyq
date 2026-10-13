@@ -28,6 +28,7 @@ veyq oder in ein anderes.
 - **Große Exporte.** Das ZIP wird direkt auf die Platte geschrieben, die Größe ist also auf einem Computer mit
   Chromium-Browser (Chrome, Edge) kein Problem; andere Browser laden es über einen eingebauten Weg herunter, und wo beides
   nicht geht, sagt veyq es dir vor dem Start.
+- **Ist genug Platz da?** Vor dem Import fragt veyq den Server, ob der Import noch in den Speicher deines Bereichs passt. Wenn nicht, sagt es dir das und startet nicht. Die Antwort ist nur Ja oder Nein — niemand erfährt, wie viel Platz noch frei ist.
 - **Bricht ein Import ab** (zum Beispiel weil dein Speicher voll ist), liegt das Angelegte im Papierkorb, und du erfährst,
   wie weit er kam.
 - Das wurde mit einer Erinnerung aus zwei Fotos in einem echten Browser ausprobiert. Große Exporte und Fotos mit GPS-Angaben
