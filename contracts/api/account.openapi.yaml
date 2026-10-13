@@ -224,6 +224,77 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: username_taken }
 
+  /api/account/profile/avatar:
+    put:
+      tags: [account-profile]
+      operationId: setMyAvatar
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          One writer: only the account holder sets their own picture; the loss is between that member's own
+          devices, and the newer picture is the one they meant.
+      summary: Set (or overwrite) the caller's profile picture in the active tenant.
+      description: >
+        Stores the caller's profile picture in the tenant resolved from the Host (uc.spaces.set-profile-picture,
+        [ADR 0084](../../docs/decisions/0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md)):
+        one opaque, constant-length ciphertext (a 128 px WebP padded to 8 KiB, sealed under `K_tenant` with the
+        `member-avatar` purpose bound to the tenant scope and the caller's own user id). The server stores it verbatim,
+        overwrites any earlier one and bumps the profile's `avatarVersion`; it never sees the image, its size or its
+        type. Other tenants' profiles of the same account are untouched.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SetAvatarRequest" }
+            example: { sealedAvatar: c2VhbGVkLWF2YXRhcg== }
+      responses:
+        "204":
+          description: The picture is stored and `avatarVersion` bumped.
+        "400":
+          description: The request was malformed (blank, over the constant length, or not base64).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "404":
+          description: No tenant resolves from the Host, or the caller has no profile there.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: profile_not_found }
+    delete:
+      tags: [account-profile]
+      operationId: clearMyAvatar
+      summary: Remove the caller's profile picture in the active tenant.
+      description: >
+        Clears the caller's profile picture in the Host tenant and bumps `avatarVersion` (uc.spaces.set-profile-picture
+        A1, ADR 0084): everyone falls back to the letter. Idempotent: clearing an absent picture answers `204` too.
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: The picture is gone (or there was none).
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "404":
+          description: No tenant resolves from the Host, or the caller has no profile there.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: profile_not_found }
+
   /api/account/identity-pins:
     get:
       tags: [account-identity-pins]
@@ -868,7 +939,7 @@ components:
     MemberProfile:
       type: object
       description: The caller's per-tenant identity — a plaintext handle + the sealed real name (ADR 0023).
-      required: [username, requireGroupAddConsent]
+      required: [username, avatarVersion, requireGroupAddConsent]
       properties:
         username:
           x-veyq-visibility: pii
@@ -887,6 +958,16 @@ components:
           contentEncoding: base64
           maxLength: 8192
           example: c2VhbGVkLW5hbWU=
+        avatarVersion:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          minimum: 0
+          description: >
+            The version of the caller's profile picture in this tenant: `0` = none, bumped on every set and clear
+            (ADR 0084). The picture itself is fetched with `getMemberAvatar` only when this is non-zero and differs
+            from the cached one. The operator-visible residual: that a picture exists and how often it changed.
+          example: 0
         requireGroupAddConsent:
           x-veyq-visibility: flag
           type: boolean
@@ -935,6 +1016,23 @@ components:
             turns a GroupOwner's add into a consent proposal; `false` restores the default direct-add. Omit
             (`null`) to leave it unchanged.
           example: true
+
+    SetAvatarRequest:
+      type: object
+      required: [sealedAvatar]
+      properties:
+        sealedAvatar:
+          type: string
+          description: >
+            The profile picture: a 128 px WebP **padded to a constant 8 KiB plaintext**, sealed under `K_tenant` with
+            the `member-avatar` purpose bound to (tenant scope, the caller's user id) (`0x02 || nonce(12) || aead`,
+            base64). Opaque base64 the server stores verbatim and never interprets. Its length is a **constant** - the
+            exact base64 length of the sealed padded plaintext (8192 + 29 bytes -> 10964 chars) - so a photo and a
+            drawing are indistinguishable and the value is provably inside the `TEXT` column (65 535).
+          contentEncoding: base64
+          maxLength: 10964
+          example: c2VhbGVkLWF2YXRhcg==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 10964) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     IdentityPins:
       type: object
