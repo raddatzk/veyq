@@ -32,7 +32,7 @@ vi.mock('../core/node/treeStore', async () => {
 })
 vi.mock('../core/people/PersonProfile.vue', async () => {
   const { defineComponent, h } = await import('vue')
-  return { default: defineComponent({ name: 'PersonProfileStub', props: ['userId'], setup: (p) => () => h('div', { class: 'profile-stub' }, p.userId) }) }
+  return { default: defineComponent({ name: 'PersonProfileStub', props: ['userId'], emits: ['named'], setup: (p, { emit }) => () => h('div', { class: 'profile-stub', onClick: () => emit('named', 'anna') }, p.userId) }) }
 })
 
 import MemoryHomeView from './MemoryHomeView.vue'
@@ -76,6 +76,13 @@ describe('MemoryHomeView: #people/<userId>', () => {
     expect(vi.mocked(enterScope)).toHaveBeenCalledWith('')
     expect(breadcrumb.trail.map((c) => c.name)).toEqual(['Shared', 'Profile'])
     expect(decodeURIComponent(breadcrumb.trail[1].hash)).toBe(`#people/${UID}`)
+  })
+
+  it('names the page by the person\'s @username once the profile has reported it', async () => {
+    const w = await mountAt(`#people/${UID}`)
+    expect(breadcrumb.trail.map((c) => c.name)).toEqual(['Shared', 'Profile'])
+    await w.get('.profile-stub').trigger('click')
+    expect(breadcrumb.trail.map((c) => c.name)).toEqual(['Shared', 'Profile', '@anna'])
   })
 
   it('a folder called "People" is not the route: it opens as people-2, and the profile page stays away', async () => {

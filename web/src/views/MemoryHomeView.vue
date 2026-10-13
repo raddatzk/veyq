@@ -193,8 +193,11 @@ const rootLabel = computed(() =>
       : t('shell.personal'),
 )
 
+// The shown profile's @username (reported by the page once the directory has answered): the last crumb.
+const personHandle = ref<string | null>(null)
+watch(() => place.value.person, () => (personHandle.value = null))
 watch(
-  [() => route.hash, () => treeStore.nodes, rootLabel],
+  [() => route.hash, () => treeStore.nodes, rootLabel, personHandle],
   () =>
     setBreadcrumb(
       place.value.person
@@ -202,6 +205,7 @@ watch(
           [
             { id: null, name: rootLabel.value, hash: hashForNode(treeStore.nodes, null, TENANT_SCOPE) },
             { id: null, name: t('people.profile'), hash: personHash(place.value.person) },
+            ...(personHandle.value ? [{ id: null, name: `@${personHandle.value}`, hash: personHash(place.value.person) }] : []),
           ]
         : breadcrumbOf(treeStore.nodes, currentNodeId.value, rootLabel.value, currentScope.value),
     ),
@@ -331,7 +335,7 @@ async function onDeleteDone() {
       <Message v-if="isPendingDeletion" severity="warn" :closable="false" class="pending-delete-banner">
         {{ t('groups.pendingDeletion', { day: pendingPurgeDay }) }}
       </Message>
-      <PersonProfile v-if="place.person" :key="place.person" :user-id="place.person" />
+      <PersonProfile v-if="place.person" :key="place.person" :user-id="place.person" @named="personHandle = $event" />
       <component
         :is="kindDetail"
         v-else-if="kindDetail && currentNode && activeSpace.scopeId"

@@ -22,6 +22,9 @@ import { useAsyncAction } from '../../shared/state/useAsyncAction'
 import { useToast } from '../../shared/state/useToast'
 
 const props = defineProps<{ userId: string }>()
+// The person's @username once the directory has answered (null while loading, for a former member, on an error): the shell
+// breadcrumb names the page by it.
+const emit = defineEmits<{ named: [username: string | null] }>()
 const { t } = useI18n()
 
 type State = { kind: 'loading' } | { kind: 'error' } | { kind: 'ready'; person: Person | null }
@@ -44,6 +47,7 @@ watch(() => props.userId, load)
 const sections = registry.personSections()
 const person = computed(() => (state.value.kind === 'ready' ? state.value.person : null))
 const title = computed(() => person.value?.displayName ?? t('people.formerMember'))
+watch(person, (p) => emit('named', p ? p.username : null), { immediate: true })
 
 // Editing one's own name and picture: only when this page is the signed-in member's.
 const toast = useToast()
