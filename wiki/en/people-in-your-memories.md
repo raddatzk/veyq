@@ -1,4 +1,4 @@
-<!-- speaks-for: docs/features/memory/use-cases/uc.memory.participants.md; pair: de/personen-in-deinen-erinnerungen.md -->
+<!-- speaks-for: docs/features/memory/use-cases/uc.memory.participants.md, docs/features/spaces/use-cases/uc.spaces.set-profile-picture.md; pair: de/personen-in-deinen-erinnerungen.md -->
 # People in your Memories
 
 A plain-language companion to [Is my data safe?](is-my-data-safe.md) and [Sharing](sharing.md). In a Memory you can
@@ -9,7 +9,7 @@ took part in.
 
 - **Name the people.** Open a Memory and choose **Add participants** under its title. You pick from the members of the
   space the Memory lives in. They appear as a row of small avatars in the Memory's header (up to three; with more, the last one shows "+2", "+3" and so on) — hover over them, or tap them, to see everyone by name. In the picker you can search the members by name. A Memory can name up to 100 people.
-- **Open a person.** Click a name and you land on that person's profile: their name, a letter avatar, and below them
+- **Open a person.** Click a name and you land on that person's profile: their name, their picture (or a letter), and below them
   the Memories they took part in — only the ones **you** are allowed to open. A Memory you can't see is simply not
   in the list. (If you have many Memories, the list says when it may be incomplete.)
 - **Who added a photo.** Open a photo and its details say who added it, as a link to that person's profile. This
@@ -17,6 +17,13 @@ took part in.
 - **People who left.** Someone who later leaves the space stays on the Memory, greyed out as "Former member" and
   without a link. Nobody removes them automatically — it is the Memory's record of who was there. You can take them
   off by hand.
+
+- **Give yourself a picture.** In **Settings → Your profile**, or on **your own** profile page (**Edit profile**), you can
+  choose a picture and frame it. It then shows instead of your letter wherever you appear in the space: the header of a
+  Memory, the list of people, the members list and your profile. Remove it any time and the letter comes back. On
+  other people's profiles there is nothing to edit — only they can change their own picture. If you joined a space as a
+  member, a small notice offers to finish your name and picture after you first unlock; "Not now" hides it for good.
+  (If you own the space, you can pick a picture right when you accept the invitation.)
 
 Names follow one rule everywhere: the **real name** if the person gave one, otherwise their **username**.
 
@@ -38,4 +45,10 @@ Names follow one rule everywhere: the **real name** if the person gave one, othe
   shows a link visitor no participants, but someone who is technically skilled and inspects what the link delivers could
   find out **how many** people are listed and their anonymous IDs — **never their names**, which a link visitor
   has no way to look up. If participants ever carried names, this would have to be decided again.
-- Not built yet: a picture for a person (their avatar is a letter for now), and showing who added a **file** in Files.
+- **Your picture is sealed too.** It is locked on your device with the space's key before it leaves, and the server only
+  stores a scrambled block of **always the same size** — so it cannot tell a photo from a drawing, and never sees the
+  image, its size or what it shows. Only **members of your space** can open it; a link visitor never gets it and sees
+  the letter. The operator can tell only that you have a picture and how often you changed it. A picture belongs to one
+  space — another space you belong to shows its own (or the letter). If you are removed from a space, your picture there
+  is cleared.
+- Not built yet: showing who added a **file** in Files. This page has not been checked in a real browser yet.

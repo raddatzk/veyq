@@ -1,9 +1,10 @@
 useCase: uc.spaces.set-profile-picture
 feature: spaces
 title: Set your profile picture in a space
-# Decided 2026-10-13 (ADR 0084). Contracts, crypto and backend are built and covered below; the web is not, so the
-# use-case stays `planned` until its gap closes and the flip (drop `status`, fill the web refs) is mechanical.
-status: planned
+# Built 2026-10-13 (ADR 0084): contract, crypto, backend and web. The web suites seal and open for real (the blob a PUT carries is
+# opened under the test key at the member's address) and mock only the generated client and the pixel stage; the contract's
+# `maxLength` is read from the YAML by memberAvatar.test.ts. NOT verified in a real browser: the crop, the WebP encode and how the
+# picture draws in the header, the popover, the profile page, the members list and the user menu were never seen by eye.
 acceptanceCriteria:
   - id: picture-sealed-on-device-constant-length
     text: The picture is cropped 1:1, encoded to a 128 px WebP, padded to a constant length and sealed on the device under `K_tenant` with the `member-avatar` purpose at (tenant scope, own user id); the server stores the blob verbatim, every blob has the same length, and the contract `maxLength` equals that sealed constant.
@@ -12,6 +13,14 @@ acceptanceCriteria:
         integration:
           - MemberAvatarSliceTest.theContractLengthIsTheSealedConstantsBase64Length
           - MemberAvatarSliceTest.theLengthBoundIsEnforcedAtTheWire
+      web:
+        unit:
+          - src/features/account/profile/memberAvatar.test.ts
+          - src/features/account/profile/ProfilePictureDialog.test.ts
+          - src/features/account/profile/useNameAndPicture.test.ts
+    gaps:
+      - surface: web
+        reason: The crop, the canvas bake and the WebP encode are the pixel stage, which the dialog test mocks; no test runs them in a real browser, so that a 128 px crop really fits the 8 KiB budget on real photos is unverified.
   - id: set-clear-and-version
     text: "`PUT` overwrites and bumps `avatar_version`, `DELETE` clears and bumps and is idempotent; the directory and profile carry only the integer `avatarVersion`, never the bytes."
     coverage:
@@ -21,6 +30,12 @@ acceptanceCriteria:
           - MemberAvatarSliceTest.clearRemovesThePictureBumpsAndIsIdempotent
           - MemberAvatarSliceTest.overlappingSetsEachBumpTheVersionOnce
           - MemberAvatarSliceTest.theDirectoryCarriesTheVersionAndNeverTheBytes
+      web:
+        unit:
+          - src/features/account/profile/useNameAndPicture.test.ts
+          - src/features/account/profile/ProfilePanel.test.ts
+          - src/core/people/avatarCache.test.ts
+          - src/core/people/directory.test.ts
   - id: members-only-versioned-read
     text: "`getMemberAvatar` is tenant-membership gated (a non-member gets the ADR 0042 404), answers 200 with an `ETag` from the version, 304 on a matching `If-None-Match`, 404 `avatar_not_found` when none; no share endpoint serves it."
     coverage:
@@ -31,8 +46,19 @@ acceptanceCriteria:
           - MemberAvatarSliceTest.aMemberWithNoPictureIs404AvatarNotFound
           - MemberAvatarSliceTest.aNonMemberOfTheTenantGetsTheMembershipNotFoundWhetherOrNotAPictureExists
           - MemberAvatarSliceTest.aMembersPictureOfOneTenantIsNotReadableThroughAnother
+      web:
+        unit:
+          - src/core/people/avatarCache.test.ts
+          - src/core/people/PersonAvatar.test.ts
+          - src/views/ShareView.memory.test.ts
   - id: edit-on-own-profile-only
     text: The same component edits name and picture in Settings and on one's own profile page, and renders no edit control on anyone else's.
+    coverage:
+      web:
+        unit:
+          - src/features/account/profile/ProfilePanel.test.ts
+          - src/core/people/PersonProfile.test.ts
+          - src/features/account/profile/useNameAndPicture.test.ts
   - id: set-at-join-or-after-first-unlock
     text: A tenant owner seals name and picture together at accept; a joining member, holding no `K_tenant`, is offered the picture after the first unlock, with no unsealed image cached.
     coverage:
@@ -41,6 +67,10 @@ acceptanceCriteria:
           - MemberAvatarSliceTest.theOwnerJoinSealsThePictureAtAcceptWithVersionOne
           - MemberAvatarSliceTest.registerAndAcceptSealsThePictureOnlyOnTheOwnerPath
           - MemberAvatarSliceTest.anOversizeOrMalformedAvatarOnAnAcceptBodyIs400AndSpendsNothing
+      web:
+        unit:
+          - src/views/TenantJoinView.avatar.test.ts
+          - src/features/account/profile/FinishProfilePrompt.test.ts
   - id: removal-clears-picture-keeps-handle
     text: Removing a member from the tenant clears `sealed_avatar` and bumps the version but keeps the username.
     coverage:
@@ -56,5 +86,3 @@ acceptanceCriteria:
           - OperatorBlindProbeTest.everyGatedOperationAnswersEachStateOfTheGate
           - OperatorBlindProbeTest.everyContractOperationIsProbedOrExcludedWithAReason
           - MemberAvatarSliceTest.aCallerWithNoProfileInTheHostTenantIs404AndAnUnknownHostToo
-gaps:
-  web: Decided, not built (ADR 0084); no test exists yet. Planned suites are memberAvatar.test.ts, the dialog, directory cache, ProfilePanel and PersonProfile tests. The `member-avatar` seal purpose and its conformance vector are built (packages/crypto, contracts/crypto/vectors/v1.json) and the web contract client is generated from the finished contract.

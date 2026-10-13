@@ -15,7 +15,7 @@
 // recorded, `test/guestMode.ts`), and nothing of the member's world is read or written — the active scope (`activeSpace`),
 // the node tree (`treeStore`), the pins (`favoritesStore`), the item marks (`itemFavoritesStore`), the member's covers
 // (`core/node/cover/coverStore`'s `memberCoverStore`, `covers`, `declaredCovers`, `resetCovers` - the guest's own store is the
-// page's, `useCovers`): every export of those modules is recorded here, and the record must stay empty.
+// page's, `useCovers`), and the people directory with the profile-picture cache (ADR 0084): every export of those modules is recorded here, and the record must stay empty.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
@@ -56,6 +56,10 @@ vi.mock('../app/activeSpace', async (orig) => recording('activeSpace', await ori
 vi.mock('../core/node/treeStore', async (orig) => recording('treeStore', await orig<Record<string, unknown>>()))
 vi.mock('../core/favorites/favoritesStore', async (orig) => recording('favoritesStore', await orig<Record<string, unknown>>()))
 vi.mock('../features/memory/itemFavoritesStore', async (orig) => recording('itemFavoritesStore', await orig<Record<string, unknown>>()))
+// The people directory and the profile pictures' cache (ADR 0084): a guest holds no K_tenant and the share page has no people, so
+// no avatar is looked up, fetched or drawn - every export is recorded and the record must stay empty.
+vi.mock('../core/people/avatarCache', async (orig) => recording('avatarCache', await orig<Record<string, unknown>>()))
+vi.mock('../core/people/directory', async (orig) => recording('directory', await orig<Record<string, unknown>>()))
 vi.mock('../core/node/cover/coverStore', async (orig) => {
   const mod = await orig<Record<string, unknown>>()
   const { memberCoverStore, covers, declaredCovers, resetCovers } = mod

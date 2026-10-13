@@ -15,13 +15,22 @@ vi.mock('./profile', async (orig) => ({
   getMyProfile: vi.fn(),
   updateMyProfile: vi.fn(),
   openOwnNameKey: vi.fn(),
+  setMyAvatar: vi.fn(),
+  clearMyAvatar: vi.fn(),
+}))
+vi.mock('../../../core/people/directory', () => ({
+  avatarUrlOf: vi.fn(() => null),
+  loadTenantPeople: vi.fn(() => Promise.resolve(new Map())),
+  refreshPeopleDirectory: vi.fn(() => Promise.resolve()),
 }))
 vi.mock('../../../shared/state/useToast', () => ({
   useToast: () => ({ success: vi.fn(), showUndo: vi.fn(), dismissUndo: vi.fn() }),
 }))
 
 import ProfilePanel from './ProfilePanel.vue'
-import { getMyProfile, updateMyProfile, openOwnNameKey, sealName, unsealName } from './profile'
+import { getMyProfile, updateMyProfile, openOwnNameKey, sealName, unsealName, setMyAvatar, clearMyAvatar } from './profile'
+import { openAvatar } from './memberAvatar'
+import NamePictureFields from './NamePictureFields.vue'
 
 const K_TENANT = v1.randomBytes(32)
 const ADDRESS = { scopeId: '5c09e000-0000-4000-8000-0000000000d1', userId: '5c09e000-0000-4000-8000-0000000000d2' }
@@ -120,5 +129,62 @@ describe('ProfilePanel (uc.spaces.edit-profile, web)', () => {
     const update = sent()
     expect(update.sealedName).toBeDefined()
     expect(unsealName(K_TENANT, ADDRESS, update.sealedName)).toEqual({ firstName: '', lastName: '' })
+  })
+})
+
+describe('ProfilePanel - the profile picture (ADR 0084)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getMyProfile).mockResolvedValue(STORED)
+    vi.mocked(updateMyProfile).mockResolvedValue(STORED)
+    vi.mocked(openOwnNameKey).mockResolvedValue({ key: K_TENANT, address: ADDRESS })
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:p'), revokeObjectURL: vi.fn() }))
+  })
+  const fields = (w: Panel) => w.findComponent(NamePictureFields).props('model')
+
+  it('renders the shared name + picture fields, the picture control enabled while the key is held', async () => {
+    const w = await mountPanel()
+    expect(w.find('[data-testid="name-picture-fields"]').exists()).toBe(true)
+    expect(w.find('[data-testid="profile-picture-open"]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('Save writes the profile first and then the chosen picture, sealed at the member\'s own address', async () => {
+    const w = await mountPanel()
+    fields(w).choose(new Uint8Array([4, 5, 6]))
+    await save(w)
+    expect(updateMyProfile).toHaveBeenCalledTimes(1)
+    expect(setMyAvatar).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(updateMyProfile).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(setMyAvatar).mock.invocationCallOrder[0])
+    expect([...openAvatar(K_TENANT, ADDRESS, vi.mocked(setMyAvatar).mock.calls[0][0])!]).toEqual([4, 5, 6])
+  })
+
+  it('removing the picture sends DELETE and no PUT; an untouched picture sends neither', async () => {
+    const w = await mountPanel()
+    await save(w)
+    expect(setMyAvatar).not.toHaveBeenCalled()
+    expect(clearMyAvatar).not.toHaveBeenCalled()
+    vi.mocked(updateMyProfile).mockClear()
+    fields(w).remove()
+    await save(w)
+    expect(clearMyAvatar).toHaveBeenCalledTimes(1)
+    expect(setMyAvatar).not.toHaveBeenCalled()
+  })
+
+  it('a picture that fails after the profile saved says exactly that, not a generic failure', async () => {
+    vi.mocked(setMyAvatar).mockRejectedValue(new Error('offline'))
+    const w = await mountPanel()
+    fields(w).choose(new Uint8Array([1]))
+    await save(w)
+    expect(updateMyProfile).toHaveBeenCalledTimes(1)
+    expect(w.text()).toContain(t('profilePicture.saveFailed'))
+  })
+
+  it('E2: without a grant the picture control is disabled with its hint and no picture is sent', async () => {
+    vi.mocked(openOwnNameKey).mockResolvedValue(null)
+    const w = await mountPanel()
+    expect(w.find('[data-testid="profile-picture-open"]').attributes('disabled')).toBeDefined()
+    expect(w.text()).toContain(t('profilePicture.noKeyYet'))
+    await save(w)
+    expect(setMyAvatar).not.toHaveBeenCalled()
   })
 })

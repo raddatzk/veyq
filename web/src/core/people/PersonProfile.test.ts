@@ -7,6 +7,15 @@ import { defineComponent, h } from 'vue'
 import PrimeVue from 'primevue/config'
 
 vi.mock('./directory', async (orig) => ({ ...(await orig<typeof import('./directory')>()), loadTenantPeople: vi.fn() }))
+vi.mock('../../features/account/profile/profile', async (orig) => ({
+  ...(await orig<typeof import('../../features/account/profile/profile')>()),
+  getMyProfile: vi.fn(),
+  updateMyProfile: vi.fn(),
+  openOwnNameKey: vi.fn(),
+  setMyAvatar: vi.fn(),
+  clearMyAvatar: vi.fn(),
+}))
+vi.mock('../../shared/state/useToast', () => ({ useToast: () => ({ success: vi.fn(), showUndo: vi.fn(), dismissUndo: vi.fn() }) }))
 vi.mock('../applications/registry', async (orig) => {
   const real = await orig<typeof import('../applications/registry')>()
   const Section = defineComponent({ props: ['userId', 'name'], setup: (p) => () => h('div', { class: 'section-stub' }, `${p.userId}|${p.name}`) })
@@ -15,7 +24,13 @@ vi.mock('../applications/registry', async (orig) => {
 
 import PersonProfile from './PersonProfile.vue'
 import { loadTenantPeople, type Person } from './directory'
-import { realI18n } from '../../test/i18n'
+import { realI18n, t } from '../../test/i18n'
+import { account } from '../../app/account'
+import { getMyProfile, updateMyProfile, openOwnNameKey, setMyAvatar, clearMyAvatar, sealName } from '../../features/account/profile/profile'
+import { openAvatar } from '../../features/account/profile/memberAvatar'
+import NamePictureFields from '../../features/account/profile/NamePictureFields.vue'
+import * as v1 from '@veyq/crypto/v1'
+import { memberProfile } from '../../test/models'
 
 const ANNA = 'aaaaaaaa-0000-4000-8000-000000000001'
 const load = vi.mocked(loadTenantPeople)
@@ -27,7 +42,10 @@ async function mountPage(userId = ANNA) {
   return w
 }
 
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => {
+  vi.clearAllMocks()
+  account.userId = ''
+})
 
 describe('PersonProfile', () => {
   it('says it is loading until the directory is read', async () => {
@@ -79,5 +97,77 @@ describe('PersonProfile', () => {
     await flushPromises()
     expect(load).toHaveBeenCalledTimes(2)
     expect(w.get('h1').text()).toBe('Former member')
+  })
+})
+
+describe('PersonProfile - editing one\'s own name and picture (ADR 0084 decision 6)', () => {
+  const K = v1.randomBytes(32)
+  const ME = '5c09e000-0000-4000-8000-0000000000b2'
+  const ADDRESS = { scopeId: '5c09e000-0000-4000-8000-0000000000b1', userId: ME }
+  const me: Person = { userId: ME, username: 'kevin', realName: 'Kevin R', displayName: 'Kevin R' }
+
+  beforeEach(() => {
+    vi.mocked(getMyProfile).mockResolvedValue(memberProfile({ sealedName: sealName(K, ADDRESS, { firstName: 'Kevin', lastName: 'R' }) }))
+    vi.mocked(openOwnNameKey).mockResolvedValue({ key: K, address: ADDRESS })
+    vi.mocked(updateMyProfile).mockResolvedValue(memberProfile())
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:p'), revokeObjectURL: vi.fn() }))
+  })
+
+  it('shows the edit control on MY page', async () => {
+    account.userId = ME
+    load.mockResolvedValue(new Map([[ME, me]]))
+    const w = await mountPage(ME)
+    expect(w.find('[data-testid="person-edit"]').exists()).toBe(true)
+  })
+
+  it('shows NO edit control on anyone else\'s page - not the button, not the form', async () => {
+    account.userId = ME
+    load.mockResolvedValue(new Map([[ANNA, anna], [ME, me]]))
+    const w = await mountPage(ANNA)
+    expect(w.find('[data-testid="person-edit"]').exists()).toBe(false)
+    expect(w.find('[data-testid="person-edit-form"]').exists()).toBe(false)
+    expect(w.findComponent(NamePictureFields).exists()).toBe(false)
+    expect(getMyProfile).not.toHaveBeenCalled()
+  })
+
+  it('shows no edit control while the signed-in id is unknown, and none on a former member\'s page', async () => {
+    load.mockResolvedValue(new Map([[ME, me]]))
+    expect((await mountPage(ME)).find('[data-testid="person-edit"]').exists()).toBe(false)
+    account.userId = ME
+    load.mockResolvedValue(new Map())
+    expect((await mountPage(ME)).find('[data-testid="person-edit"]').exists()).toBe(false)
+  })
+
+  it('opens the shared editor, saves the sealed name and the chosen picture, then closes and re-reads the page', async () => {
+    account.userId = ME
+    load.mockResolvedValue(new Map([[ME, me]]))
+    const w = await mountPage(ME)
+    await w.get('[data-testid="person-edit"]').trigger('click')
+    await flushPromises()
+    const model = w.findComponent(NamePictureFields).props('model')
+    expect(model.firstName).toBe('Kevin')
+    model.choose(new Uint8Array([8, 8]))
+    await w.get('form').trigger('submit')
+    await flushPromises()
+    expect(updateMyProfile).toHaveBeenCalledTimes(1)
+    expect(Object.keys(vi.mocked(updateMyProfile).mock.calls[0][0])).toEqual(['sealedName']) // only the name rides along
+    expect([...openAvatar(K, ADDRESS, vi.mocked(setMyAvatar).mock.calls[0][0])!]).toEqual([8, 8])
+    expect(clearMyAvatar).not.toHaveBeenCalled()
+    expect(w.find('[data-testid="person-edit-form"]').exists()).toBe(false)
+    expect(load).toHaveBeenCalledTimes(3) // the page, the editor's cache warm-up, and the re-read after the save
+  })
+
+  it('Cancel drops the draft and writes nothing', async () => {
+    account.userId = ME
+    load.mockResolvedValue(new Map([[ME, me]]))
+    const w = await mountPage(ME)
+    await w.get('[data-testid="person-edit"]').trigger('click')
+    await flushPromises()
+    w.findComponent(NamePictureFields).props('model').choose(new Uint8Array([1]))
+    const cancel = w.findAll('button').find((b) => b.text() === t('common.cancel'))!
+    await cancel.trigger('click')
+    expect(w.find('[data-testid="person-edit-form"]').exists()).toBe(false)
+    expect(updateMyProfile).not.toHaveBeenCalled()
+    expect(setMyAvatar).not.toHaveBeenCalled()
   })
 })

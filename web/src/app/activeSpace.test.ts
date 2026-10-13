@@ -11,10 +11,12 @@ vi.mock('../features/spaces/scopes', () => ({
 // Stub only the async loaders refreshActiveScope drives (they hit the content/favorites APIs) — keep the rest of
 // the stores real so the other tests still assert on treeStore/favoritesStore.
 vi.mock('../core/node/treeStore', async (orig) => ({ ...(await orig<object>()), loadTree: vi.fn() }))
+vi.mock('../core/people/directory', async (orig) => ({ ...(await orig<object>()), resetPeopleDirectory: vi.fn() }))
 vi.mock('../core/favorites/favoritesStore', async (orig) => ({ ...(await orig<object>()), loadFavoritesFor: vi.fn() }))
 vi.mock('../features/account/instance/instance', () => ({ getSetupStatus: vi.fn() }))
 
 import { activeSpace, activeScopeKey, activeEpochKeys, enterScope, refreshActiveScope, clearActiveSpace } from './activeSpace'
+import { resetPeopleDirectory } from '../core/people/directory'
 import { ensurePersonalScope, openScope, openScopeById, openGroupByToken } from '../features/spaces/scopes'
 import { ScopeKind } from '../api/generated/scopes'
 import { TENANT_SCOPE } from '../core/node/location'
@@ -233,6 +235,12 @@ describe('clearActiveSpace', () => {
     expect(activeSpace.name).toBeNull()
     expect(activeScopeKey()).toBeNull()
     expect(Array.from(key)).toEqual(Array(32).fill(0)) // zeroed in place
+  })
+
+  it('drops the decrypted names and the profile pictures\' object URLs with the keys (ADR 0084)', () => {
+    vi.mocked(resetPeopleDirectory).mockClear()
+    clearActiveSpace()
+    expect(resetPeopleDirectory).toHaveBeenCalledTimes(1)
   })
 })
 

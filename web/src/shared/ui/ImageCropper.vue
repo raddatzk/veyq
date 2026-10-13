@@ -23,7 +23,7 @@ const props = withDefaults(
   }>(),
   { aspect: 16 / 9, initialCrop: null },
 )
-const emit = defineEmits<{ load: [] }>()
+const emit = defineEmits<{ load: []; error: [] }>()
 const { t } = useI18n()
 
 // The crop viewport is **measured** from the rendered cropper (which fills its container width) rather than a fixed
@@ -208,7 +208,7 @@ defineExpose({
       @pointerup="stopDrag"
       @pointercancel="stopDrag"
     >
-      <img ref="imageElement" :src="src" :style="displayedImageStyle" draggable="false" alt="" @load="loadImage" />
+      <img ref="imageElement" :src="src" :style="displayedImageStyle" draggable="false" alt="" @load="loadImage" @error="emit('error')" />
     </div>
     <label class="memory-cover-zoom">
       <span>{{ t('common.zoom') }}</span>

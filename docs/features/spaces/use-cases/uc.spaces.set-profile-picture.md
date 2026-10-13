@@ -1,7 +1,7 @@
 # UC: Set your profile picture in a space
 
 - **ID:** uc.spaces.set-profile-picture
-- **Status:** decided 2026-10-13 ([ADR 0084](../../../decisions/0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md)); contract, `member-avatar` seal purpose and backend built 2026-10-13, the web not yet.
+- **Status:** built 2026-10-13 ([ADR 0084](../../../decisions/0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md)): contract, `member-avatar` seal purpose, backend and web. Verified by unit and component tests (and the backend slice tests); **not verified in a real browser** - the crop, the WebP encode and the picture's drawing in the header, the popover and the profile page were never seen by eye.
 - **Primary actor:** A member of a tenant space, giving themselves a face there.
 - **Secondary actor:** Every other member of the tenant, who only sees it.
 - **Goal:** Show a chosen picture instead of the letter wherever the member appears (profile page, participant
@@ -20,7 +20,8 @@
 3. The client re-encodes it to a 128 px WebP, pads the bytes to the constant length and seals them under `K_tenant`
    with the `member-avatar` purpose at (tenant scope, own user id).
 4. `PUT /api/account/profile/avatar { sealedAvatar }` — the server stores the blob verbatim, bumps `avatar_version`
-   and answers `204`.
+   and answers `204`. In *Your profile* the picture rides with the profile's Save (the profile first, then the picture); on
+   the own profile page "Edit profile" opens the same fields with their own Save.
 5. Members read it: the directory and profile carry only `avatarVersion`; when it is non-zero and differs from the
    cached one, the client calls `GET /api/tenants/{tenantId}/members/{userId}/avatar` (with `If-None-Match` for a
    known version), opens the blob on the device and renders it through `PersonAvatar`.
@@ -32,7 +33,9 @@
 - **A2 — at join, as the tenant owner:** the owner holds `K_tenant` at accept, so the picker beside the name fields
   seals name and picture together and sends `sealedAvatar` with the accept request (stored with `avatarVersion` 1).
 - **A3 — at join, as a member:** no `K_tenant` yet, so no picture is offered; after the first unlock with the key a
-  one-time "finish your profile" prompt (and Settings) offers it. Nothing unsealed is cached meanwhile.
+  one-time "finish your profile" notice (and Settings) offers it - shown when neither a name nor a picture is set, until
+  "Not now" or its link dismisses it for that user on that browser (a flag, never an image). Nothing unsealed is cached
+  meanwhile.
 - **E1 — the browser cannot decode the file:** rejected in the picker with a message; nothing is stored.
 - **E2 — no grant yet:** the control is disabled with a hint, as the name fields are
   ([uc.spaces.edit-profile](uc.spaces.edit-profile.md) E2).
@@ -66,6 +69,7 @@ du einem Bereich als Mitglied bei, kannst du dein Bild gleich nach dem ersten En
 ## Related
 
 - Feature: [Spaces (scopes)](../_index.md)
+- End-user view (wiki): [People in your Memories](../../../../wiki/en/people-in-your-memories.md)
 - Enabler: [en.spaces.member-identity](../enablers/en.spaces.member-identity.md) (the per-tenant profile row)
 - Decisions: [ADR 0084](../../../decisions/0084-a-members-profile-picture-is-a-sealed-attribute-of-their-tenant-profile.md),
   [ADR 0023](../../../decisions/0023-per-tenant-member-identity.md),

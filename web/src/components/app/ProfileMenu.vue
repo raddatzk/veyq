@@ -6,7 +6,7 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import Avatar from 'primevue/avatar'
+import PersonAvatar from '../../core/people/PersonAvatar.vue'
 import TieredMenu from 'primevue/tieredmenu'
 import type { MenuItem } from 'primevue/menuitem'
 import { account } from '../../app/account'
@@ -63,7 +63,7 @@ const menuItems = computed<MenuItem[]>(() => [
 
 <template>
   <button class="profile-button" type="button" @click="userMenu?.toggle($event)">
-    <Avatar :label="profileLabel" shape="circle" />
+    <PersonAvatar :name="profileLabel" :user-id="account.userId" />
     <span v-if="showName" class="profile-button-name">{{ userLabel }}</span>
     <span v-if="showName" class="pi pi-chevron-down profile-button-chevron" />
   </button>

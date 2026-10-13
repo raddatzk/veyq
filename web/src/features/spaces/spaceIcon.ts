@@ -40,12 +40,21 @@ export function deriveSpaceIconKey(epochKey: Uint8Array): Uint8Array {
  * Throws `icon_too_large` if the bytes exceed {@link ICON_ENCODED_BUDGET} — the caller must step quality down first.
  */
 export function pad(bytes: Uint8Array): Uint8Array {
-  if (bytes.length > ICON_ENCODED_BUDGET) throw new Error('icon_too_large')
-  const out = new Uint8Array(ICON_PADDED_LEN)
+  return padTo(bytes, ICON_PADDED_LEN)
+}
+
+/** The same `u32be(len) || bytes || zero-fill` pad at another constant length (the member avatar's 8 KiB, ADR 0084).
+ *  Throws `icon_too_large` when the bytes do not fit `paddedLen - 4`. */
+export function padTo(bytes: Uint8Array, paddedLen: number): Uint8Array {
+  if (bytes.length > paddedLen - HEADER_LEN) throw new Error('icon_too_large')
+  const out = new Uint8Array(paddedLen)
   new DataView(out.buffer).setUint32(0, bytes.length, false)
   out.set(bytes, HEADER_LEN)
   return out
 }
+
+/** The u32be length header's width: a pad at length `n` carries `n - PAD_HEADER_LEN` encoded bytes. */
+export const PAD_HEADER_LEN = HEADER_LEN
 
 /**
  * Recover the encoded bytes from a padded plaintext (the counterpart to {@link pad}). Throws `icon_malformed` on a

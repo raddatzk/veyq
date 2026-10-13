@@ -13,6 +13,9 @@ import { openScope } from '../../features/spaces/scopes'
 import { zeroEpochKeys } from '../../features/spaces/epochs'
 import { unsealName, type MemberName } from '../../features/account/profile/memberName'
 import { ScopeKind } from '../../api/generated/scopes'
+import { syncAvatars, resetAvatars } from './avatarCache'
+
+export { avatarUrlOf } from './avatarCache'
 
 /** One person as the interface shows them. */
 export interface Person {
@@ -30,12 +33,23 @@ export function displayNameOf(username: string, name: MemberName | null | undefi
   return real || username
 }
 
+/** The latest picture sync, started by a roster read and NOT awaited by it: names show at once, pictures follow reactively. */
+let avatarSync: Promise<void> = Promise.resolve()
 const NAMES_TTL_MS = 60_000
 let namesCache: { at: number; tenantScopeId: string; names: Map<string, { username: string; name: MemberName | null }> } | null = null
 
-/** Forget the cached tenant names (a sign-out, a test). */
+/** Forget the cached tenant names and every cached profile picture, revoking their object URLs (a sign-out, a test). */
 export function resetPeopleDirectory(): void {
   namesCache = null
+  resetAvatars()
+}
+
+/** Re-read the tenant roster now (not at the minute's end) and bring the pictures in line - after the caller changed their
+ *  own name or picture, so every avatar on screen follows. Resolves when the pictures settled; never rejects. */
+export async function refreshPeopleDirectory(): Promise<void> {
+  namesCache = null
+  await tenantNames().catch(() => undefined)
+  await avatarSync
 }
 
 /** The tenant's members with their sealed names opened, read once a minute: the tenant scope is the active one (its key is
@@ -43,15 +57,18 @@ export function resetPeopleDirectory(): void {
 async function tenantNames(): Promise<Map<string, { username: string; name: MemberName | null }>> {
   if (namesCache && Date.now() - namesCache.at < NAMES_TTL_MS) return namesCache.names
   let scopeId: string
+  let tenantId: string | null
   let key: Uint8Array | null
   let release: (() => void) | null = null
   if (activeSpace.kind === ScopeKind.Tenant && activeSpace.scopeId) {
     scopeId = activeSpace.scopeId
+    tenantId = activeSpace.tenantId
     key = activeScopeKey()
   } else {
     const opened = await openScope(ScopeKind.Tenant)
     if (!opened) return new Map()
     scopeId = opened.scopeId
+    tenantId = opened.tenantId
     key = opened.key
     release = () => zeroEpochKeys(opened.epochs)
   }
@@ -61,6 +78,12 @@ async function tenantNames(): Promise<Map<string, { username: string; name: Memb
       rows.map((m) => [m.userId, { username: m.username, name: key ? unsealName(key, { scopeId, userId: m.userId }, m.sealedName) : null }] as const),
     )
     namesCache = { at: Date.now(), tenantScopeId: scopeId, names }
+    // The pictures, in step with the roster: only the version integers were read; a picture is fetched when its version is new.
+    // The key is copied for the fetches (the scope's own may be zeroed below) and the copy zeroed when they settle.
+    if (key && tenantId) {
+      const copy = key.slice()
+      avatarSync = syncAvatars({ tenantId, scopeId, key: copy }, rows).finally(() => copy.fill(0))
+    }
     return names
   } finally {
     release?.()

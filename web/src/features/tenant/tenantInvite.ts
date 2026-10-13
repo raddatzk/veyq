@@ -25,13 +25,16 @@ export function acceptInvite(
   username: string,
   birth?: TenantBirth,
   sealedName?: string,
+  sealedAvatar?: string,
 ): Promise<TenantActivated> {
-  return tenantsApi().acceptTenantInvite({ acceptInviteRequest: { bootstrapSecret, username, ...birth, sealedName } })
+  return tenantsApi().acceptTenantInvite({ acceptInviteRequest: { bootstrapSecret, username, ...birth, sealedName, sealedAvatar } })
 }
 
 /** Register a new account cold and accept in one step (public — the email comes from the invite). `username` is
  *  the caller's per-tenant handle; `sealedName` is the OPTIONAL real name sealed under `K_tenant` at join
- *  (owner cold-birth only — a grant-less member seals it later via the profile op, ADR 0023). `grant` is set for
+ *  (owner cold-birth only — a grant-less member seals it later via the profile op, ADR 0023); `sealedAvatar` the
+ *  OPTIONAL profile picture sealed alongside it under the same key (ADR 0084 decision 7; owner path only - a MEMBER invite's
+ *  body is not read for it). `grant` is set for
  *  an OWNER invite (cold-births the TENANT scope) and omitted for a MEMBER invite (grant-less join). */
 export function registerAndAccept(
   bootstrapSecret: string,
@@ -40,6 +43,7 @@ export function registerAndAccept(
   material: AccountMaterial,
   birth?: TenantBirth,
   sealedName?: string,
+  sealedAvatar?: string,
 ): Promise<TenantActivatedWithUser> {
   return tenantsApi().registerAndAcceptTenantInvite({
     registerAndAcceptRequest: {
@@ -56,6 +60,7 @@ export function registerAndAccept(
       },
       ...birth,
       sealedName,
+      sealedAvatar,
     },
   })
 }

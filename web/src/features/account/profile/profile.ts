@@ -11,6 +11,7 @@ import type { MemberNameAddress } from './memberName'
 
 export type { MemberProfile } from '../../../api/generated/account'
 export { sealName, unsealName, type MemberName } from './memberName'
+export { sealAvatar } from './memberAvatar'
 
 /** The caller's profile in the active tenant (Host-resolved): the plaintext handle + the sealed name blob. */
 export function getMyProfile(): Promise<MemberProfile> {
@@ -25,6 +26,17 @@ export function updateMyProfile(update: {
   requireGroupAddConsent?: boolean
 }): Promise<MemberProfile> {
   return withRefresh(() => accountProfileApi().updateMyProfile({ profileUpdateRequest: update }))
+}
+
+/** Set the caller's profile picture in the Host tenant (ADR 0084): the picture already sealed under `K_tenant`
+ *  ({@link sealAvatar}); the server stores it verbatim and bumps `avatarVersion`. */
+export function setMyAvatar(sealedAvatar: string): Promise<void> {
+  return withRefresh(() => accountProfileApi().setMyAvatar({ setAvatarRequest: { sealedAvatar } }))
+}
+
+/** Clear the caller's profile picture (idempotent `204`); everyone falls back to the letter. */
+export function clearMyAvatar(): Promise<void> {
+  return withRefresh(() => accountProfileApi().clearMyAvatar())
 }
 
 /**
