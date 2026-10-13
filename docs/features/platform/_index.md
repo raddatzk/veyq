@@ -26,6 +26,10 @@ what this instance can do, what version it speaks, and which optional features t
   blob in core's `COVER` slot, written together with the sealed meta that names it in one transaction; core's action, one dialog (choose,
   crop, remove), derive, upload and display; a guest sees it and never sets it.)
 
+- [uc.platform.export-import](use-cases/uc.platform.export-import.md) — **built (web)** (ADR 0082: a member takes any node and
+  everything under it out as one plain ZIP, written on the device from decrypted data, and brings such a file back in as new
+  content that belongs to the importer; Files and Memories supply their content through the registry.)
+
 ## Precedent already in the fresh state
 
 The pre-auth `GET /api/setup` already advertises `suites: ["v1"]` (crypto-suite negotiation); the background-tasks

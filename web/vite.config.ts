@@ -159,7 +159,11 @@ export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   return {
     plugins: [vue(), cspPlugin(env, command === 'serve'), pdfjsAssetsPlugin(), mediaSwDevPlugin(), devSeedCredentialsPlugin()],
-    define: { __PDFJS_VERSION__: JSON.stringify(pdfjsPackage().version) },
+    define: {
+      __PDFJS_VERSION__: JSON.stringify(pdfjsPackage().version),
+      // The release identity the build was made for (informational: an export names it in its manifest); `dev` outside a release.
+      __APP_VERSION__: JSON.stringify(env.VEYQ_RELEASE ?? 'dev'),
+    },
     test: {
       // Provide the PrimeVue toast service to every mounted component (cr-0157) — see src/test/setup.ts.
       setupFiles: ['./src/test/setup.ts'],

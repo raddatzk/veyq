@@ -173,7 +173,7 @@ describe('a member moves a guest\'s folder out of a drop box', () => {
   it('from the guest\'s folder itself: its card offers the move out (and core\'s heart), and nothing else', async () => {
     await mountAt('#~me/inbox/anna/')
     const actions = [...document.body.querySelectorAll('.veyq-node-header-actions button')].map((b) => b.getAttribute('aria-label'))
-    expect(actions).toEqual([t('node.favorite'), t('node.move.action')])
+    expect(actions).toEqual([t('node.favorite'), t('node.move.action'), t('export.action')])
   })
 
   it('the drop box itself moves from its card, like any node', async () => {

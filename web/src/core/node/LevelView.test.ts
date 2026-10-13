@@ -33,6 +33,8 @@ import { chooseNew, hasNewMenu, isDisabled, newMenuLabels, openNewMenu } from '.
 import { treeNode, memberAccessOf, memberTreeOf, guestAccessOf } from '../../test/models'
 import { ShareRole } from '../../api/generated/sharing'
 import { stubRows } from '../../test/stubRows'
+import { ZipWriter } from '../export/zip'
+import { epochsOf } from '../../features/spaces/epochsTestUtil'
 import { actionIdsOf, clickAction, rowOf, titlesOf } from '../../test/levelRows'
 
 function node(id: string, kind: NodeKind, parentId: string | null = null, over: Partial<TreeNode> = {}): TreeNode {
@@ -44,14 +46,14 @@ const TRIPS = node('Trips', FOLDER_KIND)
  *  is a guest's identity folder (what the member's tree answers); `publicLinks`: the instance offers public links. */
 function mountLevel(
   tree: TreeNode[],
-  over: { folder?: TreeNode | null; pending?: boolean; identityFolder?: boolean; publicLinks?: boolean; folderName?: string; liveTick?: number } = {},
+  over: { folder?: TreeNode | null; pending?: boolean; identityFolder?: boolean; publicLinks?: boolean; folderName?: string; liveTick?: number; unlocked?: boolean } = {},
 ) {
   const folder = over.folder ?? null
   const source = memberTreeOf(() => tree)
   return mount(LevelView, {
     props: {
       folder, level: childrenOf(tree, folder?.id ?? null),
-      access: memberAccessOf({ readonly: over.pending ?? false, publicLinks: over.publicLinks ?? false }),
+      access: memberAccessOf({ readonly: over.pending ?? false, publicLinks: over.publicLinks ?? false, epochs: over.unlocked ? epochsOf(new Uint8Array(32)) : null }),
       tree: { ...source, inIdentityFolder: () => over.identityFolder ?? false },
       folderName: over.folderName,
       liveTick: over.liveTick,
@@ -479,7 +481,7 @@ describe('LevelView: the empty level', () => {
 
   it('a member who may create is told what "New" offers - folder and the application\'s entries - once, in plain text', () => {
     const w = mountLevel([])
-    expect(blocks(w)).toEqual([`empty:${t('node.levelEmptyNew', { entries: `${t('node.folderCreate')}, ${t('node.anItem')}` })}`])
+    expect(blocks(w)).toEqual([`empty:${t('node.levelEmptyNew', { entries: `${t('node.folderCreate')}, ${t('node.anItem')}, ${t('export.import')}` })}`])
     expect(w.find('.veyq-create-card').exists()).toBe(false)
   })
 
@@ -520,7 +522,7 @@ describe('LevelView: the "New" menu', () => {
 
   it('lists core\'s folder entry and the registry\'s entries by order, and each choice acts: create by kind, an action by its handler', async () => {
     const w = mountLevel([TRIPS], { folder: TRIPS })
-    expect(await newMenuLabels(w)).toEqual([t('node.folderCreate'), t('node.anItem'), t('node.rename')])
+    expect(await newMenuLabels(w)).toEqual([t('node.folderCreate'), t('node.anItem'), t('node.rename'), t('export.import')])
     await chooseNew(w, t('node.anItem'))
     await chooseNew(w, t('node.rename'))
     await chooseNew(w, t('node.folderCreate'))
@@ -540,7 +542,7 @@ describe('LevelView: the "New" menu', () => {
   it('fails closed: an entry whose capability function says no is not drawn; none left, no button', async () => {
     grant.value = false
     const w = mountLevel([TRIPS], { folder: TRIPS })
-    expect(await newMenuLabels(w)).toEqual([t('node.folderCreate')])
+    expect(await newMenuLabels(w)).toEqual([t('node.folderCreate'), t('export.import')])
     const readonly = mountLevel([TRIPS], { folder: TRIPS, pending: true })
     expect(hasNewMenu(readonly)).toBe(false)
   })
@@ -594,6 +596,60 @@ describe('LevelView: the "New" menu', () => {
       })
       await drop(mountLevel([TRIPS], { folder: TRIPS }), 'a.txt')
       expect(dropped).toEqual([])
+    })
+
+    // ADR 0082 decision 7: an export is recognised by its content and offered as an import to a member who may create here.
+    const exportFile = async (name = 'whatever.bin') => {
+      const parts: Uint8Array[] = []
+      const sink = { write: async (b: Uint8Array) => void parts.push(b.slice()), close: async () => {}, abort: async () => {} }
+      const zip = new ZipWriter(sink)
+      const manifest = { format: 'veyq-subtree', version: 1, exportedAt: 'x', appVersion: 'x', root: { id: 'n1', kind: 'FOLDER', name: 'Trip' } }
+      await zip.addBytes('manifest.json', new TextEncoder().encode(JSON.stringify(manifest)))
+      await zip.finish()
+      return new File(parts as BlobPart[], name)
+    }
+    const dropFiles = async (w: Level, ...files: File[]) => {
+      await w.find('.veyq-level-view').trigger('drop', { dataTransfer: { files } })
+      await flushPromises()
+    }
+
+    it('an export dropped on a member level is offered as an import, whatever its name, and is not uploaded', async () => {
+      const w = mountLevel([TRIPS], { folder: TRIPS, unlocked: true })
+      const file = await exportFile('renamed.bin')
+      await dropFiles(w, file)
+      expect(w.emitted('importArchive')).toEqual([[file]])
+      expect(dropped).toEqual([])
+    })
+
+    it('a zip that is no export stays an ordinary upload; a guest never gets the import offer', async () => {
+      const w = mountLevel([TRIPS], { folder: TRIPS, unlocked: true })
+      await drop(w, 'photos.zip')
+      expect(w.emitted('importArchive')).toBeUndefined()
+      expect(dropped).toEqual([['photos.zip']])
+      const g = mountGuest(ShareRole.ReadWrite)
+      await dropFiles(g, await exportFile())
+      expect(g.emitted('importArchive')).toBeUndefined()
+    })
+
+    it('the New menu offers "Import an export" to a member, and choosing it opens the file picker', async () => {
+      const w = mountLevel([TRIPS], { folder: TRIPS, unlocked: true })
+      const click = vi.spyOn(w.find<HTMLInputElement>('[data-testid="import-input"]').element, 'click').mockImplementation(() => {})
+      await chooseNew(w, t('export.import'))
+      expect(click).toHaveBeenCalled()
+      const picker = w.find<HTMLInputElement>('[data-testid="import-input"]')
+      const file = await exportFile()
+      Object.defineProperty(picker.element, 'files', { value: [file], configurable: true })
+      await picker.trigger('change')
+      expect(w.emitted('importArchive')).toEqual([[file]])
+      expect(await newMenuLabels(mountGuest(ShareRole.ReadWrite))).not.toContain(t('export.import'))
+    })
+
+    it('while the keys are locked the import entry is disabled and an export is dropped as a plain upload', async () => {
+      const w = mountLevel([TRIPS], { folder: TRIPS })
+      expect(isDisabled((await openNewMenu(w)).find((i) => i.textContent?.trim() === t('export.import'))!)).toBe(true)
+      await dropFiles(w, await exportFile('trip.zip'))
+      expect(w.emitted('importArchive')).toBeUndefined()
+      expect(dropped).toEqual([['trip.zip']])
     })
 
     it('a drop with no file in it (text dragged in) does nothing, and the default is still prevented', async () => {

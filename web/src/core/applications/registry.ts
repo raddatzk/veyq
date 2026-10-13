@@ -325,6 +325,8 @@ export interface NodeDetailEmits {
   /** Move `node` (the opened node, or a child the detail lists — a drop box's guest folder): the host mounts core's
    *  `MoveNodeDialog` for it (inbox #358). */
   move: [node: TreeNode]
+  /** Export the opened node and its subtree (ADR 0082): the host mounts core's `ExportSubtreeDialog`. */
+  export: []
   createChild: [kind: NodeKind]
   openNode: [node: TreeNode]
   share: []

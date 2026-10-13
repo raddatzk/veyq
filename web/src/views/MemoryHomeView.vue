@@ -42,6 +42,8 @@ import FolderNameDialog from '../core/node/FolderNameDialog.vue'
 import LevelView from '../core/node/LevelView.vue'
 import PersonProfile from '../core/people/PersonProfile.vue'
 import { loadTenantPeople, personNow } from '../core/people/directory'
+import ExportSubtreeDialog from '../core/export/ExportSubtreeDialog.vue'
+import ImportSubtreeDialog from '../core/export/ImportSubtreeDialog.vue'
 import MoveNodeDialog from '../core/node/MoveNodeDialog.vue'
 import { nodeMover } from '../core/node/move'
 import { registry } from '../core/applications/registry'
@@ -155,6 +157,9 @@ const createDialog = computed(() => {
 // The node being moved (core's `MoveNodeDialog`); the member's door, read against the current access on every call.
 const moving = ref<{ node: TreeNode; shown: string | null } | null>(null)
 const mover = nodeMover(() => access.value)
+// ADR 0082: the node being exported (core's `ExportSubtreeDialog`), and the export file being imported under the folder on screen.
+const exporting = ref<TreeNode | null>(null)
+const importing = ref<File | null>(null)
 const deleteVisible = ref(false)
 const trashVisible = ref(false) // the SPACE's node trash (uc.memory.delete-node) — not the per-Memory media trash
 
@@ -352,6 +357,7 @@ async function onDeleteDone() {
         @rename="startRename(currentNode)"
         @delete="startDelete(currentNode)"
         @move="startMove"
+        @export="exporting = currentNode"
         @create-child="startCreate"
         @open-node="openNode"
         @share="shareVisible = true"
@@ -372,6 +378,8 @@ async function onDeleteDone() {
         @rename-node="startRename"
         @delete-folder="currentFolder && startDelete(currentFolder)"
         @move-node="startMove"
+        @export-node="exporting = $event"
+        @import-archive="importing = $event"
         @open-trash="trashVisible = true"
         @share="shareVisible = true"
       />
@@ -405,6 +413,22 @@ async function onDeleteDone() {
       :node="deleteTarget"
       @done="onDeleteDone"
       @close="deleteVisible = false"
+    />
+    <ExportSubtreeDialog
+      v-if="exporting"
+      :node="exporting"
+      :access="access"
+      :display-name="displayNameOf(treeStore.nodes, exporting)"
+      @close="exporting = null"
+    />
+    <ImportSubtreeDialog
+      v-if="importing"
+      :file="importing"
+      :access="access"
+      :parent="currentNodeKey && currentNodeId ? { id: currentNodeId, key: currentNodeKey } : null"
+      :target-name="currentFolderName ?? rootLabel"
+      @done="onMutationDone"
+      @close="importing = null"
     />
     <MoveNodeDialog
       v-if="moving && mover"

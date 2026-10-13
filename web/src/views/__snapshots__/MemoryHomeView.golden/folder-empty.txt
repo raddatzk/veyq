@@ -5,6 +5,7 @@ div.veyq-node-host
         span.p-button-icon.p-button-icon-left.pi.pi-plus
         span.p-button-label
           "New"
+      input
       button.p-button.p-button-outlined.p-button-secondary.p-button-sm.p-component [aria-label="Trash"]
         span.p-button-icon.p-button-icon-left.pi.pi-trash
         span.p-button-label
@@ -36,6 +37,8 @@ div.veyq-node-host
               span.p-button-icon.pi.pi-trash
             button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Set cover"]
               span.p-button-icon.pi.pi-image
+            button.p-button.p-button-icon-only.p-button-outlined.p-button-secondary.p-button-sm.p-component.veyq-icon-button.veyq-node-header-action.veyq-prime-icon-button [aria-label="Export"]
+              span.p-button-icon.pi.pi-download
     div.p-component.p-tabs.veyq-level-tabs
       div.p-tablist
         div.p-tablist-content.p-tablist-viewport
@@ -53,4 +56,4 @@ div.veyq-node-host
           svg.p-icon
             path
     p.veyq-empty.veyq-empty-inline
-      "Nothing here yet. Choose New to add something (New folder, New Memory, New drop box, Upload files)."
+      "Nothing here yet. Choose New to add something (New folder, New Memory, New drop box, Upload files, Import an export…)."

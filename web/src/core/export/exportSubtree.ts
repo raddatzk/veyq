@@ -38,25 +38,36 @@ export function safeFileName(name: string): string {
   return n
 }
 
-export type ExportSubtreeParams = {
+export type PrepareExportParams = {
   scopeId: string
   epochs: EpochKeys
   /** The decrypted tree of the scope (`treeStore.nodes`). */
   tree: TreeNode[]
   rootId: string
-  sink: ByteSink
   options: ExportOptions
   appVersion: string
   signal?: AbortSignal
-  onProgress?: (p: ExportProgress) => void
   now?: () => Date
+}
+
+export type ExportSubtreeParams = PrepareExportParams & {
+  sink: ByteSink
+  onProgress?: (p: ExportProgress) => void
+}
+
+/** An export whose tree is walked and whose payloads are declared, with nothing written yet: what the dialog shows
+ *  ({@link ExportResult} less the writing) and, once the member has picked where to save, {@link write}s. */
+export type PreparedExport = Omit<ExportResult, never> & {
+  write(sink: ByteSink, onProgress?: (p: ExportProgress) => void): Promise<void>
 }
 
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('')
 const byOrder = (a: TreeNode, b: TreeNode) => a.orderIndex - b.orderIndex || a.name.localeCompare(b.name)
 
-export async function exportSubtree(params: ExportSubtreeParams): Promise<ExportResult> {
-  const { scopeId, epochs, tree, rootId, sink, options, appVersion, signal, onProgress } = params
+/** Walk the subtree and run every kind's hook, so the size and the report are known BEFORE the member picks a place to save
+ *  (the save picker needs the click's user activation, which a long walk would have used up). */
+export async function prepareExport(params: PrepareExportParams): Promise<PreparedExport> {
+  const { scopeId, epochs, tree, rootId, options, appVersion, signal } = params
   const root = tree.find((n) => n.id === rootId)
   const rootKey = root ? nodeContentKey(scopeId, epochs, tree, rootId) : null
   if (!root || !rootKey) throw new ExportError('invalid_manifest', 'the node to export is not in the open tree')
@@ -121,38 +132,47 @@ export async function exportSubtree(params: ExportSubtreeParams): Promise<Export
 
   const manifestRoot = await build(root, rootKey)
   if (!manifestRoot) throw new ExportError('invalid_manifest', 'nothing to export under this node')
+  const exportedRoot: ManifestNode = manifestRoot
 
   const bytesTotal = pending.reduce((sum, p) => sum + p.source.size, 0)
-  const writer = new ZipWriter(sink, { modified: (params.now ?? (() => new Date()))() })
-  let bytesDone = 0
-  try {
-    for (const { ref, source } of pending) {
-      const hasher = v1.sha256Stream()
-      async function* hashed() {
-        for await (const chunk of source.chunks()) {
-          if (signal?.aborted) throw signal.reason ?? new DOMException('Export cancelled', 'AbortError')
-          hasher.update(chunk)
-          bytesDone += chunk.length
-          onProgress?.({ bytesDone, bytesTotal })
-          yield chunk
+  async function write(sink: ByteSink, onProgress?: (p: ExportProgress) => void): Promise<void> {
+    const writer = new ZipWriter(sink, { modified: (params.now ?? (() => new Date()))() })
+    let bytesDone = 0
+    try {
+      for (const { ref, source } of pending) {
+        const hasher = v1.sha256Stream()
+        async function* hashed() {
+          for await (const chunk of source.chunks()) {
+            if (signal?.aborted) throw signal.reason ?? new DOMException('Export cancelled', 'AbortError')
+            hasher.update(chunk)
+            bytesDone += chunk.length
+            onProgress?.({ bytesDone, bytesTotal })
+            yield chunk
+          }
         }
+        await writer.addFile(ref.path, source.size, hashed())
+        ref.sha256 = hex(hasher.digest())
       }
-      await writer.addFile(ref.path, source.size, hashed())
-      ref.sha256 = hex(hasher.digest())
+      const manifest: Manifest = {
+        format: MANIFEST_FORMAT,
+        version: MANIFEST_VERSION,
+        exportedAt: (params.now ?? (() => new Date()))().toISOString(),
+        appVersion,
+        options: { includeLocation: options.includeLocation },
+        root: exportedRoot,
+      }
+      await writer.addBytes(MANIFEST_FILE, new TextEncoder().encode(JSON.stringify(manifest, null, 2)))
+      await writer.finish()
+    } catch (e) {
+      await writer.abort(e)
+      throw e
     }
-    const manifest: Manifest = {
-      format: MANIFEST_FORMAT,
-      version: MANIFEST_VERSION,
-      exportedAt: (params.now ?? (() => new Date()))().toISOString(),
-      appVersion,
-      options: { includeLocation: options.includeLocation },
-      root: manifestRoot,
-    }
-    await writer.addBytes(MANIFEST_FILE, new TextEncoder().encode(JSON.stringify(manifest, null, 2)))
-    await writer.finish()
-  } catch (e) {
-    await writer.abort(e)
-    throw e
   }
-  return { nodes, payloads: pending.length, bytes: bytesTotal, skipped }
+  return { nodes, payloads: pending.length, bytes: bytesTotal, skipped, write }
+}
+
+export async function exportSubtree(params: ExportSubtreeParams): Promise<ExportResult> {
+  const { write, ...result } = await prepareExport(params)
+  await write(params.sink, params.onProgress)
+  return result
 }

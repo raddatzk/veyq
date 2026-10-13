@@ -1,0 +1,38 @@
+useCase: uc.platform.export-import
+feature: platform
+title: Take a node and everything under it out as a file, and bring such a file back in
+# Web only (ADR 0082): the client walks the tree with the member's keys and writes a store-only ZIP; an import is a sequence
+# of ordinary node and blob writes. No backend, no contract under contracts/api.
+acceptanceCriteria:
+  - id: streaming-zip-with-zip64
+    text: The archive is a store-only ZIP written and read as a stream, ZIP64 exactly where a field overflows, every entry checked by its CRC-32 and size; a half archive is aborted, never closed.
+    coverage:
+      web:
+        unit: [src/core/export/zip.test.ts, src/core/blob/stream.test.ts]
+  - id: manifest-is-trusted-for-nothing
+    text: A payload path must be a plain data/<id>/<name>, ids are unique, a newer version and a file that is no export are refused, and every payload is checked against its SHA-256 before a kind uploads it.
+    coverage:
+      web:
+        unit: [src/core/export/subtree.test.ts]
+  - id: round-trip-by-hooks
+    text: Core walks the tree and each kind supplies its content through its descriptor's hooks; a kind without a hook is left out and reported; an import recreates the tree under the importer with a free name (Name (2)), and a failure moves what it created to the trash and says N of M.
+    coverage:
+      web:
+        unit: [src/core/export/subtree.test.ts, src/features/files/exportImport.test.ts, src/features/memory/exportImport.test.ts]
+  - id: memories-content
+    text: A Memory and a chapter export their originals with capture time (a correction flagged), place, date, cover and participants as names, and an import restores date and place at birth, corrections and place names afterwards, and the cover; includeLocation=false leaves out what the manifest adds.
+    coverage:
+      web:
+        unit: [src/features/memory/exportImport.test.ts]
+  - id: member-only-and-fail-closed
+    text: Export is offered only to a member whose keys are open, on a folder or a kind with an export hook; import only where the member may create; a share guest gets neither, and a locked level treats a dropped export as an ordinary upload.
+    coverage:
+      web:
+        unit: [src/core/export/exportActions.test.ts, src/core/node/LevelView.test.ts]
+  - id: dialogs
+    text: The export dialog warns that the file is plain and opens the save target first with the known size; the import dialog shows what would be created before anything is written and says how far a failed import got.
+    coverage:
+      web:
+        unit: [src/core/export/ExportSubtreeDialog.test.ts, src/core/export/ImportSubtreeDialog.test.ts]
+gaps:
+  backend: "Nothing to test: an export is produced in the client from decrypted data (there is no export endpoint, ADR 0082 decision 2) and an import is a sequence of the existing node and blob writes, which their own use-cases cover."

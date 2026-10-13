@@ -8,3 +8,6 @@ declare module '*.vue' {
 
 /** The installed pdfjs-dist version, injected by vite.config.ts (names the directory of its runtime data). */
 declare const __PDFJS_VERSION__: string
+
+/** The release this build was made for (`VEYQ_RELEASE`, else `dev`), injected by vite.config.ts; named in an export's manifest. */
+declare const __APP_VERSION__: string

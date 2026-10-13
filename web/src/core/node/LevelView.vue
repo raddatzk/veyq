@@ -78,6 +78,8 @@ import NodeHeader from './components/NodeHeader.vue'
 import LevelRowItem from './components/LevelRowItem.vue'
 import LevelNotices from './components/LevelNotices.vue'
 import { standardNodeActions } from './nodeHeader'
+import { exportHeaderActions, exportRowActions } from '../export/exportActions'
+import { openExport } from '../export/importSubtree'
 
 const props = defineProps<{
   folder: TreeNode | null
@@ -101,6 +103,11 @@ const emit = defineEmits<{
   /** A node to move (inbox #358): the folder on screen (its header) or a row's node (Files' row). The host mounts core's
    *  `MoveNodeDialog` for it. */
   moveNode: [node: TreeNode]
+  /** A node to export (ADR 0082): a row's, or the folder on screen. The host mounts core's `ExportSubtreeDialog`. */
+  exportNode: [node: TreeNode]
+  /** A file the member picked or dropped that is a veyq export (recognised by its content, ADR 0082): the host mounts core's
+   *  `ImportSubtreeDialog` for it, under the folder on screen. */
+  importArchive: [file: File]
   /** A row's node renamed in place (a kind that does not open, e.g. Files' file): the host's `FolderNameDialog`. */
   renameNode: [node: TreeNode]
   deleteFolder: []
@@ -123,6 +130,9 @@ const hideEmptyTabs = computed(() => inIdentityFolder.value)
 // tab is shown; an entry whose handler says it is not ready (keys still locked) is disabled, never a click that does nothing.
 const levelActions = createLevelActions()
 const FOLDER_ENTRY: LevelMenuItem = { id: 'create:FOLDER', create: FOLDER_KIND, label: 'node.folderCreate', icon: 'pi pi-folder', order: 0, allowed: () => true, kind: FOLDER_KIND }
+// Core's import entry (ADR 0082): a member who may create here picks an export file. Not a registry entry: it belongs to no
+// application and runs no row-source handler.
+const IMPORT_ENTRY: LevelMenuItem = { id: 'core:import', label: 'export.import', icon: 'pi pi-upload', order: 90, allowed: () => true, kind: FOLDER_KIND }
 const registryMenu = registry.levelMenu()
 const menuCtx = computed<LevelActionContext>(() => ({
   access: props.access,
@@ -130,9 +140,13 @@ const menuCtx = computed<LevelActionContext>(() => ({
   folder: props.folder,
   epochs: props.access.mode === 'member' ? props.access.epochs : null,
 }))
-const menuEntries = computed(() => [...(caps.value.createFolder ? [FOLDER_ENTRY] : []), ...registryMenu.filter((e) => e.allowed(menuCtx.value))])
+const canImport = computed(() => props.access.mode === 'member' && caps.value.createFolder)
+const menuEntries = computed(() => [...(caps.value.createFolder ? [FOLDER_ENTRY] : []), ...registryMenu.filter((e) => e.allowed(menuCtx.value)), ...(canImport.value ? [IMPORT_ENTRY] : [])])
 const menuItems = computed<MenuItem[]>(() =>
   menuEntries.value.map((e) => {
+    if (e.id === IMPORT_ENTRY.id) {
+      return { label: t(e.label), icon: e.icon, disabled: menuCtx.value.epochs === null, class: 'veyq-new-menu-item veyq-new-menu-import', command: () => importInput.value?.click() }
+    }
     const handler = e.create === undefined ? levelActions.get(e.id) : undefined
     const ready = e.create !== undefined ? true : !!handler?.enabled()
     return {
@@ -145,6 +159,13 @@ const menuItems = computed<MenuItem[]>(() =>
   }),
 )
 const newMenu = ref<InstanceType<typeof Menu> | null>(null)
+const importInput = ref<HTMLInputElement | null>(null)
+function onImportPicked(e: Event): void {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = '' // the same file can be picked again
+  if (file) emit('importArchive', file)
+}
 // The folder header's actions: the capability answers for the folder on screen, in the header's fixed order.
 const folderActions = computed(() =>
   standardNodeActions(
@@ -286,10 +307,14 @@ function rawItem(node: TreeNode): Item {
 // The cover of inbox #411 is core's second row action, merged around the application's the same way: "Set cover" /
 // cover" / "Remove cover" in the row's menu, gated by `coverCapabilities` (a writer, a kind that opted in; a guest none).
 const coreRowActions = (item: Item): CoreRowAction[] =>
-  item.unsupported ? [] : [...favoriteRowActions(t, props.access, item.node), ...cover.rowActions(item.node)]
+  item.unsupported ? [] : [...favoriteRowActions(t, props.access, item.node), ...cover.rowActions(item.node), ...exportRowActions(t, props.access, item.node, () => emit('exportNode', item.node))]
 // The folder on screen is a node too: its header carries the same heart and cover action (the scope root is no node and
 // has neither).
-const folderCoreActions = computed(() => [...favoriteHeaderActions(t, props.access, props.folder), ...cover.headerActions(props.folder)])
+const folderCoreActions = computed(() => [
+  ...favoriteHeaderActions(t, props.access, props.folder),
+  ...cover.headerActions(props.folder),
+  ...exportHeaderActions(t, props.access, props.folder, () => props.folder && emit('exportNode', props.folder)),
+])
 const folderCover = computed(() => (props.folder ? (cover.covers.value.get(props.folder.id) ?? null) : null))
 const itemMode = computed<'grid' | 'list'>(() => (mode.value === 'list' ? 'list' : 'grid'))
 
@@ -318,9 +343,19 @@ const emptyText = computed<string | null>(() => {
 })
 
 // --- a drop onto the level -----------------------------------------------------------------------------------------------
-function onDrop(e: DragEvent): void {
+async function onDrop(e: DragEvent): Promise<void> {
   const files = [...(e.dataTransfer?.files ?? [])]
   if (files.length === 0) return
+  // A veyq export dropped onto a level where a member may create is offered as an import (ADR 0082 decision 7), decided
+  // by its content, never by its name; anywhere else - and for any other file - the drop is the ordinary upload.
+  if (canImport.value && menuCtx.value.epochs !== null) {
+    for (const file of files) {
+      if (await openExport(file).then(() => true, () => false)) {
+        emit('importArchive', file)
+        return
+      }
+    }
+  }
   for (const entry of registryMenu) {
     if (entry.create !== undefined || !entry.acceptsDrop || !entry.allowed(menuCtx.value)) continue
     if (entry.enabled && !entry.enabled(menuCtx.value)) continue
@@ -350,6 +385,7 @@ function onDrop(e: DragEvent): void {
           @click="newMenu?.toggle($event)"
         />
         <Menu ref="newMenu" :model="menuItems" popup />
+        <input ref="importInput" type="file" accept=".zip,application/zip" hidden data-testid="import-input" @change="onImportPicked" />
       </template>
       <Button
         v-if="caps.nodeTrash"
