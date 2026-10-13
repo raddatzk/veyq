@@ -5,9 +5,11 @@
 // test key at the member's address); only the generated client is mocked.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { httpError } from '../../test/httpError'
+import { fakeApi, type ApiMocks } from '../../test/apiMock'
+import { tenantsApi } from '../../api/client'
+import type { TenantsApi } from '../../api/generated/tenants'
 
-const getMemberAvatar = vi.hoisted(() => vi.fn())
-vi.mock('../../api/client', () => ({ tenantsApi: () => ({ getMemberAvatar }) }))
+vi.mock('../../api/client', () => ({ tenantsApi: vi.fn() }))
 vi.mock('../../app/sessionRefresh', () => ({ withRefresh: (f: () => unknown) => f() }))
 
 import { syncAvatars, avatarUrlOf, resetAvatars, type AvatarSource } from './avatarCache'
@@ -24,8 +26,10 @@ const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0
 const sealedFor = (userId: string, bytes: Uint8Array = PNG) => ({ sealedAvatar: sealAvatar(KEY, { scopeId: SCOPE, userId }, bytes) })
 
 let n = 0
+let getMemberAvatar: ApiMocks<TenantsApi, 'getMemberAvatar'>['getMemberAvatar']
 beforeEach(() => {
   vi.clearAllMocks()
+  getMemberAvatar = fakeApi(tenantsApi, { getMemberAvatar: vi.fn<TenantsApi['getMemberAvatar']>() }).getMemberAvatar
   resetAvatars()
   n = 0
   vi.stubGlobal('URL', Object.assign(URL, {

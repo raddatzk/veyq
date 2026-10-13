@@ -21,7 +21,10 @@ vi.mock('../features/account/emergencyKit/EmergencyKitSave.vue', () => ({
   default: {
     props: ['modelValue'],
     emits: ['update:modelValue'],
-    mounted() { this.$emit('update:modelValue', true) },
+    setup: (_: unknown, { emit }: { emit: (e: string, v: boolean) => void }) => {
+      void Promise.resolve().then(() => emit('update:modelValue', true))
+      return { }
+    },
     template: '<div class="stub-kit" />',
   },
 }))
