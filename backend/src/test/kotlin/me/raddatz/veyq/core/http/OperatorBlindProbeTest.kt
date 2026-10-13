@@ -226,6 +226,7 @@ class OperatorBlindProbeTest {
             Call("PUT", "/api/tenants/${s.tenantId}/mail-settings", """{"tls":false,"enabled":false}""")
         },
         "getTenantStorage" to Probe(Address.TENANT) { s -> Call("GET", "/api/tenants/${s.tenantId}/storage") },
+        "checkTenantStorageFit" to Probe(Address.TENANT) { s -> Call("POST", "/api/tenants/${s.tenantId}/storage-fit", """{"bytes":1}""") },
         "updateTenantStorage" to Probe(Address.TENANT) { s ->
             Call("PUT", "/api/tenants/${s.tenantId}/storage", """{"shareLinkLimitBytes":10737418240}""")
         },

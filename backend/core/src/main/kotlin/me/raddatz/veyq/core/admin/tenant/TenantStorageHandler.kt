@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.admin.tenant
 
+import me.raddatz.veyq.core.quota.StorageQuota
 import me.raddatz.veyq.core.quota.StorageUsage
 import me.raddatz.veyq.core.http.FailureStatus
 import me.raddatz.veyq.core.http.Failures
@@ -22,6 +23,14 @@ sealed interface TenantStorageOutcome {
     data object NotOwner : TenantStorageOutcome, HttpFailure by httpFailure("not_tenant_owner", FailureStatus.FORBIDDEN)
 }
 
+/** The answer to the member's storage-fit preflight: yes or no, never a number (ADR 0082). */
+sealed interface StorageFitOutcome {
+    data class Ok(val fits: Boolean) : StorageFitOutcome
+    data object Suspended : StorageFitOutcome, HttpFailure by Failures.tenantSuspended
+    data object NotFound : StorageFitOutcome, HttpFailure by Failures.tenantNotFound // no such tenant, or not a member (indistinguishable)
+    data class RateLimited(val retryAfterSeconds: Long) : StorageFitOutcome
+}
+
 /**
  * The tenant owner's storage settings (uc.sharing.share-link-storage-limit, ADR 0073 §4): read the tenant's usage,
  * set the one per-link limit every READ_WRITE and WRITE_ONLY link stores at most. The mail-settings shape
@@ -36,7 +45,23 @@ class TenantStorageHandler(
     private val store: TenantStore,
     private val quota: StorageUsage,
     private val access: ScopeAccess,
+    private val storageQuota: StorageQuota,
+    private val fitLimiter: StorageFitRateLimiter,
 ) {
+
+    /**
+     * Whether [bytes] more would still fit the tenant's quota, for **any member** (not only the owner): the preflight of an
+     * import (ADR 0082). Membership gate -> tenant -> the limiter -> the rule. Only a member spends a limiter token (a
+     * stranger is refused first), and it asks [StorageQuota.tenantFitsBytes] - the very rule an upload start applies, but
+     * unlocked: the answer is advisory, the start stays the one decision. Yes or no and never the free space.
+     */
+    fun fit(callerId: String, tenantId: String, bytes: Long): StorageFitOutcome {
+        access.check(callerId, tenantId, READ)
+            .refusal(StorageFitOutcome.NotFound, StorageFitOutcome.Suspended)?.let { return it }
+        val tenant = store.findTenant(tenantId) ?: return StorageFitOutcome.NotFound
+        fitLimiter.check(tenantId, callerId)?.let { return StorageFitOutcome.RateLimited(it) }
+        return StorageFitOutcome.Ok(storageQuota.tenantFitsBytes(tenant, bytes))
+    }
 
     fun read(callerId: String, tenantId: String): TenantStorageOutcome {
         access.check(callerId, tenantId, READ)

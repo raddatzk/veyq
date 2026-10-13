@@ -639,6 +639,11 @@ interface VeyqConfig {
          *  tenant, per hour. */
         fun invite(): Invite
 
+        /** `veyq.ratelimit.storage-fit.*` - the member's "would this many bytes still fit the quota?" preflight (ADR 0082):
+         *  yes or no only, so what is bounded is a bisection towards the free space, per member and per tenant.
+         *  Defaults deliberately set, not calibrated. */
+        fun storageFit(): StorageFit
+
         /** `veyq.ratelimit.recovery.*` — the password-recovery limiter (cr-account-recovery, ADR 0054), keyed
          *  per-ADDRESS and per-INSTANCE. Deliberately not per-tenant like [invite]: an account is tenant-global,
          *  so a tenant key would bound neither one address nor the instance. Defaults deliberately set. */
@@ -681,6 +686,19 @@ interface VeyqConfig {
         interface User {
             @WithDefault("600")
             fun maxRequests(): Long
+
+            @WithDefault("60")
+            fun windowSeconds(): Long
+        }
+
+        interface StorageFit {
+            /** Questions one **member** of a tenant may ask per window. */
+            @WithDefault("10")
+            fun perMemberMaxRequests(): Int
+
+            /** Questions a whole **tenant** may ask per window. */
+            @WithDefault("60")
+            fun perTenantMaxRequests(): Int
 
             @WithDefault("60")
             fun windowSeconds(): Long

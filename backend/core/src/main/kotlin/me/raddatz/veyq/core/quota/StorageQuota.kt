@@ -56,9 +56,16 @@ class StorageQuota(
      * holds. A tenant without a quota (the default, ADR 0073 §1) fits anything, and is not summed at all. Call under
      * [lockTenant], in the transaction that inserts their sessions.
      */
-    fun tenantFits(tenant: TenantEntity, items: List<UploadDeclare>): Boolean {
+    fun tenantFits(tenant: TenantEntity, items: List<UploadDeclare>): Boolean = tenantFitsBytes(tenant, items.sumOf { it.byteSize })
+
+    /**
+     * The same rule for a bare byte count, with **no lock and no reservation**: the member's advisory preflight
+     * (`checkTenantStorageFit`, ADR 0082) asks it. It answers yes or no and is never a promise - the start that follows
+     * is still the one decision, under [lockTenant]. A tenant without a quota fits anything.
+     */
+    fun tenantFitsBytes(tenant: TenantEntity, bytes: Long): Boolean {
         val quota = tenant.storageQuotaBytes ?: return true
-        return usage.tenantUsage(tenant.id) + items.sumOf { it.byteSize } <= quota
+        return usage.tenantUsage(tenant.id) + bytes <= quota
     }
 
     /**

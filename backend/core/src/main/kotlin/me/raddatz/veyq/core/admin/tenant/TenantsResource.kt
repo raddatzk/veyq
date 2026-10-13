@@ -24,6 +24,8 @@ import me.raddatz.veyq.core.generated.model.TenantCreated
 import me.raddatz.veyq.core.generated.model.TenantInviteState
 import me.raddatz.veyq.core.generated.model.TenantStatus
 import me.raddatz.veyq.core.generated.model.TenantStorage
+import me.raddatz.veyq.core.generated.model.TenantStorageFit
+import me.raddatz.veyq.core.generated.model.TenantStorageFitRequest
 import me.raddatz.veyq.core.generated.model.TenantStorageQuotaUpdate
 import me.raddatz.veyq.core.generated.model.TenantStorageUpdate
 import me.raddatz.veyq.core.generated.model.TenantSummary
@@ -349,6 +351,17 @@ class TenantsResource(
     override fun updateTenantStorage(tenantId: UUID, tenantStorageUpdate: TenantStorageUpdate): Response =
         storageHandler.updateShareLinkLimit(identity.principal.name, tenantId.toString(), tenantStorageUpdate.shareLinkLimitBytes.validated())
             .toResponse()
+
+    // The member's storage-fit preflight (ADR 0082): any member, yes or no. Its bound is the handler's per-member and
+    // per-tenant `StorageFitRateLimiter` (a TENANT-keyed marker, handler-enforced), surfaced as 429 + Retry-After.
+    @Authenticated
+    @RateLimit(key = RateLimitKey.TENANT)
+    override fun checkTenantStorageFit(tenantId: UUID, tenantStorageFitRequest: TenantStorageFitRequest): Response =
+        when (val outcome = storageHandler.fit(identity.principal.name, tenantId.toString(), tenantStorageFitRequest.bytes.validated())) {
+            is StorageFitOutcome.Ok -> Response.ok(TenantStorageFit(outcome.fits)).build()
+            is StorageFitOutcome.RateLimited -> rateLimited(outcome.retryAfterSeconds)
+            is HttpFailure -> httpError(outcome)
+        }
 
     private fun TenantStorageOutcome.toResponse(): Response = when (this) {
         is TenantStorageOutcome.Ok -> Response.ok(TenantStorage(storage.usedBytes, storage.quotaBytes, storage.shareLinkLimitBytes)).build()
