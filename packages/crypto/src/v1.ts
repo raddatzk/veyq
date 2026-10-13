@@ -121,6 +121,13 @@ export function dedupToken(contentKey: Uint8Array, content: Uint8Array): Uint8Ar
 
 export const sha256Digest = (content: Uint8Array): Uint8Array => sha256(content)
 
+/** An incremental SHA-256 for content too large to hold: `update` chunk by chunk, `digest` once. The subtree export
+ *  (ADR 0082) hashes each payload while it streams past; the result is `sha256Digest` of the whole. */
+export const sha256Stream = (): { update(chunk: Uint8Array): void; digest(): Uint8Array } => {
+  const h = sha256.create()
+  return { update: (chunk) => void h.update(chunk), digest: () => h.digest() }
+}
+
 /** cr-0118 (ADR 0037): a share-password token = Argon2id(password, salt). The client presents it (base64) as the
  *  guest bearer credential; its `sha256Digest` is the server-checked verifier. Reuses the pinned Argon2id params. */
 export const sharesPwToken = (password: string, salt: Uint8Array, params: ArgonParams = ARGON): Uint8Array =>
