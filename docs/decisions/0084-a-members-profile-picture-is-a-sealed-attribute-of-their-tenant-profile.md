@@ -35,15 +35,19 @@ would need a new owner kind and new erasers. It is also **not** part of `GET /ap
   only when it is non-zero and caches by version. Directory reads select the version only, never the bytes.
   The stored counter only ever moves up (one guarded `UPDATE`, so overlapping writes cannot lose a bump or reuse a
   version), but the wire shows `0` whenever there is no picture, so a cleared member reads `0`, not the counter a clear
-  left behind; the `ETag` is the stored counter, quoted. The constant: an 8 KiB padded plaintext seals to 8221 bytes,
-  **10964** base64 characters, which is the `maxLength` of `SetAvatarRequest.sealedAvatar`, `MemberAvatar.sealedAvatar` and
+  left behind; the `ETag` is the stored counter, quoted. The constant: a 16 KiB padded plaintext seals to 16413 bytes,
+  **21884** base64 characters - the very number of the tenant icon's `SetScopeIconRequest.sealedIcon`, because the picture
+  uses the icon's pad - which is the `maxLength` of `SetAvatarRequest.sealedAvatar`, `MemberAvatar.sealedAvatar` and
   the accept bodies' `sealedAvatar` (`MemberAvatarSliceTest` pins the arithmetic and the wire bound).
 
 **3. Sealing.** Under `K_tenant` with a **new AEAD purpose `member-avatar`** bound to `[scopeId, userId]`: a new entry in
 the `packages/crypto` seal purposes and a conformance vector in `contracts/crypto/vectors/v1.json`
 ([ADR 0072](0072-a-seal-binds-its-object.md)). `member-name` is **not reused**, so a blob sealed for one purpose can
-never be interpreted as the other. The plaintext is a **128 px WebP padded to a constant length** with the tenant icon's
-pad/unpad (`web/src/features/spaces/spaceIcon.ts`; an 8 KiB pad gives about 11 KB of base64), so the operator cannot tell
+never be interpreted as the other. The plaintext is a **256 px WebP padded to a constant length** with the tenant icon's
+pad/unpad (`web/src/features/spaces/spaceIcon.ts`; the picture takes the icon's 16 KiB pad and 256 px edge, about 22 KB of
+base64; the largest place it is drawn is 128 px, the profile page, so it stays sharp on a 2x screen). `sealed_avatar` is a
+`TEXT` column and 21884 < 65532, so the raise needed no schema change. A picture sealed with the earlier 8 KiB pad is not
+one of ours: the client's `openAvatar` refuses any plaintext of another length and shows the letter, so the operator cannot tell
 a photo from a drawing. The contract `maxLength` equals the sealed constant's exact base64 length and is pinned by a test
 and by `validate_maxlength_storage.py`, so it provably fits the `TEXT` column.
 

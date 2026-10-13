@@ -17,7 +17,7 @@
 1. The member opens the picture control in *Settings → Your profile* or on **their own** profile page (`#people/<myId>`);
    the same component serves both, and it is absent on anyone else's profile.
 2. They pick an image file and frame it 1:1 in the cropper.
-3. The client re-encodes it to a 128 px WebP, pads the bytes to the constant length and seals them under `K_tenant`
+3. The client re-encodes it to a 256 px WebP, pads the bytes to the constant length and seals them under `K_tenant`
    with the `member-avatar` purpose at (tenant scope, own user id).
 4. `PUT /api/account/profile/avatar { sealedAvatar }` — the server stores the blob verbatim, bumps `avatar_version`
    and answers `204`. In *Your profile* the picture rides with the profile's Save (the profile first, then the picture); on
@@ -39,7 +39,7 @@
 - **E1 — the browser cannot decode the file:** rejected in the picker with a message; nothing is stored.
 - **E2 — no grant yet:** the control is disabled with a hint, as the name fields are
   ([uc.spaces.edit-profile](uc.spaces.edit-profile.md) E2).
-- **E3 — the blob does not open** (wrong key, corrupt, another member's blob on this row): the letter shows; never a
+- **E3 — the blob does not open** (wrong key, corrupt, another member's blob on this row, a pad of another length such as the earlier 8 KiB one): the letter shows; never a
   throw and never a broken image.
 - **E4 — `404 avatar_not_found`** on read (cleared since the version was seen): the letter shows and the cached entry
   is dropped. A non-member asking gets the `404` of ADR 0042.
