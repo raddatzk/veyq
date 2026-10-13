@@ -11,6 +11,8 @@ vi.mock('../features/settings/AppearancePanel.vue', () => ({ default: { template
 vi.mock('../features/account/sessions/SessionsPanel.vue', () => ({ default: { template: '<div class="stub-sessions" />' } }))
 vi.mock('../features/spaces/TenantMembersPanel.vue', () => ({ default: { template: '<div class="stub-members" />' } }))
 vi.mock('../features/spaces/GroupMembersPanel.vue', () => ({ default: { template: '<div class="stub-group-members" />' } }))
+vi.mock('../features/tenant/TenantMailSettingsPanel.vue', () => ({ default: { template: '<div class="stub-mail" />' } }))
+vi.mock('../features/tenant/TenantStoragePanel.vue', () => ({ default: { template: '<div class="stub-storage" />' } }))
 vi.mock('../features/spaces/CreateGroupDialog.vue', () => ({ default: { template: '<div class="stub-create-group" />' } }))
 vi.mock('../features/account/trustReset/TrustResetPanel.vue', () => ({ default: { template: '<div class="stub-trust-reset" />' } }))
 vi.mock('../features/account/trustReset/refusedDocuments', () => ({ refusedDocuments: vi.fn() }))
@@ -67,6 +69,53 @@ describe('SettingsHubView — starting a refused trust list over (ADR 0028 Decis
     const w = await mountHub()
     expect(navText(w)).toContain(t('settings.security'))
     expect(navText(w)).not.toContain(t('trustReset.navTitle'))
+  })
+})
+
+const pathOf = (w: Awaited<ReturnType<typeof mountHub>>) => w.vm.$router.currentRoute.value.path
+
+describe('SettingsHubView — a section the caller may not see leads back to /settings', () => {
+  beforeEach(() => {
+    activeSpace.tenantId = 't-1'
+    activeSpace.kind = ScopeKind.Tenant
+  })
+
+  it('a member who opens the owner-only mail or storage address lands on /settings; an owner stays', async () => {
+    const m = await mountHub('/settings/mail')
+    expect(pathOf(m)).toBe('/settings')
+    expect(m.find('.stub-mail').exists()).toBe(false) // the page was never mounted: it would have asked the server
+    expect(pathOf(await mountHub('/settings/storage'))).toBe('/settings')
+    vi.mocked(listMyTenants).mockResolvedValue([{ tenantId: 't-1', role: 'OWNER' } as never])
+    expect(pathOf(await mountHub('/settings/mail'))).toBe('/settings/mail')
+    expect(pathOf(await mountHub('/settings/storage'))).toBe('/settings/storage')
+  })
+
+  it('judges nothing before the tenant role is in: an owner is not bounced while the role is still being read', async () => {
+    let answer: (v: never[]) => void = () => {}
+    vi.mocked(listMyTenants).mockReturnValue(new Promise((r) => { answer = r as typeof answer }) as never)
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/settings/:section?', name: 'settings', component: { template: '<div />' } }] })
+    await router.replace('/settings/storage')
+    await router.isReady()
+    mount(SettingsHubView, { global: { plugins: [router, realI18n()] } })
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/settings/storage') // still waiting
+    answer([{ tenantId: 't-1', role: 'OWNER' }] as never[])
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/settings/storage') // an owner: stays
+  })
+
+  it('a group page of a group the caller does not own leads back; an owned one stays', async () => {
+    vi.mocked(listMyGroups).mockResolvedValue([
+      { scopeId: 'g-1', tenantId: 't-1', name: 'Mine', role: 'OWNER', deletedAt: null, purgeAfter: null, icon: null, compromiseRotation: null },
+    ])
+    expect(pathOf(await mountHub('/settings/group-g-9'))).toBe('/settings')
+    expect(pathOf(await mountHub('/settings/group-g-1'))).toBe('/settings/group-g-1')
+  })
+
+  it('the trust reset page leads back unless this device refuses a document', async () => {
+    expect(pathOf(await mountHub('/settings/trust-reset'))).toBe('/settings')
+    vi.mocked(refusedDocuments).mockResolvedValue([{ document: 'pins', code: 'trust_state_unreadable' }])
+    expect(pathOf(await mountHub('/settings/trust-reset'))).toBe('/settings/trust-reset')
   })
 })
 

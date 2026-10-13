@@ -47,8 +47,11 @@ const createGroupOpen = ref(false)
 // and writes nothing; the reset itself is reachable only from that section's confirm dialog.
 const trustRefused = ref(false)
 
+// True once every answer a gate below depends on is in (a section is never judged hidden on a guess).
+const settled = ref(false)
 onMounted(async () => {
   await Promise.all([loadGroups(), loadTrustRefusals(), loadTenantRole()])
+  settled.value = true
 })
 watch(() => activeSpace.tenantId, () => void loadTenantRole())
 
@@ -165,6 +168,29 @@ const defaultId = computed(() =>
 const activeId = computed(() => (route.params.section as string | undefined) || defaultId.value)
 const hasSection = computed(() => Boolean(route.params.section))
 
+// A section the caller may not see is not offered in the rail, and its address does not open it either: it leads back to
+// /settings (which, on a wide screen, opens the default section). Judged only once the answers are in: the owner-only pages
+// (mail, storage) need the tenant role, a trust reset needs a refused document, a group page needs the group to be the caller's.
+const OWNER_ONLY = new Set(['mail', 'storage'])
+const isHidden = (id: string): boolean =>
+  OWNER_ONLY.has(id)
+    ? !isTenantOwner.value
+    : id === 'trust-reset'
+      ? !trustRefused.value
+      : id.startsWith('group-')
+        ? !ownedGroups.value.some((g) => `group-${g.scopeId}` === id)
+        : false
+// The page itself is not mounted while it is hidden (it would ask the server for what it may not read) - nor, for the
+// pages that depend on an answer still on its way, before that answer is in.
+const detailVisible = computed(() => !isHidden(activeId.value) && (settled.value || !OWNER_ONLY.has(activeId.value)))
+watch(
+  [settled, hasSection, activeId, isTenantOwner, trustRefused, ownedGroups],
+  () => {
+    if (settled.value && hasSection.value && isHidden(activeId.value)) void router.replace('/settings')
+  },
+  { deep: true },
+)
+
 // On a WIDE viewport entering with no section already auto-shows a default section's detail — make the URL explicit by
 // replacing /settings → /settings/<defaultId> (contextual: the Tenant scope → members, a group → its page). On
 // NARROW (≤720px) /settings is the drill-down list, so it stays put (redirecting there would break the back path).
@@ -267,6 +293,7 @@ async function onGroupCreated(scopeId: string) {
         </button>
         <component
           :is="activeView.component"
+          v-if="detailVisible"
           v-bind="activeView.props"
           @lifecycle-changed="loadGroups"
           @trust-changed="loadTrustRefusals"
